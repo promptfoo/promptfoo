@@ -2,6 +2,7 @@ import { createHmac } from 'crypto';
 
 import { fetchWithCache, getCache, getScopedCacheKey, isCacheEnabled } from '../../cache';
 import logger from '../../logger';
+import { partitionInFlightKeyByGuardContext } from '../../util/fetch/guardContext';
 import { getRequestTimeoutMs } from '../shared';
 import { OpenAiGenericProvider } from '.';
 import { appendOpenAiApiPath, assertOpenAiApiModel, RETIRED_OPENAI_MODEL_IDS } from './util';
@@ -94,12 +95,16 @@ function fetchOpenAIModerationWithDedupe(
   inflightCacheKey: string,
   fetcher: () => Promise<OpenAIModerationFetchResult>,
 ): Promise<OpenAIModerationFetchResult> {
-  let inflightRequest = OPENAI_MODERATION_INFLIGHT_REQUESTS.get(inflightCacheKey);
+  // Same guard-context partition as Mistral: the dedupe key otherwise has
+  // no guard component, so a guarded call could join an ordinary call's
+  // in-flight request and skip the guarded transport entirely.
+  const partitionedKey = partitionInFlightKeyByGuardContext(inflightCacheKey);
+  let inflightRequest = OPENAI_MODERATION_INFLIGHT_REQUESTS.get(partitionedKey);
   if (!inflightRequest) {
     inflightRequest = fetcher().finally(() => {
-      OPENAI_MODERATION_INFLIGHT_REQUESTS.delete(inflightCacheKey);
+      OPENAI_MODERATION_INFLIGHT_REQUESTS.delete(partitionedKey);
     });
-    OPENAI_MODERATION_INFLIGHT_REQUESTS.set(inflightCacheKey, inflightRequest);
+    OPENAI_MODERATION_INFLIGHT_REQUESTS.set(partitionedKey, inflightRequest);
   }
   return inflightRequest;
 }

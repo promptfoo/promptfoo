@@ -45,6 +45,22 @@ vi.mock('../../../src/util/fetch/index', () => ({
   fetchWithProxy: (...args: unknown[]) => mockFetch(...args),
 }));
 
+// Guarded token fetches validate the tokenUrl with a DNS lookup; resolve
+// every test host to a public address so the validation passes and the
+// fetch mock decides the outcome.
+vi.mock('node:dns/promises', () => ({
+  lookup: vi.fn(async () => [{ address: '93.184.216.34', family: 4 }]),
+}));
+
+import { lookup } from 'node:dns/promises';
+import type { LookupAddress } from 'node:dns';
+
+import { withPrivateRangeGuard } from '../../../src/util/fetch/guardContext';
+
+const mockedLookup = vi.mocked(
+  lookup as unknown as (hostname: string, options: { all: true }) => Promise<LookupAddress[]>,
+);
+
 describe('normalizeMcpToolContent', () => {
   it.each([
     { name: 'null', content: null, expected: '' },
@@ -633,6 +649,79 @@ describe('getOAuthTokenWithExpiry', () => {
       'https://agent-a.example.com/oauth/token',
       'https://agent-b.example.com/oauth/token',
     ]);
+  });
+});
+
+describe('getOAuthTokenWithExpiry under the private-range guard', () => {
+  // The token cache is module-level, so each test uses its own client id
+  // and token URL: a token cached by one test must never satisfy another.
+  const createGuardedAuth = (suffix: string): MCPOAuthClientCredentialsAuth => ({
+    type: 'oauth',
+    grantType: 'client_credentials',
+    clientId: `guard-partition-${suffix}-client`,
+    clientSecret: `guard-partition-${suffix}-secret`,
+    tokenUrl: `https://guard-partition-${suffix}.example.com/token`,
+  });
+
+  beforeEach(() => {
+    mockFetch.mockReset();
+    mockedLookup.mockResolvedValue([{ address: '93.184.216.34', family: 4 } as LookupAddress]);
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('does not hand a guarded request a token cached by an ordinary eval', async () => {
+    const auth = createGuardedAuth('cache');
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ access_token: 'unguarded-token', expires_in: 3600 }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ access_token: 'guarded-token', expires_in: 3600 }),
+      });
+    const unguarded = await getOAuthTokenWithExpiry(auth);
+    expect(unguarded.accessToken).toBe('unguarded-token');
+
+    // Pre-fix this returned the cached 'unguarded-token' without ever
+    // calling fetchOAuthToken, so the private tokenUrl was never validated
+    // and the ordinary eval's token was attached to the guarded request.
+    const guarded = await withPrivateRangeGuard(() => getOAuthTokenWithExpiry(auth));
+    expect(guarded.accessToken).toBe('guarded-token');
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not join an ordinary eval in-flight token request', async () => {
+    const auth = createGuardedAuth('pending');
+    let releaseUnguarded!: () => void;
+    const unguardedGate = new Promise<void>((resolve) => {
+      releaseUnguarded = resolve;
+    });
+    let calls = 0;
+    mockFetch.mockImplementation(async () => {
+      calls += 1;
+      if (calls === 1) {
+        await unguardedGate;
+        return {
+          ok: true,
+          json: async () => ({ access_token: 'unguarded-token', expires_in: 3600 }),
+        };
+      }
+      return {
+        ok: true,
+        json: async () => ({ access_token: 'guarded-token', expires_in: 3600 }),
+      };
+    });
+    const unguarded = getOAuthTokenWithExpiry(auth);
+    const guardedPromise = withPrivateRangeGuard(() => getOAuthTokenWithExpiry(auth));
+    releaseUnguarded();
+    const [guarded, unguardedResult] = await Promise.all([guardedPromise, unguarded]);
+    expect(guarded.accessToken).toBe('guarded-token');
+    expect(unguardedResult.accessToken).toBe('unguarded-token');
+    expect(mockFetch).toHaveBeenCalledTimes(2);
   });
 });
 
