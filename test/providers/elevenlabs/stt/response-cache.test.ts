@@ -76,6 +76,26 @@ afterEach(() => {
 });
 
 describe('ElevenLabs STT full-response caching', () => {
+  it.each(['', '   ', '...'])(
+    'scores unexpected speech against silent reference %j and replays the score',
+    async (referenceText) => {
+      const provider = createProvider({ referenceText, calculateWER: true });
+      const response = await provider.callApi(audioPath);
+      expect(response.error).toBeUndefined();
+      expect(response.metadata?.wer).toMatchObject({ wer: 2, insertions: 2, totalWords: 0 });
+      const cached = await provider.callApi(audioPath);
+      expect(cached.cached).toBe(true);
+      expect(cached.metadata?.wer).toEqual(response.metadata?.wer);
+      expect(ElevenLabsClient.prototype.upload).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it('omits WER when no reference is supplied', async () => {
+    const response = await createProvider({ calculateWER: true }).callApi(audioPath);
+    expect(response.error).toBeUndefined();
+    expect(response.metadata?.wer).toBeUndefined();
+  });
+
   it('calculates WER when enabled after the same audio was cached without it', async () => {
     const withoutWER = createProvider({ referenceText: 'hello world', calculateWER: false });
     const withWER = createProvider({ referenceText: 'hello world', calculateWER: true });

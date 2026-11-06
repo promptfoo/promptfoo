@@ -2,6 +2,21 @@ import { describe, expect, it } from 'vitest';
 import { calculateWER } from '../../../../src/providers/elevenlabs/stt/wer';
 
 describe('calculateWER', () => {
+  it.each(['', '   ', '...'])(
+    'counts hallucinated words against an empty normalized reference %j',
+    (reference) => {
+      expect(calculateWER(reference, 'unexpected speech')).toMatchObject({
+        wer: 2,
+        insertions: 2,
+        deletions: 0,
+        substitutions: 0,
+        correct: 0,
+        totalWords: 0,
+      });
+      expect(calculateWER(reference, '')).toMatchObject({ wer: 0, insertions: 0, totalWords: 0 });
+    },
+  );
+
   it('returns zero for an exact match, ignoring case and punctuation', () => {
     const result = calculateWER('Hello, world!', 'hello world');
 

@@ -150,7 +150,7 @@ export class ElevenLabsSTTProvider implements ApiProvider {
 
       // Calculate WER if reference text provided
       let werResult: WERResult | undefined;
-      if (this.config.calculateWER && this.config.referenceText) {
+      if (this.config.calculateWER && typeof this.config.referenceText === 'string') {
         werResult = calculateWER(this.config.referenceText, sttResponse.text);
         logger.debug('[ElevenLabs STT] WER calculated', {
           wer: werResult.wer,

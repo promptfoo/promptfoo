@@ -52,7 +52,8 @@ export function calculateWER(reference: string, hypothesis: string): WERResult {
   }
 
   const totalWords = refWords.length;
-  const wer = totalWords > 0 ? distance / totalWords : 0;
+  // With a silent reference, each hallucinated word is an insertion (JiWER convention).
+  const wer = totalWords > 0 ? distance / totalWords : insertions;
 
   // Generate alignment visualization
   const alignment = generateAlignment(refWords, hypWords, operations);
