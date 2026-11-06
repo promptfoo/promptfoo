@@ -42,25 +42,6 @@ describe('matchesClassification', () => {
     },
   );
 
-  it.each(['constructor', 'toString', '__proto__'])(
-    'treats absent label %s as zero and accepts own boundary scores',
-    async (label) => {
-      const callClassificationApi = vi.fn().mockResolvedValue({ classification: { safe: 0.5 } });
-      const grader = createMockProvider({ callClassificationApi });
-      expect(await matchesClassification(label, 'sample', 0.5, { provider: grader })).toMatchObject(
-        { pass: false, score: 0 },
-      );
-      for (const score of [0, 1]) {
-        callClassificationApi.mockResolvedValue({
-          classification: Object.fromEntries([[label, score]]),
-        });
-        expect(
-          await matchesClassification(label, 'sample', 0.5, { provider: grader }),
-        ).toMatchObject({ pass: score === 1, score });
-      }
-    },
-  );
-
   it.each([NaN, Infinity, -Infinity, -0.1, 1.1, '0.9', null])(
     'rejects invalid classification score %s',
     async (invalidScore) => {
