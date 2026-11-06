@@ -526,16 +526,21 @@ export async function generateSignature(
             );
           }
 
+          const openssl = getEnvString('OPENSSL_BIN') || 'openssl';
           if (hasPfxContent) {
             keySource = 'pfxContent';
-            privateKey = await readPfxPrivateKey(Buffer.from(hasPfxContent, 'base64'), pfxPassword);
+            privateKey = await readPfxPrivateKey(
+              Buffer.from(hasPfxContent, 'base64'),
+              pfxPassword,
+              openssl,
+            );
           } else {
             const resolvedPath = safeResolve(cliState.basePath || '', signatureAuth.pfxPath);
             if (!(await pathExists(resolvedPath))) {
               throw new Error(`PFX file not found: ${resolvedPath}`);
             }
             keySource = `pfxPath ${resolvedPath}`;
-            privateKey = await readPfxPrivateKey(resolvedPath, pfxPassword);
+            privateKey = await readPfxPrivateKey(resolvedPath, pfxPassword, openssl);
           }
         } else if (hasCertAndKey) {
           try {

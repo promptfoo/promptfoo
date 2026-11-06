@@ -5,11 +5,11 @@ import {
   writeSecureTempFile,
 } from './secureTempFiles';
 
-async function decodePfx(filename: string, password: string) {
+async function decodePfx(filename: string, password: string, executable: string) {
   // Only the encrypted archive may touch disk. Keep the password off the command line.
   const args = ['pkcs12', '-in', filename, '-nocerts', '-nodes', '-passin', 'stdin'];
   const run = (flags: string[]) =>
-    runCommand(process.env.OPENSSL_BIN || 'openssl', [...args, ...flags], {
+    runCommand(executable, [...args, ...flags], {
       input: password + '\n',
     });
   try {
@@ -24,7 +24,11 @@ async function decodePfx(filename: string, password: string) {
 }
 
 /** Read the signing key from a PKCS#12 archive using the system OpenSSL. */
-export async function readPfxPrivateKey(pfx: string | Buffer, password: string): Promise<string> {
+export async function readPfxPrivateKey(
+  pfx: string | Buffer,
+  password: string,
+  executable = 'openssl',
+): Promise<string> {
   let directory: string | undefined;
   try {
     let filename: string;
@@ -38,7 +42,7 @@ export async function readPfxPrivateKey(pfx: string | Buffer, password: string):
     // Older configurations may include padding because pem trimmed passwords before use.
     for (const candidate of new Set([password, password.trim()])) {
       try {
-        output = await decodePfx(filename, candidate);
+        output = await decodePfx(filename, candidate, executable);
         break;
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code === 'ENOENT') {

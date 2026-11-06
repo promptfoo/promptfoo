@@ -4,6 +4,7 @@ import * as os from 'os';
 import path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import cliState from '../../src/cliState';
 import { generateSignature } from '../../src/providers/http';
 import { readPfxPrivateKey } from '../../src/util/pfx';
 import { runCommand } from '../../src/util/runCommand';
@@ -135,6 +136,34 @@ describe('PFX signature paths (generateSignature)', () => {
       );
     },
   );
+
+  it('uses the OpenSSL executable selected by the current invocation', async () => {
+    const { privateKey } = crypto.generateKeyPairSync('rsa', { modulusLength: 1024 });
+    const key = privateKey.export({ format: 'pem', type: 'pkcs8' }).toString();
+    vi.mocked(runCommand).mockResolvedValue({ stdout: key, stderr: '' });
+    const signatureAuth = {
+      type: 'pfx',
+      pfxPassword: 'secret',
+      pfxContent: Buffer.from('fixture').toString('base64'),
+      signatureDataTemplate: '{{signatureTimestamp}}',
+      signatureAlgorithm: 'SHA256',
+    };
+
+    await Promise.all(
+      ['first-openssl', 'second-openssl'].map((binary) =>
+        cliState.withEnv({ OPENSSL_BIN: binary }, () =>
+          generateSignature(signatureAuth, Date.now()),
+        ),
+      ),
+    );
+
+    expect(
+      vi
+        .mocked(runCommand)
+        .mock.calls.map(([binary]) => binary)
+        .sort(),
+    ).toEqual(['first-openssl', 'second-openssl']);
+  });
 
   it('succeeds when PFX content yields a key', async () => {
     const { privateKey, publicKey } = crypto.generateKeyPairSync('rsa', { modulusLength: 2048 });
