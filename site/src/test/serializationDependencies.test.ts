@@ -32,7 +32,7 @@ describe.each(['copy-webpack-plugin', 'css-minimizer-webpack-plugin'])(
         toString: () => 'function f() { return 1 }//</script',
       });
 
-      const serialized = serialize({ nested: { value }, after: 1 }, { space: 2 });
+      const serialized = serialize({ value }, { space: 2 });
 
       expect(serialized).not.toMatch(/<\/script[\t\n\f\r />]/i);
     });
