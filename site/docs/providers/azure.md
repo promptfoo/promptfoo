@@ -1393,12 +1393,12 @@ Use `azure:foundry-agent:<agent-name>` to eval an existing Foundry agent through
 
 ### Setup
 
-Install the Azure SDK packages and sign in:
+Standard npm installs include the Azure packages for your Promptfoo version. If you omitted optional dependencies, check which client package the error names and install it alongside `@azure/identity` in the project that contains Promptfoo. Add `-g` for a global npm installation.
 
-```bash
-npm install @azure-rest/core-client @azure/identity
-az login
-```
+- If discovery loads `@azure/ai-projects`, as in Promptfoo 0.125.1, run `npm install @azure/ai-projects @azure/identity`.
+- If discovery loads `@azure-rest/core-client`, run `npm install @azure-rest/core-client @azure/identity`.
+
+For local development with Azure CLI credentials, sign in with `az login`.
 
 The provider uses `DefaultAzureCredential`, which also supports service principals, workload identity, and managed identity. Azure OpenAI API keys do not authenticate Foundry agents.
 
