@@ -30,7 +30,7 @@ The select-best checker:
 
 ### Using variables in criteria
 
-The `value` is rendered with the test case `vars` before it is sent to the grader, just like other assertion values. This lets the criteria adapt to each test case:
+The `value` is rendered with the test case's resolved `vars` before it is sent to the grader, using the same Nunjucks context as the prompt. This lets the criteria adapt to each test case:
 
 ```yaml
 prompts:
@@ -54,7 +54,7 @@ assert:
     value: '{% raw %}Choose the response that mentions {{placeholder}}{% endraw %}'
 ```
 
-When rendering changes the criteria, the resolved text is recorded as `metadata.renderedAssertionValue` on each comparison result. The original template remains in the assertion value.
+When rendering changes the criteria, the resolved text is recorded as `metadata.renderedAssertionValue` on each comparison result. The original template remains in the assertion value, and any metadata from the matcher (such as a cache hit) is preserved.
 
 ### Example Configuration
 
