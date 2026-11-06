@@ -25,6 +25,7 @@ import {
   validateChatCompletionMessage,
   validateFunctionCall,
 } from '../../../src/providers/openai/util';
+import { isProviderResponseRateLimited } from '../../../src/scheduler/types';
 
 vi.mock('../../../src/cache');
 
@@ -169,6 +170,19 @@ describe('failApiCall', () => {
     expect(result).toEqual({
       error: `API error: invalid_request_error 400 Bad request`,
     });
+  });
+
+  it.each([
+    ['requests', true],
+    ['insufficient_quota', false],
+  ] as const)('preserves the SDK rate-limit classification for %s', (type, retryable) => {
+    const error = new OpenAI.APIError(
+      429,
+      { type, message: 'Please try later' },
+      undefined,
+      new Headers(),
+    );
+    expect(isProviderResponseRateLimited(failApiCall(error), undefined)).toBe(retryable);
   });
 
   it('should format generic errors', () => {
