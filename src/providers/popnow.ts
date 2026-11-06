@@ -1,3 +1,4 @@
+import { resolveConfiguredApiKey } from './credentials';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { serializeProvider } from './serialization';
 
@@ -28,6 +29,19 @@ export class PopNowProvider extends OpenAiChatCompletionProvider {
 
   protected getCapabilityModelName(): string {
     return this.normalizeCapabilityModelName(this.modelName);
+  }
+
+  // Resolve the key from the PopNow config or envar only. Falling back to
+  // OPENAI_API_KEY like the base provider would send an OpenAI key to PopNow.
+  override getApiKey(): string | undefined {
+    return resolveConfiguredApiKey(this);
+  }
+
+  // PopNow has no concept of an OpenAI organization; suppress the header so a
+  // stray OPENAI_ORGANIZATION env var doesn't leak onto PopNow requests. A
+  // deliberately configured custom header is still sent.
+  override getOrganization(): undefined {
+    return undefined;
   }
 
   id(): string {

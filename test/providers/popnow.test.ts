@@ -122,6 +122,21 @@ describe('PopNow', () => {
       }
     });
 
+    it('should not fall back to OPENAI_API_KEY or forward the OpenAI organization', () => {
+      const restore = mockProcessEnv({
+        POPNOW_API_KEY: undefined,
+        OPENAI_API_KEY: 'sk-openai-secret',
+        OPENAI_ORGANIZATION: 'org-openai-secret',
+      });
+      try {
+        const provider = new PopNowProvider('google/gemini-3.7-flash/chat', {});
+        expect(provider.getApiKey()).toBeUndefined();
+        expect(provider.getOrganization()).toBeUndefined();
+      } finally {
+        restore();
+      }
+    });
+
     it('should apply GPT-6 request rules to task-suffixed model ids', async () => {
       const provider = new PopNowProvider('openai/gpt-6.1-terra/chat', {
         config: { reasoning_effort: 'high' },
