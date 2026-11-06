@@ -173,7 +173,7 @@ describe('ElevenLabsHistoryProvider', () => {
   });
 
   describe('callApi - list conversations', () => {
-    it('preserves epoch-zero date bounds', async () => {
+    it.each([0, '0'])('preserves epoch-zero date bounds supplied as %j', async (startDate) => {
       vi.mocked(ElevenLabsClient.prototype.get).mockResolvedValue({
         conversations: [],
         has_more: false,
@@ -183,7 +183,7 @@ describe('ElevenLabsHistoryProvider', () => {
         config: { agentId: 'agent' },
       });
       const response = await provider.callApi('*', {
-        vars: { startDate: 0, endDate: 60 },
+        vars: { startDate, endDate: '60' },
       } as unknown as CallApiContextParams);
       expect(response.error).toBeUndefined();
       expect(ElevenLabsClient.prototype.get).toHaveBeenCalledWith(

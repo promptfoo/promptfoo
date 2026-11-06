@@ -159,7 +159,10 @@ export class ElevenLabsHistoryProvider implements ApiProvider {
       ]) {
         const value = context?.vars?.[variable];
         if (value !== undefined && value !== null) {
-          const seconds = typeof value === 'number' ? value : Date.parse(String(value)) / 1000;
+          const isNumeric =
+            typeof value === 'number' ||
+            (typeof value === 'string' && /^[+-]?\d+(?:\.\d+)?$/.test(value.trim()));
+          const seconds = isNumeric ? Number(value) : Date.parse(String(value)) / 1000;
           if (!Number.isFinite(seconds)) {
             throw new Error(
               `Invalid ${variable}: expected an ISO date or Unix timestamp in seconds`,
