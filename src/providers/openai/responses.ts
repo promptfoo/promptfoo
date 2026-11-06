@@ -18,7 +18,6 @@ import { fetchWithRetries } from '../../util/fetch/index';
 import { renderVarsInObject } from '../../util/index';
 import { isSecretField, sanitizeUrl } from '../../util/sanitizer';
 import { sleep } from '../../util/time';
-import { isSamplingParamsDeprecatedClaudeModel } from '../anthropic/util';
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import {
   calculateOpenRouterResponseCost,
@@ -71,6 +70,7 @@ import {
   normalizeOpenAiBillingModelName,
   normalizeOpenAiServiceTierForWire,
   OPENAI_BILLING_MODELS,
+  omitDeprecatedClaudeSamplingParams,
   RETIRED_OPENAI_MODEL_IDS,
 } from './util';
 
@@ -842,9 +842,6 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
 
   protected supportsTemperatureForCapabilityModel(modelName: string): boolean {
     const configuredModelName = this.getCapabilityModelName().replace(/(^|\/)ft:/, '$1');
-    if (isSamplingParamsDeprecatedClaudeModel(this.getClaudeCapabilityModelName(modelName))) {
-      return false;
-    }
     return modelName === configuredModelName
       ? this.supportsTemperature()
       : !this.isReasoningCapabilityModel(modelName);
@@ -1125,10 +1122,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
         ? (config.temperature ?? temperatureDefault)
         : undefined;
     const reasoningEffort = isReasoningModel ? effectiveReasoningEffort : undefined;
-    const samplingParamsDeprecated = isSamplingParamsDeprecatedClaudeModel(
-      this.getClaudeCapabilityModelName(this.getEffectiveModelName(config)),
-    );
-    const topP = samplingParamsDeprecated ? undefined : this.getConfiguredTopP(config);
+    const topP = this.getConfiguredTopP(config);
 
     const instructions = config.instructions;
 
@@ -1269,14 +1263,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       },
     );
 
-    // Claude Opus 4.7+ / Claude 5+ reject sampling params. Passthrough spreads after
-    // the omit gates above and can put temperature/top_p/top_k back — strip them
-    // from the final body so Anthropic OpenAI-compat endpoints still get a clean request.
-    if (samplingParamsDeprecated) {
-      delete body.temperature;
-      delete body.top_p;
-      delete (body as { top_k?: unknown }).top_k;
-    }
+    omitDeprecatedClaudeSamplingParams(body);
 
     return {
       body,

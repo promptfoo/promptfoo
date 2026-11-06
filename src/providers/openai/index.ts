@@ -1,5 +1,4 @@
 import { getEnvString } from '../../envars';
-import { isSamplingParamsDeprecatedClaudeModel } from '../anthropic/util';
 import { resolveProviderApiKey } from '../credentials';
 import { resolveProviderEnv } from '../env';
 import { isGpt6Model } from './gpt6';
@@ -193,36 +192,8 @@ export class OpenAiGenericProvider implements ApiProvider {
     );
   }
 
-  /**
-   * Model id used for Claude sampling-capability checks. OpenAI fine-tune IDs are
-   * `ft:<base>:<org>:<suffix>:<id>`; the suffix is a user-supplied label and must not
-   * confer Claude capabilities (e.g. `ft:gpt-4.1:org:claude-test-5:id` is still GPT-4.1).
-   * Match on the fine-tune base only, mirroring how GPT-6 / billing resolve `ft:` models.
-   * Callers that already strip the `ft:` marker leave `<base>:<org>:<suffix>:<id>` — treat
-   * that four-segment shape the same way so the suffix cannot flip Claude sampling gates.
-   */
-  protected getClaudeCapabilityModelName(modelName = this.getCapabilityModelName()): string {
-    const leaf = modelName.slice(modelName.lastIndexOf('/') + 1);
-    const withFtPrefix = /^ft:([^:]+)(?::|$)/.exec(leaf)?.[1];
-    if (withFtPrefix) {
-      return withFtPrefix;
-    }
-    const segments = leaf.split(':');
-    if (segments.length >= 4) {
-      return segments[0];
-    }
-    return modelName;
-  }
-
   protected supportsTemperature(modelName = this.getCapabilityModelName()): boolean {
-    // Claude Opus 4.7+ / Claude 5+ reject temperature (and top_p / top_k) with HTTP 400,
-    // including promptfoo's built-in temperature:0 default. Match Azure chat's gate so
-    // openai:chat:<claude-*> against Anthropic's OpenAI-compatible endpoint (and other
-    // OpenAI-shaped Claude proxies) omit sampling params the same way.
-    return (
-      !this.isReasoningModel(modelName) &&
-      !isSamplingParamsDeprecatedClaudeModel(this.getClaudeCapabilityModelName(modelName))
-    );
+    return !this.isReasoningModel(modelName);
   }
 
   protected getBillingModelName(_config: OpenAiSharedOptions): string {

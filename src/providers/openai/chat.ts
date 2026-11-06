@@ -13,7 +13,6 @@ import {
 } from '../../util/fetch/responseHeadersObserver';
 import { FINISH_REASON_MAP, normalizeFinishReason } from '../../util/finishReason';
 import { renderVarsInObject } from '../../util/index';
-import { isSamplingParamsDeprecatedClaudeModel } from '../anthropic/util';
 import {
   executeProviderFunctionCallback,
   loadProviderCallbackFromFileUrl,
@@ -69,6 +68,7 @@ import {
   normalizeOpenAiBillingModelName,
   normalizeOpenAiServiceTierForWire,
   OPENAI_CHAT_MODELS,
+  omitDeprecatedClaudeSamplingParams,
   validateFunctionCall,
 } from './util';
 import type OpenAI from 'openai';
@@ -420,10 +420,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
   }
 
   protected supportsTemperatureForCapabilityModel(modelName: string): boolean {
-    return (
-      !this.isReasoningCapabilityModel(modelName) &&
-      !isSamplingParamsDeprecatedClaudeModel(this.getClaudeCapabilityModelName(modelName))
-    );
+    return !this.isReasoningCapabilityModel(modelName);
   }
 
   /**
@@ -510,9 +507,6 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         ? undefined
         : getEnvFloat('OPENAI_TEMPERATURE')
       : getEnvFloat('OPENAI_TEMPERATURE', 0);
-    const samplingParamsDeprecated = isSamplingParamsDeprecatedClaudeModel(
-      this.getClaudeCapabilityModelName(capabilityModelName),
-    );
     const supportsTemperature =
       isGPT6Model ||
       (usesConfiguredCapabilities
@@ -545,7 +539,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       ...(maxCompletionTokens === undefined ? {} : { max_completion_tokens: maxCompletionTokens }),
       ...(reasoningEffort ? { reasoning_effort: reasoningEffort } : {}),
       ...(temperature === undefined ? {} : { temperature }),
-      ...((config.top_p !== undefined || getEnvString('OPENAI_TOP_P')) && !samplingParamsDeprecated
+      ...(config.top_p !== undefined || getEnvString('OPENAI_TOP_P')
         ? { top_p: config.top_p ?? getEnvFloat('OPENAI_TOP_P', 1) }
         : {}),
       ...(config.presence_penalty !== undefined || getEnvString('OPENAI_PRESENCE_PENALTY')
@@ -684,14 +678,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       isOpenRouter: isOpenRouterGpt6,
     });
 
-    // Claude Opus 4.7+ / Claude 5+ reject sampling params. Passthrough spreads after
-    // the omit gates above and can put temperature/top_p/top_k back — strip them
-    // from the final body so Anthropic OpenAI-compat endpoints still get a clean request.
-    if (samplingParamsDeprecated) {
-      delete body.temperature;
-      delete body.top_p;
-      delete (body as { top_k?: unknown }).top_k;
-    }
+    omitDeprecatedClaudeSamplingParams(body);
 
     return {
       body,
