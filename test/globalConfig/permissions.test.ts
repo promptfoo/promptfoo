@@ -53,25 +53,35 @@ describe('global config permissions', () => {
     }
   });
 
-  it.skipIf(process.platform === 'win32')('keeps a dangling config symlink intact', () => {
-    fs.mkdirSync(configDir);
-    fs.symlinkSync('missing.yaml', file);
+  describe.skipIf(process.platform === 'win32')('POSIX credential targets', () => {
+    it('keeps a dangling config symlink intact', () => {
+      fs.mkdirSync(configDir);
+      fs.symlinkSync('missing.yaml', file);
 
-    expect(() => writeGlobalConfig({ cloud: { apiKey: 'fixture-key' } })).toThrow(
-      'Create the global config symlink target',
-    );
-    expect(fs.readlinkSync(file)).toBe('missing.yaml');
-    expect(fs.readdirSync(configDir)).toEqual(['promptfoo.yaml']);
-  });
+      expect(() => writeGlobalConfig({ cloud: { apiKey: 'fixture-key' } })).toThrow(
+        'Create the global config symlink target',
+      );
+      expect(fs.readlinkSync(file)).toBe('missing.yaml');
+      expect(fs.readdirSync(configDir)).toEqual(['promptfoo.yaml']);
+    });
 
-  it.skipIf(process.platform === 'win32')('leaves a linked FIFO untouched', () => {
-    fs.mkdirSync(configDir);
-    const fifo = path.join(tempDir, 'pipe');
-    execFileSync('mkfifo', [fifo]);
-    fs.symlinkSync(fifo, file);
+    it('leaves a linked FIFO untouched', () => {
+      fs.mkdirSync(configDir);
+      const fifo = path.join(tempDir, 'pipe');
+      execFileSync('mkfifo', [fifo]);
+      fs.symlinkSync(fifo, file);
 
-    expect(() => writeGlobalConfig({ cloud: { apiKey: 'fixture-key' } })).toThrow('regular file');
-    expect(fs.statSync(fifo).isFIFO()).toBe(true);
+      // A regressed in-place writer must fail the test rather than block opening the FIFO.
+      const reader = fs.openSync(fifo, fs.constants.O_RDONLY | fs.constants.O_NONBLOCK);
+      try {
+        expect(() => writeGlobalConfig({ cloud: { apiKey: 'fixture-key' } })).toThrow(
+          'regular file',
+        );
+        expect(fs.statSync(fifo).isFIFO()).toBe(true);
+      } finally {
+        fs.closeSync(reader);
+      }
+    });
   });
 
   it('saves a key to an existing config', () => {
