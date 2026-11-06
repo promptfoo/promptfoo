@@ -1396,7 +1396,7 @@ Use `azure:foundry-agent:<agent-name>` to eval an existing Foundry agent through
 Install the Azure SDK packages and sign in:
 
 ```bash
-npm install @azure/ai-projects @azure/identity
+npm install @azure-rest/core-client @azure/identity
 az login
 ```
 
