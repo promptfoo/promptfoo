@@ -1,7 +1,11 @@
+import type {
+  AzureChatConfigInput,
+  AzureResponsesConfigInput,
+} from '../../contracts/providerConfig/azure';
 import type { EnvOverrides } from '../../types/env';
 import type { MCPConfig } from '../mcp/types';
 import type { DecisionGradingLevel, DecisionQuestion } from '../openai/decisionsProtocol';
-import type { AssistantFunctionCallback, GPT5ReasoningEffort } from '../openai/types';
+import type { AssistantFunctionCallback } from '../openai/types';
 
 /**
  * Options for configuring retry behavior
@@ -70,27 +74,35 @@ export interface AzureCompletionOptions {
   frequency_penalty?: number;
   presence_penalty?: number;
   best_of?: number;
-  functions?: {
-    name: string;
-    description?: string;
-    parameters: any;
-  }[];
+  functions?:
+    | AzureChatConfigInput['functions']
+    | {
+        name: string;
+        description?: string;
+        parameters: any;
+      }[];
   function_call?: 'none' | 'auto' | { name: string };
-  tools?: {
-    type: string;
-    function: {
-      name: string;
-      description?: string;
-      parameters: any;
-    };
-  }[];
+  tools?:
+    | AzureChatConfigInput['tools']
+    | AzureResponsesConfigInput['tools']
+    | {
+        type: string;
+        function: {
+          name: string;
+          description?: string;
+          parameters: any;
+        };
+      }[];
   tool_choice?:
+    | AzureChatConfigInput['tool_choice']
+    | AzureResponsesConfigInput['tool_choice']
     | 'none'
     | 'auto'
     | 'required'
     | { type: 'function'; function?: { name: string } }
     | { type: 'function'; name: string };
   response_format?:
+    | AzureChatConfigInput['response_format']
     | `file://${string}`
     | { type: 'json_object' }
     | {
@@ -101,9 +113,9 @@ export interface AzureCompletionOptions {
           schema: AzureResponseFormatSchema;
         };
       };
-  stop?: string[];
+  stop?: AzureChatConfigInput['stop'];
   seed?: number;
-  reasoning_effort?: GPT5ReasoningEffort;
+  reasoning_effort?: AzureChatConfigInput['reasoning_effort'];
   /**
    * Controls the verbosity of the model's responses. Only used for reasoning models (GPT-5, o1, o3, etc.).
    */
@@ -138,7 +150,9 @@ export interface AzureChatResponsesOptions extends AzureCompletionOptions {
  * Options specific to the Azure Responses provider.
  */
 export interface AzureResponsesOptions extends Omit<AzureChatResponsesOptions, 'response_format'> {
+  reasoning?: AzureResponsesConfigInput['reasoning'];
   response_format?:
+    | AzureResponsesConfigInput['response_format']
     | AzureCompletionOptions['response_format']
     | {
         /** Flattened schema format accepted by Azure Responses. */

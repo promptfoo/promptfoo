@@ -2639,13 +2639,16 @@ export const RETIRED_BEDROCK_MODELS = new Set([
   'meta.llama2-70b-chat-v1',
 ]);
 
-/** Reject withdrawn models and IDs that require a cross-region inference profile. */
-export function assertBedrockModelIsAvailable(modelName: string): void {
-  // A system inference profile or foundation model ARN ends in the ID it resolves to.
-  // Application inference profile ARNs hide the model, so they cannot be checked here.
-  const modelId = modelName.startsWith('arn:')
+// Only system-profile and foundation-model ARNs expose their model ID.
+function getBedrockModelId(modelName: string): string {
+  return modelName.startsWith('arn:')
     ? (/:(?:inference-profile|foundation-model)\/([^/]+)$/.exec(modelName)?.[1] ?? modelName)
     : modelName;
+}
+
+/** Reject withdrawn models and IDs that require a cross-region inference profile. */
+export function assertBedrockModelIsAvailable(modelName: string): void {
+  const modelId = getBedrockModelId(modelName);
   if (RETIRED_BEDROCK_MODELS.has(modelId.replace(INFERENCE_PROFILE_PREFIX, ''))) {
     throw new Error(`Unknown Amazon Bedrock model: ${modelName}`);
   }
@@ -3055,8 +3058,25 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
   }
 }
 
+// A text request represents one input. A batch cannot be scored as its vector.
+function onlyEmbeddingResult(items: unknown) {
+  return Array.isArray(items) && items.length === 1 ? items[0] : undefined;
+}
+
 interface BedrockEmbeddingOptions extends BedrockOptions {
   input_type?: 'search_document' | 'search_query' | 'classification' | 'clustering';
+  embeddingPurpose?:
+    | 'GENERIC_INDEX'
+    | 'GENERIC_RETRIEVAL'
+    | 'TEXT_RETRIEVAL'
+    | 'IMAGE_RETRIEVAL'
+    | 'VIDEO_RETRIEVAL'
+    | 'DOCUMENT_RETRIEVAL'
+    | 'AUDIO_RETRIEVAL'
+    | 'CLASSIFICATION'
+    | 'CLUSTERING';
+  embeddingDimension?: 256 | 384 | 1024 | 3072;
+  truncationMode?: 'START' | 'END' | 'NONE';
 }
 
 export class AwsBedrockEmbeddingProvider
@@ -3087,16 +3107,28 @@ export class AwsBedrockEmbeddingProvider
     _context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<ProviderEmbeddingResponse> {
-    const params = this.modelName.includes('cohere.embed')
-      ? {
-          texts: [text],
-          input_type: this.config.input_type ?? 'search_document',
-        }
-      : {
-          inputText: text,
-        };
+    const modelId = getBedrockModelId(this.modelName).replace(INFERENCE_PROFILE_PREFIX, '');
+    const isNovaEmbedding = modelId === 'amazon.nova-2-multimodal-embeddings-v1:0';
+    const isMarengo3 = modelId === 'twelvelabs.marengo-embed-3-0-v1:0';
+    let params: Record<string, unknown>;
+    if (isNovaEmbedding) {
+      params = {
+        taskType: 'SINGLE_EMBEDDING',
+        singleEmbeddingParams: {
+          embeddingPurpose: this.config.embeddingPurpose ?? 'GENERIC_INDEX',
+          embeddingDimension: this.config.embeddingDimension ?? 3072,
+          text: { value: text, truncationMode: this.config.truncationMode ?? 'NONE' },
+        },
+      };
+    } else if (isMarengo3) {
+      params = { inputType: 'text', text: { inputText: text } };
+    } else if (this.modelName.includes('cohere.embed')) {
+      params = { texts: [text], input_type: this.config.input_type ?? 'search_document' };
+    } else {
+      params = { inputText: text };
+    }
 
-    logger.debug('Calling AWS Bedrock API for embeddings', { params });
+    logger.debug('Calling AWS Bedrock API for embeddings', { modelId: this.modelName });
     let response;
     try {
       const bedrockInstance = await this.getBedrockInstance();
@@ -3115,34 +3147,37 @@ export class AwsBedrockEmbeddingProvider
         error: `API call error: ${String(err)}`,
       };
     }
-    logger.debug(
-      `AWS Bedrock API response (embeddings): ${JSON.stringify(response.body.transformToString())}`,
-    );
-
+    let data;
     try {
-      const data = JSON.parse(response.body.transformToString());
-      // Titan Text API returns embeddings in the `embedding` field
-      // Cohere API returns embeddings in the `embeddings` field
-      const embeddings = data?.embeddings?.float ?? data?.embeddings;
-      const embedding =
-        data?.embedding ??
-        (Array.isArray(embeddings) && embeddings.length === 1 ? embeddings[0] : undefined);
-      if (
-        !Array.isArray(embedding) ||
-        embedding.length === 0 ||
-        !embedding.every((value: unknown) => typeof value === 'number' && Number.isFinite(value))
-      ) {
-        throw new Error('No valid embedding found in AWS Bedrock API response');
-      }
+      data = JSON.parse(response.body.transformToString());
+    } catch {
       return {
-        embedding,
-      };
-    } catch (err) {
-      return {
-        error: `API response error: ${String(err)}: ${JSON.stringify(
-          response.body.transformToString(),
-        )}`,
+        error: 'API response error: Could not decode AWS Bedrock embedding response as JSON',
       };
     }
+
+    let embedding;
+    if (isNovaEmbedding) {
+      embedding = onlyEmbeddingResult(data?.embeddings)?.embedding;
+    } else if (isMarengo3) {
+      // Marengo also documents a single object in place of the one-item array.
+      const item = data?.data;
+      embedding = (Array.isArray(item) ? onlyEmbeddingResult(item) : item)?.embedding;
+    } else {
+      embedding =
+        data?.embedding ?? onlyEmbeddingResult(data?.embeddings?.float ?? data?.embeddings);
+    }
+    if (
+      !Array.isArray(embedding) ||
+      embedding.length === 0 ||
+      !embedding.every((value: unknown) => typeof value === 'number' && Number.isFinite(value))
+    ) {
+      return { error: 'API response error: No valid embedding found in AWS Bedrock API response' };
+    }
+    logger.debug('Received AWS Bedrock embedding', {
+      modelId: this.modelName,
+      dimensions: embedding.length,
+    });
+    return { embedding };
   }
 }
