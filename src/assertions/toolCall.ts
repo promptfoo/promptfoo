@@ -4,7 +4,7 @@ import invariant from '../util/invariant';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 
-/** Explicit transforms take precedence; otherwise prefer observed calls over answer text. */
+/** Only complete request metadata can replace output; execution logs may omit pending calls. */
 export function getToolCallInput({
   assertion,
   output,
@@ -12,6 +12,7 @@ export function getToolCallInput({
 }: Pick<AssertionParams, 'assertion' | 'output' | 'providerResponse'>): unknown {
   const metadata = providerResponse?.metadata;
   return !assertion.transform &&
+    metadata?.toolCallsComplete === true &&
     metadata &&
     Object.prototype.hasOwnProperty.call(metadata, 'toolCalls')
     ? metadata.toolCalls

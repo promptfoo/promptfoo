@@ -350,7 +350,7 @@ describe('OpenAiAgentsProvider', () => {
         tokenUsage: { total: 12, prompt: 7, completion: 5 },
         cached: false,
         cost: undefined,
-        metadata: { toolCalls: [] },
+        metadata: { toolCalls: [], toolCallsComplete: true },
       });
       expect(addTraceProcessor).not.toHaveBeenCalled();
     });
@@ -359,6 +359,7 @@ describe('OpenAiAgentsProvider', () => {
       runWithItems([createCall(), createOutput()]);
       const response = await createProvider().callApi('hello');
       expect(response.metadata).toEqual({
+        toolCallsComplete: true,
         toolCalls: [
           {
             callId: 'call_1',

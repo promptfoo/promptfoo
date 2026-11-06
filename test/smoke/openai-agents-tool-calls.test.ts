@@ -52,6 +52,8 @@ describe('OpenAI Agents tool metadata through the CLI', () => {
     expect(called.error).toBeUndefined();
     expect(mentioned.success).toBe(false);
     expect(called.response.output).toBe(mentioned.response.output);
+    expect(called.response.metadata.toolCallsComplete).toBe(true);
+    expect(mentioned.response.metadata.toolCallsComplete).toBe(true);
     expect(called.response.metadata.toolCalls).toMatchObject([
       { name: 'lookup_order', resultPresent: true },
     ]);

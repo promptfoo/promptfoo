@@ -123,6 +123,7 @@ describe('OpenAiAgentsProvider with the installed SDK', () => {
         },
       });
       const first = await provider.callApi('Look up order 42.');
+      expect(first.metadata?.toolCallsComplete).toBe(true);
       expect(first.metadata?.toolCalls).toMatchObject([
         {
           callId: 'order_42',
@@ -146,6 +147,7 @@ describe('OpenAiAgentsProvider with the installed SDK', () => {
         }),
       ).toMatchObject({ pass: executeTools === 'real' });
       const second = await provider.callApi('What did you find?');
+      expect(second.metadata?.toolCallsComplete).toBe(true);
       expect(second.metadata?.toolCalls).toEqual([]);
       expect(first.metadata?.toolCalls).toHaveLength(1);
     },

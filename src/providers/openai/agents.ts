@@ -356,6 +356,8 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
 
       if (this.agentConfig.includeToolCalls === true) {
         response.metadata = {
+          // Unlike execution-only logs, newItems retains pending function-call requests too.
+          toolCallsComplete: true,
           toolCalls: extractToolCalls(
             result.newItems,
             mockTools ? 'mock' : 'real',

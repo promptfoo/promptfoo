@@ -12,7 +12,7 @@ const inventory = (arguments_: unknown = { playerId: 'player1', extra: true }) =
 });
 const response = (toolCalls: unknown): ProviderResponse => ({
   output: 'check_inventory was called with player1',
-  metadata: { toolCalls },
+  metadata: { toolCalls, toolCallsComplete: true },
 });
 const grade = (assertion: Assertion, providerResponse = response([inventory()])) =>
   runAssertion({ assertion, providerResponse, test: {} });
@@ -163,6 +163,38 @@ describe('declarative tool-call assertions', () => {
 });
 
 describe('tool-call-f1 metadata defaults', () => {
+  it.each([undefined, false, 'true'])(
+    'preserves output parsing when metadata completeness is %j',
+    async (toolCallsComplete) => {
+      const providerResponse: ProviderResponse = {
+        output: [{ type: 'tool_use', name: 'get_weather', input: { location: 'Boston' } }],
+        metadata: {
+          toolCalls: [{ name: 'search_companies' }],
+          ...(toolCallsComplete === undefined ? {} : { toolCallsComplete }),
+        },
+      };
+      expect(
+        await grade({ type: 'tool-call-f1', value: ['search_companies'] }, providerResponse),
+      ).toMatchObject({ pass: false, score: 0 });
+      expect(
+        await grade({ type: 'tool-call-f1', value: ['get_weather'] }, providerResponse),
+      ).toMatchObject({ pass: true, score: 1 });
+    },
+  );
+
+  it('does not use an unmarked empty list to hide a requested tool', async () => {
+    const providerResponse: ProviderResponse = {
+      output: [{ type: 'function_call', name: 'unexpected' }],
+      metadata: { toolCalls: [] },
+    };
+    expect(
+      await grade({ type: 'tool-call-f1', value: ['unexpected'] }, providerResponse),
+    ).toMatchObject({ pass: true, score: 1 });
+    expect(
+      await grade({ type: 'not-tool-call', value: 'unexpected' }, providerResponse),
+    ).toMatchObject({ pass: false });
+  });
+
   it('uses metadata automatically while preserving final output', async () => {
     const providerResponse = response([inventory()]);
     expect(
