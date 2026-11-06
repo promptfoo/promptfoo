@@ -234,7 +234,7 @@ export async function fetchWithProxy(
 
   // This is overridden globally but Node v20 is still complaining so we need to add it here too
   const { getAuthHeaders, ...requestOptions } = options;
-  const finalOptions: FetchOptions & { dispatcher?: any } = {
+  const finalOptions: FetchOptions & { dispatcher?: Dispatcher } = {
     ...requestOptions,
     headers: getFetchWithProxyHeaders(url, options),
     signal: combinedSignal,
@@ -284,6 +284,11 @@ export async function fetchWithProxy(
     }
   }
 
+  // Keep caller-owned dispatchers (e.g. mTLS) outside the managed pool.
+  if (finalOptions.dispatcher) {
+    return fetchWithTransientRetries(finalUrl, finalOptions, getAuthHeaders, logEnabled);
+  }
+
   const tlsOptions: ConnectionOptions = {
     rejectUnauthorized: !getEnvBool('PROMPTFOO_INSECURE_SSL', true),
   };
@@ -306,10 +311,6 @@ export async function fetchWithProxy(
   }
   const proxyUrl = finalUrlString ? getProxyForUrl(finalUrlString) : '';
 
-  // Keep caller-owned dispatchers (e.g. mTLS) outside the managed pool.
-  if (finalOptions.dispatcher) {
-    return fetchWithTransientRetries(finalUrl, finalOptions, getAuthHeaders, logEnabled);
-  }
   if (proxyUrl && logEnabled) {
     logger.debug(`Using proxy: ${sanitizeUrl(proxyUrl)}`);
   }

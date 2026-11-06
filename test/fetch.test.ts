@@ -23,13 +23,7 @@ import {
 } from '../src/util/fetch/index';
 import { withFetchRetryContext } from '../src/util/fetch/retryContext';
 import { sleep } from '../src/util/time';
-import {
-  clearProxyEnv,
-  createDeferred,
-  createMockResponse,
-  mockProcessEnv,
-  PROXY_ENV_KEYS,
-} from './util/utils';
+import { createDeferred, createMockResponse, mockProcessEnv, PROXY_ENV_KEYS } from './util/utils';
 
 const FETCH_TEST_ENV_KEYS = [
   ...PROXY_ENV_KEYS,
@@ -909,133 +903,36 @@ describe('fetchWithProxy', () => {
     },
   );
 
-  it('should use proxy URL from environment variables in order of precedence', async () => {
-    const mockProxyUrls = {
-      HTTPS_PROXY: 'http://https-proxy.example.com',
-      https_proxy: 'http://https-proxy-lower.example.com',
-      HTTP_PROXY: 'http://http-proxy.example.com',
-      http_proxy: 'http://http-proxy-lower.example.com',
-      ALL_PROXY: 'http://all-proxy.example.com',
-      all_proxy: 'http://all-proxy-lower.example.com',
-    } as const;
+  it.each([
+    ['http', 'HTTP_PROXY'],
+    ['http', 'http_proxy'],
+    ['http', 'ALL_PROXY'],
+    ['http', 'all_proxy'],
+    ['https', 'HTTPS_PROXY'],
+    ['https', 'https_proxy'],
+    ['https', 'ALL_PROXY'],
+    ['https', 'all_proxy'],
+  ])('uses %s proxy configured by %s', async (protocol, variable) => {
+    const proxyUrl = 'http://proxy.example.com/';
+    mockProcessEnv({ [variable]: proxyUrl });
 
-    const httpTestCases = [
-      {
-        env: { HTTP_PROXY: mockProxyUrls.HTTP_PROXY },
-        expected: { url: mockProxyUrls.HTTP_PROXY },
-      },
-      {
-        env: { http_proxy: mockProxyUrls.http_proxy },
-        expected: { url: mockProxyUrls.http_proxy },
-      },
-      {
-        env: { ALL_PROXY: mockProxyUrls.ALL_PROXY },
-        expected: { url: mockProxyUrls.ALL_PROXY },
-      },
-      {
-        env: { all_proxy: mockProxyUrls.all_proxy },
-        expected: { url: mockProxyUrls.all_proxy },
-      },
-    ];
+    await fetchWithProxy(`${protocol}://example.com`);
 
-    const httpsTestCases = [
-      {
-        env: { HTTPS_PROXY: mockProxyUrls.HTTPS_PROXY },
-        expected: { url: mockProxyUrls.HTTPS_PROXY },
-      },
-      {
-        env: { https_proxy: mockProxyUrls.https_proxy },
-        expected: { url: mockProxyUrls.https_proxy },
-      },
-      {
-        env: { ALL_PROXY: mockProxyUrls.ALL_PROXY },
-        expected: { url: mockProxyUrls.ALL_PROXY },
-      },
-      {
-        env: { all_proxy: mockProxyUrls.all_proxy },
-        expected: { url: mockProxyUrls.all_proxy },
-      },
-    ];
-
-    for (const testCase of httpTestCases) {
-      vi.clearAllMocks();
-      clearAgentCache();
-
-      clearProxyEnv();
-
-      Object.entries(testCase.env).forEach(([key, value]) => {
-        mockProcessEnv({ [key]: value });
-      });
-
-      await fetchWithProxy('http://example.com');
-
-      expect(ProxyAgent).toHaveBeenCalledWith({
-        uri: testCase.expected.url,
-        proxyTls: {
-          rejectUnauthorized: !getEnvBool('PROMPTFOO_INSECURE_SSL', true),
-        },
-        requestTls: {
-          rejectUnauthorized: !getEnvBool('PROMPTFOO_INSECURE_SSL', true),
-        },
-        headersTimeout: getRequestTimeoutMs(),
-        keepAliveTimeout: 30_000,
-        keepAliveMaxTimeout: 60_000,
-        connections: DEFAULT_MAX_CONCURRENCY,
-      });
-      expect(global.fetch).toHaveBeenCalledWith(
-        expect.anything(),
-        expect.objectContaining({ dispatcher: expect.any(Object) }),
-      );
-
-      const debugCalls = vi.mocked(logger.debug).mock.calls;
-      const normalizedCalls = debugCalls.map((call) => call[0].replace(/\/$/, ''));
-
-      const proxyConfigCalls = normalizedCalls.filter((msg) => msg.includes(`Using proxy:`));
-
-      expect(proxyConfigCalls).toEqual([`Using proxy: ${testCase.expected.url}`]);
-
-      clearProxyEnv();
-    }
-
-    for (const testCase of httpsTestCases) {
-      vi.clearAllMocks();
-      clearAgentCache();
-
-      clearProxyEnv();
-
-      Object.entries(testCase.env).forEach(([key, value]) => {
-        mockProcessEnv({ [key]: value });
-      });
-
-      await fetchWithProxy('https://example.com');
-
-      expect(ProxyAgent).toHaveBeenCalledWith({
-        uri: testCase.expected.url,
-        proxyTls: {
-          rejectUnauthorized: !getEnvBool('PROMPTFOO_INSECURE_SSL', true),
-        },
-        requestTls: {
-          rejectUnauthorized: !getEnvBool('PROMPTFOO_INSECURE_SSL', true),
-        },
-        headersTimeout: getRequestTimeoutMs(),
-        keepAliveTimeout: 30_000,
-        keepAliveMaxTimeout: 60_000,
-        connections: DEFAULT_MAX_CONCURRENCY,
-      });
-      expect(global.fetch).toHaveBeenCalledWith(
-        expect.anything(),
-        expect.objectContaining({ dispatcher: expect.any(Object) }),
-      );
-
-      const debugCalls = vi.mocked(logger.debug).mock.calls;
-      const normalizedCalls = debugCalls.map((call) => call[0].replace(/\/$/, ''));
-
-      const proxyConfigCalls = normalizedCalls.filter((msg) => msg.includes(`Using proxy:`));
-
-      expect(proxyConfigCalls).toEqual([`Using proxy: ${testCase.expected.url}`]);
-
-      clearProxyEnv();
-    }
+    const tlsOptions = { rejectUnauthorized: !getEnvBool('PROMPTFOO_INSECURE_SSL', true) };
+    expect(ProxyAgent).toHaveBeenCalledWith({
+      uri: proxyUrl,
+      proxyTls: tlsOptions,
+      requestTls: tlsOptions,
+      headersTimeout: getRequestTimeoutMs(),
+      keepAliveTimeout: 30_000,
+      keepAliveMaxTimeout: 60_000,
+      connections: DEFAULT_MAX_CONCURRENCY,
+    });
+    expect(global.fetch).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ dispatcher: expect.any(Object) }),
+    );
+    expect(logger.debug).toHaveBeenCalledWith(`Using proxy: ${proxyUrl}`);
   });
 
   it('should use proxy for domains not in NO_PROXY', async () => {
@@ -1271,20 +1168,23 @@ describe('fetchWithProxy', () => {
     expect(original.close).toHaveBeenCalledOnce();
   });
 
-  it('should preserve a caller-provided dispatcher instead of overwriting it', async () => {
-    const customDispatcher = { custom: true };
-    let receivedDispatcher: unknown;
-    const mockFetch = vi.fn().mockImplementation((_url: string, opts: any) => {
-      receivedDispatcher = opts?.dispatcher;
-      return Promise.resolve(new Response());
-    });
-    global.fetch = mockFetch;
+  it('does not configure or close a caller-owned dispatcher', async () => {
+    mockProcessEnv({ HTTPS_PROXY: 'http://proxy.example.com/', PROMPTFOO_CA_CERT_PATH: 'ca.pem' });
+    const env = await vi.importActual<typeof import('../src/envars')>('../src/envars');
+    vi.mocked(getEnvString).mockImplementation(env.getEnvString);
+    const dispatcher = { close: vi.fn() };
 
-    await fetchWithProxy('https://example.com/api', { dispatcher: customDispatcher } as any);
+    await fetchWithProxy('https://example.com/api', { dispatcher } as any);
+    clearAgentCache();
 
-    expect(receivedDispatcher).toBe(customDispatcher);
-    // Should not create a default agent when caller provides a dispatcher
+    expect(global.fetch).toHaveBeenCalledWith(
+      'https://example.com/api',
+      expect.objectContaining({ dispatcher }),
+    );
+    expect(fsPromises.readFile).not.toHaveBeenCalled();
     expect(Agent).not.toHaveBeenCalled();
+    expect(ProxyAgent).not.toHaveBeenCalled();
+    expect(dispatcher.close).not.toHaveBeenCalled();
   });
 
   describe('Abort Signal Handling', () => {
