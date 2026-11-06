@@ -49,7 +49,7 @@ The default `apiBaseUrl` is `https://api.popnow.ai/v1`; promptfoo appends `/chat
 
 Because every model sits behind the same key and endpoint, a side-by-side comparison only needs a list of IDs:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - popnow:anthropic/claude-sonnet-5.5/chat
   - popnow:openai/gpt-6.1-terra/chat
@@ -57,7 +57,7 @@ providers:
   - popnow:deepseek/v4.1-flash/chat
 ```
 
-The full list of chat models, with per-token prices and the parameters each one accepts, is in the [PopNow chat docs](https://popnow.ai/docs/chat). `GET https://api.popnow.ai/v1/models` returns the same list.
+The full list of chat models, with per-token prices and the parameters each one accepts, is in the [PopNow chat docs](https://popnow.ai/docs/chat). `GET https://api.popnow.ai/v1/models` with your API key returns every model; chat models have `task` set to `chat`.
 
 ## Configuration Options
 
@@ -78,7 +78,7 @@ For the full shared option set, see the [OpenAI provider documentation](/docs/pr
 
 If you route PopNow through a proxy or internal gateway, override `apiBaseUrl`. You can also tell promptfoo to read the Bearer token from a different environment variable by setting `apiKeyEnvar`.
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: popnow:google/gemini-3.7-flash/chat
     config:

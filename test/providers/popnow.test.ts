@@ -196,6 +196,38 @@ describe('PopNow', () => {
       expect(result.error).toContain('400 Bad Request');
       expect(result.error).toContain('Invalid request');
     });
+
+    it('should surface server errors', async () => {
+      const provider = new PopNowProvider('google/gemini-3.7-flash/chat', {});
+      mockedFetchWithRetries.mockResolvedValueOnce(
+        jsonResponse(
+          { error: { message: 'Upstream unavailable', type: 'server_error' } },
+          500,
+          'Internal Server Error',
+        ),
+      );
+
+      const result = await provider.callApi('Test prompt');
+      expect(result.error).toContain('500 Internal Server Error');
+      expect(result.error).toContain('Upstream unavailable');
+      expect(result.metadata?.http?.status).toBe(500);
+    });
+
+    it('should surface rate limit errors', async () => {
+      const provider = new PopNowProvider('google/gemini-3.7-flash/chat', {});
+      mockedFetchWithRetries.mockResolvedValueOnce(
+        jsonResponse(
+          { error: { message: 'Too many requests', type: 'rate_limit_error' } },
+          429,
+          'Too Many Requests',
+        ),
+      );
+
+      const result = await provider.callApi('Test prompt');
+      expect(result.error).toContain('429 Too Many Requests');
+      expect(result.error).toContain('Too many requests');
+      expect(result.metadata?.http?.status).toBe(429);
+    });
   });
 
   describe('createPopNowProvider', () => {
