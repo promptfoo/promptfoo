@@ -28,6 +28,19 @@ import type {
 
 type SimilarityMetric = 'cosine' | 'dot_product' | 'euclidean';
 
+function isValidEmbedding(value: unknown): value is number[] {
+  if (!Array.isArray(value) || value.length === 0) {
+    return false;
+  }
+  // Iteration visits sparse slots as undefined, unlike Array#every.
+  for (const element of value) {
+    if (!Number.isFinite(element)) {
+      return false;
+    }
+  }
+  return true;
+}
+
 function calculateSimilarityScore(
   expectedEmbedding: number[],
   outputEmbedding: number[],
@@ -176,6 +189,13 @@ async function calculateProviderSimilarity(
 
   if (!expectedEmbedding.embedding || !outputEmbedding.embedding) {
     return fail('Embedding not found', tokensUsed);
+  }
+
+  if (
+    !isValidEmbedding(expectedEmbedding.embedding) ||
+    !isValidEmbedding(outputEmbedding.embedding)
+  ) {
+    return fail('Invalid embedding: expected a non-empty vector of finite numbers', tokensUsed);
   }
 
   return calculateSimilarityScore(
