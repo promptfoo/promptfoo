@@ -499,6 +499,16 @@ describe('assertUrlResolvesPublic', () => {
     expect(mockedLookup).not.toHaveBeenCalled();
   });
 
+  it('refuses a URL with an unresolved template without touching DNS', async () => {
+    // HttpProvider renders config.url with the prompt at call time, so the
+    // raw template preflights as public.example while the rendered URL can
+    // dispatch to loopback through the userinfo slot.
+    await expect(assertUrlResolvesPublic('http://{{prompt}}@public.example/')).rejects.toThrow(
+      PrivateRangeBlockedError,
+    );
+    expect(mockedLookup).not.toHaveBeenCalled();
+  });
+
   it('blocks shared-address space literals without touching DNS', async () => {
     await expect(assertUrlResolvesPublic('http://100.100.100.200/')).rejects.toThrow(
       PrivateRangeBlockedError,
@@ -886,6 +896,36 @@ describe('assertProviderTargetPublic', () => {
           responseParser:
             "process.mainModule.require('http').get('http://169.254.169.254/'); return json",
         },
+      }),
+    ).rejects.toThrow(PrivateRangeBlockedError);
+    expect(mockedLookup).not.toHaveBeenCalled();
+  });
+
+  it('refuses a top-level string transform that the evaluator would execute', async () => {
+    restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
+    // loadApiProvider attaches the top-level transform to the loaded
+    // provider and the evaluator runs the string with the process shim, so
+    // the nested config transform checks above do not cover it: even an
+    // echo provider could run code against a private service.
+    await expect(
+      assertProviderTargetPublic({
+        id: 'echo',
+        transform:
+          "process.mainModule.require('http').get('http://169.254.169.254/'); return output",
+      }),
+    ).rejects.toThrow(PrivateRangeBlockedError);
+    expect(mockedLookup).not.toHaveBeenCalled();
+  });
+
+  it('refuses a templated provider URL whose rendered target cannot be validated', async () => {
+    restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
+    // The raw template preflights as public.example, but HttpProvider
+    // renders it with the prompt at call time: with prompt '127.0.0.1/'
+    // the request dispatches to loopback instead.
+    await expect(
+      assertProviderTargetPublic({
+        id: 'http',
+        config: { url: 'http://{{prompt}}@public.example/' },
       }),
     ).rejects.toThrow(PrivateRangeBlockedError);
     expect(mockedLookup).not.toHaveBeenCalled();

@@ -47,6 +47,29 @@ const oauthRequestSignal = new AsyncLocalStorage<AbortSignal>();
 const sdkDefaultFetch: FetchLike = (url, init) => fetch(url, init);
 
 /**
+ * Transport fetch for non-OAuth MCP servers (no auth, bearer, basic,
+ * api_key). Without a custom fetch the SDK follows a public-to-private
+ * redirect with the global fetch, outside the guard: only the OAuth path
+ * used to inject one. Inside a guarded server route this routes through
+ * fetchWithProxy so every hop is validated; transient retries stay off,
+ * since a retried tools/call could execute twice. Outside the guard this
+ * stays the plain SDK fetch, so eval behavior is unchanged. The check runs
+ * at request time, not construction time, so a client connected outside
+ * the guard and called inside it is still covered.
+ */
+function createGuardedFetch(): FetchLike {
+  return async (url, init) => {
+    if (isPrivateRangeGuardContextActive()) {
+      return fetchWithProxy(url instanceof URL ? url.toString() : url, {
+        ...init,
+        disableTransientRetries: true,
+      } as FetchOptions);
+    }
+    return sdkDefaultFetch(url, init);
+  };
+}
+
+/**
  * Refresh tokens per request without reconnecting and aborting other tool calls.
  * Retry a rejected token once on HTTP 401; return other failures without a retry.
  */
@@ -328,19 +351,20 @@ export class MCPClient {
 
         const transportOptions = {
           ...(Object.keys(headers).length > 0 && { requestInit: { headers } }),
-          ...(oauthFetch && { fetch: oauthFetch }),
+          // Every remote transport gets a fetch: the OAuth one attaches
+          // tokens per request, the guarded one validates redirects for
+          // all other auth types (and for no auth at all). Passing no
+          // fetch would let the SDK follow a public-to-private redirect
+          // with the global fetch, outside the guard.
+          fetch: oauthFetch ?? createGuardedFetch(),
         };
-        const hasOptions = Object.keys(transportOptions).length > 0;
 
         try {
           const { StreamableHTTPClientTransport } = await import(
             '@modelcontextprotocol/sdk/client/streamableHttp.js'
           );
           signal.throwIfAborted();
-          transport = new StreamableHTTPClientTransport(
-            new URL(serverUrl),
-            hasOptions ? transportOptions : undefined,
-          );
+          transport = new StreamableHTTPClientTransport(new URL(serverUrl), transportOptions);
           await client.connect(transport, requestOptions);
           logger.debug('Connected using Streamable HTTP transport');
         } catch (error) {
@@ -356,10 +380,7 @@ export class MCPClient {
           signal.throwIfAborted();
           const { SSEClientTransport } = await import('@modelcontextprotocol/sdk/client/sse.js');
           signal.throwIfAborted();
-          transport = new SSEClientTransport(
-            new URL(serverUrl),
-            hasOptions ? transportOptions : undefined,
-          );
+          transport = new SSEClientTransport(new URL(serverUrl), transportOptions);
           await client.connect(transport, requestOptions);
           logger.debug('Connected using SSE transport');
         }

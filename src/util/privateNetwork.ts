@@ -204,6 +204,18 @@ export function isPrivateRangeBlockedMessage(message: unknown): boolean {
  * exposed server).
  */
 export async function assertUrlResolvesPublic(rawUrl: string): Promise<void> {
+  // A URL that still carries a template placeholder was never validated as
+  // the target that will actually be fetched: providers render Nunjucks
+  // templates in URL fields at call time (e.g. HttpProvider renders
+  // `config.url` with the prompt), so `http://{{prompt}}@public.example/`
+  // preflights as public.example but can dispatch to 127.0.0.1 once the
+  // prompt fills the userinfo slot. Refuse it outright: the preflight
+  // cannot prove the rendered target public.
+  if (rawUrl.includes('{{')) {
+    throw new PrivateRangeBlockedError(
+      'PROMPTFOO_BLOCK_PRIVATE_RANGES is set: refusing to fetch provider URL with an unresolved template whose rendered target cannot be validated before loading',
+    );
+  }
   let parsed: URL;
   try {
     parsed = new URL(rawUrl);
@@ -257,6 +269,8 @@ export async function assertUrlResolvesPublic(rawUrl: string): Promise<void> {
 
 interface ProviderTarget {
   id?: unknown;
+  /** Top-level executable transform (`ProviderOptions.transform`). */
+  transform?: unknown;
   config?: {
     apiBaseUrl?: unknown;
     baseUrl?: unknown;
@@ -627,6 +641,16 @@ function getRawRequestTarget(rawRequest: string, useHttps: boolean): string {
  *   code that can reach private services outside `fetchWithProxy`. A
  *   function value cannot arrive over a JSON route body and is left
  *   alone,
+ * - a top-level string `transform` on the provider options, refused
+ *   outright for the same reason: `loadApiProvider` attaches it to the
+ *   loaded provider and the evaluator executes it with the process shim,
+ *   so the nested config transforms above do not cover it,
+ * - a URL field that still carries a `{{ ... }}` template (`config.url`,
+ *   `config.apiBaseUrl`, an MCP `server.url`, a raw-request Host header),
+ *   refused outright by the URL validation below: providers render URL
+ *   templates with call-time variables (e.g. the prompt), so the raw
+ *   template can preflight as a public host while the rendered URL
+ *   dispatches to a private address,
  * - a named provider whose default endpoint is local (ollama, llama,
  *   litellm, openclaw, ...), validated against its effective default base
  *   URL, unless the provider resolves an explicit `config.apiBaseUrl`
@@ -659,6 +683,18 @@ export function getCallerSuppliedBaseUrls(providerOptions: ProviderTarget): stri
         `PROMPTFOO_BLOCK_PRIVATE_RANGES is set: refusing provider with a string ${key} transform that would execute outside the fetch guard`,
       );
     }
+  }
+  // The top-level `transform` is not a config field: `loadApiProvider`
+  // attaches it to the loaded provider (`ret.transform = options.transform`)
+  // and the evaluator executes the string with the `process.mainModule.require`
+  // shim, so the three nested config transforms above do not cover it. A
+  // string value can only arrive over a JSON route body (in-process function
+  // values are left alone, as with the config transforms above).
+  const topLevelTransform = providerOptions?.transform;
+  if (typeof topLevelTransform === 'string' && topLevelTransform.length > 0) {
+    throw new PrivateRangeBlockedError(
+      'PROMPTFOO_BLOCK_PRIVATE_RANGES is set: refusing provider with a top-level string transform that would execute outside the fetch guard',
+    );
   }
   const id = providerOptions?.id;
   if (typeof id !== 'string' || id.length === 0) {
