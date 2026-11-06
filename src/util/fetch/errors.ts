@@ -229,7 +229,7 @@ export function hasHttp429Status(message = ''): boolean {
   return (
     /\b(?:HTTP(?:\/[\d.]+)?|status(?:\s+code)?)\b[\s:(=]+429\b/i.test(message) ||
     /^API call error: Status \w+, Code 429, Message:/i.test(message) ||
-    /^(?:[\w-]+ )*(?:error|failed) (?:429|\(429\)):/i.test(message) ||
+    /^(?:[\w-]+ )*(?:error|failed|returned) (?:429|\(429\)):/i.test(message) ||
     /"(?:code|status(?:Code)?)"\s*:\s*(?:429|"429")\s*[,}]/i.test(message) ||
     /\berror(?:\s*\(429\)|:\s*429(?:[.!]?\s*$|\s*[:({\[]))/i.test(message) ||
     /^\s*(?:429|\(429\))\s*$/.test(message) ||

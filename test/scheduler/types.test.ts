@@ -53,6 +53,8 @@ describe('isProviderResponseRateLimited', () => {
       'API error: 429 {"message":"please retry"}',
       '{"statusCode":429,"message":"try later"}',
       'HTTP 200: model returned 429',
+      'Azure Content Safety API returned 429:  - Please try again later.',
+      'Service returned 429.',
       'HTTP/2 429',
       'API call error: Status RESOURCE_EXHAUSTED, Code 429, Message:\n\nPlease try again later.',
       'Error 429: Please try again later.',
@@ -68,6 +70,9 @@ describe('isProviderResponseRateLimited', () => {
     it.each([
       'HTTP 400: prompt is too long: 204291 tokens > 200000 maximum',
       'The model returned 429 tokens',
+      'Search returned 429 records',
+      'Service returned req-429',
+      'Azure Content Safety API returned 400: invalid example: API returned 429: try again',
       'API error: 429 tokens exceed the context limit',
       'Error: 429 tokens',
       'Example API error: 429 tokens exceeds the maximum',
