@@ -648,7 +648,7 @@ tests:
 
 ### tool-call
 
-Use `tool-call` to require one or more tool requests, optionally checking their arguments. It reads `response.metadata.toolCalls` automatically. The [OpenAI Agents provider](/docs/providers/openai-agents/) exposes this data with `config.includeToolCalls: true`, without a tracing collector.
+Use `tool-call` to require one or more tool requests, optionally checking their arguments. It reads `response.metadata.toolCalls` automatically when `response.metadata.toolCallsComplete` is `true`. The [OpenAI Agents provider](/docs/providers/openai-agents/) exposes this data with `config.includeToolCalls: true`, without a tracing collector.
 
 ```yaml
 assert:
@@ -671,13 +671,13 @@ All expectations must match; extra calls are allowed. Provided argument keys mus
 
 By default, a matching request is sufficient. `config.requireCompleted: true` additionally requires `resultPresent: true`, `resultStatus: completed`, and `executionMode: real`. Completion does not establish business success. Missing or malformed call records fail both positive and negative assertions; an observed empty array passes a negative assertion. Final-answer text is never treated as execution evidence.
 
-Other providers can supply the same metadata contract: an array of records with `name` and optional parsed `arguments`; completion checks require the additional status fields above. An explicit assertion `transform` can select a different array of these records and takes precedence over metadata. Without metadata or a transform, a structured output array of these records is also accepted.
+Other providers can supply the same metadata contract: an array of records with `name` and optional parsed `arguments`, plus `metadata.toolCallsComplete: true` only when that array covers all supported function-call requests in the run, including pending requests. Completion checks require the additional status fields above. An explicit assertion `transform` can select a different array of these records and takes precedence over metadata. Without metadata or a transform, a structured output array of these records is also accepted.
 
 ### tool-call-f1
 
 The `tool-call-f1` assertion computes the [F1 score](https://en.wikipedia.org/wiki/F-score) comparing the set of tools called by the LLM against an expected set of tools. This metric is useful for evaluating agentic LLM applications where you want to measure how accurately the model selects the right tools.
 
-When `response.metadata.toolCalls` is present, it is used automatically, including an empty list. No `transform` is needed. An explicit assertion `transform` takes precedence; providers without that metadata keep the output parsing behavior below. The default threshold is 1. Use `tool-call` for required calls and argument checks while allowing additional tools.
+When `response.metadata.toolCallsComplete` is `true`, `response.metadata.toolCalls` is used automatically, including an empty list. Unmarked or incomplete metadata (for example, an MCP execution log that omits pending non-MCP requests) does not replace output. No `transform` is needed. An explicit assertion `transform` takes precedence; providers without explicitly complete metadata keep the output parsing behavior below. The default threshold is 1. Use `tool-call` for required calls and argument checks while allowing additional tools.
 
 This assertion supports OpenAI Chat Completions tool calls, OpenAI Responses `function_call` items, Anthropic tool-use blocks, and Google/Vertex function calls. It accepts supported objects and arrays directly or as JSON strings, including newline-separated JSON calls mixed with text.
 

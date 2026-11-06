@@ -447,7 +447,7 @@ still run as trusted local code; mock mode does not isolate them.
 
 ## Tool assertions without tracing
 
-Set `config.includeToolCalls: true` to expose `response.metadata.toolCalls` while keeping `output` as the final answer. No OTLP receiver is required; this option does not change SDK tracing settings.
+Set `config.includeToolCalls: true` to expose `response.metadata.toolCalls` and `response.metadata.toolCallsComplete: true` while keeping `output` as the final answer. The completeness marker lets assertions select the full function-request list, including pending calls, without confusing it with execution-only metadata from other providers. No OTLP receiver is required; this option does not change SDK tracing settings.
 
 ```yaml
 providers:
