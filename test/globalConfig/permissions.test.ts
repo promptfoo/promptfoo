@@ -33,39 +33,41 @@ describe('global config permissions', () => {
     }
   });
 
-  it.skipIf(process.platform === 'win32')(
-    'restricts a legacy credential file on read without changing the shared directory',
-    () => {
-      fs.mkdirSync(configDir);
+  it('reads legacy credentials and preserves the shared directory', () => {
+    fs.mkdirSync(configDir);
+    fs.writeFileSync(file, 'id: test-id\ncloud:\n  apiKey: old-fixture-key\n');
+    if (process.platform !== 'win32') {
       fs.chmodSync(configDir, 0o755);
-      fs.writeFileSync(file, 'id: test-id\ncloud:\n  apiKey: old-fixture-key\n');
       fs.chmodSync(file, 0o444);
+    }
 
-      expect(readGlobalConfig().cloud?.apiKey).toBe('old-fixture-key');
+    expect(readGlobalConfig().cloud?.apiKey).toBe('old-fixture-key');
+    if (process.platform !== 'win32') {
       expect(fs.statSync(file).mode & 0o777).toBe(0o400);
       expect(fs.statSync(configDir).mode & 0o777).toBe(0o755);
-    },
-  );
+    }
+  });
 
-  it.skipIf(process.platform === 'win32')(
-    'keeps the first saved key out of a previously readable file descriptor',
-    () => {
-      fs.mkdirSync(configDir);
-      const target = path.join(tempDir, 'linked-config.yaml');
-      fs.writeFileSync(target, 'id: test-id\n');
+  it('saves a key to an existing config', () => {
+    fs.mkdirSync(configDir);
+    const target = process.platform === 'win32' ? file : path.join(tempDir, 'linked-config.yaml');
+    fs.writeFileSync(target, 'id: test-id\n');
+    if (process.platform !== 'win32') {
       fs.chmodSync(target, 0o644);
       fs.symlinkSync(target, file);
+    }
 
-      const previous = fs.openSync(file, 'r');
-      try {
-        writeGlobalConfigPartial({ cloud: { apiKey: 'new-fixture-key' } });
+    const previous = fs.openSync(file, 'r');
+    try {
+      writeGlobalConfigPartial({ cloud: { apiKey: 'new-fixture-key' } });
+      expect(readGlobalConfig().cloud?.apiKey).toBe('new-fixture-key');
+      if (process.platform !== 'win32') {
         expect(fs.readFileSync(previous, 'utf8')).not.toContain('new-fixture-key');
         expect(fs.statSync(target).mode & 0o777).toBe(0o600);
         expect(fs.lstatSync(file).isSymbolicLink()).toBe(true);
-        expect(readGlobalConfig().cloud?.apiKey).toBe('new-fixture-key');
-      } finally {
-        fs.closeSync(previous);
       }
-    },
-  );
+    } finally {
+      fs.closeSync(previous);
+    }
+  });
 });

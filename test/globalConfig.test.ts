@@ -127,7 +127,7 @@ describe('Global Config', () => {
     });
 
     describe('error handling', () => {
-      it.skipIf(process.platform === 'win32')('can read a credential mounted read-only', () => {
+      it('can read a credential mounted read-only', () => {
         vi.mocked(fs.existsSync).mockReturnValue(true);
         const config = { ...mockConfig, cloud: { apiKey: 'fixture-key' } };
         vi.mocked(fs.readFileSync).mockReturnValue(yaml.dump(config));
@@ -136,7 +136,11 @@ describe('Global Config', () => {
           throw Object.assign(new Error('Read-only mount'), { code: 'EROFS' });
         });
         expect(globalConfig.readGlobalConfig()).toEqual(config);
-        expect(fs.fchmodSync).toHaveBeenCalledWith(123, 0o400);
+        if (process.platform === 'win32') {
+          expect(fs.fchmodSync).not.toHaveBeenCalled();
+        } else {
+          expect(fs.fchmodSync).toHaveBeenCalledWith(123, 0o400);
+        }
       });
 
       it('should throw error if config file is invalid YAML', () => {
