@@ -9,14 +9,16 @@ cd eval-sql-validation
 
 ## Usage
 
-To get started, set your OPENAI_API_KEY environment variable and `npm i node-sql-parser` to install the peer dependency.
-
-Next, edit promptfooconfig.yaml.
-
-Then run:
+Install Promptfoo and the SQL parser together in this example directory:
 
 ```bash
-promptfoo eval
+npm install promptfoo node-sql-parser@^5.4.0
 ```
 
-Afterwards, you can view the results by running `promptfoo view`
+Set `OPENAI_API_KEY`, edit `promptfooconfig.yaml`, and run:
+
+```bash
+npx promptfoo eval
+```
+
+View the results with `npx promptfoo view`.

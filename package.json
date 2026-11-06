@@ -233,6 +233,7 @@
     "tsdown": "0.23.3",
     "typescript": "^7.0.0",
     "vitest": "^5.0.2",
+    "webpack": "5.112.2",
     "yaml": "^2.9.0"
   },
   "optionalDependencies": {
@@ -255,8 +256,6 @@
     "google-auth-library": "^11.3.1",
     "hono": "^4.13.12",
     "natural": "^8.2.3",
-    "node-sql-parser": "^5.4.0",
-    "pdf-parse": "^2.4.5",
     "pem": "~1.14.8",
     "read-excel-file": "^9.3.9",
     "sharp": "^0.35.5"
@@ -372,6 +371,8 @@
     "@slack/web-api": "*",
     "ibm-cloud-sdk-core": "*",
     "jks-js": "^1.1.5",
+    "node-sql-parser": "*",
+    "pdf-parse": "*",
     "playwright": "*",
     "playwright-extra": "*",
     "puppeteer-extra-plugin-stealth": "*"
@@ -405,6 +406,12 @@
       "optional": true
     },
     "jks-js": {
+      "optional": true
+    },
+    "node-sql-parser": {
+      "optional": true
+    },
+    "pdf-parse": {
       "optional": true
     },
     "playwright": {

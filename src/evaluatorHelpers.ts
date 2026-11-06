@@ -1,6 +1,8 @@
+import nodeModule from 'node:module';
 import fs from 'fs/promises';
 import * as path from 'path';
 
+import semverSatisfies from 'semver/functions/satisfies.js';
 import cliState from './cliState';
 import { getEnvBool } from './envars';
 import { importModule } from './esm';
@@ -23,9 +25,12 @@ import {
   type VarValue,
 } from './types/index';
 import { isAudioFile, isImageFile, isJavascriptFile, isVideoFile } from './util/fileExtensions';
+import { importPackage } from './util/importPackage';
 import { renderVarsInObject, setLoadedFileMimeTypes } from './util/index';
 import invariant from './util/invariant';
 import { filterFiniteScores } from './util/numeric';
+import { isMissingPackageImportError } from './util/packageImportErrors';
+import { getPackageVersion } from './util/packageVersion';
 import { extractVariablesFromTemplate, getNunjucksEngine } from './util/templates';
 import { transform } from './util/transform';
 import { loadYaml } from './util/yamlLoad';
@@ -34,16 +39,25 @@ type FileMetadata = Record<string, { path: string; type: string; format?: string
 
 export async function extractTextFromPDF(pdfPath: string): Promise<string> {
   logger.debug(`Extracting text from PDF: ${pdfPath}`);
+  const installHelp =
+    'Install it alongside promptfoo with: npm install promptfoo pdf-parse@^2.4.5 (or npm install -g promptfoo pdf-parse@^2.4.5 for a global install).';
   try {
-    const { PDFParse } = await import('pdf-parse');
+    const entryPoint = nodeModule.createRequire(import.meta.url).resolve('pdf-parse');
+    const version = getPackageVersion('pdf-parse', entryPoint);
+    if (!version || !semverSatisfies(version, '^2.4.5')) {
+      throw new Error(
+        `pdf-parse ${version ?? '(unknown version)'} is not supported. ${installHelp}`,
+      );
+    }
+    const { PDFParse } = (await importPackage('pdf-parse')) as typeof import('pdf-parse');
     const dataBuffer = await fs.readFile(pdfPath);
     const parser = new PDFParse({ data: dataBuffer });
     const result = await parser.getText();
     await parser.destroy();
     return result.text.trim();
   } catch (error) {
-    if (error instanceof Error && error.message.includes("Cannot find module 'pdf-parse'")) {
-      throw new Error('pdf-parse is not installed. Please install it with: npm install pdf-parse');
+    if (isMissingPackageImportError(error, 'pdf-parse')) {
+      throw new Error(`pdf-parse is not installed. ${installHelp}`);
     }
     throw new Error(
       `Failed to extract text from PDF ${pdfPath}: ${error instanceof Error ? error.message : String(error)}`,
