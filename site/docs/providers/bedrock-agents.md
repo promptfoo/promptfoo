@@ -17,7 +17,7 @@ AWS has [closed Agents Classic to new customers](https://docs.aws.amazon.com/bed
 ## Prerequisites
 
 - An existing Agents Classic deployment with an active alias.
-- AWS SDK: `npm install @aws-sdk/client-bedrock-agent-runtime`.
+- If your promptfoo install omits optional dependencies, install `@aws-sdk/client-bedrock-agent-runtime` alongside promptfoo.
 - Caller IAM permission for `bedrock:InvokeAgent` on the agent alias.
 
 ## Basic Configuration
@@ -51,8 +51,8 @@ providers:
       agentAliasId: YOUR_ALIAS_ID
       region: us-east-1
       enableTrace: true
-      # Optional: reuse only for turns in the same conversation.
-      sessionId: conversation-001
+      # Set BEDROCK_SESSION_ID to share a session across ordered turns.
+      # sessionId: '{{env.BEDROCK_SESSION_ID}}'
       endSession: false
       # Optional: enable memory on the deployed agent first.
       memoryId: customer-123
@@ -81,7 +81,7 @@ Legacy `inferenceConfig`, root-level sampling controls, `guardrailConfiguration`
 
 ### Session Management
 
-By default each call gets a fresh session. Set one `sessionId` for an ordered conversation, use `maxConcurrency: 1`, and disable caching. Choose a fresh ID for each evaluation run so previous runs do not influence the result.
+By default each call gets a fresh session. Set one `sessionId` for an ordered conversation, use `maxConcurrency: 1`, and disable caching. The following example reads the session ID from the environment. Generate it once for each evaluation so earlier runs cannot influence the result.
 
 ```yaml
 providers:
@@ -89,7 +89,7 @@ providers:
     config:
       agentAliasId: YOUR_ALIAS_ID
       region: us-east-1
-      sessionId: conversation-change-me
+      sessionId: '{{env.BEDROCK_SESSION_ID}}'
 prompts:
   - '{{query}}'
 evaluateOptions:
@@ -106,19 +106,18 @@ tests:
 ```
 
 ```bash
-promptfoo eval --no-cache -o results.json
+BEDROCK_SESSION_ID="$(node -p 'crypto.randomUUID()')" promptfoo eval -o results.json
 ```
 
 Do not share a fixed session ID across unrelated or concurrent test cases. Set `endSession: true` on a separate final invocation when you intend to end a conversation; setting it on every call prevents continuation.
 
-### Memory Types
+### Memory Across Sessions {#memory-types}
 
 `memoryId` is a user-specific identifier, not a choice between short-term and long-term memory. [Enable memory on the deployed agent](https://docs.aws.amazon.com/bedrock/latest/userguide/agents-memory.html), then reuse the same identifier for that user's conversations:
 
 ```yaml
 config:
   agentAliasId: YOUR_ALIAS_ID
-  sessionId: conversation-001
   memoryId: customer-123
 ```
 
@@ -204,7 +203,7 @@ Omit `config.profile` when selecting a profile this way. The native provider's `
 
 ### Basic Agent Testing
 
-The [single-agent example](https://github.com/promptfoo/promptfoo/tree/main/examples/amazon-bedrock/agents) pairs each `query` variable with the `{{query}}` prompt. Run it with `--no-cache -o results.json` and inspect per-test outputs, errors, scores, and assertions.
+The [single-agent example](https://github.com/promptfoo/promptfoo/tree/main/examples/amazon-bedrock/agents) pairs each `query` variable with the `{{query}}` prompt. Follow the example's run command to set a fresh session ID and export the per-test results.
 
 ### Multi-Turn Conversation Testing
 

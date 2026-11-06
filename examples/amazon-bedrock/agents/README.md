@@ -11,7 +11,7 @@ cd amazon-bedrock/agents
 
 - An existing Agents Classic deployment and its agent and alias IDs.
 - AWS credentials with `bedrock:InvokeAgent` permission on that alias.
-- `npm install @aws-sdk/client-bedrock-agent-runtime`.
+- If your promptfoo install omits optional dependencies, install `@aws-sdk/client-bedrock-agent-runtime` alongside promptfoo.
 
 Use an IAM role, standard AWS credential environment variables, or a shared profile:
 
@@ -23,10 +23,11 @@ With `AWS_PROFILE`, omit `config.profile`. The native provider's `config.profile
 
 ## Single Agent Example
 
-Replace `YOUR_AGENT_ID` and `YOUR_ALIAS_ID` in `promptfooconfig.yaml`. Use a fresh `sessionId` for each run. The four tests form one conversation, with `maxConcurrency: 1` preserving turn order and the `--no-cache` flag ensuring every turn reaches the agent. The final test checks recall of the color supplied in the previous turn.
+Replace `YOUR_AGENT_ID` and `YOUR_ALIAS_ID` in `promptfooconfig.yaml`. The command below sets the required `BEDROCK_SESSION_ID` to a new UUID for this run. The four turns run in order with caching disabled. The final turn checks whether the agent remembers the color from the previous turn.
 
 ```bash
-npx promptfoo@latest eval -c promptfooconfig.yaml --no-cache -o results.json
+BEDROCK_SESSION_ID="$(node -p 'crypto.randomUUID()')" \
+  npx promptfoo@latest eval -c promptfooconfig.yaml -o results.json
 ```
 
 Inspect the exported `success`, `score`, `error`, and provider output fields. These assertions evaluate the deployed agent's behavior; a model can fail them even when the integration works.
@@ -43,49 +44,10 @@ Each test selects provider **labels**, and each response is graded separately. T
 
 These tests use separate sessions by default. Sharing a fixed session across unrelated or concurrent tests can mix their conversation histories.
 
-## Sessions and Memory
+## Sessions, Memory, and Traces
 
-`sessionId` continues a conversation. For persistent memory across sessions, first [enable memory on the deployed agent](https://docs.aws.amazon.com/bedrock/latest/userguide/agents-memory.html), then use a stable `memoryId` for the same user:
+The single-agent example uses one session to test conversation history. To test memory across sessions, [enable memory on the agent](https://docs.aws.amazon.com/bedrock/latest/userguide/agents-memory.html), set a stable `memoryId` for the user, and allow time for the previous session to be summarized.
 
-```yaml
-config:
-  agentAliasId: YOUR_ALIAS_ID
-  sessionId: conversation-001
-  memoryId: customer-123
-```
+To inspect tool or knowledge-base use, set `enableTrace: true` and examine `response.metadata.trace`. Configure action groups, guardrails, and inference parameters on the deployed agent.
 
-`memoryId` is an identifier, not a `SHORT_TERM_MEMORY` / `LONG_TERM_MEMORY` mode switch. End the session with `endSession: true` or let its configured idle timeout elapse. Memory summarization is asynchronous; a same-session recall test does not prove persistence across sessions. Keep caching disabled when testing session state or memory.
-
-## Traces and Deployed Features
-
-Set `enableTrace: true` to return AWS-native trace events in `response.metadata.trace`. A JavaScript assertion can inspect them through `context.providerResponse.metadata.trace`. They are separate from promptfoo's OpenTelemetry traces.
-
-Configure action groups, guardrails, inference parameters, and prompt overrides on the deployed agent. `InvokeAgent` does not apply those definitions from provider configuration. The provider does not execute caller-side tools returned by a `RETURN_CONTROL` action group.
-
-## IAM Permissions
-
-Scope invocation permission to your agent **alias**, replacing the region, account, agent, and alias below:
-
-```json
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Effect": "Allow",
-      "Action": "bedrock:InvokeAgent",
-      "Resource": "arn:aws:bedrock:us-east-1:123456789012:agent-alias/AGENT12345/ALIAS12345"
-    }
-  ]
-}
-```
-
-See [AWS's agent IAM examples](https://docs.aws.amazon.com/bedrock/latest/userguide/security_iam_id-based-policy-examples-agent.html). The deployed agent's service role separately needs permissions for its models, knowledge bases, and tools.
-
-## Troubleshooting
-
-- Verify the agent and alias IDs, region, and deployment status for not-found errors.
-- Check caller IAM permissions and service access for authorization errors.
-- Use a fresh session ID, serial execution, and `--no-cache` for conversation tests.
-- Inspect AWS-native traces when a deployed tool or knowledge base is not used.
-
-See the [Promptfoo Bedrock Agents provider guide](https://promptfoo.dev/docs/providers/bedrock-agents/) and [AWS InvokeAgent reference](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_agent-runtime_InvokeAgent.html).
+See the [Bedrock Agents provider guide](https://promptfoo.dev/docs/providers/bedrock-agents/) for the IAM policy, configuration options, and troubleshooting.

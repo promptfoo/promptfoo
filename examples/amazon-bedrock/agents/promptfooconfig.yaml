@@ -9,11 +9,8 @@ providers:
     config:
       agentAliasId: YOUR_ALIAS_ID
       region: us-east-1
-      # Use a fresh ID for each run. All tests below form one ordered conversation.
-      sessionId: promptfoo-session-change-me
-      enableTrace: true
-      # Optional: enable memory on the deployed agent first, then use a user ID.
-      # memoryId: customer-123
+      # Set this once per run (see README) so all four turns share a session.
+      sessionId: '{{env.BEDROCK_SESSION_ID}}'
 
 evaluateOptions:
   maxConcurrency: 1

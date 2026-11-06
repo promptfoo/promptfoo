@@ -11,25 +11,21 @@ providers:
     config:
       agentAliasId: TECH_ALIAS_ID
       region: us-east-1
-      enableTrace: true
   - id: bedrock-agent:BILLING_AGENT_ID
     label: billing-agent
     config:
       agentAliasId: BILLING_ALIAS_ID
       region: us-east-1
-      enableTrace: true
   - id: bedrock-agent:PRODUCT_AGENT_ID
     label: product-agent
     config:
       agentAliasId: PRODUCT_ALIAS_ID
       region: us-east-1
-      enableTrace: true
   - id: bedrock-agent:SUPERVISOR_AGENT_ID
     label: supervisor-agent
     config:
       agentAliasId: SUPERVISOR_ALIAS_ID
       region: us-east-1
-      enableTrace: true
 
 defaultTest:
   assert:
