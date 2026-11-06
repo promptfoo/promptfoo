@@ -1232,6 +1232,40 @@ it('keeps mutable prices independent across model aliases', () => {
 });
 
 describe('Mistral guarded in-flight dedupe partition', () => {
+  // This describe sits outside the outer `describe('Mistral')`, so its
+  // beforeEach never runs here: without this reset, `isCacheEnabled` and
+  // `getCache` carry whatever the previous test left (the embedding cache
+  // tests leave caching on with a stub that resolves a cached response),
+  // and the unguarded callApi returns that stale cached response without
+  // ever reaching fetchWithCache, so the first waitFor times out with 0
+  // calls. `clearAllMocks` alone does not restore implementations or
+  // return values, so reset them explicitly to the state these tests assume.
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(fetchWithCache).mockReset();
+    vi.mocked(isCacheEnabled).mockReturnValue(false);
+    vi.mocked(getCache).mockReturnValue({
+      get: vi.fn().mockResolvedValue(null),
+      set: vi.fn(),
+      wrap: vi.fn(),
+      del: vi.fn(),
+      clear: vi.fn(),
+      stores: [
+        {
+          get: vi.fn(),
+          set: vi.fn(),
+        },
+      ] as any,
+      mget: vi.fn(),
+      mset: vi.fn(),
+      mdel: vi.fn(),
+      reset: vi.fn(),
+      ttl: vi.fn(),
+      on: vi.fn(),
+      removeAllListeners: vi.fn(),
+    } as any);
+  });
+
   it('does not let a guarded call join an unguarded in-flight request', async () => {
     const provider = new MistralChatCompletionProvider('mistral-tiny');
     vi.spyOn(provider, 'getApiKey').mockReturnValue('fake-api-key');
