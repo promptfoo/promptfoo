@@ -336,6 +336,22 @@ describe('Protobuf decoding', () => {
       await expect(decodeExportTraceServiceRequest(malformed)).rejects.toThrow(/invalid protobuf/i);
     });
 
+    it.each([
+      { field: 'resourceSpans message', prefix: [0x0a] },
+      { field: 'resource schema URL string', prefix: [0x0a, 0x06, 0x1a] },
+      { field: 'span trace ID bytes', prefix: [0x0a, 0x0a, 0x12, 0x08, 0x12, 0x06, 0x0a] },
+      { field: 'unknown length-delimited field', prefix: [0x7a] },
+    ])('rejects an overflowing length prefix for $field', async ({ prefix }) => {
+      // 2^32 must not wrap to a zero-byte field or message.
+      const malformed = Uint8Array.from([...prefix, 0x80, 0x80, 0x80, 0x80, 0x10]);
+      await expect(decodeExportTraceServiceRequest(malformed)).rejects.toThrow(
+        'Invalid protobuf data: invalid length encoding',
+      );
+      await expect(decodeExportTraceServiceRequest(Buffer.from(malformed))).rejects.toThrow(
+        'Invalid protobuf data: invalid length encoding',
+      );
+    });
+
     it('should handle empty resourceSpans', async () => {
       const testData = {
         resourceSpans: [],

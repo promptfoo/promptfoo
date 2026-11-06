@@ -2878,6 +2878,19 @@ Third line`;
       expect(result.cost).toBeUndefined();
     });
 
+    it('prices Kimi K3 using the tier returned by Converse', async () => {
+      const provider = new AwsBedrockConverseProvider('global.moonshotai.kimi-k3', {
+        config: { region: 'us-east-1', serviceTier: { type: 'priority' } },
+      });
+      mockSend.mockResolvedValueOnce({
+        ...createMockConverseResponse('Response', {
+          usage: { inputTokens: 1000, outputTokens: 200, totalTokens: 1200 },
+        }),
+        serviceTier: { type: 'default' },
+      });
+      expect((await provider.callApi('Test')).cost).toBeCloseTo(0.006, 12);
+    });
+
     it('passes region and service tier through to the shared cost calculator', async () => {
       const provider = new AwsBedrockConverseProvider('minimax.minimax-m2.1', {
         config: { region: 'eu-west-1', serviceTier: { type: 'priority' } },
@@ -3662,6 +3675,23 @@ Third line`;
       expect(result.output).toBe('Hello World');
       expect(result.tokenUsage?.prompt).toBe(10);
       expect(result.tokenUsage?.completion).toBe(5);
+    });
+
+    it('prices Kimi K3 using the tier in Converse stream metadata', async () => {
+      const provider = new AwsBedrockConverseProvider('global.moonshotai.kimi-k3', {
+        config: { region: 'us-east-1', serviceTier: { type: 'priority' }, streaming: true },
+      });
+      mockSend.mockResolvedValueOnce({
+        stream: createMockStream([
+          {
+            metadata: {
+              usage: { inputTokens: 1000, outputTokens: 200, totalTokens: 1200 },
+              serviceTier: { type: 'flex' },
+            },
+          },
+        ]),
+      });
+      expect((await provider.callApiStreaming('Test')).cost).toBeCloseTo(0.003, 12);
     });
 
     it('should include prompt cache reads and writes in streaming cost', async () => {

@@ -11,6 +11,7 @@ import {
   type MockInstance,
   vi,
 } from 'vitest';
+import { createLoggerModule } from './factories/logger';
 import { mockProcessEnv } from './util/utils';
 import type { Logger, transport as Transport } from 'winston';
 
@@ -1288,20 +1289,10 @@ describe('logger', () => {
   });
 
   describe('setStructuredLogging with custom logger', () => {
-    let customLogger: {
-      debug: ReturnType<typeof vi.fn>;
-      info: ReturnType<typeof vi.fn>;
-      warn: ReturnType<typeof vi.fn>;
-      error: ReturnType<typeof vi.fn>;
-    };
+    let customLogger: ReturnType<typeof createLoggerModule>['default'];
 
     beforeEach(() => {
-      customLogger = {
-        debug: vi.fn(),
-        info: vi.fn(),
-        warn: vi.fn(),
-        error: vi.fn(),
-      };
+      customLogger = createLoggerModule().default;
       // Set custom logger to bypass default createLogMethod wrappers
       logger.setLogger(customLogger);
     });
@@ -1387,20 +1378,10 @@ describe('logger', () => {
   });
 
   describe('setLogger', () => {
-    let customLogger: {
-      debug: ReturnType<typeof vi.fn>;
-      info: ReturnType<typeof vi.fn>;
-      warn: ReturnType<typeof vi.fn>;
-      error: ReturnType<typeof vi.fn>;
-    };
+    let customLogger: ReturnType<typeof createLoggerModule>['default'];
 
     beforeEach(() => {
-      customLogger = {
-        debug: vi.fn(),
-        info: vi.fn(),
-        warn: vi.fn(),
-        error: vi.fn(),
-      };
+      customLogger = createLoggerModule().default;
     });
 
     afterEach(() => {
@@ -1446,12 +1427,7 @@ describe('logger', () => {
 
     it('should work with winston-style loggers that accept objects', () => {
       // Simulate a winston-style logger that handles object arguments
-      const winstonStyleLogger = {
-        debug: vi.fn(),
-        info: vi.fn(),
-        warn: vi.fn(),
-        error: vi.fn(),
-      };
+      const winstonStyleLogger = createLoggerModule().default;
 
       logger.setLogger(winstonStyleLogger);
       logger.setStructuredLogging(true);
@@ -1467,12 +1443,7 @@ describe('logger', () => {
 
   describe('logRequestResponse with structured logging', () => {
     let mockResponse: Partial<Response>;
-    let customLogger: {
-      debug: ReturnType<typeof vi.fn>;
-      info: ReturnType<typeof vi.fn>;
-      warn: ReturnType<typeof vi.fn>;
-      error: ReturnType<typeof vi.fn>;
-    };
+    let customLogger: ReturnType<typeof createLoggerModule>['default'];
 
     beforeEach(() => {
       mockResponse = {
@@ -1483,12 +1454,7 @@ describe('logger', () => {
           text: vi.fn().mockResolvedValue('{"success": true}'),
         }),
       };
-      customLogger = {
-        debug: vi.fn(),
-        info: vi.fn(),
-        warn: vi.fn(),
-        error: vi.fn(),
-      };
+      customLogger = createLoggerModule().default;
       // Set custom logger to test structured logging behavior
       logger.setLogger(customLogger);
     });
