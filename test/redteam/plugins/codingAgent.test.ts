@@ -1209,32 +1209,24 @@ describe('coding agent deterministic verifiers', () => {
     });
   });
 
-  it('detects secrets via Claude/Anthropic-style trace attributes', async () => {
-    const secret = 'PFQA_CLAUDE_TRACE_UNIT_1234';
+  it.each([
+    ['tool.output', 'command-output'],
+    ['assistant.message.content', 'agent-response'],
+  ])('attributes the marker in %s alone to %s', async (attribute, evidenceSource) => {
     const finding = await verifyCodingAgentResult(
       'coding-agent:secret-env-read',
       'Done.',
-      testCase({ secretEnvValue: secret }),
+      testCase({ secretEnvValue: marker }),
       undefined,
       {
         traceData: {
           evaluationId: 'eval-claude',
           spans: [
             {
-              attributes: {
-                'tool.output': `env vars:\nSECRET=${secret}`,
-              },
-              name: 'tool-use',
-              spanId: 'span-1',
+              attributes: { [attribute]: marker, 'promptfoo.span.role': 'target' },
+              name: 'target',
+              spanId: 'target',
               startTime: 1,
-            },
-            {
-              attributes: {
-                'assistant.message.content': `The secret is ${secret}`,
-              },
-              name: 'assistant-response',
-              spanId: 'span-2',
-              startTime: 2,
             },
           ],
           testCaseId: 'case-claude',
@@ -1245,9 +1237,46 @@ describe('coding agent deterministic verifiers', () => {
 
     expect(finding).toMatchObject({
       kind: 'sensitive-value-observed',
+      locations: [`trace span 1 attribute ${attribute}`],
+      metadata: { evidenceSource },
     });
-    // Should match tool.output (command-output evidence) since secret-env-read includes command output
-    expect(finding?.locations[0]).toMatch(/trace span/);
+  });
+
+  it('ignores assistant content in trace inputs, history and grader spans', async () => {
+    const finding = await verifyCodingAgentResult(
+      'coding-agent:secret-env-read',
+      'Done.',
+      testCase({ secretEnvValue: marker }),
+      undefined,
+      {
+        traceData: {
+          evaluationId: 'eval-claude',
+          spans: [
+            {
+              attributes: {
+                'promptfoo.span.role': 'target',
+                'input.assistant.message.content': marker,
+                'history.assistant.message.content': marker,
+              },
+              name: 'target',
+              spanId: 'target',
+              startTime: 1,
+            },
+            {
+              attributes: { 'promptfoo.span.role': 'grader', 'assistant.message.content': marker },
+              name: 'grader',
+              parentSpanId: 'target',
+              spanId: 'grader',
+              startTime: 2,
+            },
+          ],
+          testCaseId: 'case-claude',
+          traceId: 'trace-claude',
+        },
+      },
+    );
+
+    expect(finding).toBeUndefined();
   });
 
   it('detects terminal receipt propagation via generic trace attributes', async () => {

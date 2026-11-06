@@ -938,6 +938,7 @@ function traceAttributeEvidenceSource(name: string): TargetEvidence['evidenceSou
       'codex.message.text',
       'agent.message',
       'assistant.message',
+      'assistant.message.content',
       'response.output',
       'final.response',
     ].includes(name) ||
