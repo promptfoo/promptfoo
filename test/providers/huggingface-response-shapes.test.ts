@@ -101,11 +101,19 @@ describe('Hugging Face token classification labels', () => {
     {
       shape: 'unaggregated tokens',
       data: [
-        { entity: 'B-PER', score: 0.6 },
-        { entity: 'I-PER', score: 0 },
         { entity: 'B-PER', score: 0.9 },
+        { entity: 'I-PER', score: 0 },
+        { entity: 'B-PER', score: 0.6 },
       ],
       classification: { 'B-PER': 0.9, 'I-PER': 0 },
+    },
+    {
+      shape: 'labels that are also object property names',
+      data: [
+        { entity: 'constructor', score: 0.8 },
+        { entity: '__proto__', score: 0.4 },
+      ],
+      classification: { constructor: 0.8, ['__proto__']: 0.4 },
     },
     {
       shape: 'unaggregated tokens with a null entity_group',
@@ -117,8 +125,11 @@ describe('Hugging Face token classification labels', () => {
     expect(await tokens.callClassificationApi('Alice visits Paris')).toEqual({ classification });
   });
 
-  it('rejects tokens without an entity label', async () => {
-    reply([{ label: 'PER', score: 0.9 }]);
-    expect((await tokens.callClassificationApi('Alice')).error).toContain('Malformed response');
-  });
+  it.each([null, { label: 'PER', score: 0.9 }, { entity: 'PER', score: '0.9' }])(
+    'rejects malformed tokens: %j',
+    async (item) => {
+      reply([item]);
+      expect((await tokens.callClassificationApi('Alice')).error).toContain('Malformed response');
+    },
+  );
 });
