@@ -1,4 +1,5 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { mockProcessEnv } from './util/utils';
 
 const SHEET_URL = 'https://docs.google.com/spreadsheets/d/1234567890/edit';
 
@@ -15,6 +16,8 @@ function mockAuthenticatedRead() {
 }
 
 describe('Google Sheets optional dependency', () => {
+  beforeEach(() => mockProcessEnv({ GOOGLE_CLOUD_UNIVERSE_DOMAIN: 'googleapis.com' }));
+
   afterEach(() => {
     vi.doUnmock('google-auth-library');
     vi.doUnmock('../src/util/fetch/index');

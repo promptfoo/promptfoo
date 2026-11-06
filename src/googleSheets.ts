@@ -56,10 +56,20 @@ async function openSpreadsheet(url: string, scope: string) {
   return { auth, endpoint: `${endpoint.origin}/v4/spreadsheets/${spreadsheetId}` };
 }
 
+function readSheet<T>(auth: GoogleAuth, url: string) {
+  return auth.request<T>({
+    url,
+    method: 'GET',
+    retry: true,
+    // Google requires both headers to enable gzip response compression.
+    headers: { 'Accept-Encoding': 'gzip', 'User-Agent': 'promptfoo (gzip)' },
+  });
+}
+
 async function getSheetTitle(auth: GoogleAuth, endpoint: string, gid?: string): Promise<string> {
-  const { data } = await auth.request<{
+  const { data } = await readSheet<{
     sheets?: Array<{ properties?: { sheetId?: number; title?: string } }>;
-  }>({ url: endpoint, method: 'GET', retry: true });
+  }>(auth, endpoint);
   const sheet = gid
     ? data.sheets?.find((entry) => entry.properties?.sheetId === Number(gid))
     : data.sheets?.[0];
@@ -131,11 +141,10 @@ export async function fetchCsvFromGoogleSheetUnauthenticated(url: string): Promi
 export async function fetchCsvFromGoogleSheetAuthenticated(url: string): Promise<CsvRow[]> {
   const { auth, endpoint } = await openSpreadsheet(url, 'spreadsheets.readonly');
   const title = await getSheetTitle(auth, endpoint, getSheetGid(url));
-  const response = await auth.request<{ values?: string[][] }>({
-    url: `${endpoint}/values/${encodePathSegment(title)}`,
-    method: 'GET',
-    retry: true,
-  });
+  const response = await readSheet<{ values?: string[][] }>(
+    auth,
+    `${endpoint}/values/${encodePathSegment(title)}`,
+  );
 
   const rows = response.data.values;
   if (!rows?.length) {

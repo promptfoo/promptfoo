@@ -20,6 +20,7 @@ const mockGoogleAuth = vi.fn(function GoogleAuthMock() {
 });
 vi.mock('google-auth-library', () => ({ GoogleAuth: mockGoogleAuth }));
 
+const expectedGet = { method: 'GET', retry: true, headers: expect.any(Object) };
 const spreadsheetUrl = 'https://sheets.googleapis.com/v4/spreadsheets/1234567890';
 
 describe('Google Sheets Integration', () => {
@@ -33,6 +34,7 @@ describe('Google Sheets Integration', () => {
     getUniverseDomain.mockResolvedValue('googleapis.com');
     vi.spyOn(logger, 'error').mockImplementation(() => {});
     vi.spyOn(logger, 'info').mockImplementation(() => {});
+    return mockProcessEnv({ GOOGLE_CLOUD_UNIVERSE_DOMAIN: 'googleapis.com' });
   });
 
   afterEach(() => {
@@ -142,6 +144,29 @@ describe('Google Sheets Integration', () => {
       });
     });
 
+    it('negotiates gzip for metadata and values through the Google Auth transport', async () => {
+      const { OAuth2Client } =
+        await vi.importActual<typeof import('google-auth-library')>('google-auth-library');
+      const fetch = vi
+        .fn<typeof globalThis.fetch>()
+        .mockResolvedValueOnce(Response.json({ sheets: [{ properties: { title: 'Sheet1' } }] }))
+        .mockResolvedValueOnce(Response.json({ values: [['header'], ['value']] }));
+      const client = new OAuth2Client({ transporterOptions: { fetchImplementation: fetch } });
+      client.setCredentials({ access_token: 'fixture-token' });
+      request.mockReset().mockImplementation((options) => client.request(options));
+
+      await expect(fetchCsvFromGoogleSheetAuthenticated(TEST_SHEET_URL)).resolves.toEqual([
+        { header: 'value' },
+      ]);
+      expect(fetch).toHaveBeenCalledTimes(2);
+      for (const [, options] of fetch.mock.calls) {
+        const headers = new Headers(options?.headers);
+        expect(headers.get('Accept-Encoding')).toBe('gzip');
+        expect(headers.get('User-Agent')).toContain('(gzip)');
+        expect(headers.get('Authorization')).toBe('Bearer fixture-token');
+      }
+    });
+
     it('should fetch and parse authenticated sheet data', async () => {
       const mockResponse = {
         data: {
@@ -155,11 +180,10 @@ describe('Google Sheets Integration', () => {
 
       const result = await fetchCsvFromGoogleSheetAuthenticated(TEST_SHEET_URL);
       expect(result).toEqual([{ header1: 'value1', header2: 'value2', header3: '' }]);
-      expect(request).toHaveBeenCalledWith({ url: spreadsheetUrl, method: 'GET', retry: true });
+      expect(request).toHaveBeenCalledWith({ url: spreadsheetUrl, ...expectedGet });
       expect(request).toHaveBeenCalledWith({
         url: `${spreadsheetUrl}/values/Sheet1`,
-        method: 'GET',
-        retry: true,
+        ...expectedGet,
       });
     });
 
@@ -171,8 +195,7 @@ describe('Google Sheets Integration', () => {
       await fetchCsvFromGoogleSheetAuthenticated(TEST_SHEET_URL);
       expect(request).toHaveBeenLastCalledWith({
         url: `${spreadsheetUrl}/values/Sales%20%2F%20Q1%3F%23`,
-        method: 'GET',
-        retry: true,
+        ...expectedGet,
       });
       expect(mockGoogleAuth).toHaveBeenCalledWith({
         scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
@@ -194,8 +217,7 @@ describe('Google Sheets Integration', () => {
         await fetchCsvFromGoogleSheetAuthenticated(TEST_SHEET_URL);
         expect(request).toHaveBeenLastCalledWith({
           url: 'https://sheets.example.test/v4/spreadsheets/1234567890/values/Sheet1',
-          method: 'GET',
-          retry: true,
+          ...expectedGet,
         });
       } finally {
         restore();
@@ -218,11 +240,10 @@ describe('Google Sheets Integration', () => {
       });
 
       await fetchCsvFromGoogleSheetAuthenticated(TEST_SHEET_URL_WITH_GID);
-      expect(request).toHaveBeenCalledWith({ url: spreadsheetUrl, method: 'GET', retry: true });
+      expect(request).toHaveBeenCalledWith({ url: spreadsheetUrl, ...expectedGet });
       expect(request).toHaveBeenCalledWith({
         url: `${spreadsheetUrl}/values/TestSheet`,
-        method: 'GET',
-        retry: true,
+        ...expectedGet,
       });
     });
 
@@ -232,8 +253,7 @@ describe('Google Sheets Integration', () => {
       await fetchCsvFromGoogleSheetAuthenticated(`${TEST_SHEET_URL}#gid=98765`);
       expect(request).toHaveBeenCalledWith({
         url: `${spreadsheetUrl}/values/TestSheet`,
-        method: 'GET',
-        retry: true,
+        ...expectedGet,
       });
     });
 
@@ -251,8 +271,7 @@ describe('Google Sheets Integration', () => {
       await fetchCsvFromGoogleSheetAuthenticated(`${TEST_SHEET_URL}?gid=0`);
       expect(request).toHaveBeenCalledWith({
         url: `${spreadsheetUrl}/values/Sheet1`,
-        method: 'GET',
-        retry: true,
+        ...expectedGet,
       });
     });
 
@@ -319,8 +338,7 @@ describe('Google Sheets Integration', () => {
       // Verify the API was called with just the sheet name
       expect(request).toHaveBeenCalledWith({
         url: `${spreadsheetUrl}/values/Sheet1`,
-        method: 'GET',
-        retry: true,
+        ...expectedGet,
       });
 
       // Verify all data was returned
@@ -426,8 +444,7 @@ describe('Google Sheets Integration', () => {
       // Verify the API was called with just the sheet name (not a huge range)
       expect(request).toHaveBeenCalledWith({
         url: `${spreadsheetUrl}/values/WideSheet`,
-        method: 'GET',
-        retry: true,
+        ...expectedGet,
       });
 
       // Verify all 100 columns were retrieved
