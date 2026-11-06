@@ -249,7 +249,7 @@
     "@fal-ai/client": "~1.10.1",
     "@googleapis/sheets": "^18.1.1",
     "@modelcontextprotocol/sdk": "^1.32.2",
-    "@modelcontextprotocol/server-filesystem": "2026.8.31",
+    "@modelcontextprotocol/server-filesystem": "1.0.0",
     "@opencode-ai/sdk": "^1.19.4",
     "@smithy/node-http-handler": "^4.4.14",
     "google-auth-library": "^11.3.1",
