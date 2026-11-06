@@ -11,20 +11,41 @@ import { loadYaml } from '../util/yamlLoad';
 
 import type { GlobalConfig } from '../configTypes';
 
-const CONFIG_DIRECTORY_MODE = 0o700;
 const CONFIG_FILE_MODE = 0o600;
 
 export function writeGlobalConfig(config: GlobalConfig): void {
-  const configDir = getConfigDirectoryPath();
-  if (!fs.existsSync(configDir)) {
-    fs.mkdirSync(configDir, { recursive: true, mode: CONFIG_DIRECTORY_MODE });
+  const file = path.join(getConfigDirectoryPath(true), 'promptfoo.yaml');
+  const contents = yaml.dump(config);
+  if (process.platform === 'win32' || !config.cloud?.apiKey) {
+    fs.writeFileSync(file, contents, { mode: CONFIG_FILE_MODE });
+    return;
   }
 
-  fs.writeFileSync(
-    path.join(configDir, 'promptfoo.yaml'),
-    yaml.dump(config),
-    { mode: CONFIG_FILE_MODE },
+  // Replace the file so a reader holding an old, permissive inode cannot read a new key.
+  const existing = fs.statSync(file, { throwIfNoEntry: false });
+  const target = existing ? fs.realpathSync(file) : file;
+  if (existing) {
+    fs.accessSync(target, fs.constants.W_OK);
+  }
+  const temporary = `${target}.${crypto.randomUUID()}.tmp`;
+  const fd = fs.openSync(
+    temporary,
+    'wx',
+    existing ? existing.mode & CONFIG_FILE_MODE : CONFIG_FILE_MODE,
   );
+  try {
+    try {
+      if (existing && existing.uid !== process.geteuid?.()) {
+        fs.fchownSync(fd, existing.uid, existing.gid);
+      }
+      fs.writeFileSync(fd, contents);
+    } finally {
+      fs.closeSync(fd);
+    }
+    fs.renameSync(temporary, target);
+  } finally {
+    fs.rmSync(temporary, { force: true });
+  }
 }
 
 export function readGlobalConfig(): GlobalConfig {
@@ -32,19 +53,39 @@ export function readGlobalConfig(): GlobalConfig {
   const configFilePath = path.join(configDir, 'promptfoo.yaml');
   let globalConfig: GlobalConfig = { id: crypto.randomUUID() };
   if (fs.existsSync(configFilePath)) {
-    globalConfig = (loadYaml(fs.readFileSync(configFilePath, 'utf-8')) as GlobalConfig) || {};
+    const fd = fs.openSync(configFilePath, 'r');
+    try {
+      globalConfig = (loadYaml(fs.readFileSync(fd, 'utf-8')) as GlobalConfig) || {};
+      if (process.platform !== 'win32' && globalConfig.cloud?.apiKey) {
+        restrictLegacyConfig(fd);
+      }
+    } finally {
+      fs.closeSync(fd);
+    }
     if (!globalConfig?.id) {
       globalConfig = { ...globalConfig, id: crypto.randomUUID() };
       writeGlobalConfig(globalConfig);
     }
   } else {
-    if (!fs.existsSync(configDir)) {
-      fs.mkdirSync(configDir, { recursive: true, mode: CONFIG_DIRECTORY_MODE });
-    }
-    fs.writeFileSync(configFilePath, yaml.dump(globalConfig), { mode: CONFIG_FILE_MODE });
+    writeGlobalConfig(globalConfig);
   }
 
   return globalConfig;
+}
+
+function restrictLegacyConfig(fd: number): void {
+  const { mode } = fs.fstatSync(fd);
+  if ((mode & 0o077) !== 0) {
+    try {
+      fs.fchmodSync(fd, mode & CONFIG_FILE_MODE);
+    } catch (error) {
+      // Permissions on operator-managed read-only configs must be set by the operator.
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code !== 'EROFS' && code !== 'EPERM' && code !== 'EACCES') {
+        throw error;
+      }
+    }
+  }
 }
 
 /**

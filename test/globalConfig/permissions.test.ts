@@ -1,0 +1,71 @@
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { readGlobalConfig, writeGlobalConfigPartial } from '../../src/globalConfig/globalConfig';
+import { setConfigDirectoryPath } from '../../src/util/config/manage';
+
+describe('global config permissions', () => {
+  let tempDir: string;
+  let configDir: string;
+  let file: string;
+
+  beforeEach(() => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-global-config-'));
+    configDir = path.join(tempDir, 'config');
+    file = path.join(configDir, 'promptfoo.yaml');
+    setConfigDirectoryPath(configDir);
+  });
+
+  afterEach(() => {
+    setConfigDirectoryPath(undefined);
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  it('creates and persists an ID on first read', () => {
+    const { id } = readGlobalConfig();
+    expect(id).toMatch(/^[\da-f]{8}-[\da-f]{4}-4[\da-f]{3}-[89ab][\da-f]{3}-[\da-f]{12}$/i);
+    expect(readGlobalConfig()).toEqual({ id });
+    if (process.platform !== 'win32') {
+      expect(fs.statSync(configDir).mode & 0o077).toBe(0);
+      expect(fs.statSync(file).mode & 0o077).toBe(0);
+    }
+  });
+
+  it.skipIf(process.platform === 'win32')(
+    'restricts a legacy credential file on read without changing the shared directory',
+    () => {
+      fs.mkdirSync(configDir);
+      fs.chmodSync(configDir, 0o755);
+      fs.writeFileSync(file, 'id: test-id\ncloud:\n  apiKey: old-fixture-key\n');
+      fs.chmodSync(file, 0o444);
+
+      expect(readGlobalConfig().cloud?.apiKey).toBe('old-fixture-key');
+      expect(fs.statSync(file).mode & 0o777).toBe(0o400);
+      expect(fs.statSync(configDir).mode & 0o777).toBe(0o755);
+    },
+  );
+
+  it.skipIf(process.platform === 'win32')(
+    'keeps the first saved key out of a previously readable file descriptor',
+    () => {
+      fs.mkdirSync(configDir);
+      const target = path.join(tempDir, 'linked-config.yaml');
+      fs.writeFileSync(target, 'id: test-id\n');
+      fs.chmodSync(target, 0o644);
+      fs.symlinkSync(target, file);
+
+      const previous = fs.openSync(file, 'r');
+      try {
+        writeGlobalConfigPartial({ cloud: { apiKey: 'new-fixture-key' } });
+        expect(fs.readFileSync(previous, 'utf8')).not.toContain('new-fixture-key');
+        expect(fs.statSync(target).mode & 0o777).toBe(0o600);
+        expect(fs.lstatSync(file).isSymbolicLink()).toBe(true);
+        expect(readGlobalConfig().cloud?.apiKey).toBe('new-fixture-key');
+      } finally {
+        fs.closeSync(previous);
+      }
+    },
+  );
+});

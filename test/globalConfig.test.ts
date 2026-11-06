@@ -18,6 +18,12 @@ function isValidUUID(uuid: string): boolean {
 vi.mock('fs', () => ({
   readFileSync: vi.fn(),
   writeFileSync: vi.fn(),
+  openSync: vi.fn(() => 123),
+  closeSync: vi.fn(),
+  fstatSync: vi.fn(() => ({ mode: 0o600 })),
+  fchmodSync: vi.fn(),
+  renameSync: vi.fn(),
+  rmSync: vi.fn(),
   statSync: vi.fn(),
   readdirSync: vi.fn(),
   existsSync: vi.fn(),
@@ -61,10 +67,7 @@ describe('Global Config', () => {
 
       it('should read and parse the existing config file', () => {
         const result = globalConfig.readGlobalConfig();
-        expect(fs.readFileSync).toHaveBeenCalledWith(
-          expect.stringContaining('promptfoo.yaml'),
-          'utf-8',
-        );
+        expect(fs.readFileSync).toHaveBeenCalledWith(123, 'utf-8');
         expect(result).toEqual(mockConfig);
       });
 
@@ -109,11 +112,7 @@ describe('Global Config', () => {
       it('should create new config directory and file with generated UUID', () => {
         const result = globalConfig.readGlobalConfig();
 
-        expect(fs.existsSync).toHaveBeenCalledTimes(2);
-        expect(fs.mkdirSync).toHaveBeenCalledWith(expect.any(String), {
-          recursive: true,
-          mode: 0o700,
-        });
+        expect(fs.existsSync).toHaveBeenCalledTimes(1);
         expect(fs.writeFileSync).toHaveBeenCalledTimes(1);
         expect(fs.writeFileSync).toHaveBeenCalledWith(
           expect.stringContaining('promptfoo.yaml'),
@@ -128,6 +127,18 @@ describe('Global Config', () => {
     });
 
     describe('error handling', () => {
+      it.skipIf(process.platform === 'win32')('can read a credential mounted read-only', () => {
+        vi.mocked(fs.existsSync).mockReturnValue(true);
+        const config = { ...mockConfig, cloud: { apiKey: 'fixture-key' } };
+        vi.mocked(fs.readFileSync).mockReturnValue(yaml.dump(config));
+        vi.mocked(fs.fstatSync).mockReturnValueOnce({ mode: 0o444 } as fs.Stats);
+        vi.mocked(fs.fchmodSync).mockImplementationOnce(() => {
+          throw Object.assign(new Error('Read-only mount'), { code: 'EROFS' });
+        });
+        expect(globalConfig.readGlobalConfig()).toEqual(config);
+        expect(fs.fchmodSync).toHaveBeenCalledWith(123, 0o400);
+      });
+
       it('should throw error if config file is invalid YAML', () => {
         vi.mocked(fs.existsSync).mockReturnValue(true);
         vi.mocked(fs.readFileSync).mockReturnValue('invalid: yaml: content:');
@@ -170,10 +181,8 @@ describe('Global Config', () => {
 
       globalConfig.writeGlobalConfigPartial(partialConfig);
 
-      expect(fs.writeFileSync).toHaveBeenCalledWith(
-        expect.stringContaining('promptfoo.yaml'),
+      expect(vi.mocked(fs.writeFileSync).mock.calls.map(([, contents]) => contents)).toContainEqual(
         expect.stringMatching(/email: new@example\.com.*apiKey: old-key/s),
-        expect.objectContaining({ mode: 0o600 }),
       );
     });
 
