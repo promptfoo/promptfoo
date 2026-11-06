@@ -19,15 +19,23 @@ Contact: srinivas AT testAIng.com
 
 ## Full eval
 
-`promptfoo_tests_from_hf.py` uses only the Python standard library. A starter `tests.json` is committed (offline-safe `contains` asserts for the echo provider). Re-run the script to regenerate with `llm-rubric` assertions; pass a limit to keep the file small.
+`promptfoo_tests_from_hf.py` uses only the Python standard library. A starter `tests.json` is committed (offline-safe `contains` asserts for the echo provider). Re-run the script with no limit to regenerate all 110 cases with `llm-rubric` assertions.
 
 ```bash
 python promptfoo_tests_from_hf.py
-python promptfoo_tests_from_hf.py 10
+export OPENAI_API_KEY=sk-...   # required for llm-rubric grading (or set your grader provider's key)
 npx promptfoo@latest eval
 ```
 
-`llm-rubric` needs a grader model and your own API key. The provider in `promptfooconfig.yaml` is `echo`, which is free and offline. Swap in your agent or provider before you read the scores as an evaluation of agent behavior.
+`llm-rubric` needs a separate grading provider. With only the `echo` target configured, Promptfoo grades via OpenAI unless you pass another grader, so set `OPENAI_API_KEY` (or e.g. `npx promptfoo@latest eval --grader openai:gpt-4o-mini` with that key available). The provider in `promptfooconfig.yaml` is `echo`, which is free and offline for the target. Swap in your agent or provider before you read the scores as an evaluation of agent behavior.
+
+### Optional: smaller generated suite
+
+To regenerate a truncated suite for local experimentation (this overwrites `tests.json`), pass a limit. Do **not** run this as part of the full-eval sequence above, or the next `eval` will cover only that subset instead of all 110 cases:
+
+```bash
+python promptfoo_tests_from_hf.py 10
+```
 
 ## Offline smoke
 
