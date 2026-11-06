@@ -7,7 +7,7 @@ Run evals against an existing Foundry agent:
 ```bash
 npx promptfoo@latest init --example azure/foundry-agent
 cd azure/foundry-agent
-npm install @azure-rest/core-client @azure/identity
+npm install @azure/ai-projects @azure/identity
 az login
 ```
 
