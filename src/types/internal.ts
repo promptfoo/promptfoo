@@ -24,6 +24,8 @@ export type InternalEvaluateOptions = EvaluateOptions & {
     select: (
       candidates: PreparedHistoricalCandidate[],
       suite: TestSuite,
+      /** Current-only signatures for variants without eligible authored tests. */
+      preparedSyntheticSignatures?: PreparedHistoricalCandidate[],
     ) => Promise<PreparedHistoricalCandidate[]>;
     writeEnabled: boolean;
   };

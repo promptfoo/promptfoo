@@ -687,6 +687,44 @@ describe('exact scenario result matching', () => {
     }
   });
 
+  it('matches only current prepared synthetic signature vars when no authored tests remain', () => {
+    const scenario: Scenario = {
+      config: [{ vars: { input: ['a', 'b'] } }],
+      tests: [],
+    };
+    const suite: TestSuite = { prompts: [], providers: [], scenarios: [scenario] };
+    const prepared = createScenarioResultClassifier(suite, scenario, 0, {
+      preparedSyntheticVars: [
+        { input: 'a!', added: 'current' },
+        { input: 'b!', added: 'current' },
+      ],
+    }).forVariant(0);
+    const selected = failedResult(
+      { input: 'a!', added: 'current', runtimeOnly: 'generated' },
+      { conversationId: '__scenario_0__' },
+    );
+    expect(prepared.includesResult(selected)).toBe(true);
+    expect(
+      prepared.includesResult({
+        ...selected,
+        vars: { input: 'a!', added: 'stale' },
+        testCase: { ...selected.testCase, vars: { input: 'a!', added: 'stale' } },
+      }),
+    ).toBe(false);
+    expect(
+      prepared.includesResult({
+        ...selected,
+        vars: { input: 'a', added: 'current' },
+        testCase: { ...selected.testCase, vars: { input: 'a', added: 'current' } },
+      }),
+    ).toBe(false);
+    expect(
+      createScenarioResultClassifier(suite, scenario, 0, { preparedSyntheticVars: [] })
+        .forVariant(0)
+        .includesResult(selected),
+    ).toBe(false);
+  });
+
   it('does not treat non-string arrays as scalar combinations', () => {
     const scenario: Scenario = {
       config: [{ vars: { objectValue: [{ key: 'a' }, { key: 'b' }] } }],

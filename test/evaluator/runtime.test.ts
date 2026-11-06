@@ -18,6 +18,7 @@ import { generatePrompts } from '../../src/suggestions';
 import { ResultFailureReason, type TestSuite } from '../../src/types/index';
 import { promptYesNo } from '../../src/util/readline';
 import { createEmptyTokenUsage } from '../../src/util/tokenUsageUtils';
+import { transform } from '../../src/util/transform';
 import { mockApiProvider, toPrompt } from './helpers';
 import { describeEvaluator } from './lifecycle';
 
@@ -71,6 +72,64 @@ function createInMemoryEvaluation(overrides: Partial<InMemoryEvaluation> = {}): 
 }
 
 describeEvaluator('evaluator runtime ports', () => {
+  it.each([
+    { disableVarExpansion: false, expected: ['a!', 'b!'] },
+    { disableVarExpansion: true, expected: [['a!', 'b!']] },
+  ])(
+    'prepares current synthetic scenario signatures before selection (disable expansion: $disableVarExpansion)',
+    async ({ disableVarExpansion, expected }) => {
+      const evaluation = createInMemoryEvaluation();
+      vi.mocked(transform).mockImplementationOnce(async (_code, input) => {
+        const vars = input as { input: string[] };
+        return { ...vars, input: vars.input.map((value) => `${value}!`), added: 'current' };
+      });
+      const select = vi.fn(async (...args: unknown[]) => {
+        const signatures = args[2] as Array<{ test: { vars: { input: unknown; added: string } } }>;
+        expect(signatures?.[0]?.test).toMatchObject({
+          options: {
+            transformVars: '({ input: vars.input.map((value) => value + "!"), added: "current" })',
+          },
+        });
+        expect(signatures?.map(({ test }) => test.vars.input)).toEqual(expected);
+        expect(signatures?.map(({ test }) => test.vars.added)).toEqual(
+          expected.map(() => 'current'),
+        );
+        return [];
+      });
+      await evaluate(
+        {
+          providers: [mockApiProvider],
+          prompts: [toPrompt('Test {{input}}')],
+          tests: [],
+          defaultTest: {
+            options: {
+              transformVars:
+                '({ input: vars.input.map((value) => value + "!"), added: "current" })',
+            },
+          },
+          scenarios: [
+            {
+              config: [{ vars: { input: ['a', 'b'] }, options: { disableVarExpansion } }],
+              tests: [],
+            },
+          ],
+        },
+        evaluation,
+        {
+          exactHistoricalSelection: {
+            writeEnabled: false,
+            eligible: async (cases) => cases,
+            select,
+          },
+        },
+        createInMemoryRuntime(new InMemoryEvaluationStore(evaluation)),
+      );
+      expect(select).toHaveBeenCalledOnce();
+      expect(transform).toHaveBeenCalledOnce();
+      expect(mockApiProvider.callApi).not.toHaveBeenCalled();
+    },
+  );
+
   it('rejects a required historical replay with no committed plan before provider calls', async () => {
     const evaluation = createInMemoryEvaluation({
       runtimeOptions: { exactHistoricalReplayRequired: true },

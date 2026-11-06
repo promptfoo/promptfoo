@@ -4,6 +4,7 @@ import * as path from 'path';
 import chalk from 'chalk';
 import chokidar from 'chokidar';
 import dedent from 'dedent';
+import deepEqual from 'fast-deep-equal';
 import ora from 'ora';
 import { z } from 'zod';
 import { disableCache } from '../cache';
@@ -122,6 +123,66 @@ export type EvalCommandOptions = z.infer<typeof EvalCommandSchema>;
 const ORIGINAL_SCENARIO_SOURCE_INDEX = Symbol('promptfoo.originalScenarioSourceIndex');
 type ScenarioWithSourceIndex = Scenario & { [ORIGINAL_SCENARIO_SOURCE_INDEX]?: number };
 
+// Only these assertion handlers evaluate local values or already-produced response data.
+// Unknown and provider-backed handlers must be authored in the current config.
+const SAFE_EXTRACTED_ASSERTION_TYPES = new Set([
+  'bleu',
+  'contains',
+  'contains-all',
+  'contains-any',
+  'contains-html',
+  'contains-json',
+  'contains-sql',
+  'contains-xml',
+  'cost',
+  'equals',
+  'finish-reason',
+  'gleu',
+  'guardrails',
+  'icontains',
+  'icontains-all',
+  'icontains-any',
+  'is-html',
+  'is-json',
+  'is-refusal',
+  'is-sql',
+  'is-xml',
+  'latency',
+  'levenshtein',
+  'meteor',
+  'perplexity',
+  'perplexity-score',
+  'regex',
+  'rouge-l',
+  'rouge-n',
+  'rouge-s',
+  'skill-used',
+  'starts-with',
+  'tool-call-f1',
+  'word-count',
+]);
+
+function hasUnsafeHistoricalAssertion(assertions: TestCase['assert']): boolean {
+  if (assertions === undefined) {
+    return false;
+  }
+  if (!Array.isArray(assertions)) {
+    return true;
+  }
+  return assertions.some((assertion) => {
+    if (!assertion || typeof assertion !== 'object' || typeof assertion.type !== 'string') {
+      return true;
+    }
+    let type: string = assertion.type;
+    while (type.startsWith('not-')) {
+      type = type.slice(4);
+    }
+    return type === 'assert-set'
+      ? !('assert' in assertion) || hasUnsafeHistoricalAssertion(assertion.assert)
+      : !SAFE_EXTRACTED_ASSERTION_TYPES.has(type);
+  });
+}
+
 function hasExecutableHistoricalReference(value: unknown): boolean {
   if (typeof value === 'function') {
     return true;
@@ -157,17 +218,42 @@ function hasExecutableHistoricalValue(value: unknown): boolean {
   );
 }
 
-function assertSafeExtractedHistoricalTest(test: TestCase): void {
+function assertSafeExtractedHistoricalTest(
+  test: TestCase,
+  currentPreparedVars?: NonNullable<TestCase['vars']>,
+): void {
+  const untrustedVars = Object.fromEntries(
+    Object.entries(test.vars ?? {}).filter(
+      ([key]) => !currentPreparedVars || !Object.hasOwn(currentPreparedVars, key),
+    ),
+  );
   if (
     test.assertScoringFunction !== undefined ||
+    hasUnsafeHistoricalAssertion(test.assert) ||
     hasExecutableHistoricalReference(test.assert) ||
     hasExecutableHistoricalReference(test.options) ||
-    hasExecutableHistoricalValue(test.vars)
+    hasExecutableHistoricalValue(untrustedVars)
   ) {
     throw new Error(
       'An extracted historical case contains executable or provider references. Declare the case in the current config before replaying it.',
     );
   }
+}
+
+function bindCurrentPreparedVars(
+  test: TestCase,
+  result: EvaluateResult | undefined,
+  signatures: PreparedHistoricalCandidate[],
+): NonNullable<TestCase['vars']> | undefined {
+  const matches = signatures.filter(({ test: current }) =>
+    Object.entries(current.vars ?? {}).every(
+      ([key, value]) => deepEqual(test.vars?.[key], value) && deepEqual(result?.vars?.[key], value),
+    ),
+  );
+  return matches.length > 0 &&
+    matches.every(({ test: current }) => deepEqual(current.vars, matches[0].test.vars))
+    ? matches[0].test.vars
+    : undefined;
 }
 
 function intersectHistoricalSelectors<T>(
@@ -248,16 +334,14 @@ function hasCurrentSingularOverride(
     return suite.tests?.[source.testIndex]?.provider !== undefined;
   }
   const scenario = suite.scenarios?.[source.scenarioIndex];
-  return (
-    scenario?.config[source.variantIndex]?.provider !== undefined ||
-    scenario?.tests?.[source.testIndex]?.provider !== undefined
-  );
+  return scenario?.tests?.[source.testIndex]?.provider !== undefined;
 }
 
 function bindCurrentSyntheticTarget(
   result: EvaluateResult | undefined,
   candidates: PreparedHistoricalCandidate[],
   suite: TestSuite,
+  currentVariantProvider?: TestCase['provider'],
 ): PreparedHistoricalCandidate | undefined {
   const singularSources = new Map(
     candidates
@@ -283,10 +367,12 @@ function bindCurrentSyntheticTarget(
   });
   const defaultProvider =
     typeof suite.defaultTest === 'object' ? suite.defaultTest.provider : undefined;
-  if (matchesStored(defaultProvider) && matching.length === 0) {
+  const matchesVariant = matchesStored(currentVariantProvider);
+  const matchesDefault = matchesStored(defaultProvider);
+  if (matching.length === 0 && (matchesVariant || matchesDefault)) {
     return undefined;
   }
-  if (matching.length !== 1 || matchesStored(defaultProvider)) {
+  if (matching.length !== 1 || matchesVariant || matchesDefault) {
     throw new Error(
       'Could not safely bind an extracted historical case to one current singular provider. Declare the generated case in the current config or use distinct source tests.',
     );
@@ -330,7 +416,7 @@ function createExactHistoricalSelector({
       (scenario as ScenarioWithSourceIndex)[ORIGINAL_SCENARIO_SOURCE_INDEX] = sourceIndex;
     }
   });
-  return async (candidates, suite) => {
+  return async (candidates, suite, preparedSyntheticSignatures) => {
     const resultLoadCache = new Map<string, Promise<StoredResults | undefined>>();
     const topCandidates: PreparedHistoricalCandidate[] = [];
     const scenarioCandidates = new Map<string, PreparedHistoricalCandidate[]>();
@@ -368,12 +454,12 @@ function createExactHistoricalSelector({
         });
       }
     }
-    // A scenario whose authored tests were all filtered out has no candidate from
-    // which to bind its singular provider. Resolve only the current variant provider
-    // through the normal test-provider loader before classifying historical rows.
+    // The variant provider is one current target shared by its authored tests, not
+    // one singular override per test. Resolve only that current provider once per
+    // group before classifying generated historical rows.
     for (const group of groups) {
       const variant = group.scenario.config[0];
-      if (group.candidates.length === 0 && variant.provider && !isApiProvider(variant.provider)) {
+      if (variant.provider && !isApiProvider(variant.provider)) {
         const loaded = await readTest(
           { provider: variant.provider },
           basePath ?? suite.basePath,
@@ -392,13 +478,26 @@ function createExactHistoricalSelector({
       basePath,
       varExpansionDisabled: getEnvBool('PROMPTFOO_DISABLE_VAR_EXPANSION'),
     };
+    const syntheticVarsByGroup = new Map<string, Array<NonNullable<TestCase['vars']>>>();
+    for (const signature of preparedSyntheticSignatures ?? []) {
+      if (signature.source.kind !== 'scenario') {
+        continue;
+      }
+      const key = `${signature.source.scenarioIndex}:${signature.source.variantIndex}`;
+      const vars = syntheticVarsByGroup.get(key) ?? [];
+      vars.push(signature.test.vars ?? {});
+      syntheticVarsByGroup.set(key, vars);
+    }
     const currentScenarioClassifiers = groups.map((group) =>
-      createScenarioResultClassifier(
-        preparedSuite,
-        group.scenario,
-        group.globalOffset,
-        expansionContext,
-      ),
+      createScenarioResultClassifier(preparedSuite, group.scenario, group.globalOffset, {
+        ...expansionContext,
+        ...(preparedSyntheticSignatures && group.candidates.length === 0
+          ? {
+              preparedSyntheticVars:
+                syntheticVarsByGroup.get(`${group.scenarioIndex}:${group.variantIndex}`) ?? [],
+            }
+          : {}),
+      }),
     );
     const ambiguousLegacyOriginCache = new WeakMap<
       EvaluateResult,
@@ -495,7 +594,12 @@ function createExactHistoricalSelector({
           ) {
             return false;
           }
-          const currentTarget = bindCurrentSyntheticTarget(result, groupCandidates, suite);
+          const currentTarget = bindCurrentSyntheticTarget(
+            result,
+            groupCandidates,
+            suite,
+            currentSyntheticProvider,
+          );
           if (
             !currentTarget &&
             currentSyntheticProvider &&
@@ -541,13 +645,40 @@ function createExactHistoricalSelector({
         }
         // Extracted historical cases are already prepared; never execute a saved transform.
         const { transformVars: _historicalTransform, ...options } = test.options ?? {};
-        assertSafeExtractedHistoricalTest({ ...test, options });
+        const requiresCurrentPreparedVars =
+          preparedSyntheticSignatures !== undefined &&
+          groupCandidates.length === 0 &&
+          extractedSource.kind === 'scenario';
+        const currentPreparedVars =
+          requiresCurrentPreparedVars && extractedSource.kind === 'scenario'
+            ? bindCurrentPreparedVars(
+                test,
+                resultByExtractedTest.get(test),
+                (preparedSyntheticSignatures ?? []).filter(
+                  (signature) =>
+                    signature.source.kind === 'scenario' &&
+                    signature.source.scenarioIndex === extractedSource.scenarioIndex &&
+                    signature.source.variantIndex === extractedSource.variantIndex,
+                ),
+              )
+            : undefined;
+        if (requiresCurrentPreparedVars && !currentPreparedVars) {
+          throw new Error(
+            'Could not safely bind an extracted historical case to the current prepared scenario variables.',
+          );
+        }
+        const reboundTest = currentPreparedVars
+          ? { ...test, vars: { ...test.vars, ...currentPreparedVars } }
+          : test;
+        assertSafeExtractedHistoricalTest({ ...reboundTest, options }, currentPreparedVars);
         const currentTarget = bindCurrentSyntheticTarget(
           resultByExtractedTest.get(test),
           groupCandidates,
           suite,
+          currentSyntheticProvider,
         );
         if (
+          !currentTarget &&
           currentSyntheticProvider &&
           !matchesCurrentSyntheticProvider(
             resultByExtractedTest.get(test),
@@ -561,7 +692,7 @@ function createExactHistoricalSelector({
         return {
           source: currentTarget?.source ?? extractedSource,
           test: {
-            ...test,
+            ...reboundTest,
             options,
             ...((currentTarget || currentSyntheticProvider) && {
               provider: currentTarget?.test.provider ?? currentSyntheticProvider,
@@ -636,7 +767,7 @@ function createExactHistoricalSelector({
               group.scenario.config[0].prompts ??
               (typeof suite.defaultTest === 'object' ? suite.defaultTest.prompts : undefined),
           },
-          group.candidates.length === 0 ? group.scenario.config[0].provider : undefined,
+          group.scenario.config[0].provider,
         )),
       );
     }

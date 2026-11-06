@@ -3032,6 +3032,39 @@ function expandPreparedHistoricalCandidates(
   });
 }
 
+async function prepareSyntheticHistoricalSignatures(
+  candidates: PreparedHistoricalCandidate[],
+  testSuite: TestSuite,
+  selection: NonNullable<InternalEvaluateOptions['exactHistoricalSelection']>,
+): Promise<PreparedHistoricalCandidate[]> {
+  const authoredGroups = new Set<string>();
+  for (const candidate of candidates) {
+    if (candidate.source.kind === 'scenario') {
+      authoredGroups.add(`${candidate.source.scenarioIndex}:${candidate.source.variantIndex}`);
+    }
+  }
+  const signatures: PreparedHistoricalCandidate[] = [];
+  let globalScenarioIndex = 0;
+  for (const [scenarioIndex, scenario] of (testSuite.scenarios ?? []).entries()) {
+    for (const [variantIndex, variant] of scenario.config.entries()) {
+      if (!authoredGroups.has(`${scenarioIndex}:${variantIndex}`)) {
+        signatures.push({
+          source: { kind: 'scenario', scenarioIndex, variantIndex, testIndex: -1 },
+          test: mergeScenarioTest(testSuite, variant, {}, globalScenarioIndex),
+        });
+      }
+      globalScenarioIndex++;
+    }
+  }
+  // Apply the same current metadata eligibility before executing a current transform.
+  const eligible = await selection.eligible(signatures, testSuite);
+  await prepareTestVariables(
+    eligible.map((candidate) => candidate.test),
+    testSuite,
+  );
+  return expandPreparedHistoricalCandidates(eligible, testSuite);
+}
+
 function getInitialTests(testSuite: TestSuite): AtomicTestCase[] {
   if (testSuite.tests && testSuite.tests.length > 0) {
     return testSuite.tests as AtomicTestCase[];
@@ -6106,9 +6139,15 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       ? new Set(tests.flatMap((test) => Object.keys(test.vars ?? {})))
       : await prepareTestVariables(tests, testSuite);
     if (historicalSelection && currentCandidates) {
+      const preparedSyntheticSignatures = await prepareSyntheticHistoricalSignatures(
+        currentCandidates,
+        testSuite,
+        historicalSelection,
+      );
       let selectedCandidates = await historicalSelection.select(
         expandPreparedHistoricalCandidates(currentCandidates, testSuite),
         testSuite,
+        preparedSyntheticSignatures,
       );
       if (testSuite.scenarios?.length && options.filterRange) {
         selectedCandidates = filterByRange(

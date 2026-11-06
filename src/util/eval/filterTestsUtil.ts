@@ -509,7 +509,12 @@ export async function filterTestsByResults(
 }
 
 type Variant = Scenario['config'][number];
-type ExpansionContext = { basePath?: string; varExpansionDisabled?: boolean };
+type ExpansionContext = {
+  basePath?: string;
+  varExpansionDisabled?: boolean;
+  /** Current transformed and expanded vars for a variant without authored candidates. */
+  preparedSyntheticVars?: Array<NonNullable<TestCase['vars']>>;
+};
 
 function targetIdentity(
   provider: TestCase['provider'] | { id?: string; label?: string } | undefined,
@@ -815,6 +820,9 @@ export function createScenarioResultClassifier(
     if (!result.testCase) {
       return false;
     }
+    if (expansionContext?.preparedSyntheticVars?.length === 0) {
+      return false;
+    }
     const resultVars = filterRuntimeVars(result.vars) ?? {};
     const expandedMatches = expandedCandidates[index].filter((candidate) => {
       const vars = Object.fromEntries(
@@ -896,7 +904,13 @@ export function createScenarioResultClassifier(
         !signatures[index].provider ||
         !resultProviderId ||
         providerToIdentifier(signatures[index].provider) === resultProviderId) &&
-      signatureVarKeys.every((key) => deepEqual(resultVars[key], signatures[index].vars[key])) &&
+      (expansionContext?.preparedSyntheticVars
+        ? expansionContext.preparedSyntheticVars.some((vars) =>
+            Object.keys(vars).every((key) => deepEqual(resultVars[key], vars[key])),
+          )
+        : signatureVarKeys.every((key) =>
+            deepEqual(resultVars[key], signatures[index].vars[key]),
+          )) &&
       signatureMetadataKeys.every(
         (key) =>
           key === 'conversationId' ||

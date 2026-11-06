@@ -2126,6 +2126,99 @@ describe('evaluateOptions behavior', () => {
       ).rejects.toThrow('one current singular provider');
     });
 
+    it('binds a generated row to a shared variant target rather than counting each authored test', async () => {
+      const configFile = writeTempConfig(tmpDir, 'exact-shared-variant-target.yaml', {
+        providers: ['echo'],
+        prompts: ['Hello {{topic}}'],
+        scenarios: [
+          {
+            config: [{ vars: { topic: 'sample' }, metadata: { role: 'keep' } }],
+            tests: [{ vars: { caseId: 'one' } }, { vars: { caseId: 'two' } }],
+          },
+        ],
+      });
+      const resultsPath = path.join(tmpDir, 'exact-shared-variant-target.json');
+      fs.writeFileSync(
+        resultsPath,
+        JSON.stringify({
+          results: {
+            results: [
+              {
+                success: false,
+                failureReason: ResultFailureReason.ASSERT,
+                vars: { topic: 'sample' },
+                provider: { id: 'echo' },
+                metadata: { __promptfoo: { evalOrigin: 'scenario' } },
+                testCase: {
+                  vars: { topic: 'sample' },
+                  metadata: { role: 'keep', pluginId: 'runtime', conversationId: '__scenario_0__' },
+                  provider: { id: 'qa-shared-variant-target' },
+                },
+              },
+            ],
+          },
+        }),
+      );
+      await doEval(
+        {
+          table: false,
+          write: false,
+          config: [configFile],
+          filterMetadataExact: 'role=keep',
+          filterFailing: resultsPath,
+        },
+        {},
+        undefined,
+        {},
+      );
+      const suite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+      const selection = (evaluateMock.mock.calls.at(-1)?.[2] as InternalEvaluateOptions)
+        .exactHistoricalSelection!;
+      const target = {
+        id: () => 'qa-shared-variant-target',
+        callApi: vi.fn().mockResolvedValue({ output: 'current' }),
+      };
+      suite.scenarios![0].config[0].provider = target;
+      const candidates: PreparedHistoricalCandidate[] = suite.scenarios![0].tests.map(
+        (test, testIndex) => ({
+          source: { kind: 'scenario', scenarioIndex: 0, variantIndex: 0, testIndex },
+          test: {
+            ...test,
+            vars: { topic: 'sample', ...test.vars },
+            metadata: { role: 'keep', conversationId: '__scenario_0__' },
+            provider: target,
+          },
+        }),
+      );
+      const selected = await selection.select(candidates, suite);
+      expect(selected).toHaveLength(1);
+      expect(selected[0].source).toEqual({
+        kind: 'scenario',
+        scenarioIndex: 0,
+        variantIndex: 0,
+        testIndex: -1,
+      });
+      expect(selected[0].test.provider).toBe(target);
+
+      const otherTarget = {
+        id: () => 'qa-distinct-test-target',
+        callApi: vi.fn().mockResolvedValue({ output: 'other' }),
+      };
+      suite.scenarios![0].tests[0].provider = otherTarget;
+      candidates[0].test.provider = otherTarget;
+      expect((await selection.select(candidates, suite))[0].test.provider).toBe(target);
+
+      const collidingTarget = {
+        id: () => 'qa-shared-variant-target',
+        callApi: vi.fn().mockResolvedValue({ output: 'ambiguous' }),
+      };
+      suite.scenarios![0].tests[0].provider = collidingTarget;
+      candidates[0].test.provider = collidingTarget;
+      await expect(selection.select(candidates, suite)).rejects.toThrow(
+        'one current singular provider',
+      );
+    });
+
     it('keeps a synthetic default target when another scenario source has an override', async () => {
       const defaultPath = path.join(tmpDir, 'exact-synthetic-default-target.cjs');
       const overridePath = path.join(tmpDir, 'exact-synthetic-override-target.cjs');
@@ -2263,6 +2356,17 @@ describe('evaluateOptions behavior', () => {
       for (const unsafe of [
         { options: { provider: 'file://./old-grader.js' } },
         { assert: [{ type: 'javascript', value: 'true' }] },
+        { assert: [{ type: 'llm-rubric', value: 'Use the saved rubric' }] },
+        { assert: [{ type: 'similar', value: 'saved reference' }] },
+        { assert: [{ type: 'model-graded-factuality', value: 'saved reference' }] },
+        {
+          assert: [
+            {
+              type: 'assert-set',
+              assert: [{ type: 'not-llm-rubric', value: 'Use the nested saved rubric' }],
+            },
+          ],
+        },
         { assert: [{ type: 'equals', value: 'file://./old-value.js' }] },
         { assert: [{ type: 'equals', value: 'package:old-grader:check' }] },
         { vars: { input: 'file://./old-variable.js' } },
@@ -2272,6 +2376,90 @@ describe('evaluateOptions behavior', () => {
           'An extracted historical case contains executable or provider references',
         );
       }
+    });
+
+    it('rebinds only current prepared file vars for a candidate-free scenario', async () => {
+      const filePath = path.join(tmpDir, 'current-input.txt');
+      const fileValue = `file://${filePath}`;
+      fs.writeFileSync(filePath, 'current input');
+      const configFile = writeTempConfig(tmpDir, 'exact-current-file-vars.yaml', {
+        providers: ['echo'],
+        prompts: ['Hello {{input}}'],
+        scenarios: [
+          { config: [{ vars: { input: fileValue }, metadata: { role: 'keep' } }], tests: [] },
+        ],
+      });
+      const resultsPath = path.join(tmpDir, 'exact-current-file-vars.json');
+      const writeResult = (
+        resultVars: Record<string, unknown>,
+        testVars: Record<string, unknown>,
+      ) =>
+        fs.writeFileSync(
+          resultsPath,
+          JSON.stringify({
+            results: {
+              results: [
+                {
+                  success: false,
+                  failureReason: ResultFailureReason.ASSERT,
+                  vars: resultVars,
+                  provider: { id: 'echo' },
+                  metadata: { __promptfoo: { evalOrigin: 'scenario' } },
+                  testCase: {
+                    vars: testVars,
+                    metadata: {
+                      role: 'keep',
+                      pluginId: 'runtime',
+                      conversationId: '__scenario_0__',
+                    },
+                  },
+                },
+              ],
+            },
+          }),
+        );
+      writeResult({ input: fileValue }, { input: fileValue });
+      await doEval(
+        {
+          table: false,
+          write: false,
+          config: [configFile],
+          filterMetadataExact: 'role=keep',
+          filterFailing: resultsPath,
+        },
+        {},
+        undefined,
+        {},
+      );
+      const suite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+      const selection = (evaluateMock.mock.calls.at(-1)?.[2] as InternalEvaluateOptions)
+        .exactHistoricalSelection!;
+      const signature: PreparedHistoricalCandidate = {
+        source: { kind: 'scenario', scenarioIndex: 0, variantIndex: 0, testIndex: -1 },
+        test: {
+          vars: { input: fileValue },
+          metadata: { role: 'keep', conversationId: '__scenario_0__' },
+        },
+      };
+      const selected = await selection.select([], suite, [signature]);
+      expect(selected).toHaveLength(1);
+      expect(selected[0].test.vars).toEqual({ input: fileValue });
+
+      writeResult({ input: fileValue }, { input: 'file://./historical-only.js' });
+      await expect(selection.select([], suite, [signature])).rejects.toThrow(
+        'current prepared scenario variables',
+      );
+      writeResult({ input: fileValue }, { input: fileValue, extra: 'file://./historical-only.js' });
+      await expect(selection.select([], suite, [signature])).rejects.toThrow(
+        'An extracted historical case contains executable or provider references',
+      );
+
+      suite.scenarios![0].config[0].vars = { input: 'current' };
+      signature.test.vars = { input: 'current' };
+      writeResult({ input: 'current' }, { input: 'stale' });
+      await expect(selection.select([], suite, [signature])).rejects.toThrow(
+        'current prepared scenario variables',
+      );
     });
 
     it('should resume the exact selection and its original order after range and sampling', async () => {
