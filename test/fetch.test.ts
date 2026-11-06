@@ -23,7 +23,13 @@ import {
 } from '../src/util/fetch/index';
 import { withFetchRetryContext } from '../src/util/fetch/retryContext';
 import { sleep } from '../src/util/time';
-import { clearProxyEnv, createMockResponse, mockProcessEnv, PROXY_ENV_KEYS } from './util/utils';
+import {
+  clearProxyEnv,
+  createDeferred,
+  createMockResponse,
+  mockProcessEnv,
+  PROXY_ENV_KEYS,
+} from './util/utils';
 
 const FETCH_TEST_ENV_KEYS = [
   ...PROXY_ENV_KEYS,
@@ -1200,6 +1206,69 @@ describe('fetchWithProxy', () => {
         connections: 5,
       }),
     );
+  });
+
+  it.each([undefined, 'http://proxy.example.com'])(
+    'evicts idle pools without interrupting a transient retry with proxy %s',
+    async (proxy) => {
+      mockProcessEnv({ HTTPS_PROXY: proxy });
+      const url = 'https://example.com';
+      const backoff = createDeferred<void>();
+      const retry = createDeferred<void>();
+      vi.mocked(sleep).mockImplementationOnce(() => {
+        backoff.resolve();
+        return retry.promise;
+      });
+      vi.mocked(global.fetch).mockResolvedValueOnce(
+        new Response(null, { status: 503, statusText: 'Service Unavailable' }),
+      );
+      const dispatcher = () =>
+        (vi.mocked(global.fetch).mock.lastCall?.[1] as { dispatcher: { close: () => void } })
+          .dispatcher;
+
+      cliState.maxConcurrency = 1;
+      const pending = fetchWithProxy(url);
+      await backoff.promise;
+      const active = dispatcher();
+      await fetchWithProxy(url);
+      expect(dispatcher()).toBe(active);
+
+      cliState.maxConcurrency = 2;
+      await fetchWithProxy(url);
+      const oldestIdle = dispatcher();
+      for (let connections = 3; connections <= 35; connections++) {
+        cliState.maxConcurrency = connections;
+        await fetchWithProxy(url);
+      }
+      expect(oldestIdle.close).toHaveBeenCalledOnce();
+      expect(active.close).not.toHaveBeenCalled();
+
+      retry.resolve();
+      await pending;
+      expect(dispatcher()).toBe(active);
+      clearAgentCache();
+      expect(active.close).toHaveBeenCalledOnce();
+      expect(oldestIdle.close).toHaveBeenCalledOnce();
+    },
+  );
+
+  it('allows pending authentication to finish after the pool cache is cleared', async () => {
+    const credentials = createDeferred<HeadersInit>();
+    const pending = fetchWithProxy('https://example.com', {
+      getAuthHeaders: () => credentials.promise,
+    });
+    const original = vi.mocked(Agent).mock.results[0].value as Agent;
+    clearAgentCache();
+    await fetchWithProxy('https://example.com');
+    expect(Agent).toHaveBeenCalledTimes(2);
+    expect(original.close).not.toHaveBeenCalled();
+    credentials.resolve({});
+    await pending;
+    expect(global.fetch).toHaveBeenLastCalledWith(
+      'https://example.com',
+      expect.objectContaining({ dispatcher: original }),
+    );
+    expect(original.close).toHaveBeenCalledOnce();
   });
 
   it('should preserve a caller-provided dispatcher instead of overwriting it', async () => {

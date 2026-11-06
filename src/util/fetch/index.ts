@@ -63,8 +63,11 @@ async function resolveAuthenticationHeaders(
   return Object.fromEntries(headers);
 }
 
-// Evaluations in the same process can use different pool sizes and TLS policies.
-const cachedAgents = new Map<string, Dispatcher>();
+type ActiveAgent = { key: string; dispatcher: Dispatcher; users: number };
+const activeAgents = new Map<string, ActiveAgent>();
+// Limit retained transport configurations, independently of how many requests are in flight.
+const MAX_IDLE_AGENTS = 32;
+const idleAgents = new Map<string, Dispatcher>();
 
 /**
  * Get the connection pool size for HTTP agents.
@@ -88,24 +91,21 @@ function getConnectionPoolSize(): number {
  * Close cached dispatchers on shutdown and between tests.
  */
 export function clearAgentCache(): void {
-  for (const agent of cachedAgents.values()) {
+  activeAgents.clear(); // Outstanding calls close their dispatcher on last release.
+  for (const agent of idleAgents.values()) {
     if (typeof agent.close === 'function') {
       agent.close();
     }
   }
-  cachedAgents.clear();
+  idleAgents.clear();
 }
 
-function getOrCreateAgent(proxyUrl: string, tlsOptions: ConnectionOptions): Dispatcher {
-  const connections = getConnectionPoolSize();
-  const headersTimeout = getRequestTimeoutMs();
-  // Hash the effective settings so cache keys don't retain proxy credentials or CA bundles.
-  const cacheKey = sha256(JSON.stringify([proxyUrl, tlsOptions, connections, headersTimeout]));
-  const existing = cachedAgents.get(cacheKey);
-  if (existing) {
-    return existing;
-  }
-
+function createAgent(
+  proxyUrl: string,
+  tlsOptions: ConnectionOptions,
+  connections: number,
+  headersTimeout: number,
+): Dispatcher {
   const options = {
     connections,
     headersTimeout,
@@ -115,11 +115,44 @@ function getOrCreateAgent(proxyUrl: string, tlsOptions: ConnectionOptions): Disp
   const agent = proxyUrl
     ? new ProxyAgent({ ...options, uri: proxyUrl, proxyTls: tlsOptions, requestTls: tlsOptions })
     : new Agent({ ...options, connect: tlsOptions });
-  const dispatcher = agent
-    .compose(createDecompressionInterceptor())
-    .compose(stripDecompressionHeaders());
-  cachedAgents.set(cacheKey, dispatcher);
-  return dispatcher;
+  return agent.compose(createDecompressionInterceptor()).compose(stripDecompressionHeaders());
+}
+
+function acquireAgent(proxyUrl: string, tlsOptions: ConnectionOptions): ActiveAgent {
+  const connections = getConnectionPoolSize();
+  const headersTimeout = getRequestTimeoutMs();
+  // Hash the effective settings so cache keys don't retain proxy credentials or CA bundles.
+  const key = sha256(JSON.stringify([proxyUrl, tlsOptions, connections, headersTimeout]));
+  const active = activeAgents.get(key);
+  if (active) {
+    active.users++;
+    return active;
+  }
+  const dispatcher =
+    idleAgents.get(key) ?? createAgent(proxyUrl, tlsOptions, connections, headersTimeout);
+  idleAgents.delete(key);
+  const entry = { key, dispatcher, users: 1 };
+  activeAgents.set(key, entry);
+  return entry;
+}
+
+function releaseAgent(entry: ActiveAgent): void {
+  if (--entry.users > 0) {
+    return;
+  }
+  if (activeAgents.get(entry.key) !== entry) {
+    // clearAgentCache ran while this request was pending.
+    void entry.dispatcher.close();
+    return;
+  }
+  activeAgents.delete(entry.key);
+  idleAgents.set(entry.key, entry.dispatcher);
+  if (idleAgents.size > MAX_IDLE_AGENTS) {
+    const [key, oldest] = idleAgents.entries().next().value!;
+    idleAgents.delete(key);
+    // Undici drains outstanding response bodies before closing the dispatcher.
+    void oldest.close();
+  }
 }
 
 /**
@@ -273,15 +306,29 @@ export async function fetchWithProxy(
   }
   const proxyUrl = finalUrlString ? getProxyForUrl(finalUrlString) : '';
 
-  // Bind the dispatcher per-request to avoid global state races under concurrency.
-  // Respect a caller-provided dispatcher (e.g. HTTP provider's custom TLS agent for mTLS).
-  if (!finalOptions.dispatcher) {
-    if (proxyUrl && logEnabled) {
-      logger.debug(`Using proxy: ${sanitizeUrl(proxyUrl)}`);
-    }
-    finalOptions.dispatcher = getOrCreateAgent(proxyUrl, tlsOptions);
+  // Keep caller-owned dispatchers (e.g. mTLS) outside the managed pool.
+  if (finalOptions.dispatcher) {
+    return fetchWithTransientRetries(finalUrl, finalOptions, getAuthHeaders, logEnabled);
   }
+  if (proxyUrl && logEnabled) {
+    logger.debug(`Using proxy: ${sanitizeUrl(proxyUrl)}`);
+  }
+  // Hold the same transport across asynchronous auth, redirects and retry backoff.
+  const agent = acquireAgent(proxyUrl, tlsOptions);
+  finalOptions.dispatcher = agent.dispatcher;
+  try {
+    return await fetchWithTransientRetries(finalUrl, finalOptions, getAuthHeaders, logEnabled);
+  } finally {
+    releaseAgent(agent);
+  }
+}
 
+async function fetchWithTransientRetries(
+  url: RequestInfo,
+  options: FetchOptions,
+  getAuthHeaders: FetchOptions['getAuthHeaders'],
+  logEnabled: boolean,
+): Promise<Response> {
   // Transient error retry logic (502/503/504/524 with matching status text).
   // When a provider sets maxRetries: 0 and the caller did not pass an explicit
   // disableTransientRetries, honor the provider intent via the retry context.
@@ -289,18 +336,18 @@ export async function fetchWithProxy(
   const maxTransientRetries = disableTransientRetries ? 0 : 3;
 
   for (let attempt = 0; attempt <= maxTransientRetries; attempt++) {
-    let attemptOptions = finalOptions;
+    let attemptOptions = options;
     if (getAuthHeaders) {
       attemptOptions = {
-        ...finalOptions,
+        ...options,
         headers: await resolveAuthenticationHeaders(
           getAuthHeaders,
-          finalOptions.headers,
-          combinedSignal,
+          options.headers,
+          options.signal,
         ),
       };
     }
-    const response = await monkeyPatchFetch(finalUrl, attemptOptions);
+    const response = await monkeyPatchFetch(url, attemptOptions);
 
     if (!disableTransientRetries && isTransientError(response) && attempt < maxTransientRetries) {
       const backoffMs = Math.pow(2, attempt) * 1000; // 1s, 2s, 4s
