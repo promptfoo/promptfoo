@@ -64,8 +64,7 @@ async function resolveAuthenticationHeaders(
 }
 
 // Evaluations in the same process can use different pool sizes and TLS policies.
-const cachedAgents: Map<string, Dispatcher> = new Map();
-const cachedProxyAgents: Map<string, Dispatcher> = new Map();
+const cachedAgents = new Map<string, Dispatcher>();
 
 /**
  * Get the connection pool size for HTTP agents.
@@ -86,8 +85,7 @@ function getConnectionPoolSize(): number {
 }
 
 /**
- * Clear cached agents so the next request creates fresh ones.
- * Exported for testing only.
+ * Close cached dispatchers on shutdown and between tests.
  */
 export function clearAgentCache(): void {
   for (const agent of cachedAgents.values()) {
@@ -96,59 +94,32 @@ export function clearAgentCache(): void {
     }
   }
   cachedAgents.clear();
-  for (const agent of cachedProxyAgents.values()) {
-    if (typeof agent.close === 'function') {
-      agent.close();
-    }
-  }
-  cachedProxyAgents.clear();
 }
 
-function getAgentCacheKey(concurrency: number, tlsOptions: ConnectionOptions, proxyUrl = '') {
-  // Hash the effective options so cache keys don't retain proxy credentials or CA bundles.
-  return sha256(JSON.stringify([proxyUrl, concurrency, tlsOptions]));
-}
-
-function getOrCreateAgent(tlsOptions: ConnectionOptions): Dispatcher {
-  const concurrency = getConnectionPoolSize();
-  const cacheKey = getAgentCacheKey(concurrency, tlsOptions);
+function getOrCreateAgent(proxyUrl: string, tlsOptions: ConnectionOptions): Dispatcher {
+  const connections = getConnectionPoolSize();
+  const headersTimeout = getRequestTimeoutMs();
+  // Hash the effective settings so cache keys don't retain proxy credentials or CA bundles.
+  const cacheKey = sha256(JSON.stringify([proxyUrl, tlsOptions, connections, headersTimeout]));
   const existing = cachedAgents.get(cacheKey);
   if (existing) {
     return existing;
   }
-  const agent = new Agent({
-    headersTimeout: getRequestTimeoutMs(),
-    keepAliveTimeout: 30_000,
-    keepAliveMaxTimeout: 60_000,
-    connections: concurrency,
-    connect: tlsOptions,
-  })
-    .compose(createDecompressionInterceptor())
-    .compose(stripDecompressionHeaders());
-  cachedAgents.set(cacheKey, agent);
-  return agent;
-}
 
-function getOrCreateProxyAgent(proxyUrl: string, tlsOptions: ConnectionOptions): Dispatcher {
-  const concurrency = getConnectionPoolSize();
-  const cacheKey = getAgentCacheKey(concurrency, tlsOptions, proxyUrl);
-  const existing = cachedProxyAgents.get(cacheKey);
-  if (existing) {
-    return existing;
-  }
-  const agent = new ProxyAgent({
-    uri: proxyUrl,
-    proxyTls: tlsOptions,
-    requestTls: tlsOptions,
-    headersTimeout: getRequestTimeoutMs(),
+  const options = {
+    connections,
+    headersTimeout,
     keepAliveTimeout: 30_000,
     keepAliveMaxTimeout: 60_000,
-    connections: concurrency,
-  })
+  };
+  const agent = proxyUrl
+    ? new ProxyAgent({ ...options, uri: proxyUrl, proxyTls: tlsOptions, requestTls: tlsOptions })
+    : new Agent({ ...options, connect: tlsOptions });
+  const dispatcher = agent
     .compose(createDecompressionInterceptor())
     .compose(stripDecompressionHeaders());
-  cachedProxyAgents.set(cacheKey, agent);
-  return agent;
+  cachedAgents.set(cacheKey, dispatcher);
+  return dispatcher;
 }
 
 /**
@@ -305,14 +276,10 @@ export async function fetchWithProxy(
   // Bind the dispatcher per-request to avoid global state races under concurrency.
   // Respect a caller-provided dispatcher (e.g. HTTP provider's custom TLS agent for mTLS).
   if (!finalOptions.dispatcher) {
-    if (proxyUrl) {
-      if (logEnabled) {
-        logger.debug(`Using proxy: ${sanitizeUrl(proxyUrl)}`);
-      }
-      finalOptions.dispatcher = getOrCreateProxyAgent(proxyUrl, tlsOptions);
-    } else {
-      finalOptions.dispatcher = getOrCreateAgent(tlsOptions);
+    if (proxyUrl && logEnabled) {
+      logger.debug(`Using proxy: ${sanitizeUrl(proxyUrl)}`);
     }
+    finalOptions.dispatcher = getOrCreateAgent(proxyUrl, tlsOptions);
   }
 
   // Transient error retry logic (502/503/504/524 with matching status text).

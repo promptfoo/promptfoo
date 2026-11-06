@@ -886,36 +886,22 @@ describe('fetchWithProxy', () => {
     expect(Agent).toHaveBeenCalledWith(expect.objectContaining({ connections: 12 }));
   });
 
-  it('should read REQUEST_TIMEOUT_MS when creating the default agent', async () => {
-    vi.mocked(getEnvInt).mockReturnValueOnce(1234);
+  it.each([undefined, 'http://proxy.example.com'])(
+    'honors changes to REQUEST_TIMEOUT_MS with proxy %s',
+    async (proxy) => {
+      mockProcessEnv({ HTTPS_PROXY: proxy });
+      const agent = proxy ? ProxyAgent : Agent;
+      for (const timeout of [1234, 4321, 1234]) {
+        vi.mocked(getEnvInt).mockReturnValueOnce(timeout);
+        await fetchWithProxy('https://example.com/api');
+      }
 
-    await fetchWithProxy('https://example.com/api');
-
-    expect(getEnvInt).toHaveBeenCalledWith('REQUEST_TIMEOUT_MS', 300_000);
-    expect(Agent).toHaveBeenCalledWith(
-      expect.objectContaining({
-        headersTimeout: 1234,
-        connections: DEFAULT_MAX_CONCURRENCY,
-      }),
-    );
-  });
-
-  it('should read REQUEST_TIMEOUT_MS when creating the proxy agent', async () => {
-    const mockProxyUrl = 'http://proxy.example.com';
-    mockProcessEnv({ HTTPS_PROXY: mockProxyUrl });
-    vi.mocked(getEnvInt).mockReturnValueOnce(4321);
-
-    await fetchWithProxy('https://example.com/api');
-
-    expect(getEnvInt).toHaveBeenCalledWith('REQUEST_TIMEOUT_MS', 300_000);
-    expect(ProxyAgent).toHaveBeenCalledWith(
-      expect.objectContaining({
-        uri: mockProxyUrl,
-        headersTimeout: 4321,
-        connections: DEFAULT_MAX_CONCURRENCY,
-      }),
-    );
-  });
+      expect(getEnvInt).toHaveBeenCalledWith('REQUEST_TIMEOUT_MS', 300_000);
+      expect(agent).toHaveBeenCalledTimes(2);
+      expect(agent).toHaveBeenNthCalledWith(1, expect.objectContaining({ headersTimeout: 1234 }));
+      expect(agent).toHaveBeenNthCalledWith(2, expect.objectContaining({ headersTimeout: 4321 }));
+    },
+  );
 
   it('should use proxy URL from environment variables in order of precedence', async () => {
     const mockProxyUrls = {
