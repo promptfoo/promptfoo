@@ -55,6 +55,29 @@ describe('GoogleInteractionsProvider', () => {
     ),
   );
 
+  function mockVertexTextInteraction() {
+    const getRequestHeaders = vi
+      .fn()
+      .mockResolvedValue(new Headers({ Authorization: 'Bearer vertex-token' }));
+    vi.spyOn(GoogleAuthManager, 'getOAuthClient').mockResolvedValueOnce({
+      client: {
+        getAccessToken: vi.fn().mockResolvedValue({ token: 'vertex-token' }),
+        getRequestHeaders,
+      },
+      projectId: 'detected-project',
+    });
+    mockFetchWithCache.mockResolvedValue({
+      data: {
+        status: 'completed',
+        steps: [{ type: 'model_output', content: [{ type: 'text', text: 'Move forward.' }] }],
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+    });
+    return getRequestHeaders;
+  }
+
   beforeEach(() => {
     // resetAllMocks (not clearAllMocks) so per-test persistent setters like
     // mockFetchWithCache.mockResolvedValue cannot leak across randomized test order.
@@ -3658,22 +3681,7 @@ describe('GoogleInteractionsProvider', () => {
       for (const [name, value] of Object.entries(processEnv)) {
         vi.stubEnv(name, value);
       }
-      const oauthHeaders = new Headers({ Authorization: 'Bearer vertex-token' });
-      const getRequestHeaders = vi.fn().mockResolvedValue(oauthHeaders);
-      const getOAuthClient = vi.spyOn(GoogleAuthManager, 'getOAuthClient').mockResolvedValueOnce({
-        client: {
-          getAccessToken: vi.fn().mockResolvedValue({ token: 'vertex-token' }),
-          getRequestHeaders,
-        },
-        projectId: 'detected-project',
-      });
-      mockFetchWithCache.mockResolvedValue({
-        data: {
-          status: 'completed',
-          steps: [{ type: 'model_output', content: [{ type: 'text', text: 'Move forward.' }] }],
-        },
-        cached: false,
-      } as any);
+      const getRequestHeaders = mockVertexTextInteraction();
       const provider = new GoogleInteractionsProvider('gemini-robotics-er-2-preview', {
         id: 'vertex:gemini-robotics-er-2-preview',
         config: { vertexai: true },
@@ -3683,7 +3691,7 @@ describe('GoogleInteractionsProvider', () => {
       const result = await provider.callApi('Move the block.');
 
       expect(result.error).toBeUndefined();
-      expect(getOAuthClient).toHaveBeenCalledTimes(1);
+      expect(GoogleAuthManager.getOAuthClient).toHaveBeenCalledTimes(1);
       expect(getRequestHeaders).toHaveBeenCalledWith(endpoint);
       expect(mockFetchWithCache).toHaveBeenCalledWith(
         endpoint,
@@ -3774,50 +3782,82 @@ describe('GoogleInteractionsProvider', () => {
     );
   });
 
-  it('uses a provider-scoped GOOGLE_CLOUD_LOCATION for Vertex Interactions', async () => {
-    vi.stubEnv('VERTEX_REGION', 'europe-west1');
-    const oauthHeaders = new Headers({ Authorization: 'Bearer vertex-token' });
-    const getRequestHeaders = vi.fn().mockResolvedValue(oauthHeaders);
-    vi.spyOn(GoogleAuthManager, 'getOAuthClient').mockResolvedValueOnce({
-      client: {
-        getAccessToken: vi.fn().mockResolvedValue({ token: 'vertex-token' }),
-        getRequestHeaders,
-      },
-      projectId: 'detected-project',
-    });
-    mockFetchWithCache.mockResolvedValue({
-      data: {
-        status: 'completed',
-        steps: [
-          {
-            type: 'model_output',
-            content: [{ type: 'text', text: 'Move forward.' }],
-          },
-        ],
-      },
-      cached: false,
-    } as any);
-    const provider = new GoogleInteractionsProvider('gemini-robotics-er-2-preview', {
-      config: { vertexai: true, projectId: 'configured-project' },
+  it.each([
+    {
+      name: 'the us multi-region',
+      config: { region: 'us' },
+      env: {},
+      region: 'us',
+      host: 'aiplatform.us.rep.googleapis.com',
+    },
+    {
+      name: 'the configured eu multi-region over a provider-scoped region',
+      config: { region: 'eu' },
+      env: { VERTEX_REGION: 'us' },
+      region: 'eu',
+      host: 'aiplatform.eu.rep.googleapis.com',
+    },
+    {
+      name: 'a provider-scoped GOOGLE_CLOUD_LOCATION over the process region',
+      config: {},
       env: { GOOGLE_CLOUD_LOCATION: 'us-central1' },
-    });
+      region: 'us-central1',
+      host: 'us-central1-aiplatform.googleapis.com',
+    },
+    {
+      name: 'a provider-scoped multi-region over the process region',
+      config: {},
+      env: { VERTEX_REGION: 'eu' },
+      region: 'eu',
+      host: 'aiplatform.eu.rep.googleapis.com',
+    },
+    {
+      name: 'apiBaseUrl over apiHost and a provider-scoped host',
+      config: { region: 'us', apiBaseUrl: 'https://base.example/proxy/', apiHost: 'host.example' },
+      env: { VERTEX_API_HOST: 'env.example' },
+      region: 'us',
+      host: 'base.example/proxy',
+    },
+    {
+      name: 'apiHost over a provider-scoped host',
+      config: { region: 'eu', apiHost: 'host.example' },
+      env: { VERTEX_API_HOST: 'env.example' },
+      region: 'eu',
+      host: 'host.example',
+    },
+    {
+      name: 'a provider-scoped host over the multi-region default',
+      config: { region: 'us' },
+      env: { VERTEX_API_HOST: 'https://env.example/' },
+      region: 'us',
+      host: 'env.example',
+    },
+  ])(
+    'resolves the Vertex Interactions endpoint using $name',
+    async ({ config, env, region, host }) => {
+      vi.stubEnv('VERTEX_REGION', 'europe-west1');
+      const getRequestHeaders = mockVertexTextInteraction();
+      const provider = new GoogleInteractionsProvider('gemini-robotics-er-2-preview', {
+        config: { vertexai: true, projectId: 'configured-project', ...config },
+        env,
+      });
 
-    const result = await provider.callApi('Move the block.');
+      const result = await provider.callApi('Move the block.');
 
-    const endpoint =
-      'https://us-central1-aiplatform.googleapis.com/v1beta1/projects/configured-project/locations/us-central1/interactions';
-    expect(result.error).toBeUndefined();
-    expect(getRequestHeaders).toHaveBeenCalledWith(endpoint);
-    expect(mockFetchWithCache).toHaveBeenCalledWith(
-      endpoint,
-      expect.objectContaining({
-        headers: expect.objectContaining({ Authorization: 'Bearer vertex-token' }),
-      }),
-      expect.any(Number),
-      'json',
-      true,
-    );
-  });
+      const endpoint = `https://${host}/v1beta1/projects/configured-project/locations/${region}/interactions`;
+      expect(result.error).toBeUndefined();
+      expect(getRequestHeaders).toHaveBeenCalledWith(endpoint);
+      expect(mockFetchWithCache).toHaveBeenCalledWith(
+        endpoint,
+        expect.objectContaining({
+          headers: expect.objectContaining({ Authorization: 'Bearer vertex-token' }),
+        }),
+        expect.any(Number),
+        'json',
+        true,
+      );
+    },
+  );
 
   it.each([
     [

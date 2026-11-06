@@ -464,7 +464,8 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
 
       if (!response.ok) {
         return {
-          error: `Failed to download ${variant}: ${response.status} ${response.statusText}`,
+          error:
+            `Failed to download ${variant}: HTTP ${response.status} ${response.statusText}`.trimEnd(),
         };
       }
 
