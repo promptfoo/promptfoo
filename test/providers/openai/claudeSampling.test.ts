@@ -21,6 +21,8 @@ describe.each([
     ['anthropic/claude-sonnet-5-5', undefined],
     ['anthropic/claude-opus-4.7', undefined],
     ['global.anthropic.claude-haiku-5-5', undefined],
+    ['claude-haiku-5-5-20261015', undefined],
+    ['us.anthropic.claude-opus-4-7-v1:0', undefined],
     ['gpt-4.1', haiku],
     ['ft:claude-haiku-5-5:org:label:id', undefined],
   ] as const)('omits sampling for %s with model override %s', async (configured, override) => {
@@ -43,6 +45,8 @@ describe.each([
     ['gpt-4.1', undefined],
     ['claude-haiku-4-5', undefined],
     ['prod-claude-router-5', undefined],
+    ['claude-tenant-proxy-claude-haiku-5-5', undefined],
+    ['claude-haiku-5-5-internal-example', undefined],
     ['prod-claude-haiku-5-5-router', undefined],
     ['ft:gpt-4.1:org:claude-haiku-5-5:id', undefined],
     [haiku, 'gpt-4.1'],
