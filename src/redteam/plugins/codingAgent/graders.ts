@@ -213,7 +213,7 @@ export class CodingAgentGrader extends RedteamGraderBase {
         ...grade,
         metadata: {
           ...stored.metadata,
-          ...(!stored.pass && { graderError: false, gradingIncomplete: false }),
+          ...(!stored.pass && { graderError: undefined, gradingIncomplete: undefined }),
           ...grade.metadata,
         },
       };

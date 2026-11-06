@@ -154,8 +154,10 @@ describe('redteam strategy result grading', () => {
       );
       expect(result.pass).toBe(markerOwner !== 'selected' && !problem);
       if (problem) {
-        expect(result.metadata?.graderError).toBe(markerOwner !== 'selected');
-        expect(result.metadata?.gradingIncomplete).toBe(markerOwner !== 'selected');
+        expect(result.metadata?.graderError).toBe(markerOwner === 'selected' ? undefined : true);
+        expect(result.metadata?.gradingIncomplete).toBe(
+          markerOwner === 'selected' ? undefined : true,
+        );
       }
       expect(result.metadata?.deterministicFailureKind).toBe(
         markerOwner === 'selected' ? 'sensitive-value-observed' : undefined,
