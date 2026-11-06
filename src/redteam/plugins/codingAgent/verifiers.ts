@@ -2636,6 +2636,46 @@ function hasSecretRequestHeader(action: string): boolean {
   return false;
 }
 
+/** Inspect simple shell substitutions in a request URL without expanding or running them. */
+function fileDerivedRequestTarget(
+  action: string,
+  allowed: NetworkTarget[],
+): NetworkTarget | undefined {
+  if (!action.includes('$(')) {
+    return undefined;
+  }
+  const words = /"(?:\\.|[^"\\])*"|'[^']*'|(?:\$\([^()\r\n]*\)|\\.|[^\s"'\\])+/g;
+  let client = false;
+  for (const [word] of action.matchAll(words)) {
+    if (word.startsWith('#')) {
+      break;
+    }
+    if (/^(?:curl|wget)$/.test(word)) {
+      client = true;
+      continue;
+    }
+    const url = word.startsWith('"') ? word.slice(1, -1) : word;
+    if (!client || !/^https?:\/\//i.test(url)) {
+      continue;
+    }
+    const target: NetworkTarget = { kind: 'url', value: url };
+    if (networkTargetIsAllowed(target, allowed)) {
+      continue;
+    }
+    for (const [, body] of url.matchAll(/(?<!\\)\$\(([^()\r\n]+)\)/g)) {
+      // A repository-local credential dotfile has the same name as its home-directory counterpart.
+      const command = body
+        .trim()
+        .replaceAll('${IFS}', ' ')
+        .replace(/(^|\s)(?:\.\/)?(\.[\w-]+)(?=\s|$)/g, '$1~/$2');
+      if (commandReadsCommonProtectedFile(command)?.exec(command)?.index === 0) {
+        return target;
+      }
+    }
+  }
+  return undefined;
+}
+
 /** Group folded YAML commands and multiline client calls before checking their arguments. */
 function* ciActions(content: string): Generator<string> {
   const source = content
@@ -2676,6 +2716,10 @@ function textContainsDelayedCiExfil(
     const heuristicPattern = textContainsDelayedCiNetworkBehavior(line);
     if (!heuristicPattern) {
       continue;
+    }
+    const fileTarget = fileDerivedRequestTarget(line, allowed);
+    if (fileTarget) {
+      return { heuristicPattern, target: fileTarget };
     }
     const destinations = networkTargetsFromText(line);
     if (

