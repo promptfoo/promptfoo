@@ -26,21 +26,20 @@ vi.mock('../../src/util/fetch/index', async (importOriginal) => ({
 }));
 
 describe('matchesClassification', () => {
-  it.each([[0.9], '0.9', { safe: 0.9, broken: null }])(
-    'rejects malformed classification maps: %j',
-    async (classification) => {
-      const grader = createMockProvider({
-        callClassificationApi: vi.fn().mockResolvedValue({ classification }),
-      });
-      expect(
-        await matchesClassification('safe', 'sample', 0.5, { provider: grader }),
-      ).toMatchObject({
-        pass: false,
-        score: 0,
-        metadata: { graderError: true },
-      });
-    },
-  );
+  it.each([
+    { classification: [0.9] },
+    { classification: '0.9' },
+    { classification: { safe: 0.9, broken: null } },
+  ])('rejects malformed classification maps: $classification', async ({ classification }) => {
+    const grader = createMockProvider({
+      callClassificationApi: vi.fn().mockResolvedValue({ classification }),
+    });
+    expect(await matchesClassification('safe', 'sample', 0.5, { provider: grader })).toMatchObject({
+      pass: false,
+      score: 0,
+      metadata: { graderError: true },
+    });
+  });
 
   it.each([NaN, Infinity, -Infinity, -0.1, 1.1, '0.9', null])(
     'rejects invalid classification score %s',
