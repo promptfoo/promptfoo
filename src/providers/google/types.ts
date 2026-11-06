@@ -78,6 +78,7 @@ export interface Part {
   functionCall?: FunctionCall | StreamedFunctionCall;
   functionResponse?: FunctionResponse;
   thoughtSignature?: string;
+  audioTranscription?: { text?: string; speakerLabel?: string; words?: unknown[] };
   speechMetadata?: { speaker?: string; style?: string };
   fileData?: FileData;
 }
@@ -300,6 +301,13 @@ export interface CompletionOptions {
     speechConfig?: GoogleSpeechConfig;
 
     // Transcription configuration
+    audioTranscriptionConfig?: {
+      languageCodes?: string[];
+      wordTimestamp?: boolean;
+      diarization?: boolean;
+      customVocabulary?: string[];
+      mode?: 'VERBATIM' | 'SMART';
+    };
     outputAudioTranscription?: Record<string, any>;
     inputAudioTranscription?: Record<string, any>;
 
@@ -333,7 +341,7 @@ export interface CompletionOptions {
     };
   };
 
-  responseSchema?: string;
+  responseSchema?: string | Record<string, unknown>;
 
   toolConfig?: {
     functionCallingConfig?: {

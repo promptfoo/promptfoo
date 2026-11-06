@@ -1,3 +1,5 @@
+import { isVertexLlama4Model } from './vertexLlama';
+
 /**
  * Interface for Google model cost with optional tiered pricing.
  * Tiered pricing applies when prompt tokens exceed a threshold.
@@ -44,6 +46,8 @@ export interface GoogleModel {
 // global-only availability or global as the broadly available endpoint:
 // https://docs.cloud.google.com/vertex-ai/generative-ai/docs/learn/locations#generative_ai_models
 const VERTEX_GLOBAL_DEFAULT_MODELS = new Set([
+  'gemini-3.5-transcribe',
+  'gemini-3.5-transcribe-live',
   'gemini-3.8-flash-tts',
   'gemini-3.8-flash-lite-tts',
   'gemini-3.8-flash',
@@ -60,17 +64,11 @@ const VERTEX_GLOBAL_DEFAULT_MODELS = new Set([
   'gemini-3-flash-preview',
 ]);
 
-// Vertex's managed Llama 4 MaaS endpoints are currently available in us-east5.
-const VERTEX_US_EAST5_DEFAULT_MODELS = new Set([
-  'llama-4-maverick-17b-128e-instruct-maas',
-  'llama-4-scout-17b-16e-instruct-maas',
-]);
-
 export function getVertexModelDefaultRegion(modelName: string): string | undefined {
   if (VERTEX_GLOBAL_DEFAULT_MODELS.has(modelName)) {
     return 'global';
   }
-  if (VERTEX_US_EAST5_DEFAULT_MODELS.has(modelName)) {
+  if (isVertexLlama4Model(modelName)) {
     return 'us-east5';
   }
   return undefined;
@@ -218,6 +216,11 @@ export const GOOGLE_MODELS: GoogleModel[] = [
     vertexCost: GEMINI_3_5_FLASH_LITE_COST,
     vertexRegionalPremium: 1.1,
   })),
+  ...modelsWithCost(['gemini-3.5-transcribe'], {
+    input: 2 / 1e6,
+    audioInput: 2 / 1e6,
+    output: 12 / 1e6,
+  }),
   ...modelsWithCost(
     ['gemini-omni-flash-preview', 'gemini-omni-1.1-flash', 'gemini-omni-1.1-flash-preview'],
     {
@@ -287,6 +290,10 @@ export const GOOGLE_MODELS: GoogleModel[] = [
       videoInputPerSecond: 0.000033333333333333335,
     },
   ),
+  ...modelsWithCost(['gemini-3.5-transcribe-live'], {
+    input: 3.5 / 1e6,
+    output: 21 / 1e6,
+  }),
   ...modelsWithCost(['gemini-live-2.5-flash-native-audio'], {
     input: 0.5 / 1e6,
     output: 2.0 / 1e6,
