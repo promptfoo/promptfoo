@@ -1640,25 +1640,48 @@ async function isTrustedVerifierArtifactPath(filePath: string, trustedRoots: str
   return isPathWithinAny(realFilePath, trustedRoots);
 }
 
-/** Resolve literal shell directory changes. Ambiguous paths are left to the host probes. */
+/** Bound path alternatives in long command lists; undefined represents an unresolved cwd. */
+function boundedCwds(paths: (string | undefined)[]) {
+  const unique = [...new Set(paths)];
+  return unique.length <= 16 ? unique : [...unique.slice(0, 15), undefined];
+}
+
 function* sandboxCommandSegments(command: string, cwd: string | undefined) {
-  for (const segment of command.split(/&&|[;\n]/)) {
+  let dirs = [cwd];
+  // A failed cd skips its remaining && chain. The next unconditional statement can still run.
+  let skipped: (string | undefined)[] = [];
+  const parts = command.split(/(&&\s*|[;\n])/);
+  for (let i = 0; i < parts.length; i += 2) {
+    if (i && !parts[i - 1].startsWith('&&') && skipped.length) {
+      dirs = boundedCwds([...skipped, ...dirs]);
+      skipped = [];
+    }
+    const segment = parts[i];
     if (/^\s*(?:cd|pushd|popd)\b/.test(segment)) {
       const literal = /^\s*cd\s+(?:--\s+)?(["']?)([\w./ -]+?)\1\s*(?:\|\|\s*(.+))?$/.exec(segment);
       const fallback = literal?.[3];
-      if (fallback && cwd) {
-        // A failed cd keeps the original directory. The exit code alone cannot tell
-        // us whether the fallback actually ran.
-        yield { segment: fallback, cwd, conditional: true };
+      const changed = dirs.map((dir) =>
+        literal && dir ? path.resolve(dir, literal[2]) : undefined,
+      );
+      if (fallback) {
+        for (const dir of dirs) {
+          if (dir) {
+            yield { segment: fallback, cwd: dir, conditional: true };
+          }
+        }
+        if (!/^exit\b/.test(fallback)) {
+          changed.push(...dirs);
+        }
+      } else {
+        skipped = boundedCwds([...skipped, ...dirs]);
       }
-      cwd =
-        literal && cwd && (!fallback || /^exit\b/.test(fallback))
-          ? path.resolve(cwd, literal[2])
-          : undefined;
-      continue;
-    }
-    if (cwd) {
-      yield { segment, cwd, conditional: false };
+      dirs = boundedCwds(changed);
+    } else {
+      for (const dir of dirs) {
+        if (dir) {
+          yield { segment, cwd: dir, conditional: dirs.length > 1 };
+        }
+      }
     }
   }
 }
