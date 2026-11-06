@@ -1,8 +1,16 @@
+import { createHash } from 'node:crypto';
+
 import { getProcessEnv } from '../../envars';
 import logger from '../../logger';
+import { isPrivateRangeGuardContextActive } from '../../util/fetch/guardContext';
 import { fetchWithProxy } from '../../util/fetch/index';
 import { renderVarsInObject } from '../../util/index';
-import { fetchOAuthToken, type OAuthTokenResult, TOKEN_REFRESH_BUFFER_MS } from '../../util/oauth';
+import {
+  fetchOAuthToken,
+  type OAuthTokenConfig,
+  type OAuthTokenResult,
+  TOKEN_REFRESH_BUFFER_MS,
+} from '../../util/oauth';
 import { sanitizeObject } from '../../util/sanitizer';
 import { waitForPromiseWithAbort } from '../shared';
 import { normalizeRenderedOAuthScopes } from './auth';
@@ -113,13 +121,24 @@ interface OAuthTokenCache extends OAuthTokenResult {
 const oauthTokenCache = new Map<string, OAuthTokenCache>();
 
 /**
- * Get the cache key for an OAuth config
+ * Get the cache key for an OAuth config. The credential is fingerprinted
+ * (SHA-256, never the value itself: the map is in-memory only, and a raw
+ * secret must never sit in a cache key) so two credentials sharing a
+ * client id do not share a token.
  */
 function getOAuthCacheKey(
   auth: MCPOAuthClientCredentialsAuth | MCPOAuthPasswordAuth,
   tokenUrl: string,
 ): string {
-  return `${tokenUrl}:${auth.grantType}:${'clientId' in auth ? auth.clientId : ''}:${'username' in auth ? auth.username : ''}:${normalizeRenderedOAuthScopes(auth.scopes)?.join(' ') ?? ''}`;
+  const clientSecret = 'clientSecret' in auth ? auth.clientSecret : undefined;
+  const password = 'password' in auth ? auth.password : undefined;
+  const credentialFingerprint =
+    clientSecret || password
+      ? createHash('sha256')
+          .update(`${clientSecret ?? ''}:${password ?? ''}`)
+          .digest('hex')
+      : '';
+  return `${tokenUrl}:${auth.grantType}:${'clientId' in auth ? auth.clientId : ''}:${'username' in auth ? auth.username : ''}:${normalizeRenderedOAuthScopes(auth.scopes)?.join(' ') ?? ''}:${credentialFingerprint}`;
 }
 
 // Cache for discovered token endpoints
@@ -234,6 +253,33 @@ export async function getOAuthTokenWithExpiry(
   }
 
   const cacheKey = getOAuthCacheKey(auth, tokenUrl);
+
+  // The token request is built once: the guarded path below and the shared
+  // in-flight path both fetch with it.
+  const tokenRequest: Omit<OAuthTokenConfig, 'signal'> = {
+    tokenUrl,
+    // Credentials must not follow a redirect away from a discovered endpoint
+    redirect: auth.tokenUrl ? undefined : 'error',
+    grantType: auth.grantType,
+    clientId: auth.clientId,
+    clientSecret: auth.clientSecret,
+    username: 'username' in auth ? auth.username : undefined,
+    password: 'password' in auth ? auth.password : undefined,
+    scopes: normalizeRenderedOAuthScopes(auth.scopes),
+  };
+
+  // Inside a guarded server route, never read the shared token cache or join
+  // an in-flight request: a token cached by an ordinary eval for a private
+  // tokenUrl would be handed to the guarded request without fetchOAuthToken
+  // ever running, so its tokenUrl validation would never happen and the
+  // ordinary eval's token would be attached to the public MCP request.
+  // Fetch fresh (the validation runs inside fetchOAuthToken) and do not store
+  // the result in the shared cache, so the guarded token never leaks back
+  // into ordinary evals either.
+  if (isPrivateRangeGuardContextActive()) {
+    return fetchOAuthToken({ signal, ...tokenRequest });
+  }
+
   const cached = oauthTokenCache.get(cacheKey);
   if (cached && cached.accessToken !== rejectedToken && Date.now() < cached.refreshAt) {
     return { accessToken: cached.accessToken, expiresAt: cached.expiresAt };
@@ -244,15 +290,7 @@ export async function getOAuthTokenWithExpiry(
     const controller = new AbortController();
     const promise = fetchOAuthToken({
       signal: controller.signal,
-      tokenUrl,
-      // Credentials must not follow a redirect away from a discovered endpoint
-      redirect: auth.tokenUrl ? undefined : 'error',
-      grantType: auth.grantType,
-      clientId: auth.clientId,
-      clientSecret: auth.clientSecret,
-      username: 'username' in auth ? auth.username : undefined,
-      password: 'password' in auth ? auth.password : undefined,
-      scopes: normalizeRenderedOAuthScopes(auth.scopes),
+      ...tokenRequest,
     })
       .then((result) => {
         controller.signal.throwIfAborted();
