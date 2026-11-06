@@ -7163,6 +7163,37 @@ describe('ClaudeCodeSDKProvider', () => {
         expect(toolSpan!.status?.code).toBe(1); // SpanStatusCode.OK
       });
 
+      const traceparent = '00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01';
+      const nativeChildSpan = { spanId: 'native-claude-span', parentSpanId: 'b7ad6b7169203331' };
+      const readToolTurn = {
+        type: 'assistant' as const,
+        parent_tool_use_id: null,
+        message: createMockBetaMessage([createReadToolUse()]),
+        session_id: 'test-session',
+      };
+
+      function mockStoredSpans(spans: (typeof nativeChildSpan)[]) {
+        const getTrace = vi.fn().mockResolvedValue({ spans });
+        vi.spyOn(traceStore, 'getTraceStore').mockReturnValue({
+          getTrace,
+        } as unknown as ReturnType<typeof traceStore.getTraceStore>);
+        return getTrace;
+      }
+
+      function callWithLocalTraceReceiver(parent?: string) {
+        cliState.setActiveOtlpReceiver(createOtlpOptions());
+        const provider = new ClaudeCodeSDKProvider(createTracedClaudeOptions());
+        return cliState.withRequestTracingConfig(
+          { enabled: true, otlp: { http: { enabled: true, port: 4318 } } },
+          () =>
+            provider.callApi('prompt', {
+              traceparent: parent,
+              prompt: { raw: 'prompt', label: 'prompt' },
+              vars: {},
+            }),
+        );
+      }
+
       it.each([
         {
           description:
@@ -7214,39 +7245,13 @@ describe('ClaudeCodeSDKProvider', () => {
           expectSyntheticSpans,
         }) => {
           const { emittedSpans } = installTracerSpy();
-          const traceId = '0af7651916cd43dd8448eb211c80319c';
-          const parentSpanId = 'b7ad6b7169203331';
-          vi.spyOn(genaiTracer, 'getTraceparent').mockReturnValue(
-            `00-${traceId}-${parentSpanId}-01`,
-          );
-          vi.spyOn(traceStore, 'getTraceStore').mockReturnValue({
-            getTrace: vi.fn().mockResolvedValue({
-              spans: [{ spanId: 'native-claude-span', parentSpanId }],
-            }),
-          } as unknown as ReturnType<typeof traceStore.getTraceStore>);
+          vi.spyOn(genaiTracer, 'getTraceparent').mockReturnValue(traceparent);
+          mockStoredSpans([nativeChildSpan]);
           mockQuery.mockReturnValue(
             createMockQuery([
-              {
-                type: 'assistant',
-                parent_tool_use_id: null,
-                message: createMockBetaMessage([createReadToolUse()]),
-                session_id: 'test-session',
-              },
+              readToolTurn,
               createReadToolResultMessage(),
-              {
-                type: 'result',
-                subtype: 'success',
-                session_id: 'test-session',
-                uuid: '12345678-1234-1234-1234-123456789abc',
-                result: 'ok',
-                usage: createMockUsage(10, 20),
-                total_cost_usd: 0.001,
-                duration_ms: 500,
-                duration_api_ms: 400,
-                is_error: false,
-                num_turns: 1,
-                permission_denials: [],
-              },
+              (await createMockResponse('ok').next()).value as SDKMessage,
             ]),
           );
 
@@ -7301,35 +7306,17 @@ describe('ClaudeCodeSDKProvider', () => {
       ])('preserves synthetic spans without a valid traceparent (%s)', async (traceparent) => {
         const { emittedSpans } = installTracerSpy();
         vi.spyOn(genaiTracer, 'getTraceparent').mockReturnValue(undefined);
-        const getTrace = vi.fn().mockResolvedValue({ spans: [] });
-        vi.spyOn(traceStore, 'getTraceStore').mockReturnValue({
-          getTrace,
-        } as unknown as ReturnType<typeof traceStore.getTraceStore>);
+        const getTrace = mockStoredSpans([]);
         mockQuery.mockReturnValue(
           createMockQuery([
-            {
-              type: 'assistant',
-              parent_tool_use_id: null,
-              message: createMockBetaMessage([createReadToolUse()]),
-              session_id: 'test-session',
-            },
+            readToolTurn,
             createReadToolResultMessage(),
             (await createMockResponse('ok').next()).value as SDKMessage,
           ]),
         );
-        cliState.setActiveOtlpReceiver(createOtlpOptions());
-        const provider = new ClaudeCodeSDKProvider(createTracedClaudeOptions());
+        const result = await callWithLocalTraceReceiver(traceparent);
 
-        const result = await cliState.withRequestTracingConfig(
-          { enabled: true, otlp: { http: { enabled: true, port: 4318 } } },
-          () =>
-            provider.callApi('prompt', {
-              traceparent,
-              prompt: { raw: 'prompt', label: 'prompt' },
-              vars: {},
-            }),
-        );
-
+        expect(mockQuery.mock.calls.at(-1)?.[0].options.env.TRACEPARENT).toBeUndefined();
         expect(result.output).toBe('ok');
         expect(emittedSpans.map((span) => span.name)).toEqual(['gen_ai.turn 1', 'tool Read']);
         expect(getTrace).not.toHaveBeenCalled();
@@ -7346,36 +7333,14 @@ describe('ClaudeCodeSDKProvider', () => {
           vi.useFakeTimers();
           try {
             const { emittedSpans } = installTracerSpy();
-            const parentSpanId = 'b7ad6b7169203331';
-            const getTrace = vi.fn().mockResolvedValue({
-              spans: nativeSpansArrived ? [{ spanId: 'native-claude-span', parentSpanId }] : [],
-            });
-            vi.spyOn(traceStore, 'getTraceStore').mockReturnValue({
-              getTrace,
-            } as unknown as ReturnType<typeof traceStore.getTraceStore>);
+            const getTrace = mockStoredSpans(nativeSpansArrived ? [nativeChildSpan] : []);
             mockQuery.mockReturnValue(
               createMockQuery([
-                {
-                  type: 'assistant',
-                  parent_tool_use_id: null,
-                  message: createMockBetaMessage([createReadToolUse()]),
-                  session_id: 'test-session',
-                },
+                readToolTurn,
                 ...(toolCompleted ? [createReadToolResultMessage()] : []),
               ]),
             );
-            cliState.setActiveOtlpReceiver(createOtlpOptions());
-            const provider = new ClaudeCodeSDKProvider(createTracedClaudeOptions());
-
-            const resultPromise = cliState.withRequestTracingConfig(
-              { enabled: true, otlp: { http: { enabled: true, port: 4318 } } },
-              () =>
-                provider.callApi('prompt', {
-                  traceparent: `00-0af7651916cd43dd8448eb211c80319c-${parentSpanId}-01`,
-                  prompt: { raw: 'prompt', label: 'prompt' },
-                  vars: {},
-                }),
-            );
+            const resultPromise = callWithLocalTraceReceiver(traceparent);
             await vi.runAllTimersAsync();
             const result = await resultPromise;
 
@@ -7399,6 +7364,10 @@ describe('ClaudeCodeSDKProvider', () => {
         const { emittedSpans } = installTracerSpy();
         const traceId = '0af7651916cd43dd8448eb211c80319c';
         const parentSpanId = 'b7ad6b7169203331';
+        // An invalid active span should not shadow the valid evaluator context.
+        vi.spyOn(genaiTracer, 'getTraceparent').mockReturnValue(
+          `00-${traceId}-0000000000000000-01`,
+        );
         const getTrace = vi
           .fn()
           .mockResolvedValueOnce({
