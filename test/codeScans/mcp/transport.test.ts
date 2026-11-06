@@ -45,7 +45,14 @@ describe('read-only code scan transport', () => {
     const [list, read] = write.mock.calls.map(([line]) => JSON.parse(line));
     expect(read.params.arguments.path).toBe('marker.txt');
     expect(list.id).not.toEqual(read.id);
-    const hiddenTools = ['write_file', 'edit_file', 'create_directory', 'move_file', 'future_tool'];
+    const hiddenTools = [
+      'write_file',
+      'edit_file',
+      'create_directory',
+      'move_file',
+      'list_directory_with_sizes',
+      'future_tool',
+    ];
     const safe = { name: 'read_text_file', description: 'Read text' };
     fromServer({ id: read.id, result: { content: [] } });
     fromServer({
@@ -96,15 +103,31 @@ describe('read-only code scan transport', () => {
     expect(write).not.toHaveBeenCalled();
   });
 
-  it('cancels only the matching pending read in the same batch', async () => {
-    const { request, write } = await setup();
+  it('retires cancelled wire IDs even when the server sends no response', async () => {
+    const { request, fromServer, write, response } = await setup();
     for (const batch of [1, 2]) {
       request({ method: 'tools/list', id: 1, _batch_id: batch });
     }
-    const secondId = JSON.parse(write.mock.calls[1][0]).id;
-    request({ method: 'notifications/cancelled', params: { requestId: 1 }, _batch_id: 2 });
-    expect(JSON.parse(write.mock.calls[2][0]).params).toEqual({ requestId: secondId });
-    request({ method: 'notifications/cancelled', params: { requestId: 1 }, _batch_id: 3 });
+    const [first, cancelled] = write.mock.calls.map(([line]) => JSON.parse(line).id);
+    const cancel = { method: 'notifications/cancelled', params: { requestId: 1 }, _batch_id: 2 };
+    request(cancel);
+    expect(JSON.parse(write.mock.calls[2][0]).params).toEqual({ requestId: cancelled });
+    request(cancel);
     expect(write).toHaveBeenCalledTimes(3);
+
+    request({ method: 'tools/list', id: 1, _batch_id: 2 });
+    const reused = JSON.parse(write.mock.calls[3][0]).id;
+    expect(reused).not.toBe(cancelled);
+    fromServer({ id: cancelled, result: { tools: [] } });
+    expect(response).not.toHaveBeenCalled();
+    request(cancel);
+    expect(JSON.parse(write.mock.calls[4][0]).params).toEqual({ requestId: reused });
+
+    fromServer({ id: first, result: { tools: [] } });
+    expect(response).toHaveBeenCalledExactlyOnceWith({
+      session_id: 'scan-session',
+      batch_id: 1,
+      message: { jsonrpc: '2.0', id: 1, result: { tools: [] } },
+    });
   });
 });

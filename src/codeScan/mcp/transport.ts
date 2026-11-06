@@ -20,7 +20,6 @@ const readOnlyTools = new Set([
   'get_file_info',
   'list_allowed_directories',
   'list_directory',
-  'list_directory_with_sizes',
   'read_file',
   'read_media_file',
   'read_multiple_files',
@@ -162,7 +161,7 @@ export class SocketIoMcpBridge {
           // Client-provided roots must never replace the directory passed by the local launcher.
           forwarded.params = { ...(typeof params === 'object' ? params : {}), capabilities: {} };
         } else if (method === 'notifications/cancelled') {
-          const translated = this.getCancellationParams(batchId, params);
+          const translated = this.takeCancellationParams(batchId, params);
           if (!translated) {
             return;
           }
@@ -202,10 +201,12 @@ export class SocketIoMcpBridge {
     logger.debug('MCP ↔ Socket.io bridge active');
   }
 
-  private getCancellationParams(batchId: number, params: unknown) {
+  private takeCancellationParams(batchId: number, params: unknown) {
     if (params && typeof params === 'object' && 'requestId' in params) {
       for (const [wireId, mapping] of this.wireIdMap) {
         if (mapping.batchId === batchId && mapping.originalId === params.requestId) {
+          // A cancelled request may never receive a response.
+          this.wireIdMap.delete(wireId);
           return { ...params, requestId: wireId };
         }
       }
