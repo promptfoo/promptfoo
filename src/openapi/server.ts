@@ -20,6 +20,7 @@ import { ServerSchemas } from '../types/api/server';
 import { TracesSchemas } from '../types/api/traces';
 import { UserSchemas } from '../types/api/user';
 import { VersionSchemas } from '../types/api/version';
+import echoEvalExample from './examples/echo-eval.json' with { type: 'json' };
 
 extendZodWithOpenApi(z);
 
@@ -454,12 +455,7 @@ export function createServerOpenApiRegistry() {
       body: jsonBody(
         OpenApiCreateJobRequestSchema,
         'Run the local echo example without an API key.',
-        {
-          prompts: ['ping'],
-          providers: ['echo'],
-          tests: [{ assert: [{ type: 'equals', value: 'ping' }] }],
-          sharing: false,
-        },
+        echoEvalExample,
       ),
     },
     responses: {

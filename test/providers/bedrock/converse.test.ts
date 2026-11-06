@@ -2828,6 +2828,29 @@ Third line`;
   });
 
   describe('cost calculation', () => {
+    it.each([
+      ['us.openai.gpt-6-luna', 0.000165],
+      ['us.openai.gpt-6.1-sol', 0.0033],
+    ] as const)('supports cost assertions for %s', async (model, expectedCost) => {
+      const provider = new AwsBedrockConverseProvider(model, { config: { region: 'us-east-1' } });
+      mockSend.mockResolvedValueOnce(
+        createMockConverseResponse('pong', {
+          usage: { inputTokens: 1000, outputTokens: 100, totalTokens: 1100 },
+        }),
+      );
+      const providerResponse = await provider.callApi('ping');
+      expect(providerResponse.cost).toBeCloseTo(expectedCost, 12);
+      const { runAssertion } = await import('../../../src/assertions');
+      for (const threshold of [0, 0.15]) {
+        const grade = await runAssertion({
+          assertion: { type: 'cost', threshold },
+          test: {},
+          providerResponse,
+        });
+        expect(grade.pass).toBe(threshold >= expectedCost);
+      }
+    });
+
     it('should calculate cost for Nova models', async () => {
       // Model ID needs to contain 'amazon.nova-lite' for pricing lookup
       const provider = new AwsBedrockConverseProvider('amazon.nova-lite-v1:0', {
