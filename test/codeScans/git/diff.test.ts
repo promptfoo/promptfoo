@@ -24,8 +24,12 @@ describe('Git branch selection', () => {
   });
 
   it('wraps failures outside a repository', async () => {
-    vi.mocked(runCommand).mockRejectedValue(new Error('not a git repository'));
-    await expect(validateOnBranch('/repo')).rejects.toThrow(GitError);
+    vi.mocked(runCommand).mockRejectedValue(
+      Object.assign(new Error('not a git repository'), { code: 128 }),
+    );
+    const validation = validateOnBranch('/repo');
+    await expect(validation).rejects.toThrow(GitError);
+    await expect(validation).rejects.toThrow('Failed to validate branch: not a git repository');
   });
 });
 

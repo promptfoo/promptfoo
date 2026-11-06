@@ -31,7 +31,7 @@ describe('code scan metadata with real git', () => {
 
   beforeAll(async () => {
     repoPath = await mkdtemp(path.join(tmpdir(), 'promptfoo-git-metadata-'));
-    await git(['init', '--template=', '--initial-branch=main']);
+    await git(['init', '--template=']);
     const tree = await git(['mktree'], '');
     baseSha = await git(['commit-tree', tree, '-m', 'base']);
     compareSha = await git(['commit-tree', tree, '-p', baseSha, '-m', 'feature; literal text']);
@@ -64,6 +64,24 @@ describe('code scan metadata with real git', () => {
     });
     expect(Number.isNaN(Date.parse(metadata.timestamp))).toBe(false);
     await expect(validateOnBranch(repoPath)).resolves.toBe('feature/topic');
+  });
+
+  it('identifies an unborn branch before its first commit', async () => {
+    await git(['symbolic-ref', 'HEAD', 'refs/heads/new/topic']);
+    await expect(validateOnBranch(repoPath)).resolves.toBe('new/topic');
+  });
+
+  it('preserves the branch name when a tag has the same name', async () => {
+    await git(['update-ref', 'refs/heads/review/collision', compareSha]);
+    await git(['update-ref', 'refs/tags/review/collision', compareSha]);
+    await git(['symbolic-ref', 'HEAD', 'refs/heads/review/collision']);
+    await expect(validateOnBranch(repoPath)).resolves.toBe('review/collision');
+  });
+
+  it('rejects a symbolic HEAD that points to a tag', async () => {
+    await git(['update-ref', 'refs/tags/nonbranch', compareSha]);
+    await git(['symbolic-ref', 'HEAD', 'refs/tags/nonbranch']);
+    await expect(validateOnBranch(repoPath)).rejects.toThrow('Failed to validate branch');
   });
 
   it('reports invalid comparison refs as metadata errors', async () => {

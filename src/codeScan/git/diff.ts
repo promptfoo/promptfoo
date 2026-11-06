@@ -10,20 +10,22 @@ import { runGit } from './command';
  * @throws GitError if not on a branch
  */
 export async function validateOnBranch(repoPath: string): Promise<string> {
+  let ref: string;
   try {
-    const stdout = await runGit(repoPath, ['branch', '--show-current']);
-    if (!stdout) {
-      throw new GitError('Not on a branch. Please checkout a branch before running the scan.');
-    }
-    return stdout;
+    ref = await runGit(repoPath, ['symbolic-ref', '--quiet', 'HEAD']);
   } catch (error) {
-    if (error instanceof GitError) {
-      throw error;
+    if (error instanceof Error && 'code' in error && error.code === 1) {
+      throw new GitError('Not on a branch. Please checkout a branch before running the scan.');
     }
     throw new GitError(
       `Failed to validate branch: ${error instanceof Error ? error.message : String(error)}`,
     );
   }
+  const prefix = 'refs/heads/';
+  if (!ref.startsWith(prefix)) {
+    throw new GitError('Failed to validate branch: HEAD points outside refs/heads/.');
+  }
+  return ref.slice(prefix.length);
 }
 
 export async function getDefaultBaseBranch(repoPath: string): Promise<string> {
