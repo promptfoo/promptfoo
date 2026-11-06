@@ -1511,7 +1511,7 @@ providers:
 :::info Dependencies
 
 - **JKS support** requires the opt-in `jks-js` package: `npm install promptfoo jks-js@^1.1.5` (add `-g` for npm-global Promptfoo). See [JKS installation guidance](#using-jks-java-keystore-certificates) for other package managers.
-- **PFX support** uses the optional `pem` runtime package: `npm install pem`
+- **PFX signing** uses the OpenSSL executable on your PATH. Set `OPENSSL_BIN` to select a different OpenSSL installation.
 
 :::
 
