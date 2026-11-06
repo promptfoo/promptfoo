@@ -859,6 +859,7 @@ export class GoogleLiveProvider implements ApiProvider {
       let hasFinalized = false;
       let speechInputEnded = false;
       let hasPendingInputTranscription = false;
+      let finalRecordingComplete = false;
 
       const requestedText = configuredResponseModalities?.includes('TEXT') ?? false;
       const responseModalities =
@@ -1598,28 +1599,25 @@ export class GoogleLiveProvider implements ApiProvider {
               return;
             }
 
-            if (isLiveTranscribe && serverContent.interimInputTranscription?.text) {
-              // A new utterance is in progress. Wait for its finalized transcript.
-              hasPendingInputTranscription = true;
-              clearTimeout(speechCompletionTimeout);
-            }
-            if (isLiveTranscribe && serverContent.inputTranscription) {
-              hasPendingInputTranscription = false;
-              // Only finalized segments belong in eval output. Interim hypotheses can be revised.
-              if (serverContent.inputTranscription.text) {
-                if (response_text_total) {
-                  response_text_total += '\n';
-                }
-                response_text_total += serverContent.inputTranscription.text;
+            if (isLiveTranscribe) {
+              const { inputTranscription, interimInputTranscription, turnComplete } = serverContent;
+              if (turnComplete && speechInputEnded && contentIndex === contents.length) {
+                finalRecordingComplete = true;
               }
-            }
-            // Completion can represent silence; retain the grace for any late final transcript.
-            if (
-              isLiveTranscribe &&
-              !hasPendingInputTranscription &&
-              (serverContent.inputTranscription || serverContent.turnComplete)
-            ) {
-              armSpeechCompletion();
+              // Final segments replace interim hypotheses, including an empty final on silence.
+              if (inputTranscription) {
+                hasPendingInputTranscription = false;
+                if (inputTranscription.text) {
+                  response_text_total +=
+                    (response_text_total ? '\n' : '') + inputTranscription.text;
+                }
+              } else if (interimInputTranscription?.text) {
+                hasPendingInputTranscription = true;
+                clearTimeout(speechCompletionTimeout);
+              }
+              if (!hasPendingInputTranscription && (inputTranscription || turnComplete)) {
+                armSpeechCompletion();
+              }
             }
             if (serverContent.modelTurn?.parts) {
               for (const part of serverContent.modelTurn.parts) {
@@ -1908,23 +1906,31 @@ export class GoogleLiveProvider implements ApiProvider {
         });
       };
 
-      ws.onclose = (event: WebSocket.CloseEvent) => {
+      ws.onclose = async (event: WebSocket.CloseEvent) => {
         logger.debug(
           `WebSocket connection closed. Code: ${event.code}, Reason: ${event.reason}, Clean: ${event.wasClean}`,
         );
         // Finalization closes the socket before awaiting final state. That expected
         // close must leave both the result and the stateful worker to the finalizer.
-        if (hasFinalized) {
+        if (hasFinalized || isResolved) {
           return;
         }
-        clearTimeout(timeout);
-        // If the promise hasn't been resolved yet and the closure was unexpected, resolve with error.
-        // This is a fallback; most paths should resolve the promise earlier.
-        if (!isResolved) {
-          safeResolve({
-            error: `WebSocket connection closed unexpectedly. Code: ${event.code}, Reason: ${event.reason}`,
-          });
+        if (isLiveTranscribe && speechInputEnded && event.code === 1000 && event.wasClean) {
+          // The close can arrive while earlier transcript frames are still queued.
+          try {
+            await messageQueue;
+            if (finalRecordingComplete && !hasPendingInputTranscription) {
+              await finalizeResponse();
+              return;
+            }
+          } catch (err) {
+            safeResolve({ error: `Error finalizing response: ${err}` });
+            return;
+          }
         }
+        safeResolve({
+          error: `WebSocket connection closed unexpectedly. Code: ${event.code}, Reason: ${event.reason}`,
+        });
       };
     });
   }
