@@ -9,7 +9,9 @@ import {
   getRequestTimeoutMs,
   parseChatPrompt,
   shouldBustProviderCache,
+  throwIfAborted,
   transformTools,
+  waitForPromiseWithAbort,
   withResponseCacheMetadata,
 } from './shared';
 
@@ -541,7 +543,12 @@ export class OllamaCompletionProvider implements ApiProvider {
     return `[Ollama Completion Provider ${this.modelName}]`;
   }
 
-  async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+  async callApi(
+    prompt: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
+    throwIfAborted(options?.abortSignal);
     // Set up tracing context
     const spanContext: GenAISpanContext = {
       system: 'ollama',
@@ -560,7 +567,7 @@ export class OllamaCompletionProvider implements ApiProvider {
 
     return withGenAISpan(
       spanContext,
-      () => this.callApiInternal(prompt, context),
+      () => this.callApiInternal(prompt, context, options?.abortSignal),
       (response) => extractGenAIResponse(response, true),
     );
   }
@@ -568,6 +575,7 @@ export class OllamaCompletionProvider implements ApiProvider {
   private async callApiInternal(
     prompt: string,
     context?: CallApiContextParams,
+    signal?: AbortSignal,
   ): Promise<ProviderResponse> {
     const { passthroughOptions, passthroughRest } = splitOllamaPassthrough(this.config);
     const params = {
@@ -596,6 +604,7 @@ export class OllamaCompletionProvider implements ApiProvider {
         `${resolveProviderEnv(this.env, ['OLLAMA_BASE_URL'])?.value || 'http://localhost:11434'}/api/generate`,
         {
           method: 'POST',
+          ...(signal && { signal }),
           headers: {
             'Content-Type': 'application/json',
             ...(apiKey && { Authorization: `Bearer ${apiKey}` }),
@@ -607,6 +616,7 @@ export class OllamaCompletionProvider implements ApiProvider {
         shouldBustProviderCache(context),
       );
     } catch (err) {
+      throwIfAborted(signal);
       return {
         error: `API call error: ${String(err)}. Output:\n${response?.data}`,
       };
@@ -690,7 +700,12 @@ export class OllamaChatProvider implements ApiProvider {
     return `[Ollama Chat Provider ${this.modelName}]`;
   }
 
-  async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+  async callApi(
+    prompt: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
+    throwIfAborted(options?.abortSignal);
     // Set up tracing context
     const spanContext: GenAISpanContext = {
       system: 'ollama',
@@ -709,7 +724,7 @@ export class OllamaChatProvider implements ApiProvider {
 
     return withGenAISpan(
       spanContext,
-      () => this.callApiInternal(prompt, context),
+      () => this.callApiInternal(prompt, context, options?.abortSignal),
       (response) => extractGenAIResponse(response, true),
     );
   }
@@ -717,6 +732,7 @@ export class OllamaChatProvider implements ApiProvider {
   private async callApiInternal(
     prompt: string,
     context?: CallApiContextParams,
+    signal?: AbortSignal,
   ): Promise<ProviderResponse> {
     const messages = normalizeOllamaRequestMessages(
       parseChatPrompt<unknown>(prompt, [{ role: 'user', content: prompt }]),
@@ -736,7 +752,10 @@ export class OllamaChatProvider implements ApiProvider {
 
     // Handle tools if configured
     if (this.config.tools) {
-      const loadedTools = await maybeLoadToolsFromExternalFile(this.config.tools, context?.vars);
+      const loadedTools = await waitForPromiseWithAbort(
+        maybeLoadToolsFromExternalFile(this.config.tools, context?.vars),
+        signal,
+      );
       if (loadedTools !== undefined) {
         // Transform tools to OpenAI format if needed (Ollama uses OpenAI format)
         params.tools = transformTools(loadedTools, 'openai');
@@ -753,6 +772,7 @@ export class OllamaChatProvider implements ApiProvider {
         `${resolveProviderEnv(this.env, ['OLLAMA_BASE_URL'])?.value || 'http://localhost:11434'}/api/chat`,
         {
           method: 'POST',
+          ...(signal && { signal }),
           headers: {
             'Content-Type': 'application/json',
             ...(apiKey && { Authorization: `Bearer ${apiKey}` }),
@@ -764,6 +784,7 @@ export class OllamaChatProvider implements ApiProvider {
         shouldBustProviderCache(context),
       );
     } catch (err) {
+      throwIfAborted(signal);
       return {
         error: `API call error: ${String(err)}. Output:\n${response?.data}`,
       };
