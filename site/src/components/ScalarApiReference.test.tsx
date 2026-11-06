@@ -1,7 +1,9 @@
 import React from 'react';
 
-import { act, cleanup, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
+import spec from '../../static/openapi.json';
+import LocalServerApiReference from '../pages/docs/local-server-api-reference';
 import ScalarApiReference from './ScalarApiReference';
 
 const props = {
@@ -102,3 +104,19 @@ it.each(['missing', 'empty result', 'exception'])(
     expectFallback();
   },
 );
+
+it('offers the documented eval request even when the local reference viewer fails to load', () => {
+  render(<LocalServerApiReference />);
+  act(() => getScript().dispatchEvent(new Event('error')));
+
+  const quickstart = screen.getByRole('region', { name: 'HTTP quickstart' });
+  fireEvent.click(within(quickstart).getByText('Run your first eval over HTTP'));
+  expect(quickstart.querySelector('details')).toHaveAttribute('open');
+
+  const requestBody = quickstart.textContent?.match(/--json '([^']+)'/)?.[1];
+  expect(requestBody).toBeDefined();
+  expect(JSON.parse(requestBody!)).toEqual(
+    spec.paths['/api/eval/job'].post.requestBody.content['application/json'].example,
+  );
+  expect(quickstart).toHaveTextContent('$promptfoo_url/api/eval/job/$job_id');
+});
