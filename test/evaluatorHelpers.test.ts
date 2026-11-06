@@ -1457,6 +1457,33 @@ describe('evaluatorHelpers', () => {
       ).rejects.toThrow('unknown block tag: unknown');
     });
 
+    it('should render an or fallback when its left operand is missing', async () => {
+      const renderedPrompt = await renderPrompt(
+        toPrompt('{{v}}'),
+        { v: "{{ user or 'anonymous' }}" },
+        {},
+      );
+
+      expect(renderedPrompt).toBe('anonymous');
+    });
+
+    it('should retain a required name that also has an or-fallback occurrence', async () => {
+      const value = "{{ user }} {{ user or 'anonymous' }}";
+      const renderedPrompt = await renderPrompt(toPrompt('{{v}}'), { v: value }, {});
+
+      expect(renderedPrompt).toBe(value);
+    });
+
+    it('should use complete Unicode names in the undefined-variable guard', async () => {
+      const renderedPrompt = await renderPrompt(
+        toPrompt('{{v}}'),
+        { v: '{{ café ~ "!" }}', café: 'hello' },
+        {},
+      );
+
+      expect(renderedPrompt).toBe('hello!');
+    });
+
     it('should bound wide external-context traversal without argument spreading', async () => {
       const value = '{{ 1 }}'.repeat(128000);
       const renderedPrompt = await renderPrompt(toPrompt('{"text":"{{v}}"}'), { v: value }, {});

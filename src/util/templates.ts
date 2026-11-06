@@ -24,9 +24,14 @@ type NunjucksParentContext = {
   node: NunjucksAstNode;
 };
 
-// The scope walker can either stop at one requested name or collect every
-// unbound name into a Set during the same traversal.
-type ReferenceTarget = string | Set<string>;
+type RequiredReferenceTarget = {
+  references: Set<string>;
+  excludeOrOperands: true;
+};
+
+// The scope walker can stop at one requested name, collect every unbound name,
+// or collect only names whose evaluation requires a supplied value.
+type ReferenceTarget = string | Set<string> | RequiredReferenceTarget;
 
 function disposableIterator<T>(iterator: IterableIterator<T>): SetIterator<T> {
   return {
@@ -508,6 +513,14 @@ function astReferencesVariable(
   parent?: NunjucksParentContext,
   boundSymbols: ReadonlySet<string> = new Set(),
 ): boolean {
+  if (
+    node.typename === 'Or' &&
+    typeof variableName === 'object' &&
+    'excludeOrOperands' in variableName
+  ) {
+    return false;
+  }
+
   if (LEFT_ASSOCIATIVE_BINARY_NODES.has(node.typename!)) {
     return binaryNodeReferencesVariable(node, variableName, parent, boundSymbols);
   }
@@ -519,7 +532,11 @@ function astReferencesVariable(
         return isReference;
       }
     } else if (isReference) {
-      variableName.add(node.value);
+      if (variableName instanceof Set) {
+        variableName.add(node.value);
+      } else {
+        variableName.references.add(node.value);
+      }
     }
   }
 
@@ -1011,4 +1028,22 @@ export function extractUnboundVariablesFromTemplate(template: string): string[] 
   const references = new Set<string>();
   astReferencesVariable(parseResult.ast, references);
   return Array.from(references);
+}
+
+/**
+ * Collect symbols that must be supplied for eager rendering. Nunjucks permits
+ * missing operands in an `or` fallback, so those occurrences are excluded only
+ * for this traversal; the same name elsewhere remains a required reference.
+ */
+export function extractRequiredVariablesFromTemplate(template: string): string[] | undefined {
+  const parseResult = parseNunjucksTemplate(template);
+  if (!parseResult.ok) {
+    return undefined;
+  }
+  const target: RequiredReferenceTarget = {
+    references: new Set<string>(),
+    excludeOrOperands: true,
+  };
+  astReferencesVariable(parseResult.ast, target);
+  return Array.from(target.references);
 }

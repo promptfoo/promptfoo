@@ -27,6 +27,7 @@ import { renderVarsInObject, setLoadedFileMimeTypes } from './util/index';
 import invariant from './util/invariant';
 import { filterFiniteScores } from './util/numeric';
 import {
+  extractRequiredVariablesFromTemplate,
   extractUnboundVariablesFromTemplate,
   extractVariablesFromExpression,
   extractVariablesFromTemplate,
@@ -813,16 +814,11 @@ function referencesUndefinedVariables(template: string, vars: Record<string, Var
     }
   }
   scrubbed = mapSpans(scrubbed, nested, () => '');
-  const unboundReferences = extractUnboundVariablesFromTemplate(scrubbed);
+  const unboundReferences = extractRequiredVariablesFromTemplate(scrubbed);
   if (unboundReferences) {
-    return unboundReferences.some((variableName) => {
-      const rootVariableName = /^([A-Za-z_]\w*)/.exec(variableName)?.[1];
-      return Boolean(
-        rootVariableName &&
-          !isNunjucksGlobal(rootVariableName) &&
-          vars[rootVariableName] === undefined,
-      );
-    });
+    return unboundReferences.some(
+      (variableName) => !isNunjucksGlobal(variableName) && vars[variableName] === undefined,
+    );
   }
   // Parse-failure fallback. Keep the conservative regex/RHS analysis below for
   // malformed templates; valid templates use the same scope walker as reference
