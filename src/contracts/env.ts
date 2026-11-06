@@ -101,6 +101,7 @@ export const ProviderEnvOverridesSchema = z.object({
   MODEL_API_KEY: z.string().optional(),
   MODELSLAB_API_KEY: z.string().optional(),
   N8N_API_KEY: z.string().optional(),
+  NACE_API_KEY: z.string().optional(),
   NSCALE_SERVICE_TOKEN: z.string().optional(),
   NSCALE_API_KEY: z.string().optional(),
   NOVITA_API_KEY: z.string().optional(),

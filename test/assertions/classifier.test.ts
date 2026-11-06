@@ -77,6 +77,7 @@ describe('handleClassifier', () => {
       'model output',
       0.7,
       params.test.options,
+      params.test.vars,
     );
   });
 
@@ -111,6 +112,7 @@ describe('handleClassifier', () => {
       'model output',
       1,
       params.test.options,
+      params.test.vars,
     );
   });
 
