@@ -1,7 +1,12 @@
 import { useSyncExternalStore } from 'react';
 
 import { HUMAN_ASSERTION_TYPE } from '@promptfoo/providers/constants';
-import type { EvaluateTableOutput, PromptMetrics } from '@promptfoo/types';
+import type {
+  EvaluateTable,
+  EvaluateTableOutput,
+  GradingResult,
+  PromptMetrics,
+} from '@promptfoo/types';
 
 const EVAL_OUTPUT_PROMPT_HASH_PATTERN = /^#details-row-(\d+)-prompt-(\d+)$/;
 
@@ -200,4 +205,67 @@ export function getNamedMetricTotals(
     ...(metrics.namedScoresCount ?? {}),
     ...(metrics.namedScoreWeights ?? {}),
   };
+}
+
+/**
+ * Resolve the LLM-as-a-judge provider id for display.
+ * Prefer the runtime-persisted `metadata.gradingProvider`; fall back to an
+ * explicitly configured `assertion.provider` for older eval results.
+ */
+export function getGradingProviderDisplay(
+  result: GradingResult | null | undefined,
+): string | undefined {
+  const fromMeta = result?.metadata?.gradingProvider;
+  if (typeof fromMeta === 'string' && fromMeta.trim()) {
+    return fromMeta.trim();
+  }
+
+  const configured = result?.assertion?.provider;
+  if (typeof configured === 'string' && configured.trim()) {
+    return configured.trim();
+  }
+
+  if (configured && typeof configured === 'object' && !Array.isArray(configured)) {
+    const id = (configured as { id?: unknown }).id;
+    if (typeof id === 'string' && id.trim()) {
+      const label = (configured as { label?: unknown }).label;
+      return typeof label === 'string' && label.trim() && label.trim() !== id
+        ? `${id} (${label.trim()})`
+        : id;
+    }
+  }
+
+  return undefined;
+}
+
+function collectGradingProvidersFromResult(
+  result: GradingResult | null | undefined,
+  out: Set<string>,
+): void {
+  if (!result) {
+    return;
+  }
+  const display = getGradingProviderDisplay(result);
+  if (display) {
+    out.add(display);
+  }
+  for (const child of result.componentResults ?? []) {
+    collectGradingProvidersFromResult(child, out);
+  }
+}
+
+/**
+ * Unique judge provider ids found across loaded eval table outputs.
+ */
+export function collectUniqueGradingProviders(table: EvaluateTable | null | undefined): string[] {
+  const providers = new Set<string>();
+  if (!table?.body) {
+    return [];
+  }
+  for (const row of table.body) {
+    for (const output of row.outputs ?? []) {
+      collectGradingProvidersFromResult(output?.gradingResult, providers);
+    }
+  }
+  return Array.from(providers).sort((a, b) => a.localeCompare(b));
 }

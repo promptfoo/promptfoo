@@ -63,6 +63,7 @@ describe('matchesTrajectoryGoalSuccess', () => {
         numRequests: 0,
       },
       metadata: {
+        gradingProvider: 'test-provider',
         renderedGradingPrompt:
           'Goal=Resolve the order lookup task\nTrajectory={"stepCount":2}\nOutput=The order shipped yesterday.',
       },

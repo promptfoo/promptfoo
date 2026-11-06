@@ -29,6 +29,7 @@ import { EvalIdChip } from './EvalIdChip';
 import EvalSelectorDialog from './EvalSelectorDialog';
 import EvalSelectorKeyboardShortcut from './EvalSelectorKeyboardShortcut';
 import { useTableStore } from './store';
+import { collectUniqueGradingProviders } from './utils';
 import type { ResultLightweightWithLabel } from '@promptfoo/types';
 
 export type ActiveView = 'results' | 'report';
@@ -95,6 +96,8 @@ export default function EvalHeader({
     () => new Set(head.prompts.map((p) => p.provider)).size,
     [head.prompts],
   );
+
+  const uniqueJudges = React.useMemo(() => collectUniqueGradingProviders(table), [table]);
 
   const probesCount = React.useMemo(() => {
     return head.prompts[0]?.metrics?.tokenUsage?.numRequests || totalResultsCount;
@@ -264,6 +267,11 @@ export default function EvalHeader({
                   <Chip label="PROVIDERS" interactive={false}>
                     {uniqueProviderCount}
                   </Chip>
+                  {uniqueJudges.length > 0 && (
+                    <Chip label="JUDGES" interactive={false} className="max-w-full">
+                      <span className="break-all font-mono text-xs">{uniqueJudges.join(', ')}</span>
+                    </Chip>
+                  )}
                   <Chip label="TESTS" interactive={false}>
                     {totalResultsCount}
                   </Chip>
@@ -306,6 +314,12 @@ export default function EvalHeader({
                 <span className="font-semibold text-gray-700">Providers:</span>{' '}
                 <span>{uniqueProviderCount}</span>
               </div>
+              {uniqueJudges.length > 0 && (
+                <div>
+                  <span className="font-semibold text-gray-700">Judges:</span>{' '}
+                  <span className="font-mono text-xs">{uniqueJudges.join(', ')}</span>
+                </div>
+              )}
               <div>
                 <span className="font-semibold text-gray-700">Tests:</span>{' '}
                 <span>{totalResultsCount}</span>

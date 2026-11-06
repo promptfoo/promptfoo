@@ -589,3 +589,87 @@ describe('hashVarSchema', () => {
     expect(hashVarSchema(vars1)).not.toBe(hashVarSchema(vars2));
   });
 });
+
+describe('getGradingProviderDisplay', () => {
+  it('prefers metadata.gradingProvider over assertion.provider', async () => {
+    const { getGradingProviderDisplay } = await import('./utils');
+    expect(
+      getGradingProviderDisplay({
+        pass: true,
+        score: 1,
+        reason: 'ok',
+        assertion: { type: 'llm-rubric', provider: 'openai:ignored' },
+        metadata: { gradingProvider: 'openai:gpt-4.1-mini' },
+      }),
+    ).toBe('openai:gpt-4.1-mini');
+  });
+
+  it('formats assertion.provider objects with labels', async () => {
+    const { getGradingProviderDisplay } = await import('./utils');
+    expect(
+      getGradingProviderDisplay({
+        pass: true,
+        score: 1,
+        reason: 'ok',
+        assertion: {
+          type: 'llm-rubric',
+          provider: { id: 'openai:gpt-4o', label: 'Judge' },
+        },
+      }),
+    ).toBe('openai:gpt-4o (Judge)');
+  });
+});
+
+describe('collectUniqueGradingProviders', () => {
+  it('collects unique judges from nested componentResults', async () => {
+    const { collectUniqueGradingProviders } = await import('./utils');
+    const providers = collectUniqueGradingProviders({
+      head: { prompts: [], vars: [] },
+      body: [
+        {
+          outputs: [
+            {
+              id: '1',
+              pass: true,
+              score: 1,
+              text: 'out',
+              prompt: 'p',
+              cost: 0,
+              latencyMs: 1,
+              namedScores: {},
+              failureReason: 0 as any,
+              testCase: {},
+              gradingResult: {
+                pass: true,
+                score: 1,
+                reason: 'ok',
+                componentResults: [
+                  {
+                    pass: true,
+                    score: 1,
+                    reason: 'a',
+                    metadata: { gradingProvider: 'openai:a' },
+                  },
+                  {
+                    pass: true,
+                    score: 1,
+                    reason: 'b',
+                    metadata: { gradingProvider: 'openai:b' },
+                  },
+                  {
+                    pass: true,
+                    score: 1,
+                    reason: 'a-again',
+                    metadata: { gradingProvider: 'openai:a' },
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      ],
+    } as any);
+
+    expect(providers).toEqual(['openai:a', 'openai:b']);
+  });
+});
