@@ -108,14 +108,6 @@ describe('Hugging Face token classification labels', () => {
       classification: { 'B-PER': 0.9, 'I-PER': 0 },
     },
     {
-      shape: 'labels that are also object property names',
-      data: [
-        { entity: 'constructor', score: 0.8 },
-        { entity: '__proto__', score: 0.4 },
-      ],
-      classification: { constructor: 0.8, ['__proto__']: 0.4 },
-    },
-    {
       shape: 'unaggregated tokens with a null entity_group',
       data: [{ entity_group: null, entity: 'B-PER', score: 0.9 }],
       classification: { 'B-PER': 0.9 },
@@ -123,6 +115,18 @@ describe('Hugging Face token classification labels', () => {
   ])('keeps the highest score per label for $shape', async ({ data, classification }) => {
     reply(data);
     expect(await tokens.callClassificationApi('Alice visits Paris')).toEqual({ classification });
+  });
+
+  it('preserves labels that are also object property names', async () => {
+    reply([
+      { entity: 'constructor', score: 0.8 },
+      { entity: '__proto__', score: 0.4 },
+    ]);
+    const { classification } = await tokens.callClassificationApi('Alice');
+    expect(Object.entries(classification ?? {})).toEqual([
+      ['constructor', 0.8],
+      ['__proto__', 0.4],
+    ]);
   });
 
   it('rejects a null response body', async () => {
