@@ -5,6 +5,7 @@
  * acronyms, and domain-specific vocabulary.
  */
 
+import { XMLBuilder } from 'fast-xml-parser';
 import logger from '../../../logger';
 import { ElevenLabsClient } from '../client';
 
@@ -58,14 +59,26 @@ export async function createPronunciationDictionary(
   }
 
   // Build the dictionary file content
-  const dictionaryContent = rules
-    .map((rule) => {
-      if (rule.phoneme) {
-        return `${rule.word}\t${rule.phoneme}${rule.alphabet ? `\t${rule.alphabet}` : ''}`;
-      }
-      return `${rule.word}\t${rule.pronunciation}`;
-    })
-    .join('\n');
+  const dictionaryContent = new XMLBuilder({ ignoreAttributes: false, format: true }).build({
+    '?xml': { '@_version': '1.0', '@_encoding': 'UTF-8' },
+    lexicon: {
+      '@_version': '1.0',
+      '@_xmlns': 'http://www.w3.org/2005/01/pronunciation-lexicon',
+      '@_alphabet': 'ipa',
+      '@_xml:lang': 'en-US',
+      lexeme: rules.map((rule) => ({
+        grapheme: rule.word,
+        ...(rule.phoneme
+          ? {
+              phoneme: {
+                '#text': rule.phoneme,
+                '@_alphabet': rule.alphabet === 'cmu' ? 'cmu-arpabet' : 'ipa',
+              },
+            }
+          : { alias: rule.pronunciation }),
+      })),
+    },
+  });
 
   // Create FormData for multipart upload
   const formData = new FormData();
@@ -74,7 +87,11 @@ export async function createPronunciationDictionary(
     'description',
     description || `Auto-generated pronunciation dictionary - ${name}`,
   );
-  formData.append('file', new Blob([dictionaryContent], { type: 'text/plain' }), 'dictionary.pls');
+  formData.append(
+    'file',
+    new Blob([dictionaryContent], { type: 'application/pls+xml' }),
+    'dictionary.pls',
+  );
 
   // Create dictionary via API
   const response = await client.post<{
@@ -95,24 +112,5 @@ export async function createPronunciationDictionary(
     version_id: response.version_id,
     description,
     created_at: response.created_at,
-  };
-}
-
-/**
- * Apply pronunciation dictionary to TTS request headers
- */
-export function applyPronunciationDictionary(
-  dictionaryId: string,
-  versionId: string = 'latest',
-): Record<string, string> {
-  const locators = [
-    {
-      pronunciation_dictionary_id: dictionaryId,
-      version_id: versionId,
-    },
-  ];
-
-  return {
-    'xi-pronunciation-dictionary-locators': JSON.stringify(locators),
   };
 }

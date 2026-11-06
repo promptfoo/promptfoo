@@ -33,6 +33,92 @@ beforeEach(() => vi.resetAllMocks());
 afterEach(() => vi.restoreAllMocks());
 
 describe('ElevenLabs documented request contracts', () => {
+  it('uses the generated dictionary version in the speech request', async () => {
+    vi.mocked(ElevenLabsClient.prototype.post)
+      .mockResolvedValueOnce({ id: 'created-dict', version_id: 'created-version' })
+      .mockResolvedValueOnce(Buffer.from('fixture audio'));
+    const provider = new ElevenLabsTTSProvider('elevenlabs:tts:fixture-voice', {
+      config: {
+        apiKey: 'fixture-key',
+        cache: false,
+        pronunciationRules: [{ word: 'API', pronunciation: 'ay pee eye' }],
+      },
+    });
+    expect((await provider.callApi('API')).error).toBeUndefined();
+    expect(
+      vi.mocked(ElevenLabsClient.prototype.post).mock.calls[1][1].pronunciation_dictionary_locators,
+    ).toEqual([{ pronunciation_dictionary_id: 'created-dict', version_id: 'created-version' }]);
+  });
+
+  it('separates cached speech by dictionary and version', async () => {
+    vi.mocked(isCacheEnabled).mockReturnValue(true);
+    const entries = new Map();
+    const cache = {
+      get: vi.fn(async (key: string) => entries.get(key)),
+      set: vi.fn(async (key: string, value: unknown) => {
+        entries.set(key, value);
+      }),
+    };
+    vi.mocked(getCache).mockReturnValue(cache as unknown as ReturnType<typeof getCache>);
+    vi.mocked(ElevenLabsClient.prototype.post).mockResolvedValue(Buffer.from('fixture audio'));
+    for (const [pronunciationDictionaryId, pronunciationDictionaryVersionId] of [
+      [undefined, undefined],
+      ['dict', 'v1'],
+      ['dict', 'v2'],
+      ['other', 'v1'],
+    ]) {
+      const provider = new ElevenLabsTTSProvider('elevenlabs:tts:fixture-voice', {
+        config: {
+          apiKey: 'fixture-key',
+          pronunciationDictionaryId,
+          pronunciationDictionaryVersionId,
+        },
+      });
+      expect(await provider.callApi('API')).toMatchObject({ cached: false });
+      expect(await provider.callApi('API')).toMatchObject({ cached: true });
+    }
+    expect(ElevenLabsClient.prototype.post).toHaveBeenCalledTimes(4);
+  });
+
+  it('applies an existing pronunciation dictionary in the HTTP body', async () => {
+    vi.mocked(ElevenLabsClient.prototype.post).mockResolvedValue(Buffer.from('fixture audio'));
+    const provider = new ElevenLabsTTSProvider('elevenlabs:tts:fixture-voice', {
+      config: { apiKey: 'fixture-key', cache: false, pronunciationDictionaryId: 'dict' },
+    });
+    const response = await provider.callApi('API');
+    expect(response.error).toBeUndefined();
+    const [, body, options] = vi.mocked(ElevenLabsClient.prototype.post).mock.calls[0];
+    expect(body.pronunciation_dictionary_locators).toEqual([
+      { pronunciation_dictionary_id: 'dict' },
+    ]);
+    expect(options?.headers).not.toHaveProperty('xi-pronunciation-dictionary-locators');
+  });
+
+  it('forwards a pinned dictionary version in the streaming handshake', async () => {
+    vi.mocked(handleStreamingTTS).mockImplementation(async (client) => ({
+      client,
+      chunks: [
+        { audio: Buffer.alloc(32).toString('base64'), chunkIndex: 0, timestamp: Date.now() },
+      ],
+      alignments: [],
+      errors: [],
+      startTime: Date.now(),
+    }));
+    const provider = new ElevenLabsTTSProvider('elevenlabs:tts:fixture-voice', {
+      config: {
+        apiKey: 'fixture-key',
+        streaming: true,
+        pronunciationDictionaryId: 'dict',
+        pronunciationDictionaryVersionId: 'v1',
+      },
+    });
+    expect((await provider.callApi('API')).error).toBeUndefined();
+    expect(
+      vi.mocked(ElevenLabsWebSocketClient.prototype.connect).mock.calls[0][1]
+        ?.pronunciation_dictionary_locators,
+    ).toEqual([{ pronunciation_dictionary_id: 'dict', version_id: 'v1' }]);
+  });
+
   it.each([42, 0, undefined])(
     'keeps HTTP seed %s in the body with format and latency in the query',
     async (seed) => {
