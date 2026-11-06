@@ -1451,6 +1451,13 @@ describe('evaluatorHelpers', () => {
       expect(renderedPrompt).toBe(JSON.stringify({ text: value }, null, 2));
     });
 
+    it('should bound deep postfix lookup traversal without overflowing the stack', async () => {
+      const value = `{{ a${'.b'.repeat(6000)} }}`;
+      const renderedPrompt = await renderPrompt(toPrompt('{"text":"{{v}}"}'), { v: value }, {});
+
+      expect(renderedPrompt).toBe(JSON.stringify({ text: value }, null, 2));
+    });
+
     it('should preserve render errors for referenced Unicode variable names', async () => {
       await expect(
         renderPrompt(toPrompt('{{ café }}'), { café: '{% unknown %}' }, {}),
@@ -1465,6 +1472,16 @@ describe('evaluatorHelpers', () => {
       );
 
       expect(renderedPrompt).toBe('anonymous');
+    });
+
+    it('should apply an or fallback inside a parenthesized binary chain', async () => {
+      const renderedPrompt = await renderPrompt(
+        toPrompt('{{v}}'),
+        { v: "{{ (user or 'anonymous') ~ '!' }}" },
+        {},
+      );
+
+      expect(renderedPrompt).toBe('anonymous!');
     });
 
     it('should retain a required name that also has an or-fallback occurrence', async () => {

@@ -471,6 +471,35 @@ function astFieldsReferenceVariable(
   );
 }
 
+function lookupNodeReferencesVariable(
+  node: NunjucksAstNode,
+  variableName: ReferenceTarget,
+  boundSymbols: ReadonlySet<string>,
+): boolean {
+  const lookups: NunjucksAstNode[] = [];
+  let current: unknown = node;
+  while (isNunjucksAstNode(current) && current.typename === 'LookupVal') {
+    lookups.push(current);
+    current = current.target;
+  }
+
+  // The target chain is the deepest part of a postfix expression. Preserve the
+  // old target-then-val field order without recursively visiting each target.
+  const innermost = lookups[lookups.length - 1]!;
+  if (
+    isNunjucksAstNode(current) &&
+    astReferencesVariable(current, variableName, { field: 'target', node: innermost }, boundSymbols)
+  ) {
+    return true;
+  }
+  for (let index = lookups.length - 1; index >= 0; index--) {
+    if (astChildReferencesVariable(lookups[index]!, 'val', variableName, boundSymbols)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 const LEFT_ASSOCIATIVE_BINARY_NODES = new Set([
   'Concat',
   'Add',
@@ -519,6 +548,10 @@ function astReferencesVariable(
     'excludeOrOperands' in variableName
   ) {
     return false;
+  }
+
+  if (node.typename === 'LookupVal') {
+    return lookupNodeReferencesVariable(node, variableName, boundSymbols);
   }
 
   if (LEFT_ASSOCIATIVE_BINARY_NODES.has(node.typename!)) {
