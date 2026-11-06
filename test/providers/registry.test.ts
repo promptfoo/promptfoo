@@ -1374,6 +1374,7 @@ describe('Provider Registry', () => {
         'claude-sonnet-4-6:custom',
       ],
       ['anthropic:claude-2.1:custom', 'AnthropicCompletionProvider', 'claude-2.1:custom'],
+      ['fal:image:fal-ai/flux:v2', 'FalImageGenerationProvider', 'fal-ai/flux:v2'],
     ])('preserves the model suffix and provider type for %s', async (path, type, modelName) => {
       const provider = await loadApiProvider(path, { options: { config: { apiKey: 'test-key' } } });
       expect(provider.constructor.name).toBe(type);
@@ -2186,6 +2187,10 @@ describe('Provider Registry', () => {
       ['bedrock:nova-sonic:', 'amazon.nova-sonic-v1:0'],
       ['bedrock:amazon.nova-sonic-v1:0', 'amazon.nova-sonic-v1:0'],
       ['bedrock:nova-sonic:amazon.nova-sonic-v1:0', 'amazon.nova-sonic-v1:0'],
+      ['bedrock:nova-2-5-sonic', 'amazon.nova-2-5-sonic'],
+      ['bedrock:nova-2-5-sonic:', 'amazon.nova-2-5-sonic'],
+      ['bedrock:amazon.nova-2-5-sonic', 'amazon.nova-2-5-sonic'],
+      ['bedrock:nova-2-5-sonic:amazon.nova-2-5-sonic', 'amazon.nova-2-5-sonic'],
       ['bedrock:nova-2-sonic', 'amazon.nova-2-sonic-v1:0'],
       ['bedrock:nova-2-sonic:', 'amazon.nova-2-sonic-v1:0'],
       ['bedrock:amazon.nova-2-sonic-v1:0', 'amazon.nova-2-sonic-v1:0'],
@@ -2201,6 +2206,10 @@ describe('Provider Registry', () => {
     });
 
     it.each([
+      ['bedrock:completion:amazon.nova-2-5-sonic', 'InvokeModelWithBidirectionalStream'],
+      ['bedrock:converse:amazon.nova-2-5-sonic', 'InvokeModelWithBidirectionalStream'],
+      ['bedrock:us.amazon.nova-2-5-sonic', 'does not support geo inference IDs'],
+      ['bedrock:nova-2-5-sonic:amazon.nova-2-sonic-v1:0', 'does not match provider subtype'],
       ['bedrock:completion:amazon.nova-2-sonic-v1:0', 'InvokeModelWithBidirectionalStream'],
       ['bedrock:converse:amazon.nova-2-sonic-v1:0', 'InvokeModelWithBidirectionalStream'],
       ['bedrock:us.amazon.nova-sonic-v1:0', 'does not support geo inference IDs'],
