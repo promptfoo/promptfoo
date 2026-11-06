@@ -24,6 +24,7 @@ import {
 } from './errors';
 import { monkeyPatchFetch, preserveCloudAuthRedirects } from './monkeyPatchFetch';
 import { getEffectiveRequestSignal } from './requestSignal';
+import { readWithResponseDeadline, trackResponseDeadline } from './responseDeadline';
 import { getFetchRetryContextMaxRetries } from './retryContext';
 
 import type { FetchOptions } from './types';
@@ -360,7 +361,7 @@ export async function fetchWithProxy(
 export function fetchWithTimeout(
   url: RequestInfo,
   options: FetchOptions = {},
-  timeout: number,
+  configuredTimeout: number | `${number}`,
 ): Promise<Response> {
   return new Promise((resolve, reject) => {
     const timeoutController = new AbortController();
@@ -371,6 +372,9 @@ export function fetchWithTimeout(
       ? AbortSignal.any([options.signal, timeoutController.signal])
       : timeoutController.signal;
 
+    // Provider config templates can render numeric settings as strings.
+    const timeout = Number(configuredTimeout);
+    const expiresAt = performance.now() + timeout;
     const timeoutId = setTimeout(() => {
       timeoutController.abort();
       reject(new Error(`Request timed out after ${timeout} ms`));
@@ -382,6 +386,7 @@ export function fetchWithTimeout(
     })
       .then((response) => {
         clearTimeout(timeoutId);
+        trackResponseDeadline(response, { controller: timeoutController, expiresAt, timeout });
         resolve(response);
       })
       .catch((error) => {
@@ -503,14 +508,13 @@ const RATE_LIMIT_BODY_PEEK_BYTES = 64 * 1024;
 
 /**
  * Read the body of a rate-limited response without consuming the original
- * stream. Returns the parsed body (JSON if parseable, else raw text) and
- * any extracted error code (e.g. `insufficient_quota`).
+ * stream. Returns the parsed body (JSON if parseable, else raw text).
  *
  * Why clone: `Response.text()` consumes the underlying stream. The original
  * response may still be observed by upstream wrappers (logging middleware,
  * monkey-patched fetch); cloning preserves their ability to read the body.
  *
- * Clone/read failures degrade to `{ body: undefined, code: undefined }`
+ * Clone/read failures return `undefined`
  * unless the caller cancelled the unfinished peek. Losing the body code only
  * widens classification from `quota` to `rate_limit`, which is the safer
  * (retryable) side of the misclassification.
@@ -519,7 +523,7 @@ async function peekRateLimitBody(
   response: Response,
   logEnabled: boolean,
   signal?: AbortSignal | null,
-): Promise<{ body: unknown; code: string | undefined; type: string | undefined }> {
+): Promise<unknown> {
   let cloned: Response;
   try {
     cloned = response.clone();
@@ -530,12 +534,14 @@ async function peekRateLimitBody(
     if (logEnabled) {
       logger.debug(`[fetch] peekRateLimitBody: clone failed, skipping body code lookup: ${err}`);
     }
-    return { body: undefined, code: undefined, type: undefined };
+    return undefined;
   }
 
   let text: string;
   try {
-    text = await readBoundedText(cloned, RATE_LIMIT_BODY_PEEK_BYTES, { requireStream: true });
+    text = await readWithResponseDeadline(response, () =>
+      readBoundedText(cloned, RATE_LIMIT_BODY_PEEK_BYTES, { requireStream: true }),
+    );
   } catch (err) {
     if (signal?.aborted) {
       throw getAbortError(signal);
@@ -543,26 +549,21 @@ async function peekRateLimitBody(
     if (logEnabled) {
       logger.debug(`[fetch] peekRateLimitBody: body read failed: ${err}`);
     }
-    return { body: undefined, code: undefined, type: undefined };
+    return undefined;
   }
 
   if (!text) {
-    return { body: undefined, code: undefined, type: undefined };
+    return undefined;
   }
 
   try {
-    const json = JSON.parse(text);
-    return {
-      body: json,
-      code: extractRateLimitErrorCode(json),
-      type: extractRateLimitErrorType(json),
-    };
+    return JSON.parse(text);
   } catch {
     // Keep the raw bytes for diagnostics; no code is extractable.
     if (logEnabled) {
       logger.debug('[fetch] peekRateLimitBody: response body was not JSON');
     }
-    return { body: text, code: undefined, type: undefined };
+    return text;
   }
 }
 
@@ -632,21 +633,19 @@ export function rateLimitTimingFromHeaders(headers: Record<string, string>): {
   return { retryAfterMs: parsed.retryAfterMs, resetAt: parsed.resetAt };
 }
 
-function buildHttpRateLimitError(
-  response: Response,
+export function buildHttpRateLimitError(
+  response: { status: number; statusText?: string; headers?: Headers },
   body: unknown,
-  code: string | undefined,
-  type: string | undefined,
 ): HttpRateLimitError {
-  const headers = Object.fromEntries(response.headers.entries());
+  const headers = Object.fromEntries(response.headers ?? []);
   const parsed = parseRateLimitHeaders(headers);
   return new HttpRateLimitError({
     status: response.status,
     statusText: response.statusText,
     retryAfterMs: parsed.retryAfterMs,
     resetAt: parsed.resetAt,
-    code,
-    type,
+    code: extractRateLimitErrorCode(body),
+    type: extractRateLimitErrorType(body),
     headers,
     body,
   });
@@ -723,8 +722,8 @@ async function handleRateLimitedResponse(
   // sees the same classification callers do.
   let rateLimitError: HttpRateLimitError | undefined;
   if (isHardRateLimit) {
-    const { body, code, type } = await peekRateLimitBody(response, logEnabled, signal);
-    rateLimitError = buildHttpRateLimitError(response, body, code, type);
+    const body = await peekRateLimitBody(response, logEnabled, signal);
+    rateLimitError = buildHttpRateLimitError(response, body);
   }
 
   // Hard quota failures (e.g. insufficient_quota) won't resolve on retry. Fail

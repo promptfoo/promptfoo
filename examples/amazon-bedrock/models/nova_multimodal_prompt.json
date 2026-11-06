@@ -4,8 +4,8 @@
     "content": [
       {
         "image": {
-          "format": "jpg",
-          "source": { "bytes": "{{image}}" }
+          "format": "jpeg",
+          "source": { "bytes": "{{ image | replace('data:image/jpeg;base64,', '') }}" }
         }
       },
       {
