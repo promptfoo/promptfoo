@@ -24,6 +24,7 @@ vi.mock('fs', () => ({
   fchmodSync: vi.fn(),
   renameSync: vi.fn(),
   rmSync: vi.fn(),
+  lstatSync: vi.fn(),
   statSync: vi.fn(),
   readdirSync: vi.fn(),
   existsSync: vi.fn(),
@@ -185,8 +186,8 @@ describe('Global Config', () => {
 
       globalConfig.writeGlobalConfigPartial(partialConfig);
 
-      expect(vi.mocked(fs.writeFileSync).mock.calls.map(([, contents]) => contents)).toContainEqual(
-        expect.stringMatching(/email: new@example\.com.*apiKey: old-key/s),
+      expect(vi.mocked(fs.writeFileSync).mock.lastCall?.[1]).toMatch(
+        /email: new@example\.com.*apiKey: old-key/s,
       );
     });
 

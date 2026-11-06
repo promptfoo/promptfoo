@@ -3,7 +3,11 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { readGlobalConfig, writeGlobalConfigPartial } from '../../src/globalConfig/globalConfig';
+import {
+  readGlobalConfig,
+  writeGlobalConfig,
+  writeGlobalConfigPartial,
+} from '../../src/globalConfig/globalConfig';
 import { setConfigDirectoryPath } from '../../src/util/config/manage';
 
 describe('global config permissions', () => {
@@ -48,9 +52,21 @@ describe('global config permissions', () => {
     }
   });
 
+  it.skipIf(process.platform === 'win32')('keeps a dangling config symlink intact', () => {
+    fs.mkdirSync(configDir);
+    fs.symlinkSync('missing.yaml', file);
+
+    expect(() => writeGlobalConfig({ cloud: { apiKey: 'fixture-key' } })).toThrow(
+      expect.objectContaining({ code: 'ENOENT' }),
+    );
+    expect(fs.readlinkSync(file)).toBe('missing.yaml');
+    expect(fs.readdirSync(configDir)).toEqual(['promptfoo.yaml']);
+  });
+
   it('saves a key to an existing config', () => {
     fs.mkdirSync(configDir);
-    const target = process.platform === 'win32' ? file : path.join(tempDir, 'linked-config.yaml');
+    // A linked target can already use the entire POSIX filename component limit.
+    const target = process.platform === 'win32' ? file : path.join(tempDir, 'a'.repeat(255));
     fs.writeFileSync(target, 'id: test-id\n');
     if (process.platform !== 'win32') {
       fs.chmodSync(target, 0o644);

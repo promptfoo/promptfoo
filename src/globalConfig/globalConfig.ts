@@ -22,12 +22,13 @@ export function writeGlobalConfig(config: GlobalConfig): void {
   }
 
   // Replace the file so a reader holding an old, permissive inode cannot read a new key.
-  const existing = fs.statSync(file, { throwIfNoEntry: false });
-  const target = existing ? fs.realpathSync(file) : file;
+  // Resolve existing links before replacement. A dangling link must not be overwritten.
+  const target = fs.lstatSync(file, { throwIfNoEntry: false }) ? fs.realpathSync(file) : file;
+  const existing = fs.statSync(target, { throwIfNoEntry: false });
   if (existing) {
     fs.accessSync(target, fs.constants.W_OK);
   }
-  const temporary = `${target}.${crypto.randomUUID()}.tmp`;
+  const temporary = path.join(path.dirname(target), `.promptfoo-${crypto.randomUUID()}.tmp`);
   const fd = fs.openSync(
     temporary,
     'wx',
@@ -43,14 +44,14 @@ export function writeGlobalConfig(config: GlobalConfig): void {
       fs.closeSync(fd);
     }
     fs.renameSync(temporary, target);
-  } finally {
+  } catch (error) {
     fs.rmSync(temporary, { force: true });
+    throw error;
   }
 }
 
 export function readGlobalConfig(): GlobalConfig {
-  const configDir = getConfigDirectoryPath();
-  const configFilePath = path.join(configDir, 'promptfoo.yaml');
+  const configFilePath = path.join(getConfigDirectoryPath(), 'promptfoo.yaml');
   let globalConfig: GlobalConfig = {};
   if (fs.existsSync(configFilePath)) {
     const fd = fs.openSync(configFilePath, 'r');
