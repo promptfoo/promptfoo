@@ -1,5 +1,6 @@
 import { BedrockRuntime } from '@aws-sdk/client-bedrock-runtime';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import logger from '../../../src/logger';
 import { AwsBedrockEmbeddingProvider } from '../../../src/providers/bedrock/index';
 
 function mockEmbedding(model: string, data: unknown, inputType?: 'search_query') {
@@ -193,6 +194,29 @@ describe('AwsBedrockEmbeddingProvider wire contract', () => {
     const { provider } = mockEmbedding('cohere.embed-english-v3', data);
     expect(await provider.callEmbeddingApi('A quiet garden')).toEqual({
       error: expect.stringContaining('No valid embedding found'),
+    });
+  });
+
+  it('keeps input text and raw response data out of diagnostics', async () => {
+    const secret = 'synthetic-private-text';
+    const debug = vi.spyOn(logger, 'debug').mockImplementation(() => {});
+    const { provider } = mockEmbedding('amazon.nova-2-multimodal-embeddings-v1:0', {
+      embeddings: [{ embedding: vector }],
+      echoed: secret,
+    });
+    expect(await provider.callEmbeddingApi(secret)).toEqual({ embedding: vector });
+    expect(JSON.stringify(debug.mock.calls)).not.toContain(secret);
+    const malformed = mockEmbedding('twelvelabs.marengo-embed-3-0-v1:0', { echoed: secret });
+    expect(await malformed.provider.callEmbeddingApi(secret)).toEqual({
+      error: 'API response error: No valid embedding found in AWS Bedrock API response',
+    });
+  });
+
+  it('reports unreadable responses without copying their contents into errors', async () => {
+    const { provider, invokeModel } = mockEmbedding('test-model', {});
+    invokeModel.mockResolvedValue({ body: { transformToString: () => 'not JSON: sensitive' } });
+    expect(await provider.callEmbeddingApi(text)).toEqual({
+      error: 'API response error: Could not decode AWS Bedrock embedding response as JSON',
     });
   });
 

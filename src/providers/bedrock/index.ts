@@ -3128,7 +3128,7 @@ export class AwsBedrockEmbeddingProvider
       params = { inputText: text };
     }
 
-    logger.debug('Calling AWS Bedrock API for embeddings', { params });
+    logger.debug('Calling AWS Bedrock API for embeddings', { modelId: this.modelName });
     let response;
     try {
       const bedrockInstance = await this.getBedrockInstance();
@@ -3147,36 +3147,37 @@ export class AwsBedrockEmbeddingProvider
         error: `API call error: ${String(err)}`,
       };
     }
-    let responseText: string | undefined;
+    let data;
     try {
-      responseText = response.body.transformToString();
-      logger.debug('AWS Bedrock API response (embeddings)', { responseText });
-      const data = JSON.parse(responseText);
-      let embedding;
-      if (isNovaEmbedding) {
-        embedding = onlyEmbeddingResult(data?.embeddings)?.embedding;
-      } else if (isMarengo3) {
-        // Marengo also documents a single object in place of the one-item array.
-        const item = data?.data;
-        embedding = (Array.isArray(item) ? onlyEmbeddingResult(item) : item)?.embedding;
-      } else {
-        embedding =
-          data?.embedding ?? onlyEmbeddingResult(data?.embeddings?.float ?? data?.embeddings);
-      }
-      if (
-        !Array.isArray(embedding) ||
-        embedding.length === 0 ||
-        !embedding.every((value: unknown) => typeof value === 'number' && Number.isFinite(value))
-      ) {
-        throw new Error('No valid embedding found in AWS Bedrock API response');
-      }
+      data = JSON.parse(response.body.transformToString());
+    } catch {
       return {
-        embedding,
-      };
-    } catch (err) {
-      return {
-        error: `API response error: ${String(err)}: ${JSON.stringify(responseText)}`,
+        error: 'API response error: Could not decode AWS Bedrock embedding response as JSON',
       };
     }
+
+    let embedding;
+    if (isNovaEmbedding) {
+      embedding = onlyEmbeddingResult(data?.embeddings)?.embedding;
+    } else if (isMarengo3) {
+      // Marengo also documents a single object in place of the one-item array.
+      const item = data?.data;
+      embedding = (Array.isArray(item) ? onlyEmbeddingResult(item) : item)?.embedding;
+    } else {
+      embedding =
+        data?.embedding ?? onlyEmbeddingResult(data?.embeddings?.float ?? data?.embeddings);
+    }
+    if (
+      !Array.isArray(embedding) ||
+      embedding.length === 0 ||
+      !embedding.every((value: unknown) => typeof value === 'number' && Number.isFinite(value))
+    ) {
+      return { error: 'API response error: No valid embedding found in AWS Bedrock API response' };
+    }
+    logger.debug('Received AWS Bedrock embedding', {
+      modelId: this.modelName,
+      dimensions: embedding.length,
+    });
+    return { embedding };
   }
 }
