@@ -466,7 +466,19 @@ function astFieldsReferenceVariable(
   );
 }
 
-function concatNodeReferencesVariable(
+const LEFT_ASSOCIATIVE_BINARY_NODES = new Set([
+  'Concat',
+  'Add',
+  'Sub',
+  'Mul',
+  'Div',
+  'FloorDiv',
+  'Mod',
+  'And',
+  'Or',
+]);
+
+function binaryNodeReferencesVariable(
   node: NunjucksAstNode,
   variableName: ReferenceTarget,
   parent: NunjucksParentContext | undefined,
@@ -474,9 +486,9 @@ function concatNodeReferencesVariable(
 ): boolean {
   let current = node;
   let currentParent = parent;
-  // Nunjucks concatenation is left-associative. Walk the deep left spine
-  // iteratively instead of recursively overflowing on large runtime values.
-  while (current.typename === 'Concat') {
+  // Nunjucks binary expressions are left-associative. Walk their deep left
+  // spine iteratively instead of recursively overflowing on large values.
+  while (LEFT_ASSOCIATIVE_BINARY_NODES.has(current.typename!)) {
     if (astChildReferencesVariable(current, 'right', variableName, boundSymbols)) {
       return true;
     }
@@ -496,8 +508,8 @@ function astReferencesVariable(
   parent?: NunjucksParentContext,
   boundSymbols: ReadonlySet<string> = new Set(),
 ): boolean {
-  if (node.typename === 'Concat') {
-    return concatNodeReferencesVariable(node, variableName, parent, boundSymbols);
+  if (LEFT_ASSOCIATIVE_BINARY_NODES.has(node.typename!)) {
+    return binaryNodeReferencesVariable(node, variableName, parent, boundSymbols);
   }
 
   if (node.typename === 'Symbol' && typeof node.value === 'string') {

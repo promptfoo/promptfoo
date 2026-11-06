@@ -1435,6 +1435,28 @@ describe('evaluatorHelpers', () => {
       expect(renderedPrompt).toBe(JSON.stringify({ text: value }, null, 2));
     });
 
+    it.each([
+      ['addition', ' + '],
+      ['subtraction', ' - '],
+      ['multiplication', ' * '],
+      ['division', ' / '],
+      ['floor division', ' // '],
+      ['remainder', ' % '],
+      ['boolean and', ' and '],
+      ['boolean or', ' or '],
+    ])('should bound deep %s traversal without overflowing the stack', async (_label, operator) => {
+      const value = `{{ ${`a${operator}`.repeat(12000)}a }}`;
+      const renderedPrompt = await renderPrompt(toPrompt('{"text":"{{v}}"}'), { v: value }, {});
+
+      expect(renderedPrompt).toBe(JSON.stringify({ text: value }, null, 2));
+    });
+
+    it('should preserve render errors for referenced Unicode variable names', async () => {
+      await expect(
+        renderPrompt(toPrompt('{{ café }}'), { café: '{% unknown %}' }, {}),
+      ).rejects.toThrow('unknown block tag: unknown');
+    });
+
     it('should bound wide external-context traversal without argument spreading', async () => {
       const value = '{{ 1 }}'.repeat(128000);
       const renderedPrompt = await renderPrompt(toPrompt('{"text":"{{v}}"}'), { v: value }, {});

@@ -729,7 +729,9 @@ function extractUnboundVariables(template: string): string[] {
   // Every candidate came from this same template. If parsing failed, the old
   // conservative per-candidate check necessarily returned true for all of them;
   // return the textual extraction directly instead of reparsing each candidate.
-  return extractVariablesFromTemplate(template);
+  return extractVariablesFromTemplate(template).map(
+    (reference) => /^([A-Za-z_]\w*)/.exec(reference)?.[1] ?? reference,
+  );
 }
 
 function collectPromptReferencedVars(
@@ -746,7 +748,9 @@ function collectPromptReferencedVars(
   const pending = extractUnboundVariables(basePrompt);
   while (pending.length > 0) {
     const reference = pending.pop()!;
-    const key = /^([A-Za-z_]\w*)/.exec(reference)?.[1];
+    // AST references are complete bare symbols. Textual fallback references
+    // were already reduced to their root by extractUnboundVariables.
+    const key = reference;
     if (
       !key ||
       referenced.has(key) ||
