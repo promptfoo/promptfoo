@@ -1,6 +1,8 @@
 import { createWriteStream, mkdirSync, type WriteStream } from 'fs';
 import { dirname } from 'path';
 
+import { resolveJsonlOutputPathSync } from './resolveJsonlOutputPath';
+
 export class JsonlFileWriter {
   private readonly flags: 'a' | 'w';
   private writeStream: WriteStream | undefined;
@@ -33,7 +35,7 @@ export class JsonlFileWriter {
 
     if (!this.writeStream) {
       try {
-        mkdirSync(dirname(this.filePath), { recursive: true });
+        mkdirSync(dirname(resolveJsonlOutputPathSync(this.filePath)), { recursive: true });
         this.writeStream = createWriteStream(this.filePath, { flags: this.flags });
       } catch (error) {
         throw this.wrapStreamError('write', error);

@@ -838,6 +838,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
             logger.debug(`Gemini API express mode error:\n${JSON.stringify(errorData)}`);
             return {
               error: `API call error: ${res.status} ${res.statusText}${errorData ? `: ${JSON.stringify(errorData)}` : ''}`,
+              metadata: { http: { status: res.status, statusText: res.statusText } },
             };
           }
 

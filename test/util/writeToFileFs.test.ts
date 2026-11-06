@@ -35,6 +35,24 @@ describe('JsonlFileWriter (real filesystem)', () => {
     fs.rmdirSync(parent);
   });
 
+  it('creates a dangling symlink target parent before the first write', async () => {
+    if (process.platform === 'win32') {
+      return;
+    }
+
+    const link = path.join(dir, 'out.jsonl');
+    const target = path.join(dir, 'nested', 'deep', 'out.jsonl');
+    fs.symlinkSync(path.relative(path.dirname(link), target), link);
+
+    const writer = new JsonlFileWriter(link);
+    await writer.write({ a: 1 });
+    await writer.close();
+
+    expect(fs.lstatSync(link).isSymbolicLink()).toBe(true);
+    expect(fs.readlinkSync(link)).toBe(path.relative(path.dirname(link), target));
+    expect(fs.readFileSync(target, 'utf-8')).toBe('{"a":1}\n');
+  });
+
   it('can retry a write after parent directory creation fails', async () => {
     const parent = path.join(dir, 'nested');
     fs.writeFileSync(parent, 'occupied');

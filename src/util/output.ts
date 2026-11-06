@@ -26,6 +26,7 @@ import {
   ResultFailureReason,
 } from '../types';
 import { streamEvalCsv } from './eval/evalTableUtils';
+import { resolveJsonlOutputPath } from './exportToFile/resolveJsonlOutputPath';
 import invariant from './invariant';
 import { writeJunitXmlOutput } from './junit';
 import { getOutputFileFormat, SUPPORTED_OUTPUT_FILE_FORMATS } from './outputFormats';
@@ -66,29 +67,6 @@ function isPermissionDeniedError(error: unknown): boolean {
     'code' in error &&
     (error.code === 'EACCES' || error.code === 'EPERM')
   );
-}
-
-async function resolveJsonlOutputPath(outputPath: string): Promise<string> {
-  try {
-    const stats = await fsPromises.lstat(outputPath);
-    if (!stats.isSymbolicLink()) {
-      return outputPath;
-    }
-
-    try {
-      return await fsPromises.realpath(outputPath);
-    } catch (error) {
-      if (isFileNotFoundError(error)) {
-        return path.resolve(path.dirname(outputPath), await fsPromises.readlink(outputPath));
-      }
-      throw error;
-    }
-  } catch (error) {
-    if (isFileNotFoundError(error)) {
-      return outputPath;
-    }
-    throw error;
-  }
 }
 
 async function appendJsonlResultBatch(
