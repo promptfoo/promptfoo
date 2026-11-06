@@ -89,6 +89,7 @@ import { handleSimilar } from './similar';
 import { handleSkillUsed } from './skill';
 import { handleContainsSql, handleIsSql } from './sql';
 import { handleStartsWith } from './startsWith';
+import { handleToolCall } from './toolCall';
 import { handleToolCallF1 } from './toolCallF1';
 import { handleTraceErrorSpans } from './traceErrorSpans';
 import { handleTraceSpanCount } from './traceSpanCount';
@@ -313,6 +314,7 @@ const ASSERTION_HANDLERS: Record<
   'similar:dot': handleSimilar,
   'similar:euclidean': handleSimilar,
   'starts-with': handleStartsWith,
+  'tool-call': handleToolCall,
   'tool-call-f1': handleToolCallF1,
   'trajectory:goal-success': handleTrajectoryGoalSuccess,
   'trajectory:tool-args-match': handleTrajectoryToolArgsMatch,
