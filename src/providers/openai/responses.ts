@@ -70,6 +70,7 @@ import {
   normalizeOpenAiBillingModelName,
   normalizeOpenAiServiceTierForWire,
   OPENAI_BILLING_MODELS,
+  omitDeprecatedClaudeSamplingParams,
   RETIRED_OPENAI_MODEL_IDS,
 } from './util';
 
@@ -1261,6 +1262,8 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
         supportsPersistedEffortUpdates: this.supportsPersistedGpt6EffortUpdates(),
       },
     );
+
+    omitDeprecatedClaudeSamplingParams(body);
 
     return {
       body,
