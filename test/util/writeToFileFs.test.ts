@@ -53,6 +53,76 @@ describe('JsonlFileWriter (real filesystem)', () => {
     expect(fs.readFileSync(target, 'utf-8')).toBe('{"a":1}\n');
   });
 
+  it.each([
+    { targetType: 'relative', absoluteTargets: false },
+    { targetType: 'absolute', absoluteTargets: true },
+  ])('follows a chain of $targetType dangling symlinks', async ({ absoluteTargets }) => {
+    if (process.platform === 'win32') {
+      return;
+    }
+
+    const outputPath = path.join(dir, 'out.jsonl');
+    const currentPath = path.join(dir, 'current.jsonl');
+    const target = path.join(dir, 'nested', 'deep', 'missing.jsonl');
+    const outputTarget = absoluteTargets
+      ? currentPath
+      : path.relative(path.dirname(outputPath), currentPath);
+    const currentTarget = absoluteTargets
+      ? target
+      : path.relative(path.dirname(currentPath), target);
+    fs.symlinkSync(outputTarget, outputPath);
+    fs.symlinkSync(currentTarget, currentPath);
+
+    const writer = new JsonlFileWriter(outputPath);
+    await writer.write({ a: 1 });
+    await writer.close();
+
+    expect(fs.lstatSync(outputPath).isSymbolicLink()).toBe(true);
+    expect(fs.readlinkSync(outputPath)).toBe(outputTarget);
+    expect(fs.lstatSync(currentPath).isSymbolicLink()).toBe(true);
+    expect(fs.readlinkSync(currentPath)).toBe(currentTarget);
+    expect(fs.readFileSync(target, 'utf-8')).toBe('{"a":1}\n');
+  });
+
+  it('writes through a symlink to an existing target without replacing the link', async () => {
+    if (process.platform === 'win32') {
+      return;
+    }
+
+    const outputPath = path.join(dir, 'out.jsonl');
+    const target = path.join(dir, 'existing.jsonl');
+    const symlinkTarget = path.basename(target);
+    fs.writeFileSync(target, '{"old":true}\n');
+    fs.symlinkSync(symlinkTarget, outputPath);
+
+    const writer = new JsonlFileWriter(outputPath);
+    await writer.write({ a: 1 });
+    await writer.close();
+
+    expect(fs.lstatSync(outputPath).isSymbolicLink()).toBe(true);
+    expect(fs.readlinkSync(outputPath)).toBe(symlinkTarget);
+    expect(fs.readFileSync(target, 'utf-8')).toBe('{"a":1}\n');
+  });
+
+  it('rejects a symlink cycle with ELOOP instead of hanging', async () => {
+    if (process.platform === 'win32') {
+      return;
+    }
+
+    const outputPath = path.join(dir, 'out.jsonl');
+    const currentPath = path.join(dir, 'current.jsonl');
+    fs.symlinkSync(path.basename(currentPath), outputPath);
+    fs.symlinkSync(path.basename(outputPath), currentPath);
+
+    const writer = new JsonlFileWriter(outputPath);
+    await expect(writer.write({ a: 1 })).rejects.toMatchObject({
+      message: expect.stringContaining(`Failed to write JSONL output ${outputPath}:`),
+      cause: expect.objectContaining({ code: 'ELOOP' }),
+    });
+    expect(fs.lstatSync(outputPath).isSymbolicLink()).toBe(true);
+    expect(fs.lstatSync(currentPath).isSymbolicLink()).toBe(true);
+  });
+
   it('can retry a write after parent directory creation fails', async () => {
     const parent = path.join(dir, 'nested');
     fs.writeFileSync(parent, 'occupied');

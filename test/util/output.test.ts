@@ -1651,13 +1651,22 @@ describe('writeOutput', () => {
   it('rewrites the target of a dangling JSONL symlink', async () => {
     const fileNotFoundError = Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
     const outputPath = path.join('artifacts', 'output.jsonl');
-    const symlinkTarget = path.join('nested', 'missing.jsonl');
-    const resolvedTarget = path.resolve(path.dirname(outputPath), symlinkTarget);
+    const intermediatePath = path.join('artifacts', 'current.jsonl');
+    const firstSymlinkTarget = path.basename(intermediatePath);
+    const secondSymlinkTarget = path.join('nested', 'missing.jsonl');
+    const resolvedTarget = path.resolve(path.dirname(intermediatePath), secondSymlinkTarget);
     vi.mocked(fsPromises.lstat).mockResolvedValueOnce({
       isSymbolicLink: () => true,
     } as never);
-    vi.mocked(fsPromises.realpath).mockRejectedValueOnce(fileNotFoundError);
-    vi.mocked(fsPromises.readlink).mockResolvedValueOnce(symlinkTarget);
+    vi.mocked(fsPromises.lstat).mockResolvedValueOnce({
+      isSymbolicLink: () => true,
+    } as never);
+    vi.mocked(fsPromises.realpath)
+      .mockRejectedValueOnce(fileNotFoundError)
+      .mockRejectedValueOnce(fileNotFoundError);
+    vi.mocked(fsPromises.readlink)
+      .mockResolvedValueOnce(firstSymlinkTarget)
+      .mockResolvedValueOnce(secondSymlinkTarget);
 
     await writeOutput(outputPath, new Eval({}), null);
 
@@ -1667,13 +1676,22 @@ describe('writeOutput', () => {
   it('creates the resolved target directory when rewriting a dangling JSONL symlink', async () => {
     const fileNotFoundError = Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
     const outputPath = path.join('artifacts', 'output.jsonl');
-    const symlinkTarget = path.join('nested', 'missing.jsonl');
-    const resolvedTarget = path.resolve(path.dirname(outputPath), symlinkTarget);
+    const intermediatePath = path.join('artifacts', 'current.jsonl');
+    const firstSymlinkTarget = path.basename(intermediatePath);
+    const secondSymlinkTarget = path.join('nested', 'missing.jsonl');
+    const resolvedTarget = path.resolve(path.dirname(intermediatePath), secondSymlinkTarget);
     vi.mocked(fsPromises.lstat).mockResolvedValueOnce({
       isSymbolicLink: () => true,
     } as never);
-    vi.mocked(fsPromises.realpath).mockRejectedValueOnce(fileNotFoundError);
-    vi.mocked(fsPromises.readlink).mockResolvedValueOnce(symlinkTarget);
+    vi.mocked(fsPromises.lstat).mockResolvedValueOnce({
+      isSymbolicLink: () => true,
+    } as never);
+    vi.mocked(fsPromises.realpath)
+      .mockRejectedValueOnce(fileNotFoundError)
+      .mockRejectedValueOnce(fileNotFoundError);
+    vi.mocked(fsPromises.readlink)
+      .mockResolvedValueOnce(firstSymlinkTarget)
+      .mockResolvedValueOnce(secondSymlinkTarget);
 
     await writeOutput(outputPath, new Eval({}), null);
 
