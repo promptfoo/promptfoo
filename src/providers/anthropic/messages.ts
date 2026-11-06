@@ -6,7 +6,7 @@ import {
   getScopedCacheKey,
   isCacheEnabled,
 } from '../../cache';
-import { getEnvInt, getEnvString } from '../../envars';
+import { getEnvInt, getEnvString, parseEnvFloat } from '../../envars';
 import logger from '../../logger';
 import {
   type GenAISpanContext,
@@ -17,7 +17,7 @@ import { maybeLoadResponseFormatFromExternalFile } from '../../util/file';
 import { normalizeFinishReason } from '../../util/finishReason';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
-import { MCPClient } from '../mcp/client';
+import { McpClientSession } from '../mcp/session';
 import { transformMCPToolsToAnthropic } from '../mcp/transform';
 import { getMcpErrorMessage, isMcpErrorResult, normalizeMcpToolContent } from '../mcp/util';
 import { transformToolChoice, transformTools } from '../shared';
@@ -54,12 +54,13 @@ import {
 } from './util';
 import type Anthropic from '@anthropic-ai/sdk';
 
-import type { EnvOverrides } from '../../types/env';
 import type {
   CallApiContextParams,
   CallApiOptionsParams,
   ProviderResponse,
 } from '../../types/index';
+import type { ProviderOptions } from '../../types/providers';
+import type { MCPClient } from '../mcp/client';
 import type { McpToolCallEntry } from '../mcp/types';
 import type { AnthropicMessageOptions, ClaudeEffort, ClaudeThinkingConfig } from './types';
 
@@ -92,14 +93,6 @@ async function finalMessageWithStreamedStopDetails(
     : finalMessage;
 }
 
-function parseEnvFloat(value: string | undefined): number | undefined {
-  if (value === undefined) {
-    return undefined;
-  }
-  const parsed = Number.parseFloat(value);
-  return Number.isNaN(parsed) ? undefined : parsed;
-}
-
 function normalizeHeadersForCacheKey(headers: Record<string, string>) {
   if (Object.keys(headers).length === 0) {
     return undefined;
@@ -118,7 +111,9 @@ function normalizeHeadersForCacheKey(headers: Record<string, string>) {
     });
 }
 
-function getMessagesRequestMetadata(params: Anthropic.Messages.MessageCreateParams) {
+function getMessagesRequestMetadata(
+  params: Anthropic.Messages.MessageCreateParams & { temperature?: number },
+) {
   const mcpServers = (params as { mcp_servers?: unknown }).mcp_servers;
   return {
     model: params.model,
@@ -338,7 +333,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
   }
 
   private mcpClient: MCPClient | null = null;
-  private initializationPromise: Promise<void> | null = null;
+  private mcpSession?: McpClientSession;
   private samplingParamsDeprecationWarned = false;
   private manualThinkingConversionWarned = false;
   private disabledThinkingRemovalWarned = false;
@@ -358,12 +353,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
 
   constructor(
     modelName: string,
-    options: {
-      id?: string;
-      label?: string;
-      config?: AnthropicMessageOptions;
-      env?: EnvOverrides;
-    } = {},
+    options: Pick<ProviderOptions<AnthropicMessageOptions>, 'config' | 'id' | 'label' | 'env'> = {},
   ) {
     super(modelName, options);
     if (
@@ -377,22 +367,22 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     const { id } = options;
     this.id = id ? () => id : this.id;
 
-    // Start initialization if MCP is enabled
-    if (this.config.mcp?.enabled) {
-      this.initializationPromise = this.initializeMCP();
-    }
+    void this.initializeMCP().catch(() => undefined);
   }
 
-  private async initializeMCP(): Promise<void> {
-    this.mcpClient = new MCPClient(this.config.mcp!);
-    await this.mcpClient.initialize();
+  private async initializeMCP(signal?: AbortSignal): Promise<void> {
+    if (!this.config.mcp?.enabled) {
+      return;
+    }
+    this.mcpSession ??= new McpClientSession(this.config.mcp);
+    this.mcpClient = await this.mcpSession.initialize(signal);
   }
 
   async cleanup(): Promise<void> {
-    if (this.mcpClient) {
-      await this.initializationPromise;
-      await this.mcpClient.cleanup();
-      this.mcpClient = null;
+    try {
+      await this.mcpSession?.cleanup();
+    } finally {
+      this.mcpClient = this.mcpSession?.client ?? null;
     }
   }
 
@@ -681,10 +671,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
     if (options?.abortSignal?.aborted) {
       return { error: 'Operation aborted' };
     }
-    // Wait for MCP initialization if it's in progress
-    if (this.initializationPromise != null) {
-      await this.initializationPromise;
-    }
+    await this.initializeMCP(options?.abortSignal);
 
     this.validateAuthentication();
 

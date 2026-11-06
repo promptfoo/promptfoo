@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
+import Anthropic from '@anthropic-ai/sdk';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { clearCache, disableCache, enableCache } from '../../../src/cache';
 import { setEnvOverridesProvider } from '../../../src/envOverrides';
@@ -12,7 +13,12 @@ import {
 } from '../../../src/providers/bedrock/anthropicMessages';
 import { isBedrockAnthropicMessagesModel } from '../../../src/providers/bedrock/routing';
 import { mockProcessEnv } from '../../util/utils';
-import type Anthropic from '@anthropic-ai/sdk';
+
+const createMessagesRequest = () => ({
+  method: 'post',
+  path: '/v1/messages',
+  body: { model: 'anthropic.claude-fable-5', max_tokens: 1, messages: [] },
+});
 
 describe('Bedrock Anthropic Messages provider', () => {
   it.each([
@@ -97,6 +103,36 @@ describe('Bedrock Anthropic Messages provider', () => {
       expect(perTokenZero.cost).toBe(0);
     },
   );
+
+  it('requires a complete price override for Haiku 4.5 on GovCloud Mantle', async () => {
+    const model = 'anthropic.claude-haiku-4-5';
+    const provider = createBedrockAnthropicMessagesProvider(model, {
+      config: { region: 'us-gov-west-1', apiKey: 'fixture-key' },
+    });
+    vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
+      id: 'fixture',
+      model,
+      role: 'assistant',
+      type: 'message',
+      stop_reason: 'end_turn',
+      stop_sequence: null,
+      content: [{ type: 'text', text: 'ready' }],
+      usage: { input_tokens: 100, output_tokens: 10 },
+    } as Anthropic.Messages.Message);
+    for (const [pricing, expected] of [
+      [{}, undefined],
+      [{ inputCost: 0.01 }, undefined],
+      [{ cost: 0 }, 0],
+      [{ inputCost: 0.01, outputCost: 0.02 }, 1.2],
+    ] as const) {
+      const response = await provider.callApi('rate', {
+        vars: {},
+        prompt: { raw: 'rate', label: 'rate', config: pricing },
+      });
+      expect(response.error).toBeUndefined();
+      expect(response.cost).toBe(expected);
+    }
+  });
 
   let restoreEnv: (() => void) | undefined;
 
@@ -267,6 +303,12 @@ describe('Bedrock Anthropic Messages provider', () => {
   });
 
   it('uses promptfoo env overrides for the key and region', async () => {
+    using resolveProfile = vi
+      .spyOn(
+        Anthropic.prototype as unknown as { _resolveDefaultCredentials(): Promise<void> },
+        '_resolveDefaultCredentials',
+      )
+      .mockResolvedValue(undefined);
     restoreEnv = mockProcessEnv({
       AWS_BEARER_TOKEN_BEDROCK: undefined,
       AWS_BEDROCK_REGION: undefined,
@@ -279,6 +321,7 @@ describe('Bedrock Anthropic Messages provider', () => {
 
     expect(provider).toBeInstanceOf(BedrockAnthropicMessagesProvider);
     expect(provider['getGenAISystem']()).toBe('bedrock');
+    expect(resolveProfile).not.toHaveBeenCalled();
     expect(provider.apiKey).toBe('override-key');
     expect(provider.anthropic.apiKey).toBeNull();
     expect(provider.anthropic.authToken).toBeNull();
@@ -292,11 +335,7 @@ describe('Bedrock Anthropic Messages provider', () => {
           body: Record<string, unknown>;
         }): Promise<{ req: Request }>;
       }
-    ).buildRequest({
-      method: 'post',
-      path: '/v1/messages',
-      body: { model: 'anthropic.claude-fable-5', max_tokens: 1, messages: [] },
-    });
+    ).buildRequest(createMessagesRequest());
     // Credentials are added by the transport at dispatch, not captured by the SDK.
     expect(req.headers.get('x-api-key')).toBeNull();
     expect(req.headers.get('authorization')).toBeNull();
@@ -323,11 +362,7 @@ describe('Bedrock Anthropic Messages provider', () => {
             body: Record<string, unknown>;
           }): Promise<{ req: Request }>;
         }
-      ).buildRequest({
-        method: 'post',
-        path: '/v1/messages',
-        body: { model: 'anthropic.claude-fable-5', max_tokens: 1, messages: [] },
-      });
+      ).buildRequest(createMessagesRequest());
 
       expect(req.headers.get('x-api-key')).toBeNull();
       expect(req.headers.get('authorization')).toBeNull();
@@ -345,11 +380,7 @@ describe('Bedrock Anthropic Messages provider', () => {
       provider.anthropic as unknown as {
         buildRequest: (request: Record<string, unknown>) => Promise<{ req: Request }>;
       }
-    ).buildRequest({
-      method: 'post',
-      path: '/v1/messages',
-      body: { model: 'anthropic.claude-fable-5', max_tokens: 1, messages: [] },
-    });
+    ).buildRequest(createMessagesRequest());
 
     expect(req.headers.get('x-api-key')).toBeNull();
   });
@@ -362,11 +393,7 @@ describe('Bedrock Anthropic Messages provider', () => {
     const provider = createBedrockAnthropicMessagesProvider('anthropic.claude-fable-5', {
       config: { apiKey: 'bedrock-key', region: 'us-east-1' },
     });
-    const { req } = await (provider.anthropic as any).buildRequest({
-      method: 'post',
-      path: '/v1/messages',
-      body: { model: 'anthropic.claude-fable-5', max_tokens: 1, messages: [] },
-    });
+    const { req } = await (provider.anthropic as any).buildRequest(createMessagesRequest());
 
     expect(req.headers.get('x-api-key')).toBeNull();
     expect(req.headers.get('x-proxy-secret')).toBeNull();

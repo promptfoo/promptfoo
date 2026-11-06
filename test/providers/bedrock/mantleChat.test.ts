@@ -8,6 +8,11 @@ import {
 import { OpenAiChatCompletionProvider } from '../../../src/providers/openai/chat';
 import { HttpRateLimitError } from '../../../src/util/fetch/errors';
 import { mockProcessEnv } from '../../util/utils';
+import { createMockChatResponse, createMockFetchResponse } from '../mockProviderResponses';
+
+const createBedrockKeyConfig = () => ({
+  config: { apiKey: 'bedrock-key' },
+});
 
 vi.mock('../../../src/cache', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../../src/cache')>()),
@@ -200,12 +205,38 @@ describe('bedrock mantle Chat Completions provider', () => {
       ).not.toThrow();
     });
 
-    it('rejects frontier OpenAI models on the mantle chat route', () => {
+    it('does not guess Chat support for an unlisted frontier model', () => {
       expect(() =>
-        createBedrockMantleChatProvider('openai.gpt-5.5', {
+        createBedrockMantleChatProvider('openai.gpt-future', {
           config: { apiKey: 'bedrock-key' },
         }),
-      ).toThrow(/Use the bare "bedrock:openai\.gpt-5\.5" id/);
+      ).toThrow(/Use the bare "bedrock:openai\.gpt-future" id/);
+    });
+
+    it.each([
+      ['openai.gpt-6-astra', 'us-west-2'],
+      ['openai.gpt-6.1-sol', 'us-east-1'],
+      ['openai.gpt-6.1-terra', 'us-east-1'],
+      ['openai.gpt-6-sol', 'us-east-1'],
+      ['openai.gpt-6-luna', 'us-east-1'],
+      ['openai.gpt-5.5', 'us-east-1'],
+      ['openai.gpt-5.4', 'us-east-1'],
+      ['openai.gpt-daybreak-blue-5.6-sol', 'us-east-2'],
+    ])('sends %s through its published Chat endpoint', async (model, region) => {
+      restoreEnv = mockProcessEnv({
+        AWS_BEDROCK_REGION: undefined,
+        AWS_REGION: undefined,
+        AWS_DEFAULT_REGION: undefined,
+      });
+      vi.mocked(fetchWithCache).mockResolvedValue(createMockChatResponse('hello'));
+      const provider = createBedrockMantleChatProvider(model, {
+        config: { apiKey: 'test', reasoning_effort: 'high' },
+      });
+      const result = await provider.callApi('hello');
+      expect(result.output).toBe('hello');
+      const [url, req] = vi.mocked(fetchWithCache).mock.calls[0];
+      expect(url).toBe(`https://bedrock-mantle.${region}.api.aws/openai/v1/chat/completions`);
+      expect(JSON.parse(req?.body as string)).toMatchObject({ model, reasoning_effort: 'high' });
     });
 
     it.each(['sol', 'terra', 'luna'])(
@@ -232,6 +263,34 @@ describe('bedrock mantle Chat Completions provider', () => {
     );
 
     it.each([
+      [undefined, 'us-east-2', (5 * 13.75 + 5 * 82.5) / 1e6],
+      ['us-gov-east-1', 'us-gov-east-1', (5 * 16.875 + 5 * 101.25) / 1e6],
+    ] as const)(
+      'sends GPT-5.6 Cyber Chat to its regional endpoint (%s)',
+      async (region, expectedRegion, cost) => {
+        restoreEnv = mockProcessEnv({
+          AWS_BEDROCK_REGION: undefined,
+          AWS_REGION: undefined,
+          AWS_DEFAULT_REGION: undefined,
+        });
+        vi.mocked(fetchWithCache).mockResolvedValue(createMockChatResponse('hello'));
+        const provider = createBedrockMantleChatProvider('openai.gpt-5.6-cyber', {
+          config: { apiKey: 'bedrock-key', region },
+        });
+
+        const result = await provider.callApi('hello');
+
+        const [[url, request]] = vi.mocked(fetchWithCache).mock.calls;
+        expect(url).toBe(
+          `https://bedrock-mantle.${expectedRegion}.api.aws/openai/v1/chat/completions`,
+        );
+        expect(JSON.parse(request?.body as string).model).toBe('openai.gpt-5.6-cyber');
+        expect(result.output).toBe('hello');
+        expect(result.cost).toBeCloseTo(cost, 10);
+      },
+    );
+
+    it.each([
       undefined,
       'https://bedrock-mantle.us-west-2.api.aws/openai/v1',
       'https://BEDROCK-MANTLE.us-east-1.api.aws./openai/v1',
@@ -242,7 +301,7 @@ describe('bedrock mantle Chat Completions provider', () => {
         createBedrockMantleChatProvider('us.openai.gpt-5.6-sol', {
           config: { apiKey: 'bedrock-key', apiBaseUrl },
         }),
-      ).toThrow('bedrock:converse:us.openai.gpt-5.6-sol');
+      ).toThrow('bedrock:mantle:openai.gpt-5.6-sol');
     });
 
     it.each([
@@ -355,6 +414,8 @@ describe('bedrock mantle Chat Completions provider', () => {
         'json',
         true,
         undefined,
+        expect.any(Function),
+        undefined,
       );
       const request = vi.mocked(fetchWithCache).mock.calls[0][1];
       expect(await request?.getAuthHeaders?.()).toEqual({ Authorization: 'Bearer bedrock-key' });
@@ -394,7 +455,7 @@ describe('bedrock mantle Chat Completions provider', () => {
         const result = await provider.callApi('hello');
         expect(result.error).toBeUndefined();
         expect(result.cost).toBeCloseTo(
-          ((700 * 2.64 + 200 * 0.264 + 100 * 3.3 + 500 * 15.84) * scale) / 1e6,
+          ((700 * 2.7 + 200 * 0.27 + 100 * 3.375 + 500 * 16.2) * scale) / 1e6,
           12,
         );
       },
@@ -501,9 +562,7 @@ describe('bedrock mantle Chat Completions provider', () => {
     });
 
     it('identifies the actual Bedrock provider in telemetry', () => {
-      const provider = createBedrockMantleChatProvider('deepseek.v3.1', {
-        config: { apiKey: 'bedrock-key' },
-      });
+      const provider = createBedrockMantleChatProvider('deepseek.v3.1', createBedrockKeyConfig());
 
       expect((provider as any).getGenAISystem()).toBe('bedrock');
     });
@@ -531,15 +590,12 @@ describe('bedrock mantle Chat Completions provider', () => {
     });
 
     it('calls the mantle chat endpoint and tracks token usage', async () => {
-      vi.mocked(fetchWithCache).mockResolvedValue({
-        data: {
+      vi.mocked(fetchWithCache).mockResolvedValue(
+        createMockFetchResponse({
           choices: [{ message: { content: 'Mantle output' }, finish_reason: 'stop' }],
           usage: { total_tokens: 7, prompt_tokens: 4, completion_tokens: 3 },
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
+        }),
+      );
       const provider = createBedrockMantleChatProvider('deepseek.v3.1', {
         config: { region: 'us-west-2', apiKey: 'bedrock-key' },
       });
@@ -556,6 +612,8 @@ describe('bedrock mantle Chat Completions provider', () => {
         'json',
         true,
         undefined,
+        expect.any(Function),
+        undefined,
       );
       expect(result.output).toBe('Mantle output');
       expect(result.tokenUsage).toEqual({ total: 7, prompt: 4, completion: 3, numRequests: 1 });
@@ -568,9 +626,7 @@ describe('bedrock mantle Chat Completions provider', () => {
         status: 500,
         statusText: 'Internal Server Error',
       });
-      const provider = createBedrockMantleChatProvider('deepseek.v3.1', {
-        config: { apiKey: 'bedrock-key' },
-      });
+      const provider = createBedrockMantleChatProvider('deepseek.v3.1', createBedrockKeyConfig());
 
       const result = await provider.callApi('hello');
 
@@ -581,9 +637,7 @@ describe('bedrock mantle Chat Completions provider', () => {
       vi.mocked(fetchWithCache).mockRejectedValue(
         new HttpRateLimitError({ status: 429, code: 'rate_limit_exceeded' }),
       );
-      const provider = createBedrockMantleChatProvider('deepseek.v3.1', {
-        config: { apiKey: 'bedrock-key' },
-      });
+      const provider = createBedrockMantleChatProvider('deepseek.v3.1', createBedrockKeyConfig());
 
       const result = await provider.callApi('hello');
 
@@ -592,9 +646,7 @@ describe('bedrock mantle Chat Completions provider', () => {
 
     it('surfaces mantle chat request timeout failures', async () => {
       vi.mocked(fetchWithCache).mockRejectedValue(new Error('Request timed out'));
-      const provider = createBedrockMantleChatProvider('deepseek.v3.1', {
-        config: { apiKey: 'bedrock-key' },
-      });
+      const provider = createBedrockMantleChatProvider('deepseek.v3.1', createBedrockKeyConfig());
 
       const result = await provider.callApi('hello');
 

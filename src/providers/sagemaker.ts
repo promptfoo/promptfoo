@@ -1,3 +1,4 @@
+import { setTimeout as delayWithSignal } from 'node:timers/promises';
 import crypto from 'crypto';
 
 import { z } from 'zod';
@@ -852,6 +853,8 @@ export class SageMakerEmbeddingProvider
   extends SageMakerGenericProvider
   implements ApiEmbeddingProvider
 {
+  readonly supportsEmbeddingCancellation = true;
+
   async callApi(): Promise<ProviderResponse> {
     throw new Error(
       'callApi is not implemented for embedding provider. Use callEmbeddingApi instead.',
@@ -888,7 +891,9 @@ export class SageMakerEmbeddingProvider
   async callEmbeddingApi(
     text: string,
     context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
   ): Promise<ProviderEmbeddingResponse> {
+    const signal = options?.abortSignal;
     // Import cache functions dynamically to avoid circular dependencies
     const { isCacheEnabled, getCache } = await import('../cache');
 
@@ -949,7 +954,12 @@ export class SageMakerEmbeddingProvider
       logger.debug(
         `Applying delay of ${delayMs}ms before calling SageMaker embedding endpoint ${this.getEndpointName()}`,
       );
-      await sleep(delayMs);
+      await (signal
+        ? delayWithSignal(delayMs, undefined, { signal }).catch((error) => {
+            signal.throwIfAborted();
+            throw error;
+          })
+        : sleep(delayMs));
     }
 
     // Not in cache or cache disabled, make the actual API call
@@ -999,7 +1009,9 @@ export class SageMakerEmbeddingProvider
       });
 
       const startTime = Date.now();
-      const response = await runtime.send(command);
+      const response = signal
+        ? await runtime.send(command, { abortSignal: signal })
+        : await runtime.send(command);
       const endTime = Date.now();
       const _latency = endTime - startTime;
 
@@ -1108,6 +1120,7 @@ export class SageMakerEmbeddingProvider
 
       return result;
     } catch (error: any) {
+      signal?.throwIfAborted();
       logger.error(`SageMaker embedding API error: ${error}`);
       return {
         error: `SageMaker embedding API error: ${error.message || String(error)}`,
