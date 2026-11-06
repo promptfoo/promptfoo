@@ -63,23 +63,25 @@ implicit default as a stable eval input.
 
 ## Configuration Options
 
-| Parameter          | Description                                                                         | Default               |
-| ------------------ | ----------------------------------------------------------------------------------- | --------------------- |
-| `agent`            | Agent definition (inline object or `file://path`)                                   | -                     |
-| `tools`            | Additional tool definitions (inline array or `file://path`)                         | -                     |
-| `handoffs`         | Additional handoff definitions (inline array or `file://path`)                      | -                     |
-| `maxTurns`         | Maximum conversation turns; set `null` to disable the SDK turn limit                | 10                    |
-| `model`            | Override model specified in agent definition                                        | -                     |
-| `modelSettings`    | SDK `ModelSettings` overrides, including reasoning, verbosity, and retry settings   | -                     |
-| `inputGuardrails`  | Additional input guardrails (inline array or `file://`)                             | -                     |
-| `outputGuardrails` | Additional output guardrails (inline array or `file://`)                            | -                     |
-| `session`          | Persistent SDK session definition, instance, factory, or `file://` export           | -                     |
-| `sandbox`          | Sandbox runtime config, local client definition, factory, or `file://` export       | -                     |
-| `runOptions`       | Additional non-streaming SDK `run()` options such as `conversationId` or filters    | -                     |
-| `executeTools`     | Execute function tools normally (`real`) or replace them with mocked results        | `real`                |
-| `toolMocks`        | Mocked tool outputs keyed by tool name, used when `executeTools` is `mock` or false | -                     |
-| `tracing`          | Enable Promptfoo OTLP export for SDK spans                                          | false                 |
-| `otlpEndpoint`     | Custom OTLP endpoint URL for Promptfoo tracing                                      | http://localhost:4318 |
+| Parameter            | Description                                                                         | Default               |
+| -------------------- | ----------------------------------------------------------------------------------- | --------------------- |
+| `agent`              | Agent definition (inline object or `file://path`)                                   | -                     |
+| `tools`              | Additional tool definitions (inline array or `file://path`)                         | -                     |
+| `handoffs`           | Additional handoff definitions (inline array or `file://path`)                      | -                     |
+| `maxTurns`           | Maximum conversation turns; set `null` to disable the SDK turn limit                | 10                    |
+| `model`              | Override model specified in agent definition                                        | -                     |
+| `modelSettings`      | SDK `ModelSettings` overrides, including reasoning, verbosity, and retry settings   | -                     |
+| `inputGuardrails`    | Additional input guardrails (inline array or `file://`)                             | -                     |
+| `outputGuardrails`   | Additional output guardrails (inline array or `file://`)                            | -                     |
+| `session`            | Persistent SDK session definition, instance, factory, or `file://` export           | -                     |
+| `sandbox`            | Sandbox runtime config, local client definition, factory, or `file://` export       | -                     |
+| `runOptions`         | Additional non-streaming SDK `run()` options such as `conversationId` or filters    | -                     |
+| `executeTools`       | Execute function tools normally (`real`) or replace them with mocked results        | `real`                |
+| `toolMocks`          | Mocked tool outputs keyed by tool name, used when `executeTools` is `mock` or false | -                     |
+| `includeToolCalls`   | Include function-call requests and result status in response metadata               | false                 |
+| `includeToolResults` | Also include JSON-safe tool output bodies; requires `includeToolCalls`              | false                 |
+| `tracing`            | Enable Promptfoo OTLP export for SDK spans                                          | false                 |
+| `otlpEndpoint`       | Custom OTLP endpoint URL for Promptfoo tracing                                      | http://localhost:4318 |
 
 `config.model` and `config.modelSettings` are execution overrides. When present, each option
 replaces the corresponding field on the initial agent and every handoff agent, including agents
@@ -442,6 +444,41 @@ capabilities, reusable prompt templates, and model `providerData` that overrides
 or prompt. Use direct agents for handoffs with mocked tools. Lifecycle hooks can observe the
 run, but cannot change the mocked tools or handoff configuration. Hooks and agent definitions
 still run as trusted local code; mock mode does not isolate them.
+
+## Tool assertions without tracing
+
+Set `config.includeToolCalls: true` to expose `response.metadata.toolCalls` while keeping `output` as the final answer. No OTLP receiver is required; this option does not change SDK tracing settings.
+
+```yaml
+providers:
+  - id: openai:agents:support-agent
+    config:
+      agent: file://./agents/support-agent.ts
+      includeToolCalls: true
+
+tests:
+  - vars:
+      query: 'Look up order 42'
+    assert:
+      - type: tool-call-f1
+        value: [lookup_order]
+        threshold: 1
+      - type: tool-call
+        value:
+          name: lookup_order
+          arguments:
+            orderId: '42'
+        config:
+          requireCompleted: true
+```
+
+`tool-call-f1` compares requested tool-name sets, so extra tools fail at threshold 1. `tool-call` checks required names and argument key-value pairs while allowing extra tools and arguments. Set `config.requireCompleted: true` to also require a completed, non-mocked result. Use JavaScript for ordering or counts, and retain assertions on the final answer.
+
+Each function request has `callId`, `name`, `rawArguments`, `argumentParseStatus` (`parsed` or `invalid`), `resultPresent`, and `executionMode` (`real` or `mock`, reflecting provider configuration). Valid JSON is preserved in `arguments`, including arrays, primitives, and null. Invalid JSON leaves `arguments` absent without failing the answer. `callStatus` and matched `resultStatus` preserve SDK statuses when available; a completed result does not prove business success. `executeTools: false` means mocked execution, just like `mock`.
+
+Requests remain in SDK order, including repeated calls and requests without results. Results match by unique call ID, regardless of arrival order. Unmatched outputs are ignored; duplicate request or result IDs leave `resultPresent: false` because the association is ambiguous. An enabled run with no supported requests returns an empty array; disabled collection leaves metadata absent. Only this run's `newItems` are projected: handoff events, hosted/computer/shell tools, nested independent runs, guardrails, and raw model responses are excluded. Function calls by handoff agents are included when present in that list. Runner errors and cancellation retain existing behavior; metadata is not recovered from thrown runs.
+
+Tool arguments can contain sensitive data and will be saved with eval results when collection is enabled. Output bodies are excluded unless `includeToolResults: true` is also set. The optional `result` is a JSON-safe projection of the SDK output item's `output`: normal JSON serialization applies, circular properties are removed, and unsupported output (for example BigInt) is omitted with `resultOmitted: true`. No `success` value is inferred from output text or completion status.
 
 ## Tracing
 

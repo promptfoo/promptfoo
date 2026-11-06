@@ -51,6 +51,7 @@ These assertions can check LLM output or provider metadata directly. Configured 
 | [is-valid-function-call](#is-valid-function-call)               | Ensure that the function call matches the function's JSON schema   |
 | [is-valid-openai-function-call](#is-valid-openai-function-call) | Ensure that the function call matches the function's JSON schema   |
 | [is-valid-openai-tools-call](#is-valid-openai-tools-call)       | Ensure all tool calls match the tools JSON schema                  |
+| [tool-call](#tool-call)                                         | Required tool names and argument key-value pairs                   |
 | [tool-call-f1](#tool-call-f1)                                   | F1 score comparing actual vs expected tool calls                   |
 | [skill-used](#skill-used)                                       | Ensure normalized provider skill metadata contains expected skills |
 | [trajectory:tool-used](#trajectorytool-used)                    | Ensure traced tool usage contains expected tools                   |
@@ -645,9 +646,38 @@ tests:
         value: 'MCP Tool Result' # Alternative way to check for MCP success
 ```
 
+### tool-call
+
+Use `tool-call` to require one or more tool requests, optionally checking their arguments. It reads `response.metadata.toolCalls` automatically. The [OpenAI Agents provider](/docs/providers/openai-agents/) exposes this data with `config.includeToolCalls: true`, without a tracing collector.
+
+```yaml
+assert:
+  # A single name or a list of required names.
+  - type: tool-call
+    value: check_inventory
+  - type: tool-call
+    value: [check_inventory, check_character_stats]
+  # An object or list of objects can also check arguments.
+  - type: tool-call
+    value:
+      name: check_inventory
+      arguments:
+        playerId: player1
+    config:
+      requireCompleted: true
+```
+
+All expectations must match; extra calls are allowed. Provided argument keys must exist on the same call and match by deep equality, without type coercion. Additional argument keys are allowed; nested values and arrays must match exactly. Expectations check presence, not order or cardinality. The score is 1 when all expectations pass, otherwise 0. `not-tool-call` requires that none of the listed expectations match.
+
+By default, a matching request is sufficient. `config.requireCompleted: true` additionally requires `resultPresent: true`, `resultStatus: completed`, and `executionMode: real`. Completion does not establish business success. Missing or malformed call records fail both positive and negative assertions; an observed empty array passes a negative assertion. Final-answer text is never treated as execution evidence.
+
+Other providers can supply the same metadata contract: an array of records with `name` and optional parsed `arguments`; completion checks require the additional status fields above. An explicit assertion `transform` can select a different array of these records and takes precedence over metadata. Without metadata or a transform, a structured output array of these records is also accepted.
+
 ### tool-call-f1
 
 The `tool-call-f1` assertion computes the [F1 score](https://en.wikipedia.org/wiki/F-score) comparing the set of tools called by the LLM against an expected set of tools. This metric is useful for evaluating agentic LLM applications where you want to measure how accurately the model selects the right tools.
+
+When `response.metadata.toolCalls` is present, it is used automatically, including an empty list. No `transform` is needed. An explicit assertion `transform` takes precedence; providers without that metadata keep the output parsing behavior below. The default threshold is 1. Use `tool-call` for required calls and argument checks while allowing additional tools.
 
 This assertion supports OpenAI Chat Completions tool calls, OpenAI Responses `function_call` items, Anthropic tool-use blocks, and Google/Vertex function calls. It accepts supported objects and arrays directly or as JSON strings, including newline-separated JSON calls mixed with text.
 
