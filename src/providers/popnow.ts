@@ -44,6 +44,12 @@ export class PopNowProvider extends OpenAiChatCompletionProvider {
     return undefined;
   }
 
+  // PopNow sets its own per-model rates. Billing on the full wire id keeps calls
+  // out of the OpenAI price catalog, while rates set in the config still apply.
+  protected override getBillingModelName(): string {
+    return this.modelName;
+  }
+
   id(): string {
     return `popnow:${this.modelName}`;
   }

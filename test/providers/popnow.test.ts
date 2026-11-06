@@ -243,6 +243,44 @@ describe('PopNow', () => {
       expect(result.error).toContain('Too many requests');
       expect(result.metadata?.http?.status).toBe(429);
     });
+
+    it('should surface request timeouts', async () => {
+      const provider = new PopNowProvider('google/gemini-3.7-flash/chat', {});
+      mockedFetchWithRetries.mockRejectedValueOnce(new Error('Request timed out after 5000 ms'));
+
+      const result = await provider.callApi('Test prompt');
+      expect(result.error).toContain('API call error');
+      expect(result.error).toContain('Request timed out after 5000 ms');
+    });
+
+    it('should not price calls from the OpenAI catalog', async () => {
+      const provider = new PopNowProvider('openai/gpt-6.1-terra/chat', {});
+      mockedFetchWithRetries.mockResolvedValueOnce(
+        jsonResponse({
+          choices: [{ message: { content: 'PopNow output' }, finish_reason: 'stop' }],
+          usage: { total_tokens: 12, prompt_tokens: 5, completion_tokens: 7 },
+        }),
+      );
+
+      const result = await provider.callApi('Test prompt');
+      expect(result.output).toBe('PopNow output');
+      expect(result.cost).toBeUndefined();
+    });
+
+    it('should use cost rates set in the config', async () => {
+      const provider = new PopNowProvider('openai/gpt-6.1-terra/chat', {
+        config: { inputCost: 0.000001, outputCost: 0.000002 },
+      });
+      mockedFetchWithRetries.mockResolvedValueOnce(
+        jsonResponse({
+          choices: [{ message: { content: 'PopNow output' }, finish_reason: 'stop' }],
+          usage: { total_tokens: 12, prompt_tokens: 5, completion_tokens: 7 },
+        }),
+      );
+
+      const result = await provider.callApi('Test prompt');
+      expect(result.cost).toBeCloseTo(0.000019, 10);
+    });
   });
 
   describe('createPopNowProvider', () => {
