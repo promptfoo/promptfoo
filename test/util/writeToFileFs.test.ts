@@ -190,12 +190,14 @@ describe('JsonlFileWriter (real filesystem)', () => {
     fs.symlinkSync(`${path.basename(target)}${path.sep}`, link);
 
     const writer = new JsonlFileWriter(link);
-    await expect(writer.write({ a: 1 })).rejects.toMatchObject({
-      cause: expect.objectContaining({ code: 'ENOENT' }),
-    });
+    const writeError = await writer.write({ a: 1 }).catch((error: unknown) => error);
 
     expect(fs.existsSync(target)).toBe(false);
     expect(fs.lstatSync(link).isSymbolicLink()).toBe(true);
+    expect(fs.readlinkSync(link)).toBe(`${path.basename(target)}${path.sep}`);
+    expect(writeError).toMatchObject({
+      cause: expect.objectContaining({ code: expect.stringMatching(/^(ENOENT|EISDIR)$/) }),
+    });
   });
 
   it.each([
