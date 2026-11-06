@@ -56,15 +56,10 @@ vi.mock('../../src/ruby/rubyUtils.js', () => ({
   runRuby: vi.fn(),
 }));
 
-vi.mock('../../src/python/pythonUtils', async () => {
-  const actual = await vi.importActual<typeof import('../../src/python/pythonUtils')>(
-    '../../src/python/pythonUtils',
-  );
-  return {
-    ...actual,
-    runPython: vi.fn(),
-  };
-});
+vi.mock(import('../../src/python/pythonUtils'), async (importOriginal) => ({
+  ...(await importOriginal()),
+  runPython: vi.fn(),
+}));
 
 vi.mock('../../src/matchers/llmGrading', async () => {
   const actual = await vi.importActual('../../src/matchers/llmGrading');
@@ -463,63 +458,50 @@ describe('Script value resolution', () => {
     });
   });
 
-  describe('python and ruby file assertions that throw', () => {
+  describe.each([
+    ['python', 'file://grade.py', runPython],
+    ['ruby', 'file://grade.rb', runRuby],
+  ] as const)('throwing %s file assertions', (type, value, runner) => {
     it.each([
-      ['python', 'file://grade.py', () => vi.mocked(runPython)],
-      ['ruby', 'file://grade.rb', () => vi.mocked(runRuby)],
-    ] as const)(
-      'should apply the weight: 0 override to a throwing %s file assertion',
-      async (type, value, getRunner) => {
-        getRunner().mockRejectedValue(new Error('script failed'));
+      { weight: 0, pass: true, score: 1 },
+      { weight: undefined, pass: false, score: 0.5 },
+    ])(
+      'grades the row and records the metric with weight $weight',
+      async ({ weight, pass, score }) => {
+        vi.mocked(runner).mockRejectedValueOnce(new Error('script failed'));
 
-        const result = await runAssertion({
-          assertion: { type, value, weight: 0 },
-          test: { vars: {} },
-          providerResponse: baseProviderResponse,
-        });
-
-        expect(result.pass).toBe(true);
-        expect(result.score).toBe(0);
-        expect(result.reason).toBe('script failed');
-
-        const rowResult = await runAssertions({
+        const result = await runAssertions({
           test: {
-            vars: {},
             assert: [
               { type: 'contains', value: 'test' },
-              { type, value, weight: 0 },
+              { type, value, weight, metric: 'Script' },
             ],
           },
           providerResponse: baseProviderResponse,
         });
 
-        expect(rowResult.pass).toBe(true);
-        expect(rowResult.componentResults?.[1]).toMatchObject({
-          pass: true,
+        expect(result).toMatchObject({ pass, score, namedScores: { Script: 0 } });
+        expect(result.componentResults?.[1]).toMatchObject({
+          pass,
+          score: 0,
           reason: 'script failed',
         });
       },
     );
 
-    it.each([
-      ['python', 'file://grade.py', () => vi.mocked(runPython)],
-      ['ruby', 'file://grade.rb', () => vi.mocked(runRuby)],
-    ] as const)(
-      'should still fail a throwing %s file assertion without weight: 0',
-      async (type, value, getRunner) => {
-        getRunner().mockRejectedValue(new Error('script failed'));
+    it('keeps the script error even when a sibling grader contains circular state', async () => {
+      vi.mocked(runner).mockRejectedValueOnce(new Error('script failed'));
+      const client: Record<string, unknown> = {};
+      client.self = client;
+      const provider = { id: () => 'custom', callApi: async () => ({ output: '' }), client };
+      const result = await runAssertion({
+        assertion: { type, value },
+        test: { assert: [{ type: 'llm-rubric', value: 'check', provider }] },
+        providerResponse: baseProviderResponse,
+      });
 
-        const result = await runAssertion({
-          assertion: createStringAssertion(type, value),
-          test: { vars: {} },
-          providerResponse: baseProviderResponse,
-        });
-
-        expect(result.pass).toBe(false);
-        expect(result.score).toBe(0);
-        expect(result.reason).toBe('script failed');
-      },
-    );
+      expect(result).toMatchObject({ pass: false, score: 0, reason: 'script failed' });
+    });
   });
 
   describe('edge cases', () => {
