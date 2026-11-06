@@ -19,7 +19,7 @@ npm install -g promptfoo
 
 Full-repository scans use the pinned filesystem MCP server installed with promptfoo. Keep the installation outside the repository being scanned. If you installed with `--omit=optional`, reinstall with optional dependencies or use `--diffs-only`.
 
-For Yarn Plug'n'Play, enable `pnpEnableEsmLoader: true` in the external installation's `.yarnrc.yml` and reinstall. The filesystem server needs the ESM loader to start.
+If Yarn Plug'n'Play reports a missing ESM loader, set `pnpEnableEsmLoader: true` in the external installation's `.yarnrc.yml` and reinstall.
 
 Authenticate with your promptfoo account:
 
