@@ -2864,7 +2864,7 @@ function* workflowBodies(workflow: YAMLMap, jobs: YAMLMap): Generator<[string, s
       if (typeof run === 'string') {
         yield [
           context,
-          resolveWorkflowEndpoints(run, [
+          resolveWorkflowBindings(run, [
             step.get('env', true),
             job.get('env', true),
             workflow.get('env', true),
@@ -2887,11 +2887,23 @@ function workflowControls(scope: YAMLMap, children: string): string {
   return sha256(JSON.stringify(fields));
 }
 
-function resolveWorkflowEndpoints(script: string, scopes: unknown[]): string {
+// The static scan carries the source classification, never a secret value or its name.
+const PROTECTED_WORKFLOW_BINDING = '${{secrets._}}';
+
+function workflowBinding(value: unknown): string | undefined {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+  if (value.match(WORKFLOW_SECRET_REFERENCE)?.[0] === value) {
+    return PROTECTED_WORKFLOW_BINDING;
+  }
+  return /^https?:\/\/[^\s'"$`\\]+$/i.test(value) ? value : undefined;
+}
+
+function resolveWorkflowBindings(script: string, scopes: unknown[]): string {
   const resolve = (original: string, key: string): string => {
     const scope = scopes.find((env) => isMap(env) && env.has(key));
-    const value = isMap(scope) && scope.get(key);
-    return typeof value === 'string' && /^https?:\/\/[^\s'"$`\\]+$/i.test(value) ? value : original;
+    return workflowBinding(isMap(scope) && scope.get(key)) ?? original;
   };
   // Workflow expressions expand before the shell interprets quotes. Read the decoded YAML
   // scalar so doubled single quotes and escaped double quotes retain their shell meaning.
@@ -2907,10 +2919,15 @@ function resolveWorkflowEndpoints(script: string, scopes: unknown[]): string {
     while (
       straightLine &&
       (assignment = command.match(
-        /^(?:export[ \t]+)?([A-Za-z_]\w*)=(["']?)(https?:\/\/[^\s'"$`\\;&|<>()]+)\2(?:[ \t]*;(?!;)|[ \t]+#[^\n]*$|[ \t]*$)/,
+        /^(?:export[ \t]+)?([A-Za-z_]\w*)=(["']?)(https?:\/\/[^\s'"$`\\;&|<>()]+|\$\{\{[^}\r\n]+\}\})\2(?:[ \t]*;(?!;)|[ \t]+#[^\n]*$|[ \t]*$)/,
       ))
     ) {
-      locals.set(assignment[1], assignment[3]);
+      const binding = workflowBinding(assignment[3]);
+      if (!binding) {
+        straightLine = false;
+        break;
+      }
+      locals.set(assignment[1], binding);
       command = command.slice(assignment[0].length).trimStart();
     }
     if (
