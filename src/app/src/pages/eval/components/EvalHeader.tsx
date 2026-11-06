@@ -29,7 +29,6 @@ import { EvalIdChip } from './EvalIdChip';
 import EvalSelectorDialog from './EvalSelectorDialog';
 import EvalSelectorKeyboardShortcut from './EvalSelectorKeyboardShortcut';
 import { useTableStore } from './store';
-import { collectUniqueGradingProviders } from './utils';
 import type { ResultLightweightWithLabel } from '@promptfoo/types';
 
 export type ActiveView = 'results' | 'report';
@@ -58,7 +57,16 @@ export default function EvalHeader({
 }: EvalHeaderProps) {
   const { showToast } = useToast();
 
-  const { evalId, author, config, totalResultsCount, stats, table, setAuthor } = useTableStore();
+  const {
+    evalId,
+    author,
+    config,
+    totalResultsCount,
+    stats,
+    table,
+    setAuthor,
+    accumulatedGradingProviders,
+  } = useTableStore();
 
   const { head } = table!;
 
@@ -97,7 +105,8 @@ export default function EvalHeader({
     [head.prompts],
   );
 
-  const uniqueJudges = React.useMemo(() => collectUniqueGradingProviders(table), [table]);
+  // Evaluation-wide (accumulated across paginated fetches), not the current page alone.
+  const uniqueJudges = accumulatedGradingProviders;
 
   const probesCount = React.useMemo(() => {
     return head.prompts[0]?.metrics?.tokenUsage?.numRequests || totalResultsCount;
@@ -268,9 +277,14 @@ export default function EvalHeader({
                     {uniqueProviderCount}
                   </Chip>
                   {uniqueJudges.length > 0 && (
-                    <Chip label="JUDGES" interactive={false} className="max-w-full">
-                      <span className="break-all font-mono text-xs">{uniqueJudges.join(', ')}</span>
-                    </Chip>
+                    <div className="w-full max-w-full rounded-md px-1 py-0.5">
+                      <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                        Judges
+                      </div>
+                      <div className="whitespace-normal break-all font-mono text-xs">
+                        {uniqueJudges.join(', ')}
+                      </div>
+                    </div>
                   )}
                   <Chip label="TESTS" interactive={false}>
                     {totalResultsCount}
@@ -315,9 +329,11 @@ export default function EvalHeader({
                 <span>{uniqueProviderCount}</span>
               </div>
               {uniqueJudges.length > 0 && (
-                <div>
+                <div className="col-span-3">
                   <span className="font-semibold text-gray-700">Judges:</span>{' '}
-                  <span className="font-mono text-xs">{uniqueJudges.join(', ')}</span>
+                  <span className="whitespace-normal break-all font-mono text-xs">
+                    {uniqueJudges.join(', ')}
+                  </span>
                 </div>
               )}
               <div>
