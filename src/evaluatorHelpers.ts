@@ -547,7 +547,7 @@ function collectRawSpans(value: string): Array<[number, number]> {
 
 // Nunjucks comments produce no output, but only outside raw spans and quoted
 // expressions. Track them separately so decoding never renders surrounding data.
-function collectCommentSpans(value: string): Array<[number, number]> {
+function collectCommentSpans(value: string, includeUnterminated = false): Array<[number, number]> {
   const spans: Array<[number, number]> = [];
   const rawSpans = collectRawSpans(value);
   let rawIdx = 0;
@@ -602,6 +602,9 @@ function collectCommentSpans(value: string): Array<[number, number]> {
       i++;
       continue;
     }
+  }
+  if (includeUnterminated && commentStart !== null) {
+    spans.push([commentStart, value.length]);
   }
   return spans;
 }
@@ -672,7 +675,7 @@ function decodeProtectedLiteralFragments(
 ): string {
   const rawSpans = collectRawSpans(value);
   const rawStarts = new Set(rawSpans.map(([start]) => start));
-  const commentSpans = collectCommentSpans(value);
+  const commentSpans = collectCommentSpans(value, true);
   const commentStarts = new Set(commentSpans.map(([start]) => start));
   const protectedSpans: Array<[number, number]> = [...rawSpans, ...commentSpans];
   const nestingDepths = computeNestingDepths(value, rawSpans);
@@ -692,7 +695,8 @@ function decodeProtectedLiteralFragments(
   protectedSpans.sort((left, right) => left[0] - right[0]);
   return mapSpans(value, protectedSpans, (start, end) => {
     if (commentStarts.has(start)) {
-      return '';
+      const comment = value.slice(start, end);
+      return comment.endsWith('#}') ? '' : comment;
     }
     return rawStarts.has(start)
       ? rawSpanLiteralContent(value, start, end)
@@ -831,7 +835,7 @@ function referencesUndefinedVariables(template: string, vars: Record<string, Var
     }
   }
   const setRhsVars: string[] = [];
-  for (const match of scrubbed.matchAll(/\{%\s*(?:-\s*)?set\s+([A-Za-z_]\w*)\s*=\s*([^%]+)%\}/g)) {
+  for (const match of scrubbed.matchAll(/\{%\s*(?:-\s*)?set\s+([A-Za-z_]\w*)\s*=([^%]+)%\}/g)) {
     defined.add(match[1]!);
     // Parse the RHS once and collect real expression references from its AST.
     // A parse failure keeps the previous conservative identifier fallback.

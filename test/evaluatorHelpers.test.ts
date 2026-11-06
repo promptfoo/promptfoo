@@ -1421,8 +1421,22 @@ describe('evaluatorHelpers', () => {
       expect(renderedPrompt).toBe('x!');
     });
 
+    it('should preserve an unterminated comment and its literal-looking suffix as data', async () => {
+      const value = "{# {{ 'x' }}";
+      const renderedPrompt = await renderPrompt(toPrompt('{"text":"{{v}}"}'), { v: value }, {});
+
+      expect(renderedPrompt).toBe(JSON.stringify({ text: value }, null, 2));
+    });
+
     it('should bound deep concatenation traversal without overflowing the stack', async () => {
       const value = `{{ ${'a ~ '.repeat(12000)}a }}`;
+      const renderedPrompt = await renderPrompt(toPrompt('{"text":"{{v}}"}'), { v: value }, {});
+
+      expect(renderedPrompt).toBe(JSON.stringify({ text: value }, null, 2));
+    });
+
+    it('should bound wide external-context traversal without argument spreading', async () => {
+      const value = '{{ 1 }}'.repeat(128000);
       const renderedPrompt = await renderPrompt(toPrompt('{"text":"{{v}}"}'), { v: value }, {});
 
       expect(renderedPrompt).toBe(JSON.stringify({ text: value }, null, 2));
@@ -1605,6 +1619,20 @@ describe('evaluatorHelpers', () => {
         keysSpy.mockRestore();
       }
     }, 30_000);
+
+    it('should avoid overlapping whitespace matching in the set fallback', async () => {
+      const value = '{% raw %}x{% endraw %}{% set local = ' + ' '.repeat(64000);
+      const startedAt = performance.now();
+      const renderedPrompt = await renderPrompt(
+        toPrompt('{"text":"{{other}}"}'),
+        { unused: value, other: 'ok' },
+        {},
+      );
+      const elapsed = performance.now() - startedAt;
+
+      expect(renderedPrompt).toBe(JSON.stringify({ text: 'ok' }, null, 2));
+      expect(elapsed).toBeLessThan(1000);
+    });
 
     it('should keep fallback tag prefix scanning deterministic', async () => {
       const value = `{% raw %}x{% endraw %}{%${' '.repeat(32000)}`;

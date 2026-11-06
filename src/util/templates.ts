@@ -965,7 +965,9 @@ function astLoadsExternalContext(node: unknown): boolean {
     for (const field of current.fields ?? []) {
       const child = current[field];
       if (Array.isArray(child)) {
-        pending.push(...child);
+        for (const item of child) {
+          pending.push(item);
+        }
       } else {
         pending.push(child);
       }
