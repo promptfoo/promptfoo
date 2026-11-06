@@ -653,6 +653,7 @@ export class HuggingfaceTokenExtractionProvider implements ApiProvider {
     };
 
     type TokenClassificationData =
+      | null
       | { error?: string }
       | Array<{ entity_group?: string | null; entity?: string | null; score: number }>;
     let response: FetchWithCacheResult<TokenClassificationData> | undefined;
@@ -673,7 +674,7 @@ export class HuggingfaceTokenExtractionProvider implements ApiProvider {
         getRequestTimeoutMs(),
       );
 
-      if (typeof response.data === 'object' && 'error' in response.data) {
+      if (response.data !== null && typeof response.data === 'object' && 'error' in response.data) {
         return {
           error: `API call error: ${response.data.error}`,
         };

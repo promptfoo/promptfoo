@@ -125,6 +125,13 @@ describe('Hugging Face token classification labels', () => {
     expect(await tokens.callClassificationApi('Alice visits Paris')).toEqual({ classification });
   });
 
+  it('rejects a null response body', async () => {
+    reply(null);
+    expect(await tokens.callClassificationApi('Alice')).toEqual({
+      error: 'Malformed response data: null',
+    });
+  });
+
   it.each([null, { label: 'PER', score: 0.9 }, { entity: 'PER', score: '0.9' }])(
     'rejects malformed tokens: %j',
     async (item) => {
