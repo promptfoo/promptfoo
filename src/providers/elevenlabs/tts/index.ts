@@ -179,6 +179,15 @@ export class ElevenLabsTTSProvider implements ApiProvider {
     }
 
     // Check cache first
+    // Generated dictionaries get new IDs on each provider initialization. Key their
+    // effective rules in a stable field order so identical speech remains reusable.
+    const pronunciationRules = this.config.pronunciationRules?.length
+      ? this.config.pronunciationRules.map((rule) =>
+          rule.phoneme
+            ? { word: rule.word, phoneme: rule.phoneme, alphabet: rule.alphabet ?? 'ipa' }
+            : { word: rule.word, pronunciation: rule.pronunciation },
+        )
+      : undefined;
     const cacheKey = this.cache.generateKey('tts', {
       requestVersion: 4,
       text: prompt,
@@ -188,8 +197,12 @@ export class ElevenLabsTTSProvider implements ApiProvider {
       outputFormat: this.config.outputFormat,
       optimizeStreamingLatency: this.config.optimizeStreamingLatency,
       seed: this.config.seed,
-      pronunciationDictionaryId: this.config.pronunciationDictionaryId,
-      pronunciationDictionaryVersionId: this.config.pronunciationDictionaryVersionId,
+      ...(pronunciationRules
+        ? { pronunciationRules }
+        : {
+            pronunciationDictionaryId: this.config.pronunciationDictionaryId,
+            pronunciationDictionaryVersionId: this.config.pronunciationDictionaryVersionId,
+          }),
     });
 
     const cached = isCacheEnabled() ? await this.cache.get<TTSResponse>(cacheKey) : null;

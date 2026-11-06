@@ -33,6 +33,47 @@ beforeEach(() => vi.resetAllMocks());
 afterEach(() => vi.restoreAllMocks());
 
 describe('ElevenLabs documented request contracts', () => {
+  it('reuses speech across generated dictionary IDs but separates different rules', async () => {
+    vi.mocked(isCacheEnabled).mockReturnValue(true);
+    const entries = new Map<string, unknown>();
+    vi.mocked(getCache).mockReturnValue({
+      get: async (key: string) => entries.get(key),
+      set: async (key: string, value: unknown) => entries.set(key, value),
+    } as unknown as ReturnType<typeof getCache>);
+    let dictionaries = 0;
+    const speech = vi.fn(() => Buffer.from('fixture audio'));
+    vi.mocked(ElevenLabsClient.prototype.post).mockImplementation(async (endpoint) =>
+      endpoint.includes('add-from-file')
+        ? { id: `dictionary-${++dictionaries}`, version_id: 'v1' }
+        : speech(),
+    );
+    const first = new ElevenLabsTTSProvider('elevenlabs:tts:fixture-voice', {
+      config: {
+        apiKey: 'fixture-key',
+        pronunciationRules: [{ word: 'API', pronunciation: 'ay pee eye' }],
+      },
+    });
+    expect(await first.callApi('API')).toMatchObject({ cached: false });
+    const second = new ElevenLabsTTSProvider('elevenlabs:tts:fixture-voice', {
+      config: {
+        apiKey: 'fixture-key',
+        pronunciationRules: [{ pronunciation: 'ay pee eye', word: 'API' }],
+      },
+    });
+    expect(await second.callApi('API')).toMatchObject({ cached: true });
+    expect(first.config.pronunciationDictionaryId).not.toBe(
+      second.config.pronunciationDictionaryId,
+    );
+    const changed = new ElevenLabsTTSProvider('elevenlabs:tts:fixture-voice', {
+      config: {
+        apiKey: 'fixture-key',
+        pronunciationRules: [{ word: 'API', pronunciation: 'application interface' }],
+      },
+    });
+    expect(await changed.callApi('API')).toMatchObject({ cached: false });
+    expect(speech).toHaveBeenCalledTimes(2);
+  });
+
   it('uses the generated dictionary version in the speech request', async () => {
     vi.mocked(ElevenLabsClient.prototype.post)
       .mockResolvedValueOnce({ id: 'created-dict', version_id: 'created-version' })
