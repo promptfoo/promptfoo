@@ -261,6 +261,7 @@ export const handleRedteam = async (
           renderedValue,
           assertionValueContext.trace,
           redteamHistory?.length,
+          effectivePrompt,
         )
       : storedResult;
 

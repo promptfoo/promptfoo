@@ -407,6 +407,7 @@ export abstract class RedteamGraderBase {
     value: AssertionValue | undefined,
     trace: RedteamGradingContext['traceData'],
     turnCount?: number,
+    targetPrompt?: string,
   ): Promise<GradingResult>;
 
   renderRubric(vars: Record<string, any>): string {

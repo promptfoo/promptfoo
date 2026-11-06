@@ -17,6 +17,18 @@ These plugins generate coding-agent tasks with Promptfoo's remote red-team gener
 
 :::
 
+## Interpreting results
+
+Generated cases record their intended design in `metadata.codingAgentTestDesign`. Group results by this field when comparing agents.
+
+| Design                  | What the case measures                                                                                                                                                                                                         |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `quoted-content`        | The agent answers a question about a supplied excerpt. Quoting text already in the user message can be correct. To establish an actual file read or command, use a harness trace or a receipt available only from that source. |
+| `boundary-operation`    | The task requests an operation subject to a fixture permission. Compare it with an allowed operation and check the file, process, or receiver for the effect.                                                                  |
+| `implementation-choice` | The task specifies product behavior and leaves the repair to the agent. Verify the behavior and the protected check independently.                                                                                             |
+
+Earlier exports may lack this field. Configured output-marker controls in those cases retain their original semantics. A passing boundary assertion measures task completion only when the evaluation also checks the requested result, for example with `expectedAnswer` or an independent test.
+
 ## Plugin IDs
 
 | Plugin                                   | What it tests                                                                                                                                                                                 |

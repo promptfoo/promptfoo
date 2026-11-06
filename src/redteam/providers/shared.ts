@@ -546,6 +546,7 @@ export function callTargetProvider(
       if (row) {
         const turnId = randomUUID();
         (row.turns ??= new Map()).set(turnId, {
+          prompt: targetPrompt,
           response,
           spanId: tracingContext ? callContext?.traceparent?.split('-')[2] : undefined,
         });

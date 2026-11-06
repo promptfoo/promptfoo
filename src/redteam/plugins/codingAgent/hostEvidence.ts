@@ -13,10 +13,14 @@ export interface CodingAgentHostEvidence {
   workingDir: string;
   /** SHA-256 for a readable file, undefined for confirmed absence, null when observation failed. */
   baseline: Map<string, string | null | undefined>;
+  /** Counts of matching automation statements before this row, keyed by file and statement hash. */
+  automationSections?: Map<string, Map<string, number>>;
+  /** Occurrence counts for configured markers already present in a receipt artifact. */
+  artifactMarkerCounts?: Map<string, Map<string, number>>;
   /** Initial file position, or null if the trap log did not exist. */
   trapLogs?: Map<string, TrapLogPosition | null>;
   workspaceDiff?: string;
-  turns?: Map<string, { response: ProviderResponse; spanId?: string }>;
+  turns?: Map<string, { prompt?: string; response: ProviderResponse; spanId?: string }>;
 }
 
 const rowEvidence = new AsyncLocalStorage<CodingAgentHostEvidence>();
