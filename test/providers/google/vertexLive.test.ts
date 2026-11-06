@@ -281,6 +281,69 @@ describe('VertexLiveProvider', () => {
     });
   });
 
+  it.each(
+    ['google', 'vertex'].flatMap((prefix) =>
+      [0, 1, 2].map((completionAfter) => ({ prefix, completionAfter })),
+    ),
+  )(
+    'retains all speech on $prefix when turnComplete follows $completionAfter transcript segments',
+    async ({ prefix, completionAfter }) => {
+      const provider =
+        prefix === 'vertex'
+          ? new VertexLiveProvider(liveTranscribe, {})
+          : new GoogleLiveProvider(liveTranscribe, { config: { apiKey: 'test-key' } });
+      const { result } = await start(provider, recording);
+      const segments = ['First segment.', 'Second segment.'];
+      for (let index = 0; index <= segments.length; index++) {
+        if (index === completionAfter) {
+          await emit({ serverContent: { turnComplete: true, interactionStatus: 'IDLE' } });
+        }
+        if (index < segments.length) {
+          await emit({ serverContent: { inputTranscription: { text: segments[index] } } });
+        }
+      }
+      await vi.advanceTimersByTimeAsync(4_000);
+      const response = await result;
+      expect(response.error).toBeUndefined();
+      expect(response.output).toMatchObject({ text: 'First segment.\nSecond segment.' });
+      expect(ws.close).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it.each(['google', 'vertex'])(
+    'waits for trailing speech before sending the next recording on %s',
+    async (prefix) => {
+      const provider =
+        prefix === 'vertex'
+          ? new VertexLiveProvider(liveTranscribe, {})
+          : new GoogleLiveProvider(liveTranscribe, { config: { apiKey: 'test-key' } });
+      const recordings = JSON.stringify([...JSON.parse(recording), ...JSON.parse(recording)]);
+      const { result } = await start(provider, recordings);
+      await emit({ serverContent: { inputTranscription: { text: 'First recording.' } } });
+      await emit({ serverContent: { turnComplete: true, interactionStatus: 'IDLE' } });
+      expect(sent()).toHaveLength(3);
+      await emit({ serverContent: { inputTranscription: { text: 'Trailing speech.' } } });
+      await vi.advanceTimersByTimeAsync(4_000);
+      expect(sent().slice(3)).toEqual([
+        { realtimeInput: { audio: { mimeType: 'audio/pcm;rate=16000', data: 'AAAAAA==' } } },
+        { realtimeInput: { audioStreamEnd: true } },
+      ]);
+
+      await emit({ serverContent: { turnComplete: true, interactionStatus: 'IDLE' } });
+      expect(ws.close).not.toHaveBeenCalled();
+      expect(sent()).toHaveLength(5);
+      await emit({ serverContent: { inputTranscription: { text: 'Second recording.' } } });
+      await vi.advanceTimersByTimeAsync(4_000);
+      const response = await result;
+      expect(response.error).toBeUndefined();
+      expect(response.output).toMatchObject({
+        text: 'First recording.\nTrailing speech.\nSecond recording.',
+      });
+      expect(sent()).toHaveLength(5);
+      expect(ws.close).toHaveBeenCalledTimes(1);
+    },
+  );
+
   it.each([
     [
       {},

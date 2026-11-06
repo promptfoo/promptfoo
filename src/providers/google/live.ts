@@ -1574,9 +1574,12 @@ export class GoogleLiveProvider implements ApiProvider {
             let hasMeaningfulLiveTranslateOutput = false;
             // Only IDLE ends an Extended Thinking input; an earlier queued IDLE may
             // describe the state before the latest tool response.
-            const inputComplete = usesInteractionStatus
-              ? interactionComplete && messageIndex > lastToolResponseMessageIndex
-              : serverContent.turnComplete;
+            // Input transcripts can follow turnComplete; their quiet timer advances recordings.
+            const inputComplete =
+              !isLiveTranscribe &&
+              (usesInteractionStatus
+                ? interactionComplete && messageIndex > lastToolResponseMessageIndex
+                : serverContent.turnComplete);
             const hasModelOutput =
               Boolean(serverContent.modelTurn?.parts?.length) ||
               Boolean(serverContent.outputTranscription?.text) ||
