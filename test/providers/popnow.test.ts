@@ -225,5 +225,13 @@ describe('PopNow', () => {
       expect(provider.getApiKey()).toBe('env-override-key');
       expect(provider.id()).toBe('popnow:anthropic/claude-sonnet-5.5/chat');
     });
+
+    it.each([
+      'popnow:google/nano-banana-2.1/text-to-image',
+      'popnow:openai/text-embedding-3-small/embedding',
+      'popnow:openai/gpt-6.1-terra',
+    ])('should reject non-chat model %s', (providerPath) => {
+      expect(() => createPopNowProvider(providerPath)).toThrow(/only chat models/);
+    });
   });
 });

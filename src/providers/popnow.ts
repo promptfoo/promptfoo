@@ -48,6 +48,11 @@ export function createPopNowProvider(
   options: { config?: ProviderOptions; env?: EnvOverrides } = {},
 ): ApiProvider {
   const modelName = providerPath.split(':').slice(1).join(':');
+  if (!POPNOW_TASK_SUFFIX.test(modelName)) {
+    throw new Error(
+      `Unsupported PopNow model "${modelName}": only chat models (ids ending in /chat) are available through this provider.`,
+    );
+  }
   return new PopNowProvider(modelName, {
     ...options.config,
     env: options.config?.env ?? options.env,
