@@ -50,6 +50,9 @@ export async function countUncommittedFiles(repoPath: string): Promise<number> {
   const records = stdout.split('\0');
   let count = 0;
   for (let i = 0; i < records.length && records[i]; i++) {
+    if (records[i].startsWith('# ')) {
+      continue; // Porcelain v2 headers describe repository state, not files.
+    }
     count++;
     if (records[i].startsWith('2 ')) {
       i++; // A rename or copy has a second NUL-delimited path.

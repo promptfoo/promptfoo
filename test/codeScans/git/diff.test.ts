@@ -30,16 +30,25 @@ describe('Git branch selection', () => {
 });
 
 describe('dirty file count', () => {
-  it('counts a renamed file once and treats the original name as a literal path', async () => {
-    vi.mocked(runCommand).mockResolvedValue({
-      stdout: [
-        '2 R. N... 100644 100644 100644 a b R100 new name',
-        '2 old\nname',
-        '? other',
-        '',
-      ].join('\0'),
-      stderr: '',
-    });
-    await expect(countUncommittedFiles('/repo')).resolves.toBe(2);
+  it('ignores the stash header from a clean worktree with status.showStash enabled', async () => {
+    vi.mocked(runCommand).mockResolvedValue({ stdout: '# stash 1\0', stderr: '' });
+    await expect(countUncommittedFiles('/repo')).resolves.toBe(0);
   });
+
+  it.each(['2 old\nname', '# original'])(
+    'treats the rename source %j as a literal path',
+    async (source) => {
+      vi.mocked(runCommand).mockResolvedValue({
+        stdout: [
+          '# stash 1',
+          '2 R. N... 100644 100644 100644 a b R100 # destination',
+          source,
+          '? # other',
+          '',
+        ].join('\0'),
+        stderr: '',
+      });
+      await expect(countUncommittedFiles('/repo')).resolves.toBe(2);
+    },
+  );
 });
