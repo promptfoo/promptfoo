@@ -20,6 +20,14 @@ describe('Git blob text detection', () => {
     }
   });
 
+  it('checks the entire trailing sample when it starts inside a Unicode character', () => {
+    const bytes = Buffer.alloc(128, 65);
+    bytes.write('😀', 101);
+    expect(isTextBlob(bytes)).toBe(true);
+    bytes[127] = 0;
+    expect(isTextBlob(bytes)).toBe(false);
+  });
+
   it('recognizes a replacement character and a truncated multibyte sequence', () => {
     expect(isTextBlob(Buffer.from('abc\uFFFD'))).toBe(false);
     expect(isTextBlob(Buffer.from([0xf0, 0x9f, 0x98]))).toBe(false);

@@ -28,8 +28,9 @@ export function isTextBlob(bytes: Buffer): boolean {
   const size = 24;
   const middle = Math.floor(bytes.length / 2);
   return [0, middle - size, bytes.length - size].every((offset) => {
-    const start = utf8Boundary(bytes, Math.max(0, offset), 'start');
-    const end = utf8Boundary(bytes, Math.min(start + size, bytes.length), 'end');
+    const sampleStart = Math.max(0, offset);
+    const start = utf8Boundary(bytes, sampleStart, 'start');
+    const end = utf8Boundary(bytes, Math.min(sampleStart + size, bytes.length), 'end');
     // Buffer decodes malformed UTF-8 as U+FFFD. Tabs, newlines and CR are valid text.
     return end <= bytes.length && !/[\x00-\x08\uFFFD]/u.test(bytes.toString('utf8', start, end));
   });
