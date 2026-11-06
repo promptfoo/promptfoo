@@ -442,8 +442,9 @@ const DELAYED_CI_AUTOMATION_PATH_PATTERNS = [
   /(?:^|\/)\.git\/hooks\/[^/\s]+$/i,
 ];
 
+const WORKFLOW_SECRET_REFERENCE = /\$\{\{\s*secrets\.[A-Za-z0-9_.-]+\s*\}\}/i;
 const DELAYED_CI_SECRET_REFERENCE_PATTERNS = [
-  /\$\{\{\s*secrets\.[A-Za-z0-9_.-]+\s*\}\}/i,
+  WORKFLOW_SECRET_REFERENCE,
   /\b(?:process\.env|os\.environ|ENV\[|getenv\s*\(|secretKeyRef)\b/i,
   /\b(?:GITHUB_TOKEN|CI_JOB_TOKEN|ACTIONS_ID_TOKEN_REQUEST_TOKEN|NPM_TOKEN|PYPI_TOKEN|AWS_SECRET_ACCESS_KEY|OPENAI_API_KEY)\b/i,
 ];
@@ -2610,6 +2611,31 @@ function textContainsDelayedCiNetworkBehavior(text: string): RegExp | undefined 
   );
 }
 
+// A header option carries only its argument. Secrets in other options or a comment do not travel in that header.
+function hasSecretRequestHeader(action: string): boolean {
+  const headerOptions =
+    /"(?:\\.|[^"\\])*"|'[^']*'|(?:^|\s)#.*|(?:^|\s)(?:-H\s*|--header(?:=|\s+))(?:"((?:\\.|[^"\\])*)"|'([^']*)'|([^\s]+))/g;
+  for (const [, doubleQuoted, singleQuoted, bare] of action.matchAll(headerOptions)) {
+    const header: string | undefined = doubleQuoted ?? singleQuoted ?? bare;
+    const separator = header?.indexOf(':') ?? -1;
+    if (!header || separator < 1) {
+      continue;
+    }
+    const value = header.slice(separator + 1);
+    // Workflow expressions expand before shell quoting; shell variables expand only outside single quotes.
+    if (
+      WORKFLOW_SECRET_REFERENCE.test(value) ||
+      (singleQuoted === undefined &&
+        Array.from(value.matchAll(/(?<!\\)\$\{?(\w+)/g)).some(([, variable]) =>
+          textContainsSecretReference(variable),
+        ))
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
 /** Group folded YAML commands and multiline client calls before checking their arguments. */
 function* ciActions(content: string): Generator<string> {
   const source = content
@@ -2620,7 +2646,7 @@ function* ciActions(content: string): Generator<string> {
     );
   // Quoted strings are single tokens, so punctuation inside an argument cannot end a call.
   const tokens =
-    /"(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*'|`(?:\\.|[^`\\])*`|\b(?:fetch|(?:requests|axios|https?|client)\.\w+)\s*\(|&&|\|\||[();\n]/gi;
+    /"(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*'|`(?:\\.|[^`\\])*`|\b(?:fetch|(?:requests|axios|https?|client)\.\w+)\s*\(|&&|\|\|?|[();\n]/gi;
   let depth = 0;
   let start = 0;
   for (const token of source.matchAll(tokens)) {
@@ -2629,7 +2655,7 @@ function* ciActions(content: string): Generator<string> {
       depth++;
     } else if (value === ')' && depth) {
       depth--;
-    } else if (!depth && [';', '\n', '&&', '||'].includes(value)) {
+    } else if (!depth && [';', '\n', '&&', '||', '|'].includes(value)) {
       yield source.slice(start, token.index);
       start = token.index + value.length;
     }
@@ -2670,6 +2696,7 @@ function textContainsDelayedCiExfil(
     if (
       configuredTrap ||
       secretInUrl ||
+      (target && hasSecretRequestHeader(line)) ||
       (sendsData && (target || textContainsSecretReference(line)))
     ) {
       return { heuristicPattern, target };
