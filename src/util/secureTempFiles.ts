@@ -27,7 +27,7 @@ export async function createSecureTempDirectory(prefix: string): Promise<string>
 export async function writeSecureTempFile(
   directory: string,
   filename: string,
-  contents: string,
+  contents: string | Buffer,
 ): Promise<string> {
   if (!isSimpleLeafName(filename)) {
     throw new Error('Secure temporary file names must be simple leaf names');

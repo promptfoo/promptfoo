@@ -207,7 +207,6 @@
     "@types/node": "^26.0.0",
     "@types/nunjucks": "^3.2.6",
     "@types/opener": "^1.4.3",
-    "@types/pem": "^1.14.4",
     "@types/proxy-from-env": "^1.0.4",
     "@types/semver": "^7.7.1",
     "@types/source-map-support": "^0.5.10",
@@ -257,7 +256,6 @@
     "natural": "^8.2.3",
     "node-sql-parser": "^5.4.0",
     "pdf-parse": "^2.4.5",
-    "pem": "~1.14.8",
     "read-excel-file": "^9.3.9",
     "sharp": "^0.35.5"
   },

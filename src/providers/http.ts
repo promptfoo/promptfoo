@@ -37,6 +37,7 @@ import { safeJsonStringify } from '../util/json';
 import { TOKEN_REFRESH_BUFFER_MS } from '../util/oauth';
 import { optionalPackageInstallHint } from '../util/packageImportErrors';
 import { safeResolve } from '../util/pathUtils';
+import { readPfxPrivateKey } from '../util/pfx';
 import {
   isSecretField,
   looksLikeSecret,
@@ -525,80 +526,16 @@ export async function generateSignature(
             );
           }
 
-          try {
-            // Use eval to avoid TypeScript static analysis of the dynamic import
-            const pemModule = await import('pem').catch(() => {
-              throw new Error(
-                'PFX certificate support requires the "pem" package. Install it with: npm install pem',
-              );
-            });
-
-            const pem = pemModule.default as any;
-
-            let pfxInput: Buffer | string;
-
-            if (signatureAuth.pfxContent || signatureAuth.certificateContent) {
-              // Use base64 encoded content from database
-              const content = signatureAuth.pfxContent || signatureAuth.certificateContent;
-              logger.debug(`[Signature Auth] Loading PFX from base64 content`);
-              const pfxBuffer = Buffer.from(content, 'base64');
-
-              logger.debug(
-                `[Signature Auth][PFX] Base64 content length: ${content.length}, decoded bytes: ${pfxBuffer.byteLength}`,
-              );
-
-              pfxInput = pfxBuffer;
-            } else {
-              // Use file path (existing behavior)
-              const resolvedPath = safeResolve(cliState.basePath || '', signatureAuth.pfxPath);
-              logger.debug(`[Signature Auth] Loading PFX file: ${resolvedPath}`);
-              try {
-                const stat = await fs.stat(resolvedPath);
-                logger.debug(`[Signature Auth][PFX] PFX file size: ${stat.size} bytes`);
-              } catch (e) {
-                logger.debug(`[Signature Auth][PFX] Could not stat PFX file: ${String(e)}`);
-              }
-
-              pfxInput = resolvedPath;
+          if (hasPfxContent) {
+            keySource = 'pfxContent';
+            privateKey = await readPfxPrivateKey(Buffer.from(hasPfxContent, 'base64'), pfxPassword);
+          } else {
+            const resolvedPath = safeResolve(cliState.basePath || '', signatureAuth.pfxPath);
+            if (!(await pathExists(resolvedPath))) {
+              throw new Error(`PFX file not found: ${resolvedPath}`);
             }
-
-            const result = await new Promise<{ key: string; cert: string }>((resolve, reject) => {
-              pem.readPkcs12(pfxInput, { p12Password: pfxPassword }, (err: any, data: any) => {
-                if (err) {
-                  reject(err);
-                } else {
-                  resolve(data);
-                }
-              });
-            });
-
-            if (!result.key) {
-              logger.error('[Signature Auth][PFX] No private key extracted from PFX');
-              throw new Error('No private key found in PFX file');
-            }
-
-            privateKey = result.key;
-            keySource =
-              signatureAuth.pfxContent || signatureAuth.certificateContent
-                ? 'pfxContent'
-                : `pfxPath ${safeResolve(cliState.basePath || '', signatureAuth.pfxPath)}`;
-            logger.debug(
-              `[Signature Auth] Successfully extracted private key from PFX using pem library`,
-            );
-          } catch (err) {
-            if (err instanceof Error) {
-              if (err.message.includes('ENOENT') && signatureAuth.pfxPath) {
-                const resolvedPath = safeResolve(cliState.basePath || '', signatureAuth.pfxPath);
-                throw new Error(`PFX file not found: ${resolvedPath}`);
-              }
-              if (err.message.includes('invalid') || err.message.includes('decrypt')) {
-                throw new Error(`Invalid PFX file format or wrong password: ${err.message}`);
-              }
-            }
-            logger.error(`Error loading PFX certificate: ${String(err)}`);
-            throw new Error(
-              `Failed to load PFX certificate. Make sure the ${signatureAuth.pfxContent || signatureAuth.certificateContent ? 'content is valid' : 'file exists'} and the password is correct: ${String(err)}`,
-            );
+            keySource = `pfxPath ${resolvedPath}`;
+            privateKey = await readPfxPrivateKey(resolvedPath, pfxPassword);
           }
         } else if (hasCertAndKey) {
           try {
