@@ -1041,6 +1041,34 @@ describe('Anthropic utilities', () => {
   });
 
   describe('parseMessages', () => {
+    it.each(['data', 'DATA', 'dAtA'])('extracts image base64 from the %s URL scheme', (scheme) => {
+      const { extractedMessages } = parseMessages(
+        JSON.stringify([
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'image',
+                source: { type: 'base64', data: `${scheme}:image/png;base64,aBcD+/==` },
+              },
+            ],
+          },
+        ]),
+      );
+
+      expect(extractedMessages).toEqual([
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'image',
+              source: { type: 'base64', media_type: 'image/png', data: 'aBcD+/==' },
+            },
+          ],
+        },
+      ]);
+    });
+
     it('should parse messages with user and assistant roles', () => {
       const inputMessages = dedent`user: What is the weather?
           assistant: The weather is sunny.`;
