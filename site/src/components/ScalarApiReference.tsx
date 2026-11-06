@@ -23,6 +23,7 @@ type ScalarWindow = Window & {
 };
 
 type ScalarApiReferenceProps = {
+  children?: React.ReactNode;
   description: string;
   heading: string;
   hideTestRequestButton?: boolean;
@@ -30,6 +31,7 @@ type ScalarApiReferenceProps = {
 };
 
 export default function ScalarApiReference({
+  children,
   description,
   heading,
   hideTestRequestButton = false,
@@ -105,6 +107,7 @@ export default function ScalarApiReference({
           <a href={specUrl}>OpenAPI JSON</a>
           {loadState === 'error' && <p role="alert">The interactive reference failed to load.</p>}
         </header>
+        {children}
         <div aria-busy={loadState === 'loading'} id={SCALAR_CONTAINER_ID}></div>
       </main>
     </Layout>

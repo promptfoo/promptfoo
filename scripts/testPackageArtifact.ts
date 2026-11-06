@@ -1642,6 +1642,13 @@ async function main(): Promise<void> {
         );
       }
     }
+    if (values.profile === 'default') {
+      console.log(
+        await timeAsyncPhase('check installed HTTP quickstart', () =>
+          runAsync(process.execPath, ['http-quickstart.mjs'], consumerDir, consumerEnv),
+        ),
+      );
+    }
     await timeAsyncPhase('check optional JKS support', () =>
       runOptionalJksChecks(consumerDir, configDir, consumerNpmEnv, values.profile === 'default'),
     );
