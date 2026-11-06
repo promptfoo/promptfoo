@@ -38,6 +38,7 @@ describe('VertexLiveProvider', () => {
       GOOGLE_CLOUD_PROJECT: '',
       VERTEX_REGION: '',
       GOOGLE_CLOUD_LOCATION: '',
+      VERTEX_API_VERSION: '',
     });
     vi.resetAllMocks();
     vi.useFakeTimers();
@@ -159,6 +160,28 @@ describe('VertexLiveProvider', () => {
     expect(response.output).toMatchObject({ text: 'Hello' });
     expect(ws.close).toHaveBeenCalled();
   });
+
+  it.each([
+    [{ env: { VERTEX_API_VERSION: 'v1beta1' } }, 'v1', 'v1beta1'],
+    [{}, 'v1beta1', 'v1beta1'],
+    [{ config: { apiVersion: 'v1' }, env: { VERTEX_API_VERSION: 'v1beta1' } }, 'v1beta1', 'v1'],
+    [{ env: { VERTEX_API_VERSION: '' } }, 'v1beta1', 'v1'],
+  ] as const)(
+    'resolves the API version from %j with process version %s',
+    async (options, processVersion, apiVersion) => {
+      const restoreVersion = mockProcessEnv({ VERTEX_API_VERSION: processVersion });
+      try {
+        const { result } = await start(new VertexLiveProvider(model, options as ProviderOptions));
+        expect(vi.mocked(WebSocket).mock.calls[0][0]).toBe(
+          `wss://us-central1-aiplatform.googleapis.com/ws/google.cloud.aiplatform.${apiVersion}.LlmBidiService/BidiGenerateContent`,
+        );
+        await complete();
+        expect((await result).error).toBeUndefined();
+      } finally {
+        restoreVersion();
+      }
+    },
+  );
 
   it.each([
     [{ config: { projectId: 'explicit', region: 'europe-west4' } }, 'explicit', 'europe-west4'],
@@ -327,7 +350,11 @@ describe('VertexLiveProvider', () => {
     'preserves Google Cloud aliases through parsed %s config and provider loading',
     async (source) => {
       const id = `vertex:live:${model}`;
-      const env = { GOOGLE_CLOUD_PROJECT: 'parsed-project', GOOGLE_CLOUD_LOCATION: 'europe-west4' };
+      const env = {
+        GOOGLE_CLOUD_PROJECT: 'parsed-project',
+        GOOGLE_CLOUD_LOCATION: 'europe-west4',
+        VERTEX_API_VERSION: 'v1beta1',
+      };
       const options =
         source === 'provider'
           ? ProviderOptionsSchema.parse({ id, env })
@@ -350,6 +377,7 @@ describe('VertexLiveProvider', () => {
       expect(vi.mocked(WebSocket).mock.calls[0][0]).toContain(
         'wss://europe-west4-aiplatform.googleapis.com/',
       );
+      expect(vi.mocked(WebSocket).mock.calls[0][0]).toContain('aiplatform.v1beta1.');
     },
   );
 
@@ -381,14 +409,29 @@ describe('VertexLiveProvider', () => {
     expect(WebSocket).not.toHaveBeenCalled();
   });
 
-  it.each([{ apiVersion: 'v1alpha' }, { apiVersion: 'v1beta' }, { region: 'example.com/path' }])(
-    'rejects invalid endpoint config %j before requesting credentials',
-    async (config) => {
-      await expect(new VertexLiveProvider(model, { config }).callApi('Hello')).rejects.toThrow(
-        'Vertex Live',
-      );
-      expect(mockAuth).not.toHaveBeenCalled();
-      expect(WebSocket).not.toHaveBeenCalled();
+  const invalidApiVersion = 'Vertex Live apiVersion must be v1 or v1beta1.';
+  it.each([
+    [{ config: { apiVersion: 'v1alpha' } }, '', invalidApiVersion],
+    [{ config: { apiVersion: 'v1beta' } }, '', invalidApiVersion],
+    [
+      { config: { region: 'example.com/path' } },
+      '',
+      'Vertex Live region must be a Google Cloud location ID.',
+    ],
+    [{ env: { VERTEX_API_VERSION: 'v1alpha' } }, '', invalidApiVersion],
+    [{}, 'v1beta', invalidApiVersion],
+  ] as const)(
+    'rejects invalid endpoint options %j with process version %s before requesting credentials',
+    async (options, processVersion, message) => {
+      const restoreVersion = mockProcessEnv({ VERTEX_API_VERSION: processVersion });
+      try {
+        const provider = new VertexLiveProvider(model, options);
+        await expect(provider.callApi('Hello')).rejects.toThrow(message);
+        expect(mockAuth).not.toHaveBeenCalled();
+        expect(WebSocket).not.toHaveBeenCalled();
+      } finally {
+        restoreVersion();
+      }
     },
   );
 
