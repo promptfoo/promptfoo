@@ -2124,7 +2124,31 @@
             "application/json": {
               "schema": {
                 "type": "object",
-                "properties": { "pass": { "type": "boolean" }, "score": { "type": "number" } },
+                "properties": {
+                  "pass": { "type": "boolean" },
+                  "score": { "type": "number" },
+                  "componentResults": {
+                    "type": ["array", "null"],
+                    "items": {
+                      "type": ["object", "null"],
+                      "properties": {
+                        "pass": { "type": "boolean" },
+                        "assertion": {
+                          "type": ["object", "null"],
+                          "properties": { "metricOnly": {} },
+                          "additionalProperties": {}
+                        },
+                        "metadata": {
+                          "type": ["object", "null"],
+                          "properties": { "metricOnly": {} },
+                          "additionalProperties": {}
+                        }
+                      },
+                      "required": ["pass"],
+                      "additionalProperties": {}
+                    }
+                  }
+                },
                 "required": ["pass", "score"],
                 "additionalProperties": {}
               }

@@ -11,8 +11,7 @@ import {
   resolveImageSource,
   resolveVideoSource,
 } from '@app/utils/media';
-import { type EvaluateTableOutput, type GradingResult, type ImageOutput } from '@promptfoo/types';
-import { ResultFailureReason } from '@promptfoo/types/results';
+import { countedComponentResults, ResultFailureReason } from '@promptfoo/types/results';
 import { getActualPrompt } from '@promptfoo/util/providerResponse';
 import { diffJson, diffSentences, diffWords } from 'diff';
 import {
@@ -45,6 +44,7 @@ import {
   setEvalDetailsHash,
   useEvalDetailsHash,
 } from './utils';
+import type { EvaluateTableOutput, GradingResult, ImageOutput } from '@promptfoo/types';
 
 type CSSPropertiesWithCustomVars = React.CSSProperties & {
   [key: `--${string}`]: string | number;
@@ -232,23 +232,37 @@ function getFailAndPassReasons(output: EvaluateTableOutput): {
   failReasons: string[];
   passReasons: string[];
 } {
-  const failReasons =
-    output.gradingResult?.componentResults
-      ?.filter((result) => (result ? !result.pass : false))
-      .map((result) => result.reason)
-      .filter((reason) => reason) ?? [];
+  // Metric-only outcomes stay out of the aggregate reason lists; they remain
+  // visible in the per-assertion details.
+  const countedResults = countedComponentResults(output.gradingResult?.componentResults);
 
-  const passReasons =
-    output.gradingResult?.componentResults
-      ?.filter((result) => (result ? result.pass : false))
-      .map((result) => result.reason)
-      .filter((reason) => reason) ?? [];
+  const failReasons = countedResults
+    .filter((result) => !result.pass)
+    .map((result) => result.reason)
+    .filter((reason) => reason);
+
+  const passReasons = countedResults
+    .filter((result) => result.pass)
+    .map((result) => result.reason)
+    .filter((reason) => reason);
 
   if (output.error && output.failureReason === ResultFailureReason.ERROR) {
     return {
       failReasons: [output.error, ...failReasons],
       passReasons,
     };
+  }
+
+  // A failing row can have no counted failing assertions (e.g. an
+  // all-metricOnly test failing a test-level threshold); fall back to the
+  // aggregate grading reason so the failure is still explained.
+  if (
+    !output.pass &&
+    failReasons.length === 0 &&
+    (output.gradingResult?.componentResults?.length ?? 0) > 0 &&
+    output.gradingResult?.reason
+  ) {
+    return { failReasons: [output.gradingResult.reason], passReasons };
   }
 
   return { failReasons, passReasons };
@@ -605,10 +619,12 @@ function getPassFailCounts(output: EvaluateTableOutput): {
   let passCount = 0;
   let failCount = 0;
 
-  const componentResults = output.gradingResult?.componentResults;
-  if (componentResults?.length) {
+  // Metric-only assertions are excluded from the aggregate pill counts. If
+  // every assertion is metric-only, fall through to the overall grading result.
+  const componentResults = countedComponentResults(output.gradingResult?.componentResults);
+  if (componentResults.length) {
     componentResults.forEach((result) => {
-      if (result?.pass) {
+      if (result.pass) {
         passCount++;
       } else {
         failCount++;
@@ -620,6 +636,12 @@ function getPassFailCounts(output: EvaluateTableOutput): {
   } else if (output.pass === true) {
     passCount = 1;
   } else if (output.pass === false) {
+    failCount = 1;
+  }
+
+  // A test threshold can fail even when every counted assertion passes.
+  if (output.pass === false && failCount === 0) {
+    passCount = 0;
     failCount = 1;
   }
 
@@ -927,7 +949,10 @@ function renderCellDetail({
 }
 
 function getStatusClass(output: EvaluateTableOutput, counts: ReturnType<typeof getPassFailCounts>) {
-  return output.pass === true || (counts.passCount > 0 && counts.failCount === 0) ? 'pass' : 'fail';
+  return output.pass === true ||
+    (output.pass !== false && counts.passCount > 0 && counts.failCount === 0)
+    ? 'pass'
+    : 'fail';
 }
 
 function renderStatusBlock({
