@@ -652,22 +652,16 @@ export class HuggingfaceTokenExtractionProvider implements ApiProvider {
       },
     };
 
-    interface HuggingfaceTokenClassificationResponse {
-      error?: string;
-    }
-
-    let response:
-      | FetchWithCacheResult<
-          HuggingfaceTokenClassificationResponse | Array<{ entity_group: string; score: number }>
-        >
-      | undefined;
+    type TokenClassificationData =
+      | null
+      | { error?: string }
+      | Array<{ entity_group?: string | null; entity?: string | null; score: number }>;
+    let response: FetchWithCacheResult<TokenClassificationData> | undefined;
     try {
       const url = this.config.apiEndpoint
         ? this.config.apiEndpoint
         : `${HF_INFERENCE_API_URL}/models/${this.modelName}`;
-      response = await fetchWithCache<
-        HuggingfaceTokenClassificationResponse | Array<{ entity_group: string; score: number }>
-      >(
+      response = await fetchWithCache<TokenClassificationData>(
         url,
         {
           method: 'POST',
@@ -680,7 +674,7 @@ export class HuggingfaceTokenExtractionProvider implements ApiProvider {
         getRequestTimeoutMs(),
       );
 
-      if (typeof response.data === 'object' && 'error' in response.data) {
+      if (response.data !== null && typeof response.data === 'object' && 'error' in response.data) {
         return {
           error: `API call error: ${response.data.error}`,
         };
@@ -691,14 +685,15 @@ export class HuggingfaceTokenExtractionProvider implements ApiProvider {
         };
       }
 
-      // Take the highest score of each entity group
-      const classification: Record<string, number> = {};
+      const scores = new Map<string, number>();
       for (const item of response.data) {
-        if (!classification[item.entity_group] || classification[item.entity_group] < item.score) {
-          classification[item.entity_group] = item.score;
+        const label = item?.entity_group ?? item?.entity;
+        if (typeof label !== 'string' || !label || !Number.isFinite(item.score)) {
+          return { error: `Malformed response data: ${JSON.stringify(item)}` };
         }
+        scores.set(label, Math.max(scores.get(label) ?? -Infinity, item.score));
       }
-      return { classification };
+      return { classification: Object.fromEntries(scores) };
     } catch (err) {
       return {
         error: `API call error: ${String(err)}. Output:\n${response?.data}`,
