@@ -1,3 +1,4 @@
+import { BedrockRuntime } from '@aws-sdk/client-bedrock-runtime';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AwsBedrockEmbeddingProvider } from '../../../src/providers/bedrock/index';
 
@@ -7,7 +8,7 @@ function mockEmbedding(model: string, data: unknown, inputType?: 'search_query')
     config: { region: 'us-east-1', input_type: inputType },
   });
   const invokeModel = vi.fn().mockResolvedValue({
-    body: { transformToString: () => JSON.stringify(data) },
+    body: { transformToString: vi.fn().mockReturnValueOnce(JSON.stringify(data)) },
   });
   vi.spyOn(provider, 'getBedrockInstance').mockResolvedValue({ invokeModel } as any);
   return { provider, invokeModel };
@@ -54,25 +55,58 @@ describe('AwsBedrockEmbeddingProvider wire contract', () => {
     expect(JSON.parse(invokeModel.mock.calls[0][0].body)).toEqual({ inputText: 'A quiet garden' });
   });
 
-  it('uses the Nova single-text schema and configured purpose/dimensions', async () => {
-    const { provider, invokeModel } = mockEmbedding('amazon.nova-2-multimodal-embeddings-v1:0', {
-      embeddings: [{ embeddingType: 'TEXT', embedding: [0.1, 0.2] }],
-    });
-    Object.assign(provider.config, {
-      embeddingPurpose: 'TEXT_RETRIEVAL',
-      embeddingDimension: 256,
-      truncationMode: 'NONE',
-    });
-    expect(await provider.callEmbeddingApi('A quiet garden')).toEqual({ embedding: [0.1, 0.2] });
-    expect(JSON.parse(invokeModel.mock.calls[0][0].body)).toEqual({
-      taskType: 'SINGLE_EMBEDDING',
-      singleEmbeddingParams: {
-        embeddingPurpose: 'TEXT_RETRIEVAL',
-        embeddingDimension: 256,
-        text: { value: 'A quiet garden', truncationMode: 'NONE' },
+  const text = 'A quiet garden';
+  const vector = [0.1, 0.2];
+  it.each([
+    {
+      model: 'amazon.nova-2-multimodal-embeddings-v1:0',
+      expectedBody: {
+        taskType: 'SINGLE_EMBEDDING',
+        singleEmbeddingParams: {
+          embeddingPurpose: 'TEXT_RETRIEVAL',
+          embeddingDimension: 256,
+          text: { value: text, truncationMode: 'END' },
+        },
       },
-    });
-  });
+      reply: { embeddings: [{ embeddingType: 'TEXT', embedding: vector }] },
+    },
+    {
+      model: 'us.twelvelabs.marengo-embed-3-0-v1:0',
+      expectedBody: { inputType: 'text', text: { inputText: text } },
+      reply: { data: [{ embedding: vector }] },
+    },
+  ])(
+    'serializes and decodes $model through the Bedrock SDK',
+    async ({ model, expectedBody, reply }) => {
+      const handle = vi.fn(async (_request: { body?: unknown }) => ({
+        response: {
+          statusCode: 200,
+          headers: { 'content-type': 'application/json' },
+          body: new TextEncoder().encode(JSON.stringify(reply)),
+        },
+      }));
+      const client = new BedrockRuntime({
+        region: 'us-east-1',
+        credentials: { accessKeyId: 'test', secretAccessKey: 'test' },
+        requestHandler: { handle },
+      });
+      const provider = new AwsBedrockEmbeddingProvider(model, {
+        config: {
+          embeddingPurpose: 'TEXT_RETRIEVAL',
+          embeddingDimension: 256,
+          truncationMode: 'END',
+        },
+      });
+      vi.spyOn(provider, 'getBedrockInstance').mockResolvedValue(client);
+      try {
+        expect(await provider.callEmbeddingApi(text)).toEqual({ embedding: vector });
+        expect(handle).toHaveBeenCalledTimes(1);
+        expect(JSON.parse(String(handle.mock.calls[0][0].body))).toEqual(expectedBody);
+      } finally {
+        client.destroy();
+      }
+    },
+  );
 
   it('defaults Nova to generic indexing without truncation', async () => {
     const { provider, invokeModel } = mockEmbedding('amazon.nova-2-multimodal-embeddings-v1:0', {
@@ -89,23 +123,31 @@ describe('AwsBedrockEmbeddingProvider wire contract', () => {
     });
   });
 
-  it.each(['twelvelabs.marengo-embed-3-0-v1:0', 'us.twelvelabs.marengo-embed-3-0-v1:0'])(
-    'sends nested text and normalizes the live Marengo 3 response for %s',
-    async (model) => {
-      const { provider, invokeModel } = mockEmbedding(model, { data: [{ embedding: [0.1, 0.2] }] });
-      expect(await provider.callEmbeddingApi('A quiet garden')).toEqual({ embedding: [0.1, 0.2] });
-      expect(JSON.parse(invokeModel.mock.calls[0][0].body)).toEqual({
-        inputType: 'text',
-        text: { inputText: 'A quiet garden' },
-      });
-    },
-  );
-
   it('accepts the documented Marengo single-object response', async () => {
     const { provider } = mockEmbedding('twelvelabs.marengo-embed-3-0-v1:0', {
       data: { embedding: [0.1] },
     });
     expect(await provider.callEmbeddingApi('A quiet garden')).toEqual({ embedding: [0.1] });
+  });
+
+  it('matches the exact model ID in a system profile ARN', async () => {
+    const model =
+      'arn:aws:bedrock:us-east-1:123456789012:inference-profile/us.twelvelabs.marengo-embed-3-0-v1:0';
+    const { provider, invokeModel } = mockEmbedding(model, { data: { embedding: vector } });
+    expect(await provider.callEmbeddingApi(text)).toEqual({ embedding: vector });
+    expect(invokeModel.mock.calls[0][0].modelId).toBe(model);
+    expect(JSON.parse(invokeModel.mock.calls[0][0].body)).toEqual({
+      inputType: 'text',
+      text: { inputText: text },
+    });
+  });
+
+  it('keeps unknown embedding IDs on the existing generic route', async () => {
+    const { provider, invokeModel } = mockEmbedding('twelvelabs.marengo-embed-3-0-v1:01', {
+      embedding: vector,
+    });
+    expect(await provider.callEmbeddingApi(text)).toEqual({ embedding: vector });
+    expect(JSON.parse(invokeModel.mock.calls[0][0].body)).toEqual({ inputText: text });
   });
 
   it.each([

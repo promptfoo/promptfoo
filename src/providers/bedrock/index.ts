@@ -2639,13 +2639,16 @@ export const RETIRED_BEDROCK_MODELS = new Set([
   'meta.llama2-70b-chat-v1',
 ]);
 
-/** Reject withdrawn models and IDs that require a cross-region inference profile. */
-export function assertBedrockModelIsAvailable(modelName: string): void {
-  // A system inference profile or foundation model ARN ends in the ID it resolves to.
-  // Application inference profile ARNs hide the model, so they cannot be checked here.
-  const modelId = modelName.startsWith('arn:')
+// Only system-profile and foundation-model ARNs expose their model ID.
+function getBedrockModelId(modelName: string): string {
+  return modelName.startsWith('arn:')
     ? (/:(?:inference-profile|foundation-model)\/([^/]+)$/.exec(modelName)?.[1] ?? modelName)
     : modelName;
+}
+
+/** Reject withdrawn models and IDs that require a cross-region inference profile. */
+export function assertBedrockModelIsAvailable(modelName: string): void {
+  const modelId = getBedrockModelId(modelName);
   if (RETIRED_BEDROCK_MODELS.has(modelId.replace(INFERENCE_PROFILE_PREFIX, ''))) {
     throw new Error(`Unknown Amazon Bedrock model: ${modelName}`);
   }
@@ -3055,6 +3058,11 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
   }
 }
 
+// A text request represents one input. A batch cannot be scored as its vector.
+function onlyEmbeddingResult(items: unknown) {
+  return Array.isArray(items) && items.length === 1 ? items[0] : undefined;
+}
+
 interface BedrockEmbeddingOptions extends BedrockOptions {
   input_type?: 'search_document' | 'search_query' | 'classification' | 'clustering';
   embeddingPurpose?:
@@ -3099,8 +3107,9 @@ export class AwsBedrockEmbeddingProvider
     _context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<ProviderEmbeddingResponse> {
-    const isNovaEmbedding = this.modelName.includes('amazon.nova-2-multimodal-embeddings-v1:0');
-    const isMarengo3 = this.modelName.includes('twelvelabs.marengo-embed-3-0-v1:0');
+    const modelId = getBedrockModelId(this.modelName).replace(INFERENCE_PROFILE_PREFIX, '');
+    const isNovaEmbedding = modelId === 'amazon.nova-2-multimodal-embeddings-v1:0';
+    const isMarengo3 = modelId === 'twelvelabs.marengo-embed-3-0-v1:0';
     let params: Record<string, unknown>;
     if (isNovaEmbedding) {
       params = {
@@ -3138,27 +3147,22 @@ export class AwsBedrockEmbeddingProvider
         error: `API call error: ${String(err)}`,
       };
     }
-    logger.debug(
-      `AWS Bedrock API response (embeddings): ${JSON.stringify(response.body.transformToString())}`,
-    );
-
+    let responseText: string | undefined;
     try {
-      const data = JSON.parse(response.body.transformToString());
-      const embeddings = data?.embeddings?.float ?? data?.embeddings;
-      const singleEmbedding =
-        Array.isArray(embeddings) && embeddings.length === 1 ? embeddings[0] : undefined;
-      // Marengo returns a one-element data array in live InvokeModel responses;
-      // its documented single-object form is accepted as well.
-      const marengoData = Array.isArray(data?.data)
-        ? data.data.length === 1
-          ? data.data[0]
-          : undefined
-        : data?.data;
-      const embedding = isNovaEmbedding
-        ? singleEmbedding?.embedding
-        : isMarengo3
-          ? marengoData?.embedding
-          : (data?.embedding ?? singleEmbedding);
+      responseText = response.body.transformToString();
+      logger.debug('AWS Bedrock API response (embeddings)', { responseText });
+      const data = JSON.parse(responseText);
+      let embedding;
+      if (isNovaEmbedding) {
+        embedding = onlyEmbeddingResult(data?.embeddings)?.embedding;
+      } else if (isMarengo3) {
+        // Marengo also documents a single object in place of the one-item array.
+        const item = data?.data;
+        embedding = (Array.isArray(item) ? onlyEmbeddingResult(item) : item)?.embedding;
+      } else {
+        embedding =
+          data?.embedding ?? onlyEmbeddingResult(data?.embeddings?.float ?? data?.embeddings);
+      }
       if (
         !Array.isArray(embedding) ||
         embedding.length === 0 ||
@@ -3171,9 +3175,7 @@ export class AwsBedrockEmbeddingProvider
       };
     } catch (err) {
       return {
-        error: `API response error: ${String(err)}: ${JSON.stringify(
-          response.body.transformToString(),
-        )}`,
+        error: `API response error: ${String(err)}: ${JSON.stringify(responseText)}`,
       };
     }
   }
