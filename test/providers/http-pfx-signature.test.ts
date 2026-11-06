@@ -95,6 +95,50 @@ describe('PFX signature paths (generateSignature)', () => {
   });
 
   it.each([
+    ['EACCES', /OPENSSL_BIN.*executable/i],
+    ['EPERM', /OPENSSL_BIN.*executable/i],
+    ['ENOENT', /OpenSSL is required.*OPENSSL_BIN/i],
+    [1, /Invalid PFX file format or wrong password/],
+  ] as const)(
+    'reports OpenSSL failures safely without retrying a padded password (%s)',
+    async (code, message) => {
+      vi.mocked(runCommand).mockRejectedValue(
+        Object.assign(new Error('child diagnostic'), {
+          code,
+          stdout: 'private-key-output',
+          stderr: 'asn1 encoding routines:wrong tag: raw stderr',
+        }),
+      );
+      const failure = readPfxPrivateKey('fixture.p12', ' padded-password ');
+      await expect(failure).rejects.toThrow(message);
+      await expect(failure).rejects.not.toThrow(
+        /private-key-output|padded-password|raw stderr|child diagnostic/,
+      );
+      expect(runCommand).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it('reports an unavailable legacy provider without retrying a padded password', async () => {
+    vi.mocked(runCommand)
+      .mockRejectedValueOnce(
+        Object.assign(new Error('unsupported algorithm'), { stderr: 'unsupported: RC2-40-CBC' }),
+      )
+      .mockRejectedValue(
+        Object.assign(new Error('child diagnostic'), {
+          stdout: 'private-key-output',
+          stderr: 'pkcs12: unable to load provider legacy at raw stderr',
+        }),
+      );
+    const failure = readPfxPrivateKey('fixture.p12', ' padded-password ');
+    await expect(failure).rejects.toThrow(/provider.*OPENSSL_MODULES/i);
+    await expect(failure).rejects.not.toThrow(
+      /private-key-output|padded-password|raw stderr|child diagnostic/,
+    );
+    expect(runCommand).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(runCommand).mock.calls[1][1]).toContain('-legacy');
+  });
+
+  it.each([
     {
       label: 'literal padding',
       password: '  secret\t ',

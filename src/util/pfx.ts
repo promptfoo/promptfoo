@@ -45,10 +45,31 @@ export async function readPfxPrivateKey(
         output = await decodePfx(filename, candidate, executable);
         break;
       } catch (error) {
-        if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        const { code, stderr = '' } = error as { code?: string | number; stderr?: string };
+        if (code === 'ENOENT') {
           throw new Error(
             'OpenSSL is required to read PFX certificates. Install openssl or set OPENSSL_BIN.',
           );
+        }
+        if (typeof code === 'string') {
+          throw new Error(
+            'Could not run OpenSSL. Check that OPENSSL_BIN points to an accessible executable.',
+          );
+        }
+        if (
+          /unable to load provider|unknown (?:option(?: or cipher)?|argument):? -?legacy\b/i.test(
+            stderr,
+          )
+        ) {
+          throw new Error(
+            'OpenSSL could not load the required provider. Check the OpenSSL installation and OPENSSL_MODULES for the legacy provider.',
+          );
+        }
+        // Archives without a MAC report a bad decrypt when the supplied password is wrong.
+        if (
+          !/^Mac verify (?:error|failure)\b|:bad decrypt:|:pkcs12 cipherfinal error:/im.test(stderr)
+        ) {
+          break;
         }
       }
     }
