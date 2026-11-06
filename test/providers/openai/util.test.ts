@@ -1,6 +1,7 @@
 import OpenAI from 'openai';
 import { describe, expect, it, vi } from 'vitest';
 import {
+  appendOpenAiApiPath,
   assertOpenAiApiModel,
   calculateOpenAICost,
   calculateSafeOpenAICost,
@@ -26,6 +27,16 @@ import {
 } from '../../../src/providers/openai/util';
 
 vi.mock('../../../src/cache');
+
+describe('appendOpenAiApiPath', () => {
+  it('quickly joins paths with long interior slash runs before the query and fragment', () => {
+    const base = `https://gateway.example/${'/'.repeat(100_000)}v1`;
+    const start = performance.now();
+    const url = appendOpenAiApiPath(`${base}///?tenant=one/#section/`, '//responses', 'page=2');
+    expect(performance.now() - start).toBeLessThan(1_000);
+    expect(url).toBe(`${base}/responses?tenant=one/&page=2#section/`);
+  });
+});
 
 describe('getOpenAiEffectiveServiceTier', () => {
   it('preserves layer precedence when prompt passthrough replaces provider passthrough', () => {

@@ -270,11 +270,14 @@ export function appendOpenAiApiPath(apiUrl: string, endpoint: string, query?: st
   const fragment = fragmentIndex === -1 ? '' : apiUrl.slice(fragmentIndex);
   const urlWithoutFragment = fragmentIndex === -1 ? apiUrl : apiUrl.slice(0, fragmentIndex);
   const queryIndex = urlWithoutFragment.indexOf('?');
-  const base = queryIndex === -1 ? urlWithoutFragment : urlWithoutFragment.slice(0, queryIndex);
   const existingQuery = queryIndex === -1 ? '' : urlWithoutFragment.slice(queryIndex);
   const appendedQuery = query ? `${existingQuery ? '&' : '?'}${query}` : '';
+  let baseEnd = queryIndex === -1 ? urlWithoutFragment.length : queryIndex;
+  while (baseEnd > 0 && urlWithoutFragment[baseEnd - 1] === '/') {
+    baseEnd--;
+  }
 
-  return `${base.replace(/\/+$/, '')}/${endpoint.replace(/^\/+/, '')}${existingQuery}${appendedQuery}${fragment}`;
+  return `${urlWithoutFragment.slice(0, baseEnd)}/${endpoint.replace(/^\/+/, '')}${existingQuery}${appendedQuery}${fragment}`;
 }
 type OpenAIModelCost = {
   input: number;
