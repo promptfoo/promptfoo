@@ -1,6 +1,8 @@
 import OpenAI from 'openai';
 import { InvalidToolCallError } from '../../contracts/providers';
 import logger from '../../logger';
+import { rateLimitTimingFromHeaders } from '../../util/fetch';
+import { extractRateLimitErrorCode, HttpRateLimitError } from '../../util/fetch/errors';
 import { getAjv, safeJsonStringify } from '../../util/json';
 import { isSafeCost, isSafeTokenCount } from '../../util/numeric';
 import { isNonCredentialHeader, looksLikeSecret, sanitizeUrl } from '../../util/sanitizer';
@@ -1292,9 +1294,17 @@ export function failApiCall(err: any) {
     const errorType = err.error?.type || err.type || 'unknown';
     const errorMessage = err.error?.message || err.message || 'Unknown error';
     const statusCode = err.status ? ` ${err.status}` : '';
-    return {
-      error: `API error: ${errorType}${statusCode} ${errorMessage}`,
-    };
+    const error = `API error: ${errorType}${statusCode} ${errorMessage}`;
+    if (err.status === 429) {
+      const rateLimit = new HttpRateLimitError({
+        status: err.status,
+        code: extractRateLimitErrorCode(err),
+        type: errorType,
+        ...rateLimitTimingFromHeaders(Object.fromEntries(err.headers ?? [])),
+      });
+      return { error, metadata: { rateLimitKind: rateLimit.kind } };
+    }
+    return { error };
   }
   return {
     error: `API error: ${String(err)}`,
