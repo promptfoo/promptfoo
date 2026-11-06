@@ -1154,6 +1154,8 @@ When using `thinkingBudget`:
 
 **Note:** You cannot use both `thinkingLevel` and `thinkingBudget` in the same request.
 
+To see the model's thought summaries, set `generationConfig.thinkingConfig.includeThoughts: true`. Promptfoo puts them before the answer as `Thinking: <summary>`, followed by a blank line, as it does for other reasoning providers. Set `showThinking: false` in the provider config to keep only the answer, for example when assertions check the answer text.
+
 ### Search Grounding
 
 Search grounding allows Gemini models to access the internet for up-to-date information, enhancing responses about recent events and real-time data.

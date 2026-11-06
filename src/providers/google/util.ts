@@ -1455,6 +1455,10 @@ export function formatCandidateContents(candidate: Candidate) {
     let output = '';
     let is_text = true;
     for (const part of candidate.content.parts) {
+      if (part.thought) {
+        // Thought summaries are not part of the answer; see formatGeminiThinking.
+        continue;
+      }
       if ('text' in part) {
         output += part.text;
       } else {
@@ -1469,6 +1473,38 @@ export function formatCandidateContents(candidate: Candidate) {
   } else {
     throw new Error(`No output found in response: ${JSON.stringify(candidate)}`);
   }
+}
+
+/**
+ * Merges a candidate's answer into the accumulated output and returns its thought
+ * summaries (parts with `thought: true`, sent when `thinkingConfig.includeThoughts`
+ * is set) separately, so thoughts streamed across chunks can be labelled once.
+ */
+export function mergeCandidateContents(
+  output: Part[] | string | undefined,
+  candidate: Candidate,
+): { output: Part[] | string | undefined; thoughts: string } {
+  const content = formatCandidateContents(candidate);
+  const thoughts = (candidate.content?.parts ?? [])
+    .map((part) => (part.thought && typeof part.text === 'string' ? part.text : ''))
+    .join('');
+  // A chunk holding only thoughts adds nothing to the answer.
+  return { output: thoughts && content === '' ? output : mergeParts(output, content), thoughts };
+}
+
+/**
+ * Prepends thought summaries to a text answer in the `Thinking: ...` form used by other
+ * reasoning providers, unless `showThinking` is false. Part arrays are returned unchanged.
+ */
+export function formatGeminiThinking(
+  output: Part[] | string | undefined,
+  thoughts: string,
+  showThinking: boolean | undefined,
+) {
+  if (!thoughts || showThinking === false || Array.isArray(output)) {
+    return output;
+  }
+  return output ? `Thinking: ${thoughts}\n\n${output}` : `Thinking: ${thoughts}`;
 }
 
 export function mergeParts(parts1: Part[] | string | undefined, parts2: Part[] | string) {

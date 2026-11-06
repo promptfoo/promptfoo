@@ -238,7 +238,7 @@ export interface CompletionOptions {
   topK?: number;
   top_k?: number; // Alternative format for Claude models
   thinking?: ClaudeThinkingConfig; // Extended thinking for Claude models
-  showThinking?: boolean; // Whether to include thinking output for Claude models
+  showThinking?: boolean; // Whether to include Claude thinking or Gemini thought summaries in output
   effort?: ClaudeEffort; // Reasoning depth for Claude models
 
   // Imagen image generation options

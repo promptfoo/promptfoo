@@ -615,6 +615,8 @@ Defaults vary by model: Gemini 3.8 Flash, 3.7 Flash, 3.6 Flash, and 3.5 Flash de
 
 For Gemini 2.5 models that still serve natively, use `generationConfig.thinkingConfig.thinkingBudget`. When migrating to a Gemini 3 replacement, use its supported `thinkingLevel` instead. See [Gemini thinking](https://ai.google.dev/gemini-api/docs/thinking). To return JSON with a specific shape, see [Structured Output](#structured-output).
 
+To see the model's thought summaries, set `generationConfig.thinkingConfig.includeThoughts: true`. Promptfoo puts them before the answer as `Thinking: <summary>`, followed by a blank line, as it does for other reasoning providers. Set `showThinking: false` in the provider config to keep only the answer, for example when assertions check the answer text.
+
 For multimodal inputs, the provider supports:
 
 - Images: PNG, JPEG, WEBP, HEIC, HEIF formats (max 3,600 files)

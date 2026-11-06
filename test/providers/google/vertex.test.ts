@@ -1610,6 +1610,57 @@ describe('VertexChatProvider.callGeminiApi', () => {
     expect(response.metadata?.thoughtSignatures).toEqual(['signed-thought']);
   });
 
+  it.each([
+    [undefined, 'Thinking: Let me calculate 6 * 7.\n\n42'],
+    [false, '42'],
+  ])(
+    'separates thought parts from the answer with showThinking %s',
+    async (showThinking, expected) => {
+      const geminiProvider = new VertexChatProvider('gemini-3.6-flash', {
+        config: { region: 'global', showThinking },
+      });
+      mockVertexRequest([
+        {
+          candidates: [
+            {
+              content: {
+                parts: [{ text: 'Let me calculate 6 * 7.', thought: true }, { text: '42' }],
+              },
+              finishReason: 'STOP',
+            },
+          ],
+          usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 1, totalTokenCount: 19 },
+        },
+      ]);
+
+      const response = await geminiProvider.callGeminiApi('What is 6 * 7?');
+
+      expect(response.output).toBe(expected);
+    },
+  );
+
+  it('keeps showThinking false responses apart in the cache', async () => {
+    mockIsCacheEnabled.mockReturnValue(true);
+    mockCacheGet.mockReset().mockResolvedValue(null);
+    mockCacheSet.mockReset();
+    mockVertexRequest([
+      {
+        candidates: [{ content: { parts: [{ text: '42' }] }, finishReason: 'STOP' }],
+        usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 1, totalTokenCount: 11 },
+      },
+    ]);
+
+    for (const showThinking of [undefined, false]) {
+      await new VertexChatProvider('gemini-3.6-flash', {
+        config: { region: 'global', showThinking },
+      }).callGeminiApi('What is 6 * 7?');
+    }
+
+    const [defaultKey, hiddenKey] = mockCacheGet.mock.calls.map(([key]) => key as string);
+    expect(defaultKey).toMatch(/^vertex:gemini-3\.6-flash:[a-f0-9]{64}$/);
+    expect(hiddenKey).not.toBe(defaultKey);
+  });
+
   it.each(['gemini-3.6-flash', 'gemini-3.5-flash-lite'])(
     'should assemble streamed function-call arguments for %s before executing a callback',
     async (modelId) => {

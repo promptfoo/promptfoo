@@ -5482,6 +5482,15 @@ describe('util', () => {
       );
     });
 
+    it('leaves thought parts out of the formatted text', () => {
+      const thought = { text: 'Let me calculate.', thought: true };
+
+      expect(
+        formatCandidateContents({ content: { parts: [thought, { text: '42' }] } } as any),
+      ).toBe('42');
+      expect(formatCandidateContents({ content: { parts: [thought] } } as any)).toBe('');
+    });
+
     it('collects thought signatures across streamed candidate parts', () => {
       expect(
         collectThoughtSignatures([

@@ -40,7 +40,7 @@ import {
   calculateGoogleCostFromUsage,
   collectGroundingMetadata,
   collectThoughtSignatures,
-  formatCandidateContents,
+  formatGeminiThinking,
   geminiFormatAndSystemInstructions,
   getCandidate,
   getGoogleClient,
@@ -48,9 +48,9 @@ import {
   getVertexServiceTierHeaders,
   isNonCandidateStreamChunk,
   loadCredentials,
+  mergeCandidateContents,
   mergeGoogleCompletionOptions,
   mergeGoogleRequestTools,
-  mergeParts,
   normalizeGeminiAudio,
   normalizeGoogleServiceTier,
   normalizeSafetySettings,
@@ -789,8 +789,13 @@ export class VertexChatProvider extends GoogleGenericProvider {
       )
         ? await getCache()
         : undefined;
+    // Cached responses hold formatted output; keep default keys unchanged.
     const cacheKey = cache
-      ? getVertexBodyCacheKey(`vertex:${this.modelName}`, cacheBody, apiHost)
+      ? getVertexBodyCacheKey(
+          `vertex:${this.modelName}${config.showThinking === false ? ':showThinking=false' : ''}`,
+          cacheBody,
+          apiHost,
+        )
       : undefined;
 
     let response;
@@ -897,6 +902,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
         }
         const dataWithResponse = normalizedData as GeminiResponseData[];
         let output;
+        let thoughts = '';
         for (const datum of dataWithResponse) {
           // Check for blockReason first (before getCandidate) since blocked responses have no candidates
           if (datum.promptFeedback?.blockReason) {
@@ -976,7 +982,9 @@ export class VertexChatProvider extends GoogleGenericProvider {
           } else if (candidate.finishReason && candidate.finishReason === 'MAX_TOKENS') {
             // MAX_TOKENS is treated as a successful completion with the generated output
             if (candidate.content?.parts) {
-              output = mergeParts(output, formatCandidateContents(candidate));
+              const merged = mergeCandidateContents(output, candidate);
+              output = merged.output;
+              thoughts += merged.thoughts;
             }
             const outputTokens = datum.usageMetadata?.candidatesTokenCount || 0;
             logger.debug(`Gemini API: MAX_TOKENS reached`, {
@@ -992,13 +1000,17 @@ export class VertexChatProvider extends GoogleGenericProvider {
               error: `Finish reason ${candidate.finishReason}: ${JSON.stringify(data)}`,
             };
           } else if (candidate.content?.parts) {
-            output = mergeParts(output, formatCandidateContents(candidate));
+            const merged = mergeCandidateContents(output, candidate);
+            output = merged.output;
+            thoughts += merged.thoughts;
           } else if (candidate.finishReason !== 'STOP') {
             return {
               error: `No output found in response: ${JSON.stringify(data)}`,
             };
           }
         }
+
+        output = formatGeminiThinking(output, thoughts, config.showThinking);
 
         if (output === undefined || output === '') {
           return {

@@ -18,6 +18,7 @@ import {
   collectThoughtSignatures,
   createAuthCacheDiscriminator,
   formatCandidateContents,
+  formatGeminiThinking,
   geminiFormatAndSystemInstructions,
   getCandidate,
   getEffectiveGeminiApiModel,
@@ -26,9 +27,9 @@ import {
   getGoogleResponseServiceTier,
   getLastPromptSafetyRatings,
   isNonCandidateStreamChunk,
+  mergeCandidateContents,
   mergeGoogleCompletionOptions,
   mergeGoogleRequestTools,
-  mergeParts,
   normalizeGeminiAudio,
   normalizeGoogleServiceTier,
   normalizeSafetySettings,
@@ -410,6 +411,7 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
     }
     let output: ReturnType<typeof formatCandidateContents> | undefined;
     let candidate: ReturnType<typeof getCandidate> | undefined;
+    let thoughts = '';
     try {
       for (const datum of dataWithResponse) {
         if (Array.isArray(data) && isNonCandidateStreamChunk(datum)) {
@@ -426,8 +428,11 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
           continue;
         }
 
-        output = mergeParts(output, formatCandidateContents(candidateForChunk));
+        const merged = mergeCandidateContents(output, candidateForChunk);
+        output = merged.output;
+        thoughts += merged.thoughts;
       }
+      output = formatGeminiThinking(output, thoughts, config.showThinking);
 
       if (output === undefined || output === '' || candidate === undefined) {
         throw new Error(`No output found in response: ${JSON.stringify(data)}`);
