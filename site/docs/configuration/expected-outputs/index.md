@@ -179,7 +179,7 @@ When a `not-javascript` assertion returns a full grading result, its `reason` is
 
 The `search-rubric` and `not-search-rubric` assertions require a rubric value that renders to a string.
 
-For `not-classifier`, `not-search-rubric`, `not-factuality` (also `not-model-graded-factuality`), and `not-model-graded-closedqa`, a grader error or missing verdict remains a failure with score `0`. Negation only inverts a valid grading result.
+For `not-classifier`, `not-search-rubric`, `not-factuality` (also `not-model-graded-factuality`), and `not-model-graded-closedqa`, a grader error or missing verdict remains a failure with score `0`. Negation only inverts a valid grading result. Classifier scores must be finite numbers between `0` and `1`.
 :::
 
 ### Model-assisted eval metrics
