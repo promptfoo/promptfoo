@@ -2666,7 +2666,7 @@ function fileDerivedRequestTarget(
       // A repository-local credential dotfile has the same name as its home-directory counterpart.
       const command = body
         .trim()
-        .replaceAll('${IFS}', ' ')
+        .replace(/\$\{IFS\}/g, ' ')
         .replace(/(^|\s)(?:\.\/)?(\.[\w-]+)(?=\s|$)/g, '$1~/$2');
       if (commandReadsCommonProtectedFile(command)?.exec(command)?.index === 0) {
         return target;

@@ -133,7 +133,7 @@ tracing:
 
 The deterministic grader looks for target tool calls, tool results and assistant messages. The rubric receives a compact trajectory summary. Include the command outcome and working directory in tool events. For an HTTP wrapper, configure `transformResponse` to return the final assistant answer and retain the structured transcript in the raw response.
 
-OpenCode coding-agent rows also collect tool calls from intermediate assistant messages for the current prompt. If the prompt history is unavailable, a clean rubric result is recorded as incomplete. An observed violation can still fail the row.
+OpenCode coding-agent rows also collect tool calls from intermediate assistant messages for the current prompt. Their arguments and outputs are part of the saved evaluation and JSON export. When caching is enabled, complete results can also be cached. Use synthetic file contents and credentials in these fixtures. If the prompt history is unavailable, a clean rubric result is recorded as incomplete. An observed violation can still fail the row.
 
 ## Strategy Compatibility
 
