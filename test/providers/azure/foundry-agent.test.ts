@@ -941,6 +941,24 @@ describe('AzureFoundryAgentProvider', () => {
       );
     });
 
+    it.each([
+      ['rate_limit_exceeded', 'rate_limit'],
+      ['insufficient_quota', 'quota'],
+      ['invalid_prompt', undefined],
+    ])('retains the retry classification of an in-band %s error', async (code, kind) => {
+      mockGetAgent.mockResolvedValue(mockAgent);
+      mockResponsesCreate.mockResolvedValueOnce({
+        ...createMessageResponse(''),
+        status: 'failed',
+        error: { code, message: '429 tokens' },
+      });
+      const provider = new AzureFoundryAgentProvider('weather-agent', { config: { projectUrl } });
+      const result = await provider.callApi('test prompt');
+
+      expect(result.error).toBe('429 tokens');
+      expect(result.metadata?.rateLimitKind).toBe(kind);
+    });
+
     it('marks a resolved-but-failed Responses turn as errored', async () => {
       const spans = installSpanRecorder();
       mockGetAgent.mockResolvedValue(mockAgent);
@@ -1568,6 +1586,26 @@ describe('AzureFoundryAgentProvider', () => {
       expect(cacheKey).not.toContain(secret);
       expect(cacheKey).not.toContain('weather in Paris');
       expect(mockCache.set).toHaveBeenCalledWith(cacheKey, expect.any(Object));
+    });
+
+    it('does not authorize an explicit principal using a shared cached response', async () => {
+      vi.mocked(isCacheEnabled).mockReturnValue(true);
+      vi.mocked(getCache).mockResolvedValue({
+        get: vi.fn().mockResolvedValue(createCachedAgentResponse()),
+        set: vi.fn(),
+      } as any);
+      mockGetAgent.mockResolvedValue(mockAgent);
+      mockResponsesCreate.mockResolvedValue(createMessageResponse('fresh response'));
+      const scoped = new AzureFoundryAgentProvider('weather-agent', {
+        config: {
+          projectUrl,
+          azureTenantId: 'fixture-tenant',
+          azureClientId: 'fixture-client',
+          azureClientSecret: 'fixture-secret',
+        },
+      });
+      expect(await scoped.callApi('same prompt')).toMatchObject({ output: 'fresh response' });
+      expect(getCache).not.toHaveBeenCalled();
     });
 
     it('should scope cache keys by project URL', async () => {
