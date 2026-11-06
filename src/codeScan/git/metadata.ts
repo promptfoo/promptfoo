@@ -5,7 +5,7 @@
  */
 
 import { GitMetadataError } from '../../types/codeScan';
-import { runCommand } from '../../util/runCommand';
+import { runGit } from './command';
 
 import type { GitMetadata } from '../../types/codeScan';
 
@@ -22,28 +22,20 @@ export async function extractMetadata(
   compareRef: string,
 ): Promise<GitMetadata> {
   try {
-    const resolveRef = async (ref: string) =>
-      (
-        await runCommand('git', ['rev-parse', '--verify', '--end-of-options', ref], {
-          cwd: repoPath,
-        })
-      ).stdout;
+    const resolveRef = (ref: string) =>
+      runGit(repoPath, ['rev-parse', '--verify', '--end-of-options', ref]);
     const [baseSha, compareSha] = await Promise.all([
       resolveRef(baseBranch),
       resolveRef(compareRef),
     ]);
-    const { stdout } = await runCommand(
-      'git',
-      [
-        'log',
-        '--no-show-signature',
-        '-z',
-        '--format=%H%x00%s%x00%aN%x00%aI',
-        `${baseSha}...${compareSha}`,
-        '--',
-      ],
-      { cwd: repoPath },
-    );
+    const stdout = await runGit(repoPath, [
+      'log',
+      '--no-show-signature',
+      '-z',
+      '--format=%H%x00%s%x00%aN%x00%aI',
+      `${baseSha}...${compareSha}`,
+      '--',
+    ]);
     // Each record contains four NUL-delimited fields, including the mailmapped author.
     const fields = stdout.split('\0');
     const commitMessages: string[] = [];

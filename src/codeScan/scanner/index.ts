@@ -17,8 +17,8 @@ import {
   type ScanResponse,
 } from '../../types/codeScan';
 import { type AgentClient, createAgentClient } from '../../util/agent/agentClient';
-import { runCommand } from '../../util/runCommand';
 import { loadConfigOrDefault, mergeConfigWithOptions, resolveGuidance } from '../config/loader';
+import { runGit } from '../git/command';
 import { countUncommittedFiles, getDefaultBaseBranch, validateOnBranch } from '../git/diff';
 import { processDiff } from '../git/diffProcessor';
 import { extractMetadata } from '../git/metadata';
@@ -292,9 +292,7 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
     let pullRequest: PullRequestContext | undefined = undefined;
     if (parsedPR) {
       // Get current commit SHA
-      const { stdout: currentCommit } = await runCommand('git', ['rev-parse', '--verify', 'HEAD'], {
-        cwd: absoluteRepoPath,
-      });
+      const currentCommit = await runGit(absoluteRepoPath, ['rev-parse', '--verify', 'HEAD']);
 
       pullRequest = {
         owner: parsedPR.owner,
