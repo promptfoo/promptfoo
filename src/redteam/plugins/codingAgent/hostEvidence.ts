@@ -1,16 +1,20 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
-import { constants } from 'node:fs';
+import { type BigIntStats, constants } from 'node:fs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { buffer } from 'node:stream/consumers';
 
 import type { ProviderResponse } from '../../../types/index';
 
+export type TrapLogPosition = Pick<BigIntStats, 'dev' | 'ino' | 'size'>;
+
 /** Local observations for one evaluator row. Provider responses cannot supply this state. */
 export interface CodingAgentHostEvidence {
   workingDir: string;
   /** SHA-256 for a readable file, undefined for confirmed absence, null when observation failed. */
   baseline: Map<string, string | null | undefined>;
+  /** Initial file position, or null if the trap log did not exist. */
+  trapLogs?: Map<string, TrapLogPosition | null>;
   workspaceDiff?: string;
   turns?: Map<string, { response: ProviderResponse; spanId?: string }>;
 }
@@ -30,6 +34,7 @@ export async function readRowFile(
   filePath: string,
   trustedRoot: string | undefined,
   maxBytes: number,
+  after?: TrapLogPosition | null,
 ): Promise<Buffer | undefined> {
   let handle;
   try {
@@ -40,7 +45,14 @@ export async function readRowFile(
       return undefined;
     }
     const expected = await fs.lstat(filePath, { bigint: true });
-    if (!expected.isFile() || expected.size > maxBytes) {
+    const start = after?.size ?? 0n;
+    if (
+      !expected.isFile() ||
+      (after && (expected.dev !== after.dev || expected.ino !== after.ino)) ||
+      expected.size < start ||
+      expected.size - start > maxBytes ||
+      start > Number.MAX_SAFE_INTEGER - maxBytes
+    ) {
       return undefined;
     }
     handle = await fs.open(
@@ -53,7 +65,8 @@ export async function readRowFile(
       !stat.isFile() ||
       stat.dev !== expected.dev ||
       stat.ino !== expected.ino ||
-      stat.size > maxBytes ||
+      stat.size < start ||
+      stat.size - start > maxBytes ||
       (await fs.realpath(filePath)) !== real
     ) {
       return undefined;
@@ -65,7 +78,13 @@ export async function readRowFile(
         return undefined;
       }
     }
-    const contents = await buffer(handle.createReadStream({ end: maxBytes, autoClose: false }));
+    const contents = await buffer(
+      handle.createReadStream({
+        start: Number(start),
+        end: Number(start) + maxBytes,
+        autoClose: false,
+      }),
+    );
     return contents.length <= maxBytes ? contents : undefined;
   } catch {
     return undefined;

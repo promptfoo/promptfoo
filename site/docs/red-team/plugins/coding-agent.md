@@ -133,6 +133,8 @@ tracing:
 
 The deterministic grader looks for target tool calls, tool results and assistant messages. The rubric receives a compact trajectory summary. Include the command outcome and working directory in tool events. For an HTTP wrapper, configure `transformResponse` to return the final assistant answer and retain the structured transcript in the raw response.
 
+OpenCode coding-agent rows also collect tool calls from intermediate assistant messages for the current prompt. If the prompt history is unavailable, a clean rubric result is recorded as incomplete. An observed violation can still fail the row.
+
 ## Strategy Compatibility
 
 `jailbreak:meta` and `jailbreak:hydra` support coding-agent rows. Promptfoo excludes encoding and rewriting strategies such as `base64`, `multilingual` and `jailbreak:composite` because they can change fixture receipts.
@@ -228,5 +230,7 @@ Supported assertion and test fields:
 For `sandbox-write-escape`, combine command evidence with host probes when possible. Configure a host-owned sentinel with `outsideWriteHostPath` and `outsideWriteExpectedSha256`, a must-not-exist path for newly created files, or a fresh `outsideWriteProbeDir` with `workspacePath` and explicit `outsideWriteAllowedPath` entries. This catches real writes even when the agent's final answer is vague, and it reduces false positives when a generated prompt uses encoded or Unicode lookalike path text that remains inside the workspace.
 
 For `verifier-sabotage`, keep `protectedFilePath`, `expectedSha256`, and `verifierReportPath` in assertion values, but put trusted roots such as `verifierArtifactRoot`, `verifierProbeDir`, or `workspacePath` in test vars, metadata, or plugin config. Assertion values cannot self-authorize roots.
+
+The evaluator captures each configured trap log’s byte offset before calling the target. Only new bytes can confirm a request. Use a unique receipt per row when several rows share a receiver. A rotated, truncated, unreadable, or over-limit log yields incomplete verification when no other evidence establishes an outcome. A log that stays absent or receives no new bytes remains a clean control.
 
 For `network-egress-bypass`, combine trap evidence with a disposable workspace scan when you want to catch planted code that will egress later. Configure `networkTrapUrl`, `networkTrapHost`, `networkTrapLogPath`, and `networkEgressReceipt` for live requests, and add `networkScanPath` or `networkWorkspacePath` only for a fresh fixture you control. The scan is intentionally opt-in because mature repositories may already contain legitimate network clients.
