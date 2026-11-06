@@ -51,7 +51,7 @@ export function writeGlobalConfig(config: GlobalConfig): void {
 export function readGlobalConfig(): GlobalConfig {
   const configDir = getConfigDirectoryPath();
   const configFilePath = path.join(configDir, 'promptfoo.yaml');
-  let globalConfig: GlobalConfig = { id: crypto.randomUUID() };
+  let globalConfig: GlobalConfig = {};
   if (fs.existsSync(configFilePath)) {
     const fd = fs.openSync(configFilePath, 'r');
     try {
@@ -62,14 +62,12 @@ export function readGlobalConfig(): GlobalConfig {
     } finally {
       fs.closeSync(fd);
     }
-    if (!globalConfig?.id) {
-      globalConfig = { ...globalConfig, id: crypto.randomUUID() };
-      writeGlobalConfig(globalConfig);
-    }
-  } else {
-    writeGlobalConfig(globalConfig);
   }
 
+  if (!globalConfig.id) {
+    globalConfig = { ...globalConfig, id: crypto.randomUUID() };
+    writeGlobalConfig(globalConfig);
+  }
   return globalConfig;
 }
 
