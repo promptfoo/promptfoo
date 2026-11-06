@@ -30,6 +30,82 @@ describe('declarative tool-call assertions', () => {
     expect(await grade({ type: 'tool-call', value })).toMatchObject({ pass: true, score: 1 });
   });
 
+  it.each([false, true])(
+    'renders structured expectation templates (list: %s) without mutating dataset assertions',
+    async (list) => {
+      const expectation = {
+        name: '{{toolName}}',
+        arguments: { orderId: '{{orderId}}', nested: { labels: ['{{label}}', 2, true, null] } },
+      };
+      const value = list ? [expectation] : expectation;
+      const original = structuredClone(value);
+      for (const orderId of ['42', '43']) {
+        const providerResponse = response([
+          {
+            name: 'lookup_order',
+            arguments: { orderId, nested: { labels: ['a"b\\c', 2, true, null] } },
+          },
+        ]);
+        for (const type of ['tool-call', 'not-tool-call'] as const) {
+          expect(
+            await runAssertion({
+              assertion: { type, value },
+              providerResponse,
+              test: { vars: { orderId: 'wrong-test-value' } },
+              vars: { toolName: 'lookup_order', orderId, label: 'a"b\\c' },
+            }),
+          ).toMatchObject({ pass: type === 'tool-call' });
+        }
+      }
+      expect(value).toEqual(original);
+    },
+  );
+
+  it('renders mixed list entries exactly once', async () => {
+    const value = [
+      '{{literalName}}',
+      { name: '{{toolName}}', arguments: { orderId: '{{orderId}}' } },
+    ];
+    expect(
+      await runAssertion({
+        assertion: { type: 'tool-call', value },
+        providerResponse: response([
+          { name: '{{notExpanded}}' },
+          { name: 'lookup_order', arguments: { orderId: '{{notExpanded}}' } },
+        ]),
+        vars: {
+          literalName: '{{notExpanded}}',
+          toolName: 'lookup_order',
+          orderId: '{{notExpanded}}',
+          notExpanded: 'wrong',
+        },
+        test: {},
+      }),
+    ).toMatchObject({ pass: true });
+  });
+
+  it('preserves literal argument keys when rendering nested values', async () => {
+    const expected = JSON.parse('{"__proto__":"{{orderId}}"}');
+    expect(
+      await runAssertion({
+        assertion: { type: 'tool-call', value: { name: 'lookup_order', arguments: expected } },
+        providerResponse: response([{ name: 'lookup_order', arguments: {} }]),
+        vars: { orderId: '42' },
+        test: {},
+      }),
+    ).toMatchObject({ pass: false });
+    expect(
+      await runAssertion({
+        assertion: { type: 'tool-call', value: { name: 'lookup_order', arguments: expected } },
+        providerResponse: response([
+          { name: 'lookup_order', arguments: JSON.parse('{"__proto__":"42"}') },
+        ]),
+        vars: { orderId: '42' },
+        test: {},
+      }),
+    ).toMatchObject({ pass: true });
+  });
+
   it('requires every expected tool while allowing additional calls', async () => {
     const providerResponse = response([inventory(), { name: 'check_stats' }, { name: 'extra' }]);
     expect(

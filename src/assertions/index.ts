@@ -330,6 +330,25 @@ const ASSERTION_HANDLERS: Record<
 
 const nunjucks = getNunjucksEngine();
 
+// Render literal structured expectations without invoking functions or copying inherited fields.
+function renderStructuredToolExpectation(value: unknown, vars: Record<string, VarValue>): unknown {
+  if (typeof value === 'string') {
+    return nunjucks.renderString(value, vars);
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => renderStructuredToolExpectation(item, vars));
+  }
+  if (value !== null && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [
+        key,
+        renderStructuredToolExpectation(item, vars),
+      ]),
+    );
+  }
+  return value;
+}
+
 /**
  * Renders a metric name template with test variables.
  * @param metric - The metric name, possibly containing Nunjucks template syntax
@@ -591,8 +610,17 @@ async function runAssertionInternal({
         }
         return nunjucks.renderString(v, resolvedVars);
       }
+      if (getAssertionBaseType(assertion) === 'tool-call') {
+        return renderStructuredToolExpectation(v, resolvedVars);
+      }
       return v;
     });
+  } else if (
+    renderedValue &&
+    typeof renderedValue === 'object' &&
+    getAssertionBaseType(assertion) === 'tool-call'
+  ) {
+    renderedValue = renderStructuredToolExpectation(renderedValue, resolvedVars) as AssertionValue;
   }
 
   // Centralized script output resolution
