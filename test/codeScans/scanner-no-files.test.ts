@@ -14,12 +14,14 @@ describe('Scanner machine-readable output', () => {
     processDiffError,
     configApiHost,
     files = [],
+    dirtyFiles,
   }: {
     initialLogLevel?: string;
     loadConfigError?: Error;
     processDiffError?: Error;
     configApiHost?: string;
     files?: FileRecord[];
+    dirtyFiles?: Array<{ path: string }>;
   } = {}) {
     let currentLogLevel = initialLogLevel;
 
@@ -64,6 +66,7 @@ describe('Scanner machine-readable output', () => {
       simpleGit: vi.fn(() => ({
         branch: vi.fn().mockResolvedValue({ current: 'main', all: ['main'] }),
         revparse: vi.fn().mockResolvedValue('abc123'),
+        status: vi.fn().mockResolvedValue({ files: dirtyFiles ?? [] }),
       })),
     }));
     vi.doMock('../../src/util/agent/agentClient', () => ({
@@ -370,5 +373,53 @@ describe('Scanner machine-readable output', () => {
     expect(mcp.bridgeDisconnect).not.toHaveBeenCalled();
     expect(socketEmit).not.toHaveBeenCalled();
     expect(consoleErrorSpy).toHaveBeenCalledWith('Scan failed: bridge failed');
+  });
+
+  describe('empty-scan messaging', () => {
+    const patchless: FileRecord = {
+      path: ':foo.ts',
+      status: 'M',
+      shaA: 'a',
+      shaB: 'b',
+      linesAdded: 0,
+      linesRemoved: 0,
+    };
+    it.each([
+      {
+        name: 'empty diff',
+        files: [],
+        dirtyFiles: [],
+        messages: ['No files to scan in main...HEAD', 'no net file changes'],
+      },
+      {
+        name: 'empty diff with uncommitted files',
+        files: [],
+        dirtyFiles: [{ path: 'index.js' }, { path: 'lib/util.js' }],
+        messages: ['2 uncommitted file(s)'],
+      },
+      {
+        name: 'skipped files with uncommitted work',
+        files: [{ ...patchless, path: 'package-lock.json', skipReason: 'denylist' as const }],
+        dirtyFiles: [{ path: 'src/index.ts' }],
+        messages: ['skipped: denylist', '1 uncommitted file(s)'],
+      },
+      {
+        name: 'unpatched records without skip reasons',
+        files: [patchless],
+        dirtyFiles: [],
+        messages: ['1 changed file(s) contain no scannable patches'],
+      },
+    ])('explains $name', async ({ files, dirtyFiles, messages }) => {
+      mockScanner({ files, dirtyFiles });
+      const { executeScan } = await import('../../src/codeScan/scanner/index');
+      const logger = (await import('../../src/logger')).default;
+      await executeScan('/test/repo', { diffsOnly: true });
+      for (const message of messages) {
+        expect(logger.info).toHaveBeenCalledWith(expect.stringContaining(message));
+      }
+      if (files.every((file) => !file.skipReason)) {
+        expect(logger.info).not.toHaveBeenCalledWith(expect.stringContaining('skipped:'));
+      }
+    });
   });
 });

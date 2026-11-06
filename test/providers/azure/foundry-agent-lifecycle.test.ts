@@ -1,11 +1,14 @@
 import { AIProjectClient } from '@azure/ai-projects';
-import { DefaultAzureCredential } from '@azure/identity';
+import { ClientSecretCredential, DefaultAzureCredential } from '@azure/identity';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AzureFoundryAgentProvider } from '../../../src/providers/azure/foundry-agent';
 import { createDeferred } from '../../util/utils';
 
 vi.mock('@azure/ai-projects', () => ({ AIProjectClient: vi.fn() }));
-vi.mock('@azure/identity', () => ({ DefaultAzureCredential: vi.fn() }));
+vi.mock('@azure/identity', () => ({
+  ClientSecretCredential: vi.fn(),
+  DefaultAzureCredential: vi.fn(),
+}));
 
 const agent = { id: 'agent-id', name: 'test-agent', object: 'agent', versions: { latest: {} } };
 const response = {
@@ -209,6 +212,84 @@ describe('Foundry client lifecycle', () => {
     expect(await provider.callApi('Recovered')).toMatchObject({ output: 'Hello' });
     expect(fetch).toHaveBeenCalledTimes(2);
     expect(AIProjectClient).toHaveBeenCalledTimes(1);
+  });
+
+  it('hands explicit service principals to separate project clients without invoking ambient discovery', async () => {
+    vi.mocked(ClientSecretCredential)
+      .mockReset()
+      .mockImplementation(function () {
+        return Object.create(ClientSecretCredential.prototype);
+      });
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('Unexpected network request')));
+    vi.stubEnv('AZURE_AUTHORITY_HOST', 'https://login.microsoftonline.us');
+    vi.stubEnv('AZURE_TOKEN_CREDENTIALS', 'prod');
+    try {
+      const create = (tenant: string) =>
+        new AzureFoundryAgentProvider('test-agent', {
+          config: {
+            projectUrl,
+            maxPollTimeMs: 1000,
+            azureTenantId: tenant,
+            azureClientId: `client-${tenant}`,
+            ...(tenant === 'two' && { azureAuthorityHost: 'https://login.chinacloudapi.cn' }),
+            azureClientSecret: `fixture-${tenant}`,
+          },
+        });
+      expect(await create('one').callApi('First')).toMatchObject({ output: 'Hello' });
+      expect(await create('two').callApi('Second')).toMatchObject({ output: 'Hello' });
+      for (const tenant of ['one', 'two']) {
+        expect(ClientSecretCredential).toHaveBeenCalledWith(
+          tenant,
+          `client-${tenant}`,
+          `fixture-${tenant}`,
+          {
+            authorityHost: tenant === 'two' ? 'https://login.chinacloudapi.cn' : undefined,
+          },
+        );
+      }
+      expect(DefaultAzureCredential).not.toHaveBeenCalled();
+      expect(fetch).not.toHaveBeenCalled();
+      expect(
+        new Set(vi.mocked(AIProjectClient).mock.calls.map(([, credential]) => credential)).size,
+      ).toBe(2);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it.each([
+    { azureClientSecret: 'fixture-incomplete' },
+    { azureClientId: 'fixture-client', azureClientSecret: 'fixture-incomplete' },
+    { azureTenantId: 'fixture-tenant', azureClientSecret: 'fixture-incomplete' },
+    { azureTenantId: 'fixture-tenant', azureClientId: 'fixture-client', azureClientSecret: '' },
+  ])(
+    'rejects incomplete explicit secret credentials before using ambient credentials or a cached response',
+    (partial) => {
+      expect(
+        () => new AzureFoundryAgentProvider('test-agent', { config: { projectUrl, ...partial } }),
+      ).toThrow(/azureClientId, azureTenantId and azureClientSecret/);
+      expect(DefaultAzureCredential).not.toHaveBeenCalled();
+    },
+  );
+
+  it('rejects an explicit secret when the host restricts Azure credential discovery to its CLI', async () => {
+    vi.stubEnv('AZURE_TOKEN_CREDENTIALS', 'AzureCliCredential');
+    try {
+      const provider = new AzureFoundryAgentProvider('test-agent', {
+        config: {
+          projectUrl,
+          azureTenantId: 'tenant',
+          azureClientId: 'client',
+          azureClientSecret: 'fixture-secret',
+        },
+      });
+      expect(await provider.callApi('Hello')).toMatchObject({
+        error: expect.stringContaining('AZURE_TOKEN_CREDENTIALS'),
+      });
+      expect(DefaultAzureCredential).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 
   it('keeps credentials and clients isolated across provider instances and project endpoints', async () => {

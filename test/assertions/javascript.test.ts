@@ -314,6 +314,27 @@ describe('buildFunctionBody', () => {
     expect(new Function(buildFunctionBody(code))()).toBe(true);
   });
 
+  it.each(['in {}', 'instanceof String'])(
+    'preserves a use-strict string continued with %s as an expression',
+    (operator) => {
+      const code = `const f = function () { "use strict"\n${operator}; return 010; }; f() === 8`;
+      expect(new Function(buildFunctionBody(code))()).toBe(true);
+    },
+  );
+
+  it('preserves assignment defaults in valid destructuring', () => {
+    const code = 'let a; [{a = 1}] = [{}]; a === 1';
+    expect(new Function(buildFunctionBody(code))()).toBe(true);
+  });
+
+  it.each([
+    'const f = async(a)(b) => 1; true',
+    'const x = 1; ({a = 0}.x = 0); true',
+    'const x = 1; ({__proto__: null, __proto__: null}.x = 0); true',
+  ])('rejects invalid expression syntax before constructing the assertion: %s', (code) => {
+    expect(() => buildFunctionBody(code)).toThrow(SyntaxError);
+  });
+
   it.each(['\n', '\r', '\u2028', '\u2029'])(
     'should end a line comment at %j when scanning statement separators',
     (lineEnding) => {
@@ -2064,6 +2085,50 @@ describe('JavaScript file references', () => {
       });
     },
   );
+
+  it('should fail the assertion when a package function throws (#11917)', async () => {
+    vi.mocked(isPackagePath).mockReturnValue(true);
+    vi.mocked(loadFromPackage).mockResolvedValue(() => {
+      throw new Error('boom');
+    });
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      assertion: { type: 'javascript', value: 'package:@promptfoo/fake:assertionFunction' },
+      test: {} as AtomicTestCase,
+      providerResponse: { output: 'Expected output' },
+    });
+
+    expect(result).toMatchObject({
+      pass: false,
+      score: 0,
+      reason: 'Custom function threw error: boom',
+    });
+  });
+
+  it('should apply the weight: 0 override when a package function throws', async () => {
+    vi.mocked(isPackagePath).mockReturnValue(true);
+    vi.mocked(loadFromPackage).mockResolvedValue(() => {
+      throw new Error('boom');
+    });
+
+    const result: GradingResult = await runAssertion({
+      prompt: 'Some prompt',
+      assertion: {
+        type: 'javascript',
+        value: 'package:@promptfoo/fake:assertionFunction',
+        weight: 0,
+      },
+      test: {} as AtomicTestCase,
+      providerResponse: { output: 'Expected output' },
+    });
+
+    expect(result).toMatchObject({
+      pass: true,
+      score: 0,
+      reason: 'Custom function threw error: boom',
+    });
+  });
 
   it('should resolve js paths relative to the configuration file', async () => {
     const output = 'Expected output';
