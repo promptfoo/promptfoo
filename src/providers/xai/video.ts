@@ -663,7 +663,10 @@ export class XAIVideoProvider implements ApiProvider {
       });
 
       if (!response.ok) {
-        return { error: `Failed to download video: ${response.status} ${response.statusText}` };
+        return {
+          error:
+            `Failed to download video: HTTP ${response.status} ${response.statusText}`.trimEnd(),
+        };
       }
 
       const buffer = Buffer.from(await response.arrayBuffer());

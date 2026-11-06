@@ -62,6 +62,12 @@ const allowedSkippedTests: AllowedSkip[] = [
     reason: 'requires built dist artifacts when this integration file runs outside build jobs',
   },
   {
+    file: 'globalConfig/permissions.test.ts',
+    kind: 'skipIf',
+    linePattern: /^describe\.skipIf\(process\.platform === 'win32'\)\('POSIX credential targets'/,
+    reason: 'Symlink and filesystem FIFO protection exercises the POSIX credential writer',
+  },
+  {
     file: 'prompts/processors/executable.test.ts',
     kind: 'skip',
     linePattern: /process\.platform === 'win32' \? describe\.skip : describe/,
@@ -134,6 +140,12 @@ const allowedSkippedTests: AllowedSkip[] = [
     kind: 'skipIf',
     linePattern: /^it\.skipIf\(!isRubyAvailable\(\)\)\('loads and executes Ruby provider'/,
     reason: 'Ruby smoke coverage requires the Ruby toolchain',
+  },
+  {
+    file: 'smoke/sigterm-eval.test.ts',
+    kind: 'skipIf',
+    linePattern: /^describe\.skipIf\(process\.platform === 'win32'\)\('SIGTERM during an eval'/,
+    reason: 'Windows has no POSIX signals, so SIGTERM ends the child without running handlers',
   },
   {
     file: 'smoke/extension-hooks.test.ts',
