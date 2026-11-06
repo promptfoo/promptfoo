@@ -1,5 +1,5 @@
 import { DefaultAzureCredential } from '@azure/identity';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AzureFoundryAgentProvider } from '../../../src/providers/azure/foundry-agent';
 import { FoundryProjectClient } from '../../../src/providers/azure/foundryProjectClient';
 import type { TokenCredential } from '@azure/identity';
@@ -93,6 +93,66 @@ describe('Foundry project agent discovery', () => {
       statusCode: status,
       response: { status },
       details: body,
+    });
+  });
+
+  describe('provider recovery after malformed discovery', () => {
+    const agent = { id: 'legacy-id', name: 'agent-name' };
+    let provider: AzureFoundryAgentProvider;
+
+    beforeEach(() => {
+      vi.spyOn(DefaultAzureCredential.prototype, 'getToken').mockResolvedValue({
+        token: 'fixture',
+        expiresOnTimestamp: Date.now() + 3600000,
+      });
+      vi.spyOn(globalThis, 'fetch').mockImplementation(async () =>
+        Response.json({
+          id: 'response-id',
+          model: 'gpt-4.1',
+          object: 'response',
+          status: 'completed',
+          output: [
+            {
+              type: 'message',
+              role: 'assistant',
+              content: [{ type: 'output_text', text: 'Hello' }],
+            },
+          ],
+        }),
+      );
+      provider = new AzureFoundryAgentProvider('legacy-id', {
+        config: { projectUrl: 'https://fixture.example/api/projects/project' },
+      });
+    });
+
+    it('falls back from JSON null to a valid listed agent and reuses that identity', async () => {
+      reply(200, null);
+      reply(200, { data: [agent], has_more: false });
+      await expect(provider.callApi('first')).resolves.toMatchObject({ output: 'Hello' });
+      await expect(provider.callApi('again')).resolves.toMatchObject({ output: 'Hello' });
+      expect(sendRequest.mock.calls.map(([request]) => new URL(request.url).pathname)).toEqual([
+        '/api/projects/project/agents/legacy-id',
+        '/api/projects/project/agents',
+      ]);
+    });
+
+    it.each([
+      { id: 'legacy-id', name: '   ' },
+      { id: '  ', name: 'legacy-id' },
+      { id: 'legacy-id', name: 42 },
+    ])('retries discovery after both endpoints return an invalid identity %j', async (invalid) => {
+      reply(200, invalid);
+      reply(200, { data: [invalid], has_more: false });
+      expect((await provider.callApi('first')).error).toBeTruthy();
+      expect(globalThis.fetch).not.toHaveBeenCalled();
+      reply(200, agent);
+      await expect(provider.callApi('recover')).resolves.toMatchObject({ output: 'Hello' });
+      await expect(provider.callApi('again')).resolves.toMatchObject({ output: 'Hello' });
+      expect(sendRequest.mock.calls.map(([request]) => new URL(request.url).pathname)).toEqual([
+        '/api/projects/project/agents/legacy-id',
+        '/api/projects/project/agents',
+        '/api/projects/project/agents/legacy-id',
+      ]);
     });
   });
 

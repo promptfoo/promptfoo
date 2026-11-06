@@ -1,14 +1,14 @@
 import { getBearerTokenProvider, type TokenCredential } from '@azure/identity';
 import { createRestError, getClient } from '@azure-rest/core-client';
 import OpenAI from 'openai';
+import { z } from 'zod';
 import type { PathUncheckedResponse } from '@azure-rest/core-client';
 
 const scope = 'https://ai.azure.com/.default';
 
-export interface FoundryAgent {
-  id: string;
-  name: string;
-}
+const nonblankString = z.string().regex(/\S/);
+const FoundryAgentSchema = z.looseObject({ id: nonblankString, name: nonblankString });
+export type FoundryAgent = z.infer<typeof FoundryAgentSchema>;
 
 function readBody<T>(response: PathUncheckedResponse): T {
   if (response.status !== '200') {
@@ -37,7 +37,7 @@ export class FoundryProjectClient {
     const response = await this.rest.path('/agents/{name}', name).get({
       queryParameters: { 'api-version': 'v1' },
     });
-    return readBody<FoundryAgent>(response);
+    return FoundryAgentSchema.parse(readBody(response));
   }
 
   async *listAgents(): AsyncGenerator<FoundryAgent> {
@@ -46,10 +46,10 @@ export class FoundryProjectClient {
       const response = await this.rest.path('/agents').get({
         queryParameters: { 'api-version': 'v1', after },
       });
-      const page = readBody<{ data: FoundryAgent[]; last_id?: string; has_more?: boolean }>(
-        response,
-      );
-      yield* page.data;
+      const page = readBody<{ data: unknown[]; last_id?: string; has_more?: boolean }>(response);
+      for (const agent of page.data) {
+        yield FoundryAgentSchema.parse(agent);
+      }
       after = page.has_more ? page.last_id : undefined;
     } while (after);
   }
