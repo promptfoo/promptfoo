@@ -11,10 +11,19 @@ import { loadYaml } from '../util/yamlLoad';
 
 import type { GlobalConfig } from '../configTypes';
 
+const CONFIG_DIRECTORY_MODE = 0o700;
+const CONFIG_FILE_MODE = 0o600;
+
 export function writeGlobalConfig(config: GlobalConfig): void {
+  const configDir = getConfigDirectoryPath();
+  if (!fs.existsSync(configDir)) {
+    fs.mkdirSync(configDir, { recursive: true, mode: CONFIG_DIRECTORY_MODE });
+  }
+
   fs.writeFileSync(
-    path.join(getConfigDirectoryPath(true), 'promptfoo.yaml') /* createIfNotExists */,
+    path.join(configDir, 'promptfoo.yaml'),
     yaml.dump(config),
+    { mode: CONFIG_FILE_MODE },
   );
 }
 
@@ -30,9 +39,9 @@ export function readGlobalConfig(): GlobalConfig {
     }
   } else {
     if (!fs.existsSync(configDir)) {
-      fs.mkdirSync(configDir, { recursive: true });
+      fs.mkdirSync(configDir, { recursive: true, mode: CONFIG_DIRECTORY_MODE });
     }
-    fs.writeFileSync(configFilePath, yaml.dump(globalConfig));
+    fs.writeFileSync(configFilePath, yaml.dump(globalConfig), { mode: CONFIG_FILE_MODE });
   }
 
   return globalConfig;

@@ -94,6 +94,7 @@ describe('Global Config', () => {
         expect(fs.writeFileSync).toHaveBeenCalledWith(
           expect.stringContaining('promptfoo.yaml'),
           expect.stringContaining(`id: ${result.id}`),
+          expect.objectContaining({ mode: 0o600 }),
         );
       });
     });
@@ -109,11 +110,15 @@ describe('Global Config', () => {
         const result = globalConfig.readGlobalConfig();
 
         expect(fs.existsSync).toHaveBeenCalledTimes(2);
-        expect(fs.mkdirSync).toHaveBeenCalledWith(expect.any(String), { recursive: true });
+        expect(fs.mkdirSync).toHaveBeenCalledWith(expect.any(String), {
+          recursive: true,
+          mode: 0o700,
+        });
         expect(fs.writeFileSync).toHaveBeenCalledTimes(1);
         expect(fs.writeFileSync).toHaveBeenCalledWith(
           expect.stringContaining('promptfoo.yaml'),
           expect.any(String),
+          expect.objectContaining({ mode: 0o600 }),
         );
         expect(result).toEqual({ id: expect.any(String) });
         expect(result.id).toBeDefined();
@@ -141,6 +146,7 @@ describe('Global Config', () => {
       expect(fs.writeFileSync).toHaveBeenCalledWith(
         expect.stringContaining('promptfoo.yaml'),
         expect.stringContaining('account:'),
+        expect.objectContaining({ mode: 0o600 }),
       );
     });
   });
@@ -167,6 +173,7 @@ describe('Global Config', () => {
       expect(fs.writeFileSync).toHaveBeenCalledWith(
         expect.stringContaining('promptfoo.yaml'),
         expect.stringMatching(/email: new@example\.com.*apiKey: old-key/s),
+        expect.objectContaining({ mode: 0o600 }),
       );
     });
 
@@ -180,6 +187,7 @@ describe('Global Config', () => {
       expect(fs.writeFileSync).toHaveBeenCalledWith(
         expect.stringContaining('promptfoo.yaml'),
         expect.not.stringContaining('apiKey: old-key'),
+        expect.objectContaining({ mode: 0o600 }),
       );
     });
 
