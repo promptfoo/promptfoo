@@ -22,10 +22,15 @@ export function writeGlobalConfig(config: GlobalConfig): void {
   }
 
   // Replace the file so a reader holding an old, permissive inode cannot read a new key.
-  // Resolve existing links before replacement. A dangling link must not be overwritten.
-  const target = fs.lstatSync(file, { throwIfNoEntry: false }) ? fs.realpathSync(file) : file;
-  const existing = fs.statSync(target, { throwIfNoEntry: false });
+  const existing = fs.statSync(file, { throwIfNoEntry: false });
+  if (!existing && fs.lstatSync(file, { throwIfNoEntry: false })?.isSymbolicLink()) {
+    throw new Error('Create the global config symlink target before saving credentials.');
+  }
+  const target = existing ? fs.realpathSync(file) : file;
   if (existing) {
+    if (!existing.isFile()) {
+      throw new Error('The global config must be a regular file to save credentials.');
+    }
     fs.accessSync(target, fs.constants.W_OK);
   }
   const temporary = path.join(path.dirname(target), `.promptfoo-${crypto.randomUUID()}.tmp`);

@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -57,10 +58,20 @@ describe('global config permissions', () => {
     fs.symlinkSync('missing.yaml', file);
 
     expect(() => writeGlobalConfig({ cloud: { apiKey: 'fixture-key' } })).toThrow(
-      expect.objectContaining({ code: 'ENOENT' }),
+      'Create the global config symlink target',
     );
     expect(fs.readlinkSync(file)).toBe('missing.yaml');
     expect(fs.readdirSync(configDir)).toEqual(['promptfoo.yaml']);
+  });
+
+  it.skipIf(process.platform === 'win32')('leaves a linked FIFO untouched', () => {
+    fs.mkdirSync(configDir);
+    const fifo = path.join(tempDir, 'pipe');
+    execFileSync('mkfifo', [fifo]);
+    fs.symlinkSync(fifo, file);
+
+    expect(() => writeGlobalConfig({ cloud: { apiKey: 'fixture-key' } })).toThrow('regular file');
+    expect(fs.statSync(fifo).isFIFO()).toBe(true);
   });
 
   it('saves a key to an existing config', () => {
