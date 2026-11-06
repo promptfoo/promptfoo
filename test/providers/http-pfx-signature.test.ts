@@ -5,6 +5,7 @@ import path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { generateSignature } from '../../src/providers/http';
+import { readPfxPrivateKey } from '../../src/util/pfx';
 import { runCommand } from '../../src/util/runCommand';
 
 vi.mock('../../src/util/runCommand', () => ({ runCommand: vi.fn() }));
@@ -91,6 +92,49 @@ describe('PFX signature paths (generateSignature)', () => {
     const filename = vi.mocked(runCommand).mock.calls[0][1][2];
     await expect(fs.access(filename)).rejects.toMatchObject({ code: 'ENOENT' });
   });
+
+  it.each([
+    {
+      label: 'literal padding',
+      password: '  secret\t ',
+      accepted: '  secret\t ',
+      attempts: ['  secret\t '],
+    },
+    {
+      label: 'configuration padding',
+      password: '  secret\t ',
+      accepted: 'secret',
+      attempts: ['  secret\t ', 'secret'],
+    },
+    { label: 'empty archive password', password: '   ', accepted: '', attempts: ['   ', ''] },
+  ])(
+    'passes $label through stdin and preserves compatibility',
+    async ({ password, accepted, attempts }) => {
+      const key = '-----BEGIN PRIVATE KEY-----\nYQ==\n-----END PRIVATE KEY-----';
+      vi.mocked(runCommand).mockImplementation(async (_binary, args, options) => {
+        expect(args).toEqual([
+          'pkcs12',
+          '-in',
+          'fixture.p12',
+          '-nocerts',
+          '-nodes',
+          '-passin',
+          'stdin',
+        ]);
+        if (options?.input !== accepted + '\n') {
+          throw Object.assign(new Error('openssl failed'), {
+            stderr: 'Mac verify error: invalid password?',
+          });
+        }
+        return { stdout: key, stderr: '' };
+      });
+
+      await expect(readPfxPrivateKey('fixture.p12', password)).resolves.toBe(key);
+      expect(vi.mocked(runCommand).mock.calls.map(([, , options]) => options?.input)).toEqual(
+        attempts.map((value) => value + '\n'),
+      );
+    },
+  );
 
   it('succeeds when PFX content yields a key', async () => {
     const { privateKey, publicKey } = crypto.generateKeyPairSync('rsa', { modulusLength: 2048 });
