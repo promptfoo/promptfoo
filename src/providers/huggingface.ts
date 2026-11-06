@@ -277,21 +277,20 @@ export class HuggingfaceTextGenerationProvider implements ApiProvider {
 
       logger.debug('Huggingface Inference API response', { data: response.data });
 
-      if (response.data.error) {
+      const data = response.data;
+      if (data?.error) {
         return {
-          error: `API call error: ${response.data.error}`,
+          error: `API call error: ${data.error}`,
         };
       }
-      const output = response.data.generated_text ?? response.data[0]?.generated_text;
+      const output = data?.generated_text ?? data?.[0]?.generated_text;
       if (typeof output !== 'string') {
         return {
-          error: `Malformed response data: ${response.data}`,
+          error: `Malformed response data: ${data}`,
         };
       }
 
-      return {
-        output,
-      };
+      return { output };
     } catch (err) {
       return {
         error: `API call error: ${String(err)}. Output:\n${response?.data}`,

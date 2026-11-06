@@ -3,6 +3,7 @@ import { fetchWithCache } from '../../src/cache';
 import {
   HuggingfaceFeatureExtractionProvider,
   HuggingfaceTextClassificationProvider,
+  HuggingfaceTextGenerationProvider,
 } from '../../src/providers/huggingface';
 
 vi.mock('../../src/cache', async (importOriginal) => ({
@@ -22,12 +23,38 @@ function reply(data: unknown) {
 }
 
 describe('Hugging Face task response compatibility', () => {
+  const generation = new HuggingfaceTextGenerationProvider('fixture/generator');
   const classification = new HuggingfaceTextClassificationProvider('fixture/classifier');
   const embedding = new HuggingfaceFeatureExtractionProvider('fixture/embedder');
   const scores = [
     { label: 'positive', score: 0.9 },
     { label: 'negative', score: 0.1 },
   ];
+
+  it.each(['', 'Generated text'])(
+    'preserves generated text %j in both response shapes',
+    async (text) => {
+      for (const data of [{ generated_text: text }, [{ generated_text: text }]]) {
+        reply(data);
+        expect(await generation.callApi('Test prompt')).toEqual({ output: text });
+      }
+    },
+  );
+
+  it('surfaces API errors even when generated text is present', async () => {
+    reply({ error: 'Model unavailable', generated_text: '' });
+    expect(await generation.callApi('Test prompt')).toEqual({
+      error: 'API call error: Model unavailable',
+    });
+  });
+
+  it.each([null, {}, { generated_text: 0 }, []].map((data) => [data]))(
+    'rejects malformed generation responses: %j',
+    async (data) => {
+      reply(data);
+      expect((await generation.callApi('Test prompt')).error).toContain('Malformed response data');
+    },
+  );
 
   it.each([scores, [scores]].map((data) => [data]))(
     'normalizes current and legacy classification shapes: %j',
