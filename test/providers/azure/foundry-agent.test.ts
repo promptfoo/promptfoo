@@ -941,6 +941,24 @@ describe('AzureFoundryAgentProvider', () => {
       );
     });
 
+    it.each([
+      ['rate_limit_exceeded', 'rate_limit'],
+      ['insufficient_quota', 'quota'],
+      ['invalid_prompt', undefined],
+    ])('retains the retry classification of an in-band %s error', async (code, kind) => {
+      mockGetAgent.mockResolvedValue(mockAgent);
+      mockResponsesCreate.mockResolvedValueOnce({
+        ...createMessageResponse(''),
+        status: 'failed',
+        error: { code, message: '429 tokens' },
+      });
+      const provider = new AzureFoundryAgentProvider('weather-agent', { config: { projectUrl } });
+      const result = await provider.callApi('test prompt');
+
+      expect(result.error).toBe('429 tokens');
+      expect(result.metadata?.rateLimitKind).toBe(kind);
+    });
+
     it('marks a resolved-but-failed Responses turn as errored', async () => {
       const spans = installSpanRecorder();
       mockGetAgent.mockResolvedValue(mockAgent);
