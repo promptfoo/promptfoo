@@ -620,6 +620,64 @@ describe('getGradingProviderDisplay', () => {
   });
 });
 
+it('unwraps typed provider maps like { text: string }', async () => {
+  const { getGradingProviderDisplay } = await import('./utils');
+  expect(
+    getGradingProviderDisplay({
+      pass: true,
+      score: 1,
+      reason: 'ok',
+      assertion: {
+        type: 'llm-rubric',
+        provider: { text: 'litellm:judge' },
+      },
+    }),
+  ).toBe('litellm:judge');
+});
+
+it('unwraps nested typed provider maps like { text: { id } }', async () => {
+  const { getGradingProviderDisplay } = await import('./utils');
+  expect(
+    getGradingProviderDisplay({
+      pass: true,
+      score: 1,
+      reason: 'ok',
+      assertion: {
+        type: 'llm-rubric',
+        provider: { text: { id: 'openai:gpt-4o', label: 'Judge' } },
+      },
+    }),
+  ).toBe('openai:gpt-4o (Judge)');
+});
+
+it('does not treat similar embedding providers as judges', async () => {
+  const { getGradingProviderDisplay } = await import('./utils');
+  expect(
+    getGradingProviderDisplay({
+      pass: true,
+      score: 1,
+      reason: 'ok',
+      assertion: {
+        type: 'similar',
+        provider: 'openai:text-embedding-3-large',
+      },
+    }),
+  ).toBeUndefined();
+});
+
+it('still shows runtime gradingProvider metadata for non-judge assertion types', async () => {
+  const { getGradingProviderDisplay } = await import('./utils');
+  expect(
+    getGradingProviderDisplay({
+      pass: true,
+      score: 1,
+      reason: 'ok',
+      assertion: { type: 'similar', provider: 'openai:text-embedding-3-large' },
+      metadata: { gradingProvider: 'openai:gpt-4.1-mini' },
+    }),
+  ).toBe('openai:gpt-4.1-mini');
+});
+
 describe('collectUniqueGradingProviders', () => {
   it('collects unique judges from nested componentResults', async () => {
     const { collectUniqueGradingProviders } = await import('./utils');

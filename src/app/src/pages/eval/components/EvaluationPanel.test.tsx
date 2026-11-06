@@ -546,4 +546,24 @@ describe('EvaluationPanel', () => {
 
     expect(screen.queryByText('Judge')).not.toBeInTheDocument();
   });
+
+  it('does not treat similar embedding providers as Judges', () => {
+    const gradingResults: GradingResult[] = [
+      {
+        pass: true,
+        score: 1,
+        reason: 'Similar enough',
+        assertion: {
+          type: 'similar',
+          value: 'hello',
+          provider: 'openai:text-embedding-3-large',
+        },
+      },
+    ];
+
+    render(<EvaluationPanel gradingResults={gradingResults} />);
+
+    expect(screen.queryByText('Judge')).not.toBeInTheDocument();
+    expect(screen.queryByText('openai:text-embedding-3-large')).not.toBeInTheDocument();
+  });
 });

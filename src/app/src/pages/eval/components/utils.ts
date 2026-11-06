@@ -208,9 +208,72 @@ export function getNamedMetricTotals(
 }
 
 /**
+ * Assertion types whose `provider` is an LLM-as-a-judge (text grader), not an
+ * embedding/classification/moderation provider. Used to gate the legacy
+ * `assertion.provider` display fallback so e.g. `similar` embedding providers
+ * are not labeled as Judges.
+ */
+const LLM_JUDGE_ASSERTION_TYPES = new Set<string>([
+  'agent-rubric',
+  'answer-relevance',
+  'context-faithfulness',
+  'context-recall',
+  'context-relevance',
+  'factuality',
+  'g-eval',
+  'llm-rubric',
+  'model-graded-closedqa',
+  'model-graded-factuality',
+  'pi',
+  'search-rubric',
+  'trajectory:goal-success',
+]);
+
+function isLlmJudgeAssertionType(type: string | undefined): boolean {
+  if (!type) {
+    return false;
+  }
+  const base = type.startsWith('not-') ? type.slice(4) : type;
+  return LLM_JUDGE_ASSERTION_TYPES.has(base);
+}
+
+/**
+ * Format a configured assertion provider for display. Unwraps typed maps such
+ * as `{ text: 'litellm:judge' }` / `{ text: { id: '...' } }` the same way
+ * `getGradingProvider` resolves the `text` entry for LLM judges.
+ */
+function formatConfiguredProvider(configured: unknown): string | undefined {
+  if (typeof configured === 'string' && configured.trim()) {
+    return configured.trim();
+  }
+
+  if (!configured || typeof configured !== 'object' || Array.isArray(configured)) {
+    return undefined;
+  }
+
+  const record = configured as Record<string, unknown>;
+
+  // Typed provider map: prefer the text grader entry used by LLM judges.
+  if (Object.prototype.hasOwnProperty.call(record, 'text') && record.text != null) {
+    return formatConfiguredProvider(record.text);
+  }
+
+  const id = record.id;
+  if (typeof id === 'string' && id.trim()) {
+    const label = record.label;
+    return typeof label === 'string' && label.trim() && label.trim() !== id.trim()
+      ? `${id.trim()} (${label.trim()})`
+      : id.trim();
+  }
+
+  return undefined;
+}
+
+/**
  * Resolve the LLM-as-a-judge provider id for display.
  * Prefer the runtime-persisted `metadata.gradingProvider`; fall back to an
- * explicitly configured `assertion.provider` for older eval results.
+ * explicitly configured `assertion.provider` for older eval results, but only
+ * when the assertion type actually invokes an LLM judge.
  */
 export function getGradingProviderDisplay(
   result: GradingResult | null | undefined,
@@ -220,22 +283,11 @@ export function getGradingProviderDisplay(
     return fromMeta.trim();
   }
 
-  const configured = result?.assertion?.provider;
-  if (typeof configured === 'string' && configured.trim()) {
-    return configured.trim();
+  if (!isLlmJudgeAssertionType(result?.assertion?.type)) {
+    return undefined;
   }
 
-  if (configured && typeof configured === 'object' && !Array.isArray(configured)) {
-    const id = (configured as { id?: unknown }).id;
-    if (typeof id === 'string' && id.trim()) {
-      const label = (configured as { label?: unknown }).label;
-      return typeof label === 'string' && label.trim() && label.trim() !== id
-        ? `${id} (${label.trim()})`
-        : id;
-    }
-  }
-
-  return undefined;
+  return formatConfiguredProvider(result?.assertion?.provider);
 }
 
 function collectGradingProvidersFromResult(
