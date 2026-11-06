@@ -296,8 +296,8 @@ export class ElevenLabsSTTProvider implements ApiProvider {
       .createHash('sha256')
       .update(
         JSON.stringify({
-          // Invalidate full responses cached with stale WER or unknown duration costs.
-          requestVersion: 3,
+          // Invalidate full responses cached before empty-reference WER scoring.
+          requestVersion: 4,
           modelId: this.config.modelId,
           language: this.config.language,
           diarization: this.config.diarization,

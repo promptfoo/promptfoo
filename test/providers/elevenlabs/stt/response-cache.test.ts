@@ -77,6 +77,40 @@ afterEach(() => {
 
 describe('ElevenLabs STT full-response caching', () => {
   it.each(['', '   ', '...'])(
+    'bypasses cached pre-fix silence scores for %j',
+    async (referenceText) => {
+      const shortHash = (value: string) =>
+        crypto.createHash('sha256').update(value).digest('hex').slice(0, 16);
+      const legacyConfig = {
+        requestVersion: 3,
+        modelId: 'scribe_v2',
+        language: 'en',
+        diarization: false,
+        calculateWER: true,
+        referenceText,
+      };
+      const legacyKey = `elevenlabs:stt:${shortHash(JSON.stringify(legacyConfig))}:${shortHash(`${audioPath}:${mtime.getTime()}`)}`;
+      entries.set(legacyKey, {
+        output: 'hello world',
+        metadata: { wer: referenceText ? { wer: 0 } : undefined },
+      });
+      const provider = createProvider({ referenceText, calculateWER: true });
+      const response = await provider.callApi(audioPath);
+      expect(response).toMatchObject({
+        cached: false,
+        metadata: { wer: { wer: 2, insertions: 2, totalWords: 0 } },
+      });
+      expect(cache.get).not.toHaveBeenCalledWith(legacyKey);
+      expect(ElevenLabsClient.prototype.upload).toHaveBeenCalledTimes(1);
+      expect(await provider.callApi(audioPath)).toMatchObject({
+        cached: true,
+        metadata: { wer: { wer: 2 } },
+      });
+      expect(entries.has(legacyKey)).toBe(true);
+    },
+  );
+
+  it.each(['', '   ', '...'])(
     'scores unexpected speech against silent reference %j and replays the score',
     async (referenceText) => {
       const provider = createProvider({ referenceText, calculateWER: true });
