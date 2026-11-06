@@ -294,6 +294,34 @@ type OpenAIModelInfo = {
   cost?: OpenAIModelCost;
 };
 
+// OpenAI explicitly includes fine-tuned versions in the October 23, 2026 shutdown.
+const RETIRED_OPENAI_FINE_TUNE_BASES = new Set([
+  'gpt-3.5-turbo',
+  'gpt-3.5-turbo-0125',
+  'gpt-3.5-turbo-completions',
+  'gpt-4',
+  'gpt-4-0613',
+  'gpt-4-0613-completions',
+  'gpt-4-completions',
+  'gpt-4-1106-preview',
+  'gpt-4-turbo',
+  'gpt-4-turbo-2024-04-09',
+  'gpt-4-turbo-completions',
+  'gpt-4.1-nano',
+  'gpt-4.1-nano-2025-04-14',
+  'gpt-4o-2024-05-13',
+  'gpt-image-1',
+  'o1',
+  'o1-2024-12-17',
+  'o1-pro',
+  'o1-pro-2025-03-19',
+  'o3-mini',
+  'o3-mini-2025-01-31',
+  'ft-o4-mini-2025-04-16',
+  'o4-mini',
+  'o4-mini-2025-04-16',
+]);
+
 /**
  * Model IDs whose published OpenAI shutdown dates have passed.
  *
@@ -301,9 +329,54 @@ type OpenAIModelInfo = {
  * current first-party routing registries. Do not add models before their shutdown date.
  */
 export const RETIRED_OPENAI_MODEL_IDS: ReadonlySet<string> = new Set([
-  // Additional current-main shutdowns, reconciled with the published lifecycle catalog.
+  // https://developers.openai.com/api/docs/deprecations#past-deprecations
+  ...RETIRED_OPENAI_FINE_TUNE_BASES,
+  'gpt-5.4-cyber',
+  'gpt-3.5-turbo-1106',
+  'gpt-3.5-turbo-instruct',
+  'babbage-002',
+  'davinci-002',
+  'sora-2',
+  'sora-2-2025-10-06',
+  'sora-2-2025-12-08',
+  'sora-2-pro',
+  'sora-2-pro-2025-10-06',
+  'gpt-4o-mini-search-preview',
+  'gpt-4o-search-preview',
+  'gpt-4o-mini-audio-preview-2024-12-17',
+  'gpt-4o-mini-realtime-preview-2024-12-17',
+  'dall-e-2',
+  'dall-e-3',
+  'gpt-4.5-preview',
+  'gpt-4-turbo-preview-completions',
   'gpt-5.2-chat-latest',
   'gpt-5.3-chat-latest',
+  // Retired GPT-3, InstructGPT, Codex, edit and first-generation embedding models.
+  'ada',
+  'babbage',
+  'curie',
+  'davinci',
+  'text-ada-001',
+  'text-babbage-001',
+  'text-curie-001',
+  'text-davinci-001',
+  'text-davinci-002',
+  'text-davinci-003',
+  'text-davinci-edit-001',
+  'code-davinci-edit-001',
+  'code-davinci-001',
+  'code-davinci-002',
+  'code-cushman-001',
+  'code-cushman-002',
+  ...['ada', 'babbage', 'curie', 'davinci'].flatMap((base) => [
+    `text-similarity-${base}-001`,
+    `text-search-${base}-doc-001`,
+    `text-search-${base}-query-001`,
+  ]),
+  'code-search-ada-code-001',
+  'code-search-ada-text-001',
+  'code-search-babbage-code-001',
+  'code-search-babbage-text-001',
   // Retired before 2026.
   'gpt-3.5-turbo-0301',
   'gpt-3.5-turbo-0613',
@@ -359,12 +432,7 @@ export const RETIRED_OPENAI_MODEL_IDS: ReadonlySet<string> = new Set([
 
 // Preserve current-main discovery exclusions without inferring an exact shutdown from a
 // missing catalog entry. These IDs may still be used with explicitly configured endpoints.
-const LEGACY_OPENAI_DISCOVERY_EXCLUSIONS = new Set([
-  'gpt-4o-mini-audio-preview-2024-12-17',
-  'gpt-4o-mini-search-preview',
-  'gpt-4o-search-preview',
-  'gpt-5-chat',
-]);
+const LEGACY_OPENAI_DISCOVERY_EXCLUSIONS = new Set(['gpt-3.5-turbo-instruct-0914', 'gpt-5-chat']);
 
 function excludeRetiredModels(models: OpenAIModelInfo[]): OpenAIModelInfo[] {
   return models.filter(
@@ -551,6 +619,15 @@ const OPENAI_CHAT_AND_RETIRED_MODELS: OpenAIModelInfo[] = [
       output: 15 / 1e6,
     },
   }),
+  ...modelsWithCost(['gpt-6.1-terra'], {
+    input: 1 / 1e6,
+    output: 5 / 1e6,
+    longContext: {
+      threshold: GPT_LONG_CONTEXT_THRESHOLD,
+      input: 2 / 1e6,
+      output: 7.5 / 1e6,
+    },
+  }),
   ...modelsWithCost(['gpt-6-luna'], {
     input: 0.1 / 1e6,
     output: 0.5 / 1e6,
@@ -631,8 +708,7 @@ const OPENAI_CHAT_AND_RETIRED_MODELS: OpenAIModelInfo[] = [
   }),
 ];
 
-// Retired previews remain for historical billing; the dated mini preview remains routable until
-// OpenAI publishes its shutdown date.
+// Retain retired audio previews for historical billing and compatible gateways.
 const LEGACY_OPENAI_AUDIO_MODELS: OpenAIModelInfo[] = [
   ...modelsWithCost(
     [
@@ -665,6 +741,7 @@ export const OPENAI_CODEX_ONLY_MODELS: OpenAIModelInfo[] = [{ id: 'gpt-5.3-codex
 
 const OPENAI_FIRST_PARTY_API_HOSTNAMES = new Set([
   'api.openai.com',
+  'gov.api.openai.com',
   'us.api.openai.com',
   'eu.api.openai.com',
   'au.api.openai.com',
@@ -772,7 +849,11 @@ export function assertOpenAiApiModel(
 
   assertOpenAiModelEndpointCompatibility(model, options);
   const normalizedModel = model.split('/').pop() ?? model;
-  if (RETIRED_OPENAI_MODEL_IDS.has(normalizedModel)) {
+  const [, fineTuneBase] = /^ft:([^:]+):/.exec(normalizedModel) ?? [];
+  if (
+    RETIRED_OPENAI_MODEL_IDS.has(normalizedModel) ||
+    (fineTuneBase && RETIRED_OPENAI_FINE_TUNE_BASES.has(fineTuneBase))
+  ) {
     throw new Error(
       `OpenAI model ${model} has been retired and is no longer available from OpenAI's first-party API. Use a current model or configure a custom OpenAI-compatible apiBaseUrl.`,
     );
@@ -864,7 +945,7 @@ const OPENAI_DEEP_RESEARCH_AND_RETIRED_MODELS: OpenAIModelInfo[] = [
 export const OPENAI_DEEP_RESEARCH_MODELS = OPENAI_DEEP_RESEARCH_AND_RETIRED_MODELS;
 
 // See https://platform.openai.com/docs/models/model-endpoint-compatibility
-export const OPENAI_COMPLETION_MODELS: OpenAIModelInfo[] = [
+const OPENAI_COMPLETION_AND_RETIRED_MODELS: OpenAIModelInfo[] = [
   ...modelsWithCost(['gpt-3.5-turbo-instruct'], {
     input: 1.5 / 1e6,
     output: 2 / 1e6,
@@ -882,6 +963,8 @@ export const OPENAI_COMPLETION_MODELS: OpenAIModelInfo[] = [
     output: 2 / 1e6,
   }),
 ];
+
+export const OPENAI_COMPLETION_MODELS = excludeRetiredModels(OPENAI_COMPLETION_AND_RETIRED_MODELS);
 
 /**
  * Realtime model IDs that exist on a different endpoint family from the conversational
@@ -931,7 +1014,7 @@ const OPENAI_REALTIME_AND_RETIRED_MODELS: OpenAIModelInfo[] = [
     audioInput: 10 / 1e6,
     audioOutput: 20 / 1e6,
   }),
-  // Deprecated preview snapshot; OpenAI has not published a shutdown date.
+  // Historical snapshot retained for billing.
   ...realtimeModelsWithCost(['gpt-4o-mini-realtime-preview-2024-12-17'], {
     input: 0.6 / 1e6,
     output: 2.4 / 1e6,
@@ -989,7 +1072,13 @@ export const OPENAI_REALTIME_MODELS = excludeRetiredModels([
   ...RETIRED_OPENAI_REALTIME_MODELS,
 ]);
 
-export type RetiredOpenAiModelRoute = 'chat' | 'moderation' | 'responses' | 'tts' | 'realtime';
+export type RetiredOpenAiModelRoute =
+  | 'chat'
+  | 'completion'
+  | 'moderation'
+  | 'responses'
+  | 'tts'
+  | 'realtime';
 
 /**
  * Returns the endpoint family historically used by a retired model ID, including gateway prefixes.
@@ -999,6 +1088,11 @@ export type RetiredOpenAiModelRoute = 'chat' | 'moderation' | 'responses' | 'tts
  */
 export function getRetiredOpenAiModelRoute(modelName: string): RetiredOpenAiModelRoute | undefined {
   const modelId = modelName.split('/').pop() ?? modelName;
+  // The dated instruct snapshot is absent from OpenAI's catalog. Preserve its legacy route
+  // without assuming it shared the documented shutdown date of the alias.
+  if (modelId === 'gpt-3.5-turbo-instruct-0914') {
+    return 'completion';
+  }
   if (!RETIRED_OPENAI_MODEL_IDS.has(modelId)) {
     return undefined;
   }
@@ -1007,6 +1101,9 @@ export function getRetiredOpenAiModelRoute(modelName: string): RetiredOpenAiMode
     LEGACY_OPENAI_AUDIO_MODELS.some(({ id }) => id === modelId)
   ) {
     return 'chat';
+  }
+  if (OPENAI_COMPLETION_AND_RETIRED_MODELS.some(({ id }) => id === modelId)) {
+    return 'completion';
   }
   if (OPENAI_TTS_AND_RETIRED_MODELS.some(({ id }) => id === modelId)) {
     return 'tts';
@@ -1033,7 +1130,7 @@ export const OPENAI_BILLING_MODELS: OpenAIModelInfo[] = [
   ...OPENAI_CHAT_AND_RETIRED_MODELS,
   ...OPENAI_TTS_AND_RETIRED_MODELS,
   ...LEGACY_OPENAI_AUDIO_MODELS,
-  ...OPENAI_COMPLETION_MODELS,
+  ...OPENAI_COMPLETION_AND_RETIRED_MODELS,
   ...OPENAI_REALTIME_AND_RETIRED_MODELS,
   ...RETIRED_OPENAI_REALTIME_MODELS,
   ...OPENAI_RESPONSES_ONLY_AND_RETIRED_MODELS,

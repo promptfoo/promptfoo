@@ -5,6 +5,7 @@ import { resolveProviderApiKey } from '../credentials';
 import { resolveProviderEnv } from '../env';
 import { getRequestTimeoutMs, shouldBustProviderCache, withResponseCacheMetadata } from '../shared';
 import { GoogleAuthManager } from './auth';
+import { getVertexApiHostForRegion } from './shared';
 import {
   collectGroundingMetadata,
   collectThoughtSignatures,
@@ -53,7 +54,8 @@ interface GeminiImageOptions {
 // A model and its `-preview` alias share the same resolution-tiered prices.
 // The -preview aliases were shut down by Google on June 25, 2026; entries are
 // retained so historical results and stragglers still price correctly.
-const FLASH_IMAGE_PRICING = { '0.5K': 0.045, '1K': 0.067, '2K': 0.101, '4K': 0.151 }; // Nano Banana 2
+// 747, 1120, 1680 and 2520 output tokens at $60 per million.
+const FLASH_IMAGE_PRICING = { '0.5K': 0.04482, '1K': 0.0672, '2K': 0.1008, '4K': 0.1512 };
 const PRO_IMAGE_PRICING = { '1K': 0.134, '2K': 0.134, '4K': 0.24 }; // Nano Banana Pro
 
 const GEMINI_IMAGE_PRICING: Record<string, Record<string, number>> = {
@@ -67,6 +69,12 @@ const GEMINI_IMAGE_PRICING: Record<string, Record<string, number>> = {
   'gemini-3-pro-image-preview': PRO_IMAGE_PRICING,
 };
 const DEFAULT_IMAGE_COST = 0.04;
+
+const VERTEX_GLOBAL_ONLY_IMAGE_MODELS = new Set([
+  'gemini-nano-banana-2.1',
+  'gemini-3-pro-image',
+  'gemini-3.1-flash-lite-image',
+]);
 
 /**
  * Token rates (USD per token) billed in addition to the per-image price.
@@ -171,7 +179,7 @@ export class GeminiImageProvider implements ApiProvider {
   }
 
   /**
-   * Gemini 3.x image models use the global Vertex endpoint.
+   * Gemini 3.x image models default to the global Vertex endpoint.
    * Older models (e.g. gemini-2.5) use regional endpoints.
    */
   private usesGlobalVertexEndpoint(): boolean {
@@ -316,7 +324,7 @@ export class GeminiImageProvider implements ApiProvider {
     }
 
     if (isVertexMode) {
-      return this.callVertexApi(prompt, context, config);
+      return this.callVertexApi(prompt, context, config, effectiveRegion);
     }
 
     return this.callAIStudioApi(prompt, context, config);
@@ -425,15 +433,26 @@ export class GeminiImageProvider implements ApiProvider {
     prompt: string,
     context: CallApiContextParams | undefined,
     config: GoogleProviderConfig,
+    requestedRegion: string | undefined,
   ): Promise<ProviderResponse> {
-    // Gemini 3 models require the global endpoint
-    const usesGlobalVertexEndpoint = this.usesGlobalVertexEndpoint();
-    const location = usesGlobalVertexEndpoint
-      ? 'global'
-      : this.config.region ||
-        resolveProviderEnv(this.env, ['VERTEX_REGION', 'GOOGLE_CLOUD_LOCATION', 'GOOGLE_LOCATION'])
-          ?.value ||
-        'us-central1';
+    if (
+      this.config.region &&
+      this.config.region !== 'global' &&
+      VERTEX_GLOBAL_ONLY_IMAGE_MODELS.has(this.modelName)
+    ) {
+      return {
+        error: `Unsupported Vertex location "${this.config.region}" for ${this.modelName}. Use global.`,
+      };
+    }
+    let location = this.usesGlobalVertexEndpoint() ? 'global' : requestedRegion || 'us-central1';
+    if (this.modelName === 'gemini-3.1-flash-image' && requestedRegion) {
+      if (!['global', 'us', 'eu'].includes(requestedRegion)) {
+        return {
+          error: `Unsupported Vertex location "${requestedRegion}" for ${this.modelName}. Use global, us, or eu.`,
+        };
+      }
+      location = requestedRegion;
+    }
 
     try {
       const credentials = loadCredentials(this.config.credentials);
@@ -453,11 +472,7 @@ export class GeminiImageProvider implements ApiProvider {
       }
 
       const apiVersion = 'v1';
-      // Global endpoint uses a different URL format (no region prefix)
-      const baseUrl =
-        location === 'global'
-          ? 'https://aiplatform.googleapis.com'
-          : `https://${location}-aiplatform.googleapis.com`;
+      const baseUrl = `https://${getVertexApiHostForRegion(location)}`;
       const endpoint = `${baseUrl}/${apiVersion}/projects/${projectId}/locations/${location}/publishers/google/models/${this.modelName}:generateContent`;
 
       logger.debug(`Vertex AI Gemini Image API endpoint: ${endpoint}`);
@@ -479,7 +494,10 @@ export class GeminiImageProvider implements ApiProvider {
       });
       const latencyMs = Date.now() - startTime;
 
-      return this.processResponse(response.data, config, false, latencyMs);
+      // Vertex charges 10% more for US/EU Flash Image inputs, cache reads and outputs.
+      const rateMultiplier =
+        this.modelName === 'gemini-3.1-flash-image' && location !== 'global' ? 1.1 : 1;
+      return this.processResponse(response.data, config, false, latencyMs, rateMultiplier);
     } catch (err: any) {
       if (err.response?.data?.error) {
         return {
@@ -587,6 +605,7 @@ export class GeminiImageProvider implements ApiProvider {
     config: GoogleProviderConfig,
     cached?: boolean,
     latencyMs?: number,
+    rateMultiplier = 1,
   ): ProviderResponse {
     logger.debug(`Response data: ${JSON.stringify(data).substring(0, 500)}...`);
 
@@ -726,7 +745,7 @@ export class GeminiImageProvider implements ApiProvider {
           conversationOutput: mergeParts(undefined, formatCandidateContents(candidate)),
         }),
         latencyMs,
-        cost: totalCost === 0 ? undefined : totalCost,
+        cost: totalCost === 0 ? undefined : totalCost * rateMultiplier,
         tokenUsage,
         raw: data,
         ...(guardrails && { guardrails }),

@@ -32,8 +32,7 @@ const SERVER_OPENAPI_VERSION = '3.1.0';
 const OpenApiMediaParamsSchema = z.object({
   type: z.enum(['audio', 'image', 'video', 'blob']),
   filename: z
-    .string()
-    .regex(/^(?:[a-f0-9]{12}\.[a-z0-9]+|[a-f0-9]{64})$/i)
+    .union([MediaSchemas.Get.Params.shape.filename, BlobsSchemas.Get.Params.shape.hash])
     .describe('Full SHA256 for blob; 12-character hash plus extension for legacy media'),
 });
 
@@ -46,9 +45,17 @@ const OpenApiProvidersSchema = z.union([
 
 const OpenApiCreateJobRequestSchema = z
   .object({
-    prompts: z.array(z.union([z.string(), OpenApiLooseObjectSchema])),
+    prompts: EvalSchemas.CreateJob.Request.shape.prompts,
     providers: OpenApiProvidersSchema,
-    tests: z.array(z.unknown()).optional(),
+    tests: z
+      .union([
+        z.string(),
+        z.array(z.unknown()),
+        z.object({ path: z.string(), config: OpenApiLooseObjectSchema.optional() }),
+      ])
+      .optional(),
+    sourceEvalId: EvalSchemas.CreateJob.Request.shape.sourceEvalId,
+    sharing: EvalSchemas.CreateJob.Request.shape.sharing,
     evaluateOptions: OpenApiLooseObjectSchema.optional(),
   })
   .passthrough();
@@ -94,8 +101,6 @@ const OpenApiEvalTableJsonResponseSchema = z.union([
   EvalSchemas.Table.JsonExportResponse,
 ]);
 
-export const SERVER_OPENAPI_ROUTE_COUNT = 67;
-
 type OpenApiSchema = NonNullable<ZodMediaTypeObject['schema']>;
 type OpenApiResponse = ResponseConfig & { description: string };
 type RegisteredRouteConfig = RouteConfig & {
@@ -105,19 +110,19 @@ type RegisteredRouteConfig = RouteConfig & {
 
 export function createServerOpenApiRegistry() {
   const registry = new OpenAPIRegistry();
-  const routes: RegisteredRouteConfig[] = [];
 
   // The DTO schemas are created before this generator runs. Passing them directly
   // keeps @asteasolutions/zod-to-openapi isolated to docs generation instead of
   // importing it from runtime validation modules just to attach `.openapi()`.
 
-  function jsonBody(zodSchema: z.ZodType, description = 'JSON request body') {
+  function jsonBody(zodSchema: z.ZodType, description = 'JSON request body', example?: unknown) {
     return {
       description,
       required: true,
       content: {
         [APPLICATION_JSON]: {
           schema: zodSchema,
+          example,
         },
       },
     };
@@ -185,9 +190,19 @@ export function createServerOpenApiRegistry() {
   }
 
   function register(route: RegisteredRouteConfig) {
-    routes.push(route);
     registry.registerPath(route);
   }
+
+  register({
+    method: 'get',
+    path: '/api/openapi.json',
+    operationId: 'getOpenApiDocument',
+    tags: ['Server'],
+    summary: 'Get the installed local server API specification',
+    responses: {
+      200: jsonResponse(OpenApiLooseObjectSchema),
+    },
+  });
 
   register({
     method: 'get',
@@ -349,7 +364,12 @@ export function createServerOpenApiRegistry() {
     tags: ['Telemetry'],
     summary: 'Record a web UI telemetry event',
     request: {
-      body: jsonBody(ServerSchemas.Telemetry.Request),
+      body: jsonBody(
+        ServerSchemas.Telemetry.Request.extend({
+          // The default depends on the installed version and should not enter the docs snapshot.
+          packageVersion: z.string().optional(),
+        }),
+      ),
     },
     responses: {
       200: jsonResponse(ServerSchemas.Telemetry.Response),
@@ -429,12 +449,23 @@ export function createServerOpenApiRegistry() {
     operationId: 'createEvalJob',
     tags: ['Eval'],
     summary: 'Start an evaluation job',
+    description: 'Poll GET /api/eval/job/{id} with the returned ID for progress and results.',
     request: {
-      body: jsonBody(OpenApiCreateJobRequestSchema),
+      body: jsonBody(
+        OpenApiCreateJobRequestSchema,
+        'Run the local echo example without an API key.',
+        {
+          prompts: ['ping'],
+          providers: ['echo'],
+          tests: [{ assert: [{ type: 'equals', value: 'ping' }] }],
+          sharing: false,
+        },
+      ),
     },
     responses: {
       200: jsonResponse(EvalSchemas.CreateJob.Response),
       400: jsonResponse(ErrorResponseSchema, 'Validation error'),
+      500: jsonResponse(ErrorResponseSchema, 'Failed to prepare eval job'),
     },
   });
 
@@ -451,6 +482,7 @@ export function createServerOpenApiRegistry() {
       200: jsonResponse(EvalSchemas.GetJob.Response),
       400: jsonResponse(ErrorResponseSchema, 'Validation error'),
       404: jsonResponse(ErrorResponseSchema, 'Job not found'),
+      500: jsonResponse(ErrorResponseSchema, 'Failed to load eval job'),
     },
   });
 
@@ -762,7 +794,7 @@ export function createServerOpenApiRegistry() {
     responses: {
       200: jsonResponse(ModelAuditSchemas.Scan.Response),
       400: jsonResponse(ErrorResponseSchema, 'Validation error'),
-      500: jsonResponse(ModelAuditSchemas.Scan.ErrorResponse),
+      500: jsonResponse(ModelAuditSchemas.Scan.ErrorResponse, 'Scan failed'),
     },
   });
 
@@ -900,7 +932,7 @@ export function createServerOpenApiRegistry() {
     },
     responses: {
       200: jsonResponse(ProviderSchemas.TestRequestTransform.Response),
-      400: jsonResponse(ErrorResponseSchema),
+      400: jsonResponse(ErrorResponseSchema, 'Validation error'),
     },
   });
 
@@ -915,7 +947,7 @@ export function createServerOpenApiRegistry() {
     },
     responses: {
       200: jsonResponse(ProviderSchemas.TestResponseTransform.Response),
-      400: jsonResponse(ErrorResponseSchema),
+      400: jsonResponse(ErrorResponseSchema, 'Validation error'),
     },
   });
 
@@ -957,6 +989,8 @@ export function createServerOpenApiRegistry() {
     operationId: 'runRedteam',
     tags: ['Redteam'],
     summary: 'Start a redteam run',
+    description:
+      'Starting a run cancels the previous active red team on this server. Poll GET /api/eval/job/{id} with the returned ID for progress and results.',
     request: {
       body: jsonBody(RedteamSchemas.Run.Request),
     },
@@ -1210,11 +1244,11 @@ export function createServerOpenApiRegistry() {
     },
   });
 
-  return { registry, routes };
+  return registry;
 }
 
 export function createServerOpenApiDocument() {
-  const { registry } = createServerOpenApiRegistry();
+  const registry = createServerOpenApiRegistry();
   const generator = new OpenApiGeneratorV31(registry.definitions, {
     sortComponents: 'alphabetically',
     unionPreferredType: 'oneOf',
