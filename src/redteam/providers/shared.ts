@@ -746,6 +746,23 @@ export function runRedteamGrader<TResult, TArgs extends unknown[]>(
   );
 }
 
+/** Match the assertion runner's answer transform for turn-level coding-agent grading. */
+export async function getCodingAgentTransformedAnswer(
+  assertion: AssertionOrSet,
+  output: string,
+  context: TransformContext,
+): Promise<string | undefined> {
+  if (
+    !assertion.type.startsWith('promptfoo:redteam:coding-agent:') ||
+    !('transform' in assertion) ||
+    !assertion.transform
+  ) {
+    return undefined;
+  }
+  const answer = await transform(assertion.transform, output, context);
+  return typeof answer === 'string' ? answer : JSON.stringify(answer);
+}
+
 /** Preserve the latest verdict while retaining usage from every strategy grading turn. */
 export function accumulateGraderResult(
   previous: GradingResult | undefined,
@@ -756,6 +773,7 @@ export function accumulateGraderResult(
     messages?: unknown;
     pluginId?: string;
     assertion?: AssertionOrSet;
+    transformedAnswer?: string;
   },
 ): GradingResult {
   if (input) {
@@ -769,6 +787,7 @@ export function accumulateGraderResult(
           input.output,
           input.messages,
           input.pluginId,
+          input.transformedAnswer,
         ),
       },
     };

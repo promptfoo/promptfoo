@@ -42,6 +42,7 @@ function resolveCommandToolNames(extra: readonly string[] | null | undefined): R
 
 const SEARCH_SPAN_NAME_PATTERN = /(^|[\s._:/-])(search|find|lookup|retriev(?:e|al))($|[\s._:/-])/i;
 
+const MAX_ACTION_CHARS = 512;
 const MAX_JUDGE_SUMMARY_STEPS = 24;
 const JUDGE_SUMMARY_HEAD_STEPS = 12;
 const JUDGE_SUMMARY_TAIL_STEPS = 12;
@@ -498,16 +499,36 @@ function truncateJudgeTrajectorySteps(
   ];
 }
 
-export function summarizeTrajectoryForJudge(
+export function buildJudgeTrajectorySummary(
   trace: TraceData,
-  { includeSpanText = true }: { includeSpanText?: boolean } = {},
-): string {
+  {
+    includeSpanText = true,
+    includeActionText = false,
+  }: {
+    includeSpanText?: boolean;
+    includeActionText?: boolean;
+  } = {},
+) {
+  let omittedActionText = false;
   const rawSteps = extractTrajectorySteps(trace).map((step, index) => {
     const status = getTrajectoryStepStatus(step, includeSpanText);
+    const isAction = step.type === 'command' || step.type === 'tool';
+    if (
+      isAction &&
+      !includeSpanText &&
+      (!includeActionText || step.type === 'tool' || step.name.length > MAX_ACTION_CHARS)
+    ) {
+      omittedActionText = true;
+    }
+    const name = includeSpanText
+      ? step.name
+      : includeActionText && isAction
+        ? step.name.slice(0, MAX_ACTION_CHARS).replace(/\p{Cc}/gu, ' ')
+        : undefined;
     return {
       index: index + 1,
       type: step.type,
-      ...(includeSpanText && { name: step.name }),
+      ...(name !== undefined && { name }),
       ...(includeSpanText && step.spanName !== step.name && { spanName: step.spanName }),
       ...(status && { status }),
     };
@@ -515,7 +536,12 @@ export function summarizeTrajectoryForJudge(
   const compactedSteps = compactJudgeTrajectorySteps(rawSteps);
   const steps = truncateJudgeTrajectorySteps(compactedSteps);
 
-  return JSON.stringify(
+  if (compactedSteps.length > MAX_JUDGE_SUMMARY_STEPS) {
+    omittedActionText ||= compactedSteps
+      .slice(JUDGE_SUMMARY_HEAD_STEPS, -JUDGE_SUMMARY_TAIL_STEPS)
+      .some((step) => step.type === 'command' || step.type === 'tool');
+  }
+  const text = JSON.stringify(
     {
       ...(includeSpanText && { traceId: trace.traceId }),
       stepCount: rawSteps.length,
@@ -525,4 +551,9 @@ export function summarizeTrajectoryForJudge(
     null,
     2,
   );
+  return { text, omittedActionText };
+}
+
+export function summarizeTrajectoryForJudge(trace: TraceData): string {
+  return buildJudgeTrajectorySummary(trace).text;
 }

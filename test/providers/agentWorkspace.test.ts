@@ -1696,6 +1696,18 @@ describe('agent workspaces', () => {
       expect(fs.readFileSync(path.join(workspace!.dir, 'file.txt'), 'utf8')).toBe('content\n');
     });
 
+    it('copies a relative source from the provider-specific base directory', async () => {
+      write(path.join(root, 'provider-base', 'project', 'version'), 'fixture');
+      cliState.basePath = path.join(root, 'other-base');
+      const workspace = await createAgentWorkspaceForConfig({
+        basePath: path.join(root, 'provider-base'),
+        working_dir: 'project',
+        copy_working_dir: 'copy',
+      });
+      workspaces.push(workspace!);
+      expect(fs.readFileSync(path.join(workspace!.dir, 'version'), 'utf8')).toBe('fixture');
+    });
+
     it('requires working_dir', async () => {
       await expect(createAgentWorkspaceForConfig({ copy_working_dir: true })).rejects.toThrow(
         'copy_working_dir requires working_dir',

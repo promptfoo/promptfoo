@@ -408,6 +408,7 @@ export abstract class RedteamGraderBase {
     trace: RedteamGradingContext['traceData'],
     turnCount?: number,
     targetPrompt?: string,
+    transformedAnswer?: string,
   ): Promise<GradingResult>;
 
   renderRubric(vars: Record<string, any>): string {

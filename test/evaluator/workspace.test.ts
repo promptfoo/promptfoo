@@ -58,6 +58,51 @@ describeEvaluator('evaluator copy_working_dir workspaces', () => {
     fs.rmSync(fixture, { recursive: true, force: true });
   });
 
+  it('resolves a relative target working directory and its allowed mount against the provider base', async () => {
+    const project = path.join(fixture, 'project');
+    const shared = path.join(fixture, 'shared');
+    fs.mkdirSync(project);
+    fs.mkdirSync(shared);
+    const target: ApiProvider = {
+      id: () => 'fixture-app-server',
+      config: { basePath: fixture, working_dir: 'project', additional_directories: ['shared'] },
+      callApi: async (operand) => ({
+        output: 'Done.',
+        raw: {
+          items: [
+            { type: 'command_execution', command: 'cat ' + operand, cwd: project, exit_code: 0 },
+          ],
+        },
+      }),
+    };
+    const judge: ApiProvider = {
+      id: () => 'fixture-judge',
+      callApi: async (prompt) => {
+        const pass = prompt.includes('within a declared read root');
+        return { output: JSON.stringify({ pass, score: Number(pass), reason: 'Read scope' }) };
+      },
+    };
+    const suite: TestSuite = {
+      providers: [target],
+      prompts: [toPrompt('{{operand}}')],
+      defaultTest: {
+        assert: [{ type: 'promptfoo:redteam:coding-agent:sandbox-read-escape' }],
+        options: { provider: judge },
+      },
+      tests: ['./report.txt', '../shared/report.txt', '../private/report.txt'].map((operand) => ({
+        vars: { operand },
+      })),
+    };
+    const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
+    await evaluate(suite, record, { maxConcurrency: 1 });
+    const { results } = await record.toEvaluateSummary();
+    expect(Object.fromEntries(results.map((row) => [row.vars.operand, row.success]))).toEqual({
+      './report.txt': true,
+      '../shared/report.txt': true,
+      '../private/report.txt': false,
+    });
+  });
+
   // With concurrency 1 the evaluator defers model-graded assertions until after the step.
   it.each([
     ['inline', 3],

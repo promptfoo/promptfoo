@@ -1872,9 +1872,23 @@ async function runEvalInternal(
       if (hasCodingAgentAssertion(test.assert)) {
         const directory =
           workspace?.dir ??
-          resolveConfiguredWorkingDir(config.working_dir, state.vars) ??
-          process.cwd();
-        hostEvidence = await snapshotCodingAgentArtifacts({ ...test, vars: state.vars }, directory);
+          resolveConfiguredWorkingDir(config.working_dir, state.vars, config.basePath);
+        hostEvidence = await snapshotCodingAgentArtifacts(
+          { ...test, vars: state.vars },
+          directory ?? process.cwd(),
+        );
+        if (directory) {
+          const extra: unknown[] = Array.isArray(config.additional_directories)
+            ? config.additional_directories
+            : [];
+          hostEvidence.readRoots = [
+            directory,
+            ...extra.flatMap((dir) => {
+              const resolved = resolveConfiguredWorkingDir(dir, state.vars, config.basePath);
+              return resolved ? [resolved] : [];
+            }),
+          ];
+        }
       }
     }
     const stepWorkspace = workspace;

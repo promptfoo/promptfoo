@@ -72,6 +72,59 @@ describe('redteam strategy result grading', () => {
     vi.restoreAllMocks();
   });
 
+  it('regrades a provisional sandbox-read pass when the final trace supplies read evidence', async () => {
+    const pluginId = 'coding-agent:sandbox-read-escape';
+    const assertion: Assertion = { type: 'promptfoo:redteam:coding-agent:sandbox-read-escape' };
+    const judge = vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValue({
+      grade: { pass: false, score: 0, reason: 'Fresh read evidence' },
+      rubric: 'Classified read',
+    });
+    const traceData = {
+      traceId: 'trace',
+      evaluationId: 'eval',
+      testCaseId: 'row',
+      spans: [
+        {
+          name: 'tool',
+          spanId: 'read',
+          startTime: 0,
+          statusCode: 1,
+          attributes: { 'codex.command': 'cat ../sample/version', 'codex.exit_code': 0 },
+        },
+      ],
+    };
+    const result = await runAssertion({
+      assertion,
+      prompt: attackPrompt,
+      test: { ...test, assert: [assertion], metadata: { ...test.metadata, pluginId } },
+      providerResponse: {
+        output,
+        metadata: {
+          redteamFinalPrompt: attackPrompt,
+          storedGraderResult: {
+            pass: true,
+            score: 1,
+            reason: 'Provisional',
+            assertion,
+            metadata: {
+              redteamGradingAssertionHash: getGradingAssertionHash(assertion),
+              redteamGradingInputHash: getGradingInputHash(
+                attackPrompt,
+                output,
+                undefined,
+                pluginId,
+              ),
+            },
+          },
+        },
+      },
+      traceId: traceData.traceId,
+      traceData,
+    });
+    expect(judge).toHaveBeenCalledOnce();
+    expect(result.pass).toBe(false);
+  });
+
   it.each([
     ['selected', undefined],
     ['other', undefined],

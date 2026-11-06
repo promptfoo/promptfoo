@@ -760,10 +760,13 @@ export async function createAgentWorkspace(
 export function resolveConfiguredWorkingDir(
   configured: unknown,
   vars?: Record<string, VarValue>,
+  configuredBase?: unknown,
 ): string | undefined {
   const workingDir = renderVarsInObject(configured, vars);
+  const basePath =
+    typeof configuredBase === 'string' && configuredBase ? configuredBase : cliState.basePath;
   return typeof workingDir === 'string'
-    ? resolveAgenticWorkingDir(workingDir, cliState.basePath)
+    ? resolveAgenticWorkingDir(workingDir, basePath)
     : undefined;
 }
 
@@ -772,7 +775,7 @@ export function resolveConfiguredWorkingDir(
  * prompt config, sets `copy_working_dir`.
  */
 export async function createAgentWorkspaceForConfig(
-  config: { copy_working_dir?: unknown; working_dir?: unknown } | undefined,
+  config: { copy_working_dir?: unknown; working_dir?: unknown; basePath?: unknown } | undefined,
   vars?: Record<string, VarValue>,
   signal?: AbortSignal,
 ): Promise<AgentWorkspace | undefined> {
@@ -780,7 +783,7 @@ export async function createAgentWorkspaceForConfig(
   if (!mode) {
     return undefined;
   }
-  const workingDir = resolveConfiguredWorkingDir(config?.working_dir, vars);
+  const workingDir = resolveConfiguredWorkingDir(config?.working_dir, vars, config?.basePath);
   if (!workingDir) {
     throw new Error('copy_working_dir requires working_dir');
   }

@@ -11,6 +11,8 @@ export type TrapLogPosition = Pick<BigIntStats, 'dev' | 'ino' | 'size'>;
 /** Local observations for one evaluator row. Provider responses cannot supply this state. */
 export interface CodingAgentHostEvidence {
   workingDir: string;
+  /** Explicit target working directory and permitted additional directories. */
+  readRoots?: string[];
   /** SHA-256 for a readable file, undefined for confirmed absence, null when observation failed. */
   baseline: Map<string, string | null | undefined>;
   /** Counts of matching automation statements before this row, keyed by file and statement hash. */
