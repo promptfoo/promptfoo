@@ -11,6 +11,7 @@ import {
   isAlwaysOnAdaptiveThinkingClaudeModel,
   isBetweenToolsLowestThinkingClaudeModel,
   isClaudeFableOrMythos5Model,
+  isClaudeHaiku55Model,
   isClaudeOpus5Model,
   isClaudeOpus55Model,
   isClaudeRegionalPremiumModel,
@@ -2856,6 +2857,51 @@ describe('Anthropic utilities', () => {
       expect(
         calculateAnthropicCost('global.anthropic.claude-sonnet-5-5', {}, 1000, 500),
       ).toBeCloseTo(0.007, 10);
+    });
+  });
+
+  describe('Claude Haiku 5.5', () => {
+    const HAIKU_55_IDS = [
+      'claude-haiku-5-5',
+      'anthropic:messages:claude-haiku-5-5',
+      'anthropic.claude-haiku-5-5',
+      'us.anthropic.claude-haiku-5-5',
+      'eu.anthropic.claude-haiku-5-5',
+      'jp.anthropic.claude-haiku-5-5',
+      'au.anthropic.claude-haiku-5-5',
+      'global.anthropic.claude-haiku-5-5',
+      'claude-haiku-5-5-20261015',
+    ];
+
+    it('detects Haiku 5.5 across provider naming schemes', () => {
+      for (const id of HAIKU_55_IDS) {
+        expect(isClaudeHaiku55Model(id)).toBe(true);
+        // Capability row (not only the Claude 5+ generation fallback) must mark sampling
+        // deprecated — grading and gateway paths may disable the fallback.
+        expect(isSamplingParamsDeprecatedClaudeModel(id, { allowGenerationFallback: false })).toBe(
+          true,
+        );
+        expect(isThinkingOnByDefaultClaudeModel(id)).toBe(true);
+        expect(isAlwaysOnAdaptiveThinkingClaudeModel(id)).toBe(false);
+        expect(isForcedToolChoiceUnsupportedClaudeModel(id)).toBe(false);
+        expect(isClaudeRegionalPremiumModel(id)).toBe(true);
+      }
+      expect(isClaudeHaiku55Model('claude-haiku-4-5')).toBe(false);
+      expect(isClaudeHaiku55Model('claude-haiku-5-50')).toBe(false);
+      expect(getClaudeModelWarningName('claude-haiku-5-5')).toBe('Claude Haiku 5.5');
+    });
+
+    it('omits temperature via resolveClaudeSamplingParams when deprecated', () => {
+      // Mirrors the llm-rubric grader path: default temperature 0 must not be sent.
+      const { sampling } = resolveClaudeSamplingParams(
+        { temperature: 0 },
+        {
+          thinkingEnabled: false,
+          samplingParamsDeprecated: isSamplingParamsDeprecatedClaudeModel('claude-haiku-5-5'),
+          defaultTemperature: 0,
+        },
+      );
+      expect(sampling).toEqual({});
     });
   });
 });
