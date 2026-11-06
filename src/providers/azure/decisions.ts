@@ -13,12 +13,12 @@ import invariant from '../../util/invariant';
 import { renderVarsInObject } from '../../util/render';
 import {
   isCredentialHeader,
-  looksLikeSecret,
   sanitizeObject,
   sanitizeUrlEncodedString,
   sanitizeUrlForLogging,
 } from '../../util/sanitizer';
 import { escapeRegExp } from '../../util/text';
+import { resolveProviderApiKey } from '../credentials';
 import {
   answersMatchDecisionQuestions,
   decisionGradingLevelsSchema,
@@ -27,6 +27,7 @@ import {
   decisionResponseSchema,
   parseDecisionsInput,
 } from '../openai/decisionsProtocol';
+import { hasSensitiveOpenAiCacheString } from '../openai/util';
 import { getResponsesTokenUsage } from '../responses/processor';
 import { getRequestTimeoutMs } from '../shared';
 import { decodeUrlComponent } from '../urlEncoding';
@@ -50,11 +51,50 @@ const cacheScopes = new LRUCache<string, string>({
 
 function hasSensitiveValue(value: unknown): boolean {
   if (typeof value === 'string') {
-    return looksLikeSecret(value);
+    return hasSensitiveOpenAiCacheString(value);
   }
   return value !== null && typeof value === 'object'
     ? Object.values(value).some(hasSensitiveValue)
     : false;
+}
+
+function getAzureDecisionsApiUrl(apiBaseUrl: string): string {
+  const url = new URL(apiBaseUrl);
+  const pathname = url.pathname.replace(/\/+$/, '');
+  const apiPath = /\/openai\/v1$/i.test(pathname)
+    ? pathname
+    : /\/openai$/i.test(pathname)
+      ? `${pathname}/v1`
+      : `${pathname}/openai/v1`;
+  url.pathname = `${apiPath}/decisions`;
+  return url.toString();
+}
+
+function setHeader(headers: Record<string, string>, name: string, value: string): void {
+  const normalizedName = name.toLowerCase();
+  for (const existingName of Object.keys(headers)) {
+    if (existingName.toLowerCase() === normalizedName) {
+      delete headers[existingName];
+    }
+  }
+  headers[name] = value;
+}
+
+function getRequestHeaders(
+  authHeaders: Record<string, string>,
+  customHeaders: Record<string, string> | undefined,
+): Record<string, string> {
+  const headers: Record<string, string> = {};
+  setHeader(headers, 'Content-Type', 'application/json');
+  for (const [name, value] of Object.entries(authHeaders)) {
+    setHeader(headers, name, value);
+  }
+  for (const [name, value] of Object.entries(customHeaders ?? {})) {
+    if (name.toLowerCase() !== 'x-promptfoo-silent') {
+      setHeader(headers, name, value);
+    }
+  }
+  return headers;
 }
 
 function hasHostedDecisionImage(body: DecisionRequest): boolean {
@@ -81,9 +121,13 @@ function getHeaderCredentials(name: string, value: string): string[] {
   const credentials = [value, trimmed.replace(/^[!#$%&'*+.^_`|~0-9A-Za-z-]+\s+/, '')];
   const basic = /^Basic\s+([a-z\d+/]+={0,2})$/i.exec(trimmed);
   if (basic) {
-    const decoded = Buffer.from(basic[1], 'base64').toString('utf8');
+    const bytes = Buffer.from(basic[1], 'base64');
+    const decoded = bytes.toString('utf8');
     const separator = decoded.indexOf(':');
-    if (separator !== -1) {
+    if (
+      separator !== -1 &&
+      bytes.toString('base64').replace(/=+$/, '') === basic[1].replace(/=+$/, '')
+    ) {
       credentials.push(decoded, decoded.slice(0, separator), decoded.slice(separator + 1));
     }
   }
@@ -91,10 +135,20 @@ function getHeaderCredentials(name: string, value: string): string[] {
     for (const part of value.split(';')) {
       const separator = part.indexOf('=');
       if (separator !== -1) {
-        const cookieName = part.slice(0, separator).trim();
-        const cookieValue = decodeUrlComponent(part.slice(separator + 1).trim());
-        if (isCredentialHeader(cookieName, cookieValue)) {
-          credentials.push(cookieValue);
+        const raw = part.slice(separator + 1).trim();
+        const unquoted = raw.replace(/^"(.*)"$/, '$1');
+        const decoded = decodeUrlComponent(unquoted);
+        const decodedValue = decoded.replace(/^"(.*)"$/, '$1');
+        const cookieName = part
+          .slice(0, separator)
+          .trim()
+          .replace(/^__(?:Host|Secure)-/i, '');
+        if (
+          isCredentialHeader(cookieName, decodedValue) ||
+          /^(?:csrf|xsrf)$/i.test(cookieName) ||
+          /(?:session(?:[-_]?id)?|sessid|(?:^|[._-])sid)$/i.test(cookieName)
+        ) {
+          credentials.push(raw, unquoted, decoded, decodedValue);
         }
       }
     }
@@ -160,8 +214,19 @@ export class AzureDecisionsProvider extends AzureGenericProvider<AzureDecisionsO
     options?.abortSignal?.throwIfAborted();
     const config: AzureDecisionsOptions = {
       ...this.config,
-      ...(context?.prompt?.config as Partial<AzureDecisionsOptions>),
+      ...(context?.prompt?.config as Partial<AzureDecisionsOptions> | undefined),
     };
+    const promptConfig = context?.prompt?.config as Partial<AzureDecisionsOptions> | undefined;
+    if (promptConfig?.apiBaseUrl !== undefined) {
+      config.apiHost = undefined;
+    } else if (promptConfig?.apiHost !== undefined) {
+      config.apiBaseUrl = undefined;
+    }
+    if (promptConfig?.apiKey !== undefined) {
+      config.apiKeyEnvar = undefined;
+    } else if (promptConfig?.apiKeyEnvar !== undefined) {
+      config.apiKey = undefined;
+    }
     if (context?.isGrading) {
       const label = context.prompt.label;
       if (label === 'llm-rubric') {
@@ -310,10 +375,24 @@ export class AzureDecisionsProvider extends AzureGenericProvider<AzureDecisionsO
     options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     options?.abortSignal?.throwIfAborted();
-    await this.ensureInitialized();
-    invariant(this.authHeaders, 'auth headers are not initialized');
+    const apiKey = resolveProviderApiKey(config, this.env, [
+      'AZURE_API_KEY',
+      'AZURE_OPENAI_API_KEY',
+    ]);
+    let authHeaders: Record<string, string>;
+    if (apiKey) {
+      authHeaders = { 'api-key': apiKey };
+    } else {
+      await this.ensureInitialized();
+      invariant(this.authHeaders, 'auth headers are not initialized');
+      authHeaders = this.authHeaders;
+    }
 
-    const apiBaseUrl = this.getApiBaseUrl();
+    const apiBaseUrl = config.apiBaseUrl
+      ? config.apiBaseUrl
+      : config.apiHost
+        ? `https://${config.apiHost.replace(/^(https?:\/\/)/, '')}`
+        : this.getApiBaseUrl();
     if (!apiBaseUrl) {
       throw new Error(
         'Azure API configuration missing. Set AZURE_OPENAI_API_BASE_URL or AZURE_API_HOST, or configure apiBaseUrl or apiHost.',
@@ -345,11 +424,12 @@ export class AzureDecisionsProvider extends AzureGenericProvider<AzureDecisionsO
       };
     }
 
-    const apiUrl = /\/openai\/v1$/i.test(apiBaseUrl)
-      ? apiBaseUrl
-      : /\/openai$/i.test(apiBaseUrl)
-        ? `${apiBaseUrl}/v1`
-        : `${apiBaseUrl}/openai/v1`;
+    let apiUrl: string;
+    try {
+      apiUrl = getAzureDecisionsApiUrl(apiBaseUrl);
+    } catch {
+      return { error: 'Invalid Azure Decisions API base URL.' };
+    }
 
     return withGenAISpan(
       {
@@ -363,7 +443,7 @@ export class AzureDecisionsProvider extends AzureGenericProvider<AzureDecisionsO
         traceparent: context?.traceparent,
         requestBody: typeof input === 'string' ? input : JSON.stringify(input),
       },
-      () => this.callDecisions(apiUrl, body, config, context, options),
+      () => this.callDecisions(apiUrl, body, config, authHeaders, context, options),
       extractProviderResponseAttributes,
     );
   }
@@ -372,18 +452,12 @@ export class AzureDecisionsProvider extends AzureGenericProvider<AzureDecisionsO
     apiUrl: string,
     body: DecisionRequest,
     config: AzureDecisionsOptions,
+    authHeaders: Record<string, string>,
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    invariant(this.authHeaders, 'auth headers are not initialized');
-    const headers = Object.fromEntries(
-      Object.entries({
-        'Content-Type': 'application/json',
-        ...this.authHeaders,
-        ...config.headers,
-      }).filter(([name]) => name.toLowerCase() !== 'x-promptfoo-silent'),
-    );
-    const url = `${apiUrl}/decisions`;
+    const headers = getRequestHeaders(authHeaders, config.headers);
+    const url = apiUrl;
     const secrets = [
       ...getUrlCredentials(url),
       ...Object.entries(headers)
@@ -528,7 +602,7 @@ export class AzureDecisionsProvider extends AzureGenericProvider<AzureDecisionsO
       }
 
       const result = decisionResponseSchema.safeParse(data);
-      if (!result.success || !answersMatchDecisionQuestions(result.data.answers, body.questions)) {
+      if (!result.success) {
         await deleteFromCache?.();
         return {
           error: 'Invalid Azure Decisions API response: answers or usage do not match the request',
@@ -544,7 +618,7 @@ export class AzureDecisionsProvider extends AzureGenericProvider<AzureDecisionsO
             ? 0
             : usage.input_tokens * inputCost + usage.output_tokens * outputCost
           : undefined;
-      return {
+      const accounting = {
         cached,
         latencyMs,
         tokenUsage: cached
@@ -554,6 +628,17 @@ export class AzureDecisionsProvider extends AzureGenericProvider<AzureDecisionsO
               cached: usage.input_tokens_details?.cached_tokens,
             },
         ...(cost === undefined ? {} : { cost }),
+      };
+      if (!answersMatchDecisionQuestions(answers, body.questions)) {
+        await deleteFromCache?.();
+        return {
+          ...accounting,
+          error: 'Invalid Azure Decisions API response: answers or usage do not match the request',
+          metadata: httpMetadata,
+        };
+      }
+      return {
+        ...accounting,
         output: JSON.stringify({ answers }),
         raw: data,
         metadata: {

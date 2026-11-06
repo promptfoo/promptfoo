@@ -104,6 +104,76 @@ describe('AzureDecisionsProvider', () => {
     expect(result.cost).toBeUndefined();
   });
 
+  it('appends the Decisions path before query parameters and fragments', async () => {
+    const provider = new AzureDecisionsProvider('deployment', {
+      config: {
+        ...config,
+        apiHost: undefined,
+        apiBaseUrl: 'https://gateway.example/openai/v1?api-key=gateway-query-secret#diagnostics',
+      },
+    });
+    await provider.callApi('Refund me');
+    expect(vi.mocked(fetchWithCache).mock.calls[0]![0]).toBe(
+      'https://gateway.example/openai/v1/decisions?api-key=gateway-query-secret#diagnostics',
+    );
+  });
+
+  it.each([
+    {
+      providerEndpoint: { apiHost: 'provider.openai.azure.com' },
+      promptEndpoint: { apiBaseUrl: 'https://prompt-gateway.example/openai/v1' },
+      expectedUrl: 'https://prompt-gateway.example/openai/v1/decisions',
+    },
+    {
+      providerEndpoint: { apiBaseUrl: 'https://provider.openai.azure.com' },
+      promptEndpoint: { apiHost: 'prompt-host.openai.azure.com' },
+      expectedUrl: 'https://prompt-host.openai.azure.com/openai/v1/decisions',
+    },
+  ])(
+    'honors prompt-scoped endpoint and API key overrides: $promptEndpoint',
+    async ({ providerEndpoint, promptEndpoint, expectedUrl }) => {
+      const provider = new AzureDecisionsProvider('deployment', {
+        config: { ...config, apiHost: undefined, ...providerEndpoint },
+      });
+      await provider.callApi('Refund me', {
+        vars: {},
+        prompt: {
+          raw: 'Refund me',
+          label: 'ticket',
+          config: { ...promptEndpoint, apiKey: 'prompt-azure-key' },
+        },
+      });
+      const [url, request] = vi.mocked(fetchWithCache).mock.calls[0]!;
+      expect(url).toBe(expectedUrl);
+      expect(new Headers(request?.headers).get('api-key')).toBe('prompt-azure-key');
+      expect(JSON.stringify(request?.headers)).not.toContain(config.apiKey);
+    },
+  );
+
+  it('uses prompt-scoped transport settings without provider-level endpoint or credentials', async () => {
+    vi.spyOn(AzureDecisionsProvider.prototype, 'getAzureTokenCredential').mockRejectedValue(
+      new Error('Provider-level Azure identity is unavailable'),
+    );
+    const provider = new AzureDecisionsProvider('deployment', {
+      config: { questions: [question] },
+    });
+    const result = await provider.callApi('Refund me', {
+      vars: {},
+      prompt: {
+        raw: 'Refund me',
+        label: 'ticket',
+        config: {
+          apiBaseUrl: 'https://prompt-only.openai.azure.com/openai/v1',
+          apiKey: 'prompt-only-key',
+        },
+      },
+    });
+    const [url, request] = vi.mocked(fetchWithCache).mock.calls[0]!;
+    expect(result.error).toBeUndefined();
+    expect(url).toBe('https://prompt-only.openai.azure.com/openai/v1/decisions');
+    expect(new Headers(request?.headers).get('api-key')).toBe('prompt-only-key');
+  });
+
   it('requires an Azure endpoint before transport', async () => {
     const provider = new AzureDecisionsProvider('deployment', {
       config: { apiKey: config.apiKey, questions: [question] },
@@ -150,6 +220,69 @@ describe('AzureDecisionsProvider', () => {
     expect(JSON.stringify(vi.mocked(fetchWithCache).mock.calls[0][1])).not.toContain(
       'ambient-openai-secret',
     );
+  });
+
+  it.each([
+    {
+      name: 'API key',
+      providerConfig: {
+        ...config,
+        headers: { 'API-Key': 'custom-api-key' } as Record<string, string>,
+      },
+      headerName: 'api-key',
+      expectedValue: 'custom-api-key',
+    },
+    {
+      name: 'content type',
+      providerConfig: {
+        ...config,
+        headers: {
+          'content-type': 'application/json; charset=utf-8',
+        } as Record<string, string>,
+      },
+      headerName: 'content-type',
+      expectedValue: 'application/json; charset=utf-8',
+    },
+  ])(
+    'applies case-insensitive $name header overrides without duplicates',
+    async ({ providerConfig, headerName, expectedValue }) => {
+      const provider = new AzureDecisionsProvider('deployment', {
+        config: providerConfig,
+      });
+      await provider.callApi('Refund me');
+      const headers = vi.mocked(fetchWithCache).mock.calls[0]![1]!.headers as Record<
+        string,
+        string
+      >;
+      expect(Object.keys(headers).filter((name) => name.toLowerCase() === headerName)).toHaveLength(
+        1,
+      );
+      expect(new Headers(headers).get(headerName)).toBe(expectedValue);
+    },
+  );
+
+  it('allows a custom authorization header to replace generated Entra authentication', async () => {
+    const getToken = vi.fn().mockResolvedValue({
+      token: 'generated-entra-token',
+      expiresOnTimestamp: Date.now() + 3600000,
+    });
+    vi.spyOn(AzureDecisionsProvider.prototype, 'getAzureTokenCredential').mockResolvedValue({
+      getToken,
+    });
+    const provider = new AzureDecisionsProvider('deployment', {
+      config: {
+        ...config,
+        apiKey: undefined,
+        headers: { authorization: 'Bearer custom-authorization' },
+      },
+    });
+    await provider.callApi('Refund me');
+    const headers = vi.mocked(fetchWithCache).mock.calls[0]![1]!.headers as Record<string, string>;
+    expect(Object.keys(headers).filter((name) => name.toLowerCase() === 'authorization')).toEqual([
+      'authorization',
+    ]);
+    expect(headers.authorization).toBe('Bearer custom-authorization');
+    expect(JSON.stringify(headers)).not.toContain('generated-entra-token');
   });
 
   it('fails when Azure authentication fails instead of using the OpenAI key', async () => {
@@ -299,6 +432,45 @@ describe('AzureDecisionsProvider', () => {
     expect(JSON.stringify(result)).not.toContain(config.apiKey);
   });
 
+  it('normalizes and redacts prefixed, quoted, and encoded authentication cookies', async () => {
+    const session = 'private-session-cookie';
+    const xsrf = 'private-xsrf-cookie';
+    vi.mocked(fetchWithCache).mockImplementation(
+      async (_url, _request, _timeout, _format, cacheOptions) => {
+        const message = `Access denied for ${session} and ${xsrf}`;
+        const data = { error: { message } };
+        const sanitized =
+          typeof cacheOptions === 'object'
+            ? cacheOptions.sanitizeResponse?.({
+                data,
+                statusText: message,
+                headers: { 'x-request-id': message },
+              })
+            : undefined;
+        return {
+          ...sanitized,
+          data: sanitized?.data ?? data,
+          cached: false,
+          status: 401,
+          statusText: sanitized?.statusText ?? message,
+        };
+      },
+    );
+    const provider = new AzureDecisionsProvider('deployment', {
+      config: {
+        ...config,
+        headers: {
+          Cookie: `__Host-session="${session}"; xsrf=%22${xsrf}%22`,
+        },
+      },
+    });
+    const result = await provider.callApi('Refund me');
+    expect(result.error).toContain('Azure Decisions API error (401)');
+    expect(JSON.stringify(result)).not.toContain(session);
+    expect(JSON.stringify(result)).not.toContain(xsrf);
+    expect(JSON.stringify(result)).toContain('[REDACTED]');
+  });
+
   it('reports rate limits without owning a second retry loop', async () => {
     const error = new HttpRateLimitError({
       status: 429,
@@ -332,6 +504,51 @@ describe('AzureDecisionsProvider', () => {
       provider.callApi('Refund me', undefined, { abortSignal: controller.signal }),
     ).rejects.toThrow();
     expect(fetchWithCache).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    'Review https://example.com/file?X-Amz-Signature=embedded-signature',
+    'Review this Bearer embedded-bearer-token before continuing',
+  ])('bypasses persistent caching for embedded credentials: %s', async (input) => {
+    const provider = new AzureDecisionsProvider('deployment', { config });
+    await provider.callApi(input);
+    expect(vi.mocked(fetchWithCache).mock.calls[0]![4]).toMatchObject({
+      bust: true,
+      cacheKey: undefined,
+    });
+  });
+
+  it('retains validated accounting when answers do not match the request', async () => {
+    const deleteFromCache = vi.fn();
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: {
+        model: 'resolved-model',
+        answers: [{ ...answer, name: 'different-question' }],
+        usage,
+      },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      latencyMs: 27,
+      headers: { 'x-request-id': 'request-mismatch' },
+      deleteFromCache,
+    });
+    const provider = new AzureDecisionsProvider('deployment', {
+      config: { ...config, inputCost: 0.01, outputCost: 0.02 },
+    });
+    const result = await provider.callApi('Refund me');
+    expect(result).toMatchObject({
+      error: 'Invalid Azure Decisions API response: answers or usage do not match the request',
+      cached: false,
+      latencyMs: 27,
+      cost: 0.2,
+      tokenUsage: { total: 20, prompt: 20, completion: 0 },
+      metadata: {
+        http: { status: 200, headers: { 'x-request-id': 'request-mismatch' } },
+      },
+    });
+    expect(result.output).toBeUndefined();
+    expect(deleteFromCache).toHaveBeenCalledOnce();
   });
 
   it('marks cached responses without replaying rate-limit metadata', async () => {
