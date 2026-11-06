@@ -249,11 +249,12 @@ export const handleRedteam = async (
     const redteamHistory = providerResponse.metadata?.redteamHistory as
       | Array<{ graderError?: string }>
       | undefined;
-    const { hasAnyErrors } = analyzeGraderErrors(redteamHistory);
-
-    const grader = storedResult.pass ? getGraderById(assertion.type) : undefined;
-    const finalGrade = grader?.recheckStoredPass
-      ? await grader.recheckStoredPass(
+    const grader =
+      storedResult.pass || storedResult.metadata?.verifierStatus === 'incomplete'
+        ? getGraderById(assertion.type)
+        : undefined;
+    const finalGrade = grader?.recheckStoredResult
+      ? await grader.recheckStoredResult(
           storedResult,
           outputString,
           test,
@@ -262,6 +263,17 @@ export const handleRedteam = async (
           redteamHistory?.length,
         )
       : storedResult;
+
+    const { hasAnyErrors } = analyzeGraderErrors(
+      redteamHistory,
+      storedResult.metadata?.graderError && !finalGrade.metadata?.graderError
+        ? {
+            prompt: effectivePrompt,
+            output: outputString,
+            gradingInputHash: storedResult.metadata.redteamGradingInputHash,
+          }
+        : undefined,
+    );
 
     return {
       ...finalGrade,

@@ -8,8 +8,47 @@ import { promisify } from 'node:util';
 
 import { expect, it } from 'vitest';
 import { CODING_AGENT_PLUGINS } from '../../src/redteam/constants/codingAgents';
+import { ResultFailureReason } from '../../src/types/results';
 
 import type { EvaluateResult } from '../../src/types/index';
+
+async function runEval(
+  dir: string,
+  config: string,
+  env: NodeJS.ProcessEnv = {},
+): Promise<EvaluateResult[]> {
+  const output = path.join(dir, 'result.json');
+  const child = promisify(execFile);
+  await child(
+    process.execPath,
+    [
+      path.resolve(__dirname, '../../dist/src/entrypoint.js'),
+      'eval',
+      '-c',
+      config,
+      '-o',
+      output,
+      '--no-cache',
+      '--max-concurrency',
+      '1',
+    ],
+    {
+      env: {
+        ...process.env,
+        ...env,
+        PROMPTFOO_CONFIG_DIR: path.join(dir, 'state'),
+        PROMPTFOO_DISABLE_TELEMETRY: '1',
+        PROMPTFOO_DISABLE_REMOTE_GENERATION: '1',
+        PROMPTFOO_DISABLE_UPDATE: '1',
+      },
+    },
+  ).catch((error: Error & { code?: number }) => {
+    if (error.code !== 100) {
+      throw error;
+    }
+  });
+  return JSON.parse(await fs.readFile(output, 'utf8')).results.results;
+}
 
 it('grades a clean control and an observed effect for every coding-agent plugin through the CLI', async () => {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'pf-coding-agent-smoke-'));
@@ -109,7 +148,6 @@ it('grades a clean control and an observed effect for every coding-agent plugin 
       }
     }
     const config = path.join(dir, 'config.json');
-    const output = path.join(dir, 'result.json');
     await fs.writeFile(
       config,
       JSON.stringify({
@@ -127,36 +165,7 @@ it('grades a clean control and an observed effect for every coding-agent plugin 
         tests,
       }),
     );
-    const child = promisify(execFile);
-    await child(
-      process.execPath,
-      [
-        path.resolve(__dirname, '../../dist/src/entrypoint.js'),
-        'eval',
-        '-c',
-        config,
-        '-o',
-        output,
-        '--no-cache',
-        '--max-concurrency',
-        '1',
-      ],
-      {
-        env: {
-          ...process.env,
-          PROMPTFOO_QA_MARKER: marker,
-          PROMPTFOO_CONFIG_DIR: path.join(dir, 'state'),
-          PROMPTFOO_DISABLE_TELEMETRY: '1',
-          PROMPTFOO_DISABLE_REMOTE_GENERATION: '1',
-          PROMPTFOO_DISABLE_UPDATE: '1',
-        },
-      },
-    ).catch((error: Error & { code?: number }) => {
-      if (error.code !== 100) {
-        throw error;
-      }
-    });
-    const rows: EvaluateResult[] = JSON.parse(await fs.readFile(output, 'utf8')).results.results;
+    const rows = await runEval(dir, config, { PROMPTFOO_QA_MARKER: marker });
     expect(rows).toHaveLength(2 * CODING_AGENT_PLUGINS.length);
     const failureKinds: Record<string, string> = {
       'repo-prompt-injection': 'sensitive-value-observed',
@@ -198,3 +207,46 @@ it('grades a clean control and an observed effect for every coding-agent plugin 
     await fs.rm(dir, { recursive: true, force: true });
   }
 }, 90000);
+
+it('grades marker casing, response availability and task accuracy through the CLI', async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'pf-coding-agent-answers-'));
+  try {
+    const rows = await runEval(dir, path.join(__dirname, 'fixtures/coding-agent/answers.cjs'));
+    const byScenario = new Map(rows.map((row) => [row.vars.scenario, row]));
+    const grades = (scenario: string) => byScenario.get(scenario)?.gradingResult?.componentResults;
+
+    expect(rows).toHaveLength(10);
+    expect(grades('case-only')?.map((g) => g.metadata?.verifierStatus)).toEqual(
+      Array(6).fill('failed'),
+    );
+    expect(byScenario.get('different-marker')?.success).toBe(true);
+    for (const scenario of ['empty', 'expected-wrong']) {
+      expect(byScenario.get(scenario)?.failureReason).toBe(ResultFailureReason.ERROR);
+    }
+    for (const scenario of ['empty', 'whitespace', 'expected-wrong']) {
+      expect(grades(scenario)?.[0]).toMatchObject({
+        pass: false,
+        metadata: {
+          verifierStatus: 'incomplete',
+          graderError: true,
+          verifierEvidence: {
+            problem:
+              scenario === 'expected-wrong' ? 'unexpected-final-answer' : 'empty-final-answer',
+          },
+        },
+      });
+    }
+    expect(grades('wrong-answer')?.map((g) => g.pass)).toEqual([true, false]);
+    expect(byScenario.get('wrong-answer')?.failureReason).toBe(ResultFailureReason.ASSERT);
+    expect(byScenario.get('correct-answer')?.success).toBe(true);
+    expect(byScenario.get('expected-correct')?.success).toBe(true);
+    for (const scenario of ['empty-with-receipt', 'expected-wrong-with-marker']) {
+      expect(byScenario.get(scenario)?.failureReason).toBe(ResultFailureReason.ASSERT);
+      expect(grades(scenario)?.[0]?.metadata?.deterministicFailureKind).toBe(
+        'sensitive-value-observed',
+      );
+    }
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+});

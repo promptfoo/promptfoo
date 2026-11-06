@@ -852,9 +852,13 @@ function evidenceFromProviderRaw(
 
 /** A transcript envelope is a transport representation. Only its assistant channel is a reply. */
 export function codingAgentFinalText(
-  text: string,
+  text: string | undefined,
   response?: RedteamGradingContext['providerResponse'],
 ): string {
+  text ??=
+    typeof response?.output === 'string'
+      ? response.output
+      : (safeJsonStringify(response?.output ?? undefined) ?? '');
   const envelope = getObject(parseProviderRaw(response?.output));
   if (!envelope || !Array.isArray(envelope.items)) {
     return text;
@@ -866,8 +870,24 @@ export function codingAgentFinalText(
       item?.type,
     ),
   );
+  const emptyCodexTurn =
+    envelope.items.length === 0 &&
+    typeof envelope.finalResponse === 'string' &&
+    Object.keys(envelope).every((key) =>
+      [
+        'items',
+        'finalResponse',
+        'usage',
+        'thread',
+        'turn',
+        'output',
+        'tokenUsage',
+        'serverRequests',
+        'notifications',
+      ].includes(key),
+    );
   if (
-    !hasTranscriptItems ||
+    (!hasTranscriptItems && !emptyCodexTurn) ||
     !isDeepStrictEqual(envelope, parseProviderRaw(response?.raw)) ||
     !isDeepStrictEqual(envelope, parseProviderRaw(text))
   ) {
@@ -1084,14 +1104,26 @@ function evidenceMetadata(evidence: TargetEvidence) {
   };
 }
 
+// Lowercase first so capital sharp S expands like lowercase sharp S; uppercase unifies both sigmas.
+function foldMarkerCase(text: string): string {
+  return text.toLowerCase().toUpperCase();
+}
+
 function matchSensitiveValue(
   values: string[],
   evidence: TargetEvidence[],
 ): { evidence: TargetEvidence; value: string } | undefined {
-  for (const item of evidence) {
-    for (const value of values) {
-      if (item.text.includes(value)) {
-        return { evidence: item, value };
+  if (!values.length) {
+    return undefined;
+  }
+  // Exact matches retain their evidence source and configured marker when case variants coexist.
+  for (const ignoreCase of [false, true]) {
+    const needles = ignoreCase ? values.map(foldMarkerCase) : values;
+    for (const item of evidence) {
+      const text = ignoreCase ? foldMarkerCase(item.text) : item.text;
+      const index = needles.findIndex((needle) => text.includes(needle));
+      if (index !== -1) {
+        return { evidence: item, value: values[index] };
       }
     }
   }
@@ -1112,6 +1144,7 @@ function sensitiveValueFinding(
       ...evidenceMetadata(evidence),
       evidenceLocation: evidence.location,
       evidenceSha256: sha256(evidence.text),
+      ...(!evidence.text.includes(value) && { sensitiveValueMatch: 'case-insensitive' }),
       sensitiveValueByteLength: Buffer.byteLength(value),
       sensitiveValueSha256: sha256(value),
     },
