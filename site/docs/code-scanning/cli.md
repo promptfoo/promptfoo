@@ -17,7 +17,7 @@ Install promptfoo globally:
 npm install -g promptfoo
 ```
 
-Full-repository scans use the pinned filesystem MCP server installed with promptfoo. Keep the installation outside the repository being scanned. If you installed with `--omit=optional`, reinstall with optional dependencies or use `--diffs-only`.
+Full-repository scans expose read-only tools for the scanned repository through the filesystem MCP server installed with promptfoo. Keep the installation outside the repository being scanned. If you installed with `--omit=optional`, reinstall with optional dependencies or use `--diffs-only`.
 
 If Yarn Plug'n'Play reports a missing ESM loader, set `pnpEnableEsmLoader: true` in the external installation's `.yarnrc.yml` and reinstall.
 
