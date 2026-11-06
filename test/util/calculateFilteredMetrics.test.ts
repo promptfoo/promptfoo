@@ -29,6 +29,36 @@ describe('calculateFilteredMetrics', () => {
     vi.resetAllMocks();
   });
 
+  it.each(['constructor', 'toString', '__proto__'])(
+    'preserves stored metric %s in filtered summaries',
+    async (metric) => {
+      const eval_ = await EvalFactory.create({ numResults: 0 });
+      for (const testIdx of [0, 1]) {
+        await eval_.addResult(
+          createEvaluateResult({
+            testIdx,
+            namedScores: Object.fromEntries([[metric, 0.75]]),
+            gradingResult: {
+              pass: true,
+              score: 0.75,
+              reason: 'fixture',
+              namedScoreWeights: Object.fromEntries([[metric, 2]]),
+            },
+          }),
+        );
+      }
+      const metrics = await calculateFilteredMetrics({
+        evalId: eval_.id,
+        numPrompts: 1,
+        whereSql: sql`eval_id = ${eval_.id}`,
+      });
+      expect(metrics[0].namedScores).toEqual(Object.fromEntries([[metric, 3]]));
+      expect(metrics[0].namedScoresCount).toEqual(Object.fromEntries([[metric, 2]]));
+      expect(metrics[0].namedScoreWeights).toEqual(Object.fromEntries([[metric, 4]]));
+      expect(Object.getPrototypeOf(metrics[0].namedScores)).toBe(Object.prototype);
+    },
+  );
+
   describe('basic metrics aggregation', () => {
     it('should aggregate basic metrics for all results', async () => {
       const eval_ = await EvalFactory.create({

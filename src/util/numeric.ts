@@ -7,7 +7,7 @@ export function filterFiniteScores(scores: Record<string, unknown>): Record<stri
   const filtered: Record<string, number> = {};
   for (const [key, value] of Object.entries(scores)) {
     if (typeof value === 'number' && Number.isFinite(value)) {
-      filtered[key] = value;
+      setNamedMetricValue(filtered, key, value);
     }
   }
   return filtered;
@@ -37,4 +37,18 @@ export function isSafeTokenCount(value: unknown): value is number {
  */
 export function isSafeCost(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0;
+}
+
+/** Store metric names as own data properties, including the legacy __proto__ accessor name. */
+export function setNamedMetricValue(
+  record: Record<string, number>,
+  name: string,
+  value: number,
+): void {
+  Object.defineProperty(record, name, {
+    value,
+    writable: true,
+    enumerable: true,
+    configurable: true,
+  });
 }

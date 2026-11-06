@@ -41,6 +41,13 @@ describe('isSafeCost', () => {
 });
 
 describe('filterFiniteScores', () => {
+  it('preserves own prototype-named metrics without changing the record prototype', () => {
+    const input = JSON.parse('{"__proto__":0.75,"constructor":0.5,"toString":1}');
+    const scores = filterFiniteScores(input);
+    expect(scores).toEqual(input);
+    expect(Object.hasOwn(scores, '__proto__')).toBe(true);
+    expect(Object.getPrototypeOf(scores)).toBe(Object.prototype);
+  });
   it('keeps finite numbers and drops everything else', () => {
     expect(
       filterFiniteScores({

@@ -25,6 +25,32 @@ const createErrorMetricTest = (errorValue: number) => ({
 });
 
 describeEvaluator('evaluator metrics and scoring', () => {
+  it.each(['constructor', 'toString', '__proto__'])(
+    'stores and exposes derived metric %s as an own value',
+    async (metric) => {
+      const testSuite: TestSuite = {
+        providers: [mockApiProvider],
+        prompts: [toPrompt('Derived metric names')],
+        tests: [{ assert: [{ type: 'equals', value: 'Test output' }] }],
+        derivedMetrics: [
+          { name: metric, value: () => 0.75 },
+          {
+            name: 'copied',
+            value: (scores) => (Object.hasOwn(scores, metric) ? scores[metric] : -1),
+          },
+        ],
+      };
+      const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+      await evaluate(testSuite, evalRecord, {});
+      expect(evalRecord.prompts[0].metrics?.namedScores).toEqual(
+        Object.fromEntries([
+          [metric, 0.75],
+          ['copied', 0.75],
+        ]),
+      );
+    },
+  );
+
   it('evaluator should count named score assertions per metric', async () => {
     const testSuite: TestSuite = {
       providers: [mockApiProvider],
