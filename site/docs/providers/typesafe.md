@@ -98,11 +98,11 @@ Set the pass cutoff with the provider's `config.threshold`, a number from 0 to 1
 
 ### Reasons and metadata
 
-Jev returns no rationale. The assertion's `reason` states how the verdict was derived:
+Jev returns no rationale. The assertion's `reason` reports the probability or normalized score without a threshold comparison, so it stays valid when the assertion applies its own threshold:
 
 ```text
-Jev Noul probability 0.93 >= threshold 0.5
-Jev Score 1.43 on levels 0–2 (0.715 normalized) >= threshold 0.5; nearest level: "Acknowledges the problem but offers no fix"
+Jev Noul probability 0.93
+Jev Score 1.43 on levels 0–2 (0.715 normalized); nearest level: "Acknowledges the problem but offers no fix"
 ```
 
 Jev's full answer, including a Score's `probabilities` and `confidence`, is in the grading result's `metadata.typesafe.answer`, next to the model version and request ID. The result's `renderedGradingPrompt` shows Promptfoo's standard grading prompt, which is not sent to Jev.

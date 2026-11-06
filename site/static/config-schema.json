@@ -471,6 +471,9 @@
         "N8N_API_KEY": {
           "type": "string"
         },
+        "NACE_API_KEY": {
+          "type": "string"
+        },
         "NSCALE_SERVICE_TOKEN": {
           "type": "string"
         },
