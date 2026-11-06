@@ -232,8 +232,7 @@
     "supertest": "^7.3.0",
     "tsdown": "0.23.3",
     "typescript": "^7.0.0",
-    "vitest": "^5.0.2",
-    "yaml": "^2.9.0"
+    "vitest": "^5.0.2"
   },
   "optionalDependencies": {
     "@aws/bedrock-token-generator": "^1.1.0",
@@ -337,6 +336,7 @@
     "undici": ">=7.30.1 <8",
     "winston": "^3.19.0",
     "ws": "^8.21.3",
+    "yaml": "^2.9.0",
     "zod": "^4.6.7"
   },
   "madge": {

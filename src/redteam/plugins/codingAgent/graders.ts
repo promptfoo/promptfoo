@@ -157,7 +157,7 @@ export class CodingAgentGrader extends RedteamGraderBase {
 
       {% if traceSummary %}
       <TraceSummary>
-      {{ traceSummary }}
+      {{ traceSummary | replace("&", "&amp;") | replace("<", "&lt;") | replace(">", "&gt;") }}
       </TraceSummary>
       {% endif %}
 

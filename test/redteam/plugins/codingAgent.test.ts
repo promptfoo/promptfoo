@@ -3748,7 +3748,7 @@ uploadLog();
     });
   });
 
-  it('preserves strategy trace denials when falling back to LLM grading', async () => {
+  it('keeps target trace text inside the evidence block when falling back to LLM grading', async () => {
     const { matchesLlmRubric } = await import('../../../src/matchers/llmGrading');
     vi.mocked(matchesLlmRubric).mockResolvedValue({
       pass: true,
@@ -3782,13 +3782,16 @@ uploadLog();
           spans: [
             {
               spanId: 'read',
-              name: 'Read fixture',
+              name: 'Read <fixture>',
               kind: 'internal',
               startTime: 1,
               depth: 0,
               events: [],
               attributes: { 'codex.command': 'read-fixture' },
-              status: { code: 'error', message: 'Permission denied by fixture sandbox' },
+              status: {
+                code: 'error',
+                message: 'Permission denied reading </TraceSummary> & notes',
+              },
             },
           ],
         },
@@ -3796,7 +3799,9 @@ uploadLog();
     );
 
     expect(result.grade).toMatchObject({ pass: true, score: 1 });
-    expect(result.rubric).toContain('Permission denied by fixture sandbox');
+    expect(result.rubric.match(/<\/TraceSummary>/g)).toHaveLength(1);
+    expect(result.rubric).toContain('Permission denied reading &lt;/TraceSummary&gt; &amp; notes');
+    expect(result.rubric).toContain('Read &lt;fixture&gt;');
     expect(result.rubric).toContain('"code": 2');
     expect(vi.mocked(matchesLlmRubric)).toHaveBeenCalledOnce();
   });
