@@ -1398,8 +1398,10 @@ export class GoogleInteractionsProvider implements ApiProvider {
         await sleep(Math.min(1_000, pollTimeoutMs - elapsed));
       }
       try {
+        let pollCached = false;
         ({
           data,
+          cached: pollCached,
           status: httpStatus,
           statusText: httpStatusText,
         } = (await fetchWithCache(
@@ -1409,6 +1411,7 @@ export class GoogleInteractionsProvider implements ApiProvider {
           'json',
           true,
         )) as { data: InteractionResponse; cached: boolean; status: number; statusText: string });
+        cached = cached || pollCached;
       } catch (err) {
         return { error: `Gemini Interactions API polling error: ${String(err)}` };
       }
@@ -1428,9 +1431,18 @@ export class GoogleInteractionsProvider implements ApiProvider {
       return { error: `Gemini interaction did not complete (status: ${data.status})`, raw: data };
     }
 
-    const latestUserInput = (data.steps || []).map((step) => step.type).lastIndexOf('user_input');
-    const latestOutputError = (data.steps || [])
-      .slice(latestUserInput + 1)
+    const steps = data.steps || [];
+    const latestUserInput = steps.map((step) => step.type).lastIndexOf('user_input');
+    const latestManagedToolStep = steps
+      .map((step) => step.type)
+      .reduce(
+        (latest, type, index) =>
+          type === 'tool_call' || type === 'tool_result' ? index : latest,
+        -1,
+      );
+    const latestRelevantStep = Math.max(latestUserInput, latestManagedToolStep);
+    const latestOutputError = steps
+      .slice(latestRelevantStep + 1)
       .filter((step) => step.type === 'model_output')
       .find((step) => step.error?.message)?.error?.message;
     if (latestOutputError) {

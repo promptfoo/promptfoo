@@ -443,7 +443,11 @@ export class AnthropicGenericProvider implements ApiProvider {
     response: string,
   ): Promise<void> {
     if (this.label) {
-      await cache.set(cacheKey, response);
+      if (ttlMs > 0) {
+        await cache.set(cacheKey, response, ttlMs);
+      } else {
+        await cache.set(cacheKey, response);
+      }
       return;
     }
 

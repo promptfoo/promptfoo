@@ -231,4 +231,20 @@ describe('AzureEmbeddingProvider', () => {
       expect(deleteFromCache).toHaveBeenCalledOnce();
     },
   );
+
+  it('evicts a successful response with an empty embedding', async () => {
+    const deleteFromCache = vi.fn().mockResolvedValue(undefined);
+    vi.mocked(fetchWithCache).mockResolvedValueOnce({
+      ...createMockFetchResponse({
+        data: [{ embedding: [] }],
+        usage: { total_tokens: 7, prompt_tokens: 7, completion_tokens: 0 },
+      }),
+      deleteFromCache,
+    });
+
+    expect(await provider.callEmbeddingApi('test text')).toMatchObject({
+      error: expect.stringContaining('No embedding returned'),
+    });
+    expect(deleteFromCache).toHaveBeenCalledOnce();
+  });
 });
