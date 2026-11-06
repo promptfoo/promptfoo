@@ -1122,6 +1122,33 @@ describe('fetchWithProxy', () => {
     expect(dispatchers[1]).not.toBe(dispatchers[0]);
   });
 
+  it.each([undefined, 'http://proxy.example.com'])(
+    'isolates dispatchers by effective TLS verification and CA bundle (proxy: %s)',
+    async (proxy) => {
+      mockProcessEnv({ HTTPS_PROXY: proxy, PROMPTFOO_CA_CERT_PATH: 'ca.pem' });
+      const agent = proxy ? ProxyAgent : Agent;
+      const env = await vi.importActual<typeof import('../src/envars')>('../src/envars');
+      vi.mocked(getEnvBool).mockImplementation(env.getEnvBool);
+      vi.mocked(getEnvString).mockImplementation(env.getEnvString);
+      const request = async (insecure: boolean, ca: string) => {
+        mockProcessEnv({ PROMPTFOO_INSECURE_SSL: String(insecure) });
+        vi.mocked(fsPromises.readFile).mockResolvedValueOnce(ca);
+        await fetchWithProxy('https://example.com');
+        const options = vi.mocked(global.fetch).mock.lastCall?.[1] as { dispatcher: unknown };
+        return options.dispatcher;
+      };
+
+      const permissive = await request(true, 'bundle-a');
+      const strict = await request(false, 'bundle-a');
+      const rotated = await request(false, 'bundle-b');
+      expect(strict).not.toBe(permissive);
+      expect(rotated).not.toBe(strict);
+      expect(await request(false, 'bundle-a')).toBe(strict);
+      expect(await request(true, 'bundle-a')).toBe(permissive);
+      expect(agent).toHaveBeenCalledTimes(3);
+    },
+  );
+
   it.each([
     { name: 'default Agent', agentClass: Agent, proxyUrl: undefined },
     { name: 'ProxyAgent', agentClass: ProxyAgent, proxyUrl: 'http://proxy.example.com' },

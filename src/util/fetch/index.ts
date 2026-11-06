@@ -12,6 +12,7 @@ import { getRequestTimeoutMs } from '../../providers/shared';
 import { parseRateLimitHeaders } from '../../scheduler/headerParser';
 import invariant from '../../util/invariant';
 import { sleep } from '../../util/time';
+import { sha256 } from '../createHash';
 import { sanitizeUrl, sanitizeUrlForLogging } from '../sanitizer';
 import { CloudAuthRedirectError } from './cloudAuthRedirects';
 import { createDecompressionInterceptor, stripDecompressionHeaders } from './decompress';
@@ -62,16 +63,8 @@ async function resolveAuthenticationHeaders(
   return Object.fromEntries(headers);
 }
 
-// Cached agents to avoid recreating on every request.
-// Keep separate entries per resolved connection count so overlapping requests
-// with different request-scoped concurrency caps do not evict each other.
-// Without caching, concurrent requests race on setGlobalDispatcher(),
-// corrupting TLS session state and producing "bad record mac" errors.
-//
-// Note: TLS options (rejectUnauthorized, CA cert) are captured at agent
-// creation time. This is acceptable because these env vars don't change
-// mid-process. If that assumption changes, add cache-invalidation logic.
-const cachedAgents: Map<number, Dispatcher> = new Map();
+// Evaluations in the same process can use different pool sizes and TLS policies.
+const cachedAgents: Map<string, Dispatcher> = new Map();
 const cachedProxyAgents: Map<string, Dispatcher> = new Map();
 
 /**
@@ -111,9 +104,15 @@ export function clearAgentCache(): void {
   cachedProxyAgents.clear();
 }
 
+function getAgentCacheKey(concurrency: number, tlsOptions: ConnectionOptions, proxyUrl = '') {
+  // Hash the effective options so cache keys don't retain proxy credentials or CA bundles.
+  return sha256(JSON.stringify([proxyUrl, concurrency, tlsOptions]));
+}
+
 function getOrCreateAgent(tlsOptions: ConnectionOptions): Dispatcher {
   const concurrency = getConnectionPoolSize();
-  const existing = cachedAgents.get(concurrency);
+  const cacheKey = getAgentCacheKey(concurrency, tlsOptions);
+  const existing = cachedAgents.get(cacheKey);
   if (existing) {
     return existing;
   }
@@ -126,17 +125,13 @@ function getOrCreateAgent(tlsOptions: ConnectionOptions): Dispatcher {
   })
     .compose(createDecompressionInterceptor())
     .compose(stripDecompressionHeaders());
-  cachedAgents.set(concurrency, agent);
+  cachedAgents.set(cacheKey, agent);
   return agent;
-}
-
-function getProxyAgentCacheKey(proxyUrl: string, concurrency: number): string {
-  return `${proxyUrl}::${concurrency}`;
 }
 
 function getOrCreateProxyAgent(proxyUrl: string, tlsOptions: ConnectionOptions): Dispatcher {
   const concurrency = getConnectionPoolSize();
-  const cacheKey = getProxyAgentCacheKey(proxyUrl, concurrency);
+  const cacheKey = getAgentCacheKey(concurrency, tlsOptions, proxyUrl);
   const existing = cachedProxyAgents.get(cacheKey);
   if (existing) {
     return existing;
