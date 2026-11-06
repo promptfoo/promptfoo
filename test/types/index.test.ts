@@ -1544,6 +1544,7 @@ describe('TestSuiteSchema', () => {
       'file://C:/path/to/file.py:function_name',
       'file://C:\\path\\to\\file.js:function_name',
       'file://d:/path/to/file.mjs:function_name',
+      'file:///C:/path/to/file.js:function_name',
     ])('should accept Windows absolute extension path: %s', (extension) => {
       const result = TestSuiteSchema.safeParse({ ...baseTestSuite, extensions: [extension] });
       expect(result.success).toBe(true);
@@ -1559,6 +1560,7 @@ describe('TestSuiteSchema', () => {
       ['file://C:/path/to/file.py', 'Missing function name after a Windows drive'],
       ['file://C:/path/to/file.txt:function_name', 'Invalid file extension after a Windows drive'],
       ['file://C:/path/to/file.py:function_name:extra_arg', 'Extra argument after a Windows drive'],
+      ['file:///C:/path/to/file.py', 'Missing function name after a canonical Windows drive'],
     ])('should reject invalid extension path: %s (%s)', (extension, _reason) => {
       const result = TestSuiteSchema.safeParse({ ...baseTestSuite, extensions: [extension] });
       expect(result.success).toBe(false);

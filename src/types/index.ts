@@ -1179,10 +1179,11 @@ const TraceQueryDelaySchema = z.number().int().nonnegative().max(300_000);
 
 /**
  * Splits an extension reference on its colons, keeping the colon of a Windows drive letter
- * (file://C:/path/to/hooks.js:beforeAll) inside the file path, as the runtime does.
+ * (file://C:/path/to/hooks.js:beforeAll or file:///C:/path/to/hooks.js:beforeAll) inside the
+ * file path, as the runtime does.
  */
 function splitExtensionReference(value: string): string[] {
-  const driveLetter = /^file:\/\/[a-zA-Z]:(?=[\\/])/.exec(value);
+  const driveLetter = /^file:\/\/\/?[a-zA-Z]:(?=[\\/])/.exec(value);
   if (!driveLetter) {
     return value.split(':');
   }
