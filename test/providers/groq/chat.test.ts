@@ -411,69 +411,47 @@ describe('GroqProvider', () => {
         },
       ] as const;
 
-      function context(config: GroqCompletionOptions): CallApiContextParams {
-        return { prompt: { raw: 'Test prompt', label: 'Test prompt', config }, vars: {} };
+      function request(provider: GroqProvider, config: GroqCompletionOptions) {
+        return provider.getOpenAiBody('Test prompt', {
+          prompt: { raw: 'Test prompt', label: 'Test prompt', config },
+          vars: {},
+        });
       }
 
-      it.each(cases)('uses prompt $key instead of the provider default', async (testCase) => {
-        const provider = new GroqProvider(testCase.model, {
-          config: { [testCase.key]: testCase.providerValue, temperature: 0.8 },
-        });
-        const { body, config } = await provider.getOpenAiBody(
-          'Test prompt',
-          context({ [testCase.key]: testCase.promptValue, temperature: 0.25 }),
-        );
+      it.each(cases)(
+        'overrides $key for one prompt only',
+        async ({ key, model, providerValue, promptValue }) => {
+          const defaults = { [key]: providerValue, temperature: 0.8 };
+          const provider = new GroqProvider(model, { config: defaults });
+          const overrides = { [key]: promptValue, temperature: 0.25 };
+          const overridden = await request(provider, overrides);
+          expect(overridden.body[key]).toEqual(promptValue);
+          expect(overridden.body.temperature).toBe(overrides.temperature);
+          expect(overridden.config).toMatchObject(overrides);
 
-        expect(body[testCase.key]).toEqual(testCase.promptValue);
-        expect(config).toMatchObject({ [testCase.key]: testCase.promptValue });
-        expect(body.temperature).toBe(0.25);
-        expect(provider.config).toMatchObject({ [testCase.key]: testCase.providerValue });
-        expect((await provider.getOpenAiBody('Test prompt')).body[testCase.key]).toEqual(
-          testCase.providerValue,
-        );
-      });
+          const next = await request(provider, { temperature: 0.5 });
+          expect(next.body[key]).toEqual(providerValue);
+          expect(next.body.temperature).toBe(0.5);
+          expect(provider.config).toMatchObject(defaults);
+        },
+      );
 
-      it.each(cases)('forwards prompt-only $key', async (testCase) => {
-        const provider = new GroqProvider(testCase.model, {});
-        const { body } = await provider.getOpenAiBody(
-          'Test prompt',
-          context({ [testCase.key]: testCase.promptValue }),
-        );
+      it.each(cases)(
+        'forwards prompt-only $key without setting a default',
+        async ({ key, model, promptValue }) => {
+          const provider = new GroqProvider(model, {});
+          expect((await request(provider, { [key]: promptValue })).body[key]).toEqual(promptValue);
+          expect((await request(provider, {})).body).not.toHaveProperty(key);
+        },
+      );
 
-        expect(body[testCase.key]).toEqual(testCase.promptValue);
-      });
-
-      it.each(cases)('keeps $key when the prompt does not override it', async (testCase) => {
-        const provider = new GroqProvider(testCase.model, {
-          config: { [testCase.key]: testCase.providerValue },
-        });
-        const { body } = await provider.getOpenAiBody(
-          'Test prompt',
-          context({ temperature: 0.25 }),
-        );
-
-        expect(body[testCase.key]).toEqual(testCase.providerValue);
-        expect(body.temperature).toBe(0.25);
-      });
-
-      it.each(cases)('honors an explicit undefined prompt $key', async (testCase) => {
-        const provider = new GroqProvider(testCase.model, {
-          config: { [testCase.key]: testCase.providerValue },
-        });
-        const { body } = await provider.getOpenAiBody(
-          'Test prompt',
-          context({ [testCase.key]: undefined }),
-        );
-
-        expect(body).not.toHaveProperty(testCase.key);
-      });
-
-      it.each(cases)('omits unconfigured $key', async (testCase) => {
-        const provider = new GroqProvider(testCase.model, {});
-        const { body } = await provider.getOpenAiBody('Test prompt', context({}));
-
-        expect(body).not.toHaveProperty(testCase.key);
-      });
+      it.each(cases)(
+        'omits $key when explicitly set to undefined',
+        async ({ key, model, providerValue }) => {
+          const provider = new GroqProvider(model, { config: { [key]: providerValue } });
+          expect((await request(provider, { [key]: undefined })).body).not.toHaveProperty(key);
+        },
+      );
     });
 
     it('should build correct message structure', async () => {
