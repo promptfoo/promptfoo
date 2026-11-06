@@ -181,6 +181,41 @@ describe('PFX signature paths (generateSignature)', () => {
     },
   );
 
+  describe.each(['bad decrypt', 'pkcs12 cipherfinal error'])(
+    'PKCS#12 archives without a MAC (%s)',
+    (diagnostic) => {
+      const childError = Object.assign(new Error('child diagnostic'), {
+        code: 1,
+        stdout: 'private key output',
+        stderr: `OpenSSL:${diagnostic}:child diagnostic`,
+      });
+
+      it('retries with the trimmed password', async () => {
+        const key = '-----BEGIN PRIVATE KEY-----\nYQ==\n-----END PRIVATE KEY-----';
+        const run = vi.mocked(runCommand);
+        run.mockRejectedValueOnce(childError).mockResolvedValueOnce({ stdout: key, stderr: '' });
+
+        await expect(readPfxPrivateKey('fixture.p12', ' secret ')).resolves.toBe(key);
+        expect(run.mock.calls.map(([, , options]) => options?.input)).toEqual([
+          ' secret \n',
+          'secret\n',
+        ]);
+      });
+
+      it('returns a sanitized error when both passwords fail', async () => {
+        const run = vi.mocked(runCommand).mockRejectedValue(childError);
+
+        await expect(readPfxPrivateKey('fixture.p12', ' wrong ')).rejects.toThrow(
+          /^Invalid PFX file format or wrong password$/,
+        );
+        expect(run.mock.calls.map(([, , options]) => options?.input)).toEqual([
+          ' wrong \n',
+          'wrong\n',
+        ]);
+      });
+    },
+  );
+
   it('uses the OpenSSL executable selected by the current invocation', async () => {
     const { privateKey } = crypto.generateKeyPairSync('rsa', { modulusLength: 2048 });
     const key = privateKey.export({ format: 'pem', type: 'pkcs8' }).toString();
