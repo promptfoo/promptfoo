@@ -279,12 +279,18 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
   private processor: ResponsesProcessor;
   private projectClient?: Promise<AzureAIProjectClient>;
   private projectUrl: string;
+  readonly #servicePrincipal?: {
+    tenantId: string;
+    clientId: string;
+    clientSecret: string;
+    authorityHost?: string;
+  };
   private agentPromise?: Promise<FoundryAgent>;
   private resolvedAgent: FoundryAgent | null = null;
   private warnedUnsupportedFields = new Set<string>();
 
   override async initialize(): Promise<void> {
-    // Foundry authenticates through DefaultAzureCredential in initializeClient().
+    // The project client owns its Azure credential.
   }
 
   constructor(deploymentName: string, options: AzureAssistantProviderOptions = {}) {
@@ -300,6 +306,22 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
       throw new Error(
         'Azure AI Project URL must be provided via projectUrl option or AZURE_AI_PROJECT_URL environment variable',
       );
+    }
+
+    const { azureTenantId, azureClientId, azureClientSecret, azureAuthorityHost } =
+      this.assistantConfig;
+    if (azureClientSecret !== undefined) {
+      if (!azureTenantId?.trim() || !azureClientId?.trim() || !azureClientSecret?.trim()) {
+        throw new Error(
+          'An explicit Azure service principal requires azureClientId, azureTenantId and azureClientSecret together.',
+        );
+      }
+      this.#servicePrincipal = {
+        tenantId: azureTenantId,
+        clientId: azureClientId,
+        clientSecret: azureClientSecret,
+        authorityHost: azureAuthorityHost,
+      };
     }
 
     this.processor = new ResponsesProcessor({
@@ -326,11 +348,27 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
   private async createProjectClient(): Promise<AzureAIProjectClient> {
     try {
       const { AIProjectClient } = await import('@azure/ai-projects');
-      const { DefaultAzureCredential } = await import('@azure/identity');
-
+      const { ClientSecretCredential, DefaultAzureCredential } = await import('@azure/identity');
+      const principal = this.#servicePrincipal;
+      const selector = process.env.AZURE_TOKEN_CREDENTIALS?.trim().toLowerCase();
+      if (principal && selector && !['prod', 'environmentcredential'].includes(selector)) {
+        throw new Error(
+          'AZURE_TOKEN_CREDENTIALS must allow EnvironmentCredential for an explicit Azure client secret.',
+        );
+      }
+      const credential = principal
+        ? new ClientSecretCredential(
+            principal.tenantId,
+            principal.clientId,
+            principal.clientSecret,
+            {
+              authorityHost: principal.authorityHost,
+            },
+          )
+        : new DefaultAzureCredential();
       const projectClient = new AIProjectClient(
         this.projectUrl,
-        new DefaultAzureCredential(),
+        credential,
       ) as AzureAIProjectClient;
       logger.debug('Azure AI Project client initialized successfully');
       return projectClient;
@@ -1052,7 +1090,9 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
 
     // Client-side tool behavior is absent from the serialized request body.
     // Callback closures cannot be safely represented in a persistent cache key.
+    // A project URI and client ID cannot authenticate a service principal to the shared cache.
     const useCache =
+      !this.#servicePrincipal &&
       isCacheEnabled() &&
       !Object.keys(effectiveConfig.functionToolCallbacks ?? {}).length &&
       effectiveConfig.maxPollTimeMs === undefined &&

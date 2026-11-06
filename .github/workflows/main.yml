@@ -572,6 +572,9 @@ jobs:
           npm run jsonSchema:generate
           npm run modelAuditSchema:generate
 
+      - name: Check local server OpenAPI spec
+        run: npm run openapi:check
+
       - name: Check for changes
         run: |
           if [[ -n $(git status --porcelain) ]]; then
@@ -793,7 +796,8 @@ jobs:
 
   webui:
     name: webui tests
-    timeout-minutes: 10
+    # Allow slow browser system dependency downloads before browser and coverage tests.
+    timeout-minutes: 20
     runs-on: ubuntu-latest
     permissions: *test-reporting-permissions # Required for OIDC authentication with Codecov
     steps:

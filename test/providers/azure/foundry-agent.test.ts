@@ -1588,6 +1588,26 @@ describe('AzureFoundryAgentProvider', () => {
       expect(mockCache.set).toHaveBeenCalledWith(cacheKey, expect.any(Object));
     });
 
+    it('does not authorize an explicit principal using a shared cached response', async () => {
+      vi.mocked(isCacheEnabled).mockReturnValue(true);
+      vi.mocked(getCache).mockResolvedValue({
+        get: vi.fn().mockResolvedValue(createCachedAgentResponse()),
+        set: vi.fn(),
+      } as any);
+      mockGetAgent.mockResolvedValue(mockAgent);
+      mockResponsesCreate.mockResolvedValue(createMessageResponse('fresh response'));
+      const scoped = new AzureFoundryAgentProvider('weather-agent', {
+        config: {
+          projectUrl,
+          azureTenantId: 'fixture-tenant',
+          azureClientId: 'fixture-client',
+          azureClientSecret: 'fixture-secret',
+        },
+      });
+      expect(await scoped.callApi('same prompt')).toMatchObject({ output: 'fresh response' });
+      expect(getCache).not.toHaveBeenCalled();
+    });
+
     it('should scope cache keys by project URL', async () => {
       mockGetAgent.mockResolvedValue(mockAgent);
       mockResponsesCreate.mockResolvedValue(createMessageResponse('Test response'));

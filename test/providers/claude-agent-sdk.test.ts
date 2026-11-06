@@ -724,6 +724,26 @@ describe('ClaudeCodeSDKProvider', () => {
     expect(response.output).toBe('Response');
   });
 
+  it.each([
+    { disableAllHooks: true },
+    { disableSkillShellExecution: true },
+    { allowedHttpHookUrls: [] },
+    { httpHookAllowedEnvVars: [] },
+  ])('rejects a managed hook policy the loaded SDK would drop (%j)', async (managed_settings) => {
+    vi.mocked(getPackageVersion).mockReturnValue('0.3.308');
+    mockQuery.mockImplementation(() => createMockResponse('Response'));
+    const provider = new ClaudeCodeSDKProvider({ config: { apiKey: 'test-key' } });
+    expect((await provider.callApi('Warm up')).error).toBeUndefined();
+    const result = await provider.callApi('Apply policy', {
+      prompt: { raw: 'Apply policy', label: 'restricted', config: { managed_settings } },
+      vars: {},
+    });
+    expect(result.error).toContain(
+      'Managed hook settings require @anthropic-ai/claude-agent-sdk@^0.3.309',
+    );
+    expect(mockQuery).toHaveBeenCalledTimes(1);
+  });
+
   it.each(['', null])(
     'honors empty system prompts while defaulting null (%j)',
     async (systemPrompt) => {
@@ -5483,11 +5503,14 @@ describe('ClaudeCodeSDKProvider', () => {
         });
 
         it('with managed_settings configuration', async () => {
+          vi.mocked(getPackageVersion).mockReturnValue('0.3.309');
           mockQuery.mockReturnValue(createMockResponse('Response'));
 
           const provider = new ClaudeCodeSDKProvider({
             config: {
               managed_settings: {
+                disableAllHooks: true,
+                allowedHttpHookUrls: [],
                 sandbox: { network: { allowManagedDomainsOnly: true } },
               },
             },
@@ -5499,6 +5522,8 @@ describe('ClaudeCodeSDKProvider', () => {
             prompt: 'Test prompt',
             options: expect.objectContaining({
               managedSettings: {
+                disableAllHooks: true,
+                allowedHttpHookUrls: [],
                 sandbox: { network: { allowManagedDomainsOnly: true } },
               },
             }),
