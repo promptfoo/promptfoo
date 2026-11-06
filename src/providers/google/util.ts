@@ -1475,21 +1475,27 @@ export function formatCandidateContents(candidate: Candidate) {
   }
 }
 
+/** A Gemini answer accumulated over response chunks, with its thought summaries. */
+export interface GeminiAnswer {
+  output: Part[] | string | undefined;
+  thoughts: string;
+}
+
 /**
- * Merges a candidate's answer into the accumulated output and returns its thought
- * summaries (parts with `thought: true`, sent when `thinkingConfig.includeThoughts`
- * is set) separately, so thoughts streamed across chunks can be labelled once.
+ * Adds a candidate to the answer. Thought summaries (parts with `thought: true`, sent
+ * when `thinkingConfig.includeThoughts` is set) are kept apart from the output, so
+ * thoughts streamed across chunks can be labelled once.
  */
-export function mergeCandidateContents(
-  output: Part[] | string | undefined,
-  candidate: Candidate,
-): { output: Part[] | string | undefined; thoughts: string } {
+export function mergeCandidateContents(answer: GeminiAnswer, candidate: Candidate): GeminiAnswer {
   const content = formatCandidateContents(candidate);
   const thoughts = (candidate.content?.parts ?? [])
     .map((part) => (part.thought && typeof part.text === 'string' ? part.text : ''))
     .join('');
-  // A chunk holding only thoughts adds nothing to the answer.
-  return { output: thoughts && content === '' ? output : mergeParts(output, content), thoughts };
+  return {
+    // A chunk holding only thoughts adds nothing to the output.
+    output: thoughts && content === '' ? answer.output : mergeParts(answer.output, content),
+    thoughts: answer.thoughts + thoughts,
+  };
 }
 
 /**
@@ -1497,8 +1503,7 @@ export function mergeCandidateContents(
  * reasoning providers, unless `showThinking` is false. Part arrays are returned unchanged.
  */
 export function formatGeminiThinking(
-  output: Part[] | string | undefined,
-  thoughts: string,
+  { output, thoughts }: GeminiAnswer,
   showThinking: boolean | undefined,
 ) {
   if (!thoughts || showThinking === false || Array.isArray(output)) {

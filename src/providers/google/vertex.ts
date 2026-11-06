@@ -41,6 +41,7 @@ import {
   collectGroundingMetadata,
   collectThoughtSignatures,
   formatGeminiThinking,
+  type GeminiAnswer,
   geminiFormatAndSystemInstructions,
   getCandidate,
   getGoogleClient,
@@ -902,7 +903,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
         }
         const dataWithResponse = normalizedData as GeminiResponseData[];
         let output;
-        let thoughts = '';
+        let answer: GeminiAnswer = { output: undefined, thoughts: '' };
         for (const datum of dataWithResponse) {
           // Check for blockReason first (before getCandidate) since blocked responses have no candidates
           if (datum.promptFeedback?.blockReason) {
@@ -982,9 +983,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
           } else if (candidate.finishReason && candidate.finishReason === 'MAX_TOKENS') {
             // MAX_TOKENS is treated as a successful completion with the generated output
             if (candidate.content?.parts) {
-              const merged = mergeCandidateContents(output, candidate);
-              output = merged.output;
-              thoughts += merged.thoughts;
+              answer = mergeCandidateContents(answer, candidate);
             }
             const outputTokens = datum.usageMetadata?.candidatesTokenCount || 0;
             logger.debug(`Gemini API: MAX_TOKENS reached`, {
@@ -1000,9 +999,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
               error: `Finish reason ${candidate.finishReason}: ${JSON.stringify(data)}`,
             };
           } else if (candidate.content?.parts) {
-            const merged = mergeCandidateContents(output, candidate);
-            output = merged.output;
-            thoughts += merged.thoughts;
+            answer = mergeCandidateContents(answer, candidate);
           } else if (candidate.finishReason !== 'STOP') {
             return {
               error: `No output found in response: ${JSON.stringify(data)}`,
@@ -1010,7 +1007,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
           }
         }
 
-        output = formatGeminiThinking(output, thoughts, config.showThinking);
+        output = formatGeminiThinking(answer, config.showThinking);
 
         if (output === undefined || output === '') {
           return {

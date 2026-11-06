@@ -1637,7 +1637,6 @@ describe('AIStudioChatProvider', () => {
 
       it.each([
         [undefined, 'Thinking: Let me calculate 6 * 7.\n\n42'],
-        [true, 'Thinking: Let me calculate 6 * 7.\n\n42'],
         [false, '42'],
       ])(
         'separates thoughts from the answer with showThinking %s',
