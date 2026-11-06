@@ -13,12 +13,12 @@ import path from 'path';
 
 import async from 'async';
 import binaryExtensions from 'binary-extensions';
-import { isText } from 'istextorbinary';
 import textExtensions from 'text-extensions';
 import logger from '../../logger';
 import { DiffProcessorError } from '../../types/codeScan';
 import { runCommand } from '../../util/runCommand';
 import { isInDenylist, MAX_BLOB_SIZE_BYTES, MAX_PATCH_SIZE_BYTES } from '../constants/filtering';
+import { isTextBlob } from './blobText';
 import { annotateDiffWithLineRanges } from './diffAnnotator';
 import { parseRawDiff } from './rawDiffParser';
 
@@ -200,8 +200,7 @@ async function isBlobText(repoPath: string, sha: string): Promise<boolean> {
       encoding: 'buffer',
     });
 
-    // isText can return boolean | null, treat null as false
-    return isText(null, result.stdout) === true;
+    return isTextBlob(result.stdout);
   } catch {
     return false;
   }
