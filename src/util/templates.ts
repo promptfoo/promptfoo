@@ -28,6 +28,82 @@ type NunjucksParentContext = {
 // unbound name into a Set during the same traversal.
 type ReferenceTarget = string | Set<string>;
 
+function disposableIterator<T>(iterator: IterableIterator<T>): SetIterator<T> {
+  return {
+    next: () => iterator.next(),
+    [Symbol.dispose]: () => {},
+    [Symbol.iterator]() {
+      return this;
+    },
+  };
+}
+
+class LinkedScope implements ReadonlySet<string> {
+  private readonly names = new Set<string>();
+
+  constructor(
+    private readonly parent?: ReadonlySet<string>,
+    names: Iterable<string> = [],
+  ) {
+    for (const name of names) {
+      this.names.add(name);
+    }
+  }
+
+  get size(): number {
+    return Array.from(this).length;
+  }
+
+  has(value: string): boolean {
+    return this.names.has(value) || this.parent?.has(value) === true;
+  }
+
+  add(value: string): this {
+    this.names.add(value);
+    return this;
+  }
+
+  keys(): SetIterator<string> {
+    const iterator = function* (this: LinkedScope) {
+      yield* this.names;
+      if (this.parent) {
+        for (const name of this.parent) {
+          if (!this.names.has(name)) {
+            yield name;
+          }
+        }
+      }
+    }.call(this);
+    return disposableIterator(iterator);
+  }
+
+  values(): SetIterator<string> {
+    return disposableIterator(this.keys());
+  }
+
+  entries(): SetIterator<[string, string]> {
+    const iterator = function* (this: LinkedScope) {
+      for (const name of this) {
+        yield [name, name] as [string, string];
+      }
+    }.call(this);
+    return disposableIterator(iterator);
+  }
+
+  forEach(
+    callbackfn: (value: string, value2: string, set: ReadonlySet<string>) => void,
+    thisArg?: unknown,
+  ): void {
+    for (const value of this) {
+      callbackfn.call(thisArg, value, value, this);
+    }
+  }
+
+  [Symbol.iterator](): SetIterator<string> {
+    return this.keys();
+  }
+}
+
 type ParseResult = { ok: true; ast: NunjucksAstNode } | { ok: false };
 
 function isNunjucksAstNode(value: unknown): value is NunjucksAstNode {
@@ -103,29 +179,29 @@ function collectBindingNames(node: unknown): string[] {
   return node.children.flatMap((child) => collectBindingNames(child));
 }
 
-function addBindingNames(scope: ReadonlySet<string>, node: unknown): Set<string> {
-  const nextScope = new Set(scope);
+function addBindingNames(scope: ReadonlySet<string>, node: unknown): LinkedScope {
+  const nextScope = new LinkedScope(scope);
   for (const name of collectBindingNames(node)) {
     nextScope.add(name);
   }
   return nextScope;
 }
 
-function addBindingNamesInPlace(scope: Set<string>, node: unknown): void {
+function addBindingNamesInPlace(scope: LinkedScope, node: unknown): void {
   for (const name of collectBindingNames(node)) {
     scope.add(name);
   }
 }
 
-function addNamesToScope(scope: ReadonlySet<string>, names: readonly string[]): Set<string> {
-  const nextScope = new Set(scope);
+function addNamesToScope(scope: ReadonlySet<string>, names: readonly string[]): LinkedScope {
+  const nextScope = new LinkedScope(scope);
   for (const name of names) {
     nextScope.add(name);
   }
   return nextScope;
 }
 
-function addNamesToScopeInPlace(scope: Set<string>, names: readonly string[]): void {
+function addNamesToScopeInPlace(scope: LinkedScope, names: readonly string[]): void {
   for (const name of names) {
     scope.add(name);
   }
@@ -160,7 +236,7 @@ function astNodeListReferencesVariable(
   parent: NunjucksParentContext,
   boundSymbols: ReadonlySet<string>,
 ): boolean {
-  const scope = new Set(boundSymbols);
+  const scope = new LinkedScope(boundSymbols);
   for (const item of nodes) {
     if (!isNunjucksAstNode(item)) {
       continue;
@@ -236,7 +312,7 @@ function analyzeSignatureArgs(
     return { paramNames, referencesVariable: false };
   }
 
-  const defaultScope = new Set(boundSymbols);
+  const defaultScope = new LinkedScope(boundSymbols);
   for (const child of argsNode.children) {
     if (!isNunjucksAstNode(child)) {
       continue;
@@ -356,9 +432,10 @@ function blockNodeReferencesVariable(
   variableName: ReferenceTarget,
   boundSymbols: ReadonlySet<string>,
 ): boolean {
-  // `{% block name %}...{% endblock %}` — `name` is a template-inheritance
-  // label, not a variable reference. Only the body can reference variables.
-  return astChildReferencesVariable(node, 'body', variableName, boundSymbols);
+  // `name` is a template-inheritance label, not a variable reference. Nunjucks
+  // supplies `super` from the block frame, so it is not an external dependency.
+  const blockScope = addNamesToScope(boundSymbols, ['super']);
+  return astChildReferencesVariable(node, 'body', variableName, blockScope);
 }
 
 function callerNodeReferencesVariable(
@@ -389,12 +466,40 @@ function astFieldsReferenceVariable(
   );
 }
 
+function concatNodeReferencesVariable(
+  node: NunjucksAstNode,
+  variableName: ReferenceTarget,
+  parent: NunjucksParentContext | undefined,
+  boundSymbols: ReadonlySet<string>,
+): boolean {
+  let current = node;
+  let currentParent = parent;
+  // Nunjucks concatenation is left-associative. Walk the deep left spine
+  // iteratively instead of recursively overflowing on large runtime values.
+  while (current.typename === 'Concat') {
+    if (astChildReferencesVariable(current, 'right', variableName, boundSymbols)) {
+      return true;
+    }
+    const left = current.left;
+    if (!isNunjucksAstNode(left)) {
+      return false;
+    }
+    currentParent = { field: 'left', node: current };
+    current = left;
+  }
+  return astReferencesVariable(current, variableName, currentParent, boundSymbols);
+}
+
 function astReferencesVariable(
   node: NunjucksAstNode,
   variableName: ReferenceTarget,
   parent?: NunjucksParentContext,
   boundSymbols: ReadonlySet<string> = new Set(),
 ): boolean {
+  if (node.typename === 'Concat') {
+    return concatNodeReferencesVariable(node, variableName, parent, boundSymbols);
+  }
+
   if (node.typename === 'Symbol' && typeof node.value === 'string') {
     const isReference = !boundSymbols.has(node.value) && !isNonReferenceSymbol(parent);
     if (typeof variableName === 'string') {
@@ -773,46 +878,61 @@ export function templateReferencesVariable(template: string, variableName: strin
   return analyzeTemplateReference(template, variableName).referenced;
 }
 
+type ExpressionWorkItem = { node: NunjucksAstNode; parent?: NunjucksParentContext };
+
+function collectIsExpressionReferences(
+  current: ExpressionWorkItem,
+  pending: ExpressionWorkItem[],
+): void {
+  const right = current.node.right;
+  if (isNunjucksAstNode(right)) {
+    if (right.typename === 'FunCall') {
+      if (isNunjucksAstNode(right.args)) {
+        pending.push({ node: right.args, parent: { field: 'args', node: right } });
+      }
+    } else if (right.typename !== 'Symbol') {
+      pending.push({ node: right, parent: { field: 'right', node: current.node } });
+    }
+  }
+  if (isNunjucksAstNode(current.node.left)) {
+    pending.push({ node: current.node.left, parent: { field: 'left', node: current.node } });
+  }
+}
+
 function collectExpressionReferences(
   node: NunjucksAstNode,
   parent: NunjucksParentContext | undefined,
   references: Set<string>,
 ): void {
-  if (node.typename === 'Is') {
-    if (isNunjucksAstNode(node.left)) {
-      collectExpressionReferences(node.left, { field: 'left', node }, references);
+  const pending: ExpressionWorkItem[] = [{ node, parent }];
+  while (pending.length > 0) {
+    const current = pending.pop()!;
+    if (current.node.typename === 'Is') {
+      collectIsExpressionReferences(current, pending);
+      continue;
     }
-    const right = node.right;
-    if (!isNunjucksAstNode(right)) {
-      return;
-    }
-    if (right.typename === 'FunCall') {
-      if (isNunjucksAstNode(right.args)) {
-        collectExpressionReferences(right.args, { field: 'args', node: right }, references);
+
+    if (current.node.typename === 'Symbol' && typeof current.node.value === 'string') {
+      if (!isNonReferenceSymbol(current.parent)) {
+        references.add(current.node.value);
       }
-    } else if (right.typename !== 'Symbol') {
-      collectExpressionReferences(right, { field: 'right', node }, references);
+      continue;
     }
-    return;
-  }
 
-  if (node.typename === 'Symbol' && typeof node.value === 'string') {
-    if (!isNonReferenceSymbol(parent)) {
-      references.add(node.value);
-    }
-    return;
-  }
-
-  for (const field of node.fields ?? []) {
-    const child = node[field];
-    if (Array.isArray(child)) {
-      for (const item of child) {
-        if (isNunjucksAstNode(item)) {
-          collectExpressionReferences(item, { field, node }, references);
+    const fields = current.node.fields ?? [];
+    for (let fieldIndex = fields.length - 1; fieldIndex >= 0; fieldIndex--) {
+      const field = fields[fieldIndex]!;
+      const child = current.node[field];
+      if (Array.isArray(child)) {
+        for (let index = child.length - 1; index >= 0; index--) {
+          const item = child[index]!;
+          if (isNunjucksAstNode(item)) {
+            pending.push({ node: item, parent: { field, node: current.node } });
+          }
         }
+      } else if (isNunjucksAstNode(child)) {
+        pending.push({ node: child, parent: { field, node: current.node } });
       }
-    } else if (isNunjucksAstNode(child)) {
-      collectExpressionReferences(child, { field, node }, references);
     }
   }
 }
@@ -833,18 +953,25 @@ export function extractVariablesFromExpression(template: string): string[] | und
 }
 
 function astLoadsExternalContext(node: unknown): boolean {
-  if (!isNunjucksAstNode(node)) {
-    return false;
+  const pending = [node];
+  while (pending.length > 0) {
+    const current = pending.pop();
+    if (!isNunjucksAstNode(current)) {
+      continue;
+    }
+    if (['Include', 'Import', 'FromImport', 'Extends'].includes(current.typename!)) {
+      return true;
+    }
+    for (const field of current.fields ?? []) {
+      const child = current[field];
+      if (Array.isArray(child)) {
+        pending.push(...child);
+      } else {
+        pending.push(child);
+      }
+    }
   }
-  if (['Include', 'Import', 'FromImport', 'Extends'].includes(node.typename!)) {
-    return true;
-  }
-  return (node.fields ?? []).some((field) => {
-    const child = node[field];
-    return Array.isArray(child)
-      ? child.some(astLoadsExternalContext)
-      : astLoadsExternalContext(child);
-  });
+  return false;
 }
 
 /**

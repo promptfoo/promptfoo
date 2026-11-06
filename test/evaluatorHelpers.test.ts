@@ -1421,6 +1421,40 @@ describe('evaluatorHelpers', () => {
       expect(renderedPrompt).toBe('x!');
     });
 
+    it('should bound deep concatenation traversal without overflowing the stack', async () => {
+      const value = `{{ ${'a ~ '.repeat(12000)}a }}`;
+      const renderedPrompt = await renderPrompt(toPrompt('{"text":"{{v}}"}'), { v: value }, {});
+
+      expect(renderedPrompt).toBe(JSON.stringify({ text: value }, null, 2));
+    });
+
+    it('should bind super in block-body dependencies', async () => {
+      const previousCwd = process.cwd();
+      try {
+        process.chdir(path.resolve('test/fixtures/nunjucks-include'));
+        const value = '{% extends "base.njk" %}{% block body %}{{ super() ~ "!" }}{% endblock %}';
+        const renderedPrompt = await renderPrompt(toPrompt('{{v}}'), { v: value }, {});
+
+        expect(renderedPrompt).toBe('B!\n');
+      } finally {
+        process.chdir(previousCwd);
+      }
+    });
+
+    it('should avoid quadratic scope snapshots for sibling macros', async () => {
+      const value = Array.from(
+        { length: 6000 },
+        (_, index) => `{% macro m${index}() %}x{% endmacro %}`,
+      ).join('');
+      const started = performance.now();
+      const renderedPrompt = await renderPrompt(toPrompt('{"text":"{{v}}"}'), { v: value }, {});
+      const elapsed = performance.now() - started;
+
+      expect(renderedPrompt).toHaveLength(JSON.stringify({ text: value }, null, 2).length);
+      expect(renderedPrompt).toContain('m5999');
+      expect(elapsed).toBeLessThan(100);
+    });
+
     it.each([
       ['include', '{% include "body.njk" %}'],
       ['import', '{% import "body.njk" as body %}'],
