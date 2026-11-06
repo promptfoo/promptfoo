@@ -78,6 +78,8 @@ export interface Part {
   functionCall?: FunctionCall | StreamedFunctionCall;
   functionResponse?: FunctionResponse;
   thoughtSignature?: string;
+  audioTranscription?: { text?: string; speakerLabel?: string; words?: unknown[] };
+  speechMetadata?: { speaker?: string; style?: string };
   fileData?: FileData;
 }
 
@@ -161,11 +163,18 @@ export type ClaudeThinkingConfig =
   // Claude Sonnet 5.5's lowest setting: no up-front thinking. It takes no other field.
   | { type: 'between_tools' };
 
+interface GoogleVoiceConfig {
+  /** Gemini 3.8 TTS prebuilt name or existing stored voice ID. */
+  voice?: string;
+  prebuiltVoiceConfig?: {
+    voiceName?: string;
+  };
+}
+
 export interface GoogleSpeechConfig {
-  voiceConfig?: {
-    prebuiltVoiceConfig?: {
-      voiceName?: string;
-    };
+  voiceConfig?: GoogleVoiceConfig;
+  multiSpeakerVoiceConfig?: {
+    speakerVoiceConfigs: { speaker: string; voiceConfig: GoogleVoiceConfig }[];
   };
   languageCode?: string;
 }
@@ -292,6 +301,13 @@ export interface CompletionOptions {
     speechConfig?: GoogleSpeechConfig;
 
     // Transcription configuration
+    audioTranscriptionConfig?: {
+      languageCodes?: string[];
+      wordTimestamp?: boolean;
+      diarization?: boolean;
+      customVocabulary?: string[];
+      mode?: 'VERBATIM' | 'SMART';
+    };
     outputAudioTranscription?: Record<string, any>;
     inputAudioTranscription?: Record<string, any>;
 
@@ -325,7 +341,7 @@ export interface CompletionOptions {
     };
   };
 
-  responseSchema?: string;
+  responseSchema?: string | Record<string, unknown>;
 
   toolConfig?: {
     functionCallingConfig?: {
@@ -494,6 +510,15 @@ export interface CompletionOptions {
  * { vertexai: true, apiKey: 'your-key' }
  */
 export interface GoogleProviderConfig extends CompletionOptions {
+  /** Text embedding task for models that support task-specific vectors. */
+  taskType?: string;
+  /** Document title for RETRIEVAL_DOCUMENT embeddings. */
+  title?: string;
+  /** Requested embedding vector size. */
+  outputDimensionality?: number;
+  /** Allow server-side truncation on Vertex text prediction models. */
+  autoTruncate?: boolean;
+
   /** Base directory for resolving relative file references in provider configuration. */
   basePath?: string;
 
