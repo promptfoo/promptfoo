@@ -45,24 +45,45 @@ describe('Bedrock Converse GPT-6 Luna and GPT-6.1 Sol pricing', () => {
     expect(calculateBedrockCost(model, 1000, 100, 0, 0, 'us-east-1')).toBeUndefined();
   });
 
-  it('leaves missing usage and unpublished billing modes unknown', () => {
-    const model = 'us.openai.gpt-6-luna';
-    expect(calculateBedrockCost(model, undefined, 100, 0, 0, 'us-east-1')).toBeUndefined();
-    expect(calculateBedrockCost(model, 1000, undefined, 0, 0, 'us-east-1')).toBeUndefined();
-    for (const type of ['priority', 'flex', 'reserved'] as const) {
-      expect(calculateBedrockCost(model, 1000, 100, 0, 0, 'us-east-1', { type })).toBeUndefined();
-    }
+  const usLuna = 'us.openai.gpt-6-luna';
+  const globalLuna = 'global.openai.gpt-6-luna';
+  const profileArn = `arn:aws:bedrock:us-east-1:123456789012:inference-profile/${usLuna}`;
+
+  it.each([
+    [usLuna, undefined],
+    [usLuna, 'eu-west-1'],
+    [profileArn, 'us-west-2'],
+    [globalLuna, 'cn-north-1'],
+    [globalLuna, 'us-gov-east-1'],
+    [globalLuna, 'invalid-region'],
+  ] as const)('leaves an incompatible billing route unpriced: %s / %s', (model, region) => {
+    expect(calculateBedrockCost(model, 1000, 100, 0, 0, region)).toBeUndefined();
+  });
+
+  it('can use the ARN region or a commercial global source region', () => {
+    expect(calculateBedrockCost(profileArn, 1000, 100)).toBeCloseTo(0.000165, 12);
+    expect(calculateBedrockCost(globalLuna, 1000, 100, 0, 0, 'eu-west-1')).toBeCloseTo(0.00015, 12);
+  });
+
+  it.each([
+    [undefined, 100, 0, 0],
+    [1000, undefined, 0, 0],
+    [-1, 100, 0, 0],
+    [1000, NaN, 0, 0],
+    [1000, 100, -1, 0],
+    [1000, 100, 0, 0.5],
+    [Number.MAX_SAFE_INTEGER, 100, 1, 0],
+  ])('leaves invalid or missing usage unpriced: %s, %s, %s, %s', (input, output, read, write) => {
+    expect(calculateBedrockCost(usLuna, input, output, read, write, 'us-east-1')).toBeUndefined();
+  });
+
+  it.each(['priority', 'flex', 'reserved'] as const)('does not guess %s pricing', (type) => {
+    expect(calculateBedrockCost(usLuna, 1000, 100, 0, 0, 'us-east-1', { type })).toBeUndefined();
+  });
+
+  it('does not price unpublished one-hour cache writes', () => {
     expect(
-      calculateBedrockCost(model, 1000, 100, 0, 100, 'us-east-1', undefined, 100),
-    ).toBeUndefined();
-    for (const region of ['us-gov-east-1', 'eu-west-1']) {
-      expect(calculateBedrockCost(model, 1000, 100, 0, 0, region)).toBeUndefined();
-    }
-    expect(
-      calculateBedrockCost('global.openai.gpt-6-luna', 1000, 100, 0, 0, 'eu-west-1'),
-    ).toBeCloseTo(0.00015, 12);
-    expect(
-      calculateBedrockCost('global.openai.gpt-6-luna', 1000, 100, 0, 0, 'cn-north-1'),
+      calculateBedrockCost(usLuna, 1000, 100, 0, 100, 'us-east-1', undefined, 100),
     ).toBeUndefined();
   });
 });

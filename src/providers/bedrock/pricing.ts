@@ -543,13 +543,18 @@ export function calculateBedrockCost(
   if (gptProfile) {
     const [, arnRegion, profile, model] = gptProfile;
     const sourceRegion = region ?? arnRegion;
+    const sourceRegionPattern =
+      profile === 'us'
+        ? /^(?:us-(?:east|west)-[12]|ca-(?:central|west)-1)$/
+        : /^(?:af|ap|ca|eu|il|me|mx|sa|us)-[a-z]+-\d+$/;
+    const inputTokens = promptTokens + cacheReadTokens + cacheWriteTokens;
     if (
       (arnRegion && region && arnRegion !== region) ||
-      !sourceRegion ||
-      /^(?:cn-|us-iso|eu-iso|eusc-)/.test(sourceRegion) ||
-      (profile === 'us' &&
-        !/^(?:us-(?:east|west)-[12]|ca-(?:central|west)-1)$/.test(sourceRegion)) ||
-      cacheWrite1hTokens > 0
+      !sourceRegionPattern.test(sourceRegion ?? '') ||
+      [inputTokens, promptTokens, completionTokens, cacheReadTokens, cacheWriteTokens].some(
+        (count) => !Number.isSafeInteger(count) || count < 0,
+      ) ||
+      cacheWrite1hTokens !== 0
     ) {
       return undefined;
     }
@@ -559,7 +564,7 @@ export function calculateBedrockCost(
       model,
       {},
       {
-        input_tokens: promptTokens + cacheReadTokens + cacheWriteTokens,
+        input_tokens: inputTokens,
         output_tokens: completionTokens,
         input_tokens_details: {
           cached_tokens: cacheReadTokens,
