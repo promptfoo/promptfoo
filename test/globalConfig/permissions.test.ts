@@ -1,9 +1,10 @@
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
+import { syncBuiltinESMExports } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   readGlobalConfig,
   writeGlobalConfig,
@@ -64,6 +65,39 @@ describe('global config permissions', () => {
       expect(fs.readlinkSync(file)).toBe('missing.yaml');
       expect(fs.readdirSync(configDir)).toEqual(['promptfoo.yaml']);
     });
+
+    it.each(['writeFileSync', 'renameSync'] as const)(
+      'rolls back after a failed %s',
+      (operation) => {
+        fs.mkdirSync(configDir);
+        const original = 'id: original\n';
+        const target = path.join(configDir, 'target.yaml');
+        fs.writeFileSync(target, original);
+        fs.symlinkSync('target.yaml', file);
+
+        const close = vi.spyOn(fs, 'closeSync');
+        const failure = vi.spyOn(fs, operation).mockImplementationOnce(() => {
+          throw new Error('injected credential write failure');
+        });
+        syncBuiltinESMExports();
+        try {
+          expect(() => writeGlobalConfig({ cloud: { apiKey: 'fixture-key' } })).toThrow(
+            'injected credential write failure',
+          );
+          expect(close).toHaveBeenCalledTimes(1);
+          const [fd] = close.mock.calls[0];
+          expect(() => fs.fstatSync(fd)).toThrow(expect.objectContaining({ code: 'EBADF' }));
+        } finally {
+          failure.mockRestore();
+          close.mockRestore();
+          syncBuiltinESMExports();
+        }
+
+        expect(fs.readFileSync(target, 'utf8')).toBe(original);
+        expect(fs.readlinkSync(file)).toBe('target.yaml');
+        expect(fs.readdirSync(configDir).sort()).toEqual(['promptfoo.yaml', 'target.yaml']);
+      },
+    );
 
     it('leaves a linked FIFO untouched', () => {
       fs.mkdirSync(configDir);
