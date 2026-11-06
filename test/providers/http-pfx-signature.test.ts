@@ -138,7 +138,7 @@ describe('PFX signature paths (generateSignature)', () => {
   );
 
   it('uses the OpenSSL executable selected by the current invocation', async () => {
-    const { privateKey } = crypto.generateKeyPairSync('rsa', { modulusLength: 1024 });
+    const { privateKey } = crypto.generateKeyPairSync('rsa', { modulusLength: 2048 });
     const key = privateKey.export({ format: 'pem', type: 'pkcs8' }).toString();
     vi.mocked(runCommand).mockResolvedValue({ stdout: key, stderr: '' });
     const signatureAuth = {
