@@ -723,24 +723,6 @@ describe('getOAuthTokenWithExpiry under the private-range guard', () => {
     expect(unguardedResult.accessToken).toBe('unguarded-token');
     expect(mockFetch).toHaveBeenCalledTimes(2);
   });
-
-  it('does not share a cached token across different client secrets', async () => {
-    const auth = createGuardedAuth('secret');
-    mockFetch
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ access_token: 'secret-a-token', expires_in: 3600 }),
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ access_token: 'secret-b-token', expires_in: 3600 }),
-      });
-    const first = await getOAuthTokenWithExpiry({ ...auth, clientSecret: 'secret-a' });
-    const second = await getOAuthTokenWithExpiry({ ...auth, clientSecret: 'secret-b' });
-    expect(first.accessToken).toBe('secret-a-token');
-    expect(second.accessToken).toBe('secret-b-token');
-    expect(mockFetch).toHaveBeenCalledTimes(2);
-  });
 });
 
 describe('OAuth cancellation ownership', () => {

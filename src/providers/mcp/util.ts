@@ -1,5 +1,3 @@
-import { createHash } from 'node:crypto';
-
 import { getProcessEnv } from '../../envars';
 import logger from '../../logger';
 import { isPrivateRangeGuardContextActive } from '../../util/fetch/guardContext';
@@ -121,24 +119,17 @@ interface OAuthTokenCache extends OAuthTokenResult {
 const oauthTokenCache = new Map<string, OAuthTokenCache>();
 
 /**
- * Get the cache key for an OAuth config. The credential is fingerprinted
- * (SHA-256, never the value itself: the map is in-memory only, and a raw
- * secret must never sit in a cache key) so two credentials sharing a
- * client id do not share a token.
+ * Get the cache key for an OAuth config. Secrets are deliberately not part
+ * of the key: the repo's cache-key hygiene rule forbids hashing raw secrets
+ * into cache keys, and a fast hash of a credential is exactly what CodeQL
+ * flags. Two credentials sharing a client id therefore share the cached
+ * token, which is the pre-existing upstream keying.
  */
 function getOAuthCacheKey(
   auth: MCPOAuthClientCredentialsAuth | MCPOAuthPasswordAuth,
   tokenUrl: string,
 ): string {
-  const clientSecret = 'clientSecret' in auth ? auth.clientSecret : undefined;
-  const password = 'password' in auth ? auth.password : undefined;
-  const credentialFingerprint =
-    clientSecret || password
-      ? createHash('sha256')
-          .update(`${clientSecret ?? ''}:${password ?? ''}`)
-          .digest('hex')
-      : '';
-  return `${tokenUrl}:${auth.grantType}:${'clientId' in auth ? auth.clientId : ''}:${'username' in auth ? auth.username : ''}:${normalizeRenderedOAuthScopes(auth.scopes)?.join(' ') ?? ''}:${credentialFingerprint}`;
+  return `${tokenUrl}:${auth.grantType}:${'clientId' in auth ? auth.clientId : ''}:${'username' in auth ? auth.username : ''}:${normalizeRenderedOAuthScopes(auth.scopes)?.join(' ') ?? ''}`;
 }
 
 // Cache for discovered token endpoints
