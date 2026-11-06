@@ -858,6 +858,7 @@ export class GoogleLiveProvider implements ApiProvider {
       let lastVideoFrameSentAt = 0;
       let hasFinalized = false;
       let speechInputEnded = false;
+      let hasPendingInputTranscription = false;
 
       const requestedText = configuredResponseModalities?.includes('TEXT') ?? false;
       const responseModalities =
@@ -884,6 +885,7 @@ export class GoogleLiveProvider implements ApiProvider {
       const sendContentMessages = async (contentMessages: any[]) => {
         if (isSpeechStream) {
           speechInputEnded = false;
+          hasPendingInputTranscription = false;
           clearTimeout(liveTranslateHardTimeout);
           liveTranslateHardTimeout = undefined;
         }
@@ -1598,14 +1600,25 @@ export class GoogleLiveProvider implements ApiProvider {
 
             if (isLiveTranscribe && serverContent.interimInputTranscription?.text) {
               // A new utterance is in progress. Wait for its finalized transcript.
+              hasPendingInputTranscription = true;
               clearTimeout(speechCompletionTimeout);
             }
-            if (isLiveTranscribe && serverContent.inputTranscription?.text) {
+            if (isLiveTranscribe && serverContent.inputTranscription) {
+              hasPendingInputTranscription = false;
               // Only finalized segments belong in eval output. Interim hypotheses can be revised.
-              if (response_text_total) {
-                response_text_total += '\n';
+              if (serverContent.inputTranscription.text) {
+                if (response_text_total) {
+                  response_text_total += '\n';
+                }
+                response_text_total += serverContent.inputTranscription.text;
               }
-              response_text_total += serverContent.inputTranscription.text;
+            }
+            // Completion can represent silence; retain the grace for any late final transcript.
+            if (
+              isLiveTranscribe &&
+              !hasPendingInputTranscription &&
+              (serverContent.inputTranscription || serverContent.turnComplete)
+            ) {
               armSpeechCompletion();
             }
             if (serverContent.modelTurn?.parts) {

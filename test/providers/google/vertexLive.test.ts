@@ -344,6 +344,106 @@ describe('VertexLiveProvider', () => {
     },
   );
 
+  it.each(
+    ['google', 'vertex'].flatMap((prefix) =>
+      ['silence', 'empty final after interim'].map((scenario) => ({ prefix, scenario })),
+    ),
+  )('completes $scenario on $prefix without a provider error', async ({ prefix, scenario }) => {
+    const provider =
+      prefix === 'vertex'
+        ? new VertexLiveProvider(liveTranscribe, {})
+        : new GoogleLiveProvider(liveTranscribe, { config: { apiKey: 'test-key' } });
+    const { result } = await start(provider, recording);
+    if (scenario === 'empty final after interim') {
+      await emit({ serverContent: { interimInputTranscription: { text: 'discarded draft' } } });
+    }
+    await emit({ serverContent: { turnComplete: true, interactionStatus: 'IDLE' } });
+    if (scenario === 'empty final after interim') {
+      await vi.advanceTimersByTimeAsync(4_000);
+      expect(ws.close).not.toHaveBeenCalled();
+      await emit({ serverContent: { inputTranscription: { text: '' } } });
+    }
+    await vi.advanceTimersByTimeAsync(4_000);
+    expect(ws.close).toHaveBeenCalledTimes(1);
+    const response = await result;
+    expect(response.error).toBeUndefined();
+    expect(response.output).toMatchObject({ text: '' });
+  });
+
+  it.each(['google', 'vertex'])(
+    'advances past a silent recording before transcribing speech on %s',
+    async (prefix) => {
+      const provider =
+        prefix === 'vertex'
+          ? new VertexLiveProvider(liveTranscribe, {})
+          : new GoogleLiveProvider(liveTranscribe, { config: { apiKey: 'test-key' } });
+      const recordings = JSON.stringify([...JSON.parse(recording), ...JSON.parse(recording)]);
+      const { result } = await start(provider, recordings);
+      await emit({ serverContent: { turnComplete: true, interactionStatus: 'IDLE' } });
+      expect(sent()).toHaveLength(3);
+      await vi.advanceTimersByTimeAsync(4_000);
+      expect(sent()).toHaveLength(5);
+      expect(ws.close).not.toHaveBeenCalled();
+      await emit({ serverContent: { inputTranscription: { text: 'Second recording.' } } });
+      await vi.advanceTimersByTimeAsync(4_000);
+      const response = await result;
+      expect(response.error).toBeUndefined();
+      expect(response.output).toMatchObject({ text: 'Second recording.' });
+      expect(sent()).toHaveLength(5);
+      expect(ws.close).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it.each(
+    ['google', 'vertex'].flatMap((prefix) =>
+      [true, false].map((interimFirst) => ({ prefix, interimFirst })),
+    ),
+  )(
+    'waits for finalized speech on $prefix with interimFirst=$interimFirst',
+    async ({ prefix, interimFirst }) => {
+      const provider =
+        prefix === 'vertex'
+          ? new VertexLiveProvider(liveTranscribe, {})
+          : new GoogleLiveProvider(liveTranscribe, { config: { apiKey: 'test-key' } });
+      const { result } = await start(provider, recording);
+      const interim = { serverContent: { interimInputTranscription: { text: 'draft' } } };
+      const completion = { serverContent: { turnComplete: true, interactionStatus: 'IDLE' } };
+      for (const frame of interimFirst ? [interim, completion] : [completion, interim]) {
+        await emit(frame);
+      }
+      await vi.advanceTimersByTimeAsync(4_000);
+      expect(ws.close).not.toHaveBeenCalled();
+      await emit(completion);
+      await vi.advanceTimersByTimeAsync(4_000);
+      expect(ws.close).not.toHaveBeenCalled();
+      await emit({ serverContent: { inputTranscription: { text: 'Final speech.' } } });
+      await vi.advanceTimersByTimeAsync(4_000);
+      const response = await result;
+      expect(response.error).toBeUndefined();
+      expect(response.output).toMatchObject({ text: 'Final speech.' });
+    },
+  );
+
+  it.each(['google', 'vertex'])(
+    'extends the completion grace for trailing finalized speech on %s',
+    async (prefix) => {
+      const provider =
+        prefix === 'vertex'
+          ? new VertexLiveProvider(liveTranscribe, {})
+          : new GoogleLiveProvider(liveTranscribe, { config: { apiKey: 'test-key' } });
+      const { result } = await start(provider, recording);
+      await emit({ serverContent: { turnComplete: true, interactionStatus: 'IDLE' } });
+      await vi.advanceTimersByTimeAsync(3_000);
+      await emit({ serverContent: { inputTranscription: { text: 'Final speech.' } } });
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(ws.close).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(3_000);
+      const response = await result;
+      expect(response.error).toBeUndefined();
+      expect(response.output).toMatchObject({ text: 'Final speech.' });
+    },
+  );
+
   it.each([
     [
       {},
