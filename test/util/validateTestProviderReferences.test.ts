@@ -164,5 +164,14 @@ describe('validateTestProviderReferences', () => {
         /Scenario #2/,
       );
     });
+
+    it('passes when test references a defined provider that was excluded by filtering when all defined providers are supplied', () => {
+      const allDefinedProviders = [
+        createProvider('gemini'),
+        createProvider('openrouter:deepseek/deepseek-r1'),
+      ];
+      const tests: TestCase[] = [{ vars: { foo: 'bar' }, providers: ['gemini', 'openrouter:*'] }];
+      expect(() => validateTestProviderReferences(tests, allDefinedProviders)).not.toThrow();
+    });
   });
 });

@@ -51,7 +51,7 @@ export function getProviderIdentifier(provider: ApiProvider): string {
  * Gets a descriptive identifier string for a provider, showing both label and ID when both exist.
  * Useful for error messages to help users debug provider reference issues.
  */
-export function getProviderDescription(provider: ApiProvider): string {
+export function getProviderDescription(provider: Pick<ApiProvider, 'id' | 'label'>): string {
   const label = provider.label;
   const id = provider.id();
   if (label && label !== id) {
@@ -76,7 +76,10 @@ export function sanitizeProviderIdForLog(providerId: string): string {
  * Checks if a provider reference matches a given provider.
  * Supports exact matching and wildcard patterns.
  */
-export function doesProviderRefMatch(ref: string, provider: ApiProvider): boolean {
+export function doesProviderRefMatch(
+  ref: string,
+  provider: Pick<ApiProvider, 'id' | 'label'>,
+): boolean {
   const label = provider.label;
   const id = provider.id();
 
