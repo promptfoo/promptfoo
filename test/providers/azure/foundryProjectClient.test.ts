@@ -1,4 +1,6 @@
+import { DefaultAzureCredential } from '@azure/identity';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { AzureFoundryAgentProvider } from '../../../src/providers/azure/foundry-agent';
 import { FoundryProjectClient } from '../../../src/providers/azure/foundryProjectClient';
 import type { TokenCredential } from '@azure/identity';
 import type { ClientOptions } from '@azure-rest/core-client';
@@ -9,11 +11,29 @@ vi.mock('@azure-rest/core-client', async (importOriginal) => {
   return {
     ...rest,
     getClient: (endpoint: string, credential: TokenCredential, options: ClientOptions) =>
-      rest.getClient(endpoint, credential, { ...options, httpClient: { sendRequest } }),
+      rest.getClient(endpoint, credential, {
+        ...options,
+        httpClient: { sendRequest },
+        retryOptions: { maxRetries: 0 },
+      }),
   };
 });
+vi.mock('../../../src/cache', () => ({ isCacheEnabled: () => false }));
 
-afterEach(() => vi.resetAllMocks());
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.resetAllMocks();
+});
+
+function reply(status: number, body: unknown, headers: Record<string, string> = {}) {
+  const responseHeaders = new Headers({ 'content-type': 'application/json', ...headers });
+  sendRequest.mockImplementationOnce(async (request) => ({
+    request,
+    status,
+    headers: Object.assign(responseHeaders, { toJSON: () => Object.fromEntries(responseHeaders) }),
+    bodyAsText: JSON.stringify(body),
+  }));
+}
 
 describe('Foundry project agent discovery', () => {
   it('authenticates direct lookups and follows the service cursor for legacy ID lookup', async () => {
@@ -55,5 +75,54 @@ describe('Foundry project agent discovery', () => {
     expect(urls.map((url) => url.searchParams.get('api-version'))).toEqual(['v1', 'v1', 'v1']);
     expect(urls.map((url) => url.searchParams.get('after'))).toEqual([null, null, 'cursor+/=']);
     expect(getToken.mock.calls[0][0]).toEqual(['https://ai.azure.com/.default']);
+  });
+
+  it.each([
+    [401, 'Unauthorized', 'Invalid access token'],
+    [503, 'ServiceUnavailable', 'Project temporarily unavailable'],
+  ] as const)('preserves HTTP %i discovery errors', async (status, code, message) => {
+    const body = { error: { code, message } };
+    reply(status, body);
+    const client = new FoundryProjectClient('https://fixture.example/api/projects/project', {
+      getToken: async () => ({ token: 'fixture', expiresOnTimestamp: Date.now() + 3600000 }),
+    });
+
+    await expect(client.getAgent('agent')).rejects.toMatchObject({
+      message,
+      code,
+      statusCode: status,
+      response: { status },
+      details: body,
+    });
+  });
+
+  it('falls back after a 404 and forwards a later discovery page throttle to the scheduler', async () => {
+    vi.spyOn(DefaultAzureCredential.prototype, 'getToken').mockResolvedValue({
+      token: 'fixture',
+      expiresOnTimestamp: Date.now() + 3600000,
+    });
+    reply(404, { error: { code: 'NotFound', message: 'Unknown agent name' } });
+    reply(200, { data: [], has_more: true, last_id: 'cursor' });
+    reply(
+      429,
+      { error: { code: 'rate_limit_exceeded', message: 'Slow down' } },
+      { 'retry-after': '2' },
+    );
+    const provider = new AzureFoundryAgentProvider('legacy-id', {
+      config: { projectUrl: 'https://fixture.example/api/projects/project' },
+    });
+
+    const result = await provider.callApi('hello');
+
+    expect(result.error).toContain('Slow down');
+    expect(result.metadata).toMatchObject({
+      rateLimitKind: 'rate_limit',
+      http: { status: 429, headers: { 'retry-after': '2' } },
+    });
+    expect(sendRequest.mock.calls.map(([request]) => new URL(request.url))).toMatchObject([
+      { pathname: '/api/projects/project/agents/legacy-id' },
+      { pathname: '/api/projects/project/agents' },
+      { pathname: '/api/projects/project/agents', search: expect.stringContaining('after=cursor') },
+    ]);
   });
 });
