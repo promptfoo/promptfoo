@@ -251,6 +251,72 @@ export async function renderPrompt(
 
   let basePrompt = prompt.raw;
 
+  /**
+   * Recursively walks a plain-object or array value and replaces every string
+   * that begins with `file://` with the loaded file content.  JS/Python script
+   * references are intentionally left at the top level only (they receive the
+   * `varName` and full `vars` context, which has no meaningful definition when
+   * the reference is buried inside a nested object).
+   */
+  async function resolveNestedFileRefs(value: unknown): Promise<unknown> {
+    if (typeof value === 'string' && value.startsWith('file://')) {
+      const basePath = cliState.basePath || '';
+      const filePath = path.resolve(process.cwd(), basePath, value.slice('file://'.length));
+      const fileExtension = filePath.split('.').pop();
+
+      logger.debug(`Loading nested file reference from: ${filePath}`);
+
+      if (fileExtension === 'yaml' || fileExtension === 'yml') {
+        return JSON.stringify(loadYaml(await fs.readFile(filePath, 'utf8')) as string | object);
+      } else if (fileExtension === 'pdf' && !getEnvBool('PROMPTFOO_DISABLE_PDF_AS_TEXT')) {
+        telemetry.record('feature_used', { feature: 'extract_text_from_pdf' });
+        return extractTextFromPDF(filePath);
+      } else if (
+        (isImageFile(filePath) || isVideoFile(filePath) || isAudioFile(filePath)) &&
+        !getEnvBool('PROMPTFOO_DISABLE_MULTIMEDIA_AS_BASE64')
+      ) {
+        // Multimedia inside nested objects is returned as base64 / data URL the
+        // same way top-level multimedia vars are handled.
+        const fileBuffer = await fs.readFile(filePath);
+        const base64Data = fileBuffer.toString('base64');
+        if (isImageFile(filePath)) {
+          let mimeType = getMimeTypeFromExtension(path.extname(filePath));
+          const extension = path.extname(filePath);
+          const extensionWasUnknown = !extension || mimeType === 'image/jpeg';
+          const detectedType = detectMimeFromBase64(base64Data);
+          if (detectedType && detectedType !== mimeType) {
+            logger.debug(
+              `Magic number detection overriding extension-based MIME type: ${detectedType} (was ${mimeType}) for ${filePath}`,
+            );
+            mimeType = detectedType;
+          } else if (!detectedType && extensionWasUnknown) {
+            logger.warn(
+              `Could not detect image format for ${filePath}, defaulting to image/jpeg. Supported formats: JPEG, PNG, GIF, WebP, BMP, TIFF, ICO, AVIF, HEIC, SVG`,
+            );
+          }
+          return `data:${mimeType};base64,${base64Data}`;
+        }
+        return base64Data;
+      } else {
+        return (await fs.readFile(filePath, 'utf8')).trim();
+      }
+    }
+
+    if (Array.isArray(value)) {
+      return Promise.all(value.map(resolveNestedFileRefs));
+    }
+
+    if (typeof value === 'object' && value !== null) {
+      const result: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+        result[k] = await resolveNestedFileRefs(v);
+      }
+      return result;
+    }
+
+    return value;
+  }
+
   // Load files
   for (const [varName, value] of Object.entries(vars)) {
     if (skipRenderVars?.includes(varName)) {
@@ -391,6 +457,14 @@ export async function renderPrompt(
         );
       }
       vars[varName] = javascriptOutput.output;
+    } else if (typeof value === 'object' && value !== null) {
+      // Recursively expand any `file://` references nested inside a plain object
+      // or array.  For example:
+      //   vars:
+      //     report:
+      //       period: '2024-Q1'
+      //       content: file://reports/q1.txt   ← was silently ignored before this fix
+      vars[varName] = (await resolveNestedFileRefs(value)) as VarValue;
     }
   }
 

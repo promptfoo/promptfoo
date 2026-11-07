@@ -467,6 +467,103 @@ describe('evaluatorHelpers', () => {
       expect(renderedPrompt).toBe('Test prompt with {"key":"valueFromYaml"}');
     });
 
+    describe('nested file:// references in object vars (issue #1613)', () => {
+      it('should load file:// content nested one level deep in a plain object var', async () => {
+        // Before the fix: `reporting_period.previous.report` would stay as the
+        // raw `file://` string and get injected into the prompt literally.
+        const prompt = toPrompt('Report: {{ reporting_period.previous.report }}');
+        const vars = {
+          reporting_period: {
+            current: { period: '2023-12-31' },
+            previous: {
+              period: '2022-12-31',
+              report: 'file://data/report.txt',
+            },
+          },
+        };
+
+        vi.spyOn(fs, 'readFileSync').mockReturnValueOnce('<h1>Sample Report</h1>');
+
+        const renderedPrompt = await renderPrompt(prompt, vars, {});
+
+        expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('report.txt'), 'utf8');
+        expect(renderedPrompt).toBe('Report: <h1>Sample Report</h1>');
+      });
+
+      it('should load file:// content nested deeply in a plain object var', async () => {
+        const prompt = toPrompt('Deep: {{ a.b.c.d }}');
+        const vars = {
+          a: { b: { c: { d: 'file://deep/nested.txt' } } },
+        };
+
+        vi.spyOn(fs, 'readFileSync').mockReturnValueOnce('deep content');
+
+        const renderedPrompt = await renderPrompt(prompt, vars, {});
+
+        expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('nested.txt'), 'utf8');
+        expect(renderedPrompt).toBe('Deep: deep content');
+      });
+
+      it('should expand file:// references inside an array var', async () => {
+        const prompt = toPrompt('{{ items | join(", ") }}');
+        const vars = {
+          items: ['literal', 'file://item.txt'],
+        };
+
+        vi.spyOn(fs, 'readFileSync').mockReturnValueOnce('from file');
+
+        const renderedPrompt = await renderPrompt(prompt, vars, {});
+
+        expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('item.txt'), 'utf8');
+        expect(renderedPrompt).toBe('literal, from file');
+      });
+
+      it('should load a yaml file:// reference nested inside an object var', async () => {
+        const prompt = toPrompt('Config: {{ cfg.schema }}');
+        const vars = {
+          cfg: { schema: 'file://schema.yaml' },
+        };
+
+        vi.spyOn(fs, 'readFileSync').mockReturnValueOnce('key: value');
+
+        const renderedPrompt = await renderPrompt(prompt, vars, {});
+
+        expect(fs.readFileSync).toHaveBeenCalledWith(
+          expect.stringContaining('schema.yaml'),
+          'utf8',
+        );
+        expect(renderedPrompt).toBe('Config: {"key":"value"}');
+      });
+
+      it('should leave non-file:// strings inside nested objects untouched', async () => {
+        const prompt = toPrompt('{{ data.label }}');
+        const vars = {
+          data: { label: 'just a string', count: 42 },
+        };
+
+        const renderedPrompt = await renderPrompt(prompt, vars, {});
+
+        // readFileSync should NOT have been called
+        expect(fsMocks.readFileSync).not.toHaveBeenCalled();
+        expect(renderedPrompt).toBe('just a string');
+      });
+
+      it('should not apply nested expansion to vars listed in skipRenderVars', async () => {
+        const prompt = toPrompt('{{ safe.inner }}');
+        const vars = {
+          safe: { inner: 'file://should-not-load.txt' },
+        };
+
+        const renderedPrompt = await renderPrompt(prompt, vars, {}, undefined, ['safe']);
+
+        // The file should NOT be loaded because `safe` is in skipRenderVars
+        expect(fsMocks.readFileSync).not.toHaveBeenCalled();
+        // The raw object is passed through Nunjucks – the nested property is accessible
+        // but its value stays as the original string
+        expect(renderedPrompt).toContain('file://should-not-load.txt');
+      });
+    });
+
     describe('with PROMPTFOO_DISABLE_TEMPLATING', () => {
       beforeEach(() => {
         mockProcessEnv({ PROMPTFOO_DISABLE_TEMPLATING: 'true' });
