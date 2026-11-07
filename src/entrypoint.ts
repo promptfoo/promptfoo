@@ -12,6 +12,7 @@ import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { requestsStructuredCodeScanOutput } from './codeScan/util/structuredOutputDetect';
+import { onlineCaptureArgs } from './commands/online/captureArgs';
 
 type NodeEngineComparatorOperator = '=' | '>' | '>=' | '<' | '<=';
 type NodeEngineVersionTuple = [number, number, number];
@@ -160,8 +161,15 @@ if (invokedAsCli && requestsStructuredCodeScanOutput(process.argv.slice(2))) {
 // Update argv[1] so isMainModule() in main.ts correctly detects CLI execution.
 // Trade-off: This permanently changes argv[1] for the process lifetime.
 // Any code reading argv[1] will see the synthetic main.js path, not entrypoint.js.
-process.argv[1] = fileURLToPath(new URL('./main.js', import.meta.url));
-await import('./main.js');
+// Hook capture must not load project configuration, dotenv, telemetry or the database.
+const captureArgs = onlineCaptureArgs(process.argv.slice(2));
+if (captureArgs) {
+  const { runCapture } = await import('./commands/online/capture.js');
+  await runCapture(captureArgs);
+} else {
+  process.argv[1] = fileURLToPath(new URL('./main.js', import.meta.url));
+  await import('./main.js');
+}
 
 // Required for top-level await - makes this file an ES module
 export {};

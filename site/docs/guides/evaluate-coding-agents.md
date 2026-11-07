@@ -10,6 +10,8 @@ Coding agents present a different evaluation challenge than standard LLMs. A cha
 
 This guide covers coding agent evals with promptfoo: [OpenAI Codex SDK](/docs/providers/openai-codex-sdk), [OpenAI Codex app-server](/docs/providers/openai-codex-app-server), [Claude Agent SDK](/docs/providers/claude-agent-sdk), [OpenCode SDK](/docs/providers/opencode-sdk), [Open Interpreter](/docs/providers/openinterpreter), and plain LLM baselines.
 
+To grade replies from Agents you are already using, see the [online Agent eval example](https://github.com/promptfoo/promptfoo/tree/main/examples/online-agent-evals). It connects Claude Code and Codex hooks to a local queue and a separate `promptfoo online watch` worker, without re-running the Agent. These reply-level checks complement the task and trajectory evals below.
+
 ## Why agent evals are different
 
 Standard LLM evals test a function: given input X, does output Y meet criteria Z? Agent evals test a system with emergent behavior.
