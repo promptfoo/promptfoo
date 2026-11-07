@@ -67,4 +67,18 @@ describe('inlineBlobRefsForShare', () => {
 
     expect(getShareAuthorizedBlob).toHaveBeenCalledOnce();
   });
+
+  it('inlines a shared metadata object in every result row', async () => {
+    const sharedMetadata = { preview: uri };
+    const rows = [{ metadata: sharedMetadata }, { metadata: sharedMetadata }];
+
+    const result = await inlineBlobRefsForShare(rows, createBlobInlineCache(), 'local-eval-1');
+
+    const expectedPreview = `data:image/png;base64,${bytes.toString('base64')}`;
+    expect(result).toEqual([
+      { metadata: { preview: expectedPreview } },
+      { metadata: { preview: expectedPreview } },
+    ]);
+    expect(getShareAuthorizedBlob).toHaveBeenCalledOnce();
+  });
 });

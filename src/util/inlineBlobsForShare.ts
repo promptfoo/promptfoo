@@ -82,7 +82,7 @@ function replaceBlobUris(value: string, cache: BlobInlineCache): string {
 async function inlineValue(
   value: unknown,
   cache: BlobInlineCache,
-  visited: WeakSet<object>,
+  memo: WeakMap<object, unknown>,
   depth: number,
 ): Promise<unknown> {
   if (depth > MAX_DEPTH) {
@@ -93,20 +93,28 @@ async function inlineValue(
     return replaceBlobUris(value, cache);
   }
 
-  if (Array.isArray(value)) {
-    return Promise.all(value.map((child) => inlineValue(child, cache, visited, depth + 1)));
-  }
-
   if (!value || typeof value !== 'object') {
     return value;
   }
 
-  if (visited.has(value)) {
-    return value;
+  const existing = memo.get(value);
+  if (existing !== undefined) {
+    return existing;
   }
-  visited.add(value);
+
+  if (Array.isArray(value)) {
+    const next: unknown[] = new Array(value.length);
+    memo.set(value, next);
+    await Promise.all(
+      value.map(async (child, index) => {
+        next[index] = await inlineValue(child, cache, memo, depth + 1);
+      }),
+    );
+    return next;
+  }
 
   const next: Record<string, unknown> = { ...(value as Record<string, unknown>) };
+  memo.set(value, next);
 
   if ('blobRef' in next) {
     const blobHash = extractHashFromBlobRef(next.blobRef);
@@ -125,7 +133,7 @@ async function inlineValue(
   }
 
   for (const [key, child] of Object.entries(next)) {
-    next[key] = await inlineValue(child, cache, visited, depth + 1);
+    next[key] = await inlineValue(child, cache, memo, depth + 1);
   }
 
   return next;
@@ -145,5 +153,5 @@ export async function inlineBlobRefsForShare<T>(
     maxStringLength: MAX_STRING_LENGTH_TO_SCAN,
   });
   await ensureBlobPayloads(hashes, cache, localEvalId);
-  return (await inlineValue(value, cache, new WeakSet(), 0)) as T;
+  return (await inlineValue(value, cache, new WeakMap(), 0)) as T;
 }
