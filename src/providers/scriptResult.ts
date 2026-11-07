@@ -107,8 +107,9 @@ export function validateScriptResult(
  * 100ms+ per write, so Python/Ruby must not await. Failures are logged and must
  * not reject the call. Executable scriptCompletion still awaits cache.set (#11198).
  *
- * Pending writes are tracked so shutdownGracefully and SIGTERM cleanup can flush
- * them before process exit, without putting the wait back on each provider call.
+ * Pending writes are tracked so providerRegistry.shutdownForProcess (graceful
+ * shutdown and SIGTERM) can flush them before exit, without putting the wait back
+ * on each provider call.
  */
 const pendingScriptProviderCacheWrites = new Set<Promise<unknown>>();
 
@@ -127,7 +128,7 @@ export function publishScriptProviderCacheWrite(
 ): void {
   // Promise.resolve so sync/undefined mock returns and real Keyv promises both work.
   const write = Promise.resolve(cache.set(cacheKey, value)).catch((err) => {
-    logger.warn(`${providerLabel} failed to cache result: ${String(err)}`);
+    logger.warn(`${providerLabel} failed to cache result`, { error: err });
   });
   pendingScriptProviderCacheWrites.add(write);
   void write.finally(() => {

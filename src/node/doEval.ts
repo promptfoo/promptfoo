@@ -22,10 +22,7 @@ import { cloudConfig } from '../globalConfig/cloud';
 import logger, { getLogLevel } from '../logger';
 import { runDbMigrations } from '../migrate';
 import Eval from '../models/eval';
-import {
-  flushPendingScriptProviderCacheWrites,
-  providerRegistry,
-} from '../providers/providerRegistry';
+import { providerRegistry } from '../providers/providerRegistry';
 import { neverGenerateRemote } from '../redteam/remoteGeneration';
 import { createShareableUrl, isSharingEnabled } from '../share';
 import { generateTable } from '../table';
@@ -238,13 +235,6 @@ async function cleanupOnSigterm(): Promise<void> {
     await providerRegistry.shutdownForProcess();
   } catch (error) {
     logger.debug('Provider cleanup failed during SIGTERM', { error });
-  }
-  // Python/Ruby cache writes are fire-and-forget; drain them before re-raising SIGTERM so a
-  // container/CI stop cannot discard the detached keyv-file rewrite.
-  try {
-    await flushPendingScriptProviderCacheWrites();
-  } catch (error) {
-    logger.debug('Script provider cache flush failed during SIGTERM', { error });
   }
   await shutdownOtel();
 }

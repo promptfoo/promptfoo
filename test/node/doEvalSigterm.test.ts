@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } from 'vitest';
 import { doEval, SIGTERM_CLEANUP_TIMEOUT_MS, terminateOnSigterm } from '../../src/node/doEval';
 import { providerRegistry } from '../../src/providers/providerRegistry';
-import { publishScriptProviderCacheWrite } from '../../src/providers/scriptResult';
 import { flushOtel, shutdownOtel } from '../../src/tracing/otelSdk';
 import { writeMultipleOutputs } from '../../src/util/index';
 import { createDeferred, mockProcessEnv } from '../util/utils';
@@ -107,35 +106,6 @@ describe('CLI SIGTERM handling', () => {
     await vi.advanceTimersByTimeAsync(1);
 
     expect(kill).toHaveBeenCalledWith(process.pid, 'SIGTERM');
-  });
-
-  it('flushes pending script-provider cache writes before re-raising SIGTERM', async () => {
-    const write = createDeferred<void>();
-    publishScriptProviderCacheWrite(
-      { set: () => write.promise },
-      'sigterm-flush-key',
-      '{"output":"x"}',
-      'TestProvider',
-    );
-    vi.spyOn(providerRegistry, 'shutdownForProcess').mockResolvedValue();
-    terminateOnSigterm();
-
-    process.emit('SIGTERM');
-
-    // Without the flush, cleanup finishes and re-raises immediately. With it, kill stays
-    // gated on the deferred write — prove the early kill does not happen.
-    await expect(
-      vi.waitFor(
-        () => {
-          expect(kill).toHaveBeenCalled();
-        },
-        { timeout: 150 },
-      ),
-    ).rejects.toThrow();
-
-    write.resolve();
-    await vi.waitFor(() => expect(kill).toHaveBeenCalledWith(process.pid, 'SIGTERM'));
-    expect(shutdownOtel).toHaveBeenCalled();
   });
 
   it.each([

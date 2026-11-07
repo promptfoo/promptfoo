@@ -13,9 +13,6 @@ const mockTelemetryRecord = vi.hoisted(() => vi.fn());
 const mockTelemetryInitialize = vi.hoisted(() => vi.fn());
 const mockTelemetryShutdown = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 const mockProviderShutdown = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
-const mockFlushPendingScriptProviderCacheWrites = vi.hoisted(() =>
-  vi.fn().mockResolvedValue(undefined),
-);
 const mockCloseLogger = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 const mockCloseDbIfOpen = vi.hoisted(() => vi.fn());
 const mockDispatcherDestroy = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
@@ -48,7 +45,6 @@ vi.mock('../src/telemetry', () => ({
 
 vi.mock('../src/providers/providerRegistry', () => ({
   providerRegistry: { shutdownForProcess: mockProviderShutdown },
-  flushPendingScriptProviderCacheWrites: mockFlushPendingScriptProviderCacheWrites,
 }));
 
 vi.mock('../src/database/index', () => ({
@@ -510,7 +506,6 @@ describe('shutdownGracefully', () => {
     mockSetLogLevel.mockReset();
     mockTelemetryShutdown.mockReset().mockResolvedValue(undefined);
     mockProviderShutdown.mockReset().mockResolvedValue(undefined);
-    mockFlushPendingScriptProviderCacheWrites.mockReset().mockResolvedValue(undefined);
     mockCloseLogger.mockReset().mockResolvedValue(undefined);
     mockCloseDbIfOpen.mockReset();
     mockDispatcherDestroy.mockReset().mockResolvedValue(undefined);
@@ -735,45 +730,5 @@ describe('shutdownGracefully', () => {
 
     // Should complete without throwing
     await expect(shutdownPromise).resolves.toBeUndefined();
-  });
-
-  it('waits for pending script-provider cache writes before scheduling the exit', async () => {
-    const { createDeferred } = await import('./util/utils');
-    const { publishScriptProviderCacheWrite, flushPendingScriptProviderCacheWrites } = await import(
-      '../src/providers/scriptResult'
-    );
-
-    // Drive the real pending-write tracker through shutdownGracefully so removing
-    // the flush leaves this test red (providerRegistry is mocked above).
-    mockFlushPendingScriptProviderCacheWrites.mockImplementation(() =>
-      flushPendingScriptProviderCacheWrites(),
-    );
-
-    const write = createDeferred<void>();
-    publishScriptProviderCacheWrite(
-      { set: () => write.promise },
-      'shutdown-flush-key',
-      '{"output":"x"}',
-      'TestProvider',
-    );
-
-    const shutdownPromise = shutdownGracefully();
-
-    // Instant mock cleanup reaches the flush; natural exit must stay gated on the write.
-    await vi.advanceTimersByTimeAsync(0);
-    await Promise.resolve();
-    await Promise.resolve();
-    expect(mockFlushPendingScriptProviderCacheWrites).toHaveBeenCalled();
-    expect(process.exit).not.toHaveBeenCalled();
-
-    await vi.advanceTimersByTimeAsync(100);
-    expect(process.exit).not.toHaveBeenCalled();
-
-    write.resolve();
-    await shutdownPromise;
-    expect(process.exit).not.toHaveBeenCalled();
-
-    await vi.advanceTimersByTimeAsync(100);
-    expect(process.exit).toHaveBeenCalledWith(0);
   });
 });

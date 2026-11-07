@@ -404,9 +404,9 @@ describe('PythonProvider', () => {
         cached: false,
       });
       await vi.waitFor(() => {
-        expect(logger.warn).toHaveBeenCalledWith(
-          'PythonProvider failed to cache result: Error: disk full',
-        );
+        expect(logger.warn).toHaveBeenCalledWith('PythonProvider failed to cache result', {
+          error: expect.objectContaining({ message: 'disk full' }),
+        });
       });
     });
 

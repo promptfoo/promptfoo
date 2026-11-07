@@ -6,10 +6,7 @@ import { getGlobalDispatcher } from 'undici';
 import { requestsStructuredCodeScanOutput } from './codeScan/util/structuredOutputDetect';
 import { closeDbIfOpen } from './database/index';
 import logger, { closeLogger, setLogLevel } from './logger';
-import {
-  flushPendingScriptProviderCacheWrites,
-  providerRegistry,
-} from './providers/providerRegistry';
+import { providerRegistry } from './providers/providerRegistry';
 import telemetry from './telemetry';
 import { clearAgentCache } from './util/fetch/index';
 import { setupEnv } from './util/index';
@@ -276,17 +273,6 @@ export const shutdownGracefully = async (): Promise<void> => {
   // Keep logging available until the database cleanup settles.
   await dbClosePromise;
   await providerShutdown;
-
-  try {
-    await withTimeout(
-      flushPendingScriptProviderCacheWrites(),
-      'flushPendingScriptProviderCacheWrites()',
-    );
-  } catch (error) {
-    logger.debug('[shutdownGracefully] Script provider cache flush failed', {
-      error: error instanceof Error ? error.message : String(error),
-    });
-  }
 
   logger.debug('Closing logger file transports');
   try {
