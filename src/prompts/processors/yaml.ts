@@ -17,7 +17,11 @@ import type { Prompt } from '../../types/index';
  * @returns An array of `Prompt` objects extracted from the YAML file.
  * @throws Will throw an error if the file cannot be read or parsed.
  */
-export function processYamlFile(filePath: string, prompt: Partial<Prompt>): Prompt[] {
+export function processYamlFile(
+  filePath: string,
+  prompt: Partial<Prompt>,
+  labelPath: string = filePath,
+): Prompt[] {
   const fileContents = fs.readFileSync(filePath, 'utf8');
   let maybeParsed: string | undefined = fileContents;
   try {
@@ -35,7 +39,7 @@ export function processYamlFile(filePath: string, prompt: Partial<Prompt>): Prom
   return [
     {
       raw: maybeParsed,
-      label: prompt.label || `${filePath}: ${maybeParsed?.slice(0, 80)}`,
+      label: prompt.label || `${labelPath}: ${maybeParsed?.slice(0, 80)}`,
       config: prompt.config,
     },
   ];

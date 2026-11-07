@@ -2,12 +2,31 @@ import { spawn } from 'child_process';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import type { Server } from 'node:http';
 
-import request from 'supertest';
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../../../src/server/server';
 import { asMockChildProcess, createMockChildProcess } from '../../util/mockChildProcess';
+import { setupTestServer } from '../../util/testServer';
+
+const createScanResult = (total_checks: number) => ({
+  total_checks,
+  passed_checks: total_checks,
+  failed_checks: 0,
+  files_scanned: 1,
+  bytes_scanned: 9,
+  has_errors: false,
+  issues: [],
+  checks: [],
+});
+
+const createSuccessfulCheckSummary = () => ({
+  total_checks: 5,
+  passed_checks: 5,
+  failed_checks: 0,
+  has_errors: false,
+  issues: [],
+  checks: [],
+});
 
 // Mock dependencies
 vi.mock('child_process');
@@ -34,27 +53,12 @@ import { checkModelAuditInstalled } from '../../../src/util/modelAuditInstall';
 const mockedCheckModelAuditInstalled = vi.mocked(checkModelAuditInstalled);
 const mockedSpawn = vi.mocked(spawn);
 
+function mockModelAuditProcess(options: Parameters<typeof createMockChildProcess>[0]) {
+  mockedSpawn.mockReturnValue(asMockChildProcess(createMockChildProcess(options)));
+}
+
 describe('Model Audit Routes', () => {
-  let api: ReturnType<typeof request.agent>;
-  let server: Server;
-
-  beforeAll(async () => {
-    await new Promise<void>((resolve, reject) => {
-      server = createApp().listen(0, '127.0.0.1', (error?: Error) =>
-        error ? reject(error) : resolve(),
-      );
-    });
-    api = request.agent(server);
-  });
-
-  afterAll(async () => {
-    if (!server.listening) {
-      return;
-    }
-    await new Promise<void>((resolve, reject) => {
-      server.close((error) => (error ? reject(error) : resolve()));
-    });
-  });
+  const api = setupTestServer(createApp);
 
   beforeEach(() => {
     // Reset mock implementations to ensure test isolation when tests run in random order.
@@ -78,14 +82,10 @@ describe('Model Audit Routes', () => {
         ],
       });
 
-      mockedSpawn.mockReturnValue(
-        asMockChildProcess(
-          createMockChildProcess({
-            exitCode: 0,
-            stdoutData: scannerOutput,
-          }),
-        ),
-      );
+      mockModelAuditProcess({
+        exitCode: 0,
+        stdoutData: scannerOutput,
+      });
 
       const response = await api.get('/api/model-audit/scanners');
 
@@ -117,14 +117,10 @@ describe('Model Audit Routes', () => {
     it('should return 500 when scanner listing exits non-zero', async () => {
       mockedCheckModelAuditInstalled.mockResolvedValue({ installed: true, version: '0.2.30' });
 
-      mockedSpawn.mockReturnValue(
-        asMockChildProcess(
-          createMockChildProcess({
-            exitCode: 2,
-            stderrData: 'scanner lookup failed',
-          }),
-        ),
-      );
+      mockModelAuditProcess({
+        exitCode: 2,
+        stderrData: 'scanner lookup failed',
+      });
 
       const response = await api.get('/api/model-audit/scanners');
 
@@ -135,15 +131,11 @@ describe('Model Audit Routes', () => {
     it('should return 500 when scanner listing terminates via signal', async () => {
       mockedCheckModelAuditInstalled.mockResolvedValue({ installed: true, version: '0.2.30' });
 
-      mockedSpawn.mockReturnValue(
-        asMockChildProcess(
-          createMockChildProcess({
-            customEventHandlers: {
-              close: (callback) => setImmediate(() => callback(null, 'SIGTERM')),
-            },
-          }),
-        ),
-      );
+      mockModelAuditProcess({
+        customEventHandlers: {
+          close: (callback) => setImmediate(() => callback(null, 'SIGTERM')),
+        },
+      });
 
       const response = await api.get('/api/model-audit/scanners');
 
@@ -154,14 +146,10 @@ describe('Model Audit Routes', () => {
     it('should return 500 when scanner output is invalid JSON', async () => {
       mockedCheckModelAuditInstalled.mockResolvedValue({ installed: true, version: '0.2.30' });
 
-      mockedSpawn.mockReturnValue(
-        asMockChildProcess(
-          createMockChildProcess({
-            exitCode: 0,
-            stdoutData: 'not json',
-          }),
-        ),
-      );
+      mockModelAuditProcess({
+        exitCode: 0,
+        stdoutData: 'not json',
+      });
 
       const response = await api.get('/api/model-audit/scanners');
 
@@ -179,16 +167,7 @@ describe('Model Audit Routes', () => {
       const testFilePath = path.join(os.tmpdir(), 'test-model-audit-scan.pkl');
       fs.writeFileSync(testFilePath, 'test data');
 
-      const mockScanOutput = JSON.stringify({
-        total_checks: 5,
-        passed_checks: 5,
-        failed_checks: 0,
-        files_scanned: 1,
-        bytes_scanned: 9,
-        has_errors: false,
-        issues: [],
-        checks: [],
-      });
+      const mockScanOutput = JSON.stringify(createScanResult(5));
 
       // Use the test utility for cleaner mock creation
       const mockChildProcess = createMockChildProcess({
@@ -216,16 +195,7 @@ describe('Model Audit Routes', () => {
       const testFilePath = path.join(os.tmpdir(), 'test-model-audit-scan-2.pkl');
       fs.writeFileSync(testFilePath, 'test data');
 
-      const mockScanOutput = JSON.stringify({
-        total_checks: 5,
-        passed_checks: 5,
-        failed_checks: 0,
-        files_scanned: 1,
-        bytes_scanned: 9,
-        has_errors: false,
-        issues: [],
-        checks: [],
-      });
+      const mockScanOutput = JSON.stringify(createScanResult(5));
 
       // Use the test utility for cleaner mock creation
       const mockChildProcess = createMockChildProcess({
@@ -252,25 +222,12 @@ describe('Model Audit Routes', () => {
       const testFilePath = path.join(os.tmpdir(), 'test-model-audit-zero-timeout.pkl');
       fs.writeFileSync(testFilePath, 'test data');
 
-      const mockScanOutput = JSON.stringify({
-        total_checks: 1,
-        passed_checks: 1,
-        failed_checks: 0,
-        files_scanned: 1,
-        bytes_scanned: 9,
-        has_errors: false,
-        issues: [],
-        checks: [],
-      });
+      const mockScanOutput = JSON.stringify(createScanResult(1));
 
-      mockedSpawn.mockReturnValue(
-        asMockChildProcess(
-          createMockChildProcess({
-            exitCode: 0,
-            stdoutData: mockScanOutput,
-          }),
-        ),
-      );
+      mockModelAuditProcess({
+        exitCode: 0,
+        stdoutData: mockScanOutput,
+      });
 
       try {
         const response = await api
@@ -298,25 +255,12 @@ describe('Model Audit Routes', () => {
         id: 'scan-scanner-selection',
       } as Awaited<ReturnType<typeof ModelAudit.create>>);
 
-      const mockScanOutput = JSON.stringify({
-        total_checks: 1,
-        passed_checks: 1,
-        failed_checks: 0,
-        files_scanned: 1,
-        bytes_scanned: 9,
-        has_errors: false,
-        issues: [],
-        checks: [],
-      });
+      const mockScanOutput = JSON.stringify(createScanResult(1));
 
-      mockedSpawn.mockReturnValue(
-        asMockChildProcess(
-          createMockChildProcess({
-            exitCode: 0,
-            stdoutData: mockScanOutput,
-          }),
-        ),
-      );
+      mockModelAuditProcess({
+        exitCode: 0,
+        stdoutData: mockScanOutput,
+      });
 
       try {
         const response = await api.post('/api/model-audit/scan').send({
@@ -367,25 +311,12 @@ describe('Model Audit Routes', () => {
 
       const testFilePath = path.join(os.tmpdir(), 'test-model-audit-size-alias.pkl');
       fs.writeFileSync(testFilePath, 'test data');
-      const mockScanOutput = JSON.stringify({
-        total_checks: 1,
-        passed_checks: 1,
-        failed_checks: 0,
-        files_scanned: 1,
-        bytes_scanned: 9,
-        has_errors: false,
-        issues: [],
-        checks: [],
-      });
+      const mockScanOutput = JSON.stringify(createScanResult(1));
 
-      mockedSpawn.mockReturnValue(
-        asMockChildProcess(
-          createMockChildProcess({
-            exitCode: 0,
-            stdoutData: mockScanOutput,
-          }),
-        ),
-      );
+      mockModelAuditProcess({
+        exitCode: 0,
+        stdoutData: mockScanOutput,
+      });
 
       try {
         const aliasResponse = await api
@@ -415,14 +346,10 @@ describe('Model Audit Routes', () => {
 
       const testFilePath = path.join(os.tmpdir(), 'test-model-audit-incomplete-json.pkl');
       fs.writeFileSync(testFilePath, 'test data');
-      mockedSpawn.mockReturnValue(
-        asMockChildProcess(
-          createMockChildProcess({
-            exitCode: 0,
-            stdoutData: JSON.stringify({}),
-          }),
-        ),
-      );
+      mockModelAuditProcess({
+        exitCode: 0,
+        stdoutData: JSON.stringify({}),
+      });
 
       try {
         const response = await api
@@ -441,23 +368,19 @@ describe('Model Audit Routes', () => {
 
       const testFilePath = path.join(os.tmpdir(), 'test-model-audit-signal.pkl');
       fs.writeFileSync(testFilePath, 'test data');
-      mockedSpawn.mockReturnValue(
-        asMockChildProcess(
-          createMockChildProcess({
-            stdoutData: JSON.stringify({
-              total_checks: 1,
-              passed_checks: 1,
-              failed_checks: 0,
-              has_errors: false,
-              issues: [],
-              checks: [],
-            }),
-            customEventHandlers: {
-              close: (callback) => setImmediate(() => callback(null, 'SIGTERM')),
-            },
-          }),
-        ),
-      );
+      mockModelAuditProcess({
+        stdoutData: JSON.stringify({
+          total_checks: 1,
+          passed_checks: 1,
+          failed_checks: 0,
+          has_errors: false,
+          issues: [],
+          checks: [],
+        }),
+        customEventHandlers: {
+          close: (callback) => setImmediate(() => callback(null, 'SIGTERM')),
+        },
+      });
 
       try {
         const response = await api
@@ -536,24 +459,20 @@ describe('Model Audit Routes', () => {
         id: 'scan-provenance',
       } as Awaited<ReturnType<typeof ModelAudit.create>>);
 
-      mockedSpawn.mockReturnValue(
-        asMockChildProcess(
-          createMockChildProcess({
-            exitCode: 0,
-            stdoutData: JSON.stringify({
-              total_checks: 1,
-              passed_checks: 1,
-              failed_checks: 0,
-              files_scanned: 1,
-              bytes_scanned: 9,
-              has_errors: false,
-              issues: [],
-              checks: [],
-              content_hash: 'sha256:abc123',
-            }),
-          }),
-        ),
-      );
+      mockModelAuditProcess({
+        exitCode: 0,
+        stdoutData: JSON.stringify({
+          total_checks: 1,
+          passed_checks: 1,
+          failed_checks: 0,
+          files_scanned: 1,
+          bytes_scanned: 9,
+          has_errors: false,
+          issues: [],
+          checks: [],
+          content_hash: 'sha256:abc123',
+        }),
+      });
 
       try {
         const response = await api.post('/api/model-audit/scan').send({ paths: [testFilePath] });
@@ -637,25 +556,12 @@ describe('Model Audit Routes', () => {
       const testFilePath = path.join(os.tmpdir(), 'test-model-audit-response-parse.pkl');
       fs.writeFileSync(testFilePath, 'test data');
 
-      const mockScanOutput = JSON.stringify({
-        total_checks: 1,
-        passed_checks: 1,
-        failed_checks: 0,
-        files_scanned: 1,
-        bytes_scanned: 9,
-        has_errors: false,
-        issues: [],
-        checks: [],
-      });
+      const mockScanOutput = JSON.stringify(createScanResult(1));
 
-      mockedSpawn.mockReturnValue(
-        asMockChildProcess(
-          createMockChildProcess({
-            exitCode: 0,
-            stdoutData: mockScanOutput,
-          }),
-        ),
-      );
+      mockModelAuditProcess({
+        exitCode: 0,
+        stdoutData: mockScanOutput,
+      });
       const parseSpy = vi
         .spyOn(ModelAuditSchemas.Scan.Response, 'parse')
         .mockImplementationOnce(() => {
@@ -773,27 +679,7 @@ describe('Model Audit Routes', () => {
 });
 
 describe('Model Audit Routes - DB-backed', () => {
-  let api: ReturnType<typeof request.agent>;
-  let server: Server;
-
-  beforeAll(async () => {
-    await runDbMigrations();
-    await new Promise<void>((resolve, reject) => {
-      server = createApp().listen(0, '127.0.0.1', (error?: Error) =>
-        error ? reject(error) : resolve(),
-      );
-    });
-    api = request.agent(server);
-  });
-
-  afterAll(async () => {
-    if (!server.listening) {
-      return;
-    }
-    await new Promise<void>((resolve, reject) => {
-      server.close((error) => (error ? reject(error) : resolve()));
-    });
-  });
+  const api = setupTestServer(createApp, runDbMigrations);
 
   beforeEach(async () => {
     mockedCheckModelAuditInstalled.mockReset();
@@ -818,14 +704,7 @@ describe('Model Audit Routes - DB-backed', () => {
     const baseData = {
       name: 'Test Scan',
       modelPath: '/path/to/model.pkl',
-      results: {
-        total_checks: 5,
-        passed_checks: 5,
-        failed_checks: 0,
-        has_errors: false,
-        issues: [],
-        checks: [],
-      },
+      results: createSuccessfulCheckSummary(),
       ...createOverrides,
     };
 
@@ -979,14 +858,7 @@ describe('Model Audit Routes - DB-backed', () => {
 
     it('should use scan id as a stable tie-breaker for non-unique sort fields', async () => {
       const db = await getDb();
-      const scanResults = {
-        total_checks: 5,
-        passed_checks: 5,
-        failed_checks: 0,
-        has_errors: false,
-        issues: [],
-        checks: [],
-      };
+      const scanResults = createSuccessfulCheckSummary();
       await db
         .insert(modelAuditsTable)
         .values([

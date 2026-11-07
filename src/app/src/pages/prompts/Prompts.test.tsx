@@ -1,6 +1,6 @@
 import { RenderResult, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter } from 'react-router';
 import { describe, expect, it, vi } from 'vitest';
 import Prompts from './Prompts';
 import type { ServerPromptWithMetadata } from '@promptfoo/types';
@@ -212,28 +212,6 @@ describe('Prompts', () => {
     await user.click(closeButton);
 
     expect(screen.queryByTestId('mock-prompt-dialog')).not.toBeInTheDocument();
-  });
-
-  it('should not call handleClickOpen if the prompt ID is not found in the data array', () => {
-    const handleClickOpenMock = vi.fn();
-
-    renderWithProviders({ data: mockPrompts });
-
-    const nonexistentId = 'prompt:nonexistent';
-
-    const promptCells = screen.getAllByText('This is the first sample prompt.');
-    const promptsComponent = promptCells[0].closest('[data-rowid]');
-    if (promptsComponent) {
-      const handleRowClick = () => {
-        const index = mockPrompts.findIndex((p) => p.id === nonexistentId);
-        if (index !== -1) {
-          handleClickOpenMock(index);
-        }
-      };
-      handleRowClick();
-    }
-
-    expect(handleClickOpenMock).not.toHaveBeenCalled();
   });
 
   it('should render correctly in dark mode', () => {

@@ -96,54 +96,34 @@ function attributesToRecord(
   );
 }
 
-function decodeSpanId(id: string | undefined): string | undefined {
+function decodeId(
+  id: string | undefined,
+  hexPattern: RegExp,
+  base64Pattern: RegExp,
+  byteLength: number,
+): string | undefined {
   if (!id) {
     return undefined;
   }
 
-  if (SPAN_ID_PATTERN.test(id)) {
+  if (hexPattern.test(id)) {
     return /^0+$/.test(id) ? undefined : id.toLowerCase();
   }
 
-  if (!BASE64_SPAN_ID_PATTERN.test(id)) {
+  if (!base64Pattern.test(id)) {
     return undefined;
   }
 
   const decoded = Buffer.from(id, 'base64');
   if (
-    decoded.length !== 8 ||
+    decoded.length !== byteLength ||
     decoded.toString('base64').replace(/=+$/, '') !== id.replace(/=+$/, '')
   ) {
     return undefined;
   }
 
-  const spanId = decoded.toString('hex');
-  return /^0+$/.test(spanId) ? undefined : spanId;
-}
-
-function decodeTraceId(id: string | undefined): string | undefined {
-  if (!id) {
-    return undefined;
-  }
-
-  if (TRACE_ID_PATTERN.test(id)) {
-    return /^0+$/.test(id) ? undefined : id.toLowerCase();
-  }
-
-  if (!BASE64_TRACE_ID_PATTERN.test(id)) {
-    return undefined;
-  }
-
-  const decoded = Buffer.from(id, 'base64');
-  if (
-    decoded.length !== 16 ||
-    decoded.toString('base64').replace(/=+$/, '') !== id.replace(/=+$/, '')
-  ) {
-    return undefined;
-  }
-
-  const traceId = decoded.toString('hex');
-  return /^0+$/.test(traceId) ? undefined : traceId;
+  const hexId = decoded.toString('hex');
+  return /^0+$/.test(hexId) ? undefined : hexId;
 }
 
 function normalizeStatusCode(code: number | string | undefined): number | undefined {
@@ -178,16 +158,18 @@ function transformSpan(
   resourceAttributes: Record<string, unknown>,
   scopeName: string | undefined,
 ): SpanData | null {
-  if (decodeTraceId(span.traceId) !== traceId.toLowerCase()) {
+  if (
+    decodeId(span.traceId, TRACE_ID_PATTERN, BASE64_TRACE_ID_PATTERN, 16) !== traceId.toLowerCase()
+  ) {
     throw new Error('Span trace ID must match the requested trace');
   }
 
-  const spanId = decodeSpanId(span.spanId);
+  const spanId = decodeId(span.spanId, SPAN_ID_PATTERN, BASE64_SPAN_ID_PATTERN, 8);
   if (!spanId) {
     throw new Error('Span ID must be a valid nonzero eight-byte identifier');
   }
 
-  const parentSpanId = decodeSpanId(span.parentSpanId);
+  const parentSpanId = decodeId(span.parentSpanId, SPAN_ID_PATTERN, BASE64_SPAN_ID_PATTERN, 8);
   if (span.parentSpanId && !parentSpanId) {
     throw new Error('Parent span ID must be a valid nonzero eight-byte identifier');
   }
@@ -361,33 +343,9 @@ export class TempoProvider implements TraceProvider {
     }
 
     const spans = this.transformSpans(data, traceId);
-    const services = new Set<string>();
-    for (const span of spans) {
-      const service = span.attributes?.['service.name'];
-      if (typeof service === 'string') {
-        services.add(service);
-      }
-    }
-
     return {
-      traceId,
       spans,
-      services: [...services],
       fetchedAt: Date.now(),
     };
-  }
-
-  async healthCheck(): Promise<boolean> {
-    try {
-      const response = await fetchWithProxy(`${this.baseUrl}/ready`, {
-        headers: this.buildHeaders(),
-        redirect: 'error',
-        signal: AbortSignal.timeout(5_000),
-      });
-      await releaseResponse(response, 'Tempo');
-      return response.ok;
-    } catch {
-      return false;
-    }
   }
 }
