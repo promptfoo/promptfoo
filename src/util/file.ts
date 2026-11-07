@@ -17,7 +17,7 @@ import logger from '../logger';
 import { runPython } from '../python/pythonUtils';
 import { isJavascriptFile } from './fileExtensions';
 import { parseFileUrl } from './functions/loadFunction';
-import { safeResolve } from './pathUtils';
+import { safeJoin, safeResolve } from './pathUtils';
 import { renderVarsInObject } from './render';
 import { loadYaml } from './yamlLoad';
 
@@ -446,7 +446,7 @@ export async function readFilters(
 ): Promise<NunjucksFilterMap> {
   const ret: NunjucksFilterMap = {};
   for (const [name, filterPath] of Object.entries(filters)) {
-    const globPath = path.join(basePath, filterPath);
+    const globPath = safeJoin(basePath, filterPath);
     const filePaths = globSync(globPath, {
       windowsPathsNoEscape: true,
     });
