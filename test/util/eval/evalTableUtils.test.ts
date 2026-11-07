@@ -1861,6 +1861,27 @@ describe('evalTableUtils', () => {
       const bobP2Idx = bobLine!.indexOf('Bob-P2');
       expect(bobP1Idx).toBeLessThan(bobP2Idx);
     });
+
+    it('serializes object vars as JSON when streaming CSV', async () => {
+      const csv = await runStreamEvalCsv({
+        vars: ['ctx'],
+        prompts: [createCompletedPrompt('Prompt 1', {})],
+        results: [
+          {
+            testIdx: 0,
+            promptIdx: 0,
+            testCase: { vars: { ctx: { a: 1 } } },
+            response: { output: 'out' },
+            success: true,
+            score: 1,
+          },
+        ],
+      });
+
+      expect(csv).not.toContain('[object Object]');
+      const rows = parseCsv(csv) as string[][];
+      expect(rows[1][0]).toBe(JSON.stringify({ a: 1 }));
+    });
   });
 });
 
