@@ -1,0 +1,33 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: TokenLab provider example
+
+prompts:
+  - 'Answer in one concise paragraph: {{question}}'
+
+providers:
+  - id: openai:chat:gpt-5.4-mini
+    label: tokenlab-chat-gpt-5.4-mini
+    config:
+      apiBaseUrl: https://api.tokenlab.sh/v1
+      apiKey: '{{env.TOKENLAB_API_KEY}}'
+  - id: openai:responses:gpt-5.5
+    label: tokenlab-responses-gpt-5.5
+    config:
+      apiBaseUrl: https://api.tokenlab.sh/v1
+      apiKey: '{{env.TOKENLAB_API_KEY}}'
+
+tests:
+  - vars:
+      question: What are two practical ways to evaluate an LLM gateway?
+    assert:
+      - type: contains-any
+        value:
+          - latency
+          - reliability
+          - cost
+          - quality
+  - vars:
+      question: Why is model discovery useful for AI applications?
+    assert:
+      - type: javascript
+        value: output.length > 80
