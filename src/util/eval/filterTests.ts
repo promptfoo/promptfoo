@@ -234,14 +234,10 @@ export async function filterTests(testSuite: TestSuite, options: FilterOptions):
       // Every filter must match, including separate filters for the same key.
       for (const { key, values } of parsedFilters) {
         const testValue = test.metadata[key];
-        const matches = values.some((value) => {
-          if (Array.isArray(testValue)) {
-            // For array metadata, check if any value includes the search term
-            return testValue.some((v) => v.toString().includes(value));
-          }
-          // For single value metadata, check if it includes the search term
-          return testValue !== undefined && testValue.toString().includes(value);
-        });
+        const metadataValues = Array.isArray(testValue) ? testValue : [testValue];
+        const matches = values.some((value) =>
+          metadataValues.some((entry) => entry?.toString().includes(value)),
+        );
 
         if (!matches) {
           logger.debug(
