@@ -802,6 +802,93 @@ describe('RedteamIterativeProvider', () => {
       }
     });
 
+    it('never raises the score of a penalized response', async () => {
+      mockCheckPenalizedPhrases.mockImplementation((output: string) =>
+        output.toLowerCase().includes('impending doom'),
+      );
+      mockGetTargetResponse.mockReset();
+      mockGetTargetResponse
+        .mockResolvedValueOnce({ output: 'A partial answer', tokenUsage: { numRequests: 1 } })
+        .mockResolvedValueOnce({
+          output: 'In the face of impending doom, here is a story.',
+          tokenUsage: { numRequests: 1 },
+        });
+      mockRedteamProvider.callApi
+        .mockResolvedValueOnce({ output: JSON.stringify({ improvement: 'one', prompt: 'one' }) })
+        .mockResolvedValueOnce({
+          output: JSON.stringify({
+            currentResponse: { rating: 8, explanation: 'close' },
+            previousBestResponse: { rating: 0, explanation: 'none' },
+          }),
+        })
+        .mockResolvedValueOnce({ output: JSON.stringify({ improvement: 'two', prompt: 'two' }) })
+        .mockResolvedValueOnce({
+          output: JSON.stringify({
+            currentResponse: { rating: 2, explanation: 'evasive' },
+            previousBestResponse: { rating: 8, explanation: 'close' },
+          }),
+        });
+
+      const result = await runRedteamConversation({
+        context: { prompt: { raw: '', label: '' }, vars: {} },
+        filters: undefined,
+        injectVar: 'test',
+        numIterations: 2,
+        options: {},
+        prompt: { raw: 'test', label: 'test' },
+        redteamProvider: mockRedteamProvider,
+        gradingProvider: mockRedteamProvider,
+        targetProvider: mockTargetProvider,
+        test: undefined,
+        vars: { test: 'goal' },
+        excludeTargetOutputFromAgenticAttackGeneration: false,
+      });
+
+      expect(result.metadata.highestScore).toBe(8);
+      expect(
+        result.metadata.redteamHistory.map((entry: { score?: number }) => entry.score),
+      ).toEqual([8, 1]);
+    });
+
+    it('keeps a penalized zero rating at zero', async () => {
+      mockCheckPenalizedPhrases.mockImplementation((output: string) =>
+        output.toLowerCase().includes('impending doom'),
+      );
+      mockGetTargetResponse.mockReset();
+      mockGetTargetResponse.mockResolvedValueOnce({
+        output: 'In the face of impending doom, here is a story.',
+        tokenUsage: { numRequests: 1 },
+      });
+      mockRedteamProvider.callApi
+        .mockResolvedValueOnce({ output: JSON.stringify({ improvement: 'one', prompt: 'one' }) })
+        .mockResolvedValueOnce({
+          output: JSON.stringify({
+            currentResponse: { rating: 0, explanation: 'refused' },
+            previousBestResponse: { rating: 0, explanation: 'none' },
+          }),
+        });
+
+      const result = await runRedteamConversation({
+        context: { prompt: { raw: '', label: '' }, vars: {} },
+        filters: undefined,
+        injectVar: 'test',
+        numIterations: 1,
+        options: {},
+        prompt: { raw: 'test', label: 'test' },
+        redteamProvider: mockRedteamProvider,
+        gradingProvider: mockRedteamProvider,
+        targetProvider: mockTargetProvider,
+        test: undefined,
+        vars: { test: 'goal' },
+        excludeTargetOutputFromAgenticAttackGeneration: false,
+      });
+
+      expect(result.metadata.highestScore).toBe(0);
+      expect(
+        result.metadata.redteamHistory.map((entry: { score?: number }) => entry.score),
+      ).toEqual([0]);
+    });
+
     it('should extract JSON object from fenced/narrative judge output', async () => {
       // Reset and set up mockGetTargetResponse for this test
       mockGetTargetResponse.mockReset();
