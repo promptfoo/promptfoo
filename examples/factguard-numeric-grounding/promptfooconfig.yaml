@@ -1,0 +1,24 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Check numbers in summaries against source JSON
+prompts:
+  - '{{summary}}'
+providers:
+  - echo
+defaultTest:
+  vars:
+    source: file://data/store.json
+  assert:
+    - type: python
+      value: file://factguard_assert.py
+tests:
+  - description: Grounded summary (expected to pass)
+    vars:
+      summary: >-
+        Acme Prints closed the month with 42 orders, double last month's 21, and a 4.7 rating.
+        Conversion was 3.8% and revenue was about $1.2M.
+  - description: Number attached to the wrong product (expected to fail)
+    vars:
+      summary: Holo Sticker sold 30 units at $12.50, while Die-cut Magnet sold 15 units.
+  - description: Number that is not in the data (expected to fail)
+    vars:
+      summary: Acme Prints closed the month with 42 orders. Orders grew 25% week over week.
