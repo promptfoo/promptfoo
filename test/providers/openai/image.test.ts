@@ -337,18 +337,17 @@ describe('OpenAiImageProvider', () => {
       expect(result.error).toContain('Internal Server Error');
     });
 
-    it('should handle deleteFromCache when response parsing fails', async () => {
+    it('returns the image error even if cache eviction fails', async () => {
       const provider = new OpenAiImageProvider('gpt-image-2.5-flare', createApiKeyOptions());
 
-      const mockDeleteFn = vi.fn();
-      vi.mocked(fetchWithCache).mockResolvedValueOnce(
-        createMockFetchResponse({
-          // Invalid data structure that will cause parsing to fail
-          deleteFromCache: mockDeleteFn,
-        }),
-      );
+      const mockDeleteFn = vi.fn().mockRejectedValue(new Error('Cache unavailable'));
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        ...createMockFetchResponse({}),
+        deleteFromCache: mockDeleteFn,
+      });
 
-      await provider.callApi('test prompt');
+      const result = await provider.callApi('test prompt');
+      expect(result.error).toContain('No base64 image data found');
       expect(mockDeleteFn).toHaveBeenCalledTimes(1);
     });
   });
@@ -592,6 +591,174 @@ describe('OpenAiImageProvider', () => {
         'json',
         true,
       );
+    });
+  });
+
+  describe('GPT Image 2.6 edits', () => {
+    const images = [
+      { file_id: 'file-source' },
+      { image_url: 'https://example.com/reference.webp' },
+    ];
+    const overlay = { image_url: 'data:image/png;base64,cG5n' };
+
+    it.each(['markup', 'mask'] as const)(
+      'sends a JSON edit with %s and bypasses the shared cache',
+      async (field) => {
+        vi.mocked(fetchWithCache).mockResolvedValue(mockBase64Response);
+        const model = 'gpt-image-2.6-sunburst';
+        const provider = new OpenAiImageProvider(model, {
+          config: {
+            apiKey: 'test-key',
+            operation: 'edit',
+            images,
+            [field]: overlay,
+            complexity: 'low',
+          },
+        });
+        const result = await provider.callApi('Recolor the vase.');
+        expect(result.images?.[0].mimeType).toBe('image/png');
+        expect(fetchWithCache).toHaveBeenCalledWith(
+          'https://api.openai.com/v1/images/edits',
+          expect.objectContaining({ method: 'POST' }),
+          expect.any(Number),
+          'json',
+          true,
+        );
+        const request = vi.mocked(fetchWithCache).mock.calls[0][1]!;
+        expect(JSON.parse(request.body as string)).toEqual({
+          model,
+          prompt: 'Recolor the vase.',
+          n: 1,
+          size: 'auto',
+          complexity: 'low',
+          images,
+          [field]: overlay,
+        });
+      },
+    );
+
+    it.each([
+      [{ operation: 'generation', markup: overlay }, 'operation: edit'],
+      [{ images: [] }, 'images'],
+      [{ images: Array(17).fill(images[0]) }, 'images'],
+      [
+        { images: [{ file_id: 'file-source', image_url: 'https://example.com/image.png' }] },
+        'images',
+      ],
+      [{ images: [{ image_url: 'file:///tmp/source.png' }] }, 'images'],
+      [{ markup: { image_url: 'data:image/webp;base64,d2VicA==' } }, 'PNG'],
+      [{ mask: overlay, markup: overlay }, 'markup or mask'],
+      [{ input_fidelity: 'high' }, 'input_fidelity'],
+      [{ output_format: 'svg' }, 'generation'],
+      [{ output_format: 'gif' }, 'generation'],
+    ] as const)(
+      'rejects invalid edit inputs %j before sending a request',
+      async (overrides, error) => {
+        const provider = new OpenAiImageProvider('gpt-image-2.6-flare', createApiKeyOptions());
+        const result = await provider.callApi('Recolor the vase.', {
+          prompt: { raw: '', label: 'edit', config: { operation: 'edit', images, ...overrides } },
+          vars: {},
+        });
+        expect(result.error).toContain(error);
+        expect(fetchWithCache).not.toHaveBeenCalled();
+      },
+    );
+  });
+
+  describe('GPT Image 2.6 generation', () => {
+    const usage = {
+      input_tokens: 12,
+      input_tokens_details: { text_tokens: 12, image_tokens: 0 },
+      output_tokens: 34,
+      total_tokens: 46,
+    };
+
+    beforeEach(() => {
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        ...mockBase64Response,
+        data: { ...mockBase64Response.data, usage },
+      });
+    });
+
+    it('sends GIF controls to Flare and bills actual usage', async () => {
+      const model = 'gpt-image-2.6-flare';
+      const prompt = 'Animate a blinking lantern';
+      const options = {
+        output_format: 'gif',
+        quality: 'medium',
+        complexity: 'low',
+        frame_count: 9,
+        frame_duration_ms: 200,
+      } as const;
+      const provider = new OpenAiImageProvider(model, {
+        config: { apiKey: 'test-key', ...options },
+      });
+
+      const result = await provider.callApi(prompt);
+      const [url, request] = vi.mocked(fetchWithCache).mock.calls[0];
+      expect(url).toBe('https://api.openai.com/v1/images/generations');
+      expect(JSON.parse(request!.body as string)).toEqual({
+        model,
+        prompt,
+        size: 'auto',
+        n: 1,
+        ...options,
+      });
+      const data = 'data:image/gif;base64,base64EncodedImageData';
+      expect(result).toMatchObject({
+        output: data,
+        images: [{ data, mimeType: 'image/gif' }],
+        tokenUsage: { prompt: 12, completion: 34, total: 46 },
+      });
+      expect(result.cost).toBeCloseTo((12 * 5 + 34 * 30) / 1e6, 12);
+    });
+
+    it('returns a Sunburst SVG with reported usage and omits the incomplete cost', async () => {
+      const provider = new OpenAiImageProvider('gpt-image-2.6-sunburst', {
+        config: { apiKey: 'test-key', output_format: 'svg', complexity: 'high' },
+      });
+      const result = await provider.callApi('Draw a vector logo');
+      const data = 'data:image/svg+xml;base64,base64EncodedImageData';
+      expect(result).toMatchObject({
+        output: data,
+        images: [{ data, mimeType: 'image/svg+xml' }],
+        metadata: { usage },
+      });
+      expect(result).not.toHaveProperty('cost');
+    });
+
+    it.each([
+      [{ complexity: 'auto' }, 'complexity'],
+      [{ output_format: 'gif', frame_count: 1 }, 'frame_count'],
+      [{ output_format: 'gif', frame_count: 65 }, 'frame_count'],
+      [{ output_format: 'gif', frame_count: 2.5 }, 'frame_count'],
+      [{ output_format: 'gif', frame_duration_ms: 19 }, 'frame_duration_ms'],
+      [{ output_format: 'gif', frame_duration_ms: 2001 }, 'frame_duration_ms'],
+      [{ output_format: 'png', frame_count: 2 }, 'require output_format: "gif"'],
+      [{ output_format: 'svg', n: 2 }, 'SVG output requires n: 1'],
+      [{ output_format: 'gif', output_compression: 50 }, 'output_compression'],
+      [{ output_format: 'svg', prompt_rewriter: true }, 'prompt_rewriter'],
+    ] as const)('rejects invalid generation options %j before dispatch', async (config, reason) => {
+      const provider = new OpenAiImageProvider('gpt-image-2.6-flare', createApiKeyOptions());
+      const result = await provider.callApi('Draw a lantern', {
+        prompt: { raw: 'Draw a lantern', label: 'image', config },
+        vars: {},
+      });
+      expect(result).toEqual({ error: expect.stringContaining(reason) });
+      expect(fetchWithCache).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      { output_format: 'gif' },
+      { output_format: 'svg' },
+      { complexity: 'medium' },
+      { frame_duration_ms: 200 },
+    ] as const)('rejects 2.6-only controls on GPT Image 2.5: %j', async (config) => {
+      const provider = new OpenAiImageProvider('gpt-image-2.5-sunburst', {
+        config: { apiKey: 'test-key', ...config },
+      });
+      expect(await provider.callApi('Draw a lantern')).toEqual({ error: expect.any(String) });
+      expect(fetchWithCache).not.toHaveBeenCalled();
     });
   });
 
