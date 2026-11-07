@@ -43,6 +43,7 @@ const FULL_CONFIG_ONLY_FIELDS = new Set([
   'tests',
   'scenarios',
   'defaultTest',
+  'defaultColumnVisibility',
   'evaluateOptions',
   'commandLineOptions',
   'env',

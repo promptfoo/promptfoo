@@ -43,7 +43,14 @@ import ResultsTable from './ResultsTable';
 import ShareModal from './ShareModal';
 import { useResultsViewSettingsStore, useTableStore } from './store';
 import SettingsModal from './TableSettings/TableSettingsModal';
-import { buildEvalUrlWithSearchParams, hashVarSchema, setEvalDetailsHash } from './utils';
+import {
+  buildEvalUrlWithSearchParams,
+  getConfigColumnVisibility,
+  getVariableNameFromColumnId,
+  hashVarSchema,
+  resolveColumnVisibility,
+  setEvalDetailsHash,
+} from './utils';
 import type { EvalResultsFilterMode, ResultLightweightWithLabel } from '@promptfoo/types';
 import type { CopyEvalResponse } from '@promptfoo/types/api/eval';
 import type { VisibilityState } from '@tanstack/react-table';
@@ -485,18 +492,6 @@ export default function ResultsView({
     [hasAnyDescriptions, head.vars, head.prompts],
   );
 
-  const getVarNameFromColumnId = React.useCallback(
-    (columnId: string): string | null => {
-      const match = columnId.match(/^Variable (\d+)$/);
-      if (match) {
-        const varIndex = parseInt(match[1], 10) - 1;
-        return head.vars[varIndex] ?? null;
-      }
-      return null;
-    },
-    [head.vars],
-  );
-
   const schemaHash = React.useMemo(() => hashVarSchema(head.vars), [head.vars]);
 
   const hiddenVarNames = React.useMemo(
@@ -506,29 +501,24 @@ export default function ResultsView({
 
   const currentColumnState = React.useMemo(() => {
     const savedState = columnStates[currentEvalId];
-    const columnVisibility: VisibilityState = {};
-    const selectedColumns: string[] = [];
-
-    allColumns.forEach((col) => {
-      const varName = getVarNameFromColumnId(col);
-      if (varName === null) {
-        // Non-variable columns (description, prompts): use per-eval state, default to visible
-        const isVisible = savedState?.columnVisibility[col] ?? true;
-        columnVisibility[col] = isVisible;
-        if (isVisible) {
-          selectedColumns.push(col);
-        }
-      } else {
-        const isHidden = hiddenVarNames.includes(varName);
-        columnVisibility[col] = !isHidden;
-        if (!isHidden) {
-          selectedColumns.push(col);
-        }
-      }
+    return resolveColumnVisibility({
+      allColumns,
+      varNames: head.vars,
+      perEvalColumnState: savedState?.columnVisibility,
+      hiddenVarNames,
+      hasSchemaPreference: Object.prototype.hasOwnProperty.call(hiddenVarNamesBySchema, schemaHash),
+      configDefaults: getConfigColumnVisibility(config),
     });
-
-    return { selectedColumns, columnVisibility };
-  }, [allColumns, getVarNameFromColumnId, hiddenVarNames, columnStates, currentEvalId]);
+  }, [
+    allColumns,
+    head.vars,
+    hiddenVarNames,
+    hiddenVarNamesBySchema,
+    schemaHash,
+    columnStates,
+    currentEvalId,
+    config,
+  ]);
 
   const visiblePromptCount = React.useMemo(
     () =>
@@ -543,7 +533,7 @@ export default function ResultsView({
       const newHiddenVarNames: string[] = [];
 
       allColumns.forEach((col) => {
-        const varName = getVarNameFromColumnId(col);
+        const varName = getVariableNameFromColumnId(col, head.vars);
         if (varName !== null) {
           const isVisible = columns.includes(col);
           if (!isVisible) {
@@ -563,14 +553,7 @@ export default function ResultsView({
         columnVisibility: newColumnVisibility,
       });
     },
-    [
-      allColumns,
-      getVarNameFromColumnId,
-      schemaHash,
-      setHiddenVarNamesForSchema,
-      setColumnState,
-      currentEvalId,
-    ],
+    [allColumns, head.vars, schemaHash, setHiddenVarNamesForSchema, setColumnState, currentEvalId],
   );
 
   const handleChange = React.useCallback(
