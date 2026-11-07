@@ -2894,7 +2894,7 @@ describe('evalCommand', () => {
         { watch: true, write: false, table: false, share: false },
         base,
         defaultConfigPath,
-        { timeoutMs: 999 },
+        {},
       );
       const onChange = chokidarMocks.handlers.get('change')!;
       pendingA = Promise.resolve(onChange(defaultConfigPath));
@@ -2906,7 +2906,7 @@ describe('evalCommand', () => {
 
       for (const { name, timeoutMs } of runs.slice(1)) {
         const result = completed.get(name)!;
-        expect(result.timeoutMs).toBe(timeoutMs ?? 999);
+        expect(result.timeoutMs).toBe(timeoutMs);
         expect(result.stripVars).toBe(name === 'watch-a');
         expect(result.record.config).toMatchObject({
           description: name,
