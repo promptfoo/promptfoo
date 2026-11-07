@@ -208,6 +208,8 @@ See [Model-graded evals](/docs/configuration/expected-outputs/model-graded), [cl
 | [select-best](https://promptfoo.dev/docs/configuration/expected-outputs/model-graded)                | Compare multiple outputs for a test case and pick the best one                   |
 | [max-score](/docs/configuration/expected-outputs/model-graded/max-score)                             | Select output with highest aggregate score from other assertions                 |
 
+The `select-best` criteria support test `vars`, so they can adapt to each test case. The resolved criteria are recorded as `metadata.renderedAssertionValue` while the original template remains in the assertion value. See [using variables in criteria](/docs/configuration/expected-outputs/model-graded/select-best#using-variables-in-criteria) for an example and for how to pass Nunjucks delimiters literally with a `{% raw %}` block.
+
 ## Weighted assertions
 
 In some cases, you might want to assign different weights to your assertions depending on their importance. The `weight` property is a number that determines the relative importance of the assertion. The default weight is 1.
