@@ -388,6 +388,54 @@ describe('is-sql assertion', () => {
 
   // ------------------------------------------ Database Specific Syntax Tests ------------------------------------------- //
   describe('Database Specific Syntax Tests', () => {
+    it.each([
+      'SELECT generate_series /* comment */ (1, 5)',
+      'SELECT 1--generate_series(1, 5)',
+      'SELECT 1 /*! + generate_series(1, 5) */',
+      'SELECT 1 /*!80000 + generate_series(1, 5) */',
+      'SELECT @a$name$ + generate_series(1, 5) + @b$name$',
+      'SELECT `a\\` + generate_series(1, 5) FROM examples',
+      'SELECT `a\\` + generate_series(1, 5) + `b` FROM examples',
+    ])('should retain actual MySQL function calls when ignoring text: %s', async (outputString) => {
+      for (const inverse of [false, true]) {
+        const result = await handleIsSql({
+          assertion: { type: inverse ? 'not-is-sql' : 'is-sql' },
+          renderedValue: createMysqlOptions(),
+          outputString,
+          inverse,
+        } as AssertionParams);
+
+        expect(result).toMatchObject({ pass: inverse, score: inverse ? 1 : 0 });
+      }
+    });
+
+    it.each([
+      "SELECT 'generate_series(1, 5)' AS example",
+      'SELECT "generate_series(1, 5)" AS example',
+      "SELECT 'it''s generate_series(1, 5)' AS example",
+      "SELECT 'it\\'s generate_series(1, 5)' AS example",
+      'SELECT `generate_series(1, 5)` FROM examples',
+      'SELECT 1 /* generate_series(1, 5) */',
+      'SELECT 1 -- generate_series(1, 5)\n',
+      'SELECT 1 # generate_series(1, 5)\n',
+      "SELECT 1 /*! + LENGTH('select a b from t') */",
+      "SELECT 1 /*!80000 + LENGTH('select a b from t') */",
+    ])(
+      'should ignore function-like text in MySQL literals and comments: %s',
+      async (outputString) => {
+        for (const inverse of [false, true]) {
+          const result = await handleIsSql({
+            assertion: { type: inverse ? 'not-is-sql' : 'is-sql' },
+            renderedValue: createMysqlOptions(),
+            outputString,
+            inverse,
+          } as AssertionParams);
+
+          expect(result).toMatchObject({ pass: !inverse, score: inverse ? 0 : 1 });
+        }
+      },
+    );
+
     it('should fail if the output SQL statement conforms to MySQL but not PostgreSQL', async () => {
       const renderedValue = {
         databaseType: 'PostgreSQL',
@@ -715,6 +763,18 @@ describe('contains-sql assertion', () => {
       outputString,
       inverse,
     } as AssertionParams);
+
+  it.each([false, true])(
+    'should validate fenced MySQL with function-like literal text (inverse=%s)',
+    async (inverse) => {
+      const result = await runContainsSql(
+        `${fence}sql\nSELECT 'generate_series(1, 5)' AS example\n${fence}`,
+        inverse,
+      );
+
+      expect(result).toMatchObject({ pass: !inverse, score: inverse ? 0 : 1 });
+    },
+  );
 
   it('should extract fenced SQL that uses backtick-quoted identifiers', async () => {
     // Before the fix, the [^`]+ fence regex could not contain backticks, so this
