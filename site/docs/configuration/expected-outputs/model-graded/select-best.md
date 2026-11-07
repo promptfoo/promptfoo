@@ -19,6 +19,19 @@ assert:
 
 Note: This assertion requires multiple prompts or providers to generate different outputs to compare.
 
+### Using test variables
+
+The criteria are rendered with the test's `vars`, like other assertion values:
+
+```yaml
+tests:
+  - vars:
+      audience: children
+    assert:
+      - type: select-best
+        value: 'choose the response best suited for {{audience}}'
+```
+
 ### How it works
 
 The select-best checker:

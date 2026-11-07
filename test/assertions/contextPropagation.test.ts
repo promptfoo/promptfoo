@@ -355,6 +355,27 @@ describe('Context Propagation in Model-Graded Assertions', () => {
   });
 
   describe('runCompareAssertion (select-best)', () => {
+    it('renders test vars into the select-best criteria', async () => {
+      vi.mocked(matchesSelectBest).mockResolvedValue([
+        { pass: true, score: 1, reason: 'best' },
+        { pass: false, score: 0, reason: 'not best' },
+      ]);
+
+      await runCompareAssertion(
+        { vars: { audience: 'children' } },
+        { type: 'select-best', value: 'choose the response best suited for {{audience}}' },
+        ['output1', 'output2'],
+      );
+
+      expect(matchesSelectBest).toHaveBeenCalledWith(
+        'choose the response best suited for children',
+        ['output1', 'output2'],
+        expect.anything(),
+        { audience: 'children' },
+        undefined,
+      );
+    });
+
     it('should pass callApiContext to matchesSelectBest', async () => {
       const mockResult = [
         { pass: true, score: 1, reason: 'best' },

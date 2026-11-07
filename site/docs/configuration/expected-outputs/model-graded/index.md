@@ -195,6 +195,8 @@ tests:
         value: choose the tweet that contains the most facts
 ```
 
+The criteria can use test variables, for example `value: choose the funniest tweet about {{topic}}`.
+
 The `max-score` assertion type is used to objectively select the output with the highest score from other assertions:
 
 ```yaml
