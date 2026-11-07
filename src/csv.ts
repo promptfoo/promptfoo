@@ -8,6 +8,8 @@ import { parseCommaSeparatedValues } from './validation/parseCommaSeparatedValue
 import type { Assertion, AssertionType, BaseAssertionTypes, CsvRow, TestCase } from './types/index';
 
 const DEFAULT_SEMANTIC_SIMILARITY_THRESHOLD = 0.8;
+const NUMBER_LITERAL = /[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?/;
+const COMPLETE_NUMBER_LITERAL = new RegExp(`^${NUMBER_LITERAL.source}$`);
 
 let _assertionRegex: RegExp | null = null;
 function getAssertionRegex(): RegExp {
@@ -19,7 +21,7 @@ function getAssertionRegex(): RegExp {
       .sort((a, b) => b.length - a.length)
       .join('|');
     _assertionRegex = new RegExp(
-      `^(not-)?(${assertionTypesRegex})(?:\\((\\d+(?:\\.\\d+)?)\\))?(?::([\\s\\S]*))?$`,
+      `^(not-)?(${assertionTypesRegex})(?:\\((${NUMBER_LITERAL.source})\\))?(?::([\\s\\S]*))?$`,
     );
   }
   return _assertionRegex;
@@ -33,7 +35,7 @@ function getAssertionRegex(): RegExp {
  */
 function parseFiniteNumber(value: string | undefined): number | undefined {
   const trimmed = value?.trim() ?? '';
-  if (!/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(trimmed)) {
+  if (!COMPLETE_NUMBER_LITERAL.test(trimmed)) {
     return undefined;
   }
   const parsed = Number(trimmed);
@@ -97,6 +99,9 @@ export function assertionFromString(expected: string): Assertion {
     ];
     const fullType: AssertionType = notPrefix ? `not-${type}` : type;
     const threshold = parseFiniteNumber(thresholdStr);
+    if (thresholdStr !== undefined && threshold === undefined) {
+      return { type: 'equals', value: expected };
+    }
 
     if (
       type === 'contains-all' ||

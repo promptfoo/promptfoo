@@ -789,6 +789,30 @@ describe('assertionFromString', () => {
     expect(result.threshold).toBe(0.5);
   });
 
+  it.each([
+    ['cost(1e-5)', 'cost', undefined, 0.00001],
+    ['javascript(-0.5):0', 'javascript', '0', -0.5],
+    ['not-javascript(.5):0.25', 'not-javascript', '0.25', 0.5],
+    ['javascript(+5E-1):0.75', 'javascript', '0.75', 0.5],
+    ['latency(1000.)', 'latency', undefined, 1000],
+    ['javascript(-0):0', 'javascript', '0', -0],
+    ['javascript(0):0', 'javascript', '0', 0],
+    ['cost(0.001)', 'cost', undefined, 0.001],
+    ['latency(1000)', 'latency', undefined, 1000],
+    ['javascript(1e-400):0', 'javascript', '0', 0],
+    ['javascript(-1e-400):0', 'javascript', '0', -0],
+  ])('parses numeric threshold notation in %s', (input, type, value, threshold) => {
+    expect(assertionFromString(input)).toEqual({ type, value, threshold });
+  });
+
+  it.each(['1e309', '-1e309', '9'.repeat(309), 'Infinity', 'NaN', '0x10', '1e', '0.5oops', ''])(
+    'keeps an invalid threshold %s as literal equality',
+    (threshold) => {
+      const input = `cost(${threshold})`;
+      expect(assertionFromString(input)).toEqual({ type: 'equals', value: input });
+    },
+  );
+
   it('should create a cost assertion', () => {
     const expected = 'cost(0.001)';
 
