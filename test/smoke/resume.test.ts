@@ -116,8 +116,11 @@ function spawnCli(
     checkWaiters();
   });
 
+  // Register once at spawn so a quick graceful pause cannot finish before waitForExit listens.
+  const closed = new Promise<number | null>((resolve) => child.once('close', resolve));
+
   const sendSignal = (signal: NodeJS.Signals) => {
-    if (child.pid && !child.killed) {
+    if (child.pid && child.exitCode === null && child.signalCode === null) {
       child.kill(signal);
     }
   };
@@ -168,12 +171,9 @@ function spawnCli(
         );
       }, timeoutMs);
 
-      child.on('exit', (code) => {
+      void closed.then((code) => {
         clearTimeout(timer);
-        // Small delay to collect remaining output
-        setTimeout(() => {
-          resolve({ stdout, stderr, exitCode: code ?? 1 });
-        }, 100);
+        resolve({ stdout, stderr, exitCode: code ?? 1 });
       });
     });
   };
