@@ -107,9 +107,15 @@ describe('actual iterative manager child quota ownership', () => {
     return { state, done, controller };
   }
 
-  it.each(['response', 'exception'] as const)(
-    'does not replay a strategy after its target exhausts %s retries',
-    async (kind) => {
+  it.each(
+    (['explicit context', 'native evaluator'] as const).flatMap((entry) =>
+      (['response', 'exception'] as const).flatMap((kind) =>
+        [0, 1].map((maxRetries) => ({ entry, kind, maxRetries })),
+      ),
+    ),
+  )(
+    'does not replay a strategy after its target exhausts $kind retries through $entry, maxRetries=$maxRetries',
+    async ({ entry, kind, maxRetries }) => {
       const failure = {
         error: '429 rate limit',
         metadata: {
@@ -122,7 +128,7 @@ describe('actual iterative manager child quota ownership', () => {
       };
       const target: ApiProvider = {
         id: () => 'exhausted-target',
-        config: { maxRetries: 1 },
+        config: { maxRetries },
         callApi: vi.fn(async () => {
           if (kind === 'exception') {
             throw new Error('429 rate limit; retry after 0');
@@ -135,21 +141,105 @@ describe('actual iterative manager child quota ownership', () => {
         config: { maxRetries: 2 },
         callApi: vi.fn(async () => callTargetProvider(target, 'fixture')),
       };
-      const result = withProviderCallExecutionContext({ rateLimitRegistry: registry }, () =>
-        wrapProviderWithRateLimiting(strategy, registry).callApi('fixture'),
+      const result = (
+        entry === 'native evaluator'
+          ? runEval({
+              provider: strategy,
+              prompt: { raw: 'fixture', label: 'nested retries' },
+              test: {},
+              delay: 0,
+              testIdx: 0,
+              promptIdx: 0,
+              repeatIndex: 0,
+              isRedteam: false,
+              conversations: {},
+              registers: {},
+              rateLimitRegistry: registry,
+            })
+          : withProviderCallExecutionContext({ rateLimitRegistry: registry }, () =>
+              wrapProviderWithRateLimiting(strategy, registry).callApi('fixture'),
+            )
       ).catch((error) => error);
       await vi.advanceTimersByTimeAsync(10000);
-      await result;
-      expect(target.callApi).toHaveBeenCalledTimes(2);
+      const outcome = await result;
+      if (entry === 'native evaluator') {
+        expect(outcome).toEqual([
+          expect.objectContaining({ error: expect.stringContaining('429') }),
+        ]);
+      }
+      expect(target.callApi).toHaveBeenCalledTimes(maxRetries + 1);
       expect(strategy.callApi).toHaveBeenCalledOnce();
       expect(registry.getMetrics()[getRateLimitKey(strategy)]).toMatchObject({
         retriedRequests: 0,
         rateLimitHits: 0,
       });
       expect(registry.getMetrics()[getRateLimitKey(target)]).toMatchObject({
-        retriedRequests: 1,
-        rateLimitHits: 2,
+        retriedRequests: maxRetries,
+        rateLimitHits: maxRetries + 1,
       });
+    },
+  );
+
+  it.each([0, 2])(
+    'preserves an overlapping native parent-only retry budget of %s after a sibling delegates',
+    async (maxRetries) => {
+      const failure = {
+        error: '429 rate limit',
+        metadata: {
+          http: {
+            status: 429,
+            statusText: 'Too Many Requests',
+            headers: { 'retry-after-ms': '0' },
+          },
+        },
+      };
+      const target: ApiProvider = {
+        id: () => 'nested-sibling-target',
+        config: { maxRetries: 1 },
+        callApi: vi.fn(async () => failure),
+      };
+      const strategy: ApiProvider = {
+        id: () => 'shared-sibling-strategy',
+        config: { maxRetries },
+        callApi: vi.fn(async (prompt) =>
+          prompt === 'nested' ? callTargetProvider(target, prompt) : failure,
+        ),
+      };
+      const evaluate = (prompt: string) =>
+        runEval({
+          provider: strategy,
+          prompt: { raw: prompt, label: prompt },
+          test: {},
+          delay: 0,
+          testIdx: 0,
+          promptIdx: 0,
+          repeatIndex: 0,
+          isRedteam: false,
+          conversations: {},
+          registers: {},
+          rateLimitRegistry: registry,
+        });
+      const done = Promise.all([evaluate('nested'), evaluate('parent-only')]);
+      await vi.advanceTimersByTimeAsync(10000);
+      const rows = await done;
+
+      expect(rows).toEqual([
+        [expect.objectContaining({ error: expect.stringContaining('429') })],
+        [expect.objectContaining({ error: expect.stringContaining('429') })],
+      ]);
+      expect(vi.mocked(strategy.callApi).mock.calls.map(([prompt]) => prompt)).toEqual([
+        'nested',
+        ...Array<string>(maxRetries + 1).fill('parent-only'),
+      ]);
+      expect(target.callApi).toHaveBeenCalledTimes(2);
+      expect(registry.getMetrics()[getRateLimitKey(strategy)]).toMatchObject({
+        totalRequests: 2,
+        retriedRequests: maxRetries,
+        rateLimitHits: maxRetries + 1,
+        activeRequests: 0,
+        queueDepth: 0,
+      });
+      expect(getProviderCallExecutionContext()).toBeUndefined();
     },
   );
 
