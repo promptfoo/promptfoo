@@ -722,11 +722,20 @@ export class CohereChatCompletionProvider implements ApiProvider {
         return { error: errorMessage };
       }
 
+      const usage = data.meta?.tokens ?? data.meta?.billed_units ?? {};
+      let promptTokens = usage.input_tokens || 0;
+      let completionTokens = usage.output_tokens || 0;
+      let totalTokens = promptTokens + completionTokens;
+      if (data.token_count != null) {
+        promptTokens = data.token_count.prompt_tokens || 0;
+        completionTokens = data.token_count.response_tokens || 0;
+        totalTokens = data.token_count.total_tokens || 0;
+      }
       const tokenUsage: TokenUsage = {
-        cached: cached ? data.token_count?.total_tokens || 0 : 0,
-        total: data.token_count?.total_tokens || 0,
-        prompt: data.token_count?.prompt_tokens || 0,
-        completion: data.token_count?.response_tokens || 0,
+        cached: cached ? totalTokens : 0,
+        total: totalTokens,
+        prompt: promptTokens,
+        completion: completionTokens,
         numRequests: 1,
       };
 
