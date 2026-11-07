@@ -1795,7 +1795,7 @@ providers:
               }
             } catch {}
           }
-          return out.trim();
+          return out;
         }
 ```
 
