@@ -12,6 +12,7 @@ import { CoppaGrader } from './plugins/compliance/coppa';
 import { FerpaGrader } from './plugins/compliance/ferpa';
 import { CcaGrader } from './plugins/contextComplianceAttack';
 import { ContractsGrader } from './plugins/contracts';
+import { CrossAgentInjectionGrader } from './plugins/crossAgentInjection';
 import { CrossSessionLeakGrader } from './plugins/crossSessionLeak';
 import { DataExfilGrader } from './plugins/dataExfil';
 import { DebugAccessGrader } from './plugins/debugAccess';
@@ -147,6 +148,7 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:competitors': new CompetitorsGrader(),
   'promptfoo:redteam:contracts': new ContractsGrader(),
   'promptfoo:redteam:coppa': new CoppaGrader(),
+  'promptfoo:redteam:cross-agent-injection': new CrossAgentInjectionGrader(),
   'promptfoo:redteam:cross-session-leak': new CrossSessionLeakGrader(),
   'promptfoo:redteam:data-exfil': new DataExfilGrader(),
   'promptfoo:redteam:debug-access': new DebugAccessGrader(),
