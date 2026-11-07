@@ -1026,6 +1026,8 @@ Note that `latency` requires that the [cache is disabled](/docs/configuration/ca
 
 The `levenshtein` assertion checks if the LLM output is within a given edit distance from an expected value.
 
+The expected `value` can be a string or a finite number. Numbers are compared as text: `value: 42` has distance 1 from output `43`, and `value: 0` has distance 0 from output `0`. Quote values when their formatting matters, such as leading zeros in an identifier. The same conversion applies to `not-levenshtein`.
+
 Levenshtein distance measures the number of single-character edits (insertions, deletions, or substitutions) required to change one string into another. This metric is useful for:
 
 - **Fuzzy matching**: When you want to allow minor typos or variations (e.g., "color" vs "colour")
