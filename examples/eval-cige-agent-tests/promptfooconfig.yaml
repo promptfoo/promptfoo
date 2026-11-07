@@ -1,0 +1,39 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: CIGE agentic test cases with enforced guardrails
+
+prompts:
+  - '{{cige.intent.goal}}'
+
+providers:
+  - id: file://cige-runner.mjs
+    label: cige-scripted-agent
+
+defaultTest:
+  assert:
+    # Grades outcome criteria, required evidence and guardrails as separate components.
+    - type: javascript
+      value: file://cige.mjs:assertIntent
+
+tests:
+  - path: file://cige-tests.mjs
+    config:
+      cases:
+        - description: 'C1: healthy session with all required evidence'
+          source: cases/streaming-session.cige.yaml
+          case: file://cases/streaming-session.cige.yaml
+
+        - description: 'C2: path tries to delete a session'
+          source: cases/streaming-undeclared-tool.cige.yaml
+          case: file://cases/streaming-undeclared-tool.cige.yaml
+
+        # Same CIGE case as C1. Only the environment changes: every tool still succeeds
+        # and the UI says "Connected", but the connection log comes back empty.
+        - description: 'C3: tools succeed, connection log missing'
+          source: cases/streaming-session.cige.yaml
+          case: file://cases/streaming-session.cige.yaml
+          fixture:
+            connectionLogRetention: false
+
+        - description: 'C4: mandatory guardrail the runner cannot enforce'
+          source: cases/streaming-requires-approval.cige.yaml
+          case: file://cases/streaming-requires-approval.cige.yaml
