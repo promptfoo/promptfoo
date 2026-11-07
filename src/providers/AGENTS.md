@@ -71,10 +71,17 @@ strings persist to disk; if it stores hashed keys, the hash persists.
   canonical-JSON helper) before hashing.
 - **Omit the per-run eval id from script-provider cache keys.** `context.vars`
   includes `__evalId`, which is new on every eval run. Build the key with
-  `omitEvalRuntimeVars(vars, PER_RUN_EVAL_RUNTIME_VAR_KEYS)` from
-  `src/util/evalRuntimeVars.ts`. Keep `__evalStepId` and `__repeatIndex`: they are
-  stable across runs for the same step and still separate steps and repeats. See
-  `pythonCompletion.ts` and `rubyCompletion.ts`.
+  `omitEvalRuntimeVars(vars, PER_RUN_EVAL_RUNTIME_VAR_KEYS)`. Keep `__evalStepId`
+  and `__repeatIndex`: they are stable across runs for the same step and still
+  separate steps and repeats. See `pythonCompletion.ts` and `rubyCompletion.ts`.
+- **Fingerprint resolved Python and Ruby config, not only `file://` strings.**
+  `initialize()` loads referenced settings into `this.config`, while `this.options`
+  keeps the original reference. Include `scriptResolvedConfigCacheKey(this.config)`
+  so an updated external settings file misses the cache. The helper drops secret
+  fields before hashing. Both helpers are implemented in `src/util/evalRuntimeVars.ts`
+  and `src/util/scriptConfigCacheKey.ts` and re-exported from `src/util/json.ts`,
+  which these providers already import. Do not add a new util import, and do not
+  put `__evalId` back into the key to force that miss.
 - Reference pattern for stable key structure and canonicalized hashing:
   `getModerationCacheKey` in `src/providers/azure/moderation.ts`.
 

@@ -81,7 +81,6 @@ import {
 } from './types/index';
 import { type ApiProvider, isApiProvider } from './types/providers';
 import { createDefaultPromptMetrics, updatePromptResultCounts } from './util/eval/promptMetrics';
-import { getEvalRuntimeVars, omitEvalRuntimeVars } from './util/evalRuntimeVars';
 import { isAbortError, isNonTransientHttpStatus } from './util/fetch/errors';
 import { isCallerAbortError } from './util/fetch/requestSignal';
 import { filterByRange } from './util/filterRange';
@@ -93,7 +92,12 @@ import {
   resolveConfiguredProviderReference,
 } from './util/gradingProvider';
 import invariant from './util/invariant';
-import { safeJsonStringify, summarizeEvaluateResultForLogging } from './util/json';
+import {
+  getEvalRuntimeVars,
+  omitEvalRuntimeVars,
+  safeJsonStringify,
+  summarizeEvaluateResultForLogging,
+} from './util/json';
 import { accumulateNamedMetric, backfillNamedScoreWeights } from './util/namedMetrics';
 import { filterFiniteScores } from './util/numeric';
 import { getProviderPromptOverride, isPromptAllowed } from './util/promptMatching';

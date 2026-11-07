@@ -1,5 +1,3 @@
-import type { Vars } from '../types/index';
-
 /**
  * Reserved keys for eval-step runtime vars. `EvalRuntimeVars` is keyed by
  * this tuple, so adding a new key to {@link getEvalRuntimeVars} fails to
@@ -8,10 +6,16 @@ import type { Vars } from '../types/index';
  *
  * `__evalId` changes on every eval run. `__evalStepId` and `__repeatIndex`
  * are stable across runs for the same step.
+ *
+ * This module imports nothing. The evaluator and script providers take these
+ * helpers from `src/util/json.ts`, which they already import, so the
+ * architecture edge counts stay put.
  */
 export const EVAL_RUNTIME_VAR_KEYS = ['__evalId', '__evalStepId', '__repeatIndex'] as const;
 
 type EvalRuntimeVarKey = (typeof EVAL_RUNTIME_VAR_KEYS)[number];
+
+type RuntimeVarValue = string | number | boolean | object | unknown[];
 
 /**
  * Runtime vars that must not be part of a provider response cache key.
@@ -22,7 +26,7 @@ export const PER_RUN_EVAL_RUNTIME_VAR_KEYS = [
   '__evalId',
 ] as const satisfies readonly EvalRuntimeVarKey[];
 
-type EvalRuntimeVars = Partial<Record<EvalRuntimeVarKey, Vars[string]>>;
+type EvalRuntimeVars = Partial<Record<EvalRuntimeVarKey, RuntimeVarValue>>;
 
 export function getEvalRuntimeVars({
   evalId,
@@ -57,14 +61,14 @@ export function getEvalRuntimeVars({
  * so they stay in the key and still separate steps and repeats. User vars are
  * never removed.
  */
-export function omitEvalRuntimeVars(
-  vars: Vars,
+export function omitEvalRuntimeVars<T extends Record<string, RuntimeVarValue>>(
+  vars: T,
   keys: readonly EvalRuntimeVarKey[] = EVAL_RUNTIME_VAR_KEYS,
-): Vars {
+): T {
   // Keep non-serialized metadata needed by assertion and grader providers.
-  const result: Vars = { ...vars };
+  const result: Record<string, RuntimeVarValue> = { ...vars };
   for (const key of keys) {
     delete result[key];
   }
-  return result;
+  return result as T;
 }

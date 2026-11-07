@@ -8,10 +8,14 @@ import logger from '../logger';
 import { getConfiguredPythonPath } from '../python/pythonUtils';
 import { PythonWorkerPool } from '../python/workerPool';
 import { sha256 } from '../util/createHash';
-import { omitEvalRuntimeVars, PER_RUN_EVAL_RUNTIME_VAR_KEYS } from '../util/evalRuntimeVars';
 import { processConfigFileReferences } from '../util/fileReference';
 import { parsePathOrGlob } from '../util/index';
-import { safeJsonStringify } from '../util/json';
+import {
+  omitEvalRuntimeVars,
+  PER_RUN_EVAL_RUNTIME_VAR_KEYS,
+  safeJsonStringify,
+  scriptResolvedConfigCacheKey,
+} from '../util/json';
 import { providerRegistry } from './providerRegistry';
 import { sanitizeScriptContext } from './scriptContext';
 import {
@@ -242,13 +246,15 @@ export class PythonProvider implements ApiProvider {
     // Create cache key including the function name to ensure different functions don't share caches.
     // Drop the per-run `__evalId`. `__evalStepId` and `__repeatIndex` are stable across
     // runs for the same step, so they stay and still separate steps and repeats.
+    // `this.options` keeps unresolved `file://` strings. The resolved config from
+    // `initialize()` is fingerprinted separately so an updated settings file misses.
     const varsForCache =
       context?.vars == null
         ? context?.vars
         : omitEvalRuntimeVars(context.vars, PER_RUN_EVAL_RUNTIME_VAR_KEYS);
     const cacheKey = `python:${this.scriptPath}:${this.functionName || 'default'}:${apiType}:${fileHash}:${prompt}:${JSON.stringify(
       this.options,
-    )}:${JSON.stringify(varsForCache)}`;
+    )}:${scriptResolvedConfigCacheKey(this.config)}:${JSON.stringify(varsForCache)}`;
     logger.debug(`PythonProvider cache key: ${cacheKey}`);
 
     const cache = await getCache();

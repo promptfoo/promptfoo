@@ -5,10 +5,14 @@ import { getCache, isCacheEnabled } from '../cache';
 import logger from '../logger';
 import { runRuby } from '../ruby/rubyUtils';
 import { sha256 } from '../util/createHash';
-import { omitEvalRuntimeVars, PER_RUN_EVAL_RUNTIME_VAR_KEYS } from '../util/evalRuntimeVars';
 import { processConfigFileReferences } from '../util/fileReference';
 import { parsePathOrGlob } from '../util/index';
-import { safeJsonStringify } from '../util/json';
+import {
+  omitEvalRuntimeVars,
+  PER_RUN_EVAL_RUNTIME_VAR_KEYS,
+  safeJsonStringify,
+  scriptResolvedConfigCacheKey,
+} from '../util/json';
 import { sanitizeScriptContext } from './scriptContext';
 import {
   applyCachedCallApiMetadata,
@@ -142,13 +146,15 @@ export class RubyProvider implements ApiProvider {
     // Create cache key including the function name to ensure different functions don't share caches.
     // Drop the per-run `__evalId`. `__evalStepId` and `__repeatIndex` are stable across
     // runs for the same step, so they stay and still separate steps and repeats.
+    // `this.options` keeps unresolved `file://` strings. The resolved config from
+    // `initialize()` is fingerprinted separately so an updated settings file misses.
     const varsForCache =
       context?.vars == null
         ? context?.vars
         : omitEvalRuntimeVars(context.vars, PER_RUN_EVAL_RUNTIME_VAR_KEYS);
     const cacheKey = `ruby:${this.scriptPath}:${this.functionName || 'default'}:${apiType}:${fileHash}:${prompt}:${safeJsonStringify(
       this.options,
-    )}:${safeJsonStringify(varsForCache)}`;
+    )}:${scriptResolvedConfigCacheKey(this.config)}:${safeJsonStringify(varsForCache)}`;
     logger.debug(`RubyProvider cache key: ${cacheKey}`);
 
     const cache = await getCache();
