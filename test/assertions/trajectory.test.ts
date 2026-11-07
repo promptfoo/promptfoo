@@ -2358,6 +2358,38 @@ describe('trajectory assertions', () => {
       });
     });
 
+    it.each([false, true])('counts multiline command steps with inverse=%s', (inverse) => {
+      const value = { type: 'command' as const, pattern: '*second*', min: 1 };
+      const params: AssertionParams = {
+        ...defaultParams,
+        inverse,
+        baseType: 'trajectory:step-count',
+        assertion: {
+          type: inverse ? 'not-trajectory:step-count' : 'trajectory:step-count',
+          value,
+        },
+        renderedValue: value,
+        assertionValueContext: {
+          ...defaultParams.assertionValueContext,
+          trace: {
+            ...mockTraceData,
+            spans: [
+              {
+                spanId: 'multiline-command',
+                name: 'shell.call',
+                startTime: 1000,
+                attributes: { command: 'printf first\nprintf second' },
+              },
+            ],
+          },
+        },
+      };
+
+      const result = handleTrajectoryStepCount(params);
+      expect(result.pass).toBe(!inverse);
+      expect(result.score).toBe(inverse ? 0 : 1);
+    });
+
     it('counts steps by pattern', () => {
       const params: AssertionParams = {
         ...defaultParams,
