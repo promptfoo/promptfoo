@@ -145,6 +145,37 @@ describe('doRedteamRun', () => {
     dateNowSpy.mockRestore();
   });
 
+  it.each([
+    ['live explicit override', '^Keep$', '^Drop$'],
+    ['live empty override', '^Keep$', ''],
+    ['live configured control', '^Keep$', undefined],
+    ['local explicit control', undefined, '^Drop$'],
+    ['local empty control', undefined, ''],
+    ['local unfiltered control', undefined, undefined],
+  ] as const)(
+    'prompt filter live override regression: %s',
+    async (_name, configured, filterPrompts) => {
+      await doRedteamRun({
+        filterPrompts,
+        ...(configured === undefined
+          ? {}
+          : { liveRedteamConfig: { commandLineOptions: { filterPrompts: configured } } }),
+      });
+
+      expect
+        .soft(doGenerateRedteam)
+        .toHaveBeenCalledWith(
+          expect.objectContaining({ filterPrompts: filterPrompts ?? configured }),
+        );
+      expect(doEval).toHaveBeenCalledWith(
+        expect.objectContaining({ filterPrompts }),
+        expect.anything(),
+        expect.anything(),
+        expect.anything(),
+      );
+    },
+  );
+
   it('should use default config path when not specified', async () => {
     await doRedteamRun({});
     expect(doGenerateRedteam).toHaveBeenCalledWith(

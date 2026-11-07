@@ -3,13 +3,14 @@ const { createLoggerModuleWithLevel } = await vi.hoisted(
 );
 
 import fs from 'node:fs';
+import { createHash } from 'crypto';
 
 import { Command } from 'commander';
 import * as yaml from 'js-yaml';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as cacheModule from '../../../src/cache';
 import cliState from '../../../src/cliState';
-import { DEFAULT_MAX_CONCURRENCY } from '../../../src/constants';
+import { DEFAULT_MAX_CONCURRENCY, VERSION } from '../../../src/constants';
 import {
   checkEmailStatusAndMaybeExit,
   EmailValidationError,
@@ -41,6 +42,7 @@ import { readConfig } from '../../../src/util/config/load';
 import { writePromptfooConfig } from '../../../src/util/config/writer';
 import { getCustomPolicies } from '../../../src/util/generation';
 import { checkRedteamProbeLimit } from '../../../src/util/redteamProbeLimit';
+import { RedteamGenerateOptionsSchema } from '../../../src/validators/redteam';
 import { createMockProvider } from '../../factories/provider';
 
 import type {
@@ -347,6 +349,101 @@ describe('doGenerateRedteam', () => {
     });
   });
 
+  it.each([
+    ['configured default control', '^Keep$', undefined, ['Keep context {{input}}']],
+    ['explicit override', '^Keep$', '^Drop$', ['Drop context {{input}}']],
+    ['empty override', '^Keep$', '', ['Keep context {{input}}', 'Drop context {{input}}']],
+    [
+      'unfiltered control',
+      undefined,
+      undefined,
+      ['Keep context {{input}}', 'Drop context {{input}}'],
+    ],
+    ['CLI-only override', undefined, '^Drop$', ['Drop context {{input}}']],
+  ] as const)(
+    'configured prompt filter regression: %s reaches synthesis',
+    async (_name, configured, filterPrompts, expectedPrompts) => {
+      const actualConfig = await vi.importActual<typeof configModule>(
+        '../../../src/util/config/load',
+      );
+      const defaultConfig: Partial<UnifiedConfig> = {
+        prompts: [
+          { raw: 'Keep context {{input}}', label: 'Keep' },
+          { raw: 'Drop context {{input}}', label: 'Drop' },
+        ],
+        providers: ['echo'],
+        commandLineOptions: { filterPrompts: configured },
+        redteam: { purpose: 'Test target', plugins: [{ id: 'harmful:hate' }], strategies: [] },
+      };
+      // Exercise real prompt parsing and filtering without filesystem config discovery.
+      // Generation's actual resolver arguments are retained, except the mocked file path.
+      vi.mocked(configModule.resolveConfigs).mockImplementation((options, defaults) => {
+        const { config: _configPaths, ...resolverOptions } = options;
+        return actualConfig.resolveConfigs(resolverOptions, defaults);
+      });
+      mockReadFileSync(yaml.dump(defaultConfig));
+      vi.mocked(synthesize).mockResolvedValue(createSynthesisResult());
+      const options: Partial<RedteamCliGenerateOptions> = {
+        config: 'config.yaml',
+        output: 'output.yaml',
+        cache: true,
+        defaultConfig,
+        force: true,
+        write: false,
+        filterPrompts,
+      };
+
+      const previousConfig = cliState.config;
+      const previousBasePath = cliState.basePath;
+      const previousProviders = cliState.selectedProviderConfigs;
+      try {
+        await doGenerateRedteam(options);
+        const evaluation = await actualConfig.resolveConfigs({ filterPrompts }, defaultConfig);
+
+        expect(evaluation.testSuite.prompts.map((prompt) => prompt.raw)).toEqual(expectedPrompts);
+        expect(synthesize).toHaveBeenCalledTimes(1);
+        expect(vi.mocked(synthesize).mock.calls[0][0].prompts).toEqual(expectedPrompts);
+      } finally {
+        cliState.config = previousConfig;
+        cliState.basePath = previousBasePath;
+        cliState.selectedProviderConfigs = previousProviders;
+        vi.mocked(configModule.resolveConfigs).mockReset();
+      }
+    },
+  );
+
+  it.each(['^Drop$', '', undefined])(
+    'configured prompt filter regression: schema preserves %j',
+    (filterPrompts) => {
+      expect(
+        RedteamGenerateOptionsSchema.parse({
+          cache: true,
+          defaultConfig: {},
+          write: false,
+          filterPrompts,
+        }).filterPrompts,
+      ).toBe(filterPrompts);
+    },
+  );
+
+  it('prompt filter hash regression: preserves the legacy unfiltered hash', async () => {
+    const content = yaml.dump({ providers: ['echo'], redteam: { plugins: ['harmful:hate'] } });
+    mockReadFileSync(content);
+    vi.mocked(synthesize).mockResolvedValue(createSynthesisResult());
+
+    await doGenerateRedteam({
+      config: 'config.yaml',
+      output: 'output.yaml',
+      defaultConfig: {},
+      cache: true,
+      write: false,
+    });
+
+    expect(vi.mocked(writePromptfooConfig).mock.calls[0][0].metadata?.configHash).toBe(
+      createHash('sha256').update(`${VERSION}:${content}`).digest('hex'),
+    );
+  });
+
   it('should generate redteam tests and write to output file', async () => {
     vi.mocked(configModule.combineConfigs).mockResolvedValue([
       {
@@ -408,6 +505,18 @@ describe('doGenerateRedteam', () => {
   });
 
   it.each([
+    ['prompt filter hash regression: adding a prompt filter', {}, { filterPrompts: '^Keep$' }],
+    [
+      'prompt filter hash regression: changing a prompt filter',
+      { filterPrompts: '^Keep$' },
+      { filterPrompts: '^Drop$' },
+    ],
+    ['prompt filter hash regression: adding an empty override', {}, { filterPrompts: '' }],
+    [
+      'prompt filter hash regression: removing an empty override',
+      { filterPrompts: '' },
+      { filterPrompts: undefined },
+    ],
     ['adding a filter', {}, { filterProviders: 'team-a' }],
     ['filterProviders value', { filterProviders: 'team-a' }, { filterProviders: 'team-b' }],
     ['filterTargets value', { filterTargets: 'team-a' }, { filterTargets: 'team-b' }],

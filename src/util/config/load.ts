@@ -1195,12 +1195,16 @@ async function resolveLoadedConfig(
         cmdObj.assertions ? undefined : promptBasePaths,
       );
 
-  // Filter prompts if --filter-prompts option is provided
-  if (cmdObj.filterPrompts) {
-    parsedPrompts = filterPrompts(parsedPrompts, cmdObj.filterPrompts);
+  // References describe authored prompts, including prompts excluded from this run.
+  const authoredPrompts = parsedPrompts;
+
+  // CLI values override the configured prompt filter, including an empty string.
+  const promptFilter = cmdObj.filterPrompts ?? commandLineOptions?.filterPrompts;
+  if (promptFilter) {
+    parsedPrompts = filterPrompts(parsedPrompts, promptFilter);
     if (parsedPrompts.length === 0) {
       logger.warn(
-        `No prompts matched the filter "${cmdObj.filterPrompts}". Check your --filter-prompts value.`,
+        `No prompts matched the filter "${promptFilter}". Check your --filter-prompts value.`,
       );
     }
   }
@@ -1338,7 +1342,7 @@ async function resolveLoadedConfig(
   // Validate that all prompt references in tests exist
   validateTestPromptReferences(
     testSuite.tests || [],
-    testSuite.prompts,
+    authoredPrompts,
     typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest : undefined,
     { promptReferenceSources },
   );
