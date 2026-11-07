@@ -88,16 +88,18 @@ pip install modelaudit[numpy1]                 # NumPy 1.x compatibility
 
 ### Docker
 
+Build an image from the [ModelAudit source](https://github.com/promptfoo/modelaudit) before scanning a model in your current directory:
+
 ```bash
-# Pull from GitHub Container Registry
-docker pull ghcr.io/promptfoo/modelaudit:latest
+git clone https://github.com/promptfoo/modelaudit.git
+docker build -t modelaudit ./modelaudit
 
-# Use specific variants
-docker pull ghcr.io/promptfoo/modelaudit:latest-full        # All ML frameworks
-docker pull ghcr.io/promptfoo/modelaudit:latest-tensorflow  # TensorFlow only
+# Optional variants
+docker build -f modelaudit/Dockerfile.full -t modelaudit:full ./modelaudit
+docker build -f modelaudit/Dockerfile.tensorflow -t modelaudit:tensorflow ./modelaudit
 
-# Run with Docker
-docker run --rm -v $(pwd):/data ghcr.io/promptfoo/modelaudit:latest scan /data/model.pkl
+# Scan a model in the current directory
+docker run --rm -v "$(pwd):/data" modelaudit scan /data/model.pkl
 ```
 
 ## Usage
