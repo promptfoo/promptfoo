@@ -4,6 +4,7 @@ import path from 'path';
 import { getCache, isCacheEnabled } from '../cache';
 import cliState from '../cliState';
 import { getEnvInt } from '../envars';
+import { omitEvalRuntimeVars } from '../evaluatorHelpers';
 import logger from '../logger';
 import { getConfiguredPythonPath } from '../python/pythonUtils';
 import { PythonWorkerPool } from '../python/workerPool';
@@ -238,10 +239,12 @@ export class PythonProvider implements ApiProvider {
     logger.debug(`Computing file hash for script ${absPath}`);
     const fileHash = sha256(await fs.readFile(absPath, 'utf-8'));
 
-    // Create cache key including the function name to ensure different functions don't share caches
+    // Create cache key including the function name to ensure different functions don't share caches.
+    // Runtime vars like __evalId are positional per-run identifiers; keeping them out lets an
+    // identical call in a later eval run hit the cache instead of re-executing (and re-paying).
     const cacheKey = `python:${this.scriptPath}:${this.functionName || 'default'}:${apiType}:${fileHash}:${prompt}:${JSON.stringify(
       this.options,
-    )}:${JSON.stringify(context?.vars)}`;
+    )}:${JSON.stringify(context?.vars ? omitEvalRuntimeVars(context.vars) : context?.vars)}`;
     logger.debug(`PythonProvider cache key: ${cacheKey}`);
 
     const cache = await getCache();

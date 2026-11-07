@@ -2,6 +2,7 @@ import fs from 'fs/promises';
 import path from 'path';
 
 import { getCache, isCacheEnabled } from '../cache';
+import { omitEvalRuntimeVars } from '../evaluatorHelpers';
 import logger from '../logger';
 import { runRuby } from '../ruby/rubyUtils';
 import { sha256 } from '../util/createHash';
@@ -138,10 +139,12 @@ export class RubyProvider implements ApiProvider {
     logger.debug(`Computing file hash for script ${absPath}`);
     const fileHash = sha256(await fs.readFile(absPath, 'utf-8'));
 
-    // Create cache key including the function name to ensure different functions don't share caches
+    // Create cache key including the function name to ensure different functions don't share caches.
+    // Runtime vars like __evalId are positional per-run identifiers; keeping them out lets an
+    // identical call in a later eval run hit the cache instead of re-executing (and re-paying).
     const cacheKey = `ruby:${this.scriptPath}:${this.functionName || 'default'}:${apiType}:${fileHash}:${prompt}:${safeJsonStringify(
       this.options,
-    )}:${safeJsonStringify(context?.vars)}`;
+    )}:${safeJsonStringify(context?.vars ? omitEvalRuntimeVars(context.vars) : context?.vars)}`;
     logger.debug(`RubyProvider cache key: ${cacheKey}`);
 
     const cache = await getCache();
