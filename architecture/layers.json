@@ -68,6 +68,8 @@
         "src/util/fileExtensions.ts",
         "src/util/invariant.ts",
         "src/util/objectUtils.ts",
+        "src/util/parseEnvBool.ts",
+
         "src/util/providerResponse.ts",
         "src/util/sanitizer.ts",
         "src/util/text.ts",

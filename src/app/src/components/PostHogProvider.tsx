@@ -1,13 +1,14 @@
 import React, { useEffect, useMemo, useState } from 'react';
 
 import { useUserStore } from '@app/stores/userStore';
+import { parseEnvBool } from '@promptfoo/util/parseEnvBool';
 import posthog from 'posthog-js';
 import { PostHogContext, type PostHogContextType } from './PostHogContext';
 
 // PostHog configuration - using the same key system as the backend
 const POSTHOG_KEY = import.meta.env.VITE_POSTHOG_KEY;
 const POSTHOG_HOST = import.meta.env.VITE_POSTHOG_HOST;
-const DISABLE_TELEMETRY = import.meta.env.VITE_PROMPTFOO_DISABLE_TELEMETRY;
+const DISABLE_TELEMETRY = parseEnvBool(import.meta.env.VITE_PROMPTFOO_DISABLE_TELEMETRY);
 
 interface PostHogProviderProps {
   children: React.ReactNode;
@@ -35,7 +36,7 @@ export const PostHogProvider = ({ children }: PostHogProviderProps) => {
   }, [isInitialized, email, userId]);
 
   useEffect(() => {
-    if (POSTHOG_KEY && typeof window !== 'undefined' && DISABLE_TELEMETRY !== 'true') {
+    if (POSTHOG_KEY && typeof window !== 'undefined' && !DISABLE_TELEMETRY) {
       try {
         posthog.init(POSTHOG_KEY, {
           api_host: POSTHOG_HOST,
@@ -74,7 +75,7 @@ export const PostHogProvider = ({ children }: PostHogProviderProps) => {
     [isInitialized],
   );
 
-  if (DISABLE_TELEMETRY === 'true') {
+  if (DISABLE_TELEMETRY) {
     return children;
   }
 

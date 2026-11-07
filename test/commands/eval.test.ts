@@ -1,4 +1,4 @@
-import { readFileSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 import fsPromises from 'fs/promises';
 import * as path from 'path';
 
@@ -643,6 +643,28 @@ describe('evalCommand', () => {
       expect.anything(),
       expect.anything(),
       expect.objectContaining({ cache: false }),
+    );
+  });
+
+  it('forwards an env file consumed by the parent command', async () => {
+    program.option('--env-path <path>');
+    evalCommand(program, defaultConfig, defaultConfigPath);
+    vi.mocked(readFileSync).mockReturnValue('');
+    vi.mocked(existsSync).mockReturnValueOnce(true);
+    vi.mocked(evaluate).mockImplementation(async (_testSuite, evalRecord) => evalRecord as Eval);
+
+    await program.parseAsync([
+      'node',
+      'test',
+      '--env-path',
+      'fixture.env',
+      'eval',
+      '--no-table',
+      '--no-write',
+    ]);
+
+    expect(vi.mocked(resolveConfigs).mock.calls.at(-1)?.[0]).toEqual(
+      expect.objectContaining({ envPath: 'fixture.env' }),
     );
   });
 
