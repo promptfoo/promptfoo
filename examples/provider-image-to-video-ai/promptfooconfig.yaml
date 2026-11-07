@@ -1,0 +1,60 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Evaluate image-to-video generation workflows with custom provider
+
+prompts:
+  - 'Transform this source image with motion prompt: {{prompt}}'
+
+providers:
+  - id: file://provider.js
+    label: Image to Video AI
+    config:
+      apiKey: '{{env.IMAGE_TO_VIDEO_AI_API_KEY}}'
+      pollIntervalMs: 100
+      maxPollAttempts: 30
+      defaultDuration: 5
+      defaultFps: 24
+      defaultResolution: '1280x720'
+
+tests:
+  - vars:
+      prompt: 'Cinematic drone slow fly-through over misty pine mountains at sunrise'
+      imageUrl: 'https://images.unsplash.com/photo-1506744038136-46273834b3fb'
+      motion: 'drone-forward-pan'
+      duration: 5
+      fps: 24
+      resolution: '1920x1080'
+    assert:
+      - type: contains
+        value: '[Video Result]'
+      - type: contains
+        value: '.mp4'
+      - type: javascript
+        value: 'output.includes("Duration: 5s") && output.includes("Status: completed")'
+
+  - vars:
+      prompt: 'Subtle blinking and gentle wind blowing hair, warm natural lighting'
+      imageUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb'
+      motion: 'subtle-portrait'
+      duration: 3
+      fps: 30
+      resolution: '1280x720'
+    assert:
+      - type: contains
+        value: 'https://'
+      - type: javascript
+        value: 'output.includes("Status: completed")'
+      - type: latency
+        threshold: 30000
+
+  - vars:
+      prompt: 'Water droplet falling into calm puddle with expanding ripples, slow motion'
+      imageUrl: 'https://images.unsplash.com/photo-1518837695005-2083093ee35b'
+      motion: 'slow-motion-fluid'
+      duration: 4
+      fps: 24
+      resolution: '1280x720'
+    assert:
+      - type: contains
+        value: 'Duration: 4s'
+      - type: contains
+        value: '[Video Result]'
