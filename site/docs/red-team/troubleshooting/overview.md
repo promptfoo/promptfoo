@@ -8,6 +8,25 @@ description: Red team LLM applications by diagnosing attack generation, connecti
 
 Common issues encountered when red teaming LLM applications with promptfoo.
 
+## Quick Diagnostics
+
+Run these commands to diagnose common red team issues:
+
+```bash
+# Validate configuration without contacting targets
+npx promptfoo@latest validate -c promptfooconfig.yaml
+
+# Test configured target connectivity (sends test requests)
+npx promptfoo@latest validate target -c promptfooconfig.yaml
+
+# Check the current shell without printing the key (does not load .env)
+test -n "${OPENAI_API_KEY:-}" && echo 'OPENAI_API_KEY is set in this shell' || echo 'OPENAI_API_KEY is not set in this shell'
+```
+
+Promptfoo can also load credentials from `.env` or `--env-file`; the shell check does not inspect those files. Replace `OPENAI_API_KEY` with the variable your provider uses.
+
+## Common Issues Table
+
 | Issue                                                                             | Description                                                                                                                 |
 | --------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
 | [Attack Generation](/docs/red-team/troubleshooting/attack-generation)             | Configuration errors in system scope, permissions, or available actions can prevent effective attack generation.            |
