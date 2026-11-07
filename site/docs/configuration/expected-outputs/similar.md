@@ -11,7 +11,7 @@ using a configurable similarity or distance metric with a threshold.
 
 Thresholds use the raw metric value. For cosine similarity and dot product, the assertion score is that value, or `1 - similarity` for `not-similar`. Negative scores and scores above 1 are preserved.
 
-A non-finite result (`NaN` or infinity) fails the assertion with score 0.
+Embeddings must be non-empty arrays of finite numbers. Invalid embeddings or a non-finite result (`NaN` or infinity) fail the assertion with score 0, including for `not-similar`.
 
 By default, embeddings are computed via OpenAI's `text-embedding-3-large` model.
 
