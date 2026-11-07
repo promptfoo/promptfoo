@@ -2445,32 +2445,17 @@ prompts:
     expect(result).toEqual([{ id: 'ollama:phi3', prompts: ['phi3_prompt'] }]);
   });
 
-  it('should handle .yml extension', () => {
-    const yamlContent = `
-id: ollama:phi3
-prompts:
-  - phi3_prompt
-`;
-    mockFsReadFileSync.mockReturnValue(yamlContent);
-
+  it.each([
+    ['provider.YAML', 'id: echo\nprompts: [greeting]'],
+    ['provider.YmL', 'id: echo\nprompts: [greeting]'],
+    ['provider.JsOn', '{"id":"echo","prompts":["greeting"]}'],
+  ])('resolves %s relative to the config directory', (filename, contents) => {
     const basePath = path.join(path.sep, 'test');
-    const result = resolveProviderConfigs(['file://./provider.yml'], { basePath });
+    mockFsReadFileSync.mockReturnValue(contents);
 
-    expect(mockFsReadFileSync).toHaveBeenCalledWith(path.join(basePath, 'provider.yml'), 'utf8');
-    expect(result).toEqual([{ id: 'ollama:phi3', prompts: ['phi3_prompt'] }]);
-  });
+    const result = resolveProviderConfigs([`file://./${filename}`], { basePath });
 
-  it('should handle .json extension', () => {
-    const jsonContent = JSON.stringify({
-      id: 'openai:gpt-4',
-      prompts: ['gpt_prompt'],
-    });
-    mockFsReadFileSync.mockReturnValue(jsonContent);
-
-    const basePath = path.join(path.sep, 'test');
-    const result = resolveProviderConfigs(['file://./provider.json'], { basePath });
-
-    expect(mockFsReadFileSync).toHaveBeenCalledWith(path.join(basePath, 'provider.json'), 'utf8');
-    expect(result).toEqual([{ id: 'openai:gpt-4', prompts: ['gpt_prompt'] }]);
+    expect(mockFsReadFileSync).toHaveBeenCalledWith(path.join(basePath, filename), 'utf8');
+    expect(result).toEqual([{ id: 'echo', prompts: ['greeting'] }]);
   });
 });

@@ -123,12 +123,7 @@ export function canonicalizeProviderId(id: string): string {
  * Returns true for provider refs that should be expanded from YAML/JSON config files.
  */
 export function isProviderConfigFileReference(providerPath: string): boolean {
-  return (
-    providerPath.startsWith('file://') &&
-    (providerPath.endsWith('.yaml') ||
-      providerPath.endsWith('.yml') ||
-      providerPath.endsWith('.json'))
-  );
+  return providerPath.startsWith('file://') && /\.(?:yaml|yml|json)$/i.test(providerPath);
 }
 
 /**
