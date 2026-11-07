@@ -95,6 +95,7 @@ import { createOpenRouterProvider } from './openrouter';
 import { createOrcaRouterProvider } from './orcarouter';
 import { parsePackageProvider } from './packageParser';
 import { createPerplexityProvider } from './perplexity';
+import { createPopNowProvider } from './popnow';
 import { PortkeyChatCompletionProvider } from './portkey';
 import { PromptfooModelProvider } from './promptfooModel';
 import { PythonProvider } from './pythonCompletion';
@@ -1446,6 +1447,7 @@ export const providerMap: ProviderFactory[] = [
     },
   },
   configuredProviderFactory('perplexity:', () => createPerplexityProvider),
+  configuredProviderFactory('popnow:', () => createPopNowProvider),
   {
     test: (providerPath: string) => providerPath.startsWith('portkey:'),
     create: async (

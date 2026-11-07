@@ -432,6 +432,9 @@ type EnvVars = {
   // OrcaRouter
   ORCAROUTER_API_KEY?: string;
 
+  // PopNow
+  POPNOW_API_KEY?: string;
+
   // Portkey
   PORTKEY_API_BASE_URL?: string;
   PORTKEY_API_KEY?: string;
