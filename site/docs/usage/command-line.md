@@ -121,6 +121,7 @@ By default the `eval` command will read the `promptfooconfig.yaml` configuration
 | `--filter-targets <targets>`         | Only run tests with these targets (alias for --filter-providers)                                                                                                                      |
 | `--grader <provider>`                | Model that will grade outputs                                                                                                                                                         |
 | `-j, --max-concurrency <number>`     | Maximum number of concurrent API calls                                                                                                                                                |
+| `--lock <path>`                      | Create a tamper-evident lock for the resolved eval bar before running                                                                                                                 |
 | `--model-outputs <path>`             | Path to JSON containing list of LLM output strings                                                                                                                                    |
 | `--safe-mode`                        | Reject inline JavaScript assertions and shared transforms. [Limited guard, not a sandbox](/docs/configuration/expected-outputs/javascript#restrict-inline-assertions-and-transforms). |
 | `--no-cache`                         | Do not read or write results to disk cache                                                                                                                                            |
@@ -145,6 +146,7 @@ By default the `eval` command will read the `promptfooconfig.yaml` configuration
 | `-t, --tests <path>`                 | Path to CSV with test cases                                                                                                                                                           |
 | `--var <key=value>`                  | Set a variable in key=value format                                                                                                                                                    |
 | `-v, --vars <path>`                  | Path to CSV with test cases (alias for --tests)                                                                                                                                       |
+| `--verify <path>`                    | Verify an eval lock before running and enforce its pass-rate threshold                                                                                                                |
 | `-w, --watch`                        | Watch for changes in config and re-run                                                                                                                                                |
 | `-x, --extension <paths...>`         | Extension hooks to run, such as `file://handler.js:afterAll`                                                                                                                          |
 
@@ -169,7 +171,41 @@ Range is applied before `--repeat` expansion, so `--filter-range 0:5 --repeat 3`
 
 When resuming an eval, promptfoo reuses the range saved with the original run so test indices stay stable. A `--filter-range` flag passed on resume is ignored (with a warning) and other transient filters from the original run are not restored, so resume is most predictable when range was the only selection filter.
 
-The `eval` command will return exit code `100` when there is at least 1 test case failure or when the pass rate is below the threshold set by `PROMPTFOO_PASS_RATE_THRESHOLD`. It will return exit code `1` for any other error. The exit code for failed tests can be overridden with environment variable `PROMPTFOO_FAILED_TEST_EXIT_CODE`.
+### Tamper-evident eval gates
+
+Use `--lock` to commit to an eval's success criteria before provider outputs are available. Set the pass-rate threshold explicitly when creating the lock:
+
+```sh
+PROMPTFOO_PASS_RATE_THRESHOLD=75 promptfoo eval \
+  -c promptfooconfig.yaml \
+  --lock eval.lock.json
+```
+
+The lock hashes the resolved default test, tests, assertions, scenarios, repeat count, range, template and variable-expansion modes, and promptfoo implementation version. This includes the loaded contents of referenced test files rather than only their filenames, while excluding internal absolute loader paths so the same checkout can verify in CI. The manifest follows the open [PRML v0.1 specification](https://spec.falsify.dev/v0.1), including its canonical byte format, so independent implementations can reproduce the manifest hash. Existing lock files are never overwritten.
+
+The initial lock format admits only built-in, data-only assertions such as equality, containment, regular-expression, structured-data, count, distance, trace, and local scoring checks. It rejects provider-backed or model-graded assertions, redteam criteria, scripts, webhooks, manual or comparative grading, assertion and test transforms, custom scoring functions, custom Nunjucks filters, extension hooks, progress callbacks, in-memory functions, undefined values, and unresolved `file://` or `package:` references. This explicit boundary prevents deferred code or ambient runtime state from silently changing the effective acceptance criterion after registration. Replace dynamic criteria with static, data-backed checks before locking. Sampling requires `--filter-sample-seed` so the selected tests can be reproduced. The lock path must also be different from every configured eval output path.
+
+Every locked test must apply to every selected target and prompt. The initial format rejects per-test `prompts`/`providers` selectors, provider `prompts` selectors, and `providerPromptMap`; these can otherwise omit failing cases without changing the test definitions. You can change the prompts and models under evaluation while keeping the complete test set. Criteria must use plain JSON data: undefined values, sparse arrays, negative zero, and class instances are rejected rather than hashed lossily. The lock also binds `PROMPTFOO_DISABLE_TEMPLATING` and `PROMPTFOO_DISABLE_VAR_EXPANSION`.
+
+Locked runs give target providers separate copies of the test, variables, and prompt context so context mutations cannot change the grading criteria. Custom JavaScript still runs in the same process and must be trusted; evaluation locks do not sandbox providers.
+
+Use `--verify` for a later run. Verification happens before provider calls, and the threshold stored in the lock is authoritative for the run:
+
+```sh
+promptfoo eval -c promptfooconfig.yaml --verify eval.lock.json
+```
+
+A changed manifest or eval bar exits with code `3`. A valid lock whose run misses the locked threshold uses the normal failed-test exit code (`100` by default). `--lock` and `--verify` cannot be combined with each other, `--watch`, `--resume`, or `--retry-errors`.
+
+An interrupted locked run exits with code `130` and does not satisfy the gate. Start a new `--verify` run to evaluate the complete locked bar.
+
+:::warning
+
+The lock is a hash commitment, not a signature or timestamp. Store it in a protected CI artifact, signed attestation, or reviewed commit so an operator cannot replace both the manifest and its hash.
+
+:::
+
+The `eval` command will return exit code `100` when there is at least 1 test case failure or when the pass rate is below the threshold set by `PROMPTFOO_PASS_RATE_THRESHOLD`. It returns exit code `3` for a tampered or unverifiable eval lock and exit code `1` for other errors. The exit code for failed tests can be overridden with environment variable `PROMPTFOO_FAILED_TEST_EXIT_CODE`.
 
 ## `promptfoo optimize`
 
