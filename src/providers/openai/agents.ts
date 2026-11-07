@@ -269,6 +269,10 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
         cost: undefined,
       };
 
+      if (this.agentConfig.includeToolCalls) {
+        response.metadata = { toolCalls: extractToolCalls(result.newItems) };
+      }
+
       return response;
     } catch (error) {
       logger.error('[AgentsProvider] Failed to run agent', { error });
@@ -540,6 +544,54 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
       }
     }
   }
+}
+
+type AgentToolCall = { callId: string; name: string; arguments: unknown };
+
+/** Return only function-call inputs; tool outputs may contain large or sensitive data. */
+export function extractToolCalls(newItems: unknown): AgentToolCall[] {
+  if (!Array.isArray(newItems)) {
+    return [];
+  }
+
+  const calls: AgentToolCall[] = [];
+  for (const item of newItems) {
+    if (!item || typeof item !== 'object') {
+      continue;
+    }
+    const rawItem = (item as { rawItem?: unknown }).rawItem;
+    const raw = rawItem && typeof rawItem === 'object' ? rawItem : item;
+    const record = raw as {
+      arguments?: unknown;
+      call_id?: unknown;
+      id?: unknown;
+      name?: unknown;
+      type?: unknown;
+    };
+    if (record.type !== 'function_call' || typeof record.name !== 'string') {
+      continue;
+    }
+    const callId =
+      typeof record.call_id === 'string'
+        ? record.call_id
+        : typeof record.id === 'string'
+          ? record.id
+          : undefined;
+    if (!callId || record.arguments === undefined) {
+      continue;
+    }
+
+    let args = record.arguments;
+    if (typeof args === 'string') {
+      try {
+        args = JSON.parse(args);
+      } catch {
+        // Keep malformed SDK arguments inspectable as the original string.
+      }
+    }
+    calls.push({ callId, name: record.name, arguments: args });
+  }
+  return calls;
 }
 
 function mergeArrays<T>(existing?: T[], additions?: T[]): T[] | undefined {
