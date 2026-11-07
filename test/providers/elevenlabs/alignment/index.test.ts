@@ -147,7 +147,7 @@ describe('ElevenLabsAlignmentProvider', () => {
       } as unknown as CallApiContextParams);
 
       expect(response.error).toBeUndefined();
-      expect(response.output).toContain('"words"');
+      expect(response.output).toBe(JSON.stringify(mockAlignmentResponse, null, 2));
       expect(response.metadata).toMatchObject({
         sourceFile: '/path/to/audio.mp3',
         wordCount: 2,
@@ -314,29 +314,112 @@ describe('ElevenLabsAlignmentProvider', () => {
       expect((provider as any).formatSRTTimestamp(3665.789)).toBe('01:01:05,789');
     });
 
-    it('should group words into subtitle chunks', async () => {
-      const provider = new ElevenLabsAlignmentProvider('elevenlabs:alignment');
+    describe.each(['srt', 'vtt'] as const)('%s cue boundaries', (format) => {
+      it.each([
+        {
+          name: 'one word',
+          words: [{ text: 'Hello', start: 0.5, end: 1.5 }],
+          cues: [['00:00:00,500 --> 00:00:01,500', 'Hello']],
+        },
+        {
+          name: 'four words in one cue',
+          words: [
+            { text: 'This', start: 0, end: 0.25 },
+            { text: 'is', start: 0.25, end: 0.5 },
+            { text: 'a', start: 0.5, end: 0.75 },
+            { text: 'test', start: 0.75, end: 1 },
+          ],
+          cues: [['00:00:00,000 --> 00:00:01,000', 'This is a test']],
+        },
+        ...[10, 11].map((count) => ({
+          name: `${count} words at the word-count boundary`,
+          words: Array.from({ length: count }, (_, index) => ({
+            text: `word${index + 1}`,
+            start: index / 8,
+            end: (index + 1) / 8,
+          })),
+          cues: [
+            [
+              '00:00:00,000 --> 00:00:01,250',
+              'word1 word2 word3 word4 word5 word6 word7 word8 word9 word10',
+            ],
+            ...(count === 11 ? [['00:00:01,250 --> 00:00:01,375', 'word11']] : []),
+          ],
+        })),
+        {
+          name: 'multiple cues at the two-second boundary',
+          words: [
+            { text: 'First', start: 0, end: 0.5 },
+            { text: 'cue', start: 1.5, end: 1.75 },
+            { text: 'Second', start: 2, end: 2.5 },
+            { text: 'cue', start: 3.5, end: 3.75 },
+            { text: 'Third', start: 4, end: 4.5 },
+          ],
+          cues: [
+            ['00:00:00,000 --> 00:00:01,750', 'First cue'],
+            ['00:00:02,000 --> 00:00:03,750', 'Second cue'],
+            ['00:00:04,000 --> 00:00:04,500', 'Third'],
+          ],
+        },
+        {
+          name: 'gaps within and between grouped cues',
+          words: [
+            { text: 'First', start: 0.5, end: 0.75 },
+            { text: 'cue', start: 1, end: 1.5 },
+            { text: 'Second', start: 4, end: 4.5 },
+            { text: 'cue', start: 4.75, end: 5 },
+          ],
+          cues: [
+            ['00:00:00,500 --> 00:00:01,500', 'First cue'],
+            ['00:00:04,000 --> 00:00:05,000', 'Second cue'],
+          ],
+        },
+        {
+          name: 'a gap between single-word cues',
+          words: [
+            { text: 'Hello', start: 0, end: 0.5 },
+            { text: 'again', start: 3, end: 3.5 },
+          ],
+          cues: [
+            ['00:00:00,000 --> 00:00:00,500', 'Hello'],
+            ['00:00:03,000 --> 00:00:03,500', 'again'],
+          ],
+        },
+        { name: 'no aligned words', words: [], cues: [] },
+      ])('uses each grouped last word end for $name', async ({ words, cues }) => {
+        const provider = new ElevenLabsAlignmentProvider('elevenlabs:alignment');
+        const mockAlignmentResponse = { words };
+        const originalResponse = structuredClone(mockAlignmentResponse);
+        const mockAudioBuffer = Buffer.from('audio-data');
+        const upload = vi.fn().mockResolvedValue(mockAlignmentResponse);
+        mockReadFile.mockResolvedValue(mockAudioBuffer);
+        (provider as any).client.upload = upload;
 
-      const mockAudioBuffer = Buffer.from('audio-data');
-      const mockAlignmentResponse = {
-        words: [
-          { text: 'This', start: 0.0, end: 0.2 },
-          { text: 'is', start: 0.3, end: 0.4 },
-          { text: 'a', start: 0.5, end: 0.6 },
-          { text: 'test', start: 0.7, end: 1.0 },
-        ],
-        duration_seconds: 1.0,
-      };
+        const transcript = words.map((word) => word.text).join(' ') || 'transcript';
+        const response = await provider.callApi(transcript, {
+          vars: { audioFile: '/path/to/audio.mp3', format },
+        } as unknown as CallApiContextParams);
 
-      mockReadFile.mockResolvedValue(mockAudioBuffer);
-      (provider as any).client.upload = vi.fn().mockResolvedValue(mockAlignmentResponse);
+        const expectedCues = cues
+          .map(([timestamps, text], index) =>
+            format === 'srt'
+              ? `${index + 1}\n${timestamps}\n${text}\n`
+              : `${timestamps.replaceAll(',', '.')}\n${text}\n`,
+          )
+          .join('\n');
+        const expectedOutput =
+          format === 'srt' ? expectedCues : `WEBVTT\n${cues.length > 0 ? '\n' : ''}${expectedCues}`;
 
-      const response = await provider.callApi('This is a test', {
-        vars: { audioFile: '/path/to/audio.mp3', format: 'srt' },
-      } as unknown as CallApiContextParams);
-
-      expect(response.output).toContain('This is a test');
-      expect(response.output).toMatch(/\d+\n\d{2}:\d{2}:\d{2},\d{3} --> \d{2}:\d{2}:\d{2},\d{3}\n/);
+        expect(response.error).toBeUndefined();
+        expect(upload).toHaveBeenCalledExactlyOnceWith(
+          '/forced-alignment',
+          mockAudioBuffer,
+          'audio.mp3',
+          { text: transcript, include_character_alignments: false },
+        );
+        expect(mockAlignmentResponse).toEqual(originalResponse);
+        expect(response.output).toBe(expectedOutput);
+      });
     });
   });
 
