@@ -15,7 +15,7 @@ export function processJsonlFile(
 ): Prompt[] {
   // Drop a UTF-8 byte order mark so the first line still parses as JSON.
   const fileContent = fs.readFileSync(filePath, 'utf-8').replace(/^﻿/, '');
-  const jsonLines = fileContent.split(/\r?\n/).filter((line) => line.length > 0);
+  const jsonLines = fileContent.split(/\r?\n/).filter((line) => line.trim().length > 0);
   const containsMultiple = jsonLines.length > 1;
   return jsonLines.map((json) => ({
     raw: json,
