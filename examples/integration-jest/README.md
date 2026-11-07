@@ -7,13 +7,11 @@ npx promptfoo@latest init --example integration-jest
 cd integration-jest
 ```
 
-This folder contains a small example of how to test LLM prompts using Jest, Vitest, and `promptfoo`.
+Use Promptfoo assertions in Jest or Vitest to check semantic similarity and grade responses.
 
 ## Getting Started
 
 Use Node.js 22.22 or newer to meet the Promptfoo and Vitest 5 requirements.
-
-To get started, follow these steps:
 
 1. **Install the dependencies**:
 
@@ -21,18 +19,24 @@ To get started, follow these steps:
    npm install
    ```
 
-2. **Run the tests**:
+2. **Set your OpenAI API key** for the embedding and grading requests:
+
+   ```sh
+   export OPENAI_API_KEY=your-api-key
+   ```
+
+3. **Run the tests**:
 
    To run the tests with Jest:
 
    ```sh
-   npx jest
+   npm run test:jest
    ```
 
    Or, to run the tests with Vitest:
 
    ```sh
-   npx vitest
+   npm run test:vitest -- --run
    ```
 
 ## Additional Information

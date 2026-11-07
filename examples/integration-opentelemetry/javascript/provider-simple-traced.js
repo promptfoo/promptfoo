@@ -1,5 +1,4 @@
-// provider-simple-traced.js
-// RAG/Agent provider with intricate OpenTelemetry tracing
+// Simulated RAG provider with OpenTelemetry spans for each operation.
 
 const { trace, context, propagation, SpanStatusCode } = require('@opentelemetry/api');
 const { BatchSpanProcessor, TracerProvider } = require('@opentelemetry/sdk-trace');
@@ -16,7 +15,7 @@ const exporter = new OTLPTraceExporter({
   url: exporterUrl,
 });
 
-// Use BatchSpanProcessor for better timing handling
+// Batch completed spans before exporting.
 const spanProcessor = new BatchSpanProcessor({
   exporter,
   maxQueueSize: 100,
@@ -40,7 +39,7 @@ propagation.setGlobalPropagator(new W3CTraceContextPropagator());
 // Get a tracer
 const tracer = trace.getTracer('simple-traced-provider', '1.0.0');
 
-// Fixed helper function that properly manages span lifecycle
+// Run a callback in a span and record its result.
 async function runInSpan(spanOrName, attributesOrFn, maybeFn) {
   let span;
   let fn;
@@ -122,8 +121,7 @@ class SimpleTracedProvider {
   }
 
   async _tracedCallApi(prompt, promptfooContext) {
-    // Use the improved runInSpan for the main workflow
-    return runInSpan(
+    const result = await runInSpan(
       'rag_agent_workflow',
       {
         'promptfoo.evaluation_id': promptfooContext.evaluationId,
@@ -373,15 +371,6 @@ class SimpleTracedProvider {
           reasoning_steps: 3,
         });
 
-        // Force flush to ensure spans are sent
-        try {
-          console.log('[Provider] Flushing spans...');
-          await spanProcessor.forceFlush();
-          console.log('[Provider] Spans exported successfully');
-        } catch (error) {
-          console.error('[Provider] Failed to flush spans:', error.message);
-        }
-
         return {
           output: response.text,
           tokenUsage: {
@@ -397,6 +386,10 @@ class SimpleTracedProvider {
         };
       },
     );
+
+    // End the workflow span before exporting it for trace assertions.
+    await spanProcessor.forceFlush();
+    return result;
   }
 
   async _untracedCallApi(prompt, promptfooContext) {
