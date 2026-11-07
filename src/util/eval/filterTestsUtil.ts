@@ -38,6 +38,7 @@ function mergeDefaultVars(test: TestCase, defaultTest: TestSuite['defaultTest'])
  * @param pathOrId - JSON results file path or eval ID
  * @param filterFn - Predicate to determine which results to include
  * @param extractedTestFilter - Optional predicate for runtime-generated tests extracted from results
+ * @param testConfigMap - Optional runtime-test to replayable-config mapping to preserve through clones
  * @returns Filtered array of tests
  */
 export async function filterTestsByResults(
@@ -45,6 +46,7 @@ export async function filterTestsByResults(
   pathOrId: string,
   filterFn: ResultFilterFn,
   extractedTestFilter?: TestFilterFn,
+  testConfigMap?: WeakMap<TestCase, TestCase>,
 ): Promise<Tests> {
   if (!testSuite.tests) {
     logger.debug('[filterTestsByResults] No tests in test suite');
@@ -156,6 +158,13 @@ export async function filterTestsByResults(
             ...runtimeVars,
           },
         };
+        const rawTest = testConfigMap?.get(test);
+        if (rawTest) {
+          testConfigMap?.set(testWithRuntimeVars, {
+            ...rawTest,
+            vars: { ...rawTest.vars, ...runtimeVars },
+          });
+        }
         logger.debug('[filterTestsByResults] Restored runtime vars for test', {
           varKeys: Object.keys(runtimeVars),
         });
@@ -225,6 +234,7 @@ export async function filterTestsByResults(
       // Intentionally omit: provider (security - may contain stale credentials)
     };
     extractedTests.push(extractedTest);
+    testConfigMap?.set(extractedTest, extractedTest);
     extractedTestKeys.add(JSON.stringify(filterRuntimeVars(extractedTest.vars)));
   }
 

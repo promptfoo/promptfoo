@@ -922,13 +922,13 @@ async function prepareCombinedConfig(
 }
 
 /**
- * @param type - The type of configuration file. Incrementally implemented; currently supports `DatasetGeneration`.
+ * @param type - The configuration purpose. Evaluation enables configured count/pattern selection; generation modes relax provider requirements.
  *  TODO(Optimization): Perform type-specific validation e.g. using Zod schemas for data model variants.
  */
 export async function resolveConfigs(
   cmdObj: Partial<CommandLineOptions>,
   _defaultConfig: Partial<UnifiedConfig>,
-  type?: 'DatasetGeneration' | 'AssertionGeneration',
+  type?: 'Evaluation' | 'DatasetGeneration' | 'AssertionGeneration',
 ): Promise<{
   testSuite: TestSuite;
   config: Partial<UnifiedConfig>;
@@ -997,7 +997,7 @@ async function resolveLoadedConfig(
   fileConfig: Partial<UnifiedConfig>,
   defaultConfig: Partial<UnifiedConfig>,
   promptReferenceSources: PromptReferenceSource[],
-  type?: 'DatasetGeneration' | 'AssertionGeneration',
+  type?: 'Evaluation' | 'DatasetGeneration' | 'AssertionGeneration',
   testSources?: TestSource[],
   promptBasePaths?: string[],
 ) {
@@ -1239,6 +1239,10 @@ async function resolveLoadedConfig(
   }
   if (Array.isArray(parsedScenarios)) {
     config.scenarios = [];
+    // Only evaluation opts into configured count/pattern defaults.
+    const configuredTestFilters = type === 'Evaluation' ? commandLineOptions : undefined;
+    const filterFirstN = cmdObj.filterFirstN ?? configuredTestFilters?.filterFirstN;
+    const filterPattern = cmdObj.filterPattern ?? configuredTestFilters?.filterPattern;
     const filterSample = cmdObj.filterSample ?? commandLineOptions?.filterSample;
     const filterSampleSeed = cmdObj.filterSampleSeed ?? commandLineOptions?.filterSampleSeed;
     for (const [scenarioIndex, scenario] of parsedScenarios.entries()) {
@@ -1260,8 +1264,8 @@ async function resolveLoadedConfig(
           prompts: parsedPrompts,
         },
         {
-          firstN: cmdObj.filterFirstN,
-          pattern: cmdObj.filterPattern,
+          firstN: filterFirstN,
+          pattern: filterPattern,
           failing: cmdObj.filterFailing,
           sample: filterSample,
           sampleSeed:

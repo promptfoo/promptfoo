@@ -706,6 +706,7 @@ describe('evalCommand', () => {
     expect(resolveConfigs).toHaveBeenCalledWith(
       expect.objectContaining({ config: undefined }),
       cloudConfig,
+      'Evaluation',
     );
   });
 
@@ -1282,6 +1283,7 @@ describe('evalCommand', () => {
     expect(resolveConfigs).toHaveBeenCalledWith(
       expect.objectContaining({ config: ['/suite/promptfooconfig.yaml'] }),
       expect.objectContaining({ prompts: ['from-dir'] }),
+      'Evaluation',
     );
 
     statSpy.mockRestore();
@@ -1315,6 +1317,7 @@ describe('evalCommand', () => {
         config: ['/base.yaml', '/suite/promptfooconfig.yaml', '/override.yaml'],
       }),
       expect.objectContaining({ prompts: ['from-dir'] }),
+      'Evaluation',
     );
 
     statSpy.mockRestore();
@@ -1371,6 +1374,7 @@ describe('evalCommand', () => {
     expect(resolveConfigs).toHaveBeenCalledWith(
       expect.objectContaining({ config: ['/base.yaml'] }),
       expect.anything(),
+      'Evaluation',
     );
 
     loggerWarnSpy.mockClear();

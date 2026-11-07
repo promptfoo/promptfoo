@@ -4,7 +4,13 @@ import { ResultFailureReason } from '../../../src/types/index';
 import { filterTestsByResults } from '../../../src/util/eval/filterTestsUtil';
 import * as util from '../../../src/util/index';
 
-import type { EvaluateResult, Prompt, ProviderResponse, TestSuite } from '../../../src/types/index';
+import type {
+  EvaluateResult,
+  Prompt,
+  ProviderResponse,
+  TestCase,
+  TestSuite,
+} from '../../../src/types/index';
 
 vi.mock('../../../src/models/eval', () => ({
   default: {
@@ -134,6 +140,48 @@ describe('filterTestsUtil', () => {
         () => true,
       );
       expect(result).toEqual([]);
+    });
+
+    it('keeps raw variable and provider references when a historical match restores runtime vars', async () => {
+      const parsed: TestCase = {
+        vars: { input: 'expanded contents' },
+        provider: { id: () => 'echo', callApi: vi.fn(async () => ({ output: '' })) },
+      };
+      const raw: TestCase = { vars: { input: 'file://original.txt' }, provider: 'echo' };
+      const configs = new WeakMap<TestCase, TestCase>([[parsed, raw]]);
+      vi.mocked(util.readOutput).mockResolvedValue({
+        evalId: null,
+        results: {
+          version: 2,
+          timestamp: new Date().toISOString(),
+          results: [
+            {
+              ...mockResults[1],
+              testCase: parsed,
+              vars: { input: 'expanded contents', sessionId: 'prior-session' },
+            },
+          ],
+          table: { head: { prompts: [], vars: [] }, body: [] },
+          stats: createFailedStats(),
+        },
+        config: {},
+        shareableUrl: null,
+      });
+
+      const selected = await filterTestsByResults(
+        { providers: [], prompts: [], tests: [parsed] },
+        'history.json',
+        () => true,
+        undefined,
+        configs,
+      );
+
+      expect(selected).toHaveLength(1);
+      expect(selected[0]).not.toBe(parsed);
+      expect(JSON.parse(JSON.stringify(configs.get(selected[0])))).toEqual({
+        provider: 'echo',
+        vars: { input: 'file://original.txt', sessionId: 'prior-session' },
+      });
     });
 
     describe('with file path', () => {
