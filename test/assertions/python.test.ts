@@ -2,6 +2,7 @@ import * as path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { runAssertion } from '../../src/assertions/index';
+import { buildScriptBody } from '../../src/assertions/scriptBody';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { runPython } from '../../src/python/pythonUtils';
 import { runPythonCode } from '../../src/python/wrapper';
@@ -856,6 +857,46 @@ describe('Python file references', { timeout: 15000 }, () => {
 
       expect(result.pass).toBe(false);
       expect(result.score).toBe(0);
+    });
+  });
+
+  describe('buildScriptBody YAML block scalars', () => {
+    it('should prepend return for a one-line block scalar with trailing newline', () => {
+      expect(buildScriptBody('len(output) > 10\n', '    ')).toBe('    return len(output) > 10');
+    });
+
+    it('should not double return when the block already starts with return', () => {
+      expect(buildScriptBody('return len(output) > 10\n', '    ')).toBe(
+        '    return len(output) > 10',
+      );
+    });
+
+    it('should still prepend return for identifiers starting with return', () => {
+      expect(buildScriptBody('returnValue > 10\n', '    ')).toBe('    return returnValue > 10');
+    });
+
+    it('should drop only the trailing blank line for genuinely multiline bodies', () => {
+      expect(buildScriptBody('x = len(output)\nx > 10\n', '    ')).toBe(
+        '    x = len(output)\n    x > 10',
+      );
+    });
+
+    it('should generate a returning body for inline YAML block assertions', async () => {
+      vi.mocked(runPythonCode).mockResolvedValueOnce(true);
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion: { type: 'python', value: 'len(output) > 10\n' },
+        test: {} as AtomicTestCase,
+        providerResponse: { output: 'hello world!!' },
+      });
+
+      expect(runPythonCode).toHaveBeenCalledTimes(1);
+      const generatedCode = vi.mocked(runPythonCode).mock.calls[0][0] as string;
+      expect(generatedCode).toContain('    return len(output) > 10');
+      expect(generatedCode).not.toContain('return return');
+      expect(result).toMatchObject({ pass: true, reason: 'Assertion passed' });
     });
   });
 });
