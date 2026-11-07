@@ -1961,7 +1961,7 @@ async function runEvalInternal(
             accumulateResponseTokenUsage(ret.tokenUsage, response);
           }
 
-          if (test.options?.storeOutputAs && ret.response?.output && registers) {
+          if (test.options?.storeOutputAs && ret.response?.output != null && registers) {
             // Save the output in a register for later use
             registers[test.options.storeOutputAs] = ret.response.output;
           }

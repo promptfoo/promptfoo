@@ -334,7 +334,7 @@ This creates `favoriteFruit` and `reason` vars on-the-go, as the chatbot answers
 
 ### Manipulating outputs with `transform`
 
-Outputs can be modified before storage using the `transform` property:
+Outputs can be modified before storage using the `transform` property. Values such as `0`, `false`, and an empty string are stored too, replacing any previous value of the same variable:
 
 ```yaml title="promptfooconfig.yaml"
 tests:
