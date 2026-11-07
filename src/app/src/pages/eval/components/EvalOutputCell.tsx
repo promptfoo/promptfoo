@@ -6,8 +6,11 @@ import { useShiftKey } from '@app/hooks/useShiftKey';
 import { formatDuration } from '@app/utils/date';
 import { fetchTraces, replayEvaluation } from '@app/utils/evalOperations';
 import {
+  isLegacyMediaPath,
+  isMediaRef,
   normalizeMediaText,
   resolveAudioSource,
+  resolveBlobUri,
   resolveImageSource,
   resolveVideoSource,
 } from '@app/utils/media';
@@ -33,7 +36,7 @@ import CustomMetrics from './CustomMetrics';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 import { stringifyAssertionValue } from './EvaluationPanel';
 import FailReasonCarousel from './FailReasonCarousel';
-import { IDENTITY_URL_TRANSFORM, REMARK_PLUGINS } from './markdown-config';
+import { REMARK_PLUGINS } from './markdown-config';
 import SetScoreDialog from './SetScoreDialog';
 import { useResultsViewSettingsStore, useTableStore } from './store';
 import CommentDialog from './TableCommentDialog';
@@ -49,6 +52,46 @@ import {
 type CSSPropertiesWithCustomVars = React.CSSProperties & {
   [key: `--${string}`]: string | number;
 };
+
+// Resolve complete Markdown destinations after parsing, so quoted, escaped, and
+// angle-bracket links cannot append path syntax to a validated reference prefix.
+const transformMarkdownUrl = (url: string): string =>
+  isMediaRef(url) || isLegacyMediaPath(url) ? (resolveBlobUri(url) ?? '') : url;
+
+type MarkdownDisplayNode = {
+  type: string;
+  value?: string;
+  alt?: string | null;
+  title?: string | null;
+  children?: MarkdownDisplayNode[];
+};
+
+function remarkNormalizeMediaText() {
+  return (tree: MarkdownDisplayNode) => {
+    const pending = [tree];
+    for (let node = pending.pop(); node; node = pending.pop()) {
+      // Preserve normalization of displayed prose and code, without modifying
+      // URL destinations or reference identifiers before urlTransform validates them.
+      if (
+        (node.type === 'text' || node.type === 'inlineCode' || node.type === 'code') &&
+        typeof node.value === 'string'
+      ) {
+        node.value = normalizeMediaText(node.value);
+      }
+      if (typeof node.alt === 'string') {
+        node.alt = normalizeMediaText(node.alt);
+      }
+      if (typeof node.title === 'string') {
+        node.title = normalizeMediaText(node.title);
+      }
+      for (const child of node.children ?? []) {
+        pending.push(child);
+      }
+    }
+  };
+}
+
+const EVAL_REMARK_PLUGINS = [...REMARK_PLUGINS, remarkNormalizeMediaText];
 
 function scoreToString(score: number | null | undefined) {
   if (typeof score !== 'number' || score === 0 || score === 1) {
@@ -411,13 +454,11 @@ function renderMediaNode({
 
 function renderMarkdownOrJsonNode({
   text,
-  normalizedText,
   renderMarkdown,
   prettifyJson,
   markdownComponents,
 }: {
   text: string;
-  normalizedText: string;
   renderMarkdown: boolean;
   prettifyJson: boolean;
   markdownComponents: React.ComponentProps<typeof ReactMarkdown>['components'];
@@ -447,11 +488,11 @@ function renderMarkdownOrJsonNode({
   return {
     node: (
       <ReactMarkdown
-        remarkPlugins={REMARK_PLUGINS}
-        urlTransform={IDENTITY_URL_TRANSFORM}
+        remarkPlugins={EVAL_REMARK_PLUGINS}
+        urlTransform={transformMarkdownUrl}
         components={markdownComponents}
       >
-        {normalizedText}
+        {text}
       </ReactMarkdown>
     ),
     renderedMarkdownOutput: true,
@@ -578,7 +619,6 @@ function renderOutputNode({
   if (!node && !showDiffs) {
     const formattedNode = renderMarkdownOrJsonNode({
       text,
-      normalizedText,
       renderMarkdown,
       prettifyJson,
       markdownComponents,

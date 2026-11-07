@@ -944,7 +944,7 @@ describe('ResultsTable Metrics Display', () => {
       ['storageRef:', null],
       ['promptfoo://blob/', null],
       ['storageRef:audio/test.mp3', '/api/media/audio/test.mp3'],
-      ['promptfoo://blob/abc', '/api/blobs/abc'],
+      [`promptfoo://blob/${'a'.repeat(64)}`, `/api/blobs/${'a'.repeat(64)}`],
     ])('renders encoded audio input %s through the real player', async (value, expected) => {
       vi.spyOn(useApiConfig, 'getState').mockReturnValue({
         ...useApiConfig.getState(),
@@ -1094,7 +1094,11 @@ describe('ResultsTable Metrics Display', () => {
       });
 
       it.each([
-        ['blob', 'promptfoo://blob/audio-hash', '/api/blobs/audio-hash'],
+        [
+          'blob',
+          'promptfoo://blob/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+          '/api/blobs/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+        ],
         ['storage', 'storageRef:audio/sample.mp3', '/api/media/audio/sample.mp3'],
         ['raw base64', 'YWJj', 'data:audio/mp3;base64,YWJj'],
         ['audio data URL', 'data:audio/wav;base64,YWJj', 'data:audio/wav;base64,YWJj'],
@@ -1146,8 +1150,8 @@ describe('ResultsTable Metrics Display', () => {
         ],
         [
           'trailing API slash',
-          'promptfoo://blob/audio-hash',
-          'https://api.example.test/promptfoo/api/blobs/audio-hash',
+          'promptfoo://blob/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+          'https://api.example.test/promptfoo/api/blobs/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
           'https://api.example.test/promptfoo/',
         ],
       ])(
@@ -1279,7 +1283,32 @@ describe('ResultsTable Metrics Display', () => {
       );
     });
 
-    it('renders variable video from file metadata', () => {
+    it.each([
+      ['https://example.com/input.mp4', 'https://example.com/input.mp4'],
+      ['storageRef:video/safe.mp4', '/api/media/video/safe.mp4'],
+      ['STORAGEREF:video/safe.mp4', '/api/media/video/safe.mp4'],
+      [`PROMPTFOO://BLOB/${'a'.repeat(64)}`, `/api/blobs/${'a'.repeat(64)}`],
+      [`promptfoo://blob/${'A'.repeat(64)}`, `/api/blobs/${'a'.repeat(64)}`],
+      [
+        `/api/blobs/${'%41'.repeat(64)}/?download=MyFile#Preview`,
+        `/api/blobs/${'a'.repeat(64)}/?download=MyFile#Preview`,
+      ],
+      ['/api/media/video/safe.mp4?download=1#t=0', '/api/media/video/safe.mp4?download=1#t=0'],
+      ['/api/MeDiA/video/my%20clip.mp4', '/api/MeDiA/video/my%20clip.mp4'],
+      [`/api/blobs/${'a'.repeat(64)}`, `/api/blobs/${'a'.repeat(64)}`],
+      ['/api/output/video/legacy.mp4', '/api/output/video/legacy.mp4'],
+      ['/api/media/video/safe.mp4/../../../eval/private', null],
+      ['/api/%6dedia/video/safe.mp4/../../../eval/private', null],
+      ['/api/%256Dedia/video/%zz/../../../eval/private', null],
+      ['/%61pi/%62lobs/safe/../../eval/private', null],
+      ['/api/MeDiA/video/safe.mp4/../../../eval/private', null],
+      ['/api/media/video/%252e%252e/../../eval/private', null],
+      [`/api/blobs/${'a'.repeat(64)}/../../eval/private`, null],
+      ['storageRef:../../eval/private', null],
+      ['storageRef:video/%252e%252e/../eval/private', null],
+      ['storageRef:video/safe.mp4\n/../../eval/private', null],
+      [`promptfoo://blob/${'a'.repeat(64)}\t/../../eval/private`, null],
+    ])('resolves the complete variable video reference from file metadata: %j', (value, src) => {
       vi.mocked(useTableStore).mockImplementation(() =>
         createTableStore({
           table: {
@@ -1302,7 +1331,7 @@ describe('ResultsTable Metrics Display', () => {
                   },
                 ],
                 test: {},
-                vars: ['https://example.com/input.mp4'],
+                vars: [value],
               },
             ],
             head: {
@@ -1316,9 +1345,13 @@ describe('ResultsTable Metrics Display', () => {
       const { container } = renderWithProviders(<ResultsTable {...defaultProps} />);
 
       const videoSource = container.querySelector('video source');
-      expect(videoSource).toHaveAttribute('src', 'https://example.com/input.mp4');
-      expect(videoSource).toHaveAttribute('type', 'video/mp4');
-      expect(screen.getByText('/path/to/input.mp4 (video/mp4)')).toBeInTheDocument();
+      if (src) {
+        expect(videoSource).toHaveAttribute('src', src);
+        expect(videoSource).toHaveAttribute('type', 'video/mp4');
+        expect(screen.getByText('/path/to/input.mp4 (video/mp4)')).toBeInTheDocument();
+      } else {
+        expect(videoSource).not.toBeInTheDocument();
+      }
     });
 
     it('shows original image text for the injected prompt variable when image cells are rendered', () => {

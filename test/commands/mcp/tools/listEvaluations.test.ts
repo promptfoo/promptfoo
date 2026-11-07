@@ -27,6 +27,7 @@ describe('list_evaluations in a long-lived MCP session', () => {
   });
   afterEach(async () => {
     vi.restoreAllMocks();
+    vi.useRealTimers();
     await client.close();
     await server.close();
     for (const eval_ of created.splice(0)) {
@@ -138,5 +139,30 @@ describe('list_evaluations in a long-lived MCP session', () => {
     const { datasetId } = await create('stats');
     expect((await list({ datasetId })).summary.cacheStats).toEqual({ size: 0, calculatedSize: 0 });
     expect((await list({ datasetId })).summary.cacheStats).toEqual({ size: 0, calculatedSize: 0 });
+  });
+
+  it('uses one recent cutoff for every evaluation in a listing', async () => {
+    await create('recent boundary');
+    const [summary] = await getEvalSummaries();
+    const now = Date.parse('2026-10-11T12:00:00Z');
+    const cutoff = now - 24 * 60 * 60 * 1000;
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(now);
+    vi.spyOn(evalModel, 'getEvalSummaries').mockResolvedValue(
+      [cutoff + 1, cutoff + 1, cutoff, cutoff - 1].map((createdAt, index) => ({
+        ...summary,
+        evalId: `boundary-${index}`,
+        get createdAt() {
+          // Simulate time advancing as rows are read at the 24-hour boundary.
+          vi.setSystemTime(Date.now() + 1);
+          return createdAt;
+        },
+      })),
+    );
+
+    const result = await list({ pageSize: 1 });
+
+    expect(result.summary).toMatchObject({ totalCount: 4, recentCount: 2 });
+    expect(result.evaluations).toHaveLength(1);
   });
 });
