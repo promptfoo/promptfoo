@@ -46,7 +46,6 @@ let HydraProvider: typeof import('../../../../src/redteam/providers/hydra/index'
 // Hoisted mocks
 const mockGetGraderById = vi.hoisted(() => vi.fn());
 const mockGetSessionId = vi.hoisted(() => vi.fn());
-const mockIsBasicRefusal = vi.hoisted(() => vi.fn());
 
 // Tracing mocks
 const mockResolveTracingOptions = vi.hoisted(() => vi.fn(() => createMockTracingOptions(false)));
@@ -90,7 +89,6 @@ vi.mock('../../../../src/evaluatorHelpers', async () => ({
 
 vi.mock('../../../../src/redteam/util', async () => ({
   ...(await vi.importActual('../../../../src/redteam/util')),
-  isBasicRefusal: mockIsBasicRefusal,
   getSessionId: mockGetSessionId,
 }));
 
@@ -172,8 +170,6 @@ describe('HydraProvider', () => {
     vi.mocked(neverGenerateRemote).mockReturnValue(false);
     vi.mocked(evaluatorHelpers.renderPrompt).mockResolvedValue('rendered prompt');
 
-    mockIsBasicRefusal.mockReturnValue(false);
-
     // Reset tracing mocks to default (disabled) state
     mockResolveTracingOptions.mockReturnValue({
       enabled: false,
@@ -205,6 +201,12 @@ describe('HydraProvider', () => {
       expect(provider['maxTurns']).toBe(10);
       expect(provider['maxBacktracks']).toBe(10);
       expect(provider['stateful']).toBe(false);
+    });
+
+    it('rejects an infinite backtrack limit', () => {
+      expect(() => new HydraProvider({ injectVar: 'input', maxBacktracks: Infinity })).toThrow(
+        'Hydra maxBacktracks must be a finite number',
+      );
     });
 
     it('should initialize with custom config values', () => {
@@ -944,134 +946,67 @@ describe('HydraProvider', () => {
   });
 
   describe('callApi() - backtracking', () => {
-    it('should backtrack when target refuses in stateless mode', async () => {
-      // Import to trigger the mock
-      await import('../../../../src/redteam/util');
+    const refusal = { output: "I can't help with that" };
+    let context: CallApiContextParams;
 
-      let attackCallCount = 0;
-      mockAgentProvider.callApi.mockImplementation(async function (prompt) {
-        const request = JSON.parse(prompt as string);
-        // Don't count learning updates
-        if (!request.testComplete) {
-          attackCallCount++;
-        }
-        return {
-          output: `Attack message ${attackCallCount}`,
-          tokenUsage: { total: 100, prompt: 50, completion: 50 },
-        };
-      });
-
-      let targetCallCount = 0;
-      mockTargetProvider.callApi.mockImplementation(async function () {
-        targetCallCount++;
-        // First call is refused, second succeeds
-        if (targetCallCount === 1) {
-          return { output: "I can't help with that" };
-        }
-        return { output: 'Target cooperated' };
-      });
-
-      // First response is a refusal, second is not
-      mockIsBasicRefusal.mockReturnValueOnce(true).mockReturnValueOnce(false);
-
-      const provider = new HydraProvider({
-        injectVar: 'input',
-        maxTurns: 10,
-        maxBacktracks: 5,
-        stateful: false,
-      });
-
-      const context: CallApiContextParams = {
+    beforeEach(() => {
+      mockAgentProvider.callApi.mockResolvedValue({ output: 'Attack message' });
+      const test: AtomicTestCase = {
+        assert: [{ type: 'promptfoo:redteam:contracts' }],
+        metadata: { pluginId: 'contracts' },
+      };
+      context = {
         originalProvider: mockTargetProvider,
         vars: { input: 'test goal' },
-        prompt: { raw: 'test prompt', label: 'test' },
-        test: {
-          assert: [{ type: 'harmful:test' }],
-          metadata: { goal: 'test goal', pluginId: 'harmful:test' },
-        } as any,
+        prompt: { raw: '{{input}}', label: 'test' },
+        test,
       };
+    });
+
+    it('retries the first turn after a refusal', async () => {
+      mockTargetProvider.callApi.mockResolvedValueOnce(refusal);
+      const provider = new HydraProvider({ injectVar: 'input', maxTurns: 2 });
 
       const result = await provider.callApi('', context);
 
-      expect(result.metadata?.hydraBacktrackCount).toBe(1);
-      // Should complete 1 turn (first was backtracked, second succeeded and continues to max)
-      expect(result.metadata?.hydraRoundsCompleted).toBeGreaterThanOrEqual(1);
+      const retry = JSON.parse(String(mockAgentProvider.callApi.mock.calls[1][0]));
+      expect(retry).toMatchObject({ turn: 1, conversationHistory: [] });
+      expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(3);
+      expect(result.metadata).toMatchObject({ hydraBacktrackCount: 1, hydraRoundsCompleted: 2 });
     });
 
-    it('should stop when max backtracks reached', async () => {
-      // Import to trigger the mock
-      await import('../../../../src/redteam/util');
-      mockIsBasicRefusal.mockReturnValue(true); // Always refuse
+    it.each([2, '2'])(
+      'stops when repeated refusals exhaust the backtrack limit %j',
+      async (maxBacktracks) => {
+        mockTargetProvider.callApi.mockResolvedValueOnce(refusal).mockResolvedValueOnce(refusal);
+        const provider = new HydraProvider({ injectVar: 'input', maxTurns: 1, maxBacktracks });
 
-      mockAgentProvider.callApi.mockResolvedValue({
-        output: 'Attack message',
-        tokenUsage: { total: 100, prompt: 50, completion: 50 },
-      });
+        const result = await provider.callApi('', context);
 
-      mockTargetProvider.callApi.mockResolvedValue({
-        output: "I can't help with that",
-      });
+        expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(2);
+        expect(result.metadata).toMatchObject({
+          stopReason: 'Max backtracks reached',
+          hydraBacktrackCount: 2,
+          hydraRoundsCompleted: 0,
+        });
+      },
+    );
 
-      const provider = new HydraProvider({
-        injectVar: 'input',
-        maxTurns: 10,
-        maxBacktracks: 3,
-        stateful: false,
-      });
+    it.each([
+      { stateful: true, maxBacktracks: 5 },
+      { stateful: false, maxBacktracks: 0 },
+    ])(
+      'keeps refused turns with stateful=$stateful and maxBacktracks=$maxBacktracks',
+      async (config) => {
+        mockTargetProvider.callApi.mockResolvedValue(refusal);
+        const provider = new HydraProvider({ injectVar: 'input', maxTurns: 2, ...config });
 
-      const context: CallApiContextParams = {
-        originalProvider: mockTargetProvider,
-        vars: { input: 'test goal' },
-        prompt: { raw: 'test prompt', label: 'test' },
-        test: {
-          assert: [{ type: 'harmful:test' }],
-          metadata: { goal: 'test goal', pluginId: 'harmful:test' },
-        } as any,
-      };
+        const result = await provider.callApi('', context);
 
-      const result = await provider.callApi('', context);
-
-      expect(result.metadata?.hydraBacktrackCount).toBe(3);
-      expect(result.metadata?.stopReason).toBe('Max backtracks reached');
-    });
-
-    it('should not backtrack in stateful mode', async () => {
-      // Import to trigger the mock
-      await import('../../../../src/redteam/util');
-      mockIsBasicRefusal.mockReturnValue(true); // Always refuse
-
-      mockAgentProvider.callApi.mockResolvedValue({
-        output: 'Attack message',
-        tokenUsage: { total: 100, prompt: 50, completion: 50 },
-      });
-
-      mockTargetProvider.callApi.mockResolvedValue({
-        output: "I can't help with that",
-      });
-
-      const provider = new HydraProvider({
-        injectVar: 'input',
-        maxTurns: 3,
-        maxBacktracks: 5,
-        stateful: true,
-      });
-
-      const context: CallApiContextParams = {
-        originalProvider: mockTargetProvider,
-        vars: { input: 'test goal' },
-        prompt: { raw: 'test prompt', label: 'test' },
-        test: {
-          assert: [{ type: 'harmful:test' }],
-          metadata: { goal: 'test goal', pluginId: 'harmful:test' },
-        } as any,
-      };
-
-      const result = await provider.callApi('', context);
-
-      // No backtracking should occur
-      expect(result.metadata?.hydraBacktrackCount).toBe(0);
-      expect(result.metadata?.hydraRoundsCompleted).toBe(3);
-    });
+        expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(2);
+        expect(result.metadata).toMatchObject({ hydraBacktrackCount: 0, hydraRoundsCompleted: 2 });
+      },
+    );
   });
 
   describe('callApi() - error handling', () => {
