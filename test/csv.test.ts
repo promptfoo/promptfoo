@@ -2,6 +2,7 @@ import { parse as parseBrowserCsv } from 'csv-parse/browser/esm/sync';
 import { parse as parseCsv } from 'csv-parse/sync';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { parseCommaSeparatedValues } from '../src/assertions/contains';
+import { handlePerplexity, handlePerplexityScore } from '../src/assertions/perplexity';
 import { assertionFromString, serializeObjectArrayAsCSV, testCaseFromCsvRow } from '../src/csv';
 import logger from '../src/logger';
 
@@ -12,7 +13,7 @@ vi.mock('../src/logger', () => ({
   },
 }));
 
-import type { Assertion, CsvRow, TestCase } from '../src/types/index';
+import type { Assertion, AssertionParams, CsvRow, TestCase } from '../src/types/index';
 
 describe.each([
   ['Node.js', parseCsv],
@@ -789,6 +790,29 @@ describe('assertionFromString', () => {
     expect(result.threshold).toBe(0.5);
   });
 
+  it.each(['perplexity', 'perplexity-score', 'not-perplexity', 'not-perplexity-score'])(
+    'should not add a default threshold to %s',
+    (expected) => {
+      // Perplexity is always >= 1 and perplexity-score is always <= 0.5, so a 0.75
+      // default would make these assertions fail for every output. Without an explicit
+      // threshold they should stay metric-only, matching YAML configs.
+      expect(assertionFromString(expected)).toEqual({ type: expected });
+    },
+  );
+
+  it.each([
+    ['perplexity', handlePerplexity],
+    ['perplexity-score', handlePerplexityScore],
+  ] as const)('should pass a %s assertion without an explicit threshold', (type, handler) => {
+    const result = handler({
+      assertion: assertionFromString(type),
+      inverse: false,
+      logProbs: [-0.01, -0.02, -0.03],
+    } as AssertionParams);
+
+    expect(result.pass).toBe(true);
+  });
+
   it('should create a cost assertion', () => {
     const expected = 'cost(0.001)';
 
@@ -904,8 +928,6 @@ describe('assertionFromString', () => {
       'cost',
       'latency',
       'levenshtein',
-      'perplexity-score',
-      'perplexity',
       'rouge-l',
       'rouge-n',
       'rouge-s',
