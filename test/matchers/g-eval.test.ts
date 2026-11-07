@@ -588,6 +588,47 @@ describe('matchesGEval', () => {
   });
 
   it.each([
+    ['prose with no JSON', 'I could not come up with any steps.'],
+    ['a JSON object without a steps key', 'Here you go: {"score": 8}'],
+  ])('should still fail clearly when the steps response is %s', async (_, stepsOutput) => {
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValueOnce({
+      output: stepsOutput,
+      tokenUsage: { total: 3, prompt: 1, completion: 2 },
+    });
+
+    const result = await matchesGEval('Evaluate coherence', 'Test input', 'Test output', 0.7);
+
+    expect(result).toEqual({
+      pass: false,
+      score: 0,
+      reason: `LLM-proposed evaluation steps are not in JSON format: ${stepsOutput}`,
+      tokensUsed: expect.objectContaining({ total: 3, prompt: 1, completion: 2 }),
+      metadata: { graderError: true },
+    });
+    expect(DefaultGradingProvider.callApi).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ['prose with no JSON', 'The output reads well, I would say eight out of ten.'],
+    ['an empty object', '{}'],
+  ])('should still fail clearly when the evaluation result is %s', async (_, resultOutput) => {
+    vi.spyOn(DefaultGradingProvider, 'callApi')
+      .mockImplementationOnce(async () => createClarityStepsResponse())
+      .mockImplementationOnce(async () => ({
+        output: resultOutput,
+        tokenUsage: { total: 4, prompt: 2, completion: 2 },
+      }));
+
+    const result = await matchesGEval('Evaluate coherence', 'Test input', 'Test output', 0.7);
+
+    expect(result.pass).toBe(false);
+    expect(result.score).toBe(0);
+    expect(result.metadata).toEqual({ graderError: true });
+    expect(result.reason).toEqual(expect.any(String));
+    expect(DefaultGradingProvider.callApi).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([
     ['pretty-printed', '{\n  "score": 8,\n  "reason": "Clear"\n}'],
     ['in a fenced block', '```json\n{\n  "score": 8,\n  "reason": "Clear"\n}\n```'],
     ['after a sentence', 'Scoring against {criteria}:\n{"score": 8, "reason": "Clear"}'],
