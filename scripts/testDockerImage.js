@@ -43,11 +43,11 @@ function writeFixture(name, contents) {
   return filename;
 }
 
-function request(route) {
+function request(route, init = {}) {
   const url = new URL(route, base);
   assert.equal(url.origin, base, 'Smoke requests must stay on the local server');
   // biome-ignore lint/style/noRestrictedGlobals: final-image test uses Node builtins and loopback only
-  return fetch(url, { signal: AbortSignal.timeout(5000) });
+  return fetch(url, { ...init, signal: AbortSignal.timeout(5000) });
 }
 
 let server;
@@ -55,6 +55,11 @@ let serverLog = '';
 let modelAuditStub;
 try {
   assert.notEqual(process.getuid(), 0, 'The final image must run as its non-root user');
+  assert.deepEqual(
+    [process.getuid(), process.getgid()],
+    [100, 101],
+    'Data volumes written by earlier releases belong to these IDs',
+  );
   const manifest = require('./package.json');
   const { version } = manifest;
   // npm's dev+optional overlap must not silently remove supported runtime SDKs.
@@ -273,6 +278,17 @@ def call_api(prompt, options, context):
     assert.equal(result.error, undefined);
   }
   assert.equal((await request('/api/results/missing-eval')).status, 404);
+  const malformed = await request('/api/results', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: '{',
+  });
+  assert.equal(malformed.status, 400);
+  assert.doesNotMatch(
+    await malformed.text(),
+    /node_modules|\.[cm]?js:\d+:\d+/,
+    'Error responses must not include a stack trace',
+  );
   const modelAudit = await (await request('/api/model-audit/check-installed')).json();
   assert.equal(modelAudit.installed, true, 'Server must find CLIs installed with pip by the user');
   assert.equal(modelAudit.version, '0.0.0-smoke');
