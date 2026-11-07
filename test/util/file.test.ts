@@ -359,17 +359,27 @@ describe('file utilities', () => {
       cliState.basePath = undefined;
     });
 
-    it('should handle a path with environment variables in Nunjucks template', () => {
-      mockProcessEnv({ TEST_ROOT_PATH: '/root/dir' });
-      const input = 'file://{{ env.TEST_ROOT_PATH }}/test.txt';
-
-      const expectedPath = path.resolve(`${process.env.TEST_ROOT_PATH}/test.txt`);
-      maybeLoadFromExternalFile(input);
-
-      expect(fs.readFileSync).toHaveBeenCalledWith(expectedPath, 'utf8');
-
-      mockProcessEnv({ TEST_ROOT_PATH: undefined });
-    });
+    it.each([undefined, true])(
+      'loads scalar and array paths with skipPathRendering=%s',
+      (skipPathRendering) => {
+        const restoreEnv = mockProcessEnv({ TEST_ROOT_PATH: 'synthetic-path-segment' });
+        const input = 'file://{{ env.TEST_ROOT_PATH }}/test.txt';
+        const options = skipPathRendering === undefined ? undefined : { skipPathRendering };
+        try {
+          const expectedPath = path.resolve(
+            cliState.basePath!,
+            skipPathRendering ? '{{ env.TEST_ROOT_PATH }}' : 'synthetic-path-segment',
+            'test.txt',
+          );
+          expect(maybeLoadFromExternalFile(input, undefined, options)).toBe(mockFileContent);
+          expect(maybeLoadFromExternalFile([input], undefined, options)).toEqual([mockFileContent]);
+          expect(fs.readFileSync).toHaveBeenNthCalledWith(1, expectedPath, 'utf8');
+          expect(fs.readFileSync).toHaveBeenNthCalledWith(2, expectedPath, 'utf8');
+        } finally {
+          restoreEnv();
+        }
+      },
+    );
 
     it.each([
       { disabled: false, suiteValue: undefined, expected: 'file' },
@@ -1110,6 +1120,32 @@ describe('file utilities', () => {
       const tools = 'file://tools.json';
       expect(await maybeLoadToolsFromExternalFile(tools)).toEqual(JSON.parse(mockFileContent));
     });
+
+    it.each([undefined, true])(
+      'loads scalar and array tool paths with skipPathRendering=%s',
+      async (skipPathRendering) => {
+        const restoreEnv = mockProcessEnv({ TEST_TOOLS_FILE: 'synthetic-tools-file' });
+        const input = 'file://{{ env.TEST_TOOLS_FILE }}.json';
+        const options = skipPathRendering === undefined ? undefined : { skipPathRendering };
+        try {
+          const expectedPath = path.resolve(
+            cliState.basePath || '',
+            skipPathRendering ? '{{ env.TEST_TOOLS_FILE }}.json' : 'synthetic-tools-file.json',
+          );
+          const definitions = JSON.parse(mockFileContent);
+          expect(
+            await maybeLoadToolsFromExternalFile(input, undefined, undefined, options),
+          ).toEqual(definitions);
+          expect(
+            await maybeLoadToolsFromExternalFile([input], undefined, undefined, options),
+          ).toEqual([definitions]);
+          expect(fs.readFileSync).toHaveBeenNthCalledWith(1, expectedPath, 'utf8');
+          expect(fs.readFileSync).toHaveBeenNthCalledWith(2, expectedPath, 'utf8');
+        } finally {
+          restoreEnv();
+        }
+      },
+    );
 
     it('should render variables in tools object', async () => {
       const tools = [
