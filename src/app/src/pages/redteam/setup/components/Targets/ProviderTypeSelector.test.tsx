@@ -29,6 +29,7 @@ describe('ProviderTypeSelector', () => {
       'bedrock-agent:your-agent-id',
       { agentAliasId: 'your-agent-alias-id' },
     ],
+    ['OpenAI Codex SDK', 'codex-sdk', 'openai:codex-sdk', { sandbox_mode: 'read-only' }],
     ['fal.ai', 'fal', 'fal:image:fal-ai/flux/dev', {}],
     [
       'Cloudflare AI',

@@ -47,6 +47,7 @@ import Purpose from './components/Purpose';
 import Review from './components/Review';
 import Setup from './components/Setup';
 import Strategies from './components/Strategies';
+import { isCodexSdkProviderId } from './components/Targets/helpers';
 import TargetConfiguration from './components/Targets/TargetConfiguration';
 import TargetTypeSelection from './components/Targets/TargetTypeSelection';
 import { TestCaseGenerationProvider } from './components/TestCaseGenerationProvider';
@@ -362,10 +363,11 @@ export default function RedTeamSetupPage() {
 
       // Convert string targets to objects
       if (typeof target === 'string') {
-        const targetType = findPredefinedTarget(target);
-
+        const id = isCodexSdkProviderId(target)
+          ? target
+          : (findPredefinedTarget(target)?.value ?? customTargetOption.value);
         target = ProviderOptionsSchema.parse({
-          id: targetType ? targetType.value : customTargetOption.value,
+          id,
           label: target,
         });
       }
