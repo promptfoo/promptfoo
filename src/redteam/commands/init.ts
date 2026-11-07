@@ -355,8 +355,8 @@ export async function redteamInit(directory: string | undefined) {
         })),
       ),
       {
-        name: 'Google Vertex Gemini 2.5 Pro',
-        value: 'vertex:gemini-2.5-pro',
+        name: 'Google Vertex Gemini 3.1 Pro',
+        value: 'vertex:gemini-3.1-pro-preview',
       },
     ];
 

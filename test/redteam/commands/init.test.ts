@@ -246,6 +246,9 @@ describe('redteamInit', () => {
         expect.objectContaining({ value: 'vertex:gemini-3.5-flash-lite' }),
       ]),
     );
+    expect(modelPrompt?.[0].choices).not.toContainEqual(
+      expect.objectContaining({ value: 'vertex:gemini-2.5-pro' }),
+    );
   });
 
   it('writes a syntactically valid Python custom provider template', async () => {
