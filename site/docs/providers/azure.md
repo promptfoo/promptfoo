@@ -780,6 +780,14 @@ defaultTest:
           apiHost: 'embedding-models.openai.azure.com'
 ```
 
+To use one [service principal](#service-principal) for both graders, set `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, and `AZURE_TENANT_ID` in the environment and omit Azure API keys. The `answer-relevance` assertion calls both deployments, so the service principal needs inference access to each resource.
+
+If Azure reports a token tenant mismatch, check which resource hosts each grader deployment, even if your target provider succeeded. Use that resource's subscription ID in the command below and compare the result with `azureTenantId` (or `AZURE_TENANT_ID`).
+
+```sh
+az account show --subscription '<resource-subscription-id>' --query tenantId --output tsv
+```
+
 ### Similarity
 
 The `similar` assertion type requires an embedding model such as `text-embedding-3-large` or `text-embedding-3-small`. Be sure to specify a deployment with an embedding model, not a chat model, when overriding the grader.
