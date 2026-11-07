@@ -1,4 +1,9 @@
-import { categoryAliases, displayNameOverrides } from '@promptfoo/redteam/constants';
+import {
+  categoryAliases,
+  displayNameOverrides,
+  riskCategorySeverityMap,
+  Severity,
+} from '@promptfoo/redteam/constants';
 
 export type TestResultStats = {
   // The count of successful defenses (tests that passed)
@@ -11,39 +16,51 @@ export type TestResultStats = {
   failCount: number;
 };
 
-// Types for utility functions
 export type CategoryStats = Record<string, TestResultStats>;
 
-type PluginCategories = {
+export type PluginCategories = {
   compliant: string[];
   nonCompliant: string[];
   untested: string[];
 };
 
-/**
- * Expands plugin collections like 'harmful' into their individual plugins
- */
+export const getFrameworkPluginId = (pluginId: string): string =>
+  pluginId.replace(/^promptfoo:redteam:/, '');
+
+export const getPluginSeverity = (pluginId: string): Severity =>
+  riskCategorySeverityMap[getFrameworkPluginId(pluginId) as keyof typeof riskCategorySeverityMap] ||
+  Severity.Low;
+
+/** Resolves mapped plugins to the keys present in the report. */
 export const expandPluginCollections = (
   plugins: string[],
   categoryStats: CategoryStats,
 ): Set<string> => {
-  const expandedPlugins = new Set<string>();
-  plugins.forEach((plugin) => {
-    if (plugin === 'harmful') {
-      // Add all harmful:* plugins that have stats
-      Object.keys(categoryStats)
-        .filter((key) => key.startsWith('harmful:'))
-        .forEach((key) => expandedPlugins.add(key));
-    } else {
-      expandedPlugins.add(plugin);
+  const statsKeys = new Map<string, string>();
+  for (const key of Object.keys(categoryStats)) {
+    const pluginId = getFrameworkPluginId(key);
+    // Prefer the short ID when an imported report contains both aliases.
+    if (!statsKeys.has(pluginId) || key === pluginId) {
+      statsKeys.set(pluginId, key);
     }
-  });
+  }
+
+  const expandedPlugins = new Set<string>();
+  for (const plugin of plugins) {
+    if (plugin === 'harmful') {
+      for (const [pluginId, key] of statsKeys) {
+        if (pluginId === 'harmful' || pluginId.startsWith('harmful:')) {
+          expandedPlugins.add(key);
+        }
+      }
+    } else {
+      expandedPlugins.add(statsKeys.get(plugin) ?? plugin);
+    }
+  }
   return expandedPlugins;
 };
 
-/**
- * Categorizes plugins into compliant, non-compliant, and untested based on pass rates
- */
+/** Groups results by the report's pass-rate threshold. */
 export const categorizePlugins = (
   plugins: Set<string> | string[],
   categoryStats: CategoryStats,
@@ -53,22 +70,18 @@ export const categorizePlugins = (
   const nonCompliantPlugins: string[] = [];
   const untestedPlugins: string[] = [];
 
-  // Process all plugins in the category
-  Array.from(plugins).forEach((plugin) => {
-    // Check if plugin has test data
-    if (categoryStats[plugin] && categoryStats[plugin].total > 0) {
-      // Plugin was tested
-      const stats = categoryStats[plugin];
+  for (const plugin of plugins) {
+    const stats = categoryStats[plugin];
+    if (stats && stats.total > 0) {
       if (stats.pass / stats.total >= passRateThreshold) {
         compliantPlugins.push(plugin);
       } else {
         nonCompliantPlugins.push(plugin);
       }
     } else {
-      // Plugin was not tested
       untestedPlugins.push(plugin);
     }
-  });
+  }
 
   return {
     compliant: compliantPlugins,
@@ -77,14 +90,12 @@ export const categorizePlugins = (
   };
 };
 
-/**
- * Gets a display name for a plugin
- */
 export const getPluginDisplayName = (plugin: string): string => {
+  const shortPluginId = getFrameworkPluginId(plugin);
   return (
-    displayNameOverrides[plugin as keyof typeof displayNameOverrides] ||
-    categoryAliases[plugin as keyof typeof categoryAliases] ||
-    plugin
+    displayNameOverrides[shortPluginId as keyof typeof displayNameOverrides] ||
+    categoryAliases[shortPluginId as keyof typeof categoryAliases] ||
+    shortPluginId
   );
 };
 
