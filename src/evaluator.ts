@@ -1320,7 +1320,7 @@ function updateConversationHistory({
   conversations[conversationKey].push({
     prompt: renderedJson || renderedPrompt,
     input: conversationLastInput || renderedJson || renderedPrompt,
-    output: response.conversationOutput ?? (response.output || ''),
+    output: response.conversationOutput ?? response.output ?? '',
     metadata: response.metadata,
   });
 }
@@ -1961,9 +1961,9 @@ async function runEvalInternal(
             accumulateResponseTokenUsage(ret.tokenUsage, response);
           }
 
-          if (test.options?.storeOutputAs && ret.response?.output && registers) {
-            // Save the output in a register for later use
-            registers[test.options.storeOutputAs] = ret.response.output;
+          const output = ret.response?.output;
+          if (registers && test.options?.storeOutputAs && output != null) {
+            registers[test.options.storeOutputAs] = output;
           }
 
           return [ret];
