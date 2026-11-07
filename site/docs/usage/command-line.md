@@ -156,6 +156,8 @@ promptfoo eval --tag env=ci --tag run-id=$CI_RUN_ID
 
 For export examples and format-specific guidance, see [output formats](/docs/configuration/outputs).
 
+When `--filter-failing`, `--filter-failing-only`, or `--filter-errors-only` recovers a runtime-generated test from saved results, its test-level `threshold` is preserved for the rerun. Tests that match the current configuration use the threshold from that configuration.
+
 Use `--filter-range` to shard or rerun a stable slice of test cases by index. The first test has index `0`, the `start` index is included, and the `end` index is excluded:
 
 ```sh
