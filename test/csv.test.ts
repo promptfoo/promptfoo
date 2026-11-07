@@ -342,6 +342,128 @@ describe('testCaseFromCsvRow', () => {
       });
     });
 
+    it('keeps configuration attached to its numbered column when earlier cells are blank', () => {
+      const result = testCaseFromCsvRow({
+        __expected1: ' ',
+        __expected2: 'levenshtein(0):cats',
+        '__config:__expected1:threshold': '99',
+        '__config:__expected2:threshold': '2',
+      });
+
+      expect(result.assert).toEqual([{ type: 'levenshtein', value: 'cats', threshold: 2 }]);
+      expect(result.metadata).toEqual({ threshold: 2 });
+    });
+
+    it('does not apply configuration for a blank cell to a later assertion', () => {
+      const result = testCaseFromCsvRow({
+        __expected1: '',
+        __expected2: 'levenshtein(0):cats',
+        '__config:__expected1:threshold': '99',
+      });
+
+      expect(result.assert).toEqual([{ type: 'levenshtein', value: 'cats', threshold: 0 }]);
+      expect(result.metadata).toBeUndefined();
+    });
+
+    it('uses numbered column names rather than CSV column order for configuration', () => {
+      const result = testCaseFromCsvRow({
+        '__config:__expected1:threshold': '0',
+        '__config:__expected2:threshold': '2',
+        __expected2: 'levenshtein:cats',
+        __expected1: 'levenshtein:cat',
+      });
+
+      expect(result.assert).toEqual([
+        { type: 'levenshtein', value: 'cats', threshold: 2 },
+        { type: 'levenshtein', value: 'cat', threshold: 0 },
+      ]);
+    });
+
+    it('applies configuration to non-contiguous numbered assertion columns', () => {
+      const result = testCaseFromCsvRow({
+        __expected3: 'levenshtein:cats',
+        '__config:__expected3:threshold': '2',
+      });
+
+      expect(result.assert).toEqual([{ type: 'levenshtein', value: 'cats', threshold: 2 }]);
+    });
+
+    it('preserves unnumbered configuration for the first surviving assertion', () => {
+      const result = testCaseFromCsvRow({
+        __expected1: '',
+        __expected2: 'levenshtein(0):cats',
+        __expected3: 'levenshtein(0):cat',
+        '__config:__expected:threshold': '2',
+      });
+
+      expect(result.assert).toEqual([
+        { type: 'levenshtein', value: 'cats', threshold: 2 },
+        { type: 'levenshtein', value: 'cat', threshold: 0 },
+      ]);
+    });
+
+    it('lets numbered configuration override the unnumbered configuration', () => {
+      const result = testCaseFromCsvRow({
+        __expected2: 'levenshtein(0):cats',
+        '__config:__expected2:threshold': '2',
+        '__config:__expected:threshold': '99',
+      });
+
+      expect(result.assert).toEqual([{ type: 'levenshtein', value: 'cats', threshold: 2 }]);
+    });
+
+    it('keeps unnumbered assertion columns and leading-zero indices compatible', () => {
+      const result = testCaseFromCsvRow({
+        __expected: 'levenshtein:cat',
+        __expected02: 'levenshtein:cats',
+        '__config:__expected1:threshold': '0',
+        '__config:__expected02:threshold': '2',
+      });
+
+      expect(result.assert).toEqual([
+        { type: 'levenshtein', value: 'cat', threshold: 0 },
+        { type: 'levenshtein', value: 'cats', threshold: 2 },
+      ]);
+    });
+
+    it('keeps numbered configuration on its named column when mixed with __expected', () => {
+      const result = testCaseFromCsvRow({
+        __expected: 'levenshtein(0):cat',
+        __expected1: 'levenshtein(0):cats',
+        '__config:__expected1:threshold': '2',
+      });
+
+      expect(result.assert).toEqual([
+        { type: 'levenshtein', value: 'cat', threshold: 0 },
+        { type: 'levenshtein', value: 'cats', threshold: 2 },
+      ]);
+    });
+
+    it('preserves positional configuration for __expected when its numbered alias is absent', () => {
+      const result = testCaseFromCsvRow({
+        __expected: 'levenshtein(0):cat',
+        __expected2: 'levenshtein(0):cats',
+        '__config:__expected1:threshold': '1',
+        '__config:__expected2:threshold': '2',
+      });
+
+      expect(result.assert).toEqual([
+        { type: 'levenshtein', value: 'cat', threshold: 1 },
+        { type: 'levenshtein', value: 'cats', threshold: 2 },
+      ]);
+    });
+
+    it('does not redirect configuration from a blank numbered column to __expected', () => {
+      const result = testCaseFromCsvRow({
+        __expected1: '',
+        __expected: 'levenshtein(0):cats',
+        '__config:__expected1:threshold': '99',
+      });
+
+      expect(result.assert).toEqual([{ type: 'levenshtein', value: 'cats', threshold: 0 }]);
+      expect(result.metadata).toBeUndefined();
+    });
+
     it('warns and ignores invalid __config column formats', () => {
       const row: CsvRow = {
         __expected1: 'similar:foo',
