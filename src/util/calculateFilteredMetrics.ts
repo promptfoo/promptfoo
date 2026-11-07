@@ -26,6 +26,7 @@ import { type SQL, sql } from 'drizzle-orm';
 import { getDb } from '../database/index';
 import logger from '../logger';
 import { ResultFailureReason } from '../types/index';
+import { setNamedMetricValue } from './numeric';
 
 import type { PromptMetrics } from '../types/index';
 
@@ -471,10 +472,10 @@ async function aggregateNamedScores(
   for (const row of results) {
     const idx = row.prompt_idx;
     if (idx >= 0 && idx < metrics.length && metrics[idx]) {
-      metrics[idx].namedScores[row.metric_name] = row.metric_sum;
-      metrics[idx].namedScoresCount[row.metric_name] = row.metric_count;
+      setNamedMetricValue(metrics[idx].namedScores, row.metric_name, row.metric_sum);
+      setNamedMetricValue(metrics[idx].namedScoresCount, row.metric_name, row.metric_count);
       metrics[idx].namedScoreWeights ||= {};
-      metrics[idx].namedScoreWeights[row.metric_name] = row.metric_weight_total;
+      setNamedMetricValue(metrics[idx].namedScoreWeights, row.metric_name, row.metric_weight_total);
     }
   }
 }
