@@ -1,6 +1,7 @@
 import nunjucks from 'nunjucks';
 import { getEnvBool, getEnvOverrides, isTemplateProcessEnvDisabled } from '../envars';
 import logger from '../logger';
+import { formatCharacterFacts } from './characterFacts';
 
 import type { NunjucksFilterMap } from '../types/index';
 
@@ -505,6 +506,7 @@ export function getNunjucksEngine(
   env.addFilter('load', function (str) {
     return JSON.parse(str);
   });
+  env.addFilter('characterFacts', formatCharacterFacts);
 
   if (filters) {
     for (const [name, filter] of Object.entries(filters)) {

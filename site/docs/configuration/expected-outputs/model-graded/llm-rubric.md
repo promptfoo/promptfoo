@@ -206,6 +206,27 @@ defaultTest:
       ]
 ```
 
+### Revealing Unicode whitespace and format characters
+
+When a rubric depends on exact characters, use the built-in `characterFacts` filter to add descriptive metadata beside the original output:
+
+```yaml
+defaultTest:
+  options:
+    rubricPrompt: |
+      Evaluate the output against the rubric. Character facts identify characters;
+      their presence alone does not imply that the output is incorrect.
+      Rubric: {{ rubric }}
+      <output>{{ output }}</output>
+      {{ output | characterFacts }}
+      Return JSON with a boolean "pass", a numeric "score" from 0 to 1,
+      and a string "reason".
+```
+
+The filter reports non-ASCII Unicode whitespace and format characters, including U+00A0 (NO-BREAK SPACE), U+200B (ZERO WIDTH SPACE), and bidirectional formatting controls. It returns an empty string when none are present. It does not normalize or replace the output, detect every look-alike character, or decide whether a character is allowed by the rubric. Use executable tests when they can directly check the required behavior.
+
+By default, the metadata includes at most 20 occurrences, with up to 20 code points of escaped context on either side. Use `{{ output | characterFacts(10, 12) }}` to change those limits. Omitted occurrences are counted. Positions are one-based Unicode code points in the string passed to the filter, with lines separated by LF. For structured values, serialize explicitly with `{{ output | dump | characterFacts }}`; positions then refer to that serialization, which can differ from the original model response. This filter cannot recover characters removed by an earlier transform.
+
 ## Non-English Evaluation
 
 To get evaluation output in languages other than English, you can use different approaches:
