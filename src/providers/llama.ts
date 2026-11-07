@@ -74,40 +74,39 @@ export class LlamaProvider implements ApiProvider {
     const url = resolveProviderEnv(this.env, ['LLAMA_BASE_URL'])?.value || 'http://localhost:8080';
 
     interface LlamaCompletionResponse {
-      content: string;
+      content?: string;
+      error?: string | { message?: string };
+      message?: string;
     }
 
-    let data: LlamaCompletionResponse;
-    let cached = false;
-    let latencyMs: number | undefined;
     try {
-      ({ data, cached, latencyMs } = await fetchWithCache<LlamaCompletionResponse>(
-        `${url}/completion`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
+      const { data, cached, latencyMs, status, statusText } =
+        await fetchWithCache<LlamaCompletionResponse | null>(
+          `${url}/completion`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(body),
           },
-          body: JSON.stringify(body),
-        },
-        getRequestTimeoutMs(),
-      ));
-    } catch (err) {
-      return {
-        error: `API call error: ${String(err)}`,
-      };
-    }
+          getRequestTimeoutMs(),
+        );
 
-    try {
-      return {
-        output: data.content,
-        cached,
-        latencyMs,
-      };
+      if (status < 200 || status >= 300 || data?.error) {
+        const error = data?.error;
+        const message = typeof error === 'string' ? error : (error?.message ?? data?.message);
+        const httpStatus = `${status} ${statusText}`.trimEnd();
+        const detail = typeof message === 'string' && message ? `: ${message}` : '';
+        return { error: `API response error: ${httpStatus}${detail}` };
+      }
+      if (typeof data?.content !== 'string') {
+        return { error: 'API response error: expected a string in the content field' };
+      }
+
+      return { output: data.content, cached, latencyMs };
     } catch (err) {
-      return {
-        error: `API response error: ${String(err)}: ${JSON.stringify(data)}`,
-      };
+      return { error: `API call error: ${String(err)}` };
     }
   }
 }
