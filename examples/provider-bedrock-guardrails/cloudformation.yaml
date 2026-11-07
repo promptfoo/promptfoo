@@ -1,0 +1,47 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Draft Bedrock Guardrail for the Promptfoo example
+
+Resources:
+  Guardrail:
+    Type: AWS::Bedrock::Guardrail
+    Properties:
+      Name: !Sub '${AWS::StackName}-guardrail'
+      Description: Example guardrail for standalone input assessments
+      BlockedInputMessaging: Input blocked by the example guardrail.
+      BlockedOutputsMessaging: Output blocked by the example guardrail.
+      ContentPolicyConfig:
+        FiltersConfig:
+          - Type: HATE
+            InputStrength: HIGH
+            OutputStrength: HIGH
+          - Type: INSULTS
+            InputStrength: HIGH
+            OutputStrength: HIGH
+          - Type: SEXUAL
+            InputStrength: HIGH
+            OutputStrength: HIGH
+          - Type: VIOLENCE
+            InputStrength: HIGH
+            OutputStrength: HIGH
+      WordPolicyConfig:
+        WordsConfig:
+          - Text: forbidden-example-token
+      SensitiveInformationPolicyConfig:
+        PiiEntitiesConfig:
+          - Type: EMAIL
+            Action: BLOCK
+
+# AWS::Bedrock::Guardrail creates DRAFT. No GuardrailVersion resource is needed.
+Outputs:
+  GuardrailId:
+    Description: Set BEDROCK_GUARDRAIL_ID to this value
+    Value: !GetAtt Guardrail.GuardrailId
+  GuardrailArn:
+    Description: Resource ARN for the caller's bedrock:ApplyGuardrail permission
+    Value: !GetAtt Guardrail.GuardrailArn
+  GuardrailVersion:
+    Description: Set BEDROCK_GUARDRAIL_VERSION to this value
+    Value: !GetAtt Guardrail.Version
+  Region:
+    Description: Set AWS_REGION to this value
+    Value: !Ref AWS::Region
