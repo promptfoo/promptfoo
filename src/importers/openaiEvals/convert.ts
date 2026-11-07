@@ -292,8 +292,8 @@ function createOpenAIPromptMetrics(results: EvaluateResult[]): CompletedPrompt['
     assertFailCount: 0,
     totalLatencyMs: 0,
     tokenUsage: createEmptyTokenUsage(),
-    namedScores: {},
-    namedScoresCount: {},
+    namedScores: Object.create(null),
+    namedScoresCount: Object.create(null),
     namedScoreWeights: {},
     cost: 0,
   };
