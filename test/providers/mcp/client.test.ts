@@ -708,6 +708,17 @@ describe('MCPClient', () => {
       ]);
     });
 
+    it('closes the unpublished connection if tool discovery fails', async () => {
+      const error = new Error('Tool discovery failed');
+      mockClient.listTools.mockRejectedValueOnce(error);
+      mcpClient = new MCPClient(createMcpServerOptions());
+
+      await expect(mcpClient.initialize()).rejects.toThrow(error.message);
+      expect(mockStdioTransport.close).toHaveBeenCalledOnce();
+      expect(mockClient.close).toHaveBeenCalledOnce();
+      expect(mcpClient.getAllTools()).toEqual([]);
+    });
+
     it('should initialize with correct client metadata including name, version, and description', async () => {
       // Reset mocks for this test
       mockClient.connect.mockResolvedValueOnce(undefined);
