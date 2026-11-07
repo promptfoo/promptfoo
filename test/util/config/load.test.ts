@@ -9,9 +9,15 @@ import cliState from '../../../src/cliState';
 import { isCI } from '../../../src/envars';
 import { importModule } from '../../../src/esm';
 import logger from '../../../src/logger';
+import Eval from '../../../src/models/eval';
 import { readPrompts } from '../../../src/prompts/index';
 import { loadApiProviders } from '../../../src/providers/index';
-import { type Scenario, type TestCase, type UnifiedConfig } from '../../../src/types/index';
+import {
+  ResultFailureReason,
+  type Scenario,
+  type TestCase,
+  type UnifiedConfig,
+} from '../../../src/types/index';
 import {
   ConfigResolutionError,
   combineConfigs,
@@ -25,7 +31,7 @@ import {
 import { maybeLoadFromExternalFile } from '../../../src/util/file';
 import { isRunningUnderNpx } from '../../../src/util/promptfooCommand';
 import { sanitizeTracingConfigForPersistence } from '../../../src/util/sanitizer';
-import { readTests } from '../../../src/util/testCaseReader';
+import { readTest, readTests } from '../../../src/util/testCaseReader';
 import { createMockProvider } from '../../factories/provider';
 import { mockProcessEnv } from '../utils';
 
@@ -1549,6 +1555,290 @@ describe('resolveConfigs', () => {
   afterEach(() => {
     cliState.selectedProviderConfigs = undefined;
     vi.restoreAllMocks();
+  });
+
+  it('defers exact scenario result filters while retaining metadata-eligible variants', async () => {
+    const resultsPath = '/mock/results.json';
+    const results = ['A', 'B', 'C'].map((category) => ({
+      success: category === 'C',
+      failureReason: category === 'B' ? ResultFailureReason.ERROR : ResultFailureReason.ASSERT,
+      vars: { variant: category, caseId: 'shared' },
+      testCase: {
+        vars: { variant: category, caseId: 'shared' },
+        metadata: { category, role: 'common' },
+      },
+    }));
+    const defaultConfig: Partial<UnifiedConfig> = {
+      prompts: ['Hello {{variant}}'],
+      providers: ['echo'],
+      scenarios: [
+        {
+          config: ['A', 'B', 'C'].map((category) => ({
+            vars: { variant: category },
+            metadata: { category },
+          })),
+          tests: [{ vars: { caseId: 'shared' }, metadata: { role: 'common' } }],
+        },
+      ],
+    };
+    vi.mocked(maybeLoadFromExternalFile).mockImplementation(async (value) => value);
+    vi.mocked(readTests).mockImplementation(async (tests) =>
+      Array.isArray(tests) ? (tests as TestCase[]) : [],
+    );
+    vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({ results: { results } }));
+
+    const selectedVariants = async (filters: {
+      filterFailingOnly?: string;
+      filterErrorsOnly?: string;
+    }) => {
+      vi.mocked(fs.readFileSync).mockClear();
+      const { testSuite } = await resolveConfigs(
+        { filterMetadataExact: 'role=common', ...filters },
+        defaultConfig,
+      );
+      expect(
+        vi.mocked(fs.readFileSync).mock.calls.filter(([path]) => path === resultsPath),
+      ).toHaveLength(0);
+      return testSuite.scenarios
+        ?.filter((scenario) => scenario.tests.length > 0)
+        .map((scenario) => scenario.config[0].metadata?.category);
+    };
+
+    expect(await selectedVariants({ filterFailingOnly: resultsPath })).toEqual(['A', 'B', 'C']);
+    expect(await selectedVariants({ filterErrorsOnly: resultsPath })).toEqual(['A', 'B', 'C']);
+    expect(
+      await selectedVariants({ filterFailingOnly: resultsPath, filterErrorsOnly: resultsPath }),
+    ).toEqual(['A', 'B', 'C']);
+  });
+
+  it('retains separate scenarios until evaluator global indices are assigned', async () => {
+    const resultsPath = '/mock/global-scenarios.json';
+    const defaultConfig: Partial<UnifiedConfig> = {
+      prompts: ['Hello {{caseId}}'],
+      providers: ['echo'],
+      scenarios: Array.from({ length: 3 }, () => ({
+        config: [{}],
+        tests: [{ vars: { caseId: 'shared' }, metadata: { role: 'common' } }],
+      })),
+    };
+    vi.mocked(maybeLoadFromExternalFile).mockImplementation(async (value) => value);
+    vi.mocked(readTests).mockImplementation(async (tests) =>
+      Array.isArray(tests) ? (tests as TestCase[]) : [],
+    );
+    vi.mocked(fs.readFileSync).mockReturnValue(
+      JSON.stringify({
+        results: {
+          results: [
+            {
+              success: false,
+              failureReason: ResultFailureReason.ASSERT,
+              vars: { caseId: 'shared' },
+              testCase: {
+                vars: { caseId: 'shared' },
+                metadata: { role: 'common', conversationId: '__scenario_1__' },
+              },
+            },
+          ],
+        },
+      }),
+    );
+
+    const { testSuite } = await resolveConfigs(
+      { filterMetadataExact: 'role=common', filterFailing: resultsPath },
+      defaultConfig,
+    );
+
+    expect(testSuite.scenarios?.map((scenario) => scenario.tests.length)).toEqual([1, 1, 1]);
+  });
+
+  it('does not load a shared eval ID before combined exact scenario filters run', async () => {
+    const evalId = 'eval-shared-results';
+    const results = ['A', 'B'].map((category) => ({
+      success: false,
+      failureReason: category === 'A' ? ResultFailureReason.ASSERT : ResultFailureReason.ERROR,
+      vars: { variant: category, caseId: 'shared' },
+      testCase: {
+        vars: { variant: category, caseId: 'shared' },
+        metadata: { category, role: 'common' },
+      },
+    }));
+    const toEvaluateSummary = vi.fn().mockResolvedValue({ results });
+    const findById = vi
+      .spyOn(Eval, 'findById')
+      .mockResolvedValue({ toEvaluateSummary } as unknown as Eval);
+    vi.mocked(maybeLoadFromExternalFile).mockImplementation(async (value) => value);
+    vi.mocked(readTests).mockImplementation(async (tests) =>
+      Array.isArray(tests) ? (tests as TestCase[]) : [],
+    );
+    const { testSuite } = await resolveConfigs(
+      {
+        filterMetadataExact: 'role=common',
+        filterFailingOnly: evalId,
+        filterErrorsOnly: evalId,
+      },
+      {
+        prompts: ['Hello {{variant}}'],
+        providers: ['echo'],
+        scenarios: [
+          {
+            config: ['A', 'B'].map((category) => ({
+              vars: { variant: category },
+              metadata: { category },
+            })),
+            tests: [{ vars: { caseId: 'shared' }, metadata: { role: 'common' } }],
+          },
+        ],
+      },
+    );
+
+    expect(findById).not.toHaveBeenCalled();
+    expect(toEvaluateSummary).not.toHaveBeenCalled();
+    expect(
+      testSuite.scenarios
+        ?.filter((scenario) => scenario.tests.length > 0)
+        .map((scenario) => scenario.config[0].metadata?.category),
+    ).toEqual(['A', 'B']);
+  });
+
+  it('defers a missing eval ID until historical selection', async () => {
+    const evalId = 'missing-eval';
+    const findById = vi.spyOn(Eval, 'findById').mockResolvedValue(undefined);
+    vi.mocked(maybeLoadFromExternalFile).mockImplementation(async (value) => value);
+    vi.mocked(readTests).mockImplementation(async (tests) =>
+      Array.isArray(tests) ? (tests as TestCase[]) : [],
+    );
+
+    const defaultConfig: Partial<UnifiedConfig> = {
+      prompts: ['Hello'],
+      providers: ['echo'],
+      scenarios: [
+        {
+          config: ['A', 'B'].map((category) => ({ metadata: { category } })),
+          tests: [{ metadata: { role: 'common' } }],
+        },
+      ],
+    };
+    const loadScenarios = async () =>
+      resolveConfigs(
+        { filterMetadataExact: 'role=common', filterFailingOnly: evalId },
+        defaultConfig,
+      );
+
+    const { testSuite } = await loadScenarios();
+
+    expect(findById).not.toHaveBeenCalled();
+    expect(testSuite.scenarios?.every((scenario) => scenario.tests.length === 1)).toBe(true);
+
+    findById.mockReset().mockRejectedValue(new Error('unavailable'));
+    const failedLoad = await loadScenarios();
+    expect(findById).not.toHaveBeenCalled();
+    expect(failedLoad.testSuite.scenarios?.every((scenario) => scenario.tests.length === 1)).toBe(
+      true,
+    );
+  });
+
+  it('matches exact scenario history by loaded authored providers while preserving current source config', async () => {
+    const resultsPath = '/mock/scenario-provider-results.json';
+    const providerSource = (marker: string) => ({
+      id: 'file://./same-provider.cjs',
+      config: { marker: `current-${marker}` },
+    });
+    const defaultConfig: Partial<UnifiedConfig> = {
+      prompts: ['Hello {{caseId}}'],
+      providers: ['echo'],
+      scenarios: [
+        {
+          config: [{ vars: { scenario: 'one' }, metadata: { group: 'common' } }],
+          tests: [
+            ...['A', 'B'].map((marker) => ({
+              vars: { caseId: 'shared' },
+              provider: providerSource(marker),
+            })),
+            {
+              vars: { caseId: 'shared' },
+              metadata: { group: 'excluded' },
+              provider: providerSource('C'),
+            },
+          ],
+        },
+      ],
+    };
+    const results = ['A', 'B'].map((marker) => ({
+      success: false,
+      failureReason: marker === 'A' ? ResultFailureReason.ASSERT : ResultFailureReason.ERROR,
+      vars: {
+        scenario: 'one',
+        caseId: 'shared',
+        ...(marker === 'A' ? { sessionId: 'runtime-session' } : {}),
+      },
+      provider: { id: 'echo' },
+      testCase: {
+        vars: { scenario: 'one', caseId: 'shared' },
+        metadata: { group: 'common' },
+        provider: { id: `runtime-${marker}` },
+      },
+    }));
+    vi.mocked(maybeLoadFromExternalFile).mockImplementation(async (value) => value);
+    vi.mocked(readTests).mockImplementation(async (tests) =>
+      Array.isArray(tests) ? (tests as TestCase[]) : [],
+    );
+    vi.mocked(readTest).mockImplementation(async (test) => {
+      if (
+        typeof test === 'object' &&
+        typeof test.provider === 'object' &&
+        test.provider !== null &&
+        !('callApi' in test.provider)
+      ) {
+        const marker = (test.provider as { config?: { marker?: string } }).config?.marker;
+        if (marker) {
+          return {
+            ...test,
+            provider: createMockProvider({
+              id: `runtime-${marker.replace(/^current-/, '')}`,
+              config: { marker },
+            }),
+          } as TestCase;
+        }
+      }
+      return test as TestCase;
+    });
+    vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({ results: { results } }));
+
+    const { testSuite, config } = await resolveConfigs(
+      {
+        filterMetadataExact: 'group=common',
+        filterFailingOnly: resultsPath,
+        filterErrorsOnly: resultsPath,
+      },
+      defaultConfig,
+    );
+
+    expect(
+      testSuite.scenarios?.[0].tests.map((test) =>
+        typeof test.provider === 'object' &&
+        'id' in test.provider &&
+        typeof test.provider.id === 'function'
+          ? test.provider.id()
+          : undefined,
+      ),
+    ).toEqual(['runtime-A', 'runtime-B']);
+    expect(testSuite.scenarios?.[0].tests[0].vars?.sessionId).toBeUndefined();
+    expect((config.scenarios as Scenario[])?.[0].tests.map((test) => test.provider)).toEqual([
+      providerSource('A'),
+      providerSource('B'),
+    ]);
+    expect(
+      vi
+        .mocked(readTest)
+        .mock.calls.filter(
+          ([test]) =>
+            typeof test === 'object' &&
+            typeof test.provider === 'object' &&
+            test.provider !== null &&
+            !('callApi' in test.provider) &&
+            (test.provider as { config?: { marker?: string } }).config?.marker,
+        ),
+    ).toHaveLength(2);
   });
 
   it('should set cliState.basePath', async () => {

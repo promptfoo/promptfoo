@@ -1,4 +1,11 @@
-import type { CompletedPrompt, EvaluateResult, TestSuite, UnifiedConfig } from '../types/index';
+import type {
+  AtomicTestCase,
+  CompletedPrompt,
+  EvaluateResult,
+  ExactHistoricalReplayPlan,
+  TestSuite,
+  UnifiedConfig,
+} from '../types/index';
 
 export type EvaluationStoreResult = Pick<
   EvaluateResult,
@@ -40,6 +47,10 @@ export interface EvaluationStore<
   readonly results: TResult[];
   readonly resultPersistenceFailed: boolean;
 
+  readExactHistoricalReplay(): unknown;
+  requiresExactHistoricalReplay(): boolean;
+  saveExactHistoricalReplay(plan: ExactHistoricalReplayPlan): Promise<void>;
+
   appendResult(result: EvaluateResult): Promise<void>;
   appendPrompts(prompts: CompletedPrompt[]): Promise<void>;
   hasResultPersistenceFailure(result: Pick<EvaluateResult, 'promptIdx' | 'testIdx'>): boolean;
@@ -70,6 +81,11 @@ export interface EvaluatorRuntime<
   TResult extends EvaluationStoreResult = EvaluationStoreResult,
 > {
   resolveRuntimeTestSuite?(testSuite: TestSuite): TestSuite;
+  resolveHistoricalReplayProvider?(
+    provider: NonNullable<AtomicTestCase['provider']>,
+    basePath: string | undefined,
+    env: TestSuite['env'],
+  ): Promise<AtomicTestCase['provider']>;
   createEvaluationStore(evaluation: TEvaluation): EvaluationStore<TEvaluation, TResult>;
   createResultWriters(
     outputPath: string | string[] | undefined,

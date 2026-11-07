@@ -3,6 +3,7 @@ import { JsonlFileWriter } from '../util/exportToFile/writeToFile';
 import { getOutputFileFormat } from '../util/outputFormats';
 import { renderEnvOnlyInObject } from '../util/render';
 import { preserveTracingCredentialReferences } from '../util/sanitizer';
+import { readTest } from '../util/testCaseReader';
 import { EvalEvaluationStore } from './evaluationStore';
 
 import type {
@@ -21,6 +22,10 @@ function getJsonlOutputPaths(outputPath: string | string[] | undefined): string[
 }
 
 export const nodeEvaluatorRuntime: EvaluatorRuntime<Eval, EvalResult> = {
+  async resolveHistoricalReplayProvider(provider, basePath, env) {
+    return (await readTest({ provider }, basePath, false, env)).provider;
+  },
+
   resolveRuntimeTestSuite(testSuite) {
     if (!testSuite.tracing?.provider) {
       return testSuite;

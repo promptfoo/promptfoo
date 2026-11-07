@@ -701,7 +701,10 @@ describeEvaluator('select-best runtime grading configuration', () => {
       const targetError = results.find((row) => row.promptIdx === 0)!;
       expect(targetError.failureReason).toBe(ResultFailureReason.ERROR);
       expect(targetError.error).toContain(targetMessage);
-      expect(targetError.metadata?.__promptfoo).toEqual({ retained: true });
+      expect(targetError.metadata?.__promptfoo).toEqual({
+        retained: true,
+        evalOrigin: 'top-level',
+      });
       expect(targetError.success).toBe(false);
       expect(results.find((row) => row.promptIdx === 1)?.success).toBe(true);
       expect(record.getStats()).toMatchObject({ successes: 1, failures: 0, errors: 1 });

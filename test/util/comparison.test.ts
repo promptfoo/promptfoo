@@ -1,6 +1,7 @@
 import * as path from 'path';
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import logger from '../../src/logger';
 import {
   deduplicateTestCases,
   extractRuntimeVars,
@@ -64,6 +65,29 @@ describe('resultIsForTestCase', () => {
     };
 
     expect(resultIsForTestCase(result, nonMatchTestCase)).toBe(false);
+  });
+
+  it('redacts provider URL credentials in mismatch debug logs', () => {
+    const debug = vi.spyOn(logger, 'debug').mockImplementation(() => {});
+    try {
+      const storedResult = createEvaluateResult({
+        provider: { id: 'https://result-user:result-pass@example.com/?api_key=RESULT_SECRET' },
+        vars: { key: 'value' },
+      });
+      expect(
+        resultIsForTestCase(storedResult, {
+          provider: 'https://test-user:test-pass@example.org/?api_key=TEST_SECRET',
+          vars: { key: 'value' },
+        }),
+      ).toBe(false);
+      const logged = JSON.stringify(debug.mock.calls);
+      expect(logged).not.toContain('RESULT_SECRET');
+      expect(logged).not.toContain('TEST_SECRET');
+      expect(logged).not.toContain('result-pass');
+      expect(logged).not.toContain('test-pass');
+    } finally {
+      debug.mockRestore();
+    }
   });
 
   it('matches when test has provider but result provider is null', async () => {

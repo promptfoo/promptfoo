@@ -1,7 +1,7 @@
 import deepEqual from 'fast-deep-equal';
 import logger from '../logger';
 import { type EvaluateResult, type TestCase } from '../types';
-import { providerToIdentifier } from './provider';
+import { providerToIdentifier, sanitizeProviderIdForLog } from './provider';
 
 import type { Vars } from '../types/index';
 
@@ -134,8 +134,8 @@ export function resultIsForTestCase(result: EvaluateResult, testCase: TestCase):
     logger.debug(
       `[resultIsForTestCase] No match: vars=${doVarsMatch}, providers=${providersMatch}`,
       {
-        testProvider: testProviderId || 'none',
-        resultProvider: resultProviderId || 'none',
+        testProvider: testProviderId ? sanitizeProviderIdForLog(testProviderId) : 'none',
+        resultProvider: resultProviderId ? sanitizeProviderIdForLog(resultProviderId) : 'none',
         testVarKeys: varKeys,
       },
     );

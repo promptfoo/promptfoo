@@ -521,7 +521,7 @@ export default class Eval {
           config: sanitizeTracingConfigForPersistence(config),
           results: durationResults,
           vars: opts?.vars || [],
-          runtimeOptions: sanitizeRuntimeOptions(opts?.runtimeOptions),
+          runtimeOptions: sanitizeRuntimeOptions(opts?.runtimeOptions, getStripFlags(config.env)),
           prompts: opts?.completedPrompts || [],
           isRedteam: config.redteam !== undefined,
         })
@@ -626,7 +626,7 @@ export default class Eval {
       author,
       createdAt,
       persisted: true,
-      runtimeOptions: sanitizeRuntimeOptions(opts?.runtimeOptions),
+      runtimeOptions: sanitizeRuntimeOptions(opts?.runtimeOptions, getStripFlags(config.env)),
       durationMs: opts?.durationMs,
       generationDurationMs: opts?.generationDurationMs,
       evaluationDurationMs: opts?.evaluationDurationMs,
@@ -695,7 +695,7 @@ export default class Eval {
       author: this.author,
       updatedAt: getCurrentTimestamp(),
       vars: Array.from(this.vars),
-      runtimeOptions: sanitizeRuntimeOptions(this.runtimeOptions),
+      runtimeOptions: sanitizeRuntimeOptions(this.runtimeOptions, getStripFlags(this.config.env)),
     };
 
     if (this.useOldResults()) {
@@ -1700,7 +1700,10 @@ export default class Eval {
           results: {},
           prompts: newPrompts,
           vars: newVars,
-          runtimeOptions: sanitizeRuntimeOptions(this.runtimeOptions),
+          runtimeOptions: sanitizeRuntimeOptions(
+            this.runtimeOptions,
+            getStripFlags(this.config.env),
+          ),
           isRedteam: newConfig.redteam !== undefined,
         })
         .run();

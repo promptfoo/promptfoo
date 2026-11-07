@@ -1,5 +1,5 @@
 import type { EventSource } from './eventSource';
-import type { EvaluateOptions } from './index';
+import type { AtomicTestCase, EvaluateOptions, ExactHistoricalSource, TestSuite } from './index';
 import type { TokenUsage } from './shared';
 
 /**
@@ -15,4 +15,23 @@ export type InternalEvaluateOptions = EvaluateOptions & {
   restorePromptColumns?: boolean;
   generationEventId?: string;
   generationTokenUsage?: TokenUsage;
+  /** CLI-only exact metadata/history selection after current variable preparation. */
+  exactHistoricalSelection?: {
+    eligible: (
+      candidates: PreparedHistoricalCandidate[],
+      suite: TestSuite,
+    ) => Promise<PreparedHistoricalCandidate[]>;
+    select: (
+      candidates: PreparedHistoricalCandidate[],
+      suite: TestSuite,
+      /** Current-only signatures for variants without eligible authored tests. */
+      preparedSyntheticSignatures?: PreparedHistoricalCandidate[],
+    ) => Promise<PreparedHistoricalCandidate[]>;
+    writeEnabled: boolean;
+  };
 };
+
+export interface PreparedHistoricalCandidate {
+  test: AtomicTestCase;
+  source: ExactHistoricalSource;
+}

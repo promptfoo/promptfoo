@@ -434,6 +434,118 @@ describe('Metadata Filter Tests', () => {
     expect(parsed.results.results[0].response.output).toContain('Alice');
   });
 
+  it('1.8.3.4a - --filter-metadata-exact matches complete scalar and array values', () => {
+    const configPath = path.join(OUTPUT_DIR, 'metadata-exact-config.json');
+    const scalarOutputPath = path.join(OUTPUT_DIR, 'metadata-exact-scalar-output.json');
+    const arrayOutputPath = path.join(OUTPUT_DIR, 'metadata-exact-array-output.json');
+    const nullOutputPath = path.join(OUTPUT_DIR, 'metadata-exact-null-output.json');
+    const combinedOutputPath = path.join(OUTPUT_DIR, 'metadata-exact-combined-output.json');
+    fs.writeFileSync(
+      configPath,
+      JSON.stringify({
+        providers: ['echo'],
+        prompts: ['Hello {{name}}'],
+        tests: [
+          {
+            description: 'string one',
+            vars: { name: 'One' },
+            metadata: { id: '1', type: 'unit' },
+          },
+          {
+            description: 'number one',
+            vars: { name: 'Numeric One' },
+            metadata: { id: 1, type: 'unit' },
+          },
+          { description: 'ten', vars: { name: 'Ten' }, metadata: { id: 10, type: 'unit' } },
+          {
+            description: 'array tags',
+            vars: { name: 'Tagged' },
+            metadata: { id: [null, 1], tags: ['security'], type: 'unit' },
+          },
+          {
+            description: 'longer array tag',
+            vars: { name: 'Longer Tag' },
+            metadata: { tags: ['security-critical'] },
+          },
+          {
+            description: 'string null',
+            vars: { name: 'Literal Null' },
+            metadata: { id: 'null', type: 'unit' },
+          },
+          { description: 'null', vars: { name: 'Null' }, metadata: { id: null, type: 'unit' } },
+          { description: 'missing', vars: { name: 'Missing' }, metadata: {} },
+        ],
+      }),
+    );
+
+    const scalarRun = runCli([
+      'eval',
+      '-c',
+      configPath,
+      '-o',
+      scalarOutputPath,
+      '--no-cache',
+      '--filter-metadata-exact',
+      'id=1',
+    ]);
+    expect(scalarRun.exitCode).toBe(0);
+    const scalarResults = JSON.parse(fs.readFileSync(scalarOutputPath, 'utf-8')).results.results;
+    expect(
+      scalarResults.map((result: { response: { output: string } }) => result.response.output),
+    ).toEqual(['Hello One', 'Hello Numeric One', 'Hello Tagged']);
+
+    const arrayRun = runCli([
+      'eval',
+      '-c',
+      configPath,
+      '-o',
+      arrayOutputPath,
+      '--no-cache',
+      '--filter-metadata-exact',
+      'tags=security',
+    ]);
+    expect(arrayRun.exitCode).toBe(0);
+    const arrayResults = JSON.parse(fs.readFileSync(arrayOutputPath, 'utf-8')).results.results;
+    expect(
+      arrayResults.map((result: { response: { output: string } }) => result.response.output),
+    ).toEqual(['Hello Tagged']);
+
+    const nullRun = runCli([
+      'eval',
+      '-c',
+      configPath,
+      '-o',
+      nullOutputPath,
+      '--no-cache',
+      '--filter-metadata-exact',
+      'id=null',
+    ]);
+    expect(nullRun.exitCode).toBe(0);
+    const nullResults = JSON.parse(fs.readFileSync(nullOutputPath, 'utf-8')).results.results;
+    expect(
+      nullResults.map((result: { response: { output: string } }) => result.response.output),
+    ).toEqual(['Hello Literal Null']);
+
+    const combinedRun = runCli([
+      'eval',
+      '-c',
+      configPath,
+      '-o',
+      combinedOutputPath,
+      '--no-cache',
+      '--filter-metadata',
+      'id=1',
+      '--filter-metadata-exact',
+      'type=unit',
+    ]);
+    expect(combinedRun.exitCode).toBe(0);
+    const combinedResults = JSON.parse(fs.readFileSync(combinedOutputPath, 'utf-8')).results
+      .results;
+    expect(
+      combinedResults.map((result: { response: { output: string } }) => result.response.output),
+    ).toEqual(['Hello One', 'Hello Numeric One', 'Hello Ten', 'Hello Tagged']);
+  });
+
   it('1.8.3.4b - comma-separated --filter-metadata values use OR logic within one key', () => {
     const configPath = path.join(CONFIGS_DIR, 'multi-test.yaml');
     const outputPath = path.join(OUTPUT_DIR, 'metadata-or-output.json');
