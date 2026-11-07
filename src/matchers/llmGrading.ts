@@ -12,7 +12,7 @@ import { getDefaultProviders } from '../providers/defaults';
 import { doRemoteGrading } from '../remoteGrading';
 import { doRemoteScoringWithPi } from '../remoteScoring';
 import invariant from '../util/invariant';
-import { extractFirstJsonObject } from '../util/json';
+import { extractFirstJsonObject, extractJsonObjects } from '../util/json';
 import { accumulateTokenUsage } from '../util/tokenUsageUtils';
 import {
   callProviderWithContext,
@@ -507,14 +507,14 @@ export async function matchesGEval(
   let steps;
 
   try {
-    // NOTE: use regexp for reliable, because sometimes LLM wraps response to markdown format ```json...```
-    const stepsMatch = respSteps.output.match(/\{"steps".+\}/g);
-    if (!stepsMatch) {
+    // Graders often pretty-print or fence the JSON, so find the object rather than one line of it.
+    const stepsObject = extractJsonObjects(respSteps.output).find((object) => 'steps' in object);
+    if (!stepsObject) {
       return failWithTokens(
         `LLM-proposed evaluation steps are not in JSON format: ${respSteps.output}`,
       );
     }
-    steps = JSON.parse(stepsMatch[0]).steps;
+    steps = (stepsObject as { steps: unknown }).steps;
 
     if (!Array.isArray(steps)) {
       return failWithTokens(
@@ -570,11 +570,12 @@ export async function matchesGEval(
   let result;
 
   try {
-    const resultMatch = resp.output.match(/\{.+\}/g);
-    if (!resultMatch) {
+    result = extractJsonObjects(resp.output)[0] as
+      | { score?: unknown; reason?: unknown }
+      | undefined;
+    if (!result) {
       return failWithTokens(`LLM-proposed evaluation result is not in JSON format: ${resp.output}`);
     }
-    result = JSON.parse(resultMatch[0]);
   } catch (err) {
     return failWithTokens(
       `LLM-proposed evaluation result is not in JSON format: ${(err as Error).message}\n\n${resp.output}`,
