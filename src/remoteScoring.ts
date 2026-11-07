@@ -33,7 +33,7 @@ function convertPiResultToGradingResult(
   threshold: number,
 ): GradingResult {
   return {
-    pass: result.total_score > threshold,
+    pass: result.total_score >= threshold,
     score: result.total_score,
     namedScores: result.question_scores,
     reason: 'Pi Scorer',
