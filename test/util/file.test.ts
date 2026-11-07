@@ -193,6 +193,20 @@ describe('file utilities', () => {
       expect(result).toEqual(mockData);
     });
 
+    it('should load unquoted YAML dates as strings', () => {
+      vi.mocked(fs.existsSync).mockReturnValue(true);
+      vi.mocked(fs.readFileSync).mockReturnValue(
+        'd: 2024-01-02\nt: 2024-01-02T10:00:00Z\nlist: [2024-01-03]\nquoted: "2024-01-02"\n',
+      );
+
+      expect(maybeLoadFromExternalFile('file://test.yaml')).toEqual({
+        d: '2024-01-02',
+        t: '2024-01-02T10:00:00.000Z',
+        list: ['2024-01-03'],
+        quoted: '2024-01-02',
+      });
+    });
+
     it('should load CSV files', () => {
       const csvContent = 'name,age\nJohn,30\nJane,25';
       vi.mocked(fs.existsSync).mockReturnValue(true);
@@ -299,6 +313,13 @@ describe('file utilities', () => {
       const result = maybeLoadFromExternalFile('file://**.yaml');
       // Should skip empty file and only include valid data
       expect(result).toEqual([mockData]);
+    });
+
+    it('should load unquoted YAML dates as strings in glob matches', () => {
+      vi.mocked(globSync).mockReturnValue(['/mock/base/path/a.yaml']);
+      vi.mocked(fs.readFileSync).mockReturnValueOnce('d: 2024-01-02\n');
+
+      expect(maybeLoadFromExternalFile('file://*.yaml')).toEqual([{ d: '2024-01-02' }]);
     });
 
     it('should throw error when glob pattern matches no files', () => {
@@ -474,6 +495,30 @@ describe('file utilities', () => {
           },
         },
       });
+    });
+
+    it('should convert Dates from unquoted YAML timestamps to strings instead of {}', () => {
+      const config = {
+        date: new Date('2024-01-02T00:00:00Z'),
+        instant: new Date('2024-01-02T10:00:00Z'),
+        nested: { list: [new Date('2024-01-03T00:00:00Z')] },
+      };
+
+      expect(maybeLoadConfigFromExternalFile(config)).toEqual({
+        date: '2024-01-02',
+        instant: '2024-01-02T10:00:00.000Z',
+        nested: { list: ['2024-01-03'] },
+      });
+    });
+
+    it('should pass non-plain objects such as Buffer and Map through unchanged', () => {
+      const buffer = Buffer.from('abc');
+      const map = new Map([['a', 1]]);
+
+      const result = maybeLoadConfigFromExternalFile({ buffer, map });
+
+      expect(result.buffer).toBe(buffer);
+      expect(result.map).toBe(map);
     });
 
     it('should handle primitive values safely', () => {
