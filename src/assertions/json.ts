@@ -62,6 +62,30 @@ export function handleIsJson({
   };
 }
 
+function extractJsonArrayCandidate(outputString: string): unknown[] | null {
+  const trimmed = outputString.trim();
+  try {
+    const parsed = JSON.parse(trimmed);
+    if (Array.isArray(parsed)) {
+      return parsed;
+    }
+  } catch {
+    // Fall through to fenced code block check below.
+  }
+  const fenceMatch = trimmed.match(/^```(?:json)?\s*([\s\S]*)```\s*$/i);
+  if (fenceMatch) {
+    try {
+      const parsed = JSON.parse(fenceMatch[1].trim());
+      if (Array.isArray(parsed)) {
+        return parsed;
+      }
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
 export function handleContainsJson({
   assertion,
   renderedValue,
@@ -71,8 +95,13 @@ export function handleContainsJson({
 }: AssertionParams): GradingResult {
   let errorMessage = `Expected output to ${inverse ? 'not ' : ''}contain valid JSON`;
   const jsonObjects = extractJsonObjects(outputString);
-  let pass = inverse ? jsonObjects.length === 0 : jsonObjects.length > 0;
-  for (const jsonObject of jsonObjects) {
+  const candidates: object[] = [...jsonObjects];
+  const arrayCandidate = extractJsonArrayCandidate(outputString);
+  if (arrayCandidate) {
+    candidates.unshift(arrayCandidate);
+  }
+  let pass = inverse ? candidates.length === 0 : candidates.length > 0;
+  for (const jsonObject of candidates) {
     if (renderedValue) {
       let validate: ValidateFunction;
       if (typeof renderedValue === 'string') {
