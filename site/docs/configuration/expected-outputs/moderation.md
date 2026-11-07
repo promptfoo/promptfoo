@@ -185,6 +185,8 @@ tests:
 
 You can also set blocklist names and halt on blocklist hit in the provider config:
 
+Matches produce `blocklist:<blocklistName>` flags even when Azure stops category analysis after a blocklist hit.
+
 ```yaml
 tests:
   - vars:

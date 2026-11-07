@@ -79,10 +79,6 @@ export function parseAzureModerationResponse(
     const blocklistMatches =
       data.blocklistsMatch || (data as any).blocklistsMatch || (data as any).blocklists_match || [];
 
-    if (!categories || categories.length === 0) {
-      return { flags: [] };
-    }
-
     const flags: ModerationFlag[] = [];
 
     for (const analysis of categories) {
