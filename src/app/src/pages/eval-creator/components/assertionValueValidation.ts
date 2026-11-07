@@ -1,3 +1,4 @@
+import { toolSetError } from '@promptfoo/contracts/validators/trajectoryToolSet';
 import { BaseAssertionTypesSchema } from '@promptfoo/types';
 import type { Assertion, AssertionType } from '@promptfoo/types';
 
@@ -389,6 +390,10 @@ function getTrajectoryToolSequenceValueError(value: unknown): string | undefined
 }
 
 function getStructuredValueError(assertion: Assertion): string | undefined {
+  if (assertion.type === 'trajectory:tool-set' || assertion.type === 'not-trajectory:tool-set') {
+    return toolSetError(assertion.value);
+  }
+
   if (
     OPTIONAL_SQL_CONFIGURATION_TYPES.has(assertion.type) &&
     assertion.value !== undefined &&
