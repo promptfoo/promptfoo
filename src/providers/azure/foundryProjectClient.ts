@@ -9,6 +9,16 @@ const scope = 'https://ai.azure.com/.default';
 const nonblankString = z.string().regex(/\S/);
 const FoundryAgentSchema = z.looseObject({ id: nonblankString, name: nonblankString });
 export type FoundryAgent = z.infer<typeof FoundryAgentSchema>;
+const FoundryAgentPageSchema = z
+  .object({
+    data: z.array(z.unknown()),
+    has_more: z.boolean().optional(),
+    last_id: z.string().optional(),
+  })
+  .refine((page) => !page.has_more || nonblankString.safeParse(page.last_id).success, {
+    message: 'Foundry agent pagination requires a nonblank last_id when has_more is true',
+    path: ['last_id'],
+  });
 
 function readBody<T>(response: PathUncheckedResponse): T {
   if (response.status !== '200') {
@@ -46,7 +56,7 @@ export class FoundryProjectClient {
       const response = await this.rest.path('/agents').get({
         queryParameters: { 'api-version': 'v1', after },
       });
-      const page = readBody<{ data: unknown[]; last_id?: string; has_more?: boolean }>(response);
+      const page = FoundryAgentPageSchema.parse(readBody(response));
       for (const agent of page.data) {
         yield FoundryAgentSchema.parse(agent);
       }
