@@ -499,6 +499,13 @@ export function getNunjucksEngine(
       }
       return template;
     }
+    if (typeof template === 'string' && !template.includes('{')) {
+      if (callback) {
+        callback(null, template);
+        return;
+      }
+      return template;
+    }
     return renderString(template, { env: templateEnv, ...context }, callback);
   }) as typeof env.renderString;
 

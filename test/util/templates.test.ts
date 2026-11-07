@@ -390,6 +390,43 @@ describe('getNunjucksEngine', () => {
     }).not.toThrow();
   });
 
+  it('should return plain strings without template tags directly without compiling', () => {
+    const engine = getNunjucksEngine();
+    const compileSpy = vi.spyOn(nunjucks.Template.prototype as any, '_compile');
+    try {
+      expect(engine.renderString('accuracy', { foo: 'bar' })).toBe('accuracy');
+      expect(engine.renderString('plain text metric', {})).toBe('plain text metric');
+      expect(engine.renderString('', {})).toBe('');
+      expect(compileSpy).not.toHaveBeenCalled();
+    } finally {
+      compileSpy.mockRestore();
+    }
+  });
+
+  it('should handle callbacks for plain strings without compiling', () => {
+    const engine = getNunjucksEngine();
+    const compileSpy = vi.spyOn(nunjucks.Template.prototype as any, '_compile');
+    try {
+      const cb = vi.fn();
+      engine.renderString('plain-callback', {}, cb);
+      expect(cb).toHaveBeenCalledWith(null, 'plain-callback');
+      expect(compileSpy).not.toHaveBeenCalled();
+    } finally {
+      compileSpy.mockRestore();
+    }
+  });
+
+  it('should compile and render templates when tags are present', () => {
+    const engine = getNunjucksEngine();
+    const compileSpy = vi.spyOn(nunjucks.Template.prototype as any, '_compile');
+    try {
+      expect(engine.renderString('Hello {{ name }}', { name: 'World' })).toBe('Hello World');
+      expect(compileSpy).toHaveBeenCalled();
+    } finally {
+      compileSpy.mockRestore();
+    }
+  });
+
   it('should respect all parameters when provided', () => {
     mockProcessEnv({ PROMPTFOO_DISABLE_TEMPLATING: 'true' });
     const customFilters = {
