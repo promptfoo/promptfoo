@@ -1825,6 +1825,26 @@ describe('xAI Chat Provider', () => {
       expect(calculateXAICost('grok-2-1212', {}, 0, 0)).toBe(undefined);
     });
 
+    it.each([-1, Number.NaN, Infinity, -Infinity])(
+      'rejects invalid prompt, completion, and reasoning counts (%s)',
+      (tokens) => {
+        for (const reasoningBilledSeparately of [false, true]) {
+          const options = { reasoningBilledSeparately };
+          expect(calculateXAICost('grok-4.5', {}, tokens, 500, 20, 0, options)).toBeUndefined();
+          expect(calculateXAICost('grok-4.5', {}, 1000, tokens, 20, 0, options)).toBeUndefined();
+          expect(calculateXAICost('grok-4.5', {}, 1000, 500, tokens, 0, options)).toBeUndefined();
+        }
+      },
+    );
+
+    it('rejects an overflowed sum of completion and separately billed reasoning tokens', () => {
+      expect(
+        calculateXAICost('grok-4.5', {}, 1000, Number.MAX_VALUE, Number.MAX_VALUE, 0, {
+          reasoningBilledSeparately: true,
+        }),
+      ).toBeUndefined();
+    });
+
     it('calculates cost based on model pricing', () => {
       // grok-2-1212 has input: 2.0/1e6 and output: 10.0/1e6
       const cost = calculateXAICost('grok-2-1212', {}, 1000000, 1000000);

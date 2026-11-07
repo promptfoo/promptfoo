@@ -15,6 +15,7 @@ vi.mock('../../src/logger', () => ({
 type TestableWorker = {
   process: unknown;
   ready: boolean;
+  processClosed: WeakMap<object, Promise<void>>;
   stopProcess(pythonProcess: unknown): Promise<void>;
 };
 
@@ -63,9 +64,16 @@ describe('PythonWorker process termination', () => {
 
   it('should kill the process tree on Windows, where no interrupt is delivered', async () => {
     setPlatform('win32');
-    const { testable, pythonProcess, kill } = createWorkerWithProcess();
+    const { testable, pythonProcess, kill, end } = createWorkerWithProcess();
+    let markClosed!: () => void;
+    testable.processClosed.set(
+      pythonProcess,
+      new Promise<void>((resolve) => {
+        markClosed = resolve;
+      }),
+    );
 
-    await testable.stopProcess(pythonProcess);
+    const stopped = testable.stopProcess(pythonProcess);
 
     // ChildProcess.kill() terminates outright on Windows whatever signal is named, so the
     // script can't stop its children; taskkill takes the whole tree instead.
@@ -76,6 +84,15 @@ describe('PythonWorker process termination', () => {
       expect.any(Function),
     );
     expect(kill).not.toHaveBeenCalled();
+    // EOF can let the wrapper exit before taskkill enumerates its descendants.
+    // Keep stdin open until process termination has completed.
+    expect(end).not.toHaveBeenCalled();
+    expect(pythonProcess.stdin.destroy).not.toHaveBeenCalled();
+
+    markClosed();
+    await stopped;
+    expect(end).not.toHaveBeenCalled();
+    expect(pythonProcess.stdin.destroy).toHaveBeenCalled();
   });
 
   it('should fall back to killing the process when taskkill fails', async () => {

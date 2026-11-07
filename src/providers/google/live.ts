@@ -449,7 +449,7 @@ export class GoogleLiveProvider implements ApiProvider {
   modelName: string;
   readonly env?: ProviderOptions['env'];
   protected readonly isVertex: boolean = false;
-  private loadedFunctionCallbacks: Record<string, Function> = {};
+  private loadedFunctionCallbacks: Record<string, Function> = Object.create(null);
 
   constructor(modelName: string, options: ProviderOptions) {
     this.modelName = modelName;
@@ -1742,7 +1742,13 @@ export class GoogleLiveProvider implements ApiProvider {
                   let callbackResponse: unknown = {};
                   const functionName = functionCall.name;
                   try {
-                    if (config.functionToolCallbacks?.[functionName]) {
+                    if (
+                      config.functionToolCallbacks &&
+                      Object.prototype.hasOwnProperty.call(
+                        config.functionToolCallbacks,
+                        functionName,
+                      )
+                    ) {
                       callbackResponse = await this.executeFunctionCallback(
                         functionName,
                         JSON.stringify(
