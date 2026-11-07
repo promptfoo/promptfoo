@@ -16,10 +16,10 @@ To begin, install `llama.cpp` by following the [instructions on their GitHub pag
 To start the server, use the following command:
 
 ```bash
-./llama-server -m your_model.gguf --port 8080
+./llama-server -m your_model.gguf
 ```
 
-You can check if it's running by visiting [http://localhost:8080](http://localhost:8080).
+You can check if it's running by visiting [http://localhost:9931](http://localhost:9931).
 
 ## Configuring Promptfoo
 
