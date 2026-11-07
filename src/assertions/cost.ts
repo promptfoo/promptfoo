@@ -13,6 +13,9 @@ export const handleCost = ({ cost, assertion, inverse }: AssertionParams): Gradi
   if (typeof cost === 'undefined') {
     throw new Error('Cost assertion does not support providers that do not return cost');
   }
+  if (!Number.isFinite(cost) || cost < 0) {
+    throw new Error('Cost assertion requires a finite, non-negative provider cost');
+  }
 
   const pass = cost <= assertion.threshold !== inverse;
   return {
