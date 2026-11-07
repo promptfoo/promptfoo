@@ -1,7 +1,26 @@
 import { matchesSimilarity } from '../matchers/similarity';
 import invariant from '../util/invariant';
+import {
+  accumulateNormalizedAssertionTokenUsage,
+  normalizeAssertionTokenUsage,
+} from './assertionsResult';
 
-import type { AssertionParams, GradingResult } from '../types/index';
+import type { AssertionParams, GradingResult, TokenUsage } from '../types/index';
+
+function withAccumulatedUsage(
+  result: GradingResult,
+  tokensUsed: TokenUsage,
+  allCached: boolean,
+): GradingResult {
+  const combined = { ...result, ...(Object.keys(tokensUsed).length > 0 && { tokensUsed }) };
+  if (allCached) {
+    combined.metadata = { ...combined.metadata, cachedResponse: true };
+  } else if (combined.metadata?.cachedResponse === true) {
+    const { cachedResponse: _cachedResponse, ...metadata } = combined.metadata;
+    combined.metadata = metadata;
+  }
+  return combined;
+}
 
 export const handleSimilar = async ({
   assertion,
@@ -41,6 +60,8 @@ export const handleSimilar = async ({
   }
 
   if (Array.isArray(renderedValue)) {
+    const tokensUsed: TokenUsage = {};
+    let allCached = true;
     // `not-similar` is the negation of the positive "similar to at least one"
     // semantics, so it must pass only when the output is dissimilar to EVERY
     // value. Fail (return early) on the first value the output is too similar
@@ -65,11 +86,13 @@ export const handleSimilar = async ({
         metric,
         providerCallContext,
       );
+      const normalizedUsage = normalizeAssertionTokenUsage(result);
+      if (normalizedUsage) {
+        accumulateNormalizedAssertionTokenUsage(tokensUsed, normalizedUsage);
+      }
+      allCached &&= result.metadata?.cachedResponse === true;
       if (inverse ? !result.pass : result.pass) {
-        return {
-          assertion,
-          ...result,
-        };
+        return withAccumulatedUsage({ assertion, ...result }, tokensUsed, allCached);
       }
       if (inverse && (!closestResult || result.score < closestResult.score)) {
         closestResult = result;
@@ -80,17 +103,18 @@ export const handleSimilar = async ({
     if (inverse) {
       // renderedValue is non-empty (invariant above), so closestResult is set.
       invariant(closestResult, 'Similarity result missing');
-      return {
-        assertion,
-        ...closestResult,
-      };
+      return withAccumulatedUsage({ assertion, ...closestResult }, tokensUsed, allCached);
     }
-    return {
-      assertion,
-      pass: false,
-      score: maxScore,
-      reason: `None of the provided values met the similarity threshold`,
-    };
+    return withAccumulatedUsage(
+      {
+        assertion,
+        pass: false,
+        score: maxScore,
+        reason: `None of the provided values met the similarity threshold`,
+      },
+      tokensUsed,
+      allCached,
+    );
   } else {
     return {
       assertion,
