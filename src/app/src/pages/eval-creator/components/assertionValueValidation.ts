@@ -62,6 +62,8 @@ export const PI_SCORE_ASSERTION_TYPES = new Set<AssertionType>(['pi', 'not-pi'])
 export const RAG_SCORE_ASSERTION_TYPES = new Set<AssertionType>([
   'answer-relevance',
   'not-answer-relevance',
+  'citation-faithfulness',
+  'not-citation-faithfulness',
   'context-faithfulness',
   'not-context-faithfulness',
   'context-recall',
