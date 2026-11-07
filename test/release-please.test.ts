@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { runInNewContext } from 'node:vm';
 
 import * as yaml from 'js-yaml';
 import { describe, expect, it } from 'vitest';
@@ -21,6 +22,7 @@ type ReleasePleaseConfig = {
 };
 
 type WorkflowStep = {
+  if?: unknown;
   run?: string;
   name?: unknown;
   uses?: unknown;
@@ -34,6 +36,8 @@ type WorkflowJob = {
   steps?: WorkflowStep[];
 };
 type ReleasePleaseWorkflow = {
+  concurrency?: { group?: unknown };
+  env?: Record<string, unknown>;
   jobs?: Record<string, WorkflowJob>;
 };
 type ReleaseDriftWorkflow = {
@@ -267,5 +271,142 @@ describe('release-please automation', () => {
     } finally {
       fs.rmSync(cwd, { recursive: true, force: true });
     }
+  });
+});
+
+// release-please builds the image by calling docker.yml on `main`, so the git ref is never
+// the release tag there. A rule that reads the ref publishes nothing, and a rule that is
+// not tied to a release moves an alias to unreleased commits.
+describe('Docker image tags', () => {
+  it.each([
+    ['workflow_dispatch', 'refs/tags/0.125.0', '', '0.125.0', true, 'docker-publish-0.125.0'],
+    [
+      'workflow_dispatch',
+      'refs/tags/0.125.0-beta.1',
+      '',
+      '0.125.0-beta.1',
+      true,
+      'docker-publish-0.125.0-beta.1',
+    ],
+    ['workflow_dispatch', 'refs/heads/main', '0.124.1', '0.124.1', true, 'docker-publish-0.124.1'],
+    [
+      'workflow_dispatch',
+      'refs/tags/0.125.0',
+      '0.124.1',
+      '0.124.1',
+      true,
+      'docker-publish-0.124.1',
+    ],
+    ['workflow_dispatch', 'refs/heads/main', '', '', false, 'docker-publish-refs/heads/main'],
+    ['workflow_dispatch', 'refs/heads/0.125.0', '', '', false, 'docker-publish-refs/heads/0.125.0'],
+    [
+      'workflow_dispatch',
+      'refs/tags/not-a-version',
+      '',
+      'not-a-version',
+      true,
+      'docker-publish-not-a-version',
+    ],
+    ['push', 'refs/heads/main', '', '', false, 'docker-publish-refs/heads/main'],
+    ['push', 'refs/heads/main', '0.125.0', '0.125.0', false, 'docker-publish-0.125.0'],
+    ['release', 'refs/tags/0.124.1', '', '0.124.1', true, 'docker-publish-0.124.1'],
+    ['pull_request', 'refs/pull/123/merge', '', '', false, 'docker-pr-refs/pull/123/merge'],
+  ] as const)(
+    'routes %s on %s with tag input "%s"',
+    (eventName, ref, inputTag, releaseTag, fallback, group) => {
+      const workflow = yaml.load(
+        readRepoFile('.github/workflows/docker.yml'),
+      ) as ReleasePleaseWorkflow;
+      const refName = ref.replace(/^refs\/(heads|tags)\//, '');
+      const context = {
+        github: {
+          event_name: eventName,
+          ref,
+          ref_type: ref.startsWith('refs/tags/') ? 'tag' : 'branch',
+          ref_name: refName,
+          event: { release: { tag_name: eventName === 'release' ? refName : '' } },
+        },
+        inputs: { tag_name: inputTag },
+        env: {} as Record<string, string>,
+        format: (template: string, value: string) => template.replace('{0}', value),
+      };
+      // These workflow expressions use only string/boolean operators shared with JavaScript.
+      const evaluate = (expression: unknown) => {
+        assert(typeof expression === 'string');
+        const source = expression.startsWith('${{') ? expression.slice(3, -2) : expression;
+        return runInNewContext(source, context);
+      };
+
+      context.env.RELEASE_TAG = String(evaluate(workflow.env?.RELEASE_TAG));
+      expect(context.env.RELEASE_TAG).toBe(releaseTag);
+      expect(evaluate(workflow.env?.IS_RELEASE_FALLBACK)).toBe(fallback);
+      expect(evaluate(workflow.concurrency?.group)).toBe(group);
+
+      const validate = workflow.jobs?.test?.steps?.find(
+        (step) => step.name === 'Validate release tag',
+      );
+      assert(validate, 'the Docker test job must validate release tags');
+      // Invalid tag refs must reach the existing validation step instead of publishing a SHA.
+      expect(evaluate(validate.if)).toBe(releaseTag !== '');
+    },
+  );
+
+  function readTagRules(): { flavor: string; rules: string[] } {
+    const workflow = yaml.load(
+      readRepoFile('.github/workflows/docker.yml'),
+    ) as ReleasePleaseWorkflow;
+    const metaStep = workflow.jobs?.['merge-docker-digests']?.steps?.find(
+      (step) => typeof step.uses === 'string' && step.uses.startsWith('docker/metadata-action@'),
+    );
+    const flavor = metaStep?.with?.flavor;
+    const tags = metaStep?.with?.tags;
+    assert(
+      typeof flavor === 'string' && typeof tags === 'string',
+      'merge-docker-digests must set the metadata-action flavor and tags',
+    );
+    return {
+      flavor,
+      rules: tags
+        .trim()
+        .split('\n')
+        .map((rule) => rule.trim()),
+    };
+  }
+
+  it('moves latest only for a stable release cut by release-please', () => {
+    const { flavor, rules } = readTagRules();
+
+    // The default flavor adds `latest` to every semver tag, including hand-published ones.
+    expect(flavor.trim()).toBe('latest=false');
+    const latestRules = rules.filter((rule) => rule.includes('value=latest'));
+    expect(latestRules).toHaveLength(1);
+    expect(latestRules[0]).toContain("env.RELEASE_TAG != ''");
+    expect(latestRules[0]).toContain("env.IS_RELEASE_FALLBACK != 'true'");
+    expect(latestRules[0]).toContain("!contains(env.RELEASE_TAG, '-')");
+  });
+
+  it('publishes branch and commit tags only for builds without a release tag', () => {
+    const { rules } = readTagRules();
+    const branchRules = rules.filter(
+      (rule) => rule.startsWith('type=ref,') || rule.startsWith('type=sha'),
+    );
+
+    // Releases and pushes build in separate concurrency groups. That is only safe while
+    // they never publish the same tag.
+    expect(branchRules.length).toBeGreaterThan(0);
+    for (const rule of branchRules) {
+      expect(rule).toContain("enable=${{ env.RELEASE_TAG == '' }}");
+    }
+  });
+
+  it('reads release versions from the tag input instead of the git ref', () => {
+    const { rules } = readTagRules();
+    const semverRules = rules.filter((rule) => rule.startsWith('type=semver'));
+
+    expect(semverRules.length).toBeGreaterThan(0);
+    for (const rule of semverRules) {
+      expect(rule).toContain('value=${{ env.RELEASE_TAG }}');
+    }
+    expect(rules.some((rule) => rule.startsWith('type=ref,event=tag'))).toBe(false);
   });
 });
