@@ -15,6 +15,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDb } from '../../../src/database/index';
 import { runDbMigrations } from '../../../src/migrate';
 import { createApp } from '../../../src/server/server';
+import { createEvaluateResult } from '../../factories/eval';
 import EvalFactory from '../../factories/evalFactory';
 import { clearEvalTables } from '../../util/evalDb';
 
@@ -53,6 +54,23 @@ describe('GET /api/eval/:id/table - Filtered Metrics Integration', () => {
         namedScores: expect.any(Object),
         namedScoresCount: expect.any(Object),
         cost: expect.any(Number),
+      });
+    });
+
+    it('returns matching rows with unavailable metrics during an overlapping retry', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 1, resultTypes: ['error'] });
+      await eval_.addResult(
+        createEvaluateResult({ testIdx: 0, promptIdx: 0, response: { output: 'retry answer' } }),
+      );
+
+      const response = await api
+        .get(`/api/eval/${eval_.id}/table`)
+        .query({ search: 'retry answer' });
+      expect(response.status).toBe(200);
+      expect(response.body).toMatchObject({
+        filteredCount: 1,
+        filteredMetrics: null,
+        table: { body: [{ testIdx: 0 }] },
       });
     });
 
