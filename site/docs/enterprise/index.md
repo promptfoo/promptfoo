@@ -15,22 +15,7 @@ keywords:
 
 # Promptfoo Enterprise
 
-Promptfoo offers two deployment options to meet your security needs:
-
-**Promptfoo Enterprise** is our hosted SaaS solution that lets you securely scan your LLM applications without managing infrastructure.
-
-**Promptfoo Enterprise On-Prem** is our on-premises solution that includes a dedicated runner for deployments behind your firewall.
-
-Both solutions offer a suite of tools to help you secure your LLM applications, including:
-
-- Robust RBAC controls to manage multiple users and teams
-- Teams-based configurability for customizing targets, plugins, and scan configurations
-- Detailed reporting and analytics to monitor the security of your LLM applications
-- Remediation suggestions to help you fix vulnerabilities
-- Advanced filtering to find and sort through evals
-- Sharing and exporting functions to integrate Promptfoo with your existing tools
-
-Our platform works with any LLM application, agent, or foundation model that is live and ready for inference.
+Promptfoo Enterprise adds team access controls, shared scan configurations, and finding management to LLM testing. Choose a [deployment](#deployment-options) based on who will operate the service and how it will reach your application, then compare the available capabilities below.
 
 ![Promptfoo Dashboard (Enterprise interface shown)](/img/enterprise-docs/promptfoo-dashboard.png)
 

@@ -17,17 +17,11 @@ keywords:
 
 # Assertions & metrics
 
-Assertions are used to compare the LLM output against expected values or conditions. While assertions are not required to run an eval, they are a useful way to automate your analysis.
+Assertions check model outputs against conditions you define, such as an exact answer, a JSON schema, or a grading rubric. Add them to automate checks you would otherwise perform by reviewing outputs manually.
 
-Different types of assertions can be used to validate the output in various ways, such as checking for equality, JSON structure, similarity, or custom functions.
+A test's pass/fail result depends on its assertions and thresholds. Its numeric score is a separate value used to summarize grading. Read the assertion's reference before interpreting a score or choosing a threshold.
 
-Red team strategies can grade responses during an attack. The final assertion check reuses a strategy grade only when the configured strategy, plugin, assertion, and recorded input/output match the returned result. Stale grades and older results without this binding receive fresh grading. When a new grade is needed, red team assertions use the final transformed attack input, then the provider-reported prompt (a nonempty string or the last user message in a chat array), then the last saved user message, falling back to the original test prompt when none is available. Prior user/assistant conversation is included as grading context, except for Hydra and Goblin, which grade the current turn without adding history. System and tool messages are not treated as user input.
-
-When no final strategy prompt is available, a provider-reported chat array without a usable user message uses the original prompt fallback instead of unrelated saved messages. Historical strategy grading usage is counted once across matching assertions, including assertion sets. Replayed grading responses count their full token usage as cached.
-
-For [data-exfil red team assertions](/docs/red-team/plugins/data-exfil#grading), valid page tracking can supply deterministic evidence of exfiltration. Missing or malformed tracking identifiers leave model grading in place and do not automatically pass the test.
-
-In machine learning, "Accuracy" is a metric that measures the proportion of correct predictions made by a model out of the total number of predictions. With `promptfoo`, accuracy is defined as the proportion of prompts that produce the expected or desired output.
+Red team grading also uses the attack input and application context. See [Configuring the Grader](/docs/red-team/troubleshooting/grading-results) when a red team result does not match your expectations.
 
 ## Using assertions
 

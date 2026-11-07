@@ -10,7 +10,7 @@ import TabItem from '@theme/TabItem';
 
 # Getting started
 
-This guide will walk you through creating a working eval that tests prompts across multiple models and opens a web view for comparing outputs.
+Run a translation eval, inspect its outputs, and add assertions to check whether the translations meet your requirements.
 
 After [installing](/docs/installation) promptfoo, you can set up your first config file in a few ways:
 
@@ -194,7 +194,7 @@ Now that you've created an initial configuration, you can update `promptfooconfi
      </TabItem>
    </Tabs>
 
-   This tests every prompt, model, and test case.
+   This runs the configured prompt and provider combinations for each test case.
 
 5. **Review outputs**: After the evaluation is complete, open the web viewer to review the outputs:
 
@@ -218,11 +218,13 @@ Now that you've created an initial configuration, you can update `promptfooconfi
 
 ![Promptfoo Web UI showing evaluation results](/img/docs/custom-example-view.png)
 
+Open a failed cell to compare the model output with the assertion reason. An error means the request or grading did not complete successfully and needs investigation. If you have not added assertions, review the outputs manually before deciding which prompt or model to use.
+
 ### Asserts
 
 The YAML configuration format runs each prompt through a series of test cases and checks if they meet the specified [asserts](/docs/configuration/expected-outputs/).
 
-Asserts are _optional_. Many people get value out of reviewing outputs manually, and the web UI helps facilitate this.
+Assertions are optional. Without them, a successful request does not establish that the output is correct.
 
 :::tip
 See the [Configuration docs](/docs/configuration/guide) for a detailed guide.
