@@ -609,7 +609,10 @@ describe('setupReadiness', () => {
             tests: [
               {
                 assert: [
-                  { type: 'trace-span-count' as const, value: { pattern: '*', attributes } },
+                  {
+                    type: 'trace-span-count' as const,
+                    value: { pattern: '*', min: 1, attributes },
+                  },
                 ],
               },
             ],
