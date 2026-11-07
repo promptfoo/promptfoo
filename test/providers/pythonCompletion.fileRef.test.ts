@@ -207,13 +207,13 @@ describe('PythonProvider with file references', () => {
     expect(provider.config).toEqual(mockProcessedConfig);
   });
 
-  it('should only process config references once', async () => {
+  it('keeps resolved config across worker restarts and resolves a replacement config', async () => {
     const mockConfig = {
       settings: 'file://settings.json',
     };
 
     vi.mocked(processConfigFileReferences).mockResolvedValue({
-      settings: { processed: true },
+      settings: { storageUri: 'file://store.db' },
     });
 
     const provider = new PythonProvider('test.py', {
@@ -225,11 +225,20 @@ describe('PythonProvider with file references', () => {
     });
     providers.push(provider);
 
-    await provider.initialize();
-    await provider.initialize();
+    await Promise.all([provider.initialize(), provider.initialize()]);
+    await provider.shutdown();
     await provider.initialize();
 
     expect(processConfigFileReferences).toHaveBeenCalledTimes(1);
+    expect(provider.config.settings).toEqual({ storageUri: 'file://store.db' });
+    expect(mockPoolInstance.initialize).toHaveBeenCalledTimes(2);
+
+    await provider.shutdown();
+    const replacement = { settings: 'file://replacement.json' };
+    provider.config = replacement;
+    await provider.initialize();
+    expect(processConfigFileReferences).toHaveBeenLastCalledWith(replacement, '/base/path');
+    expect(processConfigFileReferences).toHaveBeenCalledTimes(2);
   });
 
   it('should pass the loaded config to python script execution', async () => {
