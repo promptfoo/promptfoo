@@ -254,6 +254,30 @@ describe('AnthropicGenericProvider', () => {
     });
   });
 
+  describe('setCachedResponse', () => {
+    it('passes a positive TTL to persistent cache entries', async () => {
+      const provider = new AnthropicGenericProvider('claude-3-5-sonnet-20241022', {
+        label: 'test-label',
+      });
+      const cache = { set: vi.fn() };
+
+      await (provider as any).setCachedResponse(cache, 'key', 'ephemeral-key', 0, 1000, 'response');
+
+      expect(cache.set).toHaveBeenCalledWith('key', 'response', 1000);
+    });
+
+    it('uses the cache default TTL when the configured TTL is not positive', async () => {
+      const provider = new AnthropicGenericProvider('claude-3-5-sonnet-20241022', {
+        label: 'test-label',
+      });
+      const cache = { set: vi.fn() };
+
+      await (provider as any).setCachedResponse(cache, 'key', 'ephemeral-key', 0, 0, 'response');
+
+      expect(cache.set).toHaveBeenCalledWith('key', 'response');
+    });
+  });
+
   describe('Claude Code OAuth authentication', () => {
     // Exercised via `AnthropicMessagesProvider` because only OAuth-capable
     // subclasses (those that opt in via `SUPPORTS_CLAUDE_CODE_OAUTH`) honor
