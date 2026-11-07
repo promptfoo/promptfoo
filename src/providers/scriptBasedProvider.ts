@@ -1,4 +1,4 @@
-import { getResolvedRelativePath } from '../util/file';
+import { getResolvedRelativePath, parseExecutableFileReference } from '../util/file';
 
 import type { LoadApiProviderContext } from '../types/index';
 import type { ApiProvider, ProviderOptions } from '../types/providers';
@@ -24,9 +24,10 @@ export function createScriptBasedProviderFactory(
 
       // Check file extension only if fileExtension is provided
       if (fileExtension && providerPath.startsWith('file://')) {
-        return (
-          providerPath.endsWith(`.${fileExtension}`) || providerPath.includes(`.${fileExtension}:`)
-        );
+        const { filePath } = parseExecutableFileReference(providerPath.slice('file://'.length));
+        const lowerPath = filePath.toLowerCase();
+        const lowerExtension = `.${fileExtension.toLowerCase()}`;
+        return lowerPath.endsWith(lowerExtension) || lowerPath.includes(`${lowerExtension}:`);
       }
 
       return false;

@@ -10,7 +10,11 @@ import {
 import { hasTraceCredentialPath } from '../contracts/traceProviderEndpoint';
 import { PromptConfigSchema, PromptSchema } from '../contracts/validators/prompts';
 import { NunjucksFilterMapSchema, StringOrFunctionSchema } from '../contracts/validators/shared';
-import { isJavascriptFile, JAVASCRIPT_EXTENSIONS } from '../validation/fileExtensions';
+import {
+  isJavascriptFile,
+  isPythonFile,
+  JAVASCRIPT_EXTENSIONS,
+} from '../validation/fileExtensions';
 import { parseFilterRange } from '../validation/filterRange';
 import { ApiProviderSchema, ProviderOptionsSchema, ProvidersSchema } from '../validators/providers';
 import {
@@ -1240,7 +1244,7 @@ export const TestSuiteSchema = z.object({
           (value) => {
             const parts = value.split(':');
             return (
-              (parts[1].endsWith('.py') || isJavascriptFile(parts[1])) &&
+              (isPythonFile(parts[1]) || isJavascriptFile(parts[1])) &&
               (parts.length === 3 || parts.length === 2)
             );
           },

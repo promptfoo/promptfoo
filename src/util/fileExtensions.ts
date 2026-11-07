@@ -3,6 +3,10 @@ export {
   isAudioFile,
   isImageFile,
   isJavascriptFile,
+  isPythonFile,
   isVideoFile,
   JAVASCRIPT_EXTENSIONS,
+  parseExecutableFileReference,
+  parsePythonFileReference,
+  parseRubyFileReference,
 } from '../validation/fileExtensions';
