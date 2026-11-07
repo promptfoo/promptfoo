@@ -147,12 +147,9 @@ function getInlineTransformFunction(code: string, inputType: TransformInputType)
       'Inline JavaScript execution is disabled in safe mode. Please use a file reference instead (e.g. "file://path/to/transform.js").',
     );
   }
-  return new Function(
-    inputType,
-    'context',
-    'process',
-    code.includes('\n') ? code : `return ${code}`,
-  );
+  const trimmed = code.trim();
+  const isFunctionBody = code.includes('\n') || /^(return|throw)\b/.test(trimmed);
+  return new Function(inputType, 'context', 'process', isFunctionBody ? code : `return ${code}`);
 }
 
 /**
