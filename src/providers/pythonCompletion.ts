@@ -17,6 +17,7 @@ import {
   applyCachedCallApiMetadata,
   buildScriptArgs,
   hasScriptResultError,
+  publishScriptProviderCacheWrite,
   validateScriptResult,
 } from './scriptResult';
 
@@ -293,7 +294,7 @@ export class PythonProvider implements ApiProvider {
 
       if (isCacheEnabled() && !hasError) {
         logger.debug(`PythonProvider caching result: ${cacheKey}`);
-        await cache.set(cacheKey, JSON.stringify(result));
+        publishScriptProviderCacheWrite(cache, cacheKey, JSON.stringify(result), 'PythonProvider');
       } else {
         logger.debug(
           `PythonProvider not caching result: ${isCacheEnabled() ? (hasError ? 'has error' : 'unknown reason') : 'cache disabled'}`,

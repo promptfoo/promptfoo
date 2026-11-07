@@ -100,3 +100,21 @@ export function validateScriptResult(
     );
   }
 }
+
+/**
+ * Persist a script-provider result without blocking the caller.
+ * Matches fetchWithCache: keyv-file rewrites of a large cache.json can take
+ * 100ms+ per write, so Python/Ruby must not await. Failures are logged and must
+ * not reject the call. Executable scriptCompletion still awaits cache.set (#11198).
+ */
+export function publishScriptProviderCacheWrite(
+  cache: { set: (key: string, value: string) => Promise<unknown> | unknown },
+  cacheKey: string,
+  value: string,
+  providerLabel: string,
+): void {
+  // Promise.resolve so sync/undefined mock returns and real Keyv promises both work.
+  void Promise.resolve(cache.set(cacheKey, value)).catch((err) => {
+    logger.warn(`${providerLabel} failed to cache result: ${String(err)}`);
+  });
+}
