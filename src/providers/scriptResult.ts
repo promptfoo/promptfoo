@@ -107,8 +107,8 @@ export function validateScriptResult(
  * 100ms+ per write, so Python/Ruby must not await. Failures are logged and must
  * not reject the call. Executable scriptCompletion still awaits cache.set (#11198).
  *
- * Pending writes are tracked so shutdownGracefully can flush them before the
- * 100ms natural-exit timer, without putting the wait back on each provider call.
+ * Pending writes are tracked so shutdownGracefully and SIGTERM cleanup can flush
+ * them before process exit, without putting the wait back on each provider call.
  */
 const pendingScriptProviderCacheWrites = new Set<Promise<unknown>>();
 

@@ -6,8 +6,10 @@ import { getGlobalDispatcher } from 'undici';
 import { requestsStructuredCodeScanOutput } from './codeScan/util/structuredOutputDetect';
 import { closeDbIfOpen } from './database/index';
 import logger, { closeLogger, setLogLevel } from './logger';
-import { providerRegistry } from './providers/providerRegistry';
-import { flushPendingScriptProviderCacheWrites } from './providers/scriptResult';
+import {
+  flushPendingScriptProviderCacheWrites,
+  providerRegistry,
+} from './providers/providerRegistry';
 import telemetry from './telemetry';
 import { clearAgentCache } from './util/fetch/index';
 import { setupEnv } from './util/index';

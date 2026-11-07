@@ -667,3 +667,7 @@ export class ProviderRegistry {
 }
 
 export const providerRegistry = new ProviderRegistry();
+
+// Re-exported so legacy-runtime / node shutdown paths share one providers import
+// (keeps architecture edge baseline) while flushing detached Python/Ruby cache writes.
+export { flushPendingScriptProviderCacheWrites } from './scriptResult';
