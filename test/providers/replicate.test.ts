@@ -38,6 +38,79 @@ const createMockPredictionResponse = (output: string | string[] | null = 'test r
     output: output,
   });
 
+describe.each([
+  { name: 'text', Provider: ReplicateProvider },
+  { name: 'image', Provider: ReplicateImageProvider },
+])('Replicate $name terminal predictions', ({ Provider }) => {
+  const mockCache = { get: vi.fn(), set: vi.fn() };
+
+  beforeEach(() => {
+    vi.resetAllMocks();
+    vi.useFakeTimers();
+    vi.mocked(isCacheEnabled).mockReturnValue(true);
+    vi.mocked(getCache).mockReturnValue(mockCache as unknown as ReturnType<typeof getCache>);
+  });
+
+  afterEach(() => {
+    vi.resetAllMocks();
+    vi.useRealTimers();
+  });
+
+  describe.each(['canceled', 'aborted'])('%s', (status) => {
+    it('preserves the service error without caching partial output', async () => {
+      mockedFetchWithCache.mockResolvedValue(
+        createMockFetchResponse({
+          id: 'test-id',
+          status,
+          output: ['https://example.invalid/partial.png'],
+          error: 'The prediction deadline was exceeded',
+        }),
+      );
+      const provider = new Provider('test-model', { config: { apiKey: 'test-api-key' } });
+
+      const response = await provider.callApi('test prompt');
+
+      expect(response.error).toContain('The prediction deadline was exceeded');
+      expect(response.output).toBeUndefined();
+      expect(mockCache.set).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      [false, null],
+      [false, 'https://example.invalid/partial.png'],
+      [false, ['https://example.invalid/partial.png']],
+      [true, null],
+      [true, 'https://example.invalid/partial.png'],
+      [true, ['https://example.invalid/partial.png']],
+    ])(
+      'returns an error without caching output (polled: %s, output: %j)',
+      async (polled, output) => {
+        if (polled) {
+          mockedFetchWithCache.mockResolvedValueOnce(
+            createMockFetchResponse({ id: 'test-id', status: 'processing', output: null }),
+          );
+        }
+        mockedFetchWithCache.mockResolvedValue(
+          createMockFetchResponse({ id: 'test-id', status, output }),
+        );
+        const provider = new Provider('test-model', { config: { apiKey: 'test-api-key' } });
+        const completion = provider.callApi('test prompt').then(
+          (response) => ({ response }),
+          (error) => ({ error }),
+        );
+
+        await vi.runAllTimersAsync();
+
+        expect(await completion).toEqual({
+          response: { error: expect.stringContaining(`Prediction ${status}`) },
+        });
+        expect(mockedFetchWithCache).toHaveBeenCalledTimes(polled ? 2 : 1);
+        expect(mockCache.set).not.toHaveBeenCalled();
+      },
+    );
+  });
+});
+
 describe('ReplicateProvider', () => {
   const mockApiKey = 'test-api-key';
 
