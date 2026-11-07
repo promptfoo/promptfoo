@@ -20,7 +20,13 @@ import cliState from './cliState';
 import { DEFAULT_MAX_CONCURRENCY, FILE_METADATA_KEY } from './constants';
 import { getEnvBool, getEnvInt, getEvalTimeoutMs, getMaxEvalTimeMs, isCI } from './envars';
 import { compileDerivedMetricFormula } from './evaluator/derivedMetricFormula';
-import { collectFileMetadata, renderPrompt, runExtensionHook } from './evaluatorHelpers';
+import {
+  collectFileMetadata,
+  markStoredOutput,
+  renderPrompt,
+  runExtensionHook,
+  tagOutputRegisters,
+} from './evaluatorHelpers';
 import logger, { globalLogCallback, isDebugEnabled, setLogCallback } from './logger';
 import { selectMaxScore } from './matchers/comparison';
 import {
@@ -860,6 +866,7 @@ async function renderRunEvalPrompt({
   isRedteam,
   provider,
   promptForRender,
+  registers,
   test,
   testSuite,
   vars,
@@ -868,6 +875,7 @@ async function renderRunEvalPrompt({
   isRedteam: boolean;
   provider: ApiProvider;
   promptForRender: Prompt;
+  registers?: EvalRegisters;
   test: AtomicTestCase;
   testSuite?: TestSuite;
   vars: Vars;
@@ -881,6 +889,7 @@ async function renderRunEvalPrompt({
     filters,
     provider,
     skipRenderVars,
+    registers && Object.keys(registers),
   );
   if (isRedteam) {
     throwIfTargetPromptExceedsMaxChars(renderedPrompt, testSuite?.redteam?.maxCharsPerMessage);
@@ -924,6 +933,7 @@ async function callProviderForRunEval({
   promptForRender,
   provider,
   rateLimitRegistry,
+  registers,
   renderedPrompt,
   repeatIndex,
   test,
@@ -938,6 +948,7 @@ async function callProviderForRunEval({
   | 'nunjucksFilters'
   | 'provider'
   | 'rateLimitRegistry'
+  | 'registers'
   | 'repeatIndex'
   | 'test'
   | 'testSuite'
@@ -975,6 +986,7 @@ async function callProviderForRunEval({
         promptForRender,
         provider,
         rateLimitRegistry,
+        registers,
         renderedPrompt,
         repeatIndex,
         test,
@@ -1098,6 +1110,7 @@ async function callActiveProvider({
   promptForRender,
   provider,
   rateLimitRegistry,
+  registers,
   renderedPrompt,
   repeatIndex,
   test,
@@ -1107,7 +1120,14 @@ async function callActiveProvider({
   vars,
 }: Pick<
   RunEvalOptions,
-  'abortSignal' | 'evalId' | 'provider' | 'rateLimitRegistry' | 'repeatIndex' | 'test' | 'testSuite'
+  | 'abortSignal'
+  | 'evalId'
+  | 'provider'
+  | 'rateLimitRegistry'
+  | 'registers'
+  | 'repeatIndex'
+  | 'test'
+  | 'testSuite'
 > & {
   filters: RunEvalOptions['nunjucksFilters'];
   pauseSignal?: AbortSignal;
@@ -1131,6 +1151,7 @@ async function callActiveProvider({
     filters,
     originalProvider,
     promptForRender,
+    registers,
     repeatIndex,
     test,
     testIndex,
@@ -1244,6 +1265,7 @@ function buildCallApiContext({
   filters,
   originalProvider,
   promptForRender,
+  registers,
   repeatIndex,
   test,
   testIndex,
@@ -1254,6 +1276,7 @@ function buildCallApiContext({
   filters: RunEvalOptions['nunjucksFilters'];
   originalProvider: ApiProvider;
   promptForRender: Prompt;
+  registers?: EvalRegisters;
   repeatIndex: number;
   test: AtomicTestCase;
   testIndex: number;
@@ -1263,6 +1286,7 @@ function buildCallApiContext({
   const callApiContext: CallApiContextParams = {
     vars,
     prompt: promptForRender,
+    registers,
     filters,
     originalProvider,
     test,
@@ -1807,6 +1831,7 @@ async function runEvalInternal(
     vars: state.vars,
   });
   Object.assign(state.vars, registers);
+  tagOutputRegisters(state.vars, registers);
   Object.assign(
     state.vars,
     getEvalRuntimeVars({
@@ -1830,6 +1855,7 @@ async function runEvalInternal(
       isRedteam,
       provider,
       promptForRender: state.promptForRender,
+      registers,
       test,
       testSuite,
       vars: state.vars,
@@ -1877,6 +1903,7 @@ async function runEvalInternal(
             },
             provider,
             rateLimitRegistry,
+            registers,
             renderedPrompt: rendered.renderedPrompt,
             repeatIndex,
             test,
@@ -1964,6 +1991,7 @@ async function runEvalInternal(
           if (test.options?.storeOutputAs && ret.response?.output && registers) {
             // Save the output in a register for later use
             registers[test.options.storeOutputAs] = ret.response.output;
+            markStoredOutput(ret.response.output);
           }
 
           return [ret];

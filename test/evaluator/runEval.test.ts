@@ -7,6 +7,7 @@ import fs from 'fs/promises';
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearCache } from '../../src/cache';
 import { runEval } from '../../src/evaluator';
+import { renderPrompt } from '../../src/evaluatorHelpers';
 import logger from '../../src/logger';
 import { geminiFormatAndSystemInstructions } from '../../src/providers/google/util';
 import { RateLimitRegistry } from '../../src/scheduler/rateLimitRegistry';
@@ -779,6 +780,78 @@ describe('runEval', () => {
       expect.anything(),
       undefined,
     );
+  });
+
+  it('should not load file references from registers', async () => {
+    const results = await runEval({
+      ...defaultOptions,
+      provider: mockProvider,
+      prompt: { raw: 'Using {{ savedText }} {{ savedValue.path }}', label: 'test-label' },
+      test: {},
+      conversations: {},
+      registers: {
+        savedText: 'file:///nonexistent/secret.txt',
+        savedValue: { path: 'file:///nonexistent/secret.txt' },
+      },
+    });
+
+    expect(results[0].success).toBe(true);
+    expect(mockProvider.callApi).toHaveBeenCalledWith(
+      'Using file:///nonexistent/secret.txt file:///nonexistent/secret.txt',
+      expect.anything(),
+      undefined,
+    );
+  });
+
+  it('should not load file references from registers during strategy re-renders to an agentic target', async () => {
+    let targetPromptReceived = '';
+    const agenticTarget: ApiProvider = {
+      id: vi.fn().mockReturnValue('agentic-target'),
+      callApi: vi.fn().mockImplementation(async (prompt: string) => {
+        targetPromptReceived = prompt;
+        return {
+          output: 'target response',
+          tokenUsage: { total: 5, prompt: 3, completion: 2, cached: 0, numRequests: 1 },
+        };
+      }),
+    };
+
+    const redteamStrategyProvider: ApiProvider = {
+      id: vi.fn().mockReturnValue('promptfoo:redteam:iterative'),
+      callApi: vi.fn().mockImplementation(async (_prompt: string, context?: any) => {
+        // Redteam iterative provider re-renders prompt with injectVar and updated vars
+        const updatedVars = {
+          ...context.vars,
+          prompt: 'fixture attack',
+        };
+        const rendered = await renderPrompt(
+          context.prompt,
+          updatedVars,
+          context.filters,
+          agenticTarget,
+          ['prompt'],
+        );
+        return agenticTarget.callApi(rendered, context);
+      }),
+    };
+
+    const registers = {
+      saved: { report: 'file:///nonexistent/canary.txt' },
+    };
+
+    const results = await runEval({
+      ...defaultOptions,
+      provider: redteamStrategyProvider,
+      prompt: { raw: '{{prompt}}|{{saved.report}}', label: 'canary-prompt' },
+      test: {
+        vars: { prompt: 'initial prompt' },
+      },
+      conversations: {},
+      registers,
+    });
+
+    expect(results[0].success).toBe(true);
+    expect(targetPromptReceived).toBe('fixture attack|file:///nonexistent/canary.txt');
   });
 
   it('should store output in register when specified', async () => {

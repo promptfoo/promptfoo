@@ -28,6 +28,85 @@ type VarsWithFileMimeTypes = Record<string, unknown> & {
   [loadedFileMimeTypes]?: ReadonlyMap<string, string>;
 };
 
+const outputVarNames = Symbol('outputVarNames');
+const outputValueMarker = Symbol('outputValueMarker');
+
+type VarsWithOutputProvenance = Record<string, unknown> & {
+  [outputVarNames]?: ReadonlySet<string>;
+};
+
+/**
+ * Recursively marks an object/array value as having originated from an output register
+ * or runtime model response, so file references inside it are never loaded.
+ */
+export function markOutputValue(val: unknown, ancestors = new WeakSet<object>()): void {
+  if (!val || typeof val !== 'object' || ancestors.has(val)) {
+    return;
+  }
+  ancestors.add(val);
+  try {
+    Object.defineProperty(val, outputValueMarker, {
+      value: true,
+      enumerable: true,
+      configurable: true,
+    });
+  } catch {
+    // Ignore non-extensible objects
+  }
+  const descriptors = Object.getOwnPropertyDescriptors(val);
+  for (const descriptor of Object.values(descriptors)) {
+    if ('value' in descriptor && descriptor.value) {
+      markOutputValue(descriptor.value, ancestors);
+    }
+  }
+}
+
+/**
+ * Checks whether an object/array value originated from an output register.
+ */
+export function isOutputValue(val: unknown): boolean {
+  return Boolean(
+    val &&
+      typeof val === 'object' &&
+      (val as Record<string, unknown>)[outputValueMarker as unknown as string],
+  );
+}
+
+/**
+ * Preserves output-register provenance across variable copies (e.g. `{ ...vars }`).
+ * Records which variable names hold provider outputs so strategy-level re-renders
+ * (like iterative attack providers) never treat saved provider output as file configuration.
+ */
+export function setOutputVars(
+  vars: Record<string, unknown>,
+  varNames?: Iterable<string>,
+): Set<string> {
+  const current = (vars as VarsWithOutputProvenance)[outputVarNames];
+  const next = new Set<string>(current);
+  if (varNames) {
+    for (const name of varNames) {
+      next.add(name);
+      if (vars[name]) {
+        markOutputValue(vars[name]);
+      }
+    }
+  }
+  if (next.size > 0) {
+    Object.defineProperty(vars, outputVarNames, {
+      value: next,
+      enumerable: true,
+      configurable: true,
+    });
+  } else {
+    delete (vars as VarsWithOutputProvenance)[outputVarNames];
+  }
+  return next;
+}
+
+export function getOutputVars(vars: Record<string, unknown>): ReadonlySet<string> | undefined {
+  return (vars as VarsWithOutputProvenance)[outputVarNames];
+}
+
 /** Preserve loaded-file provenance through object copies, outside serialized vars. */
 export function setLoadedFileMimeTypes(
   vars: Record<string, unknown>,
