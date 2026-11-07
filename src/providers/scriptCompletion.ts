@@ -120,11 +120,17 @@ export class ScriptCompletionProvider implements ApiProvider {
         }
         logger.debug(`Output from script ${this.scriptPath}: ${standardOutput}`);
         const result = { output: standardOutput };
-        if (fileHashes.length > 0 && isCacheEnabled()) {
-          const cache = await getCache();
-          await cache.set(cacheKey, JSON.stringify(result));
+        try {
+          if (fileHashes.length > 0 && isCacheEnabled()) {
+            const cache = await getCache();
+            await cache.set(cacheKey, JSON.stringify(result));
+          }
+          resolve(result);
+        } catch (err) {
+          // Async execFile callbacks do not reject the outer Promise on their own;
+          // forward cache write failures so callApi observes them (#11198).
+          reject(err);
         }
-        resolve(result);
       });
       // Close stdin immediately so child processes that read stdin don't hang.
       // execFile pipes stdin by default but never writes to it, causing tools

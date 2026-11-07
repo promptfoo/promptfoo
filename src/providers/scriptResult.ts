@@ -106,7 +106,19 @@ export function validateScriptResult(
  * Matches fetchWithCache: keyv-file rewrites of a large cache.json can take
  * 100ms+ per write, so Python/Ruby must not await. Failures are logged and must
  * not reject the call. Executable scriptCompletion still awaits cache.set (#11198).
+ *
+ * Pending writes are tracked so shutdownGracefully can flush them before the
+ * 100ms natural-exit timer, without putting the wait back on each provider call.
  */
+const pendingScriptProviderCacheWrites = new Set<Promise<unknown>>();
+
+export async function flushPendingScriptProviderCacheWrites(): Promise<void> {
+  if (pendingScriptProviderCacheWrites.size === 0) {
+    return;
+  }
+  await Promise.allSettled([...pendingScriptProviderCacheWrites]);
+}
+
 export function publishScriptProviderCacheWrite(
   cache: { set: (key: string, value: string) => Promise<unknown> | unknown },
   cacheKey: string,
@@ -114,7 +126,11 @@ export function publishScriptProviderCacheWrite(
   providerLabel: string,
 ): void {
   // Promise.resolve so sync/undefined mock returns and real Keyv promises both work.
-  void Promise.resolve(cache.set(cacheKey, value)).catch((err) => {
+  const write = Promise.resolve(cache.set(cacheKey, value)).catch((err) => {
     logger.warn(`${providerLabel} failed to cache result: ${String(err)}`);
+  });
+  pendingScriptProviderCacheWrites.add(write);
+  void write.finally(() => {
+    pendingScriptProviderCacheWrites.delete(write);
   });
 }

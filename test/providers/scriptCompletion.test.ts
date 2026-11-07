@@ -366,6 +366,48 @@ describe('ScriptCompletionProvider', () => {
     expect(settled).toBe(true);
   });
 
+  it('forwards rejected cache writes onto the callApi path (#11198)', async () => {
+    const write = createDeferred<void>();
+    const mockCache = {
+      get: vi.fn().mockResolvedValue(undefined),
+      set: vi.fn().mockReturnValue(write.promise),
+    };
+    vi.spyOn(cacheModule, 'getCache').mockResolvedValue(mockCache as never);
+    vi.spyOn(cacheModule, 'isCacheEnabled').mockReturnValue(true);
+
+    existsSyncMock.mockReturnValue(true);
+    statSyncMock.mockReturnValue({ isFile: () => true } as fs.Stats);
+    readFileSyncMock.mockReturnValue('file content');
+
+    const mockHashUpdate = {
+      update: vi.fn().mockReturnThis(),
+      digest: vi.fn().mockReturnValue('mock hash'),
+    } as unknown as crypto.Hash;
+    vi.mocked(crypto.createHash).mockImplementation(function () {
+      return mockHashUpdate;
+    });
+
+    vi.mocked(execFile).mockImplementation(function (_cmd, _args, _options, callback) {
+      if (typeof callback === 'function') {
+        callback(null, Buffer.from('script output'), '');
+      }
+      return { stdin: { end: vi.fn() } } as any;
+    });
+
+    const provider = new ScriptCompletionProvider('node script.js');
+    const pending = provider.callApi('test prompt');
+    // Attach rejection assertion before rejecting the deferred write so a hang
+    // fails the test instead of leaving callApi pending forever.
+    const rejection = expect(pending).rejects.toThrow('cache write failed');
+
+    await vi.waitFor(() => {
+      expect(mockCache.set).toHaveBeenCalled();
+    });
+
+    write.reject(new Error('cache write failed'));
+    await rejection;
+  });
+
   it('should handle script execution errors', async () => {
     const errorMessage = 'Script execution failed';
     vi.mocked(execFile).mockImplementation(function (_cmd, _args, _options, callback) {
