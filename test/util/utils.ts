@@ -138,12 +138,6 @@ export const PROXY_ENV_KEYS = [
   'npm_config_https_proxy',
 ] as const;
 
-export function clearProxyEnv(): void {
-  for (const key of PROXY_ENV_KEYS) {
-    Reflect.deleteProperty(process.env, key);
-  }
-}
-
 export function mockGlobal<T>(name: string, value: T): () => void {
   const descriptor = Object.getOwnPropertyDescriptor(globalThis, name);
 
