@@ -259,20 +259,17 @@ export class HyperbolicImageProvider implements ApiProvider {
       };
     }
 
-    if (data.error) {
+    if (data?.error) {
       return {
         error: typeof data.error === 'string' ? data.error : JSON.stringify(data.error),
       };
     }
 
     try {
-      if (!data.images || !Array.isArray(data.images) || data.images.length === 0) {
-        return {
-          error: 'No images returned from API',
-        };
+      const imageData = Array.isArray(data?.images) ? data.images[0]?.image : undefined;
+      if (typeof imageData !== 'string' || !imageData.trim()) {
+        return { error: 'No images returned from API' };
       }
-
-      const imageData = data.images[0].image;
       const cost = cached ? 0 : this.calculateImageCost();
 
       // Format the output for proper rendering
