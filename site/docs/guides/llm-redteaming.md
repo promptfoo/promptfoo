@@ -263,9 +263,9 @@ The adversarial tests include:
 
 - Prompt injection ([OWASP LLM01](https://genai.owasp.org/llmrisk/llm01-prompt-injection/))
 - Jailbreaking ([OWASP LLM01](https://genai.owasp.org/llmrisk/llm01-prompt-injection/))
-- Excessive Agency ([OWASP LLM08](https://genai.owasp.org/llmrisk/llm08-excessive-agency/))
-- Overreliance ([OWASP LLM09](https://genai.owasp.org/llmrisk/llm09-overreliance/))
-- Hallucination (when the LLM provides unfactual answers)
+- Excessive Agency ([OWASP LLM06:2025](https://genai.owasp.org/llmrisk/llm062025-excessive-agency/))
+- Overreliance (related to [OWASP LLM09:2025 Misinformation](https://genai.owasp.org/llmrisk/llm092025-misinformation/))
+- Hallucination (fabricated or unsupported answers, covered by LLM09:2025)
 - Hijacking (when the LLM is used for unintended purposes)
 - PII leaks (ensuring the model does not inadvertently disclose PII)
 - Competitor recommendations (when the LLM suggests alternatives to your business)
