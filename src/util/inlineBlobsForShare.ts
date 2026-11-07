@@ -21,6 +21,14 @@ type BlobPayload = {
 
 export type BlobInlineCache = Map<string, BlobPayload | null>;
 
+// Keep pending reads separate from settled payloads so replacement never treats
+// a Promise as media data. Cache instances belong to a share operation.
+const pendingBlobReads = new WeakMap<BlobInlineCache, Map<string, Promise<void>>>();
+
+function getCacheKey(hash: string, localEvalId: string): string {
+  return JSON.stringify([localEvalId, hash]);
+}
+
 function shouldScanString(value: string): boolean {
   if (value.startsWith(BLOB_SCHEME)) {
     return true;
@@ -37,44 +45,64 @@ async function ensureBlobPayloads(
   cache: BlobInlineCache,
   localEvalId: string,
 ): Promise<void> {
-  const missing = Array.from(hashes).filter((hash) => !cache.has(hash));
+  const missing = Array.from(hashes).filter((hash) => !cache.has(getCacheKey(hash, localEvalId)));
   if (missing.length === 0) {
     return;
   }
 
+  let pending = pendingBlobReads.get(cache);
+  if (!pending) {
+    pending = new Map();
+    pendingBlobReads.set(cache, pending);
+  }
+  const reads = pending;
   await Promise.all(
-    missing.map(async (hash) => {
-      try {
-        // Result text may contain copied blob URIs; only refs with trusted provenance
-        // for this eval authorize reading local bytes (same gate as the upload path).
-        const blob = await getShareAuthorizedBlob(hash, localEvalId);
-        if (!blob) {
-          cache.set(hash, null);
-          return;
-        }
-
-        const base64 = blob.data.toString('base64');
-        const mimeType = blob.metadata.mimeType || 'application/octet-stream';
-        cache.set(hash, {
-          base64,
-          mimeType,
-          dataUrl: `data:${mimeType};base64,${base64}`,
-        });
-      } catch (error) {
-        logger.warn('[Share] Failed to inline blob reference', { error, hash });
-        cache.set(hash, null);
+    missing.map((hash) => {
+      const key = getCacheKey(hash, localEvalId);
+      let read = reads.get(key);
+      if (!read) {
+        read = loadBlobPayload(hash, localEvalId)
+          .then((payload) => {
+            cache.set(key, payload);
+          })
+          .finally(() => {
+            reads.delete(key);
+            if (reads.size === 0) {
+              pendingBlobReads.delete(cache);
+            }
+          });
+        // Register before yielding so every checkpoint/row shares this read.
+        reads.set(key, read);
       }
+      return read;
     }),
   );
 }
 
-function replaceBlobUris(value: string, cache: BlobInlineCache): string {
+async function loadBlobPayload(hash: string, localEvalId: string): Promise<BlobPayload | null> {
+  try {
+    // Result text may contain copied blob URIs; only refs with trusted provenance
+    // for this eval authorize reading local bytes (same gate as the upload path).
+    const blob = await getShareAuthorizedBlob(hash, localEvalId);
+    if (!blob) {
+      return null;
+    }
+    const base64 = blob.data.toString('base64');
+    const mimeType = blob.metadata.mimeType || 'application/octet-stream';
+    return { base64, mimeType, dataUrl: `data:${mimeType};base64,${base64}` };
+  } catch (error) {
+    logger.warn('[Share] Failed to inline blob reference', { error, hash });
+    return null;
+  }
+}
+
+function replaceBlobUris(value: string, cache: BlobInlineCache, localEvalId: string): string {
   if (!shouldScanString(value) || !value.includes(BLOB_SCHEME)) {
     return value;
   }
 
   return value.replace(BLOB_URI_REGEX, (match, hash) => {
-    const payload = cache.get(normalizeBlobHash(hash));
+    const payload = cache.get(getCacheKey(normalizeBlobHash(hash), localEvalId));
     return payload ? payload.dataUrl : match;
   });
 }
@@ -82,6 +110,7 @@ function replaceBlobUris(value: string, cache: BlobInlineCache): string {
 async function inlineValue(
   value: unknown,
   cache: BlobInlineCache,
+  localEvalId: string,
   visited: WeakSet<object>,
   depth: number,
 ): Promise<unknown> {
@@ -90,11 +119,13 @@ async function inlineValue(
   }
 
   if (typeof value === 'string') {
-    return replaceBlobUris(value, cache);
+    return replaceBlobUris(value, cache, localEvalId);
   }
 
   if (Array.isArray(value)) {
-    return Promise.all(value.map((child) => inlineValue(child, cache, visited, depth + 1)));
+    return Promise.all(
+      value.map((child) => inlineValue(child, cache, localEvalId, visited, depth + 1)),
+    );
   }
 
   if (!value || typeof value !== 'object') {
@@ -111,7 +142,7 @@ async function inlineValue(
   if ('blobRef' in next) {
     const blobHash = extractHashFromBlobRef(next.blobRef);
     if (blobHash) {
-      const payload = cache.get(blobHash);
+      const payload = cache.get(getCacheKey(blobHash, localEvalId));
       if (payload) {
         delete next.blobRef;
         if (next.data == null) {
@@ -125,7 +156,7 @@ async function inlineValue(
   }
 
   for (const [key, child] of Object.entries(next)) {
-    next[key] = await inlineValue(child, cache, visited, depth + 1);
+    next[key] = await inlineValue(child, cache, localEvalId, visited, depth + 1);
   }
 
   return next;
@@ -145,5 +176,5 @@ export async function inlineBlobRefsForShare<T>(
     maxStringLength: MAX_STRING_LENGTH_TO_SCAN,
   });
   await ensureBlobPayloads(hashes, cache, localEvalId);
-  return (await inlineValue(value, cache, new WeakSet(), 0)) as T;
+  return (await inlineValue(value, cache, localEvalId, new WeakSet(), 0)) as T;
 }
