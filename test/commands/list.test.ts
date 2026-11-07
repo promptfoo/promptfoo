@@ -122,6 +122,45 @@ describe('list command', () => {
   });
 
   describe('evals', () => {
+    it('outputs full eval metadata as JSON', async () => {
+      const description = 'Long description '.repeat(10);
+      const olderEval = createEval({
+        id: 'eval-older-full-id',
+        createdAt: 1,
+        description: 'Older eval',
+        providers: ['echo'],
+        prompts: [],
+      });
+      const newerEval = createEval({
+        id: 'eval-newer-full-id',
+        createdAt: 2,
+        description,
+        providers: ['echo'],
+        prompts: [{ raw: 'Full prompt' }],
+      });
+      evalModel.getMany.mockResolvedValue([newerEval, olderEval]);
+      evalQueries.getVarsFromEvals.mockResolvedValue({ 'eval-newer-full-id': ['topic'] });
+
+      await getListSubcommand('evals')?.parseAsync(['node', 'test', '--json']);
+
+      expect(JSON.parse(String(vi.mocked(logger.info).mock.calls[0][0]))).toEqual([
+        {
+          id: 'eval-older-full-id',
+          description: 'Older eval',
+          promptIds: [],
+          vars: [],
+        },
+        {
+          id: 'eval-newer-full-id',
+          description,
+          promptIds: ['hash-Full prompt'],
+          vars: ['topic'],
+        },
+      ]);
+      expect(wrapTable).not.toHaveBeenCalled();
+      expect(printBorder).not.toHaveBeenCalled();
+    });
+
     it('prints eval ids with --ids-only', async () => {
       evalModel.getMany.mockResolvedValue([{ id: 'eval-1' }, { id: 'eval-2' }]);
 
@@ -186,6 +225,34 @@ describe('list command', () => {
   });
 
   describe('prompts', () => {
+    it('outputs prompt metadata as JSON without shortening IDs or text', async () => {
+      const raw = 'Long prompt '.repeat(12);
+      const prompts: PromptWithMetadata[] = [
+        {
+          id: 'full-prompt-id-123456',
+          prompt: { raw, label: 'Prompt label' },
+          count: 3,
+          recentEvalDate: new Date('2025-01-01T00:00:00.000Z'),
+          recentEvalId: 'full-eval-id',
+          evals: [],
+        },
+      ];
+      vi.mocked(getPrompts).mockResolvedValue(prompts);
+
+      await getListSubcommand('prompts')?.parseAsync(['node', 'test', '--json']);
+
+      expect(JSON.parse(String(vi.mocked(logger.info).mock.calls[0][0]))).toEqual([
+        {
+          id: 'full-prompt-id-123456',
+          raw,
+          evalCount: 3,
+          recentEvalId: 'full-eval-id',
+        },
+      ]);
+      expect(wrapTable).not.toHaveBeenCalled();
+      expect(printBorder).not.toHaveBeenCalled();
+    });
+
     // Prompts are sorted by recentEvalId (ascending), so eval-a < eval-b
     it('prints prompt ids with --ids-only in sorted order', async () => {
       const prompts: PromptWithMetadata[] = [
@@ -249,6 +316,55 @@ describe('list command', () => {
   });
 
   describe('datasets', () => {
+    it('outputs dataset metadata as JSON including full prompt IDs', async () => {
+      const datasets: TestCasesWithMetadata[] = [
+        {
+          id: 'dataset-empty',
+          testCases: [],
+          prompts: [],
+          count: 0,
+          recentEvalDate: new Date('2025-01-01T00:00:00.000Z'),
+          recentEvalId: 'eval-001',
+        },
+        {
+          id: 'dataset-full-id',
+          testCases: [],
+          prompts: [
+            {
+              id: 'prompt-full-id',
+              evalId: 'eval-999',
+              prompt: { raw: 'Hello', label: 'Hello', provider: 'echo' },
+            },
+          ],
+          count: 2,
+          recentEvalDate: new Date('2025-01-02T00:00:00.000Z'),
+          recentEvalId: 'eval-999',
+        },
+      ];
+      vi.mocked(getTestCases).mockResolvedValue(datasets);
+
+      await getListSubcommand('datasets')?.parseAsync(['node', 'test', '--json']);
+
+      expect(JSON.parse(String(vi.mocked(logger.info).mock.calls[0][0]))).toEqual([
+        {
+          id: 'dataset-full-id',
+          bestPromptId: 'prompt-full-id',
+          evalCount: 2,
+          promptIds: ['prompt-full-id'],
+          recentEvalId: 'eval-999',
+        },
+        {
+          id: 'dataset-empty',
+          bestPromptId: null,
+          evalCount: 0,
+          promptIds: [],
+          recentEvalId: 'eval-001',
+        },
+      ]);
+      expect(wrapTable).not.toHaveBeenCalled();
+      expect(printBorder).not.toHaveBeenCalled();
+    });
+
     // Datasets are sorted by recentEvalId (descending), so eval-999 > eval-001
     it('prints dataset ids with --ids-only in sorted order', async () => {
       const datasets: TestCasesWithMetadata[] = [
