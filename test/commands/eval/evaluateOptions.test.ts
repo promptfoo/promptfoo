@@ -395,6 +395,31 @@ describe('evaluateOptions behavior', () => {
   });
 
   describe('commandLineOptions behavior', () => {
+    it.each([{ filterFirstN: 1 }, { filterPattern: '^keep$' }])(
+      'filters configured scenario tests before loading their providers: %j',
+      async (commandLineOptions) => {
+        const configFile = writeTempConfig(tmpDir, 'scenario-provider-selection.yaml', {
+          providers: ['echo'],
+          prompts: ['{{input}}'],
+          scenarios: [
+            {
+              config: [{}],
+              tests: [
+                { description: 'keep', vars: { input: 'one' } },
+                { description: 'other', vars: { input: 'two' }, provider: 42 },
+              ],
+            },
+          ],
+          commandLineOptions,
+        });
+
+        await runEvalAndGetOptions({ config: [configFile] });
+
+        const suite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+        expect(suite.scenarios?.[0].tests.map((test) => test.description)).toEqual(['keep']);
+      },
+    );
+
     describe.each(['top-level', 'scenario'])('%s configured selection', (form) => {
       it.each([
         { name: 'first count', configured: { filterFirstN: 1 }, cli: {}, expected: ['keep'] },

@@ -552,7 +552,7 @@ async function doEvalWithEnv(
         basePath: _basePath,
         commandLineOptions,
         testSources,
-      } = await resolveConfigs(cmdObj, defaultConfig));
+      } = await resolveConfigs(cmdObj, defaultConfig, 'Evaluation'));
     }
 
     // Clean up the providers this run loaded once no evaluation is using them.
