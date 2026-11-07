@@ -42,6 +42,7 @@ module.exports = class OpenAIProvider {
   constructor(options) {
     this.providerId = options.id || 'openai-custom';
     this.config = options.config;
+    this.apiKey = this.config?.apiKey ?? options.env?.OPENAI_API_KEY;
   }
 
   id() {
@@ -55,7 +56,7 @@ module.exports = class OpenAIProvider {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+          Authorization: `Bearer ${this.apiKey ?? process.env.OPENAI_API_KEY}`,
         },
         body: JSON.stringify({
           model: this.config?.model || 'gpt-5-mini',
@@ -73,6 +74,8 @@ module.exports = class OpenAIProvider {
   }
 };
 ```
+
+`options.env` contains provider and suite environment overrides. Read it before `process.env`, as above, so custom providers honor those settings. The `??` checks preserve explicit empty overrides instead of falling back to host credentials. For programmatic env files, see [Node API environment handling](/docs/usage/node-package#provider-functions).
 
 `callApi` returns a `ProviderResponse` object. The `ProviderResponse` object format:
 
@@ -195,6 +198,7 @@ module.exports = class TwoStageProvider {
   constructor(options) {
     this.providerId = options.id || 'two-stage';
     this.config = options.config;
+    this.apiKey = this.config?.apiKey ?? options.env?.OPENAI_API_KEY;
   }
 
   id() {
@@ -227,7 +231,7 @@ module.exports = class TwoStageProvider {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+          Authorization: `Bearer ${this.apiKey ?? process.env.OPENAI_API_KEY}`,
         },
         body: JSON.stringify({
           model: 'gpt-5-mini',
@@ -311,9 +315,11 @@ providers:
 
 ### Embeddings API
 
+This method uses the `apiKey` set by the constructor above.
+
 To stop embedding grading when an eval is cancelled, set `supportsEmbeddingCancellation` to `true` and pass the third argument's `abortSignal` to your request. Without this flag, promptfoo calls `callEmbeddingApi` with only the input.
 
-```javascript
+```javascript title="embeddingProvider.js"
 supportsEmbeddingCancellation = true;
 
 async callEmbeddingApi(text, _context, { abortSignal } = {}) {
@@ -322,7 +328,7 @@ async callEmbeddingApi(text, _context, { abortSignal } = {}) {
     signal: abortSignal,
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+      Authorization: `Bearer ${this.apiKey ?? process.env.OPENAI_API_KEY}`,
     },
     body: JSON.stringify({
       model: 'text-embedding-3-small',
@@ -387,12 +393,16 @@ Audio and video have opposite generation requirements: audio requires remote gen
 
 ```javascript title="multimodalProvider.js"
 module.exports = class MultimodalProvider {
+  constructor(options) {
+    this.apiKey = options.config?.apiKey ?? options.env?.OPENAI_API_KEY;
+  }
+
   id() {
     return 'multimodal-provider';
   }
 
   async callApi(prompt, context) {
-    const apiKey = process.env.OPENAI_API_KEY;
+    const apiKey = this.apiKey ?? process.env.OPENAI_API_KEY;
     if (!apiKey) {
       return { error: 'OPENAI_API_KEY is required' };
     }
