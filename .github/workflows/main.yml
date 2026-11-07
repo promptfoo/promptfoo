@@ -422,6 +422,16 @@ jobs:
       npm_config_cache: ${{ github.workspace }}/.artifact-npm-cache
     steps:
       - *require-package-build
+      - name: Use a Dev Drive for Windows package installs
+        if: runner.os == 'Windows'
+        continue-on-error: true
+        uses: samypr100/setup-dev-drive@cf663fdf88945e3faaa980ec525b5bc2350fbf9d # v3.4.3
+        with:
+          drive-size: 8GB
+          env-mapping: |
+            npm_config_cache,{{ DEV_DRIVE }}/npm-cache
+            TEMP,{{ DEV_DRIVE }}/
+            TMP,{{ DEV_DRIVE }}/
       - &checkout-source-read-only
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with: *no-persisted-credentials
