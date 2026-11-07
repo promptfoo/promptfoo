@@ -41,14 +41,7 @@ The conversation has two participants:
 1. A simulated user (controlled by promptfoo)
 2. Your AI agent (the provider being tested)
 
-For each turn:
-
-1. The simulated user's message is sent to the agent
-2. The agent's response is sent back to the simulated user
-3. The simulated user generates the next message based on their instructions
-4. This continues until either:
-   - The maximum number of turns is reached
-   - The simulated user emits `###STOP###`
+The simulated user sends a message to your agent and uses its reply and the user's instructions to generate the next turn. See [Stop Conditions](#stop-conditions).
 
 ## Configuration Options
 
@@ -268,6 +261,7 @@ The conversation will automatically stop when:
 
 - The `maxTurns` limit is reached
 - The simulated user includes `###STOP###` anywhere in its message
+- The target returns `conversationEnded: true`, including in response to `initialMessages`. The final target message stays in the transcript.
 - An error occurs during the conversation
 
 Promptfoo checks for `###STOP###` before sending the simulated user's message to the target. You can include instructions such as "say `###STOP###` once the booking is confirmed." The marker has no effect in the target's own response.
