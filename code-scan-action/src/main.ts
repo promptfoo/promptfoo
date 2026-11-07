@@ -17,7 +17,7 @@ import * as github from '@actions/github';
 // instead of resolving a mutable dist-tag like `latest`.
 import { version as defaultPromptfooVersion } from '../../package.json';
 import { hasPrPostableFindings, prepareComments } from '../../src/codeScan/util/github';
-import { hasSarifReportableFindings, scanResponseToSarif } from '../../src/codeScan/util/sarif';
+import { scanResponseToSarif } from '../../src/codeScan/util/sarif';
 import {
   CodeScanSeverity,
   type Comment,
@@ -27,11 +27,17 @@ import {
   type ScanResponse,
 } from '../../src/types/codeScan';
 import { generateConfigFile } from './config';
-import { getGitHubContext, getPRFiles, partitionReviewCommentsByDiff } from './github';
+import {
+  assertCurrentPRHead,
+  getGitHubContext,
+  getPRFiles,
+  partitionReviewCommentsByDiff,
+} from './github';
 
 interface ActionInputs {
   apiHost: string;
   minimumSeverity: string;
+  diffsOnly: boolean;
   configPath: string;
   guidanceText: string;
   guidanceFile: string;
@@ -137,6 +143,7 @@ function createMockScanResponse(): ScanResponse {
 
   const scanResponse: ScanResponse = {
     success: true,
+    skippedFiles: 0,
     comments: [
       {
         file: 'src/example.ts',
@@ -420,16 +427,35 @@ function emitSarifOutput(scanResponse: ScanResponse, rawPath: string): void {
   }
 }
 
-function resolveNpmCliPath(): string {
-  for (const candidate of getNpmCliCandidates(path.dirname(process.execPath))) {
-    if (fs.existsSync(candidate)) {
-      return fs.realpathSync(candidate);
+function resolveSafeNpmCliCandidate(
+  directory: string,
+  canonicalWorkspace: string,
+): string | undefined {
+  for (const candidate of getNpmCliCandidates(directory)) {
+    if (!fs.existsSync(candidate)) {
+      continue;
+    }
+
+    try {
+      const canonicalCandidate = fs.realpathSync(candidate);
+      if (!isPathWithinDirectory(canonicalWorkspace, canonicalCandidate)) {
+        return canonicalCandidate;
+      }
+    } catch {
+      // A disappearing or inaccessible PATH entry is not a usable npm install.
     }
   }
 
+  return undefined;
+}
+
+function* resolveSafePathExecutables(executableNames: string[]): Generator<{
+  directory: string;
+  executable: string;
+  canonicalWorkspace: string;
+}> {
   const workspace = path.resolve(process.env.GITHUB_WORKSPACE || process.cwd());
   const canonicalWorkspace = fs.realpathSync(workspace);
-  const executableNames = process.platform === 'win32' ? ['npm.cmd', 'npm.exe', 'npm'] : ['npm'];
   const visited = new Set<string>();
 
   for (const directory of (process.env.PATH || '').split(path.delimiter)) {
@@ -438,16 +464,15 @@ function resolveNpmCliPath(): string {
     }
     visited.add(directory);
 
-    // PATH often contains checkout-derived bins. A PR must not gain npm-code
-    // execution merely by placing a lookalike npm-cli.js under one of them.
+    // Credentialed tools must not resolve through the checkout.
     if (isPathWithinDirectory(workspace, directory)) {
       continue;
     }
 
-    const npmExecutable = executableNames
+    const executable = executableNames
       .map((executableName) => path.join(directory, executableName))
       .find((candidate) => fs.existsSync(candidate));
-    if (!npmExecutable) {
+    if (!executable) {
       continue;
     }
 
@@ -455,7 +480,7 @@ function resolveNpmCliPath(): string {
     let canonicalExecutable: string;
     try {
       canonicalDirectory = fs.realpathSync(directory);
-      canonicalExecutable = fs.realpathSync(npmExecutable);
+      canonicalExecutable = fs.realpathSync(executable);
     } catch {
       continue;
     }
@@ -467,24 +492,32 @@ function resolveNpmCliPath(): string {
       continue;
     }
 
+    yield { directory, executable: canonicalExecutable, canonicalWorkspace };
+  }
+}
+
+function resolveNpmCliPath(): string {
+  const actionNodeDir = path.dirname(process.execPath);
+  for (const candidate of getNpmCliCandidates(actionNodeDir)) {
+    if (fs.existsSync(candidate)) {
+      return fs.realpathSync(candidate);
+    }
+  }
+
+  const executableNames = process.platform === 'win32' ? ['npm.cmd', 'npm.exe', 'npm'] : ['npm'];
+  for (const {
+    directory,
+    executable: canonicalExecutable,
+    canonicalWorkspace,
+  } of resolveSafePathExecutables(executableNames)) {
     // Unix npm shims are normally symlinks directly to npm-cli.js.
     if (path.basename(canonicalExecutable) === 'npm-cli.js') {
       return canonicalExecutable;
     }
 
-    for (const candidate of getNpmCliCandidates(directory)) {
-      if (!fs.existsSync(candidate)) {
-        continue;
-      }
-
-      try {
-        const canonicalCandidate = fs.realpathSync(candidate);
-        if (!isPathWithinDirectory(canonicalWorkspace, canonicalCandidate)) {
-          return canonicalCandidate;
-        }
-      } catch {
-        // A disappearing or inaccessible PATH entry is not a usable npm install.
-      }
+    const npmCliPath = resolveSafeNpmCliCandidate(directory, canonicalWorkspace);
+    if (npmCliPath) {
+      return npmCliPath;
     }
   }
 
@@ -513,15 +546,73 @@ async function getGitHubOIDCToken(): Promise<string> {
   }
 }
 
-async function fetchBaseBranch(baseBranch: string): Promise<void> {
+function getGitCommand(): string {
+  const gitPath = resolveSafePathExecutables(
+    process.platform === 'win32' ? ['git.exe'] : ['git'],
+  ).next().value?.executable;
+  if (!gitPath) {
+    throw new Error('Git not found outside the checkout; install Git and add it to PATH');
+  }
+  return `"${gitPath}"`;
+}
+
+function createGitEnv(): Record<string, string> {
+  const env = createSubprocessEnv();
+  // Keep helper selection, repository selection, and configuration local to this invocation.
+  for (const key of Object.keys(env)) {
+    if (key.toUpperCase().startsWith('GIT_')) {
+      delete env[key];
+    }
+  }
+  return {
+    ...env,
+    // Git for Windows recognizes its POSIX null path, not Node's device namespace.
+    GIT_CONFIG_GLOBAL: '/dev/null',
+    GIT_CONFIG_NOSYSTEM: '1',
+    GIT_TERMINAL_PROMPT: '0',
+  };
+}
+
+async function fetchBaseBranch(baseBranch: string, githubToken: string): Promise<void> {
   core.info(`📥 Fetching base branch: ${baseBranch}...`);
 
   try {
-    await exec.exec('git', ['fetch', 'origin', `${baseBranch}:${baseBranch}`]);
+    const basicAuth = Buffer.from(`x-access-token:${githubToken}`).toString('base64');
+    await exec.exec(getGitCommand(), ['fetch', 'origin', `${baseBranch}:${baseBranch}`], {
+      env: {
+        ...createGitEnv(),
+        GIT_CONFIG_COUNT: '3',
+        GIT_CONFIG_KEY_0: 'http.https://github.com/.extraheader',
+        GIT_CONFIG_VALUE_0: '',
+        GIT_CONFIG_KEY_1: 'http.https://github.com/.extraheader',
+        GIT_CONFIG_VALUE_1: `AUTHORIZATION: basic ${basicAuth}`,
+        GIT_CONFIG_KEY_2: 'core.hooksPath',
+        GIT_CONFIG_VALUE_2: '/dev/null',
+      },
+    });
     core.info(`✅ Base branch ${baseBranch} fetched successfully`);
   } catch (error) {
     core.warning(`Failed to fetch base branch ${baseBranch}: ${formatError(error)}`);
     core.warning('Git diff may fail if base branch is not available');
+  }
+}
+
+async function assertWorkspaceHead(context: PullRequestContext): Promise<void> {
+  let output = '';
+  const exitCode = await exec.exec(getGitCommand(), ['rev-parse', 'HEAD'], {
+    env: createGitEnv(),
+    listeners: {
+      stdout: (data: Buffer) => {
+        output += data.toString();
+      },
+    },
+    ignoreReturnCode: true,
+  });
+  const workspaceHead = output.trim();
+  if (exitCode !== 0 || !workspaceHead || workspaceHead !== context.sha) {
+    throw new Error(
+      `Workspace HEAD (${workspaceHead || 'unknown'}) does not match PR head ${context.sha}`,
+    );
   }
 }
 
@@ -536,6 +627,258 @@ function buildGeneralCommentBody(comment: Comment): string {
   return location ? `**${location}**\n\n${body}` : body;
 }
 
+function resolveDiffsOnlyInput(): boolean {
+  return core.getInput('diffs-only').trim() ? core.getBooleanInput('diffs-only') : false;
+}
+
+function warnIgnoredInputsWhenConfigPathSet(configPath: string): void {
+  if (!configPath) {
+    return;
+  }
+
+  const ignoredInputs = [
+    'min-severity',
+    'minimum-severity',
+    'diffs-only',
+    'guidance',
+    'guidance-file',
+  ].filter((name) => core.getInput(name).trim());
+
+  if (ignoredInputs.length > 0) {
+    core.warning(
+      `config-path supplies scan policy; ignoring Action input${ignoredInputs.length === 1 ? '' : 's'}: ${ignoredInputs.join(', ')}`,
+    );
+  }
+}
+
+function loadGuidance(inputs: ActionInputs): string | undefined {
+  if (inputs.configPath) {
+    return undefined;
+  }
+
+  if (inputs.guidanceText && inputs.guidanceFile) {
+    throw new Error('Cannot specify both guidance and guidance-file inputs');
+  }
+
+  if (inputs.guidanceText) {
+    return inputs.guidanceText;
+  }
+
+  if (!inputs.guidanceFile) {
+    return undefined;
+  }
+
+  try {
+    const guidance = fs.readFileSync(inputs.guidanceFile, 'utf-8');
+    core.info(`📖 Loaded guidance from: ${inputs.guidanceFile}`);
+    return guidance;
+  } catch (error) {
+    throw new Error(`Failed to read guidance file: ${formatError(error)}`);
+  }
+}
+
+async function postReview(
+  octokit: ReturnType<typeof github.getOctokit>,
+  context: PullRequestContext,
+  lineComments: Comment[],
+  reviewBody: string,
+): Promise<void> {
+  if (lineComments.length === 0 && !reviewBody) {
+    return;
+  }
+
+  core.info(
+    `📌 Posting PR review${lineComments.length > 0 ? ` with ${lineComments.length} line-specific comments` : ''}...`,
+  );
+
+  await octokit.rest.pulls.createReview({
+    owner: context.owner,
+    repo: context.repo,
+    pull_number: context.number,
+    event: 'COMMENT',
+    commit_id: context.sha,
+    body: reviewBody || undefined,
+    comments: lineComments.length > 0 ? lineComments.map(toReviewComment) : undefined,
+  });
+
+  core.info('✅ PR review posted successfully');
+}
+
+async function postGeneralComments(
+  octokit: ReturnType<typeof github.getOctokit>,
+  context: PullRequestContext,
+  generalComments: Comment[],
+): Promise<void> {
+  if (generalComments.length === 0) {
+    return;
+  }
+
+  core.info(`💬 Posting ${generalComments.length} general comments...`);
+
+  for (const comment of generalComments) {
+    await octokit.rest.issues.createComment({
+      owner: context.owner,
+      repo: context.repo,
+      issue_number: context.number,
+      body: buildGeneralCommentBody(comment),
+    });
+  }
+
+  core.info('✅ General comments posted successfully');
+}
+
+async function postFallbackComments(
+  githubToken: string,
+  context: PullRequestContext,
+  comments: Comment[],
+  review: string | undefined,
+  minimumSeverity: string | undefined,
+): Promise<void> {
+  core.info('📝 Server could not post comments - posting as fallback...');
+
+  const octokit = github.getOctokit(githubToken);
+  const {
+    lineComments: preparedLineComments,
+    generalComments,
+    reviewBody,
+  } = prepareComments(comments, review, minimumSeverity);
+
+  let lineComments: Comment[];
+  let invalidLineComments: Comment[];
+  try {
+    ({ lineComments, invalidLineComments } = await partitionReviewCommentsByDiff(
+      githubToken,
+      context,
+      preparedLineComments,
+    ));
+  } catch (error) {
+    if (error instanceof Error && error.name === 'StalePullRequestHeadError') {
+      throw error;
+    }
+    // Preserve findings as general comments when their locations cannot be validated.
+    core.warning(`Failed to validate comment locations against the PR diff: ${formatError(error)}`);
+    lineComments = [];
+    invalidLineComments = preparedLineComments;
+  }
+
+  const generalCommentsToPost = [...generalComments, ...invalidLineComments];
+
+  // A rejected review must not discard the findings that can still be posted separately.
+  let reviewFailed = false;
+  try {
+    await postReview(octokit, context, lineComments, reviewBody);
+  } catch (error) {
+    reviewFailed = true;
+    core.warning(
+      `Failed to post PR review; degrading ${lineComments.length} line finding${lineComments.length === 1 ? '' : 's'} to general comments: ${formatError(error)}`,
+    );
+    generalCommentsToPost.push(...lineComments);
+  }
+
+  if (generalCommentsToPost.length > 0 || (reviewFailed && reviewBody)) {
+    // Issue comments are not commit-bound. Recheck after the review attempt before
+    // falling back, and fail if the current head cannot be verified.
+    await assertCurrentPRHead(octokit.rest, context);
+  }
+
+  try {
+    // Preserve the summary when GitHub rejects the review.
+    if (reviewFailed && reviewBody) {
+      try {
+        await octokit.rest.issues.createComment({
+          owner: context.owner,
+          repo: context.repo,
+          issue_number: context.number,
+          body: reviewBody,
+        });
+      } catch (error) {
+        if (generalCommentsToPost.length === 0) {
+          throw error;
+        }
+        core.warning('Failed to post review summary as a comment: ' + formatError(error));
+      }
+    }
+    await postGeneralComments(octokit, context, generalCommentsToPost);
+  } catch (error) {
+    // Fail if findings could not be posted through either channel.
+    core.error(`Failed to post comments: ${formatError(error)}`);
+    core.setFailed(
+      `Code scan found findings but they could not be posted to the PR: ${formatError(error)}`,
+    );
+    return;
+  }
+
+  core.info(
+    reviewFailed
+      ? '✅ Findings posted as general comments after the PR review could not be created'
+      : '✅ All comments posted to PR by action',
+  );
+}
+
+function emitConfiguredSarifOutput(scanResponse: ScanResponse, inputs: ActionInputs): void {
+  if (inputs.sarifOutputPath) {
+    emitSarifOutput(scanResponse, inputs.sarifOutputPath);
+  }
+}
+
+async function handleScanResponse(
+  scanResponse: ScanResponse,
+  inputs: ActionInputs,
+  context: PullRequestContext,
+): Promise<void> {
+  const { comments, commentsPosted, review, skipReason, skippedFiles } = scanResponse;
+  const hasPrFindings = hasPrPostableFindings(comments);
+
+  // Skipped scans can still have findings to post, but cannot produce a complete SARIF run.
+  if (skipReason && !hasPrFindings) {
+    core.info(`🔀 Scan skipped: ${skipReason}`);
+    return;
+  }
+
+  if (skipReason) {
+    // Carry the skipReason into the warning: a contradictory response (skip + real
+    // findings) signals a server-side bug, and the reason text is the operator's only
+    // clue to which path produced it.
+    core.warning(
+      `Scan response included findings alongside a skipReason ("${skipReason}"); processing findings.`,
+    );
+  }
+
+  core.info(`📊 Found ${comments.length} comments${review ? ' and review summary' : ''}`);
+
+  // Uploading a partial SARIF run could close prior alerts absent from this incomplete scan.
+  if (!skipReason && skippedFiles === 0) {
+    emitConfiguredSarifOutput(scanResponse, inputs);
+  } else if ((skippedFiles ?? 0) > 0) {
+    core.warning(
+      `SARIF not written because ${skippedFiles} changed file${skippedFiles === 1 ? ' was' : 's were'} skipped.`,
+    );
+  }
+
+  if ((hasPrFindings || review) && commentsPosted === false) {
+    await postFallbackComments(
+      inputs.githubToken,
+      context,
+      comments,
+      review,
+      inputs.configPath ? undefined : inputs.minimumSeverity,
+    );
+  } else if (comments.length > 0 && commentsPosted === true) {
+    core.info('✅ Comments posted to PR by scan server');
+  } else if (comments.length > 0) {
+    // commentsPosted is undefined - old server version
+    core.info('✅ Comments returned (server version does not indicate if posted)');
+  } else {
+    core.info('✨ No vulnerabilities found!');
+  }
+
+  if (inputs.sarifOutputPath && (skipReason || skippedFiles !== 0)) {
+    throw new Error(
+      'SARIF was requested but withheld because scan completeness was not confirmed. Use a scanner that reports skippedFiles: 0 for a complete scan.',
+    );
+  }
+}
+
 async function run(): Promise<void> {
   try {
     await runCodeScan();
@@ -545,7 +888,9 @@ async function run(): Promise<void> {
 }
 
 async function runCodeScan(): Promise<void> {
-  const apiHostInput = core.getInput('api-host');
+  const apiHostInput = core.getInput('api-host').trim() || 'https://api.promptfoo.app';
+  const configPath = core.getInput('config-path').trim();
+  warnIgnoredInputsWhenConfigPathSet(configPath);
   /**
    * Resolve the effective minimum severity from the two supported inputs.
    *
@@ -562,10 +907,10 @@ async function runCodeScan(): Promise<void> {
    * emitted so the workflow author can collapse the inputs.
    */
 
-  const primary = core.getInput('min-severity').trim();
-  const alias = core.getInput('minimum-severity').trim();
+  const primary = core.getInput('min-severity').trim().toLowerCase();
+  const alias = core.getInput('minimum-severity').trim().toLowerCase();
 
-  if (primary && alias && primary !== alias) {
+  if (!configPath && primary && alias && primary !== alias) {
     core.warning(
       `Both min-severity (${primary}) and minimum-severity (${alias}) are set; using min-severity. minimum-severity is an alias and should only be set when min-severity is unset.`,
     );
@@ -574,7 +919,8 @@ async function runCodeScan(): Promise<void> {
   const inputs: ActionInputs = {
     apiHost: apiHostInput,
     minimumSeverity: primary || alias || DEFAULT_MINIMUM_SEVERITY,
-    configPath: core.getInput('config-path'),
+    configPath,
+    diffsOnly: !configPath && resolveDiffsOnlyInput(),
     guidanceText: core.getInput('guidance'),
     guidanceFile: core.getInput('guidance-file'),
     githubToken: core.getInput('github-token', { required: true }),
@@ -619,24 +965,12 @@ async function runCodeScan(): Promise<void> {
     }
   }
 
-  let guidance: string | undefined;
-  if (inputs.guidanceText && inputs.guidanceFile) {
-    throw new Error('Cannot specify both guidance and guidance-file inputs');
-  }
-  if (inputs.guidanceText) {
-    guidance = inputs.guidanceText;
-  } else if (inputs.guidanceFile) {
-    try {
-      guidance = fs.readFileSync(inputs.guidanceFile, 'utf-8');
-      core.info(`📖 Loaded guidance from: ${inputs.guidanceFile}`);
-    } catch (error) {
-      throw new Error(`Failed to read guidance file: ${formatError(error)}`);
-    }
-  }
+  const guidance = loadGuidance(inputs);
 
   core.info('🔍 Starting Promptfoo Code Scan...');
 
   const context = await getGitHubContext(inputs.githubToken);
+  await assertWorkspaceHead(context);
   core.info(`📋 Scanning PR #${context.number} in ${context.owner}/${context.repo}`);
 
   core.info('🔎 Checking if this is a setup PR...');
@@ -657,13 +991,13 @@ async function runCodeScan(): Promise<void> {
   let finalConfigPath = inputs.configPath;
   const minimumSeverity = inputs.minimumSeverity;
   if (!finalConfigPath) {
-    finalConfigPath = generateConfigFile(minimumSeverity, guidance);
+    finalConfigPath = generateConfigFile(minimumSeverity, guidance, inputs.diffsOnly);
     core.info(`📝 Generated temporary config at ${finalConfigPath}`);
   }
 
   try {
     const baseBranch = await getBaseBranch(inputs.githubToken, context);
-    await fetchBaseBranch(baseBranch);
+    await fetchBaseBranch(baseBranch, inputs.githubToken);
 
     const apiHost = inputs.apiHost;
     const cliArgs = [
@@ -749,124 +1083,8 @@ async function runCodeScan(): Promise<void> {
       ? Promise.resolve(createMockScanResponse())
       : runPromptfooScan());
 
-    async function handleScanResponse(): Promise<void> {
-      const { comments, commentsPosted, review, skipReason } = scanResponse;
-      const hasSarifFindings = hasSarifReportableFindings(scanResponse);
-      const hasPrFindings = hasPrPostableFindings(comments);
-
-      // A skipped scan is not a clean scan. Do not upload empty SARIF results that could clear
-      // existing Code Scanning findings or imply that authorization-gated work ran. Mixed
-      // responses still need processing when a finding can be surfaced through SARIF or PR
-      // comments, because those output channels intentionally support different locations.
-      if (skipReason && !hasSarifFindings && !hasPrFindings) {
-        core.info(`🔀 Scan skipped: ${skipReason}`);
-        return;
-      }
-
-      if (skipReason) {
-        // Carry the skipReason into the warning: a contradictory response (skip + real
-        // findings) signals a server-side bug, and the reason text is the operator's only
-        // clue to which path produced it.
-        core.warning(
-          `Scan response included findings alongside a skipReason ("${skipReason}"); processing findings.`,
-        );
-      }
-
-      core.info(`📊 Found ${comments.length} comments${review ? ' and review summary' : ''}`);
-
-      // A mixed skip with only PR-postable findings must not upload an empty SARIF run.
-      if ((!skipReason || hasSarifFindings) && inputs.sarifOutputPath) {
-        emitSarifOutput(scanResponse, inputs.sarifOutputPath);
-      }
-
-      if ((hasPrFindings || review) && commentsPosted === false) {
-        const githubToken = inputs.githubToken;
-        const minimumSeverity = inputs.minimumSeverity;
-        async function postFallbackComments(): Promise<void> {
-          core.info('📝 Server could not post comments - posting as fallback...');
-
-          try {
-            const octokit = github.getOctokit(githubToken);
-            const {
-              lineComments: preparedLineComments,
-              generalComments,
-              reviewBody,
-            } = prepareComments(comments, review, minimumSeverity);
-            const { lineComments, invalidLineComments } = await partitionReviewCommentsByDiff(
-              githubToken,
-              context,
-              preparedLineComments,
-            );
-
-            async function postReview(): Promise<void> {
-              if (lineComments.length === 0 && !reviewBody) {
-                return;
-              }
-
-              core.info(
-                `📌 Posting PR review${lineComments.length > 0 ? ` with ${lineComments.length} line-specific comments` : ''}...`,
-              );
-
-              await octokit.rest.pulls.createReview({
-                owner: context.owner,
-                repo: context.repo,
-                pull_number: context.number,
-                event: 'COMMENT',
-                body: reviewBody || undefined,
-                comments: lineComments.length > 0 ? lineComments.map(toReviewComment) : undefined,
-              });
-
-              core.info('✅ PR review posted successfully');
-            }
-
-            await postReview();
-            async function postGeneralComments(generalComments: Comment[]): Promise<void> {
-              if (generalComments.length === 0) {
-                return;
-              }
-
-              core.info(`💬 Posting ${generalComments.length} general comments...`);
-
-              for (const comment of generalComments) {
-                await octokit.rest.issues.createComment({
-                  owner: context.owner,
-                  repo: context.repo,
-                  issue_number: context.number,
-                  body: buildGeneralCommentBody(comment),
-                });
-              }
-
-              core.info('✅ General comments posted successfully');
-            }
-
-            await postGeneralComments([...generalComments, ...invalidLineComments]);
-
-            core.info('✅ All comments posted to PR by action');
-          } catch (error) {
-            core.error(`Failed to post comments: ${formatError(error)}`);
-            core.warning('Comments could not be posted to PR');
-          }
-        }
-
-        await postFallbackComments();
-        return;
-      }
-
-      if (comments.length > 0 && commentsPosted === true) {
-        core.info('✅ Comments posted to PR by scan server');
-        return;
-      }
-
-      if (comments.length > 0) {
-        // commentsPosted is undefined - old server version
-        core.info('✅ Comments returned (server version does not indicate if posted)');
-        return;
-      }
-
-      core.info('✨ No vulnerabilities found!');
-    }
-
-    await handleScanResponse();
+    await assertWorkspaceHead(context);
+    await handleScanResponse(scanResponse, inputs, context);
     const comments = scanResponse.comments;
     if (process.env.ACT === 'true' && comments.length !== 0) {
       core.info('🧪 Running in act - showing comment preview:');

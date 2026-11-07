@@ -7,9 +7,9 @@
 import * as core from '@actions/core';
 import * as github from '@actions/github';
 import {
-  clampCommentLines,
   extractValidLineRanges,
   type FileLineRanges,
+  isLineInDiff,
 } from '../../src/codeScan/util/diffLineRanges';
 import {
   type Comment,
@@ -17,6 +17,13 @@ import {
   FileChangeStatus,
   type PullRequestContext,
 } from '../../src/types/codeScan';
+
+export class StalePullRequestHeadError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'StalePullRequestHeadError';
+  }
+}
 
 /**
  * Get GitHub context from the current workflow.
@@ -41,7 +48,8 @@ export async function getGitHubContext(token: string): Promise<PullRequestContex
       throw new Error(`Invalid pr_number input: "${prNumberInput}"`);
     }
 
-    const { data: pr } = await github.getOctokit(token).rest.pulls.get({
+    const octokit = github.getOctokit(token);
+    const { data: pr } = await octokit.rest.pulls.get({
       owner: context.repo.owner,
       repo: context.repo.repo,
       pull_number: prNumber,
@@ -80,7 +88,9 @@ export async function getPRFiles(
   token: string,
   context: PullRequestContext,
 ): Promise<FileChange[]> {
-  const { data: files } = await github.getOctokit(token).rest.pulls.listFiles({
+  const octokit = github.getOctokit(token);
+
+  const { data: files } = await octokit.rest.pulls.listFiles({
     owner: context.owner,
     repo: context.repo,
     pull_number: context.number,
@@ -92,81 +102,118 @@ export async function getPRFiles(
   }));
 }
 
+/**
+ * Fetch PR diff and extract valid line ranges for each file.
+ * This is used to validate exact comment locations.
+ */
+async function getPRDiffRanges(
+  octokit: ReturnType<typeof github.getOctokit>,
+  context: PullRequestContext,
+): Promise<FileLineRanges> {
+  try {
+    const { data: diff } = await octokit.rest.pulls.get({
+      owner: context.owner,
+      repo: context.repo,
+      pull_number: context.number,
+      mediaType: { format: 'diff' },
+    });
+
+    // The diff is returned as a string when using mediaType: { format: 'diff' }
+    return extractValidLineRanges(diff as unknown as string);
+  } catch (error) {
+    core.warning(
+      `Failed to fetch PR diff for line validation: ${error instanceof Error ? error.message : String(error)}`,
+    );
+    return new Map();
+  }
+}
+
+export async function assertCurrentPRHead(
+  octokit: Pick<ReturnType<typeof github.getOctokit>['rest'], 'pulls'>,
+  context: PullRequestContext,
+): Promise<void> {
+  const { data: pr } = await octokit.pulls.get({
+    owner: context.owner,
+    repo: context.repo,
+    pull_number: context.number,
+  });
+  if (pr.head.sha !== context.sha) {
+    throw new StalePullRequestHeadError(
+      'Pull request head changed after scan: ' + context.sha + ' -> ' + pr.head.sha,
+    );
+  }
+}
+
+// Keep exact finding locations. Out-of-diff findings become general comments instead
+// of being moved onto unrelated code in a nearby hunk.
+function isInlineCommentInDiff(comment: Comment, validRanges: FileLineRanges): boolean {
+  if (!comment.file || comment.line == null) {
+    return false;
+  }
+
+  if (!isLineInDiff(comment.file, comment.line, validRanges)) {
+    return false;
+  }
+
+  // Multi-line comment: GitHub requires start_line to be in the diff too. When startLine
+  // is absent or not strictly less than line, toReviewComment posts it single-line, so the
+  // end line is the only anchor that must be present.
+  if (comment.startLine != null && comment.startLine < comment.line) {
+    return (
+      validRanges
+        .get(comment.file)
+        ?.some((range) => comment.startLine! >= range.start && comment.line! <= range.end) ?? false
+    );
+  }
+
+  return true;
+}
+
+/**
+ * Validate review-comment locations against the current PR diff.
+ * Comments that cannot be placed inline are returned separately for general posting with
+ * their original locations preserved.
+ */
+async function partitionReviewCommentsWithOctokit(
+  octokit: ReturnType<typeof github.getOctokit>,
+  context: PullRequestContext,
+  comments: Comment[],
+): Promise<{
+  lineComments: Comment[];
+  generalComments: Comment[];
+  invalidLineComments: Comment[];
+}> {
+  await assertCurrentPRHead(octokit.rest, context);
+  const validRanges = await getPRDiffRanges(octokit, context);
+  await assertCurrentPRHead(octokit.rest, context);
+  const lineComments: Comment[] = [];
+  const generalComments: Comment[] = [];
+  const invalidLineComments: Comment[] = [];
+
+  for (const comment of comments) {
+    if (!comment.file || comment.line == null) {
+      generalComments.push(comment);
+      continue;
+    }
+
+    if (isInlineCommentInDiff(comment, validRanges)) {
+      // Exact location is in the diff - keep it inline, unmodified.
+      lineComments.push(comment);
+    } else {
+      core.warning(
+        `Comment on ${comment.file}:${comment.line} is not on a line in the reviewed diff - posting as a general comment to preserve its location`,
+      );
+      invalidLineComments.push(comment);
+    }
+  }
+
+  return { lineComments, generalComments, invalidLineComments };
+}
+
 export async function partitionReviewCommentsByDiff(
   token: string,
   context: PullRequestContext,
   comments: Comment[],
 ) {
-  const octokit = github.getOctokit(token);
-  /**
-   * Validate review-comment locations against the current PR diff.
-   * Comments that cannot be placed inline are returned separately for general posting.
-   */
-  async function partitionReviewCommentsWithOctokit(): Promise<{
-    lineComments: Comment[];
-    generalComments: Comment[];
-    invalidLineComments: Comment[];
-  }> {
-    /**
-     * Fetch PR diff and extract valid line ranges for each file.
-     * This is used to validate and clamp comment line numbers.
-     */
-    async function getPRDiffRanges(): Promise<FileLineRanges> {
-      try {
-        const { data: diff } = await octokit.rest.pulls.get({
-          owner: context.owner,
-          repo: context.repo,
-          pull_number: context.number,
-          mediaType: { format: 'diff' },
-        });
-
-        // The diff is returned as a string when using mediaType: { format: 'diff' }
-        return extractValidLineRanges(diff as unknown as string);
-      } catch (error) {
-        core.warning(
-          `Failed to fetch PR diff for line validation: ${error instanceof Error ? error.message : String(error)}`,
-        );
-        return new Map();
-      }
-    }
-
-    const validRanges = await getPRDiffRanges();
-    const lineComments: Comment[] = [];
-    const generalComments: Comment[] = [];
-    const invalidLineComments: Comment[] = [];
-
-    for (const comment of comments) {
-      if (!comment.file || comment.line == null) {
-        generalComments.push(comment);
-        continue;
-      }
-
-      /**
-       * Clamp a comment's line numbers to valid diff ranges.
-       * Comments without valid ranges are converted to general comments below.
-       */
-      if (!comment.file || comment.line == null) {
-        lineComments.push(comment);
-        continue;
-      }
-      const clamped = clampCommentLines(comment.file, comment.startLine, comment.line, validRanges);
-      if (clamped) {
-        lineComments.push({
-          ...comment,
-          startLine: clamped.startLine,
-          line: clamped.line,
-        });
-      } else {
-        // File not in diff - convert to general comment
-        core.warning(
-          `Comment on ${comment.file}:${comment.line} could not be placed in diff - converting to general comment`,
-        );
-        invalidLineComments.push(comment);
-      }
-    }
-
-    return { lineComments, generalComments, invalidLineComments };
-  }
-
-  return partitionReviewCommentsWithOctokit();
+  return partitionReviewCommentsWithOctokit(github.getOctokit(token), context, comments);
 }
