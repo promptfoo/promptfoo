@@ -3,7 +3,7 @@ import { and, eq, inArray } from 'drizzle-orm';
 import cliState from '../cliState';
 import { getDb } from '../database/index';
 import { evalResultsTable } from '../database/tables';
-import { evaluate } from '../evaluator';
+import { evaluate, hasTestsInRange } from '../evaluator';
 import logger from '../logger';
 import Eval from '../models/eval';
 import { notifyEvaluationChanged } from '../models/evalMutation';
@@ -57,7 +57,7 @@ function assertRetryProviderFilterMatched(
 async function resolveRetryConfigs(
   originalEval: Eval,
   cmdObj: RetryCommandOptions,
-): Promise<Awaited<ReturnType<typeof resolveConfigs>>> {
+): Promise<Awaited<ReturnType<typeof resolveConfigs>> & { filterRange?: string }> {
   const providerFilterOptions = getPersistedProviderFilterOptions(
     originalEval.runtimeOptions?.providerFilter,
   );
@@ -77,8 +77,47 @@ async function resolveRetryConfigs(
   }
 
   const configs = cmdObj.config
-    ? await resolveConfigs({ config: [cmdObj.config], ...providerFilterOptions }, {})
+    ? await resolveConfigs({ config: [cmdObj.config], ...providerFilterOptions }, {}, 'Evaluation')
     : await resolveConfigs(providerFilterOptions, originalEval.config);
+  // Saved tests are already selected; only their remaining global range needs replaying.
+  const savedRange = originalEval.runtimeOptions?.filterRange;
+  let filterRange = cmdObj.config
+    ? undefined
+    : typeof savedRange === 'string'
+      ? savedRange
+      : originalEval.config.evaluateOptions?.filterRange;
+
+  const configured = configs.commandLineOptions;
+  if (
+    cmdObj.config &&
+    (configured?.filterFirstN !== undefined || configured?.filterPattern !== undefined)
+  ) {
+    if (configured.filterSample !== undefined && configured.filterSampleSeed === undefined) {
+      throw new ConfigResolutionError(
+        'Cannot retry a configured sample without a seed from an override config. ' +
+          'Existing ERROR results were preserved. Retry without --config to use the saved test order.',
+      );
+    }
+    // doEval imports retry helpers, so load its shared filter only after module initialization.
+    const { applyTestFilters } = await import('./doEval');
+    filterRange = configured.filterRange ?? configs.config.evaluateOptions?.filterRange;
+    const consumedTopLevelRange = await applyTestFilters(configs.testSuite, configs.config, {
+      firstN: configured.filterFirstN,
+      pattern: configured.filterPattern,
+      range: filterRange,
+      sample: configured.filterSample,
+      sampleSeed: configured.filterSampleSeed,
+    });
+    if (consumedTopLevelRange) {
+      filterRange = undefined;
+    }
+    if (!hasTestsInRange(configs.testSuite, filterRange)) {
+      throw new ConfigResolutionError(
+        'The override config selected no tests to retry. Existing ERROR results were preserved. ' +
+          'Retry without --config to use the saved test selection.',
+      );
+    }
+  }
 
   // The original run filtered twice: raw configs in resolveConfigs, then instantiated
   // providers by live id()/label in doEval. Replay both stages so the retried provider
@@ -91,7 +130,7 @@ async function resolveRetryConfigs(
     configs.testSuite.providers.length,
     cmdObj.config,
   );
-  return configs;
+  return { ...configs, filterRange };
 }
 
 async function restoreJsonlOutputsAfterPersistenceFailure(
@@ -327,7 +366,12 @@ async function retryWithConfig(
   originalEval: Eval,
   errorResultIds: string[],
   cmdObj: RetryCommandOptions,
-  { testSuite, commandLineOptions, config }: Awaited<ReturnType<typeof resolveRetryConfigs>>,
+  {
+    testSuite,
+    commandLineOptions,
+    config,
+    filterRange,
+  }: Awaited<ReturnType<typeof resolveRetryConfigs>>,
 ) {
   const evalId = originalEval.id;
 
@@ -378,6 +422,7 @@ async function retryWithConfig(
     eventSource: 'cli',
     restorePromptColumns: !cmdObj.config,
     showProgressBar: !cmdObj.verbose, // Show progress bar unless verbose mode
+    ...(filterRange === undefined ? {} : { filterRange }),
   };
 
   try {

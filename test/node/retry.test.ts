@@ -560,6 +560,30 @@ describe('retryCommand', () => {
     expect(cliState.maxConcurrency).toBeUndefined();
   });
 
+  it.each([
+    { runtimeRange: '1:3', configRange: '2:4', expected: '1:3' },
+    { runtimeRange: undefined, configRange: '2:4', expected: '2:4' },
+  ])('restores saved range options: $expected', async ({ runtimeRange, configRange, expected }) => {
+    const originalEval = createEval({
+      config: { evaluateOptions: { filterRange: configRange } },
+      runtimeOptions: { filterRange: runtimeRange },
+    });
+    const retriedEval = createEval();
+    vi.mocked(Eval.findById).mockResolvedValue(originalEval);
+    dbMocks.errorRows.push({ id: 'error-result-1' });
+    mockResolvedConfig();
+    vi.mocked(evaluate).mockResolvedValue(retriedEval);
+
+    await retryCommand(originalEval.id, {});
+
+    expect(evaluate).toHaveBeenCalledWith(
+      testSuite,
+      originalEval,
+      expect.objectContaining({ filterRange: expected }),
+    );
+    expect(resolveConfigs).toHaveBeenCalledWith({}, originalEval.config);
+  });
+
   it('uses an explicit config and forces concurrency to one when delay is requested', async () => {
     const originalEval = createEval({
       runtimeOptions: { providerFilter: 'selected-target' },
@@ -594,6 +618,7 @@ describe('retryCommand', () => {
     expect(resolveConfigs).toHaveBeenCalledWith(
       { config: ['retry.yaml'], filterProviders: 'selected-target' },
       {},
+      'Evaluation',
     );
     expect(logger.info).toHaveBeenCalledWith(
       'Running at concurrency=1 because 25ms delay was requested between API calls',
