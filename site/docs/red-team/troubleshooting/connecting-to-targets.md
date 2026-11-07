@@ -37,6 +37,8 @@ headers:
   User-Agent: Promptfoo
 ```
 
+For small local or single-worker targets, start with `promptfoo redteam run --max-concurrency 1` to avoid overwhelming the target with concurrent test cases. Increase concurrency only as the target's capacity allows.
+
 ## Streaming or Polling
 
 Many chatbots will stream responses back to the client or have the client poll for new messages. The solution here is to set up an alternate HTTP endpoint or parameter to return the response in a single message.
