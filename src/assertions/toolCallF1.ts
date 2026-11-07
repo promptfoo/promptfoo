@@ -1,4 +1,5 @@
 import invariant from '../util/invariant';
+import { getToolCallInput } from './toolCall';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 
@@ -370,6 +371,7 @@ function extractToolNames(output: unknown): Set<string> {
 export const handleToolCallF1 = ({
   assertion,
   output,
+  providerResponse,
   renderedValue,
   inverse,
 }: AssertionParams): GradingResult => {
@@ -399,7 +401,7 @@ export const handleToolCallF1 = ({
   const expected = new Set(expectedTools);
   let actual: Set<string>;
   try {
-    actual = extractToolNames(output);
+    actual = extractToolNames(getToolCallInput({ assertion, output, providerResponse }));
   } catch (error) {
     if (!(error instanceof ToolCallParseError)) {
       throw error;

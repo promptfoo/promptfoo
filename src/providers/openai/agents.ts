@@ -11,6 +11,7 @@ import {
 import { SandboxAgent } from '@openai/agents/sandbox';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
+import { safeJsonStringify } from '../../util/json';
 import { getConfiguredTracingExport } from '../tracing';
 import {
   loadAgentDefinition,
@@ -25,7 +26,7 @@ import {
 import { resolveModelSettings } from './agents-model-settings';
 import { OTLPTracingExporter } from './agents-tracing';
 import { OpenAiGenericProvider } from './index';
-import type { AgentInputItem, Handoff, ModelSettings, Session } from '@openai/agents';
+import type { AgentInputItem, Handoff, ModelSettings, RunItem, Session } from '@openai/agents';
 
 import type { EnvOverrides } from '../../types/env';
 import type {
@@ -36,6 +37,84 @@ import type {
 import type { OpenAiAgentsOptions, OpenAiAgentsSessionFactory } from './agents-types';
 
 type AgentExecutionOverrides = { model?: string; modelSettings?: ModelSettings };
+
+type ToolCallMetadata = {
+  callId: string;
+  name: string;
+  rawArguments: string;
+  arguments?: unknown;
+  argumentParseStatus: 'parsed' | 'invalid';
+  callStatus?: string;
+  resultPresent: boolean;
+  resultStatus?: string;
+  executionMode: 'real' | 'mock';
+  result?: unknown;
+  resultOmitted?: true;
+};
+
+function extractToolCalls(
+  items: RunItem[],
+  executionMode: ToolCallMetadata['executionMode'],
+  includeResults: boolean,
+): ToolCallMetadata[] {
+  const requests = items.filter(
+    (item) => item.type === 'tool_call_item' && item.rawItem.type === 'function_call',
+  );
+  const requestCounts = new Map<string, number>();
+  for (const item of requests) {
+    if (item.type === 'tool_call_item' && item.rawItem.type === 'function_call') {
+      requestCounts.set(item.rawItem.callId, (requestCounts.get(item.rawItem.callId) ?? 0) + 1);
+    }
+  }
+  const outputs = new Map<string, Array<Extract<RunItem, { type: 'tool_call_output_item' }>>>();
+  for (const item of items) {
+    if (item.type === 'tool_call_output_item' && item.rawItem.type === 'function_call_result') {
+      const matches = outputs.get(item.rawItem.callId) ?? [];
+      matches.push(item);
+      outputs.set(item.rawItem.callId, matches);
+    }
+  }
+
+  return requests.flatMap((item) => {
+    if (item.type !== 'tool_call_item' || item.rawItem.type !== 'function_call') {
+      return [];
+    }
+    const call = item.rawItem;
+    const record: ToolCallMetadata = {
+      callId: call.callId,
+      name: call.name,
+      rawArguments: call.arguments,
+      argumentParseStatus: 'invalid',
+      ...(call.status === undefined ? {} : { callStatus: call.status }),
+      resultPresent: false,
+      executionMode,
+    };
+    try {
+      record.arguments = JSON.parse(call.arguments);
+      record.argumentParseStatus = 'parsed';
+    } catch {
+      // Invalid model arguments must not discard an otherwise valid final answer.
+    }
+
+    const matches = outputs.get(call.callId);
+    // Ambiguous IDs cannot establish which request produced a result.
+    const output =
+      requestCounts.get(call.callId) === 1 && matches?.length === 1 ? matches[0] : undefined;
+    if (output?.rawItem.type === 'function_call_result') {
+      record.resultPresent = true;
+      record.resultStatus = output.rawItem.status;
+      if (includeResults) {
+        const serialized = safeJsonStringify(output.output);
+        if (serialized === undefined) {
+          record.resultOmitted = true;
+        } else {
+          record.result = JSON.parse(serialized);
+        }
+      }
+    }
+    return [record];
+  });
+}
 /**
  * OpenAI Agents Provider
  *
@@ -85,6 +164,12 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
 
     try {
       validateExecuteTools(this.agentConfig.executeTools);
+      for (const option of ['includeToolCalls', 'includeToolResults'] as const) {
+        const value = this.agentConfig[option];
+        if (value !== undefined && typeof value !== 'boolean') {
+          throw new Error(`${option} must be a boolean`);
+        }
+      }
 
       // Initialize agent if not already initialized
       if (!this.agent) {
@@ -268,6 +353,18 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
         // agents with different models. Without per-model usage, no exact total is available.
         cost: undefined,
       };
+
+      if (this.agentConfig.includeToolCalls === true) {
+        response.metadata = {
+          // Unlike execution-only logs, newItems retains pending function-call requests too.
+          toolCallsComplete: true,
+          toolCalls: extractToolCalls(
+            result.newItems,
+            mockTools ? 'mock' : 'real',
+            this.agentConfig.includeToolResults === true,
+          ),
+        };
+      }
 
       return response;
     } catch (error) {

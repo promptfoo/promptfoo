@@ -87,6 +87,12 @@ export interface OpenAiAgentsOptions extends OpenAiSharedOptions {
    */
   toolMocks?: Record<string, any>;
 
+  /** Include function-call requests and result status in response metadata. Defaults to false. */
+  includeToolCalls?: boolean;
+
+  /** Include JSON-safe tool output bodies. Requires includeToolCalls; defaults to false. */
+  includeToolResults?: boolean;
+
   /**
    * Enable tracing for agent execution
    * If enabled, will export traces to OTLP endpoint

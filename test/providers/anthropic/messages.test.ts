@@ -2,6 +2,7 @@ import { APIError } from '@anthropic-ai/sdk';
 import dedent from 'dedent';
 import { satisfies } from 'semver';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { runAssertion } from '../../../src/assertions/index';
 import {
   clearCache,
   disableCache,
@@ -2234,6 +2235,37 @@ describe('AnthropicMessagesProvider', () => {
       expect(provider.anthropic.messages.create).toHaveBeenCalledTimes(1);
       expect(result.finishReason).toBe('tool_calls');
       expect(result.output).toContain('"name":"get_weather"');
+    });
+
+    it('keeps a pending non-MCP request in F1 after executing an MCP tool', async () => {
+      provider = createProvider('claude-sonnet-4-6', createMcpOptions());
+      mcpMocks.callTool.mockResolvedValueOnce({ content: 'Found Acme Solar.' });
+      vi.spyOn(provider.anthropic.messages, 'create')
+        .mockResolvedValueOnce(createSearchTurn() as Anthropic.Messages.Message)
+        .mockResolvedValueOnce({
+          content: [createWeatherToolUse()],
+          stop_reason: 'tool_use',
+          usage: { input_tokens: 8, output_tokens: 4, server_tool_use: null },
+        } as Anthropic.Messages.Message);
+
+      const result = await provider.callApi('Find companies and then check the weather');
+      expect(mcpMocks.callTool).toHaveBeenCalledTimes(1);
+      expect(result.metadata?.toolCalls).toMatchObject([{ name: 'search_companies' }]);
+      expect(result.output).toContain('"name":"get_weather"');
+      expect(
+        await runAssertion({
+          assertion: { type: 'tool-call-f1', value: ['search_companies'] },
+          providerResponse: result,
+          test: {},
+        }),
+      ).toMatchObject({ pass: false, score: 0 });
+      expect(
+        await runAssertion({
+          assertion: { type: 'tool-call-f1', value: ['get_weather'] },
+          providerResponse: result,
+          test: {},
+        }),
+      ).toMatchObject({ pass: true, score: 1 });
     });
 
     it('publishes executed MCP tool calls as metadata.toolCalls across rounds', async () => {

@@ -157,6 +157,7 @@ These metrics are programmatic tests that are run on LLM output. [See all detail
 | [is-valid-function-call](/docs/configuration/expected-outputs/deterministic/#is-valid-function-call)               | Ensure that the function call matches the function's JSON schema                |
 | [is-valid-openai-function-call](/docs/configuration/expected-outputs/deterministic/#is-valid-openai-function-call) | Ensure that the function call matches the function's JSON schema                |
 | [is-valid-openai-tools-call](/docs/configuration/expected-outputs/deterministic/#is-valid-openai-tools-call)       | Ensure all tool calls match the tools JSON schema                               |
+| [tool-call](/docs/configuration/expected-outputs/deterministic/#tool-call)                                         | Required tool requests match names and optional arguments                       |
 | [tool-call-f1](/docs/configuration/expected-outputs/deterministic/#tool-call-f1)                                   | Tool names meet the F1 threshold; parser limit exhaustion fails                 |
 | [trace-span-count](/docs/configuration/expected-outputs/deterministic/#trace-span-count)                           | Count spans matching names and attributes with min/max thresholds               |
 | [trace-span-duration](/docs/configuration/expected-outputs/deterministic/#trace-span-duration)                     | Check durations of spans selected by name and attributes, including percentiles |

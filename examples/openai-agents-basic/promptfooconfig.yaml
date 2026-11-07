@@ -9,6 +9,7 @@ providers:
     config:
       agent: file://./agents/dungeon-master-agent.ts
       maxTurns: 20
+      includeToolCalls: true
       # tracing: true  # Enable when OTLP collector is running
 
 tests:
@@ -39,6 +40,13 @@ tests:
     vars:
       query: 'What weapons and items do I have with me?'
     assert:
+      - type: tool-call
+        value:
+          name: check_inventory
+          arguments:
+            playerId: player1
+        config:
+          requireCompleted: true
       - type: contains
         value: Longsword
       - type: contains

@@ -1,5 +1,6 @@
-import { Agent, setTracingDisabled, Usage } from '@openai/agents';
+import { Agent, setTracingDisabled, tool, Usage } from '@openai/agents';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { runAssertion } from '../../../src/assertions/index';
 import { OpenAiAgentsProvider } from '../../../src/providers/openai/agents';
 import { createDeferred } from '../../util/utils';
 import type { Model, ModelRequest, ModelResponse, StreamEvent } from '@openai/agents';
@@ -74,6 +75,83 @@ describe('OpenAiAgentsProvider with the installed SDK', () => {
     expect(resumedInput).toContain('Remembered.');
     expect(resumedInput).toContain('What did I ask you to remember?');
   });
+
+  it.each(['real', 'mock'] as const)(
+    'records %s function calls through the real runner without replaying session history',
+    async (executeTools) => {
+      const execute = vi.fn(async () => ({ status: 'shipped' }));
+      const model = scriptedModel(async ({ input }) => {
+        if (!JSON.stringify(input).includes('function_call_result')) {
+          return {
+            usage: new Usage(),
+            output: [
+              {
+                type: 'function_call',
+                callId: 'order_42',
+                name: 'lookup_order',
+                arguments: '{"orderId":"42"}',
+              },
+            ],
+          };
+        }
+        return reply('Order shipped.');
+      });
+      const provider = new OpenAiAgentsProvider('tool-fixture', {
+        config: {
+          agent: new Agent({
+            name: 'Tool fixture',
+            model,
+            tools: [
+              tool({
+                name: 'lookup_order',
+                description: 'Look up an order',
+                parameters: {
+                  type: 'object',
+                  properties: { orderId: { type: 'string' } },
+                  required: ['orderId'],
+                  additionalProperties: false,
+                },
+                execute,
+              }),
+            ],
+          }),
+          includeToolCalls: true,
+          includeToolResults: true,
+          executeTools,
+          toolMocks: { lookup_order: { status: 'mocked' } },
+          session: { type: 'memory', sessionId: 'tool-session' },
+        },
+      });
+      const first = await provider.callApi('Look up order 42.');
+      expect(first.metadata?.toolCallsComplete).toBe(true);
+      expect(first.metadata?.toolCalls).toMatchObject([
+        {
+          callId: 'order_42',
+          name: 'lookup_order',
+          arguments: { orderId: '42' },
+          resultPresent: true,
+          resultStatus: 'completed',
+          executionMode: executeTools,
+        },
+      ]);
+      expect(execute).toHaveBeenCalledTimes(executeTools === 'real' ? 1 : 0);
+      expect(
+        await runAssertion({
+          assertion: {
+            type: 'tool-call',
+            value: { name: 'lookup_order', arguments: { orderId: '42' } },
+            config: { requireCompleted: true },
+          },
+          providerResponse: first,
+          test: {},
+        }),
+      ).toMatchObject({ pass: executeTools === 'real' });
+      const second = await provider.callApi('What did you find?');
+      expect(second.metadata?.toolCallsComplete).toBe(true);
+      expect(second.metadata?.toolCalls).toEqual([]);
+      expect(first.metadata?.toolCalls).toHaveLength(1);
+    },
+  );
 
   it('surfaces model failures instead of returning an output to score', async () => {
     const model = scriptedModel(async () => {
