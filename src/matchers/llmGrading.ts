@@ -12,7 +12,7 @@ import { getDefaultProviders } from '../providers/defaults';
 import { doRemoteGrading } from '../remoteGrading';
 import { doRemoteScoringWithPi } from '../remoteScoring';
 import invariant from '../util/invariant';
-import { extractFirstJsonObject } from '../util/json';
+import { extractFirstJsonObject, extractJsonObjects } from '../util/json';
 import { accumulateTokenUsage } from '../util/tokenUsageUtils';
 import {
   callProviderWithContext,
@@ -507,14 +507,26 @@ export async function matchesGEval(
   let steps;
 
   try {
-    // NOTE: use regexp for reliable, because sometimes LLM wraps response to markdown format ```json...```
-    const stepsMatch = respSteps.output.match(/\{"steps".+\}/g);
-    if (!stepsMatch) {
+    const jsonObjects = extractJsonObjects(respSteps.output);
+    if (jsonObjects.length === 0) {
       return failWithTokens(
         `LLM-proposed evaluation steps are not in JSON format: ${respSteps.output}`,
       );
     }
-    steps = JSON.parse(stepsMatch[0]).steps;
+    const isStepsArray = (obj: unknown): obj is { steps: unknown } =>
+      typeof obj === 'object' &&
+      obj !== null &&
+      'steps' in obj &&
+      Array.isArray((obj as { steps: unknown }).steps) &&
+      (obj as { steps: unknown[] }).steps.length > 0;
+    const isStepsObject = (obj: unknown): obj is { steps: unknown } =>
+      typeof obj === 'object' && obj !== null && 'steps' in obj;
+    const reversedSteps = [...jsonObjects].reverse();
+    const candidate =
+      reversedSteps.find(isStepsArray) ??
+      reversedSteps.find(isStepsObject) ??
+      (reversedSteps[0] as { steps?: unknown });
+    steps = candidate?.steps;
 
     if (!Array.isArray(steps)) {
       return failWithTokens(
@@ -567,14 +579,22 @@ export async function matchesGEval(
   if (typeof resp.output !== 'string') {
     return failWithTokens('LLM-proposed evaluation result response is not a string');
   }
-  let result;
+  let result: { score?: unknown; reason?: unknown };
 
   try {
-    const resultMatch = resp.output.match(/\{.+\}/g);
-    if (!resultMatch) {
+    const jsonObjects = extractJsonObjects(resp.output);
+    if (jsonObjects.length === 0) {
       return failWithTokens(`LLM-proposed evaluation result is not in JSON format: ${resp.output}`);
     }
-    result = JSON.parse(resultMatch[0]);
+    const isCompleteResult = (obj: unknown): obj is { score?: unknown; reason?: unknown } =>
+      typeof obj === 'object' && obj !== null && 'score' in obj && 'reason' in obj;
+    const isPartialResult = (obj: unknown): obj is { score?: unknown; reason?: unknown } =>
+      typeof obj === 'object' && obj !== null && ('score' in obj || 'reason' in obj);
+    const reversed = [...jsonObjects].reverse();
+    result =
+      reversed.find(isCompleteResult) ??
+      reversed.find(isPartialResult) ??
+      (reversed[0] as { score?: unknown; reason?: unknown });
   } catch (err) {
     return failWithTokens(
       `LLM-proposed evaluation result is not in JSON format: ${(err as Error).message}\n\n${resp.output}`,
