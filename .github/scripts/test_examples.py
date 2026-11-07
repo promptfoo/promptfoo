@@ -29,7 +29,7 @@ SCRIPT = Path(__file__).with_name("examples.py")
 class SelectionTests(unittest.TestCase):
     def test_full_run_preserves_every_registered_runtime(self):
         rows = select_examples(None)
-        self.assertEqual(len(rows), 22)
+        self.assertEqual(len(rows), 24)
         self.assertEqual(
             [(row["example"], row["python"]) for row in rows],
             [
@@ -49,6 +49,8 @@ class SelectionTests(unittest.TestCase):
                 ("langgraph", "3.14"),
                 ("rag-pdf", "3.10"),
                 ("rag-pdf-cli", "3.14"),
+                ("image-classification", "3.11"),
+                ("image-classification", "3.14"),
                 ("f-score", "3.10"),
                 ("f-score", "3.14"),
                 ("google-adk", "3.12"),
@@ -139,6 +141,27 @@ class SelectionTests(unittest.TestCase):
                 (ROOT / example.directory / example.suites[2][0]).resolve(),
                 ROOT / ".github/scripts/tests/openai_agents",
             )
+
+    def test_image_changes_select_generator_tests_without_node(self):
+        for filename in ("dataset_gen.py", "test_dataset_gen.py", "requirements.txt"):
+            with self.subTest(filename=filename):
+                self.assertEqual(
+                    select_examples([f"examples/eval-image-classification/{filename}"]),
+                    [
+                        {
+                            "example": "image-classification",
+                            "python": version,
+                            "node": False,
+                        }
+                        for version in ("3.11", "3.14")
+                    ],
+                )
+        self.assertEqual(
+            EXAMPLES["image-classification"].suites, ((".", "test_dataset_gen.py"),)
+        )
+        self.assertEqual(
+            select_examples(["examples/eval-image-classification-other/file.py"]), []
+        )
 
     def test_fscore_changes_select_its_python_only_dependency_suite(self):
         for filename in ("prepare_data.py", "dependencies_test.py", "requirements.txt"):
