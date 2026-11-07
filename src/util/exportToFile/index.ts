@@ -1,9 +1,11 @@
 import { getTableCellMedia, getTableCellText } from '../../presentation/evalTableCells';
 
 import type EvalResult from '../../models/evalResult';
-import type { EvaluateTableOutput, EvaluateTableRow } from '../../types/index';
+import type { EvaluateResult, EvaluateTableOutput, EvaluateTableRow } from '../../types/index';
 
-export function convertEvalResultToTableCell(result: EvalResult): EvaluateTableOutput {
+export function convertEvalResultToTableCell(
+  result: EvalResult | EvaluateResult,
+): EvaluateTableOutput {
   const resultText = getTableCellText(result);
   return {
     ...result,

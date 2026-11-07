@@ -12,6 +12,7 @@ import { Spinner } from '@app/components/ui/spinner';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { useCustomPoliciesMap } from '@app/hooks/useCustomPoliciesMap';
 import { useTelemetry } from '@app/hooks/useTelemetry';
+import { getDisplayVars } from '@promptfoo/presentation/evalResults';
 import { displayNameOverrides } from '@promptfoo/redteam/constants';
 import { stringify } from 'csv-stringify/browser/esm/sync';
 import { getPluginIdFromResult, getStrategyIdFromTest } from '../components/shared';
@@ -45,6 +46,7 @@ const ReportDownloadButton = ({ evalDescription, evalData }: ReportDownloadButto
         }
       }
 
+      const displayVars = getDisplayVars(result);
       return {
         'Test ID': index + 1,
         Plugin: pluginDisplayName,
@@ -54,8 +56,8 @@ const ReportDownloadButton = ({ evalDescription, evalData }: ReportDownloadButto
         Strategy: getStrategyIdFromTest(result.testCase as any),
         Target: result.provider.label || result.provider.id || '',
         Prompt:
-          result.vars.query?.toString() ||
-          result.vars.prompt?.toString() ||
+          displayVars?.query?.toString() ||
+          displayVars?.prompt?.toString() ||
           result.prompt.raw ||
           '',
         Response: result.response?.output || '',
