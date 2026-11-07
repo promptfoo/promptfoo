@@ -3,6 +3,7 @@ import { importModule } from '../esm';
 import logger from '../logger';
 import { runPython } from '../python/pythonUtils';
 import { isJavascriptFile } from './fileExtensions';
+import { parseFileUrl } from './functions/loadFunction';
 import { safeJoin } from './pathUtils';
 import { getProcessShim } from './processShim';
 import { isSafeMode, SafeModeError } from './safeMode';
@@ -46,21 +47,6 @@ export const TransformInputType = {
   VARS: 'vars',
 } as const;
 export type TransformInputType = (typeof TransformInputType)[keyof typeof TransformInputType];
-
-/**
- * Parses a file path string to extract the file path and function name.
- * Handles Windows drive letters (e.g., C:\path\to\file.js:functionName).
- * @param filePath - The file path string, potentially including a function name.
- * @returns A tuple containing the file path and function name (if present).
- */
-function parseFilePathAndFunctionName(filePath: string): [string, string | undefined] {
-  const lastColonIndex = filePath.lastIndexOf(':');
-  // Check if colon is part of Windows drive letter (position 1) or not present
-  if (lastColonIndex > 1) {
-    return [filePath.slice(0, lastColonIndex), filePath.slice(lastColonIndex + 1)];
-  }
-  return [filePath, undefined];
-}
 
 /**
  * Retrieves a JavaScript transform function from a file.
@@ -114,9 +100,7 @@ function getPythonTransformFunction(
  * @throws Error if the file format is unsupported.
  */
 async function getFileTransformFunction(filePath: string): Promise<Function> {
-  const [actualFilePath, functionName] = parseFilePathAndFunctionName(
-    filePath.slice('file://'.length),
-  );
+  const { filePath: actualFilePath, functionName } = parseFileUrl(filePath);
 
   const fullPath = safeJoin(cliState.basePath || '', actualFilePath);
 
