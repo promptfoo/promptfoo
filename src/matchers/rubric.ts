@@ -20,6 +20,7 @@ import type {
   ApiProvider,
   Assertion,
   CallApiContextParams,
+  EvidenceEntry,
   GradingConfig,
   GradingResult,
   ImageOutput,
@@ -885,6 +886,7 @@ export async function runJsonGradingPrompt({
   vars,
   images,
   audio,
+  evidence,
 }: {
   assertion?: Assertion;
   checkName: string;
@@ -898,9 +900,29 @@ export async function runJsonGradingPrompt({
   vars: Record<string, VarValue>;
   images?: ImageOutput[];
   audio?: ProviderResponse['audio'];
+  /**
+   * Optional structured evidence entries. These are exposed to the grader as
+   * a first-class `evidence` template variable alongside the candidate `output`,
+   * NOT appended to the output string and NOT auto-injected into the prompt.
+   * Custom rubric templates reference them explicitly via `{{ evidence }}` or
+   * iterate with `{% for e in evidence %}...{% endfor %}`. This separation
+   * preserves `tryParse(output)` for structured-json candidates and keeps
+   * image normalisation intact.
+   */
+  evidence?: EvidenceEntry[];
 }): Promise<GradingResult> {
   const rubricPrompt = await loadRubricPrompt(grading.rubricPrompt, defaultPrompt);
-  const renderedPrompt = await renderLlmRubricPrompt(rubricPrompt, vars);
+
+  // Expose evidence as a first-class template variable — structured entries
+  // alongside the candidate `output`. Custom rubrics decide how (and whether)
+  // to present them; we NEVER auto-inject evidence into the prompt text, nor
+  // splice it into the candidate output string.
+  const templateVars: Record<string, VarValue> = {
+    ...vars,
+    ...(evidence === undefined ? {} : { evidence }),
+  };
+
+  const finalPrompt = await renderLlmRubricPrompt(rubricPrompt, templateVars);
 
   const defaultProviders = await getDefaultProviders();
   const defaultProvider =
@@ -915,7 +937,7 @@ export async function runJsonGradingPrompt({
     prompt: providerPrompt,
     imageCount,
     audioAttached,
-  } = await buildGradingProviderPrompt(renderedPrompt, images, finalProvider, audio);
+  } = await buildGradingProviderPrompt(finalPrompt, images, finalProvider, audio);
   const resp = await callProviderWithContext(
     finalProvider,
     providerPrompt,
@@ -970,7 +992,7 @@ export async function runJsonGradingPrompt({
     }),
     metadata: {
       ...trustedResponseMetadata,
-      renderedGradingPrompt: renderedPrompt,
+      renderedGradingPrompt: finalPrompt,
       ...(imageCount > 0 ? { renderedGradingPromptImages: imageCount } : {}),
       ...(audioAttached ? { renderedGradingPromptAudio: true } : {}),
       ...(resp.cached ? { cachedResponse: true } : {}),
