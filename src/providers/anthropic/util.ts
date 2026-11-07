@@ -518,6 +518,18 @@ export function normalizeAnthropicModelName(modelName: string): string {
     : normalized;
 }
 
+/** Shared gateways may use opaque deployment aliases. Only match complete known model IDs. */
+export function isKnownClaudeModelWithDeprecatedSampling(modelId: string): boolean {
+  const canonical = normalizeAnthropicModelName(modelId)
+    .replace(/-v\d+:\d+$/, '') // Bedrock revision
+    .replace(/(?:[-@]\d{8}|-latest)$/, '') // dated snapshot or model alias
+    .replace(/(\d)\.(\d)/, '$1-$2'); // OpenRouter uses dotted versions
+  return CLAUDE_MODEL_FAMILIES.some(
+    ({ match, samplingParamsDeprecated }) =>
+      samplingParamsDeprecated && match.exec(canonical)?.[0] === canonical,
+  );
+}
+
 /**
  * Claude Opus 4.7/4.8 and Claude 5+ models deprecate manual sampling controls at the model
  * level — `temperature`, `top_p`, and `top_k` return 400 `invalid_request_error` (including

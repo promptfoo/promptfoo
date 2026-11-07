@@ -858,6 +858,8 @@ export class GoogleLiveProvider implements ApiProvider {
       let lastVideoFrameSentAt = 0;
       let hasFinalized = false;
       let speechInputEnded = false;
+      let hasPendingInputTranscription = false;
+      let finalRecordingComplete = false;
 
       const requestedText = configuredResponseModalities?.includes('TEXT') ?? false;
       const responseModalities =
@@ -884,6 +886,7 @@ export class GoogleLiveProvider implements ApiProvider {
       const sendContentMessages = async (contentMessages: any[]) => {
         if (isSpeechStream) {
           speechInputEnded = false;
+          hasPendingInputTranscription = false;
           clearTimeout(liveTranslateHardTimeout);
           liveTranslateHardTimeout = undefined;
         }
@@ -1574,9 +1577,12 @@ export class GoogleLiveProvider implements ApiProvider {
             let hasMeaningfulLiveTranslateOutput = false;
             // Only IDLE ends an Extended Thinking input; an earlier queued IDLE may
             // describe the state before the latest tool response.
-            const inputComplete = usesInteractionStatus
-              ? interactionComplete && messageIndex > lastToolResponseMessageIndex
-              : serverContent.turnComplete;
+            // Input transcripts can follow turnComplete; their quiet timer advances recordings.
+            const inputComplete =
+              !isLiveTranscribe &&
+              (usesInteractionStatus
+                ? interactionComplete && messageIndex > lastToolResponseMessageIndex
+                : serverContent.turnComplete);
             const hasModelOutput =
               Boolean(serverContent.modelTurn?.parts?.length) ||
               Boolean(serverContent.outputTranscription?.text) ||
@@ -1593,17 +1599,25 @@ export class GoogleLiveProvider implements ApiProvider {
               return;
             }
 
-            if (isLiveTranscribe && serverContent.interimInputTranscription?.text) {
-              // A new utterance is in progress. Wait for its finalized transcript.
-              clearTimeout(speechCompletionTimeout);
-            }
-            if (isLiveTranscribe && serverContent.inputTranscription?.text) {
-              // Only finalized segments belong in eval output. Interim hypotheses can be revised.
-              if (response_text_total) {
-                response_text_total += '\n';
+            if (isLiveTranscribe) {
+              const { inputTranscription, interimInputTranscription, turnComplete } = serverContent;
+              if (turnComplete && speechInputEnded && contentIndex === contents.length) {
+                finalRecordingComplete = true;
               }
-              response_text_total += serverContent.inputTranscription.text;
-              armSpeechCompletion();
+              // Final segments replace interim hypotheses, including an empty final on silence.
+              if (inputTranscription) {
+                hasPendingInputTranscription = false;
+                if (inputTranscription.text) {
+                  response_text_total +=
+                    (response_text_total ? '\n' : '') + inputTranscription.text;
+                }
+              } else if (interimInputTranscription?.text) {
+                hasPendingInputTranscription = true;
+                clearTimeout(speechCompletionTimeout);
+              }
+              if (!hasPendingInputTranscription && (inputTranscription || turnComplete)) {
+                armSpeechCompletion();
+              }
             }
             if (serverContent.modelTurn?.parts) {
               for (const part of serverContent.modelTurn.parts) {
@@ -1892,23 +1906,31 @@ export class GoogleLiveProvider implements ApiProvider {
         });
       };
 
-      ws.onclose = (event: WebSocket.CloseEvent) => {
+      ws.onclose = async (event: WebSocket.CloseEvent) => {
         logger.debug(
           `WebSocket connection closed. Code: ${event.code}, Reason: ${event.reason}, Clean: ${event.wasClean}`,
         );
         // Finalization closes the socket before awaiting final state. That expected
         // close must leave both the result and the stateful worker to the finalizer.
-        if (hasFinalized) {
+        if (hasFinalized || isResolved) {
           return;
         }
-        clearTimeout(timeout);
-        // If the promise hasn't been resolved yet and the closure was unexpected, resolve with error.
-        // This is a fallback; most paths should resolve the promise earlier.
-        if (!isResolved) {
-          safeResolve({
-            error: `WebSocket connection closed unexpectedly. Code: ${event.code}, Reason: ${event.reason}`,
-          });
+        if (isLiveTranscribe && speechInputEnded && event.code === 1000 && event.wasClean) {
+          // The close can arrive while earlier transcript frames are still queued.
+          try {
+            await messageQueue;
+            if (finalRecordingComplete && !hasPendingInputTranscription) {
+              await finalizeResponse();
+              return;
+            }
+          } catch (err) {
+            safeResolve({ error: `Error finalizing response: ${err}` });
+            return;
+          }
         }
+        safeResolve({
+          error: `WebSocket connection closed unexpectedly. Code: ${event.code}, Reason: ${event.reason}`,
+        });
       };
     });
   }

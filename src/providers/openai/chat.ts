@@ -68,6 +68,7 @@ import {
   normalizeOpenAiBillingModelName,
   normalizeOpenAiServiceTierForWire,
   OPENAI_CHAT_MODELS,
+  omitDeprecatedClaudeSamplingParams,
   validateFunctionCall,
 } from './util';
 import type OpenAI from 'openai';
@@ -676,6 +677,8 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     applyGpt6RequestRules(body, capabilityModelName, 'chat', {
       isOpenRouter: isOpenRouterGpt6,
     });
+
+    omitDeprecatedClaudeSamplingParams(body);
 
     return {
       body,

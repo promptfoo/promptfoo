@@ -344,6 +344,21 @@ Error responses include categorized error types in `metadata.errorType`:
 - `parsing`: Response parsing failures
 - `session`: Bidirectional stream session errors
 
+## Text Embeddings
+
+`promptfooconfig.embeddings.yaml` verifies Nova Multimodal Embeddings and TwelveLabs
+Marengo 3 through text similarity assertions. It uses an echo target, so only embedding
+requests are billed. Configure AWS credentials and model access in `us-east-1`, then run:
+
+```bash
+npx promptfoo@latest eval -c promptfooconfig.embeddings.yaml --no-cache -o embeddings-results.json
+```
+
+Both models grade the same pair of related phrases with a shared similarity threshold.
+The Nova test requests a 256-dimensional vector. See the
+[Bedrock embedding options](https://www.promptfoo.dev/docs/providers/aws-bedrock/#embeddings)
+for the other dimensions, embedding purposes, and truncation settings.
+
 ## Getting Started
 
 1. Run the evaluation:
