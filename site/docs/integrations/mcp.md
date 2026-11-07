@@ -220,6 +220,8 @@ For detailed information about using MCP with OpenAI's Responses API, see the [O
 
 Promptfoo automatically handles JSON Schema compatibility between MCP servers and LLM providers by removing provider-incompatible metadata fields (like `$schema`) while preserving supported features. Tools with no input parameters work without modification.
 
+To review tool definition changes before a tool-call eval, see the [MCP tool definition drift example](https://github.com/promptfoo/promptfoo/tree/main/examples/mcp-tool-definition-drift). A separate SDK script compares `name`, `description`, and `inputSchema` against a reviewed baseline; the example's combined command runs the eval only if they match. It uses one local stdio server and requires no LLM or API keys. The README covers manual baseline updates and the limits of definition checks, including changes in tool behavior.
+
 ## Timeout Configuration
 
 MCP tool calls have a default timeout of 60 seconds. For long-running tools, increase the timeout:
