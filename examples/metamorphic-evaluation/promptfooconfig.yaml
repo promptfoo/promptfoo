@@ -1,0 +1,39 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Check controlled output relationships without a judge
+prompts:
+  - '{{result}}'
+providers:
+  - echo
+tests:
+  - vars:
+      result: '{"decision":"allow","actions":["read"],"temperature":100}'
+    metadata:
+      metamorphic:
+        familyId: context-order
+        variantId: original
+    assert:
+      - type: is-json
+  - vars:
+      result: '{"temperature":100,"actions":["read"],"decision":"allow"}'
+    metadata:
+      metamorphic:
+        familyId: context-order
+        variantId: reordered
+    assert:
+      - type: is-json
+  - vars:
+      result: '{"temperature":212}'
+    metadata:
+      metamorphic:
+        familyId: temperature-units
+        variantId: fahrenheit
+    assert:
+      - type: is-json
+  - vars:
+      result: '{"temperature":100}'
+    metadata:
+      metamorphic:
+        familyId: temperature-units
+        variantId: celsius
+    assert:
+      - type: is-json

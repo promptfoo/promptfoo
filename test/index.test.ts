@@ -113,6 +113,7 @@ describe('index.ts exports', () => {
     'normalizeInputDefinition',
     'normalizeInputs',
     'ProbeLimitExceededError',
+    'metamorphic',
     'redteam',
   ];
 
@@ -213,6 +214,7 @@ describe('index.ts exports', () => {
       guardrails: index.guardrails,
       loadApiProvider: index.loadApiProvider,
       loadApiProviders: index.loadApiProviders,
+      metamorphic: index.metamorphic,
       redteam: index.redteam,
     });
   });

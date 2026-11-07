@@ -1,0 +1,47 @@
+{
+  "version": 1,
+  "name": "Controlled relationships",
+  "repetitions": 2,
+  "contexts": [{ "id": "echo", "promptIdx": 0, "providerId": "echo", "providerLabel": "" }],
+  "families": [
+    {
+      "id": "context-order",
+      "variants": ["original", "reordered"],
+      "relations": [
+        {
+          "id": "decision-invariance",
+          "left": "original",
+          "right": "reordered",
+          "kind": "equal",
+          "leftSelector": { "source": "output", "decode": "json", "pointer": "/decision" },
+          "rightSelector": { "source": "output", "decode": "json", "pointer": "/decision" }
+        },
+        {
+          "id": "action-invariance",
+          "left": "original",
+          "right": "reordered",
+          "kind": "set-equal",
+          "leftSelector": { "source": "output", "decode": "json", "pointer": "/actions" },
+          "rightSelector": { "source": "output", "decode": "json", "pointer": "/actions" }
+        }
+      ]
+    },
+    {
+      "id": "temperature-units",
+      "variants": ["celsius", "fahrenheit"],
+      "relations": [
+        {
+          "id": "unit-conversion",
+          "left": "celsius",
+          "right": "fahrenheit",
+          "kind": "affine",
+          "scale": 1.8,
+          "offset": 32,
+          "absoluteTolerance": 0.000001,
+          "leftSelector": { "source": "output", "decode": "json", "pointer": "/temperature" },
+          "rightSelector": { "source": "output", "decode": "json", "pointer": "/temperature" }
+        }
+      ]
+    }
+  ]
+}
