@@ -6,6 +6,7 @@ import {
   DATASET_EXEMPT_PLUGINS,
   isMultiTurnStrategy,
   MULTI_INPUT_EXCLUDED_PLUGINS,
+  MULTI_INPUT_VAR,
   type MultiTurnStrategy,
 } from '../../redteam/constants';
 import { PluginFactory, Plugins } from '../../redteam/plugins/index';
@@ -83,9 +84,7 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
     // Find the plugin
     const pluginFactory = Plugins.find((p) => p.key === plugin.id) as PluginFactory;
 
-    // TODO: Add support for this? Was previously misconfigured such that the no value would ever
-    // be passed in as a configuration option.
-    const injectVar = 'query';
+    const injectVar = hasMultiInput ? MULTI_INPUT_VAR : 'query';
 
     // Keep preview generation request-scoped. A form-selected provider wins, followed by
     // any org/team cache, then the built-in default; previous CLI runs must not leak here.
