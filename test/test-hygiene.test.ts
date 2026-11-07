@@ -539,9 +539,14 @@ function callbackResetsAllMocks(callback: Node): boolean {
   }
   const statements = callback.body.type === 'BlockStatement' ? callback.body.body : [callback.body];
   for (const statement of statements) {
-    const expression = statement.type === 'ExpressionStatement' ? statement.expression : statement;
-    const call = expression.type === 'AwaitExpression' ? expression.argument : expression;
-    if (call.type === 'CallExpression' && isViCall(call, 'resetAllMocks')) {
+    const expression =
+      statement.type === 'ExpressionStatement'
+        ? statement.expression
+        : statement.type === 'ReturnStatement'
+          ? statement.argument
+          : statement;
+    const call = expression?.type === 'AwaitExpression' ? expression.argument : expression;
+    if (call?.type === 'CallExpression' && isViCall(call, 'resetAllMocks')) {
       return true;
     }
     // A return in a branch can bypass a later direct reset.
@@ -1635,6 +1640,8 @@ describe('root test hygiene', () => {
     'beforeEach(() => { if (enabled) { vi.resetAllMocks(); } });',
     'beforeEach(() => enabled && vi.resetAllMocks());',
     'beforeEach(() => { return; vi.resetAllMocks(); });',
+    'beforeEach(() => { return configure(); vi.resetAllMocks(); });',
+    'beforeEach(() => { return enabled && vi.resetAllMocks(); });',
     'it("case", () => { beforeEach(() => vi.resetAllMocks()); });',
     'if (enabled) { beforeEach(() => vi.resetAllMocks()); }',
     'enabled && beforeEach(() => vi.resetAllMocks());',
@@ -1649,6 +1656,8 @@ describe('root test hygiene', () => {
   it.each([
     'beforeEach(() => vi.resetAllMocks());',
     'beforeEach(async () => { await vi.resetAllMocks(); });',
+    'beforeEach(() => { return vi.resetAllMocks(); });',
+    'beforeEach(async () => { return await vi.resetAllMocks(); });',
     'beforeEach(function () { vi.resetAllMocks(); });',
     'if (enabled) { configure(); } beforeEach(() => vi.resetAllMocks());',
     'beforeEach(() => { if (enabled) { configure(); } vi.resetAllMocks(); });',
