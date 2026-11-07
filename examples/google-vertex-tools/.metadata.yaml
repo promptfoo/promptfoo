@@ -1,0 +1,5 @@
+title: 'Google Vertex AI Function Calling'
+description: 'Function calling and tool callback execution with Vertex AI Gemini models'
+tags:
+  - Tool Use
+  - Providers

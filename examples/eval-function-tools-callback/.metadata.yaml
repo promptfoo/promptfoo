@@ -1,0 +1,5 @@
+title: 'Function Tool Callbacks'
+description: 'Evaluate OpenAI function calling with functionToolCallbacks to execute tool calls during evaluation'
+tags:
+  - Tool Use
+  - OpenAI

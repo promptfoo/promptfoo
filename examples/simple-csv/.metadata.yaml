@@ -1,0 +1,5 @@
+title: 'CSV and Excel Test Cases'
+description: 'Load test cases from CSV and Excel files for a translation task with JSON configuration fields and assertions'
+tags:
+  - Getting Started
+  - Configuration

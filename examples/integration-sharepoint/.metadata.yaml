@@ -1,0 +1,5 @@
+title: 'SharePoint CSV Import'
+description: 'Import test cases from CSV files stored in Microsoft SharePoint'
+tags:
+  - Integrations
+  - Configuration
