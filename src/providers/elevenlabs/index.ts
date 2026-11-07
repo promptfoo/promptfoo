@@ -18,7 +18,7 @@ export { ElevenLabsHistoryProvider } from './history';
 export { ElevenLabsIsolationProvider } from './isolation';
 export { ElevenLabsSTTProvider } from './stt';
 export { ElevenLabsTTSProvider } from './tts';
-export { applyPronunciationDictionary, createPronunciationDictionary } from './tts/pronunciation';
+export { createPronunciationDictionary } from './tts/pronunciation';
 export { designVoice, remixVoice } from './tts/voice-design';
 export { ElevenLabsWebSocketClient } from './websocket-client';
 
