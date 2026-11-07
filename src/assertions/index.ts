@@ -495,9 +495,10 @@ async function runAssertionInternal({
   const scriptFailure = (reason: string): GradingResult =>
     applyAssertionWeight({ pass: false, score: 0, reason, assertion }, assertion.weight);
   if (typeof renderedValue === 'string') {
-    if (renderedValue.startsWith('file://')) {
+    const interpolatedValue = nunjucks.renderString(renderedValue, resolvedVars);
+    if (interpolatedValue.startsWith('file://')) {
       const basePath = cliState.basePath || '';
-      const fileRef = renderedValue.slice('file://'.length);
+      const fileRef = interpolatedValue.slice('file://'.length);
       let filePath = fileRef;
       let functionName: string | undefined;
 
@@ -535,7 +536,10 @@ async function runAssertionInternal({
           return scriptFailure((error as Error).message);
         }
       } else {
-        renderedValue = processFileReference(renderedValue);
+        renderedValue = processFileReference(interpolatedValue);
+        if (typeof renderedValue === 'string') {
+          renderedValue = nunjucks.renderString(renderedValue, resolvedVars);
+        }
       }
     } else if (isPackagePath(renderedValue)) {
       const basePath = cliState.basePath || '';
@@ -555,16 +559,21 @@ async function runAssertionInternal({
       }
     } else {
       // It's a normal string value
-      renderedValue = nunjucks.renderString(renderedValue, resolvedVars);
+      renderedValue = interpolatedValue;
     }
   } else if (renderedValue && Array.isArray(renderedValue)) {
     // Process each element in the array
     renderedValue = renderedValue.map((v) => {
       if (typeof v === 'string') {
-        if (v.startsWith('file://')) {
-          return processFileReference(v);
+        const interpolated = nunjucks.renderString(v, resolvedVars);
+        if (interpolated.startsWith('file://')) {
+          const processed = processFileReference(interpolated);
+          if (typeof processed === 'string') {
+            return nunjucks.renderString(processed, resolvedVars);
+          }
+          return processed;
         }
-        return nunjucks.renderString(v, resolvedVars);
+        return interpolated;
       }
       return v;
     });
