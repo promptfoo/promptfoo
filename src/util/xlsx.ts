@@ -36,7 +36,8 @@ export async function parseXlsxFile(filePath: string): Promise<CsvRow[]> {
   try {
     // Parse file path and optional sheet name
     // Supports syntax: file.xlsx#SheetName or file.xlsx#2 (1-based index)
-    const [actualFilePath, sheetSpecifier] = filePath.split('#');
+    const [actualFilePath, ...sheetParts] = filePath.split('#');
+    const sheetSpecifier = sheetParts.join('#');
 
     // Try to import read-excel-file first to give proper error if not installed
     let readXlsxFile: typeof import('read-excel-file/node').default;
