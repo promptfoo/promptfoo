@@ -1,7 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
 import { getEnvString } from '../../src/envars';
-import { CLOUD_API_HOST, CloudConfig, cloudConfig } from '../../src/globalConfig/cloud';
+import {
+  CLOUD_API_HOST,
+  CloudConfig,
+  cloudConfig,
+  SHARING_CUTOFF_DATE,
+} from '../../src/globalConfig/cloud';
 import { readGlobalConfig, writeGlobalConfigPartial } from '../../src/globalConfig/globalConfig';
 import logger from '../../src/logger';
 import { fetchWithProxy } from '../../src/util/fetch/index';
@@ -254,14 +259,16 @@ describe('CloudConfig', () => {
       hasActiveLicense: true,
     };
 
-    it('should validate token and update config on success', async () => {
-      const mockFetchResponse = {
+    function mockTokenResponse(response: typeof mockResponse) {
+      vi.mocked(fetchWithProxy).mockResolvedValue({
         ok: true,
-        json: () => Promise.resolve(mockResponse),
-        text: () => Promise.resolve(JSON.stringify(mockResponse)),
-      } as Response;
+        json: () => Promise.resolve(response),
+        text: () => Promise.resolve(JSON.stringify(response)),
+      } as Response);
+    }
 
-      vi.mocked(fetchWithProxy).mockResolvedValue(mockFetchResponse);
+    it('should validate token and update config on success', async () => {
+      mockTokenResponse(mockResponse);
 
       const result = await cloudConfigInstance.validateAndSetApiToken(
         'test-token',
@@ -279,59 +286,33 @@ describe('CloudConfig', () => {
       );
     });
 
-    it('should set sharing to false when hasActiveLicense is false and user created after cutoff (public cloud)', async () => {
-      const noLicenseResponse = {
-        ...mockResponse,
-        hasActiveLicense: false,
-        user: { ...mockResponse.user, createdAt: new Date('2026-03-10T00:00:00Z') },
-      };
-      const mockFetchResponse = {
-        ok: true,
-        json: () => Promise.resolve(noLicenseResponse),
-        text: () => Promise.resolve(JSON.stringify(noLicenseResponse)),
-      } as Response;
+    it.each([
+      { offsetMs: -1, sharing: true },
+      { offsetMs: 0, sharing: false },
+      { offsetMs: 1, sharing: false },
+    ])(
+      'sets public-cloud sharing to $sharing at cutoff + $offsetMs ms',
+      async ({ offsetMs, sharing }) => {
+        mockTokenResponse({
+          ...mockResponse,
+          hasActiveLicense: false,
+          user: {
+            ...mockResponse.user,
+            createdAt: new Date(SHARING_CUTOFF_DATE.getTime() + offsetMs),
+          },
+        });
 
-      vi.mocked(fetchWithProxy).mockResolvedValue(mockFetchResponse);
+        const result = await cloudConfigInstance.validateAndSetApiToken(
+          'test-token',
+          CLOUD_API_HOST,
+        );
 
-      const result = await cloudConfigInstance.validateAndSetApiToken('test-token', CLOUD_API_HOST);
-
-      expect(result.hasActiveLicense).toBe(false);
-      const lastCall = vi.mocked(writeGlobalConfigPartial).mock.calls.at(-1)?.[0];
-      expect(lastCall).toEqual(
-        expect.objectContaining({
-          cloud: expect.objectContaining({
-            sharing: false,
-          }),
-        }),
-      );
-    });
-
-    it('should set sharing to true when hasActiveLicense is false but user created before cutoff (public cloud, grandfathered)', async () => {
-      const grandfatheredResponse = {
-        ...mockResponse,
-        hasActiveLicense: false,
-        user: { ...mockResponse.user, createdAt: new Date('2026-03-01T00:00:00Z') },
-      };
-      const mockFetchResponse = {
-        ok: true,
-        json: () => Promise.resolve(grandfatheredResponse),
-        text: () => Promise.resolve(JSON.stringify(grandfatheredResponse)),
-      } as Response;
-
-      vi.mocked(fetchWithProxy).mockResolvedValue(mockFetchResponse);
-
-      const result = await cloudConfigInstance.validateAndSetApiToken('test-token', CLOUD_API_HOST);
-
-      expect(result.hasActiveLicense).toBe(false);
-      const lastCall = vi.mocked(writeGlobalConfigPartial).mock.calls.at(-1)?.[0];
-      expect(lastCall).toEqual(
-        expect.objectContaining({
-          cloud: expect.objectContaining({
-            sharing: true,
-          }),
-        }),
-      );
-    });
+        expect(result.hasActiveLicense).toBe(false);
+        expect(writeGlobalConfigPartial).toHaveBeenLastCalledWith(
+          expect.objectContaining({ cloud: expect.objectContaining({ sharing }) }),
+        );
+      },
+    );
 
     it('should preserve existing sharing value when public cloud omits hasActiveLicense', async () => {
       // Pre-set sharing to true to verify it is preserved
@@ -420,7 +401,7 @@ describe('CloudConfig', () => {
         name: 'On-Prem User',
         email: 'user@example.com',
         // Account created well after the public-cloud grandfathering cutoff.
-        createdAt: new Date('2026-04-01T00:00:00Z'),
+        createdAt: new Date(SHARING_CUTOFF_DATE.getTime() + 24 * 60 * 60 * 1000),
         updatedAt: new Date('2026-04-01T00:00:00Z'),
       },
       organization: {
