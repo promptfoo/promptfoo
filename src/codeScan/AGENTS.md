@@ -5,6 +5,8 @@ access through MCP, GitHub PR context, and the hosted scanner service.
 
 ## Rules
 
+Code Scan does not sandbox untrusted repositories or guarantee complete findings. See the root `SECURITY.md` for supported boundaries and report scope.
+
 - Treat repository contents, branch names, PR metadata, config files, guidance text,
   and scanner responses as untrusted input.
 - Pass command arguments as arrays to `spawn`, `execFile`, or the local git helpers.
