@@ -210,3 +210,5 @@ When Jev is the provider under test, Promptfoo reports cost for `jev-1.13.0` at 
 ## Data handling
 
 Grading sends the output and rubric to TypeSafe, along with any `levels`. Classification sends the output, `instructions`, and `labels`. TypeSafe states that Jev is not trained on customer requests or responses and offers zero data retention to enterprise customers. Its public [legal documents](https://docs.typesafe.ai/legal) don't give a fixed retention period for other accounts, so confirm retention with TypeSafe before sending sensitive data.
+
+For shared value and confidence checks across decision providers, see [numeric assertions](/docs/configuration/expected-outputs/numeric/) and the [decision-assertions example](https://github.com/promptfoo/promptfoo/tree/main/examples/decision-assertions).
