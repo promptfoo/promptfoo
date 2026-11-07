@@ -174,7 +174,7 @@ async function buildJunitSuites(evalRecord: Eval): Promise<JunitSuite[]> {
   for await (const result of iterateJunitProjectedResults(evalRecord)) {
     const { provider } = result;
     const providerKey = JSON.stringify([provider.id ?? '', provider.label ?? '']);
-    const promptKey = result.promptId || `prompt-index:${result.promptIdx}`;
+    const promptKey = `prompt-index:${result.promptIdx}`;
     const key = JSON.stringify([providerKey, promptKey]);
     let suite = suites.get(key);
     if (!suite) {
@@ -237,7 +237,7 @@ async function buildJunitSuites(evalRecord: Eval): Promise<JunitSuite[]> {
     }
   }
 
-  return [...suites.values()];
+  return orderedSuites;
 }
 
 function buildJunitTestCase(result: JunitProjectedResult) {
