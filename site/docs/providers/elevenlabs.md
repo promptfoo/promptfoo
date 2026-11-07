@@ -465,6 +465,8 @@ tests:
 
 Generate and save speech in a TTS eval, then pass the saved audio file path and `config.referenceText` to a separate STT eval. The [transcription pipeline guide](/docs/guides/evaluate-elevenlabs/#part-3-speech-to-text-accuracy) shows both configs and an assertion using `context.providerResponse.metadata.wer`.
 
+To test silent audio, set `calculateWER: true` and `referenceText: ''`. When the normalized reference contains no words, WER is the number of inserted words in the transcription, or `0` for silence. Omitting `referenceText` skips WER calculation.
+
 ### Agent Regression Testing
 
 Ensure agent improvements don't degrade performance:
