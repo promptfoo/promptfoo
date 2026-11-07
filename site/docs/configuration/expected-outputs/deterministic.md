@@ -2089,6 +2089,8 @@ assert:
 
 The `word-count` assertion checks if the LLM output has a specific number of words or falls within a range.
 
+Range bounds (`min` and `max`) must be finite numbers. Omit a bound to leave it unconstrained; a blank YAML value (`null`) is an error, including with `not-word-count`.
+
 ```yaml
 assert:
   # Exact count
