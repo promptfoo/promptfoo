@@ -8,6 +8,7 @@ import { PostHogContext, type PostHogContextType } from './PostHogContext';
 const POSTHOG_KEY = import.meta.env.VITE_POSTHOG_KEY;
 const POSTHOG_HOST = import.meta.env.VITE_POSTHOG_HOST;
 const DISABLE_TELEMETRY = import.meta.env.VITE_PROMPTFOO_DISABLE_TELEMETRY;
+const NO_NETWORK = import.meta.env.VITE_PROMPTFOO_NO_NETWORK;
 
 interface PostHogProviderProps {
   children: React.ReactNode;
@@ -35,7 +36,12 @@ export const PostHogProvider = ({ children }: PostHogProviderProps) => {
   }, [isInitialized, email, userId]);
 
   useEffect(() => {
-    if (POSTHOG_KEY && typeof window !== 'undefined' && DISABLE_TELEMETRY !== 'true') {
+    if (
+      POSTHOG_KEY &&
+      typeof window !== 'undefined' &&
+      DISABLE_TELEMETRY !== 'true' &&
+      NO_NETWORK !== 'true'
+    ) {
       try {
         posthog.init(POSTHOG_KEY, {
           api_host: POSTHOG_HOST,

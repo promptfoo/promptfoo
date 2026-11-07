@@ -3,7 +3,7 @@ import { gatherFeedback, sendFeedback } from '../src/feedback';
 import logger from '../src/logger';
 import { fetchWithProxy } from '../src/util/fetch/index';
 import * as readlineUtils from '../src/util/readline';
-import { createMockResponse } from './util/utils';
+import { createMockResponse, mockProcessEnv } from './util/utils';
 
 vi.mock('../src/util/fetch/index', () => ({
   fetchWithProxy: vi.fn(),
@@ -50,6 +50,18 @@ describe('Feedback Module', () => {
       );
 
       expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Feedback sent'));
+    });
+
+    it('should not send feedback when PROMPTFOO_NO_NETWORK is set', async () => {
+      const restoreEnv = mockProcessEnv({ PROMPTFOO_NO_NETWORK: 'true' });
+      try {
+        await sendFeedback('Test feedback');
+
+        expect(fetchWithProxy).not.toHaveBeenCalled();
+        expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('PROMPTFOO_NO_NETWORK'));
+      } finally {
+        restoreEnv();
+      }
     });
 
     it('should handle API failure', async () => {
