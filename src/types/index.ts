@@ -1177,6 +1177,20 @@ const TraceProviderConfigSchema = z.discriminatedUnion('id', [
 
 const TraceQueryDelaySchema = z.number().int().nonnegative().max(300_000);
 
+/**
+ * Splits an extension reference on its colons, keeping the colon of a Windows drive letter
+ * (file://C:/path/to/hooks.js:beforeAll or file:///C:/path/to/hooks.js:beforeAll) inside the
+ * file path, as the runtime does.
+ */
+function splitExtensionReference(value: string): string[] {
+  const driveLetter = /^file:\/\/\/?[a-zA-Z]:(?=[\\/])/.exec(value);
+  if (!driveLetter) {
+    return value.split(':');
+  }
+  const [filePath, ...rest] = value.slice(driveLetter[0].length).split(':');
+  return ['file', `${driveLetter[0].slice('file:'.length)}${filePath}`, ...rest];
+}
+
 // The test suite defines the "knobs" that we are tuning in prompt engineering: providers and prompts
 export const TestSuiteSchema = z.object({
   // Optional tags to describe the test suite
@@ -1229,7 +1243,7 @@ export const TestSuiteSchema = z.object({
         })
         .refine(
           (value) => {
-            const parts = value.split(':');
+            const parts = splitExtensionReference(value);
             return parts.length === 3 && parts.every((part) => part.trim() !== '');
           },
           {
@@ -1238,7 +1252,7 @@ export const TestSuiteSchema = z.object({
         )
         .refine(
           (value) => {
-            const parts = value.split(':');
+            const parts = splitExtensionReference(value);
             return (
               (parts[1].endsWith('.py') || isJavascriptFile(parts[1])) &&
               (parts.length === 3 || parts.length === 2)
