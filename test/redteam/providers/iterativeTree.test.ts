@@ -49,6 +49,39 @@ vi.mock('../../../src/redteam/graders', async (importOriginal) => {
 });
 
 describe('RedteamIterativeProvider', () => {
+  it('counts consecutive scores that do not beat the best score', async () => {
+    const ratings = [5, 1, 1, 6, 1, 1, 6];
+    using attacker = vi.spyOn(redteamProviderManager, 'getProvider');
+    attacker.mockResolvedValue(
+      createMockProvider({
+        response: { output: { prompt: 'attack', improvement: 'try again' } },
+      }),
+    );
+    using judge = vi.spyOn(redteamProviderManager, 'getGradingProvider');
+    judge.mockResolvedValue(
+      createMockProvider({
+        callApi: async () => ({ output: { currentResponse: { rating: ratings.shift() ?? 1 } } }),
+      }),
+    );
+
+    const provider = new RedteamIterativeTreeProvider({
+      injectVar: 'goal',
+      redteamProvider: 'test-attacker',
+      maxNoImprovement: 3,
+    });
+    const result = await provider.callApi('', {
+      originalProvider: createMockProvider(),
+      vars: { goal: 'test goal' },
+      prompt: { raw: '{{goal}}', label: 'test' },
+    });
+
+    expect(result.metadata).toMatchObject({
+      attempts: 7,
+      highestScore: 6,
+      stopReason: 'NO_IMPROVEMENT',
+    });
+  });
+
   describe('renderSystemPrompts', () => {
     it('should render system prompts correctly with default settings', () => {
       const goal = '{{goal}}';
