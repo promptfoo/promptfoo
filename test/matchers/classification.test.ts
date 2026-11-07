@@ -463,15 +463,37 @@ describe('matchesClassification', () => {
     },
   );
 
-  it('treats an absent label in a nonempty classification as a valid negative verdict', async () => {
-    await expect(
-      matchesClassification('harmful', 'Sample output', 0.5, { provider: new TestGrader() }),
-    ).resolves.toEqual({
-      pass: false,
-      score: 0,
-      reason: 'Classification harmful has score 0.00 < 0.5',
-    });
-  });
+  it.each(['harmful', 'constructor', 'toString', '__proto__'])(
+    'treats absent label %s in a nonempty classification as a valid negative verdict',
+    async (expected) => {
+      await expect(
+        matchesClassification(expected, 'Sample output', 0.5, { provider: new TestGrader() }),
+      ).resolves.toEqual({
+        pass: false,
+        score: 0,
+        reason: `Classification ${expected} has score 0.00 < 0.5`,
+      });
+    },
+  );
+
+  it.each(['constructor', 'toString', '__proto__'])(
+    'uses the own classification score for label %s',
+    async (expected) => {
+      const provider = createMockProvider({
+        callClassificationApi: vi.fn().mockResolvedValue({
+          classification: { [expected]: 0.75 },
+        }),
+      });
+
+      await expect(
+        matchesClassification(expected, 'Sample output', 0.5, { provider }),
+      ).resolves.toEqual({
+        pass: true,
+        score: 0.75,
+        reason: `Classification ${expected} has score 0.75 >= 0.5`,
+      });
+    },
+  );
 
   it('tags a provider error as a grader failure instead of a legitimate score', async () => {
     const grading: GradingConfig = {
