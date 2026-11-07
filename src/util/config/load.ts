@@ -1239,6 +1239,8 @@ async function resolveLoadedConfig(
   }
   if (Array.isArray(parsedScenarios)) {
     config.scenarios = [];
+    const filterFirstN = cmdObj.filterFirstN ?? commandLineOptions?.filterFirstN;
+    const filterPattern = cmdObj.filterPattern ?? commandLineOptions?.filterPattern;
     const filterSample = cmdObj.filterSample ?? commandLineOptions?.filterSample;
     const filterSampleSeed = cmdObj.filterSampleSeed ?? commandLineOptions?.filterSampleSeed;
     for (const [scenarioIndex, scenario] of parsedScenarios.entries()) {
@@ -1260,8 +1262,8 @@ async function resolveLoadedConfig(
           prompts: parsedPrompts,
         },
         {
-          firstN: cmdObj.filterFirstN,
-          pattern: cmdObj.filterPattern,
+          firstN: filterFirstN,
+          pattern: filterPattern,
           failing: cmdObj.filterFailing,
           sample: filterSample,
           sampleSeed:

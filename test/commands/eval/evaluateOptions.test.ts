@@ -394,6 +394,67 @@ describe('evaluateOptions behavior', () => {
   });
 
   describe('commandLineOptions behavior', () => {
+    describe.each(['top-level', 'scenario'])('%s configured selection', (form) => {
+      it.each([
+        { name: 'first count', configured: { filterFirstN: 1 }, cli: {}, expected: ['keep'] },
+        {
+          name: 'description pattern',
+          configured: { filterPattern: '^keep$' },
+          cli: {},
+          expected: ['keep'],
+        },
+        {
+          name: 'CLI count override',
+          configured: { filterFirstN: 1 },
+          cli: { filterFirstN: 2 },
+          expected: ['keep', 'other'],
+        },
+        {
+          name: 'CLI pattern override',
+          configured: { filterPattern: '^keep$' },
+          cli: { filterPattern: '^other$' },
+          expected: ['other'],
+        },
+        {
+          name: 'explicit empty CLI pattern',
+          configured: { filterPattern: '^keep$' },
+          cli: { filterPattern: '' },
+          expected: ['keep', 'other'],
+        },
+      ])('applies configured test selection: $name', async ({ configured, cli, expected }) => {
+        const tests = [
+          { description: 'keep', vars: { input: 'one' } },
+          { description: 'other', vars: { input: 'two' } },
+        ];
+        const configFile = writeTempConfig(tmpDir, 'configured-test-selection.yaml', {
+          providers: ['echo'],
+          prompts: ['{{input}}'],
+          ...(form === 'scenario' ? { scenarios: [{ config: [{}], tests }] } : { tests }),
+          commandLineOptions: configured,
+        });
+
+        await runEvalAndGetOptions({ config: [configFile], ...cli });
+
+        const suite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+        const selected = form === 'scenario' ? suite.scenarios?.[0]?.tests : suite.tests;
+        expect(selected?.map((test) => test.description)).toEqual(expected);
+      });
+    });
+
+    it('applies a configured pattern to the implicit default test', async () => {
+      const configFile = writeTempConfig(tmpDir, 'configured-implicit-selection.yaml', {
+        providers: ['echo'],
+        prompts: ['Hello'],
+        commandLineOptions: { filterPattern: '^keep$' },
+      });
+
+      await runEvalAndGetOptions({ config: [configFile] });
+
+      const suite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+      expect(suite.tests).toEqual([]);
+      expect(suite.scenarios).toEqual([]);
+    });
+
     it('should respect commandLineOptions.maxConcurrency from config', async () => {
       const tempConfig = writeOptionsConfig(tmpDir, 'test-commandline-maxconcurrency.yaml', {
         commandLineOptions: {

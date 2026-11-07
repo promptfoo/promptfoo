@@ -705,6 +705,8 @@ async function doEvalWithEnv(
     const filterRange = resumeEval
       ? resumeFilterRange
       : (cmdObj.filterRange ?? commandLineOptions?.filterRange ?? evaluateOptions.filterRange);
+    const filterFirstN = cmdObj.filterFirstN ?? commandLineOptions?.filterFirstN;
+    const filterPattern = cmdObj.filterPattern ?? commandLineOptions?.filterPattern;
     const filterSample = cmdObj.filterSample ?? commandLineOptions?.filterSample;
     const filterSampleSeed = cmdObj.filterSampleSeed ?? commandLineOptions?.filterSampleSeed;
     const hasActiveTestFilter =
@@ -712,9 +714,9 @@ async function doEvalWithEnv(
       cmdObj.filterFailing !== undefined ||
       cmdObj.filterFailingOnly !== undefined ||
       cmdObj.filterErrorsOnly !== undefined ||
-      cmdObj.filterFirstN !== undefined ||
+      filterFirstN !== undefined ||
       cmdObj.filterMetadata !== undefined ||
-      cmdObj.filterPattern !== undefined ||
+      filterPattern !== undefined ||
       filterSample !== undefined;
     const shouldApplyFiltersToImplicitDefaultTest =
       hasActiveTestFilter && canSynthesizeImplicitDefaultTest && !testSuite.tests?.length;
@@ -730,9 +732,9 @@ async function doEvalWithEnv(
         failing: cmdObj.filterFailing,
         failingOnly: cmdObj.filterFailingOnly,
         errorsOnly: cmdObj.filterErrorsOnly,
-        firstN: cmdObj.filterFirstN,
+        firstN: filterFirstN,
         metadata: cmdObj.filterMetadata,
-        pattern: cmdObj.filterPattern,
+        pattern: filterPattern,
         range: hasScenarios ? undefined : filterRange,
         sample: filterSample,
         sampleSeed: filterSampleSeed,
