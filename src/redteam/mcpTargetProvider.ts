@@ -38,7 +38,9 @@ function mergeMaterializationTokenUsage(
   targetWasCalled: boolean,
 ): ProviderResponse {
   if (!materializationUsage?.tokenUsage) {
-    return response;
+    return targetWasCalled
+      ? response
+      : { ...response, tokenUsage: { ...response.tokenUsage, numRequests: 0 } };
   }
 
   const tokenUsage = createEmptyTokenUsage();
@@ -136,7 +138,10 @@ class RedteamMcpTargetProvider implements ApiProvider {
             value: prompt,
           },
           options,
-        );
+        ).catch((error: unknown) => {
+          materializationUsage = { tokenUsage: getErrorTokenUsage(error) };
+          throw error;
+        });
         signal?.throwIfAborted();
 
         if (remoteMaterializedPrompt) {
