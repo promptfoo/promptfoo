@@ -1540,6 +1540,8 @@ export interface ResultsFile {
   vars?: string[];
   // Included by readResult() in util.
   datasetId?: string | null;
+  /** Stored traces, present only when the evaluation has any. */
+  traces?: TraceData[];
 }
 
 // The eval results list returned by the server and used for the eval picker

@@ -1632,6 +1632,24 @@ describe('evaluator', () => {
       expect(JSON.stringify(evaluation.config)).toContain(gateway);
     });
 
+    it('exports stored traces and spans', async () => {
+      const evaluation = await EvalFactory.create();
+      const traceStore = new TraceStore();
+      const traceId = 'results-file-trace';
+      await traceStore.createTrace({
+        traceId,
+        evaluationId: evaluation.id,
+        testCaseId: 'test-case-id',
+      });
+      await traceStore.addSpans(traceId, [
+        { spanId: 'results-file-span', name: 'provider-call', startTime: 1 },
+      ]);
+
+      const { traces } = await evaluation.toResultsFile();
+
+      expect(traces).toMatchObject([{ traceId, spans: [{ spanId: 'results-file-span' }] }]);
+    });
+
     it('drops malformed trace-provider headers when exporting older evaluations', async () => {
       const evaluation = new Eval({
         tracing: {
