@@ -1481,6 +1481,62 @@ describeEvaluator('evaluator execution control', () => {
     },
   );
 
+  it('restores metric selector eligibility after interruption between selectors', async () => {
+    const controller = new AbortController();
+    const target: ApiProvider = {
+      id: () => 'interrupted-metric-target',
+      callApi: vi.fn(async (prompt) => ({
+        output: 'ok',
+        cost: prompt === 'first' ? 1 : 2,
+        latencyMs: prompt === 'first' ? 10 : 20,
+      })),
+    };
+    const suite: TestSuite = {
+      providers: [target],
+      prompts: [toPrompt('first'), toPrompt('second')],
+      tests: [
+        {
+          assert: [
+            { type: 'select-lowest-cost', value: { onlyPassing: true } },
+            { type: 'select-lowest-latency' },
+          ],
+        },
+      ],
+    };
+    const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
+    const save = EvalResult.prototype.save;
+    let cancelled = false;
+    const saveSpy = vi.spyOn(EvalResult.prototype, 'save').mockImplementation(async function (
+      this: EvalResult,
+      ...args
+    ) {
+      if (
+        !cancelled &&
+        this.gradingResult?.componentResults?.some(
+          (c) => c.assertion?.type === 'select-lowest-cost',
+        )
+      ) {
+        cancelled = true;
+        controller.abort(new Error('pause between selectors'));
+      }
+      return save.apply(this, args);
+    });
+    try {
+      await evaluate(suite, record, { abortSignal: controller.signal });
+      expect(cancelled).toBe(true);
+      cliState.resume = true;
+      await evaluate(suite, record, {});
+      const after = await record.toEvaluateSummary();
+      expect(after.results.sort((a, b) => a.promptIdx - b.promptIdx).map((r) => r.success)).toEqual(
+        [true, false],
+      );
+      expect(after.stats).toMatchObject({ successes: 1, failures: 1, errors: 0 });
+    } finally {
+      saveSpy.mockRestore();
+      cliState.resume = false;
+    }
+  });
+
   it.each(['caller', 'deadline'] as const)(
     'resumes interrupted select-best and max-score rows after %s cancellation',
     async (cancellation) => {

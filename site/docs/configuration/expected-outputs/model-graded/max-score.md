@@ -19,8 +19,8 @@ Use `max-score` when you want to:
 
 ## How it works
 
-1. All regular assertions run first on each output
-2. `max-score` collects the scores from these assertions
+1. All regular assertions and `select-*` comparisons run first on each output
+2. `max-score` collects the regular assertion scores; `select-*` results are excluded
 3. Calculates an aggregate score for each output (average by default)
 4. Selects the output with the highest aggregate score
 5. Returns pass=true for the highest scoring output, pass=false for others
@@ -223,7 +223,7 @@ tests:
 
 ## Edge cases
 
-- **No other assertions**: Error - max-score requires at least one assertion to aggregate
+- **No other scoring assertions**: All outputs fail with a configuration error; `select-*` assertions do not count as scoring assertions
 - **Tie scores**: First output wins (by index)
 - **All outputs fail**: Still selects the highest scorer ("least bad")
 - **Below threshold**: No output selected if threshold is specified and not met
