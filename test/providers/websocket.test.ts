@@ -3,6 +3,7 @@ import WebSocket from 'ws';
 import logger from '../../src/logger';
 import { createTransformResponse, WebSocketProvider } from '../../src/providers/websocket';
 import { RateLimitRegistry } from '../../src/scheduler/rateLimitRegistry';
+import { DEFAULT_RETRY_POLICY, shouldRetry } from '../../src/scheduler/retryPolicy';
 import { isProviderResponseRateLimited } from '../../src/scheduler/types';
 
 const websocketMocks = vi.hoisted(() => {
@@ -51,6 +52,7 @@ describe('WebSocketProvider', () => {
       | { type: 'open' }
       | { type: 'message'; data: unknown }
       | { type: 'error'; error?: Error; message?: string }
+      | { type: 'close'; code?: number }
     >
   ) => {
     websocketMocks.setFactory(() => {
@@ -61,6 +63,14 @@ describe('WebSocketProvider', () => {
             ws.onopen?.({ type: 'open', target: ws } as WebSocket.Event);
           } else if (event.type === 'message') {
             ws.onmessage?.({ data: event.data } as WebSocket.MessageEvent);
+          } else if (event.type === 'close') {
+            ws.onclose?.({
+              type: 'close',
+              code: event.code ?? 1000,
+              reason: '',
+              wasClean: true,
+              target: ws,
+            } as WebSocket.CloseEvent);
           } else {
             const error = event.error ?? new Error(event.message ?? 'connection failed');
             ws.onerror?.({
@@ -888,12 +898,17 @@ describe('WebSocketProvider', () => {
           });
         }
         const controller = new AbortController();
-        controller.abort(new Error('fixture cancellation'));
+        const reason = new Error('fixture cancellation');
+        controller.abort(reason);
         const response = provider.callApi('hello', undefined, { abortSignal: controller.signal });
         const outcome = response.catch((error) => error);
         await vi.runAllTimersAsync();
 
-        await expect(outcome).resolves.toMatchObject({ name: 'AbortError' });
+        await expect(outcome).resolves.toMatchObject({
+          name: 'AbortError',
+          message: reason.message,
+          cause: reason,
+        });
         expect(WebSocket).not.toHaveBeenCalled();
         expect(vi.getTimerCount()).toBe(0);
       },
@@ -914,7 +929,11 @@ describe('WebSocketProvider', () => {
         expect(mockWs.close).toHaveBeenCalledOnce();
         expect(vi.getTimerCount()).toBe(0);
         expect(removeListener).toHaveBeenCalledWith('abort', expect.any(Function));
-        await expect(outcome).resolves.toMatchObject({ name: 'AbortError' });
+        await expect(outcome).resolves.toMatchObject({
+          name: 'AbortError',
+          message: 'fixture cancellation',
+          cause: 'fixture cancellation',
+        });
 
         const sent = mockWs.send.mock.calls.length;
         mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
@@ -1076,7 +1095,7 @@ describe('WebSocketProvider', () => {
       } as WebSocket.CloseEvent);
       await vi.advanceTimersByTimeAsync(0);
       expect(rejected).toHaveBeenCalledWith(
-        new Error('WebSocket connection closed before the response completed'),
+        new Error('WebSocket connection closed before the response completed (code 1000)'),
       );
       expect(vi.getTimerCount()).toBe(0);
       await response;
@@ -1314,6 +1333,190 @@ describe('WebSocketProvider', () => {
         registry.dispose();
         vi.useRealTimers();
       }
+    });
+    it('should reject promptly when the server closes the connection mid-stream', async () => {
+      vi.useFakeTimers();
+      try {
+        const streamResponse = vi.fn((accumulator: any, event: any) => [
+          { output: `${accumulator.output ?? ''}${event?.data ?? ''}` },
+          '',
+        ]);
+
+        provider = new WebSocketProvider('ws://test.com', {
+          config: {
+            messageTemplate: '{{ prompt }}',
+            timeoutMs: 60000,
+            streamResponse,
+          },
+        });
+
+        emitWebSocketEvents(
+          { type: 'open' },
+          { type: 'message', data: 'partial chunk' },
+          { type: 'close', code: 1001 },
+        );
+
+        const responsePromise = provider.callApi('close test');
+        const rejection = expect(responsePromise).rejects.toThrow(
+          'WebSocket connection closed before the response completed (code 1001)',
+        );
+        // The close settles the promise on its own; nothing is left waiting
+        // on the 60s request deadline.
+        await vi.advanceTimersByTimeAsync(0);
+        await rejection;
+        expect(vi.getTimerCount()).toBe(0);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('should reject as a connection reset when the close code invites a reconnect', async () => {
+      const streamResponse = vi.fn((accumulator: any, event: any) => [
+        { output: `${accumulator.output ?? ''}${event?.data ?? ''}` },
+        '',
+      ]);
+
+      provider = new WebSocketProvider('ws://test.com', {
+        config: {
+          messageTemplate: '{{ prompt }}',
+          timeoutMs: 100,
+          streamResponse,
+        },
+      });
+
+      emitWebSocketEvents(
+        { type: 'open' },
+        { type: 'message', data: 'partial chunk' },
+        { type: 'close', code: 1013 },
+      );
+
+      // 1013 (try again later) explicitly invites a reconnect, so it rejects
+      // as ECONNRESET: the retry policy matches that code and fires its
+      // backoff right away instead of after the full request deadline.
+      const error = await provider.callApi('close test').then(
+        () => {
+          throw new Error('expected a rejection');
+        },
+        (err: unknown) => err,
+      );
+      expect((error as NodeJS.ErrnoException).code).toBe('ECONNRESET');
+      expect((error as Error).message).toContain('1013');
+      expect((error as Error).message).toContain('try again later');
+    });
+
+    it('should also reset on a dropped connection but keep protocol violations permanent', async () => {
+      const streamResponse = vi.fn((accumulator: any, event: any) => [
+        { output: `${accumulator.output ?? ''}${event?.data ?? ''}` },
+        '',
+      ]);
+
+      provider = new WebSocketProvider('ws://test.com', {
+        config: {
+          messageTemplate: '{{ prompt }}',
+          timeoutMs: 100,
+          streamResponse,
+        },
+      });
+
+      // 1006 (abnormal closure, no close frame) is a dead transport, not a
+      // rejection of the payload, so it retries like any other reset.
+      emitWebSocketEvents(
+        { type: 'open' },
+        { type: 'message', data: 'partial chunk' },
+        { type: 'close', code: 1006 },
+      );
+      const resetError = await provider.callApi('close test').then(
+        () => {
+          throw new Error('expected a rejection');
+        },
+        (err: unknown) => err,
+      );
+      expect((resetError as NodeJS.ErrnoException).code).toBe('ECONNRESET');
+      expect((resetError as Error).message).toContain('1006');
+
+      // 1003 (unsupported data) is the peer rejecting the payload itself; a
+      // fresh connection would lose the same way, so it stays permanent.
+      emitWebSocketEvents({ type: 'open' }, { type: 'close', code: 1003 });
+      const permanentError = await provider.callApi('close test').then(
+        () => {
+          throw new Error('expected a rejection');
+        },
+        (err: unknown) => err,
+      );
+      expect((permanentError as NodeJS.ErrnoException).code).not.toBe('ECONNRESET');
+      expect((permanentError as Error).message).toContain('1003');
+    });
+
+    it.each([4502, 4503, 4504])(
+      'should keep terminal close code %s out of HTTP retries',
+      async (closeCode) => {
+        provider = new WebSocketProvider('ws://test.com', {
+          config: {
+            messageTemplate: '{{ prompt }}',
+            streamResponse: (accumulator: any) => [accumulator, false],
+          },
+        });
+        emitWebSocketEvents({ type: 'open' }, { type: 'close', code: closeCode });
+
+        const error = await provider.callApi('close test').then(
+          () => {
+            throw new Error('expected a rejection');
+          },
+          (err: unknown) => err,
+        );
+        expect((error as Error).message).toContain(String(closeCode));
+        expect(shouldRetry(0, error as Error, false, DEFAULT_RETRY_POLICY)).toBe(false);
+      },
+    );
+
+    it.each([
+      { wasClean: true, expectedCode: undefined },
+      { wasClean: false, expectedCode: 'ECONNRESET' },
+    ])(
+      'should classify a 1005 close using wasClean=$wasClean',
+      async ({ wasClean, expectedCode }) => {
+        provider = new WebSocketProvider('ws://test.com', {
+          config: {
+            messageTemplate: '{{ prompt }}',
+            streamResponse: (accumulator: any) => [accumulator, false],
+          },
+        });
+        const response = provider.callApi('close test').catch((error) => error);
+        await Promise.resolve();
+        mockWs.onclose?.({
+          type: 'close',
+          target: mockWs,
+          code: 1005,
+          reason: '',
+          wasClean,
+        } as WebSocket.CloseEvent);
+
+        const error = await response;
+        expect((error as NodeJS.ErrnoException).code).toBe(expectedCode);
+        expect((error as Error).message).toContain('1005');
+      },
+    );
+
+    it('should propagate a bounded reconnect delay for a 1012 close', async () => {
+      vi.spyOn(Math, 'random').mockReturnValue(0.5);
+      provider = new WebSocketProvider('ws://test.com', {
+        config: {
+          messageTemplate: '{{ prompt }}',
+          streamResponse: (accumulator: any) => [accumulator, false],
+        },
+      });
+      const response = provider.callApi('close test').catch((error) => error);
+      await Promise.resolve();
+      mockWs.onclose?.({
+        type: 'close',
+        target: mockWs,
+        code: 1012,
+        reason: '',
+        wasClean: false,
+      } as WebSocket.CloseEvent);
+
+      const error = await response;
+      expect(error).toMatchObject({ code: 'ECONNRESET', retryAfterMs: 15000 });
     });
   });
 });
