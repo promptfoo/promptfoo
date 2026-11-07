@@ -94,6 +94,7 @@ providers:
 - `azure:chat:<deployment name>` - For chat endpoints (e.g., gpt-6-sol, gpt-6-luna, gpt-5.6-terra, gpt-5.4, gpt-4o)
 - `azure:completion:<deployment name>` - For completion endpoints (e.g., gpt-35-turbo-instruct)
 - `azure:embedding:<deployment name>` - For embedding models (e.g., text-embedding-3-small, text-embedding-3-large)
+- `azure:decisions:<deployment name>` - For predicate, choice, and score questions ([Decisions API](#azure-decisions-api))
 - `azure:responses:<deployment name>` - For the Responses API (e.g., gpt-6-astra, gpt-6-sol, gpt-6-luna, gpt-5.6-terra, gpt-4.1)
 - `azure:realtime:<deployment name>` - For GA Realtime API deployments (e.g., gpt-realtime-1.5-2026-02-23)
 - `azure:assistant:<assistant id>` - Legacy Azure OpenAI Assistants (retired August 26, 2026)
@@ -215,6 +216,50 @@ providers:
 ```
 
 Realtime prompts can include `input_image` parts in the user message. The preview Realtime endpoint (`/openai/realtime?api-version=...&deployment=...`) uses a different wire format and is not selected by this provider.
+
+## Azure Decisions API
+
+Use `azure:decisions:<deployment name>` (or `azureopenai:decisions:<deployment name>`) to evaluate predicate, choice, and score questions through Azure's [`/openai/v1/decisions` endpoint](https://learn.microsoft.com/azure/foundry/openai/how-to/decisions). The provider ID takes your deployment name, which can differ from the model name. Check Azure's guide for supported models and regions.
+
+```yaml
+providers:
+  - id: azure:decisions:my-decisions-deployment
+    config:
+      questions:
+        - type: predicate
+          name: refund_requested
+          instructions: The customer asks for a refund.
+```
+
+Set `AZURE_OPENAI_API_BASE_URL` to your resource endpoint and `AZURE_OPENAI_API_KEY` to its API key, or use the [Azure authentication](#setup) options described on this page, including Microsoft Entra ID. `apiBaseUrl`, `apiHost`, `apiKey`, `apiKeyEnvar`, and `headers` are also supported. Base URLs may end at the resource root, `/openai`, or `/openai/v1`. This endpoint does not require `apiVersion`.
+
+The rendered prompt becomes `input`. Question types, input validation, JSON output (`JSON.parse(output).answers`), refusal handling, and explicit per-token cost configuration follow the [OpenAI Decisions provider](./openai-decisions.md). `questions` and `safety_identifier` support template variables. `maxRetries` controls HTTP retries, and `--no-cache` bypasses response reuse. No default Decisions price is inferred from the deployment name. Azure image inputs must use inline base64 data URLs; hosted image URLs are not supported.
+
+Azure Decisions can also grade text with `llm-rubric` and `classifier`. Set `threshold` and optional ordered `levels` for rubric grading, or set `instructions` and `labels` for classification. Other model-graded assertions are rejected because they require generated text rather than Decisions answers.
+
+```yaml
+assert:
+  - type: llm-rubric
+    value: The reply resolves the customer's problem
+    provider:
+      id: azure:decisions:my-decisions-deployment
+      config:
+        threshold: 0.7
+  - type: classifier
+    value: resolution
+    threshold: 0.8
+    provider:
+      id: azure:decisions:my-decisions-deployment
+      config:
+        instructions: What is this support reply doing?
+        labels:
+          resolution: Resolves the issue or offers a concrete fix
+          deflection: Redirects the customer without helping
+```
+
+Rubric grading supports text or serialized output only; media attachments are rejected. A refusal or malformed answer fails grading, including negated assertions. See [Grade and classify outputs](./openai-decisions.md#grade-and-classify-outputs) for score normalization, thresholds, and label behavior shared by both providers.
+
+Try the [Azure Decisions example](https://github.com/promptfoo/promptfoo/tree/main/examples/azure-openai-decisions) for direct questions plus grading and classification configs.
 
 ## Azure Responses API
 
