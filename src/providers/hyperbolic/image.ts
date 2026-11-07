@@ -125,8 +125,14 @@ export class HyperbolicImageProvider implements ApiProvider {
     if (this.config?.apiKey) {
       return this.config.apiKey;
     }
+    const namedKey = this.config.apiKeyEnvar
+      ? (getProviderEnvString(this.env, this.config.apiKeyEnvar) ??
+        getEnvString(this.config.apiKeyEnvar))
+      : undefined;
     return (
-      getProviderEnvString(this.env, 'HYPERBOLIC_API_KEY') || getEnvString('HYPERBOLIC_API_KEY')
+      namedKey ||
+      getProviderEnvString(this.env, 'HYPERBOLIC_API_KEY') ||
+      getEnvString('HYPERBOLIC_API_KEY')
     );
   }
 

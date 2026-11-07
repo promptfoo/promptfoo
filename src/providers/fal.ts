@@ -139,7 +139,7 @@ class FalProvider<Input = Record<string, unknown>> implements ApiProvider {
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     if (!this.apiKey) {
       throw new Error(
-        'fal.ai API key is not set. Set the FAL_KEY environment variable or or add `apiKey` to the provider config.',
+        'fal.ai API key is not set. Set the FAL_KEY environment variable or add `apiKey` to the provider config.',
       );
     }
 
