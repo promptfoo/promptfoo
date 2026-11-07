@@ -323,7 +323,7 @@ const getProviderConfig = (providerType?: string): ProviderConfig => {
         targetIdLabel: 'Endpoint Name',
         targetIdPlaceholder: 'sagemaker:my-endpoint-name',
         helpText: <>SageMaker endpoint name. Requires AWS credentials configured.</>,
-        docUrl: 'https://www.promptfoo.dev/docs/providers/aws-bedrock/#sagemaker',
+        docUrl: 'https://www.promptfoo.dev/docs/providers/sagemaker/',
         examples: {
           title: 'SageMaker Examples',
           items: [
