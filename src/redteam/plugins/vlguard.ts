@@ -131,16 +131,15 @@ interface VLGuardMetadataRecord {
 }
 
 /**
- * DatasetManager to handle VLGuard dataset caching and filtering
- * Fetches metadata from {split}.json and images from HuggingFace
+ * Caches VLGuard metadata and images by split.
  * @internal - exported for testing purposes only
  */
 export class VLGuardDatasetManager {
-  protected datasetCache: VLGuardInput[] | null = null;
   private static instance: VLGuardDatasetManager | null = null;
+  private datasetCache: VLGuardInput[] | null = null;
   // Fetch all records - the dataset has ~3000 total (train: 1999, test: 1000)
   // Images are fetched on-demand with bounded concurrency
-  protected fetchLimit = 3000;
+  private readonly fetchLimit = 3000;
 
   // Cache for metadata (keyed by actual split: 'train' or 'test')
   private metadataCache: Map<'train' | 'test', VLGuardMetadataRecord[]> = new Map();
@@ -415,9 +414,9 @@ export class VLGuardDatasetManager {
   }
 
   /**
-   * Load the dataset using custom metadata fetching
+   * Load and cache metadata and images for the selected split
    */
-  protected async ensureDatasetLoaded(): Promise<void> {
+  private async ensureDatasetLoaded(): Promise<void> {
     // Check if we have cached data for the current split
     const cachedData = this.splitCache.get(this.currentSplit);
     if (cachedData) {

@@ -21,7 +21,7 @@ export abstract class ImageDatasetPluginBase<
 > extends RedteamPluginBase {
   protected abstract readonly pluginId: string;
   protected abstract readonly datasetManager: {
-    getFilteredRecords(limit: number, config?: any): Promise<TInput[]>;
+    getFilteredRecords(limit: number, config?: TConfig): Promise<TInput[]>;
   };
   protected pluginConfig?: TConfig;
 
