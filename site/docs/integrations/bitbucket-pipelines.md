@@ -48,13 +48,13 @@ Store your LLM provider API keys as repository variables in Bitbucket:
 
 ### Fail the Pipeline on Failed Assertions
 
-You can configure the pipeline to fail when promptfoo assertions don't pass:
+`promptfoo eval` [exits with code `100`](/docs/usage/command-line#promptfoo-eval) when any test fails (or the pass rate falls below `PROMPTFOO_PASS_RATE_THRESHOLD`), so the pipeline fails without extra flags:
 
 ```yaml
 script:
   - npm ci
   - npm install -g promptfoo
-  - npx promptfoo eval --fail-on-error
+  - npx promptfoo eval
 ```
 
 ### Custom Evaluation Configurations
@@ -88,7 +88,7 @@ pipelines:
           script:
             - npm ci
             - npm install -g promptfoo
-            - npx promptfoo eval --fail-on-error
+            - npx promptfoo eval
 ```
 
 ### Scheduled Evaluations
