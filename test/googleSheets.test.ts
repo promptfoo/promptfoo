@@ -187,6 +187,26 @@ describe('Google Sheets Integration', () => {
       });
     });
 
+    it('preserves columns named like object prototype properties', async () => {
+      request.mockResolvedValueOnce({
+        data: {
+          values: [
+            ['__proto__', 'constructor', 'toString', 'name'],
+            ['proto-value', 'ctor-value', 'string-value', 'normal-value'],
+          ],
+        },
+      });
+
+      const [row] = await fetchCsvFromGoogleSheetAuthenticated(TEST_SHEET_URL);
+      expect(Object.getPrototypeOf(row)).toBe(Object.prototype);
+      expect(Object.entries(row)).toEqual([
+        ['__proto__', 'proto-value'],
+        ['constructor', 'ctor-value'],
+        ['toString', 'string-value'],
+        ['name', 'normal-value'],
+      ]);
+    });
+
     it('keeps reserved characters in a sheet title inside a single URL segment', async () => {
       request
         .mockReset()
