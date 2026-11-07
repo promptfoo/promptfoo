@@ -202,5 +202,5 @@ steps:
 ## Additional Resources
 
 - [Browser Provider Documentation](/docs/providers/browser)
-- [Playwright Selectors Guide](https://playwright.dev/docs/selectors)
+- [Playwright Locators Guide](https://playwright.dev/docs/locators)
 - [Gradio Documentation](https://www.gradio.app/docs)
