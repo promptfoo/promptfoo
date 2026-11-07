@@ -745,11 +745,13 @@ describe('checkCodexCliCompatibility', () => {
         expect(mockExecFile).not.toHaveBeenCalled();
         expect(probe.child.kill).toHaveBeenCalledExactlyOnceWith('SIGKILL');
         await expect(probe.result).resolves.toMatchObject({
-          error: expect.objectContaining({
-            message: expect.stringContaining(
-              'Cannot locate the Windows system directory for Codex version cleanup',
-            ),
-          }),
+          error: {
+            cause: {
+              name: 'CodexCliCleanupError',
+              cleanup: { phase: 'preflight', code: 'INVALID_SYSTEM_ROOT' },
+              cause: { message: expect.stringContaining('timed out after 10000ms') },
+            },
+          },
         });
         const outcome = await probe.result;
         expect(outcome).toHaveProperty(
@@ -769,12 +771,74 @@ describe('checkCodexCliCompatibility', () => {
         controller.abort();
         expect(mockExecFile).not.toHaveBeenCalled();
         expect(probe.child.kill).toHaveBeenCalledExactlyOnceWith('SIGKILL');
-        await expect(probe.result).resolves.toMatchObject({
-          error: expect.objectContaining({ name: 'AbortError' }),
+        const outcome = await probe.result;
+        expect(outcome).toMatchObject({
+          error: {
+            name: 'AbortError',
+            cause: {
+              name: 'CodexCliCleanupError',
+              cleanup: { phase: 'preflight', code: 'INVALID_SYSTEM_ROOT' },
+              cause: { name: 'AbortError' },
+            },
+          },
         });
+        expect(outcome).toHaveProperty(
+          'error.cause.message',
+          expect.not.stringContaining('relative'),
+        );
       } finally {
         restoreRoot();
       }
+    });
+
+    it.each(['abort', 'stdout', 'stderr'] as const)(
+      'reports unverified tree cleanup for %s after the direct child exits without targeting its PID',
+      async (trigger) => {
+        const controller = new AbortController();
+        const probe = startProbe(controller.signal);
+        probe.exit(0);
+        if (trigger === 'abort') {
+          controller.abort();
+        } else {
+          probe[trigger].write('x'.repeat(1024 * 1024 + 1));
+        }
+
+        await expect(probe.result).resolves.toMatchObject({
+          error: {
+            name: trigger === 'abort' ? 'AbortError' : 'CodexCliCompatibilityError',
+            cause: {
+              name: 'CodexCliCleanupError',
+              cleanup: {
+                phase: 'preflight',
+                code: 'DIRECT_CHILD_EXITED',
+                directChildExitedAtStart: true,
+                directChildExitedAtFailure: true,
+              },
+              cause: {
+                message: expect.stringContaining(
+                  trigger === 'abort' ? 'aborted' : `${trigger} exceeded`,
+                ),
+              },
+            },
+          },
+        });
+        expect(mockExecFile).not.toHaveBeenCalled();
+        expect(probe.child.kill).not.toHaveBeenCalled();
+        expect(vi.getTimerCount()).toBe(0);
+      },
+    );
+
+    it('accepts an ordinary successful Windows close without a cleanup failure', async () => {
+      const probe = startProbe();
+      probe.stdout.write('codex-cli 0.130.0');
+      probe.exit(0);
+      probe.stdout.end();
+      probe.stderr.end();
+
+      await expect(probe.result).resolves.toEqual({ success: true });
+      expect(mockExecFile).not.toHaveBeenCalled();
+      expect(probe.child.kill).not.toHaveBeenCalled();
+      expect(vi.getTimerCount()).toBe(0);
     });
 
     it('accepts a fully qualified host system directory with spaces and a trailing separator', async () => {
@@ -806,7 +870,7 @@ describe('checkCodexCliCompatibility', () => {
     it.each(['callback', 'synchronous'] as const)(
       'falls back only to the owned child after a %s utility startup error',
       async (mode) => {
-        const error = new Error('taskkill ENOENT');
+        const error = Object.assign(new Error('taskkill ENOENT'), { code: 'ENOENT' });
         if (mode === 'synchronous') {
           mockExecFile.mockImplementation(() => {
             throw error;
@@ -823,10 +887,114 @@ describe('checkCodexCliCompatibility', () => {
         expect(mockExecFile.mock.calls[0][0]).toBe('C:\\Windows\\System32\\taskkill.exe');
         expect(probe.child.kill).toHaveBeenCalledExactlyOnceWith('SIGKILL');
         await expect(probe.result).resolves.toMatchObject({
-          error: expect.objectContaining({ message: expect.stringContaining('taskkill ENOENT') }),
+          error: expect.objectContaining({
+            cause: expect.objectContaining({
+              cleanup: expect.objectContaining({ code: 'ENOENT' }),
+            }),
+          }),
         });
       },
     );
+
+    it.each([
+      { code: 5, killed: false, signal: null, exitedFirst: false, exitsAfterCallback: false },
+      { code: 5, killed: false, signal: null, exitedFirst: false, exitsAfterCallback: true },
+      { code: 5, killed: false, signal: null, exitedFirst: true },
+      { code: null, killed: true, signal: 'SIGKILL', exitedFirst: false },
+      { code: null, killed: true, signal: 'SIGKILL', exitedFirst: true },
+    ])(
+      'preserves failed tree cleanup evidence ($code, $signal, exited first: $exitedFirst)',
+      async ({ code, killed, signal, exitedFirst, exitsAfterCallback }) => {
+        const probe = startProbe();
+        const settled = vi.fn();
+        void probe.result.then(settled);
+        probe.stdout.write('x'.repeat(1024 * 1024 + 1));
+        if (exitedFirst) {
+          probe.exit(null, 'SIGKILL');
+          probe.stdout.destroy();
+          probe.stderr.destroy();
+          await vi.advanceTimersByTimeAsync(0);
+          expect(settled).not.toHaveBeenCalled();
+        }
+        await vi.advanceTimersByTimeAsync(325);
+        cleanupCallbacks[0](
+          Object.assign(new Error('SYNTHETIC_PRIVATE_UTILITY_OUTPUT'), {
+            code,
+            killed,
+            signal,
+            stdout: 'SYNTHETIC_PRIVATE_UTILITY_OUTPUT',
+            stderr: 'SYNTHETIC_PRIVATE_UTILITY_OUTPUT',
+          }),
+        );
+        if (exitsAfterCallback) {
+          probe.exit(null, 'SIGKILL');
+        }
+        await vi.advanceTimersByTimeAsync(0);
+
+        const outcome = await probe.result;
+        expect(outcome).toMatchObject({
+          error: {
+            name: 'CodexCliCompatibilityError',
+            cause: {
+              name: 'CodexCliCleanupError',
+              cleanup: {
+                phase: 'callback',
+                code,
+                killed,
+                signal,
+                elapsedMs: 325,
+                directChildExitedAtStart: false,
+                directChildExitedAtFailure: exitedFirst,
+              },
+              cause: { message: expect.stringContaining('stdout exceeded') },
+            },
+          },
+        });
+        expect(outcome).toHaveProperty(
+          'error.message',
+          expect.stringContaining('process-tree cleanup failed'),
+        );
+        expect(outcome).toHaveProperty(
+          'error.message',
+          expect.not.stringContaining('SYNTHETIC_PRIVATE_UTILITY_OUTPUT'),
+        );
+        expect(outcome).toHaveProperty(
+          'error.cause.message',
+          expect.not.stringContaining('SYNTHETIC_PRIVATE_UTILITY_OUTPUT'),
+        );
+        const error = (outcome as { error: Error & { cause: Error } }).error;
+        expect(Object.getOwnPropertyDescriptor(error, 'cause')).toMatchObject({
+          enumerable: false,
+          value: expect.any(Error),
+        });
+        expect(Object.getOwnPropertyDescriptor(error.cause, 'cause')).toMatchObject({
+          enumerable: false,
+          value: expect.objectContaining({ message: expect.stringContaining('stdout exceeded') }),
+        });
+        expect(probe.child.kill).toHaveBeenCalledTimes(exitedFirst || exitsAfterCallback ? 0 : 1);
+        expect(mockExecFile).toHaveBeenCalledTimes(1);
+        expect(vi.getTimerCount()).toBe(0);
+      },
+    );
+
+    it('retains failed tree cleanup evidence when preserving caller abort', async () => {
+      const controller = new AbortController();
+      const probe = startProbe(controller.signal);
+      controller.abort();
+      probe.exit(null, 'SIGKILL');
+      cleanupCallbacks[0](Object.assign(new Error('private utility output'), { code: 5 }));
+
+      await expect(probe.result).resolves.toMatchObject({
+        error: {
+          name: 'AbortError',
+          cause: {
+            name: 'CodexCliCleanupError',
+            cleanup: { code: 5, directChildExitedAtFailure: true },
+          },
+        },
+      });
+      expect(probe.child.kill).not.toHaveBeenCalled();
+    });
 
     it('waits for cleanup completion if the process exits before the utility callback', async () => {
       const controller = new AbortController();
