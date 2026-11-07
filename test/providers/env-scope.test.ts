@@ -203,6 +203,96 @@ describe('provider environment scopes', () => {
     expect(Reflect.get(provider, 'getVertexApiKey').call(provider)).toBe('provider-google-key');
   });
 
+  describe.each([
+    ['snowflake:fixture', 'SNOWFLAKE_ACCOUNT_IDENTIFIER', 'SNOWFLAKE_API_KEY', 'accountIdentifier'],
+    ['cloudera:fixture', 'CDP_DOMAIN', 'CDP_TOKEN', 'domain'],
+  ])('%s endpoint and credential scopes', (route, endpointKey, credentialKey, configKey) => {
+    const values = (scope: string) => ({
+      [endpointKey]: `${scope}.example.invalid`,
+      [credentialKey]: `${scope}-key`,
+    });
+    const url = (scope: string) =>
+      route.startsWith('snowflake:')
+        ? `https://${scope}.example.invalid.snowflakecomputing.com/api/v2/cortex/inference:complete`
+        : `https://${scope}.example.invalid/namespaces/serving-default/endpoints/fixture/v1/chat/completions`;
+    let previousProvider: ReturnType<typeof getEnvOverridesProvider>;
+
+    beforeEach(() => {
+      previousProvider = getEnvOverridesProvider();
+      setEnvOverridesProvider(
+        (layer) => (layer === 'provider' ? values('registered') : previousProvider?.(layer)),
+        { providerLayer: true },
+      );
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: { choices: [{ message: { role: 'assistant', content: 'fixture output' } }] },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+    });
+    afterEach(() => setEnvOverridesProvider(previousProvider));
+
+    it.each(['registered', 'env', 'config'])(
+      'uses matching %s endpoint and credentials in the outgoing request',
+      async (source) => {
+        const provider = await loadApiProvider(route, {
+          env: values('suite'),
+          options: {
+            env: source === 'env' ? values('env') : undefined,
+            config:
+              source === 'config'
+                ? { [configKey]: 'config.example.invalid', apiKey: 'config-key' }
+                : undefined,
+          },
+        });
+        expect(await provider.callApi('hello')).toMatchObject({ output: 'fixture output' });
+        expect(fetchWithCache).toHaveBeenCalledOnce();
+        const [requestUrl, request] = vi.mocked(fetchWithCache).mock.calls[0];
+        expect(requestUrl).toBe(url(source));
+        expect(request?.headers).toMatchObject({ Authorization: `Bearer ${source}-key` });
+      },
+    );
+
+    it.each(['suite', 'file', 'process', 'legacy callback'])(
+      'retains %s values without provider-layer overrides',
+      async (source) => {
+        setEnvOverridesProvider(previousProvider);
+        if (source === 'process') {
+          mockProcessEnv(values('fallback'));
+        } else if (source === 'legacy callback') {
+          setEnvOverridesProvider((layer) => (layer === 'suite' ? values('fallback') : undefined));
+        }
+        await cliState.withEnvFileOverrides(
+          source === 'file' ? values('fallback') : undefined,
+          async () => {
+            const provider = await loadApiProvider(route, {
+              env: source === 'suite' ? values('fallback') : {},
+            });
+            expect(await provider.callApi('hello')).toMatchObject({ output: 'fixture output' });
+            const [requestUrl, request] = vi.mocked(fetchWithCache).mock.calls[0];
+            expect(requestUrl).toBe(url('fallback'));
+            expect(request?.headers).toMatchObject({ Authorization: 'Bearer fallback-key' });
+          },
+        );
+      },
+    );
+
+    it('preserves the existing empty provider endpoint behavior', async () => {
+      const loading = loadApiProvider(route, {
+        env: values('suite'),
+        options: { env: { [endpointKey]: '' } },
+      });
+      if (route.startsWith('snowflake:')) {
+        await expect(loading).rejects.toThrow('Snowflake provider requires an account identifier');
+        expect(fetchWithCache).not.toHaveBeenCalled();
+      } else {
+        const provider = await loading;
+        expect(await provider.callApi('hello')).toMatchObject({ output: 'fixture output' });
+        expect(vi.mocked(fetchWithCache).mock.calls[0][0]).toBe(url('registered'));
+      }
+    });
+  });
+
   let restoreEnv: () => void;
   beforeEach(() => {
     restoreEnv = mockProcessEnv({}, { clear: true });

@@ -1,10 +1,11 @@
 import * as path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { runAssertion } from '../../src/assertions/index';
+import { runAssertion, runAssertions } from '../../src/assertions/index';
 import cliState from '../../src/cliState';
 import { importModule } from '../../src/esm';
 import * as llmGradingMatchers from '../../src/matchers/llmGrading';
+import { runPython } from '../../src/python/pythonUtils';
 import { runRuby } from '../../src/ruby/rubyUtils.js';
 import { createStringAssertion } from '../factories/literalFixtures';
 
@@ -53,6 +54,11 @@ vi.mock('../../src/database', () => ({
 
 vi.mock('../../src/ruby/rubyUtils.js', () => ({
   runRuby: vi.fn(),
+}));
+
+vi.mock(import('../../src/python/pythonUtils'), async (importOriginal) => ({
+  ...(await importOriginal()),
+  runPython: vi.fn(),
 }));
 
 vi.mock('../../src/matchers/llmGrading', async () => {
@@ -369,6 +375,132 @@ describe('Script value resolution', () => {
       });
 
       expect(result.pass).toBe(true);
+    });
+  });
+
+  describe('javascript file assertion that throws (#11917)', () => {
+    it('should fail the assertion instead of throwing', async () => {
+      const result = await runAssertion({
+        assertion: createStringAssertion('javascript', 'file://throws.cjs'),
+        test: { vars: {} },
+        providerResponse: baseProviderResponse,
+      });
+
+      expect(result.pass).toBe(false);
+      expect(result.score).toBe(0);
+      expect(result.reason).toBe('Custom function threw error: boom');
+    });
+
+    it('should keep the results of the other assertions in the row', async () => {
+      const result = await runAssertions({
+        test: {
+          vars: { n: 1 },
+          assert: [
+            { type: 'contains', value: 'hello' },
+            { type: 'javascript', value: 'file://throws.cjs' },
+          ],
+        },
+        providerResponse: {
+          output: 'hello 1',
+          tokenUsage: { total: 0, prompt: 0, completion: 0 },
+        },
+      });
+
+      expect(result.pass).toBe(false);
+      expect(result.componentResults).toHaveLength(2);
+      expect(result.componentResults?.[0]).toMatchObject({ pass: true });
+      expect(result.componentResults?.[1]).toMatchObject({
+        pass: false,
+        reason: 'Custom function threw error: boom',
+      });
+    });
+
+    it('should apply the weight: 0 override to a throwing file assertion', async () => {
+      const result = await runAssertion({
+        assertion: { type: 'javascript', value: 'file://throws.cjs', weight: 0 },
+        test: { vars: {} },
+        providerResponse: baseProviderResponse,
+      });
+
+      expect(result.pass).toBe(true);
+      expect(result.score).toBe(0);
+      expect(result.reason).toBe('Custom function threw error: boom');
+
+      const rowResult = await runAssertions({
+        test: {
+          vars: { n: 1 },
+          assert: [
+            { type: 'contains', value: 'hello' },
+            { type: 'javascript', value: 'file://throws.cjs', weight: 0 },
+          ],
+        },
+        providerResponse: {
+          output: 'hello 1',
+          tokenUsage: { total: 0, prompt: 0, completion: 0 },
+        },
+      });
+
+      expect(rowResult.pass).toBe(true);
+      expect(rowResult.componentResults?.[1]).toMatchObject({
+        pass: true,
+        reason: 'Custom function threw error: boom',
+      });
+    });
+
+    it('should still throw when the file does not export a function', async () => {
+      await expect(
+        runAssertion({
+          assertion: createStringAssertion('javascript', 'file://no-function-export.cjs'),
+          test: { vars: {} },
+          providerResponse: baseProviderResponse,
+        }),
+      ).rejects.toThrow('must export a function');
+    });
+  });
+
+  describe.each([
+    ['python', 'file://grade.py', runPython],
+    ['ruby', 'file://grade.rb', runRuby],
+  ] as const)('throwing %s file assertions', (type, value, runner) => {
+    it.each([
+      { weight: 0, pass: true, score: 1 },
+      { weight: undefined, pass: false, score: 0.5 },
+    ])(
+      'grades the row and records the metric with weight $weight',
+      async ({ weight, pass, score }) => {
+        vi.mocked(runner).mockRejectedValueOnce(new Error('script failed'));
+
+        const result = await runAssertions({
+          test: {
+            assert: [
+              { type: 'contains', value: 'test' },
+              { type, value, weight, metric: 'Script' },
+            ],
+          },
+          providerResponse: baseProviderResponse,
+        });
+
+        expect(result).toMatchObject({ pass, score, namedScores: { Script: 0 } });
+        expect(result.componentResults?.[1]).toMatchObject({
+          pass,
+          score: 0,
+          reason: 'script failed',
+        });
+      },
+    );
+
+    it('keeps the script error even when a sibling grader contains circular state', async () => {
+      vi.mocked(runner).mockRejectedValueOnce(new Error('script failed'));
+      const client: Record<string, unknown> = {};
+      client.self = client;
+      const provider = { id: () => 'custom', callApi: async () => ({ output: '' }), client };
+      const result = await runAssertion({
+        assertion: { type, value },
+        test: { assert: [{ type: 'llm-rubric', value: 'check', provider }] },
+        providerResponse: baseProviderResponse,
+      });
+
+      expect(result).toMatchObject({ pass: false, score: 0, reason: 'script failed' });
     });
   });
 

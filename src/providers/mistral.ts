@@ -262,7 +262,7 @@ interface MistralChatCompletionOptions {
 const MISTRAL_CACHE_HASH_KEY = 'promptfoo:mistral:cache-key:v1';
 const MISTRAL_INFLIGHT_REQUESTS = new Map<string, Promise<MistralFetchResult>>();
 
-type MistralFetchResult = { data: any; cached: boolean };
+type MistralFetchResult = { data: any; cached: boolean; status?: number; statusText?: string };
 
 function hashMistralCacheValue(value: unknown): string {
   const serialized = typeof value === 'string' ? value : JSON.stringify(value);
@@ -820,6 +820,8 @@ export class MistralEmbeddingProvider implements ApiProvider {
 
     let data;
     let cached = false;
+    let status: number | undefined;
+    let statusText: string | undefined;
     const cache = isCacheEnabled() ? getCache() : undefined;
     if (cache) {
       try {
@@ -844,7 +846,7 @@ export class MistralEmbeddingProvider implements ApiProvider {
       });
 
       try {
-        ({ data, cached } = await fetchMistralWithDedupe(
+        ({ data, cached, status, statusText } = await fetchMistralWithDedupe(
           cacheKey,
           async () => {
             return (await fetchWithCache(
@@ -870,6 +872,10 @@ export class MistralEmbeddingProvider implements ApiProvider {
         options?.abortSignal?.throwIfAborted();
         logger.error(`API call error: ${err}`);
         throw err;
+      }
+
+      if (status !== undefined && (status < 200 || status >= 300)) {
+        throw new Error(`Mistral embeddings API error: ${status} ${statusText}`);
       }
     }
 
