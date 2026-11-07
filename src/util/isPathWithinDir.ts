@@ -1,66 +1,48 @@
-/**
- * Symlink-safe directory containment check.
- *
- * Resolves symlinks via realpath to prevent symlink-based directory
- * traversal attacks. For non-existent paths (e.g., when creating new
- * files), recursively validates the parent directory.
- */
-
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 
 import logger from '../logger';
 
 /**
- * Check if a file path is within a given directory.
- *
- * @param filePath - The file path to check (can be relative or absolute)
- * @param dir - The containing directory (absolute path)
- * @returns Promise that resolves to true if the path is within dir
+ * Check whether a path resolves inside dir. For a new file, validate its nearest
+ * existing ancestor. A dangling symlink counts as an existing entry and is rejected.
  */
 export async function isPathWithinDir(filePath: string, dir: string): Promise<boolean> {
-  // Validate dir exists first — fail fast on configuration errors
-  let realDirRaw: string;
+  let realDir: string;
   try {
-    realDirRaw = await fs.realpath(dir);
+    realDir = await fs.realpath(dir);
   } catch {
     throw new Error(`Directory does not exist or is inaccessible: ${dir}`);
   }
 
+  // Keep '..' intact so the filesystem resolves it after any preceding symlink.
+  let target = path.isAbsolute(filePath)
+    ? filePath
+    : path.format({ root: path.parse(realDir).root, dir: realDir, base: filePath });
   try {
-    const absoluteTarget = path.isAbsolute(filePath) ? filePath : path.resolve(dir, filePath);
-    const realTargetRaw = await fs.realpath(absoluteTarget);
-
-    // Windows: compare case-insensitive
-    const realDir = process.platform === 'win32' ? realDirRaw.toLowerCase() : realDirRaw;
-    const realTarget = process.platform === 'win32' ? realTargetRaw.toLowerCase() : realTargetRaw;
-
-    // Equal means the dir itself
-    if (realTarget === realDir) {
-      return true;
-    }
-
-    // Containment check via relative() — avoids prefix gotchas like /foo/bar vs /foo/barista
-    const rel = path.relative(realDir, realTarget);
-    return rel !== '' && !rel.startsWith('..') && !path.isAbsolute(rel);
-  } catch (error: any) {
-    // If target doesn't exist (ENOENT), validate parent directory instead.
-    // This allows writes to create new files in valid directories.
-    if (error.code === 'ENOENT') {
-      const absoluteTarget = path.isAbsolute(filePath) ? filePath : path.resolve(dir, filePath);
-      const parentDir = path.dirname(absoluteTarget);
-
-      // Stop recursion if we've reached root
-      if (parentDir === absoluteTarget) {
-        logger.warn('Path validation failed — reached filesystem root');
+    for (;;) {
+      const parts = path.parse(target);
+      // lstat follows the last link when the name ends in a separator.
+      target = path.format(parts);
+      const entry = await fs.lstat(target).catch((error: NodeJS.ErrnoException) => {
+        if (error.code !== 'ENOENT') {
+          throw error;
+        }
+        return undefined;
+      });
+      if (entry) {
+        const relative = path.relative(realDir, await fs.realpath(target));
+        return (
+          relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative)
+        );
+      }
+      if (!parts.base || parts.base === '..') {
         return false;
       }
-
-      return isPathWithinDir(parentDir, dir);
+      target = parts.dir;
     }
-
-    // Fail safely on any other error (broken symlinks, permission errors, etc.)
-    logger.warn(`Path validation failed for ${filePath}: ${error.message ?? error}`);
+  } catch (error) {
+    logger.warn('Path validation failed', { filePath, error });
     return false;
   }
 }

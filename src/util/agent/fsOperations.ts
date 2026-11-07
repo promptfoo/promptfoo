@@ -1,9 +1,6 @@
 /**
- * CLI-side filesystem operations for recon.
- *
- * All operations are sandboxed to a root directory — path traversal
- * outside the root is rejected. Uses realpath to resolve symlinks,
- * preventing symlink-based directory traversal attacks.
+ * Workspace filesystem tools for recon. Reads and writes resolve symlinks before
+ * checking containment. New files must have an existing ancestor inside the workspace.
  */
 
 import { execSync } from 'node:child_process';
