@@ -1,5 +1,5 @@
 import { getEnvInt } from '../envars';
-import { fetchWithRetries } from '../util/fetch/index';
+import { fetchWithRetries, readWithResponseDeadline } from '../util/fetch/index';
 import invariant from '../util/invariant';
 
 import type { AssertionParams, GradingResult } from '../types/index';
@@ -35,7 +35,10 @@ export async function handleWebhook({
       throw new Error(`Webhook response status: ${response.status}`);
     }
 
-    const jsonResponse = await response.json();
+    // The webhook timeout covers the whole response, including the body. Without
+    // this, a server that sends headers and then stalls the body hangs until the
+    // transport's own body timeout.
+    const jsonResponse = await readWithResponseDeadline(response, () => response.json());
     invariant(
       typeof jsonResponse?.pass === 'boolean',
       'Webhook response must be a JSON object with a boolean "pass" property',
