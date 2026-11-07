@@ -71,6 +71,7 @@ interface GeneratedConfig {
     headers?: Record<string, string>;
     body?: unknown;
     request?: string;
+    useHttps?: boolean;
     transformRequest?: string;
     transformResponse?: string;
     sessionParser?: string;
@@ -470,6 +471,7 @@ ${exampleRequest}`;
       if (generatedConfig.config.request) {
         resetState(true);
         updateCustomTarget('request', generatedConfig.config.request);
+        updateCustomTarget('useHttps', generatedConfig.config.useHttps === true);
       } else {
         resetState(false);
         if (generatedConfig.config.url) {
