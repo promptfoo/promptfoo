@@ -1,4 +1,4 @@
-import { sleep } from '../util/time';
+import { sleep, sleepWithAbort } from '../util/time';
 
 import type { ApiProvider, ProviderOptions, ProviderResponse } from '../types/providers';
 
@@ -32,7 +32,18 @@ export class EchoProvider implements ApiProvider {
     context?: any,
   ): Promise<ProviderResponse> {
     if (this.delay && this.delay > 0) {
-      await sleep(this.delay);
+      if (context?.abortSignal) {
+        try {
+          await sleepWithAbort(this.delay, context.abortSignal);
+        } catch (error) {
+          if (context.abortSignal.aborted) {
+            throw context.abortSignal.reason;
+          }
+          throw error;
+        }
+      } else {
+        await sleep(this.delay);
+      }
     }
 
     // Create a complete ProviderResponse object
