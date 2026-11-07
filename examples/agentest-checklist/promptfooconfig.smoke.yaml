@@ -1,0 +1,9 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+# Offline smoke: echo provider plus a contains assert. No grader model.
+# tests.smoke.json is a committed 3-case sample, so this run needs no network.
+description: agentest checklist offline smoke
+prompts:
+  - "Scenario: {{scenario}}\nInput: {{input}}\nWhat should a correct agent do?"
+providers:
+  - echo
+tests: file://tests.smoke.json

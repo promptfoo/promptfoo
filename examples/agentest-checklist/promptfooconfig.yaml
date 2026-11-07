@@ -1,0 +1,13 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+# Community example. Promptfoo is not an agentest dependency.
+# 1) python promptfoo_tests_from_hf.py [limit]
+# 2) npx promptfoo@latest eval
+# The echo provider is free and offline. Swap in your own agent or provider.
+# llm-rubric assertions need a grader model. For an offline smoke run:
+#   npx promptfoo@latest eval --no-cache -c promptfooconfig.smoke.yaml
+description: agentest checklist examples
+prompts:
+  - "Scenario: {{scenario}}\nInput: {{input}}\nWhat should a correct agent do?"
+providers:
+  - echo
+tests: file://tests.json
