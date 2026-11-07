@@ -24,6 +24,91 @@ type NunjucksParentContext = {
   node: NunjucksAstNode;
 };
 
+type RequiredReferenceTarget = {
+  references: Set<string>;
+  excludeOrOperands: true;
+};
+
+// The scope walker can stop at one requested name, collect every unbound name,
+// or collect only names whose evaluation requires a supplied value.
+type ReferenceTarget = string | Set<string> | RequiredReferenceTarget;
+
+function disposableIterator<T>(iterator: IterableIterator<T>): SetIterator<T> {
+  return {
+    next: () => iterator.next(),
+    [Symbol.dispose]: () => {},
+    [Symbol.iterator]() {
+      return this;
+    },
+  };
+}
+
+class LinkedScope implements ReadonlySet<string> {
+  private readonly names = new Set<string>();
+
+  constructor(
+    private readonly parent?: ReadonlySet<string>,
+    names: Iterable<string> = [],
+  ) {
+    for (const name of names) {
+      this.names.add(name);
+    }
+  }
+
+  get size(): number {
+    return Array.from(this).length;
+  }
+
+  has(value: string): boolean {
+    return this.names.has(value) || this.parent?.has(value) === true;
+  }
+
+  add(value: string): this {
+    this.names.add(value);
+    return this;
+  }
+
+  keys(): SetIterator<string> {
+    const iterator = function* (this: LinkedScope) {
+      yield* this.names;
+      if (this.parent) {
+        for (const name of this.parent) {
+          if (!this.names.has(name)) {
+            yield name;
+          }
+        }
+      }
+    }.call(this);
+    return disposableIterator(iterator);
+  }
+
+  values(): SetIterator<string> {
+    return disposableIterator(this.keys());
+  }
+
+  entries(): SetIterator<[string, string]> {
+    const iterator = function* (this: LinkedScope) {
+      for (const name of this) {
+        yield [name, name] as [string, string];
+      }
+    }.call(this);
+    return disposableIterator(iterator);
+  }
+
+  forEach(
+    callbackfn: (value: string, value2: string, set: ReadonlySet<string>) => void,
+    thisArg?: unknown,
+  ): void {
+    for (const value of this) {
+      callbackfn.call(thisArg, value, value, this);
+    }
+  }
+
+  [Symbol.iterator](): SetIterator<string> {
+    return this.keys();
+  }
+}
+
 type ParseResult = { ok: true; ast: NunjucksAstNode } | { ok: false };
 
 function isNunjucksAstNode(value: unknown): value is NunjucksAstNode {
@@ -99,20 +184,32 @@ function collectBindingNames(node: unknown): string[] {
   return node.children.flatMap((child) => collectBindingNames(child));
 }
 
-function addBindingNames(scope: ReadonlySet<string>, node: unknown): Set<string> {
-  const nextScope = new Set(scope);
+function addBindingNames(scope: ReadonlySet<string>, node: unknown): LinkedScope {
+  const nextScope = new LinkedScope(scope);
   for (const name of collectBindingNames(node)) {
     nextScope.add(name);
   }
   return nextScope;
 }
 
-function addNamesToScope(scope: ReadonlySet<string>, names: readonly string[]): Set<string> {
-  const nextScope = new Set(scope);
+function addBindingNamesInPlace(scope: LinkedScope, node: unknown): void {
+  for (const name of collectBindingNames(node)) {
+    scope.add(name);
+  }
+}
+
+function addNamesToScope(scope: ReadonlySet<string>, names: readonly string[]): LinkedScope {
+  const nextScope = new LinkedScope(scope);
   for (const name of names) {
     nextScope.add(name);
   }
   return nextScope;
+}
+
+function addNamesToScopeInPlace(scope: LinkedScope, names: readonly string[]): void {
+  for (const name of names) {
+    scope.add(name);
+  }
 }
 
 function collectFromImportBindingNames(namesNode: unknown): string[] {
@@ -140,11 +237,11 @@ function collectFromImportBindingNames(namesNode: unknown): string[] {
 
 function astNodeListReferencesVariable(
   nodes: readonly unknown[],
-  variableName: string,
+  variableName: ReferenceTarget,
   parent: NunjucksParentContext,
   boundSymbols: ReadonlySet<string>,
 ): boolean {
-  let scope = new Set(boundSymbols);
+  const scope = new LinkedScope(boundSymbols);
   for (const item of nodes) {
     if (!isNunjucksAstNode(item)) {
       continue;
@@ -153,13 +250,13 @@ function astNodeListReferencesVariable(
       return true;
     }
     if (item.typename === 'Set') {
-      scope = addBindingNames(scope, item.targets);
+      addBindingNamesInPlace(scope, item.targets);
     } else if (item.typename === 'Macro') {
-      scope = addBindingNames(scope, item.name);
+      addBindingNamesInPlace(scope, item.name);
     } else if (item.typename === 'Import') {
-      scope = addBindingNames(scope, item.target);
+      addBindingNamesInPlace(scope, item.target);
     } else if (item.typename === 'FromImport') {
-      scope = addNamesToScope(scope, collectFromImportBindingNames(item.names));
+      addNamesToScopeInPlace(scope, collectFromImportBindingNames(item.names));
     }
   }
   return false;
@@ -168,7 +265,7 @@ function astNodeListReferencesVariable(
 function astChildReferencesVariable(
   node: NunjucksAstNode,
   field: string,
-  variableName: string,
+  variableName: ReferenceTarget,
   boundSymbols: ReadonlySet<string>,
 ): boolean {
   const child = node[field];
@@ -191,10 +288,13 @@ function isForLikeNode(node: NunjucksAstNode): boolean {
 
 function forLikeNodeReferencesVariable(
   node: NunjucksAstNode,
-  variableName: string,
+  variableName: ReferenceTarget,
   boundSymbols: ReadonlySet<string>,
 ): boolean {
   const loopScope = addBindingNames(boundSymbols, node.name);
+  // Nunjucks exposes the frame-local `loop` object alongside the explicit loop
+  // variable. It is neither an external dependency nor an engine global.
+  loopScope.add('loop');
   return (
     astChildReferencesVariable(node, 'arr', variableName, boundSymbols) ||
     astChildReferencesVariable(node, 'body', variableName, loopScope) ||
@@ -209,7 +309,7 @@ function forLikeNodeReferencesVariable(
  */
 function analyzeSignatureArgs(
   argsNode: unknown,
-  variableName: string,
+  variableName: ReferenceTarget,
   boundSymbols: ReadonlySet<string>,
 ): { paramNames: string[]; referencesVariable: boolean } {
   const paramNames: string[] = [];
@@ -217,7 +317,7 @@ function analyzeSignatureArgs(
     return { paramNames, referencesVariable: false };
   }
 
-  const defaultScope = new Set(boundSymbols);
+  const defaultScope = new LinkedScope(boundSymbols);
   for (const child of argsNode.children) {
     if (!isNunjucksAstNode(child)) {
       continue;
@@ -263,7 +363,7 @@ function analyzeSignatureArgs(
 
 function macroNodeReferencesVariable(
   node: NunjucksAstNode,
-  variableName: string,
+  variableName: ReferenceTarget,
   boundSymbols: ReadonlySet<string>,
 ): boolean {
   const { paramNames, referencesVariable } = analyzeSignatureArgs(
@@ -275,18 +375,20 @@ function macroNodeReferencesVariable(
     return true;
   }
 
-  // Walk the body with the full macro scope (outer + param names + macro name).
+  // Walk the body with the full macro scope (outer + param names + macro name
+  // + the implicit caller supplied by a call block).
   const macroScope = addNamesToScope(boundSymbols, paramNames);
   const macroName = getSymbolName(node.name);
   if (macroName) {
     macroScope.add(macroName);
   }
+  macroScope.add('caller');
   return astChildReferencesVariable(node, 'body', variableName, macroScope);
 }
 
 function isNodeReferencesVariable(
   node: NunjucksAstNode,
-  variableName: string,
+  variableName: ReferenceTarget,
   boundSymbols: ReadonlySet<string>,
 ): boolean {
   if (astChildReferencesVariable(node, 'left', variableName, boundSymbols)) {
@@ -310,7 +412,7 @@ function isNodeReferencesVariable(
 
 function setNodeReferencesVariable(
   node: NunjucksAstNode,
-  variableName: string,
+  variableName: ReferenceTarget,
   boundSymbols: ReadonlySet<string>,
 ): boolean {
   return (
@@ -321,7 +423,7 @@ function setNodeReferencesVariable(
 
 function fromImportNodeReferencesVariable(
   node: NunjucksAstNode,
-  variableName: string,
+  variableName: ReferenceTarget,
   boundSymbols: ReadonlySet<string>,
 ): boolean {
   // `{% from template import a, b as c %}` — the template expression may
@@ -332,17 +434,18 @@ function fromImportNodeReferencesVariable(
 
 function blockNodeReferencesVariable(
   node: NunjucksAstNode,
-  variableName: string,
+  variableName: ReferenceTarget,
   boundSymbols: ReadonlySet<string>,
 ): boolean {
-  // `{% block name %}...{% endblock %}` — `name` is a template-inheritance
-  // label, not a variable reference. Only the body can reference variables.
-  return astChildReferencesVariable(node, 'body', variableName, boundSymbols);
+  // `name` is a template-inheritance label, not a variable reference. Nunjucks
+  // supplies `super` from the block frame, so it is not an external dependency.
+  const blockScope = addNamesToScope(boundSymbols, ['super']);
+  return astChildReferencesVariable(node, 'body', variableName, blockScope);
 }
 
 function callerNodeReferencesVariable(
   node: NunjucksAstNode,
-  variableName: string,
+  variableName: ReferenceTarget,
   boundSymbols: ReadonlySet<string>,
 ): boolean {
   const { paramNames, referencesVariable } = analyzeSignatureArgs(
@@ -360,7 +463,7 @@ function callerNodeReferencesVariable(
 
 function astFieldsReferenceVariable(
   node: NunjucksAstNode,
-  variableName: string,
+  variableName: ReferenceTarget,
   boundSymbols: ReadonlySet<string>,
 ): boolean {
   return (node.fields ?? []).some((field) =>
@@ -368,14 +471,106 @@ function astFieldsReferenceVariable(
   );
 }
 
+function lookupNodeReferencesVariable(
+  node: NunjucksAstNode,
+  variableName: ReferenceTarget,
+  boundSymbols: ReadonlySet<string>,
+): boolean {
+  const lookups: NunjucksAstNode[] = [];
+  let current: unknown = node;
+  while (isNunjucksAstNode(current) && current.typename === 'LookupVal') {
+    lookups.push(current);
+    current = current.target;
+  }
+
+  // The target chain is the deepest part of a postfix expression. Preserve the
+  // old target-then-val field order without recursively visiting each target.
+  const innermost = lookups[lookups.length - 1]!;
+  if (
+    isNunjucksAstNode(current) &&
+    astReferencesVariable(current, variableName, { field: 'target', node: innermost }, boundSymbols)
+  ) {
+    return true;
+  }
+  for (let index = lookups.length - 1; index >= 0; index--) {
+    if (astChildReferencesVariable(lookups[index]!, 'val', variableName, boundSymbols)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+const LEFT_ASSOCIATIVE_BINARY_NODES = new Set([
+  'Concat',
+  'Add',
+  'Sub',
+  'Mul',
+  'Div',
+  'FloorDiv',
+  'Mod',
+  'And',
+  'Or',
+]);
+
+function binaryNodeReferencesVariable(
+  node: NunjucksAstNode,
+  variableName: ReferenceTarget,
+  parent: NunjucksParentContext | undefined,
+  boundSymbols: ReadonlySet<string>,
+): boolean {
+  let current = node;
+  let currentParent = parent;
+  // Nunjucks binary expressions are left-associative. Walk their deep left
+  // spine iteratively instead of recursively overflowing on large values.
+  while (LEFT_ASSOCIATIVE_BINARY_NODES.has(current.typename!)) {
+    if (astChildReferencesVariable(current, 'right', variableName, boundSymbols)) {
+      return true;
+    }
+    const left = current.left;
+    if (!isNunjucksAstNode(left)) {
+      return false;
+    }
+    currentParent = { field: 'left', node: current };
+    current = left;
+  }
+  return astReferencesVariable(current, variableName, currentParent, boundSymbols);
+}
+
 function astReferencesVariable(
   node: NunjucksAstNode,
-  variableName: string,
+  variableName: ReferenceTarget,
   parent?: NunjucksParentContext,
   boundSymbols: ReadonlySet<string> = new Set(),
 ): boolean {
-  if (node.typename === 'Symbol' && node.value === variableName) {
-    return !boundSymbols.has(variableName) && !isNonReferenceSymbol(parent);
+  if (
+    node.typename === 'Or' &&
+    typeof variableName === 'object' &&
+    'excludeOrOperands' in variableName
+  ) {
+    return false;
+  }
+
+  if (node.typename === 'LookupVal') {
+    return lookupNodeReferencesVariable(node, variableName, boundSymbols);
+  }
+
+  if (LEFT_ASSOCIATIVE_BINARY_NODES.has(node.typename!)) {
+    return binaryNodeReferencesVariable(node, variableName, parent, boundSymbols);
+  }
+
+  if (node.typename === 'Symbol' && typeof node.value === 'string') {
+    const isReference = !boundSymbols.has(node.value) && !isNonReferenceSymbol(parent);
+    if (typeof variableName === 'string') {
+      if (node.value === variableName) {
+        return isReference;
+      }
+    } else if (isReference) {
+      if (variableName instanceof Set) {
+        variableName.add(node.value);
+      } else {
+        variableName.references.add(node.value);
+      }
+    }
   }
 
   if ((node.typename === 'Root' || node.typename === 'NodeList') && Array.isArray(node.children)) {
@@ -514,6 +709,103 @@ export function getNunjucksEngine(
   return env;
 }
 
+let globalsEngine: nunjucks.Environment | undefined;
+
+/** Check both Nunjucks built-ins and globals installed on the configured engine. */
+export function isNunjucksGlobal(name: string): boolean {
+  globalsEngine ??= getNunjucksEngine();
+  // getGlobal throws for an unknown name. Read the same table directly so
+  // ordinary undefined variables stay on the non-exceptional path.
+  const { globals } = globalsEngine as unknown as { globals: Record<string, unknown> };
+  return globals[name] !== undefined;
+}
+
+function isTemplateWhitespace(char: string | undefined): boolean {
+  return char !== undefined && /\s/.test(char);
+}
+
+function skipTemplateWhitespace(template: string, start: number, end: number): number {
+  let index = start;
+  while (index < end && isTemplateWhitespace(template[index])) {
+    index++;
+  }
+  return index;
+}
+
+function stripClosedComments(template: string): string {
+  const chunks: string[] = [];
+  let cursor = 0;
+  let start = template.indexOf('{#');
+  while (start !== -1) {
+    const end = template.indexOf('#}', start + 2);
+    if (end === -1) {
+      break;
+    }
+    chunks.push(template.slice(cursor, start));
+    cursor = end + 2;
+    start = template.indexOf('{#', cursor);
+  }
+  chunks.push(template.slice(cursor));
+  return chunks.join('');
+}
+
+type OutputRejectionCache = { end: number; at: number };
+
+function readOutputVariable(
+  template: string,
+  start: number,
+  end: number,
+  rejectionCache: OutputRejectionCache,
+): string | undefined {
+  let index = skipTemplateWhitespace(template, start + 2, end);
+  const tokenStart = index;
+  while (index < end && !/[{}\s|]/.test(template[index]!)) {
+    index++;
+  }
+  const variable = template.slice(tokenStart, index);
+  index = skipTemplateWhitespace(template, index, end);
+  if (variable && index === end) {
+    return variable;
+  }
+  if (!variable || template[index] !== '|') {
+    return undefined;
+  }
+
+  index++;
+  if (rejectionCache.end === end && rejectionCache.at >= index) {
+    return undefined;
+  }
+  let hasFilterContent = false;
+  for (; index < end; index++) {
+    if (template[index] === '}') {
+      rejectionCache.end = end;
+      rejectionCache.at = index;
+      return undefined;
+    }
+    hasFilterContent = true;
+  }
+  return hasFilterContent ? variable : undefined;
+}
+
+function readBlockVariable(template: string, start: number, end: number): string | undefined {
+  let index = skipTemplateWhitespace(template, start + 2, end);
+  const keyword = template.startsWith('if', index)
+    ? 'if'
+    : template.startsWith('for', index)
+      ? 'for'
+      : '';
+  if (!keyword || !isTemplateWhitespace(template[index + keyword.length])) {
+    return undefined;
+  }
+
+  index = skipTemplateWhitespace(template, index + keyword.length, end);
+  const tokenStart = index;
+  while (index < end && !/[{}\s]/.test(template[index]!)) {
+    index++;
+  }
+  return index > tokenStart ? template.slice(tokenStart, index) : undefined;
+}
+
 /**
  * Parse Nunjucks template to extract variables.
  * @param template - The Nunjucks template string.
@@ -521,23 +813,58 @@ export function getNunjucksEngine(
  */
 export function extractVariablesFromTemplate(template: string): string[] {
   const variableSet = new Set<string>();
-  const regex =
-    /\{\{[\s]*([^{}\s|]+)[\s]*(?:\|[^}]+)?\}\}|\{%[\s]*(?:if|for)[\s]+([^{}\s]+)[\s]*.*?%\}/g;
-  const commentRegex = /\{#[\s\S]*?#\}/g;
+  // Remove only closed comments, matching the old non-greedy regex without
+  // backtracking through an unterminated comment.
+  template = stripClosedComments(template);
 
-  // Remove comments
-  template = template.replace(commentRegex, '');
+  // Scan tags directly instead of using a body-wide `.*?`. Close positions are
+  // cached across malformed nested openers, so an unterminated long tag is one
+  // linear pass rather than quadratic regex backtracking.
+  let cursor = 0;
+  const openerPattern = /\{\{|\{%/g;
+  let outputEnd: number | undefined;
+  let blockEnd: number | undefined;
+  const rejectionCache: OutputRejectionCache = { end: -1, at: -1 };
+  while (cursor < template.length) {
+    openerPattern.lastIndex = cursor;
+    const opener = openerPattern.exec(template);
+    if (!opener) {
+      break;
+    }
+    const start = opener.index;
+    const isOutput = opener[0] === '{{';
+    let end = isOutput ? outputEnd : blockEnd;
+    if (end === undefined || (end >= 0 && end < start + 2)) {
+      end = template.indexOf(isOutput ? '}}' : '%}', start + 2);
+      if (isOutput) {
+        outputEnd = end;
+      } else {
+        blockEnd = end;
+      }
+    }
+    if (end === -1) {
+      // The suffix has no close for this tag kind. Keep -1 cached so later
+      // malformed openers do not each rescan the same suffix.
+      cursor = start + 2;
+      continue;
+    }
 
-  let match;
-  while ((match = regex.exec(template)) !== null) {
-    const variable = match[1] || match[2];
+    const variable = isOutput
+      ? readOutputVariable(template, start, end, rejectionCache)
+      : readBlockVariable(template, start, end);
     if (variable) {
-      // Split by dot and add only the full path
       variableSet.add(variable);
+      cursor = end + 2;
+    } else {
+      // A malformed outer tag can contain a complete inner tag. Resume after
+      // this opener instead of skipping the first close, preserving the old
+      // conservative behavior for nested placeholders.
+      cursor = start + 2;
     }
   }
 
   // Handle for loops separately
+  let match;
   const forLoopRegex = /\{%[\s]*for[\s]+(\w+)[\s]+in[\s]+(\w+)[\s]*%\}/g;
   while ((match = forLoopRegex.exec(template)) !== null) {
     variableSet.delete(match[1]); // Remove loop variable
@@ -611,4 +938,145 @@ export function analyzeTemplateReference(
  */
 export function templateReferencesVariable(template: string, variableName: string): boolean {
   return analyzeTemplateReference(template, variableName).referenced;
+}
+
+type ExpressionWorkItem = { node: NunjucksAstNode; parent?: NunjucksParentContext };
+
+function collectIsExpressionReferences(
+  current: ExpressionWorkItem,
+  pending: ExpressionWorkItem[],
+): void {
+  const right = current.node.right;
+  if (isNunjucksAstNode(right)) {
+    if (right.typename === 'FunCall') {
+      if (isNunjucksAstNode(right.args)) {
+        pending.push({ node: right.args, parent: { field: 'args', node: right } });
+      }
+    } else if (right.typename !== 'Symbol') {
+      pending.push({ node: right, parent: { field: 'right', node: current.node } });
+    }
+  }
+  if (isNunjucksAstNode(current.node.left)) {
+    pending.push({ node: current.node.left, parent: { field: 'left', node: current.node } });
+  }
+}
+
+function collectExpressionReferences(
+  node: NunjucksAstNode,
+  parent: NunjucksParentContext | undefined,
+  references: Set<string>,
+): void {
+  const pending: ExpressionWorkItem[] = [{ node, parent }];
+  while (pending.length > 0) {
+    const current = pending.pop()!;
+    if (current.node.typename === 'Is') {
+      collectIsExpressionReferences(current, pending);
+      continue;
+    }
+
+    if (current.node.typename === 'Symbol' && typeof current.node.value === 'string') {
+      if (!isNonReferenceSymbol(current.parent)) {
+        references.add(current.node.value);
+      }
+      continue;
+    }
+
+    const fields = current.node.fields ?? [];
+    for (let fieldIndex = fields.length - 1; fieldIndex >= 0; fieldIndex--) {
+      const field = fields[fieldIndex]!;
+      const child = current.node[field];
+      if (Array.isArray(child)) {
+        for (let index = child.length - 1; index >= 0; index--) {
+          const item = child[index]!;
+          if (isNunjucksAstNode(item)) {
+            pending.push({ node: item, parent: { field, node: current.node } });
+          }
+        }
+      } else if (isNunjucksAstNode(child)) {
+        pending.push({ node: child, parent: { field, node: current.node } });
+      }
+    }
+  }
+}
+
+/**
+ * Collect real symbols from a Nunjucks expression with one AST parse.
+ * String literals, filter names, object keys, and property names are excluded.
+ * Returns undefined when parsing fails so callers can choose a conservative fallback.
+ */
+export function extractVariablesFromExpression(template: string): string[] | undefined {
+  const parseResult = parseNunjucksTemplate(template);
+  if (!parseResult.ok) {
+    return undefined;
+  }
+  const references = new Set<string>();
+  collectExpressionReferences(parseResult.ast, undefined, references);
+  return Array.from(references);
+}
+
+function astLoadsExternalContext(node: unknown): boolean {
+  const pending = [node];
+  while (pending.length > 0) {
+    const current = pending.pop();
+    if (!isNunjucksAstNode(current)) {
+      continue;
+    }
+    if (['Include', 'Import', 'FromImport', 'Extends'].includes(current.typename!)) {
+      return true;
+    }
+    for (const field of current.fields ?? []) {
+      const child = current[field];
+      if (Array.isArray(child)) {
+        for (const item of child) {
+          pending.push(item);
+        }
+      } else {
+        pending.push(child);
+      }
+    }
+  }
+  return false;
+}
+
+/**
+ * Return whether a template loads another template whose references are not
+ * visible in this AST. Parse failure is indeterminate and uses the same
+ * conservative answer, so callers do not suppress errors on unseen variables.
+ */
+export function templateLoadsExternalContext(template: string): boolean {
+  const parseResult = parseNunjucksTemplate(template);
+  return !parseResult.ok || astLoadsExternalContext(parseResult.ast);
+}
+
+/**
+ * Collect all unbound expression symbols with one parse and one scope-aware
+ * AST walk. Returns undefined on parse failure so callers can retain their
+ * conservative textual fallback.
+ */
+export function extractUnboundVariablesFromTemplate(template: string): string[] | undefined {
+  const parseResult = parseNunjucksTemplate(template);
+  if (!parseResult.ok) {
+    return undefined;
+  }
+  const references = new Set<string>();
+  astReferencesVariable(parseResult.ast, references);
+  return Array.from(references);
+}
+
+/**
+ * Collect symbols that must be supplied for eager rendering. Nunjucks permits
+ * missing operands in an `or` fallback, so those occurrences are excluded only
+ * for this traversal; the same name elsewhere remains a required reference.
+ */
+export function extractRequiredVariablesFromTemplate(template: string): string[] | undefined {
+  const parseResult = parseNunjucksTemplate(template);
+  if (!parseResult.ok) {
+    return undefined;
+  }
+  const target: RequiredReferenceTarget = {
+    references: new Set<string>(),
+    excludeOrOperands: true,
+  };
+  astReferencesVariable(parseResult.ast, target);
+  return Array.from(target.references);
 }

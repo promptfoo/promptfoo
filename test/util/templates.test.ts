@@ -5,6 +5,7 @@ import { getEnvString, getProcessEnv } from '../../src/envars';
 import { getEnvOverridesProvider, setEnvOverridesProvider } from '../../src/envOverrides';
 import {
   analyzeTemplateReference,
+  extractVariablesFromExpression,
   extractVariablesFromTemplate,
   extractVariablesFromTemplates,
   getNunjucksEngine,
@@ -71,6 +72,33 @@ describe('extractVariablesFromTemplate', () => {
   it('should handle templates without variables', () => {
     const template = 'This is a static template without variables.';
     expect(extractVariablesFromTemplate(template)).toEqual([]);
+  });
+
+  it('should handle an unterminated if tag without quadratic backtracking', () => {
+    const template = `{% if ${'a'.repeat(64000)}`;
+    const started = performance.now();
+    expect(extractVariablesFromTemplate(template)).toEqual([]);
+    const elapsed = performance.now() - started;
+
+    expect(elapsed).toBeLessThan(250);
+  });
+
+  it('should handle many unterminated tags in one pass', () => {
+    const template = '{% if bad '.repeat(20000);
+    const started = performance.now();
+    expect(extractVariablesFromTemplate(template)).toEqual([]);
+    const elapsed = performance.now() - started;
+
+    expect(elapsed).toBeLessThan(250);
+  });
+
+  it('should not rescan rejected filter bodies for every nested opener', () => {
+    const template = '{{x|'.repeat(16000) + '}end}}';
+    const started = performance.now();
+    extractVariablesFromTemplate(template);
+    const elapsed = performance.now() - started;
+
+    expect(elapsed).toBeLessThan(250);
   });
 });
 
@@ -302,6 +330,32 @@ describe('analyzeTemplateReference', () => {
       referenced: false,
       parsed: true,
     });
+  });
+});
+
+describe('extractVariablesFromExpression', () => {
+  it('parses once and collects only real expression references', () => {
+    const parser = (nunjucks as unknown as { parser: { parse: (template: string) => unknown } })
+      .parser;
+    const parseSpy = vi.spyOn(parser, 'parse');
+    try {
+      const references = extractVariablesFromExpression(
+        "{{ user.name ~ foo | length ~ {'key': bar} ~ 'Hello' ~ true }}",
+      );
+
+      expect(references).toEqual(['user', 'foo', 'bar']);
+      expect(parseSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      parseSpy.mockRestore();
+    }
+  });
+
+  it('excludes callable test names from expression references', () => {
+    expect(extractVariablesFromExpression('{{ n is divisibleby(2) }}')).toEqual(['n']);
+  });
+
+  it('reports parse failure so callers can retain their conservative fallback', () => {
+    expect(extractVariablesFromExpression('{{ broken')).toBeUndefined();
   });
 });
 
