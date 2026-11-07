@@ -348,39 +348,35 @@ function isBase64(str: string): boolean {
 }
 
 /**
- * Explain why PEM key material cannot be used for signing, in terms of what the operator
- * can actually see and act on.
- *
- * OpenSSL 3 is the reason this exists: `createSign().sign()` and `createPrivateKey()` both
- * collapse empty, whitespace-only, malformed, truncated, and public-key-instead-of-private
- * input into one opaque `error:1E08010C:DECODER routines::unsupported`. The distinction only
- * survives in the PEM text, so classify that before handing it to crypto.
- *
- * Returns `undefined` when the material is structurally sound -- crypto then reports anything
- * subtler (wrong curve for the algorithm, unsupported key size) with a real diagnostic.
- *
- * Uses plain string matching rather than regexes so no user-controlled input reaches a
- * backtracking matcher, and never echoes key material -- only which marker was found or
- * missing, so pointing this at the wrong file cannot leak that file's contents.
+ * Classify common PEM mistakes before OpenSSL reduces them to a decoder error.
+ * Uses string matching and never includes key material in the diagnostic.
+ * Crypto handles errors beyond missing markers and encrypted keys.
  */
 export function diagnosePrivateKeyMaterial(material: unknown): string | undefined {
   const text = typeof material === 'string' ? material.trim() : '';
   if (!text) {
     return 'it is empty';
   }
-  if (text.includes('BEGIN CERTIFICATE')) {
-    return 'it is a certificate, not a private key';
-  }
-  if (text.includes('PUBLIC KEY-----')) {
-    return 'it is a public key, not a private key';
+  const keyHeader = text
+    .split('\n')
+    .map((line) => line.trim())
+    .find((line) => line.startsWith('-----BEGIN ') && line.endsWith('PRIVATE KEY-----'));
+  // PEM bundles can contain both a private key and its certificate or public key.
+  if (!keyHeader) {
+    if (text.includes('BEGIN CERTIFICATE')) {
+      return 'it is a certificate, not a private key';
+    }
+    if (text.includes('PUBLIC KEY-----')) {
+      return 'it is a public key, not a private key';
+    }
+    return 'it is not PEM-encoded (no "-----BEGIN ... PRIVATE KEY-----" header)';
   }
   if (text.includes('ENCRYPTED PRIVATE KEY') || text.includes('Proc-Type: 4,ENCRYPTED')) {
     return 'it is passphrase-protected; decrypt it first or supply an unencrypted key';
   }
-  if (!text.includes('PRIVATE KEY-----')) {
-    return 'it is not PEM-encoded (no "-----BEGIN ... PRIVATE KEY-----" header)';
-  }
-  if (!text.includes('-----END')) {
+  const keyBlock = text.slice(text.indexOf(keyHeader) + keyHeader.length).split('-----BEGIN')[0];
+  const keyFooter = keyHeader.replace('-----BEGIN ', '-----END ');
+  if (!keyBlock.includes(keyFooter)) {
     return 'it is truncated (no "-----END ... PRIVATE KEY-----" line)';
   }
   return undefined;
