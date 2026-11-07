@@ -1313,7 +1313,11 @@ export function extractOpenAIBillingUsage(rawUsage: any): OpenAIBillingUsage {
 
   return {
     totalInputTokens,
-    cachedInputTokens: getNumericValue(inputDetails.cached_tokens ?? usage.cached_input_tokens),
+    cachedInputTokens: getNumericValue(
+      // Some OpenAI-compatible APIs (e.g. Moonshot) report cached prompt tokens
+      // at the top level of usage instead of inside prompt_tokens_details.
+      inputDetails.cached_tokens ?? usage.cached_input_tokens ?? usage.cached_tokens,
+    ),
     cacheWriteInputTokens: getOpenAICacheWriteInputTokens(usage) ?? 0,
     cacheWrite12hInputTokens: getNumericValue(
       inputDetails.cache_write_tokens_details?.ttl_12h_tokens,
