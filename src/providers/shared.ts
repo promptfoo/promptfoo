@@ -123,7 +123,7 @@ export function getOpenAICompletionTokenLimitFromEnv(): number | undefined {
  */
 export const LONG_RUNNING_MODEL_TIMEOUT_MS = 600_000; // 10 minutes
 
-interface ModelCost {
+export interface ModelCost {
   input: number;
   output: number;
   audioInput?: number;

@@ -9,6 +9,7 @@ import {
   validateResolution,
   XAIVideoProvider,
 } from '../../../src/providers/xai/video';
+import { isProviderResponseRateLimited } from '../../../src/scheduler/types';
 import * as fetch from '../../../src/util/fetch/index';
 import { sleep } from '../../../src/util/time';
 
@@ -526,7 +527,7 @@ describe('XAI Video Provider', () => {
       expect(result.error).toContain('Content policy violation');
     });
 
-    it('handles video download failure', async () => {
+    it.each([404, 429])('reports HTTP %i during video download', async (status) => {
       // Mock job creation
       const createResponse = {
         ok: true,
@@ -545,8 +546,8 @@ describe('XAI Video Provider', () => {
       // Mock download failure
       const downloadResponse = {
         ok: false,
-        status: 404,
-        statusText: 'Not Found',
+        status,
+        statusText: '',
       };
 
       vi.mocked(fetch.fetchWithProxy)
@@ -557,7 +558,8 @@ describe('XAI Video Provider', () => {
       const provider = new XAIVideoProvider('grok-imagine-video');
       const result = await provider.callApi(mockPrompt);
 
-      expect(result.error).toContain('Failed to download video');
+      expect(isProviderResponseRateLimited(result, undefined)).toBe(status === 429);
+      expect(result.error).toContain(`Failed to download video: HTTP ${status}`);
     });
 
     it('handles invalid duration parameter', async () => {
