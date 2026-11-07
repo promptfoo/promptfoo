@@ -233,7 +233,7 @@ If the LLM output is `Goodbye world`, the `equals` assertion fails but the `cont
 
 ### Setting a score requirement
 
-Test cases support an optional `threshold` property. If set, the pass/fail status of a test case is determined by whether the combined weighted score of all assertions is greater than or equal to the threshold value. This can override individual assertion verdicts. Omit the test-level threshold to require every nonzero-weight assertion to pass.
+Set a test case’s `threshold` to its minimum combined weighted score. Small floating-point rounding differences at the cutoff are allowed. A zero score still fails a positive threshold. Omit the test-level threshold to require every nonzero-weight assertion to pass.
 
 For example:
 

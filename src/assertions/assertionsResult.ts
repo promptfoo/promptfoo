@@ -326,7 +326,11 @@ export class AssertionsResult {
       // A numeric test threshold overrides the pass/fail status of individual assertions.
       // Honor zero and negative thresholds, but do not coerce an empty YAML threshold
       // (null) to zero. A zero threshold can still fail when the aggregate score is negative.
-      pass = score >= this.threshold;
+      // Scale rounding tolerance to these values so zero still fails a tiny positive threshold.
+      const tolerance = Number.EPSILON * Math.max(Math.abs(score), Math.abs(this.threshold));
+      pass =
+        score >= this.threshold ||
+        (Number.isFinite(tolerance) && this.threshold - score <= tolerance);
       const comparator = pass ? '≥' : '<';
       reason = `Aggregate score ${score.toFixed(2)} ${comparator} ${this.threshold} threshold`;
     }
