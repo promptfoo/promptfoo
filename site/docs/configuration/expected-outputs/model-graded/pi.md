@@ -1,93 +1,48 @@
 ---
 sidebar_position: 8
-description: 'Identify and block prompt injection attacks using advanced model-based classification for enhanced security protection'
+description: 'Grade a response against a question using the Pi Labs scoring model.'
 ---
 
 # Pi Scorer
 
-`pi` is an alternative approach to model grading that uses a dedicated scoring model instead of the "LLM as a judge" technique. It can evaluate input and output pairs against criteria.
-
-:::note
-**Important**: Unlike `llm-rubric` which works with your existing providers, Pi requires a separate external API key from Pi Labs.
-:::
+The `pi` assertion sends the prompt, provider output, and a grading question to Pi Labs. Its scoring model returns a numeric score for the question.
 
 ## Alternative Approach
 
-Pi offers a different approach to evaluation with some distinct characteristics:
-
-- Uses a dedicated scoring model rather than prompting an LLM to act as a judge
-- Focuses on highly accurate numeric scoring without providing detailed reasoning
-- Aims for consistency in scoring the same inputs
-- Requires a separate API key and integration
-
-Each approach has different strengths, and you may want to experiment with both to determine which best suits your specific evaluation needs.
+Use `pi` for a numeric score from a dedicated grading model. Use `llm-rubric` to grade with a rubric and a model of your choice.
 
 ## Prerequisites
 
-To use Pi, you **must** first:
-
-1. Create a Pi API key from [Pi Labs](https://build.withpi.ai/account/keys)
-2. Set the `WITHPI_API_KEY` environment variable
-
-```bash
-export WITHPI_API_KEY=your_api_key_here
-```
-
-or set
-
-```yaml
-env:
-  WITHPI_API_KEY: your_api_key_here
-```
-
-in your promptfoo config
+Create a [Pi Labs API key](https://build.withpi.ai/account/keys) and set `WITHPI_API_KEY` in the environment that runs your eval.
 
 ## How to use it
 
-To use the `pi` assertion type, add it to your test configuration:
+Write the criterion as a question. For example, these assertions require a clear explanation and reject insults:
 
 ```yaml
 assert:
   - type: pi
-    # Specify the criteria for grading the LLM output
-    value: Is the response not apologetic and provides a clear, concise answer?
+    value: Can a reader understand the explanation without technical jargon?
+    threshold: 0.8
+  - type: not-pi
+    value: Does the response insult the reader?
 ```
-
-This assertion will use the Pi scorer to grade the output based on the specified criteria.
 
 ## How it works
 
-Under the hood, the `pi` assertion uses the `withpi` SDK to evaluate the output based on the criteria you provide.
-
-Compared to LLM as a judge:
-
-- The inputs of the eval are the same: `llm_input` and `llm_output`
-- Pi does not need a system prompt, and is pretrained to score
-- Pi always generates the same score, when given the same input
-- Pi requires a separate API key (see Prerequisites section)
+Promptfoo sends the prompt, the provider output, and the grading question to Pi. It uses the overall score for the assertion and records the per-question scores as named metrics.
 
 ## Threshold Support
 
-The `pi` assertion type supports an optional `threshold` property that sets a minimum score requirement. When specified, the output must achieve a score greater than or equal to the threshold to pass.
+A score at or above the threshold passes `pi`. The default threshold is `0.5`.
 
-```yaml
-assert:
-  - type: pi
-    value: Is not apologetic and provides a clear, concise answer
-    threshold: 0.8 # Requires a score of 0.8 or higher to pass
-```
+## Negation with `not-pi`
 
-:::info
-The default threshold is `0.5` if not specified.
-:::
+`not-pi` reverses the verdict and reports the complementary score (`1 - score` for scores between 0 and 1). An unavailable scorer or invalid response is a grading error for either assertion.
 
 ## Metrics Brainstorming
 
-You can use the [Pi Labs Copilot](https://build.withpi.ai) to interactively brainstorm representative metrics for your application. It helps you:
-
-1. Generate effective evaluation criteria
-2. Test metrics on example outputs before integration
-3. Find the optimal threshold values for your use case
+[Pi Labs Copilot](https://build.withpi.ai) lets you try grading questions against sample outputs before adding them to your eval.
 
 ## Example Configuration
 
