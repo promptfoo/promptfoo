@@ -17,6 +17,7 @@ import {
   REMOTE_ONLY_PLUGIN_IDS,
   UNALIGNED_PROVIDER_HARM_PLUGINS,
 } from '../constants';
+import { CODING_AGENT_CORE_PLUGINS, CODING_AGENT_PLUGINS } from '../constants/codingAgents';
 import { recordGenerationTokenUsage } from '../generationTokenUsage';
 import { buildPromptInputDescriptions } from '../inputVariables';
 import {
@@ -45,6 +46,7 @@ import { getShortPluginId } from '../util';
 import { AegisPlugin } from './aegis';
 import { type RedteamPluginBase } from './base';
 import { BeavertailsPlugin } from './beavertails';
+import { hasCodingAgentAssertion } from './codingAgent/assertions';
 import { ContractPlugin } from './contracts';
 import { CrossSessionLeakPlugin } from './crossSessionLeak';
 import { CyberSecEvalPlugin } from './cyberseceval';
@@ -436,7 +438,20 @@ async function fetchRemoteTestCases(
     if (requiresRemoteMaterialization(config?.inputs)) {
       assertRemoteMaterializationHandled(data, `Remote plugin generation for ${key}`);
     }
-    const ret = data.result;
+    const members =
+      key === 'coding-agent:core'
+        ? CODING_AGENT_CORE_PLUGINS
+        : key === 'coding-agent:all'
+          ? CODING_AGENT_PLUGINS
+          : [key];
+    const ret = key.startsWith('coding-agent:')
+      ? data.result.filter((row) => hasCodingAgentAssertion(row?.assert, members))
+      : data.result;
+    if (ret.length !== data.result.length) {
+      logger.warn(
+        `Discarded ${data.result.length - ret.length} generated rows missing the grading assertion for ${key}.`,
+      );
+    }
     logger.debug(`Received remote generation for ${key}:\n${JSON.stringify(ret)}`);
     return ret;
   } catch (err) {

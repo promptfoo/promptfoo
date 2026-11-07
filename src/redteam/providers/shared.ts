@@ -51,6 +51,7 @@ import {
   getGradingInputHash,
   withGradingUsage,
 } from '../grading/storedResult';
+import { getCodingAgentHostEvidence } from '../plugins/codingAgent/hostEvidence';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import { throwIfTargetPromptExceedsMaxChars } from '../shared/promptLength';
 import { ATTACKER_MODEL, ATTACKER_MODEL_SMALL, TEMPERATURE } from './constants';
@@ -541,6 +542,16 @@ export function callTargetProvider(
     const call = async (callContext?: CallApiContextParams) => {
       const response = await targetProvider.callApi(targetPrompt, callContext, targetOptions);
       executionContext?.onTargetResponse?.(targetPrompt, response);
+      const row = getCodingAgentHostEvidence();
+      if (row) {
+        const turnId = randomUUID();
+        (row.turns ??= new Map()).set(turnId, {
+          prompt: targetPrompt,
+          response,
+          spanId: tracingContext ? callContext?.traceparent?.split('-')[2] : undefined,
+        });
+        return { ...response, metadata: { ...response.metadata, codingAgentTurnId: turnId } };
+      }
       return response;
     };
     return tracingContext
@@ -735,6 +746,23 @@ export function runRedteamGrader<TResult, TArgs extends unknown[]>(
   );
 }
 
+/** Match the assertion runner's answer transform for turn-level coding-agent grading. */
+export async function getCodingAgentTransformedAnswer(
+  assertion: AssertionOrSet,
+  output: string,
+  context: TransformContext,
+): Promise<string | undefined> {
+  if (
+    !assertion.type.startsWith('promptfoo:redteam:coding-agent:') ||
+    !('transform' in assertion) ||
+    !assertion.transform
+  ) {
+    return undefined;
+  }
+  const answer = await transform(assertion.transform, output, context);
+  return typeof answer === 'string' ? answer : JSON.stringify(answer);
+}
+
 /** Preserve the latest verdict while retaining usage from every strategy grading turn. */
 export function accumulateGraderResult(
   previous: GradingResult | undefined,
@@ -745,6 +773,7 @@ export function accumulateGraderResult(
     messages?: unknown;
     pluginId?: string;
     assertion?: AssertionOrSet;
+    transformedAnswer?: string;
   },
 ): GradingResult {
   if (input) {
@@ -758,6 +787,7 @@ export function accumulateGraderResult(
           input.output,
           input.messages,
           input.pluginId,
+          input.transformedAnswer,
         ),
       },
     };

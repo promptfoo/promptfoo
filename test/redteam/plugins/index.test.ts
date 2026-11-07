@@ -612,11 +612,18 @@ describe('Plugins', () => {
       expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('http://test-url'));
     });
 
-    it('should preserve coding-agent canary-breaking strategy exclusions in metadata', async () => {
+    it('keeps only rows with the requested coding-agent assertion and preserves strategy exclusions', async () => {
       vi.mocked(shouldGenerateRemote).mockReturnValue(true);
       vi.mocked(neverGenerateRemote).mockReturnValue(false);
 
-      const mockResponse = mockFetchResponse([{ vars: { testVar: 'test content' } }]);
+      const assert = [{ type: 'promptfoo:redteam:coding-agent:secret-env-read' }];
+      const mockResponse = mockFetchResponse([
+        { vars: { testVar: 'test content' }, assert },
+        { vars: { testVar: 'nested' }, assert: [{ type: 'assert-set', assert }] },
+        { vars: { testVar: 'missing' } },
+        { assert: [{ type: 'promptfoo:redteam:coding-agent:secret-file-read' }] },
+        { assert: [null] },
+      ]);
       vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
       const plugin = Plugins.find((p) => p.key === 'coding-agent:secret-env-read');
@@ -635,6 +642,7 @@ describe('Plugins', () => {
         ...CANARY_BREAKING_STRATEGY_IDS,
         'custom-strategy',
       ]);
+      expect(result?.map((row) => row.vars?.testVar)).toEqual(['test content', 'nested']);
       expect(result?.[0].metadata?.pluginConfig?.excludeStrategies).toEqual([
         ...CANARY_BREAKING_STRATEGY_IDS,
         'custom-strategy',
@@ -647,7 +655,12 @@ describe('Plugins', () => {
         vi.mocked(shouldGenerateRemote).mockReturnValue(true);
         vi.mocked(neverGenerateRemote).mockReturnValue(false);
 
-        const mockResponse = mockFetchResponse([{ vars: { testVar: 'test content' } }]);
+        const mockResponse = mockFetchResponse([
+          {
+            vars: { testVar: 'test content' },
+            assert: [{ type: 'promptfoo:redteam:coding-agent:secret-env-read' }],
+          },
+        ]);
         vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
         const plugin = Plugins.find((p) => p.key === pluginId);

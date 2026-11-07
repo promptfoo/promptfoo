@@ -15,7 +15,13 @@ import { createAnthropicEnvOptions } from '../factories/literalFixtures';
 import { createDeferred, mockProcessEnv } from '../util/utils';
 import type { MockInstance } from 'vitest';
 
-import type { CallApiContextParams } from '../../src/types/index';
+import type { AtomicTestCase, CallApiContextParams } from '../../src/types/index';
+
+const codingAgentTest: AtomicTestCase = {
+  assert: [
+    { type: 'assert-set', assert: [{ type: 'promptfoo:redteam:coding-agent:secret-file-read' }] },
+  ],
+};
 
 const createSkillEnabledOptions = () => ({
   config: { tools: { skill: true } },
@@ -841,6 +847,48 @@ describe('OpenCodeSDKProvider', () => {
             input: { name: 'missing-skill' },
             source: 'tool',
             is_error: true,
+          },
+        ]);
+      });
+
+      it('captures only the current prompt’s intermediate tool results for coding-agent assertions', async () => {
+        const anchors = createCurrentAssistantAnchor();
+        mockSessionPrompt.mockResolvedValue(createMockPromptResponseWithAnchors('Done.', anchors));
+        const toolMessage = (parentID: string, role: string, output: string) => ({
+          info: { id: output, role, parentID },
+          parts: [
+            {
+              type: 'tool',
+              tool: 'read',
+              callID: output,
+              state: { status: 'completed', input: {}, output },
+            },
+          ],
+        });
+        mockSessionMessages.mockResolvedValue({
+          data: [
+            createConversationMessage(anchors.parentID, 'user', 'Read the fixture'),
+            toolMessage(anchors.parentID, 'user', 'injected'),
+            toolMessage('another-prompt', 'assistant', 'concurrent'),
+            toolMessage(anchors.parentID, 'assistant', 'fixture-marker'),
+            createConversationMessage(anchors.id, 'assistant', 'Done.'),
+            toolMessage(anchors.parentID, 'assistant', 'later'),
+          ],
+        });
+        const provider = new OpenCodeSDKProvider({ config: { tools: { skill: false } } });
+        const result = await provider.callApi('Read the fixture', {
+          prompt: { raw: 'Read the fixture', label: 'Read the fixture' },
+          vars: {},
+          test: codingAgentTest,
+        });
+        expect(mockSessionMessages).toHaveBeenCalledTimes(1);
+        expect(result.metadata?.toolCalls).toEqual([
+          {
+            id: 'fixture-marker',
+            name: 'read',
+            input: {},
+            output: 'fixture-marker',
+            is_error: false,
           },
         ]);
       });
@@ -1786,6 +1834,30 @@ describe('OpenCodeSDKProvider', () => {
 
         // Only one actual API call
         expect(mockSessionPrompt).toHaveBeenCalledTimes(1);
+      });
+
+      it('retries missing coding-agent history and caches an anchored clean turn separately', async () => {
+        mockSessionPrompt.mockResolvedValue(
+          createMockPromptResponse([{ type: 'text', text: 'Done.' }]),
+        );
+        const anchors = [
+          createConversationMessage('user-msg-123', 'user', 'Read the fixture'),
+          createConversationMessage('msg-123', 'assistant', 'Done.'),
+        ];
+        mockSessionMessages
+          .mockResolvedValueOnce({ data: anchors.slice(0, 1) })
+          .mockRejectedValueOnce(new Error('Fixture history unavailable'))
+          .mockResolvedValue({ data: anchors });
+        const provider = new OpenCodeSDKProvider(createAnthropicEnvOptions());
+        const prompt = { raw: 'Read the fixture', label: 'Read the fixture' };
+        const context = { prompt, vars: {}, test: codingAgentTest };
+        await provider.callApi(prompt.raw);
+        for (const status of ['unavailable', 'unavailable', 'complete', 'complete']) {
+          expect(
+            (await provider.callApi(prompt.raw, context)).metadata?.codingAgentToolHistory,
+          ).toBe(status);
+        }
+        expect(mockSessionPrompt).toHaveBeenCalledTimes(4);
       });
 
       it('should not share cached responses across credential identities', async () => {

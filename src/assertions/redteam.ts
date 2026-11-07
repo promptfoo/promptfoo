@@ -13,6 +13,7 @@ import { isApiProvider, isProviderOptions } from '../types/providers';
 import invariant from '../util/invariant';
 import { accumulateTokenUsage, cloneTokenUsageBreakdown } from '../util/tokenUsageUtils';
 import { summarizeTrajectoryForJudge } from './trajectoryUtils';
+import { coerceString } from './utils';
 
 import type { RedteamGradingContext } from '../redteam/grading/types';
 import type {
@@ -233,26 +234,77 @@ export const handleRedteam = async (
     hasStrategyGrade && storedResult.tokensUsed && claimStoredGradingUsage()
       ? cloneTokenUsageBreakdown(storedResult.tokensUsed)
       : undefined;
+  const transformedAnswer =
+    assertion.transform && assertion.type.startsWith('promptfoo:redteam:coding-agent:')
+      ? outputString
+      : undefined;
+  const rawGradingInput =
+    transformedAnswer === undefined ? outputString : coerceString(providerResponse.output ?? '');
+  const matchesStoredInput = Boolean(
+    storedResult?.metadata?.redteamGradingInputHash &&
+      storedResult.metadata.redteamGradingInputHash ===
+        getGradingInputHash(
+          effectivePrompt,
+          rawGradingInput,
+          gradesCurrentTurnOnly ? undefined : gradingMessages,
+          test.metadata?.pluginId,
+          transformedAnswer,
+        ),
+  );
+  // Late spans can add local read classifications or explicitly requested action text.
+  const gradeFinalActions =
+    storedResult?.pass &&
+    assertionValueContext.trace?.spans.length &&
+    (baseType === 'promptfoo:redteam:coding-agent:sandbox-read-escape' ||
+      (baseType.startsWith('promptfoo:redteam:coding-agent:') &&
+        renderedValue &&
+        typeof renderedValue === 'object' &&
+        'includeTraceActions' in renderedValue &&
+        renderedValue.includeTraceActions === true));
   if (
     hasStrategyGrade &&
+    !gradeFinalActions &&
+    (!providerResponse.metadata?.codingAgentTurnId ||
+      !storedResult.metadata?.codingAgentTurnId ||
+      providerResponse.metadata.codingAgentTurnId === storedResult.metadata.codingAgentTurnId) &&
     typeof storedResult.metadata?.redteamGradingAssertionHash === 'string' &&
     storedResult.metadata.redteamGradingAssertionHash === getGradingAssertionHash(assertion) &&
-    storedResult.metadata?.redteamGradingInputHash ===
-      getGradingInputHash(
-        effectivePrompt,
-        outputString,
-        gradesCurrentTurnOnly ? undefined : gradingMessages,
-        test.metadata?.pluginId,
-      )
+    matchesStoredInput
   ) {
     // Check if any turns had grader errors (even though we have a stored result)
     const redteamHistory = providerResponse.metadata?.redteamHistory as
       | Array<{ graderError?: string }>
       | undefined;
-    const { hasAnyErrors } = analyzeGraderErrors(redteamHistory);
+    const grader =
+      storedResult.pass || storedResult.metadata?.verifierStatus === 'incomplete'
+        ? getGraderById(assertion.type)
+        : undefined;
+    const finalGrade = grader?.recheckStoredResult
+      ? await grader.recheckStoredResult(
+          storedResult,
+          rawGradingInput,
+          test,
+          renderedValue,
+          assertionValueContext.trace,
+          redteamHistory?.length,
+          effectivePrompt,
+          transformedAnswer,
+        )
+      : storedResult;
+
+    const { hasAnyErrors } = analyzeGraderErrors(
+      redteamHistory,
+      storedResult.metadata?.graderError && !finalGrade.metadata?.graderError
+        ? {
+            prompt: effectivePrompt,
+            output: outputString,
+            gradingInputHash: storedResult.metadata.redteamGradingInputHash,
+          }
+        : undefined,
+    );
 
     return {
-      ...storedResult,
+      ...finalGrade,
       tokensUsed: getStoredTokens(),
       assertion: {
         ...(storedResult.assertion ?? assertion),
@@ -260,7 +312,7 @@ export const handleRedteam = async (
       },
       metadata: {
         ...test.metadata,
-        ...storedResult.metadata,
+        ...finalGrade.metadata,
         // Propagate gradingIncomplete if any turns had grader errors
         ...(hasAnyErrors ? { gradingIncomplete: true } : {}),
       },
@@ -279,6 +331,10 @@ export const handleRedteam = async (
     providerResponse,
     conversationTranscript: gradesCurrentTurnOnly ? undefined : conversationTranscript,
   });
+  gradingContext.codingAgentTransformedAnswer = transformedAnswer;
+  if (matchesStoredInput && storedResult?.metadata?.codingAgentTurnId) {
+    gradingContext.storedCodingAgentTurnId = storedResult.metadata.codingAgentTurnId;
+  }
   const trackingIds =
     getWebPageTrackingIds(
       providerResponse.metadata,
@@ -347,9 +403,10 @@ export const handleRedteam = async (
             output: outputString,
             gradingInputHash: getGradingInputHash(
               effectivePrompt,
-              outputString,
+              rawGradingInput,
               undefined,
               test.metadata?.pluginId,
+              transformedAnswer,
             ),
           },
     );

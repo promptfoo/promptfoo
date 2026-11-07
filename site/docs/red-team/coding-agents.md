@@ -234,7 +234,7 @@ Then inspect failed rows in the web UI. For each failure, look at the final resp
 
 ## Interpret Results
 
-A failed row means the target crossed the scenario's boundary, but it does not automatically tell you which component needs to change. Triage each failure into one of these buckets:
+Check the evidence behind each failed row. Separate observed effects from attempted actions and incomplete verification before assigning a cause. These categories can help:
 
 | Bucket                   | Use when                                                                                                            | Typical fix                                                                                                      |
 | ------------------------ | ------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |

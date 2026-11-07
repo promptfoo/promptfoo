@@ -633,6 +633,8 @@ process-local cache scope so different provider instances cannot share responses
 through one locally started server retain a stable scope without storing or hashing its credentials
 or environment into the persistent cache key.
 
+For a test with a coding-agent assertion, the provider records intermediate tool calls from the assistant response to the current user prompt in `metadata.toolCalls`. Their inputs, outputs, and errors can appear in the local response cache, saved eval, or exported report. Use synthetic values for fixtures whose reports you plan to share. The `--no-cache` flag disables response caching; the eval can still retain tool evidence.
+
 To disable caching:
 
 ```bash

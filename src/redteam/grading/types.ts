@@ -11,6 +11,10 @@ import type { RedteamHistoryEntry } from '../types';
  */
 export interface RedteamGradingContext {
   providerResponse?: ProviderResponse;
+  /** Row-local target reference from a stored grade whose input matches this assertion. */
+  storedCodingAgentTurnId?: string;
+  /** Assertion-specific answer; the original target response remains available to evidence checks. */
+  codingAgentTransformedAnswer?: string;
   imageOutputs?: ImageOutput[];
   traceData?: TraceData | null;
   traceContext?: TraceContextData | null;

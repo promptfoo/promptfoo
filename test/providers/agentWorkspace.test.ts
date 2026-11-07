@@ -382,7 +382,10 @@ describe('agent workspaces', () => {
       fs.unlinkSync(index);
       execFileSync('mkfifo', [index]);
 
-      expect(await workspace.metadata()).toEqual({ workingDir: workspace.dir });
+      expect(await workspace.metadata()).toEqual({
+        workingDir: workspace.dir,
+        workspaceDiffError: 'unavailable',
+      });
       await workspace.remove();
       expect(fs.existsSync(workspace.dir)).toBe(false);
     });
@@ -393,7 +396,10 @@ describe('agent workspaces', () => {
       const workspace = await create(source);
       fs.truncateSync(path.join(workspace.dir, '.git', 'index'), 64 * 1024 * 1024 + 1);
 
-      expect(await workspace.metadata()).toEqual({ workingDir: workspace.dir });
+      expect(await workspace.metadata()).toEqual({
+        workingDir: workspace.dir,
+        workspaceDiffError: 'unavailable',
+      });
     });
 
     it.each(['agent', 'global'])(
@@ -459,7 +465,10 @@ describe('agent workspaces', () => {
         execFileSync('mkfifo', [sharedIndex]);
       }
 
-      expect(await workspace.metadata()).toEqual({ workingDir: workspace.dir });
+      expect(await workspace.metadata()).toEqual({
+        workingDir: workspace.dir,
+        workspaceDiffError: 'unavailable',
+      });
     });
 
     it('bounds the total size of copied shared indexes', async () => {
@@ -472,7 +481,10 @@ describe('agent workspaces', () => {
         fs.truncateSync(file, 33 * 1024 * 1024);
       }
 
-      expect(await workspace.metadata()).toEqual({ workingDir: workspace.dir });
+      expect(await workspace.metadata()).toEqual({
+        workingDir: workspace.dir,
+        workspaceDiffError: 'unavailable',
+      });
     });
 
     it('bounds the number of copied shared indexes', async () => {
@@ -486,7 +498,10 @@ describe('agent workspaces', () => {
         );
       }
 
-      expect(await workspace.metadata()).toEqual({ workingDir: workspace.dir });
+      expect(await workspace.metadata()).toEqual({
+        workingDir: workspace.dir,
+        workspaceDiffError: 'unavailable',
+      });
     });
 
     it.each([
@@ -1028,8 +1043,9 @@ describe('agent workspaces', () => {
       const workspace = await create(source);
       write(path.join(workspace.dir, 'big.txt'), 'x'.repeat(150_000));
 
-      const { workspaceDiff } = await workspace.metadata();
+      const { workspaceDiff, workspaceDiffError } = await workspace.metadata();
 
+      expect(workspaceDiffError).toBe('truncated');
       expect(workspaceDiff).toMatch(/\n\[diff truncated after 100000 characters\]$/);
     });
 
@@ -1153,7 +1169,10 @@ describe('agent workspaces', () => {
       fs.renameSync(workspace.dir, `${workspace.dir}-moved`);
       fs.symlinkSync(secrets, workspace.dir);
 
-      expect(await workspace.metadata()).toEqual({ workingDir: workspace.dir });
+      expect(await workspace.metadata()).toEqual({
+        workingDir: workspace.dir,
+        workspaceDiffError: 'unavailable',
+      });
     });
 
     it('clones a linked worktree at its own commit', async () => {
@@ -1675,6 +1694,18 @@ describe('agent workspaces', () => {
 
       expect(workspace?.strategy).toBe('copy');
       expect(fs.readFileSync(path.join(workspace!.dir, 'file.txt'), 'utf8')).toBe('content\n');
+    });
+
+    it('copies a relative source from the provider-specific base directory', async () => {
+      write(path.join(root, 'provider-base', 'project', 'version'), 'fixture');
+      cliState.basePath = path.join(root, 'other-base');
+      const workspace = await createAgentWorkspaceForConfig({
+        basePath: path.join(root, 'provider-base'),
+        working_dir: 'project',
+        copy_working_dir: 'copy',
+      });
+      workspaces.push(workspace!);
+      expect(fs.readFileSync(path.join(workspace!.dir, 'version'), 'utf8')).toBe('fixture');
     });
 
     it('requires working_dir', async () => {

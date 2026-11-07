@@ -31,12 +31,23 @@ import {
 import { generateIdFromPrompt } from './models/prompt';
 import { nodeEvaluatorRuntime } from './node/evaluatorRuntime';
 import { CIProgressReporter } from './progress/ciProgressReporter';
-import { type AgentWorkspace, createAgentWorkspaceForConfig } from './providers/agentWorkspace';
+import {
+  type AgentWorkspace,
+  createAgentWorkspaceForConfig,
+  resolveConfiguredWorkingDir,
+} from './providers/agentWorkspace';
 import { maybeEmitAzureOpenAiWarning } from './providers/azure/warnings';
 import { providerRegistry } from './providers/providerRegistry';
 import { isPromptfooSampleTarget } from './providers/shared';
 import { maybeWrapMcpProviderForRedteam } from './redteam/mcpTargetProvider';
+import { hasCodingAgentAssertion } from './redteam/plugins/codingAgent/assertions';
+import {
+  type CodingAgentHostEvidence,
+  withCodingAgentHostEvidence,
+} from './redteam/plugins/codingAgent/hostEvidence';
+import { snapshotCodingAgentArtifacts } from './redteam/plugins/codingAgent/verifiers';
 import { redteamProviderManager } from './redteam/providers/shared';
+import { isAttackProvider } from './redteam/shared/attackProviders';
 import { throwIfTargetPromptExceedsMaxChars } from './redteam/shared/promptLength';
 import { getSessionId } from './redteam/util';
 import { createProviderRateLimitOptions, RateLimitRegistry, sleepWithAbort } from './scheduler';
@@ -625,7 +636,19 @@ function synchronizeLegacyTransportHeaders(
 function applyGradingResult(row: EvaluateResult, checkResult: GradingResult) {
   if (!checkResult.pass) {
     row.error = checkResult.reason;
-    row.failureReason = ResultFailureReason.ASSERT;
+    const failedChecks = (checkResult.componentResults ?? [checkResult]).filter(
+      (check) => !check.pass && !check.componentResults?.length,
+    );
+    row.failureReason =
+      failedChecks.length > 0 &&
+      failedChecks.every(
+        (check) =>
+          check.assertion?.type.startsWith('promptfoo:redteam:coding-agent:') &&
+          check.metadata?.verifierStatus === 'incomplete' &&
+          check.metadata?.graderError === true,
+      )
+        ? ResultFailureReason.ERROR
+        : ResultFailureReason.ASSERT;
   }
   row.success = checkResult.pass;
   row.score = checkResult.score;
@@ -1835,13 +1858,38 @@ async function runEvalInternal(
       vars: state.vars,
     });
     setup = rendered.setup;
+    let hostEvidence: CodingAgentHostEvidence | undefined;
     if (!test.providerOutput) {
-      const activeProvider = isApiProvider(test.provider) ? test.provider : provider;
-      workspace = await createAgentWorkspaceForConfig(
-        { ...activeProvider.config, ...rendered.setup.prompt.config },
-        state.vars,
-        abortSignal,
-      );
+      const override = isApiProvider(test.provider) ? test.provider : undefined;
+      const overrideId = override?.id();
+      // Strategies invoke the original target with this row's prompt config.
+      const target =
+        overrideId?.startsWith('promptfoo:redteam:') && isAttackProvider(overrideId)
+          ? provider
+          : (override ?? provider);
+      const config = { ...target.config, ...rendered.setup.prompt.config };
+      workspace = await createAgentWorkspaceForConfig(config, state.vars, abortSignal);
+      if (hasCodingAgentAssertion(test.assert)) {
+        const directory =
+          workspace?.dir ??
+          resolveConfiguredWorkingDir(config.working_dir, state.vars, config.basePath);
+        hostEvidence = await snapshotCodingAgentArtifacts(
+          { ...test, vars: state.vars },
+          directory ?? process.cwd(),
+        );
+        if (directory) {
+          const extra: unknown[] = Array.isArray(config.additional_directories)
+            ? config.additional_directories
+            : [];
+          hostEvidence.readRoots = [
+            directory,
+            ...extra.flatMap((dir) => {
+              const resolved = resolveConfiguredWorkingDir(dir, state.vars, config.basePath);
+              return resolved ? [resolved] : [];
+            }),
+          ];
+        }
+      }
     }
     const stepWorkspace = workspace;
 
@@ -1889,7 +1937,25 @@ async function runEvalInternal(
           const response = normalizeCachedTargetResponse(providerCall.response);
           latencyMs = providerCall.latencyMs;
           if (stepWorkspace) {
-            response.metadata = { ...response.metadata, ...(await stepWorkspace.metadata()) };
+            const observed = await stepWorkspace.metadata();
+            // Workspace evidence and its completeness come from the evaluator.
+            const {
+              workspaceDiff: _providerDiff,
+              workspaceDiffError: _providerDiffError,
+              ...providerMetadata
+            } = response.metadata ?? {};
+            response.metadata = { ...providerMetadata, ...observed };
+            if (hostEvidence) {
+              hostEvidence.workspaceDiffError = observed.workspaceDiffError;
+              // A partial file patch can omit removals or truncate a token into a false match.
+              hostEvidence.workspaceDiff =
+                observed.workspaceDiffError === 'truncated'
+                  ? observed.workspaceDiff
+                      ?.split(/(?=^diff --git )/m)
+                      .slice(0, -1)
+                      .join('')
+                  : observed.workspaceDiff;
+            }
           }
 
           updateConversationHistory({
@@ -1970,6 +2036,9 @@ async function runEvalInternal(
         },
         (rows) => deferredGradingPromises.get(rows[0]),
       );
+    const runRow = hostEvidence
+      ? () => withCodingAgentHostEvidence(hostEvidence, runExecution)
+      : runExecution;
     const rows = executionTraceContext
       ? await withProviderCallTracingContext(
           {
@@ -1978,9 +2047,9 @@ async function runEvalInternal(
             withGraderSpan,
             withProviderSpan: withTracedProviderCall,
           },
-          runExecution,
+          runRow,
         )
-      : await runExecution();
+      : await runRow();
     // Deferred assertions still need the workspace, so they remove it when they finish.
     const deferredGrading = deferredGradingPromises.get(rows[0]);
     if (workspace && deferredGrading) {

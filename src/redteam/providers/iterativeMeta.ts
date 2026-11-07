@@ -43,6 +43,7 @@ import {
   buildGraderResultAssertion,
   createIterationContext,
   externalizeResponseForRedteamHistory,
+  getCodingAgentTransformedAnswer,
   getGraderAssertionValue,
   getTargetResponse,
   preserveSelectedError,
@@ -627,6 +628,15 @@ export async function runMetaAgentRedteam({
           });
         }
 
+        gradingContext.codingAgentTransformedAnswer = await getCodingAgentTransformedAnswer(
+          assertToUse,
+          targetResponse.output,
+          {
+            vars: iterationVars,
+            prompt: { label: finalAttackPrompt },
+            metadata: targetResponse.metadata,
+          },
+        );
         const { grade, rubric } = await runRedteamGrader(
           grader,
           finalAttackPrompt,
@@ -645,6 +655,7 @@ export async function runMetaAgentRedteam({
         storedGraderResult = accumulateGraderResult(storedGraderResult, graderResult, {
           prompt: finalAttackPrompt,
           output: targetResponse.output,
+          transformedAnswer: gradingContext.codingAgentTransformedAnswer,
           pluginId: test.metadata?.pluginId,
           assertion: assertToUse,
         });
@@ -717,6 +728,9 @@ export async function runMetaAgentRedteam({
         // Use the last prompt sent to target (e.g., fetchPrompt for indirect-web-pwn layer)
         // This ensures UI shows what was actually sent, not the pre-transform jailbreak
         redteamFinalPrompt: lastFinalAttackPrompt || bestPrompt,
+        ...(lastResponse?.metadata?.codingAgentTurnId && {
+          codingAgentTurnId: lastResponse.metadata.codingAgentTurnId,
+        }),
         storedGraderResult,
         stopReason,
         redteamHistory,
