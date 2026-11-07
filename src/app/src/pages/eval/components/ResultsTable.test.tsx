@@ -1800,7 +1800,7 @@ describe('ResultsTable rating actions', () => {
     renderWithProviders(<ResultsTable {...createDefaultProps()} />);
   }
 
-  async function savedRating() {
+  async function savedRating(commentOnly = false) {
     await waitFor(() => {
       expect(callApi).toHaveBeenCalledWith(
         '/eval/123/results/test-output-1/rating',
@@ -1812,13 +1812,22 @@ describe('ResultsTable rating actions', () => {
     const request = callApi.mock.calls.find(
       ([url]) => url === '/eval/123/results/test-output-1/rating',
     )![1];
-    const payload = JSON.parse(request!.body as string) as GradingResult;
-    expect(payload).toEqual(updatedOutput.gradingResult);
+    const { commentOnly: savedCommentOnly, ...payload } = JSON.parse(request!.body as string);
+    expect(savedCommentOnly).toBe(commentOnly);
+    expect(payload).toEqual(
+      commentOnly
+        ? { ...updatedOutput.gradingResult, pass: updatedOutput.pass, score: updatedOutput.score }
+        : updatedOutput.gradingResult,
+    );
     return { payload, output: updatedOutput };
   }
 
   it.each([
     ['missing grade', undefined],
+    [
+      'a comparison error with an earlier passing grade',
+      { pass: true, score: 1, reason: 'Earlier passing grade' },
+    ],
     ['missing pass and score', { reason: 'Existing reason' }],
     [
       'empty assertions',
@@ -1834,7 +1843,7 @@ describe('ResultsTable rating actions', () => {
     await act(async () => {
       await cell.onRating(undefined, undefined, '!highlight New comment');
     });
-    const { payload, output } = await savedRating();
+    const { payload, output } = await savedRating(true);
     expect(payload).toMatchObject({
       pass: false,
       score: 0.2,
