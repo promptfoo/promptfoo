@@ -527,7 +527,6 @@ export async function createDummyFiles(
             config: { region: 'global' },
           })),
           'vertex:gemini-3.1-pro-preview',
-          'vertex:gemini-2.5-pro',
         ],
       },
       {
