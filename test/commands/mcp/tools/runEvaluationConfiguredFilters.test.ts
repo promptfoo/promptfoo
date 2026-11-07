@@ -19,8 +19,8 @@ vi.mock('../../../../src/telemetry', () => ({
   default: { record: vi.fn(), send: vi.fn(), recordAndSendOnce: vi.fn() },
 }));
 vi.mock('../../../../src/share', () => ({
-  isSharingEnabled: vi.fn().mockReturnValue(false),
-  createShareableUrl: vi.fn().mockResolvedValue(null),
+  isSharingEnabled: () => false,
+  createShareableUrl: async () => null,
 }));
 
 describe('MCP configured test selection', () => {
