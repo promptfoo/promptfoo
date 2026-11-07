@@ -23,6 +23,8 @@ const createLabeledPrompt = () => ({
   label: 'test',
 });
 
+import type { CallApiContextParams } from '../../src/types/providers';
+
 // Hoisted mock functions
 const mockExecFile = vi.hoisted(() => vi.fn());
 const mockGetCache = vi.hoisted(() => vi.fn());
@@ -287,6 +289,56 @@ describe('GolangProvider', () => {
       });
       return {} as any;
     }) as any);
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it.each([false, true])('preserves reused caller context (frozen: %s)', async (frozen) => {
+    const provider = new GolangProvider('script.go', { config: { basePath: '/absolute/path/to' } });
+    const originalProvider = { id: () => 'original', callApi: vi.fn() };
+    Object.assign(originalProvider, { self: originalProvider });
+    const context: CallApiContextParams = {
+      prompt: { raw: 'hello', label: 'greeting' },
+      vars: { name: 'Ada' },
+      evaluationId: 'context-eval',
+      getCache: vi.fn(),
+      logger: { debug: vi.fn() } as unknown as CallApiContextParams['logger'],
+      filters: { upper: (value: string) => value.toUpperCase() },
+      originalProvider,
+    };
+    const originalContext = { ...context };
+    if (frozen) {
+      Object.freeze(context);
+    }
+
+    for (const prompt of ['first turn', 'second turn']) {
+      await expect(provider.callApi(prompt, context)).resolves.toEqual({ output: 'test output' });
+      expect(Object.keys(context)).toEqual(Object.keys(originalContext));
+      for (const key of [
+        'prompt',
+        'vars',
+        'evaluationId',
+        'getCache',
+        'logger',
+        'filters',
+        'originalProvider',
+      ] as const) {
+        expect(context[key]).toBe(originalContext[key]);
+      }
+    }
+    const executions = mockExecFile.mock.calls.filter(([command]) =>
+      command.endsWith('golang_wrapper'),
+    );
+    expect(executions).toHaveLength(2);
+    for (const [, args] of executions) {
+      expect(JSON.parse(args[2])[2]).toEqual({
+        prompt: context.prompt,
+        vars: context.vars,
+        evaluationId: 'context-eval',
+      });
+    }
   });
 
   it('passes file defaults to Go tooling and the compiled provider', async () => {
