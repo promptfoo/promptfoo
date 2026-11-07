@@ -116,7 +116,7 @@ import {
 } from './util/sanitizer';
 import { analyzeTemplateReference, extractVariablesFromTemplate } from './util/templates';
 import { sleep } from './util/time';
-import { TokenUsageTracker } from './util/tokenUsage';
+import { trackResponseUsage, withTokenUsageTracking } from './util/tokenUsage';
 import {
   accumulateAssertionTokenUsage,
   accumulateGradingRequest,
@@ -1449,7 +1449,7 @@ function trackProviderUsage(provider: ApiProvider, response: ProviderResponse) {
   const trackingId = provider.constructor?.name
     ? `${providerId} (${provider.constructor.name})`
     : providerId;
-  TokenUsageTracker.getInstance().trackResponseUsage(trackingId, response);
+  trackResponseUsage(trackingId, response);
 }
 
 async function applyRunEvalResponseOutcome({
@@ -6291,7 +6291,7 @@ export function evaluate<
           // Capture this entry point's policy for providers and graders loaded
           // through another package copy, including extension-hook imports.
           return withCacheEnabled(options.cache === false ? false : isCacheEnabled(), () =>
-            ev.evaluate(),
+            withTokenUsageTracking(() => ev.evaluate()),
           );
         },
         testSuite.providers.map((provider) => ({ id: provider.id(), config: provider.config })),

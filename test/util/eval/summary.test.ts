@@ -1,40 +1,18 @@
 import chalk from 'chalk';
-import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { generateEvalSummary } from '../../../src/util/eval/summary';
 import { accumulateTokenUsage, createEmptyTokenUsage } from '../../../src/util/tokenUsageUtils';
 import { stripAnsi } from '../../util/utils';
 
+import type { TokenUsage } from '../../../src/types/shared';
 import type { EvalSummaryParams } from '../../../src/util/eval/summary';
-import type { TokenUsageTracker } from '../../../src/util/tokenUsage';
-
-type MockTracker = {
-  getProviderIds: Mock;
-  getProviderUsage: Mock;
-  trackUsage: Mock;
-  resetAllUsage: Mock;
-  resetProviderUsage: Mock;
-  getTotalUsage: Mock;
-  cleanup: Mock;
-};
-
-function createMockTracker(): TokenUsageTracker {
-  return {
-    getProviderIds: vi.fn().mockReturnValue([]),
-    getProviderUsage: vi.fn(),
-    trackUsage: vi.fn(),
-    resetAllUsage: vi.fn(),
-    resetProviderUsage: vi.fn(),
-    getTotalUsage: vi.fn(),
-    cleanup: vi.fn(),
-  } as unknown as TokenUsageTracker;
-}
 
 describe('generateEvalSummary', () => {
-  let mockTracker: MockTracker & TokenUsageTracker;
+  let providerUsage: Map<string, TokenUsage>;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mockTracker = createMockTracker() as MockTracker & TokenUsageTracker;
+    providerUsage = new Map();
   });
 
   afterEach(() => {
@@ -57,7 +35,7 @@ describe('generateEvalSummary', () => {
         errors: 0,
         duration: 5000,
         maxConcurrency: 4,
-        tracker: mockTracker,
+        providerUsage,
       };
 
       const lines = generateEvalSummary(params);
@@ -82,7 +60,7 @@ describe('generateEvalSummary', () => {
         errors: 0,
         duration: 5000,
         maxConcurrency: 4,
-        tracker: mockTracker,
+        providerUsage,
       };
 
       const lines = generateEvalSummary(params);
@@ -106,7 +84,7 @@ describe('generateEvalSummary', () => {
         errors: 0,
         duration: 5000,
         maxConcurrency: 4,
-        tracker: mockTracker,
+        providerUsage,
       };
 
       const lines = generateEvalSummary(params);
@@ -131,7 +109,7 @@ describe('generateEvalSummary', () => {
         errors: 0,
         duration: 8000,
         maxConcurrency: 4,
-        tracker: mockTracker,
+        providerUsage,
       };
 
       const lines = generateEvalSummary(params);
@@ -156,7 +134,7 @@ describe('generateEvalSummary', () => {
         errors: 1,
         duration: 1000,
         maxConcurrency: 4,
-        tracker: mockTracker,
+        providerUsage,
         targetErrorStatus: 401,
       };
 
@@ -194,7 +172,7 @@ describe('generateEvalSummary', () => {
         errors: 0,
         duration: 5000,
         maxConcurrency: 4,
-        tracker: mockTracker,
+        providerUsage,
       };
 
       const lines = generateEvalSummary(params);
@@ -228,7 +206,7 @@ describe('generateEvalSummary', () => {
         errors: 0,
         duration: 5000,
         maxConcurrency: 4,
-        tracker: mockTracker,
+        providerUsage,
       };
 
       const lines = generateEvalSummary(params);
@@ -257,7 +235,7 @@ describe('generateEvalSummary', () => {
         errors: 0,
         duration: 1000,
         maxConcurrency: 1,
-        tracker: mockTracker,
+        providerUsage,
       });
       const output = stripAnsi(lines.join('\n'));
 
@@ -287,7 +265,7 @@ describe('generateEvalSummary', () => {
         errors: 0,
         duration: 1000,
         maxConcurrency: 1,
-        tracker: mockTracker,
+        providerUsage,
       });
       const output = stripAnsi(lines.join('\n'));
 
@@ -321,7 +299,7 @@ describe('generateEvalSummary', () => {
         errors: 0,
         duration: 5000,
         maxConcurrency: 4,
-        tracker: mockTracker,
+        providerUsage,
       };
 
       const lines = generateEvalSummary(params);
@@ -355,7 +333,7 @@ describe('generateEvalSummary', () => {
         errors: 0,
         duration: 1000,
         maxConcurrency: 1,
-        tracker: mockTracker,
+        providerUsage,
       });
       const output = stripAnsi(lines.join('\n'));
       expect(output).toContain('Total Tokens: 215');
@@ -394,7 +372,7 @@ describe('generateEvalSummary', () => {
         errors: 0,
         duration: 1000,
         maxConcurrency: 1,
-        tracker: mockTracker,
+        providerUsage,
       });
       const output = stripAnsi(lines.join('\n'));
 
@@ -426,7 +404,7 @@ describe('generateEvalSummary', () => {
         errors: 0,
         duration: 1000,
         maxConcurrency: 1,
-        tracker: mockTracker,
+        providerUsage,
       });
       const output = stripAnsi(lines.join('\n'));
 
@@ -459,7 +437,7 @@ describe('generateEvalSummary', () => {
         errors: 0,
         duration: 1000,
         maxConcurrency: 1,
-        tracker: mockTracker,
+        providerUsage,
       });
       const output = stripAnsi(lines.join('\n'));
 
@@ -489,7 +467,7 @@ describe('generateEvalSummary', () => {
         errors: 1,
         duration: 1000,
         maxConcurrency: 1,
-        tracker: mockTracker,
+        providerUsage,
       });
       const output = stripAnsi(lines.join('\n'));
 
@@ -517,7 +495,7 @@ describe('generateEvalSummary', () => {
         errors: 1,
         duration: 1000,
         maxConcurrency: 1,
-        tracker: mockTracker,
+        providerUsage,
       });
       const output = stripAnsi(lines.join('\n'));
 
@@ -546,7 +524,7 @@ describe('generateEvalSummary', () => {
         errors: 0,
         duration: 5000,
         maxConcurrency: 4,
-        tracker: mockTracker,
+        providerUsage,
       };
 
       const lines = generateEvalSummary(params);
@@ -576,7 +554,7 @@ describe('generateEvalSummary', () => {
         errors: 0,
         duration: 5000,
         maxConcurrency: 4,
-        tracker: mockTracker,
+        providerUsage,
       };
 
       const lines = generateEvalSummary(params);
@@ -600,7 +578,7 @@ describe('generateEvalSummary', () => {
         errors: 0,
         duration: 5000,
         maxConcurrency: 4,
-        tracker: mockTracker,
+        providerUsage,
       };
 
       const lines = generateEvalSummary(params);
@@ -612,27 +590,19 @@ describe('generateEvalSummary', () => {
 
   describe('provider breakdown', () => {
     it('should show provider breakdown with request counts', () => {
-      mockTracker.getProviderIds.mockReturnValue(['openai:gpt-4', 'anthropic:claude-3']);
-      mockTracker.getProviderUsage.mockImplementation((id: string) => {
-        if (id === 'openai:gpt-4') {
-          return {
-            total: 1500,
-            prompt: 600,
-            completion: 900,
-            cached: 0,
-            numRequests: 5,
-          };
-        }
-        if (id === 'anthropic:claude-3') {
-          return {
-            total: 800,
-            prompt: 300,
-            completion: 500,
-            cached: 0,
-            numRequests: 3,
-          };
-        }
-        return undefined;
+      providerUsage.set('openai:gpt-4', {
+        total: 1500,
+        prompt: 600,
+        completion: 900,
+        cached: 0,
+        numRequests: 5,
+      });
+      providerUsage.set('anthropic:claude-3', {
+        total: 800,
+        prompt: 300,
+        completion: 500,
+        cached: 0,
+        numRequests: 3,
       });
 
       const params: EvalSummaryParams = {
@@ -649,7 +619,7 @@ describe('generateEvalSummary', () => {
         errors: 0,
         duration: 5000,
         maxConcurrency: 4,
-        tracker: mockTracker,
+        providerUsage,
       };
 
       const lines = generateEvalSummary(params);
@@ -663,24 +633,16 @@ describe('generateEvalSummary', () => {
     });
 
     it('should always show request count even when 0', () => {
-      mockTracker.getProviderIds.mockReturnValue(['openai:gpt-4', 'anthropic:claude-3']);
-      mockTracker.getProviderUsage.mockImplementation((id: string) => {
-        if (id === 'openai:gpt-4') {
-          return {
-            total: 1000,
-            cached: 1000,
-            numRequests: 0,
-          };
-        }
-        if (id === 'anthropic:claude-3') {
-          return {
-            total: 500,
-            prompt: 200,
-            completion: 300,
-            numRequests: 2,
-          };
-        }
-        return undefined;
+      providerUsage.set('openai:gpt-4', {
+        total: 1000,
+        cached: 1000,
+        numRequests: 0,
+      });
+      providerUsage.set('anthropic:claude-3', {
+        total: 500,
+        prompt: 200,
+        completion: 300,
+        numRequests: 2,
       });
 
       const params: EvalSummaryParams = {
@@ -697,7 +659,7 @@ describe('generateEvalSummary', () => {
         errors: 0,
         duration: 5000,
         maxConcurrency: 4,
-        tracker: mockTracker,
+        providerUsage,
       };
 
       const lines = generateEvalSummary(params);
@@ -725,7 +687,7 @@ describe('generateEvalSummary', () => {
         errors: 0,
         duration: 5000,
         maxConcurrency: 4,
-        tracker: mockTracker,
+        providerUsage,
       };
 
       const lines = generateEvalSummary(params);
@@ -752,7 +714,7 @@ describe('generateEvalSummary', () => {
         errors: 0,
         duration: 5000,
         maxConcurrency: 4,
-        tracker: mockTracker,
+        providerUsage,
       };
 
       const lines = generateEvalSummary(params);
@@ -779,7 +741,7 @@ describe('generateEvalSummary', () => {
         errors: 0,
         duration: 5000,
         maxConcurrency: 4,
-        tracker: mockTracker,
+        providerUsage,
       };
 
       const lines = generateEvalSummary(params);
@@ -806,7 +768,7 @@ describe('generateEvalSummary', () => {
         errors: 1,
         duration: 5000,
         maxConcurrency: 4,
-        tracker: mockTracker,
+        providerUsage,
       };
 
       const lines = generateEvalSummary(params);
@@ -836,7 +798,7 @@ describe('generateEvalSummary', () => {
         errors: 0,
         duration: 5000,
         maxConcurrency: 4,
-        tracker: mockTracker,
+        providerUsage,
       };
 
       const withHits = stripAnsi(generateEvalSummary({ ...baseParams, cacheHits: 4 }).join('\n'));
@@ -864,7 +826,7 @@ describe('generateEvalSummary', () => {
         errors: 1,
         duration: 5000,
         maxConcurrency: 4,
-        tracker: mockTracker,
+        providerUsage,
       };
 
       const lines = generateEvalSummary(params);
@@ -897,7 +859,7 @@ describe('generateEvalSummary', () => {
         errors: 0,
         duration: 5000,
         maxConcurrency: 4,
-        tracker: mockTracker,
+        providerUsage,
       };
 
       const lines = generateEvalSummary(params);
@@ -923,7 +885,7 @@ describe('generateEvalSummary', () => {
         errors: 0,
         duration: 5000,
         maxConcurrency: 4,
-        tracker: mockTracker,
+        providerUsage,
       };
 
       const lines = generateEvalSummary(params);
@@ -949,7 +911,7 @@ describe('generateEvalSummary', () => {
         errors: 0,
         duration: 5000,
         maxConcurrency: 4,
-        tracker: mockTracker,
+        providerUsage,
       };
 
       const lines = generateEvalSummary(params);
@@ -975,7 +937,7 @@ describe('generateEvalSummary', () => {
         errors: 0,
         duration: 5000,
         maxConcurrency: 4,
-        tracker: mockTracker,
+        providerUsage,
       };
 
       const lines = generateEvalSummary(params);
@@ -1001,7 +963,7 @@ describe('generateEvalSummary', () => {
         errors: 0,
         duration: 5000,
         maxConcurrency: 4,
-        tracker: mockTracker,
+        providerUsage,
       };
 
       const lines = generateEvalSummary(params);
@@ -1029,7 +991,7 @@ describe('generateEvalSummary', () => {
         errors: 0,
         duration: 125, // 125 seconds = 2m 5s
         maxConcurrency: 8,
-        tracker: mockTracker,
+        providerUsage,
       };
 
       const lines = generateEvalSummary(params);
@@ -1056,7 +1018,7 @@ describe('generateEvalSummary', () => {
         errors: 1,
         duration: 5,
         maxConcurrency: 2,
-        tracker: mockTracker,
+        providerUsage,
         repeatStability: {
           totalGroups: 2,
           unstableGroups: 1,
@@ -1124,7 +1086,7 @@ describe('generateEvalSummary', () => {
         errors: 1,
         duration: 5000,
         maxConcurrency: 4,
-        tracker: mockTracker,
+        providerUsage,
       };
 
       const lines = generateEvalSummary(params);
@@ -1149,7 +1111,7 @@ describe('generateEvalSummary', () => {
         errors: 3,
         duration: 5000,
         maxConcurrency: 4,
-        tracker: mockTracker,
+        providerUsage,
       };
 
       const lines = generateEvalSummary(params);
@@ -1173,7 +1135,7 @@ describe('generateEvalSummary', () => {
         errors: 0,
         duration: 5000,
         maxConcurrency: 4,
-        tracker: mockTracker,
+        providerUsage,
       };
 
       const lines = generateEvalSummary(params);
@@ -1182,33 +1144,18 @@ describe('generateEvalSummary', () => {
       expect(plainOutput).toContain('0 errors');
     });
 
-    it('should handle provider returning undefined usage gracefully', () => {
-      mockTracker.getProviderIds.mockReturnValue([
-        'openai:gpt-4',
-        'missing-provider',
-        'anthropic:claude-3',
-      ]);
-      mockTracker.getProviderUsage.mockImplementation((id: string) => {
-        if (id === 'openai:gpt-4') {
-          return {
-            total: 1000,
-            prompt: 400,
-            completion: 600,
-            numRequests: 5,
-          };
-        }
-        if (id === 'missing-provider') {
-          return undefined; // Simulates a provider that returns undefined
-        }
-        if (id === 'anthropic:claude-3') {
-          return {
-            total: 500,
-            prompt: 200,
-            completion: 300,
-            numRequests: 3,
-          };
-        }
-        return undefined;
+    it('shows only providers with recorded usage', () => {
+      providerUsage.set('openai:gpt-4', {
+        total: 1000,
+        prompt: 400,
+        completion: 600,
+        numRequests: 5,
+      });
+      providerUsage.set('anthropic:claude-3', {
+        total: 500,
+        prompt: 200,
+        completion: 300,
+        numRequests: 3,
       });
 
       const params: EvalSummaryParams = {
@@ -1225,7 +1172,7 @@ describe('generateEvalSummary', () => {
         errors: 0,
         duration: 5000,
         maxConcurrency: 4,
-        tracker: mockTracker,
+        providerUsage,
       };
 
       // Should not throw
