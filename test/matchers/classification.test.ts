@@ -26,6 +26,43 @@ vi.mock('../../src/util/fetch/index', async (importOriginal) => ({
 }));
 
 describe('matchesClassification', () => {
+  it.each([
+    { classification: [0.9] },
+    { classification: '0.9' },
+    { classification: { safe: 0.9, broken: null } },
+  ])('rejects malformed classification maps: $classification', async ({ classification }) => {
+    const grader = createMockProvider({
+      callClassificationApi: vi.fn().mockResolvedValue({ classification }),
+    });
+    expect(await matchesClassification('safe', 'sample', 0.5, { provider: grader })).toMatchObject({
+      pass: false,
+      score: 0,
+      metadata: { graderError: true },
+    });
+  });
+
+  it.each([NaN, Infinity, -Infinity, -0.1, 1.1, '0.9', null])(
+    'rejects invalid classification score %s',
+    async (invalidScore) => {
+      const grader = createMockProvider();
+      grader.callClassificationApi = async () => ({
+        classification: { safe: invalidScore } as unknown as Record<string, number>,
+        tokenUsage: { total: 3 },
+        cached: true,
+      });
+      for (const expected of ['safe', undefined]) {
+        const result = await matchesClassification(expected, 'sample', 0.5, { provider: grader });
+        expect(result).toMatchObject({
+          pass: false,
+          score: 0,
+          metadata: { graderError: true, cachedResponse: true },
+          tokensUsed: { total: 3 },
+        });
+        expect(result.reason).toContain('Invalid classification scores');
+      }
+    },
+  );
+
   function decisionsProvider() {
     return new OpenAiDecisionsProvider('classification-fixture', {
       config: {

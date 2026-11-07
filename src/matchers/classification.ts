@@ -36,11 +36,20 @@ export async function matchesClassification(
   );
 
   const scores = Object.values(resp.classification ?? {});
-  if (!resp.classification || scores.length === 0) {
+  const invalidScores =
+    resp.classification &&
+    (typeof resp.classification !== 'object' ||
+      Array.isArray(resp.classification) ||
+      scores.some(
+        (score) => typeof score !== 'number' || !Number.isFinite(score) || score < 0 || score > 1,
+      ));
+  if (!resp.classification || scores.length === 0 || invalidScores) {
     const failure = graderFail(
-      resp.classification
-        ? 'No classification scores returned'
-        : resp.error || 'Unknown error fetching classification',
+      invalidScores
+        ? 'Invalid classification scores: expected a label map of finite numbers between 0 and 1'
+        : resp.classification
+          ? 'No classification scores returned'
+          : resp.error || 'Unknown error fetching classification',
       resp.tokenUsage,
     );
     return {
