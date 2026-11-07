@@ -104,7 +104,7 @@ export class BrowserProvider implements ApiProvider {
         this.config,
       )}`,
     );
-    this.defaultTimeout = this.config.timeoutMs || 30000; // Default 30 seconds timeout
+    this.defaultTimeout = this.config.timeoutMs ?? 30000;
     this.headless = this.config.headless ?? true;
   }
 
@@ -494,10 +494,12 @@ export class BrowserProvider implements ApiProvider {
         }
         extracted[name] = extractedContent;
         break;
-      case 'wait':
-        logger.debug(`Waiting for ${renderedArgs.ms}ms`);
-        await page.waitForTimeout(renderedArgs.ms);
+      case 'wait': {
+        const ms = renderedArgs.ms ?? 1000;
+        logger.debug(`Waiting for ${ms}ms`);
+        await page.waitForTimeout(ms);
         break;
+      }
       case 'waitForNewChildren':
         logger.debug(`Waiting for new element in ${renderedArgs.parentSelector}`);
         await this.waitForNewChildren(
