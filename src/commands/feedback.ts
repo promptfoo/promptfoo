@@ -5,7 +5,5 @@ export function feedbackCommand(program: Command) {
   program
     .command('feedback [message]')
     .description('Send feedback to the promptfoo developers')
-    .action((message?: string) => {
-      void gatherFeedback(message);
-    });
+    .action(gatherFeedback);
 }
