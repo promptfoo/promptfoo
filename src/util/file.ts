@@ -23,6 +23,8 @@ import { loadYaml } from './yamlLoad';
 
 import type { NunjucksFilterMap, OutputFile, VarValue } from '../types';
 
+type FileLoadContext = 'assertion' | 'assertion-item' | 'general' | 'test-config' | 'vars';
+
 const loadedFileMimeTypes = Symbol('loadedFileMimeTypes');
 type VarsWithFileMimeTypes = Record<string, unknown> & {
   [loadedFileMimeTypes]?: ReadonlyMap<string, string>;
@@ -115,7 +117,7 @@ export function getNunjucksEngineForFilePath(): nunjucks.Environment {
  * @param filePath - The input to process. Can be a file path string starting with "file://",
  * an array of file paths, or any other type of data.
  * @param context - Optional context to control file loading behavior. 'assertion' context
- * preserves Python/JS file references instead of loading their content.
+ * preserves script file references (JS/TS, Python, Ruby) instead of loading their content.
  * @returns The loaded content if the input was a file path, otherwise the original input.
  * For JSON and YAML files, the content is parsed into an object.
  * For other file types, the raw file content is returned as a string.
@@ -124,7 +126,7 @@ export function getNunjucksEngineForFilePath(): nunjucks.Environment {
  */
 export function maybeLoadFromExternalFile(
   filePath: string | object | Function | undefined | null,
-  context?: 'assertion' | 'general' | 'vars',
+  context?: FileLoadContext,
 ) {
   if (Array.isArray(filePath)) {
     return filePath.map((path) => {
@@ -149,11 +151,14 @@ export function maybeLoadFromExternalFile(
   // This handles colon splitting correctly, including Windows drive letters (C:\path)
   const { filePath: cleanPath, functionName } = parseFileUrl(renderedFilePath);
 
-  // In assertion contexts, always preserve Python/JS file references
+  // In assertion contexts, always preserve script file references
   // This prevents premature dereferencing of assertion files that should be
   // handled by the assertion system, not the generic config loader
-  if (context === 'assertion' && (cleanPath.endsWith('.py') || isJavascriptFile(cleanPath))) {
-    logger.debug(`Preserving Python/JS file reference in assertion context: ${renderedFilePath}`);
+  if (
+    context === 'assertion' &&
+    (cleanPath.endsWith('.py') || cleanPath.endsWith('.rb') || isJavascriptFile(cleanPath))
+  ) {
+    logger.debug(`Preserving script file reference in assertion context: ${renderedFilePath}`);
     return renderedFilePath;
   }
 
@@ -166,16 +171,20 @@ export function maybeLoadFromExternalFile(
     return renderedFilePath;
   }
 
-  // For Python/JS files with function names, return the original string unchanged
+  // For script files with function names, return the original string unchanged
   // to allow the assertion system to handle function loading at execution time.
   // This prevents premature file existence checks that would fail for function references.
-  if (functionName && (cleanPath.endsWith('.py') || isJavascriptFile(cleanPath))) {
+  if (
+    functionName &&
+    (cleanPath.endsWith('.py') || cleanPath.endsWith('.rb') || isJavascriptFile(cleanPath))
+  ) {
     return renderedFilePath;
   }
 
-  // For non-Python/JS files, use the original path (ignore potential function name)
+  // For non-script files, use the original path (ignore potential function name)
   const pathToUse =
-    functionName && !(cleanPath.endsWith('.py') || isJavascriptFile(cleanPath))
+    functionName &&
+    !(cleanPath.endsWith('.py') || cleanPath.endsWith('.rb') || isJavascriptFile(cleanPath))
       ? renderedFilePath.slice('file://'.length) // Use original path for non-script files
       : cleanPath;
 
@@ -305,6 +314,31 @@ export function getResolvedRelativePath(filePath: string, isCloudConfig?: boolea
   return path.join(process.cwd(), filePath);
 }
 
+function getChildContext(
+  key: string,
+  config: Record<string, any>,
+  context: FileLoadContext | undefined,
+): FileLoadContext | undefined {
+  if (key === 'assert') {
+    return context === 'test-config' || context === 'assertion-item' ? 'assertion-item' : context;
+  }
+  if (key === 'vars') {
+    return 'vars';
+  }
+  if (context === 'assertion-item') {
+    return key === 'value' && typeof config[key] === 'string' ? 'assertion' : 'general';
+  }
+  if (context === 'test-config') {
+    return key === 'tests' ? 'test-config' : 'general';
+  }
+  const isAssertionValue =
+    key === 'value' &&
+    'type' in config &&
+    typeof config.type === 'string' &&
+    (config.type === 'python' || config.type === 'javascript');
+  return isAssertionValue ? 'assertion' : context;
+}
+
 /**
  * Recursively loads external file references from a configuration object.
  *
@@ -315,7 +349,7 @@ export function getResolvedRelativePath(filePath: string, isCloudConfig?: boolea
  */
 export function maybeLoadConfigFromExternalFile(
   config: any,
-  context?: 'assertion' | 'general' | 'vars',
+  context?: FileLoadContext,
   basePath?: string,
 ): any {
   if (basePath !== undefined) {
@@ -327,19 +361,7 @@ export function maybeLoadConfigFromExternalFile(
   if (typeof config === 'object' && config !== null) {
     const result: Record<string, any> = {};
     for (const key of Object.keys(config)) {
-      // Detect assertion contexts: if we have a sibling 'type' key with 'python' or 'javascript'
-      // and current key is 'value', switch to assertion context
-      const isAssertionValue =
-        key === 'value' &&
-        'type' in config &&
-        typeof config.type === 'string' &&
-        (config.type === 'python' || config.type === 'javascript');
-
-      // Detect vars contexts: if we're processing a 'vars' key, switch to vars context
-      // This preserves file:// glob patterns for test case expansion
-      const isVarsField = key === 'vars';
-
-      const childContext = isAssertionValue ? 'assertion' : isVarsField ? 'vars' : context;
+      const childContext = getChildContext(key, config, context);
       const value = maybeLoadConfigFromExternalFile(config[key], childContext);
 
       if (key === '__proto__') {

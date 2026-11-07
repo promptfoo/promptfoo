@@ -398,6 +398,8 @@ not valid json`,
       { assert: [], description: 'Row #1', options: {}, vars: { var1: 'value1', var2: 'value2' } },
       { assert: [], description: 'Row #2', options: {}, vars: { var1: 'value3', var2: 'value4' } },
     ]);
+    const args = vi.mocked(maybeLoadConfigFromExternalFile).mock.calls[0];
+    expect(args[1]).toBeUndefined();
   });
 
   it('should read Google Sheets and return test cases', async () => {
@@ -1879,6 +1881,18 @@ describe('readVarsFiles', () => {
     const result = await readTestFiles('vars.yaml');
 
     expect(result).toEqual({ var1: 'value1', var2: 'value2' });
+  });
+
+  it('should load vars files without test-config assertion detection', async () => {
+    vi.mocked(fs.readFileSync).mockReturnValue(
+      'payload:\n  assert:\n    - value: file://snippet.js',
+    );
+    vi.mocked(globSync).mockReturnValue(['vars.yaml']);
+
+    await readTestFiles('vars.yaml');
+
+    const args = vi.mocked(maybeLoadConfigFromExternalFile).mock.calls[0];
+    expect(args[1]).toBeUndefined();
   });
 
   it('should read variables from multiple YAML files', async () => {
