@@ -91,6 +91,21 @@ function resolveGoalSuccessValue(value: unknown): TrajectoryGoalSuccessValue {
   );
 }
 
+function validateCountBounds({ min, max }: TrajectoryCountValue, assertionType: string) {
+  for (const [name, bound] of [
+    ['min', min],
+    ['max', max],
+  ] as const) {
+    if (bound !== undefined && (!Number.isInteger(bound) || bound < 0)) {
+      throw new Error(`${assertionType} assertion ${name} must be a finite, non-negative integer`);
+    }
+  }
+
+  if (min !== undefined && max !== undefined && min > max) {
+    throw new Error(`${assertionType} assertion min must be less than or equal to max`);
+  }
+}
+
 function resolveToolMatchers(
   value: unknown,
 ):
@@ -111,19 +126,15 @@ function resolveToolMatchers(
   }
 
   if (value && typeof value === 'object' && !Array.isArray(value)) {
+    const countValue = value as TrajectoryCountValue;
+    validateCountBounds(countValue, 'trajectory:tool-used');
     const matcher = normalizeTrajectoryMatcher(value as TrajectoryStepMatcher, 'tool');
     return {
       kind: 'count',
       matcher: {
         ...matcher,
-        max:
-          typeof (value as TrajectoryCountValue).max === 'number'
-            ? (value as TrajectoryCountValue).max
-            : undefined,
-        min:
-          typeof (value as TrajectoryCountValue).min === 'number'
-            ? (value as TrajectoryCountValue).min
-            : undefined,
+        max: countValue.max,
+        min: countValue.min,
       },
     };
   }
@@ -562,17 +573,13 @@ function resolveStepCountValue(value: unknown): TrajectoryCountValue {
     throw new Error('trajectory:step-count assertion must have an object value');
   }
 
+  const countValue = value as TrajectoryCountValue;
+  validateCountBounds(countValue, 'trajectory:step-count');
   const matcher = normalizeTrajectoryMatcher(value as TrajectoryStepMatcher);
   return {
     ...matcher,
-    max:
-      typeof (value as TrajectoryCountValue).max === 'number'
-        ? (value as TrajectoryCountValue).max
-        : undefined,
-    min:
-      typeof (value as TrajectoryCountValue).min === 'number'
-        ? (value as TrajectoryCountValue).min
-        : undefined,
+    max: countValue.max,
+    min: countValue.min,
   };
 }
 

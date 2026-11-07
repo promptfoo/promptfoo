@@ -370,11 +370,54 @@ function getTrajectoryToolArgsMatchValueError(value: unknown): string | undefine
   return undefined;
 }
 
-function getTrajectoryStepCountValueError(value: unknown): string | undefined {
-  if (!isRecord(value) || (typeof value.min !== 'number' && typeof value.max !== 'number')) {
-    return 'Enter JSON with a minimum or maximum trajectory step count.';
+function getTrajectoryCountBoundsError({ min, max }: Record<string, unknown>): string | undefined {
+  if (
+    (min !== undefined && !isNonNegativeInteger(min)) ||
+    (max !== undefined && !isNonNegativeInteger(max))
+  ) {
+    return 'Enter trajectory count limits as whole numbers, 0 or greater.';
+  }
+  if (typeof min === 'number' && typeof max === 'number' && min > max) {
+    return 'Minimum trajectory count cannot exceed maximum trajectory count.';
   }
   return undefined;
+}
+
+export function getFirstTrajectoryCountBoundsError(
+  assertions: unknown[] | undefined,
+): string | undefined {
+  for (const assertion of assertions ?? []) {
+    if (!isRecord(assertion) || typeof assertion.type !== 'string') {
+      continue;
+    }
+    if (assertion.type === 'assert-set' && Array.isArray(assertion.assert)) {
+      const error = getFirstTrajectoryCountBoundsError(assertion.assert);
+      if (error) {
+        return error;
+      }
+    } else if (
+      [
+        'trajectory:tool-used',
+        'not-trajectory:tool-used',
+        'trajectory:step-count',
+        'not-trajectory:step-count',
+      ].includes(assertion.type) &&
+      isRecord(assertion.value)
+    ) {
+      const error = getTrajectoryCountBoundsError(assertion.value);
+      if (error) {
+        return error;
+      }
+    }
+  }
+  return undefined;
+}
+
+function getTrajectoryStepCountValueError(value: unknown): string | undefined {
+  if (!isRecord(value) || (value.min === undefined && value.max === undefined)) {
+    return 'Enter JSON with a minimum or maximum trajectory step count.';
+  }
+  return getTrajectoryCountBoundsError(value);
 }
 
 function getTrajectoryToolSequenceValueError(value: unknown): string | undefined {
@@ -417,6 +460,12 @@ function getStructuredValueError(assertion: Assertion): string | undefined {
     assertion.type === 'not-trajectory:step-count'
   ) {
     return getTrajectoryStepCountValueError(assertion.value);
+  }
+  if (
+    (assertion.type === 'trajectory:tool-used' || assertion.type === 'not-trajectory:tool-used') &&
+    isRecord(assertion.value)
+  ) {
+    return getTrajectoryCountBoundsError(assertion.value);
   }
   if (
     assertion.type === 'trajectory:tool-sequence' ||

@@ -736,6 +736,75 @@ describe('trajectory utilities', () => {
 });
 
 describe('trajectory assertions', () => {
+  describe.each([
+    ['trajectory:tool-used', handleTrajectoryToolUsed],
+    ['trajectory:step-count', handleTrajectoryStepCount],
+  ] as const)('%s count bounds', (baseType, handler) => {
+    describe.each([false, true])('inverse=%s', (inverse) => {
+      it.each([
+        ['null', null],
+        ['numeric string', '2'],
+        ['invalid string', 'invalid'],
+        ['boolean', false],
+        ['array', []],
+        ['object', {}],
+        ['negative number', -1],
+        ['fraction', 1.5],
+        ['NaN', Number.NaN],
+        ['infinity', Number.POSITIVE_INFINITY],
+        ['negative infinity', Number.NEGATIVE_INFINITY],
+      ])('rejects %s bounds', (_label, bound) => {
+        for (const field of ['min', 'max'] as const) {
+          const value = { pattern: 'search*', min: 0, max: 3, [field]: bound };
+          const params: AssertionParams = {
+            ...defaultParams,
+            inverse,
+            baseType,
+            assertion: { type: inverse ? `not-${baseType}` : baseType, value },
+            renderedValue: value,
+          };
+
+          expect(() => handler(params)).toThrow(
+            `${baseType} assertion ${field} must be a finite, non-negative integer`,
+          );
+        }
+      });
+
+      it('rejects a minimum greater than the maximum', () => {
+        const value = { pattern: 'search*', min: 3, max: 2 };
+        const params: AssertionParams = {
+          ...defaultParams,
+          inverse,
+          baseType,
+          assertion: { type: inverse ? `not-${baseType}` : baseType, value },
+          renderedValue: value,
+        };
+
+        expect(() => handler(params)).toThrow(
+          `${baseType} assertion min must be less than or equal to max`,
+        );
+      });
+
+      it.each([
+        ['unused_tool', true],
+        ['search*', false],
+      ])('supports zero bounds for %s', (pattern, positivePass) => {
+        const value = { pattern, min: 0, max: 0 };
+        const params: AssertionParams = {
+          ...defaultParams,
+          inverse,
+          baseType,
+          assertion: { type: inverse ? `not-${baseType}` : baseType, value },
+          renderedValue: value,
+        };
+
+        const result = handler(params);
+        const pass = inverse ? !positivePass : positivePass;
+        expect(result).toMatchObject({ pass, score: pass ? 1 : 0 });
+      });
+    });
+  });
+
   describe('trajectory:tool-used', () => {
     it('throws when trace data is not available', () => {
       const params: AssertionParams = {

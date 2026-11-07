@@ -793,6 +793,8 @@ tests:
 - An array of strings, such as `['search_orders', 'compose_reply']`
 - An object with `pattern`, `min`, and optional `max`
 
+Count bounds must be finite, non-negative integers, with `min <= max` when both are supplied. The default `min` is 1; use `min: 0` and `max: 0` to require no matching tools. Invalid bounds produce an error, including for `not-trajectory:tool-used`.
+
 ### trajectory:tool-args-match {#trajectorytool-args-match}
 
 The `trajectory:tool-args-match` assertion checks traced tool-call arguments. Use it when the agent must not only invoke the right tool, but also pass the right parameters.
@@ -984,6 +986,8 @@ For `anthropic:claude-agent-sdk`, subagent rounds also emit `gen_ai.turn` spans 
 ### trajectory:step-count {#trajectorystep-count}
 
 The `trajectory:step-count` assertion counts normalized trajectory steps. It can filter by step type (`tool`, `command`, `search`, `reasoning`, `message`, or `span`) and by glob-style name pattern.
+
+Supply at least one of `min` or `max` as a finite, non-negative integer. When both are supplied, `min` must not exceed `max`. A `max: 0` bound requires no matching steps; invalid bounds produce an error even with `not-trajectory:step-count`.
 
 Command steps are detected from command attributes such as `command` and `codex.command`, and from command-like tool spans such as OpenAI Agents SDK `exec_command`, `local_shell`, or `shell` calls whose arguments include `cmd`, `command`, or `commands`.
 
