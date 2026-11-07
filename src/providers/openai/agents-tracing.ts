@@ -9,6 +9,14 @@ import type { TracingExportFormat } from '../tracing';
 const DEFAULT_OTLP_ENDPOINT = 'http://localhost:4318';
 const OTLP_SPAN_KIND_INTERNAL = 1;
 const OTLP_SPAN_KIND_CLIENT = 3;
+const MAX_STRUCTURED_ATTRIBUTE_BYTES = 64 * 1024;
+const MAX_STRUCTURED_ATTRIBUTE_DEPTH = 32;
+const MAX_STRUCTURED_ATTRIBUTE_NODES = 10_000;
+const TRACE_LINKAGE_ATTRIBUTE_KEYS = new Set(['evaluation.id', 'test.case.id']);
+const losslessJson = JSON as typeof JSON & {
+  rawJSON?: (source: string) => unknown;
+  isRawJSON?: (value: unknown) => boolean;
+};
 const INTERNAL_TRACE_METADATA_KEYS = new Set([
   'promptfoo.otlp_endpoint',
   'promptfoo.otlp_format',
@@ -25,9 +33,6 @@ const INTERNAL_TRACE_METADATA_KEYS = new Set([
  * normalized into OTLP attributes that its trajectory assertions understand.
  */
 export class OTLPTracingExporter implements TracingExporter {
-  /**
-   * Export traces and spans to their configured OTLP endpoint.
-   */
   async export(items: (Trace | Span<any>)[], signal?: AbortSignal): Promise<void> {
     const spans = items.filter((item): item is Span<any> => item.type === 'trace.span');
     if (spans.length === 0) {
@@ -87,16 +92,14 @@ export class OTLPTracingExporter implements TracingExporter {
     );
   }
 
-  /**
-   * Transform openai-agents-js spans to OTLP JSON format.
-   */
   private transformToOTLP(spans: Span<any>[]): any {
     const spansByService = new Map<string, Span<any>[]>();
     const defaultServiceName = getTracingServiceName();
 
     for (const span of spans) {
-      const serviceName =
-        getStringTraceMetadata(span, 'promptfoo.service_name') ?? defaultServiceName;
+      const serviceName = sanitizeSerializedAttribute(
+        getStringTraceMetadata(span, 'promptfoo.service_name') ?? defaultServiceName,
+      );
       const serviceSpans = spansByService.get(serviceName) ?? [];
       serviceSpans.push(span);
       spansByService.set(serviceName, serviceSpans);
@@ -119,9 +122,6 @@ export class OTLPTracingExporter implements TracingExporter {
     };
   }
 
-  /**
-   * Convert a single span to OTLP format.
-   */
   private spanToOTLP(span: Span<any>): any {
     const startTime = span.startedAt ? new Date(span.startedAt).getTime() : Date.now();
     const endTime = span.endedAt ? new Date(span.endedAt).getTime() : undefined;
@@ -134,14 +134,14 @@ export class OTLPTracingExporter implements TracingExporter {
       traceId: this.hexToBase64(traceId, 'trace'),
       spanId: this.hexToBase64(spanId, 'span'),
       parentSpanId: parentSpanId ? this.hexToBase64(parentSpanId, 'span') : undefined,
-      name: this.getSpanName(span),
+      name: sanitizeSerializedAttribute(this.getSpanName(span)),
       kind:
         span.spanData.type === 'generation' || span.spanData.type === 'response'
           ? OTLP_SPAN_KIND_CLIENT
           : OTLP_SPAN_KIND_INTERNAL,
       startTimeUnixNano: String(startTime * 1_000_000),
       endTimeUnixNano: endTime ? String(endTime * 1_000_000) : undefined,
-      attributes: this.attributesToOTLP(this.getSpanAttributes(span)),
+      attributes: this.attributesToOTLP(this.getSpanAttributes(span), span),
       status: this.getSpanStatus(span),
     };
   }
@@ -171,10 +171,13 @@ export class OTLPTracingExporter implements TracingExporter {
 
   private getCustomSpanName(data: Extract<SpanData, { type: 'custom' }>): string {
     const nestedData = isRecord(data.data) ? data.data : {};
-    const sandboxOperation = nestedData['sandbox.operation'];
-
-    if (typeof sandboxOperation === 'string' && sandboxOperation) {
-      return `sandbox.${sandboxOperation}`;
+    try {
+      const sandboxOperation = nestedData['sandbox.operation'];
+      if (typeof sandboxOperation === 'string' && sandboxOperation) {
+        return `sandbox.${sandboxOperation}`;
+      }
+    } catch {
+      // An unreadable optional label must not discard this span or its siblings.
     }
 
     return data.name || 'custom';
@@ -184,7 +187,7 @@ export class OTLPTracingExporter implements TracingExporter {
     if (span.error) {
       return {
         code: 2,
-        message: span.error.message || String(span.error),
+        message: sanitizeSerializedAttribute(span.error.message || String(span.error)),
       };
     }
 
@@ -332,16 +335,18 @@ export class OTLPTracingExporter implements TracingExporter {
       return;
     }
 
-    for (const [key, value] of Object.entries(data.data)) {
+    for (const [key, value] of structuredAttributeEntries(data.data)) {
       attributes[key] = sanitizeAttributeValue(value);
     }
 
-    const command = commandToString(data.data.command ?? data.data.cmd);
+    const command = commandToString(
+      sanitizeAttributeByKey('command', attributes.command ?? attributes.cmd),
+    );
     if (command) {
       attributes.command = command;
     }
 
-    const exitCode = data.data.exit_code ?? data.data.exitCode;
+    const exitCode = attributes.exit_code ?? attributes.exitCode;
     if (typeof exitCode === 'number') {
       attributes['process.exit.code'] = exitCode;
     }
@@ -360,22 +365,31 @@ export class OTLPTracingExporter implements TracingExporter {
     }
   }
 
-  private attributesToOTLP(attributes: Record<string, unknown>): any[] {
+  private attributesToOTLP(attributes: Record<string, unknown>, span: Span<any>): any[] {
     return Object.entries(attributes)
       .filter(([, value]) => value !== undefined)
-      .map(([key, value]) => ({
-        key,
-        value: this.valueToOTLP(value),
-      }));
+      .map(([key, value]) => {
+        const preserveTraceLinkage =
+          typeof value === 'string' &&
+          TRACE_LINKAGE_ATTRIBUTE_KEYS.has(key) &&
+          Object.prototype.hasOwnProperty.call(span.traceMetadata ?? {}, key);
+        return {
+          key: sanitizeCredentialText(key),
+          value: this.valueToOTLP(
+            preserveTraceLinkage ? value : sanitizeAttributeByKey(key, value),
+            preserveTraceLinkage,
+          ),
+        };
+      });
   }
 
-  private valueToOTLP(value: unknown): any {
+  private valueToOTLP(value: unknown, preserveTraceLinkage = false): any {
     if (value === null || value === undefined) {
       return { stringValue: '' };
     }
 
     if (typeof value === 'string') {
-      return { stringValue: value };
+      return { stringValue: preserveTraceLinkage ? value : sanitizeSerializedAttribute(value) };
     }
 
     if (typeof value === 'number') {
@@ -395,15 +409,12 @@ export class OTLPTracingExporter implements TracingExporter {
     }
 
     if (typeof value === 'object') {
-      return { stringValue: safeJsonStringify(value) };
+      return { stringValue: sanitizeSerializedAttribute(safeJsonStringify(value)) };
     }
 
     return { stringValue: String(value) };
   }
 
-  /**
-   * Convert hex string to base64 for OTLP JSON payloads.
-   */
   private hexToBase64(hex: string, kind: 'trace' | 'span'): string {
     if (!hex) {
       return '';
@@ -552,8 +563,626 @@ function commandToString(value: unknown): string | undefined {
   return String(value).trim() || undefined;
 }
 
-function sanitizeAttributeValue(value: unknown): unknown {
+function sanitizeSerializedAttribute(value: string): string {
+  const trimmed = value.trim();
   if (
+    (trimmed.startsWith('{') && trimmed.endsWith('}')) ||
+    (trimmed.startsWith('[') && trimmed.endsWith(']'))
+  ) {
+    if (
+      trimmed.length > MAX_STRUCTURED_ATTRIBUTE_BYTES ||
+      Buffer.byteLength(trimmed, 'utf8') > MAX_STRUCTURED_ATTRIBUTE_BYTES
+    ) {
+      return '<redacted>';
+    }
+    try {
+      const parsed = parseStructuredJson(trimmed);
+      if (isRecord(parsed) || Array.isArray(parsed)) {
+        const state = { changed: false };
+        const sanitized = sanitizeStructuredAttribute(parsed, state);
+        return state.changed ? JSON.stringify(sanitized) : value;
+      }
+    } catch (error) {
+      if (error instanceof RangeError) {
+        return '<redacted>';
+      }
+      // Non-JSON strings still need the existing free-text credential redaction.
+    }
+  }
+
+  return sanitizeCredentialText(value);
+}
+
+function parseStructuredJson(value: string): unknown {
+  if (typeof losslessJson.rawJSON !== 'function') {
+    return JSON.parse(value);
+  }
+
+  return JSON.parse(value, (_key, parsed: unknown, context?: { source?: string }) => {
+    if (typeof parsed === 'number' && typeof context?.source === 'string') {
+      return losslessJson.rawJSON!(context.source);
+    }
+    return parsed;
+  });
+}
+
+function sanitizeCredentialText(value: string): string {
+  if (/^\s*(?:Bearer|Basic)[ \t]+[A-Za-z\d._~+/-]{20,}=*\s*$/i.test(value)) {
+    return '<redacted>';
+  }
+
+  if (/-----BEGIN (?:[A-Z]+ )?PRIVATE KEY(?: BLOCK)?-----/.test(value)) {
+    return '<redacted>';
+  }
+
+  if (hasCredentialNamedPayload(value)) {
+    return '<redacted>';
+  }
+
+  for (const [, key] of value.matchAll(
+    /^[ \t]*(?:export[ \t]+)?(?:const|let|var)[ \t]+([A-Za-z_$][\w$]*)[ \t]*:[^=\r\n]*=/gm,
+  )) {
+    if (isCredentialAttributeKey(key)) {
+      return '<redacted>';
+    }
+  }
+
+  if (
+    /"ciphertext"\s*:\s*"[^"]+"/.test(value) &&
+    /"tag"\s*:\s*"[^"]+"/.test(value) &&
+    /"(?:protected|unprotected|recipients|header)"\s*:/.test(value)
+  ) {
+    return '<redacted>';
+  }
+
+  if (
+    /"kty"\s*:\s*"(?:RSA|EC|OKP|oct)"/.test(value) &&
+    /"(?:d|p|q|dp|dq|qi|oth|k)"\s*:/.test(value)
+  ) {
+    return '<redacted>';
+  }
+
+  // YAML values can span lines, including flow collections under credential keys.
+  for (const [, , key, scalar] of value.matchAll(
+    /(?:^|[\r\n])[ \t]*(?:-[ \t]+)?(["']?)([A-Za-z_][A-Za-z\d_.-]*)\1[ \t]*:[ \t]*([^\r\n]*)/g,
+  )) {
+    if (isCredentialAttributeKey(key) && !/^[ \t]*["']/.test(scalar)) {
+      return '<redacted>';
+    }
+  }
+
+  for (const [, , key, first] of value.matchAll(
+    /[,{\[]\s*(["']?)([A-Za-z_][A-Za-z\d_.-]*)\1\s*:\s*(?=(\S|$))/g,
+  )) {
+    if (isCredentialAttributeKey(key) && first !== '"' && first !== "'") {
+      return '<redacted>';
+    }
+  }
+
+  const netrc = value.replace(/^[ \t]*#[^\r\n]*/gm, '');
+  if (
+    /(?:^|[\r\n])[ \t]*(?:machine\s+\S+|default)\b/i.test(netrc) &&
+    (/(?:^|\s)login\s+\S/i.test(netrc) ||
+      /(?:machine\s+\S+|default)\s+(?:password|account)\b/i.test(netrc)) &&
+    /(?:^|\s)(?:password|account)\s+\S/i.test(netrc)
+  ) {
+    return '<redacted>';
+  }
+
+  // Backslash runs inside keys must end in a non-quote character. A run before
+  // a quote belongs only to the closing delimiter, avoiding overlapping matches.
+  for (const [, encodedKey] of value.matchAll(
+    /(?<!\\)\\+"((?:[^"\\]|\\+[^"\\]){0,4096})\\+"\s*:/g,
+  )) {
+    let key = encodedKey;
+    try {
+      key = JSON.parse(`"${encodedKey}"`);
+    } catch {
+      // Malformed embedded JSON falls through to the remaining text masks.
+    }
+    if (isCredentialAttributeKey(key)) {
+      return '<redacted>';
+    }
+  }
+
+  const options =
+    /(^|\s)(--?[A-Za-z][A-Za-z\d_.-]*)([ \t]+|=)("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|[^\s;]+)/g;
+  const usesCurlAuth = isCurlCommand(value);
+  let match: RegExpExecArray | null;
+  let sanitized = '';
+  let copied = 0;
+  while ((match = options.exec(value))) {
+    const [, prefix, option, separator] = match;
+    if (isCredentialOption(option, usesCurlAuth)) {
+      sanitized += value.slice(copied, match.index) + prefix + option + separator + '<redacted>';
+      copied = options.lastIndex;
+    } else {
+      // A boolean option can precede another option instead of a value.
+      options.lastIndex = match.index + prefix.length + option.length;
+    }
+  }
+  value = sanitized + value.slice(copied);
+
+  return redactQuotedCredentials(value)
+    .replace(/\b(?:sk|pk)-[a-zA-Z0-9_-]{20,}\b/g, '<REDACTED_API_KEY>')
+    .replace(/\bAKIA[A-Z0-9]{16}\b/g, '<REDACTED_AWS_KEY>')
+    .replace(/\bAIza[a-zA-Z0-9_-]{35}\b/g, '<redacted>')
+    .replace(
+      /^([ \t]*)([A-Za-z_][A-Za-z\d_.-]*)([ \t]+)(?![ \t:=])([^\r\n]+)/gm,
+      (match, prefix: string, key: string, separator: string) =>
+        key.toLowerCase() !== 'pwd' && isCredentialAttributeKey(key)
+          ? `${prefix}${key}${separator}<redacted>`
+          : match,
+    )
+    .replace(
+      /(?<![A-Za-z0-9_-])([A-Za-z0-9_-]+)\.[A-Za-z0-9_-]*\.[A-Za-z0-9_-]*(?:\.[A-Za-z0-9_-]*\.[A-Za-z0-9_-]*)?/g,
+      (token, header: string) => {
+        if (header.length > MAX_STRUCTURED_ATTRIBUTE_BYTES) {
+          return '<redacted>';
+        }
+        try {
+          const parsed = JSON.parse(Buffer.from(header, 'base64url').toString('utf8'));
+          return isRecord(parsed) && typeof parsed.alg === 'string' ? '<redacted>' : token;
+        } catch {
+          return token;
+        }
+      },
+    )
+    .replace(/(\/\/)[^\s/?#]+@/g, (_match, prefix: string) => `${prefix}<redacted>@`)
+    .replace(
+      /(["'])(\b(?:Authorization\s*:|Authorization\s*=(?=[ \t]*(?:Bearer|Basic|Token|Api[-_]?Key|Digest|Negotiate|AWS4-HMAC-SHA256)\b)|Cookie\s*:)[ \t]*)(?:\\[^\r\n]|(?!\1)[^\\\r\n])*(?:\1|(?=[\r\n]|$))|(\b(?:Authorization\s*:|Authorization\s*=(?=[ \t]*(?:Bearer|Basic|Token|Api[-_]?Key|Digest|Negotiate|AWS4-HMAC-SHA256)\b)|Cookie\s*:)[ \t]*)[^\r\n]*/gi,
+      (match, quote: string | undefined, quotedPrefix: string, prefix: string) =>
+        quote
+          ? `${quote}${quotedPrefix}<redacted>${match.endsWith(quote) ? quote : ''}`
+          : `${prefix}<redacted>`,
+    )
+    .replace(
+      /(\bAuthorization\s*=\s*)([A-Za-z][A-Za-z\d-]*\s+)[^\s;,"'{}\]]+/gi,
+      (_match, prefix: string) => `${prefix}<redacted>`,
+    )
+    .replace(
+      /(^|[\s;,:])([A-Za-z_][A-Za-z\d_.-]*)(\s*:\s*)((?:(?:Bearer|Basic|Token|Api[-_]?Key)\s+)?[^\s;,"'{}\]]+)/gi,
+      (match, prefix: string, key: string, separator: string) =>
+        isCredentialAttributeKey(key) ? `${prefix}${key}${separator}<redacted>` : match,
+    )
+    .replace(
+      /(^|[?&#;:\s])((?:[A-Za-z_]|%[\da-fA-F]{2})[A-Za-z\d_.%+-]*(?:\[(?:[A-Za-z_]|%[\da-fA-F]{2})[A-Za-z\d_.%+-]*\])*)(\s*=\s*)(["']?)(?:(?:Bearer|Basic|Token|Api[-_]?Key)\s+)?([^&#;\s"',}\]\\]+)\4/gi,
+      (match, prefix: string, key: string, separator: string, quote: string) => {
+        let decodedKey = key;
+        try {
+          decodedKey = decodeURIComponent(key.replace(/\+/g, ' '));
+        } catch {
+          // Preserve malformed query parameters while still checking their literal key.
+        }
+        const bareFormKey = /^key$/i.test(decodedKey) && (prefix === '' || /[?&#;]/.test(prefix));
+        return isCredentialAttributeKey(decodedKey) || bareFormKey
+          ? `${prefix}${key}${separator}${quote}<redacted>${quote}`
+          : match;
+      },
+    );
+}
+
+function isCurlCommand(command: unknown): boolean {
+  let executable: unknown;
+  if (Array.isArray(command)) {
+    let index = 0;
+    while (['env', 'command', 'exec'].includes(command[index])) {
+      if (command[index] === 'env' && command[index + 1] === '-i') {
+        index++;
+      }
+      index++;
+    }
+    executable = command[index];
+  } else if (typeof command === 'string') {
+    const match = command
+      .trimStart()
+      .match(/^(?:(?:env(?:[ \t]+-i)?|command|exec)[ \t]+)*(?:"([^"]+)"|'([^']+)'|(\S+))/);
+    executable = match?.[1] ?? match?.[2] ?? match?.[3];
+  }
+  return typeof executable === 'string' && /(?:^|[/\\])curl(?:\.exe)?$/i.test(executable);
+}
+
+function isCredentialOption(option: string, usesCurlAuth: boolean): boolean {
+  return (
+    isCredentialAttributeKey(option) ||
+    (usesCurlAuth && ['-u', '--user', '--proxy-user'].includes(option))
+  );
+}
+
+function hasCredentialNamedPayload(value: string): boolean {
+  for (const [, quotedName, unquotedName] of value.matchAll(
+    /^content-disposition:[^\r\n]*?\bname\s*=\s*(?:["']([^"'\r\n]*)["']|([^\s;]+))/gim,
+  )) {
+    if (isCredentialAttributeKey(quotedName ?? unquotedName)) {
+      return true;
+    }
+  }
+  // Excluding nested delimiters keeps malformed markup scans linear.
+  for (const [, tag] of value.matchAll(/(?<![\w$])<([^<>\r\n]*)>/g)) {
+    if (['redacted', 'REDACTED_API_KEY', 'REDACTED_AWS_KEY'].includes(tag)) {
+      continue;
+    }
+    const name = tag.match(/^(?:[\w.-]+:)?([A-Za-z_][A-Za-z\d_.-]*)\b/)?.[1];
+    if (name && isCredentialAttributeKey(name)) {
+      return true;
+    }
+    for (const [, field] of tag.matchAll(/\b(?:name|key)\s*=\s*["']([^"']*)["']/gi)) {
+      if (isCredentialAttributeKey(field)) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+function redactQuotedCredentials(value: string): string {
+  return value
+    .replace(
+      /(^|[\s;])([A-Za-z_][A-Za-z\d_.-]*)(\s*=\s*)\{(?:}}|[^}])*(?:}|$)/gi,
+      (match, prefix: string, key: string, separator: string) =>
+        isCredentialAttributeKey(key) ? `${prefix}${key}${separator}<redacted>` : match,
+    )
+    .replace(
+      /(["'])([A-Za-z_][A-Za-z0-9_.-]*)\1(\s*:\s*)(["'])(?:\\(?:[\s\S]|$)|\4\4|(?!\4)[^\\])*(?:\4|$)/g,
+      (match, keyQuote: string, key: string, separator: string, valueQuote: string) =>
+        isCredentialAttributeKey(key)
+          ? `${keyQuote}${key}${keyQuote}${separator}${valueQuote}<redacted>${valueQuote}`
+          : match,
+    )
+    .replace(
+      /(^|[\s;,:{\[])([A-Za-z_][A-Za-z\d_.-]*)(\s*[:=]\s*)(["'])(?:\\(?:[\s\S]|$)|\4\4|(?!\4)[^\\])*(?:\4|$)/gi,
+      (match, prefix: string, key: string, separator: string, quote: string) =>
+        isCredentialAttributeKey(key)
+          ? `${prefix}${key}${separator}${quote}<redacted>${quote}`
+          : match,
+    );
+}
+
+function isCredentialAttributeKey(key: string): boolean {
+  if (/^x-session-id$/i.test(key)) {
+    return true;
+  }
+
+  const parts = key
+    .replace(/([a-z\d])([A-Z])/g, '$1_$2')
+    .toLowerCase()
+    .split(/[^a-z\d]+/)
+    .filter(Boolean);
+
+  return parts.some((part, index) => {
+    if (part === 'session' || part === 'sessionid') {
+      return /(?:^(?:--?)?|\.)session(?:[._-]?id)?$/i.test(key);
+    }
+    if (part === 'token' || part === 'tokens') {
+      return (
+        ![
+          'used',
+          'count',
+          'counts',
+          'usage',
+          'limit',
+          'budget',
+          'length',
+          'type',
+          'id',
+          'ids',
+          'index',
+          'indices',
+          'position',
+          'positions',
+          'mask',
+          'masks',
+          'endpoint',
+          'url',
+          'uri',
+        ].includes(parts[index + 1]) &&
+        ![
+          'num',
+          'estimated',
+          'used',
+          'usage',
+          'input',
+          'output',
+          'total',
+          'cached',
+          'reasoning',
+          'prompt',
+          'completion',
+          'prediction',
+          'response',
+          'max',
+          'min',
+        ].includes(parts[index - 1])
+      );
+    }
+    if (part === 'assertion') {
+      return parts[index - 1] === 'client' && !['type', 'types'].includes(parts[index + 1]);
+    }
+    if (
+      [
+        'authorization',
+        'cookie',
+        'cookies',
+        'password',
+        'passwords',
+        'passwd',
+        'pwd',
+        'passphrase',
+        'passphrases',
+        'secret',
+        'secrets',
+        'credential',
+        'credentials',
+        'apikey',
+        'apikeys',
+        'auth',
+        'jwt',
+        'sig',
+        'signature',
+        'pgpassword',
+      ].includes(part)
+    ) {
+      if (
+        part === 'auth' &&
+        ['type', 'method', 'methods', 'supported', 'status', 'enabled'].includes(parts[index + 1])
+      ) {
+        return false;
+      }
+      if (
+        part === 'signature' &&
+        (parts[index - 1] === 'function' ||
+          ['algorithm', 'method', 'type', 'version', 'format', 'scheme', 'encoding'].includes(
+            parts[index + 1],
+          ))
+      ) {
+        return false;
+      }
+      if (part === 'authorization' && ['endpoint', 'url', 'uri'].includes(parts[index + 1])) {
+        return false;
+      }
+      return true;
+    }
+    return (
+      (part === 'key' || part === 'keys') &&
+      (!['algorithm', 'type', 'format', 'id'].includes(parts[index + 1]) ||
+        (parts[index - 1] === 'access' && parts[index + 1] === 'id')) &&
+      ['api', 'access', 'private', 'client', 'ssl', 'tls', 'signing', 'encryption'].includes(
+        parts[index - 1],
+      )
+    );
+  });
+}
+
+function sanitizeAttributeByKey(key: string, value: unknown): unknown {
+  try {
+    if (isCredentialAttributeKey(key) || typeof value === 'function' || ArrayBuffer.isView(value)) {
+      return '<redacted>';
+    }
+    if (value instanceof Date) {
+      return new Date(Date.prototype.getTime.call(value));
+    }
+    if (Array.isArray(value) || isRecord(value)) {
+      return sanitizeStructuredAttribute(value, { changed: false }, false, isHeaderContainer(key));
+    }
+    return value;
+  } catch {
+    return '<redacted>';
+  }
+}
+
+function isHeaderContainer(key: string): boolean {
+  return /(?:^|[._-])(?:raw[_-]?)?headers$/i.test(key);
+}
+
+function isCredentialPairValue(
+  source: Record<string, unknown> | unknown[],
+  key: string,
+  headerPairs: boolean,
+) {
+  if (Array.isArray(source)) {
+    const option = source[Number(key) - 1];
+    if (typeof option !== 'string') {
+      return false;
+    }
+    if (headerPairs && Number(key) % 2 === 1 && /^[A-Za-z][A-Za-z\d_.-]*$/.test(option)) {
+      return isCredentialAttributeKey(option);
+    }
+    return (
+      /^--?[A-Za-z][A-Za-z\d_.-]*$/.test(option) &&
+      isCredentialOption(option, isCurlCommand(source))
+    );
+  }
+  return (
+    key.toLowerCase() === 'value' &&
+    Object.entries(source).some(
+      ([field, name]) =>
+        /^(name|key)$/i.test(field) && typeof name === 'string' && isCredentialAttributeKey(name),
+    )
+  );
+}
+
+function isPrivateJwkParameter(source: Record<string, unknown> | unknown[], key: string): boolean {
+  if (Array.isArray(source)) {
+    return false;
+  }
+  if (source.kty === 'RSA') {
+    return ['d', 'p', 'q', 'dp', 'dq', 'qi', 'oth'].includes(key);
+  }
+  return source.kty === 'EC' || source.kty === 'OKP'
+    ? key === 'd'
+    : source.kty === 'oct' && key === 'k';
+}
+
+function isJwe(value: unknown, budget: { remaining: number }): boolean {
+  if (!isRecord(value) || typeof value.ciphertext !== 'string' || typeof value.tag !== 'string') {
+    return false;
+  }
+  let protectedHeader: unknown;
+  if (typeof value.protected === 'string') {
+    if (value.protected.length > MAX_STRUCTURED_ATTRIBUTE_BYTES) {
+      return true;
+    }
+    try {
+      protectedHeader = JSON.parse(Buffer.from(value.protected, 'base64url').toString('utf8'));
+    } catch {
+      // Unprotected headers can still identify a sensitive envelope.
+    }
+  }
+  const hasAlgorithms = (recipientHeader: unknown) =>
+    ['alg', 'enc'].every((key) =>
+      [protectedHeader, value.unprotected, recipientHeader].some(
+        (header) => isRecord(header) && typeof header[key] === 'string',
+      ),
+    );
+  if (hasAlgorithms(value.header)) {
+    return true;
+  }
+  if (!Array.isArray(value.recipients)) {
+    return false;
+  }
+  budget.remaining -= value.recipients.length;
+  return (
+    budget.remaining < 0 ||
+    value.recipients.some((recipient) => isRecord(recipient) && hasAlgorithms(recipient.header))
+  );
+}
+
+function sanitizeStructuredAttribute(
+  value: Record<string, unknown> | unknown[],
+  state: { changed: boolean } = { changed: false },
+  normalizeScalars = false,
+  headerPairs = false,
+): Record<string, unknown> | unknown[] | string {
+  try {
+    if (
+      !(value instanceof Date) &&
+      typeof (value as Record<string, unknown>).toJSON === 'function'
+    ) {
+      state.changed = true;
+      return '<redacted>';
+    }
+    return sanitizeStructuredAttributeValue(value, state, normalizeScalars, headerPairs);
+  } catch {
+    state.changed = true;
+    return '<redacted>';
+  }
+}
+
+function sanitizeStructuredAttributeValue(
+  value: Record<string, unknown> | unknown[],
+  state: { changed: boolean },
+  normalizeScalars: boolean,
+  headerPairs: boolean,
+): Record<string, unknown> | unknown[] | string {
+  const budget = { remaining: MAX_STRUCTURED_ATTRIBUTE_NODES };
+  if (isJwe(value, budget)) {
+    state.changed = true;
+    return '<redacted>';
+  }
+  type StructuredValue = Record<string, unknown> | unknown[];
+  const root: StructuredValue = Array.isArray(value) ? [] : {};
+  const stack: Array<{
+    source: StructuredValue;
+    target: StructuredValue;
+    depth: number;
+    headerPairs: boolean;
+  }> = [{ source: value, target: root, depth: 0, headerPairs }];
+
+  while (stack.length > 0) {
+    const { source, target, depth, headerPairs: sourceHeaders } = stack.pop()!;
+    // Array holes also consume work when JSON.stringify serializes the copy.
+    if (Array.isArray(source)) {
+      budget.remaining -= source.length;
+      if (budget.remaining < 0) {
+        state.changed = true;
+        return '<redacted>';
+      }
+      (target as unknown[]).length = source.length;
+    }
+    for (const [key, entry] of structuredAttributeEntries(source)) {
+      if (--budget.remaining < 0) {
+        state.changed = true;
+        return '<redacted>';
+      }
+
+      let sanitized: unknown;
+      if (
+        typeof entry === 'function' ||
+        ArrayBuffer.isView(entry) ||
+        ((isRecord(entry) || Array.isArray(entry)) &&
+          !(entry instanceof Date) &&
+          typeof (entry as Record<string, unknown>).toJSON === 'function') ||
+        isCredentialPairValue(source, key, sourceHeaders) ||
+        isCredentialAttributeKey(key) ||
+        isPrivateJwkParameter(source, key) ||
+        isJwe(entry, budget)
+      ) {
+        sanitized = '<redacted>';
+        state.changed = true;
+      } else if (!normalizeScalars && (losslessJson.isRawJSON?.(entry) || entry instanceof Date)) {
+        sanitized = entry instanceof Date ? new Date(Date.prototype.getTime.call(entry)) : entry;
+      } else if (isRecord(entry) || Array.isArray(entry)) {
+        if (depth >= MAX_STRUCTURED_ATTRIBUTE_DEPTH) {
+          sanitized = '<redacted>';
+          state.changed = true;
+        } else {
+          const child: StructuredValue = Array.isArray(entry) ? [] : {};
+          stack.push({
+            source: entry,
+            target: child,
+            depth: depth + 1,
+            headerPairs: isHeaderContainer(key) || (sourceHeaders && Array.isArray(source)),
+          });
+          sanitized = child;
+        }
+      } else {
+        sanitized = normalizeScalars ? sanitizeAttributeValue(entry) : entry;
+        if (typeof sanitized === 'string') {
+          sanitized = sanitizeSerializedAttribute(sanitized);
+        }
+        state.changed ||= sanitized !== entry;
+      }
+
+      const sanitizedKey = sanitizeSerializedAttribute(key);
+      state.changed ||= sanitizedKey !== key;
+      Object.defineProperty(target, sanitizedKey, {
+        configurable: true,
+        enumerable: true,
+        value: sanitized,
+        writable: true,
+      });
+    }
+  }
+
+  if (Buffer.byteLength(safeJsonStringify(root), 'utf8') > MAX_STRUCTURED_ATTRIBUTE_BYTES) {
+    state.changed = true;
+    return '<redacted>';
+  }
+
+  return root;
+}
+
+function* structuredAttributeEntries(
+  value: Record<string, unknown> | unknown[],
+): Generator<[string, unknown]> {
+  for (const key in value) {
+    if (Object.prototype.hasOwnProperty.call(value, key)) {
+      try {
+        yield [key, Reflect.get(value, key)];
+      } catch {
+        yield [key, '<redacted>'];
+      }
+    }
+  }
+}
+
+function sanitizeAttributeValue(value: unknown): unknown {
+  if (typeof value === 'function') {
+    return '<redacted>';
+  }
+
+  if (
+    value === undefined ||
     value === null ||
     typeof value === 'string' ||
     typeof value === 'number' ||
@@ -562,14 +1191,12 @@ function sanitizeAttributeValue(value: unknown): unknown {
     return value;
   }
 
-  if (Array.isArray(value)) {
-    return value.map((entry) => sanitizeAttributeValue(entry));
+  if (ArrayBuffer.isView(value)) {
+    return '<redacted>';
   }
 
-  if (isRecord(value)) {
-    return Object.fromEntries(
-      Object.entries(value).map(([key, entry]) => [key, sanitizeAttributeValue(entry)]),
-    );
+  if (Array.isArray(value) || isRecord(value)) {
+    return sanitizeStructuredAttribute(value, { changed: false }, true);
   }
 
   return String(value);
@@ -577,7 +1204,7 @@ function sanitizeAttributeValue(value: unknown): unknown {
 
 function safeJsonStringify(value: unknown): string {
   try {
-    return JSON.stringify(value);
+    return JSON.stringify(value) ?? String(value);
   } catch {
     return String(value);
   }
