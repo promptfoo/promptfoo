@@ -432,6 +432,7 @@ export default function StrategyConfigDialog({
       strategy === 'best-of-n' ||
       strategy === 'goat' ||
       strategy === 'crescendo' ||
+      strategy === 'react-crescendo' ||
       strategy === 'custom' ||
       strategy === 'gcg' ||
       strategy === 'citation' ||
