@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import { access } from 'fs/promises';
 import * as path from 'path';
 
-import { type Options as CsvOptions, parse as csvParse } from 'csv-parse/sync';
+import { parse as csvParse } from 'csv-parse/sync';
 import { escape as escapeGlob, globSync, hasMagic } from 'glob';
 import nunjucks from 'nunjucks';
 import cliState from '../cliState';
@@ -66,10 +66,6 @@ export function getLoadedFileMimeType(
   return (vars as VarsWithFileMimeTypes)[loadedFileMimeTypes]?.get(value);
 }
 
-type CsvParseOptionsWithColumns<T> = Omit<CsvOptions<T>, 'columns'> & {
-  columns: Exclude<CsvOptions['columns'], undefined | false>;
-};
-
 /**
  * Returns true if the path is accessible. ENOENT (and ENOTDIR, which Node
  * surfaces when a path component isn't a directory) yield false; other errors
@@ -106,6 +102,25 @@ export function getNunjucksEngineForFilePath(): nunjucks.Environment {
   });
 
   return env;
+}
+
+/** Decode external data consistently for literal paths and glob matches. */
+function parseExternalFileContents(contents: string, filePath: string) {
+  if (filePath.endsWith('.json')) {
+    return JSON.parse(contents.replace(/^\uFEFF/, ''));
+  }
+  if (filePath.endsWith('.yaml') || filePath.endsWith('.yml')) {
+    return loadYaml(contents);
+  }
+  if (filePath.endsWith('.csv')) {
+    const records = csvParse<Record<string, string>>(contents, { bom: true, columns: true });
+    // A single CSV column represents a list of values.
+    if (records.length > 0 && Object.keys(records[0]).length === 1) {
+      return records.map((record) => Object.values(record)[0]);
+    }
+    return records;
+  }
+  return contents;
 }
 
 /**
@@ -211,36 +226,17 @@ export function maybeLoadFromExternalFile(
         }
         throw error;
       }
-      if (matchedFile.endsWith('.json')) {
-        const parsed = JSON.parse(contents);
-        if (Array.isArray(parsed)) {
-          allContents.push(...parsed);
-        } else {
-          allContents.push(parsed);
-        }
-      } else if (matchedFile.endsWith('.yaml') || matchedFile.endsWith('.yml')) {
-        const parsed = loadYaml(contents);
-        if (parsed === null || parsed === undefined) {
-          continue; // Skip empty files
-        }
-        if (Array.isArray(parsed)) {
-          allContents.push(...parsed);
-        } else {
-          allContents.push(parsed);
-        }
-      } else if (matchedFile.endsWith('.csv')) {
-        const csvOptions: CsvParseOptionsWithColumns<Record<string, string>> = {
-          columns: true as const,
-        };
-        const records = csvParse<Record<string, string>>(contents, csvOptions);
-        // If single column, return array of values to match single file behavior
-        if (records.length > 0 && Object.keys(records[0]).length === 1) {
-          allContents.push(...records.map((record) => Object.values(record)[0]));
-        } else {
-          allContents.push(...records);
-        }
+      const parsed = parseExternalFileContents(contents, matchedFile);
+      if (
+        (matchedFile.endsWith('.yaml') || matchedFile.endsWith('.yml')) &&
+        (parsed === null || parsed === undefined)
+      ) {
+        continue; // Empty YAML contributes no glob rows.
+      }
+      if (Array.isArray(parsed)) {
+        allContents.push(...parsed);
       } else {
-        allContents.push(contents);
+        allContents.push(parsed);
       }
     }
 
@@ -259,32 +255,17 @@ export function maybeLoadFromExternalFile(
     }
     throw new Error(`Failed to read file ${finalPath}: ${error}`);
   }
-  if (finalPath.endsWith('.json')) {
-    try {
-      return JSON.parse(contents);
-    } catch (error) {
+  try {
+    return parseExternalFileContents(contents, finalPath);
+  } catch (error) {
+    if (finalPath.endsWith('.json')) {
       throw new Error(`Failed to parse JSON file ${finalPath}: ${error}`);
     }
-  }
-  if (finalPath.endsWith('.yaml') || finalPath.endsWith('.yml')) {
-    try {
-      return loadYaml(contents);
-    } catch (error) {
+    if (finalPath.endsWith('.yaml') || finalPath.endsWith('.yml')) {
       throw new Error(`Failed to parse YAML file ${finalPath}: ${error}`);
     }
+    throw error;
   }
-  if (finalPath.endsWith('.csv')) {
-    const csvOptions: CsvParseOptionsWithColumns<Record<string, string>> = {
-      columns: true as const,
-    };
-    const records = csvParse<Record<string, string>>(contents, csvOptions);
-    // If single column, return array of values
-    if (records.length > 0 && Object.keys(records[0]).length === 1) {
-      return records.map((record) => Object.values(record)[0]);
-    }
-    return records;
-  }
-  return contents;
 }
 
 /**

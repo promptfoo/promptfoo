@@ -205,6 +205,49 @@ describe('file utilities', () => {
       ]);
     });
 
+    it('should strip BOM from single-file CSV', () => {
+      const csvContent = '\uFEFFq,a\nhi,yo\n';
+      vi.mocked(fs.existsSync).mockReturnValue(true);
+      vi.mocked(fs.readFileSync).mockReturnValue(csvContent);
+
+      const result = maybeLoadFromExternalFile('file://test.csv');
+      expect(result).toEqual([{ q: 'hi', a: 'yo' }]);
+    });
+
+    it('should strip BOM from glob CSV files', () => {
+      const mockFiles = ['/mock/base/path/data1.csv'];
+      const csvContent = '\uFEFFq,a\nhi,yo\n';
+
+      vi.mocked(globSync).mockReturnValue(mockFiles);
+      vi.mocked(fs.readFileSync).mockReturnValue(csvContent);
+
+      const result = maybeLoadFromExternalFile('file://data*.csv');
+      expect(result).toEqual([{ q: 'hi', a: 'yo' }]);
+    });
+
+    it('should parse single-file JSON with BOM', () => {
+      const mockData = { key: 'value' };
+      vi.mocked(fs.existsSync).mockReturnValue(true);
+      vi.mocked(fs.readFileSync).mockReturnValue('\uFEFF' + JSON.stringify(mockData));
+
+      const result = maybeLoadFromExternalFile('file://test.json');
+      expect(result).toEqual(mockData);
+    });
+
+    it('should parse glob JSON files with BOM', () => {
+      const mockFiles = ['/mock/base/path/data1.json', '/mock/base/path/data2.json'];
+      const mockData1 = { id: 1 };
+      const mockData2 = { id: 2 };
+
+      vi.mocked(globSync).mockReturnValue(mockFiles);
+      vi.mocked(fs.readFileSync)
+        .mockReturnValueOnce('\uFEFF' + JSON.stringify(mockData1))
+        .mockReturnValueOnce('\uFEFF' + JSON.stringify(mockData2));
+
+      const result = maybeLoadFromExternalFile('file://data*.json');
+      expect(result).toEqual([mockData1, mockData2]);
+    });
+
     it('should handle glob patterns for YAML files', () => {
       const mockFiles = ['/mock/base/path/scenario1.yaml', '/mock/base/path/scenario2.yaml'];
       const mockData1 = { test: 'scenario1' };
