@@ -16,6 +16,14 @@ import type {
 } from '../../../types';
 import type { ConversationHistoryConfig, ConversationHistoryResponse } from './types';
 
+interface ConversationListItem extends Omit<ConversationHistoryResponse, 'status' | 'created_at'> {
+  status: string;
+  created_at?: string;
+  start_time_unix_secs?: number;
+  call_duration_secs?: number;
+  message_count?: number;
+}
+
 /**
  * Provider for retrieving ElevenLabs conversation history
  *
@@ -144,41 +152,65 @@ export class ElevenLabsHistoryProvider implements ApiProvider {
 
     try {
       // Build query parameters
-      const params: Record<string, any> = {};
-
-      if (context?.vars?.status) {
-        params.status = context.vars.status;
+      const params = new URLSearchParams({ agent_id: String(agentId) });
+      for (const [variable, parameter] of [
+        ['startDate', 'call_start_after_unix'],
+        ['endDate', 'call_start_before_unix'],
+      ]) {
+        const value = context?.vars?.[variable];
+        if (value !== undefined && value !== null) {
+          const isNumeric =
+            typeof value === 'number' ||
+            (typeof value === 'string' && /^[+-]?\d+(?:\.\d+)?$/.test(value.trim()));
+          const seconds = isNumeric ? Number(value) : Date.parse(String(value)) / 1000;
+          if (!Number.isFinite(seconds)) {
+            throw new Error(
+              `Invalid ${variable}: expected an ISO date or Unix timestamp in seconds`,
+            );
+          }
+          params.set(parameter, String(Math.floor(seconds)));
+        }
       }
-
-      if (context?.vars?.startDate) {
-        params.start_date = context.vars.startDate;
+      if (context?.vars?.limit !== undefined) {
+        params.set('page_size', String(context.vars.limit));
       }
-
-      if (context?.vars?.endDate) {
-        params.end_date = context.vars.endDate;
-      }
-
-      if (context?.vars?.limit) {
-        params.limit = context.vars.limit;
+      if (context?.vars?.cursor !== undefined) {
+        params.set('cursor', String(context.vars.cursor));
       }
 
       // Fetch conversations
-      const queryString = new URLSearchParams(params as Record<string, string>).toString();
-      const url = `/convai/agents/${agentId}/conversations${queryString ? `?${queryString}` : ''}`;
-      const response = await this.client.get<{ conversations: ConversationHistoryResponse[] }>(url);
+      const url = `/convai/conversations?${params}`;
+      const response = await this.client.get<{
+        conversations: ConversationListItem[];
+        has_more?: boolean;
+        next_cursor?: string | null;
+      }>(url);
+
+      // The list API has no positive status filter. Apply it to this page locally.
+      const status = context?.vars?.status;
+      const nativeStatus =
+        status === 'completed' ? 'done' : status === 'in_progress' ? 'in-progress' : status;
+      const conversations = response.conversations.filter(
+        (conv) => !status || conv.status === status || conv.status === nativeStatus,
+      );
 
       const latency = Date.now() - startTime;
 
       // Format summary
       const summary = {
         agent_id: agentId,
-        total_conversations: response.conversations.length,
-        conversations: response.conversations.map((conv) => ({
+        total_conversations: conversations.length,
+        has_more: response.has_more,
+        next_cursor: response.next_cursor,
+        conversations: conversations.map((conv) => ({
           conversation_id: conv.conversation_id,
           status: conv.status,
-          duration_seconds: conv.duration_seconds,
-          turn_count: conv.history?.length || 0,
-          created_at: conv.created_at,
+          duration_seconds: conv.call_duration_secs ?? conv.duration_seconds,
+          turn_count: conv.message_count ?? conv.history?.length ?? 0,
+          created_at:
+            conv.start_time_unix_secs === undefined
+              ? conv.created_at
+              : new Date(conv.start_time_unix_secs * 1000).toISOString(),
         })),
       };
 
@@ -186,7 +218,9 @@ export class ElevenLabsHistoryProvider implements ApiProvider {
         output: JSON.stringify(summary, null, 2),
         metadata: {
           agentId,
-          conversationCount: response.conversations.length,
+          conversationCount: conversations.length,
+          hasMore: response.has_more,
+          nextCursor: response.next_cursor,
           latency,
         },
       };
