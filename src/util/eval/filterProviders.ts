@@ -43,10 +43,29 @@ export function getProviderFilterRegexError(filter: string): string | undefined 
  * Handles all provider config formats: string, function, ProviderOptions, ProviderOptionsMap.
  */
 export function getProviderIdAndLabel(
-  provider: string | ProviderOptions | ProviderOptionsMap | ((...args: unknown[]) => unknown),
+  provider:
+    | string
+    | ProviderOptions
+    | ProviderOptionsMap
+    | ApiProvider
+    | ((...args: unknown[]) => unknown),
   index: number,
 ): { id: string; label?: string } {
+  if (hasIdMethod(provider)) {
+    return { id: provider.id(), label: provider.label };
+  }
   return normalizeProviderRef(provider, { index });
+}
+
+/**
+ * A JS/TS config can pass ApiProvider instances, whose id is a method rather than a config value.
+ */
+function hasIdMethod(provider: unknown): provider is Pick<ApiProvider, 'id' | 'label'> {
+  return (
+    typeof provider === 'object' &&
+    provider !== null &&
+    typeof (provider as { id?: unknown }).id === 'function'
+  );
 }
 
 /**
@@ -87,6 +106,26 @@ export function filterProviderConfigs(
   return providers.filter((provider, index) => {
     const { id, label } = getProviderIdAndLabel(provider, index);
     return filterRegex.test(id) || (label && filterRegex.test(label));
+  });
+}
+
+/**
+ * Returns the provider configs that filterProviderConfigs removed, for validating test provider
+ * references. Tests may still reference these providers; they just don't run on them.
+ */
+export function getExcludedProviders(
+  providers: TestSuiteConfig['providers'],
+  filteredProviders: TestSuiteConfig['providers'],
+): Pick<ApiProvider, 'id' | 'label'>[] {
+  if (!Array.isArray(providers) || !Array.isArray(filteredProviders)) {
+    return [];
+  }
+  return providers.flatMap((provider, index) => {
+    if (filteredProviders.includes(provider)) {
+      return [];
+    }
+    const { id, label } = getProviderIdAndLabel(provider, index);
+    return [{ id: () => id, label }];
   });
 }
 
