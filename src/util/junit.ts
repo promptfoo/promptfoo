@@ -202,7 +202,7 @@ async function buildJunitSuites(evalRecord: Eval): Promise<JunitSuite[]> {
       testcase: buildJunitTestCase(result),
       testIdx: result.testIdx,
     });
-    suite.timeMs += result.latencyMs;
+    suite.timeMs += Number.isFinite(result.latencyMs) ? result.latencyMs : 0;
     if (!result.success) {
       if (result.failureReason === ResultFailureReason.ASSERT) {
         suite.failures += 1;
