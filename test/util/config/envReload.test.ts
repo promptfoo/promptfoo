@@ -2316,7 +2316,7 @@ describe('suite environment loading', () => {
       fs.writeFileSync(
         path.join(base, source),
         form === 'generator'
-          ? `module.exports = () => ${JSON.stringify([row])};`
+          ? "module.exports = () => [{ vars: {}, provider: 'python:provider.py:custom_call' }];"
           : JSON.stringify(form === 'json' || form === 'path-config' ? [row] : row),
       );
       const { testSuite } = await resolveConfigs({ config: [configPath] }, {});
