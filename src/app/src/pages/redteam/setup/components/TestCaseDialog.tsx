@@ -102,7 +102,7 @@ export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
           contentType:
             strategyName === 'audio'
               ? ('audio' as const)
-              : strategyName === 'image'
+              : strategyName === 'image' || strategyName === 'image-stego'
                 ? ('image' as const)
                 : strategyName === 'video'
                   ? ('video' as const)
