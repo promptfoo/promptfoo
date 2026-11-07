@@ -521,7 +521,7 @@ describe('RubyProvider', () => {
       });
       expect(mockCache.set).toHaveBeenCalledWith(
         expect.stringMatching(
-          /^ruby:script\.rb:default:call_api:[a-f0-9]{64}:test prompt:undefined:[a-f0-9]{64}:undefined$/,
+          /^ruby:script\.rb:default:call_api:[a-f0-9]{64}:test prompt:undefined:[a-f0-9]{64}:[a-f0-9]{64}:undefined$/,
         ),
         '{"output":"fresh result"}',
       );

@@ -78,10 +78,22 @@ strings persist to disk; if it stores hashed keys, the hash persists.
   `initialize()` loads referenced settings into `this.config`, while `this.options`
   keeps the original reference. Include `scriptResolvedConfigCacheKey(this.config)`
   so an updated external settings file misses the cache. The helper drops secret
-  fields before hashing. Both helpers are implemented in `src/util/evalRuntimeVars.ts`
-  and `src/util/scriptConfigCacheKey.ts` and re-exported from `src/util/json.ts`,
-  which these providers already import. Do not add a new util import, and do not
-  put `__evalId` back into the key to force that miss.
+  fields before hashing. If `isScriptResolvedConfigCacheable(resolved, original)`
+  is false, skip both the cache read and the cache write: a `file://` payload that
+  differs only by a redacted secret would otherwise share an entry, and the secret
+  must not be hashed into the disk key. Inline secrets stay cacheable.
+- **Fingerprint script-visible prompt and test metadata.** The script receives
+  `context.prompt` and `context.test.metadata` (see `sanitizeScriptContext`).
+  Include `scriptVisibleContextCacheKey(context)` so a new prompt label or
+  `pluginId` / `strategyId` misses. The helper drops per-run tracing ids
+  (`evaluationId`, `traceparent`, and `__evalId` on metadata) and prompt
+  functions, which the worker never serializes. Vars stay on the key via
+  `omitEvalRuntimeVars`.
+- These helpers live in `src/util/evalRuntimeVars.ts`,
+  `src/util/scriptConfigCacheKey.ts`, and `src/util/scriptContextCacheKey.ts`.
+  They are re-exported from `src/util/json.ts`, which these providers already
+  import. Do not add a new util import, and do not put `__evalId` back into the
+  key to force a miss.
 - Reference pattern for stable key structure and canonicalized hashing:
   `getModerationCacheKey` in `src/providers/azure/moderation.ts`.
 

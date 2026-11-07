@@ -11,10 +11,12 @@ import { sha256 } from '../util/createHash';
 import { processConfigFileReferences } from '../util/fileReference';
 import { parsePathOrGlob } from '../util/index';
 import {
+  isScriptResolvedConfigCacheable,
   omitEvalRuntimeVars,
   PER_RUN_EVAL_RUNTIME_VAR_KEYS,
   safeJsonStringify,
   scriptResolvedConfigCacheKey,
+  scriptVisibleContextCacheKey,
 } from '../util/json';
 import { providerRegistry } from './providerRegistry';
 import { sanitizeScriptContext } from './scriptContext';
@@ -248,19 +250,25 @@ export class PythonProvider implements ApiProvider {
     // runs for the same step, so they stay and still separate steps and repeats.
     // `this.options` keeps unresolved `file://` strings. The resolved config from
     // `initialize()` is fingerprinted separately so an updated settings file misses.
+    // Prompt label and test metadata are script-visible and are fingerprinted too.
+    // A file-backed secret is redacted to one placeholder, so it cannot identify an
+    // account. Skip the cache instead of replaying another credential's response.
     const varsForCache =
       context?.vars == null
         ? context?.vars
         : omitEvalRuntimeVars(context.vars, PER_RUN_EVAL_RUNTIME_VAR_KEYS);
+    const cacheResolvedConfig = isScriptResolvedConfigCacheable(this.config, this.options?.config);
     const cacheKey = `python:${this.scriptPath}:${this.functionName || 'default'}:${apiType}:${fileHash}:${prompt}:${JSON.stringify(
       this.options,
-    )}:${scriptResolvedConfigCacheKey(this.config)}:${JSON.stringify(varsForCache)}`;
+    )}:${scriptResolvedConfigCacheKey(this.config)}:${scriptVisibleContextCacheKey(context)}:${JSON.stringify(varsForCache)}`;
     logger.debug(`PythonProvider cache key: ${cacheKey}`);
 
     const cache = await getCache();
     let cachedResult;
-    const cacheEnabled = isCacheEnabled();
-    logger.debug(`PythonProvider cache enabled: ${cacheEnabled}`);
+    const cacheEnabled = isCacheEnabled() && cacheResolvedConfig;
+    logger.debug(
+      `PythonProvider cache enabled: ${cacheEnabled}, file-backed secrets redacted: ${!cacheResolvedConfig}`,
+    );
 
     if (cacheEnabled) {
       cachedResult = await cache.get(cacheKey);
@@ -304,12 +312,12 @@ export class PythonProvider implements ApiProvider {
       // Store result in cache if enabled and no errors
       const hasError = hasScriptResultError(result);
 
-      if (isCacheEnabled() && !hasError) {
+      if (cacheEnabled && !hasError) {
         logger.debug(`PythonProvider caching result: ${cacheKey}`);
         await cache.set(cacheKey, JSON.stringify(result));
       } else {
         logger.debug(
-          `PythonProvider not caching result: ${isCacheEnabled() ? (hasError ? 'has error' : 'unknown reason') : 'cache disabled'}`,
+          `PythonProvider not caching result: ${cacheResolvedConfig ? (isCacheEnabled() ? (hasError ? 'has error' : 'unknown reason') : 'cache disabled') : 'file-backed secret redacted'}`,
         );
       }
 
