@@ -345,6 +345,47 @@ describe('mergeWithDefaults', () => {
 });
 
 describe('roundtrip integration', () => {
+  it.each([
+    'Before\n```\nAfter',
+    'Example:\n```json\n{"id":"123"}\n```\nKeep this text too.',
+    '```\nAt the start and end\n```',
+    'Nested examples:\n````markdown\n```json\n{}\n```\n````\n``````\nAfter',
+    'Example:\n```\nKey Features and Capabilities:\n```\nEmbedded feature text\n```\nAfter',
+  ])('preserves embedded fences when exporting and importing %j', (content) => {
+    const original: ApplicationDefinition = {
+      purpose: content,
+      features: 'Real features',
+      exampleIdentifiers: content,
+      connectedSystems: 'Real connected systems',
+    };
+
+    const imported = purposeToApplicationDefinition(applicationDefinitionToPurpose(original));
+
+    expect(imported).toEqual(mergeWithDefaults(original));
+  });
+
+  it('normalizes CRLF content with embedded fences without truncating it', () => {
+    const original: ApplicationDefinition = {
+      purpose: 'Example:\r\n```json\r\n{}\r\n```\r\nAfter',
+      features: 'Real features',
+    };
+
+    const imported = purposeToApplicationDefinition(applicationDefinitionToPurpose(original));
+
+    expect(imported.purpose).toBe('Example:\n```json\n{}\n```\nAfter');
+    expect(imported.features).toBe(original.features);
+  });
+
+  it('only closes an extended fence on a line containing the exact delimiter', () => {
+    const content = 'Before\n```\n`````\n````json\nAfter';
+    const purpose = `Application Purpose:\n\`\`\`\`\n${content}\n\`\`\`\`\n\nKey Features and Capabilities:\n\`\`\`\nFeatures\n\`\`\``;
+
+    const imported = purposeToApplicationDefinition(purpose);
+
+    expect(imported.purpose).toBe(content);
+    expect(imported.features).toBe('Features');
+  });
+
   it('should roundtrip a complete ApplicationDefinition', () => {
     const original: ApplicationDefinition = {
       purpose: 'Healthcare patient portal assistant',

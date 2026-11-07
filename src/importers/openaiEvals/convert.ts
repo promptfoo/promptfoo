@@ -278,8 +278,28 @@ function getOpenAIItemAlignmentKey(row: OpenAIEvalsJsonlRow): string {
   return `${row.data_source_idx}:${itemHash}`;
 }
 
-function sanitizeOpenAIEvalsIdPart(value: string): string {
-  return value.replace(/[^A-Za-z0-9_-]/g, '_');
+function createOpenAIEvalsId(runIds: string[]): string {
+  if (runIds.length === 1) {
+    const runId = runIds[0];
+    // Preserve ordinary IDs, but reserve the generated single- and multi-run namespaces.
+    if (
+      /^[A-Za-z0-9_-]*$/.test(runId) &&
+      !/^(?:hashed-[a-f0-9]{64}|runs-(?:encoded-)?[a-f0-9]{24})$/.test(runId)
+    ) {
+      return `${OPENAI_EVALS_PROVIDER_PREFIX}-${runId}`;
+    }
+    // JSON escaping also distinguishes lone surrogates that UTF-8 hashing would replace.
+    return `${OPENAI_EVALS_PROVIDER_PREFIX}-hashed-${sha256(JSON.stringify(runId))}`;
+  }
+
+  const sortedRunIds = [...runIds].sort();
+  // Keep existing IDs unless newline separators or UTF-8 replacement could lose identity.
+  const needsEncoding = sortedRunIds.some(
+    (runId) => runId.includes('\n') || Buffer.from(runId).toString() !== runId,
+  );
+  const identity = needsEncoding ? JSON.stringify(sortedRunIds) : sortedRunIds.join('\n');
+  const namespace = needsEncoding ? 'runs-encoded' : 'runs';
+  return `${OPENAI_EVALS_PROVIDER_PREFIX}-${namespace}-${sha256(identity).slice(0, 24)}`;
 }
 
 function createOpenAIPromptMetrics(results: EvaluateResult[]): CompletedPrompt['metrics'] {
@@ -371,10 +391,7 @@ export function convertOpenAIEvalsJsonl(rows: OpenAIEvalsJsonlRow[]): OpenAIEval
   }));
   const tests = Array.from(firstRowByAlignmentKey.values()).map(createOpenAITestCase);
   const timestamp = new Date().toISOString();
-  const evalId =
-    runIds.length === 1
-      ? `${OPENAI_EVALS_PROVIDER_PREFIX}-${sanitizeOpenAIEvalsIdPart(runIds[0])}`
-      : `${OPENAI_EVALS_PROVIDER_PREFIX}-runs-${sha256([...runIds].sort().join('\n')).slice(0, 24)}`;
+  const evalId = createOpenAIEvalsId(runIds);
   const runDescription = runIds.length === 1 ? `run ${runIds[0]}` : `runs ${runIds.join(', ')}`;
 
   return {

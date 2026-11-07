@@ -38,8 +38,15 @@ export const applicationDefinitionToPurpose = (
   }
 
   for (const [header, field] of Object.entries(SECTION_MAPPINGS)) {
-    if (applicationDefinition[field]) {
-      sections.push(`${header}:\n\`\`\`\n${applicationDefinition[field]}\n\`\`\``);
+    const content = applicationDefinition[field];
+    if (content) {
+      // Keep code samples inside the section by using a longer fence than any in its content.
+      let fenceLength = 3;
+      for (const match of content.matchAll(/`{3,}/g)) {
+        fenceLength = Math.max(fenceLength, match[0].length + 1);
+      }
+      const fence = '`'.repeat(fenceLength);
+      sections.push(`${header}:\n${fence}\n${content}\n${fence}`);
     }
   }
 
@@ -88,6 +95,8 @@ const DEFAULT_APPLICATION_DEFINITION: ApplicationDefinition = {
  * more content
  * \`\`\`
  * ```
+ * Fences contain at least three backticks and are longer than any backtick run
+ * in the section content. The closing fence must match the opening fence.
  *
  * If the string doesn't match this format, it falls back to treating
  * the entire string as the purpose field.
@@ -112,15 +121,14 @@ export function purposeToApplicationDefinition(purpose: string | undefined): App
   const result: ApplicationDefinition = { ...DEFAULT_APPLICATION_DEFINITION };
 
   // Try to parse structured format with code blocks
-  // Pattern: "Section Title:\n```\ncontent\n```"
-  // Using a more robust regex that handles various edge cases
-  const sectionRegex = /([A-Za-z][A-Za-z0-9\s/']+?):\s*\n```\n([\s\S]*?)\n```/g;
+  // Match the exact opening fence on its own line so embedded fences remain content.
+  const sectionRegex = /([A-Za-z][A-Za-z0-9\s/']+?):\s*\n(`{3,})\n([\s\S]*?)\n\2(?=\n|$)/g;
 
   let match;
   let foundAnySection = false;
 
   while ((match = sectionRegex.exec(trimmedPurpose)) !== null) {
-    const [, sectionTitle, content] = match;
+    const [, sectionTitle, , content] = match;
     const normalizedTitle = sectionTitle.trim();
     const field = SECTION_MAPPINGS[normalizedTitle];
 

@@ -1095,6 +1095,48 @@ describe('importCommand', () => {
       expect(process.exitCode).toBe(1);
     });
 
+    it('imports distinct run IDs that previously sanitized to the same eval ID', async () => {
+      const runIds = ['evalrun/a', 'evalrun_a', 'evalrun?a', 'evalrunéa', 'evalrun中a'];
+      const filePath = path.join(__dirname, `temp-openai-evals-${Date.now()}.jsonl`);
+      tempFilePath = filePath;
+
+      for (const runId of runIds) {
+        fs.writeFileSync(
+          filePath,
+          JSON.stringify({
+            run_id: runId,
+            data_source_idx: 0,
+            item: { input: runId },
+            sample: { outputs: [{ content: runId }] },
+            grades: { Match: 1 },
+            passes: { Match: true },
+          }),
+        );
+        const importProgram = new Command();
+        importCommand(importProgram);
+        await importProgram.parseAsync(['node', 'test', 'import', filePath]);
+        expect(process.exitCode).toBeUndefined();
+      }
+
+      const importedEvals = await Eval.getMany(10);
+      expect(importedEvals).toHaveLength(runIds.length);
+      expect(new Set(importedEvals.map((evalRecord) => evalRecord.id)).size).toBe(runIds.length);
+      for (const importedEval of importedEvals) {
+        const [runId] = importedEval.config.metadata!.openaiEvalsImport.runIds;
+        const results = await EvalResult.findManyByEvalId(importedEval.id);
+        expect(results).toHaveLength(1);
+        expect(results[0].response?.output).toBe(runId);
+        expect(results[0].metadata?.openai?.runId).toBe(runId);
+      }
+
+      const repeatProgram = new Command();
+      importCommand(repeatProgram);
+      await repeatProgram.parseAsync(['node', 'test', 'import', filePath]);
+      expect(process.exitCode).toBe(1);
+      expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('already exists'));
+      expect(await Eval.getMany(10)).toHaveLength(runIds.length);
+    });
+
     it('should import multi-run samples as comparable prompt columns', async () => {
       const sampleFilePath = path.join(
         __dirname,
@@ -1288,7 +1330,7 @@ describe('importCommand', () => {
       expect(importedEvals).toHaveLength(0);
     });
 
-    it('should sanitize unsafe characters in the OpenAI run id used as eval id', async () => {
+    it('should hash unsafe characters in the OpenAI run id used as eval id', async () => {
       const filePath = path.join(__dirname, `temp-openai-evals-${Date.now()}.jsonl`);
       fs.writeFileSync(
         filePath,
@@ -1306,7 +1348,8 @@ describe('importCommand', () => {
       await program.parseAsync(['node', 'test', 'import', filePath]);
 
       expect(process.exitCode).toBeUndefined();
-      const importedEval = await Eval.findById('openai-evals-evalrun_with_spaces___slashes');
+      const [importedEval] = await Eval.getMany(10);
+      expect(importedEval.id).toMatch(/^openai-evals-hashed-[a-f0-9]{64}$/);
       expect(importedEval).toBeDefined();
       expect(importedEval!.config.metadata?.openaiEvalsImport).toMatchObject({
         runIds: ['evalrun/with spaces & slashes'],
