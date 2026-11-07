@@ -79,6 +79,10 @@ Each config schema also exports a matching `*InputJsonSchema` for JSON Schema co
 
 For GPT-5.6 and newer models, use `openai:<model>`, such as `openai:gpt-6-luna`. These IDs default to Responses. Add an endpoint prefix only to select a different API or make an API comparison explicit.
 
+`openai:chat:chat-latest` and `openai:responses:chat-latest` use [OpenAI's current ChatGPT Instant alias](https://developers.openai.com/api/docs/models/chat-latest). Its underlying snapshot can change; use a dated model for stable eval baselines.
+
+[Published Standard pricing](https://developers.openai.com/api/docs/pricing) is $5 input, $0.50 cached input, and $30 output per million tokens, including image-input tokens. Other service tiers remain unpriced unless you configure explicit costs.
+
 | Task                                   | Provider ID                                | Guide                                                                    |
 | -------------------------------------- | ------------------------------------------ | ------------------------------------------------------------------------ |
 | GPT-5.6+ text, image inputs, and tools | `openai:<model>`                           | [Responses API](#responses-api)                                          |
