@@ -72,7 +72,7 @@ Object.assign(process.env, { VITE_PUBLIC_PROMPTFOO_REMOTE_API_BASE_URL: remoteAp
 // Export a plain object here to avoid CI-only type conflicts from multiple Vite installs in the monorepo.
 export default {
   server: {
-    port: 3000,
+    port: 15501,
   },
   base: process.env.VITE_PUBLIC_BASENAME || '/',
   plugins: [
