@@ -227,6 +227,85 @@ function detectMimeFromBase64(base64Data: string): string | null {
 }
 
 /**
+ * Resolves `file://` references nested inside a vars value.
+ *
+ * Top-level vars are handled by renderPrompt, where a reference may also invoke a
+ * JavaScript/Python var script or be encoded as base64 media. Nested references are
+ * plain data, so only text and YAML files are read here; script and media references
+ * are left as authored rather than parsed as text.
+ */
+async function resolveNestedFileReferences(
+  value: VarValue,
+  basePath: string,
+  seen: WeakSet<object> = new WeakSet(),
+): Promise<VarValue> {
+  if (Array.isArray(value)) {
+    // A cyclic vars graph (YAML anchors, a JS generator returning itself) must not
+    // recurse forever: resolve each container once and leave the back-edge as authored.
+    if (seen.has(value)) {
+      return value;
+    }
+    seen.add(value);
+    const result: VarValue[] = [];
+    for (const item of value) {
+      result.push(await resolveNestedFileReferences(item as VarValue, basePath, seen));
+    }
+    return result;
+  }
+
+  if (value && typeof value === 'object' && Object.getPrototypeOf(value) === Object.prototype) {
+    if (seen.has(value)) {
+      return value;
+    }
+    seen.add(value);
+    const result: Record<string, VarValue> = {};
+    for (const [key, item] of Object.entries(value)) {
+      // defineProperty keeps a `__proto__` key an own property instead of writing
+      // through to the prototype, which would pollute it.
+      Object.defineProperty(result, key, {
+        value: await resolveNestedFileReferences(item as VarValue, basePath, seen),
+        enumerable: true,
+        configurable: true,
+        writable: true,
+      });
+    }
+    return result;
+  }
+
+  if (typeof value !== 'string' || !value.startsWith('file://')) {
+    return value;
+  }
+
+  // Nested references are plain data: only the path is needed here, with no var-script
+  // function name, so this mirrors the top-level slice rather than importing a parser
+  // from the node layer (which would add a cross-layer dependency).
+  const referencePath = value.slice('file://'.length);
+  const filePath = path.resolve(process.cwd(), basePath, referencePath);
+  const fileExtension = path.extname(filePath).toLowerCase();
+
+  // These types are loaded with top-level-only semantics (var name, prompt, and provider
+  // context), so leave nested references to them untouched.
+  if (
+    isJavascriptFile(filePath) ||
+    fileExtension === '.py' ||
+    fileExtension === '.pdf' ||
+    isImageFile(filePath) ||
+    isVideoFile(filePath) ||
+    isAudioFile(filePath)
+  ) {
+    logger.debug('[EvaluatorHelpers] Leaving nested file reference unresolved', { value });
+    return value;
+  }
+
+  // Object context, not interpolation: structured log transports keep the path a field.
+  logger.debug('[EvaluatorHelpers] Loading nested var file reference', { filePath });
+  if (fileExtension === '.yaml' || fileExtension === '.yml') {
+    return JSON.stringify(loadYaml(await fs.readFile(filePath, 'utf8')) as string | object);
+  }
+  return (await fs.readFile(filePath, 'utf8')).trim();
+}
+
+/**
  * Renders a prompt template with variable substitution using Nunjucks.
  *
  * @param prompt - The prompt template to render
@@ -391,6 +470,8 @@ export async function renderPrompt(
         );
       }
       vars[varName] = javascriptOutput.output;
+    } else if (value !== null && typeof value === 'object') {
+      vars[varName] = await resolveNestedFileReferences(value, cliState.basePath || '');
     }
   }
 
