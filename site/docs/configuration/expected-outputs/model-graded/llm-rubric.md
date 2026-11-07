@@ -73,17 +73,16 @@ To evaluate tone, pacing, or pronunciation, choose an audio-capable OpenAI Chat 
 assert:
   - type: llm-rubric
     value: The speaker sounds calm and speaks at a steady pace.
-    provider:
-      id: openai:chat:gpt-audio-1.5
-      config:
-        modalities: [text]
+    provider: openai:chat:gpt-audio-1.5
 ```
 
-`modalities: [text]` requests the grader's JSON result as text. The grader listens to the attached audio and uses the transcript as supporting context. This works with audio from [OpenAI Realtime](/docs/providers/openai#realtime-api-models), audio chat, text to speech, or a custom target provider that returns the same audio fields.
+Promptfoo requests the JSON grade as text. The grader listens to the attached audio and uses the transcript as supporting context. This works with audio from [OpenAI Realtime](/docs/providers/openai#realtime-api-models), audio chat, text to speech, or a custom target provider that returns the same audio fields.
 
-The target must return inline base64 audio with `format: wav` or `format: mp3`, up to 20 MiB. Blob references and other formats produce a grading error. The built-in Realtime provider converts its default PCM16 output to WAV, including in persistent conversations; use `output_audio_format: pcm16` for grading. Text-only graders retain their existing behavior and evaluate the text output or transcript.
+The target must return inline base64 audio with `format: wav` or `format: mp3`, up to 20 MiB. Native audio grading rejects blob references and other formats. The built-in Realtime provider converts its default PCM16 output to WAV, including in persistent conversations; use `output_audio_format: pcm16` for grading.
 
-An assertion with `transform` grades the transformed text and does not attach the original audio. Successful audio grades include `renderedGradingPromptAudio: true` in assertion metadata; `renderedGradingPrompt` contains the text prompt without the attached audio bytes.
+A grader that cannot listen to audio uses the transcript, or the text output when no transcript is available, and logs a warning. The assertion errors if the only evidence is audio, an empty output, an audio placeholder, or a built-in text-to-speech status message. A blob-backed response can still provide a transcript for text grading.
+
+Provider transforms, test `transform`/`postprocess`, and assertion transforms grade the transformed text without the original audio or transcript. Successful audio grades include `renderedGradingPromptAudio: true` in assertion metadata; `renderedGradingPrompt` contains the text prompt without the attached audio bytes.
 
 ## Using variables in the rubric
 

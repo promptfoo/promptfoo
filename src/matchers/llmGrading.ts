@@ -21,6 +21,8 @@ import {
   shouldUseRemoteGrading,
 } from './providers';
 import {
+  ATTACHED_AUDIO_OUTPUT_PLACEHOLDER,
+  getAudioGradingFallback,
   LlmRubricProviderError,
   loadRubricPrompt,
   materializeImageOutputsForGrading,
@@ -174,7 +176,7 @@ function getGradingOutputForAudio(llmOutput: string, audio: ProviderResponse['au
     .replace(/^data:audio\/[^;,]+;base64,/i, '')
     .replace(/\s/g, '');
   return outputData === audio.data.replace(/\s/g, '')
-    ? audio.transcript || '[Audio output]'
+    ? audio.transcript || ATTACHED_AUDIO_OUTPUT_PLACEHOLDER
     : llmOutput;
 }
 
@@ -216,12 +218,15 @@ export async function matchesLlmRubric(
     cliState.config?.redteam &&
     shouldUseRemoteGrading({ canUseCodexDefaultProvider: true })
   ) {
+    const remoteOutput = audio
+      ? getAudioGradingFallback(gradingOutput, audio, 'Remote grading')
+      : gradingOutput;
     try {
       return {
         ...(await doRemoteGrading({
           task: 'llm-rubric',
           rubric,
-          output: gradingOutput,
+          output: remoteOutput,
           vars: vars || {},
           ...(imageOutputs.length ? { images: imageOutputs } : {}),
           ...getRemoteGradingContext(),
