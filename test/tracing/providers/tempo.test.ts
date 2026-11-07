@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../../../src/util/fetch/index', () => ({ fetchWithProxy: vi.fn() }));
 vi.mock('../../../src/logger', () => ({
@@ -12,6 +12,10 @@ import { fetchWithProxy } from '../../../src/util/fetch/index';
 
 const mockedFetch = vi.mocked(fetchWithProxy);
 const TRACE_ID = '0123456789abcdef0123456789abcdef';
+
+afterEach(() => {
+  vi.resetAllMocks();
+});
 
 function response(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), {
@@ -81,6 +85,128 @@ describe('TempoProvider', () => {
     { id: 'tempo', endpoint: 'https://example.com', timeout: -1 },
   ] as const)('rejects invalid endpoint configuration: %o', (config) => {
     expect(() => new TempoProvider(config)).toThrow();
+  });
+
+  it.each(['resource', 'scope', 'span', 'events', 'links', 'event', 'link'])(
+    'rejects incomplete or invalid %s counters without returning partial spans',
+    async (location) => {
+      const provider = new TempoProvider({ id: 'tempo', endpoint: 'http://tempo:3200' });
+      for (const count of [
+        1,
+        '1',
+        -1,
+        0.5,
+        '0.01',
+        '1e-4',
+        '+0',
+        '00',
+        '0x0',
+        '0.',
+        '',
+        'unknown',
+        {},
+        false,
+      ]) {
+        const data = structuredClone(traceResponse);
+        const batch = data.batches[0];
+        const scope = batch.scopeSpans[0];
+        const span = scope.spans[1];
+        const record =
+          location === 'resource' ? batch.resource : location === 'scope' ? scope.scope : span;
+        if (location === 'event' || location === 'link') {
+          Object.assign(span, {
+            [location === 'event' ? 'events' : 'links']: [{ droppedAttributesCount: count }],
+          });
+        } else {
+          Object.assign(record, {
+            [location === 'events'
+              ? 'droppedEventsCount'
+              : location === 'links'
+                ? 'droppedLinksCount'
+                : 'droppedAttributesCount']: count,
+          });
+        }
+        mockedFetch.mockResolvedValueOnce(response(data));
+        await expect(provider.fetchTrace(TRACE_ID)).rejects.toMatchObject({
+          name: 'TraceProviderError',
+          retryable: false,
+          message: 'Tempo returned incomplete trace data: dropped telemetry',
+        });
+      }
+    },
+  );
+
+  it.each([
+    { resource: { droppedAttributesCount: 1 }, scopeSpans: [] },
+    { resource: { droppedAttributesCount: 'invalid' } },
+    { scopeSpans: [{ scope: { droppedAttributesCount: 1 }, spans: [] }] },
+    { scopeSpans: [{ scope: { droppedAttributesCount: 'invalid' } }] },
+  ])('checks dropped counters before iterating owner children: %j', async (batch) => {
+    mockedFetch.mockResolvedValueOnce(response({ batches: [...traceResponse.batches, batch] }));
+    const provider = new TempoProvider({ id: 'tempo', endpoint: 'http://tempo:3200' });
+    await expect(provider.fetchTrace(TRACE_ID)).rejects.toMatchObject({
+      name: 'TraceProviderError',
+      retryable: false,
+      message: 'Tempo returned incomplete trace data: dropped telemetry',
+    });
+  });
+
+  it.each(['events', 'links'])('rejects non-array %s collections', async (field) => {
+    const data = structuredClone(traceResponse);
+    Object.assign(data.batches[0].scopeSpans[0].spans[0], { [field]: {} });
+    mockedFetch.mockResolvedValueOnce(response(data));
+    const provider = new TempoProvider({ id: 'tempo', endpoint: 'http://tempo:3200' });
+    await expect(provider.fetchTrace(TRACE_ID)).rejects.toThrow('must be arrays');
+  });
+
+  it.each([undefined, null, 0, '0', '0.0', '0e0', '-0', '0.00e-12', ' -0.0E+12\r\n'])(
+    'accepts omitted, null, and zero dropped counters: %s',
+    async (count) => {
+      const data = structuredClone(traceResponse);
+      const batch = data.batches[0];
+      const scope = batch.scopeSpans[0];
+      Object.assign(batch.resource, { droppedAttributesCount: count });
+      Object.assign(scope.scope, { droppedAttributesCount: count });
+      Object.assign(scope.spans[0], {
+        droppedAttributesCount: count,
+        droppedEventsCount: count,
+        droppedLinksCount: count,
+        events: [{ droppedAttributesCount: count }],
+        links: [{ droppedAttributesCount: count }],
+      });
+      mockedFetch.mockResolvedValueOnce(response(data));
+      const result = await new TempoProvider({
+        id: 'tempo',
+        endpoint: 'http://tempo:3200',
+      }).fetchTrace(TRACE_ID);
+      expect(result?.spans.map(({ spanId }) => spanId)).toEqual([
+        '0123456789abcdef',
+        '1123456789abcdef',
+      ]);
+    },
+  );
+
+  it('accepts the unique span limit and equivalent repeats, but rejects larger snapshots', async () => {
+    const provider = new TempoProvider({ id: 'tempo', endpoint: 'http://tempo:3200' });
+    const spans = Array.from({ length: 10_000 }, (_, index) => ({
+      traceId: TRACE_ID,
+      spanId: (index + 1).toString(16).padStart(16, '0'),
+      name: 'fixture',
+      startTimeUnixNano: '1704067200000000000',
+    }));
+    const data = { batches: [{ scopeSpans: [{ spans }] }] };
+    mockedFetch.mockResolvedValueOnce(response(data));
+    expect((await provider.fetchTrace(TRACE_ID))?.spans).toHaveLength(10_000);
+    spans.push({ ...spans[0] });
+    mockedFetch.mockResolvedValueOnce(response(data));
+    expect((await provider.fetchTrace(TRACE_ID))?.spans).toHaveLength(10_000);
+    spans.push({ ...spans[0], spanId: 'ffffffffffffffff' });
+    mockedFetch.mockResolvedValueOnce(response(data));
+    await expect(provider.fetchTrace(TRACE_ID)).rejects.toMatchObject({
+      name: 'TraceProviderError',
+      retryable: false,
+      message: 'Tempo trace exceeds the maximum span count',
+    });
   });
 
   it('fetches and normalizes OpenTelemetry trace spans', async () => {
