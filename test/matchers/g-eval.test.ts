@@ -561,6 +561,54 @@ describe('matchesGEval', () => {
     });
   });
 
+  it.each([
+    ['pretty-printed', '{\n  "steps": ["Check clarity"]\n}'],
+    ['with a space after the brace', '{ "steps": ["Check clarity"] }'],
+    ['in a fenced block', '```json\n{\n  "steps": ["Check clarity"]\n}\n```'],
+    ['after a sentence', 'Here are the steps:\n{"steps": ["Check clarity"]}\nHope this helps.'],
+  ])('should read the evaluation steps when the grader returns them %s', async (_, stepsOutput) => {
+    vi.spyOn(DefaultGradingProvider, 'callApi')
+      .mockImplementationOnce(async () => ({
+        output: stepsOutput,
+        tokenUsage: { total: 3, prompt: 1, completion: 2 },
+      }))
+      .mockImplementationOnce(async () => ({
+        output: '{"score": 8, "reason": "Clear"}',
+        tokenUsage: { total: 4, prompt: 2, completion: 2 },
+      }));
+
+    const result = await matchesGEval('Evaluate coherence', 'Test input', 'Test output', 0.7);
+
+    expect(result).toEqual({
+      pass: true,
+      score: 0.8,
+      reason: 'Clear',
+      tokensUsed: expect.any(Object),
+    });
+  });
+
+  it.each([
+    ['pretty-printed', '{\n  "score": 8,\n  "reason": "Clear"\n}'],
+    ['in a fenced block', '```json\n{\n  "score": 8,\n  "reason": "Clear"\n}\n```'],
+    ['after a sentence', 'Scoring against {criteria}:\n{"score": 8, "reason": "Clear"}'],
+  ])('should read the evaluation result when the grader returns it %s', async (_, resultOutput) => {
+    vi.spyOn(DefaultGradingProvider, 'callApi')
+      .mockImplementationOnce(async () => createClarityStepsResponse())
+      .mockImplementationOnce(async () => ({
+        output: resultOutput,
+        tokenUsage: { total: 4, prompt: 2, completion: 2 },
+      }));
+
+    const result = await matchesGEval('Evaluate coherence', 'Test input', 'Test output', 0.7);
+
+    expect(result).toEqual({
+      pass: true,
+      score: 0.8,
+      reason: 'Clear',
+      tokensUsed: expect.any(Object),
+    });
+  });
+
   it('tracks token usage for both API calls', async () => {
     const criteria = 'Evaluate coherence and clarity';
     const input = 'Test input';
