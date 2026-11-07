@@ -55,6 +55,7 @@ import {
   warnOnDegradedJsonlRecovery,
   writeMultipleOutputs,
 } from '../util/index';
+import invariant from '../util/invariant';
 import { promptfooCommand } from '../util/promptfooCommand';
 import { checkProviderApiKeys } from '../util/provider';
 import { shouldShareResults } from '../util/sharing';
@@ -71,6 +72,7 @@ import type {
   EnvOverrides,
   EvalRuntimeOptions,
   Scenario,
+  TestCase,
   TestSuite,
   UnifiedConfig,
 } from '../types/index';
@@ -720,13 +722,29 @@ async function doEvalWithEnv(
       filterSample !== undefined;
     const shouldApplyFiltersToImplicitDefaultTest =
       hasActiveTestFilter && canSynthesizeImplicitDefaultTest && !testSuite.tests?.length;
+    const persistTestSelection =
+      !resumeEval && (filterFirstN !== undefined || filterPattern !== undefined);
+    const consumedTopLevelRange = persistTestSelection && !hasScenarios;
 
     // Apply filtering only when not resuming, to preserve test indices
     if (!resumeEval) {
+      const testConfigMap = persistTestSelection ? new WeakMap<TestCase, TestCase>() : undefined;
+      if (testConfigMap) {
+        const rawTests = Array.isArray(config.tests) ? config.tests : [];
+        for (const [index, test] of (testSuite.tests ?? []).entries()) {
+          const rawTest = rawTests[index];
+          invariant(
+            rawTest && typeof rawTest === 'object',
+            'Missing replayable test configuration',
+          );
+          testConfigMap.set(test, rawTest as TestCase);
+        }
+      }
       if (shouldApplyFiltersToImplicitDefaultTest) {
         const defaultMetadata =
           typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest?.metadata : undefined;
         testSuite.tests = defaultMetadata ? [{ metadata: defaultMetadata }] : [{}];
+        testConfigMap?.set(testSuite.tests[0], { ...testSuite.tests[0], vars: {} });
       }
       const filterOptions: FilterOptions = {
         failing: cmdObj.filterFailing,
@@ -739,12 +757,25 @@ async function doEvalWithEnv(
         sample: filterSample,
         sampleSeed: filterSampleSeed,
       };
-      testSuite.tests = await filterTests(testSuite, filterOptions);
+      testSuite.tests = await filterTests(testSuite, filterOptions, testConfigMap);
+      if (testConfigMap) {
+        config.tests = testSuite.tests.map((test) => {
+          const rawTest = testConfigMap.get(test);
+          invariant(rawTest, 'Filtered test lost its replayable configuration');
+          return rawTest;
+        });
+        if (consumedTopLevelRange && config.evaluateOptions) {
+          config.evaluateOptions = { ...config.evaluateOptions, filterRange: undefined };
+        }
+      }
       const shouldSuppressImplicitDefaultTest =
         testSuite.tests.length === 0 &&
         ((explicitTestCountBeforeFiltering ?? 0) > 0 || shouldApplyFiltersToImplicitDefaultTest);
       if (!hasScenarios && shouldSuppressImplicitDefaultTest) {
         testSuite.scenarios = [];
+        if (persistTestSelection) {
+          config.scenarios = [];
+        }
       }
     }
 
@@ -881,6 +912,7 @@ async function doEvalWithEnv(
 
     const runtimeOptions: EvalRuntimeOptions = {
       ...options,
+      ...(consumedTopLevelRange ? { filterRange: undefined } : {}),
       ...(providerFilter ? { providerFilter } : {}),
     };
 
