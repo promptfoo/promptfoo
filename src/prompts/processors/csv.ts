@@ -54,8 +54,8 @@ function buildCsvPrompts(
 }
 
 /**
- * Fallback for content that can't be parsed as delimited CSV: treat every
- * non-empty line as a prompt, skipping a leading `prompt` header if present.
+ * Fallback for content without a `prompt` header or that can't be parsed as CSV:
+ * treat every non-empty line as a prompt, skipping a leading `prompt` header if present.
  */
 function processCsvLines(content: string, basePrompt: Partial<Prompt>): Prompt[] {
   const lines = content.split(/\r?\n/).filter((line) => line.trim());
@@ -88,13 +88,15 @@ export async function processCsvPrompts(
   const delimiter = getEnvString('PROMPTFOO_CSV_DELIMITER', ',');
   const enforceStrict = getEnvBool('PROMPTFOO_CSV_STRICT', false);
 
-  if (!content.includes(delimiter)) {
-    return processCsvLines(content, basePrompt);
-  }
-
+  let header: string[] = [];
+  let records: Record<string, string>[];
   try {
     const parseOptions: CsvParseOptionsWithColumns<Record<string, string>> = {
-      columns: true as const,
+      // Match column names case-insensitively, like the `prompt` header in processCsvLines.
+      columns: (columns: string[]) => {
+        header = columns.map((column) => column.toLowerCase());
+        return header;
+      },
       bom: true,
       delimiter,
       relax_quotes: !enforceStrict,
@@ -102,13 +104,19 @@ export async function processCsvPrompts(
       trim: true,
     };
 
-    const records = parse<Record<string, string>>(content, parseOptions);
-    const promptRecords = records.filter((row) => row.prompt);
-    return buildCsvPrompts(
-      promptRecords.map((row) => ({ raw: row.prompt, label: row.label })),
-      basePrompt,
-    );
+    records = parse<Record<string, string>>(content, parseOptions);
   } catch {
     return processCsvLines(content, basePrompt);
   }
+
+  // Without a `prompt` header the file lists one prompt per line, even if a line contains the delimiter.
+  if (!header.includes('prompt')) {
+    return processCsvLines(content, basePrompt);
+  }
+
+  const promptRecords = records.filter((row) => row.prompt);
+  return buildCsvPrompts(
+    promptRecords.map((row) => ({ raw: row.prompt, label: row.label })),
+    basePrompt,
+  );
 }
