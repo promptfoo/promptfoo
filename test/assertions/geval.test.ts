@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { handleGEval } from '../../src/assertions/geval';
 import { runAssertion } from '../../src/assertions/index';
 import { matchesGEval } from '../../src/matchers/llmGrading';
@@ -93,6 +93,10 @@ describe('handleGEval', () => {
     vi.resetAllMocks();
   });
 
+  afterEach(() => {
+    vi.resetAllMocks();
+  });
+
   it('should handle string renderedValue', async () => {
     const mockMatchesGEval = vi.mocked(matchesGEval);
     mockMatchesGEval.mockResolvedValue(createPassingGrade());
@@ -157,6 +161,39 @@ describe('handleGEval', () => {
       tokensUsed: expect.objectContaining({ total: 24, prompt: 14, completion: 10 }),
     });
   });
+
+  it.each([
+    { label: 'default threshold', score: 0.7, threshold: undefined, inverse: false, pass: true },
+    { label: 'explicit threshold', score: 0.7, threshold: 0.7, inverse: false, pass: true },
+    { label: 'below threshold', score: 0.699999999, threshold: 0.7, inverse: false, pass: false },
+    { label: 'above threshold', score: 0.700000001, threshold: 0.7, inverse: false, pass: true },
+    { label: 'inverse boundary', score: 0.7, threshold: 0.7, inverse: true, pass: false },
+  ])(
+    'compares averaged scores at the $label without rounding',
+    async ({ score, threshold, inverse, pass }) => {
+      vi.mocked(matchesGEval).mockResolvedValue({
+        pass: score >= (threshold ?? 0.7),
+        score,
+        reason: 'Criterion evaluated',
+      });
+      const criteria = ['clarity', 'accuracy', 'completeness'];
+      const result = await handleGEval({
+        ...createGevalParams(),
+        assertion: {
+          type: inverse ? 'not-g-eval' : 'g-eval',
+          value: criteria,
+          ...(threshold === undefined ? {} : { threshold }),
+        },
+        renderedValue: criteria,
+        inverse,
+      });
+
+      const averageScore = (score + score + score) / 3;
+      expect(result.pass).toBe(pass);
+      expect(result.score).toBe(inverse ? 1 - averageScore : averageScore);
+      expect(matchesGEval).toHaveBeenCalledTimes(3);
+    },
+  );
 
   it('should fail with a clear reason when array renderedValue is empty', async () => {
     const mockMatchesGEval = vi.mocked(matchesGEval);
