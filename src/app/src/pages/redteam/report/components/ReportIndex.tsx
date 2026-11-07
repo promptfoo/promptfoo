@@ -10,7 +10,7 @@ export default function ReportIndex() {
   const navigate = useNavigate();
 
   return (
-    <PageContainer className="fixed top-[calc(var(--nav-height)_+_var(--update-banner-height,0px))] left-0 right-0 bottom-0 overflow-y-auto">
+    <PageContainer className="fixed top-[calc(var(--nav-height)_+_var(--update-banner-height,0px))] left-0 right-0 bottom-0 flex min-h-0 flex-col overflow-x-hidden overflow-y-auto">
       <PageHeader>
         <div className="mx-auto flex w-full max-w-screen-2xl flex-wrap items-center justify-between gap-4 px-4 py-6 sm:px-8">
           <div>
@@ -27,7 +27,7 @@ export default function ReportIndex() {
           </Button>
         </div>
       </PageHeader>
-      <div className="mx-auto w-full max-w-screen-2xl px-4 py-6 sm:px-8">
+      <div className="mx-auto flex min-h-0 w-full flex-1 flex-col max-w-screen-2xl px-4 py-6 sm:px-8">
         <ReportsTable
           onReportSelected={(evalId) => navigate(REDTEAM_ROUTES.REPORT_DETAIL(evalId))}
         />
