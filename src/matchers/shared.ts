@@ -1,4 +1,42 @@
+import { sanitizeProviderIdForLog } from '../util/provider';
+
 import type { GradingResult, TokenUsage } from '../types/index';
+import type { ApiProvider } from '../types/providers';
+
+/**
+ * Stable display id for the resolved LLM-as-a-judge provider. Prefer the
+ * provider's runtime `id()` (e.g. `openai:gpt-4.1-mini`) and append a label
+ * when it differs from the id. Credential-bearing HTTP IDs are redacted so
+ * secrets never land in persisted `metadata.gradingProvider`.
+ */
+export function formatResolvedGradingProvider(provider: ApiProvider): string {
+  const id = provider.id();
+  const label = typeof provider.label === 'string' ? provider.label.trim() : '';
+  const display = label && label !== id ? `${id} (${label})` : id;
+  return sanitizeProviderIdForLog(display);
+}
+
+/**
+ * Attach the resolved judge provider id onto a grading result's metadata so
+ * the eval results UI can show which model graded the assertion. Overwrites
+ * any existing `gradingProvider` key (including spoofed provider-metadata).
+ * Always redacts credentials before persistence.
+ */
+export function attachGradingProvider<T extends Omit<GradingResult, 'assertion'>>(
+  result: T,
+  provider: ApiProvider | string,
+): T {
+  const gradingProvider = sanitizeProviderIdForLog(
+    typeof provider === 'string' ? provider : formatResolvedGradingProvider(provider),
+  );
+  return {
+    ...result,
+    metadata: {
+      ...result.metadata,
+      gradingProvider,
+    },
+  };
+}
 
 /**
  * Normalize token usage for matcher results. Unlike the evaluator-level

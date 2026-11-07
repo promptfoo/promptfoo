@@ -1,9 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
+  attachGradingProvider,
+  formatResolvedGradingProvider,
   normalizeMatcherTokenUsage,
   splitIntoSentences,
   splitTextIntoSentences,
 } from '../../src/matchers/shared';
+
+import type { ApiProvider } from '../../src/types/providers';
 
 describe('normalizeMatcherTokenUsage', () => {
   it('derives missing totals before matcher normalization makes them indistinguishable from zero', () => {
@@ -174,5 +178,55 @@ describe('splitTextIntoSentences', () => {
   it('returns an empty array for empty or whitespace-only text', () => {
     expect(splitTextIntoSentences('')).toEqual([]);
     expect(splitTextIntoSentences('   \n  \n ')).toEqual([]);
+  });
+});
+
+describe('formatResolvedGradingProvider', () => {
+  it('redacts credentials from HTTP judge URLs before display', () => {
+    const provider = {
+      id: () => 'https://user:pass@judge.example/grade?api_key=secret-token',
+      callApi: async () => ({ output: '' }),
+    } as ApiProvider;
+
+    expect(formatResolvedGradingProvider(provider)).toBe(
+      'https://***:***@judge.example/grade?api_key=%5BREDACTED%5D',
+    );
+  });
+
+  it('redacts credentials when a label is appended', () => {
+    const provider = {
+      id: () => 'https://judge.example/grade?api_key=secret-token',
+      label: 'Custom Judge',
+      callApi: async () => ({ output: '' }),
+    } as ApiProvider;
+
+    expect(formatResolvedGradingProvider(provider)).toBe(
+      'https://judge.example/grade?api_key=%5BREDACTED%5D (Custom Judge)',
+    );
+  });
+
+  it('leaves ordinary provider ids unchanged', () => {
+    const provider = {
+      id: () => 'openai:gpt-4.1-mini',
+      callApi: async () => ({ output: '' }),
+    } as ApiProvider;
+
+    expect(formatResolvedGradingProvider(provider)).toBe('openai:gpt-4.1-mini');
+  });
+});
+
+describe('attachGradingProvider', () => {
+  it('persists a redacted HTTP judge id into metadata.gradingProvider', () => {
+    const provider = {
+      id: () => 'https://judge.example/grade?api_key=super-secret',
+      callApi: async () => ({ output: '' }),
+    } as ApiProvider;
+
+    const result = attachGradingProvider({ pass: true, score: 1, reason: 'ok' }, provider);
+
+    expect(result.metadata?.gradingProvider).toBe(
+      'https://judge.example/grade?api_key=%5BREDACTED%5D',
+    );
+    expect(result.metadata?.gradingProvider).not.toContain('super-secret');
   });
 });
