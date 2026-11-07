@@ -249,15 +249,16 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
     return;
   }
 
-  // If there's a current job running, abort it
+  // Refuse to start while another job is already running. Aborting the in-flight
+  // job here let any stray request kill the operator's run; the UI offers an
+  // explicit cancel-then-restart through POST /redteam/cancel instead.
   if (currentJobId) {
-    if (currentAbortController) {
-      currentAbortController.abort();
-    }
-    evalJobService.fail(currentJobId, ['Job cancelled - new job started'], {
-      append: true,
-      resetResult: false,
+    res.status(409).json({
+      success: false,
+      error: 'A red team job is already running. Cancel it before starting a new one.',
+      jobId: currentJobId,
     });
+    return;
   }
 
   const { config, force, verbose, delay, maxConcurrency } = bodyResult.data;
