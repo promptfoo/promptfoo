@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import { afterEach, describe, expect, it } from 'vitest';
 import { ZodError } from 'zod';
 import { generateConfigFile } from '../../code-scan-action/src/config';
+import { loadConfig } from '../../src/codeScan/config/loader';
 
 describe('generateConfigFile', () => {
   const generatedPaths: string[] = [];
@@ -15,27 +16,51 @@ describe('generateConfigFile', () => {
     }
   });
 
-  function readGeneratedConfig(minimumSeverity: string, guidance?: string): string {
+  function readGeneratedConfig(minimumSeverity: string, guidance?: string) {
     const configPath = generateConfigFile(minimumSeverity, guidance);
     generatedPaths.push(configPath);
-    return fs.readFileSync(configPath, 'utf8');
+    return loadConfig(configPath);
   }
 
   it('writes a normalized config for full-repository scans', () => {
-    expect(readGeneratedConfig(' HIGH ')).toBe('minimumSeverity: high\ndiffsOnly: false\n');
+    expect(readGeneratedConfig(' HIGH ')).toEqual({
+      minimumSeverity: 'high',
+      diffsOnly: false,
+    });
   });
 
-  it('escapes single-line guidance as a YAML string', () => {
-    expect(readGeneratedConfig('medium', 'Review "auth" carefully')).toBe(
-      'minimumSeverity: medium\ndiffsOnly: false\nguidance: "Review \\"auth\\" carefully"\n',
-    );
+  it.each([
+    'Review "auth": carefully',
+    'Line one\nLine two',
+    '  indented first\nunindented second',
+    'one\n\n',
+    '\n\nleading blank',
+    'Windows\r\nline',
+    'tab\tfield',
+    'control\u0000char',
+    'Unicode λ 😀',
+    'on',
+    'false',
+    'null',
+    '2026-01-02',
+    '{"nested":{"array":[true,1,null]}}',
+    '  ',
+  ])('preserves guidance exactly through the scanner YAML loader: %j', (guidance) => {
+    const parsed = readGeneratedConfig('critical', guidance);
+    expect(parsed).toEqual({ minimumSeverity: 'critical', diffsOnly: false, guidance });
   });
 
-  it('writes multiline guidance as a YAML literal block', () => {
-    expect(readGeneratedConfig('critical', 'Line one\nLine two')).toBe(
-      'minimumSeverity: critical\ndiffsOnly: false\nguidance: |\n  Line one\n  Line two\n',
-    );
+  it.each(['', undefined])('omits empty or absent guidance: %j', (guidance) => {
+    const parsed = readGeneratedConfig('low', guidance);
+    expect(parsed).toEqual({ minimumSeverity: 'low', diffsOnly: false });
   });
+
+  it.each([null, false, 0, { nested: ['guidance'] }, ['guidance']])(
+    'rejects invalid guidance before serialization: %j',
+    (guidance) => {
+      expect(() => readGeneratedConfig('high', guidance as unknown as string)).toThrow(ZodError);
+    },
+  );
 
   it('rejects invalid severities', () => {
     let thrown: unknown;
