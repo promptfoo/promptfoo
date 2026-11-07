@@ -1,9 +1,14 @@
 import logger from '../../logger';
 import Eval from '../../models/eval';
-import { deduplicateTestCases, extractRuntimeVars, filterRuntimeVars } from '../../util/comparison';
+import {
+  deduplicateTestCases,
+  extractRuntimeVars,
+  filterRuntimeVars,
+  isRuntimeVar,
+} from '../../util/comparison';
 import { readOutput, resultIsForTestCase } from '../../util/index';
 
-import type { EvaluateResult, TestCase, TestSuite } from '../../types/index';
+import type { EvaluateResult, TestCase, TestSuite, Vars } from '../../types/index';
 
 type Tests = NonNullable<TestSuite['tests']>;
 
@@ -12,6 +17,49 @@ type Tests = NonNullable<TestSuite['tests']>;
  */
 type ResultFilterFn = (result: EvaluateResult) => boolean;
 type TestFilterFn = (test: TestCase) => boolean;
+
+// Equal vars have the same primitive fields, regardless of insertion order. Nested
+// values can share a bucket because resultIsForTestCase still checks full equality.
+function primitiveVarsKey(vars: Vars | undefined): string {
+  if (!vars || typeof vars !== 'object' || Array.isArray(vars)) {
+    return '';
+  }
+  const fields = [];
+  for (const key of Object.keys(vars).sort()) {
+    const value = vars[key];
+    if (
+      !isRuntimeVar(key) &&
+      (value === null ||
+        typeof value === 'string' ||
+        typeof value === 'number' ||
+        typeof value === 'boolean')
+    ) {
+      fields.push([key, value]);
+    }
+  }
+  return JSON.stringify(fields);
+}
+
+function createCandidateLookup<T>(
+  items: T[],
+  getVars: (item: T) => Vars | undefined,
+  expectedLookups: number,
+): (vars: Vars | undefined) => T[] {
+  if (items.length < 64 || expectedLookups < 64) {
+    return () => items;
+  }
+  const buckets = new Map<string, T[]>();
+  for (const item of items) {
+    const key = primitiveVarsKey(getVars(item));
+    const bucket = buckets.get(key);
+    if (bucket) {
+      bucket.push(item);
+    } else {
+      buckets.set(key, [item]);
+    }
+  }
+  return (vars) => buckets.get(primitiveVarsKey(vars)) ?? [];
+}
 
 /**
  * Merges defaultTest.vars into a test case's vars for comparison purposes.
@@ -94,54 +142,34 @@ export async function filterTestsByResults(
     `[filterTestsByResults] ${uniqueVarsInResults.size} unique test cases (by vars) in filtered results`,
   );
 
-  // Match tests against filtered results and restore runtime vars.
-  // We try two matching strategies:
-  // 1. First, try with defaultTest.vars merged (for new results where defaults are merged)
-  // 2. Fallback: try without merging defaults (for old results that don't have defaults merged)
-  // This ensures backward compatibility with results stored before the merge was consistent.
-  //
-  // When a match is found, we restore runtime variables (like _conversation, sessionId)
-  // from the result into the test so they're available during re-evaluation.
   const matchedTests: Tests = [];
+  const candidatesForTest = createCandidateLookup(
+    filteredResults,
+    (result) => result.vars,
+    testSuite.tests.length,
+  );
 
-  for (const test of testSuite.tests) {
-    const testWithDefaults = mergeDefaultVars(test, testSuite.defaultTest);
-
-    // Try matching with merged defaults first (new results)
-    // Prefer results that have runtime vars to ensure we restore them when available.
-    // This prevents issues when a test matches multiple results and only some have runtime vars.
-    let matchedResult = filteredResults.find(
-      (result) =>
-        resultIsForTestCase(result, testWithDefaults) &&
-        extractRuntimeVars(result.vars) !== undefined,
-    );
-
-    // Fallback: any matching result (even without runtime vars)
-    if (!matchedResult) {
-      matchedResult = filteredResults.find((result) =>
-        resultIsForTestCase(result, testWithDefaults),
-      );
-    }
-
-    // Fallback: try matching without defaults (old results that don't have defaults merged)
-    if (!matchedResult) {
-      const hasDefaultVars =
-        testSuite.defaultTest &&
-        typeof testSuite.defaultTest !== 'string' &&
-        testSuite.defaultTest.vars &&
-        Object.keys(testSuite.defaultTest.vars).length > 0;
-
-      if (hasDefaultVars) {
-        // Again, prefer results with runtime vars first
-        matchedResult = filteredResults.find(
-          (result) =>
-            resultIsForTestCase(result, test) && extractRuntimeVars(result.vars) !== undefined,
-        );
-        if (!matchedResult) {
-          matchedResult = filteredResults.find((result) => resultIsForTestCase(result, test));
+  function findMatchingResult(test: TestCase): EvaluateResult | undefined {
+    let firstMatch: EvaluateResult | undefined;
+    for (const result of candidatesForTest(test.vars)) {
+      if (resultIsForTestCase(result, test)) {
+        if (extractRuntimeVars(result.vars)) {
+          return result;
         }
+        firstMatch ??= result;
       }
     }
+    return firstMatch;
+  }
+
+  const defaultVars =
+    typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest?.vars : undefined;
+  const hasDefaultVars = defaultVars && Object.keys(defaultVars).length > 0;
+  for (const test of testSuite.tests) {
+    // Older saved results can omit default vars.
+    const matchedResult =
+      findMatchingResult(mergeDefaultVars(test, testSuite.defaultTest)) ??
+      (hasDefaultVars ? findMatchingResult(test) : undefined);
 
     if (matchedResult) {
       // Restore runtime variables from the matched result into the test.
@@ -182,8 +210,13 @@ export async function filterTestsByResults(
   const matchedTestsWithDefaults = matchedTests.map((test) =>
     mergeDefaultVars(test, testSuite.defaultTest),
   );
+  const candidatesForResult = createCandidateLookup(
+    matchedTestsWithDefaults,
+    (test) => test.vars,
+    filteredResults.length,
+  );
   for (const result of filteredResults) {
-    for (const testWithDefaults of matchedTestsWithDefaults) {
+    for (const testWithDefaults of candidatesForResult(result.vars)) {
       if (resultIsForTestCase(result, testWithDefaults)) {
         matchedResultKeys.add(JSON.stringify(filterRuntimeVars(result.vars)));
         break;
