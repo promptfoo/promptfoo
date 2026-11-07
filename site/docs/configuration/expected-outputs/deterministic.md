@@ -68,7 +68,7 @@ These assertions can check LLM output or provider metadata directly. Configured 
 | [rouge-l](#rouge-l)                                             | ROUGE-Lsum score is at least the threshold                         |
 | [rouge-n](#rouge-n)                                             | Rouge-N score is above a given threshold                           |
 | [rouge-s](#rouge-s)                                             | ROUGE-S skip-bigram score is at least the threshold                |
-| [starts-with](#starts-with)                                     | output starts with string                                          |
+| [starts-with](#starts-with)                                     | output starts with a string or number as text                      |
 | [trace-span-count](#trace-span-count)                           | Count spans matching names and attributes with min/max thresholds  |
 | [trace-span-duration](#trace-span-duration)                     | Check span durations with percentile support                       |
 | [trace-error-spans](#trace-error-spans)                         | Detect errors in traces by status codes, attributes, and messages  |
@@ -1112,14 +1112,12 @@ See [Python assertions](/docs/configuration/expected-outputs/python).
 
 ### Starts-With
 
-The `starts-with` assertion checks if the LLM output begins with the specified string.
-
-This example checks if the output starts with "Yes":
+Use `starts-with` to match a string or a finite number as text. For example, `200` matches `200 OK`. Quote `'01'` to preserve its leading zero or `'Infinity'` to match the literal word. Use `not-starts-with` to reject a matching prefix.
 
 ```yaml
 assert:
   - type: starts-with
-    value: 'Yes'
+    value: 200
 ```
 
 ### Trace-Span-Count
