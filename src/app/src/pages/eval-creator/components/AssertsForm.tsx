@@ -70,6 +70,7 @@ const assertTypes: AssertionType[] = [
 
   // Metrics
   'bleu',
+  'character-count',
   'cost',
   'finish-reason',
   'latency',
@@ -85,6 +86,7 @@ const assertTypes: AssertionType[] = [
   'not-contains-all',
   'not-contains-any',
   'not-contains-json',
+  'not-character-count',
   'not-equals',
   'not-icontains',
   'not-is-json',
@@ -104,6 +106,44 @@ const ARRAY_VALUE_ASSERTION_TYPES = new Set<AssertionType>([
   'not-contains-any',
   'not-contains-all',
 ]);
+
+const CHARACTER_COUNT_ASSERTION_TYPES = new Set<AssertionType>([
+  'character-count',
+  'not-character-count',
+]);
+
+function formatAssertionValue(assertion: Assertion): string {
+  if (typeof assertion.value === 'string') {
+    return assertion.value;
+  }
+  if (typeof assertion.value === 'number') {
+    return String(assertion.value);
+  }
+  if (
+    CHARACTER_COUNT_ASSERTION_TYPES.has(assertion.type) &&
+    assertion.value &&
+    typeof assertion.value === 'object' &&
+    !Array.isArray(assertion.value)
+  ) {
+    return JSON.stringify(assertion.value);
+  }
+  return '';
+}
+
+function parseAssertionValue(type: AssertionType, value: string): Assertion['value'] {
+  if (!CHARACTER_COUNT_ASSERTION_TYPES.has(type) || !value.trim().startsWith('{')) {
+    return value;
+  }
+
+  try {
+    const parsedValue = JSON.parse(value);
+    return parsedValue && typeof parsedValue === 'object' && !Array.isArray(parsedValue)
+      ? parsedValue
+      : value;
+  } catch {
+    return value;
+  }
+}
 
 // Assertion types that require an LLM
 const LLM_ASSERTION_TYPES = new Set<AssertionType>([
@@ -201,15 +241,9 @@ const AssertsForm = ({ onAdd, initialValues }: AssertsFormProps) => {
                   <Textarea
                     id={`assert-value-${index}`}
                     placeholder="Enter expected value or criteria..."
-                    value={
-                      typeof assert.value === 'string'
-                        ? assert.value
-                        : typeof assert.value === 'number'
-                          ? String(assert.value)
-                          : ''
-                    }
+                    value={formatAssertionValue(assert)}
                     onChange={(e) => {
-                      const newValue = e.target.value;
+                      const newValue = parseAssertionValue(assert.type, e.target.value);
                       const newAsserts = asserts.map((a, i) =>
                         i === index ? { ...a, value: newValue } : a,
                       );
