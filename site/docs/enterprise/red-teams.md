@@ -9,73 +9,55 @@ keywords:
 
 # Running Red Teams
 
-[Promptfoo Enterprise](/docs/enterprise/) allows you to configure targets, plugin collections, and scan configurations that can be shared among your team.
+[Promptfoo Enterprise](/docs/enterprise/) lets your team share targets, plugin collections, and scan templates.
 
 ## Connecting to Promptfoo
 
-Promptfoo requires access to [\*.promptfoo.app](https://promptfoo.app) to function.
+When using Promptfoo-hosted services, your browser and CLI need access to the relevant `*.promptfoo.app` endpoints. If you use a proxy or VPN, see [remote generation troubleshooting](/docs/red-team/troubleshooting/remote-generation/) for connectivity checks.
 
-If you are using a proxy or VPN, you may need to add these domains to your whitelist before you can generate red teams.
+On-prem deployments use your organization's app, API, and authentication URLs. The scan runner must reach the target and the configured inference providers. Access to Promptfoo-hosted generation is needed only when your deployment is configured to use it.
 
 ## Creating Targets
 
-Targets are the LLM entities that are being tested. They can be a web application, agent, foundation model, or any other LLM entity. When you create a target, this target can be accessed by other users in your team to run scans.
+Targets are the applications, agents, or models you test. Team members can reuse a target across scans.
 
-You can create a target by navigating to the "Targets" tab and clicking "Create Target".
+Create a target from **Targets**.
 
-The "General Settings" section is where you identify the type of target you are testing and provide the technical details to connect to the target, pass probes, and parse responses.
+The **Configuration** section contains the connection details for sending probes to the target and parsing responses.
 
-The "Context" section is where you provide any additional information about the target that will help Promptfoo generate adversarial probes. This is where you provide context about the target's primary objective and any rules it should follow, as well as what type of user the red team should impersonate.
-
-The more information you provide, the better the red team attacks and grading will be.
+Use **Application Details** to describe the target's capabilities, rules, and access permissions. Use **Context** for test scenarios, conversation handling, and user personas. These details guide attack generation and grading.
 
 ### Accessing External Systems
 
-If your target has RAG orchestration or is an agent, you can select the "Accessing External Systems" option to provide additional details about the target's connection to external systems. Providing additional context about the target's access to external systems will help Promptfoo generate more accurate red team attacks and grading.
-
-If your target is an agent, you can provide additional context about the agent's access to tools and functions in the question "What external systems are connected to this application?" This will help Promptfoo ascertain whether it was able to successfully enumerate tools and functions when running the [tool discovery plugin](/docs/red-team/plugins/tool-discovery/).
+For RAG applications and agents, describe connected data sources and tools in **Application Details → Access & Permissions**, including what the target may access and what it must not access. Include tool names and capabilities when using the [tool discovery plugin](/docs/red-team/plugins/tool-discovery/).
 
 ## Creating Plugin Collections
 
-You can create plugin collections to share among your team. These plugin collections allow you to create specific presets to run tests against your targets, including establishing custom policies and prompts.
+Plugin collections group security tests, custom policies, and prompts for reuse across your team's scans.
 
-To create a plugin collection, navigate to the "Plugin Collections" tab under the "Red team" navigation header and click "Create Plugin Collection".
-
-![Creating a new plugin collection](/img/enterprise-docs/create-plugin-collection.gif)
+Open **Policies → Plugin Collections** to create a collection and choose its plugins.
 
 ## Configuring Scans
 
-When you want to run a new red team scan, navigate to the "Red team" navigation header and click on "Scan Configurations". You will see a list of all the scan configurations that your team has created. Click on "New Scan" to create a new scan.
+Open **Red Team → Scan Templates** and click **Create Scan Template**. Choose **New Scan Template** and enter a name, or select **Upload YAML** to import an existing Promptfoo configuration.
 
-![Create Scan Configuration interface](/img/enterprise-docs/create-scan.png)
-
-If you have already created a scan configuration from the open-source version of Promptfoo or local usage, you can import the YAML file to use it in Promptfoo Enterprise.
-
-Click on "Create Scan" to configure a new scan. You will then be prompted to select a target. Alternatively, you can create a new target.
-
-![Select Target screen](/img/enterprise-docs/select-target.png)
-
-Once you have selected a target, you will be prompted to select a plugin collection. If you do not have a plugin collection, you can create a new one.
-
-![Select Plugin Collection screen](/img/enterprise-docs/choose-plugins.png)
-
-Once you have selected a plugin collection, you will be prompted to select the strategies. [Promptfoo strategies](/docs/red-team/strategies/) are the ways in which adversarial probes are delivered to maximize attack success rates.
-
-![Select Strategies screen](/img/enterprise-docs/select-strategies.png)
+Configure the **Plugins** and **Strategies** tabs, then check **Review** and save the template. [Strategies](/docs/red-team/strategies/) determine how adversarial probes are delivered. Select the target when you run the template.
 
 ## Running a Scan
 
-Once you have configured a scan by selecting a target, plugin collection, and strategies, you can generate a red team scan by navigating to the "Review" section. Click on "Save Configuration" for Promptfoo to generate a CLI command. You will need to [authenticate](./authentication.md) into the CLI to run the scan and share the results.
+Save your scan template, then select **Scan Now** in its **Review** section. Choose the target, confirm the selected scan template, and review the run options.
 
-![Run Scan configuration screen](/img/enterprise-docs/run-scan.png)
+If server-side execution is enabled and the target supports it, select **Run on Server**, then **Run Red Team Scan**. The scan executes on your deployment's runner. Before starting, verify that generation and grading use the intended inference providers and credentials.
 
-Alternatively, you can download the Promptfoo YAML file and run the scan locally.
+Follow the scan's status, probe progress, and logs in **Scan History** or the target's run history.
 
-When you enter the command into your terminal, Promptfoo will generate the adversarial probes and write the test cases locally.
+To stop a running server scan, open its details and select **Stop**. With permission to update jobs, you can choose **Cancel Scan** to stop without publishing, or **Publish Partial Report** to publish the completed probes. Partial reports require at least one completed probe and do not represent a completed scan. Open the available results with **View Report** or **View Partial Report**.
 
-![Running scan in CLI](/img/enterprise-docs/run-scan-cli.png)
+For programmatic runs, the **Jobs** section of the [API reference](/docs/api-reference/) documents **Start job**, **Get job**, **Stream job logs**, and **Stop job**, including the request fields for canceling a run or publishing a partial report.
 
-Once generated, Promptfoo will execute the test cases against your target and upload the results to Promptfoo Enterprise. You can review the results by clicking on the evaluation link that is generated in the terminal or by navigating to Promptfoo Enterprise.
+To execute from your machine, select **Run via CLI** and use the generated command, or use **Export Config** to download the YAML configuration. [Authenticate](./authentication.md) to the correct deployment before running the command. Commands referencing a saved scan configuration retain that configuration's team; see [CLI team selection](./authentication.md#checking-current-team).
+
+`promptfoo redteam run` generates adversarial probes and runs them against your target. When sharing is enabled, it uploads the results to your configured Promptfoo Enterprise instance. Review them through the report link in the terminal or the Enterprise UI; see [Findings and Reports](./findings.md).
 
 ## See Also
 
