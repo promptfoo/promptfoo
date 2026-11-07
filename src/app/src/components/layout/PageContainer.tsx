@@ -5,6 +5,8 @@ interface PageContainerProps extends React.ComponentProps<'div'> {
   className?: string;
 }
 
+export const FIXED_PAGE_CONTAINER_TOP = 'calc(3.5rem + var(--update-banner-height, 0px))';
+
 /**
  * PageContainer provides the base background layer for all pages.
  * Uses the shared background and foreground tokens in both themes.
