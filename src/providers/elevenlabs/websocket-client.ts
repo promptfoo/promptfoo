@@ -20,6 +20,7 @@ export class ElevenLabsWebSocketClient {
   private ws: WebSocket | null = null;
   private keepAliveTimer: NodeJS.Timeout | null = null;
   private messageHandler: ((data: Buffer) => void) | null = null;
+  private closeHandler: ((code: number, reason: Buffer) => void) | null = null;
 
   constructor(config: WebSocketClientConfig) {
     this.apiKey = config.apiKey;
@@ -128,6 +129,9 @@ export class ElevenLabsWebSocketClient {
             type: 'error',
             data: parsed.error,
           });
+        } else if (parsed.isFinal) {
+          // Final output: generation is complete and carries no audio
+          callback({ type: 'flush' });
         } else {
           logger.debug('[ElevenLabs WebSocket] Received unknown message type', {
             keys: Object.keys(parsed),
@@ -145,6 +149,19 @@ export class ElevenLabsWebSocketClient {
     this.ws.on('message', this.messageHandler);
   }
 
+  onClose(callback: (code: number, reason: string) => void): void {
+    if (!this.ws) {
+      throw new Error('WebSocket not initialized');
+    }
+
+    if (this.closeHandler) {
+      this.ws.removeListener('close', this.closeHandler);
+    }
+
+    this.closeHandler = (code: number, reason: Buffer) => callback(code, reason.toString());
+    this.ws.on('close', this.closeHandler);
+  }
+
   close(): void {
     this.stopKeepAlive();
 
@@ -153,6 +170,10 @@ export class ElevenLabsWebSocketClient {
       if (this.messageHandler) {
         this.ws.removeListener('message', this.messageHandler);
         this.messageHandler = null;
+      }
+      if (this.closeHandler) {
+        this.ws.removeListener('close', this.closeHandler);
+        this.closeHandler = null;
       }
       this.ws.close();
       this.ws = null;
