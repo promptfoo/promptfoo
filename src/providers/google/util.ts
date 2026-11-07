@@ -1455,7 +1455,7 @@ export function formatCandidateContents(candidate: Candidate) {
     let output = '';
     let is_text = true;
     for (const part of candidate.content.parts) {
-      if (part.thought) {
+      if (part.thought && 'text' in part) {
         // Thought summaries are not part of the answer; see formatGeminiThinking.
         continue;
       }

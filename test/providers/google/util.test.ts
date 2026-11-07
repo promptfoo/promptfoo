@@ -38,6 +38,7 @@ import {
   getGoogleResponseServiceTier,
   loadFile,
   maybeCoerceToGeminiFormat,
+  mergeCandidateContents,
   mergeGoogleCompletionOptions,
   mergeGoogleRequestTools,
   mergeParts,
@@ -5489,6 +5490,21 @@ describe('util', () => {
         formatCandidateContents({ content: { parts: [thought, { text: '42' }] } } as any),
       ).toBe('42');
       expect(formatCandidateContents({ content: { parts: [thought] } } as any)).toBe('');
+    });
+
+    it('returns parts with a thought image unchanged', () => {
+      const thoughtImage = { thought: true, inlineData: { mimeType: 'image/png', data: 'AA==' } };
+      const parts = [thoughtImage, { text: '42' }];
+
+      expect(formatCandidateContents({ content: { parts } } as any)).toEqual(parts);
+      expect(
+        mergeCandidateContents(
+          mergeCandidateContents({ output: undefined, thoughts: '' }, {
+            content: { parts: [thoughtImage] },
+          } as any),
+          { content: { parts: [{ functionCall: { name: 'f', args: {} } }] } } as any,
+        ).output,
+      ).toEqual([thoughtImage, { functionCall: { name: 'f', args: {} } }]);
     });
 
     it('collects thought signatures across streamed candidate parts', () => {
