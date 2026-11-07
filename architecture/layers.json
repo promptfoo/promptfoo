@@ -40,6 +40,7 @@
       ],
       "allowedImportPaths": [
         "src/contracts.ts",
+        "src/contracts/trajectory.ts",
         "src/csv.ts",
         "src/presentation/evalResults.ts",
         "src/presentation/redteamConfig.ts",
