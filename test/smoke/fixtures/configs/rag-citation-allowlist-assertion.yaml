@@ -1,0 +1,90 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+# Config for testing the citation-allowlist javascript assertion from
+# site/docs/guides/rag-failure-modes.md ("Fabricated citation or source").
+# Regression test for: a legitimately cited, allowlisted URL ending in .pdf/.md
+# must not be rejected just because its basename also happens to match the
+# bare-file regex.
+description: 'Smoke test - RAG citation allowlist javascript assertion'
+
+providers:
+  - echo
+
+prompts:
+  - '{{ answer_text }}'
+
+tests:
+  - description: 'allowlisted URL citation (basename not separately allowlisted as a file) passes'
+    vars:
+      answer_text: 'See the full report at https://kb.example.com/reports/quarterly.pdf for details.'
+    assert:
+      - type: javascript
+        value: |
+          const allowedFiles = new Set(['handbook.md', 'benefits.pdf']);
+          const allowedUrls = new Set(['https://kb.example.com/reports/quarterly.pdf']);
+          const urls = Array.from(output.matchAll(/https?:\/\/[^\s)\]}>\,"']+/g), (m) =>
+            m[0].replace(/[.,;:!?]+$/, ''),
+          );
+          const outputWithoutUrls = urls.reduce((text, url) => text.replaceAll(url, ''), output);
+          const files = Array.from(outputWithoutUrls.matchAll(/\b[\w.-]+\.(?:md|pdf)\b/g), (m) => m[0]);
+          return (
+            files.length + urls.length > 0 &&
+            files.every((name) => allowedFiles.has(name)) &&
+            urls.every((url) => allowedUrls.has(url))
+          );
+
+  - description: 'allowlisted bare file citation still passes'
+    vars:
+      answer_text: 'See handbook.md for the full policy.'
+    assert:
+      - type: javascript
+        value: |
+          const allowedFiles = new Set(['handbook.md', 'benefits.pdf']);
+          const allowedUrls = new Set(['https://kb.example.com/reports/quarterly.pdf']);
+          const urls = Array.from(output.matchAll(/https?:\/\/[^\s)\]}>\,"']+/g), (m) =>
+            m[0].replace(/[.,;:!?]+$/, ''),
+          );
+          const outputWithoutUrls = urls.reduce((text, url) => text.replaceAll(url, ''), output);
+          const files = Array.from(outputWithoutUrls.matchAll(/\b[\w.-]+\.(?:md|pdf)\b/g), (m) => m[0]);
+          return (
+            files.length + urls.length > 0 &&
+            files.every((name) => allowedFiles.has(name)) &&
+            urls.every((url) => allowedUrls.has(url))
+          );
+
+  - description: 'fabricated file citation is rejected'
+    vars:
+      answer_text: 'See made-up-file.pdf for details.'
+    assert:
+      - type: javascript
+        value: |
+          const allowedFiles = new Set(['handbook.md', 'benefits.pdf']);
+          const allowedUrls = new Set(['https://kb.example.com/reports/quarterly.pdf']);
+          const urls = Array.from(output.matchAll(/https?:\/\/[^\s)\]}>\,"']+/g), (m) =>
+            m[0].replace(/[.,;:!?]+$/, ''),
+          );
+          const outputWithoutUrls = urls.reduce((text, url) => text.replaceAll(url, ''), output);
+          const files = Array.from(outputWithoutUrls.matchAll(/\b[\w.-]+\.(?:md|pdf)\b/g), (m) => m[0]);
+          return !(
+            files.length + urls.length > 0 &&
+            files.every((name) => allowedFiles.has(name)) &&
+            urls.every((url) => allowedUrls.has(url))
+          );
+
+  - description: 'fabricated URL citation is rejected'
+    vars:
+      answer_text: 'See https://evil.example.com/quarterly.pdf for details.'
+    assert:
+      - type: javascript
+        value: |
+          const allowedFiles = new Set(['handbook.md', 'benefits.pdf']);
+          const allowedUrls = new Set(['https://kb.example.com/reports/quarterly.pdf']);
+          const urls = Array.from(output.matchAll(/https?:\/\/[^\s)\]}>\,"']+/g), (m) =>
+            m[0].replace(/[.,;:!?]+$/, ''),
+          );
+          const outputWithoutUrls = urls.reduce((text, url) => text.replaceAll(url, ''), output);
+          const files = Array.from(outputWithoutUrls.matchAll(/\b[\w.-]+\.(?:md|pdf)\b/g), (m) => m[0]);
+          return !(
+            files.length + urls.length > 0 &&
+            files.every((name) => allowedFiles.has(name)) &&
+            urls.every((url) => allowedUrls.has(url))
+          );
