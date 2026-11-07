@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray } from 'drizzle-orm';
+import { and, desc, eq, exists, inArray, sql } from 'drizzle-orm';
 import { DEFAULT_QUERY_LIMIT } from '../constants';
 import { deleteTraceRecordsForEvals } from '../database/evalDeletion';
 import { getDb } from '../database/index';
@@ -512,19 +512,33 @@ export async function getStandaloneEvals({
       evalId: evalsTable.id,
       description: evalsTable.description,
       results: evalsTable.results,
+      prompts: evalsTable.prompts,
+      config: evalsTable.config,
       createdAt: evalsTable.createdAt,
-      promptId: evalsToPromptsTable.promptId,
-      datasetId: evalsToDatasetsTable.datasetId,
+      datasetId: sql<string | null>`(
+        SELECT ${evalsToDatasetsTable.datasetId} FROM ${evalsToDatasetsTable}
+        WHERE ${evalsToDatasetsTable.evalId} = ${evalsTable.id} LIMIT 1
+      )`,
       isRedteam: evalsTable.isRedteam,
     })
     .from(evalsTable)
-    .leftJoin(evalsToPromptsTable, eq(evalsTable.id, evalsToPromptsTable.evalId))
-    .leftJoin(evalsToDatasetsTable, eq(evalsTable.id, evalsToDatasetsTable.evalId))
-    .leftJoin(evalsToTagsTable, eq(evalsTable.id, evalsToTagsTable.evalId))
-    .leftJoin(tagsTable, eq(evalsToTagsTable.tagId, tagsTable.id))
     .where(
       and(
-        tag ? and(eq(tagsTable.name, tag.key), eq(tagsTable.value, tag.value)) : undefined,
+        tag
+          ? exists(
+              db
+                .select({ evalId: evalsToTagsTable.evalId })
+                .from(evalsToTagsTable)
+                .innerJoin(tagsTable, eq(evalsToTagsTable.tagId, tagsTable.id))
+                .where(
+                  and(
+                    eq(evalsToTagsTable.evalId, evalsTable.id),
+                    eq(tagsTable.name, tag.key),
+                    eq(tagsTable.value, tag.value),
+                  ),
+                ),
+            )
+          : undefined,
         description ? eq(evalsTable.description, description) : undefined,
       ),
     )
@@ -532,45 +546,113 @@ export async function getStandaloneEvals({
     .limit(limit)
     .all();
 
-  // Conservative optimization: Reduce N+1 by batching eval lookups while maintaining exact logic
-  const uniqueEvalIds = Array.from(new Set(results.map((r) => r.evalId)));
+  const legacyResults = new Map(
+    results.flatMap((result) =>
+      result.results && typeof result.results === 'object' && 'table' in result.results
+        ? [[result.evalId, result.results as EvaluateSummaryV2] as const]
+        : [],
+    ),
+  );
+  type PluginRow = { pluginId?: string; outputs: (boolean | undefined)[] };
+  const pluginRows = new Map<string, Map<number, PluginRow>>();
+  const promptIds = new Map<string, Set<string>>();
 
-  // Batch load all unique evals to reduce N+1 queries
-  const evalPromises = uniqueEvalIds.map(async (evalId) => {
-    const eval_ = await Eval.findById(evalId);
-    invariant(eval_, `Eval with ID ${evalId} not found`);
-    const table = (await eval_.getTable()) || { body: [] };
-    return [evalId, { eval_, table }] as const;
-  });
+  // Fetch only history's inputs in batches, rather than reconstructing complete result files
+  // (including responses and traces) separately for each evaluation.
+  const batchSize = 500;
+  for (let offset = 0; offset < results.length; offset += batchSize) {
+    const batch = results.slice(offset, offset + batchSize);
+    const links = await db
+      .select({ evalId: evalsToPromptsTable.evalId, promptId: evalsToPromptsTable.promptId })
+      .from(evalsToPromptsTable)
+      .where(
+        inArray(
+          evalsToPromptsTable.evalId,
+          batch.map((result) => result.evalId),
+        ),
+      )
+      .all();
+    for (const link of links) {
+      let ids = promptIds.get(link.evalId);
+      if (!ids) {
+        ids = new Set();
+        promptIds.set(link.evalId, ids);
+      }
+      ids.add(link.promptId);
+    }
 
-  const evalMap = new Map(await Promise.all(evalPromises));
+    const normalizedIds = batch
+      .filter(
+        (result) =>
+          !legacyResults.has(result.evalId) &&
+          !getStripFlags(result.config.env).shouldStripMetadata,
+      )
+      .map((result) => result.evalId);
+    if (normalizedIds.length === 0) {
+      continue;
+    }
+    const rows = await db
+      .select({
+        evalId: evalResultsTable.evalId,
+        testIdx: evalResultsTable.testIdx,
+        promptIdx: evalResultsTable.promptIdx,
+        pluginId: sql<
+          string | null
+        >`json_extract(${evalResultsTable.testCase}, ${'$.metadata.pluginId'})`,
+        success: evalResultsTable.success,
+      })
+      .from(evalResultsTable)
+      .where(inArray(evalResultsTable.evalId, normalizedIds))
+      .all();
+    for (const row of rows) {
+      let evalRows = pluginRows.get(row.evalId);
+      if (!evalRows) {
+        evalRows = new Map();
+        pluginRows.set(row.evalId, evalRows);
+      }
+      let testRow = evalRows.get(row.testIdx);
+      if (!testRow) {
+        testRow = { pluginId: row.pluginId ?? undefined, outputs: [] };
+        evalRows.set(row.testIdx, testRow);
+      }
+      // Match table reconstruction: the first result supplies test metadata, while the
+      // last result for a repeated cell supplies its final verdict.
+      testRow.outputs[row.promptIdx] = row.success;
+    }
+  }
 
   const standaloneEvals = results.flatMap((result) => {
-    const { description, createdAt, evalId, promptId, datasetId, isRedteam } = result;
+    const { description, createdAt, evalId, datasetId, isRedteam } = result;
+    const legacyResult = legacyResults.get(evalId);
+    const prompts = legacyResult
+      ? (legacyResult.table?.head.prompts ?? [])
+      : (result.prompts ?? []);
+    const rows: PluginRow[] = legacyResult
+      ? (legacyResult.table?.body ?? []).map((row) => ({
+          pluginId: row.test.metadata?.pluginId,
+          outputs: row.outputs.map((output) => output?.pass),
+        }))
+      : [...(pluginRows.get(evalId)?.values() ?? [])];
+    const linkedIds = promptIds.get(evalId);
 
-    const evalInfo = evalMap.get(evalId);
-    invariant(evalInfo, `Eval with ID ${evalId} not found in map`);
-    const { eval_, table } = evalInfo;
-
-    // @ts-ignore
-    return eval_.getPrompts().map((col, index) => {
-      // Compute some stats - keep original logic exactly
-      const pluginCounts = table.body.reduce<{
-        pluginPassCount: Record<string, number>;
-        pluginFailCount: Record<string, number>;
-      }>(
-        // @ts-ignore
-        (acc, row) => {
-          const pluginId = row.test.metadata?.pluginId;
-          if (pluginId) {
-            const isPass = row.outputs[index].pass;
-            acc.pluginPassCount[pluginId] = (acc.pluginPassCount[pluginId] || 0) + (isPass ? 1 : 0);
-            acc.pluginFailCount[pluginId] = (acc.pluginFailCount[pluginId] || 0) + (isPass ? 0 : 1);
-          }
-          return acc;
-        },
-        { pluginPassCount: {}, pluginFailCount: {} },
-      );
+    return prompts.map((col, index) => {
+      const counts = new Map<string, { pass: number; fail: number }>();
+      for (const row of rows) {
+        const isPass = row.outputs[index];
+        if (row.pluginId && isPass !== undefined) {
+          const count = counts.get(row.pluginId) ?? { pass: 0, fail: 0 };
+          count.pass += isPass ? 1 : 0;
+          count.fail += isPass ? 0 : 1;
+          counts.set(row.pluginId, count);
+        }
+      }
+      const generatedId = generateIdFromPrompt(col);
+      const promptId =
+        col.id && linkedIds?.has(col.id)
+          ? col.id
+          : linkedIds?.has(generatedId)
+            ? generatedId
+            : null;
 
       return {
         evalId,
@@ -579,7 +661,8 @@ export async function getStandaloneEvals({
         datasetId,
         createdAt,
         isRedteam,
-        ...pluginCounts,
+        pluginPassCount: Object.fromEntries([...counts].map(([id, count]) => [id, count.pass])),
+        pluginFailCount: Object.fromEntries([...counts].map(([id, count]) => [id, count.fail])),
         ...col,
       };
     });

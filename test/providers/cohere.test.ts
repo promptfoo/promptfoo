@@ -107,7 +107,7 @@ describe('CohereChatCompletionProvider', () => {
     });
   });
 
-  it('honors a configured v1 API base URL without forwarding credentials or transport config', async () => {
+  it('honors a configured v1 API base URL without including credentials or transport config in the body', async () => {
     vi.mocked(fetchWithCache).mockResolvedValue({
       cached: false,
       data: {
@@ -833,7 +833,7 @@ describe('CohereChatCompletionProvider', () => {
     expect(body.documents).toEqual([{ id: 'prompt-doc', data: { text: 'Prompt payload' } }]);
   });
 
-  it('appends unique v2 document sources when prompt config enables showDocuments', async () => {
+  it('appends unique v2 document sources when JSON prompt parameters enable showDocuments', async () => {
     const firstDocument = { id: 'doc-1', title: 'First document' };
     const secondDocument = { id: 'doc-2', title: 'Second document' };
     const firstDocumentSource = {
