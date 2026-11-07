@@ -69,7 +69,7 @@ async function createLogArchive(logFiles: string[], outputPath: string): Promise
           Buffer.from('0000000 ').copy(header, 116);
 
           // File size (12 bytes) - octal
-          const sizeOctal = fileStats.size.toString(8).padStart(11, '0') + ' ';
+          const sizeOctal = fileContent.length.toString(8).padStart(11, '0') + ' ';
           Buffer.from(sizeOctal).copy(header, 124);
 
           // Modification time (12 bytes) - octal

@@ -1,6 +1,7 @@
 import { EventEmitter } from 'events';
 import fs from 'fs';
 import fsPromises from 'fs/promises';
+import { Writable } from 'stream';
 import zlib from 'zlib';
 
 import { Command } from 'commander';
@@ -236,6 +237,10 @@ describe('exportCommand', () => {
     const mockGetLogFiles = vi.mocked(getLogFiles);
 
     beforeEach(() => {
+      vi.mocked(fs.createWriteStream).mockReset();
+      vi.mocked(zlib.createGzip).mockReset();
+      mockFsPromises.readFile.mockReset();
+      mockFsPromises.stat.mockReset();
       mockGetLogDirectory.mockReturnValue(mockLogDir);
       mockGetLogFiles.mockResolvedValue([]);
       mockFsPromises.access.mockResolvedValue(undefined);
@@ -326,5 +331,77 @@ describe('exportCommand', () => {
       expect(mockFsPromises.stat).toHaveBeenCalledWith(logPath);
       expect(logger.info).toHaveBeenCalledWith('Log files have been collected in: logs.gz');
     });
+
+    it.each([
+      [0, 0],
+      [511, 511],
+      [512, 512],
+      [513, 513],
+      [511, 512],
+      [512, 513],
+      [513, 512],
+      [512, 511],
+      [1, 0],
+      [0, 1],
+    ])(
+      'archives the bytes read when stat reports %i bytes and readFile returns %i',
+      async (statSize, readSize) => {
+        const files = [
+          { name: 'promptfoo-debug-first.log', content: Buffer.alloc(readSize, 65) },
+          { name: 'promptfoo-debug-second.log', content: Buffer.from('second log entry\n') },
+        ];
+        const mtime = new Date('2025-01-01T00:00:00.000Z');
+        const compressed: Buffer[] = [];
+        const output = new Writable({
+          write(chunk, _encoding, callback) {
+            compressed.push(Buffer.from(chunk));
+            callback();
+          },
+        });
+        const actualZlib = await vi.importActual<typeof import('zlib')>('zlib');
+
+        vi.mocked(fs.createWriteStream).mockReturnValue(output as unknown as fs.WriteStream);
+        vi.mocked(zlib.createGzip).mockImplementation(actualZlib.createGzip);
+        mockGetLogFiles.mockResolvedValue(
+          files.map((file, index) => ({
+            name: file.name,
+            path: `${mockLogDir}/${file.name}`,
+            mtime,
+            type: 'debug',
+            size: index === 0 ? statSize : file.content.length,
+          })),
+        );
+        mockFsPromises.readFile.mockImplementation(async (filePath) => {
+          const file = files.find((file) => filePath === `${mockLogDir}/${file.name}`);
+          if (!file) {
+            throw new Error(`Unexpected log path: ${filePath}`);
+          }
+          return file.content;
+        });
+        mockFsPromises.stat.mockImplementation(async (filePath) => {
+          const size =
+            filePath === `${mockLogDir}/${files[0].name}` ? statSize : files[1].content.length;
+          return { size, mtime } as fs.Stats;
+        });
+
+        await program.parseAsync(['node', 'test', 'export', 'logs', '--output', 'logs.gz']);
+
+        expect(process.exitCode).toBe(0);
+        const archive = actualZlib.gunzipSync(Buffer.concat(compressed));
+        let offset = 0;
+        for (const file of files) {
+          const header = archive.subarray(offset, offset + 512);
+          const size = parseInt(header.toString('ascii', 124, 136).trim(), 8);
+          expect(header.toString('utf8', 0, 100).replace(/\0.*$/s, '')).toBe(file.name);
+          expect(size).toBe(file.content.length);
+          expect(parseInt(header.toString('ascii', 136, 148).trim(), 8)).toBe(
+            mtime.getTime() / 1000,
+          );
+          expect(archive.subarray(offset + 512, offset + 512 + size)).toEqual(file.content);
+          offset += 512 + Math.ceil(size / 512) * 512;
+        }
+        expect(archive.subarray(offset)).toEqual(Buffer.alloc(1024));
+      },
+    );
   });
 });
