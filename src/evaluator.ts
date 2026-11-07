@@ -622,22 +622,40 @@ function synchronizeLegacyTransportHeaders(
   return { ...metadataWithoutHeaders, headers: hookResponseMetadata.headers };
 }
 
-function applyGradingResult(row: EvaluateResult, checkResult: GradingResult) {
-  if (!checkResult.pass) {
-    row.error = checkResult.reason;
-    row.failureReason = ResultFailureReason.ASSERT;
+function findGraderError(root: GradingResult): GradingResult | undefined {
+  // Assertion sets can expose a component directly and through its parent.
+  const components = new Set([root]);
+  for (const result of components) {
+    if (result.metadata?.graderError === true) {
+      return result;
+    }
+    for (const child of result.componentResults ?? []) {
+      components.add(child);
+    }
   }
-  row.success = checkResult.pass;
-  row.score = checkResult.score;
-  row.namedScores = checkResult.namedScores || {};
+  return undefined;
+}
+
+function applyGradingResult(row: EvaluateResult, checkResult: GradingResult) {
+  const error = findGraderError(checkResult);
+  const gradingResult = error
+    ? { ...checkResult, pass: false, reason: error.reason || 'Grader execution failed' }
+    : checkResult;
+  if (!gradingResult.pass) {
+    row.error = gradingResult.reason;
+    row.failureReason = error ? ResultFailureReason.ERROR : ResultFailureReason.ASSERT;
+  }
+  row.success = gradingResult.pass;
+  row.score = gradingResult.score;
+  row.namedScores = gradingResult.namedScores || {};
 
   if (!row.tokenUsage) {
     row.tokenUsage = createEmptyTokenUsage();
   }
-  accumulateGradingTokenUsage(row.tokenUsage, checkResult.tokensUsed, {
-    cached: checkResult.metadata?.cachedResponse,
+  accumulateGradingTokenUsage(row.tokenUsage, gradingResult.tokensUsed, {
+    cached: gradingResult.metadata?.cachedResponse,
   });
-  row.gradingResult = checkResult;
+  row.gradingResult = gradingResult;
 }
 
 const ABORTED_GRADING_PREFIX = 'Aborted: ';
@@ -4129,43 +4147,6 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     redteamProviderManager.setRateLimitRegistry(this.rateLimitRegistry);
   }
 
-  /**
-   * Updates metrics and stats after a comparison assertion (select-best or max-score).
-   */
-  private updateComparisonStats(
-    result: TResult,
-    passed: boolean,
-    reason: string,
-    tokensUsed: TokenUsage | undefined,
-    wasSuccess: boolean,
-    wasScore: number,
-    metrics: CompletedPrompt['metrics'] | undefined,
-    gradingCached?: boolean,
-  ): void {
-    if (metrics) {
-      metrics.assertPassCount += passed ? 1 : 0;
-      metrics.assertFailCount += passed ? 0 : 1;
-      if (tokensUsed) {
-        updateAssertionMetrics(metrics, tokensUsed, { cached: gradingCached });
-      }
-      if (!passed && result.score !== wasScore) {
-        metrics.score += result.score - wasScore;
-      }
-    }
-    if (wasSuccess && !result.success) {
-      result.failureReason = ResultFailureReason.ASSERT;
-      result.error = reason;
-      if (metrics) {
-        metrics.testPassCount -= 1;
-        metrics.testFailCount += 1;
-      }
-      if (this.currentResultKeys.has(getResultIndexKey(result))) {
-        this.stats.successes -= 1;
-        this.stats.failures += 1;
-      }
-    }
-  }
-
   private updateComparisonResultCounts(
     result: TResult,
     previous: Pick<TResult, 'success' | 'score' | 'failureReason'>,
@@ -5157,7 +5138,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     if (!assertion) {
       return;
     }
-    let gradingResults: GradingResult[];
+    let gradingResults: GradingResult[] = [];
     try {
       const providers = this.comparisonProviders.get(getResultIndexKey(firstResult));
       // Persisted rows retain each column's hook-adjusted criteria and vars. Only grader
@@ -5199,6 +5180,10 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
               ),
           ),
       );
+      const graderError = gradingResults.find((grade) => grade.metadata?.graderError);
+      if (graderError) {
+        throw new Error(graderError.reason);
+      }
     } catch (error) {
       if (isGradingAbort(error, providerAbortSignal)) {
         throw error;
@@ -5217,8 +5202,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       const message =
         'Check the grader configuration and credentials. Supply a grader configuration matching the saved result to resume, or rerun the evaluation. Run with --verbose to log the underlying error.';
       const reason = `${COMPARISON_ERROR_PREFIX}${graderId ? ` (${graderId})` : ''}: ${message}`;
-      gradingResults = [];
-      for (const result of resultsToCompare) {
+      for (const [index, result] of resultsToCompare.entries()) {
         if (result.failureReason === ResultFailureReason.ERROR && !getComparisonError(result)) {
           continue;
         }
@@ -5235,12 +5219,15 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         result.failureReason = ResultFailureReason.ERROR;
         result.success = false;
         result.score = 0;
-        this.updateComparisonResultCounts(result, previous, prompts[result.promptIdx]?.metrics);
-        this.trackFinalJsonlResult(result);
-        if (this.store.persisted && !this.store.hasResultPersistenceFailure(result)) {
-          await this.store.saveResult(result);
+        const metrics = prompts[result.promptIdx]?.metrics;
+        const grade = gradingResults[index];
+        if (grade?.tokensUsed) {
+          mergeComparisonTokenUsage(result, grade, this.stats.tokenUsage);
         }
+        this.updateComparisonResultCounts(result, previous, metrics);
+        await this.recordComparisonResult(result, grade, metrics);
       }
+      gradingResults = [];
     }
 
     for (let index = 0; index < gradingResults.length; index++) {
@@ -5437,26 +5424,47 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     wasSuccess: boolean;
     wasScore: number;
   }) {
-    this.updateComparisonStats(
-      result,
-      gradingResult.pass,
-      gradingResult.reason || '',
-      gradingResult.tokensUsed,
-      wasSuccess,
-      wasScore,
-      metrics,
-      gradingResult.metadata?.cachedResponse,
-    );
+    const passed = gradingResult.pass;
+    if (metrics) {
+      metrics.assertPassCount += passed ? 1 : 0;
+      metrics.assertFailCount += passed ? 0 : 1;
+      if (!passed && result.score !== wasScore) {
+        metrics.score += result.score - wasScore;
+      }
+    }
+    if (wasSuccess && !result.success) {
+      result.failureReason = ResultFailureReason.ASSERT;
+      result.error = gradingResult.reason || '';
+      if (metrics) {
+        metrics.testPassCount -= 1;
+        metrics.testFailCount += 1;
+      }
+      if (this.currentResultKeys.has(getResultIndexKey(result))) {
+        this.stats.successes -= 1;
+        this.stats.failures += 1;
+      }
+    }
+    await this.recordComparisonResult(result, gradingResult, metrics);
+  }
+
+  private async recordComparisonResult(
+    result: TResult,
+    grade: GradingResult | undefined,
+    metrics: CompletedPrompt['metrics'] | undefined,
+  ) {
+    const tokensUsed = grade?.tokensUsed;
+    const cached = grade?.metadata?.cachedResponse;
+    if (metrics && tokensUsed) {
+      updateAssertionMetrics(metrics, tokensUsed, { cached });
+    }
     if (
       result.response?.cached &&
       result.response.tokenUsage &&
       (result.response.tokenUsage.numRequests ?? 0) === 0 &&
-      gradingResult.tokensUsed
+      tokensUsed
     ) {
       const comparisonUsage = createEmptyAssertions();
-      accumulateGradingRequest(comparisonUsage, gradingResult.tokensUsed, {
-        cached: gradingResult.metadata?.cachedResponse,
-      });
+      accumulateGradingRequest(comparisonUsage, tokensUsed, { cached });
       if ((comparisonUsage.numRequests ?? 0) > 0) {
         result.response.tokenUsage.numRequests = 1;
         const evaluatedResult = this.store.toEvaluateResult(result);

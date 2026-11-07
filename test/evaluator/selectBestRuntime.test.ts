@@ -571,7 +571,7 @@ describeEvaluator('select-best runtime grading configuration', () => {
     expect(grader.callApi).toHaveBeenCalledTimes(2);
   });
 
-  it.each(['malformed YAML', 'Error', 'string'])(
+  it.each(['malformed YAML', 'Error', 'string', 'error response'])(
     'keeps secrets in a grader %s out of persisted errors and recovers on resume',
     async (failure) => {
       const { grader, suite, target } = makeSuite();
@@ -585,6 +585,11 @@ describeEvaluator('select-best runtime grading configuration', () => {
         if (failure === 'malformed YAML') {
           await writeFile(graderPath, `id: echo\nconfig:\n  apiKey: ${errorSecret}: invalid\n`);
           (suite.tests![0].assert![0] as Assertion).provider = `file://${graderPath}`;
+        } else if (failure === 'error response') {
+          vi.mocked(grader.callApi).mockResolvedValueOnce({
+            error: errorSecret,
+            tokenUsage: { total: 7, prompt: 5, completion: 2, numRequests: 1 },
+          });
         } else {
           vi.mocked(grader.callApi).mockRejectedValueOnce(
             failure === 'Error' ? new Error(errorSecret) : errorSecret,
@@ -607,6 +612,9 @@ describeEvaluator('select-best runtime grading configuration', () => {
           expect(row.error).toContain(failure === 'malformed YAML' ? graderPath : grader.id());
         }
         expect(record.getStats()).toMatchObject({ successes: 0, failures: 0, errors: 2 });
+        if (failure === 'error response') {
+          expect(record.getStats().tokenUsage.assertions?.total).toBe(14);
+        }
         // The run's log file records debug messages on every run, so without debug output
         // enabled the cause must not be logged at all.
         expect(getLogLevel()).not.toBe('debug');
@@ -630,6 +638,38 @@ describeEvaluator('select-best runtime grading configuration', () => {
         call.mockRestore();
         await rm(directory, { recursive: true, force: true });
       }
+    },
+  );
+
+  it.each([false, true])(
+    'accounts for a failed comparison on saved cache hits (cached grader: %s)',
+    async (cached) => {
+      const { grader, suite, target } = makeSuite();
+      vi.mocked(target.callApi).mockResolvedValue({
+        output: 'cached answer',
+        cached: true,
+        tokenUsage: { total: 5 },
+      });
+      const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
+      await evaluate(suite, record, {});
+      await markComparisonPending(record);
+      // Older evals stored zero requests on cached targets awaiting a comparison.
+      for (const row of await record.fetchResultsByTestIdx(0)) {
+        row.response!.tokenUsage!.numRequests = 0;
+        await row.save();
+      }
+      vi.mocked(grader.callApi).mockResolvedValue({
+        error: 'grader unavailable',
+        cached,
+        tokenUsage: { total: 7, numRequests: 1 },
+      });
+      cliState.resume = true;
+      await evaluate(suite, record, {});
+      for (const row of await record.fetchResultsByTestIdx(0)) {
+        expect(row.failureReason).toBe(ResultFailureReason.ERROR);
+        expect(row.response?.tokenUsage?.numRequests).toBe(cached ? 0 : 1);
+      }
+      expect(target.callApi).toHaveBeenCalledTimes(2);
     },
   );
 
