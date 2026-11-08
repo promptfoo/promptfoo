@@ -523,41 +523,11 @@ export class GoogleVideoProvider implements ApiProvider {
     return undefined;
   }
 
-  private buildVertexRequestBody(
-    prompt: string,
+  private addImageInputs(
+    instance: Record<string, unknown>,
     config: GoogleVideoOptions,
-    mediaBasePaths: GoogleVideoMediaBasePaths = {
-      image: config.basePath,
-      lastFrame: config.basePath,
-      referenceImages: config.basePath,
-      sourceVideo: config.basePath,
-    },
-  ): { body?: Record<string, unknown>; error?: string } {
-    const instance: Record<string, unknown> = { prompt };
-    // Vertex Veo separates media/prompt inputs from generation parameters:
-    // https://docs.cloud.google.com/vertex-ai/generative-ai/docs/reference/rest/Shared.Types/VideoGenerationModelParams
-    const parameters: Record<string, unknown> = {};
-
-    if (config.aspectRatio) {
-      parameters.aspectRatio = config.aspectRatio;
-    }
-    if (config.resolution) {
-      parameters.resolution = config.resolution;
-    }
-    if (config.durationSeconds && !config.sourceVideo && !config.extendVideoId) {
-      parameters.durationSeconds = config.durationSeconds;
-    }
-    if (config.negativePrompt) {
-      parameters.negativePrompt = config.negativePrompt;
-    }
-    if (config.personGeneration) {
-      parameters.personGeneration = config.personGeneration;
-    }
-    if (config.seed !== undefined) {
-      parameters.seed = config.seed;
-    }
-    addOptionalVideoParameter(parameters, 'storageUri', config.storageUri);
-
+    mediaBasePaths: GoogleVideoMediaBasePaths,
+  ): { error: string } | undefined {
     if (config.image) {
       const result = this.loadImageData(config.image, {
         basePath: mediaBasePaths.image,
@@ -594,6 +564,49 @@ export class GoogleVideoProvider implements ApiProvider {
         refs.push({ image: result.image, referenceType });
       }
       instance.referenceImages = refs;
+    }
+
+    return undefined;
+  }
+
+  private buildVertexRequestBody(
+    prompt: string,
+    config: GoogleVideoOptions,
+    mediaBasePaths: GoogleVideoMediaBasePaths = {
+      image: config.basePath,
+      lastFrame: config.basePath,
+      referenceImages: config.basePath,
+      sourceVideo: config.basePath,
+    },
+  ): { body?: Record<string, unknown>; error?: string } {
+    const instance: Record<string, unknown> = { prompt };
+    // Vertex Veo separates media/prompt inputs from generation parameters:
+    // https://docs.cloud.google.com/vertex-ai/generative-ai/docs/reference/rest/Shared.Types/VideoGenerationModelParams
+    const parameters: Record<string, unknown> = {};
+
+    if (config.aspectRatio) {
+      parameters.aspectRatio = config.aspectRatio;
+    }
+    if (config.resolution) {
+      parameters.resolution = config.resolution;
+    }
+    if (config.durationSeconds && !config.sourceVideo && !config.extendVideoId) {
+      parameters.durationSeconds = config.durationSeconds;
+    }
+    if (config.negativePrompt) {
+      parameters.negativePrompt = config.negativePrompt;
+    }
+    if (config.personGeneration) {
+      parameters.personGeneration = config.personGeneration;
+    }
+    if (config.seed !== undefined) {
+      parameters.seed = config.seed;
+    }
+    addOptionalVideoParameter(parameters, 'storageUri', config.storageUri);
+
+    const imageError = this.addImageInputs(instance, config, mediaBasePaths);
+    if (imageError) {
+      return imageError;
     }
 
     const sourceVideoError = this.addVertexSourceVideo(
@@ -645,41 +658,9 @@ export class GoogleVideoProvider implements ApiProvider {
       parameters.seed = config.seed;
     }
 
-    if (config.image) {
-      const result = this.loadImageData(config.image, {
-        basePath: mediaBasePaths.image,
-      });
-      if ('error' in result) {
-        return result;
-      }
-      instance.image = result.image;
-    }
-
-    const lastFrame = config.lastFrame || config.lastImage;
-    if (lastFrame) {
-      const result = this.loadImageData(lastFrame, {
-        basePath: mediaBasePaths.lastFrame,
-      });
-      if ('error' in result) {
-        return result;
-      }
-      instance.lastFrame = result.image;
-    }
-
-    if (config.referenceImages && config.referenceImages.length > 0) {
-      const refs = [];
-      for (const ref of config.referenceImages.slice(0, 3)) {
-        const imagePath = typeof ref === 'string' ? ref : ref.image;
-        const referenceType = typeof ref === 'string' ? 'asset' : ref.referenceType || 'asset';
-        const result = this.loadImageData(imagePath, {
-          basePath: mediaBasePaths.referenceImages,
-        });
-        if ('error' in result) {
-          return result;
-        }
-        refs.push({ image: result.image, referenceType });
-      }
-      instance.referenceImages = refs;
+    const imageError = this.addImageInputs(instance, config, mediaBasePaths);
+    if (imageError) {
+      return imageError;
     }
 
     const sourceVideo = config.sourceVideo || config.extendVideoId;
