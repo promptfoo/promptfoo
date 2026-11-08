@@ -55,6 +55,16 @@ describe('resolveTestsWatchPaths', () => {
     ]);
   });
 
+  it('watches the files matched by POSIX punctuation and printable classes', () => {
+    const symbol = path.join(base, 'fixtures/case-€.yaml');
+    const letter = path.join(base, 'fixtures/case-a.yaml');
+    fs.writeFileSync(symbol, '[]');
+    fs.writeFileSync(letter, '[]');
+
+    expect(resolve('file://fixtures/case-[[:punct:]].yaml')).toEqual([symbol]);
+    expect(resolve('file://fixtures/case-[[:print:]].yaml').sort()).toEqual([letter, symbol]);
+  });
+
   it('expands test globs beneath a directory containing brackets', () => {
     const root = path.join(base, 'suite[blue]');
     fs.mkdirSync(root);
