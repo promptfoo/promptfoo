@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
 import {
   createHyperbolicImageProvider,
@@ -13,6 +13,10 @@ vi.mock('../../../src/cache');
 
 describe('HyperbolicImageProvider', () => {
   beforeEach(() => {
+    vi.resetAllMocks();
+  });
+
+  afterEach(() => {
     vi.resetAllMocks();
   });
 
@@ -69,6 +73,43 @@ describe('HyperbolicImageProvider', () => {
   });
 
   describe('callApi', () => {
+    it.each([
+      { name: 'null response', data: null },
+      { name: 'missing images', data: {} },
+      { name: 'non-array images', data: { images: { 0: { image: 'test' } } } },
+      { name: 'null image', data: { images: [null] } },
+      { name: 'missing image data', data: { images: [{}] } },
+      { name: 'whitespace image data', data: { images: [{ image: ' \n\t' }] } },
+      { name: 'numeric image data', data: { images: [{ image: 123 }] } },
+      { name: 'object image data', data: { images: [{ image: {} }] } },
+    ])('reports $name as a missing image', async ({ data }) => {
+      vi.mocked(fetchWithCache).mockResolvedValue(createMockFetchResponse(data));
+      for (const response_format of ['url', 'b64_json'] as const) {
+        const provider = new HyperbolicImageProvider('test', {
+          config: { apiKey: 'test-key', response_format },
+        });
+        await expect(provider.callApi('test prompt')).resolves.toEqual({
+          error: 'No images returned from API',
+        });
+      }
+    });
+
+    it.each(['url', 'b64_json'] as const)(
+      'rejects an empty image in %s mode',
+      async (response_format) => {
+        vi.mocked(fetchWithCache).mockResolvedValue(
+          createMockFetchResponse({ images: [{ image: '' }] }),
+        );
+        const provider = new HyperbolicImageProvider('test', {
+          config: { apiKey: 'test-key', response_format },
+        });
+
+        await expect(provider.callApi('test prompt')).resolves.toEqual({
+          error: 'No images returned from API',
+        });
+      },
+    );
+
     it('should throw error if no API key', async () => {
       const restoreEnv = mockProcessEnv({ HYPERBOLIC_API_KEY: undefined });
       try {
@@ -100,6 +141,23 @@ describe('HyperbolicImageProvider', () => {
         output: 'data:image/jpeg;base64,test-image-data',
         cached: false,
         cost: 0.01,
+      });
+    });
+
+    it('preserves nonempty base64 JSON output from a cached response', async () => {
+      vi.mocked(fetchWithCache).mockResolvedValue(
+        createMockFetchResponse({ images: [{ image: 'aBcD+/==' }] }, { cached: true }),
+      );
+      const provider = new HyperbolicImageProvider('test', {
+        config: { apiKey: 'test-key', response_format: 'b64_json' },
+      });
+
+      await expect(provider.callApi('test prompt')).resolves.toEqual({
+        output: '{"data":[{"b64_json":"aBcD+/=="}]}',
+        cached: true,
+        cost: 0,
+        isBase64: true,
+        format: 'json',
       });
     });
 
