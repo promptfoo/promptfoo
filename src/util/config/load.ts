@@ -756,26 +756,19 @@ async function prepareCombinedConfig(
     };
   };
 
-  const seenPrompts = new Set<string | Prompt>();
-  const addSeenPrompt = (prompt: string | Prompt, basePath: string) => {
+  const addPrompt = (basePath: string, source: string | Prompt) => {
+    const prompt = makeAbsolute(basePath, source);
     if (!promptBasePaths.has(prompt)) {
       promptBasePaths.set(prompt, basePath);
     }
-    if (typeof prompt === 'string') {
-      seenPrompts.add(prompt);
-    } else if (typeof prompt === 'object' && prompt.id) {
-      seenPrompts.add(prompt);
-    } else if (PromptSchema.safeParse(prompt).success) {
-      seenPrompts.add(prompt);
-    } else {
+    if (typeof prompt !== 'string' && !prompt.id && !PromptSchema.safeParse(prompt).success) {
       throw new Error('Invalid prompt object');
     }
   };
   configSources.forEach(({ config, basePath }) => {
     if (typeof config.prompts === 'string') {
       invariant(Array.isArray(prompts), 'Cannot mix string and map-type prompts');
-      const absolutePrompt = makeAbsolute(basePath, config.prompts);
-      addSeenPrompt(absolutePrompt, basePath);
+      addPrompt(basePath, config.prompts);
     } else if (Array.isArray(config.prompts)) {
       invariant(Array.isArray(prompts), 'Cannot mix configs with map and array-type prompts');
       config.prompts.forEach((prompt) => {
@@ -785,7 +778,7 @@ async function prepareCombinedConfig(
               (typeof prompt.raw === 'string' || typeof prompt.label === 'string')),
           `Invalid prompt: ${JSON.stringify(prompt)}. Prompts must be either a string or an object with a 'raw' or 'label' string property.`,
         );
-        addSeenPrompt(makeAbsolute(basePath, prompt as string | Prompt), basePath);
+        addPrompt(basePath, prompt as string | Prompt);
       });
     } else {
       // Object format such as { 'prompts/prompt1.txt': 'foo', 'prompts/prompt2.txt': 'bar' }
@@ -808,7 +801,7 @@ async function prepareCombinedConfig(
     }
   });
   if (Array.isArray(prompts)) {
-    prompts.push(...Array.from(seenPrompts));
+    prompts.push(...promptBasePaths.keys());
   }
 
   let scenarios: UnifiedConfig['scenarios'];
