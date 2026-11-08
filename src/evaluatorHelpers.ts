@@ -226,6 +226,79 @@ function detectMimeFromBase64(base64Data: string): string | null {
   return null;
 }
 
+async function loadNonScriptFile(
+  filePath: string,
+  provider?: ApiProvider,
+  vars?: Record<string, VarValue>,
+  loadedMimeTypes?: Map<string, string>,
+): Promise<string> {
+  const fileExtension = filePath.split('.').pop()?.toLowerCase();
+  if (fileExtension === 'yaml' || fileExtension === 'yml') {
+    return JSON.stringify(loadYaml(await fs.readFile(filePath, 'utf8')) as string | object);
+  }
+  if (fileExtension === 'pdf' && !getEnvBool('PROMPTFOO_DISABLE_PDF_AS_TEXT')) {
+    telemetry.record('feature_used', {
+      feature: 'extract_text_from_pdf',
+    });
+    return extractTextFromPDF(filePath);
+  }
+  if (
+    (isImageFile(filePath) || isVideoFile(filePath) || isAudioFile(filePath)) &&
+    !getEnvBool('PROMPTFOO_DISABLE_MULTIMEDIA_AS_BASE64')
+  ) {
+    const fileType = isImageFile(filePath) ? 'image' : isVideoFile(filePath) ? 'video' : 'audio';
+
+    telemetry.record('feature_used', {
+      feature: `load_${fileType}_as_base64`,
+    });
+
+    logger.debug(`Loading ${fileType} as base64: ${filePath}`);
+    try {
+      const fileBuffer = await fs.readFile(filePath);
+      const base64Data = fileBuffer.toString('base64');
+
+      if (fileType === 'image') {
+        let mimeType = getMimeTypeFromExtension(path.extname(filePath));
+        const extension = path.extname(filePath);
+        const extensionWasUnknown = !extension || mimeType === 'image/jpeg';
+
+        const detectedType = detectMimeFromBase64(base64Data);
+        if (detectedType) {
+          if (detectedType !== mimeType) {
+            logger.debug(
+              `Magic number detection overriding extension-based MIME type: ${detectedType} (was ${mimeType}) for ${filePath}`,
+            );
+            mimeType = detectedType;
+          }
+        } else if (extensionWasUnknown) {
+          logger.warn(
+            `Could not detect image format for ${filePath}, defaulting to image/jpeg. Supported formats: JPEG, PNG, GIF, WebP, BMP, TIFF, ICO, AVIF, HEIC, SVG`,
+          );
+        }
+
+        return `data:${mimeType};base64,${base64Data}`;
+      }
+
+      if (
+        fileType === 'audio' &&
+        fileExtension === 'm4a' &&
+        provider?.getAudioInputFormat?.() === 'google'
+      ) {
+        if (loadedMimeTypes && vars) {
+          loadedMimeTypes.set(base64Data, 'audio/mp4');
+          setLoadedFileMimeTypes(vars, loadedMimeTypes);
+        }
+      }
+      return base64Data;
+    } catch (error) {
+      throw new Error(
+        `Failed to load ${fileType} ${filePath}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+  return (await fs.readFile(filePath, 'utf8')).trim();
+}
+
 /**
  * Renders a prompt template with variable substitution using Nunjucks.
  *
@@ -273,48 +346,7 @@ export async function renderPrompt(
       }
 
       logger.debug(`Loading nested file reference from: ${filePath}`);
-
-      if (fileExtension === 'yaml' || fileExtension === 'yml') {
-        return JSON.stringify(loadYaml(await fs.readFile(filePath, 'utf8')) as string | object);
-      } else if (fileExtension === 'pdf' && !getEnvBool('PROMPTFOO_DISABLE_PDF_AS_TEXT')) {
-        telemetry.record('feature_used', { feature: 'extract_text_from_pdf' });
-        return extractTextFromPDF(filePath);
-      } else if (
-        (isImageFile(filePath) || isVideoFile(filePath) || isAudioFile(filePath)) &&
-        !getEnvBool('PROMPTFOO_DISABLE_MULTIMEDIA_AS_BASE64')
-      ) {
-        // Multimedia inside nested objects is returned as base64 / data URL the
-        // same way top-level multimedia vars are handled.
-        const fileBuffer = await fs.readFile(filePath);
-        const base64Data = fileBuffer.toString('base64');
-        if (isImageFile(filePath)) {
-          let mimeType = getMimeTypeFromExtension(path.extname(filePath));
-          const extension = path.extname(filePath);
-          const extensionWasUnknown = !extension || mimeType === 'image/jpeg';
-          const detectedType = detectMimeFromBase64(base64Data);
-          if (detectedType && detectedType !== mimeType) {
-            logger.debug(
-              `Magic number detection overriding extension-based MIME type: ${detectedType} (was ${mimeType}) for ${filePath}`,
-            );
-            mimeType = detectedType;
-          } else if (!detectedType && extensionWasUnknown) {
-            logger.warn(
-              `Could not detect image format for ${filePath}, defaulting to image/jpeg. Supported formats: JPEG, PNG, GIF, WebP, BMP, TIFF, ICO, AVIF, HEIC, SVG`,
-            );
-          }
-          return `data:${mimeType};base64,${base64Data}`;
-        }
-        if (
-          fileExtension?.toLowerCase() === 'm4a' &&
-          provider?.getAudioInputFormat?.() === 'google'
-        ) {
-          loadedMimeTypes.set(base64Data, 'audio/mp4');
-          setLoadedFileMimeTypes(vars, loadedMimeTypes);
-        }
-        return base64Data;
-      } else {
-        return (await fs.readFile(filePath, 'utf8')).trim();
-      }
+      return loadNonScriptFile(filePath, provider, vars, loadedMimeTypes);
     }
 
     if (Array.isArray(value)) {
@@ -408,78 +440,8 @@ export async function renderPrompt(
           `pythonScriptOutput.output must be a string. Received: ${typeof pythonScriptOutput.output}`,
         );
         vars[varName] = pythonScriptOutput.output.trim();
-      } else if (fileExtension === 'yaml' || fileExtension === 'yml') {
-        vars[varName] = JSON.stringify(
-          loadYaml(await fs.readFile(filePath, 'utf8')) as string | object,
-        );
-      } else if (fileExtension === 'pdf' && !getEnvBool('PROMPTFOO_DISABLE_PDF_AS_TEXT')) {
-        telemetry.record('feature_used', {
-          feature: 'extract_text_from_pdf',
-        });
-        vars[varName] = await extractTextFromPDF(filePath);
-      } else if (
-        (isImageFile(filePath) || isVideoFile(filePath) || isAudioFile(filePath)) &&
-        !getEnvBool('PROMPTFOO_DISABLE_MULTIMEDIA_AS_BASE64')
-      ) {
-        const fileType = isImageFile(filePath)
-          ? 'image'
-          : isVideoFile(filePath)
-            ? 'video'
-            : 'audio';
-
-        telemetry.record('feature_used', {
-          feature: `load_${fileType}_as_base64`,
-        });
-
-        logger.debug(`Loading ${fileType} as base64: ${filePath}`);
-        try {
-          const fileBuffer = await fs.readFile(filePath);
-          const base64Data = fileBuffer.toString('base64');
-
-          if (fileType === 'image') {
-            // For images, generate data URL with proper MIME type
-            // Use extension first, then magic number detection for accuracy
-            let mimeType = getMimeTypeFromExtension(path.extname(filePath));
-            const extension = path.extname(filePath);
-            const extensionWasUnknown = !extension || mimeType === 'image/jpeg';
-
-            // For better accuracy, use magic number detection
-            const detectedType = detectMimeFromBase64(base64Data);
-            if (detectedType) {
-              // Use detected type if available and different from extension-based guess
-              if (detectedType !== mimeType) {
-                logger.debug(
-                  `Magic number detection overriding extension-based MIME type: ${detectedType} (was ${mimeType}) for ${filePath}`,
-                );
-                mimeType = detectedType;
-              }
-            } else if (extensionWasUnknown) {
-              // Could not detect format and extension was unknown/ambiguous
-              logger.warn(
-                `Could not detect image format for ${filePath}, defaulting to image/jpeg. Supported formats: JPEG, PNG, GIF, WebP, BMP, TIFF, ICO, AVIF, HEIC, SVG`,
-              );
-            }
-
-            vars[varName] = `data:${mimeType};base64,${base64Data}`;
-          } else {
-            // Keep existing behavior for video/audio files (raw base64)
-            vars[varName] = base64Data;
-            if (
-              fileType === 'audio' &&
-              fileExtension?.toLowerCase() === 'm4a' &&
-              provider?.getAudioInputFormat?.() === 'google'
-            ) {
-              loadedMimeTypes.set(base64Data, 'audio/mp4');
-              setLoadedFileMimeTypes(vars, loadedMimeTypes);
-            }
-          }
-        } catch (error) {
-          throw new Error(
-            `Failed to load ${fileType} ${filePath}: ${error instanceof Error ? error.message : String(error)}`,
-          );
-        }
       } else {
-        vars[varName] = (await fs.readFile(filePath, 'utf8')).trim();
+        vars[varName] = await loadNonScriptFile(filePath, provider, vars, loadedMimeTypes);
       }
     } else if (isPackagePath(value)) {
       const basePath = cliState.basePath || '';
