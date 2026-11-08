@@ -1,34 +1,26 @@
+import cliState from '../../cliState';
+import { getEnvString } from '../../envars';
 import { AnthropicMessagesProvider } from './messages';
 
 import type { EnvOverrides } from '../../types/env';
 import type { DefaultProviders, ProviderResponse } from '../../types/index';
 
-// Default model to use for all default providers
-export const DEFAULT_ANTHROPIC_MODEL = 'claude-sonnet-4-6';
+// Must support the rubric grader's forced tool_choice.
+export const DEFAULT_ANTHROPIC_MODEL = 'claude-sonnet-5';
 
-/**
- * Helper function to create a lazy-loaded provider. This allows the .env file to be
- * loaded first before the provider is initialized.
- * @param factory Factory function that creates provider instance with optional env
- * @returns Object with getter that lazily initializes the provider with the latest env
- */
-function createLazyProvider<T>(factory: (env?: EnvOverrides) => T): {
-  getInstance: (env?: EnvOverrides) => T;
-} {
-  const instances = new Map<string, T>();
+type AnthropicProviders = Pick<
+  DefaultProviders,
+  | 'gradingJsonProvider'
+  | 'gradingProvider'
+  | 'llmRubricProvider'
+  | 'suggestionsProvider'
+  | 'synthesizeProvider'
+  | 'webSearchProvider'
+>;
 
-  return {
-    getInstance(env?: EnvOverrides) {
-      // Use a simple cache key strategy - empty string for undefined env
-      const cacheKey = env ? JSON.stringify(env) : '';
-
-      if (!instances.has(cacheKey)) {
-        instances.set(cacheKey, factory(env));
-      }
-      return instances.get(cacheKey)!;
-    },
-  };
-}
+// A scope owns at most one bundle. Weak ownership allows its clients and ephemeral
+// response caches to be collected after the invocation, without credential fingerprints.
+const scopedProviders = new WeakMap<object, { env: EnvOverrides; providers: AnthropicProviders }>();
 
 // LLM Rubric Provider
 export class AnthropicLlmRubricProvider extends AnthropicMessagesProvider {
@@ -66,6 +58,8 @@ export class AnthropicLlmRubricProvider extends AnthropicMessagesProvider {
           },
         ],
         ...config,
+        // Keep the tool-use JSON parseable even if the caller enables thinking display.
+        showThinking: false,
       },
     });
   }
@@ -99,54 +93,40 @@ export class AnthropicLlmRubricProvider extends AnthropicMessagesProvider {
   }
 }
 
-// Private provider factories with lazy loading
-const gradingProviderFactory = createLazyProvider(
-  (env?: EnvOverrides) => new AnthropicMessagesProvider(DEFAULT_ANTHROPIC_MODEL, { env }),
-);
+/** Create default Anthropic providers for the active environment scope. */
+export function getAnthropicProviders(env?: EnvOverrides): AnthropicProviders {
+  // Resolve every construction input before reuse, including partial explicit maps.
+  // Preserve explicit empty credentials and headers when capturing the client inputs.
+  const resolvedEnv = {
+    ...env,
+    ANTHROPIC_API_KEY: env?.ANTHROPIC_API_KEY ?? getEnvString('ANTHROPIC_API_KEY'),
+    ANTHROPIC_BASE_URL: env?.ANTHROPIC_BASE_URL ?? getEnvString('ANTHROPIC_BASE_URL'),
+    ANTHROPIC_CUSTOM_HEADERS:
+      env?.ANTHROPIC_CUSTOM_HEADERS ?? getEnvString('ANTHROPIC_CUSTOM_HEADERS'),
+  };
+  const scope = cliState.envScope;
+  const cached = scope ? scopedProviders.get(scope) : undefined;
+  if (
+    cached &&
+    Object.keys(cached.env).length === Object.keys(resolvedEnv).length &&
+    Object.entries(resolvedEnv).every(([key, value]) => cached.env[key] === value)
+  ) {
+    return cached.providers;
+  }
+  const gradingProvider = new AnthropicMessagesProvider(DEFAULT_ANTHROPIC_MODEL, {
+    env: resolvedEnv,
+  });
+  const llmRubricProvider = new AnthropicLlmRubricProvider(DEFAULT_ANTHROPIC_MODEL, {
+    env: resolvedEnv,
+  });
+  const webSearchProvider = new AnthropicMessagesProvider(DEFAULT_ANTHROPIC_MODEL, {
+    env: resolvedEnv,
+    config: {
+      tools: [{ type: 'web_search_20260209', name: 'web_search', max_uses: 5 }],
+    },
+  });
 
-const llmRubricProviderFactory = createLazyProvider(
-  (env?: EnvOverrides) => new AnthropicLlmRubricProvider(DEFAULT_ANTHROPIC_MODEL, { env }),
-);
-
-// Web Search Provider with web_search tool
-const webSearchProviderFactory = createLazyProvider(
-  (env?: EnvOverrides) =>
-    new AnthropicMessagesProvider(DEFAULT_ANTHROPIC_MODEL, {
-      env,
-      config: {
-        tools: [
-          {
-            type: 'web_search_20250305',
-            name: 'web_search',
-            max_uses: 5,
-          } as any,
-        ],
-      },
-    }),
-);
-
-/**
- * Gets all default Anthropic providers with the given environment overrides
- * @param env - Optional environment overrides
- * @returns Anthropic provider implementations for various functions
- */
-export function getAnthropicProviders(
-  env?: EnvOverrides,
-): Pick<
-  DefaultProviders,
-  | 'gradingJsonProvider'
-  | 'gradingProvider'
-  | 'llmRubricProvider'
-  | 'suggestionsProvider'
-  | 'synthesizeProvider'
-  | 'webSearchProvider'
-> {
-  // Get providers with the provided environment variables
-  const gradingProvider = gradingProviderFactory.getInstance(env);
-  const llmRubricProvider = llmRubricProviderFactory.getInstance(env);
-  const webSearchProvider = webSearchProviderFactory.getInstance(env);
-
-  return {
+  const providers = {
     gradingJsonProvider: gradingProvider,
     gradingProvider,
     llmRubricProvider,
@@ -154,4 +134,8 @@ export function getAnthropicProviders(
     synthesizeProvider: gradingProvider,
     webSearchProvider,
   };
+  if (scope) {
+    scopedProviders.set(scope, { env: resolvedEnv, providers });
+  }
+  return providers;
 }

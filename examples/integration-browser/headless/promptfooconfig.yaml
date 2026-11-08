@@ -7,7 +7,7 @@ prompts:
 providers:
   - id: browser
     config:
-      headless: false # set to false to see the browser in action
+      headless: true # Set to false to see the browser in action
       steps:
         # Always start with a respectful delay
         - action: wait

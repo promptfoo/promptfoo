@@ -118,8 +118,9 @@ describe('database WAL mode', () => {
     const database = await import('../src/database');
     const db = await database.getDb();
 
-    // Unit tests use a shared in-memory DB and skip WAL setup.
-    expect(db).toBeDefined();
+    const result = await db.all<{ journal_mode: string }>(sql`PRAGMA journal_mode`);
+    expect(result).toEqual([{ journal_mode: 'memory' }]);
+    expect(fs.existsSync(database.getDbPath())).toBe(false);
   });
 
   describe('closeDbIfOpen', () => {
