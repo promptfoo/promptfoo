@@ -3,13 +3,16 @@ import { handleMeteorAssertion } from '../../src/assertions/meteor';
 
 import type { AssertionParams } from '../../src/types/index';
 
-vi.mock('natural', () => ({
+vi.mock('natural/lib/natural/stemmers/index.js', () => ({
   PorterStemmer: {
     stem(word: string) {
       const stems: Record<string, string> = { cats: 'cat', running: 'run' };
       return stems[word] ?? word;
     },
   },
+}));
+
+vi.mock('natural/lib/natural/wordnet/index.js', () => ({
   WordNet: class {
     lookup(word: string, callback: (records: { synonyms: string[] }[]) => void) {
       const synonyms: Record<string, string[]> = {
