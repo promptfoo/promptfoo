@@ -59,6 +59,31 @@ export function resolveVariables(
   let resolved: boolean;
   const regex = /\{\{\s*(\w+)\s*\}\}/g; // Matches {{variableName}}, {{ variableName }}, etc.
 
+  // Follows placeholder references transitively: returns true when the variable named
+  // `from` (transitively) references `to`. Comparing parsed placeholder names avoids
+  // building a RegExp from arbitrary variable keys, which can throw on metacharacters.
+  const canReach = (from: string, to: string): boolean => {
+    const stack = [from];
+    const seen = new Set<string>();
+    while (stack.length > 0) {
+      const current = stack.pop() as string;
+      if (current === to) {
+        return true;
+      }
+      if (seen.has(current)) {
+        continue;
+      }
+      seen.add(current);
+      const currentValue = variables[current];
+      if (typeof currentValue === 'string') {
+        for (const inner of currentValue.matchAll(regex)) {
+          stack.push(inner[1]);
+        }
+      }
+    }
+    return false;
+  };
+
   let iterations = 0;
   do {
     resolved = true;
@@ -74,17 +99,12 @@ export function resolveVariables(
       // Find the first placeholder whose variable is defined. An unresolved placeholder is
       // left in place - the final nunjucks render will fail if necessary - but it must not
       // block resolvable placeholders that follow it in the same string.
-      // Skip self-references and direct cycles: replacing them would substitute the value
+      // Skip self-references and cycles: replacing them would substitute the value
       // into itself on every pass, growing it instead of resolving it.
-      const selfRef = new RegExp(`\\{\\{\\s*${key}\\s*\\}\\}`);
       let match: RegExpMatchArray | undefined;
       for (const candidate of value.matchAll(regex)) {
         const varName = candidate[1];
-        if (variables[varName] === undefined || varName === key) {
-          continue;
-        }
-        const candidateValue = variables[varName];
-        if (typeof candidateValue === 'string' && selfRef.test(candidateValue)) {
+        if (variables[varName] === undefined || canReach(varName, key)) {
           continue;
         }
         match = candidate;

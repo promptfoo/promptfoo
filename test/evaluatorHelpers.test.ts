@@ -708,6 +708,20 @@ describe('evaluatorHelpers', () => {
       expect(resolveVariables(variables)).toEqual({ a: '{{missing}} {{b}}', b: '{{a}}' });
     });
 
+    it('should not expand a transitive cycle that follows an unresolved placeholder', () => {
+      const variables = { a: '{{missing}} {{b}}', b: '{{c}}', c: '{{a}}' };
+      expect(resolveVariables(variables)).toEqual({
+        a: '{{missing}} {{b}}',
+        b: '{{c}}',
+        c: '{{a}}',
+      });
+    });
+
+    it('should resolve variables whose key contains regex metacharacters', () => {
+      const variables = { 'input[': '{{name}}', name: 'x' };
+      expect(resolveVariables(variables)).toEqual({ 'input[': 'x', name: 'x' });
+    });
+
     it('should not fail for unresolved placeholders', () => {
       const variables = { greeting: 'Hello, {{name}}!', name: '{{unknown}}' };
       expect(resolveVariables(variables)).toEqual({
