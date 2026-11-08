@@ -367,6 +367,8 @@ describe('handleIsHtml', () => {
       { input: '<svg><circle cx="1"', tag: 'svg' },
       { input: '<svg><g><circle r="1"/></svg>', tag: 'g' },
       { input: '<math><mi>x</math>', tag: 'mi' },
+      { input: '<svg data=x/>', tag: 'svg' },
+      { input: '<table><thead><tbody></tbody><thead><tr><th>x</th></tr></table>', tag: 'thead' },
     ];
 
     unclosedExamples.forEach(({ input, tag }) => {
@@ -389,6 +391,7 @@ describe('handleIsHtml', () => {
       '<ul><li>One<li>Two</ul>',
       '<table><tr><td>1<td>2</table>',
       '<table><thead><tr><th>Head<tbody><tr><td>Body</table>',
+      '<table><thead><tbody></tbody><thead><tbody></tbody><thead><tfoot></table>',
       '<dl><dt>Term<dd>Definition</dl>',
     ];
 
@@ -411,6 +414,7 @@ describe('handleIsHtml', () => {
     const fragments = [
       '<svg><circle /></svg>',
       '<svg><circle r="1"/></svg>',
+      '<svg><circle r="1" /></svg>',
       '<svg viewBox="0 0 1 1"><path d="M0 0"/></svg>',
       '<template><div>x</div></template>',
     ];

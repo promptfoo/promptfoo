@@ -328,9 +328,20 @@ const OPTIONAL_END_TAG_ELEMENTS = new Set([
   'th',
 ]);
 
+const siblingIndexesByParent = new WeakMap<HtmlParentNode, Map<HtmlChildNode, number>>();
+
+function getSiblingIndex(parent: HtmlParentNode, element: HtmlElement): number {
+  let siblingIndexes = siblingIndexesByParent.get(parent);
+  if (!siblingIndexes) {
+    siblingIndexes = new Map(parent.childNodes.map((node, index) => [node, index]));
+    siblingIndexesByParent.set(parent, siblingIndexes);
+  }
+  return siblingIndexes.get(element) ?? -1;
+}
+
 function isFollowedByTableBody(element: HtmlElement): boolean {
-  const siblings = element.parentNode?.childNodes ?? [];
-  const nextSibling = siblings[siblings.indexOf(element) + 1];
+  const parent = element.parentNode;
+  const nextSibling = parent ? parent.childNodes[getSiblingIndex(parent, element) + 1] : undefined;
   return (
     nextSibling !== undefined &&
     isElementNode(nextSibling) &&
@@ -346,9 +357,14 @@ function canOmitEndTag(element: HtmlElement, tagName: string): boolean {
 }
 
 function hasSelfClosingStartTag(element: HtmlElement, input: string): boolean {
-  const startTag = element.sourceCodeLocation?.startTag;
+  const location = element.sourceCodeLocation;
+  if (!location?.startTag) {
+    return false;
+  }
+  const slashOffset = location.startTag.endOffset - 2;
   return (
-    startTag !== undefined && input.slice(startTag.startOffset, startTag.endOffset).endsWith('/>')
+    input[slashOffset] === '/' &&
+    Object.values(location.attrs ?? {}).every((attr) => attr.endOffset <= slashOffset)
   );
 }
 
