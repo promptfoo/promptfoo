@@ -55,20 +55,23 @@
         "writeLatestResults": {
           "$ref": "#/definitions/__schema70"
         },
-        "tracing": {
+        "defaultColumnVisibility": {
           "$ref": "#/definitions/__schema71"
         },
-        "basePath": {
-          "$ref": "#/definitions/__schema76"
+        "tracing": {
+          "$ref": "#/definitions/__schema72"
         },
-        "evaluateOptions": {
+        "basePath": {
           "$ref": "#/definitions/__schema77"
         },
+        "evaluateOptions": {
+          "$ref": "#/definitions/__schema78"
+        },
         "commandLineOptions": {
-          "$ref": "#/definitions/__schema79"
+          "$ref": "#/definitions/__schema80"
         },
         "targets": {
-          "$ref": "#/definitions/__schema80"
+          "$ref": "#/definitions/__schema81"
         }
       },
       "required": ["prompts"],
@@ -2684,6 +2687,31 @@
     "__schema71": {
       "type": "object",
       "properties": {
+        "variables": {
+          "type": "string",
+          "enum": ["visible", "hidden"]
+        },
+        "prompts": {
+          "type": "string",
+          "enum": ["visible", "hidden"]
+        },
+        "hideColumns": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "showColumns": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "__schema72": {
+      "type": "object",
+      "properties": {
         "enabled": {
           "default": false,
           "type": "boolean"
@@ -2792,19 +2820,19 @@
                   "const": "tempo"
                 },
                 "endpoint": {
-                  "$ref": "#/definitions/__schema72"
+                  "$ref": "#/definitions/__schema73"
                 },
                 "auth": {
                   "type": "object",
                   "properties": {
                     "token": {
-                      "$ref": "#/definitions/__schema73"
-                    },
-                    "username": {
                       "$ref": "#/definitions/__schema74"
                     },
-                    "password": {
+                    "username": {
                       "$ref": "#/definitions/__schema75"
+                    },
+                    "password": {
+                      "$ref": "#/definitions/__schema76"
                     }
                   }
                 },
@@ -2833,7 +2861,7 @@
                   "const": "braintrust"
                 },
                 "endpoint": {
-                  "$ref": "#/definitions/__schema72"
+                  "$ref": "#/definitions/__schema73"
                 },
                 "projectId": {
                   "type": "string",
@@ -2875,7 +2903,7 @@
                   "const": "langfuse"
                 },
                 "endpoint": {
-                  "$ref": "#/definitions/__schema72"
+                  "$ref": "#/definitions/__schema73"
                 },
                 "auth": {
                   "type": "object",
@@ -2921,13 +2949,9 @@
         }
       }
     },
-    "__schema72": {
-      "type": "string",
-      "format": "uri"
-    },
     "__schema73": {
       "type": "string",
-      "minLength": 1
+      "format": "uri"
     },
     "__schema74": {
       "type": "string",
@@ -2938,9 +2962,13 @@
       "minLength": 1
     },
     "__schema76": {
-      "type": "string"
+      "type": "string",
+      "minLength": 1
     },
     "__schema77": {
+      "type": "string"
+    },
+    "__schema78": {
       "type": "object",
       "properties": {
         "cache": {
@@ -2983,14 +3011,14 @@
           "type": "boolean"
         },
         "filterRange": {
-          "$ref": "#/definitions/__schema78"
+          "$ref": "#/definitions/__schema79"
         }
       }
     },
-    "__schema78": {
+    "__schema79": {
       "type": "string"
     },
-    "__schema79": {
+    "__schema80": {
       "type": "object",
       "properties": {
         "description": {
@@ -3122,7 +3150,7 @@
         "filterRange": {
           "allOf": [
             {
-              "$ref": "#/definitions/__schema78"
+              "$ref": "#/definitions/__schema79"
             }
           ]
         },
@@ -3195,7 +3223,7 @@
         }
       }
     },
-    "__schema80": {
+    "__schema81": {
       "allOf": [
         {
           "$ref": "#/definitions/__schema3"
