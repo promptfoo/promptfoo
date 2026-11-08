@@ -377,6 +377,8 @@ describe('matchesLlmRubric', () => {
   it('should keep the served model reported to the default Anthropic grader', async () => {
     const restoreEnv = mockProcessEnv({
       OPENAI_API_KEY: undefined,
+      AZURE_DEPLOYMENT_NAME: undefined,
+      AZURE_OPENAI_DEPLOYMENT_NAME: undefined,
       ANTHROPIC_API_KEY: 'test-anthropic-key',
     });
     const create = vi.spyOn(Messages.prototype, 'create').mockResolvedValue({
