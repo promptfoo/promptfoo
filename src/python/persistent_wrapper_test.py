@@ -560,11 +560,14 @@ class TestHandleCall(unittest.TestCase):
         self.mock_module.test_func = MagicMock(return_value={1})
         with open(self.request_file, "w") as f:
             json.dump([], f)
-        with patch("sys.stdout", new_callable=io.StringIO) as stdout, patch(
-            "sys.stderr", new_callable=io.StringIO
-        ) as stderr:
+        with (
+            patch("sys.stdout", new_callable=io.StringIO) as stdout,
+            patch("sys.stderr", new_callable=io.StringIO) as stderr,
+        ):
             persistent_wrapper.handle_call(
-                f"CALL|{self.request_file}|{self.response_file}", self.mock_module, "test_func"
+                f"CALL|{self.request_file}|{self.response_file}",
+                self.mock_module,
+                "test_func",
             )
         self.mock_module.test_func.assert_called_once_with()
         self.assertEqual(stdout.getvalue(), f"\nDONE|{self.response_file}\n")
