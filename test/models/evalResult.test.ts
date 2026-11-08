@@ -309,7 +309,7 @@ describe('EvalResult', () => {
       });
     });
 
-    it('preserves repeat linkage across single-row persistence', async () => {
+    it('preserves repeat linkage across single-row persistence and later saves', async () => {
       const result = await EvalResult.createFromEvaluateResult('test-eval-repeat-linkage', {
         ...mockEvaluateResult,
         repeatIndex: 2,
@@ -319,10 +319,16 @@ describe('EvalResult', () => {
 
       const retrieved = await EvalResult.findById(result.id);
 
-      expect(retrieved?.toEvaluateResult()).toMatchObject({
+      expect(retrieved).not.toBeNull();
+      retrieved!.score = 0.5;
+      await retrieved!.save();
+      const saved = await EvalResult.findById(result.id);
+
+      expect(saved?.toEvaluateResult()).toMatchObject({
         repeatIndex: 2,
         repeatGroupId: 'test-0-vars-1',
         metadata: { source: 'repeat' },
+        score: 0.5,
       });
       expect(retrieved?.metadata).not.toHaveProperty('__promptfoo');
     });
