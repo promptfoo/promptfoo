@@ -784,6 +784,16 @@ function usesYamlTestLoader(source: string): boolean {
   );
 }
 
+function isLiteralWorkbookReference(source: string, basePath: string): boolean {
+  const filename = path.basename(source).split('#')[0].toLowerCase();
+  // Sheet names can contain glob characters; only inspect the actual workbook path.
+  const workbookPath = stripSheetSelector(source);
+  return (
+    (filename.endsWith('.xlsx') || filename.endsWith('.xls')) &&
+    (!hasGlobMagic(workbookPath) || fs.existsSync(path.resolve(basePath, workbookPath)))
+  );
+}
+
 async function readTestsWithEnv(
   tests: TestSuiteConfig['tests'],
   basePath: string,
@@ -847,15 +857,12 @@ async function readTestsWithEnv(
       // Extract path without function name (Windows-aware)
       const pathWithoutScheme = globOrTest.replace(/^file:\/\//, '');
       const pathWithoutFunction = stripFunctionSuffix(pathWithoutScheme);
-      // Handle xlsx/xls files with optional sheet specifier (e.g., file.xlsx#Sheet1)
-      const pathWithoutSheet = path.basename(globOrTest).split('#')[0].toLowerCase();
       // Read standalone sources, then resolve provider and vars references for local rows.
       if (
         isRemoteTestsReference(globOrTest) ||
         isJavascriptFile(pathWithoutFunction) ||
         pathWithoutFunction.endsWith('.py') ||
-        pathWithoutSheet.endsWith('.xlsx') ||
-        pathWithoutSheet.endsWith('.xls') ||
+        isLiteralWorkbookReference(pathWithoutScheme, basePath) ||
         pathWithoutFunction !== pathWithoutScheme
       ) {
         ret.push(...(await loadStandalone(globOrTest)));
