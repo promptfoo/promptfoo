@@ -525,18 +525,9 @@ export function evalTableToCsv(
   const hasDescriptions = table.body.some((row) => row.test.description);
 
   const namedScoreNamesByPrompt = collectNamedScoreNamesByPrompt(table);
-  const headers = buildCsvHeaders(table.head.vars, table.head.prompts, {
-    hasDescriptions,
-    isRedteam,
-    namedScoreNamesByPrompt,
-  });
-
-  const csvRows = [
-    headers,
-    ...table.body.map((row) =>
-      tableRowToCsvValues(row, { hasDescriptions, isRedteam, namedScoreNamesByPrompt }),
-    ),
-  ];
+  const columnOptions = { hasDescriptions, isRedteam, namedScoreNamesByPrompt };
+  const headers = buildCsvHeaders(table.head.vars, table.head.prompts, columnOptions);
+  const csvRows = [headers, ...table.body.map((row) => tableRowToCsvValues(row, columnOptions))];
 
   return csvStringify(escapeCsvRowsForFormulaInjection(csvRows, env));
 }
