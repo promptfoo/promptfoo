@@ -7,7 +7,7 @@ import { loadApiProvider } from '../../../../src/providers/index';
 
 vi.mock('../../../../src/providers/index', () => ({ loadApiProvider: vi.fn() }));
 
-afterEach(() => vi.mocked(loadApiProvider).mockReset());
+afterEach(() => void vi.mocked(loadApiProvider).mockReset());
 
 it('reports the call error and recovers on the next provider test', async () => {
   const id = vi.fn(() => {
