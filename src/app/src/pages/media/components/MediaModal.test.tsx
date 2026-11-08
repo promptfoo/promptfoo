@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 
 import { mockMatchMedia } from '@app/tests/browserMocks';
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { act, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -117,9 +117,13 @@ describe('MediaModal', () => {
 
       const dialog = screen.getByRole('dialog');
       const audio = dialog.querySelector('audio')!;
-      fireEvent.play(audio);
+      act(() => {
+        audio.dispatchEvent(new Event('play'));
+      });
       expect(dialog.querySelectorAll('.animate-pulse')).toHaveLength(12);
-      fireEvent.pause(audio);
+      act(() => {
+        audio.dispatchEvent(new Event('pause'));
+      });
       expect(dialog.querySelectorAll('.animate-pulse')).toHaveLength(0);
     });
 
