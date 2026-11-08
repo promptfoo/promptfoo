@@ -1,6 +1,6 @@
-import { EventEmitter } from 'events';
 import fs from 'fs';
 import fsPromises from 'fs/promises';
+import { Writable } from 'stream';
 import zlib from 'zlib';
 
 import { Command } from 'commander';
@@ -10,6 +10,7 @@ import logger from '../../src/logger';
 import Eval from '../../src/models/eval';
 import { getLogDirectory, getLogFiles } from '../../src/util/logs';
 import { writeOutput } from '../../src/util/output';
+import { createDeferred } from '../util/utils';
 
 vi.mock('../../src/telemetry', () => ({
   default: {
@@ -232,6 +233,13 @@ describe('exportCommand', () => {
 
   describe('logs export', () => {
     const mockLogDir = '/test/config/logs';
+    const logFile = {
+      name: 'promptfoo-debug-2025-01-01.log',
+      path: `${mockLogDir}/promptfoo-debug-2025-01-01.log`,
+      mtime: new Date('2025-01-01T00:00:00.000Z'),
+      type: 'debug' as const,
+      size: 10,
+    };
     const mockGetLogDirectory = vi.mocked(getLogDirectory);
     const mockGetLogFiles = vi.mocked(getLogFiles);
 
@@ -270,15 +278,7 @@ describe('exportCommand', () => {
       ['should handle invalid count parameter', 'invalid'],
       ['should handle zero count parameter', '0'],
     ])('%s', async (_title, count) => {
-      mockGetLogFiles.mockResolvedValue([
-        {
-          name: 'promptfoo-debug-2025-01-01.log',
-          path: '/test/config/logs/promptfoo-debug-2025-01-01.log',
-          mtime: new Date(),
-          type: 'debug',
-          size: 1024,
-        },
-      ]);
+      mockGetLogFiles.mockResolvedValue([logFile]);
 
       await program.parseAsync(['node', 'test', 'export', 'logs', '--count', count]);
 
@@ -286,44 +286,50 @@ describe('exportCommand', () => {
       expect(process.exitCode).toBe(1);
     });
 
-    it('should archive log files using async fs helpers', async () => {
-      const logPath = '/test/config/logs/promptfoo-debug-2025-01-01.log';
-      const output = new EventEmitter() as EventEmitter & {
-        on: typeof EventEmitter.prototype.on;
-      };
-      const gzip = {
-        end: vi.fn(() => output.emit('close')),
-        pipe: vi.fn(),
-        write: vi.fn(),
-        on: vi.fn(),
-      };
+    it.each([false, true])('collects logs (destination fails: %s)', async (writeFails) => {
+      const output = new Writable({
+        write(_chunk, _encoding, callback) {
+          callback();
+        },
+      });
+      const actualZlib = await vi.importActual<typeof import('zlib')>('zlib');
 
       vi.mocked(fs.createWriteStream).mockReturnValue(output as unknown as fs.WriteStream);
-      vi.mocked(zlib.createGzip).mockReturnValue(gzip as unknown as zlib.Gzip);
-      mockGetLogFiles.mockResolvedValue([
-        {
-          name: 'promptfoo-debug-2025-01-01.log',
-          path: logPath,
-          mtime: new Date('2025-01-01T00:00:00.000Z'),
-          type: 'debug',
-          size: 12,
-        },
-      ]);
-      mockFsPromises.readFile.mockResolvedValue(Buffer.from('hello logs'));
-      mockFsPromises.stat.mockImplementation(async (filePath) => {
-        if (filePath === 'logs.gz') {
-          return { size: 123 } as fs.Stats;
+      vi.mocked(zlib.createGzip).mockImplementation(actualZlib.createGzip);
+      mockGetLogFiles.mockResolvedValue([logFile]);
+      const read = createDeferred<Buffer<ArrayBuffer>>();
+      mockFsPromises.readFile.mockImplementation(() => {
+        if (writeFails) {
+          output.destroy(new Error('disk full'));
         }
-        return {
-          size: 10,
-          mtime: new Date('2025-01-01T00:00:00.000Z'),
-        } as fs.Stats;
+        return read.promise;
       });
+      mockFsPromises.stat.mockResolvedValue({
+        size: logFile.size,
+        mtime: logFile.mtime,
+      } as fs.Stats);
 
-      await program.parseAsync(['node', 'test', 'export', 'logs', '--output', 'logs.gz']);
+      const command = program.parseAsync(['node', 'test', 'export', 'logs', '--output', 'logs.gz']);
+      try {
+        if (writeFails) {
+          await vi.waitFor(() =>
+            expect(logger.error).toHaveBeenCalledWith('Failed to collect logs: Error: disk full'),
+          );
+        }
+      } finally {
+        read.resolve(Buffer.from('hello logs'));
+        await command;
+      }
 
-      expect(mockFsPromises.readFile).toHaveBeenCalledWith(logPath);
-      expect(mockFsPromises.stat).toHaveBeenCalledWith(logPath);
+      expect(mockFsPromises.readFile).toHaveBeenCalledWith(logFile.path);
+      expect(mockFsPromises.stat).toHaveBeenCalledWith(logFile.path);
+      if (writeFails) {
+        expect(process.exitCode).toBe(1);
+        expect(logger.info).not.toHaveBeenCalledWith(
+          expect.stringContaining('Created log archive:'),
+        );
+        return;
+      }
       expect(logger.info).toHaveBeenCalledWith('Log files have been collected in: logs.gz');
     });
   });
