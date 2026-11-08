@@ -96,6 +96,36 @@ describeEvaluator('evaluator basic flows', () => {
     expect(summary.results[0].response?.output).toBe('Test output');
   });
 
+  it('evaluate with vars - resolves a defined var that follows an unresolved var reference', async () => {
+    let capturedPrompt: string | undefined;
+    const provider = {
+      id: () => 'prompt-capture',
+      callApi: async (prompt: string) => {
+        capturedPrompt = prompt;
+        return { output: prompt };
+      },
+    };
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('Received: {{ message }}')],
+      tests: [
+        {
+          vars: {
+            name: 'Alice',
+            message: 'Hello {{ undefined_var }} and {{ name }}',
+          },
+        },
+      ],
+    };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
+
+    expect(summary.stats.successes).toBe(1);
+    expect(capturedPrompt).toBe('Received: Hello {{ undefined_var }} and Alice');
+    expect(summary.results[0].prompt.raw).toBe('Received: Hello {{ undefined_var }} and Alice');
+  });
+
   it('evaluate with vars - no escaping', async () => {
     const testSuite: TestSuite = {
       providers: [mockApiProvider],

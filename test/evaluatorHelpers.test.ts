@@ -682,6 +682,30 @@ describe('evaluatorHelpers', () => {
       });
     });
 
+    it('should resolve a defined placeholder that follows an unresolved one', () => {
+      const variables = {
+        message: 'Hello {{ undefined_var }} and {{ name }}',
+        name: 'Alice',
+      };
+      expect(resolveVariables(variables)).toEqual({
+        message: 'Hello {{ undefined_var }} and Alice',
+        name: 'Alice',
+      });
+    });
+
+    it('should resolve multiple defined placeholders after an unresolved one', () => {
+      const variables = {
+        message: '{{ undefined_var }} then {{ first }} and {{ second }}',
+        first: 'A',
+        second: 'B',
+      };
+      expect(resolveVariables(variables)).toEqual({
+        message: '{{ undefined_var }} then A and B',
+        first: 'A',
+        second: 'B',
+      });
+    });
+
     it('should handle Date objects as variables', () => {
       const dateObj = new Date('2024-01-15T00:00:00.000Z');
       const variables = {

@@ -57,7 +57,7 @@ export function resolveVariables(
   varsResolvedFromSkipped?: Set<string>,
 ): Record<string, VarValue> {
   let resolved: boolean;
-  const regex = /\{\{\s*(\w+)\s*\}\}/; // Matches {{variableName}}, {{ variableName }}, etc.
+  const regex = /\{\{\s*(\w+)\s*\}\}/g; // Matches {{variableName}}, {{ variableName }}, etc.
 
   let iterations = 0;
   do {
@@ -71,20 +71,29 @@ export function resolveVariables(
         continue;
       }
       const value = variables[key] as string;
-      const match = regex.exec(value);
-      if (match) {
-        const [placeholder, varName] = match;
-        if (variables[varName] === undefined) {
-          // Do nothing - final nunjucks render will fail if necessary.
-          // logger.warn(`Variable "${varName}" not found for substitution.`);
-        } else {
-          // A replacer function keeps `$&`, `$'` and `` $` `` in the value literal.
-          variables[key] = value.replace(placeholder, () => variables[varName] as string);
-          if (skipResolveVars?.includes(varName) || varsResolvedFromSkipped?.has(varName)) {
-            varsResolvedFromSkipped?.add(key);
-          }
-          resolved = false; // Indicate that we've made a replacement and should check again
+      let madeReplacement = false;
+      let referencesSkipped = false;
+      // Replace every placeholder whose variable is defined. Placeholders whose
+      // variable is undefined are left untouched - the final nunjucks render will
+      // fail if necessary. A replacer function keeps `$&`, `$'` and `` $` `` in
+      // the value literal.
+      const newValue = value.replace(regex, (placeholder: string, varName: string) => {
+        const replacement = variables[varName];
+        if (replacement === undefined) {
+          return placeholder;
         }
+        madeReplacement = true;
+        if (skipResolveVars?.includes(varName) || varsResolvedFromSkipped?.has(varName)) {
+          referencesSkipped = true;
+        }
+        return replacement as string;
+      });
+      if (madeReplacement) {
+        variables[key] = newValue;
+        if (referencesSkipped) {
+          varsResolvedFromSkipped?.add(key);
+        }
+        resolved = false; // Indicate that we've made a replacement and should check again
       }
     }
     iterations++;
