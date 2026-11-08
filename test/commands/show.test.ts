@@ -20,41 +20,35 @@ describe('show command', () => {
     process.exitCode = undefined;
   });
 
-  describe('show [id]', () => {
-    it('should show latest eval if no id provided', async () => {
-      const mockLatestEval = {
-        id: 'latest123',
-        createdAt: new Date(),
-        config: {},
-        results: [],
-        prompts: [],
-        vars: [],
-        testResults: [],
-        metrics: {},
-        getTable: vi.fn().mockResolvedValue({
-          head: { prompts: [], vars: [] },
-          body: [],
-        }),
-      };
-      vi.mocked(Eval.latest).mockResolvedValue(mockLatestEval as any);
-      vi.mocked(Eval.findById).mockResolvedValue(mockLatestEval as any);
+  describe.each([
+    { command: 'show', args: ['show'] },
+    { command: 'show eval', args: ['show', 'eval'] },
+  ])('$command without an id', ({ args }) => {
+    it('renders the eval selected by latest', async () => {
+      const getTable = vi.fn().mockResolvedValue({ head: { prompts: [], vars: [] }, body: [] });
+      vi.mocked(Eval.latest).mockResolvedValue({ id: 'latest123', getTable } as unknown as Eval);
 
       await showCommand(program);
-      await program.parseAsync(['node', 'test', 'show']);
+      await program.parseAsync(['node', 'test', ...args]);
 
-      expect(Eval.latest).toHaveBeenCalledWith();
+      expect(Eval.latest).toHaveBeenCalledOnce();
+      expect(Eval.findById).not.toHaveBeenCalled();
+      expect(getTable).toHaveBeenCalledOnce();
+      expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Eval latest123'));
     });
 
-    it('should show error if no eval found and no id provided', async () => {
+    it('reports when there is no eval to show', async () => {
       vi.mocked(Eval.latest).mockResolvedValue(undefined);
 
       await showCommand(program);
-      await program.parseAsync(['node', 'test', 'show']);
+      await program.parseAsync(['node', 'test', ...args]);
 
       expect(logger.error).toHaveBeenCalledWith('No eval found');
       expect(process.exitCode).toBe(1);
     });
+  });
 
+  describe('show [id]', () => {
     it('should show eval if id matches eval', async () => {
       const evalId = 'eval123';
       const mockEval = {
@@ -125,40 +119,6 @@ describe('show command', () => {
   });
 
   describe('show eval [id]', () => {
-    it('should show latest eval if no id provided', async () => {
-      const mockLatestEval = {
-        id: 'latest123',
-        createdAt: new Date(),
-        config: {},
-        results: [],
-        prompts: [],
-        vars: [],
-        testResults: [],
-        metrics: {},
-        getTable: vi.fn().mockResolvedValue({
-          head: { prompts: [], vars: [] },
-          body: [],
-        }),
-      };
-      vi.mocked(Eval.latest).mockResolvedValue(mockLatestEval as any);
-      vi.mocked(Eval.findById).mockResolvedValue(mockLatestEval as any);
-
-      await showCommand(program);
-      await program.parseAsync(['node', 'test', 'show', 'eval']);
-
-      expect(Eval.latest).toHaveBeenCalledWith();
-    });
-
-    it('should show error if no eval found and no id provided', async () => {
-      vi.mocked(Eval.latest).mockResolvedValue(undefined);
-
-      await showCommand(program);
-      await program.parseAsync(['node', 'test', 'show', 'eval']);
-
-      expect(logger.error).toHaveBeenCalledWith('No eval found');
-      expect(process.exitCode).toBe(1);
-    });
-
     it('should show eval details for provided id', async () => {
       const evalId = 'eval123';
       vi.mocked(Eval.findById).mockResolvedValue({

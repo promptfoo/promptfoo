@@ -73,11 +73,16 @@ export async function handlePrompt(id: string) {
   printResourceHint('dataset');
 }
 
-export async function handleEval(id: string) {
-  const eval_ = await Eval.findById(id);
+export async function handleEval(id?: string) {
+  const eval_ = id === undefined ? await Eval.latest() : await Eval.findById(id);
   if (!eval_) {
-    logger.error(`No evaluation found with ID ${id}`);
-    logger.info(`Run ${chalk.green('promptfoo list evals')} to see available evaluation IDs.`);
+    if (id === undefined) {
+      logger.error('No eval found');
+      logger.info(`Run ${chalk.green('promptfoo eval')} to create one.`);
+    } else {
+      logger.error(`No evaluation found with ID ${id}`);
+      logger.info(`Run ${chalk.green('promptfoo list evals')} to see available evaluation IDs.`);
+    }
     process.exitCode = 1;
     return;
   }
@@ -91,7 +96,7 @@ export async function handleEval(id: string) {
   }
 
   printBorder();
-  logger.info(chalk.cyan(`Eval ${id}`));
+  logger.info(chalk.cyan(`Eval ${eval_.id}`));
   printBorder();
   logger.info(`${prompts.length} prompts`);
   const promptIds = prompts
@@ -146,16 +151,6 @@ export async function handleDataset(id: string) {
   printResourceHint('eval');
 }
 
-function showLatestEval(latestEval: Eval | undefined) {
-  if (latestEval) {
-    return handleEval(latestEval.id);
-  }
-  logger.error('No eval found');
-  logger.info(`Run ${chalk.green('promptfoo eval')} to create one.`);
-  process.exitCode = 1;
-  return;
-}
-
 export async function showCommand(program: Command) {
   const showCommand = program
     .command('show [id]')
@@ -165,7 +160,7 @@ export async function showCommand(program: Command) {
       setupEnv(cmdObj.envPath);
 
       if (!id) {
-        return showLatestEval(await Eval.latest());
+        return handleEval();
       }
 
       const evl = await getEvalFromId(id);
@@ -193,12 +188,7 @@ export async function showCommand(program: Command) {
   showCommand
     .command('eval [id]')
     .description('Show details of a specific evaluation (defaults to most recent)')
-    .action(async (id?: string) => {
-      if (!id) {
-        return showLatestEval(await Eval.latest());
-      }
-      return handleEval(id);
-    });
+    .action((id?: string) => handleEval(id || undefined));
 
   showCommand
     .command('prompt <id>')
