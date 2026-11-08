@@ -84,6 +84,8 @@ export class AnthropicLlmRubricProvider extends AnthropicMessagesProvider {
       };
       return {
         output: functionCall.input,
+        // Keep the grader's response metadata, such as the served model.
+        ...(result.metadata && { metadata: result.metadata }),
       };
     } catch (err) {
       return {
