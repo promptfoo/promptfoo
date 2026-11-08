@@ -1,4 +1,4 @@
-import { parse } from 'parse5';
+import { html, parse } from 'parse5';
 import type { DefaultTreeAdapterMap } from 'parse5';
 
 import type { AssertionParams, GradingResult } from '../types/index';
@@ -41,6 +41,9 @@ function hasSourceCodeLocation(element: HtmlElement): boolean {
 }
 
 function getChildNodes(node: HtmlNode): HtmlChildNode[] {
+  if ('content' in node) {
+    return node.content.childNodes;
+  }
   return 'childNodes' in node ? node.childNodes : [];
 }
 
@@ -287,6 +290,73 @@ const VALID_HTML_ELEMENTS = new Set([
   'template',
 ]);
 
+const VOID_HTML_ELEMENTS = new Set([
+  'area',
+  'base',
+  'br',
+  'col',
+  'embed',
+  'hr',
+  'img',
+  'input',
+  'link',
+  'meta',
+  'param',
+  'source',
+  'track',
+  'wbr',
+]);
+
+const OPTIONAL_END_TAG_ELEMENTS = new Set([
+  'html',
+  'head',
+  'body',
+  'li',
+  'dt',
+  'dd',
+  'p',
+  'rt',
+  'rp',
+  'optgroup',
+  'option',
+  'colgroup',
+  'caption',
+  'tbody',
+  'tfoot',
+  'tr',
+  'td',
+  'th',
+]);
+
+function isFollowedByTableBody(element: HtmlElement): boolean {
+  const siblings = element.parentNode?.childNodes ?? [];
+  const nextSibling = siblings[siblings.indexOf(element) + 1];
+  return (
+    nextSibling !== undefined &&
+    isElementNode(nextSibling) &&
+    (nextSibling.tagName === 'tbody' || nextSibling.tagName === 'tfoot')
+  );
+}
+
+function canOmitEndTag(element: HtmlElement, tagName: string): boolean {
+  if (tagName === 'thead') {
+    return isFollowedByTableBody(element);
+  }
+  return OPTIONAL_END_TAG_ELEMENTS.has(tagName);
+}
+
+function isUnclosedElement(element: HtmlElement, inputLowercase: string): boolean {
+  const tagName = element.tagName.toLowerCase();
+  return (
+    element.namespaceURI === html.NS.HTML &&
+    hasSourceCodeLocation(element) &&
+    !element.sourceCodeLocation?.endTag &&
+    !VOID_HTML_ELEMENTS.has(tagName) &&
+    !canOmitEndTag(element, tagName) &&
+    isUserProvidedElement(element, inputLowercase)
+  );
+}
+
 function validateHtml(htmlString: string): { isValid: boolean; reason: string } {
   const trimmed = htmlString.trim();
 
@@ -325,6 +395,17 @@ function validateHtml(htmlString: string): { isValid: boolean; reason: string } 
 
   if (!userProvidedElement) {
     return { isValid: false, reason: 'Output does not contain recognized HTML elements' };
+  }
+
+  const unclosedElement = findFirstElement(document, (element) =>
+    isUnclosedElement(element, inputLowercase),
+  );
+
+  if (unclosedElement) {
+    return {
+      isValid: false,
+      reason: `Output contains an unclosed <${unclosedElement.tagName}> element`,
+    };
   }
 
   return { isValid: true, reason: 'Output is valid HTML' };

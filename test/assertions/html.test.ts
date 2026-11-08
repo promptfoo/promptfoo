@@ -356,6 +356,42 @@ describe('handleIsHtml', () => {
     });
   });
 
+  it('should reject HTML with unclosed elements', () => {
+    const unclosedExamples = [
+      { input: '<div>Unclosed div', tag: 'div' },
+      { input: '<!DOCTYPE html><html><body><main><h1>Title</h1><p>Truncated', tag: 'main' },
+      { input: '<div><span>Missing span end tag</div>', tag: 'span' },
+      { input: '<div />', tag: 'div' },
+      { input: '<template><div>x</template>', tag: 'div' },
+      { input: '<table><thead><tr><th>x</th></tr></table>', tag: 'thead' },
+    ];
+
+    unclosedExamples.forEach(({ input, tag }) => {
+      const params: AssertionParams = {
+        ...defaultParams,
+        assertion: { type: 'is-html' },
+        outputString: input,
+        inverse: false,
+      };
+
+      const result = handleIsHtml(params);
+      expect(result.pass).toBe(false);
+      expect(result.reason).toBe(`Output contains an unclosed <${tag}> element`);
+    });
+  });
+
+  it('should accept elements whose end tags HTML allows omitting', () => {
+    const fragments = [
+      '<p>First paragraph<p>Second paragraph',
+      '<ul><li>One<li>Two</ul>',
+      '<table><tr><td>1<td>2</table>',
+      '<table><thead><tr><th>Head<tbody><tr><td>Body</table>',
+      '<dl><dt>Term<dd>Definition</dl>',
+    ];
+
+    fragments.forEach(verifyValidHtml);
+  });
+
   it('should accept bare elements that parse5 hoists into head', () => {
     // parse5 places top-level <script>, <style>, <title> into an auto-created
     // <head>. The walker should still find them as user-provided elements.
