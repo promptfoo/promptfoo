@@ -271,6 +271,7 @@ This assertion will pass for:
 - HTML fragments: `<div>Content</div>`
 - Multiple elements: `<h1>Title</h1><p>Paragraph</p>`
 - Self-closing tags: `<img src="test.jpg" />`
+- Elements whose end tag HTML lets you omit: `<ul><li>One<li>Two</ul>`
 
 It will fail for:
 
