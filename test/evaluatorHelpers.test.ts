@@ -714,16 +714,34 @@ describe('evaluatorHelpers', () => {
       });
 
       it('should normalize canonical Windows file URLs (file:///C:/path/to/file)', async () => {
-        const prompt = toPrompt('Doc: {{ doc.content }}');
-        const vars = {
-          doc: { content: 'file:///C:/workspace/data.txt' },
-        };
+        const originalPlatform = process.platform;
+        Object.defineProperty(process, 'platform', {
+          value: 'win32',
+          configurable: true,
+        });
 
-        vi.spyOn(fs, 'readFileSync').mockReturnValueOnce('windows data');
+        try {
+          const prompt = toPrompt('Doc: {{ doc.content }}');
+          const vars = {
+            doc: { content: 'file:///C:/workspace/data.txt' },
+          };
 
-        const renderedPrompt = await renderPrompt(prompt, vars, {});
+          vi.spyOn(fs, 'readFileSync').mockReturnValueOnce('windows data');
 
-        expect(renderedPrompt).toBe('Doc: windows data');
+          const renderedPrompt = await renderPrompt(prompt, vars, {});
+
+          expect(renderedPrompt).toBe('Doc: windows data');
+          expect(mockPathResolve).toHaveBeenCalledWith(
+            expect.any(String),
+            expect.any(String),
+            'C:/workspace/data.txt',
+          );
+        } finally {
+          Object.defineProperty(process, 'platform', {
+            value: originalPlatform,
+            configurable: true,
+          });
+        }
       });
     });
 
