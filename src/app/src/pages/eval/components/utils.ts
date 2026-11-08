@@ -219,6 +219,7 @@ const LLM_JUDGE_ASSERTION_TYPES = new Set<string>([
   'context-faithfulness',
   'context-recall',
   'context-relevance',
+  'conversation-relevance',
   'factuality',
   'g-eval',
   'llm-rubric',
@@ -229,12 +230,11 @@ const LLM_JUDGE_ASSERTION_TYPES = new Set<string>([
   'trajectory:goal-success',
 ]);
 
-function isLlmJudgeAssertionType(type: string | undefined): boolean {
+function getAssertionBaseType(type: string | undefined): string | undefined {
   if (!type) {
-    return false;
+    return undefined;
   }
-  const base = type.startsWith('not-') ? type.slice(4) : type;
-  return LLM_JUDGE_ASSERTION_TYPES.has(base);
+  return type.startsWith('not-') ? type.slice(4) : type;
 }
 
 /**
@@ -283,8 +283,18 @@ export function getGradingProviderDisplay(
     return fromMeta.trim();
   }
 
-  if (!isLlmJudgeAssertionType(result?.assertion?.type)) {
+  const baseType = getAssertionBaseType(result?.assertion?.type);
+  if (!baseType || !LLM_JUDGE_ASSERTION_TYPES.has(baseType)) {
     return undefined;
+  }
+
+  // search-rubric may swap in a web-search-capable provider at runtime and
+  // records that actual grader as metadata.searchProvider.
+  if (baseType === 'search-rubric') {
+    const fromSearch = result?.metadata?.searchProvider;
+    if (typeof fromSearch === 'string' && fromSearch.trim()) {
+      return fromSearch.trim();
+    }
   }
 
   return formatConfiguredProvider(result?.assertion?.provider);

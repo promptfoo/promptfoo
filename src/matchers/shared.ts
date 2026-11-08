@@ -1,7 +1,6 @@
 import { sanitizeProviderIdForLog } from '../util/provider';
 
-import type { GradingResult, TokenUsage } from '../types/index';
-import type { ApiProvider } from '../types/providers';
+import type { ApiProvider, GradingResult, TokenUsage } from '../types/index';
 
 /**
  * Stable display id for the resolved LLM-as-a-judge provider. Prefer the
@@ -25,7 +24,7 @@ export function formatResolvedGradingProvider(provider: ApiProvider): string {
 export function attachGradingProvider<T extends Omit<GradingResult, 'assertion'>>(
   result: T,
   provider: ApiProvider | string,
-): T {
+): T & { metadata: NonNullable<GradingResult['metadata']> } {
   const gradingProvider = sanitizeProviderIdForLog(
     typeof provider === 'string' ? provider : formatResolvedGradingProvider(provider),
   );

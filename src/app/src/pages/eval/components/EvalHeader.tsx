@@ -106,7 +106,8 @@ export default function EvalHeader({
   );
 
   // Evaluation-wide (accumulated across paginated fetches), not the current page alone.
-  const uniqueJudges = accumulatedGradingProviders;
+  // Default to [] so partial store mocks / pre-init state cannot crash the header.
+  const uniqueJudges = accumulatedGradingProviders ?? [];
 
   const probesCount = React.useMemo(() => {
     return head.prompts[0]?.metrics?.tokenUsage?.numRequests || totalResultsCount;

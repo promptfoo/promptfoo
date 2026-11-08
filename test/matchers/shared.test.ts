@@ -7,6 +7,7 @@ import {
   splitTextIntoSentences,
 } from '../../src/matchers/shared';
 
+import type { GradingResult } from '../../src/types/index';
 import type { ApiProvider } from '../../src/types/providers';
 
 describe('normalizeMatcherTokenUsage', () => {
@@ -222,11 +223,16 @@ describe('attachGradingProvider', () => {
       callApi: async () => ({ output: '' }),
     } as ApiProvider;
 
-    const result = attachGradingProvider({ pass: true, score: 1, reason: 'ok' }, provider);
+    const baseResult: Omit<GradingResult, 'assertion'> = {
+      pass: true,
+      score: 1,
+      reason: 'ok',
+    };
+    const result = attachGradingProvider(baseResult, provider);
 
-    expect(result.metadata?.gradingProvider).toBe(
+    expect(result.metadata.gradingProvider).toBe(
       'https://judge.example/grade?api_key=%5BREDACTED%5D',
     );
-    expect(result.metadata?.gradingProvider).not.toContain('super-secret');
+    expect(result.metadata.gradingProvider).not.toContain('super-secret');
   });
 });

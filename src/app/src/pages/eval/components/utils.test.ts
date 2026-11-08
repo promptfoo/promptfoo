@@ -678,6 +678,52 @@ it('still shows runtime gradingProvider metadata for non-judge assertion types',
   ).toBe('openai:gpt-4.1-mini');
 });
 
+it('falls back to assertion.provider for conversation-relevance', async () => {
+  const { getGradingProviderDisplay } = await import('./utils');
+  expect(
+    getGradingProviderDisplay({
+      pass: true,
+      score: 1,
+      reason: 'ok',
+      assertion: {
+        type: 'conversation-relevance',
+        provider: 'openai:gpt-4.1-mini',
+      },
+    }),
+  ).toBe('openai:gpt-4.1-mini');
+});
+
+it('prefers metadata.searchProvider over assertion.provider for search-rubric', async () => {
+  const { getGradingProviderDisplay } = await import('./utils');
+  expect(
+    getGradingProviderDisplay({
+      pass: true,
+      score: 1,
+      reason: 'ok',
+      assertion: {
+        type: 'search-rubric',
+        provider: 'openai:gpt-4o',
+      },
+      metadata: { searchProvider: 'openai:gpt-4o-search-preview' },
+    }),
+  ).toBe('openai:gpt-4o-search-preview');
+});
+
+it('falls back to assertion.provider for search-rubric without searchProvider', async () => {
+  const { getGradingProviderDisplay } = await import('./utils');
+  expect(
+    getGradingProviderDisplay({
+      pass: true,
+      score: 1,
+      reason: 'ok',
+      assertion: {
+        type: 'search-rubric',
+        provider: 'openai:gpt-4o',
+      },
+    }),
+  ).toBe('openai:gpt-4o');
+});
+
 describe('collectUniqueGradingProviders', () => {
   it('collects unique judges from nested componentResults', async () => {
     const { collectUniqueGradingProviders } = await import('./utils');
