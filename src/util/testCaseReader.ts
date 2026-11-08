@@ -220,31 +220,32 @@ async function readLocalStandaloneTestsFile(
     return readPythonTestCases(pathWithoutFunction, maybeFunctionName, finalConfig);
   }
 
-  if (fileExtension === 'csv') {
+  const dataExtension = fileExtension.toLowerCase();
+  if (dataExtension === 'csv') {
     telemetry.record('feature_used', {
       feature: 'csv tests file - local',
     });
     return csvRowsToTestCases(await readLocalCsvRows(resolvedVarsPath));
   }
-  if (fileExtension === 'xlsx' || fileExtension === 'xls') {
+  if (dataExtension === 'xlsx' || dataExtension === 'xls') {
     telemetry.record('feature_used', {
       feature: 'xlsx tests file - local',
     });
     return csvRowsToTestCases(await parseXlsxFile(resolvedVarsPath));
   }
-  if (fileExtension === 'json') {
+  if (dataExtension === 'json') {
     telemetry.record('feature_used', {
       feature: 'json tests file',
     });
     return readJsonTestCases(resolvedVarsPath);
   }
-  if (fileExtension === 'jsonl') {
+  if (dataExtension === 'jsonl') {
     telemetry.record('feature_used', {
       feature: 'jsonl tests file',
     });
     return readJsonlTestCases(resolvedVarsPath);
   }
-  if (fileExtension === 'yaml' || fileExtension === 'yml') {
+  if (dataExtension === 'yaml' || dataExtension === 'yml') {
     telemetry.record('feature_used', {
       feature: 'yaml tests file',
     });
@@ -289,7 +290,7 @@ function getStandaloneTestsFileMetadata(
   const fileNameWithoutSheet = path.basename(pathWithoutFunction).split('#')[0];
   const sheetAwareExtension = parsePath(fileNameWithoutSheet).ext.slice(1);
   const fileExtension =
-    sheetAwareExtension === 'xlsx' || sheetAwareExtension === 'xls'
+    sheetAwareExtension.toLowerCase() === 'xlsx' || sheetAwareExtension.toLowerCase() === 'xls'
       ? sheetAwareExtension
       : parsePath(pathWithoutFunction).ext.slice(1);
 
@@ -694,9 +695,10 @@ async function loadTestsFromGlobWithEnv(
     const pathWithoutFunction = stripFunctionSuffix(testFile);
 
     // Handle xlsx/xls files with optional sheet specifier (e.g., file.xlsx#Sheet1)
-    const fileWithoutSheet = testFile.split('#')[0];
+    const normalizedTestFile = testFile.toLowerCase();
+    const fileWithoutSheet = normalizedTestFile.split('#')[0];
     if (
-      testFile.endsWith('.csv') ||
+      normalizedTestFile.endsWith('.csv') ||
       testFile.startsWith('https://docs.google.com/spreadsheets/') ||
       isJavascriptFile(pathWithoutFunction) ||
       pathWithoutFunction.endsWith('.py') ||
@@ -704,16 +706,16 @@ async function loadTestsFromGlobWithEnv(
       fileWithoutSheet.endsWith('.xls')
     ) {
       testCases = await readStandaloneTestsFile(testFile, basePath);
-    } else if (testFile.endsWith('.yaml') || testFile.endsWith('.yml')) {
+    } else if (normalizedTestFile.endsWith('.yaml') || normalizedTestFile.endsWith('.yml')) {
       const rawContent = loadYaml(await fsPromises.readFile(testFile, 'utf-8'));
       testCases = maybeLoadConfigFromExternalFile(rawContent) as TestCase[];
       testCases = await _deref(testCases, testFile);
-    } else if (testFile.endsWith('.jsonl')) {
+    } else if (normalizedTestFile.endsWith('.jsonl')) {
       const fileContent = await fsPromises.readFile(testFile, 'utf-8');
       const rawCases = parseJsonlLines(fileContent, testFile);
       testCases = maybeLoadConfigFromExternalFile(rawCases) as TestCase[];
       testCases = await _deref(testCases, testFile);
-    } else if (testFile.endsWith('.json')) {
+    } else if (normalizedTestFile.endsWith('.json')) {
       const fileContent = await fsPromises.readFile(testFile, 'utf8');
       const rawContent = parseJsonOrThrow(
         fileContent,
@@ -791,7 +793,7 @@ async function readTestsWithEnv(
       return loadStandalone(source);
     }
     // Points to a tests file with multiple test cases
-    if (source.endsWith('yaml') || source.endsWith('yml')) {
+    if (source.toLowerCase().endsWith('yaml') || source.toLowerCase().endsWith('yml')) {
       return loadTestsFromGlobWithEnv(source, basePath, env, loadProviders);
     }
     const withoutScheme = source.replace(/^file:\/\//, '');
@@ -831,7 +833,7 @@ async function readTestsWithEnv(
       const pathWithoutScheme = globOrTest.replace(/^file:\/\//, '');
       const pathWithoutFunction = stripFunctionSuffix(pathWithoutScheme);
       // Handle xlsx/xls files with optional sheet specifier (e.g., file.xlsx#Sheet1)
-      const pathWithoutSheet = globOrTest.split('#')[0];
+      const pathWithoutSheet = globOrTest.split('#')[0].toLowerCase();
       // Read standalone sources, then resolve provider and vars references for local rows.
       if (
         isRemoteTestsReference(globOrTest) ||
@@ -1078,8 +1080,8 @@ export function resolveTestsWatchPaths(
       const source = renderEnvOnlyInObject(entry).replace(/^file:\/\//, '');
       const useSourceDirectory =
         Array.isArray(tests) ||
-        source.endsWith('yaml') ||
-        source.endsWith('yml') ||
+        source.toLowerCase().endsWith('yaml') ||
+        source.toLowerCase().endsWith('yml') ||
         (hasGlobMagic(source) && !fs.existsSync(path.resolve(basePath, source)));
       return resolveTestsFileReference(entry, basePath).flatMap((file) => [
         file,
