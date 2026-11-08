@@ -14,6 +14,7 @@ import {
   runAssertions,
   runCompareAssertion,
 } from './assertions/index';
+import { validateAssertions } from './assertions/validateAssertions';
 import { extractAndStoreBinaryData } from './blobs/extractor';
 import { getCache, isCacheEnabled, withCacheEnabled, withCacheNamespace } from './cache';
 import cliState from './cliState';
@@ -5794,6 +5795,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       testSuite = { ...testSuite, prompts: recovery.hookPrompts };
     }
     testSuite = await runBeforeAllExtensions(testSuite);
+    validateAssertions(testSuite.tests || [], getDefaultTest(testSuite), testSuite.scenarios);
     const derivedMetrics = prepareDerivedMetrics(testSuite.derivedMetrics);
     if (
       !restorePromptColumns &&

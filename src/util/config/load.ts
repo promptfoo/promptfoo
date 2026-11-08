@@ -865,6 +865,7 @@ async function prepareCombinedConfig(
       }
       // Otherwise merge objects
       const currDefaultTest = typeof curr.defaultTest === 'object' ? curr.defaultTest : {};
+      validateAssertions([], currDefaultTest);
       const prevObj = typeof prev === 'object' ? prev : {};
       return {
         ...prevObj,
@@ -1325,6 +1326,7 @@ async function resolveLoadedConfig(
   validateAssertions(
     testSuite.tests || [],
     typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest : undefined,
+    testSuite.scenarios,
   );
 
   // Validate provider references in tests and scenarios
