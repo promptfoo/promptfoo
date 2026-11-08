@@ -674,6 +674,30 @@ describe('evaluatorHelpers', () => {
       expect(resolveVariables(variables)).toEqual({ greeting: 'Hello, {{name}}!' });
     });
 
+    it('should resolve defined variables that follow an unresolved placeholder', () => {
+      const variables = {
+        greeting: 'Hello {{ undefined_var }} and {{ name }}',
+        name: 'Alice',
+      };
+      expect(resolveVariables(variables)).toEqual({
+        greeting: 'Hello {{ undefined_var }} and Alice',
+        name: 'Alice',
+      });
+    });
+
+    it('should keep resolving later placeholders when an earlier one is unresolved', () => {
+      const variables = {
+        message: '{{missing}} {{a}} {{b}}',
+        a: 'A',
+        b: '{{a}}',
+      };
+      expect(resolveVariables(variables)).toEqual({
+        message: '{{missing}} A A',
+        a: 'A',
+        b: 'A',
+      });
+    });
+
     it('should not fail for unresolved placeholders', () => {
       const variables = { greeting: 'Hello, {{name}}!', name: '{{unknown}}' };
       expect(resolveVariables(variables)).toEqual({
