@@ -100,8 +100,10 @@ describe('getStandaloneEvals', () => {
     expect(datasets[0].id).toBe(datasetId);
     expect(JSON.stringify(datasets[0].testCases)).not.toContain('short-secret');
     expect((await getDatasetFromHash(datasetId))?.id).toBe(datasetId);
-    expect((await getPrompts())[0].evals[0].datasetId).toBe(datasetId);
-    expect(await getPromptsForTestCasesHash(datasetId)).toHaveLength(1);
+    const prompts = await getPrompts();
+    expect(prompts[0].evals[0].datasetId).toBe(datasetId);
+    expect(await getPromptsForTestCasesHash(datasetId)).toEqual(prompts);
+    expect(await getPromptsForTestCasesHash('')).toEqual([]);
     expect(persisted!.config.tests).toEqual(tests);
   });
 

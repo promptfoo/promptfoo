@@ -218,7 +218,7 @@ export async function updateResult(
 }
 
 async function getPromptsWithPredicate(
-  predicate: (eval_: Eval) => boolean,
+  predicate: (datasetId: string) => boolean,
   limit: number,
 ): Promise<PromptWithMetadata[]> {
   // TODO(ian): Make this use a proper database query
@@ -228,8 +228,8 @@ async function getPromptsWithPredicate(
 
   for (const eval_ of evals_) {
     const createdAt = new Date(eval_.createdAt).toISOString();
-    if (predicate(eval_)) {
-      const datasetId = sha256(JSON.stringify(eval_.config.tests || []));
+    const datasetId = sha256(JSON.stringify(eval_.config.tests || []));
+    if (predicate(datasetId)) {
       for (const prompt of eval_.getPrompts()) {
         const promptId = sha256(prompt.raw);
         if (promptId in groupedPrompts) {
@@ -272,11 +272,7 @@ export function getPromptsForTestCasesHash(
   testCasesSha256: string,
   limit: number = DEFAULT_QUERY_LIMIT,
 ) {
-  return getPromptsWithPredicate((eval_) => {
-    const testsJson = JSON.stringify(eval_.config.tests || []);
-    const hash = sha256(testsJson);
-    return hash === testCasesSha256;
-  }, limit);
+  return getPromptsWithPredicate((datasetId) => datasetId === testCasesSha256, limit);
 }
 
 async function readTestCases(limit: number): Promise<TestCasesWithMetadata[]> {
