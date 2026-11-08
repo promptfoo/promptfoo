@@ -1,4 +1,3 @@
-import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 
@@ -78,33 +77,6 @@ function getVertexApiHost(location: string): string {
 // =============================================================================
 // Helper Functions
 // =============================================================================
-
-/**
- * Generate a cache key for video generation based on input parameters.
- * This is used for display purposes and deduplication hints.
- */
-export function generateVideoCacheKey(
-  prompt: string,
-  model: string,
-  aspectRatio: string,
-  resolution: string,
-  durationSeconds: number,
-  imageData?: string,
-  negativePrompt?: string,
-): string {
-  const hashInput = JSON.stringify({
-    prompt,
-    model,
-    aspectRatio,
-    resolution,
-    durationSeconds,
-    imageData: imageData || null,
-    negativePrompt: negativePrompt || null,
-  });
-
-  const hash = crypto.createHash('sha256').update(hashInput).digest('hex');
-  return `${hash.slice(0, 8)}-${hash.slice(8, 12)}-${hash.slice(12, 16)}-${hash.slice(16, 20)}-${hash.slice(20, 32)}`;
-}
 
 export function validateAspectRatio(ratio: string): { valid: boolean; message?: string } {
   if (!['16:9', '9:16'].includes(ratio)) {
