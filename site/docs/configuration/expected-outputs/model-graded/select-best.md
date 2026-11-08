@@ -28,6 +28,10 @@ The select-best checker:
 3. Selects the best output
 4. Returns pass=true for the winning output and pass=false for others
 
+The grader should return a single zero-based output index. Surrounding text such as `Text 2` is accepted when it contains only one distinct valid index. If it mentions multiple valid indexes, all outputs fail with an ambiguous-verdict reason instead of guessing a winner. Signed numbers, decimals, and digits embedded in words are not output indexes.
+
+This check does not interpret prose: a lone index in the grader's reasoning can still be mistaken for its choice. Return only the final index in the grader output; keep any reasoning in a separate provider field.
+
 ### Example Configuration
 
 Here's a complete example showing how to use select-best to compare different prompt variations:
