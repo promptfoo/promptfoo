@@ -7,16 +7,14 @@ import { loadApiProvider } from '../../../../src/providers/index';
 
 vi.mock('../../../../src/providers/index', () => ({ loadApiProvider: vi.fn() }));
 
-it('reports the provider call failure even when looking up its identity would throw', async () => {
+it('reports the call error and recovers on the next provider test', async () => {
   const id = vi.fn(() => {
     throw new Error('provider not found');
   });
-  vi.mocked(loadApiProvider).mockResolvedValue({
-    id,
-    callApi: async () => {
-      throw new Error('inference failed');
-    },
-  });
+  const callApi = vi.fn().mockRejectedValueOnce(new Error('inference failed'));
+  vi.mocked(loadApiProvider)
+    .mockResolvedValueOnce({ id, callApi })
+    .mockResolvedValueOnce({ id: () => 'local', callApi: async () => ({ output: 'recovered' }) });
   const server = new McpServer({ name: 'server', version: '1' });
   registerTestProviderTool(server);
   const client = new Client({ name: 'client', version: '1' });
@@ -24,17 +22,21 @@ it('reports the provider call failure even when looking up its identity would th
   try {
     await server.connect(serverTransport);
     await client.connect(clientTransport);
-    const result = await client.callTool({
-      name: 'test_provider',
-      arguments: { provider: 'local' },
-    });
-    expect(result).toMatchObject({
+    const call = () => client.callTool({ name: 'test_provider', arguments: { provider: 'local' } });
+    expect(await call()).toMatchObject({
       isError: true,
       content: [
         { type: 'text', text: expect.stringContaining('Provider test failed: inference failed') },
       ],
     });
     expect(id).not.toHaveBeenCalled();
+    const success = await call();
+    expect(success).toMatchObject({ isError: false, content: [{ type: 'text' }] });
+    const [content] = success.content as { text: string }[];
+    expect(JSON.parse(content.text)).toMatchObject({
+      success: true,
+      data: { providerId: 'local', response: 'recovered' },
+    });
   } finally {
     await client.close();
     await server.close();
