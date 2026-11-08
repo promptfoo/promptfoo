@@ -82,6 +82,22 @@ describe('workbook test file globs', () => {
   );
 
   it.each([
+    ['xlsx', '#ordinary'],
+    ['XLSX', '#ordinary'],
+    ['xls', '#1'],
+    ['XLS', '#1'],
+  ])('rejects workbook globs with a sheet selector: %s%s', async (extension, selector) => {
+    writeWorkbook('Cases/one.' + extension);
+    const reference = 'file://Cases/*.' + extension + selector;
+
+    for (const read of [readTests, readTestConfigs]) {
+      for (const input of [reference, [reference], { path: reference }]) {
+        await expect(read(input, directory)).rejects.toThrow('File not found:');
+      }
+    }
+  });
+
+  it.each([
     ['Cases[1].xlsx', 'Cases1.xlsx', ''],
     ['Cases[1].XLSX', 'Cases1.XLSX', '#ordinary'],
     ['Data[1]/Cases.xlsx', 'Data1/Cases.xlsx', '#1'],

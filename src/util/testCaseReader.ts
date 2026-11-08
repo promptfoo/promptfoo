@@ -784,13 +784,15 @@ function usesYamlTestLoader(source: string): boolean {
   );
 }
 
-function isLiteralWorkbookReference(source: string, basePath: string): boolean {
+function usesStandaloneWorkbookLoader(source: string, basePath: string): boolean {
   const filename = path.basename(source).split('#')[0].toLowerCase();
   // Sheet names can contain glob characters; only inspect the actual workbook path.
   const workbookPath = stripSheetSelector(source);
   return (
     (filename.endsWith('.xlsx') || filename.endsWith('.xls')) &&
-    (!hasGlobMagic(workbookPath) || fs.existsSync(path.resolve(basePath, workbookPath)))
+    (workbookPath !== source ||
+      !hasGlobMagic(workbookPath) ||
+      fs.existsSync(path.resolve(basePath, workbookPath)))
   );
 }
 
@@ -862,7 +864,7 @@ async function readTestsWithEnv(
         isRemoteTestsReference(globOrTest) ||
         isJavascriptFile(pathWithoutFunction) ||
         pathWithoutFunction.endsWith('.py') ||
-        isLiteralWorkbookReference(pathWithoutScheme, basePath) ||
+        usesStandaloneWorkbookLoader(pathWithoutScheme, basePath) ||
         pathWithoutFunction !== pathWithoutScheme
       ) {
         ret.push(...(await loadStandalone(globOrTest)));
