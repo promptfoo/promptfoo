@@ -107,6 +107,19 @@ describe('getStandaloneEvals', () => {
     expect(persisted!.config.tests).toEqual(tests);
   });
 
+  it('keeps prompt membership order and the latest date across timestamp formats', async () => {
+    const older = await createEvalWithPrompts({});
+    const newer = await createEvalWithPrompts({});
+    const db = await getDb();
+    await db.run(sql`UPDATE evals SET created_at = '2000-01-01 00:00:00' WHERE id = ${older.id}`);
+
+    const [group] = await getPrompts();
+    expect(group.evals.map(({ id }) => id)).toEqual([older.id, newer.id]);
+    expect(group.count).toBe(2);
+    expect(group.recentEvalId).toBe(older.id);
+    expect(group.recentEvalDate).toEqual(new Date(newer.createdAt));
+  });
+
   it('returns isRedteam from the materialized column, not raw JSON inspection', async () => {
     const redteamEval = await createEvalWithPrompts({ redteam: {} as any });
     const regularEval = await createEvalWithPrompts({});
