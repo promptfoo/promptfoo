@@ -17,13 +17,9 @@ SCRIPTS = (
 def is_dependency_manifest(path: str) -> bool:
     """Ignore tool-only pyprojects and unsupported project metadata formats."""
     manifest = pathlib.Path(path)
-    if not manifest.is_file():
-        return False
-    if manifest.match("requirements*.txt"):
-        return True
-    return manifest.name == "pyproject.toml" and "project" in tomllib.loads(
-        manifest.read_text()
-    )
+    if manifest.name == "pyproject.toml":
+        return manifest.is_file() and "project" in tomllib.loads(manifest.read_text())
+    return manifest.match("requirements*.txt") and manifest.is_file()
 
 
 def select_manifests(base: str, head: str) -> list[str]:
