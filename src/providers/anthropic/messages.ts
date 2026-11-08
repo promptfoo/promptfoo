@@ -887,9 +887,18 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       logger.warn(refusalDetails);
     }
 
+    // The model the API reports as having served the reply; it can differ from the
+    // requested model name (for example, an alias).
+    const servedModel =
+      typeof message.model === 'string' && message.model ? message.model : undefined;
+    const metadata = {
+      ...(servedModel && { model: servedModel }),
+      ...(fileReferences.length > 0 && { fileReferences }),
+    };
+
     return {
       output,
-      ...(fileReferences.length > 0 && { metadata: { fileReferences } }),
+      ...(Object.keys(metadata).length > 0 && { metadata }),
       tokenUsage: getTokenUsage(message, cached),
       ...(finishReason && { finishReason }),
       ...(refusalDetails && { guardrails: { flagged: true, reason: refusalDetails } }),
