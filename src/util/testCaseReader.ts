@@ -74,7 +74,10 @@ export async function readTestFiles(
 
   const ret: Record<string, string | string[] | object> = {};
   for (const pathOrGlob of pathOrGlobs) {
-    const resolvedPath = path.resolve(basePath, pathOrGlob);
+    const resolvedPath = path.resolve(
+      escapeGlob(path.resolve(basePath), { windowsPathsNoEscape: true }),
+      pathOrGlob,
+    );
 
     const paths = globSync(resolvedPath, {
       windowsPathsNoEscape: true,
