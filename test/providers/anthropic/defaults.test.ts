@@ -192,6 +192,29 @@ describe('Anthropic Default Providers', () => {
       expect(result.error).toContain('Anthropic LLM rubric grader - invalid JSON');
     });
 
+    it.each([
+      {
+        name: 'a non-string reply',
+        output: { confession: 'I am not a string' },
+        error: 'Anthropic LLM rubric grader - malformed non-string output',
+      },
+      {
+        name: 'a reply that is not the grade_output tool call',
+        output: 'I cannot grade this.',
+        error: 'Anthropic LLM rubric grader - invalid JSON',
+      },
+    ])('should keep the parent response metadata on $name', async ({ output, error }) => {
+      vi.spyOn(AnthropicMessagesProvider.prototype, 'callApi').mockResolvedValue({
+        output,
+        metadata: { model: 'claude-3-5-sonnet-20241022-served' },
+      });
+
+      const result = await provider.callApi('Test prompt');
+
+      expect(result.error).toContain(error);
+      expect(result.metadata).toEqual({ model: 'claude-3-5-sonnet-20241022-served' });
+    });
+
     it('should handle API errors', async () => {
       const mockError = new Error('API Error');
       vi.spyOn(AnthropicMessagesProvider.prototype, 'callApi').mockRejectedValue(mockError);

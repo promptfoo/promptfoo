@@ -66,9 +66,12 @@ export class AnthropicLlmRubricProvider extends AnthropicMessagesProvider {
 
   async callApi(prompt: string): Promise<ProviderResponse> {
     const result = await super.callApi(prompt);
+    // Keep the grader's response metadata, such as the served model, on every return.
+    const parentMetadata = result.metadata ? { metadata: result.metadata } : {};
     if (typeof result.output !== 'string') {
       return {
         error: `Anthropic LLM rubric grader - malformed non-string output\n\n${JSON.stringify(result.output)}`,
+        ...parentMetadata,
       };
     }
     try {
@@ -84,12 +87,12 @@ export class AnthropicLlmRubricProvider extends AnthropicMessagesProvider {
       };
       return {
         output: functionCall.input,
-        // Keep the grader's response metadata, such as the served model.
-        ...(result.metadata && { metadata: result.metadata }),
+        ...parentMetadata,
       };
     } catch (err) {
       return {
         error: `Anthropic LLM rubric grader - invalid JSON: ${err}\n\n${result.output}`,
+        ...parentMetadata,
       };
     }
   }
