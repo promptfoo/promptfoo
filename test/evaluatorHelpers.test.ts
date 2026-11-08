@@ -712,6 +712,19 @@ describe('evaluatorHelpers', () => {
           },
         });
       });
+
+      it('should normalize canonical Windows file URLs (file:///C:/path/to/file)', async () => {
+        const prompt = toPrompt('Doc: {{ doc.content }}');
+        const vars = {
+          doc: { content: 'file:///C:/workspace/data.txt' },
+        };
+
+        vi.spyOn(fs, 'readFileSync').mockReturnValueOnce('windows data');
+
+        const renderedPrompt = await renderPrompt(prompt, vars, {});
+
+        expect(renderedPrompt).toBe('Doc: windows data');
+      });
     });
 
     describe('with PROMPTFOO_DISABLE_TEMPLATING', () => {

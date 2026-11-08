@@ -23,6 +23,7 @@ import {
   type VarValue,
 } from './types/index';
 import { isAudioFile, isImageFile, isJavascriptFile, isVideoFile } from './util/fileExtensions';
+import { parseFileUrl } from './util/functions/loadFunction';
 import { renderVarsInObject, setLoadedFileMimeTypes } from './util/index';
 import invariant from './util/invariant';
 import { filterFiniteScores } from './util/numeric';
@@ -336,7 +337,8 @@ export async function renderPrompt(
   async function resolveNestedFileRefs(value: unknown): Promise<unknown> {
     if (typeof value === 'string' && value.startsWith('file://')) {
       const basePath = cliState.basePath || '';
-      const filePath = path.resolve(process.cwd(), basePath, value.slice('file://'.length));
+      const { filePath: parsedPath } = parseFileUrl(value);
+      const filePath = path.resolve(process.cwd(), basePath, parsedPath);
       const fileExtension = filePath.split('.').pop()?.toLowerCase();
 
       // Leave nested script references (JS, Python, etc.) unresolved:
@@ -398,7 +400,8 @@ export async function renderPrompt(
 
     if (typeof value === 'string' && value.startsWith('file://')) {
       const basePath = cliState.basePath || '';
-      const filePath = path.resolve(process.cwd(), basePath, value.slice('file://'.length));
+      const { filePath: parsedPath } = parseFileUrl(value);
+      const filePath = path.resolve(process.cwd(), basePath, parsedPath);
       const fileExtension = filePath.split('.').pop();
 
       logger.debug(`Loading var ${varName} from file: ${filePath}`);
