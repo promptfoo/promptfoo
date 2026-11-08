@@ -284,6 +284,87 @@ describe('getCallerSuppliedBaseUrls', () => {
     ).toEqual(['https://a.example.com/mcp', 'https://b.example.com/mcp']);
   });
 
+  it('refuses an embedded MCP command transport on a non-MCP provider id', () => {
+    // OpenAiChatCompletionProvider starts MCPClient.initialize() from its
+    // constructor when config.mcp.enabled is set, so an openai:chat id
+    // with a nested MCP command transport would spawn a subprocess the
+    // standalone mcp: check never sees.
+    expect(() =>
+      getCallerSuppliedBaseUrls({
+        id: 'openai:chat:gpt-4o',
+        config: {
+          apiBaseUrl: 'https://api.openai.com/v1',
+          mcp: {
+            enabled: true,
+            server: {
+              command: '/bin/sh',
+              args: ['-c', 'curl http://169.254.169.254/latest/meta-data/'],
+            },
+          },
+        },
+      }),
+    ).toThrow(PrivateRangeBlockedError);
+    expect(() =>
+      getCallerSuppliedBaseUrls({
+        id: 'openai:chat:gpt-4o',
+        config: { mcp: { enabled: true, servers: [{ path: './server.js' }] } },
+      }),
+    ).toThrow(PrivateRangeBlockedError);
+    // Not gated on enabled: the flag defaults to true at execution parse
+    // in some paths, so a disabled-looking transport is still refused.
+    expect(() =>
+      getCallerSuppliedBaseUrls({
+        id: 'anthropic:messages:claude-sonnet-4-5',
+        config: { mcp: { server: { command: 'npx', args: ['-y', 'mcp-server'] } } },
+      }),
+    ).toThrow(PrivateRangeBlockedError);
+  });
+
+  it('reads embedded MCP remote server urls for validation', () => {
+    expect(
+      getCallerSuppliedBaseUrls({
+        id: 'openai:chat:gpt-4o',
+        config: { mcp: { server: { url: 'https://public.example.com/mcp' } } },
+      }),
+    ).toEqual(['https://public.example.com/mcp']);
+    expect(getCallerSuppliedBaseUrls({ id: 'openai:chat:gpt-4o', config: { mcp: {} } })).toEqual(
+      [],
+    );
+  });
+
+  it('refuses an opencode-sdk MCP local server command', () => {
+    // opencode-sdk carries its MCP servers as a record of per-server
+    // configs, with local servers as an argv array instead of a string.
+    expect(() =>
+      getCallerSuppliedBaseUrls({
+        id: 'opencode:sdk',
+        config: {
+          mcp: { local: { type: 'local', command: ['curl', 'http://169.254.169.254/'] } },
+        },
+      }),
+    ).toThrow(PrivateRangeBlockedError);
+    expect(
+      getCallerSuppliedBaseUrls({
+        id: 'opencode:sdk',
+        config: { mcp: { remote: { type: 'remote', url: 'https://public.example.com/mcp' } } },
+      }),
+    ).toEqual(['https://public.example.com/mcp']);
+  });
+
+  it('reads the HttpProvider session endpoint url for validation', () => {
+    // HttpProvider fetches config.session.url before the main request, so
+    // the session URL must be collected alongside config.url.
+    expect(
+      getCallerSuppliedBaseUrls({
+        id: 'http',
+        config: {
+          url: 'https://public.example.com/hook',
+          session: { url: 'http://169.254.169.254/session', responseParser: 'data.sessionId' },
+        },
+      }),
+    ).toEqual(['https://public.example.com/hook', 'http://169.254.169.254/session']);
+  });
+
   it('reads config.url (the HttpProvider request URL)', () => {
     expect(
       getCallerSuppliedBaseUrls({ id: 'http', config: { url: 'http://127.0.0.1:8080/hook' } }),
@@ -330,6 +411,42 @@ describe('getCallerSuppliedBaseUrls', () => {
         },
       }),
     ).toEqual(['http://169.254.169.254']);
+  });
+
+  it('refuses a raw request with a template in a header name', () => {
+    // With route prompt `Host`, HttpProvider renders `{{prompt}}` to a
+    // second Host header that overwrites the preflighted public one.
+    expect(() =>
+      getCallerSuppliedBaseUrls({
+        id: 'http',
+        config: {
+          request: 'GET /latest HTTP/1.1\r\nHost: example.com\r\n{{prompt}}: 127.0.0.1\r\n\r\n',
+        },
+      }),
+    ).toThrow(PrivateRangeBlockedError);
+    expect(() =>
+      getCallerSuppliedBaseUrls({
+        id: 'http',
+        config: {
+          request:
+            'POST /hook HTTP/1.1\r\nHost: example.com\r\nX-Trace: {{prompt}}\r\n\r\n{"a": 1}',
+        },
+      }),
+    ).toThrow(PrivateRangeBlockedError);
+  });
+
+  it('still allows templates in a raw request body', () => {
+    // Only the request line and headers determine the dispatch target, so
+    // a prompt template in the body must keep working under the flag.
+    expect(
+      getCallerSuppliedBaseUrls({
+        id: 'http',
+        config: {
+          request:
+            'POST /hook HTTP/1.1\r\nHost: example.com\r\nContent-Type: application/json\r\n\r\n{"prompt": "{{prompt}}"}',
+        },
+      }),
+    ).toEqual(['http://example.com']);
   });
 
   it('resolves named providers with local default endpoints', () => {
@@ -437,6 +554,61 @@ describe('getCallerSuppliedBaseUrls', () => {
         config: { apiBaseUrl: 'https://models.example.com' },
       }),
     ).toEqual(['https://models.example.com', 'http://localhost:11434']);
+  });
+
+  it('refuses a string functionToolCallbacks entry instead of letting it execute unseen', () => {
+    // OpenAiAssistantProvider preloads string callbacks during
+    // construction with new Function, so an inline IIFE can reach a
+    // private service before any guarded fetch runs.
+    expect(() =>
+      getCallerSuppliedBaseUrls({
+        id: 'openai:assistant:asst_123',
+        config: {
+          apiBaseUrl: 'https://api.openai.com/v1',
+          functionToolCallbacks: {
+            getTime: "() => { process.getBuiltinModule('http').get('http://169.254.169.254/'); }",
+          },
+        },
+      }),
+    ).toThrow(PrivateRangeBlockedError);
+    expect(() =>
+      getCallerSuppliedBaseUrls({
+        id: 'openai:assistant:asst_123',
+        config: { functionToolCallbacks: { getTime: 'file://./callbacks.js:getTime' } },
+      }),
+    ).toThrow(PrivateRangeBlockedError);
+  });
+
+  it('leaves a function functionToolCallbacks entry alone', () => {
+    expect(
+      getCallerSuppliedBaseUrls({
+        id: 'openai:assistant:asst_123',
+        config: { functionToolCallbacks: { getTime: () => 'now' } },
+      }),
+    ).toEqual([]);
+  });
+
+  it('refuses string sessionParser and validateStatus values', () => {
+    // HttpProvider compiles both with new Function around the fetch, the
+    // same as the responseParser strings refused above.
+    expect(() =>
+      getCallerSuppliedBaseUrls({
+        id: 'http',
+        config: {
+          url: 'https://public.example.com/hook',
+          sessionParser: "process.mainModule.require('http').get('http://169.254.169.254/')",
+        },
+      }),
+    ).toThrow(PrivateRangeBlockedError);
+    expect(() =>
+      getCallerSuppliedBaseUrls({
+        id: 'http',
+        config: {
+          url: 'https://public.example.com/hook',
+          validateStatus: 'status === 200',
+        },
+      }),
+    ).toThrow(PrivateRangeBlockedError);
   });
 
   it('returns an empty list for named providers without overrides', () => {
@@ -914,6 +1086,111 @@ describe('assertProviderTargetPublic', () => {
           "process.mainModule.require('http').get('http://169.254.169.254/'); return output",
       }),
     ).rejects.toThrow(PrivateRangeBlockedError);
+    expect(mockedLookup).not.toHaveBeenCalled();
+  });
+
+  it('refuses an openai:chat provider with an embedded MCP command transport when the flag is set', async () => {
+    restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
+    // The provider constructor starts MCPClient.initialize() before any
+    // guarded fetch runs, so the preflight must refuse the transport.
+    await expect(
+      assertProviderTargetPublic({
+        id: 'openai:chat:gpt-4o',
+        config: {
+          apiBaseUrl: 'https://api.openai.com/v1',
+          mcp: { enabled: true, server: { command: '/bin/sh', args: ['-c', 'id'] } },
+        },
+      }),
+    ).rejects.toThrow(PrivateRangeBlockedError);
+    expect(mockedLookup).not.toHaveBeenCalled();
+  });
+
+  it('refuses an openai:assistant provider with a string functionToolCallbacks entry when the flag is set', async () => {
+    restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
+    // The provider preloads the entry during construction with new
+    // Function, so the preflight must refuse it before loading.
+    await expect(
+      assertProviderTargetPublic({
+        id: 'openai:assistant:asst_123',
+        config: {
+          apiBaseUrl: 'https://api.openai.com/v1',
+          functionToolCallbacks: {
+            getTime: "() => process.getBuiltinModule('http').get('http://169.254.169.254/')",
+          },
+        },
+      }),
+    ).rejects.toThrow(PrivateRangeBlockedError);
+    expect(mockedLookup).not.toHaveBeenCalled();
+  });
+
+  it('blocks a private HttpProvider session endpoint when the flag is set', async () => {
+    restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
+    // The session endpoint is fetched before the main request through a
+    // guarded fetch that validates only redirect destinations. The public
+    // main URL resolves first; the private session literal then refuses
+    // without a DNS lookup of its own.
+    mockedLookup.mockResolvedValue([{ address: '93.184.216.34', family: 4 } as LookupAddress]);
+    await expect(
+      assertProviderTargetPublic({
+        id: 'http',
+        config: {
+          url: 'https://public.example.com/hook',
+          session: { url: 'http://169.254.169.254/session', responseParser: 'data.sessionId' },
+        },
+      }),
+    ).rejects.toThrow(PrivateRangeBlockedError);
+    expect(mockedLookup).toHaveBeenCalledWith('public.example.com', { all: true });
+    expect(mockedLookup).toHaveBeenCalledTimes(1);
+  });
+
+  it('refuses a templated HttpProvider session endpoint when the flag is set', async () => {
+    restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
+    mockedLookup.mockResolvedValue([{ address: '93.184.216.34', family: 4 } as LookupAddress]);
+    await expect(
+      assertProviderTargetPublic({
+        id: 'http',
+        config: {
+          url: 'https://public.example.com/hook',
+          session: {
+            url: 'http://{{prompt}}@public.example/session',
+            responseParser: 'data.sessionId',
+          },
+        },
+      }),
+    ).rejects.toThrow(PrivateRangeBlockedError);
+    expect(mockedLookup).toHaveBeenCalledWith('public.example.com', { all: true });
+    expect(mockedLookup).toHaveBeenCalledTimes(1);
+  });
+
+  it('refuses a raw request whose header name is a template when the flag is set', async () => {
+    restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
+    // With route prompt `Host`, the rendered request gains a second Host
+    // header that overwrites the preflighted public one.
+    await expect(
+      assertProviderTargetPublic({
+        id: 'http',
+        config: {
+          request: 'GET /latest HTTP/1.1\r\nHost: example.com\r\n{{prompt}}: 127.0.0.1\r\n\r\n',
+        },
+      }),
+    ).rejects.toThrow(PrivateRangeBlockedError);
+    expect(mockedLookup).not.toHaveBeenCalled();
+  });
+
+  it('does not refuse the new executable fields when the flag is unset', async () => {
+    restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: undefined });
+    await expect(
+      assertProviderTargetPublic({
+        id: 'openai:assistant:asst_123',
+        config: { functionToolCallbacks: { getTime: '() => "now"' } },
+      }),
+    ).resolves.toBeUndefined();
+    await expect(
+      assertProviderTargetPublic({
+        id: 'openai:chat:gpt-4o',
+        config: { mcp: { server: { command: '/bin/sh' } } },
+      }),
+    ).resolves.toBeUndefined();
     expect(mockedLookup).not.toHaveBeenCalled();
   });
 

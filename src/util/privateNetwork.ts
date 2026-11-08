@@ -283,6 +283,11 @@ interface ProviderTarget {
     transformRequest?: unknown;
     transformResponse?: unknown;
     responseParser?: unknown;
+    mcp?: unknown;
+    session?: unknown;
+    sessionParser?: unknown;
+    validateStatus?: unknown;
+    functionToolCallbacks?: unknown;
   };
 }
 
@@ -481,6 +486,34 @@ function getMcpServers(config: ProviderTarget['config']): McpServerTransport[] {
 }
 
 /**
+ * Refuse a subprocess MCP transport, collect a remote server URL for
+ * validation. Shared by the standalone `mcp:` providers and the embedded
+ * `config.mcp` configs below: both spawn the transport outside the fetch
+ * layer when the provider initializes, so neither the preflight nor
+ * redirect validation would see the network access it performs. `command`
+ * is a string for the shared MCP client and an argv array for opencode-sdk
+ * local servers; either form spawns a subprocess.
+ */
+function handleMcpServerTransport(server: McpServerTransport, urls: string[]): void {
+  const hasCommand =
+    (typeof server.command === 'string' && server.command.length > 0) ||
+    (Array.isArray(server.command) && server.command.length > 0);
+  if (hasCommand) {
+    throw new PrivateRangeBlockedError(
+      'PROMPTFOO_BLOCK_PRIVATE_RANGES is set: refusing MCP server command transport whose subprocess would execute outside the fetch guard',
+    );
+  }
+  if (typeof server.path === 'string' && server.path.length > 0) {
+    throw new PrivateRangeBlockedError(
+      'PROMPTFOO_BLOCK_PRIVATE_RANGES is set: refusing MCP local server path whose script would execute outside the fetch guard',
+    );
+  }
+  if (typeof server.url === 'string' && server.url.length > 0) {
+    urls.push(server.url);
+  }
+}
+
+/**
  * MCP servers execute outside the fetch layer too: command/path transports
  * spawn a subprocess (or a local script) when the provider initializes, so
  * they are refused outright like script providers. A remote server URL is
@@ -495,18 +528,43 @@ function handleMcpProviderTargets(
     return;
   }
   for (const server of getMcpServers(config)) {
-    if (typeof server.command === 'string' && server.command.length > 0) {
-      throw new PrivateRangeBlockedError(
-        'PROMPTFOO_BLOCK_PRIVATE_RANGES is set: refusing MCP server command transport whose subprocess would execute outside the fetch guard',
-      );
+    handleMcpServerTransport(server, urls);
+  }
+}
+
+/**
+ * MCP configs embedded in another provider's config (`config.mcp`): the
+ * outer provider id is not `mcp:`, so the standalone check above never
+ * runs, but the provider still initializes the servers when it loads.
+ * OpenAiChatCompletionProvider starts MCPClient.initialize() from its
+ * constructor when `config.mcp.enabled` is set, McpClientSession (used by
+ * the Anthropic, Azure, and Google providers) starts it from its own
+ * constructor, and the remaining embedded-MCP providers start it on first
+ * use, all inside the guarded route's load call. The transport check is
+ * the same as for standalone MCP providers: command/path transports are
+ * refused outright, remote server URLs are collected for validation. Not
+ * gated on `enabled`: the flag defaults to true at execution parse in
+ * some paths, and reproducing each provider's enabled default here would
+ * risk a divergence the bypass could hide in. Two shapes are handled: the
+ * MCPConfig object (`server`/`servers`, openai/anthropic/azure/bedrock/
+ * google) and the opencode-sdk record of per-server configs (local servers
+ * carry `command` as an argv array, remote servers carry `url`).
+ */
+function handleEmbeddedMcpTargets(config: ProviderTarget['config'], urls: string[]): void {
+  const mcp = config?.mcp;
+  if (typeof mcp !== 'object' || mcp === null) {
+    return;
+  }
+  const mcpRecord = mcp as { server?: unknown; servers?: unknown };
+  if ('server' in mcpRecord || 'servers' in mcpRecord) {
+    for (const server of getMcpServers(mcpRecord)) {
+      handleMcpServerTransport(server, urls);
     }
-    if (typeof server.path === 'string' && server.path.length > 0) {
-      throw new PrivateRangeBlockedError(
-        'PROMPTFOO_BLOCK_PRIVATE_RANGES is set: refusing MCP local server path whose script would execute outside the fetch guard',
-      );
-    }
-    if (typeof server.url === 'string' && server.url.length > 0) {
-      urls.push(server.url);
+    return;
+  }
+  for (const server of Object.values(mcpRecord)) {
+    if (typeof server === 'object' && server !== null) {
+      handleMcpServerTransport(server as McpServerTransport, urls);
     }
   }
 }
@@ -563,6 +621,24 @@ function getRawRequestTarget(rawRequest: string, useHttps: boolean): string {
     requestText = loaded;
   }
   const headerBlock = requestText.replace(/\r\n/g, '\n').split('\n\n')[0] ?? '';
+  // A template in the request line or headers can rewrite the effective
+  // target at call time: HttpProvider renders the whole request with
+  // Nunjucks before parsing, and its header reducer lets a later Host
+  // overwrite the first, so `{{prompt}}: 127.0.0.1` with prompt `Host`
+  // preflights as the literal public Host but dispatches to loopback. A
+  // template literal can also smuggle a newline into a header value
+  // (`{{ "a\nHost: 127.0.0.1" }}`), so refusing templates only in header
+  // names is not enough: refuse any template opener in the header block
+  // outright. Templates in the body stay allowed: the body cannot change
+  // the dispatch target (only the request line and the Host header do).
+  // Nunjucks `{% %}` tags need no refusal here: renderRawRequestWithNunjucks
+  // raw-wraps the request and only re-enables `{{...}}` variables, so
+  // `{% %}` never renders.
+  if (headerBlock.includes('{{')) {
+    throw new PrivateRangeBlockedError(
+      'PROMPTFOO_BLOCK_PRIVATE_RANGES is set: refusing provider raw request with an unresolved template in the request line or headers whose rendered target cannot be validated before loading',
+    );
+  }
   const lines = headerBlock.split('\n');
   const target = lines[0]?.trim().split(/\s+/)[1] ?? '';
   // Last Host header wins: the provider collapses duplicate headers by
@@ -645,8 +721,33 @@ function getRawRequestTarget(rawRequest: string, useHttps: boolean): string {
  *   outright for the same reason: `loadApiProvider` attaches it to the
  *   loaded provider and the evaluator executes it with the process shim,
  *   so the nested config transforms above do not cover it,
+ * - an MCP config embedded in another provider (`config.mcp`), refused
+ *   or collected like a standalone MCP provider: the outer id is not
+ *   `mcp:`, so the standalone check never runs, yet the provider still
+ *   initializes the servers at load time (openai:chat from its
+ *   constructor, Anthropic/Azure/Google via McpClientSession). Command
+ *   and path transports are refused outright, remote server URLs are
+ *   collected for validation, in both the MCPConfig (`server`/`servers`)
+ *   and opencode-sdk record shapes,
+ * - an HttpProvider session endpoint (`config.session.url`), collected
+ *   for validation: the provider fetches it before the main request
+ *   through a guarded fetch that validates only redirect destinations,
+ *   so the initial session hop would otherwise go unchecked,
+ * - a string HttpProvider `sessionParser` or `validateStatus`, or a
+ *   string entry in `config.functionToolCallbacks`, refused outright
+ *   like the transforms above: the provider compiles them with
+ *   `new Function` (or loads a `file://` module) before or around the
+ *   fetch, outside the fetch guard. A function value cannot arrive over
+ *   a JSON route body and is left alone,
+ * - a template (`{{ ... }}`) in the request line or headers of an
+ *   HttpProvider raw `config.request`, refused outright: the provider
+ *   renders the whole request with Nunjucks before parsing, so a
+ *   template can become a second Host header that overwrites the
+ *   preflighted one. Templates in the request body stay allowed: the
+ *   body cannot change the dispatch target,
  * - a URL field that still carries a `{{ ... }}` template (`config.url`,
- *   `config.apiBaseUrl`, an MCP `server.url`, a raw-request Host header),
+ *   `config.apiBaseUrl`, `config.session.url`, an MCP `server.url`, a
+ *   raw-request Host header),
  *   refused outright by the URL validation below: providers render URL
  *   templates with call-time variables (e.g. the prompt), so the raw
  *   template can preflight as a public host while the rendered URL
@@ -663,6 +764,83 @@ function getRawRequestTarget(rawRequest: string, useHttps: boolean): string {
  * Named providers without an override or a local default resolve to their
  * public defaults and need no check.
  */
+/**
+ * Collect the HttpProvider session endpoint for validation. The provider
+ * calls it before the main request (fetchSessionFromEndpoint renders
+ * config.session.url with the prompt and fetches it through
+ * fetchWithCache), but the guarded fetch validates only redirect
+ * destinations, not the initial hop, so a private session URL would
+ * never be checked unless it is collected here. A templated session URL
+ * is refused by the URL validation below, same as config.url. The
+ * session responseParser string is deliberately not refused with the
+ * transforms below: the schema requires it for every session config, so
+ * refusing it would block all session use under the flag; that residual
+ * code-execution surface needs a maintainer decision, not a silent
+ * behavior change here.
+ */
+function collectSessionUrl(config: ProviderTarget['config'], urls: string[]): void {
+  const session = config?.session;
+  if (typeof session === 'object' && session !== null) {
+    const sessionUrl = (session as { url?: unknown }).url;
+    if (typeof sessionUrl === 'string' && sessionUrl.length > 0) {
+      urls.push(sessionUrl);
+    }
+  }
+}
+
+/**
+ * Refuse string executable fields: the provider compiles them with
+ * `new Function` (or loads a `file://` module) before or around the
+ * fetch, outside the fetch guard. A function value cannot arrive over a
+ * JSON route body and is left alone. Provider function callbacks are the
+ * same class: OpenAiAssistantProvider preloads
+ * config.functionToolCallbacks during construction, so an inline IIFE can
+ * reach a private service with process.getBuiltinModule('http'). The
+ * top-level `transform` is not a config field: `loadApiProvider`
+ * attaches it to the loaded provider and the evaluator executes the
+ * string with the `process.mainModule.require` shim, so the nested
+ * config transforms do not cover it.
+ */
+function refuseExecutableFields(providerOptions: ProviderTarget): void {
+  const config = providerOptions?.config;
+  for (const key of ['transformRequest', 'transformResponse', 'responseParser'] as const) {
+    const transform = config?.[key];
+    if (typeof transform === 'string' && transform.length > 0) {
+      throw new PrivateRangeBlockedError(
+        `PROMPTFOO_BLOCK_PRIVATE_RANGES is set: refusing provider with a string ${key} transform that would execute outside the fetch guard`,
+      );
+    }
+  }
+  // HttpProvider compiles these the same way (new Function, with a file://
+  // module load for file references), so they get the same refusal as the
+  // transforms above: a string sessionParser or validateStatus runs before
+  // or around the fetch, outside fetchWithProxy.
+  for (const key of ['sessionParser', 'validateStatus'] as const) {
+    const executable = config?.[key];
+    if (typeof executable === 'string' && executable.length > 0) {
+      throw new PrivateRangeBlockedError(
+        `PROMPTFOO_BLOCK_PRIVATE_RANGES is set: refusing provider with a string ${key} that would execute outside the fetch guard`,
+      );
+    }
+  }
+  const functionToolCallbacks = config?.functionToolCallbacks;
+  if (typeof functionToolCallbacks === 'object' && functionToolCallbacks !== null) {
+    for (const callback of Object.values(functionToolCallbacks)) {
+      if (typeof callback === 'string' && callback.length > 0) {
+        throw new PrivateRangeBlockedError(
+          'PROMPTFOO_BLOCK_PRIVATE_RANGES is set: refusing provider with a string functionToolCallbacks entry that would execute outside the fetch guard',
+        );
+      }
+    }
+  }
+  const topLevelTransform = providerOptions?.transform;
+  if (typeof topLevelTransform === 'string' && topLevelTransform.length > 0) {
+    throw new PrivateRangeBlockedError(
+      'PROMPTFOO_BLOCK_PRIVATE_RANGES is set: refusing provider with a top-level string transform that would execute outside the fetch guard',
+    );
+  }
+}
+
 export function getCallerSuppliedBaseUrls(providerOptions: ProviderTarget): string[] {
   const urls: string[] = [];
   const config = providerOptions?.config;
@@ -672,30 +850,12 @@ export function getCallerSuppliedBaseUrls(providerOptions: ProviderTarget): stri
       urls.push(configUrl);
     }
   }
+  collectSessionUrl(config, urls);
   const rawRequest = config?.request;
   if (typeof rawRequest === 'string' && rawRequest.length > 0) {
     urls.push(getRawRequestTarget(rawRequest, config?.useHttps === true));
   }
-  for (const key of ['transformRequest', 'transformResponse', 'responseParser'] as const) {
-    const transform = config?.[key];
-    if (typeof transform === 'string' && transform.length > 0) {
-      throw new PrivateRangeBlockedError(
-        `PROMPTFOO_BLOCK_PRIVATE_RANGES is set: refusing provider with a string ${key} transform that would execute outside the fetch guard`,
-      );
-    }
-  }
-  // The top-level `transform` is not a config field: `loadApiProvider`
-  // attaches it to the loaded provider (`ret.transform = options.transform`)
-  // and the evaluator executes the string with the `process.mainModule.require`
-  // shim, so the three nested config transforms above do not cover it. A
-  // string value can only arrive over a JSON route body (in-process function
-  // values are left alone, as with the config transforms above).
-  const topLevelTransform = providerOptions?.transform;
-  if (typeof topLevelTransform === 'string' && topLevelTransform.length > 0) {
-    throw new PrivateRangeBlockedError(
-      'PROMPTFOO_BLOCK_PRIVATE_RANGES is set: refusing provider with a top-level string transform that would execute outside the fetch guard',
-    );
-  }
+  refuseExecutableFields(providerOptions);
   const id = providerOptions?.id;
   if (typeof id !== 'string' || id.length === 0) {
     return urls;
@@ -721,6 +881,7 @@ export function getCallerSuppliedBaseUrls(providerOptions: ProviderTarget): stri
     );
   }
   handleMcpProviderTargets(id, config, urls);
+  handleEmbeddedMcpTargets(config, urls);
   const idUrl = getUrlFromProviderId(id);
   if (idUrl) {
     urls.push(idUrl);
