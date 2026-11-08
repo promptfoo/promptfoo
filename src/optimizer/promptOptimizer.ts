@@ -531,57 +531,6 @@ function buildCandidateProviderPromptMap(
   );
 }
 
-function buildCandidateTests(
-  tests: TestSuite['tests'],
-  routingPrompt: Prompt,
-  seedPrompt: Prompt,
-  candidateLabels: string[],
-): TestSuite['tests'] {
-  if (!tests) {
-    return tests;
-  }
-
-  return tests.map((test) => ({
-    ...test,
-    prompts: extendPromptFilter(test.prompts, routingPrompt, seedPrompt, candidateLabels),
-  }));
-}
-
-function buildCandidateDefaultTest(
-  defaultTest: TestSuite['defaultTest'],
-  routingPrompt: Prompt,
-  seedPrompt: Prompt,
-  candidateLabels: string[],
-): TestSuite['defaultTest'] {
-  if (!defaultTest || typeof defaultTest !== 'object') {
-    return defaultTest;
-  }
-
-  return {
-    ...defaultTest,
-    prompts: extendPromptFilter(defaultTest.prompts, routingPrompt, seedPrompt, candidateLabels),
-  };
-}
-
-function buildCandidateScenarios(
-  scenarios: TestSuite['scenarios'],
-  routingPrompt: Prompt,
-  seedPrompt: Prompt,
-  candidateLabels: string[],
-): TestSuite['scenarios'] {
-  return scenarios?.map((scenario) => ({
-    ...scenario,
-    config: scenario.config.map((test) => ({
-      ...test,
-      prompts: extendPromptFilter(test.prompts, routingPrompt, seedPrompt, candidateLabels),
-    })),
-    tests: scenario.tests.map((test) => ({
-      ...test,
-      prompts: extendPromptFilter(test.prompts, routingPrompt, seedPrompt, candidateLabels),
-    })),
-  }));
-}
-
 function createCandidateTestSuite(
   testSuite: TestSuite,
   routingPrompt: Prompt,
@@ -603,6 +552,14 @@ function createCandidateTestSuite(
     .map((prompt) => prompt.label)
     .filter(Boolean) as string[];
 
+  const withCandidatePrompts = <T extends { prompts?: string[] }>(test: T) => ({
+    ...test,
+    prompts: extendPromptFilter(test.prompts, routingPrompt, seedPrompt, candidateLabels),
+  });
+  const mapTests = (tests: TestSuite['tests']) => tests && tests.map(withCandidatePrompts);
+  const mapDefaultTest = (test: TestSuite['defaultTest']) =>
+    test && typeof test === 'object' ? withCandidatePrompts(test) : test;
+
   return {
     ...testSuite,
     prompts: [seedPrompt, ...candidatePrompts],
@@ -612,19 +569,13 @@ function createCandidateTestSuite(
       seedPrompt,
       candidateLabels,
     ),
-    tests: buildCandidateTests(testSuite.tests, routingPrompt, seedPrompt, candidateLabels),
-    defaultTest: buildCandidateDefaultTest(
-      testSuite.defaultTest,
-      routingPrompt,
-      seedPrompt,
-      candidateLabels,
-    ),
-    scenarios: buildCandidateScenarios(
-      testSuite.scenarios,
-      routingPrompt,
-      seedPrompt,
-      candidateLabels,
-    ),
+    tests: mapTests(testSuite.tests),
+    defaultTest: mapDefaultTest(testSuite.defaultTest),
+    scenarios: testSuite.scenarios?.map((scenario) => ({
+      ...scenario,
+      config: scenario.config.map(withCandidatePrompts),
+      tests: scenario.tests.map(withCandidatePrompts),
+    })),
   };
 }
 
