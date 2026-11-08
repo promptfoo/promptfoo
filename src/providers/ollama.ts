@@ -23,6 +23,11 @@ import type {
   TokenUsage,
 } from '../types/index';
 
+function getOllamaApiUrl(env: EnvOverrides | undefined, endpoint: 'generate' | 'chat' | 'embed') {
+  const baseUrl = resolveProviderEnv(env, ['OLLAMA_BASE_URL'])?.value || 'http://localhost:11434';
+  return `${baseUrl.replace(/\/+$/, '')}/api/${endpoint}`;
+}
+
 interface OllamaCompletionOptions {
   // Nested `options` members, per Ollama's current Options/Runner structs:
   // https://github.com/ollama/ollama/blob/main/api/types.go
@@ -593,7 +598,7 @@ export class OllamaCompletionProvider implements ApiProvider {
     let response: FetchWithCacheResult<string> | undefined;
     try {
       response = await fetchWithCache<string>(
-        `${resolveProviderEnv(this.env, ['OLLAMA_BASE_URL'])?.value || 'http://localhost:11434'}/api/generate`,
+        getOllamaApiUrl(this.env, 'generate'),
         {
           method: 'POST',
           headers: {
@@ -750,7 +755,7 @@ export class OllamaChatProvider implements ApiProvider {
     let response: FetchWithCacheResult<string> | undefined;
     try {
       response = await fetchWithCache<string>(
-        `${resolveProviderEnv(this.env, ['OLLAMA_BASE_URL'])?.value || 'http://localhost:11434'}/api/chat`,
+        getOllamaApiUrl(this.env, 'chat'),
         {
           method: 'POST',
           headers: {
@@ -886,7 +891,7 @@ export class OllamaEmbeddingProvider extends OllamaCompletionProvider {
     let response: FetchWithCacheResult<OllamaEmbedResponse>;
     try {
       response = await fetchWithCache<OllamaEmbedResponse>(
-        `${resolveProviderEnv(this.env, ['OLLAMA_BASE_URL'])?.value || 'http://localhost:11434'}/api/embed`,
+        getOllamaApiUrl(this.env, 'embed'),
         {
           method: 'POST',
           headers: {
