@@ -1,15 +1,13 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { beforeEach, expect, it, vi } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
 import { registerTestProviderTool } from '../../../../src/commands/mcp/tools/testProvider';
 import { loadApiProvider } from '../../../../src/providers/index';
 
 vi.mock('../../../../src/providers/index', () => ({ loadApiProvider: vi.fn() }));
 
-beforeEach(() => {
-  vi.mocked(loadApiProvider).mockReset();
-});
+afterEach(() => vi.mocked(loadApiProvider).mockReset());
 
 it('reports the call error and recovers on the next provider test', async () => {
   const id = vi.fn(() => {
