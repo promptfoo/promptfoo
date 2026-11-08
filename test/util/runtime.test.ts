@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { expect, it, vi } from 'vitest';
 
 vi.mock('../../src/logger', () => ({
   default: {
@@ -6,31 +6,12 @@ vi.mock('../../src/logger', () => ({
   },
 }));
 
+import { TERMINAL_MAX_WIDTH } from '../../src/constants';
 import logger from '../../src/logger';
 import { printBorder } from '../../src/util/runtime';
 
-describe('runtime utilities', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
+it('logs one border matching the configured terminal width', () => {
+  printBorder();
 
-  afterEach(() => {
-    vi.resetAllMocks();
-  });
-
-  describe('printBorder', () => {
-    it.each([
-      'should call logger.info with a border string',
-      'should print a border of repeated equals signs',
-    ])('%s', () => {
-      printBorder();
-
-      expect(logger.info).toHaveBeenCalledTimes(1);
-      const call = vi.mocked(logger.info).mock.calls[0][0];
-      expect(typeof call).toBe('string');
-      expect(call).toMatch(/^=+$/);
-      expect(call.length).toBeGreaterThan(0);
-      expect(call.split('').every((char) => char === '=')).toBe(true);
-    });
-  });
+  expect(logger.info).toHaveBeenCalledExactlyOnceWith('='.repeat(TERMINAL_MAX_WIDTH));
 });
