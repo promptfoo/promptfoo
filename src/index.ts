@@ -1,6 +1,7 @@
 import assertions from './assertions/index';
 import * as cache from './cache';
 import guardrails from './guardrails';
+import { metamorphic } from './metamorphic';
 import { evaluate } from './node';
 import { loadApiProvider, loadApiProviders } from './providers/index';
 import { getModelPricing } from './providers/pricing';
@@ -36,6 +37,7 @@ export type {
   BeforeEachExtensionHookContext,
   ExtensionHookContextMap,
 } from './evaluatorHelpers';
+export type { MetamorphicPlan, MetamorphicReport, NativeInspection } from './metamorphic';
 export type { ModelPricing } from './providers/pricing';
 export type { TransformContext, TransformFunction, TransformPrompt } from './types/transform';
 
@@ -70,6 +72,7 @@ export {
   guardrails,
   loadApiProvider,
   loadApiProviders,
+  metamorphic,
   redteam,
 };
 
@@ -81,5 +84,6 @@ export default {
   guardrails,
   loadApiProvider,
   loadApiProviders,
+  metamorphic,
   redteam,
 };

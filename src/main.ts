@@ -17,6 +17,7 @@ import { initCommand } from './commands/init';
 import { listCommand } from './commands/list';
 import { logsCommand } from './commands/logs';
 import { mcpCommand } from './commands/mcp/index';
+import { metamorphicCommand } from './commands/metamorphic';
 import { modelScanCommand } from './commands/modelScan';
 import { optimizeCommand } from './commands/optimize';
 import { initCommand as redteamInitCommand } from './commands/redteam/init';
@@ -106,6 +107,7 @@ async function main() {
   importCommand(program);
   listCommand(program);
   logsCommand(program);
+  metamorphicCommand(program);
   modelScanCommand(program);
   optimizeCommand(program, defaultConfig, defaultConfigPath);
   setupRetryCommand(program);
