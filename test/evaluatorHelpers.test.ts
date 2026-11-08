@@ -468,6 +468,10 @@ describe('evaluatorHelpers', () => {
     });
 
     describe('nested file:// references in object vars (issue #1613)', () => {
+      afterEach(() => {
+        vi.restoreAllMocks();
+      });
+
       it('should load file:// content nested one level deep in a plain object var', async () => {
         // Before the fix: `reporting_period.previous.report` would stay as the
         // raw `file://` string and get injected into the prompt literally.
@@ -561,6 +565,39 @@ describe('evaluatorHelpers', () => {
         // The raw object is passed through Nunjucks – the nested property is accessible
         // but its value stays as the original string
         expect(renderedPrompt).toContain('file://should-not-load.txt');
+      });
+
+      it('should exclude _conversation from nested file resolution', async () => {
+        const prompt = toPrompt('{{ _conversation[0].output }}');
+        const vars = {
+          _conversation: [{ output: 'file:///etc/passwd' }],
+        };
+
+        const renderedPrompt = await renderPrompt(prompt, vars, {});
+
+        expect(fsMocks.readFileSync).not.toHaveBeenCalled();
+        expect(renderedPrompt).toBe('file:///etc/passwd');
+      });
+
+      it('should handle cyclic object structures without infinite recursion', async () => {
+        const prompt = toPrompt('{{ node.name }}');
+        const node: Record<string, any> = { name: 'Root' };
+        node.self = node;
+        const vars = { node };
+
+        const renderedPrompt = await renderPrompt(prompt, vars, {});
+
+        expect(renderedPrompt).toBe('Root');
+      });
+
+      it('should preserve non-plain objects such as Date intact', async () => {
+        const dateObj = new Date('2024-01-15T00:00:00.000Z');
+        const prompt = toPrompt('{{ created_at }}');
+        const vars = { created_at: dateObj };
+
+        const renderedPrompt = await renderPrompt(prompt, vars, {});
+
+        expect(renderedPrompt).toBe(dateObj.toString());
       });
     });
 

@@ -251,6 +251,8 @@ export async function renderPrompt(
 
   let basePrompt = prompt.raw;
 
+  const visitedObjects = new WeakSet<object>();
+
   /**
    * Recursively walks a plain-object or array value and replaces every string
    * that begins with `file://` with the loaded file content.  JS/Python script
@@ -296,6 +298,13 @@ export async function renderPrompt(
           }
           return `data:${mimeType};base64,${base64Data}`;
         }
+        if (
+          fileExtension?.toLowerCase() === 'm4a' &&
+          provider?.getAudioInputFormat?.() === 'google'
+        ) {
+          loadedMimeTypes.set(base64Data, 'audio/mp4');
+          setLoadedFileMimeTypes(vars, loadedMimeTypes);
+        }
         return base64Data;
       } else {
         return (await fs.readFile(filePath, 'utf8')).trim();
@@ -303,13 +312,31 @@ export async function renderPrompt(
     }
 
     if (Array.isArray(value)) {
+      if (visitedObjects.has(value)) {
+        return value;
+      }
+      visitedObjects.add(value);
       return Promise.all(value.map(resolveNestedFileRefs));
     }
 
-    if (typeof value === 'object' && value !== null) {
+    // Only recurse into plain objects; preserve Date, Buffer, Map, Set, and other class instances
+    if (
+      typeof value === 'object' &&
+      value !== null &&
+      (value.constructor === Object || Object.getPrototypeOf(value) === null)
+    ) {
+      if (visitedObjects.has(value)) {
+        return value;
+      }
+      visitedObjects.add(value);
       const result: Record<string, unknown> = {};
       for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
-        result[k] = await resolveNestedFileRefs(v);
+        // Exclude conversation history from file resolution (runtime provider output is untrusted)
+        if (k === '_conversation') {
+          result[k] = v;
+        } else {
+          result[k] = await resolveNestedFileRefs(v);
+        }
       }
       return result;
     }
@@ -319,7 +346,7 @@ export async function renderPrompt(
 
   // Load files
   for (const [varName, value] of Object.entries(vars)) {
-    if (skipRenderVars?.includes(varName)) {
+    if (skipRenderVars?.includes(varName) || varName === '_conversation') {
       continue;
     }
 
