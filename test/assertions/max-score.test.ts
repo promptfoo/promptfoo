@@ -23,11 +23,13 @@ describe('max-score assertion integration', () => {
     expect(result.componentResults![0].assertion?.type).toBe('contains');
   });
 
-  it('should filter out select-best and max-score from processing', async () => {
+  it('should filter out comparison assertions from regular processing', async () => {
     const test = {
       assert: [
         { type: 'contains', value: 'test' } as Assertion,
         { type: 'select-best', value: 'best criteria' } as Assertion,
+        { type: 'select-lowest-cost' } as Assertion,
+        { type: 'select-lowest-latency' } as Assertion,
         { type: 'max-score' } as Assertion,
         { type: 'equals', value: 'test output' } as Assertion,
       ],
