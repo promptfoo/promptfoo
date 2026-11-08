@@ -118,6 +118,55 @@ describe('test data file extension matching', () => {
     },
   );
 
+  it.each([
+    ['cases.notYAML', false],
+    ['cases.notYML', false],
+    ['cases.notYaml', false],
+    ['cases.notYml', false],
+    ['casesnotYAML', false],
+    ['casesnotYML', false],
+    ['cases.notyaml', true],
+    ['cases.notyml', true],
+    ['casesnotyaml', true],
+    ['casesnotyml', true],
+  ] as const)('preserves legacy routing for %s', async (filename, scalarThrows) => {
+    fs.writeFileSync(path.join(directory, filename), JSON.stringify(tests));
+    await expect(readStandaloneTestsFile(filename, directory)).resolves.toEqual([]);
+    for (const read of [readTests, readTestConfigs]) {
+      if (scalarThrows) {
+        await expect(read(filename, directory)).rejects.toThrow(
+          'Unsupported file type for test file:',
+        );
+      } else {
+        await expect(read(filename, directory)).resolves.toEqual([]);
+      }
+      await expect(read([filename], directory)).rejects.toThrow(
+        'Unsupported file type for test file:',
+      );
+    }
+    expect(resolveTestsWatchPaths(filename, directory)).toEqual([path.join(directory, filename)]);
+  });
+
+  it.each(['.YAML', '.YML'])(
+    'loads the %s dotfile through both scalar readers',
+    async (filename) => {
+      fs.writeFileSync(path.join(directory, filename), JSON.stringify(tests));
+      for (const read of [readTests, readTestConfigs]) {
+        expect((await read(filename, directory)).map((test) => test.vars)).toEqual(values);
+      }
+      expect(resolveTestsWatchPaths(filename, directory)).toEqual([path.join(directory, filename)]);
+    },
+  );
+
+  it.each(['Cases.YAML\n', 'Cases.YAML\r\n', 'Cases.YML\n', 'Cases.YML\r\n'])(
+    'does not recognize a YAML suffix before trailing line terminators: %j',
+    async (filename) => {
+      await expect(readTests(filename, directory)).resolves.toEqual([]);
+      await expect(readTestConfigs(filename, directory)).resolves.toEqual([]);
+      expect(resolveTestsWatchPaths(filename, directory)).toEqual([path.join(directory, filename)]);
+    },
+  );
+
   it('keeps the existing behavior for unknown data extensions', async () => {
     fs.writeFileSync(path.join(directory, 'ExampleData.unknown'), JSON.stringify(tests));
     await expect(readStandaloneTestsFile('ExampleData.unknown', directory)).resolves.toEqual([]);

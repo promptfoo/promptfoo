@@ -769,6 +769,11 @@ export async function readTestConfigs(
   );
 }
 
+function usesYamlTestLoader(source: string): boolean {
+  // Preserve legacy lowercase suffix routing; extend case matching only to real extensions.
+  return source.endsWith('yaml') || source.endsWith('yml') || /\.ya?ml$/i.test(source);
+}
+
 async function readTestsWithEnv(
   tests: TestSuiteConfig['tests'],
   basePath: string,
@@ -793,7 +798,7 @@ async function readTestsWithEnv(
       return loadStandalone(source);
     }
     // Points to a tests file with multiple test cases
-    if (source.toLowerCase().endsWith('yaml') || source.toLowerCase().endsWith('yml')) {
+    if (usesYamlTestLoader(source)) {
       return loadTestsFromGlobWithEnv(source, basePath, env, loadProviders);
     }
     const withoutScheme = source.replace(/^file:\/\//, '');
@@ -1080,8 +1085,7 @@ export function resolveTestsWatchPaths(
       const source = renderEnvOnlyInObject(entry).replace(/^file:\/\//, '');
       const useSourceDirectory =
         Array.isArray(tests) ||
-        source.toLowerCase().endsWith('yaml') ||
-        source.toLowerCase().endsWith('yml') ||
+        usesYamlTestLoader(source) ||
         (hasGlobMagic(source) && !fs.existsSync(path.resolve(basePath, source)));
       return resolveTestsFileReference(entry, basePath).flatMap((file) => [
         file,
