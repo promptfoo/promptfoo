@@ -373,13 +373,6 @@ def main():
             print(traceback.format_exc(), file=sys.stderr, flush=True)
 
 
-def _write_response(response_file: str, response: dict) -> None:
-    with open(response_file, "w", encoding="utf-8") as f:
-        json.dump(response, f, ensure_ascii=False)
-        f.flush()
-        os.fsync(f.fileno())  # Persist the full response before signaling Node.
-
-
 def handle_call(command_line, user_module, default_function_name):
     """Handle a CALL command."""
     response_file = None
@@ -412,7 +405,11 @@ def handle_call(command_line, user_module, default_function_name):
                 "traceback": traceback.format_exc(),
             }
 
-        _write_response(response_file, response)
+        # Write response
+        with open(response_file, "w", encoding="utf-8") as f:
+            json.dump(response, f, ensure_ascii=False)
+            f.flush()  # Flush Python buffer
+            os.fsync(f.fileno())  # Force OS to write to disk (critical for Windows)
 
         # Verify file is readable before signaling done (prevents race conditions)
         # Retry up to 3 times with small delays if file isn't immediately readable
@@ -454,7 +451,10 @@ def handle_call(command_line, user_module, default_function_name):
                     "error": str(e),
                     "traceback": traceback.format_exc(),
                 }
-                _write_response(response_file, error_response)
+                with open(response_file, "w", encoding="utf-8") as f:
+                    json.dump(error_response, f, ensure_ascii=False)
+                    f.flush()
+                    os.fsync(f.fileno())
             except Exception as write_error:
                 print(
                     f"ERROR: Failed to write error response: {write_error}",
