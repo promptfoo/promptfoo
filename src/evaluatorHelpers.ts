@@ -371,21 +371,16 @@ export async function renderPrompt(
         const result: Record<string, unknown> = Object.create(proto);
         resolvedCache.set(value, result);
         for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
-          // Exclude conversation history from file resolution (runtime provider output is untrusted)
-          if (k === '_conversation') {
-            result[k] = v;
+          const resolvedVal = await resolveNestedFileRefs(v);
+          if (k === '__proto__') {
+            Object.defineProperty(result, k, {
+              value: resolvedVal,
+              enumerable: true,
+              configurable: true,
+              writable: true,
+            });
           } else {
-            const resolvedVal = await resolveNestedFileRefs(v);
-            if (k === '__proto__') {
-              Object.defineProperty(result, k, {
-                value: resolvedVal,
-                enumerable: true,
-                configurable: true,
-                writable: true,
-              });
-            } else {
-              result[k] = resolvedVal;
-            }
+            result[k] = resolvedVal;
           }
         }
         return result;
