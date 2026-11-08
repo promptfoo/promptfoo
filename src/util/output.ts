@@ -589,6 +589,10 @@ async function renderEvalHtmlReport(evalRecord: Eval): Promise<string> {
   });
 }
 
+// Measured with real Chromium: about 29 MB of report HTML took over four minutes and produced
+// a 584 MB PDF. Warn well before that, while the export is still likely to be shareable.
+const PDF_LARGE_HTML_WARNING_BYTES = 10 * 1024 * 1024;
+
 async function writePdfOutput(outputPath: string, evalRecord: Eval): Promise<void> {
   let chromium;
   try {
@@ -599,6 +603,12 @@ async function writePdfOutput(outputPath: string, evalRecord: Eval): Promise<voi
     );
   }
   const htmlOutput = await renderEvalHtmlReport(evalRecord);
+  const htmlBytes = Buffer.byteLength(htmlOutput);
+  if (htmlBytes > PDF_LARGE_HTML_WARNING_BYTES) {
+    logger.warn(
+      `PDF report is ${(htmlBytes / (1024 * 1024)).toFixed(1)} MB of HTML. Rendering may take several minutes, produce a very large file, or fail. Consider exporting HTML instead: --output report.html`,
+    );
+  }
   let browser;
   try {
     browser = await chromium.launch({ headless: true });
@@ -797,6 +807,9 @@ export async function writeMultipleOutputs(
   );
   const errors = results.flatMap((result) => (result.status === 'rejected' ? [result.reason] : []));
   if (errors.length > 0) {
-    throw Object.assign(new Error('One or more output writes failed'), { errors });
+    const details = errors.map((error) => (error instanceof Error ? error.message : String(error)));
+    throw Object.assign(new Error(`One or more output writes failed:\n${details.join('\n')}`), {
+      errors,
+    });
   }
 }

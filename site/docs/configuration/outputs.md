@@ -71,15 +71,17 @@ Generate a portable, print-ready version of the HTML report:
 promptfoo eval --output report.pdf
 ```
 
-PDF export renders the HTML report with Playwright's Chromium, which ships with promptfoo
-as an optional dependency and normally needs no setup. If you installed with
-`--no-optional`, or optional dependencies were otherwise skipped, install these packages in
-the project where you run promptfoo:
+PDF export renders the HTML report with Playwright's Chromium. Playwright is an optional
+feature, so install it in the project where you run promptfoo, then install the matching
+Chromium binary:
 
 ```bash
-npm install playwright
+npm install promptfoo "playwright@^1.63.0"
 npx playwright install chromium
 ```
+
+For a global CLI, install the same packages with `npm install -g` and run
+`playwright install chromium`.
 
 :::note
 
@@ -88,6 +90,10 @@ score, named scores, output, reason, and error. The per-result detail behind **V
 in the HTML report — the rendered prompt text, latency, cost, and token counts — is built
 on demand in the browser and is not included. Use `--output report.html` or the JSON export
 when you need those fields.
+
+Very large reports can take several minutes to render and produce very large files, so
+promptfoo warns when the report exceeds 10 MB of HTML. Filter the eval or use HTML output
+for those runs.
 
 :::
 

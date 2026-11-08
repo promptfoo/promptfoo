@@ -1924,6 +1924,8 @@ describe('writeOutput', () => {
 
     resolveSlowWrite!();
     await expect(writePromise).rejects.toThrow('One or more output writes failed');
+    // Writers put actionable guidance in their messages, so it has to reach the CLI user.
+    await expect(writePromise).rejects.toThrow('json write failed');
   });
 
   it('writeOutput with HTML template escapes special characters', async () => {
@@ -2073,11 +2075,13 @@ describe('writeOutput', () => {
     expect(html).toContain('No rows match the current search and status filters.');
   });
 
-  it('writeOutput with PDF renders the HTML report through playwright', async () => {
+  const setupPdfReportEval = async (
+    description: string,
+    resultOverrides: Partial<Parameters<Eval['addResult']>[0]> = {},
+  ) => {
     const realFs = await vi.importActual<typeof import('fs')>('fs');
     const templatePath = path.resolve(__dirname, '../../src/tableOutput.html');
-    const templateContent = realFs.readFileSync(templatePath, 'utf-8');
-    vi.mocked(fsPromises.readFile).mockResolvedValue(templateContent);
+    vi.mocked(fsPromises.readFile).mockResolvedValue(realFs.readFileSync(templatePath, 'utf-8'));
 
     playwrightMocks.chromium.launch.mockResolvedValue(playwrightMocks.browser);
     playwrightMocks.browser.newPage.mockResolvedValue(playwrightMocks.page);
@@ -2085,7 +2089,7 @@ describe('writeOutput', () => {
     playwrightMocks.page.setContent.mockResolvedValue(undefined);
     playwrightMocks.page.pdf.mockResolvedValue(undefined);
 
-    const eval_ = new Eval({ description: 'PDF report' });
+    const eval_ = new Eval({ description });
     await eval_.addPrompts([{ raw: 'Prompt', label: 'Prompt', provider: 'provider' }]);
     eval_.setVars(['input']);
     await eval_.addResult({
@@ -2107,7 +2111,14 @@ describe('writeOutput', () => {
         score: 1,
         reason: 'Passing reason',
       },
+      ...resultOverrides,
     });
+    return eval_;
+  };
+
+  it('writeOutput with PDF renders the HTML report through playwright', async () => {
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => logger);
+    const eval_ = await setupPdfReportEval('PDF report');
 
     await writeOutput('output.pdf', eval_, null);
 
@@ -2119,38 +2130,31 @@ describe('writeOutput', () => {
       expect.objectContaining({ path: 'output.pdf', format: 'A4', printBackground: true }),
     );
     expect(playwrightMocks.browser.close).toHaveBeenCalledTimes(1);
+    expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('PDF report is'));
+    warnSpy.mockRestore();
+  });
+
+  it('writeOutput with PDF warns about a very large report', async () => {
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => logger);
+    const eval_ = await setupPdfReportEval('PDF report', {
+      response: { output: 'x'.repeat(11 * 1024 * 1024) },
+    });
+
+    await writeOutput('output.pdf', eval_, null);
+
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringMatching(/PDF report is \d+\.\d MB of HTML/));
+    expect(playwrightMocks.page.pdf).toHaveBeenCalledTimes(1);
+    warnSpy.mockRestore();
   });
 
   it('writeOutput with PDF includes error rows in the rendered HTML', async () => {
-    const realFs = await vi.importActual<typeof import('fs')>('fs');
-    const templatePath = path.resolve(__dirname, '../../src/tableOutput.html');
-    const templateContent = realFs.readFileSync(templatePath, 'utf-8');
-    vi.mocked(fsPromises.readFile).mockResolvedValue(templateContent);
-
-    playwrightMocks.chromium.launch.mockResolvedValue(playwrightMocks.browser);
-    playwrightMocks.browser.newPage.mockResolvedValue(playwrightMocks.page);
-    playwrightMocks.browser.close.mockResolvedValue(undefined);
-    playwrightMocks.page.setContent.mockResolvedValue(undefined);
-    playwrightMocks.page.pdf.mockResolvedValue(undefined);
-
-    const eval_ = new Eval({ description: 'PDF error report' });
-    await eval_.addPrompts([{ raw: 'Prompt', label: 'Prompt', provider: 'provider' }]);
-    eval_.setVars(['input']);
-    await eval_.addResult({
+    const eval_ = await setupPdfReportEval('PDF error report', {
       success: false,
       failureReason: ResultFailureReason.ERROR,
       score: 0,
-      namedScores: {},
-      latencyMs: 100,
-      provider: { id: 'provider' },
-      prompt: { raw: 'Prompt', label: 'Prompt' },
       response: { output: '' },
       error: 'provider exploded <img src=x>',
-      vars: { input: 'one' },
-      promptIdx: 0,
-      testIdx: 0,
-      testCase: { vars: { input: 'one' } },
-      promptId: 'prompt',
+      gradingResult: undefined,
     });
 
     await writeOutput('output.pdf', eval_, null);
@@ -2164,38 +2168,10 @@ describe('writeOutput', () => {
   });
 
   it('writeOutput with PDF explains how to install Chromium when launch fails', async () => {
-    const realFs = await vi.importActual<typeof import('fs')>('fs');
-    const templatePath = path.resolve(__dirname, '../../src/tableOutput.html');
-    const templateContent = realFs.readFileSync(templatePath, 'utf-8');
-    vi.mocked(fsPromises.readFile).mockResolvedValue(templateContent);
-
+    const eval_ = await setupPdfReportEval('PDF report');
     playwrightMocks.chromium.launch.mockRejectedValue(
       new Error("Executable doesn't exist at /path/to/chromium"),
     );
-
-    const eval_ = new Eval({ description: 'PDF report' });
-    await eval_.addPrompts([{ raw: 'Prompt', label: 'Prompt', provider: 'provider' }]);
-    eval_.setVars(['input']);
-    await eval_.addResult({
-      success: true,
-      failureReason: ResultFailureReason.NONE,
-      score: 1,
-      namedScores: {},
-      latencyMs: 100,
-      provider: { id: 'provider' },
-      prompt: { raw: 'Prompt', label: 'Prompt' },
-      response: { output: 'Passing output' },
-      vars: { input: 'one' },
-      promptIdx: 0,
-      testIdx: 0,
-      testCase: { vars: { input: 'one' } },
-      promptId: 'prompt',
-      gradingResult: {
-        pass: true,
-        score: 1,
-        reason: 'Passing reason',
-      },
-    });
 
     await expect(writeOutput('output.pdf', eval_, null)).rejects.toThrow(
       'npx playwright install chromium',
@@ -2203,40 +2179,8 @@ describe('writeOutput', () => {
   });
 
   it('writeOutput with PDF closes the browser when PDF generation fails', async () => {
-    const realFs = await vi.importActual<typeof import('fs')>('fs');
-    const templatePath = path.resolve(__dirname, '../../src/tableOutput.html');
-    const templateContent = realFs.readFileSync(templatePath, 'utf-8');
-    vi.mocked(fsPromises.readFile).mockResolvedValue(templateContent);
-
-    playwrightMocks.chromium.launch.mockResolvedValue(playwrightMocks.browser);
-    playwrightMocks.browser.newPage.mockResolvedValue(playwrightMocks.page);
-    playwrightMocks.browser.close.mockResolvedValue(undefined);
-    playwrightMocks.page.setContent.mockResolvedValue(undefined);
+    const eval_ = await setupPdfReportEval('PDF report');
     playwrightMocks.page.pdf.mockRejectedValue(new Error('render failed'));
-
-    const eval_ = new Eval({ description: 'PDF report' });
-    await eval_.addPrompts([{ raw: 'Prompt', label: 'Prompt', provider: 'provider' }]);
-    eval_.setVars(['input']);
-    await eval_.addResult({
-      success: true,
-      failureReason: ResultFailureReason.NONE,
-      score: 1,
-      namedScores: {},
-      latencyMs: 100,
-      provider: { id: 'provider' },
-      prompt: { raw: 'Prompt', label: 'Prompt' },
-      response: { output: 'Passing output' },
-      vars: { input: 'one' },
-      promptIdx: 0,
-      testIdx: 0,
-      testCase: { vars: { input: 'one' } },
-      promptId: 'prompt',
-      gradingResult: {
-        pass: true,
-        score: 1,
-        reason: 'Passing reason',
-      },
-    });
 
     const writePromise = writeOutput('output.pdf', eval_, null);
     // The raw Chromium message ("Protocol error (Page.printToPDF): Printing failed") is
