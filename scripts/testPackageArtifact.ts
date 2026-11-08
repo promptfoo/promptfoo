@@ -12,7 +12,6 @@ import { brotliCompressSync, gzipSync } from 'node:zlib';
 
 import { API } from 'typescript/unstable/sync';
 import { writePackedConsumerSbom } from './packedConsumerSbom';
-import { assertBuiltAssetsPackaged } from './packPackageArtifact';
 
 type PackFile = {
   mode: number;
@@ -198,11 +197,12 @@ function installConsumerPackages(
   );
 }
 
-function assertPackagedFiles(packResult: PackResult, compareSource: boolean): void {
+async function assertPackagedFiles(packResult: PackResult, compareSource: boolean): Promise<void> {
   const packagedPaths = new Set(packResult.files.map((file) => file.path));
   const missingPaths = requiredPackagedPaths.filter((file) => !packagedPaths.has(file));
   assert.deepEqual(missingPaths, [], `Missing packaged runtime assets: ${missingPaths.join(', ')}`);
   if (compareSource) {
+    const { assertBuiltAssetsPackaged } = await import('./packPackageArtifact');
     assertBuiltAssetsPackaged(ROOT, packResult.files);
   }
   assert(
@@ -1511,7 +1511,7 @@ async function main(): Promise<void> {
 
     const [packResult] = packResults;
     assert.equal(packResult.name, 'promptfoo');
-    assertPackagedFiles(packResult, !suppliedTarball);
+    await assertPackagedFiles(packResult, !suppliedTarball);
 
     const tarballPath = suppliedTarball ?? path.join(artifactsDir, packResult.filename);
     assert(fs.existsSync(tarballPath), `Missing tarball: ${tarballPath}`);
