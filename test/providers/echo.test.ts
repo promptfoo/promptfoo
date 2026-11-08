@@ -111,6 +111,7 @@ describe('EchoProvider', () => {
       expect(result.metadata).toEqual({
         test: 'value',
       });
+      expect((await provider.callApi(input, context)).metadata).toEqual(context.metadata);
     });
 
     it('should respect the configured delay', async () => {
@@ -125,6 +126,25 @@ describe('EchoProvider', () => {
       await responsePromise;
 
       expect(Date.now() - startTime).toBe(100);
+    });
+
+    it('rejects an already cancelled call even without a delay', async () => {
+      const reason = new Error('stop echo');
+      await expect(
+        new EchoProvider().callApi('input', undefined, {
+          abortSignal: AbortSignal.abort(reason),
+        }),
+      ).rejects.toBe(reason);
+    });
+
+    it('releases the pending delay when the caller aborts', async () => {
+      const controller = new AbortController();
+      const reason = new Error('pause echo');
+      const pending = new EchoProvider({ delay: 60000 }).callApi('input', undefined, {
+        abortSignal: controller.signal,
+      });
+      controller.abort(reason);
+      await expect(pending).rejects.toMatchObject({ name: 'AbortError', cause: reason });
     });
 
     it('should handle empty input', async () => {
