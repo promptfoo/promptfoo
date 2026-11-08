@@ -169,6 +169,12 @@ function getServedModel(message: { model?: unknown } | undefined): string | unde
   return typeof message?.model === 'string' && message.model ? message.model : undefined;
 }
 
+/** `{ metadata: { model } }` when the message names its served model, otherwise `{}`. */
+function getServedModelMetadata(message: { model?: unknown } | undefined) {
+  const model = getServedModel(message);
+  return model ? { metadata: { model } } : {};
+}
+
 function getMcpContinuationParams(
   params: Anthropic.Messages.MessageCreateParams,
   messages: Anthropic.Messages.MessageCreateParams['messages'],
@@ -1286,6 +1292,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
               cost: this.calculateMessageCosts(config, responses),
             }
           : {}),
+        ...getServedModelMetadata(lastResponse),
       };
     }
   }

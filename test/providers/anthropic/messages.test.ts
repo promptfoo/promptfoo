@@ -2372,6 +2372,24 @@ describe('AnthropicMessagesProvider', () => {
       expect(result.metadata?.model).toBe('claude-sonnet-4-6-20260101');
     });
 
+    it('keeps the served model when an MCP continuation request fails', async () => {
+      provider = createProvider('claude-sonnet-4-6', createMcpOptions());
+
+      mcpMocks.callTool.mockResolvedValue({ content: 'Acme Solar' });
+
+      vi.spyOn(provider.anthropic.messages, 'create')
+        .mockResolvedValueOnce({
+          ...createSearchTurn(),
+          model: 'claude-sonnet-4-6-20260101',
+        } as Anthropic.Messages.Message)
+        .mockRejectedValueOnce(new Error('Connection lost'));
+
+      const result = await provider.callApi('Find clean energy companies');
+
+      expect(result.error).toBe('API call error: Connection lost');
+      expect(result.metadata?.model).toBe('claude-sonnet-4-6-20260101');
+    });
+
     it('returns an error when MCP tool execution exceeds max_tool_calls', async () => {
       provider = createProvider('claude-sonnet-4-6', {
         config: {
