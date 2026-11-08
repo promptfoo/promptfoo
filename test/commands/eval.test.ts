@@ -3,7 +3,7 @@ import fsPromises from 'fs/promises';
 import * as path from 'path';
 
 import { Command } from 'commander';
-import { afterEach, beforeEach, describe, expect, it, Mocked, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { disableCache, withCacheEnabled, withCacheNamespace } from '../../src/cache';
 import cliState from '../../src/cliState';
 import {
@@ -56,7 +56,6 @@ import { ConfigResolutionError, resolveConfigs } from '../../src/util/config/loa
 import { createDefaultPromptMetrics } from '../../src/util/eval/promptMetrics';
 import { writeMultipleOutputs } from '../../src/util/index';
 import { checkProviderApiKeys } from '../../src/util/provider';
-import { TokenUsageTracker } from '../../src/util/tokenUsage';
 import { mockProcessEnv } from '../util/utils';
 
 import type EvalResult from '../../src/models/evalResult';
@@ -141,7 +140,6 @@ vi.mock('../../src/util/index', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../src/util/index')>()),
   writeMultipleOutputs: vi.fn(),
 }));
-vi.mock('../../src/util/tokenUsage');
 vi.mock('../../src/util/provider', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../src/util/provider')>()),
   checkProviderApiKeys: vi.fn(() => new Map<string, string[]>()),
@@ -2293,12 +2291,6 @@ describe('evalCommand', () => {
     });
     const actual =
       await vi.importActual<typeof import('../../src/evaluator')>('../../src/evaluator');
-    const { TokenUsageTracker: ActualTracker } = await vi.importActual<
-      typeof import('../../src/util/tokenUsage')
-    >('../../src/util/tokenUsage');
-    const tracker = vi
-      .spyOn(TokenUsageTracker, 'getInstance')
-      .mockReturnValue(ActualTracker.getInstance());
     vi.mocked(evaluate).mockImplementationOnce(async (suite, evalRecord, options) => {
       // Run the actual command-prepared suite through the evaluator with an in-memory
       // store. The outer command retains its existing mocked persistence/cleanup.
@@ -2350,7 +2342,6 @@ describe('evalCommand', () => {
     } finally {
       findById.mockRestore();
       latest.mockRestore();
-      tracker.mockRestore();
       vi.mocked(withCacheEnabled).mockReset();
       vi.mocked(withCacheNamespace).mockReset();
       vi.mocked(evaluate).mockReset();
@@ -3597,22 +3588,8 @@ describe('Sharing Precedence - Comprehensive Test Coverage', () => {
     providers: [],
   } as UnifiedConfig;
 
-  let mockTokenUsageTracker: Mocked<TokenUsageTracker>;
-
   beforeEach(() => {
     vi.resetAllMocks();
-
-    // Set up TokenUsageTracker mock - required by generateEvalSummary
-    mockTokenUsageTracker = {
-      getProviderIds: vi.fn().mockReturnValue([]),
-      getProviderUsage: vi.fn(),
-      trackUsage: vi.fn(),
-      resetAllUsage: vi.fn(),
-      resetProviderUsage: vi.fn(),
-      getTotalUsage: vi.fn(),
-      cleanup: vi.fn(),
-    } as any;
-    vi.mocked(TokenUsageTracker.getInstance).mockReturnValue(mockTokenUsageTracker);
 
     // Set up required account mocks
     vi.mocked(promptForEmailUnverified).mockResolvedValue({ emailNeedsValidation: false });

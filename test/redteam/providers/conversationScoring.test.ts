@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MemorySystem } from '../../../src/redteam/providers/conversationMemory';
 import { CrescendoProvider } from '../../../src/redteam/providers/crescendo';
 import {
@@ -7,7 +7,7 @@ import {
 } from '../../../src/redteam/providers/crescendo/prompts';
 import { CustomProvider } from '../../../src/redteam/providers/custom';
 import { getNunjucksEngine } from '../../../src/util/templates';
-import { TokenUsageTracker } from '../../../src/util/tokenUsage';
+import { getProviderTokenUsage, withTokenUsageTracking } from '../../../src/util/tokenUsage';
 import { createEmptyTokenUsage } from '../../../src/util/tokenUsageUtils';
 import { createMockProvider } from '../../factories/provider';
 
@@ -36,11 +36,13 @@ const score = {
 };
 const reported = { total: 17, prompt: 11, completion: 6, numRequests: 1 };
 
-beforeEach(() => TokenUsageTracker.getInstance().resetAllUsage());
+function tracked<T>(run: () => Promise<T>) {
+  return withTokenUsageTracking(async () => ({ result: await run() }));
+}
+
 afterEach(() => {
   vi.restoreAllMocks();
   vi.useRealTimers();
-  TokenUsageTracker.getInstance().resetAllUsage();
 });
 
 describe.each([
@@ -68,13 +70,14 @@ describe.each([
     const { provider, scorer, resolve, usage } = setup();
     resolve.mockRejectedValue(new Error('Must not resolve credentials on shortcut'));
     const before = structuredClone(usage);
-    expect(
-      await provider.getRefusalScore(attack, 'I cannot help with that request.', usage),
-    ).toEqual([true, 'The output contains a standard refusal.']);
+    const evaluation = await tracked(() =>
+      provider.getRefusalScore(attack, 'I cannot help with that request.', usage),
+    );
+    expect(evaluation.result).toEqual([true, 'The output contains a standard refusal.']);
     expect(resolve).not.toHaveBeenCalled();
     expect(scorer.callApi).not.toHaveBeenCalled();
     expect(usage).toEqual(before);
-    expect(TokenUsageTracker.getInstance().getProviderUsage(scorer.id())).toBeUndefined();
+    expect(getProviderTokenUsage(evaluation).get(scorer.id())).toBeUndefined();
   });
 
   describe.each(['refusal', 'eval'] as const)('%s score', (kind) => {
@@ -93,7 +96,7 @@ describe.each([
         });
         const controller = new AbortController();
         const options = { abortSignal: controller.signal };
-        const result = await invoke(provider, usage, options);
+        const evaluation = await tracked(() => invoke(provider, usage, options));
         const expectedBody = JSON.stringify([
           {
             role: 'system',
@@ -115,21 +118,19 @@ describe.each([
           { prompt: { raw: expectedBody, label: kind }, vars: {} },
           options,
         );
-        expect(result).toEqual(kind === 'refusal' ? [false, score.rationale] : score);
+        expect(evaluation.result).toEqual(kind === 'refusal' ? [false, score.rationale] : score);
         expect(usage.assertions).toMatchObject(reported);
-        expect(TokenUsageTracker.getInstance().getProviderUsage(scorer.id())).toMatchObject(
-          reported,
-        );
+        expect(getProviderTokenUsage(evaluation).get(scorer.id())).toMatchObject(reported);
       },
     );
 
     it('preserves cached logical grading usage and zero incurred requests', async () => {
       const { provider, scorer, usage } = setup();
       scorer.callApi.mockResolvedValue({ output: score, tokenUsage: reported, cached: true });
-      await invoke(provider, usage);
+      const evaluation = await tracked(() => invoke(provider, usage));
       expect(usage.assertions).toMatchObject({ ...reported, cached: 17 });
       expect(usage.incurredTokenUsage?.assertions).toMatchObject({ total: 0, numRequests: 0 });
-      expect(TokenUsageTracker.getInstance().getProviderUsage(scorer.id())).toMatchObject({
+      expect(getProviderTokenUsage(evaluation).get(scorer.id())).toMatchObject({
         total: 0,
         cached: 17,
         numRequests: 0,
@@ -143,25 +144,27 @@ describe.each([
       scorer.delay = 25;
       scorer.callApi.mockResolvedValue({ error: 'synthetic scorer failure', tokenUsage: reported });
       let settled = false;
-      const pending = invoke(provider, usage).then(
-        () => {
-          throw new Error('Expected failure');
-        },
-        (error: unknown) => {
-          settled = true;
-          return error;
-        },
-      );
-      await vi.advanceTimersByTimeAsync(0);
-      expect(usage.assertions).toMatchObject(reported);
-      expect(TokenUsageTracker.getInstance().getProviderUsage(scorer.id())).toMatchObject(reported);
-      expect(settled).toBe(false);
-      await vi.advanceTimersByTimeAsync(24);
-      expect(settled).toBe(false);
-      await vi.advanceTimersByTimeAsync(1);
-      expect(await pending).toEqual(
-        new Error(`Error from redteam (${kind}) provider: synthetic scorer failure`),
-      );
+      const evaluation = await tracked(async () => {
+        const pending = invoke(provider, usage).then(
+          () => {
+            throw new Error('Expected failure');
+          },
+          (error: unknown) => {
+            settled = true;
+            return error;
+          },
+        );
+        await vi.advanceTimersByTimeAsync(0);
+        expect(usage.assertions).toMatchObject(reported);
+        expect(settled).toBe(false);
+        await vi.advanceTimersByTimeAsync(24);
+        expect(settled).toBe(false);
+        await vi.advanceTimersByTimeAsync(1);
+        expect(await pending).toEqual(
+          new Error(`Error from redteam (${kind}) provider: synthetic scorer failure`),
+        );
+      });
+      expect(getProviderTokenUsage(evaluation).get(scorer.id())).toMatchObject(reported);
     });
 
     it('forwards cancellation to the actual scorer callback without inventing usage', async () => {
@@ -176,13 +179,15 @@ describe.each([
             });
           }),
       );
-      const pending = invoke(provider, usage, { abortSignal: controller.signal });
-      const rejection = expect(pending).rejects.toBe(cancellation);
-      await Promise.resolve();
-      controller.abort();
-      await rejection;
+      const evaluation = await tracked(async () => {
+        const pending = invoke(provider, usage, { abortSignal: controller.signal });
+        const rejection = expect(pending).rejects.toBe(cancellation);
+        await Promise.resolve();
+        controller.abort();
+        await rejection;
+      });
       expect(usage).toEqual(createEmptyTokenUsage());
-      expect(TokenUsageTracker.getInstance().getProviderUsage(scorer.id())).toBeUndefined();
+      expect(getProviderTokenUsage(evaluation).get(scorer.id())).toBeUndefined();
     });
 
     it.each([

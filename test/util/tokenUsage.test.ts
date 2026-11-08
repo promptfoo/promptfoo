@@ -1,197 +1,22 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import logger from '../../src/logger';
-import { TokenUsageTracker } from '../../src/util/tokenUsage';
+import {
+  getProviderTokenUsage,
+  trackResponseUsage,
+  withTokenUsageTracking,
+} from '../../src/util/tokenUsage';
 
-import type { TokenUsage } from '../../src/types/shared';
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
-describe('TokenUsageTracker', () => {
-  it('redacts URL credentials in provider ids when logging tracked usage', () => {
-    // The debug message string is the only redaction layer for provider ids —
-    // logger sanitizes context objects, never message strings.
-    const debugSpy = vi.spyOn(logger, 'debug').mockImplementation(() => logger);
-    try {
-      TokenUsageTracker.getInstance().trackUsage(
-        'https://api.example.com/v1?api_key=sk-12345678901234567890 (HttpProvider)',
-        { total: 1 },
-      );
-      const messages = debugSpy.mock.calls.map((call) => String(call[0])).join('\n');
-      expect(messages).toContain('api_key=%5BREDACTED%5D');
-      expect(messages).toContain('(HttpProvider)');
-      expect(messages).not.toContain('sk-12345678901234567890');
-    } finally {
-      debugSpy.mockRestore();
-      TokenUsageTracker.getInstance().resetAllUsage();
-    }
-  });
-
-  it('redacts URL credentials when logging response usage', () => {
-    const debugSpy = vi.spyOn(logger, 'debug').mockImplementation(() => logger);
-    try {
-      TokenUsageTracker.getInstance().trackResponseUsage(
-        'https://api.example.com/v1?api_key=sk-12345678901234567890 (HttpProvider)',
-        { tokenUsage: { total: 1 } },
-      );
-      const messages = debugSpy.mock.calls.map((call) => String(call[0])).join('\n');
-      expect(messages).toContain('api_key=%5BREDACTED%5D');
-      expect(messages).toContain('(HttpProvider)');
-      expect(messages).not.toContain('sk-12345678901234567890');
-    } finally {
-      debugSpy.mockRestore();
-      TokenUsageTracker.getInstance().resetAllUsage();
-    }
-  });
-
-  let tracker: TokenUsageTracker;
-
-  beforeEach(() => {
-    tracker = TokenUsageTracker.getInstance();
-    tracker.resetAllUsage();
-  });
-
-  afterEach(() => {
-    tracker.cleanup();
-  });
-
-  it('should track token usage for a provider', () => {
-    const usage: TokenUsage = {
-      total: 100,
-      prompt: 50,
-      completion: 50,
-      cached: 10,
-      numRequests: 1,
-      completionDetails: {
-        reasoning: 20,
-        acceptedPrediction: 15,
-        rejectedPrediction: 5,
-      },
-      assertions: {
-        total: 30,
-        prompt: 10,
-        completion: 15,
-        cached: 5,
-      },
-    };
-
-    tracker.trackUsage('test-provider', usage);
-    const tracked = tracker.getProviderUsage('test-provider');
-
-    expect(tracked).toEqual({
-      ...usage,
-      completionDetails: {
-        reasoning: 20,
-        acceptedPrediction: 15,
-        rejectedPrediction: 5,
-        cacheReadInputTokens: 0,
-        cacheCreationInputTokens: 0,
-      },
-      assertions: {
-        ...usage.assertions,
-        numRequests: 0,
-        completionDetails: {
-          reasoning: 0,
-          acceptedPrediction: 0,
-          rejectedPrediction: 0,
-          cacheReadInputTokens: 0,
-          cacheCreationInputTokens: 0,
-        },
-      },
+describe('evaluation token usage', () => {
+  it('infers one request when a fresh response omits numRequests', async () => {
+    const evaluation = await withTokenUsageTracking(async () => {
+      trackResponseUsage('target', { tokenUsage: { total: 7, prompt: 3, completion: 4 } });
+      return {};
     });
-  });
-
-  it('should handle undefined token usage', () => {
-    tracker.trackUsage('test-provider', undefined);
-    expect(tracker.getProviderUsage('test-provider')).toEqual(
-      expect.objectContaining({ numRequests: 1 }),
-    );
-  });
-
-  it('protects tracked usage and future aggregation from edits to a provider snapshot', () => {
-    const usage: TokenUsage = {
-      total: 100,
-      completionDetails: { reasoning: 20 },
-      assertions: { total: 30, completionDetails: { reasoning: 5 } },
-      attacker: { total: 40, completionDetails: { reasoning: 6 } },
-      generation: { total: 50, completionDetails: { reasoning: 7 } },
-      incurredTokenUsage: {
-        total: 60,
-        completionDetails: { reasoning: 8 },
-        assertions: { total: 10, completionDetails: { reasoning: 2 } },
-        attacker: { total: 15, completionDetails: { reasoning: 3 } },
-        generation: { total: 20, completionDetails: { reasoning: 4 } },
-      },
-    };
-    tracker.trackUsage('test-provider', usage);
-
-    const snapshot = tracker.getProviderUsage('test-provider')!;
-    snapshot.total = 999;
-    snapshot.completionDetails!.reasoning = 999;
-    for (const breakdown of [snapshot.assertions, snapshot.attacker, snapshot.generation]) {
-      breakdown!.total = 999;
-      breakdown!.completionDetails!.reasoning = 999;
-    }
-    snapshot.incurredTokenUsage!.total = 999;
-    snapshot.incurredTokenUsage!.completionDetails!.reasoning = 999;
-    for (const breakdown of [
-      snapshot.incurredTokenUsage!.assertions,
-      snapshot.incurredTokenUsage!.attacker,
-      snapshot.incurredTokenUsage!.generation,
-    ]) {
-      breakdown!.total = 999;
-      breakdown!.completionDetails!.reasoning = 999;
-    }
-
-    expect(tracker.getProviderUsage('test-provider')).toMatchObject(usage);
-    expect(tracker.getTotalUsage()).toMatchObject(usage);
-
-    tracker.trackUsage('test-provider', usage);
-    const expected: TokenUsage = {
-      total: 200,
-      completionDetails: { reasoning: 40 },
-      assertions: { total: 60, completionDetails: { reasoning: 10 } },
-      attacker: { total: 80, completionDetails: { reasoning: 12 } },
-      generation: { total: 100, completionDetails: { reasoning: 14 } },
-      incurredTokenUsage: {
-        total: 120,
-        completionDetails: { reasoning: 16 },
-        assertions: { total: 20, completionDetails: { reasoning: 4 } },
-        attacker: { total: 30, completionDetails: { reasoning: 6 } },
-        generation: { total: 40, completionDetails: { reasoning: 8 } },
-      },
-    };
-    expect(tracker.getProviderUsage('test-provider')).toMatchObject(expected);
-    expect(tracker.getTotalUsage()).toMatchObject(expected);
-  });
-
-  it('keeps a provider snapshot unchanged after tracking more usage', () => {
-    const usage: TokenUsage = {
-      total: 10,
-      assertions: { total: 5, completionDetails: { reasoning: 2 } },
-      incurredTokenUsage: { total: 10, assertions: { total: 5 } },
-    };
-    tracker.trackUsage('test-provider', usage);
-    const snapshot = tracker.getProviderUsage('test-provider');
-
-    tracker.trackUsage('test-provider', usage);
-
-    expect(snapshot).toMatchObject(usage);
-    expect(tracker.getProviderUsage('test-provider')).toMatchObject({
-      total: 20,
-      assertions: { total: 10, completionDetails: { reasoning: 4 } },
-      incurredTokenUsage: { total: 20, assertions: { total: 10 } },
-    });
-  });
-
-  it('should infer one request from a response that omits numRequests', () => {
-    tracker.trackResponseUsage('test-provider', {
-      tokenUsage: {
-        total: 7,
-        prompt: 3,
-        completion: 4,
-        cached: 0,
-      },
-    });
-
-    expect(tracker.getProviderUsage('test-provider')).toMatchObject({
+    expect(getProviderTokenUsage(evaluation).get('target')).toMatchObject({
       total: 7,
       prompt: 3,
       completion: 4,
@@ -200,19 +25,15 @@ describe('TokenUsageTracker', () => {
     });
   });
 
-  it('tracks a cached provider response without repeating its historical usage', () => {
-    tracker.trackResponseUsage('cached-provider', {
-      cached: true,
-      tokenUsage: {
-        total: 100,
-        prompt: 60,
-        completion: 40,
-        cached: 10,
-        numRequests: 1,
-      },
+  it('shows cache hits without charging historical work again', async () => {
+    const evaluation = await withTokenUsageTracking(async () => {
+      trackResponseUsage('target', {
+        cached: true,
+        tokenUsage: { total: 100, prompt: 60, completion: 40, cached: 10, numRequests: 1 },
+      });
+      return {};
     });
-
-    expect(tracker.getProviderUsage('cached-provider')).toMatchObject({
+    expect(getProviderTokenUsage(evaluation).get('target')).toMatchObject({
       total: 0,
       prompt: 0,
       completion: 0,
@@ -221,227 +42,146 @@ describe('TokenUsageTracker', () => {
     });
   });
 
-  it('combines fresh provider usage with cache-hit visibility without charging the replay', () => {
-    tracker.trackResponseUsage('mixed-provider', {
-      tokenUsage: { total: 25, prompt: 15, completion: 10, cached: 5, numRequests: 1 },
+  it('combines fresh usage with cache visibility and preserves reported retry counts', async () => {
+    const evaluation = await withTokenUsageTracking(async () => {
+      trackResponseUsage('target', {
+        tokenUsage: { total: 25, prompt: 15, completion: 10, cached: 5, numRequests: 3 },
+      });
+      trackResponseUsage('target', {
+        cached: true,
+        tokenUsage: { total: 40, prompt: 25, completion: 15, numRequests: 1 },
+      });
+      return {};
     });
-    tracker.trackResponseUsage('mixed-provider', {
-      cached: true,
-      tokenUsage: { total: 40, prompt: 25, completion: 15, cached: 0, numRequests: 1 },
-    });
-
-    expect(tracker.getProviderUsage('mixed-provider')).toMatchObject({
+    expect(getProviderTokenUsage(evaluation).get('target')).toMatchObject({
       total: 25,
       prompt: 15,
       completion: 10,
       cached: 45,
-      numRequests: 1,
-    });
-  });
-
-  it('does not create provider usage for an absent response', () => {
-    tracker.trackResponseUsage('test-provider', undefined);
-
-    expect(tracker.getProviderUsage('test-provider')).toBeUndefined();
-  });
-
-  it('does not corrupt provider usage when a response token getter throws', () => {
-    const response = {
-      tokenUsage: Object.defineProperty({}, 'total', {
-        enumerable: true,
-        get() {
-          throw new Error('usage getter failed');
-        },
-      }),
-    };
-
-    expect(() => tracker.trackResponseUsage('test-provider', response)).not.toThrow();
-    expect(tracker.getProviderUsage('test-provider')).toMatchObject({
-      total: 0,
-      prompt: 0,
-      completion: 0,
-      numRequests: 1,
-    });
-  });
-
-  it.each([Number.NaN, Infinity, -Infinity])(
-    'preserves known usage when a later response reports %s tokens',
-    (total) => {
-      tracker.trackResponseUsage('test-provider', {
-        tokenUsage: { total: 5, prompt: 2, completion: 3 },
-      });
-      tracker.trackResponseUsage('test-provider', {
-        tokenUsage: { total, prompt: 3, completion: 4 },
-      });
-
-      expect(tracker.getProviderUsage('test-provider')).toMatchObject({
-        total: 5,
-        prompt: 2,
-        completion: 3,
-        numRequests: 2,
-      });
-    },
-  );
-
-  it('should merge token usage for the same provider', () => {
-    const usage1: TokenUsage = {
-      total: 100,
-      prompt: 50,
-      completion: 50,
-      cached: 10,
-      numRequests: 1,
-      completionDetails: {
-        reasoning: 20,
-        acceptedPrediction: 15,
-        rejectedPrediction: 5,
-      },
-      assertions: {
-        total: 30,
-        prompt: 10,
-        completion: 15,
-        cached: 5,
-      },
-    };
-
-    const usage2: TokenUsage = {
-      total: 200,
-      prompt: 100,
-      completion: 100,
-      cached: 20,
-      numRequests: 2,
-      completionDetails: {
-        reasoning: 40,
-        acceptedPrediction: 30,
-        rejectedPrediction: 10,
-      },
-      assertions: {
-        total: 60,
-        prompt: 20,
-        completion: 30,
-        cached: 10,
-      },
-    };
-
-    tracker.trackUsage('test-provider', usage1);
-    tracker.trackUsage('test-provider', usage2);
-
-    const merged = tracker.getProviderUsage('test-provider');
-    expect(merged).toEqual({
-      total: 300,
-      prompt: 150,
-      completion: 150,
-      cached: 30,
       numRequests: 3,
-      completionDetails: {
-        reasoning: 60,
-        acceptedPrediction: 45,
-        rejectedPrediction: 15,
-        cacheReadInputTokens: 0,
-        cacheCreationInputTokens: 0,
-      },
-      assertions: {
-        total: 90,
-        prompt: 30,
-        completion: 45,
-        cached: 15,
-        numRequests: 0,
-        completionDetails: {
-          reasoning: 0,
-          acceptedPrediction: 0,
-          rejectedPrediction: 0,
-          cacheReadInputTokens: 0,
-          cacheCreationInputTokens: 0,
-        },
-      },
     });
   });
 
-  it('should get provider IDs', () => {
-    tracker.trackUsage('provider1', { total: 100 });
-    tracker.trackUsage('provider2', { total: 200 });
-
-    expect(tracker.getProviderIds()).toEqual(['provider1', 'provider2']);
+  it('returns independent evaluation usage snapshots and keeps malformed usage from overwriting prior totals', async () => {
+    const evaluation = await withTokenUsageTracking(async () => {
+      trackResponseUsage('target', { tokenUsage: { total: 5, completion: 5 } });
+      trackResponseUsage('target', { tokenUsage: { total: Number.NaN } });
+      trackResponseUsage('target', {
+        get tokenUsage(): never {
+          throw new Error('invalid usage');
+        },
+      });
+      trackResponseUsage('absent', undefined);
+      return {};
+    });
+    const snapshot = getProviderTokenUsage(evaluation);
+    const usage = snapshot.get('target')!;
+    expect(usage).toMatchObject({ total: 5, completion: 5, numRequests: 3 });
+    expect(snapshot.has('absent')).toBe(false);
+    usage.total = 99;
+    expect(getProviderTokenUsage(evaluation).get('target')?.total).toBe(5);
   });
 
-  it('should get total usage across all providers', () => {
-    tracker.trackUsage('provider1', {
+  it('restores parent accounting after a nested run and a failed nested run', async () => {
+    let child!: object;
+    const parent = await withTokenUsageTracking(async () => {
+      trackResponseUsage('shared', { tokenUsage: { total: 1 } });
+      child = await withTokenUsageTracking(async () => {
+        trackResponseUsage('shared', { tokenUsage: { total: 100 } });
+        return {};
+      });
+      await expect(
+        withTokenUsageTracking(async () => {
+          trackResponseUsage('shared', { tokenUsage: { total: 1000 } });
+          throw new Error('failed nested evaluation');
+        }),
+      ).rejects.toThrow('failed nested evaluation');
+      trackResponseUsage('shared', { tokenUsage: { total: 2 } });
+      return {};
+    });
+    expect(getProviderTokenUsage(parent).get('shared')).toMatchObject({ total: 3, numRequests: 2 });
+    expect(getProviderTokenUsage(child).get('shared')).toMatchObject({
       total: 100,
-      prompt: 50,
-      completion: 50,
-      cached: 10,
       numRequests: 1,
-      completionDetails: {
-        reasoning: 20,
-        acceptedPrediction: 15,
-        rejectedPrediction: 5,
-      },
-      assertions: {
-        total: 30,
-        prompt: 10,
-        completion: 15,
-        cached: 5,
-      },
     });
+  });
 
-    tracker.trackUsage('provider2', {
-      total: 200,
-      prompt: 100,
-      completion: 100,
-      cached: 20,
-      numRequests: 2,
-      completionDetails: {
-        reasoning: 40,
-        acceptedPrediction: 30,
-        rejectedPrediction: 10,
-      },
-      assertions: {
-        total: 60,
-        prompt: 20,
-        completion: 30,
-        cached: 10,
-      },
+  it('keeps overlapping runs with the same ID separate by returned object identity', async () => {
+    let release!: () => void;
+    const ready = new Promise<void>((resolve) => {
+      release = resolve;
     });
+    const first = withTokenUsageTracking(async () => {
+      trackResponseUsage('shared', { tokenUsage: { total: 1 } });
+      await ready;
+      trackResponseUsage('shared', { tokenUsage: { total: 2 } });
+      return { id: 'same-id' };
+    });
+    const second = await withTokenUsageTracking(async () => {
+      trackResponseUsage('shared', { tokenUsage: { total: 100 } });
+      return { id: 'same-id' };
+    });
+    release();
+    expect(getProviderTokenUsage(await first).get('shared')?.total).toBe(3);
+    expect(getProviderTokenUsage(second).get('shared')?.total).toBe(100);
+  });
 
-    expect(tracker.getTotalUsage()).toEqual({
-      total: 300,
-      prompt: 150,
-      completion: 150,
-      cached: 30,
-      numRequests: 3,
-      completionDetails: {
-        reasoning: 60,
-        acceptedPrediction: 45,
-        rejectedPrediction: 15,
-        cacheReadInputTokens: 0,
-        cacheCreationInputTokens: 0,
-      },
-      assertions: {
-        total: 90,
-        prompt: 30,
-        completion: 45,
-        cached: 15,
-        numRequests: 0,
-        completionDetails: {
-          reasoning: 0,
-          acceptedPrediction: 0,
-          rejectedPrediction: 0,
-          cacheReadInputTokens: 0,
-          cacheCreationInputTokens: 0,
+  it('starts a new map for a later run of the same evaluation object', async () => {
+    const evaluation = {};
+    await withTokenUsageTracking(async () => {
+      trackResponseUsage('target', { tokenUsage: { total: 100 } });
+      return evaluation;
+    });
+    const firstUsage = getProviderTokenUsage(evaluation);
+    await withTokenUsageTracking(async () => {
+      trackResponseUsage('target', { tokenUsage: { total: 3 } });
+      return evaluation;
+    });
+    expect(firstUsage.get('target')?.total).toBe(100);
+    expect(getProviderTokenUsage(evaluation).get('target')?.total).toBe(3);
+  });
+
+  it('seals completed accounting against late work that inherited its async context', async () => {
+    let release!: () => void;
+    const ready = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let lateWork!: Promise<void>;
+    const evaluation = await withTokenUsageTracking(async () => {
+      trackResponseUsage('target', { tokenUsage: { total: 1 } });
+      lateWork = ready.then(() => {
+        trackResponseUsage('target', { tokenUsage: { total: 100 } });
+        trackResponseUsage('late-attacker', { tokenUsage: { total: 1000 } });
+      });
+      return {};
+    });
+    release();
+    await lateWork;
+    expect([...getProviderTokenUsage(evaluation).keys()]).toEqual(['target']);
+    expect(getProviderTokenUsage(evaluation).get('target')?.total).toBe(1);
+  });
+
+  it('does not create process-wide accounting outside an evaluation', () => {
+    const debug = vi.spyOn(logger, 'debug');
+    trackResponseUsage('standalone', { tokenUsage: { total: 100 } });
+    expect(debug).not.toHaveBeenCalled();
+    expect(getProviderTokenUsage({}).size).toBe(0);
+  });
+
+  it('redacts URL credentials in provider IDs when logging response usage', async () => {
+    const debug = vi.spyOn(logger, 'debug').mockImplementation(() => logger);
+    await withTokenUsageTracking(async () => {
+      trackResponseUsage(
+        'https://api.example.com/v1?api_key=sk-12345678901234567890 (HttpProvider)',
+        {
+          tokenUsage: { total: 1 },
         },
-      },
+      );
+      return {};
     });
-  });
-
-  it('should reset provider usage', () => {
-    tracker.trackUsage('provider1', { total: 100 });
-    tracker.resetProviderUsage('provider1');
-    expect(tracker.getProviderUsage('provider1')).toBeUndefined();
-  });
-
-  it('should reset all usage', () => {
-    tracker.trackUsage('provider1', { total: 100 });
-    tracker.trackUsage('provider2', { total: 200 });
-    tracker.resetAllUsage();
-    expect(tracker.getProviderIds()).toHaveLength(0);
+    const messages = debug.mock.calls.map(([message]) => String(message)).join('\n');
+    expect(messages).toContain('api_key=%5BREDACTED%5D');
+    expect(messages).toContain('(HttpProvider)');
+    expect(messages).not.toContain('sk-12345678901234567890');
   });
 });
