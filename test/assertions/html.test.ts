@@ -364,6 +364,9 @@ describe('handleIsHtml', () => {
       { input: '<div />', tag: 'div' },
       { input: '<template><div>x</template>', tag: 'div' },
       { input: '<table><thead><tr><th>x</th></tr></table>', tag: 'thead' },
+      { input: '<svg><circle cx="1"', tag: 'svg' },
+      { input: '<svg><g><circle r="1"/></svg>', tag: 'g' },
+      { input: '<math><mi>x</math>', tag: 'mi' },
     ];
 
     unclosedExamples.forEach(({ input, tag }) => {
@@ -405,7 +408,12 @@ describe('handleIsHtml', () => {
   });
 
   it('should accept SVG and template wrappers', () => {
-    const fragments = ['<svg><circle /></svg>', '<template><div>x</div></template>'];
+    const fragments = [
+      '<svg><circle /></svg>',
+      '<svg><circle r="1"/></svg>',
+      '<svg viewBox="0 0 1 1"><path d="M0 0"/></svg>',
+      '<template><div>x</div></template>',
+    ];
 
     fragments.forEach(verifyValidHtml);
   });

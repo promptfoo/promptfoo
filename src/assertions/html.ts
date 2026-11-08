@@ -345,15 +345,23 @@ function canOmitEndTag(element: HtmlElement, tagName: string): boolean {
   return OPTIONAL_END_TAG_ELEMENTS.has(tagName);
 }
 
-function isUnclosedElement(element: HtmlElement, inputLowercase: string): boolean {
+function hasSelfClosingStartTag(element: HtmlElement, input: string): boolean {
+  const startTag = element.sourceCodeLocation?.startTag;
+  return (
+    startTag !== undefined && input.slice(startTag.startOffset, startTag.endOffset).endsWith('/>')
+  );
+}
+
+function isUnclosedElement(element: HtmlElement, input: string, inputLowercase: string): boolean {
   const tagName = element.tagName.toLowerCase();
   return (
-    element.namespaceURI === html.NS.HTML &&
     hasSourceCodeLocation(element) &&
     !element.sourceCodeLocation?.endTag &&
-    !VOID_HTML_ELEMENTS.has(tagName) &&
-    !canOmitEndTag(element, tagName) &&
-    isUserProvidedElement(element, inputLowercase)
+    (element.namespaceURI === html.NS.HTML
+      ? !VOID_HTML_ELEMENTS.has(tagName) &&
+        !canOmitEndTag(element, tagName) &&
+        isUserProvidedElement(element, inputLowercase)
+      : !hasSelfClosingStartTag(element, input))
   );
 }
 
@@ -398,7 +406,7 @@ function validateHtml(htmlString: string): { isValid: boolean; reason: string } 
   }
 
   const unclosedElement = findFirstElement(document, (element) =>
-    isUnclosedElement(element, inputLowercase),
+    isUnclosedElement(element, trimmed, inputLowercase),
   );
 
   if (unclosedElement) {
