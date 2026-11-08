@@ -667,9 +667,10 @@ class RunnerTests(unittest.TestCase):
         for name in ("openai-agents", "openai-agents-minimums", "openai-agents-otel"):
             with (
                 self.subTest(name=name),
-                mock_example_runtime(
-                    10 if name.endswith("minimums") else 12
-                ) as (run, _),
+                mock_example_runtime(10 if name.endswith("minimums") else 12) as (
+                    run,
+                    _,
+                ),
                 patch("examples.Path.is_file", return_value=True),
             ):
                 run_example(name)
