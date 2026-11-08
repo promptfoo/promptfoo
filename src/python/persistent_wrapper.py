@@ -373,6 +373,13 @@ def main():
             print(traceback.format_exc(), file=sys.stderr, flush=True)
 
 
+def _write_response(response_file: str, response: dict) -> None:
+    with open(response_file, "w", encoding="utf-8") as f:
+        json.dump(response, f, ensure_ascii=False)
+        f.flush()
+        os.fsync(f.fileno())  # Persist the full response before signaling Node.
+
+
 def handle_call(command_line, user_module, default_function_name):
     """Handle a CALL command."""
     response_file = None
@@ -382,20 +389,10 @@ def handle_call(command_line, user_module, default_function_name):
         # Note: Using pipe (|) delimiter to avoid conflicts with Windows drive letters (C:)
         parts = command_line.split("|", 3)
 
-        # Extract response_file first (always the last part) so it's available even if validation fails
-        # This ensures we can write an error response file if command format is invalid
-        if len(parts) >= 3:
-            response_file = parts[-1]
-
-        if len(parts) == 4:
-            # New format: CALL|<function_name>|<request_file>|<response_file>
-            _, function_name, request_file, _ = parts
-        elif len(parts) == 3:
-            # Legacy format: CALL|<request_file>|<response_file>
-            _, request_file, _ = parts
-            function_name = default_function_name
-        else:
+        if len(parts) < 3:
             raise ValueError(f"Invalid CALL command format: {command_line}")
+        request_file, response_file = parts[-2:]
+        function_name = parts[1] if len(parts) == 4 else default_function_name
 
         # Resolve the callable for this call
         method_callable = get_callable(user_module, function_name)
@@ -415,11 +412,7 @@ def handle_call(command_line, user_module, default_function_name):
                 "traceback": traceback.format_exc(),
             }
 
-        # Write response
-        with open(response_file, "w", encoding="utf-8") as f:
-            json.dump(response, f, ensure_ascii=False)
-            f.flush()  # Flush Python buffer
-            os.fsync(f.fileno())  # Force OS to write to disk (critical for Windows)
+        _write_response(response_file, response)
 
         # Verify file is readable before signaling done (prevents race conditions)
         # Retry up to 3 times with small delays if file isn't immediately readable
@@ -461,10 +454,7 @@ def handle_call(command_line, user_module, default_function_name):
                     "error": str(e),
                     "traceback": traceback.format_exc(),
                 }
-                with open(response_file, "w", encoding="utf-8") as f:
-                    json.dump(error_response, f, ensure_ascii=False)
-                    f.flush()
-                    os.fsync(f.fileno())
+                _write_response(response_file, error_response)
             except Exception as write_error:
                 print(
                     f"ERROR: Failed to write error response: {write_error}",
