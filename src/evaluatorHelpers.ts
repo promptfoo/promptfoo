@@ -23,7 +23,6 @@ import {
   type VarValue,
 } from './types/index';
 import { isAudioFile, isImageFile, isJavascriptFile, isVideoFile } from './util/fileExtensions';
-import { parseFileUrl } from './util/functions/loadFunction';
 import { renderVarsInObject, setLoadedFileMimeTypes } from './util/index';
 import invariant from './util/invariant';
 import { filterFiniteScores } from './util/numeric';
@@ -206,6 +205,19 @@ function getMimeTypeFromExtension(extension: string): string {
  * @param base64Data Base64 encoded image data
  * @returns MIME type string or null if format cannot be detected
  */
+// Matches the leading slash + Windows drive prefix from canonical `file:///C:/...`
+// URLs (e.g. `/C:/` or `/C:\`). Only stripped on Windows so POSIX paths that
+// legitimately start with `/X:` (a directory literally named `X:`) are preserved.
+const WIN32_DRIVE_PREFIX = /^\/[A-Za-z]:[\\/]/;
+
+function normalizeFileUri(fileUrl: string): string {
+  const urlWithoutProtocol = fileUrl.slice('file://'.length);
+  if (process.platform === 'win32' && WIN32_DRIVE_PREFIX.test(urlWithoutProtocol)) {
+    return urlWithoutProtocol.slice(1);
+  }
+  return urlWithoutProtocol;
+}
+
 function detectMimeFromBase64(base64Data: string): string | null {
   // Check magic numbers at the start of base64 data
   if (base64Data.startsWith('/9j/')) {
@@ -337,7 +349,7 @@ export async function renderPrompt(
   async function resolveNestedFileRefs(value: unknown): Promise<unknown> {
     if (typeof value === 'string' && value.startsWith('file://')) {
       const basePath = cliState.basePath || '';
-      const { filePath: parsedPath } = parseFileUrl(value);
+      const parsedPath = normalizeFileUri(value);
       const filePath = path.resolve(process.cwd(), basePath, parsedPath);
       const fileExtension = filePath.split('.').pop()?.toLowerCase();
 
@@ -400,7 +412,7 @@ export async function renderPrompt(
 
     if (typeof value === 'string' && value.startsWith('file://')) {
       const basePath = cliState.basePath || '';
-      const { filePath: parsedPath } = parseFileUrl(value);
+      const parsedPath = normalizeFileUri(value);
       const filePath = path.resolve(process.cwd(), basePath, parsedPath);
       const fileExtension = filePath.split('.').pop();
 
