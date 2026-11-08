@@ -3674,21 +3674,19 @@ async function filterCompletedResumeSteps(
   store: EvaluationStore,
 ) {
   if (!cliState.resume || !store.persisted) {
-    return;
+    return runEvalOptions;
   }
 
+  let pending = runEvalOptions;
   try {
     const completedPairs = await store.readCompletedIndexPairs({
       excludeErrors: cliState.retryMode,
     });
-    const originalCount = runEvalOptions.length;
-    for (let i = runEvalOptions.length - 1; i >= 0; i--) {
-      const step = runEvalOptions[i];
-      if (completedPairs.has(`${step.testIdx}:${step.promptIdx}`)) {
-        runEvalOptions.splice(i, 1);
-      }
+    if (completedPairs.size === 0) {
+      return runEvalOptions;
     }
-    const skipped = originalCount - runEvalOptions.length;
+    pending = runEvalOptions.filter((step) => !completedPairs.has(getResultIndexKey(step)));
+    const skipped = runEvalOptions.length - pending.length;
     if (skipped > 0) {
       logger.info(`Resuming: skipping ${skipped} previously completed cases`);
     }
@@ -3697,6 +3695,7 @@ async function filterCompletedResumeSteps(
       `Resume: failed to load completed results. Running full evaluation. ${String(err)}`,
     );
   }
+  return pending;
 }
 
 function adjustConcurrencyForSerialFeatures({
@@ -5821,7 +5820,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       vars.add(varName);
     }
     let concurrency = options.maxConcurrency || DEFAULT_MAX_CONCURRENCY;
-    const runEvalOptions = await buildRunEvalOptions({
+    let runEvalOptions = await buildRunEvalOptions({
       concurrency,
       conversations: this.conversations,
       evalId: this.store.id,
@@ -5842,7 +5841,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       }
     }
     const repeatCacheContextByTestIdx = buildRepeatCacheContextByTestIdx(runEvalOptions);
-    await filterCompletedResumeSteps(runEvalOptions, this.store);
+    runEvalOptions = await filterCompletedResumeSteps(runEvalOptions, this.store);
 
     const concurrencySettings = adjustConcurrencyForSerialFeatures({
       concurrency,
