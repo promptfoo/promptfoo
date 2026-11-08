@@ -161,6 +161,14 @@ function getMaxMcpToolCalls(config: AnthropicMessageOptions): number {
   return Math.floor(config.max_tool_calls);
 }
 
+/**
+ * The model the API reports as having served the reply. It can differ from the requested
+ * model name (for example, an alias).
+ */
+function getServedModel(message: { model?: unknown } | undefined): string | undefined {
+  return typeof message?.model === 'string' && message.model ? message.model : undefined;
+}
+
 function getMcpContinuationParams(
   params: Anthropic.Messages.MessageCreateParams,
   messages: Anthropic.Messages.MessageCreateParams['messages'],
@@ -887,10 +895,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       logger.warn(refusalDetails);
     }
 
-    // The model the API reports as having served the reply; it can differ from the
-    // requested model name (for example, an alias).
-    const servedModel =
-      typeof message.model === 'string' && message.model ? message.model : undefined;
+    const servedModel = getServedModel(message);
     const metadata = {
       ...(servedModel && { model: servedModel }),
       ...(fileReferences.length > 0 && { fileReferences }),
@@ -1209,11 +1214,16 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
         // max_tool_calls was exceeded — tokens were still spent across the loop,
         // so surface the cost alongside the error so it doesn't disappear from
         // eval cost tracking.
+        const servedModel = getServedModel(resolvedMessage);
+        const errorMetadata = {
+          ...(servedModel && { model: servedModel }),
+          ...mcpMetadata,
+        };
         return {
           error,
           tokenUsage: getTokenUsage(resolvedMessage, false),
           cost,
-          ...(mcpMetadata ? { metadata: mcpMetadata } : {}),
+          ...(Object.keys(errorMetadata).length > 0 && { metadata: errorMetadata }),
         };
       }
 

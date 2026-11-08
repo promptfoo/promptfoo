@@ -2356,9 +2356,10 @@ describe('AnthropicMessagesProvider', () => {
 
       vi.spyOn(provider.anthropic.messages, 'create')
         .mockResolvedValueOnce(createSearchTurn() as Anthropic.Messages.Message)
-        .mockResolvedValueOnce(
-          createSearchTurn('toolu_second', 'solar', 8, 4) as Anthropic.Messages.Message,
-        );
+        .mockResolvedValueOnce({
+          ...createSearchTurn('toolu_second', 'solar', 8, 4),
+          model: 'claude-sonnet-4-6-20260101',
+        } as Anthropic.Messages.Message);
 
       const result = await provider.callApi('Find clean energy companies');
 
@@ -2368,6 +2369,7 @@ describe('AnthropicMessagesProvider', () => {
       expect(result.metadata?.toolCalls).toMatchObject([
         { id: 'toolu_first', name: 'search_companies', is_error: false },
       ]);
+      expect(result.metadata?.model).toBe('claude-sonnet-4-6-20260101');
     });
 
     it('returns an error when MCP tool execution exceeds max_tool_calls', async () => {
