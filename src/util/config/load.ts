@@ -666,7 +666,7 @@ async function prepareCombinedConfig(
     (config) => typeof config.prompts === 'string' || Array.isArray(config.prompts),
   );
 
-  let prompts: UnifiedConfig['prompts'] = configsAreStringOrArray ? [] : {};
+  const promptLabels = configsAreStringOrArray ? undefined : new Map<string, string>();
   const promptBasePaths = new Map<string | Prompt, string>();
 
   const resolveConfigPath = (basePath: string, reference: string): string => {
@@ -767,10 +767,10 @@ async function prepareCombinedConfig(
   };
   configSources.forEach(({ config, basePath }) => {
     if (typeof config.prompts === 'string') {
-      invariant(Array.isArray(prompts), 'Cannot mix string and map-type prompts');
+      invariant(!promptLabels, 'Cannot mix string and map-type prompts');
       addPrompt(basePath, config.prompts);
     } else if (Array.isArray(config.prompts)) {
-      invariant(Array.isArray(prompts), 'Cannot mix configs with map and array-type prompts');
+      invariant(!promptLabels, 'Cannot mix configs with map and array-type prompts');
       config.prompts.forEach((prompt) => {
         invariant(
           typeof prompt === 'string' ||
@@ -782,27 +782,19 @@ async function prepareCombinedConfig(
       });
     } else {
       // Object format such as { 'prompts/prompt1.txt': 'foo', 'prompts/prompt2.txt': 'bar' }
-      invariant(
-        typeof prompts === 'object' && !Array.isArray(prompts),
-        'Cannot mix configs with map and array-type prompts',
-      );
-      prompts = {
-        ...prompts,
-        ...Object.fromEntries(
-          Object.entries(config.prompts).map(([prompt, label]) => {
-            const absolutePrompt = prompt.startsWith('file://')
-              ? resolveConfigPath(basePath, prompt)
-              : prompt;
-            promptBasePaths.set(absolutePrompt, basePath);
-            return [absolutePrompt, label];
-          }),
-        ),
-      };
+      invariant(promptLabels, 'Cannot mix configs with map and array-type prompts');
+      for (const [prompt, label] of Object.entries(config.prompts)) {
+        const absolutePrompt = prompt.startsWith('file://')
+          ? resolveConfigPath(basePath, prompt)
+          : prompt;
+        promptBasePaths.set(absolutePrompt, basePath);
+        promptLabels.set(absolutePrompt, label);
+      }
     }
   });
-  if (Array.isArray(prompts)) {
-    prompts.push(...promptBasePaths.keys());
-  }
+  const prompts = promptLabels
+    ? Object.fromEntries(promptLabels)
+    : Array.from(promptBasePaths.keys());
 
   let scenarios: UnifiedConfig['scenarios'];
   for (const { config, basePath } of configSources) {

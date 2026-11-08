@@ -122,6 +122,12 @@ describe('suite environment loading', () => {
     return configPath;
   }
 
+  it('combines prompt lists larger than the JavaScript function argument limit', async () => {
+    const prompts = Array.from({ length: 140_000 }, (_, index) => `prompt ${index}`);
+    const file = writeConfig('many-prompts', { prompts });
+    expect((await combineConfigs([file])).prompts).toEqual(prompts);
+  });
+
   it('accepts numeric and boolean env values from config files', async () => {
     const configPath = writeConfig('env-value-types', {
       env: {
