@@ -860,6 +860,7 @@ async function renderRunEvalPrompt({
   isRedteam,
   provider,
   promptForRender,
+  registers,
   test,
   testSuite,
   vars,
@@ -868,19 +869,24 @@ async function renderRunEvalPrompt({
   isRedteam: boolean;
   provider: ApiProvider;
   promptForRender: Prompt;
+  registers?: Record<string, unknown>;
   test: AtomicTestCase;
   testSuite?: TestSuite;
   vars: Vars;
 }): Promise<RenderedRunEvalPrompt> {
-  const skipRenderVars = shouldSkipRedteamInjectVar(test, testSuite, isRedteam)
-    ? [getRedteamInjectVar(test, promptForRender, testSuite)]
+  const redteamInjectVar = shouldSkipRedteamInjectVar(test, testSuite, isRedteam)
+    ? getRedteamInjectVar(test, promptForRender, testSuite)
     : undefined;
+  const skipRenderVars = [
+    ...(redteamInjectVar ? [redteamInjectVar] : []),
+    ...(registers ? Object.keys(registers) : []),
+  ];
   const renderedPrompt = await renderPrompt(
     promptForRender,
     vars,
     filters,
     provider,
-    skipRenderVars,
+    skipRenderVars.length > 0 ? skipRenderVars : undefined,
   );
   if (isRedteam) {
     throwIfTargetPromptExceedsMaxChars(renderedPrompt, testSuite?.redteam?.maxCharsPerMessage);
@@ -1830,6 +1836,7 @@ async function runEvalInternal(
       isRedteam,
       provider,
       promptForRender: state.promptForRender,
+      registers,
       test,
       testSuite,
       vars: state.vars,

@@ -599,6 +599,112 @@ describe('evaluatorHelpers', () => {
 
         expect(renderedPrompt).toBe(dateObj.toString());
       });
+
+      it('should resolve shared object aliases consistently across branches', async () => {
+        const shared = { content: 'file://shared.txt' };
+        const prompt = toPrompt('A: {{ a.content }} B: {{ b.content }}');
+        const vars = { a: shared, b: shared };
+
+        vi.spyOn(fs, 'readFileSync').mockReturnValue('shared content');
+
+        const renderedPrompt = await renderPrompt(prompt, vars, {});
+
+        expect(renderedPrompt).toBe('A: shared content B: shared content');
+      });
+
+      it('should detect plain objects even if they have an own constructor property', async () => {
+        const prompt = toPrompt('{{ item.text }} (type: {{ item.constructor }})');
+        const vars = {
+          item: {
+            constructor: 'custom-type',
+            text: 'file://item.txt',
+          },
+        };
+
+        vi.spyOn(fs, 'readFileSync').mockReturnValueOnce('resolved text');
+
+        const renderedPrompt = await renderPrompt(prompt, vars, {});
+
+        expect(renderedPrompt).toBe('resolved text (type: custom-type)');
+      });
+
+      it('should preserve __proto__ as an own key safely without prototype pollution', async () => {
+        const prompt = toPrompt('{{ item.label }}');
+        const vars = {
+          item: {
+            __proto__: 'metadata',
+            label: 'file://label.txt',
+          },
+        };
+
+        vi.spyOn(fs, 'readFileSync').mockReturnValueOnce('safe label');
+
+        const renderedPrompt = await renderPrompt(prompt, vars, {});
+
+        expect(renderedPrompt).toBe('safe label');
+      });
+
+      it('should leave nested JS and Python script references unresolved', async () => {
+        const prompt = toPrompt('JS: {{ config.jsScript }} PY: {{ config.pyScript }}');
+        const vars = {
+          config: {
+            jsScript: 'file://helpers/script.js',
+            pyScript: 'file://helpers/script.py',
+          },
+        };
+
+        const renderedPrompt = await renderPrompt(prompt, vars, {});
+
+        expect(fsMocks.readFileSync).not.toHaveBeenCalled();
+        expect(renderedPrompt).toBe('JS: file://helpers/script.js PY: file://helpers/script.py');
+      });
+
+      it('should extract text from nested PDF file references', async () => {
+        const prompt = toPrompt('PDF: {{ doc.content }}');
+        const vars = {
+          doc: { content: 'file://document.pdf' },
+        };
+
+        const renderedPrompt = await renderPrompt(prompt, vars, {});
+
+        expect(renderedPrompt).toBe('PDF: Extracted PDF text');
+      });
+
+      it('should load nested image files as data URLs', async () => {
+        const prompt = toPrompt('Img: {{ asset.image }}');
+        const vars = {
+          asset: { image: 'file://photo.png' },
+        };
+
+        const samplePngBase64 =
+          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+        vi.spyOn(fs, 'readFileSync').mockReturnValueOnce(
+          Buffer.from(samplePngBase64, 'base64') as any,
+        );
+
+        const renderedPrompt = await renderPrompt(prompt, vars, {});
+
+        expect(renderedPrompt).toContain('data:image/png;base64,');
+      });
+
+      it('should load nested audio files and register M4A mime type for google provider', async () => {
+        const prompt = toPrompt('Audio: {{ track.audio }}');
+        const vars = {
+          track: { audio: 'file://recording.m4a' },
+        };
+
+        const mockGoogleProvider = {
+          id: () => 'google-audio',
+          callApi: vi.fn(),
+          getAudioInputFormat: () => 'google' as const,
+        };
+
+        vi.spyOn(fs, 'readFileSync').mockReturnValueOnce(Buffer.from('m4a-data') as any);
+
+        const renderedPrompt = await renderPrompt(prompt, vars, {}, mockGoogleProvider as any);
+
+        expect(renderedPrompt).toBe(`Audio: ${Buffer.from('m4a-data').toString('base64')}`);
+      });
     });
 
     describe('with PROMPTFOO_DISABLE_TEMPLATING', () => {

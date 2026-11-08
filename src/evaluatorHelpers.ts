@@ -251,7 +251,7 @@ export async function renderPrompt(
 
   let basePrompt = prompt.raw;
 
-  const visitedObjects = new WeakSet<object>();
+  const resolvedCache = new WeakMap<object, unknown>();
 
   /**
    * Recursively walks a plain-object or array value and replaces every string
@@ -264,7 +264,13 @@ export async function renderPrompt(
     if (typeof value === 'string' && value.startsWith('file://')) {
       const basePath = cliState.basePath || '';
       const filePath = path.resolve(process.cwd(), basePath, value.slice('file://'.length));
-      const fileExtension = filePath.split('.').pop();
+      const fileExtension = filePath.split('.').pop()?.toLowerCase();
+
+      // Leave nested script references (JS, Python, etc.) unresolved:
+      // Script variables must be evaluated at top-level only, where varName and vars context exist.
+      if (isJavascriptFile(filePath) || fileExtension === 'py') {
+        return value;
+      }
 
       logger.debug(`Loading nested file reference from: ${filePath}`);
 
@@ -312,33 +318,56 @@ export async function renderPrompt(
     }
 
     if (Array.isArray(value)) {
-      if (visitedObjects.has(value)) {
-        return value;
+      if (resolvedCache.has(value)) {
+        return resolvedCache.get(value);
       }
-      visitedObjects.add(value);
-      return Promise.all(value.map(resolveNestedFileRefs));
+      const arr: unknown[] = [];
+      resolvedCache.set(value, arr);
+      const resolvedItems = await Promise.all(value.map(resolveNestedFileRefs));
+      for (const item of resolvedItems) {
+        arr.push(item);
+      }
+      return arr;
     }
 
     // Only recurse into plain objects; preserve Date, Buffer, Map, Set, and other class instances
-    if (
-      typeof value === 'object' &&
-      value !== null &&
-      (value.constructor === Object || Object.getPrototypeOf(value) === null)
-    ) {
-      if (visitedObjects.has(value)) {
-        return value;
-      }
-      visitedObjects.add(value);
-      const result: Record<string, unknown> = {};
-      for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
-        // Exclude conversation history from file resolution (runtime provider output is untrusted)
-        if (k === '_conversation') {
-          result[k] = v;
-        } else {
-          result[k] = await resolveNestedFileRefs(v);
+    if (typeof value === 'object' && value !== null) {
+      const proto = Object.getPrototypeOf(value);
+      if (proto === Object.prototype || proto === null) {
+        if (resolvedCache.has(value)) {
+          return resolvedCache.get(value);
         }
+        const result: Record<string, unknown> = Object.create(proto);
+        resolvedCache.set(value, result);
+        for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+          // Exclude conversation history from file resolution (runtime provider output is untrusted)
+          if (k === '_conversation') {
+            if (k === '__proto__') {
+              Object.defineProperty(result, k, {
+                value: v,
+                enumerable: true,
+                configurable: true,
+                writable: true,
+              });
+            } else {
+              result[k] = v;
+            }
+          } else {
+            const resolvedVal = await resolveNestedFileRefs(v);
+            if (k === '__proto__') {
+              Object.defineProperty(result, k, {
+                value: resolvedVal,
+                enumerable: true,
+                configurable: true,
+                writable: true,
+              });
+            } else {
+              result[k] = resolvedVal;
+            }
+          }
+        }
+        return result;
       }
-      return result;
     }
 
     return value;

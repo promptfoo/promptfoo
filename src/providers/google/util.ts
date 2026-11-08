@@ -1904,7 +1904,7 @@ function processImagesInContents(
 
   const base64ToMimeType = new Map<string, string>();
 
-  for (const value of Object.values(contextVars)) {
+  function registerMediaValue(value: unknown) {
     if (typeof value === 'string') {
       let mimeType = getMimeTypeFromBase64(value);
       // Generic MP4 brands need audio provenance bound to the current loaded bytes.
@@ -1919,7 +1919,19 @@ function processImagesInContents(
       if (mimeType && (mimeType !== 'video/mp4' || base64ToMimeType.get(value) !== 'audio/mp4')) {
         base64ToMimeType.set(value, mimeType);
       }
+    } else if (Array.isArray(value)) {
+      for (const item of value) {
+        registerMediaValue(item);
+      }
+    } else if (typeof value === 'object' && value !== null) {
+      for (const val of Object.values(value)) {
+        registerMediaValue(val);
+      }
     }
+  }
+
+  for (const value of Object.values(contextVars)) {
+    registerMediaValue(value);
   }
 
   return contents.map((content) => {
