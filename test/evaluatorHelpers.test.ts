@@ -13,6 +13,7 @@ import {
 } from '../src/evaluatorHelpers';
 import logger from '../src/logger';
 import { AIStudioChatProvider } from '../src/providers/google/ai.studio';
+import { geminiFormatAndSystemInstructions } from '../src/providers/google/util';
 import { runPython } from '../src/python/pythonUtils';
 import { transform } from '../src/util/transform';
 import { createMockProvider } from './factories/provider';
@@ -631,10 +632,7 @@ describe('evaluatorHelpers', () => {
       it('should preserve __proto__ as an own key safely without prototype pollution', async () => {
         const prompt = toPrompt('{{ item.label }}');
         const vars = {
-          item: {
-            __proto__: 'metadata',
-            label: 'file://label.txt',
-          },
+          item: JSON.parse('{"__proto__": "metadata", "label": "file://label.txt"}'),
         };
 
         vi.spyOn(fs, 'readFileSync').mockReturnValueOnce('safe label');
@@ -642,6 +640,7 @@ describe('evaluatorHelpers', () => {
         const renderedPrompt = await renderPrompt(prompt, vars, {});
 
         expect(renderedPrompt).toBe('safe label');
+        expect(Object.prototype.hasOwnProperty.call(vars.item, '__proto__')).toBe(true);
       });
 
       it('should leave nested JS and Python script references unresolved', async () => {
@@ -689,6 +688,7 @@ describe('evaluatorHelpers', () => {
 
       it('should load nested audio files and register M4A mime type for google provider', async () => {
         const prompt = toPrompt('Audio: {{ track.audio }}');
+        const bytes = Buffer.from('000000186674797069736f6d0000000069736f6d6d703432', 'hex');
         const vars = {
           track: { audio: 'file://recording.m4a' },
         };
@@ -699,11 +699,18 @@ describe('evaluatorHelpers', () => {
           getAudioInputFormat: () => 'google' as const,
         };
 
-        vi.spyOn(fs, 'readFileSync').mockReturnValueOnce(Buffer.from('m4a-data') as any);
+        vi.spyOn(fs, 'readFileSync').mockReturnValueOnce(bytes as any);
 
         const renderedPrompt = await renderPrompt(prompt, vars, {}, mockGoogleProvider as any);
 
-        expect(renderedPrompt).toBe(`Audio: ${Buffer.from('m4a-data').toString('base64')}`);
+        expect(renderedPrompt).toBe(`Audio: ${bytes.toString('base64')}`);
+        const { contents } = geminiFormatAndSystemInstructions(bytes.toString('base64'), vars);
+        expect(contents[0].parts[0]).toEqual({
+          inlineData: {
+            mimeType: 'audio/mp4',
+            data: bytes.toString('base64'),
+          },
+        });
       });
     });
 

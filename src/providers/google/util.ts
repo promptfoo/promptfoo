@@ -1930,7 +1930,10 @@ function processImagesInContents(
     }
   }
 
-  for (const value of Object.values(contextVars)) {
+  for (const [key, value] of Object.entries(contextVars || {})) {
+    if (key === '_conversation') {
+      continue;
+    }
     registerMediaValue(value);
   }
 

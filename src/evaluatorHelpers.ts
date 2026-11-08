@@ -323,9 +323,8 @@ export async function renderPrompt(
       }
       const arr: unknown[] = [];
       resolvedCache.set(value, arr);
-      const resolvedItems = await Promise.all(value.map(resolveNestedFileRefs));
-      for (const item of resolvedItems) {
-        arr.push(item);
+      for (const item of value) {
+        arr.push(await resolveNestedFileRefs(item));
       }
       return arr;
     }
