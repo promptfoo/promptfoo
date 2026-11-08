@@ -696,7 +696,7 @@ async function loadTestsFromGlobWithEnv(
 
     // Handle xlsx/xls files with optional sheet specifier (e.g., file.xlsx#Sheet1)
     const normalizedTestFile = testFile.toLowerCase();
-    const fileWithoutSheet = normalizedTestFile.split('#')[0];
+    const fileWithoutSheet = path.basename(testFile).split('#')[0].toLowerCase();
     if (
       normalizedTestFile.endsWith('.csv') ||
       testFile.startsWith('https://docs.google.com/spreadsheets/') ||
@@ -770,8 +770,18 @@ export async function readTestConfigs(
 }
 
 function usesYamlTestLoader(source: string): boolean {
-  // Preserve legacy lowercase suffix routing; extend case matching only to real extensions.
-  return source.endsWith('yaml') || source.endsWith('yml') || /\.ya?ml$/i.test(source);
+  const localPath = source.replace(/^file:\/\//, '');
+  const pathWithoutFunction = stripFunctionSuffix(localPath);
+  // Preserve legacy suffix routing; extend case matching only for local file extensions.
+  return (
+    source.endsWith('yaml') ||
+    source.endsWith('yml') ||
+    (!isRemoteTestsReference(source) &&
+      !isJavascriptFile(pathWithoutFunction) &&
+      !pathWithoutFunction.endsWith('.py') &&
+      stripSheetSelector(localPath) === localPath &&
+      /\.ya?ml$/i.test(localPath))
+  );
 }
 
 async function readTestsWithEnv(
@@ -838,7 +848,7 @@ async function readTestsWithEnv(
       const pathWithoutScheme = globOrTest.replace(/^file:\/\//, '');
       const pathWithoutFunction = stripFunctionSuffix(pathWithoutScheme);
       // Handle xlsx/xls files with optional sheet specifier (e.g., file.xlsx#Sheet1)
-      const pathWithoutSheet = globOrTest.split('#')[0].toLowerCase();
+      const pathWithoutSheet = path.basename(globOrTest).split('#')[0].toLowerCase();
       // Read standalone sources, then resolve provider and vars references for local rows.
       if (
         isRemoteTestsReference(globOrTest) ||

@@ -167,6 +167,110 @@ describe('test data file extension matching', () => {
     },
   );
 
+  it.each([
+    'suite.XLSX#archive',
+    'suite.XlS#archive',
+    'suite.xlsx#archive',
+    'suite.xls#archive',
+    'plain',
+  ])('does not infer the data format from the parent directory %s', async (folder) => {
+    const nested = path.join(directory, folder);
+    fs.mkdirSync(nested);
+    fs.writeFileSync(path.join(nested, 'vars.yaml'), 'value: child');
+    fs.writeFileSync(path.join(nested, 'cases.yaml'), JSON.stringify([{ vars: 'vars.yaml' }]));
+    const reference = path.join(folder, 'cases.yaml');
+    for (const read of [readTests, readTestConfigs]) {
+      expect((await read(reference, directory)).map((test) => test.vars)).toEqual([
+        { value: 'child' },
+      ]);
+      expect((await read([reference], directory)).map((test) => test.vars)).toEqual([
+        { value: 'child' },
+      ]);
+    }
+    expect(resolveTestsWatchPaths(reference, directory)).toEqual([
+      path.join(nested, 'cases.yaml'),
+      path.join(nested, 'vars.yaml'),
+    ]);
+  });
+
+  it.each(['suite.XLSX#archive', 'suite.XlS#archive'])(
+    'keeps unknown extension routing below the parent directory %s',
+    async (folder) => {
+      const nested = path.join(directory, folder);
+      fs.mkdirSync(nested);
+      fs.writeFileSync(path.join(nested, 'cases.unknown'), JSON.stringify(tests));
+      const reference = path.join(folder, 'cases.unknown');
+      for (const read of [readTests, readTestConfigs]) {
+        await expect(read(reference, directory)).resolves.toEqual([]);
+        await expect(read([reference], directory)).rejects.toThrow(
+          'Unsupported file type for test file:',
+        );
+      }
+    },
+  );
+
+  for (const prefix of ['', 'file://']) {
+    it.each(['rows.YAML', 'rows.YmL', 'make_YAML', 'rows.yaml'])(
+      `preserves the data-looking suffix in a function selector ${prefix}%s`,
+      async (functionName) => {
+        const nested = path.join(directory, 'Generator');
+        fs.mkdirSync(nested);
+        fs.writeFileSync(path.join(directory, 'vars.yaml'), 'value: config-directory');
+        fs.writeFileSync(path.join(nested, 'vars.yaml'), 'value: generator-directory');
+        fs.writeFileSync(
+          path.join(nested, 'cases.cjs'),
+          `exports[${JSON.stringify(functionName)}] = () => [{ vars: 'vars.yaml' }];`,
+        );
+        const reference = `${prefix}Generator/cases.cjs:${functionName}`;
+
+        for (const read of [readTests, readTestConfigs]) {
+          const scalarValue =
+            functionName === 'rows.yaml' ? 'generator-directory' : 'config-directory';
+          expect((await read(reference, directory)).map((test) => test.vars)).toEqual([
+            { value: scalarValue },
+          ]);
+          for (const input of [[reference], { path: reference }]) {
+            expect((await read(input, directory)).map((test) => test.vars)).toEqual([
+              { value: 'config-directory' },
+            ]);
+          }
+        }
+        expect(resolveTestsWatchPaths(reference, directory)).toEqual([
+          path.join(nested, 'cases.cjs'),
+        ]);
+      },
+    );
+
+    it.each(['Rows.YAML', 'Rows.YmL', 'ordinary', 'Legacy.yaml'])(
+      `preserves the data-looking suffix in a sheet selector ${prefix}%s`,
+      async (sheet) => {
+        const filename = 'Cases.xlsx';
+        fs.copyFileSync(
+          path.resolve(__dirname, '../fixtures/test-data-extension-selectors.xlsx'),
+          path.join(directory, filename),
+        );
+        const reference = `${prefix}${filename}#${sheet}`;
+        const expected = [{ value: 'first' }, { value: 'second' }];
+
+        for (const read of [readTests, readTestConfigs]) {
+          if (sheet === 'Legacy.yaml') {
+            await expect(read(reference, directory)).rejects.toThrow(
+              'No test files found for path:',
+            );
+          } else {
+            expect((await read(reference, directory)).map((test) => test.vars)).toEqual(expected);
+          }
+          for (const input of [[reference], { path: reference }]) {
+            expect((await read(input, directory)).map((test) => test.vars)).toEqual(expected);
+          }
+        }
+        expect(resolveTestsWatchPaths(reference, directory)).toEqual([
+          path.join(directory, filename),
+        ]);
+      },
+    );
+  }
+
   it('keeps the existing behavior for unknown data extensions', async () => {
     fs.writeFileSync(path.join(directory, 'ExampleData.unknown'), JSON.stringify(tests));
     await expect(readStandaloneTestsFile('ExampleData.unknown', directory)).resolves.toEqual([]);
