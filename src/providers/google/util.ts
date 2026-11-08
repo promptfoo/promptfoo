@@ -1911,7 +1911,7 @@ function processImagesInContents(
       if (
         mimeType === 'video/mp4' &&
         !isDataUrl(value) &&
-        getLoadedFileMimeType(contextVars, value) === 'audio/mp4'
+        getLoadedFileMimeType(contextVars || {}, value) === 'audio/mp4'
       ) {
         mimeType = 'audio/mp4';
       }

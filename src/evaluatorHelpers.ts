@@ -342,16 +342,7 @@ export async function renderPrompt(
         for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
           // Exclude conversation history from file resolution (runtime provider output is untrusted)
           if (k === '_conversation') {
-            if (k === '__proto__') {
-              Object.defineProperty(result, k, {
-                value: v,
-                enumerable: true,
-                configurable: true,
-                writable: true,
-              });
-            } else {
-              result[k] = v;
-            }
+            result[k] = v;
           } else {
             const resolvedVal = await resolveNestedFileRefs(v);
             if (k === '__proto__') {
