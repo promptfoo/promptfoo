@@ -1,3 +1,5 @@
+import path from 'node:path';
+
 import type { CsvRow } from '../types/index';
 
 function getSheetIndex(sheetSpecifier: string | undefined, sheetNames: string[]): number {
@@ -36,7 +38,9 @@ export async function parseXlsxFile(filePath: string): Promise<CsvRow[]> {
   try {
     // Parse file path and optional sheet name
     // Supports syntax: file.xlsx#SheetName or file.xlsx#2 (1-based index)
-    const [actualFilePath, sheetSpecifier] = filePath.split('#');
+    const filenameStart = filePath.lastIndexOf(path.basename(filePath));
+    const [filename, sheetSpecifier] = filePath.slice(filenameStart).split('#');
+    const actualFilePath = filePath.slice(0, filenameStart) + filename;
 
     // Try to import read-excel-file first to give proper error if not installed
     let readXlsxFile: typeof import('read-excel-file/node').default;
