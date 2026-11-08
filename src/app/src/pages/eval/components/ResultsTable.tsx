@@ -75,7 +75,7 @@ import './ResultsTable.css';
 
 import { NumberInput } from '@app/components/ui/number-input';
 import { isEncodingStrategy } from '@promptfoo/redteam/constants/strategies';
-import { useMetricsGetter, usePassingTestCounts, usePassRates, useTestCounts } from './hooks';
+import { useMetricsGetter, usePromptPassMetrics } from './hooks';
 import {
   getNamedMetricTotals,
   parseEvalOutputPromptHash,
@@ -1637,7 +1637,8 @@ function ResultsTable({
     isFetching,
     filters,
   } = useTableStore();
-  const { inComparisonMode, comparisonEvalIds } = useResultsViewSettingsStore();
+  const { inComparisonMode, comparisonEvalIds, renderMarkdown, stickyHeader, setStickyHeader } =
+    useResultsViewSettingsStore();
   const { setFilterMode } = useFilterMode();
 
   const { showToast } = useToast();
@@ -1991,9 +1992,7 @@ function ResultsTable({
     // Removed filters.appliedCount since appliedFiltersString covers it
   ]);
 
-  const testCounts = useTestCounts();
-  const passingTestCounts = usePassingTestCounts();
-  const passRates = usePassRates();
+  const { testCounts, passingTestCounts, passRates } = usePromptPassMetrics();
   const getMetrics = useMetricsGetter();
 
   const numAsserts = React.useMemo(
@@ -2016,7 +2015,6 @@ function ResultsTable({
 
   const columnHelper = React.useMemo(() => createColumnHelper<EvaluateTableRow>(), []);
 
-  const { renderMarkdown } = useResultsViewSettingsStore();
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   const variableColumns = React.useMemo(() => {
     if (head.vars.length > 0) {
@@ -2263,8 +2261,6 @@ function ResultsTable({
     onColumnSizingChange: setColumnSizing,
     enableColumnResizing: true,
   });
-
-  const { stickyHeader, setStickyHeader } = useResultsViewSettingsStore();
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
