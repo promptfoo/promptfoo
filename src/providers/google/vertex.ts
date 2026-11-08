@@ -359,6 +359,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
       providerId: this.id(),
       temperature: llama?.temperature ?? this.config.temperature,
       topP: llama?.top_p ?? this.config.topP,
+      topK: llama?.top_k,
       maxTokens: llama?.max_tokens ?? (this.config.maxOutputTokens || this.config.max_tokens),
       testIndex: context?.testIdx ?? (context?.test?.vars?.__testIdx as number | undefined),
       promptLabel: context?.prompt?.label,

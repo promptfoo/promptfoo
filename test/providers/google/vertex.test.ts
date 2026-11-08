@@ -3536,6 +3536,7 @@ describe('VertexChatProvider.callLlamaApi', () => {
         maxTokens: expected,
         temperature: 0.2,
         topP: 0.9,
+        topK: 40,
       });
     },
   );
