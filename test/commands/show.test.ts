@@ -1,3 +1,4 @@
+import chalk from 'chalk';
 import { Command } from 'commander';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { handleDataset, handleEval, handlePrompt, showCommand } from '../../src/commands/show';
@@ -76,8 +77,8 @@ describe('show command', () => {
         raw: 'test',
         label: 'Test Prompt',
       };
-      vi.mocked(getPromptFromHash).mockResolvedValue({
-        id: promptId,
+      vi.mocked(getPromptFromHash).mockResolvedValueOnce({
+        id: `${promptId}-full-hash`,
         prompt: mockPrompt,
         evals: [],
       } as any);
@@ -85,13 +86,15 @@ describe('show command', () => {
       await showCommand(program);
       await program.parseAsync(['node', 'test', 'show', promptId]);
 
-      expect(getPromptFromHash).toHaveBeenCalledWith(promptId);
+      expect(getPromptFromHash).toHaveBeenCalledExactlyOnceWith(promptId);
+      expect(getDatasetFromHash).not.toHaveBeenCalled();
+      expect(logger.info).toHaveBeenCalledWith(chalk.bold(`Prompt ${promptId}`));
     });
 
     it('should show dataset if id matches dataset', async () => {
       const datasetId = 'dataset123';
-      vi.mocked(getDatasetFromHash).mockResolvedValue({
-        id: datasetId,
+      vi.mocked(getDatasetFromHash).mockResolvedValueOnce({
+        id: `${datasetId}-full-hash`,
         prompts: [],
         recentEvalDate: new Date(),
         recentEvalId: 'eval123',
@@ -102,7 +105,9 @@ describe('show command', () => {
       await showCommand(program);
       await program.parseAsync(['node', 'test', 'show', datasetId]);
 
-      expect(getDatasetFromHash).toHaveBeenCalledWith(datasetId);
+      expect(getPromptFromHash).toHaveBeenCalledBefore(vi.mocked(getDatasetFromHash));
+      expect(getDatasetFromHash).toHaveBeenCalledExactlyOnceWith(datasetId);
+      expect(logger.info).toHaveBeenCalledWith(chalk.bold(`Dataset ${datasetId}`));
     });
 
     it('should show error if no resource found with id', async () => {

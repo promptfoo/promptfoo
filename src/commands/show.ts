@@ -6,43 +6,35 @@ import { getDatasetFromHash, getEvalFromId, getPromptFromHash } from '../util/da
 import { printBorder, setupEnv } from '../util/index';
 import type { Command } from 'commander';
 
-type CountMetrics = {
-  testPassCount: number;
-  testFailCount: number;
-  testErrorCount: number;
-};
+type MatchedPrompt = NonNullable<Awaited<ReturnType<typeof getPromptFromHash>>>;
 
-function formatPassRate(metrics?: CountMetrics) {
-  return metrics && metrics.testPassCount + metrics.testFailCount + metrics.testErrorCount > 0
-    ? `${(
-        (metrics.testPassCount /
-          (metrics.testPassCount + metrics.testFailCount + metrics.testErrorCount)) *
-          100
-      ).toFixed(2)}%`
-    : '-';
-}
-
-function formatPassCount(metrics?: CountMetrics) {
-  if (!metrics) {
-    return '-';
-  }
-  return String(metrics.testPassCount ?? 0);
-}
-
-function formatFailCount(metrics?: CountMetrics) {
-  if (!metrics) {
-    return '-';
-  }
-  const failCount = metrics.testFailCount ?? 0;
-  const errorCount = metrics.testErrorCount ?? 0;
-  if (errorCount > 0) {
-    return `${failCount} (+${errorCount} errors)`;
-  }
-  return String(failCount);
+function formatMetrics(metrics: MatchedPrompt['evals'][number]['metrics']) {
+  const rawScore = metrics?.score?.toFixed(2) || '-';
+  const passRate =
+    metrics && metrics.testPassCount + metrics.testFailCount + metrics.testErrorCount > 0
+      ? `${(
+          (metrics.testPassCount /
+            (metrics.testPassCount + metrics.testFailCount + metrics.testErrorCount)) *
+            100
+        ).toFixed(2)}%`
+      : '-';
+  const passCount = metrics ? String(metrics.testPassCount ?? 0) : '-';
+  const failCount = metrics?.testFailCount ?? 0;
+  const errorCount = metrics?.testErrorCount ?? 0;
+  return {
+    'Raw score': rawScore,
+    'Pass rate': passRate,
+    'Pass count': passCount,
+    'Fail count':
+      errorCount > 0 ? `${failCount} (+${errorCount} errors)` : metrics ? String(failCount) : '-',
+  };
 }
 
 export async function handlePrompt(id: string) {
-  const prompt = await getPromptFromHash(id);
+  return showPrompt(id, await getPromptFromHash(id));
+}
+
+function showPrompt(id: string, prompt: MatchedPrompt | undefined) {
   if (!prompt) {
     logger.error(`Prompt with ID ${id} not found.`);
     process.exitCode = 1;
@@ -61,10 +53,7 @@ export async function handlePrompt(id: string) {
     table.push({
       'Eval ID': evl.id.slice(0, 6),
       'Dataset ID': evl.datasetId.slice(0, 6),
-      'Raw score': evl.metrics?.score?.toFixed(2) || '-',
-      'Pass rate': formatPassRate(evl.metrics),
-      'Pass count': formatPassCount(evl.metrics),
-      'Fail count': formatFailCount(evl.metrics),
+      ...formatMetrics(evl.metrics),
     });
   }
   logger.info(wrapTable(table) as string);
@@ -122,7 +111,10 @@ export async function handleEval(id?: string) {
 }
 
 export async function handleDataset(id: string) {
-  const dataset = await getDatasetFromHash(id);
+  return showDataset(id, await getDatasetFromHash(id));
+}
+
+function showDataset(id: string, dataset: Awaited<ReturnType<typeof getDatasetFromHash>>) {
   if (!dataset) {
     logger.error(`Dataset with ID ${id} not found.`);
     process.exitCode = 1;
@@ -140,10 +132,7 @@ export async function handleDataset(id: string) {
     .map((prompt) => ({
       'Eval ID': prompt.evalId.slice(0, 6),
       'Prompt ID': prompt.id.slice(0, 6),
-      'Raw score': prompt.prompt.metrics?.score?.toFixed(2) || '-',
-      'Pass rate': formatPassRate(prompt.prompt.metrics),
-      'Pass count': formatPassCount(prompt.prompt.metrics),
-      'Fail count': formatFailCount(prompt.prompt.metrics),
+      ...formatMetrics(prompt.prompt.metrics),
     }));
   logger.info(wrapTable(table) as string);
   printBorder();
@@ -170,12 +159,12 @@ export async function showCommand(program: Command) {
 
       const prompt = await getPromptFromHash(id);
       if (prompt) {
-        return handlePrompt(id);
+        return showPrompt(id, prompt);
       }
 
       const dataset = await getDatasetFromHash(id);
       if (dataset) {
-        return handleDataset(id);
+        return showDataset(id, dataset);
       }
 
       logger.error(`No resource found with ID ${id}`);
