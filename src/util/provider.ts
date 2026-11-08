@@ -97,7 +97,14 @@ export function doesProviderRefMatch(ref: string, provider: ApiProvider): boolea
   // Wildcard match: 'openai:*' matches 'openai:gpt-4', etc.
   if (ref.endsWith('*')) {
     const prefix = ref.slice(0, -1);
-    if (label?.startsWith(prefix) || id.startsWith(prefix) || canonicalId.startsWith(prefix)) {
+    // Normalize before removing '*' so a directory's trailing separator is retained.
+    const canonicalPrefix = canonicalRef.slice(0, -1);
+    if (
+      label?.startsWith(prefix) ||
+      id.startsWith(prefix) ||
+      canonicalId.startsWith(prefix) ||
+      canonicalId.startsWith(canonicalPrefix)
+    ) {
       return true;
     }
   }

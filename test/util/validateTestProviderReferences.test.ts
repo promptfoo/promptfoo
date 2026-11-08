@@ -37,6 +37,25 @@ describe('validateTestProviderReferences', () => {
     expect(() => validateTestProviderReferences(tests, providers)).not.toThrow();
   });
 
+  it.each(['test', 'defaultTest', 'scenarioConfig', 'scenarioTest'])(
+    'accepts a normalized file wildcard in %s',
+    (location) => {
+      const fileProviders = [createProvider('file://providers/alpha.js')];
+      const test = { providers: ['file://./providers/*'] };
+      const tests = location === 'test' ? [test] : [];
+      const defaultTest = location === 'defaultTest' ? test : undefined;
+      const scenarios =
+        location === 'scenarioConfig'
+          ? [{ config: [test], tests: [] }]
+          : location === 'scenarioTest'
+            ? [{ config: [], tests: [test] }]
+            : [];
+      expect(() =>
+        validateTestProviderReferences(tests, fileProviders, defaultTest, scenarios),
+      ).not.toThrow();
+    },
+  );
+
   it('passes with legacy prefix match', () => {
     const tests: TestCase[] = [{ vars: { foo: 'bar' }, providers: ['openai'] }];
     expect(() => validateTestProviderReferences(tests, providers)).not.toThrow();
