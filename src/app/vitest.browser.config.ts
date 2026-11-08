@@ -3,6 +3,10 @@ import appConfig from './vite.config';
 
 export default {
   ...appConfig,
+  optimizeDeps: {
+    ...appConfig.optimizeDeps,
+    include: [...appConfig.optimizeDeps.include, '@testing-library/react'],
+  },
   server: {
     ...appConfig.server,
     port: 0,
