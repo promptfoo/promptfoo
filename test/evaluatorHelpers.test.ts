@@ -698,6 +698,16 @@ describe('evaluatorHelpers', () => {
       });
     });
 
+    it('should not expand a self-reference that follows an unresolved placeholder', () => {
+      const variables = { message: '{{missing}} {{message}}' };
+      expect(resolveVariables(variables)).toEqual({ message: '{{missing}} {{message}}' });
+    });
+
+    it('should not expand a direct cycle that follows an unresolved placeholder', () => {
+      const variables = { a: '{{missing}} {{b}}', b: '{{a}}' };
+      expect(resolveVariables(variables)).toEqual({ a: '{{missing}} {{b}}', b: '{{a}}' });
+    });
+
     it('should not fail for unresolved placeholders', () => {
       const variables = { greeting: 'Hello, {{name}}!', name: '{{unknown}}' };
       expect(resolveVariables(variables)).toEqual({

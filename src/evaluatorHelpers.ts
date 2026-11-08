@@ -74,12 +74,21 @@ export function resolveVariables(
       // Find the first placeholder whose variable is defined. An unresolved placeholder is
       // left in place - the final nunjucks render will fail if necessary - but it must not
       // block resolvable placeholders that follow it in the same string.
+      // Skip self-references and direct cycles: replacing them would substitute the value
+      // into itself on every pass, growing it instead of resolving it.
+      const selfRef = new RegExp(`\\{\\{\\s*${key}\\s*\\}\\}`);
       let match: RegExpMatchArray | undefined;
       for (const candidate of value.matchAll(regex)) {
-        if (variables[candidate[1]] !== undefined) {
-          match = candidate;
-          break;
+        const varName = candidate[1];
+        if (variables[varName] === undefined || varName === key) {
+          continue;
         }
+        const candidateValue = variables[varName];
+        if (typeof candidateValue === 'string' && selfRef.test(candidateValue)) {
+          continue;
+        }
+        match = candidate;
+        break;
       }
       if (match) {
         const [placeholder, varName] = match;
