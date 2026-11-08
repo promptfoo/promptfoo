@@ -305,7 +305,7 @@ describe('getTestCases', () => {
     vi.unstubAllEnvs();
   });
 
-  it('returns sanitized test cases without loading eval results', async () => {
+  it('groups sanitized datasets with their first-seen prompts without loading results', async () => {
     const tests = [
       {
         description: 'says hello',
@@ -317,6 +317,11 @@ describe('getTestCases', () => {
       tests,
       env: { PROMPTFOO_STRIP_METADATA: 'true' },
     });
+    const olderPrompt = { ...completedPrompt, raw: 'different prompt' };
+    const older = await Eval.create({ tests }, renderedPrompts, {
+      createdAt: new Date(1),
+      completedPrompts: [completedPrompt, olderPrompt, { ...olderPrompt, label: 'duplicate' }],
+    });
     const persisted = await Eval.findById(created.id);
     expect(persisted?.config.tests).toEqual(tests);
 
@@ -326,6 +331,15 @@ describe('getTestCases', () => {
       const datasets = await getTestCases();
 
       expect(datasets).toHaveLength(1);
+      expect(datasets[0]).toMatchObject({
+        count: 2,
+        recentEvalId: created.id,
+        recentEvalDate: new Date(created.createdAt),
+      });
+      expect(datasets[0].prompts).toMatchObject([
+        { evalId: created.id, prompt: completedPrompt },
+        { evalId: older.id, prompt: olderPrompt },
+      ]);
       expect(datasets[0].testCases).toEqual([
         {
           description: 'says hello',

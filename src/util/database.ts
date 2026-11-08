@@ -279,72 +279,57 @@ export function getPromptsForTestCasesHash(
   }, limit);
 }
 
-async function readTestCases(limit: number): Promise<TestCasesWithMetadata[]> {
-  const evals_ = await Eval.getMany(limit);
+export async function getTestCases(limit = DEFAULT_QUERY_LIMIT): Promise<TestCasesWithMetadata[]> {
+  const evals = await Eval.getMany(limit);
+  const groupedTestCases: Record<
+    string,
+    Omit<TestCasesWithMetadata, 'prompts'> & {
+      prompts: Record<string, TestCasesWithMetadataPrompt>;
+    }
+  > = {};
 
-  const groupedTestCases: { [hash: string]: TestCasesWithMetadata } = {};
-
-  for (const eval_ of evals_) {
-    const createdAt = new Date(eval_.createdAt).toISOString();
+  for (const evl of evals) {
+    const { id: evalId, config, createdAt } = evl;
+    const date = new Date(createdAt).toISOString();
     // Same config projection as toResultsFile, without loading result rows.
-    const config = sanitizeConfigForOutput(eval_.config, getStripFlags(eval_.config.env));
-    const testCases = config.tests;
-    if (testCases) {
-      const evalId = eval_.id;
-      // For database storage, we need to handle the union type properly
-      // Only store actual test case arrays, not generator configs
-      let storableTestCases: string | Array<string | any>;
-      if (typeof testCases === 'string') {
-        storableTestCases = testCases;
-      } else if (Array.isArray(testCases)) {
-        storableTestCases = testCases;
-      } else {
-        // If it's a TestGeneratorConfig object, we can't store it directly
-        // This case should be rare as the database typically stores resolved tests
-        logger.warn('Skipping TestGeneratorConfig object in database storage');
-        continue;
-      }
-      const datasetId = sha256(JSON.stringify(eval_.config.tests || []));
+    const { tests: testCases } = sanitizeConfigForOutput(config, getStripFlags(config.env));
+    if (!testCases) {
+      continue;
+    }
+    if (typeof testCases !== 'string' && !Array.isArray(testCases)) {
+      logger.warn('Skipping TestGeneratorConfig object in database storage');
+      continue;
+    }
 
-      if (datasetId in groupedTestCases) {
-        groupedTestCases[datasetId].recentEvalDate = new Date(
-          Math.max(groupedTestCases[datasetId].recentEvalDate.getTime(), eval_.createdAt),
-        );
-        groupedTestCases[datasetId].count += 1;
-      } else {
-        groupedTestCases[datasetId] = {
-          id: datasetId,
-          count: 1,
-          testCases: storableTestCases,
-          recentEvalDate: new Date(createdAt),
-          recentEvalId: evalId,
-          prompts: [],
-        };
-      }
-      const newPrompts = eval_.getPrompts().map((prompt) => ({
-        id: sha256(prompt.raw),
-        prompt,
-        evalId,
-      }));
-      const promptsById: Record<string, TestCasesWithMetadataPrompt> = {};
-      for (const prompt of groupedTestCases[datasetId].prompts.concat(newPrompts)) {
-        if (!(prompt.id in promptsById)) {
-          promptsById[prompt.id] = prompt;
-        }
-      }
-      groupedTestCases[datasetId].prompts = Object.values(promptsById);
+    // Hash the stored tests so output stripping does not change dataset identity.
+    const id = sha256(JSON.stringify(config.tests || []));
+    const dataset = (groupedTestCases[id] ??= {
+      id,
+      count: 0,
+      testCases: testCases as TestCasesWithMetadata['testCases'],
+      recentEvalDate: new Date(date),
+      recentEvalId: evalId,
+      prompts: {},
+    });
+    dataset.count++;
+    if (createdAt > dataset.recentEvalDate.getTime()) {
+      dataset.recentEvalDate = new Date(createdAt);
+    }
+
+    for (const prompt of evl.getPrompts()) {
+      const promptId = sha256(prompt.raw);
+      dataset.prompts[promptId] ??= { id: promptId, prompt, evalId };
     }
   }
 
-  return Object.values(groupedTestCases);
+  return Object.values(groupedTestCases).map(({ prompts, ...dataset }) => ({
+    ...dataset,
+    prompts: Object.values(prompts),
+  }));
 }
 
 export function getPrompts(limit: number = DEFAULT_QUERY_LIMIT) {
   return getPromptsWithPredicate(() => true, limit);
-}
-
-export async function getTestCases(limit: number = DEFAULT_QUERY_LIMIT) {
-  return readTestCases(limit);
 }
 
 export async function getPromptFromHash(hash: string) {
