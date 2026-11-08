@@ -19,8 +19,9 @@ async function createLogArchive(logFiles: string[], outputPath: string): Promise
   try {
     const output = fs.createWriteStream(outputPath);
     const transfer = pipeline(
-      async function* () {
+      async function* ({ signal } = {}) {
         for (const logFile of logFiles) {
+          signal?.throwIfAborted();
           let fileContent: Buffer;
           let fileStats: Awaited<ReturnType<typeof fsPromises.stat>>;
 

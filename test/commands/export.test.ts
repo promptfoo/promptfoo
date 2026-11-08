@@ -1,10 +1,12 @@
+import { randomBytes } from 'node:crypto';
+import { once } from 'node:events';
+import { setImmediate } from 'node:timers/promises';
 import fs from 'fs';
 import fsPromises from 'fs/promises';
-import { Writable } from 'stream';
-import zlib from 'zlib';
+import { PassThrough } from 'stream';
 
 import { Command } from 'commander';
-import { afterEach, beforeEach, describe, expect, it, Mocked, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { exportCommand } from '../../src/commands/export';
 import logger from '../../src/logger';
 import Eval from '../../src/models/eval';
@@ -60,42 +62,6 @@ vi.mock('../../src/util/logs', () => ({
   getLogFiles: vi.fn().mockResolvedValue([]),
 }));
 
-vi.mock('fs', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('fs')>();
-  return {
-    ...actual,
-    default: {
-      ...actual,
-      createWriteStream: vi.fn(),
-    },
-    createWriteStream: vi.fn(),
-  };
-});
-
-vi.mock('fs/promises', () => ({
-  default: {
-    access: vi.fn().mockResolvedValue(undefined),
-    readFile: vi.fn(),
-    stat: vi.fn(),
-  },
-  access: vi.fn().mockResolvedValue(undefined),
-  readFile: vi.fn(),
-  stat: vi.fn(),
-}));
-
-vi.mock('zlib', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('zlib')>();
-  return {
-    ...actual,
-    default: {
-      ...actual,
-      createGzip: vi.fn(),
-    },
-    createGzip: vi.fn(),
-    gzip: vi.fn(),
-  };
-});
-
 vi.mock('../../src/database', async (importOriginal) => {
   return {
     ...(await importOriginal()),
@@ -106,7 +72,6 @@ vi.mock('../../src/database', async (importOriginal) => {
 describe('exportCommand', () => {
   let program: Command;
   let mockEval: any;
-  const mockFsPromises = fsPromises as Mocked<typeof fsPromises>;
 
   beforeEach(() => {
     program = new Command();
@@ -246,14 +211,16 @@ describe('exportCommand', () => {
     beforeEach(() => {
       mockGetLogDirectory.mockReturnValue(mockLogDir);
       mockGetLogFiles.mockResolvedValue([]);
-      mockFsPromises.access.mockResolvedValue(undefined);
-      // Reset all mocks for clean state
-      vi.clearAllMocks();
+      vi.spyOn(fsPromises, 'access').mockResolvedValue(undefined);
       exportCommand(program);
     });
 
+    afterEach(() => {
+      vi.mocked(fsPromises.access).mockRestore();
+    });
+
     it('should handle missing log directory', async () => {
-      mockFsPromises.access.mockRejectedValue(new Error('ENOENT'));
+      vi.mocked(fsPromises.access).mockRejectedValue(new Error('ENOENT'));
 
       await program.parseAsync(['node', 'test', 'export', 'logs']);
 
@@ -286,51 +253,81 @@ describe('exportCommand', () => {
       expect(process.exitCode).toBe(1);
     });
 
-    it.each([false, true])('collects logs (destination fails: %s)', async (writeFails) => {
-      const output = new Writable({
-        write(_chunk, _encoding, callback) {
-          callback();
-        },
-      });
-      const actualZlib = await vi.importActual<typeof import('zlib')>('zlib');
-
-      vi.mocked(fs.createWriteStream).mockReturnValue(output as unknown as fs.WriteStream);
-      vi.mocked(zlib.createGzip).mockImplementation(actualZlib.createGzip);
-      mockGetLogFiles.mockResolvedValue([logFile]);
-      const read = createDeferred<Buffer<ArrayBuffer>>();
-      mockFsPromises.readFile.mockImplementation(() => {
-        if (writeFails) {
-          output.destroy(new Error('disk full'));
-        }
-        return read.promise;
-      });
-      mockFsPromises.stat.mockResolvedValue({
-        size: logFile.size,
+    it('pauses reading log files while the archive destination is backpressured', async () => {
+      const content = randomBytes(128 * 1024);
+      const files = Array.from({ length: 12 }, (_, i) => ({
+        ...logFile,
+        path: `${logFile.path}.${i}`,
+      }));
+      mockGetLogFiles.mockResolvedValue(files);
+      using readFile = vi.spyOn(fsPromises, 'readFile').mockResolvedValue(content);
+      using _stat = vi.spyOn(fsPromises, 'stat').mockResolvedValue({
+        size: content.length,
         mtime: logFile.mtime,
       } as fs.Stats);
-
+      const output = new PassThrough({ highWaterMark: 1 });
+      using _write = vi
+        .spyOn(fs, 'createWriteStream')
+        .mockReturnValue(output as unknown as fs.WriteStream);
       const command = program.parseAsync(['node', 'test', 'export', 'logs', '--output', 'logs.gz']);
       try {
-        if (writeFails) {
-          await vi.waitFor(() =>
-            expect(logger.error).toHaveBeenCalledWith('Failed to collect logs: Error: disk full'),
-          );
-        }
+        await Promise.race([once(output, 'readable'), command]);
+        await setImmediate();
+        expect(output.writableNeedDrain).toBe(true);
+        expect(readFile.mock.calls.length).toBeLessThan(files.length);
       } finally {
-        read.resolve(Buffer.from('hello logs'));
+        output.resume();
         await command;
       }
-
-      expect(mockFsPromises.readFile).toHaveBeenCalledWith(logFile.path);
-      expect(mockFsPromises.stat).toHaveBeenCalledWith(logFile.path);
-      if (writeFails) {
-        expect(process.exitCode).toBe(1);
-        expect(logger.info).not.toHaveBeenCalledWith(
-          expect.stringContaining('Created log archive:'),
-        );
-        return;
-      }
+      expect(readFile.mock.calls.map(([file]) => file)).toEqual(files.map(({ path }) => path));
       expect(logger.info).toHaveBeenCalledWith('Log files have been collected in: logs.gz');
     });
+
+    it.each([
+      ['readFile', new Error('disk full'), 'Failed to collect logs: Error: disk full'],
+      ['stat', undefined, 'ERR_STREAM_PREMATURE_CLOSE'],
+    ] as const)(
+      'stops collecting logs if the destination closes during %s',
+      async (pending, error, message) => {
+        const output = new PassThrough();
+        using _write = vi
+          .spyOn(fs, 'createWriteStream')
+          .mockReturnValue(output as unknown as fs.WriteStream);
+        using readFile = vi.spyOn(fsPromises, 'readFile').mockResolvedValue(Buffer.alloc(0));
+        using stat = vi
+          .spyOn(fsPromises, 'stat')
+          .mockResolvedValue({ size: 0, mtime: logFile.mtime } as fs.Stats);
+        mockGetLogFiles.mockResolvedValue([logFile, { ...logFile, path: `${logFile.path}.next` }]);
+        const rotated = createDeferred<never>();
+        const fileOps = { readFile, stat };
+        fileOps[pending].mockImplementationOnce(() => {
+          output.destroy(error);
+          return rotated.promise;
+        });
+        const command = program.parseAsync([
+          'node',
+          'test',
+          'export',
+          'logs',
+          '--output',
+          'logs.gz',
+        ]);
+        try {
+          await vi.waitFor(() =>
+            expect(logger.error).toHaveBeenCalledWith(expect.stringContaining(message)),
+          );
+          expect(process.exitCode).toBe(1);
+        } finally {
+          rotated.reject(Object.assign(new Error('rotated'), { code: 'ENOENT' }));
+          await command;
+        }
+        await setImmediate();
+        expect(readFile).toHaveBeenCalledExactlyOnceWith(logFile.path);
+        expect(stat).toHaveBeenCalledExactlyOnceWith(logFile.path);
+        expect(logger.info).not.toHaveBeenCalledWith(
+          expect.stringMatching(/Created log archive:|Log files have been collected/),
+        );
+      },
+    );
   });
 });
