@@ -308,9 +308,10 @@ describe('OpenAI Provider', () => {
     });
 
     it.each([
-      { reported: 'ultrafast', cost: undefined },
-      { reported: undefined, cost: undefined },
+      { reported: 'ultrafast', cost: 0.018 },
+      { reported: undefined, cost: 0.018 },
       { reported: 'default', cost: 0.003 },
+      { reported: 'fast', cost: 0.006 },
     ])(
       'forwards Ultrafast and bills the actual tier $reported for GPT-6.1 Sol',
       async ({ reported, cost }) => {
@@ -342,11 +343,7 @@ describe('OpenAI Provider', () => {
         });
         expect(result.error).toBeUndefined();
         expect(result.output).toBe('Ready.');
-        if (cost === undefined) {
-          expect(result.cost).toBeUndefined();
-        } else {
-          expect(result.cost).toBeCloseTo(cost, 10);
-        }
+        expect(result.cost).toBeCloseTo(cost, 10);
       },
     );
 
@@ -427,6 +424,71 @@ describe('OpenAI Provider', () => {
       expect(result.output).toBe('Test output');
       expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5, numRequests: 1 });
       expect(result.guardrails).toEqual({ flagged: false });
+    });
+
+    it.each([false, true])(
+      'preserves prepared HTTP metadata when stream parsing rejects: %s',
+      async (rejectStream) => {
+        class StreamFixtureProvider extends OpenAiChatCompletionProvider {
+          protected getChatResponseFormat() {
+            return 'text' as const;
+          }
+
+          protected parseChatResponse(data: string) {
+            if (rejectStream) {
+              throw new Error('Invalid stream fixture');
+            }
+            return JSON.parse(data);
+          }
+        }
+
+        const response = {
+          ...createMockFetchResponse(
+            JSON.stringify({
+              choices: [{ message: { content: 'READY' }, finish_reason: 'stop' }],
+              usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+            }),
+            { status: 201, statusText: 'Created' },
+          ),
+          headers: { 'x-fixture-response': 'prepared', 'cache-control': 'no-store' },
+        };
+        let fetchReturned = false;
+        mockFetchWithCache.mockImplementation(async (...args) => {
+          args[6]?.(response);
+          fetchReturned = true;
+          return response;
+        });
+
+        const provider = new StreamFixtureProvider('gpt-4o-mini');
+        const result = await provider.callApi('Test prompt');
+
+        expect(fetchReturned).toBe(!rejectStream);
+        expect(result.metadata?.http).toEqual({
+          status: 201,
+          statusText: 'Created',
+          headers: response.headers,
+        });
+        if (rejectStream) {
+          expect(result.error).toContain('Invalid stream fixture');
+          expect(result.output).toBeUndefined();
+        } else {
+          expect(result.error).toBeUndefined();
+          expect(result.output).toBe('READY');
+          expect(result.tokenUsage?.total).toBe(15);
+        }
+      },
+    );
+
+    it('keeps transport-error metadata when no HTTP response was received', async () => {
+      mockFetchWithCache.mockRejectedValue(new Error('Transport fixture failed'));
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
+
+      const result = await provider.callApi('Test prompt');
+
+      expect(result.error).toContain('Transport fixture failed');
+      expect(result.output).toBeUndefined();
+      expect(result.tokenUsage).toBeUndefined();
+      expect(result.metadata?.http).toEqual({ status: 0, statusText: 'Error', headers: {} });
     });
 
     it('should record GPT-5.6 cache writes in the chat span', async () => {
@@ -1975,6 +2037,133 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       expect(mockFetchWithCache).toHaveBeenCalledTimes(2);
     });
 
+    it.each([
+      { format: 'legacy', args: '{"location":' },
+      { format: 'legacy', args: '{"location":"New York"}' },
+      { format: 'tools', args: '{"location":' },
+      { format: 'tools', args: '{"location":"New York"}' },
+    ])('should retain length-truncated $format calls with args $args', async ({ format, args }) => {
+      const call = { name: 'get_weather', arguments: args };
+      const message = {
+        role: 'assistant',
+        content: 'Partial answer',
+        ...(format === 'legacy'
+          ? { function_call: call }
+          : { tool_calls: [{ id: 'call_weather', type: 'function', function: call }] }),
+      };
+      mockFetchWithCache.mockResolvedValue(
+        createMockFetchResponse({
+          choices: [
+            {
+              message,
+              finish_reason: 'length',
+              logprobs: { content: [{ token: 'Partial', logprob: -0.5 }] },
+            },
+          ],
+          usage: { prompt_tokens: 100, completion_tokens: 20, total_tokens: 120 },
+        }),
+      );
+      const callback = vi.fn().mockResolvedValue('Unexpected callback');
+      const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
+        config: {
+          inputCost: 0.01,
+          outputCost: 0.02,
+          functionToolCallbacks: { get_weather: callback },
+        },
+      });
+
+      const result = await provider.callApi('What is the weather?');
+
+      expect(callback).not.toHaveBeenCalled();
+      expect(result.output).toEqual(message);
+      expect(result.error).toBeUndefined();
+      expect(result.cost).toBeCloseTo(1.4);
+      expect(result).toMatchObject({
+        finishReason: 'length',
+        tokenUsage: { prompt: 100, completion: 20, total: 120 },
+        cached: false,
+        logProbs: [-0.5],
+        metadata: { http: { status: 200 } },
+      });
+    });
+
+    it.each([
+      { format: 'legacy', finishReason: 'function_call' },
+      { format: 'tools', finishReason: 'tool_calls' },
+      { format: 'legacy', finishReason: 'stop' },
+      { format: 'tools', finishReason: 'stop' },
+      { format: 'legacy', finishReason: undefined },
+      { format: 'tools', finishReason: undefined },
+    ])(
+      'should dispatch $format calls with finish reason $finishReason',
+      async ({ format, finishReason }) => {
+        const call = { name: 'get_weather', arguments: '{"location":"New York"}' };
+        mockFetchWithCache.mockResolvedValue(
+          createMockFetchResponse({
+            choices: [
+              {
+                message: {
+                  content: null,
+                  ...(format === 'legacy'
+                    ? { function_call: call }
+                    : { tool_calls: [{ function: call }] }),
+                },
+                ...(finishReason === undefined ? {} : { finish_reason: finishReason }),
+              },
+            ],
+            usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+          }),
+        );
+        const callback = vi.fn().mockResolvedValue('Sunny');
+        const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
+          config: { functionToolCallbacks: { get_weather: callback } },
+        });
+
+        const result = await provider.callApi('What is the weather?');
+
+        expect(callback).toHaveBeenCalledExactlyOnceWith('{"location":"New York"}');
+        expect(result.output).toBe('Sunny');
+        expect(result.error).toBeUndefined();
+        expect(result.tokenUsage).toMatchObject({ prompt: 10, completion: 5, total: 15 });
+      },
+    );
+
+    it.each(['length', 'content_filter'])(
+      'should not dispatch MCP or function callbacks after %s',
+      async (finishReason) => {
+        const message = {
+          content: 'Partial answer',
+          tool_calls: [{ function: { name: 'get_weather', arguments: '{"location":"New York"}' } }],
+        };
+        mockFetchWithCache.mockResolvedValue(
+          createMockFetchResponse({
+            choices: [{ message, finish_reason: finishReason }],
+            usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+          }),
+        );
+        const callback = vi.fn().mockResolvedValue('Unexpected callback');
+        const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
+          config: { functionToolCallbacks: { get_weather: callback } },
+        });
+        const mcpClient = {
+          getAllTools: vi.fn().mockReturnValue([{ name: 'get_weather' }]),
+          callTool: vi.fn().mockResolvedValue({ content: 'Unexpected MCP call' }),
+        };
+        (provider as any).mcpClient = mcpClient;
+
+        const result = await provider.callApi('What is the weather?');
+
+        expect(mcpClient.callTool).not.toHaveBeenCalled();
+        expect(callback).not.toHaveBeenCalled();
+        expect(result.metadata?.toolCalls).toBeUndefined();
+        expect(result.output).toEqual(finishReason === 'length' ? message : 'Partial answer');
+        expect(result.error).toBeUndefined();
+        expect(result.finishReason).toBe(finishReason);
+        expect(result.isRefusal).toBe(finishReason === 'content_filter' ? true : undefined);
+        expect(result.tokenUsage).toMatchObject({ prompt: 10, completion: 5, total: 15 });
+      },
+    );
+
     it('should handle function tool callbacks correctly', async () => {
       const mockResponse = createMockFetchResponse({
         choices: [
@@ -3107,7 +3296,9 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
     });
 
     it('should treat fine-tuned o-series models as reasoning models', async () => {
-      const provider = new OpenAiChatCompletionProvider('ft:o4-mini-2025-04-16:company::model');
+      const provider = new OpenAiChatCompletionProvider('ft:o4-mini-2025-04-16:company::model', {
+        config: { apiBaseUrl: 'https://gateway.example/v1' },
+      });
 
       const { body } = await provider.getOpenAiBody('Test prompt');
 
@@ -3120,19 +3311,22 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       mockFetchWithCache.mockResolvedValue(mockResponse);
 
       // Test regular model with temperature
-      const regularProvider = new OpenAiChatCompletionProvider('gpt-4', createTemperatureOptions());
+      const regularProvider = new OpenAiChatCompletionProvider(
+        'gpt-4.1',
+        createTemperatureOptions(),
+      );
       await regularProvider.callApi('Test prompt');
       const regularCall = mockFetchWithCache.mock.calls[0] as [string, { body: string }];
       const regularBody = JSON.parse(regularCall[1].body);
       expect(regularBody.temperature).toBe(0.7);
 
-      // Test O1 model (should omit temperature)
+      // Test O3 model (should omit temperature)
       mockFetchWithCache.mockClear();
-      const o1Provider = new OpenAiChatCompletionProvider('o1', createTemperatureOptions());
-      await o1Provider.callApi('Test prompt');
-      const o1Call = mockFetchWithCache.mock.calls[0] as [string, { body: string }];
-      const o1Body = JSON.parse(o1Call[1].body);
-      expect(o1Body.temperature).toBeUndefined();
+      const o3Provider = new OpenAiChatCompletionProvider('o3', createTemperatureOptions());
+      await o3Provider.callApi('Test prompt');
+      const o3Call = mockFetchWithCache.mock.calls[0] as [string, { body: string }];
+      const o3Body = JSON.parse(o3Call[1].body);
+      expect(o3Body.temperature).toBeUndefined();
     });
 
     it('should correctly send temperature: 0 in the request body', async () => {
@@ -3140,7 +3334,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       mockFetchWithCache.mockResolvedValue(mockResponse);
 
       // Test that temperature: 0 is correctly sent (not filtered out by falsy check)
-      const provider = new OpenAiChatCompletionProvider('gpt-4', {
+      const provider = new OpenAiChatCompletionProvider('gpt-4.1', {
         config: { temperature: 0 },
       });
       await provider.callApi('Test prompt');
@@ -3158,7 +3352,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
 
       // Test that max_tokens: 0 is correctly sent (not filtered out by falsy check)
       // Note: While max_tokens: 0 is impractical, it should still be sent if explicitly configured
-      const provider = new OpenAiChatCompletionProvider('gpt-4', {
+      const provider = new OpenAiChatCompletionProvider('gpt-4.1', {
         config: { max_tokens: 0 },
       });
       await provider.callApi('Test prompt');
@@ -3175,7 +3369,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       mockFetchWithCache.mockResolvedValue(mockResponse);
 
       // Test regular model with max_tokens
-      const regularProvider = new OpenAiChatCompletionProvider('gpt-4', {
+      const regularProvider = new OpenAiChatCompletionProvider('gpt-4.1', {
         config: { max_tokens: 100 },
       });
       await regularProvider.callApi('Test prompt');
@@ -3184,16 +3378,16 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       expect(regularBody.max_tokens).toBe(100);
       expect(regularBody.max_completion_tokens).toBeUndefined();
 
-      // Test O1 model with max_completion_tokens
+      // Test O3 model with max_completion_tokens
       mockFetchWithCache.mockClear();
-      const o1Provider = new OpenAiChatCompletionProvider('o1', {
+      const o3Provider = new OpenAiChatCompletionProvider('o3', {
         config: { max_completion_tokens: 200 },
       });
-      await o1Provider.callApi('Test prompt');
-      const o1Call = mockFetchWithCache.mock.calls[0] as [string, { body: string }];
-      const o1Body = JSON.parse(o1Call[1].body);
-      expect(o1Body.max_tokens).toBeUndefined();
-      expect(o1Body.max_completion_tokens).toBe(200);
+      await o3Provider.callApi('Test prompt');
+      const o3Call = mockFetchWithCache.mock.calls[0] as [string, { body: string }];
+      const o3Body = JSON.parse(o3Call[1].body);
+      expect(o3Body.max_tokens).toBeUndefined();
+      expect(o3Body.max_completion_tokens).toBe(200);
 
       // Test GPT-5 model should not include max_tokens
       mockFetchWithCache.mockClear();
@@ -3314,18 +3508,18 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       const mockResponse = createMockChatResponse();
       mockFetchWithCache.mockResolvedValue(mockResponse);
 
-      // Test O1 model with reasoning_effort
-      const o1Provider = new OpenAiChatCompletionProvider('o1', {
+      // Test O3 model with reasoning_effort
+      const o3Provider = new OpenAiChatCompletionProvider('o3', {
         config: { reasoning_effort: 'high' } as any,
       });
-      await o1Provider.callApi('Test prompt');
-      const o1Call = mockFetchWithCache.mock.calls[0] as [string, { body: string }];
-      const o1Body = JSON.parse(o1Call[1].body);
-      expect(o1Body.reasoning_effort).toBe('high');
+      await o3Provider.callApi('Test prompt');
+      const o3Call = mockFetchWithCache.mock.calls[0] as [string, { body: string }];
+      const o3Body = JSON.parse(o3Call[1].body);
+      expect(o3Body.reasoning_effort).toBe('high');
 
       // Test regular model (should not include reasoning_effort)
       mockFetchWithCache.mockClear();
-      const regularProvider = new OpenAiChatCompletionProvider('gpt-4', {
+      const regularProvider = new OpenAiChatCompletionProvider('gpt-4.1', {
         config: { reasoning_effort: 'high' } as any,
       });
       await regularProvider.callApi('Test prompt');
@@ -3348,21 +3542,21 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       },
     );
 
-    it('should handle o4-mini with reasoning_effort and service_tier', async () => {
+    it('should handle o3 with reasoning_effort and service_tier', async () => {
       const mockResponse = createMockChatResponse('Test response');
       mockFetchWithCache.mockResolvedValue(mockResponse);
 
-      // Test O4-mini model with reasoning_effort
-      const o4Provider = new OpenAiChatCompletionProvider('o4-mini', {
+      // Test O3 model with reasoning_effort
+      const o3Provider = new OpenAiChatCompletionProvider('o3', {
         config: {
           reasoning_effort: 'medium',
-          service_tier: 'premium',
+          service_tier: 'priority',
         } as any,
       });
 
-      const { body: o4Body } = await o4Provider.getOpenAiBody('Test prompt');
-      expect(o4Body.reasoning_effort).toBe('medium');
-      expect(o4Body.service_tier).toBe('premium');
+      const { body: o3Body } = await o3Provider.getOpenAiBody('Test prompt');
+      expect(o3Body.reasoning_effort).toBe('medium');
+      expect(o3Body.service_tier).toBe('priority');
     });
 
     it('should handle user, metadata, and store parameters', async () => {
@@ -3393,7 +3587,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       const mockResponse = createMockChatResponse('Test response');
       mockFetchWithCache.mockResolvedValue(mockResponse);
 
-      const o1Provider = new OpenAiChatCompletionProvider('o1', {
+      const o3Provider = new OpenAiChatCompletionProvider('o3', {
         config: {
           reasoning: {
             effort: 'high',
@@ -3402,7 +3596,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
         } as any,
       });
 
-      const { body } = await o1Provider.getOpenAiBody('Test prompt');
+      const { body } = await o3Provider.getOpenAiBody('Test prompt');
       expect(body.reasoning).toEqual({
         effort: 'high',
         summary: 'detailed',
