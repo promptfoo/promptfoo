@@ -870,9 +870,6 @@ async function runInstalledCodingSdkEval(
   withOptionalDependencies: boolean,
 ): Promise<void> {
   const fixturesDir = path.join(consumerDir, 'coding-sdks');
-  fs.cpSync(path.join(ROOT, 'test/fixtures/package-artifact/coding-sdks'), fixturesDir, {
-    recursive: true,
-  });
   // The Codex SDK sends `exec` first. Let Node load that fixture on every platform.
   fs.copyFileSync(path.join(fixturesDir, 'codex.mjs'), path.join(consumerDir, 'exec'));
   const scriptPath = path.join(consumerDir, 'coding-sdks.mjs');

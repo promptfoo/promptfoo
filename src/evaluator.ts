@@ -3674,21 +3674,19 @@ async function filterCompletedResumeSteps(
   store: EvaluationStore,
 ) {
   if (!cliState.resume || !store.persisted) {
-    return;
+    return runEvalOptions;
   }
 
+  let pending = runEvalOptions;
   try {
     const completedPairs = await store.readCompletedIndexPairs({
       excludeErrors: cliState.retryMode,
     });
-    const originalCount = runEvalOptions.length;
-    for (let i = runEvalOptions.length - 1; i >= 0; i--) {
-      const step = runEvalOptions[i];
-      if (completedPairs.has(`${step.testIdx}:${step.promptIdx}`)) {
-        runEvalOptions.splice(i, 1);
-      }
+    if (completedPairs.size === 0) {
+      return runEvalOptions;
     }
-    const skipped = originalCount - runEvalOptions.length;
+    pending = runEvalOptions.filter((step) => !completedPairs.has(getResultIndexKey(step)));
+    const skipped = runEvalOptions.length - pending.length;
     if (skipped > 0) {
       logger.info(`Resuming: skipping ${skipped} previously completed cases`);
     }
@@ -3697,6 +3695,7 @@ async function filterCompletedResumeSteps(
       `Resume: failed to load completed results. Running full evaluation. ${String(err)}`,
     );
   }
+  return pending;
 }
 
 function adjustConcurrencyForSerialFeatures({
@@ -3774,42 +3773,40 @@ async function runGroupedGradingForRows(
   providerCallQueue: ProviderGroupedCallQueue,
   onRowsGraded: (entry: GroupedRows) => Promise<void>,
 ) {
-  const rowsWithDeferredGrading = entries
-    .flatMap((entry) => entry.rows)
-    .flatMap((row) => {
+  const gradingPromises: Promise<void>[] = [];
+  for (const { rows } of entries) {
+    for (const row of rows) {
       const gradingPromise = deferredGradingPromises.get(row);
-      return gradingPromise === undefined ? [] : [{ row, gradingPromise }];
-    });
-  if (rowsWithDeferredGrading.length === 0) {
-    return;
+      if (gradingPromise) {
+        gradingPromises.push(
+          gradingPromise.finally(() => {
+            deferredGradingPromises.delete(row);
+            if (--pendingCount === 0) {
+              resolveAllDone();
+            }
+          }),
+        );
+      }
+    }
   }
 
-  const processedEntries = new Set<GroupedRows>();
-  let pendingCount = rowsWithDeferredGrading.length;
-  let resolveAllDone: () => void = () => {};
+  let pendingCount = gradingPromises.length;
+  if (pendingCount === 0) {
+    return;
+  }
+  let resolveAllDone: () => void;
   const allDone = new Promise<void>((resolve) => {
     resolveAllDone = resolve;
   });
-
-  const gradingPromises = rowsWithDeferredGrading.map(({ row, gradingPromise }) =>
-    gradingPromise.finally(() => {
-      deferredGradingPromises.delete(row);
-      pendingCount--;
-      if (pendingCount === 0) {
-        resolveAllDone();
-      }
-    }),
-  );
+  let nextEntryIndex = 0;
 
   const processReadyEntries = async () => {
-    for (const entry of entries) {
-      if (processedEntries.has(entry)) {
-        continue;
-      }
+    while (nextEntryIndex < entries.length) {
+      const entry = entries[nextEntryIndex];
       if (!entry.rows.every((row) => !deferredGradingPromises.has(row))) {
         break;
       }
-      processedEntries.add(entry);
+      nextEntryIndex++;
       await onRowsGraded(entry);
     }
   };
@@ -3821,13 +3818,8 @@ async function runGroupedGradingForRows(
       await processReadyEntries();
     }
 
-    const group = providerCallQueue.takeNextGroup(currentProviderId);
-    if (group.length === 0) {
-      continue;
-    }
-
-    currentProviderId = group[0].providerId;
-    for (const job of group) {
+    for (const job of providerCallQueue.takeNextGroup(currentProviderId)) {
+      currentProviderId = job.providerId;
       await providerCallQueue.run(job);
       await Promise.resolve();
       await processReadyEntries();
@@ -5821,7 +5813,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       vars.add(varName);
     }
     let concurrency = options.maxConcurrency || DEFAULT_MAX_CONCURRENCY;
-    const runEvalOptions = await buildRunEvalOptions({
+    let runEvalOptions = await buildRunEvalOptions({
       concurrency,
       conversations: this.conversations,
       evalId: this.store.id,
@@ -5842,7 +5834,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       }
     }
     const repeatCacheContextByTestIdx = buildRepeatCacheContextByTestIdx(runEvalOptions);
-    await filterCompletedResumeSteps(runEvalOptions, this.store);
+    runEvalOptions = await filterCompletedResumeSteps(runEvalOptions, this.store);
 
     const concurrencySettings = adjustConcurrencyForSerialFeatures({
       concurrency,
