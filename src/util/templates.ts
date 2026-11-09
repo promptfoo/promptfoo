@@ -43,8 +43,21 @@ function disposableIterator<T>(iterator: IterableIterator<T>): SetIterator<T> {
   };
 }
 
+const MAX_MACRO_ANALYSIS_DEPTH = 100;
+let macroAnalysisDepth = 0;
+
+type DeferredMacro = {
+  node: NunjucksAstNode;
+  paramNames: string[];
+  definitionScope: ReadonlySet<string>;
+  called: boolean;
+  analyzing: boolean;
+};
+
 class LinkedScope implements ReadonlySet<string> {
   private readonly names = new Set<string>();
+  private readonly macros = new Map<string, DeferredMacro>();
+  private fallbackMacroMemo?: Set<DeferredMacro>;
 
   constructor(
     private readonly parent?: ReadonlySet<string>,
@@ -66,6 +79,44 @@ class LinkedScope implements ReadonlySet<string> {
   add(value: string): this {
     this.names.add(value);
     return this;
+  }
+
+  registerMacro(name: string, definition: DeferredMacro): void {
+    this.macros.set(name, definition);
+  }
+
+  removeMacroBindings(node: unknown): void {
+    for (const name of collectBindingNames(node)) {
+      this.macros.delete(name);
+    }
+  }
+
+  removeMacro(name: string): void {
+    this.macros.delete(name);
+  }
+
+  findMacro(name: string): DeferredMacro | undefined {
+    if (this.names.has(name)) {
+      return this.macros.get(name);
+    }
+    return this.parent instanceof LinkedScope ? this.parent.findMacro(name) : undefined;
+  }
+
+  localMacros(): DeferredMacro[] {
+    return Array.from(this.macros.values());
+  }
+
+  macroAnalysisMemo(): Set<DeferredMacro> | undefined {
+    return (
+      this.fallbackMacroMemo ??
+      (this.parent instanceof LinkedScope ? this.parent.macroAnalysisMemo() : undefined)
+    );
+  }
+
+  replaceMacroAnalysisMemo(memo?: Set<DeferredMacro>): Set<DeferredMacro> | undefined {
+    const previous = this.fallbackMacroMemo;
+    this.fallbackMacroMemo = memo;
+    return previous;
   }
 
   keys(): SetIterator<string> {
@@ -250,14 +301,30 @@ function astNodeListReferencesVariable(
       return true;
     }
     if (item.typename === 'Set') {
+      scope.removeMacroBindings(item.targets);
       addBindingNamesInPlace(scope, item.targets);
     } else if (item.typename === 'Macro') {
       addBindingNamesInPlace(scope, item.name);
     } else if (item.typename === 'Import') {
+      scope.removeMacroBindings(item.target);
       addBindingNamesInPlace(scope, item.target);
     } else if (item.typename === 'FromImport') {
-      addNamesToScopeInPlace(scope, collectFromImportBindingNames(item.names));
+      const names = collectFromImportBindingNames(item.names);
+      for (const name of names) {
+        scope.removeMacro(name);
+      }
+      addNamesToScopeInPlace(scope, names);
     }
+  }
+  const previousMemo = scope.replaceMacroAnalysisMemo(new Set());
+  try {
+    for (const macro of scope.localMacros()) {
+      if (!macro.called && analyzeMacroBody(macro, variableName, scope.macroAnalysisMemo())) {
+        return true;
+      }
+    }
+  } finally {
+    scope.replaceMacroAnalysisMemo(previousMemo);
   }
   return false;
 }
@@ -309,7 +376,7 @@ function forLikeNodeReferencesVariable(
  */
 function analyzeSignatureArgs(
   argsNode: unknown,
-  variableName: ReferenceTarget,
+  variableName: ReferenceTarget | undefined,
   boundSymbols: ReadonlySet<string>,
 ): { paramNames: string[]; referencesVariable: boolean } {
   const paramNames: string[] = [];
@@ -333,6 +400,7 @@ function analyzeSignatureArgs(
         const keywordParamName =
           isNunjucksAstNode(pair) && pair.typename === 'Pair' ? getSymbolName(pair.key) : undefined;
         if (
+          variableName &&
           isNunjucksAstNode(pair) &&
           pair.typename === 'Pair' &&
           astChildReferencesVariable(pair, 'value', variableName, defaultScope)
@@ -347,6 +415,7 @@ function analyzeSignatureArgs(
       continue;
     }
     if (
+      variableName &&
       astReferencesVariable(
         child,
         variableName,
@@ -361,29 +430,69 @@ function analyzeSignatureArgs(
   return { paramNames, referencesVariable: false };
 }
 
+function analyzeMacroBody(
+  macro: DeferredMacro,
+  variableName: ReferenceTarget,
+  memo?: Set<DeferredMacro>,
+): boolean {
+  if (macro.analyzing || memo?.has(macro) || macroAnalysisDepth >= MAX_MACRO_ANALYSIS_DEPTH) {
+    return false;
+  }
+
+  macro.analyzing = true;
+  macroAnalysisDepth++;
+  try {
+    // Defaults and bodies see the definition frame's current bindings at each
+    // call, not a declaration-time snapshot or the caller macro's local frame.
+    const { referencesVariable } = analyzeSignatureArgs(
+      macro.node.args,
+      variableName,
+      macro.definitionScope,
+    );
+    if (referencesVariable) {
+      return true;
+    }
+
+    const macroScope = addNamesToScope(macro.definitionScope, macro.paramNames);
+    const macroName = getSymbolName(macro.node.name);
+    if (macroName) {
+      macroScope.add(macroName);
+      macroScope.registerMacro(macroName, macro);
+    }
+    macroScope.add('caller');
+    const result = astChildReferencesVariable(macro.node, 'body', variableName, macroScope);
+    if (!result) {
+      memo?.add(macro);
+    }
+    return result;
+  } finally {
+    macroAnalysisDepth--;
+    macro.analyzing = false;
+  }
+}
+
 function macroNodeReferencesVariable(
   node: NunjucksAstNode,
   variableName: ReferenceTarget,
   boundSymbols: ReadonlySet<string>,
 ): boolean {
-  const { paramNames, referencesVariable } = analyzeSignatureArgs(
-    node.args,
-    variableName,
-    boundSymbols,
-  );
-  if (referencesVariable) {
-    return true;
+  const { paramNames } = analyzeSignatureArgs(node.args, undefined, boundSymbols);
+  const macroName = getSymbolName(node.name);
+  if (macroName && boundSymbols instanceof LinkedScope) {
+    boundSymbols.registerMacro(macroName, {
+      node,
+      paramNames,
+      definitionScope: boundSymbols,
+      called: false,
+      analyzing: false,
+    });
+    return false;
   }
 
-  // Walk the body with the full macro scope (outer + param names + macro name
-  // + the implicit caller supplied by a call block).
-  const macroScope = addNamesToScope(boundSymbols, paramNames);
-  const macroName = getSymbolName(node.name);
-  if (macroName) {
-    macroScope.add(macroName);
-  }
-  macroScope.add('caller');
-  return astChildReferencesVariable(node, 'body', variableName, macroScope);
+  return analyzeMacroBody(
+    { node, paramNames, definitionScope: boundSymbols, called: false, analyzing: false },
+    variableName,
+  );
 }
 
 function isNodeReferencesVariable(
@@ -391,11 +500,21 @@ function isNodeReferencesVariable(
   variableName: ReferenceTarget,
   boundSymbols: ReadonlySet<string>,
 ): boolean {
+  const right = node.right;
+  if (
+    typeof variableName === 'object' &&
+    'excludeOrOperands' in variableName &&
+    isNunjucksAstNode(right) &&
+    right.typename === 'Symbol' &&
+    (right.value === 'defined' || right.value === 'undefined')
+  ) {
+    return false;
+  }
+
   if (astChildReferencesVariable(node, 'left', variableName, boundSymbols)) {
     return true;
   }
 
-  const right = node.right;
   if (!isNunjucksAstNode(right)) {
     return false;
   }
@@ -500,6 +619,50 @@ function lookupNodeReferencesVariable(
   return false;
 }
 
+function funCallNodeReferencesVariable(
+  node: NunjucksAstNode,
+  variableName: ReferenceTarget,
+  boundSymbols: ReadonlySet<string>,
+): boolean {
+  const calls: NunjucksAstNode[] = [];
+  let current: unknown = node;
+  while (isNunjucksAstNode(current) && current.typename === 'FunCall') {
+    calls.push(current);
+    current = current.name;
+  }
+
+  // Preserve the original name-then-args field order without recursively
+  // walking the callee chain. Arguments and macro bodies follow their callee.
+  const innermost = calls[calls.length - 1]!;
+  if (
+    isNunjucksAstNode(current) &&
+    astReferencesVariable(current, variableName, { field: 'name', node: innermost }, boundSymbols)
+  ) {
+    return true;
+  }
+  for (let index = calls.length - 1; index >= 0; index--) {
+    const call = calls[index]!;
+    if (astChildReferencesVariable(call, 'args', variableName, boundSymbols)) {
+      return true;
+    }
+    const macroName = getSymbolName(call.name);
+    const macro =
+      macroName && boundSymbols instanceof LinkedScope
+        ? boundSymbols.findMacro(macroName)
+        : undefined;
+    const memo = boundSymbols instanceof LinkedScope ? boundSymbols.macroAnalysisMemo() : undefined;
+    if (macro && (memo?.has(macro) || macroAnalysisDepth < MAX_MACRO_ANALYSIS_DEPTH)) {
+      // At the depth limit, leave the macro uncalled so the final-scope pass
+      // collects its dependencies without recursively expanding the whole chain.
+      macro.called = true;
+      if (analyzeMacroBody(macro, variableName, memo)) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 const LEFT_ASSOCIATIVE_BINARY_NODES = new Set([
   'Concat',
   'Add',
@@ -548,6 +711,10 @@ function astReferencesVariable(
     'excludeOrOperands' in variableName
   ) {
     return false;
+  }
+
+  if (node.typename === 'FunCall') {
+    return funCallNodeReferencesVariable(node, variableName, boundSymbols);
   }
 
   if (node.typename === 'LookupVal') {

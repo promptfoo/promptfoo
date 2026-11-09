@@ -5,6 +5,7 @@ import { getEnvString, getProcessEnv } from '../../src/envars';
 import { getEnvOverridesProvider, setEnvOverridesProvider } from '../../src/envOverrides';
 import {
   analyzeTemplateReference,
+  extractUnboundVariablesFromTemplate,
   extractVariablesFromExpression,
   extractVariablesFromTemplate,
   extractVariablesFromTemplates,
@@ -152,6 +153,7 @@ describe('templateReferencesVariable', () => {
     ['filter argument', '{{ input | default(_conversation) }}'],
     ['is test with call arg', '{{ foo is divisibleby(_conversation) }}'],
     ['is test function argument value', '{{ foo is _conversation(_conversation) }}'],
+    ['existence test operand', '{{ _conversation is defined }}'],
     ['bracket index lookup', '{{ obj[_conversation] }}'],
     ['array literal member', '{{ [_conversation, other] }}'],
     ['group expression', '{{ (_conversation) }}'],
@@ -348,6 +350,14 @@ describe('extractVariablesFromExpression', () => {
     } finally {
       parseSpy.mockRestore();
     }
+  });
+
+  it('preserves callee-before-argument reference order through nested calls', () => {
+    expect(extractUnboundVariablesFromTemplate('{{ outer(inner)(later) }}')).toEqual([
+      'outer',
+      'inner',
+      'later',
+    ]);
   });
 
   it('excludes callable test names from expression references', () => {

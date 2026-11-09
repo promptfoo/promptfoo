@@ -3163,4 +3163,71 @@ describe('evaluatorHelpers', () => {
       expect(fs.readFileSync).not.toHaveBeenCalled();
     });
   });
+
+  describe('structural dependency guards', () => {
+    it('does not treat quoted raw markers as real spans that hide a missing dependency', async () => {
+      const value = "{{ '{% raw %}' }}{{missing}}{{ '{% endraw %}' }}";
+      expect(await renderPrompt(toPrompt('{{v}}'), { v: value })).toBe(value);
+    });
+
+    it('strips many unclosed comments in linear time', async () => {
+      const value = '{{ "ok" }}' + '{#'.repeat(64000);
+      const started = performance.now();
+      await renderPrompt(toPrompt('{"text":"{{v}}"}'), { v: value });
+      expect(performance.now() - started).toBeLessThan(2000);
+    }, 15000);
+
+    it('allows missing operands in defined and undefined tests', async () => {
+      expect(await renderPrompt(toPrompt('{{v}}'), { v: '{{ user is defined }}' })).toBe('false');
+      expect(await renderPrompt(toPrompt('{{v}}'), { v: '{{ user is undefined }}' })).toBe('true');
+    });
+
+    it('protects verbatim bodies without nesting later placeholders', async () => {
+      const value = '{% verbatim %}{{% endverbatim %} {{x}}';
+      expect(await renderPrompt(toPrompt('{{v}}'), { v: value, x: 'yes' })).toBe('{ yes');
+    });
+
+    it('collects dependencies through deep function-call chains without overflowing', async () => {
+      const value = '{{ a' + '()'.repeat(6000) + ' }}';
+      const rendered = await renderPrompt(toPrompt('{"text":"{{v}}"}'), { v: value });
+      expect(JSON.parse(rendered).text).toBe(value);
+    }, 15000);
+
+    it('bounds deferred macro chains without expanding them quadratically', async () => {
+      const value = Array.from({ length: 1000 }, (_, index) =>
+        index === 0
+          ? '{% macro m0() %}x{% endmacro %}'
+          : `{% macro m${index}() %}{{m${index - 1}()}}{% endmacro %}`,
+      ).join('');
+      const rendered = await renderPrompt(toPrompt('{"text":"{{v}}"}'), { v: value });
+      expect(JSON.parse(rendered).text).toBe(value);
+    }, 15000);
+
+    it('retains deep dependencies beyond the macro expansion limit', async () => {
+      const value =
+        Array.from({ length: 1000 }, (_, index) =>
+          index === 0
+            ? '{% macro m0() %}{{missing}}{% endmacro %}'
+            : `{% macro m${index}() %}{{m${index - 1}()}}{% endmacro %}`,
+        ).join('') + '{{m999()}}';
+      expect(await renderPrompt(toPrompt('{{v}}'), { v: value })).toBe(value);
+    }, 15000);
+
+    it('does not leak caller macro locals into nested macro dependencies', async () => {
+      const value =
+        "{% macro b() %}{{y}}{% endmacro %}{% macro a(y='local') %}{{b()}}{% endmacro %}{{a()}}";
+      expect(await renderPrompt(toPrompt('{{v}}'), { v: value })).toBe(value);
+    });
+
+    it('resolves deferred macro reads against bindings present at each call', async () => {
+      const afterSet = "{% macro m() %}{{ s ~ '!' }}{% endmacro %}{% set s = 'a' %}{{ m() ~ '' }}";
+      expect(await renderPrompt(toPrompt('{{v}}'), { v: afterSet })).toBe('a!');
+
+      const beforeSet = '{% macro m() %}{{s}}{% endmacro %}{{m()}}{% set s = "a" %}';
+      expect(await renderPrompt(toPrompt('{{v}}'), { v: beforeSet })).toBe(beforeSet);
+
+      const defaultAfterSet = '{% macro m(x=s) %}{{x}}{% endmacro %}{% set s = "a" %}{{m()}}';
+      expect(await renderPrompt(toPrompt('{{v}}'), { v: defaultAfterSet })).toBe('a');
+    });
+  });
 });
