@@ -75,6 +75,51 @@ async function markComparisonPending(record: Eval) {
 }
 
 describeEvaluator('select-best runtime grading configuration', () => {
+  it.each([
+    { name: 'native zero', output: 0, expected: '0' },
+    { name: 'native false', output: false, expected: 'false' },
+    { name: 'positive number', output: 7, expected: '7' },
+    { name: 'true', output: true, expected: 'true' },
+    { name: 'empty string', output: '', expected: '' },
+    { name: 'textual zero', output: '0', expected: '0' },
+    { name: 'textual false', output: 'false', expected: 'false' },
+  ])('preserves $name in the select-best grader prompt', async ({ output, expected }) => {
+    const { grader, suite, target } = makeSuite();
+    vi.mocked(target.callApi).mockImplementation(async (prompt) => ({
+      output: prompt === 'first' ? output : 'reference',
+    }));
+    suite.tests![0].assert!.unshift({ type: 'javascript', value: 'true' });
+    const expectedFragment = '<Text index="0">\n' + expected + '\n</Text>';
+    vi.mocked(grader.callApi).mockImplementation(async (prompt) => ({
+      output: JSON.parse(prompt)[0].content.includes(expectedFragment) ? '0' : '1',
+    }));
+    const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
+
+    await evaluate(suite, record, { maxConcurrency: 1, cache: false });
+
+    expect(grader.callApi).toHaveBeenCalledTimes(1);
+    const graderPrompt = JSON.parse(vi.mocked(grader.callApi).mock.calls[0][0])[0].content;
+    expect(graderPrompt).toContain(expectedFragment);
+    const results = await record.fetchResultsByTestIdx(0);
+    const first = results.find((result) => result.promptIdx === 0)!;
+    const second = results.find((result) => result.promptIdx === 1)!;
+    expect(first.response?.output).toEqual(output);
+    expect(first.gradingResult?.componentResults).toContainEqual(
+      expect.objectContaining({
+        assertion: expect.objectContaining({ type: 'select-best' }),
+        pass: true,
+        score: 1,
+      }),
+    );
+    expect(second.gradingResult?.componentResults).toContainEqual(
+      expect.objectContaining({
+        assertion: expect.objectContaining({ type: 'select-best' }),
+        pass: false,
+        score: 0,
+      }),
+    );
+  });
+
   it.each([0, 10000])('grades the replacement test with timeoutMs=%s', async (timeoutMs) => {
     const { grader, suite } = makeSuite();
     vi.mocked(runExtensionHook).mockImplementation(async (_extensions, hookName, context) => {

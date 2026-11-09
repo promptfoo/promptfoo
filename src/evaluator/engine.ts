@@ -3257,7 +3257,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       };
 
       const repeatCacheContext = repeatCacheContextByTestIdx.get(testIdx);
-      const outputs = resultsToCompare.map((r) => r.response?.output || '');
+      const outputs = resultsToCompare.map((r) => r.response?.output ?? '');
       gradingResults = await withCacheNamespace(
         repeatCacheContext
           ? getRepeatCacheNamespace(
