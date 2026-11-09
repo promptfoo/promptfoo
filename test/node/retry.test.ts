@@ -356,6 +356,7 @@ describe('retryCommand', () => {
       expect(prompts[0].metrics).toMatchObject({
         cost: expectedLogicalCost,
         incurredCost: expectedIncurredCost,
+        testCacheHitCount: costs.filter(({ cached }) => cached).length,
       });
       expect(evalRecord.addPrompts).toHaveBeenCalledWith(prompts);
     },
@@ -472,6 +473,9 @@ describe('retryCommand', () => {
     await recalculatePromptMetrics(evalRecord);
 
     expect(prompts[0].metrics.tokenUsage).toMatchObject(scenario.expected);
+    expect(prompts[0].metrics.testCacheHitCount).toBe(
+      'cached' in scenario.response && scenario.response.cached ? 1 : 0,
+    );
   });
 
   it('logs and rethrows metric recalculation and persistence failures', async () => {

@@ -459,7 +459,6 @@ export async function extractAndStoreBinaryData(
     try {
       const parsed = JSON.parse(response.output) as { data?: Array<Record<string, unknown>> };
       if (Array.isArray(parsed.data)) {
-        let jsonMutated = false;
         const storedUris: string[] = [];
         for (const item of parsed.data) {
           if (item?.b64_json && typeof item.b64_json === 'string') {
@@ -470,9 +469,7 @@ export async function extractAndStoreBinaryData(
               'image',
             );
             if (stored) {
-              item.b64_json = stored.uri;
               storedUris.push(stored.uri);
-              jsonMutated = true;
               mutated = true;
               logger.debug('[BlobExtractor] Stored image blob from b64_json', {
                 ...context,
@@ -481,15 +478,9 @@ export async function extractAndStoreBinaryData(
             }
           }
         }
-        if (jsonMutated) {
+        if (storedUris.length > 0) {
           // Prefer a simple blob ref output so graders/UI don't have to parse JSON
-          if (storedUris.length === 1) {
-            next.output = storedUris[0];
-          } else if (storedUris.length > 1) {
-            next.output = JSON.stringify(storedUris);
-          } else {
-            next.output = JSON.stringify(parsed);
-          }
+          next.output = storedUris.length === 1 ? storedUris[0] : JSON.stringify(storedUris);
           next.metadata = {
             ...(response.metadata || {}),
             blobUris: storedUris,

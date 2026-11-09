@@ -121,6 +121,7 @@
     {
       "name": "node",
       "roots": [
+        "src/cache",
         "src/cache.ts",
         "src/database",
         "src/evaluate.ts",

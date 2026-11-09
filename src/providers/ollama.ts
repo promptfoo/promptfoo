@@ -1,5 +1,5 @@
 import { type FetchWithCacheResult, fetchWithCache } from '../cache';
-import { getEnvString } from '../envars';
+import { getEnvString, getProviderEnvString } from '../envars';
 import logger from '../logger';
 import { extractGenAIResponse, type GenAISpanContext, withGenAISpan } from '../tracing/genaiTracer';
 import { normalizeFinishReason } from '../util/finishReason';
@@ -22,6 +22,11 @@ import type {
   ProviderResponse,
   TokenUsage,
 } from '../types/index';
+
+function getOllamaApiUrl(env: EnvOverrides | undefined, endpoint: 'generate' | 'chat' | 'embed') {
+  const baseUrl = resolveProviderEnv(env, ['OLLAMA_BASE_URL'])?.value || 'http://localhost:11434';
+  return `${baseUrl.replace(/\/+$/, '')}/api/${endpoint}`;
+}
 
 interface OllamaCompletionOptions {
   // Nested `options` members, per Ollama's current Options/Runner structs:
@@ -588,11 +593,12 @@ export class OllamaCompletionProvider implements ApiProvider {
 
     logger.debug('Calling Ollama API', { params });
 
-    const apiKey = this.env?.OLLAMA_API_KEY ?? getEnvString('OLLAMA_API_KEY');
+    const apiKey =
+      getProviderEnvString(this.env, 'OLLAMA_API_KEY') ?? getEnvString('OLLAMA_API_KEY');
     let response: FetchWithCacheResult<string> | undefined;
     try {
       response = await fetchWithCache<string>(
-        `${resolveProviderEnv(this.env, ['OLLAMA_BASE_URL'])?.value || 'http://localhost:11434'}/api/generate`,
+        getOllamaApiUrl(this.env, 'generate'),
         {
           method: 'POST',
           headers: {
@@ -744,11 +750,12 @@ export class OllamaChatProvider implements ApiProvider {
 
     logger.debug('[Ollama Chat] Calling Ollama API', { params });
 
-    const apiKey = this.env?.OLLAMA_API_KEY ?? getEnvString('OLLAMA_API_KEY');
+    const apiKey =
+      getProviderEnvString(this.env, 'OLLAMA_API_KEY') ?? getEnvString('OLLAMA_API_KEY');
     let response: FetchWithCacheResult<string> | undefined;
     try {
       response = await fetchWithCache<string>(
-        `${resolveProviderEnv(this.env, ['OLLAMA_BASE_URL'])?.value || 'http://localhost:11434'}/api/chat`,
+        getOllamaApiUrl(this.env, 'chat'),
         {
           method: 'POST',
           headers: {
@@ -879,11 +886,12 @@ export class OllamaEmbeddingProvider extends OllamaCompletionProvider {
       prompt_eval_count?: number;
     }
 
-    const apiKey = this.env?.OLLAMA_API_KEY ?? getEnvString('OLLAMA_API_KEY');
+    const apiKey =
+      getProviderEnvString(this.env, 'OLLAMA_API_KEY') ?? getEnvString('OLLAMA_API_KEY');
     let response: FetchWithCacheResult<OllamaEmbedResponse>;
     try {
       response = await fetchWithCache<OllamaEmbedResponse>(
-        `${resolveProviderEnv(this.env, ['OLLAMA_BASE_URL'])?.value || 'http://localhost:11434'}/api/embed`,
+        getOllamaApiUrl(this.env, 'embed'),
         {
           method: 'POST',
           headers: {
