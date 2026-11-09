@@ -51,10 +51,12 @@ export async function extractTextFromPDF(pdfPath: string): Promise<string> {
   }
 }
 
-// Returns the names of string-valued variables whose placeholder references form
-// a cycle (direct or transitive). Iterative three-color DFS, so long reference
-// chains cannot overflow the call stack.
-function findCyclicVars(variables: Record<string, VarValue>, regex: RegExp): Set<string> {
+// Builds the placeholder reference graph: each string-valued variable maps to the
+// names of the variables its placeholders reference, in order.
+function buildReferenceGraph(
+  variables: Record<string, VarValue>,
+  regex: RegExp,
+): Map<string, string[]> {
   const refs = new Map<string, string[]>();
   for (const [key, value] of Object.entries(variables)) {
     if (typeof value === 'string') {
@@ -64,40 +66,107 @@ function findCyclicVars(variables: Record<string, VarValue>, regex: RegExp): Set
       );
     }
   }
-  const cyclic = new Set<string>();
-  const state = new Map<string, 'visiting' | 'done'>();
-  for (const start of refs.keys()) {
-    if (state.has(start)) {
-      continue;
+  return refs;
+}
+
+// Pops the strongly connected component rooted at `root` off the SCC stack and,
+// when it is cyclic (more than one member, or a self-reference), records its
+// members in `cyclic`.
+function collectSccIfCyclic(
+  root: string,
+  refs: Map<string, string[]>,
+  sccStack: string[],
+  onStack: Set<string>,
+  cyclic: Set<string>,
+): void {
+  const members: string[] = [];
+  let member: string;
+  do {
+    member = sccStack.pop() as string;
+    onStack.delete(member);
+    members.push(member);
+  } while (member !== root);
+  if (members.length > 1 || (refs.get(root) ?? []).includes(root)) {
+    for (const name of members) {
+      cyclic.add(name);
     }
-    state.set(start, 'visiting');
-    const path = [start];
-    const stack = [{ node: start, childIndex: 0 }];
-    while (stack.length > 0) {
-      const top = stack[stack.length - 1];
-      const children = refs.get(top.node) ?? [];
-      if (top.childIndex < children.length) {
-        const child = children[top.childIndex++];
-        const childState = state.get(child);
-        if (childState === 'visiting') {
-          // Back edge: everything from child to the top of the path is on a cycle.
-          const cycleStart = path.indexOf(child);
-          for (let i = cycleStart; i < path.length; i++) {
-            cyclic.add(path[i]);
-          }
-        } else if (childState === undefined) {
-          state.set(child, 'visiting');
-          path.push(child);
-          stack.push({ node: child, childIndex: 0 });
-        }
-      } else {
-        state.set(top.node, 'done');
-        stack.pop();
-        path.pop();
+  }
+}
+
+interface TarjanState {
+  refs: Map<string, string[]>;
+  indexOf: Map<string, number>;
+  lowlink: Map<string, number>;
+  onStack: Set<string>;
+  sccStack: string[];
+  cyclic: Set<string>;
+  counter: number;
+}
+
+// Iterative Tarjan walk from `start`: assigns index/lowlink, pushes discovered
+// nodes, and pops strongly connected components as their roots complete.
+function strongConnectFrom(start: string, state: TarjanState): void {
+  const { refs, indexOf, lowlink, onStack, sccStack, cyclic } = state;
+  indexOf.set(start, state.counter);
+  lowlink.set(start, state.counter);
+  state.counter++;
+  sccStack.push(start);
+  onStack.add(start);
+  const work = [{ node: start, childIndex: 0 }];
+  while (work.length > 0) {
+    const top = work[work.length - 1];
+    const children = refs.get(top.node) ?? [];
+    if (top.childIndex < children.length) {
+      const child = children[top.childIndex++];
+      if (!indexOf.has(child)) {
+        indexOf.set(child, state.counter);
+        lowlink.set(child, state.counter);
+        state.counter++;
+        sccStack.push(child);
+        onStack.add(child);
+        work.push({ node: child, childIndex: 0 });
+      } else if (onStack.has(child)) {
+        lowlink.set(
+          top.node,
+          Math.min(lowlink.get(top.node) as number, indexOf.get(child) as number),
+        );
+      }
+    } else {
+      work.pop();
+      if (work.length > 0) {
+        const parent = work[work.length - 1].node;
+        lowlink.set(
+          parent,
+          Math.min(lowlink.get(parent) as number, lowlink.get(top.node) as number),
+        );
+      }
+      if (lowlink.get(top.node) === indexOf.get(top.node)) {
+        collectSccIfCyclic(top.node, refs, sccStack, onStack, cyclic);
       }
     }
   }
-  return cyclic;
+}
+
+// Returns the names of string-valued variables whose placeholder references form
+// a cycle (direct or transitive). Iterative Tarjan SCC: a variable is cyclic when
+// its strongly connected component has more than one member or it references
+// itself. Iterative so long reference chains cannot overflow the call stack.
+function findCyclicVars(variables: Record<string, VarValue>, regex: RegExp): Set<string> {
+  const state: TarjanState = {
+    refs: buildReferenceGraph(variables, regex),
+    indexOf: new Map(),
+    lowlink: new Map(),
+    onStack: new Set(),
+    sccStack: [],
+    cyclic: new Set(),
+    counter: 0,
+  };
+  for (const start of state.refs.keys()) {
+    if (!state.indexOf.has(start)) {
+      strongConnectFrom(start, state);
+    }
+  }
+  return state.cyclic;
 }
 
 export function resolveVariables(

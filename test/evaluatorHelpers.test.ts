@@ -731,6 +731,21 @@ describe('evaluatorHelpers', () => {
       });
     });
 
+    it('should leave every member of a non-tree cycle unresolved', () => {
+      const variables = {
+        v0: '{{v1}} {{v2}}',
+        v1: '{{v0}}',
+        v2: '{{v1}}',
+        message: '{{missing}} {{v2}}',
+      };
+      expect(resolveVariables(variables)).toEqual({
+        v0: '{{v1}} {{v2}}',
+        v1: '{{v0}}',
+        v2: '{{v1}}',
+        message: '{{missing}} {{v2}}',
+      });
+    });
+
     it('should inline a skipped variable whose contents mention the consumer', () => {
       const varsResolvedFromSkipped = new Set<string>();
       const variables = { wrapped: '{{payload}}', payload: '{{wrapped}}' };
