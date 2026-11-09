@@ -62,7 +62,12 @@ import { shouldShareResults } from '../util/sharing';
 import { resolveTestsWatchPaths } from '../util/testCaseReader';
 import { TokenUsageTracker } from '../util/tokenUsage';
 import { isUuid } from '../util/uuid';
-import { deleteErrorResults, getErrorResultIds, recalculatePromptMetrics } from './retry';
+import {
+  deleteErrorResults,
+  getErrorResultIds,
+  getReplacedErrorResultIds,
+  recalculatePromptMetrics,
+} from './retry';
 import { notCloudEnabledShareInstructions } from './shareInstructions';
 import type { FSWatcher } from 'chokidar';
 import type { Command } from 'commander';
@@ -1025,15 +1030,16 @@ async function doEvalWithEnv(
       });
 
       // Post-evaluation cleanup for retry-errors mode
-      // SUCCESS: Now it's safe to delete the old ERROR results and recalculate metrics
+      // Remove only old ERROR rows covered by another persisted result at the same index pair.
       // Skip if evaluation was paused - no point cleaning up incomplete retry
       if (retryErrors && cliState._retryErrorResultIds && !paused) {
         const errorResultIds = cliState._retryErrorResultIds;
         try {
-          await deleteErrorResults(errorResultIds);
+          const replacedErrorIds = await getReplacedErrorResultIds(ret, errorResultIds);
+          await deleteErrorResults(replacedErrorIds);
           await recalculatePromptMetrics(ret);
           logger.debug(
-            `Cleaned up ${errorResultIds.length} old ERROR results after successful retry`,
+            `Cleaned up ${replacedErrorIds.length} old ERROR results after successful retry`,
           );
         } catch (cleanupError) {
           // Cleanup failure is non-fatal - retry itself succeeded

@@ -1,3 +1,6 @@
+import path from 'node:path';
+import { isDeepStrictEqual } from 'node:util';
+
 import chalk from 'chalk';
 import { and, eq, inArray } from 'drizzle-orm';
 import cliState from '../cliState';
@@ -23,7 +26,7 @@ import { getOutputFileFormat } from '../util/outputFormats';
 import { shouldShareResults } from '../util/sharing';
 import { accumulateGradingTokenUsage, accumulateResponseTokenUsage } from '../util/tokenUsageUtils';
 
-import type { PromptMetrics } from '../types/index';
+import type { PromptMetrics, UnifiedConfig } from '../types/index';
 import type { InternalEvaluateOptions } from '../types/internal';
 
 export interface RetryCommandOptions {
@@ -53,6 +56,101 @@ function assertRetryProviderFilterMatched(
   throw new ConfigResolutionError(
     `Stored provider filter "${providerFilter}" matched no providers in the ${configDescription}. Existing ERROR results were preserved.`,
   );
+}
+
+function normalizeRetryLayout(value: unknown, ancestors = new Set<object>()): unknown {
+  if (value === null || typeof value === 'string' || typeof value === 'boolean') {
+    return value;
+  }
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value !== 'object' || ancestors.has(value)) {
+    throw new Error('Retry layout is not safely comparable');
+  }
+  const isArray = Array.isArray(value);
+  const prototype = Object.getPrototypeOf(value);
+  if (!isArray && prototype !== Object.prototype && prototype !== null) {
+    throw new Error('Retry layout is not plain data');
+  }
+  for (const key of Reflect.ownKeys(value)) {
+    const descriptor = Object.getOwnPropertyDescriptor(value, key)!;
+    if (
+      typeof key === 'symbol' ||
+      !('value' in descriptor) ||
+      (!descriptor.enumerable && !(isArray && key === 'length'))
+    ) {
+      throw new Error('Retry layout is not plain data');
+    }
+  }
+  ancestors.add(value);
+  try {
+    return isArray
+      ? value.map((item) => normalizeRetryLayout(item, ancestors))
+      : Object.fromEntries(
+          Object.entries(value)
+            .filter(([, item]) => item !== undefined)
+            .map(([key, item]) => [key, normalizeRetryLayout(item, ancestors)]),
+        );
+  } finally {
+    ancestors.delete(value);
+  }
+}
+
+function hasRelativeFileReference(value: unknown): boolean {
+  if (typeof value === 'string') {
+    return value.startsWith('file://') && !path.isAbsolute(value.slice(7));
+  }
+  if (value && typeof value === 'object') {
+    return Object.values(value).some(hasRelativeFileReference);
+  }
+  return false;
+}
+
+function assertRetryLayoutMatched(
+  originalEval: Eval,
+  config: Partial<UnifiedConfig>,
+  filterRange: string | undefined,
+): void {
+  const savedRange = originalEval.runtimeOptions?.filterRange;
+  const layout = (savedConfig: Partial<UnifiedConfig>, range: string | undefined) =>
+    normalizeRetryLayout({
+      tests: savedConfig.tests,
+      scenarios: savedConfig.scenarios,
+      defaultTest: savedConfig.defaultTest,
+      filterRange: range,
+    });
+  let matches = false;
+  try {
+    const original = layout(
+      originalEval.config,
+      typeof savedRange === 'string'
+        ? savedRange
+        : originalEval.config.evaluateOptions?.filterRange,
+    );
+    const override = layout(config, filterRange);
+    const usesRelativeFiles =
+      hasRelativeFileReference(original) || hasRelativeFileReference(override);
+    const originalBase = originalEval.config.basePath;
+    const overrideBase = config.basePath;
+    matches =
+      isDeepStrictEqual(original, override) &&
+      (!usesRelativeFiles ||
+        (typeof originalBase === 'string' &&
+          typeof overrideBase === 'string' &&
+          path.isAbsolute(originalBase) &&
+          path.isAbsolute(overrideBase) &&
+          path.resolve(originalBase) === path.resolve(overrideBase)));
+  } catch {
+    // Functions, accessors, cycles, and other non-JSON layouts cannot establish index identity.
+  }
+  if (!matches) {
+    throw new ConfigResolutionError(
+      'The override config changes or cannot preserve the saved test layout. ' +
+        'Existing ERROR results were preserved. Retry without --config to use the saved selection, ' +
+        'or start a new evaluation for the changed selection.',
+    );
+  }
 }
 
 async function resolveRetryConfigs(
@@ -118,6 +216,7 @@ async function resolveRetryConfigs(
           'Retry without --config to use the saved test selection.',
       );
     }
+    assertRetryLayoutMatched(originalEval, configs.config, filterRange);
   }
 
   // The original run filtered twice: raw configs in resolveConfigs, then instantiated
@@ -175,6 +274,45 @@ export async function getErrorResultIds(evalId: string): Promise<string[]> {
     .all();
 
   return errorResults.map((r) => r.id);
+}
+
+/** Find captured ERROR rows whose index pair has another persisted result. */
+export async function getReplacedErrorResultIds(
+  evalRecord: Eval,
+  errorResultIds: string[],
+): Promise<string[]> {
+  if (errorResultIds.length === 0 || evalRecord.resultPersistenceFailed) {
+    return [];
+  }
+  const originalIds = new Set(errorResultIds);
+  const originalPairs = new Map<string, string>();
+  const replacementPairs = new Set<string>();
+  const db = await getDb();
+  // Read only identities; response and test payloads can be large for long evaluations.
+  const rows = await db
+    .select({
+      id: evalResultsTable.id,
+      testIdx: evalResultsTable.testIdx,
+      promptIdx: evalResultsTable.promptIdx,
+      failureReason: evalResultsTable.failureReason,
+    })
+    .from(evalResultsTable)
+    .where(eq(evalResultsTable.evalId, evalRecord.id))
+    .all();
+  for (const row of rows) {
+    const pair = row.testIdx + ':' + row.promptIdx;
+    if (originalIds.has(row.id)) {
+      if (row.failureReason === ResultFailureReason.ERROR) {
+        originalPairs.set(row.id, pair);
+      }
+    } else {
+      replacementPairs.add(pair);
+    }
+  }
+  return errorResultIds.filter((id) => {
+    const pair = originalPairs.get(id);
+    return pair !== undefined && replacementPairs.has(pair);
+  });
 }
 
 /**
@@ -438,7 +576,7 @@ async function retryWithConfig(
 
     let errorRowsDeleted = false;
     try {
-      await deleteErrorResults(errorResultIds);
+      await deleteErrorResults(await getReplacedErrorResultIds(retriedEval, errorResultIds));
       errorRowsDeleted = true;
       await recalculatePromptMetrics(retriedEval);
     } catch (cleanupError) {

@@ -2,8 +2,11 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
+import { eq } from 'drizzle-orm';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
+import { getDb } from '../../src/database/index';
+import { evalResultsTable, evalsTable } from '../../src/database/tables';
 import { hasTestsInRange } from '../../src/evaluator/engine';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
@@ -117,7 +120,7 @@ describe('retry configured test selection', () => {
       true,
     );
     fs.writeFileSync(readyPath, 'ready');
-    return { record, config, configPath, callsPath, initial };
+    return { record, config, configPath, callsPath, readyPath, initial };
   }
 
   async function assertRetryMatchesInitial(
@@ -217,6 +220,160 @@ describe('retry configured test selection', () => {
       expect(calls).toHaveLength(fixture.initial.length);
     });
   });
+
+  it('allows transport-only override changes when the selected test layout is unchanged', async () => {
+    const fixture = await initialEval('top-level', { filterFirstN: 1 });
+    fs.writeFileSync(
+      fixture.configPath,
+      JSON.stringify({
+        ...fixture.config,
+        providers: fixture.config.providers.map((id) => ({ id, config: { timeoutMs: 4321 } })),
+        commandLineOptions: { filterFirstN: 1, maxConcurrency: 4, delay: 0, share: false },
+      }),
+    );
+    await assertRetryMatchesInitial(fixture, true);
+  });
+
+  it.each(
+    (['top-level', 'scenario', 'mixed'] as const).flatMap((form) => [
+      { form, configured: { filterFirstN: 1 } },
+      { form, configured: { filterPattern: 'keep$' } },
+    ]),
+  )(
+    'preserves the saved layout before a narrowing $form override: $configured',
+    async ({ form, configured }) => {
+      const fixture = await initialEval(form, {});
+      const db = await getDb();
+      const before = await db
+        .select()
+        .from(evalResultsTable)
+        .where(eq(evalResultsTable.evalId, fixture.record.id))
+        .all();
+      fs.writeFileSync(
+        fixture.configPath,
+        JSON.stringify({ ...fixture.config, commandLineOptions: configured }),
+      );
+
+      await expect(retryCommand(fixture.record.id, { config: fixture.configPath })).rejects.toThrow(
+        /saved test layout.*ERROR results were preserved/,
+      );
+
+      expect(
+        await db
+          .select()
+          .from(evalResultsTable)
+          .where(eq(evalResultsTable.evalId, fixture.record.id))
+          .all(),
+      ).toEqual(before);
+      expect(
+        fs.readFileSync(fixture.callsPath, 'utf8').trim().split(String.fromCharCode(10)),
+      ).toHaveLength(fixture.initial.length);
+    },
+  );
+
+  it('refuses a pattern that would move a completed test onto an ERROR index', async () => {
+    const fixture = await initialEval('top-level', {});
+    const db = await getDb();
+    const rows = await db
+      .select()
+      .from(evalResultsTable)
+      .where(eq(evalResultsTable.evalId, fixture.record.id))
+      .all();
+    for (const row of rows.filter((result) => result.testIdx > 0)) {
+      await db
+        .update(evalResultsTable)
+        .set({
+          success: true,
+          score: 1,
+          failureReason: ResultFailureReason.NONE,
+          error: null,
+          response: { output: String(row.testCase.vars?.input) },
+        })
+        .where(eq(evalResultsTable.id, row.id))
+        .run();
+    }
+    const before = await db
+      .select()
+      .from(evalResultsTable)
+      .where(eq(evalResultsTable.evalId, fixture.record.id))
+      .all();
+    const errors = await getErrorResultIds(fixture.record.id);
+    expect(errors).toHaveLength(1);
+    fs.writeFileSync(
+      fixture.configPath,
+      JSON.stringify({ ...fixture.config, commandLineOptions: { filterPattern: 'keep$' } }),
+    );
+
+    await expect(retryCommand(fixture.record.id, { config: fixture.configPath })).rejects.toThrow(
+      /saved test layout.*ERROR results were preserved/,
+    );
+
+    expect(
+      await db
+        .select()
+        .from(evalResultsTable)
+        .where(eq(evalResultsTable.evalId, fixture.record.id))
+        .all(),
+    ).toEqual(before);
+    expect(await getErrorResultIds(fixture.record.id)).toEqual(errors);
+    expect(
+      fs.readFileSync(fixture.callsPath, 'utf8').trim().split(String.fromCharCode(10)),
+    ).toHaveLength(fixture.initial.length);
+  });
+
+  it.each(
+    (['retry', 'retry-errors'] as const).flatMap((mode) => [
+      { mode, stillFails: false },
+      { mode, stillFails: true },
+    ]),
+  )(
+    'preserves ERROR rows without a replacement in $mode (stillFails=$stillFails)',
+    async ({ mode, stillFails }) => {
+      const fixture = await initialEval('top-level', {});
+      const db = await getDb();
+      await db
+        .update(evalsTable)
+        .set({
+          runtimeOptions: { ...fixture.record.runtimeOptions, filterRange: '0:1' },
+        })
+        .where(eq(evalsTable.id, fixture.record.id))
+        .run();
+      const before = await db
+        .select()
+        .from(evalResultsTable)
+        .where(eq(evalResultsTable.evalId, fixture.record.id))
+        .all();
+      if (stillFails) {
+        fs.unlinkSync(fixture.readyPath);
+      }
+
+      if (mode === 'retry') {
+        await retryCommand(fixture.record.id, { share: false, verbose: true });
+      } else {
+        await doEval(
+          { retryErrors: true, write: true, table: false, share: false },
+          {},
+          undefined,
+          { showProgressBar: false },
+        );
+      }
+
+      const after = await db
+        .select()
+        .from(evalResultsTable)
+        .where(eq(evalResultsTable.evalId, fixture.record.id))
+        .all();
+      const unreplaced = before.filter((result) => result.testIdx !== 0);
+      expect(after.filter((result) => result.testIdx !== 0)).toEqual(unreplaced);
+      const replaced = after.filter((result) => result.testIdx === 0);
+      expect(replaced).toHaveLength(1);
+      expect(replaced[0].id).not.toBe(before.find((result) => result.testIdx === 0)!.id);
+      expect(replaced[0].failureReason).toBe(
+        stillFails ? ResultFailureReason.ERROR : ResultFailureReason.NONE,
+      );
+      expect(after).toHaveLength(before.length);
+    },
+  );
 
   it.each(
     (['top-level', 'scenario', 'mixed'] as const).flatMap((form) => [

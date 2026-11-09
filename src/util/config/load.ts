@@ -1242,6 +1242,7 @@ async function resolveLoadedConfig(
         );
       }
       invariant(typeof scenario === 'object', 'scenario must be an object');
+      scenario.tests ??= [{ vars: {} }];
       const filteredTests = await filterTests(
         {
           ...(scenario ?? {}),
