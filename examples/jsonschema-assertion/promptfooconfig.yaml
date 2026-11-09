@@ -1,0 +1,51 @@
+description: 'Customer feedback sentiment extraction with JSON Schema assertion'
+
+providers:
+  - id: 'openai:gpt-4o-mini'
+    label: 'gpt-4o-mini'
+
+prompts:
+  - id: |
+      You are a customer support analyst. Given customer feedback, extract
+      sentiment and up to three keywords. Reply ONLY with valid JSON matching
+      this schema:
+      {
+        "type": "object",
+        "properties": {
+          "sentiment": { "enum": ["positive", "negative", "neutral"] },
+          "keywords":  { "type": "array", "items": { "type": "string" }, "maxItems": 3 }
+        },
+        "required": ["sentiment", "keywords"]
+      }
+    label: 'sentiment-extraction'
+
+tests:
+  - vars:
+      feedback: 'The product was exactly what I needed, shipping was fast.'
+    assert:
+      - type: 'json-schema'
+        value:
+          type: 'object'
+          properties:
+            sentiment:
+              enum: ['positive', 'negative', 'neutral']
+            keywords:
+              type: 'array'
+              items: { type: 'string' }
+              maxItems: 3
+          required: ['sentiment', 'keywords']
+
+  - vars:
+      feedback: 'Terrible experience - broken on arrival, support never replied.'
+    assert:
+      - type: 'json-schema'
+        value:
+          type: 'object'
+          properties:
+            sentiment:
+              enum: ['positive', 'negative', 'neutral']
+            keywords:
+              type: 'array'
+              items: { type: 'string' }
+              maxItems: 3
+          required: ['sentiment', 'keywords']
