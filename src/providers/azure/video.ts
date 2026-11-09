@@ -278,7 +278,8 @@ export class AzureVideoProvider extends AzureGenericProvider {
 
       if (!response.ok) {
         return {
-          error: `Failed to download video: ${response.status} ${response.statusText}`,
+          error:
+            `Failed to download video: HTTP ${response.status} ${response.statusText}`.trimEnd(),
         };
       }
 

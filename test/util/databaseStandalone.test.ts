@@ -15,6 +15,7 @@ import {
   getPromptsForTestCasesHash,
   getStandaloneEvals,
   getTestCases,
+  hasRecentEvalWithIdPrefix,
   updateResult,
 } from '../../src/util/database';
 import {
@@ -293,6 +294,38 @@ describe('getStandaloneEvals', () => {
   });
 });
 
+describe('hasRecentEvalWithIdPrefix', () => {
+  beforeAll(() => runDbMigrations());
+  beforeEach(resetEvalTables);
+
+  it('matches literal, case-sensitive prefixes within the 100 most recent IDs', async () => {
+    const db = await getDb();
+    await db.insert(evalsTable).values(
+      Array.from({ length: 101 }, (_, index) => ({
+        id: `Eval-${index}-fixture`,
+        createdAt: index,
+        config: {},
+        results: {},
+      })),
+    );
+
+    expect(await hasRecentEvalWithIdPrefix('Eval-0-fixture')).toBe(false);
+    expect(await hasRecentEvalWithIdPrefix('Eval-1-fix')).toBe(true);
+    expect(await hasRecentEvalWithIdPrefix('Eval-100-fixture')).toBe(true);
+    expect(await hasRecentEvalWithIdPrefix('eval-1-fix')).toBe(false);
+    expect(await hasRecentEvalWithIdPrefix('Eval-%')).toBe(false);
+  });
+
+  it('checks IDs without decoding unrelated payloads or timestamps', async () => {
+    const db = await getDb();
+    await db.insert(evalsTable).values({ id: 'target', results: {}, config: {} });
+    await db.run(sql`INSERT INTO evals (id, created_at, results, config) VALUES
+      ('broken-json', 1, '{', '{'), ('invalid-date', 9000000000000000, '{}', '{}')`);
+
+    expect(await hasRecentEvalWithIdPrefix('target')).toBe(true);
+  });
+});
+
 describe('getTestCases', () => {
   beforeAll(async () => {
     await runDbMigrations();
@@ -305,7 +338,7 @@ describe('getTestCases', () => {
     vi.unstubAllEnvs();
   });
 
-  it('returns sanitized test cases without loading eval results', async () => {
+  it('groups sanitized datasets with their first-seen prompts without loading results', async () => {
     const tests = [
       {
         description: 'says hello',
@@ -317,6 +350,11 @@ describe('getTestCases', () => {
       tests,
       env: { PROMPTFOO_STRIP_METADATA: 'true' },
     });
+    const olderPrompt = { ...completedPrompt, raw: 'different prompt' };
+    const older = await Eval.create({ tests }, renderedPrompts, {
+      createdAt: new Date(1),
+      completedPrompts: [completedPrompt, olderPrompt, { ...olderPrompt, label: 'duplicate' }],
+    });
     const persisted = await Eval.findById(created.id);
     expect(persisted?.config.tests).toEqual(tests);
 
@@ -326,6 +364,15 @@ describe('getTestCases', () => {
       const datasets = await getTestCases();
 
       expect(datasets).toHaveLength(1);
+      expect(datasets[0]).toMatchObject({
+        count: 2,
+        recentEvalId: created.id,
+        recentEvalDate: new Date(created.createdAt),
+      });
+      expect(datasets[0].prompts).toMatchObject([
+        { evalId: created.id, prompt: completedPrompt },
+        { evalId: older.id, prompt: olderPrompt },
+      ]);
       expect(datasets[0].testCases).toEqual([
         {
           description: 'says hello',
