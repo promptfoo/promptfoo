@@ -48,7 +48,6 @@ import {
 import { filterTests } from '../util/eval/filterTests';
 import { warnIfRedteamConfigHasNoTests } from '../util/eval/redteamWarning';
 import { generateEvalSummary } from '../util/eval/summary';
-import { maybeLoadFromExternalFile } from '../util/file';
 import {
   printBorder,
   setupEnv,
@@ -70,7 +69,6 @@ import type {
   CommandLineOptions,
   EnvOverrides,
   EvalRuntimeOptions,
-  Scenario,
   TestSuite,
   UnifiedConfig,
 } from '../types/index';
@@ -852,17 +850,6 @@ async function doEvalWithEnv(
     }
     if (!resumeEval) {
       Object.assign(options, resolveSuggestionOptions(cmdObj, commandLineOptions, options));
-    }
-    // load scenarios or tests from an external file
-    if (testSuite.scenarios) {
-      testSuite.scenarios = (await maybeLoadFromExternalFile(testSuite.scenarios)) as Scenario[];
-      // Flatten the scenarios array in case glob patterns were used
-      testSuite.scenarios = testSuite.scenarios.flat();
-    }
-    for (const scenario of testSuite.scenarios || []) {
-      if (scenario.tests) {
-        scenario.tests = await maybeLoadFromExternalFile(scenario.tests);
-      }
     }
 
     const testSuiteSchema = TestSuiteSchema.safeParse(testSuite);
