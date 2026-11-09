@@ -22,6 +22,22 @@ function splitComponents(value: string): string[] {
   return value.split(pathSeparatorPattern).filter(Boolean);
 }
 
+function getPathRootAndComponents(value: string): { root: string; components: string[] } {
+  const parsedRoot = path.parse(value).root;
+  const components = splitComponents(value.slice(parsedRoot.length));
+  if (isWindows && parsedRoot.toLowerCase() === '\\\\?\\unc\\') {
+    const [server, share, ...remainingComponents] = components;
+    if (server && share) {
+      return {
+        root: `${parsedRoot}${server}${path.sep}${share}${path.sep}`,
+        components: remainingComponents,
+      };
+    }
+  }
+
+  return { root: parsedRoot, components };
+}
+
 function hasTrailingSeparator(value: string): boolean {
   return isWindows ? /[\\/]$/.test(value) : value.endsWith(path.sep);
 }
@@ -37,33 +53,34 @@ function getAbsolutePathParts(
   relativeTo: string,
 ): { root: string; components: string[] } {
   const parsed = path.parse(value);
+  const valueParts = getPathRootAndComponents(value);
   if (path.isAbsolute(value)) {
-    const root = isWindows && parsed.root === '\\' ? path.parse(relativeTo).root : parsed.root;
-    return { root, components: splitComponents(value.slice(parsed.root.length)) };
+    const root =
+      isWindows && parsed.root === '\\'
+        ? getPathRootAndComponents(relativeTo).root
+        : valueParts.root;
+    return { root, components: valueParts.components };
   }
 
   if (isWindows && /^[A-Za-z]:$/.test(parsed.root)) {
     const driveCwd = process.env[`=${parsed.root}`];
-    const relativeRoot = path.parse(relativeTo).root;
+    const relativeRoot = getPathRootAndComponents(relativeTo).root;
     const basePath =
       driveCwd ??
       (relativeRoot.slice(0, 2).toLowerCase() === parsed.root.toLowerCase()
         ? relativeTo
         : `${parsed.root}${path.sep}`);
-    const baseRoot = path.parse(basePath).root;
+    const baseParts = getPathRootAndComponents(basePath);
     return {
-      root: baseRoot,
-      components: [
-        ...splitComponents(basePath.slice(baseRoot.length)),
-        ...splitComponents(value.slice(parsed.root.length)),
-      ],
+      root: baseParts.root,
+      components: [...baseParts.components, ...valueParts.components],
     };
   }
 
-  const baseRoot = path.parse(relativeTo).root;
+  const baseParts = getPathRootAndComponents(relativeTo);
   return {
-    root: baseRoot,
-    components: [...splitComponents(relativeTo.slice(baseRoot.length)), ...splitComponents(value)],
+    root: baseParts.root,
+    components: [...baseParts.components, ...valueParts.components],
   };
 }
 
@@ -95,12 +112,16 @@ function resolveDotComponent(
   component: string,
   currentPath: string,
   currentIsDirectory: boolean,
+  root: string,
 ): { currentPath: string; currentIsDirectory: boolean } {
   if (!currentIsDirectory) {
     throw notDirectoryError(currentPath);
   }
+  const isAtRoot = isWindows
+    ? currentPath.replace(/[\\/]+$/, '').toLowerCase() === root.replace(/[\\/]+$/, '').toLowerCase()
+    : currentPath === root;
   return {
-    currentPath: component === '..' ? path.dirname(currentPath) : currentPath,
+    currentPath: component === '..' && !isAtRoot ? path.dirname(currentPath) : currentPath,
     currentIsDirectory: true,
   };
 }
@@ -108,11 +129,12 @@ function resolveDotComponent(
 function* expandSymlinkPath(
   symlinkPath: string,
   currentPath: string,
+  currentRoot: string,
   remainingComponents: string[],
   mustBeDirectory: boolean,
 ): Generator<
   PathOperation,
-  { currentPath: string; components: string[]; mustBeDirectory: boolean },
+  { root: string; currentPath: string; components: string[]; mustBeDirectory: boolean },
   PathOperationResult
 > {
   const symlinkTarget = (yield { kind: 'readlink', path: symlinkPath }) as string;
@@ -122,6 +144,7 @@ function* expandSymlinkPath(
     remainingComponents.length === 0 && isDirectoryPath(symlinkTarget);
 
   return {
+    root: targetIsRooted ? targetParts.root : currentRoot,
     currentPath: targetIsRooted ? targetParts.root : currentPath,
     components: [
       ...(targetIsRooted ? targetParts.components : splitComponents(symlinkTarget)),
@@ -172,6 +195,7 @@ function* walkJsonlOutputPath(
 ): Generator<PathOperation, JsonlOutputPathPlan, PathOperationResult> {
   const { root, components } = getAbsolutePathParts(outputPath, process.cwd());
   let currentPath = root;
+  let currentRoot = root;
   let currentIsDirectory = true;
   let mustBeDirectory = isDirectoryPath(outputPath);
   let symlinkHops = 0;
@@ -189,6 +213,7 @@ function* walkJsonlOutputPath(
         component,
         currentPath,
         currentIsDirectory,
+        currentRoot,
       ));
       continue;
     }
@@ -225,9 +250,11 @@ function* walkJsonlOutputPath(
       const expansion = yield* expandSymlinkPath(
         candidatePath,
         currentPath,
+        currentRoot,
         remainingComponents,
         mustBeDirectory,
       );
+      currentRoot = expansion.root;
       currentPath = expansion.currentPath;
       currentIsDirectory = true;
       pendingComponents = expansion.components;
