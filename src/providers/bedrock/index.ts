@@ -177,7 +177,7 @@ interface BedrockCohereCommandGenerationOptions extends BedrockOptions {
   truncate?: string;
 }
 
-interface BedrockCohereCommandRGenerationOptions extends BedrockOptions {
+interface CohereCommandROptions {
   message?: string;
   chat_history?: Array<{
     role: 'USER' | 'CHATBOT';
@@ -223,51 +223,12 @@ interface BedrockCohereCommandRGenerationOptions extends BedrockOptions {
   raw_prompting?: boolean;
 }
 
-interface CohereCommandRRequestParams {
+interface BedrockCohereCommandRGenerationOptions extends BedrockOptions, CohereCommandROptions {}
+
+// The request builder supplies the message and history even when config omits them.
+interface CohereCommandRRequestParams extends CohereCommandROptions {
   message: string;
-  chat_history: {
-    role: 'USER' | 'CHATBOT';
-    message: string;
-  }[];
-  documents?: {
-    title: string;
-    snippet: string;
-  }[];
-  search_queries_only?: boolean;
-  preamble?: string;
-  max_tokens?: number;
-  temperature?: number;
-  p?: number;
-  k?: number;
-  prompt_truncation?: string;
-  frequency_penalty?: number;
-  presence_penalty?: number;
-  seed?: number;
-  return_prompt?: boolean;
-  tools?: {
-    name: string;
-    description: string;
-    parameter_definitions: {
-      [parameterName: string]: {
-        description: string;
-        type: string;
-        required: boolean;
-      };
-    };
-  }[];
-  tool_results?: {
-    call: {
-      name: string;
-      parameters: {
-        [parameterName: string]: string;
-      };
-    };
-    outputs: {
-      text: string;
-    }[];
-  }[];
-  stop_sequences?: string[];
-  raw_prompting?: boolean;
+  chat_history: NonNullable<CohereCommandROptions['chat_history']>;
 }
 
 interface BedrockMistralGenerationOptions extends BedrockOptions {
@@ -605,22 +566,6 @@ export interface NovaReelVideoOptions extends BedrockOptions {
   downloadFromS3?: boolean; // Default: true - download and store to blob storage
 }
 
-/**
- * Nova Reel async invoke response
- */
-export interface NovaReelInvocationResponse {
-  invocationArn: string;
-  status: 'InProgress' | 'Completed' | 'Failed';
-  submitTime?: string;
-  endTime?: string;
-  outputDataConfig?: {
-    s3OutputDataConfig: {
-      s3Uri: string;
-    };
-  };
-  failureMessage?: string;
-}
-
 // =============================================================================
 // Luma Ray 2 Video Generation Types
 // =============================================================================
@@ -672,19 +617,6 @@ export interface LumaRayVideoOptions extends BedrockOptions {
 
   /** Whether to download video from S3 to blob storage (default: true) */
   downloadFromS3?: boolean;
-}
-
-export interface LumaRayInvocationResponse {
-  invocationArn: string;
-  status: 'InProgress' | 'Completed' | 'Failed';
-  submitTime?: string;
-  endTime?: string;
-  failureMessage?: string;
-  outputDataConfig?: {
-    s3OutputDataConfig?: {
-      s3Uri: string;
-    };
-  };
 }
 
 export interface IBedrockModel {

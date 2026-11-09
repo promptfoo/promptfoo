@@ -1,3 +1,5 @@
+import { getResultIndexKey } from './resultIndex';
+
 import type {
   CompletedPrompt,
   EvalRuntimeOptions,
@@ -24,10 +26,6 @@ export interface InMemoryEvaluation {
   durationMs?: number;
   generationDurationMs?: number;
   evaluationDurationMs?: number;
-}
-
-function getResultIndexKey(result: Pick<EvaluateResult, 'promptIdx' | 'testIdx'>): string {
-  return `${result.testIdx}:${result.promptIdx}`;
 }
 
 function toResultMap(results: EvaluateResult[]): Map<string, EvaluateResult> {
