@@ -1,3 +1,5 @@
+import { existsSync } from 'node:fs';
+
 import logger from '../../logger';
 import Eval from '../../models/eval';
 import { deduplicateTestCases, extractRuntimeVars, filterRuntimeVars } from '../../util/comparison';
@@ -55,7 +57,11 @@ export async function filterTestsByResults(
 
   let results: { results: EvaluateResult[] };
   try {
-    if (pathOrId.endsWith('.json')) {
+    // A mixed-case JSON filename can also be an existing custom evaluation ID.
+    if (
+      pathOrId.endsWith('.json') ||
+      (pathOrId.toLowerCase().endsWith('.json') && existsSync(pathOrId))
+    ) {
       const output = await readOutput(pathOrId);
       results = output.results;
     } else {

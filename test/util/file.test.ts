@@ -1650,8 +1650,7 @@ describe('file utilities', () => {
       vi.mocked(fs.readFileSync).mockReset();
     });
 
-    it('reads JSON output', () => {
-      const outputPath = 'output.json';
+    it.each(['output.json', 'output.JsOn'])('reads JSON output from %s', (outputPath) => {
       vi.mocked(fs.readFileSync).mockReturnValue('{}');
       const output = readOutput(outputPath);
       expect(output).toEqual({});
