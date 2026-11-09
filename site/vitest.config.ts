@@ -40,8 +40,6 @@ export default defineConfig({
         'src/setupTests.ts',
         'src/test/**',
       ],
-      // @ts-expect-error - 'all' is valid in Vitest v8 coverage but types are incomplete
-      all: true,
     },
   },
   resolve: {

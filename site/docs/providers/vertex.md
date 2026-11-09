@@ -790,6 +790,8 @@ Re-authenticate using:
 gcloud auth application-default login
 ```
 
+When diagnosing Application Default Credentials on Google Cloud, set `GOOGLE_SDK_NODE_LOGGING=gcp-metadata` to see metadata requests and responses at debug severity. Responses can include access tokens. Redact credentials before sharing these logs.
+
 ### Claude Model Access Errors
 
 If you encounter errors like:

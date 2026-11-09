@@ -17,6 +17,7 @@ import { renderVarsInObject } from '../../util/index';
 import { getAjv } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
 import { resolveProviderEnv } from '../env';
+import { encodePcmToWav } from '../pcm';
 import {
   calculateCost,
   clampCachedTokens,
@@ -1512,23 +1513,8 @@ export function normalizeGeminiAudio(output: Part[] | string | undefined) {
   }
 
   const sampleRate = Number(mimeType.match(/(?:^|;)\s*rate=(\d+)/i)?.[1] ?? 24_000);
-  const header = Buffer.alloc(44);
-  header.write('RIFF', 0);
-  header.writeUInt32LE(36 + audioData.length, 4);
-  header.write('WAVE', 8);
-  header.write('fmt ', 12);
-  header.writeUInt32LE(16, 16);
-  header.writeUInt16LE(1, 20);
-  header.writeUInt16LE(1, 22);
-  header.writeUInt32LE(sampleRate, 24);
-  header.writeUInt32LE(sampleRate * 2, 28);
-  header.writeUInt16LE(2, 32);
-  header.writeUInt16LE(16, 34);
-  header.write('data', 36);
-  header.writeUInt32LE(audioData.length, 40);
-
   return {
-    data: Buffer.concat([header, audioData]).toString('base64'),
+    data: encodePcmToWav(audioData, sampleRate).toString('base64'),
     format: 'wav',
     sampleRate,
     channels: 1,
