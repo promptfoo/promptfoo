@@ -54,6 +54,8 @@ ModelAudit helps identify these risks before models are deployed to production e
 
 ## Installation
 
+ModelAudit 0.2.55 supports Python 3.10 through 3.14. For Python 3.14, use standard (GIL-enabled) CPython.
+
 ### Using Promptfoo
 
 The easiest way to use ModelAudit is through Promptfoo:
@@ -263,6 +265,8 @@ The scanner looks for various security issues, including:
 - **JIT Code Detection**: Scanning TorchScript, ONNX custom ops, and other JIT-compiled code
 
 ## Interpreting Results
+
+In ModelAudit 0.2.55, a completed scan can report `success: true` even when it finds security issues. Check the findings or the exit code to decide whether to accept a model.
 
 The scan results are classified by severity:
 

@@ -4,7 +4,7 @@ import { GeminiImageProvider } from '../../../src/providers/google/gemini-image'
 import * as googleUtil from '../../../src/providers/google/util';
 import { checkProviderApiKeys } from '../../../src/util/provider';
 import { createGoogleSearchTool, createImageUsageCounts } from '../../factories/literalFixtures';
-import { createGoogleImageEnvCleanup, mockProcessEnv } from '../../util/utils';
+import { mockGoogleImageEnv, mockProcessEnv } from '../../util/utils';
 import { createMockFetchResponse as createMockProviderResponse } from '../mockProviderResponses';
 
 const createInlineImageCandidate = () => ({
@@ -82,18 +82,11 @@ describe('GeminiImageProvider', () => {
       statusText: 'OK',
     });
 
+  let restoreImageEnv: () => void;
+
   beforeEach(() => {
     vi.clearAllMocks();
-    mockProcessEnv({ GOOGLE_API_KEY: 'test-api-key' });
-    mockProcessEnv({ GOOGLE_GENERATIVE_AI_API_KEY: undefined });
-    mockProcessEnv({ GEMINI_API_KEY: undefined });
-    mockProcessEnv({ GOOGLE_PROJECT_ID: undefined });
-    mockProcessEnv({ GOOGLE_CLOUD_PROJECT: undefined });
-    mockProcessEnv({ VERTEX_PROJECT_ID: undefined });
-    mockProcessEnv({ VERTEX_API_KEY: undefined });
-    mockProcessEnv({ VERTEX_REGION: undefined });
-    mockProcessEnv({ GOOGLE_CLOUD_LOCATION: undefined });
-    mockProcessEnv({ GOOGLE_LOCATION: undefined });
+    restoreImageEnv = mockGoogleImageEnv();
 
     mockLoadCredentials.mockImplementation((creds) => {
       if (typeof creds === 'object') {
@@ -104,7 +97,7 @@ describe('GeminiImageProvider', () => {
     mockResolveProjectId.mockResolvedValue('test-project');
   });
 
-  afterEach(createGoogleImageEnvCleanup());
+  afterEach(() => restoreImageEnv());
 
   describe('API key preflight', () => {
     let restoreEnv: () => void;
