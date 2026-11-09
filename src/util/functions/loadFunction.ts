@@ -153,7 +153,11 @@ export function parseFileUrl(fileUrl: string): { filePath: string; functionName?
   while (colonIndex > 1) {
     const candidateFilePath = urlWithoutProtocol.slice(0, colonIndex);
     const functionName = urlWithoutProtocol.slice(colonIndex + 1);
-    if (candidateFilePath.endsWith('.rb') && functionName.includes('::')) {
+    if (
+      candidateFilePath.endsWith('.rb') &&
+      functionName.includes('::') &&
+      !/[\\/]/.test(functionName)
+    ) {
       return {
         filePath: normalizeFilePath(candidateFilePath),
         functionName,
