@@ -184,6 +184,31 @@ describe('JSONL output path preparation (Windows path emulation)', () => {
       `${root}nested`,
     ]);
 
+    for (const separatorVariant of [
+      '//?/UNC/server/share/nested/out.jsonl',
+      '\\\\?\\UNC/server\\share/nested\\out.jsonl',
+      '\\\\?\\UNC/server/share/nested/out.jsonl',
+      '//?/UNC\\server\\share\\nested\\out.jsonl',
+      String.raw`\\?//UNC/server/share/nested/out.jsonl`,
+    ]) {
+      fileSystem.reset();
+      expect(modules.resolveJsonlOutputPathSync(separatorVariant)).toEqual({
+        targetPath: separatorVariant,
+        parentDirectories: [`${root}nested`],
+      });
+    }
+
+    fileSystem.reset();
+    const mixedSeparatorDotDot = '//?/UNC/server/share/nested/../..\\out.jsonl';
+    expect(modules.resolveJsonlOutputPathSync(mixedSeparatorDotDot)).toEqual({
+      targetPath: mixedSeparatorDotDot,
+      parentDirectories: [`${root}nested`],
+    });
+    expect(fileSystem.sync.lstatSync.mock.calls.map(([filePath]) => filePath)).toEqual([
+      `${root}nested`,
+      `${root}out.jsonl`,
+    ]);
+
     fileSystem.reset();
     const sourceRoot = '\\\\source-server\\source-share\\';
     const targetRoot = extendedUncRoot('target-server', 'target-share', 'unc');

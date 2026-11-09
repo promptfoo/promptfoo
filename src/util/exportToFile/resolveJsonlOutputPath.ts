@@ -25,11 +25,13 @@ function splitComponents(value: string): string[] {
 function getPathRootAndComponents(value: string): { root: string; components: string[] } {
   const parsedRoot = path.parse(value).root;
   const components = splitComponents(value.slice(parsedRoot.length));
-  if (isWindows && parsedRoot.toLowerCase() === '\\\\?\\unc\\') {
+  const normalizedRoot = path.normalize(parsedRoot);
+  const extendedUncPrefix = `${path.sep}${path.sep}?${path.sep}UNC${path.sep}`;
+  if (isWindows && normalizedRoot.toLowerCase() === extendedUncPrefix.toLowerCase()) {
     const [server, share, ...remainingComponents] = components;
     if (server && share) {
       return {
-        root: `${parsedRoot}${server}${path.sep}${share}${path.sep}`,
+        root: `${normalizedRoot}${server}${path.sep}${share}${path.sep}`,
         components: remainingComponents,
       };
     }
