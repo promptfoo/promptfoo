@@ -3,6 +3,7 @@ import crypto from 'crypto';
 import { SageMakerRuntimeClient } from '@aws-sdk/client-sagemaker-runtime';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import logger from '../../src/logger';
+import { sanitizeObject } from '../../src/util/sanitizer';
 
 // Use vi.hoisted to create mock functions that can be used in vi.mock factories
 const createCustomModelOptions = () => ({
@@ -65,6 +66,40 @@ describe('SageMakerCompletionProvider', () => {
     vi.clearAllMocks();
     vi.unstubAllEnvs();
     vi.restoreAllMocks();
+  });
+
+  describe('config validation warning', () => {
+    it('should not interpolate AWS credentials into the warning message', () => {
+      const secretAccessKey = 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY';
+      const sessionToken = 'FwoGZXIvYXdzEXAMPLESESSIONTOKEN1234567890';
+      const warnSpy = vi.spyOn(logger, 'warn');
+
+      new SageMakerCompletionProvider('test-endpoint', {
+        config: {
+          modelType: 'custom',
+          region: 'us-east-1',
+          accessKeyId: 'AKIAIOSFODNN7EXAMPLE',
+          secretAccessKey,
+          sessionToken,
+          // Unknown key fails the strict schema and triggers the warning.
+          max_new_tokens: 256,
+        } as any,
+      });
+
+      const warningCall = warnSpy.mock.calls.find(([message]) =>
+        String(message).startsWith('Error validating SageMaker config'),
+      );
+      expect(warningCall).toBeDefined();
+      const [message, context] = warningCall!;
+      expect(message).toContain('max_new_tokens');
+      expect(message).not.toContain(secretAccessKey);
+      expect(message).not.toContain(sessionToken);
+      expect(message).not.toContain('AKIAIOSFODNN7EXAMPLE');
+      // Config is passed as a log context, which the logger sanitizes before writing.
+      const sanitized = JSON.stringify(sanitizeObject(context));
+      expect(sanitized).not.toContain(secretAccessKey);
+      expect(sanitized).not.toContain(sessionToken);
+    });
   });
 
   describe('cache flag behavior', () => {

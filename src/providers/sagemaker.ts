@@ -118,8 +118,11 @@ abstract class SageMakerGenericProvider {
     try {
       SageMakerConfigSchema.parse(config);
     } catch (error) {
+      // Pass config as context so the logger redacts credentials (accessKeyId,
+      // secretAccessKey, sessionToken) instead of interpolating them into the message.
       logger.warn(
-        `Error validating SageMaker config\nConfig: ${JSON.stringify(config)}\n${error instanceof z.ZodError ? z.prettifyError(error) : error}`,
+        `Error validating SageMaker config\n${error instanceof z.ZodError ? z.prettifyError(error) : error}`,
+        { config },
       );
     }
 
