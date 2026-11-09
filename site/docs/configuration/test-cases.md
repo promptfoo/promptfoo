@@ -256,7 +256,7 @@ Variables are automatically mapped from column headers.
 
 ### Excel (XLSX/XLS) Support
 
-Excel files (.xlsx and .xls) are supported as an optional feature. To use Excel files:
+Use an Excel Open XML workbook (`.xlsx`) for test cases. If you have an Excel 97–2003 workbook (`.xls`), open it in Excel or LibreOffice and save it as `.xlsx` before importing it.
 
 1. Install the `read-excel-file` package as a peer dependency:
 
