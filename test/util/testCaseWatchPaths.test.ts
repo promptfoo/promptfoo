@@ -46,13 +46,23 @@ describe('resolveTestsWatchPaths', () => {
     ]);
   });
 
-  it('expands a glob, because chokidar v5 does not', () => {
+  it('expands a glob, because chokidar does not', () => {
     // Exactly the matches, and nothing else: glob order is not guaranteed.
     const watched = resolve('file://tests/*.yaml' as TestSuiteConfig['tests']);
     expect([...watched].sort()).toEqual([
       path.join(base, 'tests/a.yaml'),
       path.join(base, 'tests/b.yaml'),
     ]);
+  });
+
+  it('watches the files matched by POSIX punctuation and printable classes', () => {
+    const symbol = path.join(base, 'fixtures/case-€.yaml');
+    const letter = path.join(base, 'fixtures/case-a.yaml');
+    fs.writeFileSync(symbol, '[]');
+    fs.writeFileSync(letter, '[]');
+
+    expect(resolve('file://fixtures/case-[[:punct:]].yaml')).toEqual([symbol]);
+    expect(resolve('file://fixtures/case-[[:print:]].yaml').sort()).toEqual([letter, symbol]);
   });
 
   it('expands test globs beneath a directory containing brackets', () => {
