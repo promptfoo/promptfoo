@@ -1694,6 +1694,18 @@ describe('readTests', () => {
     expect(result[0].vars).toEqual({ name: 'test1', value: 'result1' });
   });
 
+  it.each(['checks.yaml', 'results.js'])(
+    'reads worksheet %s as part of the workbook',
+    async (sheet) => {
+      const reference = `file://cases.xlsx#${sheet}`;
+      mockParseXlsxFileState.implementation = vi.fn().mockResolvedValue([{ selected: sheet }]);
+
+      for (const tests of [reference, [reference], [{ path: reference }]]) {
+        expect(await readTests(tests)).toMatchObject([{ vars: { selected: sheet } }]);
+      }
+    },
+  );
+
   it('should handle xlsx sheet names containing dots in array format', async () => {
     const mockData = [{ name: 'decimal-sheet', value: 'result' }];
     const parseXlsxFileMock = vi.fn().mockResolvedValue(mockData);
