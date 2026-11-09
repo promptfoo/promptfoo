@@ -4435,26 +4435,35 @@ describe('AnthropicMessagesProvider', () => {
       expect(params.thinking?.budget_tokens).toBe(5000);
     });
 
-    it('omits the built-in temperature default for Sonnet 5 (no explicit config)', async () => {
-      // Regression for the live-API 400: `temperature` is deprecated for this model.
-      const provider = createProvider('claude-sonnet-5', { config: {} });
-      const createSpy = vi
-        .spyOn(provider.anthropic.messages, 'create')
-        .mockResolvedValue({ ...mockResp, model: 'claude-sonnet-5' });
+    it.each(['claude-sonnet-5', 'claude-haiku-5-5'])(
+      'omits default temperature on %s',
+      async (model) => {
+        // Regression for the live-API 400: `temperature` is deprecated for this model.
+        const provider = createProvider(model, { config: {} });
+        const createSpy = vi
+          .spyOn(provider.anthropic.messages, 'create')
+          .mockResolvedValue({ ...mockResp, model });
 
-      await provider.callApi('Hello');
+        await provider.callApi('Hello');
 
-      const params = createSpy.mock.calls[0][0] as unknown as Record<string, unknown>;
-      expect(params).not.toHaveProperty('temperature');
-    });
+        const params = createSpy.mock.calls[0][0] as unknown as Record<string, unknown>;
+        expect(params).not.toHaveProperty('temperature');
+        if (model === 'claude-haiku-5-5') {
+          expect(params.max_tokens).toBe(2048);
+        }
+      },
+    );
 
-    it('omits temperature/top_p/top_k and warns with a Sonnet 5 message', async () => {
-      const provider = createProvider('claude-sonnet-5', {
+    it.each([
+      ['claude-sonnet-5', 'Claude Sonnet 5'],
+      ['claude-haiku-5-5', 'Claude Haiku 5.5'],
+    ])('omits explicit sampling parameters and warns on %s', async (model, displayName) => {
+      const provider = createProvider(model, {
         config: { temperature: 0.5, top_p: 0.9, top_k: 40 },
       });
       const createSpy = vi
         .spyOn(provider.anthropic.messages, 'create')
-        .mockResolvedValue({ ...mockResp, model: 'claude-sonnet-5' });
+        .mockResolvedValue({ ...mockResp, model });
       const warnSpy = vi.spyOn(logger, 'warn');
 
       await provider.callApi('Hello');
@@ -4464,7 +4473,7 @@ describe('AnthropicMessagesProvider', () => {
       expect(params).not.toHaveProperty('top_p');
       expect(params).not.toHaveProperty('top_k');
       expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining('temperature is deprecated on Claude Sonnet 5'),
+        expect.stringContaining(`temperature is deprecated on ${displayName}`),
       );
     });
 
