@@ -41,6 +41,9 @@
         // Optional peer loaded lazily only by Transformers providers. Consumers opt
         // in; unit tests mock it and the package artifact test installs the real SDK.
         "@huggingface/transformers",
+        // Optional peer loaded lazily for JKS signature auth and mTLS. Consumers opt
+        // in; installed-package fixtures exercise the missing and installed cases.
+        "jks-js",
         // Install-side-effect git-hook tool; never imported.
         "block-no-verify",
         // Transitive pin for google-auth-library behavior (see comments in
@@ -75,7 +78,6 @@
       "ignoreDependencies": [
         // Docusaurus aliasing/preset conventions resolved at build time.
         "@theme/*",
-        "@mui/*",
         "@generated/*"
       ]
     },
@@ -86,7 +88,6 @@
   "ignoreBinaries": [
     // System tools invoked by package scripts and subprocesses.
     "act",
-    "ffmpeg",
     "go",
     // POSIX utility used by workspace FIFO regression tests.
     "mkfifo",

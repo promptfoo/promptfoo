@@ -11,6 +11,7 @@ import {
   isAlwaysOnAdaptiveThinkingClaudeModel,
   isBetweenToolsLowestThinkingClaudeModel,
   isClaudeFableOrMythos5Model,
+  isClaudeHaiku55Model,
   isClaudeOpus5Model,
   isClaudeOpus55Model,
   isClaudeRegionalPremiumModel,
@@ -106,6 +107,7 @@ const createMockMessage = (content: AnthropicTestMessage['content']): AnthropicT
     cache_read_input_tokens: 0,
     server_tool_use: null,
     service_tier: null,
+    speed: null,
     inference_geo: null,
     output_tokens_details: null,
   },
@@ -499,10 +501,10 @@ describe('Anthropic utilities', () => {
       ['anthropic.claude-sonnet-5', 1.1],
       ['us.anthropic.claude-sonnet-5', 1.1],
       ['global.anthropic.claude-sonnet-5', 1],
-    ])('preserves independent Bedrock Sonnet 5 estimates for %s', (model, premium) => {
-      expect(calculateAnthropicCost(model, {}, 1000, 100)).toBeCloseTo(0.0045 * premium, 10);
+    ])('calculates Bedrock Sonnet 5 estimates for %s', (model, premium) => {
+      expect(calculateAnthropicCost(model, {}, 1000, 100)).toBeCloseTo(0.003 * premium, 10);
       expect(calculateAnthropicCost(model, {}, 1000, 100, 2000, 400)).toBeCloseTo(
-        0.0066 * premium,
+        0.0044 * premium,
         10,
       );
       // Explicit rates are final and suppress the regional premium.
@@ -2834,12 +2836,12 @@ describe('Anthropic utilities', () => {
       ).toEqual({ type: 'adaptive' });
     });
 
-    it('bills $2/$10 with 0.1x cache reads and a flat 1M context', () => {
+    it('bills $2/$10 with 0.05x cache reads and a flat 1M context', () => {
       // 1000 * 2e-6 + 500 * 10e-6 = 0.007
       expect(calculateAnthropicCost('claude-sonnet-5-5', {}, 1000, 500)).toBeCloseTo(0.007, 10);
-      // + 200 cache reads * 0.2e-6 + 100 cache writes * 2.5e-6 = 0.00004 + 0.00025
+      // + 200 cache reads * 0.1e-6 + 100 cache writes * 2.5e-6 = 0.00002 + 0.00025
       expect(calculateAnthropicCost('claude-sonnet-5-5', {}, 1000, 500, 200, 100)).toBeCloseTo(
-        0.00729,
+        0.00727,
         10,
       );
       // No >200K surcharge: 300,000 * 2e-6 + 20,000 * 10e-6 = 0.8
@@ -2855,6 +2857,51 @@ describe('Anthropic utilities', () => {
       expect(
         calculateAnthropicCost('global.anthropic.claude-sonnet-5-5', {}, 1000, 500),
       ).toBeCloseTo(0.007, 10);
+    });
+  });
+
+  describe('Claude Haiku 5.5', () => {
+    const HAIKU_55_IDS = [
+      'claude-haiku-5-5',
+      'anthropic:messages:claude-haiku-5-5',
+      'anthropic.claude-haiku-5-5',
+      'us.anthropic.claude-haiku-5-5',
+      'eu.anthropic.claude-haiku-5-5',
+      'jp.anthropic.claude-haiku-5-5',
+      'au.anthropic.claude-haiku-5-5',
+      'global.anthropic.claude-haiku-5-5',
+      'claude-haiku-5-5-20261015',
+    ];
+
+    it('detects Haiku 5.5 across provider naming schemes', () => {
+      for (const id of HAIKU_55_IDS) {
+        expect(isClaudeHaiku55Model(id)).toBe(true);
+        // Capability row (not only the Claude 5+ generation fallback) must mark sampling
+        // deprecated — grading and gateway paths may disable the fallback.
+        expect(isSamplingParamsDeprecatedClaudeModel(id, { allowGenerationFallback: false })).toBe(
+          true,
+        );
+        expect(isThinkingOnByDefaultClaudeModel(id)).toBe(true);
+        expect(isAlwaysOnAdaptiveThinkingClaudeModel(id)).toBe(false);
+        expect(isForcedToolChoiceUnsupportedClaudeModel(id)).toBe(false);
+        expect(isClaudeRegionalPremiumModel(id)).toBe(true);
+      }
+      expect(isClaudeHaiku55Model('claude-haiku-4-5')).toBe(false);
+      expect(isClaudeHaiku55Model('claude-haiku-5-50')).toBe(false);
+      expect(getClaudeModelWarningName('claude-haiku-5-5')).toBe('Claude Haiku 5.5');
+    });
+
+    it('omits temperature via resolveClaudeSamplingParams when deprecated', () => {
+      // Mirrors the llm-rubric grader path: default temperature 0 must not be sent.
+      const { sampling } = resolveClaudeSamplingParams(
+        { temperature: 0 },
+        {
+          thinkingEnabled: false,
+          samplingParamsDeprecated: isSamplingParamsDeprecatedClaudeModel('claude-haiku-5-5'),
+          defaultTemperature: 0,
+        },
+      );
+      expect(sampling).toEqual({});
     });
   });
 });
