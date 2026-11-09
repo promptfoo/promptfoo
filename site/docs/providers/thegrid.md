@@ -26,6 +26,7 @@ providers:
       headers:
         OpenAI-Organization: ''
       max_tokens: 1024
+      showThinking: false
 
 tests:
   - vars:
@@ -43,15 +44,17 @@ The empty `OpenAI-Organization` header stops an `OPENAI_ORGANIZATION` set in you
 
 :::
 
-## Setting the endpoint by environment variable
+## Credentials and endpoint
 
-`OPENAI_BASE_URL` works only when neither `OPENAI_API_HOST` nor `OPENAI_API_BASE_URL` is set; `getApiUrl` reads those two first. Setting `apiBaseUrl` on the provider is unambiguous and is the recommended form.
+Export the key, and set `apiBaseUrl` on each Grid provider as shown above:
 
 ```bash
 export THEGRID_API_KEY=<your-the-grid-key>
 ```
 
 `apiBaseUrl` should be the `/v1` root; promptfoo appends `/chat/completions`.
+
+Do not point `OPENAI_BASE_URL` at The Grid AI instead. It redirects every `openai:` provider in the run, and `OPENAI_API_HOST` or `OPENAI_API_BASE_URL` take precedence over it when set. Without a provider-level `apiBaseUrl`, requests go to `api.openai.com` with your Grid key.
 
 ## Choosing an instrument
 
