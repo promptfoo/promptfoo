@@ -10,6 +10,7 @@ import {
   validateVideoSize,
 } from '../../../src/providers/openai/video';
 import { checkVideoCache, generateVideoCacheKey } from '../../../src/providers/video';
+import { isProviderResponseRateLimited } from '../../../src/scheduler/types';
 import { createApiKeyOptions, createVideoRequest } from '../../factories/literalFixtures';
 import { mockProcessEnv } from '../../util/utils';
 import { getOpenAiMissingApiKeyMessage } from './shared';
@@ -564,7 +565,7 @@ describe('OpenAiVideoProvider', () => {
       }
     });
 
-    it('should handle video download failure', async () => {
+    it.each([500, 429])('reports HTTP %i during video download', async (status) => {
       const provider = new OpenAiVideoProvider('sora-2', createApiKeyOptions());
 
       // Mock job creation
@@ -582,13 +583,14 @@ describe('OpenAiVideoProvider', () => {
       // Mock video download failure
       mockFetchWithProxy.mockResolvedValueOnce({
         ok: false,
-        status: 500,
-        statusText: 'Internal Server Error',
+        status,
+        statusText: '',
       });
 
       const result = await provider.callApi('test prompt');
 
-      expect(result.error).toContain('Failed to download video');
+      expect(isProviderResponseRateLimited(result, undefined)).toBe(status === 429);
+      expect(result.error).toContain(`Failed to download video: HTTP ${status}`);
     });
 
     it('should use default model sora-2 when not specified', async () => {

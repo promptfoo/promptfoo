@@ -3774,42 +3774,40 @@ async function runGroupedGradingForRows(
   providerCallQueue: ProviderGroupedCallQueue,
   onRowsGraded: (entry: GroupedRows) => Promise<void>,
 ) {
-  const rowsWithDeferredGrading = entries
-    .flatMap((entry) => entry.rows)
-    .flatMap((row) => {
+  const gradingPromises: Promise<void>[] = [];
+  for (const { rows } of entries) {
+    for (const row of rows) {
       const gradingPromise = deferredGradingPromises.get(row);
-      return gradingPromise === undefined ? [] : [{ row, gradingPromise }];
-    });
-  if (rowsWithDeferredGrading.length === 0) {
-    return;
+      if (gradingPromise) {
+        gradingPromises.push(
+          gradingPromise.finally(() => {
+            deferredGradingPromises.delete(row);
+            if (--pendingCount === 0) {
+              resolveAllDone();
+            }
+          }),
+        );
+      }
+    }
   }
 
-  const processedEntries = new Set<GroupedRows>();
-  let pendingCount = rowsWithDeferredGrading.length;
-  let resolveAllDone: () => void = () => {};
+  let pendingCount = gradingPromises.length;
+  if (pendingCount === 0) {
+    return;
+  }
+  let resolveAllDone: () => void;
   const allDone = new Promise<void>((resolve) => {
     resolveAllDone = resolve;
   });
-
-  const gradingPromises = rowsWithDeferredGrading.map(({ row, gradingPromise }) =>
-    gradingPromise.finally(() => {
-      deferredGradingPromises.delete(row);
-      pendingCount--;
-      if (pendingCount === 0) {
-        resolveAllDone();
-      }
-    }),
-  );
+  let nextEntryIndex = 0;
 
   const processReadyEntries = async () => {
-    for (const entry of entries) {
-      if (processedEntries.has(entry)) {
-        continue;
-      }
+    while (nextEntryIndex < entries.length) {
+      const entry = entries[nextEntryIndex];
       if (!entry.rows.every((row) => !deferredGradingPromises.has(row))) {
         break;
       }
-      processedEntries.add(entry);
+      nextEntryIndex++;
       await onRowsGraded(entry);
     }
   };
@@ -3821,13 +3819,8 @@ async function runGroupedGradingForRows(
       await processReadyEntries();
     }
 
-    const group = providerCallQueue.takeNextGroup(currentProviderId);
-    if (group.length === 0) {
-      continue;
-    }
-
-    currentProviderId = group[0].providerId;
-    for (const job of group) {
+    for (const job of providerCallQueue.takeNextGroup(currentProviderId)) {
+      currentProviderId = job.providerId;
       await providerCallQueue.run(job);
       await Promise.resolve();
       await processReadyEntries();

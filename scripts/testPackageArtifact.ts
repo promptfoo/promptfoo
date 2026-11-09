@@ -870,9 +870,6 @@ async function runInstalledCodingSdkEval(
   withOptionalDependencies: boolean,
 ): Promise<void> {
   const fixturesDir = path.join(consumerDir, 'coding-sdks');
-  fs.cpSync(path.join(ROOT, 'test/fixtures/package-artifact/coding-sdks'), fixturesDir, {
-    recursive: true,
-  });
   // The Codex SDK sends `exec` first. Let Node load that fixture on every platform.
   fs.copyFileSync(path.join(fixturesDir, 'codex.mjs'), path.join(consumerDir, 'exec'));
   const scriptPath = path.join(consumerDir, 'coding-sdks.mjs');
@@ -1641,6 +1638,13 @@ async function main(): Promise<void> {
           packResult.version,
         );
       }
+    }
+    if (values.profile === 'default') {
+      console.log(
+        await timeAsyncPhase('check installed HTTP quickstart', () =>
+          runAsync(process.execPath, ['http-quickstart.mjs'], consumerDir, consumerEnv),
+        ),
+      );
     }
     await timeAsyncPhase('check optional JKS support', () =>
       runOptionalJksChecks(consumerDir, configDir, consumerNpmEnv, values.profile === 'default'),
