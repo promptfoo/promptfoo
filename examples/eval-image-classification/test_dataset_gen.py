@@ -1,6 +1,7 @@
 import base64
 import csv
 import gzip
+import hashlib
 import io
 import random
 import struct
@@ -66,19 +67,52 @@ class DatasetGenerationTest(unittest.TestCase):
             dataset_gen.image_to_base64(array("f", [0.0]) * (28 * 28))
 
     def test_download_reads_official_idx_files(self):
-        fixtures = [
-            io.BytesIO(gzip.compress(self.images)),
-            io.BytesIO(gzip.compress(self.labels)),
-        ]
-        with patch(
-            "dataset_gen.urllib.request.urlopen", side_effect=fixtures
-        ) as request:
+        fixtures = {
+            name: (self.path / name).read_bytes()
+            for name in (dataset_gen.IMAGE_FILE, dataset_gen.LABEL_FILE)
+        }
+        hashes = {
+            name: hashlib.sha256(data).hexdigest() for name, data in fixtures.items()
+        }
+        with (
+            patch.dict(dataset_gen.DOWNLOAD_SHA256, hashes),
+            patch(
+                "dataset_gen.urllib.request.urlopen",
+                side_effect=[io.BytesIO(data) for data in fixtures.values()],
+            ) as request,
+        ):
             images, labels = dataset_gen.load_dataset()
         self.assertEqual((images, labels), (self.images[16:], self.labels[8:]))
         self.assertEqual(request.call_count, 2)
         self.assertTrue(
             request.call_args_list[0].args[0].endswith(dataset_gen.IMAGE_FILE)
         )
+
+    def test_rejects_noncanonical_downloads_before_decompression(self):
+        image = (self.path / dataset_gen.IMAGE_FILE).read_bytes()
+        label = (self.path / dataset_gen.LABEL_FILE).read_bytes()
+        output = self.path / "sample.csv"
+        for filename, responses, hashes in [
+            (dataset_gen.IMAGE_FILE, [image], {}),
+            (
+                dataset_gen.LABEL_FILE,
+                [image, label],
+                {dataset_gen.IMAGE_FILE: hashlib.sha256(image).hexdigest()},
+            ),
+        ]:
+            with (
+                self.subTest(filename=filename),
+                patch.dict(dataset_gen.DOWNLOAD_SHA256, hashes),
+                patch(
+                    "dataset_gen.urllib.request.urlopen",
+                    side_effect=[io.BytesIO(data) for data in responses],
+                ),
+                patch("dataset_gen.gzip.decompress", wraps=gzip.decompress) as unpack,
+                self.assertRaisesRegex(ValueError, f"SHA-256 mismatch for {filename}"),
+            ):
+                dataset_gen.save_fashion_mnist_sample_to_csv(1, str(output))
+            self.assertEqual(unpack.call_count, len(responses) - 1)
+            self.assertFalse(output.exists())
 
     def test_rejects_truncated_or_mismatched_idx(self):
         for images, labels in [

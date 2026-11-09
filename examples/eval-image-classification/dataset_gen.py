@@ -4,6 +4,7 @@ import argparse
 import base64
 import csv
 import gzip
+import hashlib
 import io
 import random
 import struct
@@ -15,6 +16,12 @@ from PIL import Image
 DATASET_URL = "https://raw.githubusercontent.com/zalandoresearch/fashion-mnist/master/data/fashion/"
 IMAGE_FILE = "train-images-idx3-ubyte.gz"
 LABEL_FILE = "train-labels-idx1-ubyte.gz"
+# Compressed archive hashes from the TensorFlow Datasets checksum registry:
+# https://github.com/tensorflow/datasets/blob/24211da0508a86f0a9efd82c69bab9d25cda0a20/tensorflow_datasets/url_checksums/fashion_mnist.txt
+DOWNLOAD_SHA256 = {
+    IMAGE_FILE: "3aede38d61863908ad78613f6a32ed271626dd12800ba2636569512369268a84",
+    LABEL_FILE: "a04f17134ac03560a47e3764e11b92fc97de4d1bfaf8ba1a3aa29af54cc90845",
+}
 CLASS_NAMES = (
     "T-shirt/top",
     "Trouser",
@@ -36,7 +43,10 @@ def load_dataset(data_dir: Path | None = None) -> tuple[bytes, bytes]:
         if data_dir is not None:
             return gzip.decompress((data_dir / filename).read_bytes())
         with urllib.request.urlopen(DATASET_URL + filename, timeout=60) as response:
-            return gzip.decompress(response.read())
+            compressed = response.read()
+        if hashlib.sha256(compressed).hexdigest() != DOWNLOAD_SHA256[filename]:
+            raise ValueError(f"SHA-256 mismatch for {filename}")
+        return gzip.decompress(compressed)
 
     images, labels = read(IMAGE_FILE), read(LABEL_FILE)
     if len(images) < 16 or len(labels) < 8:
