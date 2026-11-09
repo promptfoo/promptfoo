@@ -361,6 +361,9 @@ describe('parseFileUrl', () => {
     expect(parseFileUrl('file://project.rb:Old::Checks/payload.json')).toEqual({
       filePath: 'project.rb:Old::Checks/payload.json',
     });
+    expect(parseFileUrl('file://project.rb:Old/payload.json')).toEqual({
+      filePath: 'project.rb:Old/payload.json',
+    });
   });
 
   it('should parse file URL without function name', () => {
