@@ -182,6 +182,18 @@ describe('filterTestsUtil', () => {
         expect(result).toHaveLength(0);
       });
 
+      it('reads a mixed-case report when no stored evaluation has its name', async () => {
+        vi.mocked(Eval.findById).mockResolvedValue(undefined);
+
+        const result = await filterTestsByResults(
+          mockTestSuite,
+          'results.JsOn',
+          (row) => row.success,
+        );
+        expect(util.readOutput).toHaveBeenCalledWith('results.JsOn');
+        expect(result[0]?.vars?.var1).toBe('test1');
+      });
+
       it.each(['results.txt', 'nightly-eval.JSON'])('keeps eval ID %s', async (id) => {
         const mockEval = {
           id,
