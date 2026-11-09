@@ -145,7 +145,7 @@ export async function updateResult(
 }
 
 async function getPromptsWithPredicate(
-  predicate: (eval_: Eval) => boolean,
+  predicate: (datasetId: string) => boolean,
   limit: number,
 ): Promise<PromptWithMetadata[]> {
   // TODO(ian): Make this use a proper database query
@@ -154,40 +154,24 @@ async function getPromptsWithPredicate(
   const groupedPrompts: { [hash: string]: PromptWithMetadata } = {};
 
   for (const eval_ of evals_) {
-    const createdAt = new Date(eval_.createdAt).toISOString();
-    if (predicate(eval_)) {
-      const datasetId = sha256(JSON.stringify(eval_.config.tests || []));
+    const timestamp = eval_.createdAt;
+    const createdAt = new Date(timestamp).toISOString();
+    const datasetId = sha256(JSON.stringify(eval_.config.tests || []));
+    if (predicate(datasetId)) {
       for (const prompt of eval_.getPrompts()) {
         const promptId = sha256(prompt.raw);
-        if (promptId in groupedPrompts) {
-          groupedPrompts[promptId].recentEvalDate = new Date(
-            Math.max(
-              groupedPrompts[promptId].recentEvalDate.getTime(),
-              new Date(createdAt).getTime(),
-            ),
-          );
-          groupedPrompts[promptId].count += 1;
-          groupedPrompts[promptId].evals.push({
-            id: eval_.id,
-            datasetId,
-            metrics: prompt.metrics,
-          });
-        } else {
-          groupedPrompts[promptId] = {
-            count: 1,
-            id: promptId,
-            prompt,
-            recentEvalDate: new Date(createdAt),
-            recentEvalId: eval_.id,
-            evals: [
-              {
-                id: eval_.id,
-                datasetId,
-                metrics: prompt.metrics,
-              },
-            ],
-          };
+        const group = (groupedPrompts[promptId] ??= {
+          count: 0,
+          id: promptId,
+          prompt,
+          recentEvalDate: new Date(createdAt),
+          recentEvalId: eval_.id,
+          evals: [],
+        });
+        if (timestamp > group.recentEvalDate.getTime()) {
+          group.recentEvalDate = new Date(createdAt);
         }
+        group.count = group.evals.push({ id: eval_.id, datasetId, metrics: prompt.metrics });
       }
     }
   }
@@ -199,11 +183,7 @@ export function getPromptsForTestCasesHash(
   testCasesSha256: string,
   limit: number = DEFAULT_QUERY_LIMIT,
 ) {
-  return getPromptsWithPredicate((eval_) => {
-    const testsJson = JSON.stringify(eval_.config.tests || []);
-    const hash = sha256(testsJson);
-    return hash === testCasesSha256;
-  }, limit);
+  return getPromptsWithPredicate((datasetId) => datasetId === testCasesSha256, limit);
 }
 
 export async function getTestCases(limit = DEFAULT_QUERY_LIMIT): Promise<TestCasesWithMetadata[]> {

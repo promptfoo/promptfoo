@@ -1210,7 +1210,7 @@ async function resolveLoadedConfig(
 
   let parsedScenarios = config.scenarios;
   // Parse testCases for each scenario
-  if (parsedScenarios && (!Array.isArray(parsedScenarios) || parsedScenarios.length > 0)) {
+  if (parsedScenarios) {
     parsedScenarios = (await maybeLoadFromExternalFile(parsedScenarios)) as Scenario[];
     // Flatten the scenarios array in case glob patterns were used
     parsedScenarios = parsedScenarios.flat().map((scenario) =>
