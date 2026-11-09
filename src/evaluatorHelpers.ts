@@ -51,6 +51,55 @@ export async function extractTextFromPDF(pdfPath: string): Promise<string> {
   }
 }
 
+// Returns the names of string-valued variables whose placeholder references form
+// a cycle (direct or transitive). Iterative three-color DFS, so long reference
+// chains cannot overflow the call stack.
+function findCyclicVars(variables: Record<string, VarValue>, regex: RegExp): Set<string> {
+  const refs = new Map<string, string[]>();
+  for (const [key, value] of Object.entries(variables)) {
+    if (typeof value === 'string') {
+      refs.set(
+        key,
+        [...value.matchAll(regex)].map((match) => match[1]),
+      );
+    }
+  }
+  const cyclic = new Set<string>();
+  const state = new Map<string, 'visiting' | 'done'>();
+  for (const start of refs.keys()) {
+    if (state.has(start)) {
+      continue;
+    }
+    state.set(start, 'visiting');
+    const path = [start];
+    const stack = [{ node: start, childIndex: 0 }];
+    while (stack.length > 0) {
+      const top = stack[stack.length - 1];
+      const children = refs.get(top.node) ?? [];
+      if (top.childIndex < children.length) {
+        const child = children[top.childIndex++];
+        const childState = state.get(child);
+        if (childState === 'visiting') {
+          // Back edge: everything from child to the top of the path is on a cycle.
+          const cycleStart = path.indexOf(child);
+          for (let i = cycleStart; i < path.length; i++) {
+            cyclic.add(path[i]);
+          }
+        } else if (childState === undefined) {
+          state.set(child, 'visiting');
+          path.push(child);
+          stack.push({ node: child, childIndex: 0 });
+        }
+      } else {
+        state.set(top.node, 'done');
+        stack.pop();
+        path.pop();
+      }
+    }
+  }
+  return cyclic;
+}
+
 export function resolveVariables(
   variables: Record<string, VarValue>,
   skipResolveVars?: string[],
@@ -59,46 +108,16 @@ export function resolveVariables(
   let resolved: boolean;
   const regex = /\{\{\s*(\w+)\s*\}\}/g; // Matches {{variableName}}, {{ variableName }}, etc.
 
-  // Follows placeholder references transitively: returns true when the variable named
-  // `from` (transitively) references `to`. Comparing parsed placeholder names avoids
-  // building a RegExp from arbitrary variable keys, which can throw on metacharacters.
-  const canReach = (from: string, to: string): boolean => {
-    const stack = [from];
-    const seen = new Set<string>();
-    while (stack.length > 0) {
-      const current = stack.pop() as string;
-      if (current === to) {
-        return true;
-      }
-      if (seen.has(current)) {
-        continue;
-      }
-      seen.add(current);
-      const currentValue = variables[current];
-      if (typeof currentValue === 'string') {
-        for (const inner of currentValue.matchAll(regex)) {
-          stack.push(inner[1]);
-        }
-      }
-    }
-    return false;
-  };
-
-  // True when the variable's own references form a cycle, even one that does not
-  // return to the key currently being resolved. Substituting a cyclic candidate
-  // inlines its growing value on every pass, corrupting the dependent variable.
-  const isCyclic = (name: string): boolean => {
-    const value = variables[name];
-    if (typeof value !== 'string') {
-      return false;
-    }
-    for (const inner of value.matchAll(regex)) {
-      if (canReach(inner[1], name)) {
-        return true;
-      }
-    }
-    return false;
-  };
+  // Variables whose placeholder references form a cycle. Substituting a cyclic
+  // variable inlines its growing value into a dependent on every pass (a cycle
+  // behind an unresolved placeholder duplicates the unresolved text), so cyclic
+  // variables are never substituted. The set is computed once from the initial
+  // values because it is invariant under substitution: only acyclic candidates
+  // are ever inlined, and if an acyclic candidate's references could reach the
+  // key it is inlined into, key and candidate would already form a cycle.
+  // Comparing parsed placeholder names avoids building a RegExp from arbitrary
+  // variable keys, which can throw on metacharacters.
+  const cyclicVars = findCyclicVars(variables, regex);
 
   let iterations = 0;
   do {
@@ -115,8 +134,9 @@ export function resolveVariables(
       // Find the first placeholder whose variable is defined. An unresolved placeholder is
       // left in place - the final nunjucks render will fail if necessary - but it must not
       // block resolvable placeholders that follow it in the same string.
-      // Skip self-references and cycles: replacing them would substitute the value
-      // into itself on every pass, growing it instead of resolving it.
+      // Cyclic variables (self-references and cycles of any length) are skipped:
+      // replacing them would substitute the value into itself on every pass,
+      // growing it instead of resolving it.
       let match: RegExpMatchArray | undefined;
       for (const candidate of value.matchAll(regex)) {
         const varName = candidate[1];
@@ -125,10 +145,7 @@ export function resolveVariables(
         // resolved-from-skipped, so cycle checks must not look inside them.
         const candidateIsSkipped =
           skipResolveVars?.includes(varName) || varsResolvedFromSkipped?.has(varName);
-        if (
-          variables[varName] === undefined ||
-          (!candidateIsSkipped && (canReach(varName, key) || isCyclic(varName)))
-        ) {
+        if (variables[varName] === undefined || (!candidateIsSkipped && cyclicVars.has(varName))) {
           continue;
         }
         match = candidate;
