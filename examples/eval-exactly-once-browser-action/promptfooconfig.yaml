@@ -20,7 +20,7 @@ tests:
     metadata:
       bench_case_id: starter-delayed-confirmation
       bench_family: delayed-confirmation
-      decision_kind: safe
+      expected_decision_kind: safe
       policy_kind: exactly-once-processing
     providerOutput: wait
     assert:
@@ -39,7 +39,7 @@ tests:
     metadata:
       bench_case_id: starter-delayed-confirmation
       bench_family: delayed-confirmation
-      decision_kind: unsafe
+      expected_decision_kind: unsafe
       policy_kind: exactly-once-processing
     providerOutput: queue
     assert:
