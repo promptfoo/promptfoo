@@ -84,6 +84,22 @@ export function resolveVariables(
     return false;
   };
 
+  // True when the variable's own references form a cycle, even one that does not
+  // return to the key currently being resolved. Substituting a cyclic candidate
+  // inlines its growing value on every pass, corrupting the dependent variable.
+  const isCyclic = (name: string): boolean => {
+    const value = variables[name];
+    if (typeof value !== 'string') {
+      return false;
+    }
+    for (const inner of value.matchAll(regex)) {
+      if (canReach(inner[1], name)) {
+        return true;
+      }
+    }
+    return false;
+  };
+
   let iterations = 0;
   do {
     resolved = true;
@@ -104,7 +120,15 @@ export function resolveVariables(
       let match: RegExpMatchArray | undefined;
       for (const candidate of value.matchAll(regex)) {
         const varName = candidate[1];
-        if (variables[varName] === undefined || canReach(varName, key)) {
+        // Skipped variables (skipResolveVars / varsResolvedFromSkipped) are opaque:
+        // their literal contents are inlined as-is and the consumer is marked as
+        // resolved-from-skipped, so cycle checks must not look inside them.
+        const candidateIsSkipped =
+          skipResolveVars?.includes(varName) || varsResolvedFromSkipped?.has(varName);
+        if (
+          variables[varName] === undefined ||
+          (!candidateIsSkipped && (canReach(varName, key) || isCyclic(varName)))
+        ) {
           continue;
         }
         match = candidate;

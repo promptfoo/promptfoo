@@ -722,6 +722,25 @@ describe('evaluatorHelpers', () => {
       expect(resolveVariables(variables)).toEqual({ 'input[': 'x', name: 'x' });
     });
 
+    it('should not expand a dependency whose own graph is cyclic', () => {
+      const variables = { loop: '{{missing}} {{loop}}', other: 'x', message: '{{other}} {{loop}}' };
+      expect(resolveVariables(variables)).toEqual({
+        loop: '{{missing}} {{loop}}',
+        other: 'x',
+        message: 'x {{loop}}',
+      });
+    });
+
+    it('should inline a skipped variable whose contents mention the consumer', () => {
+      const varsResolvedFromSkipped = new Set<string>();
+      const variables = { wrapped: '{{payload}}', payload: '{{wrapped}}' };
+      expect(resolveVariables(variables, ['payload'], varsResolvedFromSkipped)).toEqual({
+        wrapped: '{{wrapped}}',
+        payload: '{{wrapped}}',
+      });
+      expect(varsResolvedFromSkipped.has('wrapped')).toBe(true);
+    });
+
     it('should not fail for unresolved placeholders', () => {
       const variables = { greeting: 'Hello, {{name}}!', name: '{{unknown}}' };
       expect(resolveVariables(variables)).toEqual({
