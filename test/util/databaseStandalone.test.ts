@@ -15,6 +15,7 @@ import {
   getPromptsForTestCasesHash,
   getStandaloneEvals,
   getTestCases,
+  hasRecentEvalWithIdPrefix,
   updateResult,
 } from '../../src/util/database';
 import {
@@ -290,6 +291,38 @@ describe('getStandaloneEvals', () => {
 
     const row = (await getStandaloneEvals()).find((r) => r.evalId === eval_.id);
     expect(row?.isRedteam).toBe(true);
+  });
+});
+
+describe('hasRecentEvalWithIdPrefix', () => {
+  beforeAll(() => runDbMigrations());
+  beforeEach(resetEvalTables);
+
+  it('matches literal, case-sensitive prefixes within the 100 most recent IDs', async () => {
+    const db = await getDb();
+    await db.insert(evalsTable).values(
+      Array.from({ length: 101 }, (_, index) => ({
+        id: `Eval-${index}-fixture`,
+        createdAt: index,
+        config: {},
+        results: {},
+      })),
+    );
+
+    expect(await hasRecentEvalWithIdPrefix('Eval-0-fixture')).toBe(false);
+    expect(await hasRecentEvalWithIdPrefix('Eval-1-fix')).toBe(true);
+    expect(await hasRecentEvalWithIdPrefix('Eval-100-fixture')).toBe(true);
+    expect(await hasRecentEvalWithIdPrefix('eval-1-fix')).toBe(false);
+    expect(await hasRecentEvalWithIdPrefix('Eval-%')).toBe(false);
+  });
+
+  it('checks IDs without decoding unrelated payloads or timestamps', async () => {
+    const db = await getDb();
+    await db.insert(evalsTable).values({ id: 'target', results: {}, config: {} });
+    await db.run(sql`INSERT INTO evals (id, created_at, results, config) VALUES
+      ('broken-json', 1, '{', '{'), ('invalid-date', 9000000000000000, '{}', '{}')`);
+
+    expect(await hasRecentEvalWithIdPrefix('target')).toBe(true);
   });
 });
 

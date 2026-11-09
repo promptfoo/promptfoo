@@ -23,7 +23,6 @@ import { generateIdFromPrompt } from '../models/prompt';
 import {
   type EvaluateSummaryV2,
   type EvaluateTable,
-  type EvalWithMetadata,
   type PromptWithMetadata,
   type ResultsFile,
   type TestCasesWithMetadata,
@@ -367,65 +366,15 @@ export async function getDatasetFromHash(hash: string) {
   return undefined;
 }
 
-async function getEvalsWithPredicate(
-  predicate: (result: ResultsFile) => boolean,
-  limit: number,
-): Promise<EvalWithMetadata[]> {
+export async function hasRecentEvalWithIdPrefix(prefix: string): Promise<boolean> {
   const db = await getDb();
-  const evals_ = await db
-    .select({
-      id: evalsTable.id,
-      createdAt: evalsTable.createdAt,
-      author: evalsTable.author,
-      results: evalsTable.results,
-      config: evalsTable.config,
-      description: evalsTable.description,
-    })
+  const recentEvals = await db
+    .select({ id: evalsTable.id })
     .from(evalsTable)
     .orderBy(desc(evalsTable.createdAt))
-    .limit(limit)
+    .limit(DEFAULT_QUERY_LIMIT)
     .all();
-
-  const ret: EvalWithMetadata[] = [];
-
-  for (const eval_ of evals_) {
-    const createdAt = new Date(eval_.createdAt).toISOString();
-    const resultWrapper: ResultsFile = {
-      version: 3,
-      createdAt,
-      author: eval_.author,
-      // @ts-ignore
-      results: eval_.results,
-      config: eval_.config,
-    };
-    if (predicate(resultWrapper)) {
-      const evalId = eval_.id;
-      ret.push({
-        id: evalId,
-        date: new Date(eval_.createdAt),
-        config: eval_.config,
-        // @ts-ignore
-        results: eval_.results,
-        description: eval_.description || undefined,
-      });
-    }
-  }
-
-  return ret;
-}
-
-async function getEvals(limit: number = DEFAULT_QUERY_LIMIT) {
-  return getEvalsWithPredicate(() => true, limit);
-}
-
-export async function getEvalFromId(hash: string) {
-  const evals_ = await getEvals();
-  for (const eval_ of evals_) {
-    if (eval_.id.startsWith(hash)) {
-      return eval_;
-    }
-  }
-  return undefined;
+  return recentEvals.some(({ id }) => id.startsWith(prefix));
 }
 
 export async function deleteEval(evalId: string) {

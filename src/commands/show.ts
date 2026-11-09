@@ -2,7 +2,7 @@ import chalk from 'chalk';
 import logger from '../logger';
 import Eval from '../models/eval';
 import { generateTable, wrapTable } from '../table';
-import { getDatasetFromHash, getEvalFromId, getPromptFromHash } from '../util/database';
+import { getDatasetFromHash, getPromptFromHash, hasRecentEvalWithIdPrefix } from '../util/database';
 import { printBorder, setupEnv } from '../util/index';
 import type { Command } from 'commander';
 
@@ -168,8 +168,7 @@ export async function showCommand(program: Command) {
         return showLatestEval(await Eval.latest());
       }
 
-      const evl = await getEvalFromId(id);
-      if (evl) {
+      if (await hasRecentEvalWithIdPrefix(id)) {
         return handleEval(id);
       }
 
