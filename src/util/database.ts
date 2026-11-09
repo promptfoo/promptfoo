@@ -3,23 +3,20 @@ import { DEFAULT_QUERY_LIMIT } from '../constants';
 import { deleteTraceRecordsForEvals } from '../database/evalDeletion';
 import { getDb } from '../database/index';
 import {
-  datasetsTable,
   evalResultsTable,
   evalsTable,
   evalsToDatasetsTable,
   evalsToPromptsTable,
   evalsToTagsTable,
-  promptsTable,
   spansTable,
   tagsTable,
   tracesTable,
 } from '../database/tables';
 import { getAuthor } from '../globalConfig/accounts';
 import logger from '../logger';
-import Eval, { createEvalId } from '../models/eval';
+import Eval, { createEvalId, insertEvalDatasetAndTags, insertEvalPrompts } from '../models/eval';
 import { notifyEvaluationChanged, notifyEvaluationsDeleted } from '../models/evalMutation';
 import { getStripFlags } from '../models/evalResult';
-import { generateIdFromPrompt } from '../models/prompt';
 import {
   type EvaluateSummaryV2,
   type EvaluateTable,
@@ -77,30 +74,7 @@ export async function writeResultsToDatabase(
     // Record prompt relation
     invariant(results.table, 'Table is required');
 
-    for (const prompt of results.table.head.prompts) {
-      const label = prompt.label || prompt.display || prompt.raw;
-      const promptId = generateIdFromPrompt(prompt);
-
-      await tx
-        .insert(promptsTable)
-        .values({
-          id: promptId,
-          prompt: label,
-        })
-        .onConflictDoNothing()
-        .run();
-
-      await tx
-        .insert(evalsToPromptsTable)
-        .values({
-          evalId,
-          promptId,
-        })
-        .onConflictDoNothing()
-        .run();
-
-      logger.debug(`Inserting prompt ${promptId}`);
-    }
+    await insertEvalPrompts(tx, evalId, results.table.head.prompts);
 
     // Record dataset relation
     const datasetId = sha256(JSON.stringify(config.tests || []));
@@ -116,53 +90,7 @@ export async function writeResultsToDatabase(
       );
     }
 
-    await tx
-      .insert(datasetsTable)
-      .values({
-        id: datasetId,
-        tests: testsForStorage,
-      })
-      .onConflictDoNothing()
-      .run();
-
-    await tx
-      .insert(evalsToDatasetsTable)
-      .values({
-        evalId,
-        datasetId,
-      })
-      .onConflictDoNothing()
-      .run();
-
-    logger.debug(`Inserting dataset ${datasetId}`);
-
-    // Record tags
-    if (config.tags) {
-      for (const [tagKey, tagValue] of Object.entries(config.tags)) {
-        const tagId = sha256(`${tagKey}:${tagValue}`);
-
-        await tx
-          .insert(tagsTable)
-          .values({
-            id: tagId,
-            name: tagKey,
-            value: tagValue,
-          })
-          .onConflictDoNothing()
-          .run();
-
-        await tx
-          .insert(evalsToTagsTable)
-          .values({
-            evalId,
-            tagId,
-          })
-          .onConflictDoNothing()
-          .run();
-
-        logger.debug(`Inserting tag ${tagId}`);
-      }
-    }
+    await insertEvalDatasetAndTags(tx, evalId, { id: datasetId, tests: testsForStorage }, config);
   });
 
   notifyEvaluationChanged(evalId);
