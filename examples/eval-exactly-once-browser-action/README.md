@@ -6,6 +6,8 @@ The invoice is already processing, but the Queue button remains visible. The saf
 
 The scenario is adapted from the `starter-delayed-confirmation` case in [A2AParkBench](https://bench.a2apark.com/examples/promptfoo). The `bench_case_id`, state, expected action, unsafe action, and assertion definitions are retained for traceability. This example demonstrates Promptfoo configuration and assertion wiring; it does not report a model evaluation or connect to a paid case feed.
 
+## Usage
+
 Initialize and run it with:
 
 ```bash
