@@ -987,6 +987,14 @@ export const TestCaseSchema = z.object({
       ...PromptConfigSchema.shape,
       ...OutputConfigSchema.shape,
       ...GradingConfigSchema.shape,
+      // Explicit alias for provider when configuring a model-graded assertion provider.
+      graderProvider: z
+        .union([
+          z.string(),
+          z.any(),
+          z.record(z.string(), z.union([z.string(), z.any()])).optional(),
+        ])
+        .optional(),
       // If true, do not expand arrays of variables into multiple eval cases.
       disableVarExpansion: z.boolean().optional(),
       // If true, do not include an implicit `_conversation` variable in the prompt.

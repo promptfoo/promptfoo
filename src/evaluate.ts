@@ -21,6 +21,7 @@ import {
   resolveConfiguredProviderReference,
 } from './util/gradingProvider';
 import { readFilters, warnOnDegradedJsonlRecovery, writeMultipleOutputs } from './util/index';
+import invariant from './util/invariant';
 import { readTests } from './util/testCaseReader';
 import { INLINE_FUNCTION_LABEL, TRANSFORM_KEYS } from './util/transform';
 
@@ -246,6 +247,16 @@ async function resolveNestedProviders(
   if (typeof constructedTestSuite.defaultTest === 'object' && constructedTestSuite.defaultTest) {
     constructedTestSuite.defaultTest = cloneTestForResolve(constructedTestSuite.defaultTest);
 
+    if (constructedTestSuite.defaultTest.options?.graderProvider !== undefined) {
+      invariant(
+        constructedTestSuite.defaultTest.options.provider === undefined,
+        'Specify only one of defaultTest.options.provider or defaultTest.options.graderProvider',
+      );
+      constructedTestSuite.defaultTest.options.provider =
+        constructedTestSuite.defaultTest.options.graderProvider;
+      delete constructedTestSuite.defaultTest.options.graderProvider;
+    }
+
     if (
       constructedTestSuite.defaultTest.provider &&
       !isApiProvider(constructedTestSuite.defaultTest.provider)
@@ -271,6 +282,14 @@ async function resolveNestedProviders(
   constructedTestSuite.tests = (constructedTestSuite.tests || []).map(cloneTestForResolve);
 
   for (const test of constructedTestSuite.tests) {
+    if (test.options?.graderProvider !== undefined) {
+      invariant(
+        test.options.provider === undefined,
+        'Specify only one of test.options.provider or test.options.graderProvider',
+      );
+      test.options.provider = test.options.graderProvider;
+      delete test.options.graderProvider;
+    }
     if (test.options?.provider && !isApiProvider(test.options.provider)) {
       test.options.provider = await resolveGradingProvider(test.options.provider, providerMap, {
         env: testSuiteConfig.env,

@@ -851,7 +851,12 @@ describe('TestCaseSchema options merged schema guard', () => {
   });
 
   it('should have no overlapping keys with additional options properties', () => {
-    const additionalKeys = ['disableVarExpansion', 'disableConversationVar', 'runSerially'];
+    const additionalKeys = [
+      'graderProvider',
+      'disableVarExpansion',
+      'disableConversationVar',
+      'runSerially',
+    ];
     const allSchemaKeys = [
       ...Object.keys(PromptConfigSchema.shape),
       ...Object.keys(OutputConfigSchema.shape),
@@ -1608,6 +1613,15 @@ describe('TestSuiteSchema', () => {
           vars: { foo: 'bar' },
         }),
       );
+    });
+
+    it('should accept graderProvider as an explicit grading provider alias', () => {
+      const result = TestSuiteSchema.safeParse({
+        ...baseTestSuite,
+        defaultTest: { options: { graderProvider: 'openai:gpt-4.1' } },
+      });
+
+      expect(result.success).toBe(true);
     });
 
     it('should accept undefined defaultTest', () => {

@@ -344,6 +344,52 @@ describe('evaluate function', () => {
     );
   });
 
+  it('should resolve graderProvider as the grading provider alias', async () => {
+    const testSuite = {
+      prompts: ['test prompt'],
+      providers: [],
+      tests: [{ options: { graderProvider: 'openai:gpt-4.1-mini' } }],
+    };
+
+    await evaluate(testSuite);
+
+    expect(doEvaluate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tests: expect.arrayContaining([
+          expect.objectContaining({
+            options: expect.objectContaining({
+              provider: expect.anything(),
+            }),
+          }),
+        ]),
+      }),
+      expect.anything(),
+      expect.anything(),
+    );
+    const runtimeSuite = vi.mocked(doEvaluate).mock.calls.at(-1)?.[0];
+    expect(runtimeSuite?.tests?.[0].options).not.toHaveProperty('graderProvider');
+    expect(testSuite.tests[0].options).toEqual({
+      graderProvider: 'openai:gpt-4.1-mini',
+    });
+  });
+
+  it('should reject ambiguous grading provider aliases', async () => {
+    await expect(
+      evaluate({
+        prompts: ['test prompt'],
+        providers: [],
+        tests: [
+          {
+            options: {
+              provider: 'openai:gpt-4.1-mini',
+              graderProvider: 'openai:gpt-4.1',
+            },
+          },
+        ],
+      }),
+    ).rejects.toThrow('Specify only one of test.options.provider or test.options.graderProvider');
+  });
+
   it('should resolve provider configuration in defaultTest', async () => {
     const testSuite = {
       prompts: ['test prompt'],

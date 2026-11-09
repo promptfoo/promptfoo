@@ -241,13 +241,16 @@ override the grader. There are several ways to do this, depending on your prefer
    ```yaml
    defaultTest:
      options:
-       provider: openai:gpt-6-sol
+       graderProvider: openai:gpt-6-sol
    tests:
      - description: Use LLM to evaluate output
        assert:
          - type: llm-rubric
            value: Is spoken like a pirate
    ```
+
+   `graderProvider` is an explicit alias for the existing `provider` option. Use either name at a
+   given options level, but not both.
 
 3. Using `assertion.provider` on a per-assertion basis:
 
