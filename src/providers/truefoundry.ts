@@ -283,7 +283,7 @@ export class TrueFoundryProvider extends OpenAiChatCompletionProvider {
     }
 
     // Add TrueFoundry-specific body parameters (MCP servers, iteration limit)
-    const tfBody: Record<string, any> = {
+    const tfBody: typeof body = {
       ...body,
     };
 

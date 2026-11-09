@@ -2,9 +2,9 @@ import { WatsonXAI } from '@ibm-cloud/watsonx-ai';
 import { context, propagation, SpanStatusCode, trace } from '@opentelemetry/api';
 import {
   InMemorySpanExporter,
-  NodeTracerProvider,
   SimpleSpanProcessor,
-} from '@opentelemetry/sdk-trace-node';
+  TracerProvider,
+} from '@opentelemetry/sdk-trace';
 import { BearerTokenAuthenticator, IamAuthenticator } from 'ibm-cloud-sdk-core';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getCache, isCacheEnabled } from '../../src/cache';
@@ -16,6 +16,7 @@ import {
   WatsonXChatProvider,
   WatsonXProvider,
 } from '../../src/providers/watsonx';
+import { registerTracerProvider } from '../../src/tracing/tracerProvider';
 import { createEmptyTokenUsage } from '../../src/util/tokenUsageUtils';
 import { createChatUsage } from '../factories/literalFixtures';
 
@@ -1397,13 +1398,13 @@ describe('WatsonXChatProvider', () => {
 
   describe('GenAI tracing', () => {
     const exporter = new InMemorySpanExporter();
-    const tracerProvider = new NodeTracerProvider({
-      spanProcessors: [new SimpleSpanProcessor(exporter)],
+    const tracerProvider = new TracerProvider({
+      spanProcessors: [new SimpleSpanProcessor({ exporter: exporter })],
     });
     const textChat = vi.fn();
 
     beforeAll(() => {
-      tracerProvider.register();
+      registerTracerProvider(tracerProvider);
     });
 
     beforeEach(() => {
