@@ -598,22 +598,15 @@ function renderRequestMetric({
   );
 }
 
-function renderAssertMetric({
-  numAsserts,
-  numGoodAsserts,
-  idx,
-}: {
-  numAsserts: number[];
-  numGoodAsserts: number[];
-  idx: number;
-}): React.ReactNode {
-  if (!numAsserts[idx]) {
+function renderAssertMetric(metrics: PromptMetrics['total']): React.ReactNode {
+  const total = (metrics?.assertFailCount ?? 0) + (metrics?.assertPassCount ?? 0);
+  if (!total) {
     return null;
   }
 
   return (
     <div>
-      <strong>Asserts:</strong> {numGoodAsserts[idx]}/{numAsserts[idx]} passed
+      <strong>Asserts:</strong> {metrics?.assertPassCount || 0}/{total} passed
     </div>
   );
 }
@@ -1031,8 +1024,6 @@ function renderPromptMetricDetails({
   idx,
   isRedteam,
   showStats,
-  numAsserts,
-  numGoodAsserts,
   testCounts,
 }: {
   metrics: PromptMetrics['total'];
@@ -1040,8 +1031,6 @@ function renderPromptMetricDetails({
   idx: number;
   isRedteam: boolean;
   showStats: boolean;
-  numAsserts: number[];
-  numGoodAsserts: number[];
   testCounts: PromptSummaryMetric[];
 }): React.ReactNode {
   if (!showStats) {
@@ -1051,7 +1040,7 @@ function renderPromptMetricDetails({
   return (
     <div className="prompt-detail collapse-hidden">
       {renderRequestMetric({ metrics, isRedteam })}
-      {renderAssertMetric({ numAsserts, numGoodAsserts, idx })}
+      {renderAssertMetric(metrics)}
       {renderCostMetric({
         metrics,
         filteredMetrics,
@@ -1092,8 +1081,6 @@ function PromptColumnHeader({
   getMetrics,
   showStats,
   isRedteam,
-  numAsserts,
-  numGoodAsserts,
   testCounts,
   passingTestCounts,
   config,
@@ -1111,8 +1098,6 @@ function PromptColumnHeader({
   getMetrics: ReturnType<typeof useMetricsGetter>;
   showStats: boolean;
   isRedteam: boolean;
-  numAsserts: number[];
-  numGoodAsserts: number[];
   testCounts: PromptSummaryMetric[];
   passingTestCounts: PromptSummaryMetric[];
   config: ReturnType<typeof useTableStore.getState>['config'];
@@ -1195,8 +1180,6 @@ function PromptColumnHeader({
         idx,
         isRedteam,
         showStats,
-        numAsserts,
-        numGoodAsserts,
         testCounts,
       })}
       {filterMode === 'failures' && headPromptCount > 1 && (
@@ -1996,24 +1979,6 @@ function ResultsTable({
   const passRates = usePassRates();
   const getMetrics = useMetricsGetter();
 
-  const numAsserts = React.useMemo(
-    () =>
-      head.prompts.map((_, idx) => {
-        const { total: metrics } = getMetrics(idx);
-        return (metrics?.assertFailCount ?? 0) + (metrics?.assertPassCount ?? 0);
-      }),
-    [head.prompts, getMetrics],
-  );
-
-  const numGoodAsserts = React.useMemo(
-    () =>
-      head.prompts.map((_, idx) => {
-        const { total: metrics } = getMetrics(idx);
-        return metrics?.assertPassCount || 0;
-      }),
-    [head.prompts, getMetrics],
-  );
-
   const columnHelper = React.useMemo(() => createColumnHelper<EvaluateTableRow>(), []);
 
   const { renderMarkdown } = useResultsViewSettingsStore();
@@ -2137,8 +2102,6 @@ function ResultsTable({
                 getMetrics={getMetrics}
                 showStats={showStats}
                 isRedteam={isRedteam}
-                numAsserts={numAsserts}
-                numGoodAsserts={numGoodAsserts}
                 testCounts={testCounts}
                 passingTestCounts={passingTestCounts}
                 config={config}
@@ -2209,8 +2172,6 @@ function ResultsTable({
     head.prompts,
     isRedteam,
     maxTextLength,
-    numAsserts,
-    numGoodAsserts,
     onFailureFilterToggle,
     debouncedSearchText,
     showStats,
