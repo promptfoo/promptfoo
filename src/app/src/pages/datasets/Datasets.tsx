@@ -11,13 +11,13 @@ import DatasetDialog from './DatasetDialog';
 import type { TestCase, TestCasesWithMetadata } from '@promptfoo/types';
 import type { ColumnDef } from '@tanstack/react-table';
 
+export type DatasetRow = Omit<TestCasesWithMetadata, 'recentEvalDate'> & { recentEvalDate: string };
+
 interface DatasetsProps {
-  data: (TestCasesWithMetadata & { recentEvalDate: string })[];
+  data: DatasetRow[];
   isLoading: boolean;
   error: string | null;
 }
-
-type DatasetRow = TestCasesWithMetadata & { recentEvalDate: string };
 
 const getVariables = (testCases: DatasetRow['testCases']) => {
   if (!Array.isArray(testCases) || typeof testCases[0] === 'string') {
