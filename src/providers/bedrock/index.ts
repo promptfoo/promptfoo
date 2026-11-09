@@ -2295,6 +2295,8 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'anthropic.claude-fable-5': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-fable-5-1': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-mythos-5-1': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'anthropic.claude-fable-5-2': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'anthropic.claude-mythos-5-2': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-opus-4-1-20250805-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-opus-4-6-v1': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-opus-4-7': BEDROCK_MODEL.CLAUDE_MESSAGES,
@@ -2401,6 +2403,8 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'us.anthropic.claude-fable-5': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-fable-5-1': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-mythos-5-1': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'us.anthropic.claude-fable-5-2': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'us.anthropic.claude-mythos-5-2': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-opus-4-1-20250805-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-opus-4-6-v1': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-opus-4-7': BEDROCK_MODEL.CLAUDE_MESSAGES,
@@ -2528,6 +2532,10 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'global.anthropic.claude-fable-5': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'global.anthropic.claude-fable-5-1': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'global.anthropic.claude-mythos-5-1': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  // Fable/Mythos 5.2 serve only through the `us.` and `global.` Runtime profiles (AWS model
+  // cards, 2026-11-09).
+  'global.anthropic.claude-fable-5-2': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'global.anthropic.claude-mythos-5-2': BEDROCK_MODEL.CLAUDE_MESSAGES,
   // Claude Sonnet 5 uses the global endpoint like the other Claude 5-generation
   // models (Fable 5, Opus 4.7/4.8) rather than the older `apac.` prefix.
   'global.anthropic.claude-sonnet-5': BEDROCK_MODEL.CLAUDE_MESSAGES,

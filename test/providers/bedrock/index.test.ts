@@ -896,7 +896,7 @@ describe('AwsBedrockGenericProvider', () => {
       }
     });
 
-    it.each(['global.anthropic.claude-opus-5-5', 'global.anthropic.claude-fable-5-1'])(
+    it.each(['global.anthropic.claude-opus-5-5', 'global.anthropic.claude-fable-5-2'])(
       'keeps thinking headroom for always-on %s even when thinking is disabled',
       async (model) => {
         // The rejected `disabled` block is dropped, so the model still thinks against max_tokens.
@@ -4302,6 +4302,8 @@ describe('AwsBedrockCompletionProvider', () => {
     expect(result.cost).toBeCloseTo(0.00555, 8);
   });
   it.each([
+    ['global.anthropic.claude-fable-5-2', 1000, 0.02904],
+    ['global.anthropic.claude-mythos-5-2', 0, 0.02104],
     ['global.anthropic.claude-fable-5-1', 1000, 0.0363],
     ['global.anthropic.claude-opus-5-5', 1000, 0.01454],
     ['global.anthropic.claude-sonnet-5-5', 1000, 0.00727],
