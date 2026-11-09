@@ -838,15 +838,26 @@ async function readTestsWithEnv(
         usesStandaloneWorkbookLoader(pathWithoutScheme, basePath) ||
         pathWithoutFunction !== pathWithoutScheme
       ) {
-        ret.push(...(await loadStandalone(globOrTest)));
+        for (const testCase of await loadStandalone(globOrTest)) {
+          ret.push(testCase);
+        }
       } else {
         // Resolve globs for other file types
-        ret.push(...(await loadTestsFromGlobWithEnv(globOrTest, basePath, env, loadProviders)));
+        for (const testCase of await loadTestsFromGlobWithEnv(
+          globOrTest,
+          basePath,
+          env,
+          loadProviders,
+        )) {
+          ret.push(testCase);
+        }
       }
     } else if (isRemoteTestCase(globOrTest as TestCase)) {
       ret.push(globOrTest as TestCase);
     } else if ('path' in globOrTest) {
-      ret.push(...(await loadStandalone(globOrTest.path, globOrTest.config)));
+      for (const testCase of await loadStandalone(globOrTest.path, globOrTest.config)) {
+        ret.push(testCase);
+      }
     } else {
       // Load individual TestCase
       ret.push(
