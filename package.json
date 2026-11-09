@@ -143,7 +143,7 @@
     "gaxios": "^8.3.0",
     "ip-address": "10.7.5",
     "mongoose": {
-      "gcp-metadata": "^9.2.2"
+      "gcp-metadata": "^9.2.3"
     },
     "webpack-dev-server": {
       "express": "^4.22.3"
@@ -300,7 +300,7 @@
     "fast-safe-stringify": "^2.1.1",
     "fast-xml-parser": "^5.7.1",
     "fastest-levenshtein": "^1.0.16",
-    "gcp-metadata": "^9.2.2",
+    "gcp-metadata": "^9.2.3",
     "glob": "^14.0.3",
     "http-z": "^8.1.1",
     "js-rouge": "^3.2.1",
