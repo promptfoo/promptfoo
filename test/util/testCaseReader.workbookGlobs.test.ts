@@ -116,4 +116,21 @@ describe('workbook test file globs', () => {
     }
     expect(resolveTestsWatchPaths(reference, directory)).toEqual([workbook]);
   });
+
+  it.each(['YAML', 'YmL'])(
+    'keeps a workbook selector ending in %s on the Excel loader',
+    async (extension) => {
+      const workbook = writeWorkbook('C# fixtures/Cases#2.XLSX');
+      const reference = 'file://C# fixtures/Cases#2.XLSX#missing.' + extension;
+
+      for (const read of [readTests, readTestConfigs]) {
+        for (const input of [reference, [reference], { path: reference }]) {
+          await expect(read(input, directory)).rejects.toThrow(
+            'Sheet "missing.' + extension + '" not found',
+          );
+        }
+      }
+      expect(resolveTestsWatchPaths(reference, directory)).toEqual([workbook]);
+    },
+  );
 });
