@@ -216,6 +216,8 @@ async function resolveRetryConfigs(
           'Retry without --config to use the saved test selection.',
       );
     }
+  }
+  if (cmdObj.config) {
     assertRetryLayoutMatched(originalEval, configs.config, filterRange);
   }
 

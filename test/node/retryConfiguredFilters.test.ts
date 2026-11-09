@@ -58,6 +58,7 @@ describe('retry configured test selection', () => {
   async function initialEval(
     form: 'top-level' | 'scenario' | 'mixed',
     commandLineOptions: Partial<CommandLineOptions>,
+    cliFilters: Partial<Pick<CommandLineOptions, 'filterFirstN' | 'filterPattern'>> = {},
   ) {
     const readyPath = path.join(tempDir, 'ready');
     const callsPath = path.join(tempDir, 'calls.jsonl');
@@ -109,6 +110,7 @@ describe('retry configured test selection', () => {
         share: false,
         cache: false,
         maxConcurrency: 1,
+        ...cliFilters,
       },
       {},
       undefined,
@@ -233,6 +235,83 @@ describe('retry configured test selection', () => {
     );
     await assertRetryMatchesInitial(fixture, true);
   });
+
+  it.each(
+    (['top-level', 'scenario'] as const).flatMap((form) =>
+      (['cli', 'config'] as const).flatMap((source) => [
+        { form, source, selected: { filterFirstN: 1 } },
+        { form, source, selected: { filterPattern: 'keep$' } },
+      ]),
+    ),
+  )(
+    'rejects a selector-less override after $source filtering $form tests: $selected',
+    async ({ form, source, selected }) => {
+      const fixture = await initialEval(
+        form,
+        source === 'config' ? selected : {},
+        source === 'cli' ? selected : {},
+      );
+      const db = await getDb();
+      const before = await db
+        .select()
+        .from(evalResultsTable)
+        .where(eq(evalResultsTable.evalId, fixture.record.id))
+        .all();
+      fs.writeFileSync(
+        fixture.configPath,
+        JSON.stringify({ ...fixture.config, commandLineOptions: undefined }),
+      );
+
+      await expect(retryCommand(fixture.record.id, { config: fixture.configPath })).rejects.toThrow(
+        /saved test layout.*ERROR results were preserved/,
+      );
+
+      expect(
+        await db
+          .select()
+          .from(evalResultsTable)
+          .where(eq(evalResultsTable.evalId, fixture.record.id))
+          .all(),
+      ).toEqual(before);
+      expect(
+        fs.readFileSync(fixture.callsPath, 'utf8').trim().split(String.fromCharCode(10)),
+      ).toHaveLength(fixture.initial.length);
+      await assertRetryMatchesInitial(fixture, false);
+    },
+  );
+
+  it('allows an unchanged unfiltered layout with transport-only overrides', async () => {
+    const fixture = await initialEval('top-level', {});
+    fs.writeFileSync(
+      fixture.configPath,
+      JSON.stringify({
+        ...fixture.config,
+        providers: fixture.config.providers.map((id) => ({ id, config: { timeoutMs: 4321 } })),
+        commandLineOptions: { maxConcurrency: 4, delay: 0, share: false },
+      }),
+    );
+    await assertRetryMatchesInitial(fixture, true);
+  });
+
+  it.each(
+    (['top-level', 'scenario'] as const).flatMap((form) => [
+      { form, configured: { filterFirstN: 1 } },
+      { form, configured: { filterPattern: 'keep$' } },
+    ]),
+  )(
+    'allows removing $configured when the override retains the saved materialized $form tests',
+    async ({ form, configured }) => {
+      const fixture = await initialEval(form, configured);
+      fs.writeFileSync(
+        fixture.configPath,
+        JSON.stringify({
+          ...fixture.record.config,
+          commandLineOptions: undefined,
+        }),
+      );
+      await assertRetryMatchesInitial(fixture, true);
+    },
+  );
 
   it.each(
     (['top-level', 'scenario', 'mixed'] as const).flatMap((form) => [
