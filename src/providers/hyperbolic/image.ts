@@ -1,5 +1,5 @@
 import { fetchWithCache } from '../../cache';
-import { getEnvString } from '../../envars';
+import { getEnvString, getProviderEnvString } from '../../envars';
 import logger from '../../logger';
 import { getRequestTimeoutMs } from '../shared';
 
@@ -125,7 +125,9 @@ export class HyperbolicImageProvider implements ApiProvider {
     if (this.config?.apiKey) {
       return this.config.apiKey;
     }
-    return this.env?.HYPERBOLIC_API_KEY || getEnvString('HYPERBOLIC_API_KEY');
+    return (
+      getProviderEnvString(this.env, 'HYPERBOLIC_API_KEY') || getEnvString('HYPERBOLIC_API_KEY')
+    );
   }
 
   getApiUrl(): string {
@@ -257,20 +259,17 @@ export class HyperbolicImageProvider implements ApiProvider {
       };
     }
 
-    if (data.error) {
+    if (data?.error) {
       return {
         error: typeof data.error === 'string' ? data.error : JSON.stringify(data.error),
       };
     }
 
     try {
-      if (!data.images || !Array.isArray(data.images) || data.images.length === 0) {
-        return {
-          error: 'No images returned from API',
-        };
+      const imageData = Array.isArray(data?.images) ? data.images[0]?.image : undefined;
+      if (typeof imageData !== 'string' || !imageData.trim()) {
+        return { error: 'No images returned from API' };
       }
-
-      const imageData = data.images[0].image;
       const cost = cached ? 0 : this.calculateImageCost();
 
       // Format the output for proper rendering

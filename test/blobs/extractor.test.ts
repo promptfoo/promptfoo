@@ -221,16 +221,17 @@ describe('Local blob extraction', () => {
     vi.resetAllMocks();
   });
 
-  it('stores extracted blobs locally without eagerly uploading them', async () => {
-    // Create a large enough data URL to trigger externalization (>1KB)
-    const largeBase64 = Buffer.alloc(2000).toString('base64');
-    const response: ProviderResponse = {
-      output: `data:image/png;base64,${largeBase64}`,
-    };
-
-    await extractAndStoreBinaryData(response);
-
-    // Should store locally
+  const base64 = Buffer.alloc(2000).toString('base64');
+  const image = { b64_json: base64 };
+  const uri = 'promptfoo://blob/abc123def456';
+  it.each([
+    ['a data URL', `data:image/png;base64,${base64}`, undefined],
+    ['one JSON image', JSON.stringify({ data: [null, image] }), [uri]],
+    ['two JSON images', JSON.stringify({ data: [image, image] }), [uri, uri]],
+  ] as const)('stores %s locally without eagerly uploading it', async (_label, output, uris) => {
+    const result = await extractAndStoreBinaryData({ output });
+    expect(result?.output).toBe(uris && uris.length > 1 ? JSON.stringify(uris) : uri);
+    expect(result?.metadata?.blobUris).toEqual(uris);
     expect(mockStoreBlob).toHaveBeenCalledTimes(1);
     expect(mockUploadBlobRemote).not.toHaveBeenCalled();
   });
