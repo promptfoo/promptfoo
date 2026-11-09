@@ -101,9 +101,24 @@ describe('getStandaloneEvals', () => {
     expect(datasets[0].id).toBe(datasetId);
     expect(JSON.stringify(datasets[0].testCases)).not.toContain('short-secret');
     expect((await getDatasetFromHash(datasetId))?.id).toBe(datasetId);
-    expect((await getPrompts())[0].evals[0].datasetId).toBe(datasetId);
-    expect(await getPromptsForTestCasesHash(datasetId)).toHaveLength(1);
+    const prompts = await getPrompts();
+    expect(prompts[0].evals[0].datasetId).toBe(datasetId);
+    expect(await getPromptsForTestCasesHash(datasetId)).toEqual(prompts);
+    expect(await getPromptsForTestCasesHash('')).toEqual([]);
     expect(persisted!.config.tests).toEqual(tests);
+  });
+
+  it('keeps prompt membership order and the latest date across timestamp formats', async () => {
+    const older = await createEvalWithPrompts({});
+    const newer = await createEvalWithPrompts({});
+    const db = await getDb();
+    await db.run(sql`UPDATE evals SET created_at = '2000-01-01 00:00:00' WHERE id = ${older.id}`);
+
+    const [group] = await getPrompts();
+    expect(group.evals.map(({ id }) => id)).toEqual([older.id, newer.id]);
+    expect(group.count).toBe(2);
+    expect(group.recentEvalId).toBe(older.id);
+    expect(group.recentEvalDate).toEqual(new Date(newer.createdAt));
   });
 
   it('returns isRedteam from the materialized column, not raw JSON inspection', async () => {
