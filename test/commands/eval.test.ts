@@ -1020,10 +1020,10 @@ describe('evalCommand', () => {
     };
 
     /** The listeners watch mode installed, without disturbing anyone else's. */
-    const installedSince = (before: NodeJS.SignalsListener[]) =>
+    const installedSince = (before: Array<(signal: 'SIGINT') => void>) =>
       process.listeners('SIGINT').filter((listener) => !before.includes(listener));
 
-    let before: NodeJS.SignalsListener[];
+    let before: Array<(signal: 'SIGINT') => void>;
 
     beforeEach(() => {
       before = process.listeners('SIGINT');
@@ -1889,7 +1889,7 @@ describe('evalCommand', () => {
         path.resolve('/suite', 'vars/scenario.yaml'),
         path.resolve('/suite', 'vars/body.txt'),
       ]),
-      { ignored: /^\./, persistent: true },
+      { atomic: true, ignored: /^\./, persistent: true },
     );
 
     const loggerInfoSpy = vi.spyOn(logger, 'info').mockImplementation(() => logger);
@@ -1937,7 +1937,7 @@ describe('evalCommand', () => {
         );
         expect(chokidarMocks.watch).toHaveBeenCalledWith(
           expect.arrayContaining([path.resolve(expected)]),
-          { ignored: /^\./, persistent: true },
+          { atomic: true, ignored: /^\./, persistent: true },
         );
       } finally {
         cwd.mockRestore();
