@@ -56,48 +56,85 @@ export function resolveVariables(
   skipResolveVars?: string[],
   varsResolvedFromSkipped?: Set<string>,
 ): Record<string, VarValue> {
-  let resolved: boolean;
   const regex = /\{\{\s*(\w+)\s*\}\}/g; // Matches {{variableName}}, {{ variableName }}, etc.
+  const skippedVars = new Set(skipResolveVars);
+  const resolvedFromSkipped = varsResolvedFromSkipped ?? new Set<string>();
+  const ordinaryVars = new Set(
+    Object.keys(variables).filter(
+      (key) =>
+        typeof variables[key] === 'string' &&
+        !skippedVars.has(key) &&
+        !resolvedFromSkipped.has(key),
+    ),
+  );
+  const dependencies = new Map<string, Set<string>>();
+  const dependents = new Map<string, string[]>();
+  for (const key of ordinaryVars) {
+    const references = new Set(
+      [...(variables[key] as string).matchAll(regex)]
+        .map((match) => match[1])
+        .filter((name) => ordinaryVars.has(name)),
+    );
+    dependencies.set(key, references);
+    for (const name of references) {
+      const parents = dependents.get(name) ?? [];
+      parents.push(key);
+      dependents.set(name, parents);
+    }
+  }
 
-  let iterations = 0;
-  do {
-    resolved = true;
-    for (const key of Object.keys(variables)) {
-      if (
-        skipResolveVars?.includes(key) ||
-        varsResolvedFromSkipped?.has(key) ||
-        typeof variables[key] !== 'string'
-      ) {
-        continue;
-      }
-      const value = variables[key] as string;
-      let madeReplacement = false;
-      let referencesSkipped = false;
-      // Replace every placeholder whose variable is defined. Placeholders whose
-      // variable is undefined are left untouched - the final nunjucks render will
-      // fail if necessary. A replacer function keeps `$&`, `$'` and `` $` `` in
-      // the value literal.
-      const newValue = value.replace(regex, (placeholder: string, varName: string) => {
-        const replacement = variables[varName];
-        if (replacement === undefined) {
-          return placeholder;
-        }
-        madeReplacement = true;
-        if (skipResolveVars?.includes(varName) || varsResolvedFromSkipped?.has(varName)) {
-          referencesSkipped = true;
-        }
-        return replacement as string;
-      });
-      if (madeReplacement) {
-        variables[key] = newValue;
-        if (referencesSkipped) {
-          varsResolvedFromSkipped?.add(key);
-        }
-        resolved = false; // Indicate that we've made a replacement and should check again
+  // Remove acyclic dependencies. Remaining variables reach a cycle, so leave
+  // references to them untouched instead of repeatedly expanding their values.
+  const cyclicVars = new Set(ordinaryVars);
+  const ready = [...ordinaryVars].filter((key) => dependencies.get(key)?.size === 0);
+  while (ready.length > 0) {
+    const key = ready.pop()!;
+    cyclicVars.delete(key);
+    for (const parent of dependents.get(key) ?? []) {
+      const references = dependencies.get(parent)!;
+      references.delete(key);
+      if (references.size === 0) {
+        ready.push(parent);
       }
     }
-    iterations++;
-  } while (!resolved && iterations < 5);
+  }
+
+  // Finish ordinary aliases before copying skipped values. Once copied, their
+  // contents must remain opaque, even when they contain valid variable names.
+  for (const resolveSkipped of [false, true]) {
+    let resolved: boolean;
+    let iterations = 0;
+    do {
+      resolved = true;
+      for (const key of ordinaryVars) {
+        if (resolvedFromSkipped.has(key)) {
+          continue;
+        }
+        const value = variables[key] as string;
+        let referencesSkipped = false;
+        // A replacer function keeps `$&`, `$'` and `` $` `` in the value literal.
+        const newValue = value.replace(regex, (placeholder: string, varName: string) => {
+          const replacement = variables[varName];
+          const isSkipped = skippedVars.has(varName) || resolvedFromSkipped.has(varName);
+          if (
+            replacement === undefined ||
+            isSkipped !== resolveSkipped ||
+            (!isSkipped && cyclicVars.has(varName))
+          ) {
+            return placeholder;
+          }
+          referencesSkipped ||= isSkipped;
+          return replacement as string;
+        });
+        if (referencesSkipped) {
+          resolvedFromSkipped.add(key);
+        }
+        variables[key] = newValue;
+        resolved &&= newValue === value;
+      }
+      iterations++;
+    } while (!resolved && iterations < 5);
+  }
 
   return variables;
 }

@@ -706,6 +706,54 @@ describe('evaluatorHelpers', () => {
       });
     });
 
+    it('should resolve every repeated defined placeholder after an unresolved one', () => {
+      const variables = { message: '{{unknown}}' + '{{name}}'.repeat(20), name: 'Alice' };
+
+      expect(resolveVariables(variables).message).toBe('{{unknown}}' + 'Alice'.repeat(20));
+    });
+
+    it.each(['{{a}}', '{{a}}{{a}}', '{{ a }}{{a}}'])(
+      'should leave self-references unexpanded: %s',
+      (a) => {
+        const variables = { a, message: '{{a}} {{name}}', name: 'Alice' };
+
+        expect(resolveVariables(variables)).toEqual({
+          a,
+          message: '{{a}} Alice',
+          name: 'Alice',
+        });
+      },
+    );
+
+    it('should leave indirect cycles and aliases to them unexpanded', () => {
+      const variables = {
+        message: '{{a}} {{name}}',
+        a: '{{b}}{{b}}',
+        b: '{{a}}{{a}}',
+        name: 'Alice',
+      };
+
+      expect(resolveVariables(variables)).toEqual({
+        message: '{{a}} Alice',
+        a: '{{b}}{{b}}',
+        b: '{{a}}{{a}}',
+        name: 'Alice',
+      });
+    });
+
+    it('should preserve skipped contents without an external bookkeeping set', () => {
+      const variables = {
+        message: '{{prefix}} {{payload}}',
+        prefix: '{{greeting}}',
+        greeting: 'Hello',
+        payload: '{{message}}{{secret}}',
+        secret: 'do-not-inline',
+      };
+
+      expect(resolveVariables(variables, ['payload']).message).toBe('Hello {{message}}{{secret}}');
+      expect(variables.payload).toBe('{{message}}{{secret}}');
+    });
+
     it('should handle Date objects as variables', () => {
       const dateObj = new Date('2024-01-15T00:00:00.000Z');
       const variables = {

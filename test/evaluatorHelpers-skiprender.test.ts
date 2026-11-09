@@ -110,6 +110,28 @@ describe('renderPrompt with skipRenderVars', () => {
     expect(result).toBe('User input: {{secret}}');
   });
 
+  it.each([
+    ['{{prefix}} {{payload}}', 'Hello {{secret}} {{7*7}}'],
+    ['{{payload}} {{prefix}}', '{{secret}} {{7*7}} Hello'],
+    ['{{prefix}} {{wrapped_payload}}', 'Hello {{secret}} {{7*7}}'],
+    ['{{wrapped_payload}} {{prefix}}', '{{secret}} {{7*7}} Hello'],
+  ])('should finish ordinary aliases in a skipped composite: %s', async (message, expected) => {
+    const vars = {
+      message,
+      prefix: '{{greeting}}',
+      wrapped_payload: '{{payload}}',
+      payload: '{{secret}} {{7*7}}',
+      greeting: 'Hello',
+      secret: 'do-not-inline',
+    };
+
+    const result = await renderPrompt({ raw: '{{message}}', label: 'test' }, vars, {}, undefined, [
+      'payload',
+    ]);
+
+    expect(result).toBe(expected);
+  });
+
   it('should preserve trailing newlines inside skipRenderVars values', async () => {
     const prompt = { raw: 'User input: {{user_input}}', label: 'test' };
     const vars = {
