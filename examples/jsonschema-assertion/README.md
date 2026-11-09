@@ -41,5 +41,8 @@ schema.
 
 - The assertion type is `is-json`; its `value` is interpreted as a JSON Schema.
 - `additionalProperties: false` rejects hallucinated fields, not just wrong types.
-- Unlike exact-text checks, this keeps passing when the model rephrases the
-  sentence around the JSON payload.
+- Unlike exact-text checks, this keeps passing when the model picks different
+  field values, as long as the structure still matches the schema.
+- `is-json` parses the entire response, so it fails when the model adds prose
+  around the JSON. If that can happen, use `contains-json`, which extracts JSON
+  objects from the surrounding text.
