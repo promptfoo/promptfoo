@@ -7,7 +7,6 @@ export {
   generateVarCombinations,
   getTraceId,
   getTraceLinkage,
-  hasTestsInRange,
   isAllowedPrompt,
   runEval,
 } from './engine';

@@ -1,3 +1,4 @@
+import Clone from 'rfdc';
 import logger from '../../logger';
 import Eval from '../../models/eval';
 import { deduplicateTestCases, extractRuntimeVars, filterRuntimeVars } from '../../util/comparison';
@@ -12,6 +13,8 @@ type Tests = NonNullable<TestSuite['tests']>;
  */
 type ResultFilterFn = (result: EvaluateResult) => boolean;
 type TestFilterFn = (test: TestCase) => boolean;
+
+const clone = Clone({ circles: true });
 
 /**
  * Merges defaultTest.vars into a test case's vars for comparison purposes.
@@ -162,7 +165,7 @@ export async function filterTestsByResults(
         if (rawTest) {
           testConfigMap?.set(testWithRuntimeVars, {
             ...rawTest,
-            vars: { ...rawTest.vars, ...runtimeVars },
+            vars: clone({ ...rawTest.vars, ...runtimeVars }),
           });
         }
         logger.debug('[filterTestsByResults] Restored runtime vars for test', {
@@ -234,7 +237,7 @@ export async function filterTestsByResults(
       // Intentionally omit: provider (security - may contain stale credentials)
     };
     extractedTests.push(extractedTest);
-    testConfigMap?.set(extractedTest, extractedTest);
+    testConfigMap?.set(extractedTest, clone(extractedTest));
     extractedTestKeys.add(JSON.stringify(filterRuntimeVars(extractedTest.vars)));
   }
 

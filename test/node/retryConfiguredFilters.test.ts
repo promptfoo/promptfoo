@@ -4,7 +4,7 @@ import path from 'node:path';
 
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
-import { hasTestsInRange } from '../../src/evaluator';
+import { hasTestsInRange } from '../../src/evaluator/engine';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
 import { doEval } from '../../src/node/doEval';
