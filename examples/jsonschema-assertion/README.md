@@ -1,28 +1,45 @@
-# JSON Schema Assertion Example
+# jsonschema-assertion (JSON Schema Assertion)
 
-This example demonstrates how to use promptfoo's JSON Schema assertion to
-validate that an LLM output conforms to a structured schema. JSON Schema is
-widely supported and works well with function calling / tool use responses.
+Validate that an LLM returns structured JSON your code can consume, by checking
+the output against a JSON Schema with the `is-json` assertion.
 
-## What it does
+## Setup
 
-We ask an LLM to extract structured information from free-form customer feedback
-and assert that the response matches a schema describing `sentiment`
-(`positive` | `negative` | `neutral`) and `keywords` (array of strings).
+```bash
+npx promptfoo@latest init --example jsonschema-assertion
+cd jsonschema-assertion
+```
 
-## Files
+The example uses `openai:gpt-6-sol`, which needs an OpenAI API key. Put it in a
+`.env` file inside the example directory and keep that file out of version
+control:
 
-- `promptfooconfig.yaml` — the eval configuration
-- `test.js` — a lightweight zero-dep sanity check that runs with plain Node
+```text
+OPENAI_API_KEY=sk-...
+```
 
 ## Run it
 
 ```bash
 npx promptfoo@latest eval -c promptfooconfig.yaml
+npx promptfoo@latest view
 ```
+
+## What it does
+
+The prompt asks for JSON only: a `sentiment` enum (`positive`, `negative`,
+`neutral`) and up to three `keywords`. Each test passes a different customer
+feedback string through `{{feedback}}`, then asserts the reply against the
+schema.
+
+## Files
+
+- `promptfooconfig.yaml` — the eval configuration
+- `test.js` — zero-dependency sanity check for the schema logic, runs with `node test.js`
 
 ## Key points
 
-- The JSON Schema assertion lives under `assert` → `type: 'json-schema'`.
-- The schema should be as strict as you can make it — this is what catches
-  hallucinated fields and wrong types.
+- The assertion type is `is-json`; its `value` is interpreted as a JSON Schema.
+- `additionalProperties: false` rejects hallucinated fields, not just wrong types.
+- Unlike exact-text checks, this keeps passing when the model rephrases the
+  sentence around the JSON payload.

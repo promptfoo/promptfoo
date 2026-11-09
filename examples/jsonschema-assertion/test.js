@@ -9,12 +9,18 @@ const schema = {
     keywords: { type: 'array', items: { type: 'string' }, maxItems: 3 },
   },
   required: ['sentiment', 'keywords'],
+  additionalProperties: false,
 };
 
 function validate(obj, s) {
   if (typeof obj !== 'object' || obj === null) return 'not an object';
   for (const key of s.required) {
     if (!(key in obj)) return `missing ${key}`;
+  }
+  if (s.additionalProperties === false) {
+    for (const key of Object.keys(obj)) {
+      if (!(key in s.properties)) return `unexpected field ${key}`;
+    }
   }
   for (const [key, sub] of Object.entries(s.properties)) {
     if (!(key in obj)) continue;
