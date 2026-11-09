@@ -69,6 +69,66 @@ describe('matchesSelectBest', () => {
     },
   );
 
+  it.each([
+    {
+      description: 'coverage counts',
+      output: 'Text 0 covers 2 of the 3 requested points; text 1 covers all of them. Best: 1',
+      outputCount: 3,
+    },
+    {
+      description: 'score fractions',
+      output: "Output 1 wins, scoring 9/10 against output 0's 7/10.",
+      outputCount: 3,
+    },
+    {
+      description: 'a count of criteria',
+      output: 'Using the 2 criteria, text 0 wins.',
+      outputCount: 3,
+    },
+    {
+      description: 'a multi-digit winner and runner-up',
+      output: 'Output 10 is best; output 2 is second.',
+      outputCount: 12,
+    },
+    {
+      description: 'elimination reasoning',
+      output: 'After eliminating 0 and 2, the winner is 1.',
+      outputCount: 3,
+    },
+    {
+      description: 'quoted candidate text',
+      output:
+        'Text 0 says "I have 2 dogs", which is irrelevant; text 1 answers the question. Best: 1',
+      outputCount: 3,
+    },
+  ])(
+    'rejects clear-verdict prose containing $description instead of inferring its winner',
+    async ({ output, outputCount }) => {
+      const outputs = Array.from({ length: outputCount }, (_value, index) => 'Output ' + index);
+      const result = await matchesSelectBest('best answer', outputs, {
+        provider: createSelectBestProvider(output),
+      });
+
+      expect(result).toHaveLength(outputCount);
+      for (const grade of result) {
+        expect(grade).toMatchObject({
+          pass: false,
+          score: 0,
+          reason: 'Ambiguous select-best verdict: multiple output indexes',
+        });
+      }
+    },
+  );
+
+  it('preserves the documented limitation for a lone incidental index without a verdict', async () => {
+    const result = await matchesSelectBest('best answer', ['A', 'B', 'C'], {
+      provider: createSelectBestProvider("Text 2's opening is strong."),
+    });
+
+    expect(result.map(({ pass }) => pass)).toEqual([false, false, true]);
+    expect(result.map(({ score }) => score)).toEqual([0, 0, 1]);
+  });
+
   it('preserves cache provenance and independent results for an ambiguous verdict', async () => {
     const provider = createMockProvider({
       response: {
