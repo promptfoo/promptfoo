@@ -137,10 +137,14 @@ export function parseFileUrl(fileUrl: string): { filePath: string; functionName?
   const lastColonIndex = urlWithoutProtocol.lastIndexOf(':');
   if (lastColonIndex > 1) {
     const candidateFilePath = urlWithoutProtocol.slice(0, lastColonIndex);
-    if (isScriptFilePath(candidateFilePath)) {
+    const functionName = urlWithoutProtocol.slice(lastColonIndex + 1);
+    if (
+      isScriptFilePath(candidateFilePath) &&
+      !(candidateFilePath.endsWith('.rb') && /[\\/]/.test(functionName))
+    ) {
       return {
         filePath: normalizeFilePath(candidateFilePath),
-        functionName: urlWithoutProtocol.slice(lastColonIndex + 1),
+        functionName,
       };
     }
   }
