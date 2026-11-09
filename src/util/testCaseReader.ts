@@ -914,7 +914,11 @@ function hasGlobMagic(reference: string): boolean {
  * watching a pattern's parent directory instead would rerun the evaluation on every
  * unrelated edit beneath it, including the run's own output file.
  */
-function resolveTestsFileReference(reference: string, basePath: string): string[] {
+function resolveTestsFileReference(
+  reference: string,
+  basePath: string,
+  kind: 'tests' | 'vars' | 'config' = 'config',
+): string[] {
   reference = renderEnvOnlyInObject(reference);
   const withoutScheme = reference.replace(/^file:\/\//, '');
   if (isRemoteTestsReference(withoutScheme)) {
@@ -922,7 +926,15 @@ function resolveTestsFileReference(reference: string, basePath: string): string[
   }
 
   const resolved = path.resolve(basePath, withoutScheme);
-  if (hasGlobMagic(withoutScheme)) {
+  const withoutSheet = getExcelWorkbookPath(resolved) ?? resolved;
+  const withoutFunction = stripFunctionSuffix(withoutSheet);
+  const isScript = isJavascriptFile(withoutFunction) || withoutFunction.endsWith('.py');
+  const filePath = isScript ? withoutFunction : withoutSheet;
+  // Test sources prefer existing literal files. Raw vars paths always go through globSync.
+  if (
+    kind === 'vars' ||
+    (hasGlobMagic(withoutScheme) && (kind !== 'tests' || !fs.existsSync(filePath)))
+  ) {
     const matches = globSync(
       path.resolve(
         escapeGlob(path.resolve(basePath), { windowsPathsNoEscape: true }),
@@ -937,12 +949,7 @@ function resolveTestsFileReference(reference: string, basePath: string): string[
     // happens to contain a glob metacharacter.
   }
 
-  // A concrete path. Only strip a `:functionName` suffix for script references, so that
-  // a vars file whose name legally contains a colon is still watched in full.
-  const withoutSheet = getExcelWorkbookPath(resolved) ?? resolved;
-  const withoutFunction = stripFunctionSuffix(withoutSheet);
-  const isScript = isJavascriptFile(withoutFunction) || withoutFunction.endsWith('.py');
-  return [isScript ? withoutFunction : withoutSheet];
+  return [filePath];
 }
 
 /**
@@ -1057,7 +1064,7 @@ export function resolveTestsWatchPaths(
         source.endsWith('yaml') ||
         source.endsWith('yml') ||
         (hasGlobMagic(source) && !fs.existsSync(path.resolve(basePath, source)));
-      return resolveTestsFileReference(entry, basePath).flatMap((file) => [
+      return resolveTestsFileReference(entry, basePath, 'tests').flatMap((file) => [
         file,
         ...collectNestedFileReferences(
           file,
@@ -1071,7 +1078,7 @@ export function resolveTestsWatchPaths(
     }
     if ('path' in entry && typeof entry.path === 'string') {
       return [
-        ...resolveTestsFileReference(entry.path, basePath),
+        ...resolveTestsFileReference(entry.path, basePath, 'tests'),
         ...collectConfigFileReferences((entry as { config?: unknown }).config, basePath),
       ];
     }
@@ -1082,7 +1089,7 @@ export function resolveTestsWatchPaths(
       if (typeof entry.vars === 'string' || Array.isArray(entry.vars)) {
         const references = Array.isArray(entry.vars) ? entry.vars : [entry.vars];
         return references.flatMap((value) =>
-          typeof value === 'string' ? resolveTestsFileReference(value, basePath) : [],
+          typeof value === 'string' ? resolveTestsFileReference(value, basePath, 'vars') : [],
         );
       }
       // A mapping: only file:// values are file references, the rest are literal vars.
