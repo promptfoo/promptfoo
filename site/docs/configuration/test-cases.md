@@ -274,6 +274,8 @@ Use an Excel Open XML workbook (`.xlsx`) for test cases. If you have an Excel 97
 - `file://test_cases.xlsx#Sheet2` - Select sheet by name
 - `file://test_cases.xlsx#2` - Select sheet by 1-based index (2 = second sheet)
 
+The `#` after the workbook extension starts the sheet selector. For example, `file://cases#2.xlsx#Data#2026` selects the worksheet `Data#2026` in `cases#2.xlsx`.
+
 ```yaml title="promptfooconfig.yaml"
 # Use a specific sheet by name
 tests: file://test_cases.xlsx#DataSheet
