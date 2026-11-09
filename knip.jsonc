@@ -78,7 +78,6 @@
       "ignoreDependencies": [
         // Docusaurus aliasing/preset conventions resolved at build time.
         "@theme/*",
-        "@mui/*",
         "@generated/*"
       ]
     },
@@ -89,7 +88,6 @@
   "ignoreBinaries": [
     // System tools invoked by package scripts and subprocesses.
     "act",
-    "ffmpeg",
     "go",
     // POSIX utility used by workspace FIFO regression tests.
     "mkfifo",
