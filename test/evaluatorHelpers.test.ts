@@ -741,6 +741,35 @@ describe('evaluatorHelpers', () => {
       });
     });
 
+    it.each([false, true])(
+      'should stop cycles assembled from replacement fragments (alias first: %s)',
+      (aliasFirst) => {
+        const a = '{{open}}{{name}}{{close}}'.repeat(4);
+        const variables = aliasFirst
+          ? {
+              message: '{{a}} {{greeting}}',
+              a,
+              open: '{{',
+              name: 'a',
+              close: '}}',
+              greeting: 'Hello',
+            }
+          : {
+              a,
+              message: '{{a}} {{greeting}}',
+              open: '{{',
+              name: 'a',
+              close: '}}',
+              greeting: 'Hello',
+            };
+
+        const result = resolveVariables(variables);
+
+        expect(result.a).toBe('{{a}}'.repeat(4));
+        expect(result.message).toBe(aliasFirst ? '{{a}}'.repeat(4) + ' Hello' : '{{a}} Hello');
+      },
+    );
+
     it('should preserve skipped contents without an external bookkeeping set', () => {
       const variables = {
         message: '{{prefix}} {{payload}}',

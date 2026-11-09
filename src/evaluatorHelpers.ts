@@ -51,22 +51,11 @@ export async function extractTextFromPDF(pdfPath: string): Promise<string> {
   }
 }
 
-export function resolveVariables(
+function findCyclicVariables(
   variables: Record<string, VarValue>,
-  skipResolveVars?: string[],
-  varsResolvedFromSkipped?: Set<string>,
-): Record<string, VarValue> {
-  const regex = /\{\{\s*(\w+)\s*\}\}/g; // Matches {{variableName}}, {{ variableName }}, etc.
-  const skippedVars = new Set(skipResolveVars);
-  const resolvedFromSkipped = varsResolvedFromSkipped ?? new Set<string>();
-  const ordinaryVars = new Set(
-    Object.keys(variables).filter(
-      (key) =>
-        typeof variables[key] === 'string' &&
-        !skippedVars.has(key) &&
-        !resolvedFromSkipped.has(key),
-    ),
-  );
+  ordinaryVars: Set<string>,
+  regex: RegExp,
+): Set<string> {
   const dependencies = new Map<string, Set<string>>();
   const dependents = new Map<string, string[]>();
   for (const key of ordinaryVars) {
@@ -83,8 +72,6 @@ export function resolveVariables(
     }
   }
 
-  // Remove acyclic dependencies. Remaining variables reach a cycle, so leave
-  // references to them untouched instead of repeatedly expanding their values.
   const cyclicVars = new Set(ordinaryVars);
   const ready = [...ordinaryVars].filter((key) => dependencies.get(key)?.size === 0);
   while (ready.length > 0) {
@@ -98,6 +85,27 @@ export function resolveVariables(
       }
     }
   }
+
+  return cyclicVars;
+}
+
+export function resolveVariables(
+  variables: Record<string, VarValue>,
+  skipResolveVars?: string[],
+  varsResolvedFromSkipped?: Set<string>,
+): Record<string, VarValue> {
+  const regex = /\{\{\s*(\w+)\s*\}\}/g; // Matches {{variableName}}, {{ variableName }}, etc.
+  const skippedVars = new Set(skipResolveVars);
+  const resolvedFromSkipped = varsResolvedFromSkipped ?? new Set<string>();
+  const ordinaryVars = new Set(
+    Object.keys(variables).filter(
+      (key) =>
+        typeof variables[key] === 'string' &&
+        !skippedVars.has(key) &&
+        !resolvedFromSkipped.has(key),
+    ),
+  );
+  let cyclicVars = findCyclicVariables(variables, ordinaryVars, regex);
 
   // Finish ordinary aliases before copying skipped values. Once copied, their
   // contents must remain opaque, even when they contain valid variable names.
@@ -129,8 +137,15 @@ export function resolveVariables(
         if (referencesSkipped) {
           resolvedFromSkipped.add(key);
         }
-        variables[key] = newValue;
-        resolved &&= newValue === value;
+        if (newValue !== value) {
+          variables[key] = newValue;
+          if (!resolveSkipped && newValue.includes('{{')) {
+            // Replacement fragments can assemble placeholders absent from the
+            // original value, so check the updated dependency graph as well.
+            cyclicVars = findCyclicVariables(variables, ordinaryVars, regex);
+          }
+          resolved = false;
+        }
       }
       iterations++;
     } while (!resolved && iterations < 5);
