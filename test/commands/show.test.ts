@@ -3,7 +3,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { handleDataset, handleEval, handlePrompt, showCommand } from '../../src/commands/show';
 import logger from '../../src/logger';
 import Eval from '../../src/models/eval';
-import { getDatasetFromHash, getEvalFromId, getPromptFromHash } from '../../src/util/database';
+import {
+  getDatasetFromHash,
+  getPromptFromHash,
+  hasRecentEvalWithIdPrefix,
+} from '../../src/util/database';
 
 import type { Prompt } from '../../src/types/prompts';
 
@@ -67,13 +71,14 @@ describe('show command', () => {
           body: [],
         }),
       };
-      vi.mocked(getEvalFromId).mockResolvedValue(mockEval as any);
+      vi.mocked(hasRecentEvalWithIdPrefix).mockResolvedValue(true);
       vi.mocked(Eval.findById).mockResolvedValue(mockEval as any);
 
       await showCommand(program);
       await program.parseAsync(['node', 'test', 'show', evalId]);
 
-      expect(getEvalFromId).toHaveBeenCalledWith(evalId);
+      expect(hasRecentEvalWithIdPrefix).toHaveBeenCalledWith(evalId);
+      expect(Eval.findById).toHaveBeenCalledWith(evalId);
     });
 
     it('should show prompt if id matches prompt', async () => {
@@ -113,7 +118,7 @@ describe('show command', () => {
 
     it('should show error if no resource found with id', async () => {
       const invalidId = 'invalid123';
-      vi.mocked(getEvalFromId).mockResolvedValue(undefined);
+      vi.mocked(hasRecentEvalWithIdPrefix).mockResolvedValue(false);
       vi.mocked(getPromptFromHash).mockResolvedValue(undefined);
       vi.mocked(getDatasetFromHash).mockResolvedValue(undefined);
 
