@@ -10,6 +10,7 @@ import {
   validateVideoSize,
 } from '../../../src/providers/openai/video';
 import { checkVideoCache, generateVideoCacheKey } from '../../../src/providers/video';
+import { isProviderResponseRateLimited } from '../../../src/scheduler/types';
 import { createApiKeyOptions, createVideoRequest } from '../../factories/literalFixtures';
 import { mockProcessEnv } from '../../util/utils';
 import { getOpenAiMissingApiKeyMessage } from './shared';
@@ -92,18 +93,21 @@ vi.mock('../../../src/providers/video', async (importOriginal) => {
 });
 
 describe('OpenAiVideoProvider', () => {
-  it('should reject a per-prompt Codex-only video model override before dispatch', async () => {
-    const provider = new OpenAiVideoProvider('sora-2', { config: { apiKey: 'test-key' } });
+  it.each(['https://api.openai.com/v1', 'https://eu.api.openai.com/v1'])(
+    'rejects the retired Videos API on %s even for an unknown model',
+    async (apiBaseUrl) => {
+      const provider = new OpenAiVideoProvider('custom-model', { config: { apiBaseUrl } });
+      await expect(provider.callApi('Generate a video')).rejects.toThrow('retired the Videos API');
+      expect(mockFetchWithProxy).not.toHaveBeenCalled();
+    },
+  );
 
-    await expect(
-      provider.callApi('Generate a video', {
-        prompt: { config: { model: 'gpt-5.3-codex-spark' } },
-      } as any),
-    ).rejects.toThrow('only available through openai:codex-sdk');
-    expect(mockFetchWithProxy).not.toHaveBeenCalled();
-  });
-
+  let restoreEnv: () => void;
   beforeEach(() => {
+    restoreEnv = mockProcessEnv({
+      OPENAI_API_BASE_URL: 'https://gateway.example/v1',
+      OPENAI_API_KEY: undefined,
+    });
     vi.clearAllMocks();
     mockFetchWithProxy.mockReset();
     mockStoreMedia.mockReset();
@@ -131,6 +135,7 @@ describe('OpenAiVideoProvider', () => {
   });
 
   afterEach(() => {
+    restoreEnv();
     vi.resetAllMocks();
   });
 
@@ -246,7 +251,7 @@ describe('OpenAiVideoProvider', () => {
       ['sora-2-2025-12-08', '720x1280', 0.1],
       ['sora-2-pro-2025-10-06', '1280x720', 0.3],
       ['sora-2-pro-2025-10-06', '1920x1080', 0.7],
-    ] as const)('should calculate cost for active Sora snapshot %s', (model, size, rate) => {
+    ] as const)('should calculate cost for historical Sora snapshot %s', (model, size, rate) => {
       expect(calculateVideoCost(model, 8, false, size)).toBeCloseTo(8 * rate, 10);
     });
 
@@ -270,7 +275,7 @@ describe('OpenAiVideoProvider', () => {
       expect(SORA_COSTS['sora-2-pro']).toBe(0.3);
     });
 
-    it('should have correct base costs for active Sora snapshots', () => {
+    it('should have correct base costs for historical Sora snapshots', () => {
       expect(SORA_COSTS['sora-2-2025-10-06']).toBe(0.1);
       expect(SORA_COSTS['sora-2-2025-12-08']).toBe(0.1);
       expect(SORA_COSTS['sora-2-pro-2025-10-06']).toBe(0.3);
@@ -375,11 +380,9 @@ describe('OpenAiVideoProvider', () => {
       expect(result.video?.spritesheet).toContain('storageRef:');
       expect(result.cost).toBeGreaterThan(0);
       expect(mockFetchWithProxy).toHaveBeenCalledWith(
-        expect.stringMatching(/\/videos$/),
+        'https://gateway.example/v1/videos',
         expect.objectContaining({
-          headers: expect.objectContaining({
-            'X-OpenAI-Originator': 'promptfoo',
-          }),
+          headers: expect.objectContaining({ Authorization: 'Bearer test-key' }),
         }),
       );
     });
@@ -562,7 +565,7 @@ describe('OpenAiVideoProvider', () => {
       }
     });
 
-    it('should handle video download failure', async () => {
+    it.each([500, 429])('reports HTTP %i during video download', async (status) => {
       const provider = new OpenAiVideoProvider('sora-2', createApiKeyOptions());
 
       // Mock job creation
@@ -580,13 +583,14 @@ describe('OpenAiVideoProvider', () => {
       // Mock video download failure
       mockFetchWithProxy.mockResolvedValueOnce({
         ok: false,
-        status: 500,
-        statusText: 'Internal Server Error',
+        status,
+        statusText: '',
       });
 
       const result = await provider.callApi('test prompt');
 
-      expect(result.error).toContain('Failed to download video');
+      expect(isProviderResponseRateLimited(result, undefined)).toBe(status === 429);
+      expect(result.error).toContain(`Failed to download video: HTTP ${status}`);
     });
 
     it('should use default model sora-2 when not specified', async () => {
@@ -1083,30 +1087,23 @@ describe('OpenAiVideoProvider', () => {
   });
 
   describe('checkVideoCache', () => {
-    it('should return video key if cache mapping exists and video file exists', async () => {
-      vi.mocked(fsPromises.readFile).mockResolvedValue(
-        JSON.stringify({
-          videoKey: 'video/abc123def456.mp4',
-          thumbnailKey: 'video/abc123def456.webp',
-        }),
+    it('returns the mapping when its video exists', async () => {
+      const mapping = { ...createStoredVideoAssetKeys(), createdAt: '2026-04-28T00:00:00.000Z' };
+      vi.mocked(fsPromises.readFile).mockResolvedValue(JSON.stringify(mapping));
+      const exists = vi.fn().mockResolvedValue(true);
+      mockGetMediaStorage.mockReturnValue({ exists });
+
+      await expect(checkVideoCache('test-cache-key')).resolves.toEqual(mapping);
+      expect(fsPromises.readFile).toHaveBeenCalledExactlyOnceWith(
+        path.join('/test/config', 'media', 'video', '_cache', 'test-cache-key.json'),
+        'utf8',
       );
+      expect(exists).toHaveBeenCalledExactlyOnceWith(mapping.videoKey);
+    });
 
-      // Mock storage: video file exists
-      const mockStorage = {
-        exists: vi.fn().mockImplementation((key: string) => {
-          if (key === 'video/abc123def456.mp4') {
-            return Promise.resolve(true);
-          }
-          return Promise.resolve(false);
-        }),
-      };
-      mockGetMediaStorage.mockReturnValue(mockStorage);
-
-      const result = await checkVideoCache('test-cache-key');
-
-      expect(result).toBe('video/abc123def456.mp4');
-      expect(fsPromises.readFile).toHaveBeenCalled();
-      expect(mockStorage.exists).toHaveBeenCalledWith('video/abc123def456.mp4');
+    it.each(['{', '{}'])('treats invalid mapping %j as a miss', async (data) => {
+      vi.mocked(fsPromises.readFile).mockResolvedValue(data);
+      await expect(checkVideoCache('invalid-key')).resolves.toBeNull();
     });
 
     it('should return null if cache mapping does not exist', async () => {
@@ -1136,7 +1133,7 @@ describe('OpenAiVideoProvider', () => {
 
   describe('caching behavior', () => {
     it('should return cached result when video already exists', async () => {
-      const provider = new OpenAiVideoProvider('sora-2', createApiKeyOptions());
+      const provider = new OpenAiVideoProvider('sora-2', { config: { apiKeyRequired: false } });
 
       vi.mocked(fsPromises.readFile).mockResolvedValue(
         JSON.stringify({
@@ -1170,59 +1167,53 @@ describe('OpenAiVideoProvider', () => {
       expect(result.video?.model).toBe('sora-2');
     });
 
-    it('should include thumbnail path in cached result if thumbnail exists', async () => {
-      const provider = new OpenAiVideoProvider('sora-2', createApiKeyOptions());
-
-      vi.mocked(fsPromises.readFile).mockResolvedValue(
-        JSON.stringify(createStoredVideoAssetKeys()),
-      );
-
-      // Mock storage: all asset files exist
-      const mockStorage = {
-        exists: vi.fn().mockImplementation((key: string) => {
-          if (
-            key === 'video/stored123.mp4' ||
-            key === 'video/stored123.webp' ||
-            key === 'video/stored123.jpg'
-          ) {
-            return Promise.resolve(true);
-          }
-          return Promise.resolve(false);
-        }),
-      };
-      mockGetMediaStorage.mockReturnValue(mockStorage);
+    it('uses the verified mapping for all assets even when the mapping is replaced', async () => {
+      const provider = new OpenAiVideoProvider('sora-2', { config: { apiKeyRequired: false } });
+      const original = createStoredVideoAssetKeys();
+      vi.mocked(fsPromises.readFile)
+        .mockResolvedValueOnce(JSON.stringify(original))
+        .mockResolvedValue(JSON.stringify({ videoKey: 'video/replacement.mp4' }));
+      mockGetMediaStorage.mockReturnValue({ exists: vi.fn().mockResolvedValue(true) });
 
       const result = await provider.callApi('cached video with assets');
 
+      expect(fsPromises.readFile).toHaveBeenCalledTimes(1);
       expect(result.cached).toBe(true);
+      expect(result.video?.url).toBe('storageRef:video/stored123.mp4');
       expect(result.video?.thumbnail).toBe('storageRef:video/stored123.webp');
       expect(result.video?.spritesheet).toBe('storageRef:video/stored123.jpg');
     });
 
-    it('should not include thumbnail in cached result if it does not exist', async () => {
-      const provider = new OpenAiVideoProvider('sora-2', createApiKeyOptions());
+    it.each([
+      [false, false],
+      [false, true],
+      [true, false],
+    ])(
+      'checks optional blobs independently (thumbnail %s, spritesheet %s)',
+      async (thumbnail, spritesheet) => {
+        const provider = new OpenAiVideoProvider('sora-2', { config: { apiKeyRequired: false } });
+        const mapping = createStoredVideoAssetKeys();
+        vi.mocked(fsPromises.readFile).mockResolvedValue(JSON.stringify(mapping));
+        const available = {
+          [mapping.videoKey]: true,
+          [mapping.thumbnailKey]: thumbnail,
+          [mapping.spritesheetKey]: spritesheet,
+        };
+        mockGetMediaStorage.mockReturnValue({
+          exists: async (key: string) => available[key] ?? false,
+        });
 
-      vi.mocked(fsPromises.readFile).mockResolvedValue(
-        JSON.stringify(createStoredVideoAssetKeys()),
-      );
+        const result = await provider.callApi('cached video with unavailable extras');
 
-      // Mock storage: only video exists, not thumbnail/spritesheet
-      const mockStorage = {
-        exists: vi.fn().mockImplementation((key: string) => {
-          if (key === 'video/stored123.mp4') {
-            return Promise.resolve(true);
-          }
-          return Promise.resolve(false);
-        }),
-      };
-      mockGetMediaStorage.mockReturnValue(mockStorage);
-
-      const result = await provider.callApi('cached video without extras');
-
-      expect(result.cached).toBe(true);
-      expect(result.video?.thumbnail).toBeUndefined();
-      expect(result.video?.spritesheet).toBeUndefined();
-    });
+        expect(result.cached).toBe(true);
+        expect(result.video?.thumbnail).toBe(
+          thumbnail ? 'storageRef:video/stored123.webp' : undefined,
+        );
+        expect(result.video?.spritesheet).toBe(
+          spritesheet ? 'storageRef:video/stored123.jpg' : undefined,
+        );
+      },
+    );
 
     it('should skip caching for remix operations', async () => {
       const provider = new OpenAiVideoProvider('sora-2', {
@@ -1268,13 +1259,13 @@ describe('OpenAiVideoProvider', () => {
       expect(result.cached).toBe(false);
     });
 
-    it('should persist the cache mapping for a cacheable default-endpoint video', async () => {
+    it('should persist the cache mapping for a cacheable unauthenticated gateway video', async () => {
       // Positive control for all of the "does not persist" tests below: a clean
-      // api.openai.com run with no sensitive headers, prompt, or references MUST
+      // gateway run with no sensitive headers, prompt, or references MUST
       // write the cache mapping. A regression that disables persistence
       // everywhere passes every bypass test but fails here.
       const provider = new OpenAiVideoProvider('sora-2', {
-        config: { apiKey: 'test-key', download_thumbnail: false, download_spritesheet: false },
+        config: { apiKeyRequired: false, download_thumbnail: false, download_spritesheet: false },
       });
       mockFetchWithProxy
         .mockResolvedValueOnce({
@@ -1348,7 +1339,7 @@ describe('OpenAiVideoProvider', () => {
 
     it('does not persist videos containing an embedded credential-bearing prompt URL', async () => {
       const provider = new OpenAiVideoProvider('sora-2', {
-        config: { apiKey: 'test-key', download_thumbnail: false, download_spritesheet: false },
+        config: { apiKeyRequired: false, download_thumbnail: false, download_spritesheet: false },
       });
       mockFetchWithProxy
         .mockResolvedValueOnce({
@@ -1374,7 +1365,7 @@ describe('OpenAiVideoProvider', () => {
     it('should bypass the persistent video cache for authenticated image references without a tenant scope', async () => {
       const provider = new OpenAiVideoProvider('sora-2', {
         config: {
-          apiKey: 'test-key',
+          apiKeyRequired: false,
           input_reference: 'https://assets.example/start.png?signature=tenant-a-secret',
           download_thumbnail: false,
           download_spritesheet: false,
@@ -1402,7 +1393,7 @@ describe('OpenAiVideoProvider', () => {
     it('should not persist an image-reference credential embedded in the URL path', async () => {
       const provider = new OpenAiVideoProvider('sora-2', {
         config: {
-          apiKey: 'test-key',
+          apiKeyRequired: false,
           input_reference:
             'https://assets.example/sk-proj-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/start.png',
           download_thumbnail: false,
@@ -1434,7 +1425,7 @@ describe('OpenAiVideoProvider', () => {
     it('should not persist a bearer credential embedded in an image-reference URL path', async () => {
       const provider = new OpenAiVideoProvider('sora-2', {
         config: {
-          apiKey: 'test-key',
+          apiKeyRequired: false,
           input_reference: 'https://assets.example/bearer-aaaaaaaa/start.png',
           download_thumbnail: false,
           download_spritesheet: false,
@@ -1470,7 +1461,7 @@ describe('OpenAiVideoProvider', () => {
       async (_label, asset) => {
         const provider = new OpenAiVideoProvider('sora-2', {
           config: {
-            apiKey: 'test-key',
+            apiKeyRequired: false,
             organization: 'org-shared',
             ...asset,
             download_thumbnail: false,
@@ -1535,7 +1526,7 @@ describe('OpenAiVideoProvider', () => {
     it('should not treat credential-like tenant headers as a safe video cache scope', async () => {
       const provider = new OpenAiVideoProvider('sora-2', {
         config: {
-          apiKey: 'test-key',
+          apiKeyRequired: false,
           input_reference: 'https://assets.example/start.png?signature=private-reference',
           headers: { 'X-Tenant-Token': 'tenant-secret' },
           download_thumbnail: false,
@@ -1596,7 +1587,7 @@ describe('OpenAiVideoProvider', () => {
     it('should not treat secret-valued tenant headers as a safe video cache scope', async () => {
       const provider = new OpenAiVideoProvider('sora-2', {
         config: {
-          apiKey: 'test-key',
+          apiKeyRequired: false,
           input_reference: 'https://assets.example/start.png?signature=private-reference',
           headers: { 'X-Tenant-Id': 'sk-proj-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' },
           download_thumbnail: false,
@@ -1625,7 +1616,7 @@ describe('OpenAiVideoProvider', () => {
     it('should not persist video prompts containing embedded credentials', async () => {
       const provider = new OpenAiVideoProvider('sora-2', {
         config: {
-          apiKey: 'test-key',
+          apiKeyRequired: false,
           headers: { 'X-Tenant-Id': 'tenant-a' },
           download_thumbnail: false,
           download_spritesheet: false,
@@ -1693,7 +1684,7 @@ describe('OpenAiVideoProvider', () => {
       async (credential) => {
         const provider = new OpenAiVideoProvider('sora-2', {
           config: {
-            apiKey: 'test-key',
+            apiKeyRequired: false,
             headers: { 'OpenAI-Project': 'project-a', 'X-Route': credential },
             download_thumbnail: false,
             download_spritesheet: false,
@@ -1729,7 +1720,7 @@ describe('OpenAiVideoProvider', () => {
     ])('should not persist videos with the opaque image path credential %s', async (credential) => {
       const provider = new OpenAiVideoProvider('sora-2', {
         config: {
-          apiKey: 'test-key',
+          apiKeyRequired: false,
           input_reference: `https://assets.example/private/${credential}/frame.png`,
           download_thumbnail: false,
           download_spritesheet: false,
