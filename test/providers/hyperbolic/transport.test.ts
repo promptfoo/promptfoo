@@ -16,13 +16,15 @@ describe.each([
     'audio',
     () => new HyperbolicAudioProvider('Melo-TTS', { config: { apiKey: 'fixture' } }),
     { audio: 'YXVkaW8=' },
+    'Invalid JSON response from API',
   ],
   [
     'image',
     () => new HyperbolicImageProvider('SDXL1.0-base', { config: { apiKey: 'fixture' } }),
     { images: [{ image: 'aW1hZ2U=' }] },
+    'No images returned from API',
   ],
-] as const)('Hyperbolic %s transport', (_name, create, data) => {
+] as const)('Hyperbolic %s transport', (_name, create, data, invalidPayloadError) => {
   it.each([{ bustCache: true }, { debug: true }, { bustCache: false, debug: true }])(
     'forwards cancellation and cache policy %j',
     async (policy) => {
@@ -84,13 +86,13 @@ describe.each([
     await expect(pending).rejects.toThrow('cancelled cache lookup');
   });
 
-  it.each([null, 'invalid'])('reports a malformed JSON payload: %j', async (data) => {
+  it.each([null, false, 0, '', 'invalid'])('reports a malformed JSON payload: %j', async (data) => {
     vi.mocked(fetchWithCache).mockResolvedValue({
       data,
       cached: false,
       status: 200,
       statusText: 'OK',
     });
-    expect(await create().callApi('hello')).toEqual({ error: 'Invalid JSON response from API' });
+    expect(await create().callApi('hello')).toEqual({ error: invalidPayloadError });
   });
 });

@@ -35,6 +35,8 @@ export type HyperbolicImageOptions = {
   response_format?: 'url' | 'b64_json';
 };
 
+const NO_IMAGES_ERROR = 'No images returned from API';
+
 const HYPERBOLIC_IMAGE_MODELS = [
   {
     id: 'Flux.1-dev',
@@ -234,6 +236,7 @@ export class HyperbolicImageProvider implements ApiProvider {
       body,
       context,
       callApiOptions?.abortSignal,
+      NO_IMAGES_ERROR,
     );
     if (!result.ok) {
       return { error: result.error };
@@ -241,13 +244,10 @@ export class HyperbolicImageProvider implements ApiProvider {
     const { data, cached, latencyMs } = result;
 
     try {
-      if (!data.images || !Array.isArray(data.images) || data.images.length === 0) {
-        return {
-          error: 'No images returned from API',
-        };
+      const imageData = Array.isArray(data?.images) ? data.images[0]?.image : undefined;
+      if (typeof imageData !== 'string' || !imageData.trim()) {
+        return { error: NO_IMAGES_ERROR };
       }
-
-      const imageData = data.images[0].image;
       const cost = cached ? 0 : this.calculateImageCost();
 
       // Format the output for proper rendering

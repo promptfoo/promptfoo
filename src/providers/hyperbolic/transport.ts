@@ -15,6 +15,7 @@ export async function requestHyperbolicJson<T>(
   body: Record<string, unknown>,
   context?: CallApiContextParams,
   signal?: AbortSignal,
+  invalidPayloadError = 'Invalid JSON response from API',
 ): Promise<JsonResult<T>> {
   signal?.throwIfAborted();
   try {
@@ -38,7 +39,7 @@ export async function requestHyperbolicJson<T>(
       };
     }
     if (!data || typeof data !== 'object') {
-      return { ok: false, error: 'Invalid JSON response from API' };
+      return { ok: false, error: invalidPayloadError };
     }
     if ('error' in data && data.error) {
       return {
