@@ -22,10 +22,11 @@ import {
   wrapError,
 } from '../../util/functions/loadFunction';
 import { getNunjucksEngine } from '../../util/templates';
-import { executeCallback } from '../functionCallbackExecutor';
+import { resolveCallback } from '../functionCallbackExecutor';
 import { McpClientSession } from '../mcp/session';
 import { transformMCPToolsToGoogle } from '../mcp/transform';
 import { getRequestTimeoutMs } from '../shared';
+import { withGenAIToolSpan } from '../tracing';
 import { GoogleAuthManager } from './auth';
 import { getVertexModelDefaultRegion } from './shared';
 import { loadGoogleTools, resolveGoogleToolConfig, validateFunctionCall } from './util';
@@ -562,10 +563,8 @@ export abstract class GoogleGenericProvider implements ApiProvider {
         typeof callbackRef === 'string' && callbackRef.startsWith('file://')
           ? resolveCallbackPath('.', config.basePath)
           : undefined;
-      const execution = await executeCallback({
+      const resolved = resolveCallback({
         name: functionName,
-        args,
-        callId,
         reference: callbackRef,
         cache: this.loadedFunctionCallbacks,
         cacheScope: callbackBasePath,
@@ -589,10 +588,11 @@ export abstract class GoogleGenericProvider implements ApiProvider {
           }
         },
       });
-      if (execution.isError) {
-        throw execution.error;
-      }
-      return execution.output;
+      const callback = typeof resolved === 'function' ? resolved : await resolved;
+      logger.debug(`Executing function '${functionName}' with args: ${args}`);
+      return await withGenAIToolSpan({ name: functionName, arguments: args, callId }, () =>
+        callback(args),
+      );
     } catch (error: any) {
       logger.error(`Error executing function '${functionName}': ${error.message || String(error)}`);
       throw error;

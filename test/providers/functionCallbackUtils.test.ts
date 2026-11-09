@@ -1,6 +1,6 @@
 import path from 'path';
 
-import { trace } from '@opentelemetry/api';
+import { SpanStatusCode, trace } from '@opentelemetry/api';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
 import { importModule } from '../../src/esm';
@@ -29,7 +29,22 @@ vi.mock('../../src/logger', () => ({
 const mockImportModule = vi.mocked(importModule);
 const mockLogger = vi.mocked(logger);
 
-it('records the actual fallback sent for an unserializable direct-provider callback', async () => {
+it('invokes an in-memory provider callback before a same-turn abort', async () => {
+  const controller = new AbortController();
+  const callback = vi.fn().mockResolvedValue('result');
+  const pending = executeProviderFunctionCallback({
+    functionName: 'lookup',
+    args: '{}',
+    callbacks: { lookup: callback },
+    cache: {},
+    abortSignal: controller.signal,
+  });
+  controller.abort();
+  await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+  expect(callback).toHaveBeenCalledOnce();
+});
+
+it('traces only resolved direct-provider callbacks and records their raw results', async () => {
   mockLogger.warn.mockClear();
   const span = {
     setAttribute: vi.fn(),
@@ -38,11 +53,25 @@ it('records the actual fallback sent for an unserializable direct-provider callb
     recordException: vi.fn(),
   };
   const activeSpanSpy = vi.spyOn(trace, 'getActiveSpan').mockReturnValue(span as any);
+  const startActiveSpan = vi.fn((_name, _options, callback) => callback(span));
   const tracerSpy = vi.spyOn(trace, 'getTracer').mockReturnValue({
-    startActiveSpan: vi.fn((_name, _options, callback) => callback(span)),
+    startActiveSpan,
   } as any);
 
   try {
+    await expect(
+      executeProviderFunctionCallback({
+        functionName: 'lookup',
+        args: 'unresolved arguments',
+        callbacks: {},
+        cache: {},
+      }),
+    ).rejects.toThrow("No callback found for function 'lookup'");
+    expect(startActiveSpan).not.toHaveBeenCalled();
+    expect(mockLogger.debug).not.toHaveBeenCalledWith(
+      expect.stringContaining('unresolved arguments'),
+    );
+
     const output = await executeProviderFunctionCallback({
       functionName: 'lookup',
       args: '{}',
@@ -50,9 +79,24 @@ it('records the actual fallback sent for an unserializable direct-provider callb
       cache: {},
     });
     expect(output).toBe('[object Object]');
-    expect(span.setAttribute).toHaveBeenCalledWith('tool.output', output);
+    expect(span.setAttribute).not.toHaveBeenCalledWith('tool.output', expect.anything());
     expect(span.end).toHaveBeenCalledOnce();
     expect(mockLogger.warn).toHaveBeenCalledWith(expect.stringContaining('BigInt'));
+
+    const errorResult = { isError: true, error: 'fixture failure' };
+    await expect(
+      executeProviderFunctionCallback({
+        functionName: 'lookup',
+        args: '{}',
+        callbacks: { lookup: () => errorResult },
+        cache: {},
+      }),
+    ).resolves.toBe(JSON.stringify(errorResult));
+    expect(span.setAttribute).toHaveBeenCalledWith('tool.is_error', true);
+    expect(span.setStatus).toHaveBeenCalledWith({
+      code: SpanStatusCode.ERROR,
+      message: 'fixture failure',
+    });
   } finally {
     activeSpanSpy.mockRestore();
     tracerSpy.mockRestore();
@@ -524,12 +568,12 @@ describe('FunctionCallbackHandler', () => {
   });
 
   describe('executeCallback', () => {
-    it('returns an empty string when a callback returns undefined', async () => {
+    it('preserves undefined when a callback returns undefined', async () => {
       const result = await handler.processCall(
         { name: 'emptyFunction', arguments: '{}' },
         { emptyFunction: (() => undefined) as unknown as FunctionCallbackConfig['emptyFunction'] },
       );
-      expect(result).toEqual({ output: '', isError: false });
+      expect(result).toStrictEqual({ output: undefined, isError: false });
     });
 
     it('should cache and reuse loaded callbacks', async () => {

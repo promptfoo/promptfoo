@@ -58,14 +58,17 @@ describe('callback execution records', () => {
 
   it('reuses a reference and reloads after a prompt changes that reference', async () => {
     const cache = {};
+    const first = vi.fn(() => 'first');
     const loadFile = vi
       .fn()
-      .mockResolvedValueOnce(() => 'first')
+      .mockResolvedValueOnce(first)
       .mockResolvedValueOnce(() => 'second');
     const call = (reference: string) =>
       executeCallback({ ...identity, reference, cache, loadFile });
     expect((await call('file://first.js')).output).toBe('first');
-    expect((await call('file://first.js')).output).toBe('first');
+    const cached = call('file://first.js');
+    expect(first).toHaveBeenCalledTimes(2);
+    expect((await cached).output).toBe('first');
     expect((await call('file://second.js')).output).toBe('second');
     expect(loadFile).toHaveBeenCalledTimes(2);
   });

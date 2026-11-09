@@ -157,7 +157,7 @@ ls examples/myprovider/promptfooconfig.yaml
 
 ## Tool callbacks
 
-Use `executeCallback` from `functionCallbackExecutor.ts` for callback loading, reference-aware caching, and traced execution. Keep file-export policy and output conversion in each adapter. Pass `transformOutput` to record the serialized result before the tool span closes. The execution record retains the tool name, arguments, call ID, output, and original error.
+Use `resolveCallback` for reference-aware callback loading and caching. Direct providers and Google trace the resolved callback's raw result. Direct providers format the result after the span closes. `FunctionCallbackHandler` uses `executeCallback` to include loading and output conversion inside its tool span. Keep each adapter's file-export policy and cancellation behavior.
 
 ## Creator inputs
 

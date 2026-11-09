@@ -5,9 +5,10 @@ import {
   loadCallbackFromFileUrl,
   wrapError,
 } from '../util/functions/loadFunction';
-import { executeCallback } from './functionCallbackExecutor';
+import { executeCallback, resolveCallback } from './functionCallbackExecutor';
 import { getMcpErrorMessage, isMcpErrorResult, normalizeMcpToolContent } from './mcp/util';
-import { throwIfAborted } from './shared';
+import { throwIfAborted, waitForPromiseWithAbort } from './shared';
+import { withGenAIToolSpan } from './tracing';
 
 import type {
   FunctionCall,
@@ -62,37 +63,40 @@ export async function executeProviderFunctionCallback({
 }): Promise<string> {
   const prefix = logPrefix ? `${logPrefix} ` : '';
   try {
-    logger.debug(`${prefix}Executing function '${functionName}' with args: ${args}`);
-    const execution = await executeCallback({
+    throwIfAborted(abortSignal);
+    const resolved = resolveCallback({
       name: functionName,
-      args,
-      callId,
       reference:
         callbacks && Object.prototype.hasOwnProperty.call(callbacks, functionName)
           ? callbacks[functionName]
           : undefined,
       cache,
-      abortSignal,
       loadFile: (reference) => loadProviderCallbackFromFileUrl(reference, logPrefix),
-      transformOutput: (result) => {
-        if (result === undefined || result === null) {
-          return '';
-        }
-        if (typeof result === 'object') {
-          try {
-            return JSON.stringify(result);
-          } catch (error) {
-            logger.warn(`Error stringifying result from function '${functionName}': ${error}`);
-            return String(result);
-          }
-        }
-        return String(result);
-      },
     });
-    if (execution.isError) {
-      throw execution.error;
+    const callback =
+      typeof resolved === 'function'
+        ? resolved
+        : await waitForPromiseWithAbort(resolved, abortSignal);
+    throwIfAborted(abortSignal);
+    logger.debug(`${prefix}Executing function '${functionName}' with args: ${args}`);
+    const result = await withGenAIToolSpan({ name: functionName, arguments: args, callId }, () => {
+      throwIfAborted(abortSignal);
+      return waitForPromiseWithAbort(Promise.resolve(callback(args)), abortSignal);
+    });
+    throwIfAborted(abortSignal);
+
+    if (result === undefined || result === null) {
+      return '';
     }
-    return execution.output as string;
+    if (typeof result === 'object') {
+      try {
+        return JSON.stringify(result);
+      } catch (error) {
+        logger.warn(`Error stringifying result from function '${functionName}': ${error}`);
+        return String(result);
+      }
+    }
+    return String(result);
   } catch (error: any) {
     if (isCallerAbortError(error, abortSignal, { requireReasonMatch: true })) {
       throwIfAborted(abortSignal);
@@ -289,8 +293,7 @@ export class FunctionCallbackHandler {
       cache: this.loadedCallbacks,
       context,
       passContext: true,
-      transformOutput: (output) =>
-        typeof output === 'string' ? output : (JSON.stringify(output) ?? ''),
+      transformOutput: (output) => (typeof output === 'string' ? output : JSON.stringify(output)),
       loadFile: (reference) => this.loadExternalFunction(reference),
     });
     if (execution.isError) {
