@@ -274,7 +274,7 @@ Excel files (.xlsx and .xls) are supported as an optional feature. To use Excel 
 - `file://test_cases.xlsx#Sheet2` - Select sheet by name
 - `file://test_cases.xlsx#2` - Select sheet by 1-based index (2 = second sheet)
 
-The first `#` separates the file path from the sheet selector. Additional `#` characters are part of the sheet name, for example `file://test_cases.xlsx#Data#2026` selects the sheet named `Data#2026`.
+The `#` after the workbook extension starts the sheet selector. For example, `file://cases#2.xlsx#Data#2026` selects the worksheet `Data#2026` in the workbook `cases#2.xlsx`.
 
 ```yaml title="promptfooconfig.yaml"
 # Use a specific sheet by name

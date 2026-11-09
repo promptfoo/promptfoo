@@ -3,7 +3,7 @@ import * as os from 'os';
 import * as path from 'path';
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { resolveTestsWatchPaths } from '../../src/util/testCaseReader';
+import { readTests, resolveTestsWatchPaths } from '../../src/util/testCaseReader';
 
 import type { TestSuiteConfig } from '../../src/types/index';
 
@@ -44,6 +44,15 @@ describe('resolveTestsWatchPaths', () => {
     expect(resolve('file://cases.yaml' as TestSuiteConfig['tests'])).toEqual([
       path.join(base, 'cases.yaml'),
     ]);
+  });
+
+  it('loads the named sheet and watches the physical workbook when its filename contains a hash', async () => {
+    const workbook = path.join(base, 'cases#2.XLSX');
+    fs.copyFileSync(path.join(__dirname, '../fixtures/xlsx-hash-sheet-names.xlsx'), workbook);
+
+    const reference = 'file://cases#2.XLSX#Data#2026';
+    expect(await readTests([reference], base)).toMatchObject([{ vars: { input: 'Data#2026' } }]);
+    expect(resolve(reference)).toEqual([workbook]);
   });
 
   it('expands a glob, because chokidar does not', () => {
