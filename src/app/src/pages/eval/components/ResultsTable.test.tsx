@@ -174,7 +174,8 @@ function createNextPageExpectation(mockFetchEvalData: unknown, checkPageSize = f
   };
 }
 
-vi.mock('./store', () => ({
+vi.mock('./store', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./store')>()),
   useTableStore: vi.fn(() => ({
     config: {},
     evalId: '123',
