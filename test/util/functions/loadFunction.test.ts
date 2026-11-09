@@ -357,6 +357,12 @@ describe('parseFileUrl', () => {
     });
   });
 
+  it('should not treat a Ruby-like directory suffix as a function name', () => {
+    expect(parseFileUrl('file://project.rb:Old::Checks/payload.json')).toEqual({
+      filePath: 'project.rb:Old::Checks/payload.json',
+    });
+  });
+
   it('should parse file URL without function name', () => {
     const result = parseFileUrl('file:///path/to/file.js');
     expect(result).toEqual({
