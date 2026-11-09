@@ -1271,8 +1271,8 @@ function appendRunEvalOptionsForTestCase({
   testCaseIndex: number;
   testSuite: TestSuite;
 }) {
-  const promptPrefix = testCase.options?.prefix || getDefaultTest(testSuite)?.options?.prefix || '';
-  const promptSuffix = testCase.options?.suffix || getDefaultTest(testSuite)?.options?.suffix || '';
+  const promptPrefix = testCase.options?.prefix ?? getDefaultTest(testSuite)?.options?.prefix ?? '';
+  const promptSuffix = testCase.options?.suffix ?? getDefaultTest(testSuite)?.options?.suffix ?? '';
   const varCombinations =
     getEnvBool('PROMPTFOO_DISABLE_VAR_EXPANSION') || testCase.options?.disableVarExpansion
       ? [testCase.vars]
