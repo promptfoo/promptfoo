@@ -262,14 +262,17 @@ describe('aws bedrock provider factory routing', () => {
     );
   });
 
-  it.each(['fable', 'mythos'])('routes %s 5.2 through Converse', async (family) => {
-    const provider = await bedrockFactory.create(
-      `bedrock:converse:global.anthropic.claude-${family}-5-2`,
-      {},
-      ctx,
-    );
-    expect(provider).toBeInstanceOf(AwsBedrockConverseProvider);
-  });
+  it.each(['fable-5-1', 'mythos-5-1', 'fable-5-2', 'mythos-5-2'])(
+    'routes %s through Converse',
+    async (model) => {
+      const provider = await bedrockFactory.create(
+        `bedrock:converse:global.anthropic.claude-${model}`,
+        {},
+        ctx,
+      );
+      expect(provider).toBeInstanceOf(AwsBedrockConverseProvider);
+    },
+  );
 
   it.each([
     [

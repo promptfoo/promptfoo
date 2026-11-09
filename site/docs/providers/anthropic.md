@@ -127,8 +127,8 @@ Claude models are available across multiple platforms. Here's how the model name
 | ----------------- | ---------------------------------------------- | --------------------------------------------------------------------- | ------------------------------------------------- | ---------------------------------------------- |
 | Claude Fable 5.2  | claude-fable-5-2                               | claude-fable-5-2                                                      | global.anthropic.claude-fable-5-2                 | claude-fable-5-2                               |
 | Claude Mythos 5.2 | claude-mythos-5-2                              | claude-mythos-5-2 (limited)                                           | global.anthropic.claude-mythos-5-2 (limited)      | claude-mythos-5-2 (limited)                    |
-| Claude Fable 5.1  | claude-fable-5-1                               | claude-fable-5-1                                                      | anthropic.claude-fable-5-1                        | claude-fable-5-1                               |
-| Claude Mythos 5.1 | claude-mythos-5-1                              | claude-mythos-5-1 (limited)                                           | anthropic.claude-mythos-5-1 (limited)             | claude-mythos-5-1 (limited)                    |
+| Claude Fable 5.1  | claude-fable-5-1                               | claude-fable-5-1                                                      | global.anthropic.claude-fable-5-1                 | claude-fable-5-1                               |
+| Claude Mythos 5.1 | claude-mythos-5-1                              | claude-mythos-5-1 (limited)                                           | global.anthropic.claude-mythos-5-1 (limited)      | claude-mythos-5-1 (limited)                    |
 | Claude Fable 5    | claude-fable-5                                 | claude-fable-5                                                        | anthropic.claude-fable-5                          | claude-fable-5                                 |
 | Claude Mythos 5   | claude-mythos-5                                | Not available                                                         | anthropic.claude-mythos-5 (limited)               | Limited availability; ID not public            |
 | Claude Opus 5.5   | claude-opus-5-5                                | claude-opus-5-5                                                       | anthropic.claude-opus-5-5                         | claude-opus-5-5                                |
@@ -604,7 +604,7 @@ tests:
 
 ### Claude Fable 5.2 and Mythos 5.2
 
-Fable 5.2 is Anthropic's most capable widely released model. Mythos 5.2 has the same
+Fable 5.2 is built for demanding reasoning and long-horizon agentic work. Mythos 5.2 has the same
 capabilities and is available only to organizations verified through an Anthropic verification
 program, such as the Cyber Verification Program. Both IDs are pinned.
 
@@ -623,8 +623,8 @@ providers:
 Both models have a 1M-token context window, support up to 128K output tokens, and cost
 **$8 per million input tokens and $40 per million output tokens**. Cache reads cost $0.20 per
 million tokens, and promptfoo's cost estimates include cache pricing. Fast mode
-(`extra_body: { speed: fast }`) bills at $16 / $80; set `inputCost: 16 / 1e6` and
-`outputCost: 80 / 1e6` to track it.
+(`extra_body: { speed: fast }`) bills at $16 / $80; set `inputCost: 0.000016` and
+`outputCost: 0.00008` to track it.
 
 Promptfoo adjusts requests to these rules and logs a warning:
 
@@ -680,8 +680,8 @@ Its request rules match Fable 5.2's, and promptfoo adjusts requests to follow th
 
 Opus 5.5 costs a flat **$4 per million input tokens and $20 per million output tokens** across
 its 1M-token context window. Cache reads cost **$0.20 per million tokens**, and promptfoo's cost
-estimates include that rate. To track Anthropic's fast mode, set `inputCost: 8 / 1e6` and
-`outputCost: 40 / 1e6`.
+estimates include that rate. To track Anthropic's fast mode, set `inputCost: 0.000008` and
+`outputCost: 0.00004`.
 
 ```yaml title="promptfooconfig.yaml"
 providers:
@@ -719,7 +719,7 @@ Opus 5 uses a 1M-token context window (both the default and the maximum) billed 
 **$5 per million input / $25 per million output** — the same list rates as Opus 4.8, with no
 long-context surcharge above 200K tokens. Anthropic's fast mode ($10 / $50, Claude API only)
 is a separate research-preview rate that promptfoo does not encode. To track it, set
-`inputCost: 10 / 1e6` and `outputCost: 50 / 1e6` — a single `cost` cannot express asymmetric
+`inputCost: 0.00001` and `outputCost: 0.00005` — a single `cost` cannot express asymmetric
 rates, because it is applied as both the input and the output per-token price.
 
 ```yaml title="promptfooconfig.yaml"
