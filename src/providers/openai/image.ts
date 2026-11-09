@@ -1,4 +1,4 @@
-import { fetchWithCache } from '../../cache';
+import { type FetchWithCacheResult, fetchWithCache } from '../../cache';
 import logger from '../../logger';
 import { isSecretField, sanitizeUrl } from '../../util/sanitizer';
 import { ellipsize } from '../../util/text';
@@ -707,16 +707,18 @@ export function formatOutput(
   responseFormat?: string,
   outputFormat?: string,
 ): string | { error: string } {
+  const image = Array.isArray(data?.data) ? data.data[0] : undefined;
+
   if (responseFormat === 'b64_json') {
-    const b64Json = data.data[0].b64_json;
-    if (!b64Json) {
+    const b64Json = image?.b64_json;
+    if (typeof b64Json !== 'string' || !b64Json) {
       return { error: `No base64 image data found in response: ${JSON.stringify(data)}` };
     }
 
     return `data:${getMimeTypeForOutputFormat(outputFormat)};base64,${b64Json}`;
   } else {
-    const url = data.data[0].url;
-    if (!url) {
+    const url = image?.url;
+    if (typeof url !== 'string' || !url) {
       return { error: `No image URL found in response: ${JSON.stringify(data)}` };
     }
 
@@ -863,7 +865,7 @@ export async function callOpenAiImageApi(
   body: Record<string, any>,
   headers: Record<string, string>,
   timeout: number,
-): Promise<{ data: any; cached: boolean; status: number; statusText: string; latencyMs?: number }> {
+): Promise<FetchWithCacheResult<any>> {
   let sendsToOpenAiApi = false;
   let hasSensitiveUrl = false;
   try {
@@ -914,8 +916,7 @@ export async function processApiResponse(
   outputFormat?: string,
   billingConfig: OpenAiImageOptions = {},
 ): Promise<ProviderResponse> {
-  if (data.error) {
-    await data?.deleteFromCache?.();
+  if (data?.error) {
     return {
       error: formatOpenAiError(data),
     };
@@ -947,7 +948,6 @@ export async function processApiResponse(
       ...(responseFormat === 'b64_json' ? { isBase64: true, format: 'json' } : {}),
     };
   } catch (err) {
-    await data?.deleteFromCache?.();
     return {
       error: `API error: ${String(err)}: ${JSON.stringify(data)}`,
     };
@@ -1016,31 +1016,29 @@ export class OpenAiImageProvider extends OpenAiGenericProvider {
       ...this.getOpenAiRequestHeaders(config.headers),
     };
 
-    let data, status, statusText;
-    let cached = false;
-    let latencyMs: number | undefined;
+    let response: FetchWithCacheResult<any>;
     try {
-      ({ data, cached, status, statusText, latencyMs } = await callOpenAiImageApi(
+      response = await callOpenAiImageApi(
         appendOpenAiApiPath(this.getApiUrl(), endpoint),
         body,
         headers,
         getRequestTimeoutMs(),
-      ));
-
-      if (status < 200 || status >= 300) {
-        return {
-          error: `API error: ${status} ${statusText}\n${typeof data === 'string' ? data : JSON.stringify(data)}`,
-        };
-      }
+      );
     } catch (err) {
       logger.error(`API call error: ${String(err)}`);
-      await data?.deleteFromCache?.();
       return {
         error: `API call error: ${String(err)}`,
       };
     }
 
-    return processApiResponse(
+    const { data, cached, status, statusText, latencyMs } = response;
+    if (status < 200 || status >= 300) {
+      return {
+        error: `API error: ${status} ${statusText}\n${typeof data === 'string' ? data : JSON.stringify(data)}`,
+      };
+    }
+
+    const result = await processApiResponse(
       data,
       prompt,
       responseFormat,
@@ -1053,5 +1051,11 @@ export class OpenAiImageProvider extends OpenAiGenericProvider {
       outputFormat,
       config,
     );
+    if (result.error) {
+      await response.deleteFromCache?.().catch((error) => {
+        logger.warn('[OpenAI Image] Failed to evict invalid response from cache', { error });
+      });
+    }
+    return result;
   }
 }
