@@ -1,35 +1,32 @@
+import type { Sheet } from 'read-excel-file/node';
+
 import type { CsvRow } from '../types/index';
 
-function getSheetIndex(sheetSpecifier: string | undefined, sheetNames: string[]): number {
-  if (!sheetSpecifier) {
-    // Use the first sheet by default (1-based index)
-    return 1;
+function selectSheet(sheets: Sheet[], selector: string | undefined): Sheet {
+  if (sheets.length === 0) {
+    throw new Error('Excel file has no sheets');
+  }
+  if (!selector) {
+    return sheets[0];
   }
 
-  // Check if it's a numeric index (1-based). Treat the specifier as an index only
-  // when the whole string is numeric; otherwise it's a sheet name. parseInt would
-  // prefix-parse names like "2024-Q1" or "1H" into a number and mis-route them.
-  const trimmedSpecifier = sheetSpecifier.trim();
-  const parsedSheetIndex = /^[+-]?\d+$/.test(trimmedSpecifier) ? Number(trimmedSpecifier) : NaN;
-  if (isNaN(parsedSheetIndex)) {
-    // It's a sheet name
-    const sheetIndex = sheetNames.indexOf(sheetSpecifier) + 1;
-    if (sheetIndex === 0) {
+  // A leading number is valid in a sheet name. Only a complete integer is a 1-based index.
+  if (/^[+-]?\d+$/.test(selector.trim())) {
+    const index = Number(selector);
+    if (index < 1 || index > sheets.length) {
       throw new Error(
-        `Sheet "${sheetSpecifier}" not found. Available sheets: ${sheetNames.join(', ')}`,
+        `Sheet index ${index} is out of range. Available sheets: ${sheets.length} (1-${sheets.length})`,
       );
     }
-    return sheetIndex;
+    return sheets[index - 1];
   }
 
-  // Validate 1-based index
-  if (parsedSheetIndex < 1 || parsedSheetIndex > sheetNames.length) {
-    throw new Error(
-      `Sheet index ${parsedSheetIndex} is out of range. Available sheets: ${sheetNames.length} (1-${sheetNames.length})`,
-    );
+  const sheet = sheets.find((entry) => entry.sheet === selector);
+  if (!sheet) {
+    const names = sheets.map((entry) => entry.sheet).join(', ');
+    throw new Error(`Sheet "${selector}" not found. Available sheets: ${names}`);
   }
-
-  return parsedSheetIndex;
+  return sheet;
 }
 
 export async function parseXlsxFile(filePath: string): Promise<CsvRow[]> {
@@ -50,28 +47,13 @@ export async function parseXlsxFile(filePath: string): Promise<CsvRow[]> {
       );
     }
 
-    // Get all sheet names to validate and determine which sheet to use
     const sheets = await readXlsxFile(actualFilePath).catch((error) => {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
         throw new Error(`File not found: ${actualFilePath}`);
       }
       throw error;
     });
-    const sheetNames = sheets.map((sheet) => sheet.sheet);
-
-    // Validate that the workbook has at least one sheet
-    if (!sheetNames || sheetNames.length === 0) {
-      throw new Error('Excel file has no sheets');
-    }
-
-    // Determine which sheet to use
-    const sheetIndex = getSheetIndex(sheetSpecifier, sheetNames);
-
-    // Get the sheet name for error messages
-    const sheetName = sheetNames[sheetIndex - 1];
-
-    // Read the sheet - returns array of arrays
-    const rows = sheets[sheetIndex - 1].data;
+    const { sheet: sheetName, data: rows } = selectSheet(sheets, sheetSpecifier);
 
     // Check if the sheet is empty
     if (rows.length === 0) {
