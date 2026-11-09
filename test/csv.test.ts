@@ -2,6 +2,7 @@ import { parse as parseBrowserCsv } from 'csv-parse/browser/esm/sync';
 import { parse as parseCsv } from 'csv-parse/sync';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { parseCommaSeparatedValues } from '../src/assertions/contains';
+import { handleLevenshtein } from '../src/assertions/levenshtein';
 import { assertionFromString, serializeObjectArrayAsCSV, testCaseFromCsvRow } from '../src/csv';
 import logger from '../src/logger';
 
@@ -12,7 +13,7 @@ vi.mock('../src/logger', () => ({
   },
 }));
 
-import type { Assertion, CsvRow, TestCase } from '../src/types/index';
+import type { Assertion, AssertionParams, CsvRow, TestCase } from '../src/types/index';
 
 describe.each([
   ['Node.js', parseCsv],
@@ -903,7 +904,6 @@ describe('assertionFromString', () => {
       'context-relevance',
       'cost',
       'latency',
-      'levenshtein',
       'perplexity-score',
       'perplexity',
       'rouge-l',
@@ -925,7 +925,7 @@ describe('assertionFromString', () => {
     // All three genuinely consume `threshold` in their handlers (unlike e.g.
     // starts-with, which receives the 0.75 default but ignores it), so the
     // parsed default is meaningful for these types.
-    const representativeAssertions = ['answer-relevance', 'levenshtein', 'rouge-n'];
+    const representativeAssertions = ['answer-relevance', 'rouge-l', 'rouge-n'];
 
     for (const type of representativeAssertions) {
       const expected = `${type}:Expected output`;
@@ -960,6 +960,30 @@ describe('assertionFromString', () => {
       value: 'Expected output',
       threshold: 0.9,
     });
+  });
+
+  it.each(['levenshtein', 'not-levenshtein'])(
+    'should leave %s without a threshold so the handler default distance applies',
+    (type) => {
+      expect(assertionFromString(`${type}:hello world`)).toStrictEqual({
+        type,
+        value: 'hello world',
+      });
+    },
+  );
+
+  it('should grade a levenshtein assertion without a threshold like the YAML form', () => {
+    const assertion = assertionFromString('levenshtein:hello world');
+    const params = {
+      renderedValue: 'hello world',
+      outputString: 'hello world!',
+      inverse: false,
+    } as AssertionParams;
+
+    expect(handleLevenshtein({ ...params, assertion })).toEqual(
+      handleLevenshtein({ ...params, assertion: { type: 'levenshtein', value: 'hello world' } }),
+    );
+    expect(handleLevenshtein({ ...params, assertion }).pass).toBe(true);
   });
 
   it('should not add a threshold for types without a CSV default when none is specified', () => {
