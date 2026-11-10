@@ -1,7 +1,7 @@
 ---
 title: RouterPlex
 sidebar_label: RouterPlex
-description: Configure RouterPlex chat models in promptfoo using the OpenAI-compatible provider, so one eval can compare Claude, GPT, Gemini, and DeepSeek models with a single API key.
+description: Configure RouterPlex in promptfoo with the OpenAI-compatible provider so one eval can compare Claude, GPT, Gemini, and DeepSeek models with a single API key.
 ---
 
 # RouterPlex
@@ -30,7 +30,7 @@ providers:
 
 ## Configuration
 
-- Use the model ID exactly as RouterPlex lists it, after `openai:chat:`. IDs are case-sensitive and have no vendor prefix, for example `claude-sonnet-4-6`, `gpt-6-sol`, `gemini-3.1-pro`, or `deepseek-v4-pro`.
+- Use the model ID exactly as RouterPlex lists it, after `openai:chat:`. IDs are case-sensitive and have no vendor prefix, for example `claude-sonnet-4-6`, `gpt-6-sol`, `gemini-3.8-flash`, or `deepseek-v4-pro`.
 - `omitDefaults: true` omits promptfoo's default output limit and temperature. Explicit settings and `OPENAI_MAX_TOKENS` / `OPENAI_TEMPERATURE` still apply.
 - Use `max_tokens` to cap output, including reasoning tokens for reasoning models.
 - Check the [model catalog](https://routerplex.com/api/models) or `GET https://api.routerplex.com/v1/models` for current model IDs, context windows, and prices. The catalog also lists an image generation model, which this chat provider does not use.
