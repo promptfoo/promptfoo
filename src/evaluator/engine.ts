@@ -985,6 +985,18 @@ function resolveRuntimeGradingProviderReferences(
   testCase: AtomicTestCase,
   providerMap: Record<string, ApiProvider>,
 ): void {
+  if (testCase.options?.graderProvider !== undefined) {
+    invariant(
+      testCase.options.provider === undefined,
+      'Specify only one of test.options.provider or test.options.graderProvider',
+    );
+    testCase.options = {
+      ...testCase.options,
+      provider: testCase.options.graderProvider,
+    };
+    delete testCase.options.graderProvider;
+  }
+
   if (testCase.options?.provider) {
     const provider = resolveConfiguredProviderReference(testCase.options.provider, providerMap);
     if (provider !== testCase.options.provider) {
