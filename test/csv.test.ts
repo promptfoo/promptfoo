@@ -894,13 +894,8 @@ describe('assertionFromString', () => {
     expect(result.threshold).toBe(0.8); // DEFAULT_SEMANTIC_SIMILARITY_THRESHOLD
   });
 
-  it('should use 0.75 as default threshold for other assertions requiring threshold', () => {
+  it('should use 0.75 as default threshold for assertions with a CSV default', () => {
     const assertionTypes = [
-      'answer-relevance',
-      'classifier',
-      'context-faithfulness',
-      'context-recall',
-      'context-relevance',
       'cost',
       'latency',
       'levenshtein',
@@ -921,11 +916,22 @@ describe('assertionFromString', () => {
     }
   });
 
+  it.each([
+    ['answer-relevance', 0.5],
+    ['context-faithfulness', 0.5],
+    ['context-recall', 0.5],
+    ['context-relevance', 0.5],
+    ['classifier', 1],
+  ])('should leave the handler default threshold intact for %s', (type, threshold) => {
+    const result: Assertion = assertionFromString(`${type}:Expected output`);
+
+    expect(result).toEqual({ type, value: 'Expected output' });
+    // The assertion handlers apply their own defaults when threshold is undefined.
+    expect(threshold).toBe(type === 'classifier' ? 1 : 0.5);
+  });
+
   it('should return complete assertion object structure for representative threshold-based assertion types', () => {
-    // All three genuinely consume `threshold` in their handlers (unlike e.g.
-    // starts-with, which receives the 0.75 default but ignores it), so the
-    // parsed default is meaningful for these types.
-    const representativeAssertions = ['answer-relevance', 'levenshtein', 'rouge-n'];
+    const representativeAssertions = ['levenshtein', 'rouge-l', 'rouge-n'];
 
     for (const type of representativeAssertions) {
       const expected = `${type}:Expected output`;

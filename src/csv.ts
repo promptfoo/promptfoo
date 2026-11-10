@@ -114,11 +114,6 @@ export function assertionFromString(expected: string): Assertion {
         value,
       };
     } else if (
-      type === 'answer-relevance' ||
-      type === 'classifier' ||
-      type === 'context-faithfulness' ||
-      type === 'context-recall' ||
-      type === 'context-relevance' ||
       type === 'cost' ||
       type === 'latency' ||
       type === 'levenshtein' ||
