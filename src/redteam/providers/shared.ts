@@ -65,7 +65,7 @@ export const BLOCKING_QUESTION_ANALYSIS_FEATURE_FLAG_TIMESTAMP = '2025-06-16T14:
 /** Count a blocking-analysis task as grading without treating it as a target or attacker call. */
 export function accumulateUnblockingTokenUsage(
   totalTokenUsage: TokenUsage,
-  result: { attempted?: boolean; cached?: boolean; tokenUsage?: TokenUsage },
+  result: { attempted?: boolean; cached?: boolean; error?: string; tokenUsage?: TokenUsage },
 ): void {
   if (!result.attempted && !result.tokenUsage) {
     return;
@@ -73,6 +73,7 @@ export function accumulateUnblockingTokenUsage(
 
   accumulateGradingResponseTokenUsage(totalTokenUsage, {
     cached: result.cached,
+    error: result.error,
     tokenUsage: result.tokenUsage?.assertions ?? result.tokenUsage,
   });
 }
@@ -1053,6 +1054,7 @@ export async function tryUnblocking({
 }): Promise<{
   attempted?: boolean;
   cached?: boolean;
+  error?: string;
   success: boolean;
   tokenUsage?: TokenUsage;
   unblockingPrompt?: string;
@@ -1119,6 +1121,7 @@ export async function tryUnblocking({
         attempted: true,
         cached: response.cached,
         success: false,
+        error: response.error,
         tokenUsage: response.tokenUsage,
       };
     }
