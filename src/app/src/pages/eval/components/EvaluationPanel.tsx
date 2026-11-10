@@ -71,15 +71,6 @@ function getAssertionSet(result: GradingResult): AssertionSetMetadata | undefine
   return isAssertionSetMetadata(assertionSet) ? assertionSet : undefined;
 }
 
-function getAssertionSetCount(result: GradingResult): number | undefined {
-  const assertionSet = getAssertionSet(result);
-  if (!assertionSet) {
-    return undefined;
-  }
-
-  return assertionSet.assertionCount ?? assertionSet.assert?.length;
-}
-
 function getMetric(result: GradingResult): string {
   return result.assertion?.metric || getAssertionSet(result)?.metric || '';
 }
@@ -221,14 +212,10 @@ function getDisplayValue(result: GradingResult): AssertionDisplayValue {
   }
 
   const assertionSet = getAssertionSet(result);
-  if (assertionSet) {
-    const assertionCount = getAssertionSetCount(result) ?? getChildResults(result).length;
+  const assertionCount =
+    assertionSet?.assertionCount ?? assertionSet?.assert?.length ?? getChildResults(result).length;
+  if (assertionSet || assertionCount > 0) {
     return { value: `${assertionCount} nested assertion${assertionCount === 1 ? '' : 's'}` };
-  }
-
-  const childResultCount = getChildResults(result).length;
-  if (childResultCount > 0) {
-    return { value: `${childResultCount} nested assertion${childResultCount === 1 ? '' : 's'}` };
   }
 
   return { value: '-' };
