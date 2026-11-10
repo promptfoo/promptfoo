@@ -28,6 +28,12 @@ A stall or crash is in scope when Promptfoo’s built-in processing consumes dis
 
 Report disclosures to a user, tenant, or destination the operator did not authorize to receive that data. Sensitive data confined to the same local account is generally a privacy or hardening issue. A documented redaction or exclusion rule, or one you configure using a supported setting, must still protect the data it covers wherever the feature says it applies.
 
+Code Scan does not sandbox repositories or guarantee complete findings. See the [repository security policy](https://github.com/promptfoo/promptfoo/blob/main/SECURITY.md#contributor-ci-and-automation-tooling) for report scope.
+
+When you share an eval, Promptfoo sends its snapshot to your Cloud organization, on-premises deployment, or configured self-hosted endpoint. Your account or config may also enable automatic sharing. A snapshot can include prompts, test vars, model outputs, grading results, traces, configuration, and media.
+
+Saved `PROMPTFOO_STRIP_*` settings remove their documented fields from eval results, exports, and shared snapshots, including shared traces. They do not disable sharing or redact arbitrary content in other fields. Failures of documented redactions or exclusions remain in scope.
+
 ### Cloud Services
 
 Promptfoo Cloud operates with higher isolation expectations. The following are **in scope and treated as critical**:

@@ -500,7 +500,7 @@ cache:
    - Consider on-premise deployments for enterprise
 
 3. **Data Privacy**
-   - Enable output stripping for sensitive data:
+   - Strip large or sensitive fields from results, exports, and shared snapshots. These flags do not disable sharing or remove sensitive content from other fields:
 
    ```bash
    export PROMPTFOO_STRIP_RESPONSE_OUTPUT=true

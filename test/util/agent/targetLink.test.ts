@@ -2,6 +2,9 @@ import { EventEmitter } from 'events';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TargetLinkEvents } from '../../../src/types/targetLink';
+import { fetchWithProxy } from '../../../src/util/fetch/index';
+
+vi.mock('../../../src/util/fetch/index', () => ({ fetchWithProxy: vi.fn() }));
 
 vi.mock('../../../src/logger', () => ({
   default: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
@@ -224,5 +227,58 @@ describe('attachTargetLink', () => {
       expect(results).toHaveLength(1);
       expect((results[0].args[0] as any).tokenUsage).toBeUndefined();
     });
+  });
+
+  it.each([
+    {
+      description: 'follows same-origin redirects',
+      url: 'https://example.test/start',
+      location: '/next',
+      success: true,
+    },
+    {
+      description: 'follows same-host HTTPS upgrades',
+      url: 'http://example.test/start',
+      location: 'https://example.test/next',
+      success: true,
+    },
+    {
+      description: 'rejects HTTPS upgrades that change an explicit port',
+      url: 'http://example.test:8080/start',
+      location: 'https://example.test/next',
+      success: false,
+    },
+    {
+      description: 'rejects cross-origin redirects',
+      url: 'https://example.test/start',
+      location: 'https://other.test/next',
+      success: false,
+    },
+  ])('$description', async ({ url, location, success }) => {
+    vi.mocked(fetchWithProxy)
+      .mockResolvedValueOnce(new Response('', { status: 307, headers: { location } }))
+      .mockResolvedValueOnce(new Response('ok', { status: 200 }));
+    const { attachTargetLink } = await import('../../../src/util/agent/targetLink');
+    attachTargetLink(fakeClient as any, { id: () => 'test', callApi: vi.fn() as any });
+
+    fakeClient._simulateEvent(TargetLinkEvents.PROBE_HTTP, {
+      requestId: 'redirect-fixture',
+      url,
+      body: 'fixture data',
+    });
+
+    await vi.waitFor(() => {
+      const result = fakeClient._emittedToServer.find(
+        (event) => event.event === TargetLinkEvents.PROBE_HTTP_RESULT,
+      );
+      expect(result?.args[0]).toMatchObject({
+        requestId: 'redirect-fixture',
+        success,
+        ...(success
+          ? { finalUrl: new URL(location, url).href }
+          : { error: 'TargetLink HTTP probes do not follow cross-origin redirects' }),
+      });
+    });
+    expect(fetchWithProxy).toHaveBeenCalledTimes(success ? 2 : 1);
   });
 });
