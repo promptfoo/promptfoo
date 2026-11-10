@@ -210,6 +210,26 @@ describe('StrategyItem', () => {
       );
       expect(enterpriseTooltips.length).toBeGreaterThan(0);
     });
+
+    it.each(['other-encodings', 'text-mutations'] as const)(
+      'disables test case generation for the %s strategy collection',
+      (strategyId) => {
+        renderStrategyItem({
+          isDisabled: false,
+          isRemoteGenerationDisabled: false,
+          strategy: { ...baseStrategy, id: strategyId },
+          isSelected: false,
+          onToggle: mockOnToggle,
+          onConfigClick: mockOnConfigClick,
+        });
+
+        expect(
+          screen.getByRole('button', {
+            name: 'Test case generation is not available for Test Strategy strategy.',
+          }),
+        ).toBeDisabled();
+      },
+    );
   });
 
   describe('Labels and Pills', () => {

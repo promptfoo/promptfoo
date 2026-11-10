@@ -86,7 +86,7 @@ describe('mapEncodingTestCases', () => {
         },
       },
     ]);
-    expect(transform).toHaveBeenCalledWith('false');
+    expect(transform).toHaveBeenCalledWith('false', testCase);
     expect(result[0]).not.toBe(testCase);
     expect(result[0].vars).not.toBe(testCase.vars);
     expect(result[0].assert).not.toBe(testCase.assert);

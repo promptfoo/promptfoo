@@ -54,6 +54,7 @@
         "src/redteam/constants/strategies.ts",
         "src/redteam/plugins/policy/utils.ts",
         "src/redteam/riskScoring.ts",
+        "src/redteam/shared/attackProviders.ts",
         "src/redteam/types.ts",
         "src/types/api/eval.ts",
         "src/types/api/modelAudit.ts",
