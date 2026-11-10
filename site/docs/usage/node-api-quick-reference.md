@@ -63,7 +63,9 @@ await evaluate({
 
 - `cache: boolean` - Enable/disable caching
 - `maxConcurrency: number` - Parallel execution limit
-- `outputPath: string` - Save results to file
+- `progressCallback` - Report execution progress
+
+Set `outputPath` and `writeLatestResults` on `testSuite`, the first argument.
 
 ---
 
@@ -136,9 +138,7 @@ for (const p of providers) {
 ### Task: Save Results
 
 ```typescript
-await evaluate(testSuite, {
-  outputPath: 'results.json',
-});
+await evaluate({ ...testSuite, outputPath: 'results.json' });
 ```
 
 ---
@@ -146,11 +146,7 @@ await evaluate(testSuite, {
 ### Task: Disable Cache
 
 ```typescript
-import { cache } from 'promptfoo';
-
-cache.disableCache();
-const evalRecord = await evaluate(testSuite);
-cache.enableCache();
+const evalRecord = await evaluate(testSuite, { cache: false });
 ```
 
 ---
@@ -306,12 +302,16 @@ console.log(`v1: ${v1.stats.successes}, v2: ${v2.stats.successes}`);
 
 ### Pattern: Streaming Results
 
+Report progress during the run, then read completed results. The API does not provide a per-result streaming callback.
+
 ```typescript
-await evaluate(testSuite, {
-  onTestComplete: (result) => {
-    console.log(`${result.testCase.description ?? 'test'}: ${result.success ? '✓' : '✗'}`);
+const evalRecord = await evaluate(testSuite, {
+  progressCallback: (completed, total) => {
+    console.log(`${completed}/${total} rows completed`);
   },
 });
+const summary = await evalRecord.toEvaluateSummary();
+console.log(summary.results);
 ```
 
 ### Pattern: Batch Testing Providers
@@ -425,7 +425,7 @@ import type {
 2. **Increase concurrency** - `maxConcurrency: 20` for parallel tests
 3. **Batch operations** - Test multiple items in one eval
 4. **Namespace cache** - Isolate v1 vs v2 results
-5. **Stream results** - Use `onTestComplete` callback
+5. **Track progress** - Use `progressCallback`; read final results after the evaluation finishes
 
 ---
 
