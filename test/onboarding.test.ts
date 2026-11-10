@@ -247,7 +247,7 @@ describe('createDummyFiles', () => {
     mockSelect
       .mockResolvedValueOnce('rag')
       .mockResolvedValueOnce('python')
-      .mockResolvedValueOnce('openai:gpt-4o');
+      .mockImplementationOnce(({ choices }) => choices[0].value);
 
     await createDummyFiles(tempDir, true);
 
@@ -306,26 +306,6 @@ describe('createDummyFiles', () => {
     ]);
   });
 
-  it('should report Vertex provider prefixes when Google object providers are selected', async () => {
-    const googleProviders = [
-      { id: 'vertex:gemini-3.6-flash', config: { region: 'global' } },
-      { id: 'vertex:gemini-3.5-flash-lite', config: { region: 'global' } },
-    ];
-    mockSelect.mockResolvedValueOnce('compare').mockResolvedValueOnce(googleProviders);
-
-    const result = await createDummyFiles(tempDir, true);
-
-    expect(result.providerPrefixes).toEqual(['vertex', 'vertex']);
-
-    const configCall = mockFs.writeFileSync.mock.calls.find((call: any[]) =>
-      call[0].toString().endsWith('promptfooconfig.yaml'),
-    );
-    const parsedConfig = yaml.load(configCall?.[1] as string) as {
-      providers: Array<{ id: string; config: { region: string } }>;
-    };
-    expect(parsedConfig.providers).toEqual(googleProviders);
-  });
-
   it('should offer current Cohere direct API models', async () => {
     mockSelect
       .mockResolvedValueOnce('compare')
@@ -343,7 +323,7 @@ describe('createDummyFiles', () => {
     });
   });
 
-  it('offers current Gemini Flash models during interactive onboarding', async () => {
+  it('writes the advertised Gemini models and reports their Vertex prefixes', async () => {
     const googleModels = [
       { id: 'vertex:gemini-3.8-flash', config: { region: 'global' } },
       { id: 'vertex:gemini-3.7-flash', config: { region: 'global' } },
@@ -351,9 +331,12 @@ describe('createDummyFiles', () => {
       { id: 'vertex:gemini-3.5-flash-lite', config: { region: 'global' } },
       'vertex:gemini-3.1-pro-preview',
     ];
-    mockSelect.mockResolvedValueOnce('compare').mockResolvedValueOnce(googleModels);
+    mockSelect.mockResolvedValueOnce('compare').mockImplementationOnce(({ choices }) => {
+      return choices.find((choice: { name: string }) => choice.name.startsWith('[Google]')).value;
+    });
 
-    await createDummyFiles(tempDir, true);
+    const result = await createDummyFiles(tempDir, true);
+    expect(result.providerPrefixes).toEqual(googleModels.map(() => 'vertex'));
 
     expect(mockSelect).toHaveBeenNthCalledWith(
       2,
@@ -376,9 +359,10 @@ describe('createDummyFiles', () => {
   });
 
   it('offers supported Anthropic models instead of retired Opus 4.1', async () => {
-    mockSelect
-      .mockResolvedValueOnce('compare')
-      .mockResolvedValueOnce(['anthropic:messages:claude-opus-4-6']);
+    mockSelect.mockResolvedValueOnce('compare').mockImplementationOnce(({ choices }) => {
+      return choices.find((choice: { name: string }) => choice.name.startsWith('[Anthropic]'))
+        .value;
+    });
 
     await createDummyFiles(tempDir, true);
 
@@ -397,7 +381,9 @@ describe('createDummyFiles', () => {
     mockFs.existsSync.mockImplementation((path: string) => path.includes('promptfooconfig.yaml'));
 
     mockConfirm.mockResolvedValueOnce(true);
-    mockSelect.mockResolvedValueOnce('compare').mockResolvedValueOnce('openai:gpt-4o');
+    mockSelect
+      .mockResolvedValueOnce('compare')
+      .mockImplementationOnce(({ choices }) => choices[0].value);
 
     await createDummyFiles(tempDir, true);
 

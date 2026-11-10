@@ -309,8 +309,8 @@ export async function redteamInit(directory: string | undefined) {
       { name: 'openai:gpt-5.6', value: 'openai:gpt-5.6' },
       { name: 'openai:gpt-5.4-mini', value: 'openai:gpt-5.4-mini' },
       {
-        name: 'anthropic:claude-fable-5-1',
-        value: 'anthropic:messages:claude-fable-5-1',
+        name: 'anthropic:claude-fable-5-2',
+        value: 'anthropic:messages:claude-fable-5-2',
       },
       {
         name: 'anthropic:claude-fable-5',

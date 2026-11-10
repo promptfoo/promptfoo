@@ -47,6 +47,25 @@ describe('CopyButton', () => {
     expect(screen.queryByRole('button', { name: 'Copied' })).not.toBeInTheDocument();
   });
 
+  it('does not start feedback if the clipboard write succeeds after unmount', async () => {
+    const user = userEvent.setup();
+    let complete!: () => void;
+    const pending = new Promise<void>((resolve) => {
+      complete = resolve;
+    });
+    vi.spyOn(navigator.clipboard, 'writeText').mockReturnValue(pending);
+    const timer = vi.spyOn(globalThis, 'setTimeout');
+    const { unmount } = render(<CopyButton value="test" />);
+    await user.click(screen.getByRole('button', { name: 'Copy' }));
+    unmount();
+
+    await act(async () => {
+      complete();
+      await pending;
+    });
+    expect(timer.mock.calls.filter(([, delay]) => delay === 2000)).toHaveLength(0);
+  });
+
   it('shows check icon after successful copy', async () => {
     const user = userEvent.setup();
     const { container } = render(<CopyButton value="test text" />);

@@ -4,8 +4,6 @@ import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageU
 
 import type { AssertionParams, GradingResult } from '../types/index';
 
-type MatcherResponse = Awaited<ReturnType<typeof matchesGEval>>;
-
 export const handleGEval = async ({
   assertion,
   inverse,
@@ -37,8 +35,9 @@ export const handleGEval = async ({
     // failure — a grader transport/parse failure is propagated verbatim without
     // inversion, and continuing to spend grader calls on the remaining criteria
     // would be wasted API cost.
-    const responses: MatcherResponse[] = [];
-    let failure: { index: number; resp: MatcherResponse } | undefined;
+    const tokensUsed = createEmptyTokenUsage();
+    const reasons: string[] = [];
+    let totalScore = 0;
     for (const [index, value] of renderedValue.entries()) {
       const resp = await matchesGEval(
         value,
@@ -48,39 +47,30 @@ export const handleGEval = async ({
         test.options,
         providerCallContext,
       );
-      responses.push(resp);
+      accumulateTokenUsage(tokensUsed, resp.tokensUsed);
       if (isGraderFailure(resp)) {
-        failure = { index, resp };
-        break;
+        const criterion = renderedValue[index];
+        return {
+          assertion,
+          pass: false,
+          score: 0,
+          reason: `G-Eval criterion ${index + 1}/${renderedValue.length} (${JSON.stringify(criterion)}) failed: ${resp.reason}`,
+          tokensUsed,
+          metadata: resp.metadata,
+        };
       }
+      totalScore += resp.score;
+      reasons.push(resp.reason);
     }
 
-    const tokensUsed = createEmptyTokenUsage();
-    for (const r of responses) {
-      accumulateTokenUsage(tokensUsed, r.tokensUsed);
-    }
-
-    if (failure) {
-      const criterion = renderedValue[failure.index];
-      return {
-        assertion,
-        pass: false,
-        score: 0,
-        reason: `G-Eval criterion ${failure.index + 1}/${renderedValue.length} (${JSON.stringify(criterion)}) failed: ${failure.resp.reason}`,
-        tokensUsed,
-        metadata: failure.resp.metadata,
-      };
-    }
-
-    const averageScore = responses.reduce((acc, r) => acc + r.score, 0) / responses.length;
-    const combinedReason = responses.map((r) => r.reason).join('\n\n');
+    const averageScore = totalScore / reasons.length;
     const passed = averageScore >= threshold !== inverse;
 
     return {
       assertion,
       pass: passed,
       score: inverse ? 1 - averageScore : averageScore,
-      reason: combinedReason,
+      reason: reasons.join('\n\n'),
       tokensUsed,
     };
   }
