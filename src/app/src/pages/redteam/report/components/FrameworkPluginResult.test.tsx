@@ -128,6 +128,28 @@ describe('FrameworkPluginResult', () => {
     expect(mockNavigate).toHaveBeenCalledWith(expectedUrl);
   });
 
+  it('opens the aggregate harmful rows without expanding to child plugins', async () => {
+    renderWithProviders(
+      <FrameworkPluginResult
+        evalId="test-eval-123"
+        plugin="harmful"
+        getPluginASR={() => ({ asr: 50, total: 2, failCount: 1 })}
+        type="failed"
+      />,
+    );
+    await userEvent.click(screen.getByText('harmful'));
+    const destination = new URL(mockNavigate.mock.calls[0][0], 'https://example.com');
+    expect(destination.searchParams.get('mode')).toBe('failures');
+    expect(JSON.parse(destination.searchParams.get('filter')!)).toEqual([
+      {
+        type: 'metadata',
+        field: 'pluginId',
+        operator: 'equals',
+        value: 'harmful',
+      },
+    ]);
+  });
+
   it('should not trigger navigation when an untested plugin is clicked', async () => {
     const props = {
       evalId: 'test-eval-123',
@@ -142,6 +164,19 @@ describe('FrameworkPluginResult', () => {
     await userEvent.click(pluginElement);
 
     expect(mockNavigate).not.toHaveBeenCalled();
+  });
+
+  it('should use normalized severity styling for fully qualified plugin IDs', () => {
+    const { container } = renderWithProviders(
+      <FrameworkPluginResult
+        evalId="test-eval-123"
+        plugin="promptfoo:redteam:intent"
+        getPluginASR={vi.fn().mockReturnValue({ asr: 100, total: 1, failCount: 1 })}
+        type="failed"
+      />,
+    );
+
+    expect(container.firstChild).toHaveClass('border-l-red-500');
   });
 
   it("should navigate to the eval results page with a JSON-encoded filter and mode 'passes' when a plugin with ASR of zero is clicked and type is 'passed'", async () => {
