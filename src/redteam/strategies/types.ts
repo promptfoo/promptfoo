@@ -52,6 +52,10 @@ export async function getStrategyGenerationProvider({
       }
     }
 
+    if (selection?.source === 'cache' && jsonOnly && selection.cachedJsonOnlyProvider) {
+      return wrap(selection.cachedJsonOnlyProvider);
+    }
+
     const provider =
       selection?.source === 'default'
         ? await redteamProviderManager.getDefaultProvider({ jsonOnly, preferSmallModel })
