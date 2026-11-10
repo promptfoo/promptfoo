@@ -141,7 +141,7 @@ vi.mock('@modelcontextprotocol/sdk/server/mcp.js', () => ({
 }));
 
 vi.mock('@modelcontextprotocol/sdk/server/stdio.js', () => ({
-  StdioServerTransport: vi.fn().mockImplementation(() => ({})),
+  StdioServerTransport: vi.fn(function MockStdioServerTransport() {}),
 }));
 
 const streamableHttpMocks = vi.hoisted(() => ({
@@ -339,5 +339,67 @@ describe('MCP Server', () => {
         restoreEnv();
       }
     });
+  });
+
+  it.each([
+    ['http', 'SIGINT'],
+    ['http', 'SIGTERM'],
+    ['stdio', 'SIGINT'],
+    ['stdio', 'SIGTERM'],
+    ['stdio', 'end'],
+  ] as const)('removes only owned %s listeners before closing on %s', async (transport, event) => {
+    const restoreEnv = mockProcessEnv({ MCP_TRANSPORT: undefined });
+    const unrelated = vi.fn();
+    process.on('SIGINT', unrelated);
+    process.on('SIGTERM', unrelated);
+    process.stdin.on('end', unrelated);
+    const before = {
+      SIGINT: process.listeners('SIGINT'),
+      SIGTERM: process.listeners('SIGTERM'),
+      end: process.stdin.listeners('end'),
+    };
+    let finishClose!: () => void;
+    const closing = new Promise<void>((resolve) => {
+      finishClose = resolve;
+    });
+    let shutdown: (() => void) | undefined;
+    let serverPromise: Promise<void> | undefined;
+    try {
+      const { startHttpMcpServer, startStdioMcpServer } = await import(
+        '../../../src/commands/mcp/server'
+      );
+      serverPromise = transport === 'http' ? startHttpMcpServer(3100) : startStdioMcpServer();
+      await vi.waitFor(() => {
+        expect(process.listeners('SIGINT')).toHaveLength(before.SIGINT.length + 1);
+      });
+      const server = mcpServerMocks.MockMcpServer.mock.instances[0];
+      server.close.mockReturnValue(closing);
+      const listeners = event === 'end' ? process.stdin.listeners(event) : process.listeners(event);
+      shutdown = listeners.find(
+        (listener) => !before[event].some((existing) => existing === listener),
+      ) as () => void;
+      expect(shutdown).toBeDefined();
+      shutdown();
+
+      expect(process.listeners('SIGINT')).toEqual(before.SIGINT);
+      expect(process.listeners('SIGTERM')).toEqual(before.SIGTERM);
+      expect(process.stdin.listeners('end')).toEqual(before.end);
+      shutdown();
+      expect(server.close).toHaveBeenCalledOnce();
+      expect(unrelated).not.toHaveBeenCalled();
+    } finally {
+      shutdown?.();
+      finishClose();
+      await serverPromise;
+      if (shutdown) {
+        process.removeListener('SIGINT', shutdown);
+        process.removeListener('SIGTERM', shutdown);
+        process.stdin.removeListener('end', shutdown);
+      }
+      process.removeListener('SIGINT', unrelated);
+      process.removeListener('SIGTERM', unrelated);
+      process.stdin.removeListener('end', unrelated);
+      restoreEnv();
+    }
   });
 });

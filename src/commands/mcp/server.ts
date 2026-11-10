@@ -158,6 +158,8 @@ export async function startHttpMcpServer(port: number): Promise<void> {
     const shutdown = () => {
       if (!isShuttingDown) {
         isShuttingDown = true;
+        process.removeListener('SIGINT', shutdown);
+        process.removeListener('SIGTERM', shutdown);
 
         logger.info('Shutting down MCP server...');
         const SHUTDOWN_TIMEOUT_MS = 5000;
@@ -239,6 +241,9 @@ export async function startStdioMcpServer(): Promise<void> {
       const shutdown = () => {
         if (!isShuttingDown) {
           isShuttingDown = true;
+          process.removeListener('SIGINT', shutdown);
+          process.removeListener('SIGTERM', shutdown);
+          process.stdin.removeListener('end', shutdown);
 
           // Add timeout to prevent indefinite hangs, matching HTTP server pattern
           const SHUTDOWN_TIMEOUT_MS = 5000;
