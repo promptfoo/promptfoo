@@ -128,16 +128,14 @@ export function renderEnvOnlyInObject<T>(
     }
 
     if (typeof value === 'object' && value !== null) {
-      const result: Record<string, unknown> = {};
-      for (const key in value) {
-        // Conversation history is runtime data and may contain untrusted model output.
-        // Preserve it as literal data instead of rendering env templates.
-        result[key] =
-          key === '_conversation'
-            ? (value as Record<string, unknown>)[key]
-            : render((value as Record<string, unknown>)[key]);
-      }
-      return result;
+      return Object.fromEntries(
+        Object.entries(value).map(([key, item]) => [
+          key,
+          // Conversation history is runtime data and may contain untrusted model output.
+          // Preserve it as literal data instead of rendering env templates.
+          key === '_conversation' ? item : render(item),
+        ]),
+      );
     }
 
     return value;
