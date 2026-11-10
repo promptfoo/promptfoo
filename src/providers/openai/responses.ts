@@ -779,6 +779,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     'gpt-5.6-sol',
     'gpt-5.6-terra',
     'gpt-5.6-luna',
+    'chat-latest',
     // GPT-5.5 models
     'gpt-5.5',
     'gpt-5.5-2026-04-23',

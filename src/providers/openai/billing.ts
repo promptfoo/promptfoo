@@ -1521,6 +1521,13 @@ export function calculateOpenAIUsageCost(
       ? 0
       : usage.totalInputTokens * (inputRate ?? 0) + usage.totalOutputTokens * (outputRate ?? 0);
   }
+  if (
+    modelName === 'chat-latest' &&
+    options.serviceTier != null &&
+    !['default', 'standard', 'auto'].includes(options.serviceTier)
+  ) {
+    return options.cachedResponse ? 0 : calculateCustomUsageCost(usage, config, false);
+  }
   const tier = normalizeServiceTier(options.serviceTier);
   const bedrockTextRates = getBedrockTextRates(modelName, config, options, tier, usage);
   if (bedrockTextRates === null) {
