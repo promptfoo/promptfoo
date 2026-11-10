@@ -508,9 +508,11 @@ export async function matchesGEval(
 
   try {
     // NOTE: sometimes LLM wraps response to markdown format ```json...``` or pretty-prints it
-    const stepsObject = extractJsonObjects(respSteps.output).find((obj) => 'steps' in obj) as
-      | { steps?: unknown }
-      | undefined;
+    // Prefer an object whose `steps` is an array, so a placeholder like `{steps}` in the prose is skipped.
+    const stepsObjects = extractJsonObjects(respSteps.output).filter(
+      (obj) => 'steps' in obj,
+    ) as Array<{ steps?: unknown }>;
+    const stepsObject = stepsObjects.find((obj) => Array.isArray(obj.steps)) ?? stepsObjects[0];
     if (!stepsObject) {
       return failWithTokens(
         `LLM-proposed evaluation steps are not in JSON format: ${respSteps.output}`,
@@ -573,7 +575,10 @@ export async function matchesGEval(
 
   try {
     const resultObjects = extractJsonObjects(resp.output);
-    const resultObject = resultObjects.find((obj) => 'score' in obj) ?? resultObjects[0];
+    const resultObject =
+      resultObjects.find((obj) => obj.score != null) ??
+      resultObjects.find((obj) => 'score' in obj) ??
+      resultObjects[0];
     if (!resultObject) {
       return failWithTokens(`LLM-proposed evaluation result is not in JSON format: ${resp.output}`);
     }

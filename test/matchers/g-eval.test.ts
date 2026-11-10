@@ -566,6 +566,7 @@ describe('matchesGEval', () => {
     ['with a space after the brace', '{ "steps": ["Check clarity"] }'],
     ['in a fenced block', '```json\n{\n  "steps": ["Check clarity"]\n}\n```'],
     ['after a sentence', 'Here are the steps:\n{"steps": ["Check clarity"]}\nHope this helps.'],
+    ['after a sentence with a {steps} placeholder', 'Using {steps}: {"steps": ["Check clarity"]}'],
   ])('should read the evaluation steps when the grader returns them %s', async (_, stepsOutput) => {
     vi.spyOn(DefaultGradingProvider, 'callApi')
       .mockImplementationOnce(async () => ({
@@ -632,6 +633,7 @@ describe('matchesGEval', () => {
     ['pretty-printed', '{\n  "score": 8,\n  "reason": "Clear"\n}'],
     ['in a fenced block', '```json\n{\n  "score": 8,\n  "reason": "Clear"\n}\n```'],
     ['after a sentence', 'Scoring against {criteria}:\n{"score": 8, "reason": "Clear"}'],
+    ['after a sentence with a {score} placeholder', 'Using {score}: {"score": 8, "reason": "Clear"}'],
   ])('should read the evaluation result when the grader returns it %s', async (_, resultOutput) => {
     vi.spyOn(DefaultGradingProvider, 'callApi')
       .mockImplementationOnce(async () => createClarityStepsResponse())
