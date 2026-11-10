@@ -6,7 +6,7 @@ import { hasWebSearchCapability, loadWebSearchProvider } from '../providers/webS
 import { extractFirstJsonObject } from '../util/json';
 import { callProviderWithContext, getGradingProvider } from './providers';
 import { loadRubricPrompt, renderLlmRubricPrompt } from './rubric';
-import { graderFail, tryParse } from './shared';
+import { formatSanitizedProviderId, graderFail, tryParse } from './shared';
 
 import type {
   ApiProvider,
@@ -131,7 +131,7 @@ export async function matchesSearchRubric(
       assertion,
       metadata: {
         searchResults: result.searchResults || [],
-        searchProvider: searchProvider.id(),
+        searchProvider: formatSanitizedProviderId(searchProvider),
       },
     };
   } catch {

@@ -270,12 +270,38 @@ function formatConfiguredProvider(configured: unknown): string | undefined {
 }
 
 /**
+ * Strip credentials from URLs inside a provider id before it is shown. HTTP
+ * provider ids are their endpoint URL, and results stored by older versions
+ * (or fields persisted without sanitization) can carry userinfo or secret
+ * query parameters. The judge only needs to be recognizable, so keep the
+ * scheme, host and path and drop userinfo, query and fragment.
+ */
+function redactProviderUrls(display: string): string {
+  return display.replace(/[a-z][a-z0-9+.-]*:\/\/[^\s()]+/gi, (match) => {
+    try {
+      const url = new URL(match);
+      const path = url.pathname === '/' && !match.endsWith('/') ? '' : url.pathname;
+      return `${url.protocol}//${url.host}${path}`;
+    } catch {
+      return match.replace(/\/\/[^/@]*@/, '//').split(/[?#]/)[0];
+    }
+  });
+}
+
+/**
  * Resolve the LLM-as-a-judge provider id for display.
  * Prefer the runtime-persisted `metadata.gradingProvider`; fall back to an
  * explicitly configured `assertion.provider` for older eval results, but only
  * when the assertion type actually invokes an LLM judge.
  */
 export function getGradingProviderDisplay(
+  result: GradingResult | null | undefined,
+): string | undefined {
+  const display = resolveGradingProviderDisplay(result);
+  return display === undefined ? undefined : redactProviderUrls(display);
+}
+
+function resolveGradingProviderDisplay(
   result: GradingResult | null | undefined,
 ): string | undefined {
   const fromMeta = result?.metadata?.gradingProvider;

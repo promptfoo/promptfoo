@@ -16,6 +16,14 @@ export function formatResolvedGradingProvider(provider: ApiProvider): string {
 }
 
 /**
+ * Provider id for persisted grader metadata such as `metadata.searchProvider`,
+ * with credential-bearing HTTP ids redacted like `metadata.gradingProvider`.
+ */
+export function formatSanitizedProviderId(provider: ApiProvider): string {
+  return sanitizeProviderIdForLog(provider.id());
+}
+
+/**
  * Attach the resolved judge provider id onto a grading result's metadata so
  * the eval results UI can show which model graded the assertion. Overwrites
  * any existing `gradingProvider` key (including spoofed provider-metadata).

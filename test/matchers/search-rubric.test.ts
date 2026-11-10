@@ -222,6 +222,24 @@ describe('matchesSearchRubric', () => {
     );
   });
 
+  it('redacts credentials in the persisted search provider id', async () => {
+    const { matchesSearchRubric } = await import('../../src/matchers/search');
+    const originalId = mocks.webSearchProvider.id;
+    mocks.webSearchProvider.id = () =>
+      'https://judge:hunter2@api.perplexity.ai/chat/completions?api_key=sk-live-1234567890abcdef';
+
+    try {
+      const result = await matchesSearchRubric('Confirm current facts', 'output', {});
+      const searchProvider = String(result.metadata?.searchProvider);
+
+      expect(searchProvider).toContain('api.perplexity.ai/chat/completions');
+      expect(searchProvider).not.toContain('hunter2');
+      expect(searchProvider).not.toContain('sk-live-1234567890abcdef');
+    } finally {
+      mocks.webSearchProvider.id = originalId;
+    }
+  });
+
   it('throws when no web search provider can be resolved', async () => {
     const { matchesSearchRubric } = await import('../../src/matchers/search');
     mocks.getDefaultProviders.mockResolvedValue({

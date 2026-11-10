@@ -724,6 +724,48 @@ it('falls back to assertion.provider for search-rubric without searchProvider', 
   ).toBe('openai:gpt-4o');
 });
 
+it('strips credentials from a stored raw search-rubric searchProvider URL', async () => {
+  const { getGradingProviderDisplay } = await import('./utils');
+  expect(
+    getGradingProviderDisplay({
+      pass: true,
+      score: 1,
+      reason: 'ok',
+      assertion: { type: 'search-rubric' },
+      metadata: {
+        searchProvider:
+          'https://judge:hunter2@api.perplexity.ai/chat/completions?api_key=sk-live-1234567890abcdef',
+      },
+    }),
+  ).toBe('https://api.perplexity.ai/chat/completions');
+});
+
+it('strips credentials from a judge URL that has a label', async () => {
+  const { getGradingProviderDisplay } = await import('./utils');
+  expect(
+    getGradingProviderDisplay({
+      pass: true,
+      score: 1,
+      reason: 'ok',
+      metadata: {
+        gradingProvider: 'https://judge:hunter2@judge.example.com/v1?token=abc (My judge)',
+      },
+    }),
+  ).toBe('https://judge.example.com/v1 (My judge)');
+});
+
+it('leaves provider ids without a URL unchanged', async () => {
+  const { getGradingProviderDisplay } = await import('./utils');
+  expect(
+    getGradingProviderDisplay({
+      pass: true,
+      score: 1,
+      reason: 'ok',
+      metadata: { gradingProvider: 'openai:gpt-4.1-mini (Judge)' },
+    }),
+  ).toBe('openai:gpt-4.1-mini (Judge)');
+});
+
 describe('collectUniqueGradingProviders', () => {
   it('collects unique judges from nested componentResults', async () => {
     const { collectUniqueGradingProviders } = await import('./utils');
