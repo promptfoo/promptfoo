@@ -62,13 +62,6 @@ const REQUIRED_BUILD_OUTPUTS = [
   'dist/src/server/index.js', // Server entry
 ];
 
-interface CopyTask {
-  src: string;
-  dest: string;
-  recursive?: boolean;
-  filter?: (src: string) => boolean;
-}
-
 interface PostbuildResult {
   success: boolean;
   copied: string[];
@@ -92,15 +85,9 @@ function logError(message: string): void {
 /**
  * Find all HTML files in src/ directory (non-recursive).
  */
-function getHtmlFiles(): CopyTask[] {
+function getHtmlFiles(): string[] {
   try {
-    return fs
-      .readdirSync(SRC)
-      .filter((file) => file.endsWith('.html'))
-      .map((file) => ({
-        src: path.join(SRC, file),
-        dest: path.join(DIST, 'src', file),
-      }));
+    return fs.readdirSync(SRC).filter((file) => file.endsWith('.html'));
   } catch (error) {
     logError(`Failed to read src/ directory: ${error}`);
     return [];
@@ -108,36 +95,10 @@ function getHtmlFiles(): CopyTask[] {
 }
 
 /**
- * Generate copy tasks for all wrapper scripts.
- * Uses WRAPPER_FILES to ensure consistency with src/esm.ts
- *
- * Wrapper files are copied to two locations:
- * 1. dist/src/{python,ruby,golang}/ - for CLI builds (entrypoint.js, main.js)
- * 2. dist/src/server/{python,ruby,golang}/ - for bundled server build (server/index.js)
- *
- * This is necessary because getWrapperDir() uses import.meta.url to determine
- * the base directory. In the bundled server, import.meta.url points to
- * dist/src/server/index.js, so wrapper files need to be at dist/src/server/{type}/.
- */
-function getWrapperTasks(): CopyTask[] {
-  // Destinations for wrapper files:
-  // - dist/src/ for CLI (entrypoint.js, main.js use import.meta.url → dist/src/)
-  // - dist/src/server/ for bundled server (server/index.js uses import.meta.url → dist/src/server/)
-  return Object.entries(WRAPPER_FILES).flatMap(([wrapperType, files]) =>
-    files.flatMap((file) =>
-      WRAPPER_DEST_BASES.map((destBase) => ({
-        src: path.join(SRC, wrapperType, file),
-        dest: path.join(destBase, wrapperType, file),
-      })),
-    ),
-  );
-}
-
-/**
  * Clean destination directories before copying to prevent stale files.
  * Only cleans specific subdirectories, not all of dist/.
  */
-function cleanDestinations(_tasks: CopyTask[]): void {
+function cleanDestinations(): void {
   // Clean wrapper directories (both at dist/src/ and dist/src/server/)
   for (const base of WRAPPER_DEST_BASES) {
     for (const wrapperType of Object.keys(WRAPPER_FILES)) {
@@ -186,60 +147,51 @@ export function postbuild(): PostbuildResult {
     return result;
   }
 
-  // Gather all copy tasks
-  const copyTasks: CopyTask[] = [
-    ...getHtmlFiles(),
-    ...getWrapperTasks(),
-    /**
-     * Get the drizzle migration copy task with exclusion filter.
-     */
-    {
-      src: path.join(ROOT, 'drizzle'),
-      dest: path.join(DIST, 'drizzle'),
-      recursive: true,
-      filter: shouldCopyDrizzlePath,
-    },
-    /**
-     * Get the proto files copy task for OTLP protobuf support.
-     */
-    {
-      src: path.join(SRC, 'tracing', 'proto'),
-      dest: path.join(DIST, 'src', 'tracing', 'proto'),
-      recursive: true,
-    },
-  ];
+  const htmlFiles = getHtmlFiles();
+  cleanDestinations();
 
-  // Clean destinations to prevent stale files
-  cleanDestinations(copyTasks);
-
-  /**
-   * Execute a single copy task.
-   */
-  // Execute copy tasks
-  for (const task of copyTasks) {
+  function copy(src: string, dest: string, options: fs.CopySyncOptions = {}): void {
     let copyError: string | undefined;
     try {
-      if (fs.existsSync(task.src)) {
-        fs.mkdirSync(path.dirname(task.dest), { recursive: true });
-        fs.cpSync(task.src, task.dest, {
-          recursive: task.recursive ?? false,
-          filter: task.filter,
-        });
+      if (fs.existsSync(src)) {
+        fs.mkdirSync(path.dirname(dest), { recursive: true });
+        fs.cpSync(src, dest, options);
       } else {
-        copyError = `Source not found: ${task.src.replace(ROOT, '.')}`;
+        copyError = `Source not found: ${src.replace(ROOT, '.')}`;
       }
     } catch (error) {
       copyError = `Copy failed: ${error}`;
     }
     if (copyError === undefined) {
-      const relativePath = task.dest.replace(ROOT, '.');
+      const relativePath = dest.replace(ROOT, '.');
       result.copied.push(relativePath);
-      log(`Copied: ${task.src.replace(ROOT, '.')} -> ${relativePath}`);
+      log(`Copied: ${src.replace(ROOT, '.')} -> ${relativePath}`);
     } else {
       result.errors.push(copyError);
       logError(copyError);
     }
   }
+
+  for (const file of htmlFiles) {
+    copy(path.join(SRC, file), path.join(DIST, 'src', file));
+  }
+
+  // getWrapperDir() locates scripts relative to the bundle. The CLI and library
+  // live in dist/src, while the standalone server can resolve from dist/src/server.
+  for (const [type, files] of Object.entries(WRAPPER_FILES)) {
+    for (const file of files) {
+      for (const base of WRAPPER_DEST_BASES) {
+        copy(path.join(SRC, type, file), path.join(base, type, file));
+      }
+    }
+  }
+  copy(path.join(ROOT, 'drizzle'), path.join(DIST, 'drizzle'), {
+    recursive: true,
+    filter: shouldCopyDrizzlePath,
+  });
+  copy(path.join(SRC, 'tracing', 'proto'), path.join(DIST, 'src', 'tracing', 'proto'), {
+    recursive: true,
+  });
 
   // Create ESM package.json marker for dist/src
   const distSrcPackageJson = path.join(DIST, 'src', 'package.json');

@@ -54,6 +54,15 @@ describe('database WAL mode', () => {
     }
   });
 
+  it('reads absent evaluation traces without creating or opening a database', async () => {
+    const { isDbOpen } = await import('../src/database');
+    const { TraceStore } = await import('../src/tracing/store');
+
+    await expect(new TraceStore().getTracesByEvaluation('missing-eval')).resolves.toEqual([]);
+    expect(isDbOpen()).toBe(false);
+    expect(fs.existsSync(path.join(tempDir, 'promptfoo.db'))).toBe(false);
+  });
+
   it('enables WAL journal mode by default', async () => {
     // First import and initialize the database to trigger WAL mode configuration
     const database = await import('../src/database');
