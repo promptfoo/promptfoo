@@ -813,6 +813,10 @@ jobs:
       - name: Install Chromium
         run: node node_modules/playwright/cli.js install --with-deps chromium
 
+      - name: Run Site Browser Tests
+        working-directory: site
+        run: npm run test:browser
+
       - name: Run App Browser Tests
         run: npm run test:app:browser
 
