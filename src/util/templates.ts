@@ -293,40 +293,43 @@ function astNodeListReferencesVariable(
   boundSymbols: ReadonlySet<string>,
 ): boolean {
   const scope = new LinkedScope(boundSymbols);
-  for (const item of nodes) {
-    if (!isNunjucksAstNode(item)) {
-      continue;
-    }
-    if (astReferencesVariable(item, variableName, parent, scope)) {
-      return true;
-    }
-    if (item.typename === 'Set') {
-      scope.removeMacroBindings(item.targets);
-      addBindingNamesInPlace(scope, item.targets);
-    } else if (item.typename === 'Macro') {
-      addBindingNamesInPlace(scope, item.name);
-    } else if (item.typename === 'Import') {
-      scope.removeMacroBindings(item.target);
-      addBindingNamesInPlace(scope, item.target);
-    } else if (item.typename === 'FromImport') {
-      const names = collectFromImportBindingNames(item.names);
-      for (const name of names) {
-        scope.removeMacro(name);
-      }
-      addNamesToScopeInPlace(scope, names);
-    }
+  const previousMemo = scope.macroAnalysisMemo();
+  if (previousMemo === undefined) {
+    scope.replaceMacroAnalysisMemo(new Set());
   }
-  const previousMemo = scope.replaceMacroAnalysisMemo(new Set());
   try {
+    for (const item of nodes) {
+      if (!isNunjucksAstNode(item)) {
+        continue;
+      }
+      if (astReferencesVariable(item, variableName, parent, scope)) {
+        return true;
+      }
+      if (item.typename === 'Set') {
+        scope.removeMacroBindings(item.targets);
+        addBindingNamesInPlace(scope, item.targets);
+      } else if (item.typename === 'Macro') {
+        addBindingNamesInPlace(scope, item.name);
+      } else if (item.typename === 'Import') {
+        scope.removeMacroBindings(item.target);
+        addBindingNamesInPlace(scope, item.target);
+      } else if (item.typename === 'FromImport') {
+        const names = collectFromImportBindingNames(item.names);
+        for (const name of names) {
+          scope.removeMacro(name);
+        }
+        addNamesToScopeInPlace(scope, names);
+      }
+    }
     for (const macro of scope.localMacros()) {
       if (!macro.called && analyzeMacroBody(macro, variableName, scope.macroAnalysisMemo())) {
         return true;
       }
     }
+    return false;
   } finally {
     scope.replaceMacroAnalysisMemo(previousMemo);
   }
-  return false;
 }
 
 function astChildReferencesVariable(
@@ -590,62 +593,50 @@ function astFieldsReferenceVariable(
   );
 }
 
-function lookupNodeReferencesVariable(
+function postfixNodeReferencesVariable(
   node: NunjucksAstNode,
   variableName: ReferenceTarget,
   boundSymbols: ReadonlySet<string>,
 ): boolean {
-  const lookups: NunjucksAstNode[] = [];
+  const postfix: NunjucksAstNode[] = [];
   let current: unknown = node;
-  while (isNunjucksAstNode(current) && current.typename === 'LookupVal') {
-    lookups.push(current);
-    current = current.target;
+  while (
+    isNunjucksAstNode(current) &&
+    (current.typename === 'FunCall' || current.typename === 'LookupVal')
+  ) {
+    postfix.push(current);
+    current = current.typename === 'FunCall' ? current.name : current.target;
   }
 
-  // The target chain is the deepest part of a postfix expression. Preserve the
-  // old target-then-val field order without recursively visiting each target.
-  const innermost = lookups[lookups.length - 1]!;
+  // Walk a mixed postfix spine from its base outwards. Each helper used to
+  // handle only one node kind and recursively called the other on a mixed chain.
+  const innermost = postfix[postfix.length - 1]!;
   if (
     isNunjucksAstNode(current) &&
-    astReferencesVariable(current, variableName, { field: 'target', node: innermost }, boundSymbols)
+    astReferencesVariable(
+      current,
+      variableName,
+      {
+        field: innermost.typename === 'FunCall' ? 'name' : 'target',
+        node: innermost,
+      },
+      boundSymbols,
+    )
   ) {
     return true;
   }
-  for (let index = lookups.length - 1; index >= 0; index--) {
-    if (astChildReferencesVariable(lookups[index]!, 'val', variableName, boundSymbols)) {
+  for (let index = postfix.length - 1; index >= 0; index--) {
+    const part = postfix[index]!;
+    if (part.typename === 'LookupVal') {
+      if (astChildReferencesVariable(part, 'val', variableName, boundSymbols)) {
+        return true;
+      }
+      continue;
+    }
+    if (astChildReferencesVariable(part, 'args', variableName, boundSymbols)) {
       return true;
     }
-  }
-  return false;
-}
-
-function funCallNodeReferencesVariable(
-  node: NunjucksAstNode,
-  variableName: ReferenceTarget,
-  boundSymbols: ReadonlySet<string>,
-): boolean {
-  const calls: NunjucksAstNode[] = [];
-  let current: unknown = node;
-  while (isNunjucksAstNode(current) && current.typename === 'FunCall') {
-    calls.push(current);
-    current = current.name;
-  }
-
-  // Preserve the original name-then-args field order without recursively
-  // walking the callee chain. Arguments and macro bodies follow their callee.
-  const innermost = calls[calls.length - 1]!;
-  if (
-    isNunjucksAstNode(current) &&
-    astReferencesVariable(current, variableName, { field: 'name', node: innermost }, boundSymbols)
-  ) {
-    return true;
-  }
-  for (let index = calls.length - 1; index >= 0; index--) {
-    const call = calls[index]!;
-    if (astChildReferencesVariable(call, 'args', variableName, boundSymbols)) {
-      return true;
-    }
-    const macroName = getSymbolName(call.name);
+    const macroName = getSymbolName(part.name);
     const macro =
       macroName && boundSymbols instanceof LinkedScope
         ? boundSymbols.findMacro(macroName)
@@ -699,6 +690,21 @@ function binaryNodeReferencesVariable(
   return astReferencesVariable(current, variableName, currentParent, boundSymbols);
 }
 
+function isExistenceGuardedConditional(
+  node: NunjucksAstNode,
+  variableName: ReferenceTarget,
+): boolean {
+  return (
+    (node.typename === 'If' || node.typename === 'InlineIf') &&
+    typeof variableName === 'object' &&
+    'excludeOrOperands' in variableName &&
+    isNunjucksAstNode(node.cond) &&
+    node.cond.typename === 'Is' &&
+    isNunjucksAstNode(node.cond.right) &&
+    (node.cond.right.value === 'defined' || node.cond.right.value === 'undefined')
+  );
+}
+
 function astReferencesVariable(
   node: NunjucksAstNode,
   variableName: ReferenceTarget,
@@ -713,12 +719,12 @@ function astReferencesVariable(
     return false;
   }
 
-  if (node.typename === 'FunCall') {
-    return funCallNodeReferencesVariable(node, variableName, boundSymbols);
+  if (isExistenceGuardedConditional(node, variableName)) {
+    return false;
   }
 
-  if (node.typename === 'LookupVal') {
-    return lookupNodeReferencesVariable(node, variableName, boundSymbols);
+  if (node.typename === 'FunCall' || node.typename === 'LookupVal') {
+    return postfixNodeReferencesVariable(node, variableName, boundSymbols);
   }
 
   if (LEFT_ASSOCIATIVE_BINARY_NODES.has(node.typename!)) {

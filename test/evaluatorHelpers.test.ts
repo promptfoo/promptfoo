@@ -3181,6 +3181,13 @@ describe('evaluatorHelpers', () => {
       expect(await renderPrompt(toPrompt('{{v}}'), { v: '{{ user is undefined }}' })).toBe('true');
     });
 
+    it('renders an existence-guarded inline fallback', async () => {
+      const rendered = await renderPrompt(toPrompt('{{v}}'), {
+        v: "{{ user if user is defined else 'anonymous' }}",
+      });
+      expect(rendered).toBe('anonymous');
+    });
+
     it('protects verbatim bodies without nesting later placeholders', async () => {
       const value = '{% verbatim %}{{% endverbatim %} {{x}}';
       expect(await renderPrompt(toPrompt('{{v}}'), { v: value, x: 'yes' })).toBe('{ yes');
@@ -3188,6 +3195,23 @@ describe('evaluatorHelpers', () => {
 
     it('collects dependencies through deep function-call chains without overflowing', async () => {
       const value = '{{ a' + '()'.repeat(6000) + ' }}';
+      const rendered = await renderPrompt(toPrompt('{"text":"{{v}}"}'), { v: value });
+      expect(JSON.parse(rendered).text).toBe(value);
+    }, 15000);
+
+    it('collects dependencies through alternating lookup and call chains without overflowing', async () => {
+      const value = '{{ a' + '.b()'.repeat(6000) + ' }}';
+      const rendered = await renderPrompt(toPrompt('{"text":"{{v}}"}'), { v: value });
+      expect(JSON.parse(rendered).text).toBe(value);
+    }, 15000);
+
+    it('bounds macro call-site analysis across a shared dependency DAG', async () => {
+      const value =
+        Array.from({ length: 26 }, (_, index) =>
+          index === 0
+            ? '{% macro m0() %}x{% endmacro %}'
+            : `{% macro m${index}() %}{{m${index - 1}()}}{{m${index - 1}()}}{% endmacro %}`,
+        ).join('') + '{{m25()}}';
       const rendered = await renderPrompt(toPrompt('{"text":"{{v}}"}'), { v: value });
       expect(JSON.parse(rendered).text).toBe(value);
     }, 15000);
