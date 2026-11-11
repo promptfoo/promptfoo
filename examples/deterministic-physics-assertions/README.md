@@ -30,6 +30,11 @@ The validator reports PASS or FAIL based only on these rules.
 
 ## Run the example
 
+### Prerequisites
+
+- Node.js and npm
+- Python 3.8 or newer, available on your `PATH` as `python`
+
 Initialize the example:
 
 ```bash
