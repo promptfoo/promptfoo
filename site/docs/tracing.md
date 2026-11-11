@@ -331,7 +331,7 @@ tracing:
     retentionDays: 30
 ```
 
-The receiver defaults to port 4318. With `port: 0`, the startup log and `/debug/status` report the assigned port. Omit `otlp.http` to run without the built-in receiver.
+The receiver defaults to port 4318. With `port: 0`, the startup log and `/debug/status` report the assigned port. Omit `otlp.http` to run without the built-in receiver. Tracing itself defaults to disabled unless you enable it.
 
 `redactAttributes` is matched case-insensitively as a **substring** of each attribute
 key, so short patterns over-match: `token` also matches `gen_ai.usage.input_tokens`, and
