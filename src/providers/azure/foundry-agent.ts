@@ -36,7 +36,6 @@ import {
 import { formatContentFilterResponse, isContentFilterError, isServiceError } from './errors';
 import { AzureGenericProvider } from './generic';
 import { calculateAzureCost } from './util';
-import type { Agent, AIProjectClient as AzureAIProjectClient } from '@azure/ai-projects';
 import type { Span } from '@opentelemetry/api';
 
 import type {
@@ -46,17 +45,16 @@ import type {
   TokenUsage,
 } from '../../types/index';
 import type { CallbackContext, ReasoningEffort } from '../openai/types';
+import type { FoundryAgent, FoundryProjectClient } from './foundryProjectClient';
 import type { AzureAssistantOptions, AzureAssistantProviderOptions } from './types';
 
-type FoundryAgent = Agent;
-type FoundryOpenAIClient = ReturnType<AzureAIProjectClient['getOpenAIClient']>;
+type FoundryOpenAIClient = ReturnType<FoundryProjectClient['getOpenAIClient']>;
 type FoundryResponses = FoundryOpenAIClient['responses'];
 type FoundryResponseCreateParams = Parameters<FoundryResponses['create']>[0] & { stream?: false };
 type FoundryResponseCreateOptions = NonNullable<Parameters<FoundryResponses['create']>[1]>;
 type CachedFoundryAgentResponse = ProviderResponse & {
   __promptfooFoundryAgent?: Pick<FoundryAgent, 'id' | 'name'>;
 };
-// Foundry bundles its own OpenAI SDK, whose response types can differ from ours.
 type FoundryResponse = Extract<
   Awaited<ReturnType<FoundryResponses['create']>>,
   { output: unknown[] }
@@ -121,7 +119,7 @@ function hashFoundryAgentCacheValue(value: unknown): string {
  *
  * Web `Headers` and Azure Core's `HttpHeaders` are both declared
  * `Iterable<[name, value]>`, but only the Web one has `.entries()`. Azure's
- * `HttpHeadersImpl` — what an `@azure/ai-projects` `RestError` carries —
+ * `HttpHeadersImpl` — what an Azure `RestError` carries —
  * exposes `get()`, `toJSON()` and `[Symbol.iterator]` and nothing else, so
  * `.entries()` is undefined on it and `Object.entries()` yields its private
  * `_headersMap` instead of any header. Iterating covers both, `toJSON()`
@@ -277,7 +275,7 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
   assistantConfig: AzureAssistantOptions;
   private loadedFunctionCallbacks: Record<string, Function> = {};
   private processor: ResponsesProcessor;
-  private projectClient?: Promise<AzureAIProjectClient>;
+  private projectClient?: Promise<FoundryProjectClient>;
   private projectUrl: string;
   readonly #servicePrincipal?: {
     tenantId: string;
@@ -337,7 +335,7 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
     }
   }
 
-  private initializeClient(): Promise<AzureAIProjectClient> {
+  private initializeClient(): Promise<FoundryProjectClient> {
     this.projectClient ??= this.createProjectClient().catch((error) => {
       this.projectClient = undefined;
       throw error;
@@ -345,9 +343,9 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
     return this.projectClient;
   }
 
-  private async createProjectClient(): Promise<AzureAIProjectClient> {
+  private async createProjectClient(): Promise<FoundryProjectClient> {
     try {
-      const { AIProjectClient } = await import('@azure/ai-projects');
+      const { FoundryProjectClient } = await import('./foundryProjectClient');
       const { ClientSecretCredential, DefaultAzureCredential } = await import('@azure/identity');
       const principal = this.#servicePrincipal;
       const selector = process.env.AZURE_TOKEN_CREDENTIALS?.trim().toLowerCase();
@@ -366,10 +364,7 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
             },
           )
         : new DefaultAzureCredential();
-      const projectClient = new AIProjectClient(
-        this.projectUrl,
-        credential,
-      ) as AzureAIProjectClient;
+      const projectClient = new FoundryProjectClient(this.projectUrl, credential);
       logger.debug('Azure AI Project client initialized successfully');
       return projectClient;
     } catch (error) {
@@ -379,7 +374,7 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
     }
   }
 
-  private resolveAgent(client: AzureAIProjectClient): Promise<FoundryAgent> {
+  private resolveAgent(client: FoundryProjectClient): Promise<FoundryAgent> {
     this.agentPromise ??= this.lookupAgent(client)
       .then((agent) => {
         this.resolvedAgent = agent;
@@ -392,9 +387,9 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
     return this.agentPromise;
   }
 
-  private async lookupAgent(client: AzureAIProjectClient): Promise<FoundryAgent> {
+  private async lookupAgent(client: FoundryProjectClient): Promise<FoundryAgent> {
     try {
-      return await client.agents.get(this.deploymentName);
+      return await client.getAgent(this.deploymentName);
     } catch (error) {
       logger.debug(
         `[AzureFoundryAgentProvider] Direct agent lookup failed for '${this.deploymentName}', falling back to list lookup`,
@@ -404,14 +399,14 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
       );
     }
 
-    for await (const agent of client.agents.list()) {
+    for await (const agent of client.listAgents()) {
       if (agent.id === this.deploymentName || agent.name === this.deploymentName) {
         return agent;
       }
     }
 
     throw new Error(
-      `Azure Foundry agent '${this.deploymentName}' was not found by name or legacy ID in project '${this.projectUrl}'. The Azure AI Projects v2 SDK resolves agents by name. Update the provider to use azure:foundry-agent:<agent-name>, or keep using the legacy ID format and ensure the agent still exists in this project.`,
+      `Azure Foundry agent '${this.deploymentName}' was not found by name or legacy ID in project '${this.projectUrl}'. Foundry resolves agents by name. Update the provider to use azure:foundry-agent:<agent-name>, or keep using the legacy ID format and ensure the agent still exists in this project.`,
     );
   }
 
@@ -696,26 +691,6 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
         ),
       })),
     );
-  }
-
-  private getResponseOptions(
-    agent: FoundryAgent,
-    config: EffectiveFoundryConfig,
-  ): FoundryResponseCreateOptions {
-    // Azure AI Foundry replaced the top-level `agent` field in the responses
-    // create body with `agent_reference`. Sending `agent` returns a 400 similar
-    // to: "The 'agent' property is deprecated. Use 'agent_reference' instead."
-    return {
-      ...(config.timeoutMs === undefined ? {} : { timeout: config.timeoutMs }),
-      // Own retry waits until the bundled SDK supports cancellable backoff.
-      maxRetries: 0,
-      body: {
-        agent_reference: {
-          name: agent.name,
-          type: 'agent_reference',
-        },
-      },
-    };
   }
 
   private async createResponseWithRetries(
@@ -1170,7 +1145,10 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
       span.setAttribute(GenAIAttributes.AGENT_ID, agent.id);
       span.setAttribute(GenAIAttributes.AGENT_NAME, agent.name);
       span.updateName(`invoke_agent ${agent.name}`);
-      const responseOptions = this.getResponseOptions(agent, effectiveConfig);
+      const responseOptions = {
+        ...(effectiveConfig.timeoutMs === undefined ? {} : { timeout: effectiveConfig.timeoutMs }),
+        maxRetries: 0, // The provider owns cancellable retry waits.
+      };
       const tracer = getGenAITracer();
       let turnCount = 0;
 
@@ -1200,7 +1178,7 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
         try {
           const response = await this.createResponseWithRetries(
             () => client.getOpenAIClient(),
-            requestBody,
+            { ...requestBody, agent_reference: { name: agent.name, type: 'agent_reference' } },
             responseOptions,
             effectiveConfig.retryOptions?.maxRetries,
             () => {

@@ -562,7 +562,7 @@ describe('FoundationModelConfiguration', () => {
   it.each([
     'bedrock:responses:openai.gpt-oss-120b',
     'bedrock:mantle:custom.future-model',
-    'bedrock:messages:us.anthropic.claude-fable-5-1',
+    'bedrock:messages:us.anthropic.claude-fable-5-2',
   ])('acknowledges a custom endpoint for %s without inventing new model restrictions', (id) => {
     render(
       <FoundationModelConfiguration
@@ -787,7 +787,7 @@ describe('FoundationModelConfiguration', () => {
     ['bedrock:completion:xai.grok-4.3', 'responses', 'xai.grok-4.3'],
     ['bedrock:mantle:openai.gpt-oss-120b', 'chat', 'openai.gpt-oss-120b'],
     ['bedrock:mantle:openai.gpt-6.1-sol', 'chat', 'openai.gpt-6.1-sol'],
-    ['bedrock:messages:us.anthropic.claude-fable-5-1', 'messages', 'us.anthropic.claude-fable-5-1'],
+    ['bedrock:messages:us.anthropic.claude-fable-5-2', 'messages', 'us.anthropic.claude-fable-5-2'],
     ['bedrock:anthropic.claude-mythos-5', 'messages', 'anthropic.claude-mythos-5'],
   ])(
     'displays the resolved API and settings for %s without rewriting it',
@@ -852,9 +852,9 @@ describe('FoundationModelConfiguration', () => {
       'bedrock:mantle:openai.gpt-oss-20b',
     ],
     [
-      'bedrock:messages:us.anthropic.claude-fable-5-1',
-      'global.anthropic.claude-fable-5-1',
-      'bedrock:messages:global.anthropic.claude-fable-5-1',
+      'bedrock:messages:us.anthropic.claude-fable-5-2',
+      'global.anthropic.claude-fable-5-2',
+      'bedrock:messages:global.anthropic.claude-fable-5-2',
     ],
     [
       'bedrock:completion:amazon.nova-pro-v1:0',
@@ -949,7 +949,7 @@ describe('FoundationModelConfiguration', () => {
     'bedrock:converse:anthropic.claude-3-5-sonnet-20241022-v2:0',
     'bedrock:runtime:chat:qwen.qwen3-coder-next',
     'bedrock:mantle:openai.gpt-oss-120b',
-    'bedrock:messages:us.anthropic.claude-fable-5-1',
+    'bedrock:messages:us.anthropic.claude-fable-5-2',
   ])('renders MCP configuration for %s and saves servers under config.mcp', async (id) => {
     const user = userEvent.setup();
     render(

@@ -64,7 +64,11 @@ function isNovaPromptCachingModel(normalizedModelId: string): boolean {
  * different rates and must not be used here. Last reconciled 2026-09-01.
  */
 const BEDROCK_PRICING: Record<string, BedrockPricing> = {
-  // Claude 5
+  // Claude 5. Fable/Mythos point releases must precede `anthropic.claude-fable-5`: lookup is
+  // first-match `includes()`, so a missing row silently bills 5.2 at Fable 5's $10/$50.
+  // Fable/Mythos 5.2: $8/$40 global, $8.80/$44 regional (AWS price list, 2026-11-09).
+  'anthropic.claude-fable-5-2': { input: 8, output: 40 },
+  'anthropic.claude-mythos-5-2': { input: 8, output: 40 },
   'anthropic.claude-fable-5-1': { input: 10, output: 50 },
   'anthropic.claude-mythos-5-1': { input: 10, output: 50 },
   'anthropic.claude-fable-5': { input: 10, output: 50 },
