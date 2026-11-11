@@ -1,3 +1,8 @@
+import {
+  traceErrorSpansConfigError,
+  traceSpanCountBoundsError,
+  traceSpanDurationConfigError,
+} from '@promptfoo/contracts';
 import { BaseAssertionTypesSchema } from '@promptfoo/types';
 import type { Assertion, AssertionType } from '@promptfoo/types';
 
@@ -332,29 +337,14 @@ function getTraceSpanCountValueError(value: unknown): string | undefined {
   if (!isRecord(value) || !hasNonBlankString(value.pattern)) {
     return 'Enter JSON with a span name pattern.';
   }
-  if (
-    (value.min !== undefined && (typeof value.min !== 'number' || !Number.isFinite(value.min))) ||
-    (value.max !== undefined && (typeof value.max !== 'number' || !Number.isFinite(value.max)))
-  ) {
-    return 'Enter numeric trace span count limits.';
-  }
-  return getTraceAttributeFiltersError(value);
+  return traceSpanCountBoundsError(value) ?? getTraceAttributeFiltersError(value);
 }
 
 function getTraceSpanDurationValueError(value: unknown): string | undefined {
   if (!isRecord(value) || typeof value.max !== 'number' || !Number.isFinite(value.max)) {
     return 'Enter JSON with a maximum trace span duration.';
   }
-  if (
-    value.percentile !== undefined &&
-    (typeof value.percentile !== 'number' ||
-      !Number.isFinite(value.percentile) ||
-      value.percentile < 0 ||
-      value.percentile > 100)
-  ) {
-    return 'Enter a trace span percentile from 0 to 100.';
-  }
-  return getTraceAttributeFiltersError(value);
+  return traceSpanDurationConfigError(value) ?? getTraceAttributeFiltersError(value);
 }
 
 function getTrajectoryToolArgsMatchValueError(value: unknown): string | undefined {
@@ -389,6 +379,19 @@ function getTrajectoryToolSequenceValueError(value: unknown): string | undefined
 }
 
 function getStructuredValueError(assertion: Assertion): string | undefined {
+  const type = assertion.type.startsWith('not-') ? assertion.type.slice(4) : assertion.type;
+  if (
+    type.startsWith('trace-') &&
+    typeof assertion.value === 'string' &&
+    (assertion.value.startsWith('file://') || assertion.value.startsWith('package:'))
+  ) {
+    return undefined;
+  }
+  if (type === 'trace-error-spans') {
+    return (
+      traceErrorSpansConfigError(assertion.value) ?? getTraceAttributeFiltersError(assertion.value)
+    );
+  }
   if (
     OPTIONAL_SQL_CONFIGURATION_TYPES.has(assertion.type) &&
     assertion.value !== undefined &&
@@ -402,9 +405,6 @@ function getStructuredValueError(assertion: Assertion): string | undefined {
   }
   if (assertion.type === 'trace-span-duration' || assertion.type === 'not-trace-span-duration') {
     return getTraceSpanDurationValueError(assertion.value);
-  }
-  if (assertion.type === 'trace-error-spans' || assertion.type === 'not-trace-error-spans') {
-    return getTraceAttributeFiltersError(assertion.value);
   }
   if (
     assertion.type === 'trajectory:tool-args-match' ||
