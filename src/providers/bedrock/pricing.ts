@@ -9,6 +9,7 @@ import {
   isClaudeSonnet5Model,
   isClaudeSonnet55Model,
 } from '../anthropic/util';
+import { calculateOpenAIUsageCost } from '../openai/billing';
 import { getBedrockGovCloudTextRates } from './openaiGovCloudPricing';
 
 /** A first-party Runtime endpoint determines the billing region, including FIPS and PrivateLink. */
@@ -63,7 +64,11 @@ function isNovaPromptCachingModel(normalizedModelId: string): boolean {
  * different rates and must not be used here. Last reconciled 2026-09-01.
  */
 const BEDROCK_PRICING: Record<string, BedrockPricing> = {
-  // Claude 5
+  // Claude 5. Fable/Mythos point releases must precede `anthropic.claude-fable-5`: lookup is
+  // first-match `includes()`, so a missing row silently bills 5.2 at Fable 5's $10/$50.
+  // Fable/Mythos 5.2: $8/$40 global, $8.80/$44 regional (AWS price list, 2026-11-09).
+  'anthropic.claude-fable-5-2': { input: 8, output: 40 },
+  'anthropic.claude-mythos-5-2': { input: 8, output: 40 },
   'anthropic.claude-fable-5-1': { input: 10, output: 50 },
   'anthropic.claude-mythos-5-1': { input: 10, output: 50 },
   'anthropic.claude-fable-5': { input: 10, output: 50 },
@@ -535,6 +540,49 @@ export function calculateBedrockCost(
   }
 
   const normalizedModelId = modelId.toLowerCase();
+  const gptProfile =
+    /^(?:arn:aws:bedrock:([a-z0-9-]+):\d{12}:inference-profile\/)?(us|global)\.openai\.(gpt-6-luna|gpt-6\.1-sol)$/.exec(
+      normalizedModelId,
+    );
+  if (gptProfile) {
+    const [, arnRegion, profile, model] = gptProfile;
+    const sourceRegion = region ?? arnRegion;
+    const sourceRegionPattern =
+      profile === 'us'
+        ? /^(?:us-(?:east|west)-[12]|ca-(?:central|west)-1)$/
+        : /^(?:af|ap|ca|eu|il|me|mx|sa|us)-[a-z]+-\d+$/;
+    const inputTokens = promptTokens + cacheReadTokens + cacheWriteTokens;
+    if (
+      (arnRegion && region && arnRegion !== region) ||
+      !sourceRegionPattern.test(sourceRegion ?? '') ||
+      [inputTokens, promptTokens, completionTokens, cacheReadTokens, cacheWriteTokens].some(
+        (count) => !Number.isSafeInteger(count) || count < 0,
+      ) ||
+      cacheWrite1hTokens !== 0
+    ) {
+      return undefined;
+    }
+    // Converse reports uncached input separately. The shared AWS Runtime billing path
+    // expects total input, with the cache meters identified inside that total.
+    return calculateOpenAIUsageCost(
+      model,
+      {},
+      {
+        input_tokens: inputTokens,
+        output_tokens: completionTokens,
+        input_tokens_details: {
+          cached_tokens: cacheReadTokens,
+          cache_write_tokens: cacheWriteTokens,
+        },
+      },
+      {
+        provider: 'bedrock',
+        region: sourceRegion,
+        bedrockProfile: profile,
+        serviceTier: serviceTier?.type,
+      },
+    );
+  }
   const govCloudProfile =
     /^(?:arn:aws-us-gov:bedrock:us-gov-(?:east|west)-1:\d{12}:inference-profile\/)?us-gov\.openai\.(gpt-5\.6-(?:terra|luna))$/.exec(
       normalizedModelId,

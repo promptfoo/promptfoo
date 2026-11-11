@@ -9,6 +9,85 @@ const OUTPUT_TOKENS = 5_000;
 const costAtRates = (input: number, output: number) =>
   (INPUT_TOKENS / 1e6) * input + (OUTPUT_TOKENS / 1e6) * output;
 
+describe('Bedrock Converse GPT-6 Luna and GPT-6.1 Sol pricing', () => {
+  it.each([
+    ['us.openai.gpt-6-luna', 0.11, 0.011, 0.1375, 0.55],
+    ['global.openai.gpt-6-luna', 0.1, 0.01, 0.125, 0.5],
+    ['us.openai.gpt-6.1-sol', 2.2, 0.11, 2.75, 11],
+    [
+      'arn:aws:bedrock:us-east-1:123456789012:inference-profile/global.openai.gpt-6.1-sol',
+      2,
+      0.1,
+      2.5,
+      10,
+    ],
+  ] as const)(
+    'prices every token in %s at the published context tier',
+    (model, input, read, write, output) => {
+      const shortInputCost = (271_500 * input + 200 * read + 300 * write) / 1e6;
+      expect(calculateBedrockCost(model, 271_500, 100, 200, 300, 'us-east-1')).toBeCloseTo(
+        shortInputCost + (100 * output) / 1e6,
+        12,
+      );
+      expect(calculateBedrockCost(model, 271_501, 100, 200, 300, 'us-east-1')).toBeCloseTo(
+        2 * (shortInputCost + input / 1e6) + (100 * 1.5 * output) / 1e6,
+        12,
+      );
+    },
+  );
+
+  it.each([
+    'openai.gpt-6-luna',
+    'eu.openai.gpt-6-luna',
+    'us.openai.gpt-6.1-sol-future',
+    'arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/us.openai.gpt-6-luna',
+  ])('leaves unsupported profile %s unpriced', (model) => {
+    expect(calculateBedrockCost(model, 1000, 100, 0, 0, 'us-east-1')).toBeUndefined();
+  });
+
+  const usLuna = 'us.openai.gpt-6-luna';
+  const globalLuna = 'global.openai.gpt-6-luna';
+  const profileArn = `arn:aws:bedrock:us-east-1:123456789012:inference-profile/${usLuna}`;
+
+  it.each([
+    [usLuna, undefined],
+    [usLuna, 'eu-west-1'],
+    [profileArn, 'us-west-2'],
+    [globalLuna, 'cn-north-1'],
+    [globalLuna, 'us-gov-east-1'],
+    [globalLuna, 'invalid-region'],
+  ] as const)('leaves an incompatible billing route unpriced: %s / %s', (model, region) => {
+    expect(calculateBedrockCost(model, 1000, 100, 0, 0, region)).toBeUndefined();
+  });
+
+  it('can use the ARN region or a commercial global source region', () => {
+    expect(calculateBedrockCost(profileArn, 1000, 100)).toBeCloseTo(0.000165, 12);
+    expect(calculateBedrockCost(globalLuna, 1000, 100, 0, 0, 'eu-west-1')).toBeCloseTo(0.00015, 12);
+  });
+
+  it.each([
+    [undefined, 100, 0, 0],
+    [1000, undefined, 0, 0],
+    [-1, 100, 0, 0],
+    [1000, NaN, 0, 0],
+    [1000, 100, -1, 0],
+    [1000, 100, 0, 0.5],
+    [Number.MAX_SAFE_INTEGER, 100, 1, 0],
+  ])('leaves invalid or missing usage unpriced: %s, %s, %s, %s', (input, output, read, write) => {
+    expect(calculateBedrockCost(usLuna, input, output, read, write, 'us-east-1')).toBeUndefined();
+  });
+
+  it.each(['priority', 'flex', 'reserved'] as const)('does not guess %s pricing', (type) => {
+    expect(calculateBedrockCost(usLuna, 1000, 100, 0, 0, 'us-east-1', { type })).toBeUndefined();
+  });
+
+  it('does not price unpublished one-hour cache writes', () => {
+    expect(
+      calculateBedrockCost(usLuna, 1000, 100, 0, 100, 'us-east-1', undefined, 100),
+    ).toBeUndefined();
+  });
+});
+
 describe('Bedrock GovCloud OpenAI inference profiles', () => {
   it.each([
     ['us-gov.openai.gpt-5.6-terra', 2.7, 16.2],
@@ -330,6 +409,20 @@ describe('calculateBedrockCost', () => {
       expect(calculateBedrockInvokeModelCost(model, 1000, 500, 200, 100)).toBeCloseTo(expected, 8);
     },
   );
+
+  it.each([
+    'anthropic.claude-fable-5-2',
+    'global.anthropic.claude-fable-5-2',
+    'us.anthropic.claude-fable-5-2',
+    'global.anthropic.claude-mythos-5-2',
+    'us.anthropic.claude-mythos-5-2',
+  ])('prices 5.2 at $8/$40 with 0.025x cache reads for %s', (model) => {
+    // Fable 5's `anthropic.claude-fable-5` row must not win for the 5.2 point release.
+    // 1000*8 + 200*0.2 + 100*10 + 500*40 = 29,040 per 1e6
+    const expected = 0.02904 * (model.startsWith('global.') ? 1 : 1.1);
+    expect(calculateBedrockCost(model, 1000, 500, 200, 100)).toBeCloseTo(expected, 8);
+    expect(calculateBedrockInvokeModelCost(model, 1000, 500, 200, 100)).toBeCloseTo(expected, 8);
+  });
 
   it.each([
     'global.anthropic.claude-fable-5-1',
