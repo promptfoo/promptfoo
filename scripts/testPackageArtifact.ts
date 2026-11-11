@@ -12,7 +12,6 @@ import { brotliCompressSync, gzipSync } from 'node:zlib';
 
 import { API } from 'typescript/unstable/sync';
 import { writePackedConsumerSbom } from './packedConsumerSbom';
-import { assertBuiltAssetsPackaged } from './packPackageArtifact';
 
 type PackFile = {
   mode: number;
@@ -104,6 +103,7 @@ function run(
       encoding: 'utf8',
       env: {
         ...process.env,
+        NODE_PATH: '',
         npm_config_audit: 'false',
         npm_config_fund: 'false',
         ...envOverrides,
@@ -146,6 +146,7 @@ async function runAsync(
         encoding: 'utf8',
         env: {
           ...process.env,
+          NODE_PATH: '',
           npm_config_audit: 'false',
           npm_config_fund: 'false',
           ...envOverrides,
@@ -198,11 +199,12 @@ function installConsumerPackages(
   );
 }
 
-function assertPackagedFiles(packResult: PackResult, compareSource: boolean): void {
+async function assertPackagedFiles(packResult: PackResult, compareSource: boolean): Promise<void> {
   const packagedPaths = new Set(packResult.files.map((file) => file.path));
   const missingPaths = requiredPackagedPaths.filter((file) => !packagedPaths.has(file));
   assert.deepEqual(missingPaths, [], `Missing packaged runtime assets: ${missingPaths.join(', ')}`);
   if (compareSource) {
+    const { assertBuiltAssetsPackaged } = await import('./packPackageArtifact');
     assertBuiltAssetsPackaged(ROOT, packResult.files);
   }
   assert(
@@ -870,9 +872,6 @@ async function runInstalledCodingSdkEval(
   withOptionalDependencies: boolean,
 ): Promise<void> {
   const fixturesDir = path.join(consumerDir, 'coding-sdks');
-  fs.cpSync(path.join(ROOT, 'test/fixtures/package-artifact/coding-sdks'), fixturesDir, {
-    recursive: true,
-  });
   // The Codex SDK sends `exec` first. Let Node load that fixture on every platform.
   fs.copyFileSync(path.join(fixturesDir, 'codex.mjs'), path.join(consumerDir, 'exec'));
   const scriptPath = path.join(consumerDir, 'coding-sdks.mjs');
@@ -1511,7 +1510,7 @@ async function main(): Promise<void> {
 
     const [packResult] = packResults;
     assert.equal(packResult.name, 'promptfoo');
-    assertPackagedFiles(packResult, !suppliedTarball);
+    await assertPackagedFiles(packResult, !suppliedTarball);
 
     const tarballPath = suppliedTarball ?? path.join(artifactsDir, packResult.filename);
     assert(fs.existsSync(tarballPath), `Missing tarball: ${tarballPath}`);
@@ -1574,7 +1573,6 @@ async function main(): Promise<void> {
     // Consumer files live outside the repository so neither workspaces nor devDependencies
     // can satisfy undeclared package imports. Keep all user state local to this fixture.
     const consumerEnv = {
-      NODE_PATH: '',
       PROMPTFOO_CONFIG_DIR: configDir,
       PROMPTFOO_CACHE_PATH: path.join(tempDir, 'cache'),
       PROMPTFOO_DISABLE_TELEMETRY: '1',

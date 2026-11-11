@@ -411,6 +411,20 @@ describe('calculateBedrockCost', () => {
   );
 
   it.each([
+    'anthropic.claude-fable-5-2',
+    'global.anthropic.claude-fable-5-2',
+    'us.anthropic.claude-fable-5-2',
+    'global.anthropic.claude-mythos-5-2',
+    'us.anthropic.claude-mythos-5-2',
+  ])('prices 5.2 at $8/$40 with 0.025x cache reads for %s', (model) => {
+    // Fable 5's `anthropic.claude-fable-5` row must not win for the 5.2 point release.
+    // 1000*8 + 200*0.2 + 100*10 + 500*40 = 29,040 per 1e6
+    const expected = 0.02904 * (model.startsWith('global.') ? 1 : 1.1);
+    expect(calculateBedrockCost(model, 1000, 500, 200, 100)).toBeCloseTo(expected, 8);
+    expect(calculateBedrockInvokeModelCost(model, 1000, 500, 200, 100)).toBeCloseTo(expected, 8);
+  });
+
+  it.each([
     'global.anthropic.claude-fable-5-1',
     'us.anthropic.claude-fable-5-1',
     'global.anthropic.claude-mythos-5-1',
