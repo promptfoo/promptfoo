@@ -313,7 +313,7 @@
     "nunjucks": "^3.2.4",
     "openai": "^7.20.0",
     "opener": "^1.5.2",
-    "ora": "^9.3.0",
+    "ora": "^10.0.0",
     "parse5": "^8.0.0",
     "posthog-node": "~5.24.10",
     "protobufjs": "^8.8.1",
