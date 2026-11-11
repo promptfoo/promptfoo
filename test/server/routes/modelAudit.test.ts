@@ -1,12 +1,17 @@
 import { spawn } from 'child_process';
+import { once } from 'events';
 import fs from 'fs';
+import { request as httpRequest } from 'http';
 import os from 'os';
 import path from 'path';
 
+import express from 'express';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { modelAuditRouter } from '../../../src/server/routes/modelAudit';
 import { createApp } from '../../../src/server/server';
 import { asMockChildProcess, createMockChildProcess } from '../../util/mockChildProcess';
 import { setupTestServer } from '../../util/testServer';
+import { createDeferred } from '../../util/utils';
 
 const createScanResult = (total_checks: number) => ({
   total_checks,
@@ -159,6 +164,103 @@ describe('Model Audit Routes', () => {
   });
 
   describe('POST /api/model-audit/scan', () => {
+    it.each(['close', 'error', 'persistence'] as const)(
+      'should ignore %s completion after the client disconnects',
+      async (terminalEvent) => {
+        mockedCheckModelAuditInstalled.mockResolvedValue({ installed: true, version: '0.2.30' });
+        const testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'model-audit-disconnect-'));
+        const testFilePath = path.join(testDir, 'model.pkl');
+        fs.writeFileSync(testFilePath, 'test data');
+        const pendingSave = createDeferred<Awaited<ReturnType<typeof ModelAudit.create>>>();
+        const saveStarted = createDeferred<void>();
+        const savedAudit = {
+          id: 'disconnected-scan',
+        } as Awaited<ReturnType<typeof ModelAudit.create>>;
+        const createSpy = vi.spyOn(ModelAudit, 'create').mockImplementation(async () => {
+          saveStarted.resolve();
+          return terminalEvent === 'persistence' ? pendingSave.promise : savedAudit;
+        });
+        const responseParseSpy = vi.spyOn(ModelAuditSchemas.Scan.Response, 'parse');
+        const errorParseSpy = vi.spyOn(ModelAuditSchemas.Scan.ErrorResponse, 'parse');
+        let closeChild!: (code: number) => Promise<void>;
+        let errorChild!: (error: Error) => void;
+        const child = createMockChildProcess({
+          stdoutData: JSON.stringify(createScanResult(1)),
+          customEventHandlers: {
+            close: (callback) => {
+              closeChild = callback as typeof closeChild;
+            },
+            error: (callback) => {
+              errorChild = callback;
+            },
+          },
+        });
+        const spawned = createDeferred<void>();
+        mockedSpawn.mockImplementation(() => {
+          spawned.resolve();
+          return asMockChildProcess(child);
+        });
+        const disconnected = createDeferred<void>();
+        const app = express();
+        app.use(express.json());
+        app.use((_req, res, next) => {
+          res.once('close', disconnected.resolve);
+          next();
+        });
+        app.use('/api/model-audit', modelAuditRouter);
+        const server = app.listen(0, '127.0.0.1');
+        await once(server, 'listening');
+        const address = server.address();
+        if (!address || typeof address === 'string') {
+          throw new Error('Expected a loopback address');
+        }
+        const request = httpRequest({
+          host: '127.0.0.1',
+          port: address.port,
+          method: 'POST',
+          path: '/api/model-audit/scan',
+          headers: { 'Content-Type': 'application/json' },
+        });
+        request.on('error', () => {});
+
+        try {
+          request.end(JSON.stringify({ paths: [testFilePath] }));
+          await spawned.promise;
+          let pendingClose: Promise<void> | undefined;
+          if (terminalEvent === 'persistence') {
+            // Flush the mocked stdout data before starting persistence.
+            await new Promise<void>((resolve) => setImmediate(resolve));
+            pendingClose = closeChild(0);
+            await saveStarted.promise;
+          }
+          // The request body has completed; closing the response connection must
+          // still cancel the scan even though IncomingMessage.close already fired.
+          request.destroy();
+          await disconnected.promise;
+          if (terminalEvent === 'close') {
+            await closeChild(0);
+          } else if (terminalEvent === 'error') {
+            errorChild(new Error('modelaudit exited after disconnect'));
+          } else {
+            pendingSave.resolve(savedAudit);
+            await pendingClose;
+          }
+
+          expect(createSpy).toHaveBeenCalledTimes(terminalEvent === 'persistence' ? 1 : 0);
+          expect(responseParseSpy).not.toHaveBeenCalled();
+          expect(errorParseSpy).not.toHaveBeenCalled();
+          expect(child.kill).toHaveBeenCalledWith('SIGTERM');
+        } finally {
+          request.destroy();
+          await new Promise<void>((resolve) => server.close(() => resolve()));
+          createSpy.mockRestore();
+          responseParseSpy.mockRestore();
+          errorParseSpy.mockRestore();
+          fs.rmSync(testDir, { recursive: true, force: true });
+        }
+      },
+    );
+
     it('should handle request without options object', async () => {
       // This tests the fix for: options = {} default when options is undefined
       mockedCheckModelAuditInstalled.mockResolvedValue({ installed: true, version: '0.2.20' });

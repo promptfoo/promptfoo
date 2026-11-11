@@ -2219,6 +2219,82 @@ describe('AnthropicMessagesProvider', () => {
       },
     );
 
+    it.each(['{"query":', 'not json', '   '])(
+      'continues after malformed MCP input %j without losing usage or executing the tool',
+      async (input) => {
+        provider = createProvider('claude-sonnet-4-6', createMcpOptions());
+
+        const createSpy = vi
+          .spyOn(provider.anthropic.messages, 'create')
+          .mockResolvedValueOnce({
+            content: [{ ...createSearchToolUse('unused'), input }],
+            stop_reason: 'tool_use',
+            usage: { input_tokens: 10, output_tokens: 5, server_tool_use: null },
+          } as Anthropic.Messages.Message)
+          .mockResolvedValueOnce({
+            content: [{ type: 'text', text: 'The tool input was invalid.' }],
+            stop_reason: 'end_turn',
+            usage: { input_tokens: 7, output_tokens: 4, server_tool_use: null },
+          } as Anthropic.Messages.Message);
+
+        const result = await provider.callApi('Find clean energy companies');
+
+        expect(result.error).toBeUndefined();
+        expect(result.output).toBe('The tool input was invalid.');
+        expect(result.tokenUsage).toMatchObject({ prompt: 17, completion: 9, total: 26 });
+        expect(mcpMocks.callTool).not.toHaveBeenCalled();
+        expect(createSpy).toHaveBeenCalledTimes(2);
+        expect(createSpy.mock.calls[1][0].messages.at(-1)).toEqual({
+          role: 'user',
+          content: [
+            {
+              type: 'tool_result',
+              tool_use_id: 'toolu_search',
+              content: expect.stringContaining('MCP Tool Error (search_companies):'),
+              is_error: true,
+            },
+          ],
+        });
+        expect(result.metadata?.toolCalls).toEqual([
+          {
+            id: 'toolu_search',
+            name: 'search_companies',
+            input,
+            output: expect.stringContaining('MCP Tool Error (search_companies):'),
+            is_error: true,
+          },
+        ]);
+      },
+    );
+
+    it.each([false, true])(
+      'normalizes valid JSON MCP input in metadata when the tool fails: %s',
+      async (isError) => {
+        provider = createProvider('claude-sonnet-4-6', createMcpOptions());
+        mcpMocks.callTool.mockResolvedValueOnce({ content: 'Tool result', isError });
+        vi.spyOn(provider.anthropic.messages, 'create')
+          .mockResolvedValueOnce({
+            content: [{ ...createSearchToolUse('unused'), input: '{"query":"solar"}' }],
+            stop_reason: 'tool_use',
+            usage: { input_tokens: 10, output_tokens: 5, server_tool_use: null },
+          } as Anthropic.Messages.Message)
+          .mockResolvedValueOnce({
+            content: [{ type: 'text', text: 'Final answer' }],
+            stop_reason: 'end_turn',
+            usage: { input_tokens: 7, output_tokens: 4, server_tool_use: null },
+          } as Anthropic.Messages.Message);
+
+        const result = await provider.callApi('Find solar companies');
+
+        expect(result.error).toBeUndefined();
+        expect(result.output).toBe('Final answer');
+        expect(mcpMocks.callTool).toHaveBeenCalledWith('search_companies', { query: 'solar' });
+        expect(result.metadata?.toolCalls).toMatchObject([
+          { input: { query: 'solar' }, is_error: isError },
+        ]);
+      },
+    );
+
     it('leaves non-MCP Anthropic tool_use blocks on the existing output path', async () => {
       provider = createProvider('claude-sonnet-4-6', createMcpOptions());
 

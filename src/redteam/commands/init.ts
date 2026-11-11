@@ -152,9 +152,7 @@ async function getSystemPrompt(numVariablesRequired: number = 1): Promise<string
     default: prompt,
   });
   prompt = prompt.replace(NOTE, '');
-  const variables = extractVariablesFromTemplate(prompt);
-  if (variables.length < numVariablesRequired) {
-    // Give the user another chance to edit their prompt
+  while (extractVariablesFromTemplate(prompt).length < numVariablesRequired) {
     logger.info(
       chalk.red(
         `Your prompt must include ${numVariablesRequired} ${
@@ -166,6 +164,7 @@ async function getSystemPrompt(numVariablesRequired: number = 1): Promise<string
       message: 'Enter the prompt you want to test against:',
       default: prompt,
     });
+    prompt = prompt.replace(NOTE, '');
   }
 
   return prompt;

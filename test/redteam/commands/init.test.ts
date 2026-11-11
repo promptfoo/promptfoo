@@ -203,12 +203,13 @@ describe('redteamInit', () => {
 
     vi.mocked(input).mockResolvedValue('target');
     vi.mocked(select)
+      .mockReset()
       .mockResolvedValueOnce('prompt_model_chatbot')
       .mockResolvedValueOnce('now')
       .mockResolvedValueOnce('openai:gpt-5.6')
       .mockResolvedValueOnce('default')
       .mockResolvedValueOnce('default');
-    vi.mocked(editor).mockResolvedValue('User query: {{prompt}}');
+    vi.mocked(editor).mockReset().mockResolvedValue('User query: {{prompt}}');
     vi.mocked(confirm).mockResolvedValue(true);
     vi.mocked(readGlobalConfig).mockReturnValue({ hasHarmfulRedteamConsent: true } as any);
     vi.mocked(fs.writeFile).mockResolvedValue(undefined);
@@ -217,6 +218,62 @@ describe('redteamInit', () => {
   afterEach(() => {
     process.exitCode = originalExitCode;
     vi.restoreAllMocks();
+  });
+
+  it('keeps validating edited prompts until one includes an injectable variable', async () => {
+    vi.mocked(editor)
+      .mockResolvedValueOnce('First prompt without a variable')
+      .mockResolvedValueOnce('Second prompt without a variable')
+      .mockResolvedValueOnce('User query: {{question}}');
+    vi.mocked(confirm).mockResolvedValue(false);
+
+    await redteamInit(undefined);
+
+    expect(editor).toHaveBeenCalledTimes(3);
+    expect(editor).toHaveBeenNthCalledWith(2, {
+      message: 'Enter the prompt you want to test against:',
+      default: 'First prompt without a variable',
+    });
+    expect(editor).toHaveBeenNthCalledWith(3, {
+      message: 'Enter the prompt you want to test against:',
+      default: 'Second prompt without a variable',
+    });
+    const config = yaml.load(vi.mocked(fs.writeFile).mock.calls[0][1] as string) as {
+      prompts: string[];
+    };
+    expect(config.prompts).toEqual(['User query: {{question}}']);
+  });
+
+  it('removes the instructional note before validating every edit', async () => {
+    const note =
+      'NOTE: your prompt must include one or more injectable variables like {{prompt}} or {{name}} as a placeholder for user input (REMOVE THIS LINE)';
+    vi.mocked(editor)
+      .mockResolvedValueOnce('No variable')
+      .mockResolvedValueOnce(note)
+      .mockResolvedValueOnce(`User query: {{question}}\n${note}`);
+    vi.mocked(confirm).mockResolvedValue(false);
+
+    await redteamInit(undefined);
+
+    expect(editor).toHaveBeenCalledTimes(3);
+    const config = yaml.load(vi.mocked(fs.writeFile).mock.calls[0][1] as string) as {
+      prompts: string[];
+    };
+    expect(config.prompts).toEqual(['User query: {{question}}\n']);
+  });
+
+  it('propagates editor cancellation after repeated invalid prompts without writing a config', async () => {
+    const cancellation = new Error('User cancelled the editor');
+    vi.mocked(editor)
+      .mockResolvedValueOnce('First invalid prompt')
+      .mockResolvedValueOnce('Second invalid prompt')
+      .mockRejectedValueOnce(cancellation);
+
+    await expect(redteamInit(undefined)).rejects.toBe(cancellation);
+
+    expect(editor).toHaveBeenCalledTimes(3);
+    expect(fs.writeFile).not.toHaveBeenCalled();
+    expect(doGenerateRedteam).not.toHaveBeenCalled();
   });
 
   it('should treat probe-limit exhaustion as an expected CLI failure', async () => {
