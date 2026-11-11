@@ -29,4 +29,4 @@ To reference prompts in Helicone:
 
 Variables from your promptfoo test cases will be automatically plugged into the Helicone prompt as variables.
 
-You can follow [this guide](https://docs.helicone.ai/features/prompts#prompts-and-experiments) to create a Prompt using Helicone
+You can follow [this guide](https://docs.helicone.ai/features/advanced-usage/prompts/overview) to create a Prompt using Helicone
