@@ -21,11 +21,10 @@ export DASHSCOPE_API_KEY=your_api_key_here
 
 The provider uses [OpenAI provider options](/docs/providers/openai); support varies by model. Example:
 
-```yaml title="promptfooconfig.yaml"
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+```yaml
 providers:
-  - alibaba:qwen-max # Simple usage
-  - id: alibaba:qwen-plus # Aliases: alicloud:, aliyun:, dashscope:
+  - alibaba:qwen3.8-max # Simple usage
+  - id: alibaba:qwen3.7-plus # Aliases: alicloud:, aliyun:, dashscope:
     config:
       temperature: 0.7
       apiKey: your_api_key_here # Alternative to DASHSCOPE_API_KEY environment variable
@@ -33,6 +32,8 @@ providers:
 ```
 
 :::note
+
+The equivalent provider prefixes are `alicloud:`, `aliyun:`, and `dashscope:`. For new configurations, Alibaba recommends `qwen3.7-plus` for balanced use, `qwen3.8-flash` for lower cost, or `qwen3.8-max` for stronger reasoning. Check the [model catalog for your region](https://www.alibabacloud.com/help/en/model-studio/text-generation-model); model availability differs by region.
 
 If you're using the Alibaba Cloud Beijing region console, switch the base URL to `https://dashscope.aliyuncs.com/compatible-mode/v1` instead of the international endpoint.
 
@@ -44,6 +45,12 @@ The built-in Alibaba provider implements OpenAI-compatible Chat Completions and 
 
 ### Qwen 3 Flagship
 
+- `qwen3.8-max` / `qwen3.8-max-0902` - Current flagship with text, image, and video input and a 1M-token context window
+- `qwen3.8-flash` - Faster Qwen3.8 model with a 1M-token context window
+- `qwen3.7-plus` / `qwen3.7-plus-2026-05-26` - General-purpose model with thinking, vision, and tool calling
+- `qwen3.7-flash` / `qwen3.7-flash-2026-07-15` - Lower-cost Qwen3.7 model
+- `qwen3.7-max` / `qwen3.7-max-2026-06-08` - Previous flagship
+- `qwen3.6-plus` / `qwen3.6-flash` and `qwen3.5-plus` / `qwen3.5-flash` - Previous model families
 - `qwen3-max` - Supports reasoning and tool calling
 - `qwen3-max-preview` - Preview version with thinking mode support
 - `qwen3-max-2025-09-23` - September 2025 snapshot
@@ -58,6 +65,7 @@ The built-in Alibaba provider implements OpenAI-compatible Chat Completions and 
 
 ### Qwen 3 Omni & Realtime
 
+- `qwen3.8-omni-flash` - Text output from text, image, audio, and video input through Chat Completions; use the separate realtime API for `qwen3.8-omni-flash-realtime`
 - `qwen3-omni-flash` / `qwen3-omni-flash-2025-09-15` - Supports speech and vision in thinking and non-thinking modes
 - `qwen3-omni-flash-realtime` / `qwen3-omni-flash-realtime-2025-09-15` - Streaming realtime with audio stream input and VAD
 - `qwen3-omni-30b-a3b-captioner` - Dedicated audio captioning model (speech, ambient sounds, music)
@@ -72,6 +80,7 @@ The built-in Alibaba provider implements OpenAI-compatible Chat Completions and 
 - `qvq-max` / `qvq-max-latest` / `qvq-max-2025-03-25` - Visual reasoning models (commercial)
 - `qvq-72b-preview` - Experimental visual reasoning research model
 - **DeepSeek models** (hosted by Alibaba Cloud):
+  - `deepseek-v4.1-flash` / `deepseek-v4-pro-0813` - Current hosted Flash and Pro models; these IDs differ from the direct DeepSeek API
   - `deepseek-v3.2-exp` / `deepseek-v3.1` / `deepseek-v3` - DeepSeek V3 models
   - `deepseek-r1` / `deepseek-r1-0528` - DeepSeek reasoning models
   - `deepseek-r1-distill-qwen-{1.5b,7b,14b,32b}` - Distilled on Qwen2.5
@@ -138,7 +147,7 @@ All support 131K context (129,024 in, 8,192 out)
 
 ### Qwen 3 Open-source Models
 
-Latest open-source Qwen3 models with thinking mode support:
+Open-source Qwen3 models with thinking mode support:
 
 - `qwen3-next-80b-a3b-thinking` / `qwen3-next-80b-a3b-instruct` - Next-gen 80B (September 2025)
 - `qwen3-235b-a22b-thinking-2507` / `qwen3-235b-a22b-instruct-2507` - 235B July 2025 versions
@@ -153,7 +162,11 @@ Latest open-source Qwen3 models with thinking mode support:
 
 **Kimi (Moonshot AI):**
 
+- `kimi-k3` - Current Kimi model
+- `kimi-k2.6` - Previous Kimi model with a 256K context window
 - `moonshot-kimi-k2-instruct` - First open-source trillion-parameter MoE model in China (activates 32B parameters)
+
+**Z.AI (GLM):** `ZHIPU/GLM-5.3` and `glm-5.2`. Check the [regional model catalog](https://www.alibabacloud.com/help/en/model-studio/models) for access and endpoint requirements.
 
 ### Embeddings
 
@@ -161,6 +174,7 @@ Use `alibaba:embedding:<model>` for embeddings. The `alibaba:<model>` shorthand 
 
 - `text-embedding-v3` - 1,024d vectors, 8,192 token limit, 50+ languages
 - `text-embedding-v4` - Latest Qwen3-Embedding with flexible dimensions (64-2048d), 100+ languages
+- `qwen3.7-text-embedding` - Newer Qwen3.7 text embeddings; availability depends on the region
 
 ```yaml
 defaultTest:
@@ -178,14 +192,14 @@ See the [DashScope model catalog](https://www.alibabacloud.com/help/en/model-stu
 
 ## Additional Configuration
 
-Put DashScope-specific request fields under `config.passthrough`. For example, `vl_high_resolution_images` enables higher-resolution image input on `qwen-vl-max`:
+Put DashScope-specific request fields under `config.passthrough`. For example, `enable_thinking` controls thinking mode on Qwen3.8 and Qwen3.7 chat models:
 
 ```yaml
 providers:
-  - id: alibaba:qwen-vl-max
+  - id: alibaba:qwen3.8-max
     config:
       passthrough:
-        vl_high_resolution_images: true
+        enable_thinking: true
 ```
 
 Standard [OpenAI parameters](/docs/providers/openai/#configuring-parameters) (temperature, max_tokens) are supported. Base URL: `https://dashscope-intl.aliyuncs.com/compatible-mode/v1` (or `https://dashscope.aliyuncs.com/compatible-mode/v1` for the Beijing region).

@@ -113,12 +113,10 @@ Set standard OpenAI options directly under `config`. Put proxy-specific request 
 
 ```yaml
 providers:
-  - id: litellm:claude-4-sonnet # Sends LITELLM_API_KEY; the proxy holds ANTHROPIC_API_KEY
+  - id: litellm:claude-sonnet-5 # Sends LITELLM_API_KEY; the proxy holds ANTHROPIC_API_KEY
     config:
       # apiKey: "{{ env.LITELLM_API_KEY }}"  # optional, overrides LITELLM_API_KEY
-      temperature: 0.7
       max_tokens: 4096
-      top_p: 0.9
       passthrough:
         metadata:
           tags: [evals]
@@ -190,7 +188,7 @@ description: LiteLLM evaluation example
 providers:
   # Chat models
   - id: litellm:gpt-5-mini
-  - id: litellm:claude-sonnet-4-5 # Sends LITELLM_API_KEY; the proxy holds ANTHROPIC_API_KEY
+  - id: litellm:claude-sonnet-5 # Sends LITELLM_API_KEY; the proxy holds ANTHROPIC_API_KEY
     # config:
     # apiKey: "{{ env.LITELLM_API_KEY }}"  # optional, overrides LITELLM_API_KEY
 
@@ -218,7 +216,7 @@ tests:
 LiteLLM supports models from all major providers:
 
 - **OpenAI**: GPT-4.1, GPT-4, GPT-3.5, embeddings, and more
-- **Anthropic**: Claude 4, Claude 3.7, Claude 3.5, Claude 3, and earlier models
+- **Anthropic**: Claude 5, Claude 4.x, and earlier models
 - **Google**: Gemini and PaLM models
 - **Meta**: Llama models
 - **Mistral**: All Mistral models

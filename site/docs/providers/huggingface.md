@@ -40,8 +40,9 @@ This provider extends the OpenAI provider and supports OpenAI-compatible feature
 
 - Proper message formatting
 - Tool/function calling (model-dependent)
-- Streaming (model-dependent)
 - Token counting (when returned by the provider)
+
+The `huggingface:chat:` provider waits for a complete JSON response; streaming is not supported.
 
 Browse available chat models at [huggingface.co/models?other=conversational](https://huggingface.co/models?other=conversational).
 
@@ -71,7 +72,7 @@ providers:
   - id: huggingface:chat:meta-llama/Llama-3.3-70B-Instruct:fastest
 ```
 
-Available models and providers change over time. To find which providers currently support a model, check the model page on HuggingFace or query the API:
+Available models and providers change over time. To find which providers support a model, check the model page on HuggingFace or query the API:
 
 ```bash
 curl https://huggingface.co/api/models/MODEL_ID?expand[]=inferenceProviderMapping
@@ -200,7 +201,7 @@ You can also explicitly disable chat completion format with `chatCompletion: fal
 
 ## Inference endpoints
 
-HuggingFace provides the ability to pay for private hosted inference endpoints. First, go the [Create a new Endpoint](https://ui.endpoints.huggingface.co/new) and select a model and hosting setup.
+Hugging Face offers paid, dedicated [Inference Endpoints](https://huggingface.co/docs/inference-endpoints/guides/create_endpoint). Create an endpoint and choose a model, hosting setup, and security level.
 
 ![huggingface inference endpoint creation](/img/docs/huggingface-create-endpoint.png)
 
