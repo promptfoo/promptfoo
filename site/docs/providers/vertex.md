@@ -90,6 +90,8 @@ Use `vertex:<model-id>` with the ID published for Google-managed Claude. Copy da
 
 **Claude 5:**
 
+- `vertex:claude-fable-5-2` - Claude Fable 5.2 with always-on adaptive thinking, $8/$40 per MTok, and $0.20/MTok cache reads
+- `vertex:claude-mythos-5-2` - Claude Mythos 5.2 (provider approval required)
 - `vertex:claude-fable-5-1` - Claude Fable 5.1 with always-on adaptive thinking and $0.25/MTok cache reads
 - `vertex:claude-mythos-5-1` - Claude Mythos 5.1 (provider approval required)
 - `vertex:claude-fable-5` - Claude Fable 5 with a 1M-token context window and always-on adaptive thinking
@@ -115,7 +117,7 @@ curl -X POST \
   -d '{"publisherModelConfig":{"dataSharingEnabledProvider":"anthropic"}}'
 ```
 
-The `claude-mythos-5` and `claude-mythos-5-1` IDs require approval from the provider.
+The `claude-mythos-5`, `claude-mythos-5-1`, and `claude-mythos-5-2` IDs require approval from the provider.
 
 **Claude 4.8:**
 
@@ -172,8 +174,8 @@ The following models have been retired on Vertex AI according to [Google's partn
 Supported Claude models require explicit access enablement through the [Vertex AI Model Garden](https://console.cloud.google.com/vertex-ai/publishers). Navigate to the Model Garden, search for "Claude", and enable the supported models you need.
 :::
 
-Claude context limits vary by model. Fable 5, Mythos 5, Opus 5.5, Opus 5, and Sonnet 5
-have a 1M-token context window.
+Claude context limits vary by model. Fable and Mythos 5 through 5.2, Opus 5.5, Opus 5, and
+Sonnet 5 have a 1M-token context window.
 
 ### Llama Models
 
