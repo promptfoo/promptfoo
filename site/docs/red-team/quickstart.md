@@ -130,6 +130,8 @@ If you don't want to use the UI to start a red team, you can use the `init` comm
 promptfoo redteam init --no-gui
 ```
 
+When entering a prompt, include an injectable variable such as `{{prompt}}`. The CLI asks you to edit it again until a variable is present.
+
 :::
 
 ## Run the scan
