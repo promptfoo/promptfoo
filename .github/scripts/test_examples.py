@@ -7,6 +7,7 @@ import sys
 import tempfile
 import types
 import unittest
+from contextlib import contextmanager
 from pathlib import Path
 from unittest.mock import call as mock_call
 from unittest.mock import patch
@@ -29,7 +30,7 @@ SCRIPT = Path(__file__).with_name("examples.py")
 class SelectionTests(unittest.TestCase):
     def test_full_run_preserves_every_registered_runtime(self):
         rows = select_examples(None)
-        self.assertEqual(len(rows), 22)
+        self.assertEqual(len(rows), 24)
         self.assertEqual(
             [(row["example"], row["python"]) for row in rows],
             [
@@ -49,6 +50,8 @@ class SelectionTests(unittest.TestCase):
                 ("langgraph", "3.14"),
                 ("rag-pdf", "3.10"),
                 ("rag-pdf-cli", "3.14"),
+                ("image-classification", "3.11"),
+                ("image-classification", "3.14"),
                 ("f-score", "3.10"),
                 ("f-score", "3.14"),
                 ("google-adk", "3.12"),
@@ -139,6 +142,27 @@ class SelectionTests(unittest.TestCase):
                 (ROOT / example.directory / example.suites[2][0]).resolve(),
                 ROOT / ".github/scripts/tests/openai_agents",
             )
+
+    def test_image_changes_select_generator_tests_without_node(self):
+        for filename in ("dataset_gen.py", "test_dataset_gen.py", "requirements.txt"):
+            with self.subTest(filename=filename):
+                self.assertEqual(
+                    select_examples([f"examples/eval-image-classification/{filename}"]),
+                    [
+                        {
+                            "example": "image-classification",
+                            "python": version,
+                            "node": False,
+                        }
+                        for version in ("3.11", "3.14")
+                    ],
+                )
+        self.assertEqual(
+            EXAMPLES["image-classification"].suites, ((".", "test_dataset_gen.py"),)
+        )
+        self.assertEqual(
+            select_examples(["examples/eval-image-classification-other/file.py"]), []
+        )
 
     def test_fscore_changes_select_its_python_only_dependency_suite(self):
         for filename in ("prepare_data.py", "dependencies_test.py", "requirements.txt"):
@@ -407,6 +431,18 @@ class DockerPullTests(unittest.TestCase):
             sleep.assert_not_called()
 
 
+@contextmanager
+def mock_example_runtime(python_minor, *, side_effect=None):
+    """Capture one example invocation without creating a venv or running commands."""
+    version = types.SimpleNamespace(major=3, minor=python_minor)
+    with (
+        patch("examples.sys.version_info", version),
+        patch("examples.venv.EnvBuilder.create") as create,
+        patch("examples.subprocess.run", side_effect=side_effect) as run,
+    ):
+        yield run, create
+
+
 class RunnerTests(unittest.TestCase):
     def test_example_failure_is_never_retried(self):
         def fail_example(command, **_kwargs):
@@ -417,12 +453,8 @@ class RunnerTests(unittest.TestCase):
             return subprocess.CompletedProcess(command, 0, stderr="")
 
         with (
-            patch(
-                "examples.sys.version_info", types.SimpleNamespace(major=3, minor=10)
-            ),
+            mock_example_runtime(10, side_effect=fail_example) as (run, _),
             patch("examples.Path.is_file", return_value=True),
-            patch("examples.venv.EnvBuilder.create"),
-            patch("examples.subprocess.run", side_effect=fail_example) as run,
             patch("examples.time.sleep") as sleep,
             self.assertRaises(subprocess.CalledProcessError),
         ):
@@ -440,13 +472,8 @@ class RunnerTests(unittest.TestCase):
         for minor in (10, 14):
             with (
                 self.subTest(python=minor),
-                patch(
-                    "examples.sys.version_info",
-                    types.SimpleNamespace(major=3, minor=minor),
-                ),
+                mock_example_runtime(minor) as (run, _),
                 patch("examples.Path.is_file", return_value=True),
-                patch("examples.venv.EnvBuilder.create"),
-                patch("examples.subprocess.run") as run,
             ):
                 run_example("docker-sandbox")
             commands = [call.args[0] for call in run.call_args_list]
@@ -489,13 +516,8 @@ class RunnerTests(unittest.TestCase):
 
             with (
                 self.subTest(primary_errors=primary_errors),
-                patch(
-                    "examples.sys.version_info",
-                    types.SimpleNamespace(major=3, minor=10),
-                ),
+                mock_example_runtime(10, side_effect=pull) as (run, _),
                 patch("examples.Path.is_file", return_value=True),
-                patch("examples.venv.EnvBuilder.create"),
-                patch("examples.subprocess.run", side_effect=pull) as run,
                 patch("examples.time.sleep") as sleep,
             ):
                 run_example("docker-sandbox")
@@ -547,13 +569,8 @@ class RunnerTests(unittest.TestCase):
 
             with (
                 self.subTest(fallback_error=fallback_error),
-                patch(
-                    "examples.sys.version_info",
-                    types.SimpleNamespace(major=3, minor=10),
-                ),
+                mock_example_runtime(10, side_effect=fail_pull) as (run, _),
                 patch("examples.Path.is_file", return_value=True),
-                patch("examples.venv.EnvBuilder.create"),
-                patch("examples.subprocess.run", side_effect=fail_pull) as run,
                 patch("examples.time.sleep"),
                 self.assertRaises(subprocess.CalledProcessError) as raised,
             ):
@@ -593,13 +610,8 @@ class RunnerTests(unittest.TestCase):
 
             with (
                 self.subTest(operation=operation, stderr=stderr),
-                patch(
-                    "examples.sys.version_info",
-                    types.SimpleNamespace(major=3, minor=10),
-                ),
+                mock_example_runtime(10, side_effect=fail_docker) as (run, _),
                 patch("examples.Path.is_file", return_value=True),
-                patch("examples.venv.EnvBuilder.create"),
-                patch("examples.subprocess.run", side_effect=fail_docker) as run,
                 patch("examples.time.sleep") as sleep,
                 self.assertRaises(subprocess.CalledProcessError),
             ):
@@ -616,12 +628,8 @@ class RunnerTests(unittest.TestCase):
 
     def test_adk_optional_adapter_is_isolated_and_runs_its_own_suite(self):
         with (
-            patch(
-                "examples.sys.version_info", types.SimpleNamespace(major=3, minor=12)
-            ),
+            mock_example_runtime(12) as (run, create),
             patch("examples.Path.is_file", return_value=True),
-            patch("examples.venv.EnvBuilder.create") as create,
-            patch("examples.subprocess.run") as run,
         ):
             run_example("google-adk-litellm")
         calls = run.call_args_list
@@ -645,13 +653,7 @@ class RunnerTests(unittest.TestCase):
         self.assertFalse(environment.exists())
 
     def test_langchain_runs_its_existing_provider_suite_in_isolation(self):
-        with (
-            patch(
-                "examples.sys.version_info", types.SimpleNamespace(major=3, minor=10)
-            ),
-            patch("examples.venv.EnvBuilder.create") as create,
-            patch("examples.subprocess.run") as run,
-        ):
+        with mock_example_runtime(10) as (run, create):
             run_example("redteam-langchain")
         environment = create.call_args.args[0]
         commands = [call.args[0] for call in run.call_args_list]
@@ -688,14 +690,10 @@ class RunnerTests(unittest.TestCase):
         for name in ("openai-agents", "openai-agents-minimums", "openai-agents-otel"):
             with (
                 self.subTest(name=name),
-                patch(
-                    "examples.sys.version_info",
-                    types.SimpleNamespace(
-                        major=3, minor=10 if name.endswith("minimums") else 12
-                    ),
+                mock_example_runtime(10 if name.endswith("minimums") else 12) as (
+                    run,
+                    _,
                 ),
-                patch("examples.venv.EnvBuilder.create"),
-                patch("examples.subprocess.run") as run,
                 patch("examples.Path.is_file", return_value=True),
             ):
                 run_example(name)
@@ -722,12 +720,7 @@ class RunnerTests(unittest.TestCase):
                 minimum_constraints(requirements)
 
     def test_upgrade_preserves_legacy_environment_and_uses_isolated_python(self):
-        version = types.SimpleNamespace(major=3, minor=10)
-        with (
-            patch("examples.sys.version_info", version),
-            patch("examples.venv.EnvBuilder.create") as create,
-            patch("examples.subprocess.run") as run,
-        ):
+        with mock_example_runtime(10) as (run, create):
             run_example("python-provider-upgrade")
         environment = create.call_args.args[0]
         calls = run.call_args_list
@@ -751,13 +744,7 @@ class RunnerTests(unittest.TestCase):
             ],
             ["python-provider-upgrade"],
         )
-        with (
-            patch(
-                "examples.sys.version_info", types.SimpleNamespace(major=3, minor=14)
-            ),
-            patch("examples.venv.EnvBuilder.create"),
-            patch("examples.subprocess.run") as run,
-        ):
+        with mock_example_runtime(14) as (run, _):
             run_example("python-provider-minimums")
         calls = run.call_args_list
         self.assertIn("-c", calls[0].args[0])
@@ -765,18 +752,12 @@ class RunnerTests(unittest.TestCase):
         self.assertIn("test", calls[2].args[0])
 
     def test_install_failure_stops_before_tests(self):
+        failure = subprocess.CalledProcessError(1, "pip")
         with (
-            patch(
-                "examples.sys.version_info", types.SimpleNamespace(major=3, minor=10)
-            ),
-            patch("examples.venv.EnvBuilder.create"),
-            patch(
-                "examples.subprocess.run",
-                side_effect=subprocess.CalledProcessError(1, "pip"),
-            ) as run,
+            mock_example_runtime(10, side_effect=failure) as (run, _),
+            self.assertRaises(subprocess.CalledProcessError),
         ):
-            with self.assertRaises(subprocess.CalledProcessError):
-                run_example("python-provider-upgrade")
+            run_example("python-provider-upgrade")
         self.assertEqual(run.call_count, 1)
 
 
