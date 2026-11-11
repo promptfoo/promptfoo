@@ -7,13 +7,11 @@ export interface HelperTextProps extends React.HTMLAttributes<HTMLParagraphEleme
   error?: boolean;
 }
 
-/**
- * HelperText displays supplementary information below form inputs.
- * Use for hints, validation messages, or additional context.
- */
-function HelperText({ className, error, children, ...props }: HelperTextProps) {
+/** Displays input hints or validation messages; errors are announced by default. */
+function HelperText({ className, error, children, role, ...props }: HelperTextProps) {
   return (
     <p
+      role={role ?? (error ? 'alert' : undefined)}
       className={cn(
         'mt-1 text-xs',
         error ? 'text-destructive' : 'text-muted-foreground',
