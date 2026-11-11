@@ -59,4 +59,12 @@ It validates only the explicitly recognized measurement fields.
 It does not assess scientific correctness, contextual plausibility,
 or whether a measurement makes sense in a particular physical scenario.
 
+The validator expects recognized measurement values to be numeric
+values, not numeric strings. For example, `"0.5"` is rejected even
+though it represents a valid numeric value.
+
+Unrecognized fields are ignored. For example, a valid
+`mass_kg: 12` value will pass even if the same input also contains
+an unrecognized field such as `speed_km_s: 999999`.
+
 All verdicts are deterministic and independent of model judgment.
