@@ -3252,5 +3252,50 @@ describe('evaluatorHelpers', () => {
       const defaultAfterSet = '{% macro m(x=s) %}{{x}}{% endmacro %}{% set s = "a" %}{{m()}}';
       expect(await renderPrompt(toPrompt('{{v}}'), { v: defaultAfterSet })).toBe('a');
     });
+
+    it('excludes macro defaults bypassed by supplied call arguments', async () => {
+      const supplied = "{% macro m(x=missing) %}{{ x ~ '!' }}{% endmacro %}{{ m(x='hello') ~ '' }}";
+      expect(await renderPrompt(toPrompt('{{v}}'), { v: supplied })).toBe('hello!');
+
+      const repeated = supplied + "{{ m(x='again') ~ '' }}";
+      expect(await renderPrompt(toPrompt('{{v}}'), { v: repeated })).toBe('hello!again!');
+
+      const laterMissing = supplied + "{{ m() ~ '' }}";
+      expect(await renderPrompt(toPrompt('{{v}}'), { v: laterMissing })).toBe(laterMissing);
+
+      const mixed =
+        "{% macro m(x=missing, y=alsoMissing) %}{{ x ~ y }}{% endmacro %}{{ m('a', y='b') }}";
+      expect(await renderPrompt(toPrompt('{{v}}'), { v: mixed })).toBe('ab');
+
+      const partial =
+        "{% macro m(x=missing, y=alsoMissing) %}{{ x ~ y }}{% endmacro %}{{ m('a') }}";
+      expect(await renderPrompt(toPrompt('{{v}}'), { v: partial })).toBe(partial);
+    });
+
+    it('carries bindings guaranteed by both conditional branches', async () => {
+      const bothBranches =
+        "{% if enabled %}{% set s='a' %}{% else %}{% set s='b' %}{% endif %}{{ s ~ '!' }}";
+      expect(await renderPrompt(toPrompt('{{v}}'), { v: bothBranches, enabled: true })).toBe('a!');
+      expect(await renderPrompt(toPrompt('{{v}}'), { v: bothBranches, enabled: false })).toBe('b!');
+
+      const oneBranch = "{% if enabled %}{% set s='a' %}{% endif %}{{ s ~ '!' }}";
+      expect(await renderPrompt(toPrompt('{{v}}'), { v: oneBranch, enabled: true })).toBe(
+        oneBranch,
+      );
+
+      const elif =
+        "{% if first %}{% set s='a' %}{% elif second %}{% set s='b' %}{% else %}{% set s='c' %}{% endif %}{{ s ~ '!' }}";
+      expect(
+        await renderPrompt(toPrompt('{{v}}'), {
+          v: elif,
+          first: false,
+          second: false,
+        }),
+      ).toBe('c!');
+
+      const existence =
+        "{% if user is defined %}{% set s='a' %}{% else %}{% set s='b' %}{% endif %}{{ s ~ '!' }}";
+      expect(await renderPrompt(toPrompt('{{v}}'), { v: existence })).toBe('b!');
+    });
   });
 });

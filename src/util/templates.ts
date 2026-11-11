@@ -54,10 +54,12 @@ type DeferredMacro = {
   analyzing: boolean;
 };
 
+type MacroAnalysisMemo = Map<DeferredMacro, Set<string>>;
+
 class LinkedScope implements ReadonlySet<string> {
   private readonly names = new Set<string>();
   private readonly macros = new Map<string, DeferredMacro>();
-  private fallbackMacroMemo?: Set<DeferredMacro>;
+  private fallbackMacroMemo?: MacroAnalysisMemo;
 
   constructor(
     private readonly parent?: ReadonlySet<string>,
@@ -91,6 +93,17 @@ class LinkedScope implements ReadonlySet<string> {
     }
   }
 
+  rebindMacros(targets: unknown, value: unknown): void {
+    const sourceName = getSymbolName(value);
+    const sourceMacro = sourceName ? this.findMacro(sourceName) : undefined;
+    this.removeMacroBindings(targets);
+    if (sourceMacro) {
+      for (const name of collectBindingNames(targets)) {
+        this.registerMacro(name, sourceMacro);
+      }
+    }
+  }
+
   removeMacro(name: string): void {
     this.macros.delete(name);
   }
@@ -106,14 +119,14 @@ class LinkedScope implements ReadonlySet<string> {
     return Array.from(this.macros.values());
   }
 
-  macroAnalysisMemo(): Set<DeferredMacro> | undefined {
+  macroAnalysisMemo(): MacroAnalysisMemo | undefined {
     return (
       this.fallbackMacroMemo ??
       (this.parent instanceof LinkedScope ? this.parent.macroAnalysisMemo() : undefined)
     );
   }
 
-  replaceMacroAnalysisMemo(memo?: Set<DeferredMacro>): Set<DeferredMacro> | undefined {
+  replaceMacroAnalysisMemo(memo?: MacroAnalysisMemo): MacroAnalysisMemo | undefined {
     const previous = this.fallbackMacroMemo;
     this.fallbackMacroMemo = memo;
     return previous;
@@ -295,7 +308,7 @@ function astNodeListReferencesVariable(
   const scope = new LinkedScope(boundSymbols);
   const previousMemo = scope.macroAnalysisMemo();
   if (previousMemo === undefined) {
-    scope.replaceMacroAnalysisMemo(new Set());
+    scope.replaceMacroAnalysisMemo(new Map());
   }
   try {
     for (const item of nodes) {
@@ -306,7 +319,7 @@ function astNodeListReferencesVariable(
         return true;
       }
       if (item.typename === 'Set') {
-        scope.removeMacroBindings(item.targets);
+        scope.rebindMacros(item.targets, item.value);
         addBindingNamesInPlace(scope, item.targets);
       } else if (item.typename === 'Macro') {
         addBindingNamesInPlace(scope, item.name);
@@ -372,6 +385,13 @@ function forLikeNodeReferencesVariable(
   );
 }
 
+function isSuppliedParamName(
+  suppliedParamNames: ReadonlySet<string> | undefined,
+  paramName: string | undefined,
+): boolean {
+  return paramName !== undefined && suppliedParamNames?.has(paramName) === true;
+}
+
 /**
  * Walk a Nunjucks macro/caller signature left-to-right. Positional args and
  * earlier keyword defaults are visible to later defaults, but the current
@@ -381,6 +401,7 @@ function analyzeSignatureArgs(
   argsNode: unknown,
   variableName: ReferenceTarget | undefined,
   boundSymbols: ReadonlySet<string>,
+  suppliedParamNames?: ReadonlySet<string>,
 ): { paramNames: string[]; referencesVariable: boolean } {
   const paramNames: string[] = [];
   if (!isNunjucksAstNode(argsNode) || !Array.isArray(argsNode.children)) {
@@ -404,6 +425,7 @@ function analyzeSignatureArgs(
           isNunjucksAstNode(pair) && pair.typename === 'Pair' ? getSymbolName(pair.key) : undefined;
         if (
           variableName &&
+          !isSuppliedParamName(suppliedParamNames, keywordParamName) &&
           isNunjucksAstNode(pair) &&
           pair.typename === 'Pair' &&
           astChildReferencesVariable(pair, 'value', variableName, defaultScope)
@@ -433,12 +455,54 @@ function analyzeSignatureArgs(
   return { paramNames, referencesVariable: false };
 }
 
+function collectSuppliedMacroParamNames(
+  argsNode: unknown,
+  paramNames: readonly string[],
+): Set<string> {
+  const supplied = new Set<string>();
+  if (!isNunjucksAstNode(argsNode) || !Array.isArray(argsNode.children)) {
+    return supplied;
+  }
+
+  let positionalIndex = 0;
+  for (const child of argsNode.children) {
+    if (!isNunjucksAstNode(child)) {
+      continue;
+    }
+    if (child.typename === 'KeywordArgs' && Array.isArray(child.children)) {
+      for (const pair of child.children) {
+        const name =
+          isNunjucksAstNode(pair) && pair.typename === 'Pair' ? getSymbolName(pair.key) : undefined;
+        if (name && paramNames.includes(name)) {
+          supplied.add(name);
+        }
+      }
+      continue;
+    }
+    const name = paramNames[positionalIndex++];
+    if (name) {
+      supplied.add(name);
+    }
+  }
+  return supplied;
+}
+
+function macroAnalysisMemoKey(suppliedParamNames?: ReadonlySet<string>): string {
+  return suppliedParamNames ? Array.from(suppliedParamNames).sort().join('\0') : '';
+}
+
 function analyzeMacroBody(
   macro: DeferredMacro,
   variableName: ReferenceTarget,
-  memo?: Set<DeferredMacro>,
+  memo?: MacroAnalysisMemo,
+  suppliedParamNames?: ReadonlySet<string>,
 ): boolean {
-  if (macro.analyzing || memo?.has(macro) || macroAnalysisDepth >= MAX_MACRO_ANALYSIS_DEPTH) {
+  const memoKey = macroAnalysisMemoKey(suppliedParamNames);
+  if (
+    macro.analyzing ||
+    memo?.get(macro)?.has(memoKey) ||
+    macroAnalysisDepth >= MAX_MACRO_ANALYSIS_DEPTH
+  ) {
     return false;
   }
 
@@ -451,6 +515,7 @@ function analyzeMacroBody(
       macro.node.args,
       variableName,
       macro.definitionScope,
+      suppliedParamNames,
     );
     if (referencesVariable) {
       return true;
@@ -464,8 +529,10 @@ function analyzeMacroBody(
     }
     macroScope.add('caller');
     const result = astChildReferencesVariable(macro.node, 'body', variableName, macroScope);
-    if (!result) {
-      memo?.add(macro);
+    if (!result && memo) {
+      const memoKeys = memo.get(macro) ?? new Set<string>();
+      memoKeys.add(memoKey);
+      memo.set(macro, memoKeys);
     }
     return result;
   } finally {
@@ -642,11 +709,12 @@ function postfixNodeReferencesVariable(
         ? boundSymbols.findMacro(macroName)
         : undefined;
     const memo = boundSymbols instanceof LinkedScope ? boundSymbols.macroAnalysisMemo() : undefined;
-    if (macro && (memo?.has(macro) || macroAnalysisDepth < MAX_MACRO_ANALYSIS_DEPTH)) {
+    if (macro && macroAnalysisDepth < MAX_MACRO_ANALYSIS_DEPTH) {
       // At the depth limit, leave the macro uncalled so the final-scope pass
       // collects its dependencies without recursively expanding the whole chain.
       macro.called = true;
-      if (analyzeMacroBody(macro, variableName, memo)) {
+      const suppliedParamNames = collectSuppliedMacroParamNames(part.args, macro.paramNames);
+      if (analyzeMacroBody(macro, variableName, memo, suppliedParamNames)) {
         return true;
       }
     }
@@ -690,6 +758,70 @@ function binaryNodeReferencesVariable(
   return astReferencesVariable(current, variableName, currentParent, boundSymbols);
 }
 
+function isStatementListNode(
+  node: NunjucksAstNode,
+): node is NunjucksAstNode & { children: unknown[] } {
+  return (node.typename === 'Root' || node.typename === 'NodeList') && Array.isArray(node.children);
+}
+
+function guaranteedConditionalSetBindings(node: unknown): Set<string> {
+  if (!isNunjucksAstNode(node)) {
+    return new Set();
+  }
+  if (node.typename === 'If') {
+    if (!isNunjucksAstNode(node.else_)) {
+      return new Set();
+    }
+    const bodyBindings = guaranteedConditionalSetBindings(node.body);
+    const elseBindings = guaranteedConditionalSetBindings(node.else_);
+    return new Set(Array.from(bodyBindings).filter((name) => elseBindings.has(name)));
+  }
+  if (!isStatementListNode(node)) {
+    return new Set();
+  }
+
+  const bindings = new Set<string>();
+  for (const child of node.children) {
+    if (!isNunjucksAstNode(child)) {
+      continue;
+    }
+    if (child.typename === 'Set') {
+      for (const name of collectBindingNames(child.targets)) {
+        bindings.add(name);
+      }
+    } else if (child.typename === 'If') {
+      for (const name of guaranteedConditionalSetBindings(child)) {
+        bindings.add(name);
+      }
+    }
+  }
+  return bindings;
+}
+
+function ifNodeReferencesVariable(
+  node: NunjucksAstNode,
+  variableName: ReferenceTarget,
+  boundSymbols: ReadonlySet<string>,
+): boolean {
+  if (
+    !isExistenceGuardedConditional(node, variableName) &&
+    astChildReferencesVariable(node, 'cond', variableName, boundSymbols)
+  ) {
+    return true;
+  }
+  if (astChildReferencesVariable(node, 'body', variableName, new LinkedScope(boundSymbols))) {
+    return true;
+  }
+  if (astChildReferencesVariable(node, 'else_', variableName, new LinkedScope(boundSymbols))) {
+    return true;
+  }
+
+  if (boundSymbols instanceof LinkedScope) {
+    addNamesToScopeInPlace(boundSymbols, Array.from(guaranteedConditionalSetBindings(node)));
+  }
+  return false;
+}
+
 function isExistenceGuardedConditional(
   node: NunjucksAstNode,
   variableName: ReferenceTarget,
@@ -719,6 +851,10 @@ function astReferencesVariable(
     return false;
   }
 
+  if (node.typename === 'If') {
+    return ifNodeReferencesVariable(node, variableName, boundSymbols);
+  }
+
   if (isExistenceGuardedConditional(node, variableName)) {
     return false;
   }
@@ -746,7 +882,7 @@ function astReferencesVariable(
     }
   }
 
-  if ((node.typename === 'Root' || node.typename === 'NodeList') && Array.isArray(node.children)) {
+  if (isStatementListNode(node)) {
     return astNodeListReferencesVariable(
       node.children,
       variableName,

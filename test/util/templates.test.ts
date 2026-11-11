@@ -333,6 +333,15 @@ describe('analyzeTemplateReference', () => {
       parsed: true,
     });
   });
+
+  it('preserves macro dependencies through alias assignments', () => {
+    const template =
+      "{% macro m() %}{{ _conversation }}{% endmacro %}{% set saved=m %}{% set m='' %}{{ saved() }}";
+    expect(analyzeTemplateReference(template, '_conversation')).toEqual({
+      referenced: true,
+      parsed: true,
+    });
+  });
 });
 
 describe('extractVariablesFromExpression', () => {
