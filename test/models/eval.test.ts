@@ -2712,6 +2712,8 @@ describe('evaluator', () => {
       const objectOutput = { 'file\\name': 'C:\\tmp' };
       const arrayOutput = ['C:\\tmp'];
       const variable = { path: 'V:\\tmp' };
+      const metadataObject = { path: 'M:\\tmp' };
+      const metadataArray = ['M:\\array'];
       // Exactly 50,000 UTF-8 bytes after escaping, before the surrounding % characters.
       const longQuery = '界_'.repeat(10_000);
       const outputs = [
@@ -2740,6 +2742,16 @@ describe('evaluator', () => {
       await db.run(sql`UPDATE eval_results SET test_case = json_set(test_case, '$.vars.display', json(${JSON.stringify(variable)}))
         WHERE eval_id = ${eval_.id} AND test_idx = 4`);
 
+      for (const [index, value] of [metadataObject, metadataArray].entries()) {
+        const metadata = JSON.stringify({ display: value });
+        await db.run(sql`UPDATE eval_results SET metadata = ${metadata}
+          WHERE eval_id = ${eval_.id} AND test_idx = ${index}`);
+        await db.run(sql`UPDATE eval_results SET test_case = json_set(test_case, '$.metadata', json(${metadata}))
+          WHERE eval_id = ${eval_.id} AND test_idx = ${index + 2}`);
+      }
+      await db.run(sql`UPDATE eval_results SET metadata = ${JSON.stringify({ __promptfoo: { metadataObject, metadataArray } })}
+        WHERE eval_id = ${eval_.id} AND test_idx = 6`);
+
       const filters = [JSON.stringify(createAccuracyFilter())];
       for (const [searchQuery, expected, filtered = expected] of [
         ['SNAKE_CASE', [0]],
@@ -2748,11 +2760,15 @@ describe('evaluator', () => {
         ['%', [2, 4]],
         ['C:\\path\\%_', [4]],
         ['C:\\\\path', [5]],
-        ['\\', [4, 5, 7, 8, 9]],
+        ['\\', [4, 5, 7, 8, 9], [0, 1, 2, 3, 4, 5, 7, 8, 9]],
         ['\\n', [8]],
         [JSON.stringify(objectOutput), [8]],
         [JSON.stringify(arrayOutput), [9]],
         [JSON.stringify(variable), [], [4]],
+        [JSON.stringify(metadataObject), [], [0, 2]],
+        [JSON.stringify(metadataArray), [], [1, 3]],
+        ['M:\\tmp', [], [0, 2]],
+        ['M:\\array', [], [1, 3]],
         ['NUL\0RIGHT', [10]],
         ['\0', [10, 11]],
         ['\0absent', []],

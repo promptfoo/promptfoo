@@ -27,15 +27,10 @@ export function matchResultSearch(
       : contains(field);
   }
 
-  // The table renders object and array outputs and variables as compact JSON.
+  // The table renders object and array outputs, variables, and metadata as compact JSON.
   // Their children still supply decoded values for searches such as a file path.
-  const cell =
-    format === 'response'
-      ? sql`key = 'output'`
-      : format === 'vars'
-        ? sql`key IS NOT NULL`
-        : undefined;
-  const value = cell ? sql`CASE WHEN path = '$' AND ${cell} THEN value ELSE atom END` : sql`atom`;
+  const cell = format === 'response' ? sql`key = 'output'` : sql`key IS NOT NULL`;
+  const value = sql`CASE WHEN path = '$' AND ${cell} THEN value ELSE atom END`;
   const hasEscape = hasNul
     ? sql`(instr(${field}, '\\u0000') OR instr(${field}, char(0)))`
     : sql`instr(${field}, '\\')`;
