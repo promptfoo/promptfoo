@@ -381,7 +381,7 @@ export GOOGLE_CLOUD_PROJECT="your-project-id"
 
 #### Option 3: Service Account via Config (Alternative)
 
-You can also provide service account credentials directly in your configuration:
+You can also provide service account credentials directly in your configuration. With `google-auth-library` 11.3.2 or later, explicit credential JSON and `keyFilename` still work but emit deprecation warnings. Use Application Default Credentials to avoid these warnings. Only load credential configurations from trusted sources.
 
 ```yaml
 providers:
@@ -792,7 +792,7 @@ Re-authenticate using:
 gcloud auth application-default login
 ```
 
-When diagnosing Application Default Credentials on Google Cloud, set `GOOGLE_SDK_NODE_LOGGING=gcp-metadata` to see metadata requests and responses at debug severity. Responses can include access tokens. Redact credentials before sharing these logs.
+When diagnosing Application Default Credentials on Google Cloud, set `GOOGLE_SDK_NODE_LOGGING=gcp-metadata` to see metadata requests and responses at debug severity. For Google Auth requests and responses, use `GOOGLE_SDK_NODE_LOGGING=auth`. Both loggers can include access tokens in debug output. Redact credentials before sharing logs.
 
 ### Claude Model Access Errors
 
