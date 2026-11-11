@@ -39,6 +39,7 @@ npx promptfoo@latest init --example deterministic-physics-assertions
 Navigate into the generated directory and run:
 
 ```bash
+npm install
 npx promptfoo@latest eval
 ```
 
