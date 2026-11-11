@@ -765,15 +765,14 @@ describe('assertionFromString', () => {
     expect(result.threshold).toBeUndefined();
   });
 
-  it('should parse ends-with with a parenthesised threshold, ignoring the value', () => {
+  it('should parse ends-with with a parenthesised threshold, keeping the threshold', () => {
     // Parsing comes from getAssertionRegex() (built from BaseAssertionTypesSchema),
-    // so the `(0.9)` form is still accepted rather than failing to match. The value
-    // is dropped because `handleEndsWith` never reads it -- same as `contains`,
-    // `equals` and the other deterministic string asserts in the else branch.
+    // so the `(0.9)` form is accepted, and like other types without a CSV default
+    // the explicit threshold is kept rather than dropped.
     const result: Assertion = assertionFromString('ends-with(0.9):END');
     expect(result.type).toBe('ends-with');
     expect(result.value).toBe('END');
-    expect(result.threshold).toBeUndefined();
+    expect(result.threshold).toBe(0.9);
   });
 
   it('should parse not-ends-with shorthand', () => {
