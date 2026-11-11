@@ -191,7 +191,7 @@
     "@biomejs/biome": "2.6.2",
     "@fal-ai/client": "~1.10.1",
     "@ibm-cloud/watsonx-ai": "^1.7.17",
-    "@langfuse/client": "^6.0.0",
+    "@langfuse/client": "^6.1.0",
     "@openai/agents": "^0.21.0",
     "@openai/codex-sdk": "^0.165.0",
     "@openai/codex-security": "^0.8.0",
