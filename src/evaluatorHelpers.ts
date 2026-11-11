@@ -51,20 +51,33 @@ export async function extractTextFromPDF(pdfPath: string): Promise<string> {
   }
 }
 
-function findCyclicVariables(
-  variables: Record<string, VarValue>,
+// Bound the cumulative string growth across both substitution phases. Input
+// strings themselves do not count toward this budget.
+const MAX_VARIABLE_EXPANSION = 8 * 1024 * 1024;
+
+function getVariableDependencies(
+  value: string,
   ordinaryVars: Set<string>,
   regex: RegExp,
 ): Set<string> {
-  const dependencies = new Map<string, Set<string>>();
+  const references = new Set<string>();
+  for (const [, name] of value.matchAll(regex)) {
+    if (ordinaryVars.has(name)) {
+      references.add(name);
+    }
+  }
+  return references;
+}
+
+function findCyclicVariables(dependencies: Map<string, Set<string>>): Set<string> {
   const dependents = new Map<string, string[]>();
-  for (const key of ordinaryVars) {
-    const references = new Set(
-      [...(variables[key] as string).matchAll(regex)]
-        .map((match) => match[1])
-        .filter((name) => ordinaryVars.has(name)),
-    );
-    dependencies.set(key, references);
+  const remainingReferences = new Map<string, number>();
+  const ready: string[] = [];
+  for (const [key, references] of dependencies) {
+    remainingReferences.set(key, references.size);
+    if (references.size === 0) {
+      ready.push(key);
+    }
     for (const name of references) {
       const parents = dependents.get(name) ?? [];
       parents.push(key);
@@ -72,15 +85,14 @@ function findCyclicVariables(
     }
   }
 
-  const cyclicVars = new Set(ordinaryVars);
-  const ready = [...ordinaryVars].filter((key) => dependencies.get(key)?.size === 0);
+  const cyclicVars = new Set(dependencies.keys());
   while (ready.length > 0) {
     const key = ready.pop()!;
     cyclicVars.delete(key);
     for (const parent of dependents.get(key) ?? []) {
-      const references = dependencies.get(parent)!;
-      references.delete(key);
-      if (references.size === 0) {
+      const remaining = remainingReferences.get(parent)! - 1;
+      remainingReferences.set(parent, remaining);
+      if (remaining === 0) {
         ready.push(parent);
       }
     }
@@ -105,7 +117,21 @@ export function resolveVariables(
         !resolvedFromSkipped.has(key),
     ),
   );
-  let cyclicVars = findCyclicVariables(variables, ordinaryVars, regex);
+  const dependencies = new Map<string, Set<string>>();
+  for (const key of ordinaryVars) {
+    dependencies.set(key, getVariableDependencies(variables[key] as string, ordinaryVars, regex));
+  }
+  let cyclicVars = findCyclicVariables(dependencies);
+  let remainingExpansion = MAX_VARIABLE_EXPANSION;
+
+  function chargeExpansion(key: string, addedLength: number): void {
+    remainingExpansion -= Math.max(0, addedLength);
+    if (remainingExpansion < 0) {
+      throw new Error(
+        `Variable expansion exceeded ${MAX_VARIABLE_EXPANSION} characters while resolving "${key}". Reduce repeated variable references or the size of substituted values.`,
+      );
+    }
+  }
 
   // Finish ordinary aliases before copying skipped values. Once copied, their
   // contents must remain opaque, even when they contain valid variable names.
@@ -115,10 +141,11 @@ export function resolveVariables(
     do {
       resolved = true;
       for (const key of ordinaryVars) {
-        if (resolvedFromSkipped.has(key)) {
+        const value = variables[key] as string;
+        if (resolvedFromSkipped.has(key) || !value.includes('{{')) {
           continue;
         }
-        const value = variables[key] as string;
+        const inheritedDependencies = new Set(dependencies.get(key));
         let referencesSkipped = false;
         // A replacer function keeps `$&`, `$'` and `` $` `` in the value literal.
         const newValue = value.replace(regex, (placeholder: string, varName: string) => {
@@ -132,19 +159,32 @@ export function resolveVariables(
             return placeholder;
           }
           referencesSkipped ||= isSkipped;
-          return replacement as string;
+          if (!isSkipped) {
+            dependencies.get(varName)?.forEach((name) => inheritedDependencies.add(name));
+          }
+          const text = String(replacement);
+          // Charge before replace can assemble the expanded string.
+          chargeExpansion(key, text.length - placeholder.length);
+          return text;
         });
         if (referencesSkipped) {
           resolvedFromSkipped.add(key);
         }
-        if (newValue !== value) {
-          variables[key] = newValue;
-          if (!resolveSkipped && newValue.includes('{{')) {
-            // Replacement fragments can assemble placeholders absent from the
-            // original value, so check the updated dependency graph as well.
-            cyclicVars = findCyclicVariables(variables, ordinaryVars, regex);
-          }
-          resolved = false;
+        if (newValue === value) {
+          continue;
+        }
+        variables[key] = newValue;
+        resolved = false;
+
+        if (resolveSkipped) {
+          continue;
+        }
+        const references = getVariableDependencies(newValue, ordinaryVars, regex);
+        dependencies.set(key, references);
+        // Inlining an acyclic dependency can only carry over existing
+        // paths. A newly assembled reference can introduce a cycle.
+        if ([...references].some((name) => !inheritedDependencies.has(name))) {
+          cyclicVars = findCyclicVariables(dependencies);
         }
       }
       iterations++;

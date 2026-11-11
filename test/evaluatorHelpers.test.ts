@@ -712,6 +712,42 @@ describe('evaluatorHelpers', () => {
       expect(resolveVariables(variables).message).toBe('{{unknown}}' + 'Alice'.repeat(20));
     });
 
+    it('should reject excessive growth in acyclic variable references', () => {
+      const variables: Record<string, string> = { a24: 'x' };
+      for (let index = 23; index >= 0; index--) {
+        variables[`a${index}`] = `{{a${index + 1}}}`.repeat(2);
+      }
+
+      expect(() => resolveVariables(variables)).toThrow(/Variable expansion exceeded/);
+    });
+
+    it('should bound expansion when copying skipped values', () => {
+      const variables = {
+        message: '{{payload}}'.repeat(9_000),
+        payload: 'x'.repeat(1_024),
+      };
+
+      expect(() => resolveVariables(variables, ['payload'])).toThrow(
+        /Variable expansion exceeded .*message/,
+      );
+    });
+
+    it('should scan dependencies linearly when substitutions leave unresolved references', () => {
+      const count = 100;
+      const variables = Object.fromEntries(
+        Array.from({ length: count }, (_, index) => [`value${index}`, '{{known}} {{missing}}']),
+      );
+      variables.known = 'value';
+      const matchAll = vi.spyOn(String.prototype, 'matchAll');
+      try {
+        const result = resolveVariables(variables);
+        expect(matchAll.mock.calls.length).toBeLessThan(4 * count);
+        expect(result.value99).toBe('value {{missing}}');
+      } finally {
+        matchAll.mockRestore();
+      }
+    });
+
     it.each(['{{a}}', '{{a}}{{a}}', '{{ a }}{{a}}'])(
       'should leave self-references unexpanded: %s',
       (a) => {
