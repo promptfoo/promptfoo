@@ -13,7 +13,7 @@ import { getCache, isCacheEnabled, withCacheEnabled, withCacheNamespace } from '
 import cliState from '../cliState';
 import { DEFAULT_MAX_CONCURRENCY } from '../constants';
 import { getEnvBool, getEvalTimeoutMs, getMaxEvalTimeMs, isCI } from '../envars';
-import { runExtensionHook } from '../evaluatorHelpers';
+import { clearPromptTemplateCache, runExtensionHook } from '../evaluatorHelpers';
 import logger, { isDebugEnabled } from '../logger';
 import { selectMaxScore } from '../matchers/comparison';
 import { CIProgressReporter } from '../progress/ciProgressReporter';
@@ -4106,6 +4106,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
   }
 
   async evaluate(): Promise<TEvaluation> {
+    clearPromptTemplateCache();
     return providerRegistry.withEvaluation(async () => {
       const startTime = Date.now();
       const maxEvalTimeMs = this.options.maxEvalTimeMs ?? getMaxEvalTimeMs();

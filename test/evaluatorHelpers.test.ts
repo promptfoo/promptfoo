@@ -596,6 +596,21 @@ describe('evaluatorHelpers', () => {
       }
     });
 
+    it('should use the current filter after a filter map is edited in place', async () => {
+      clearPromptTemplateCache();
+      try {
+        const prompt = toPrompt('{{ text | customFilter }}');
+        const filters: Record<string, (s: string) => string> = {
+          customFilter: (s) => s.toUpperCase(),
+        };
+        expect(await renderPrompt(prompt, { text: 'Hello' }, filters)).toBe('HELLO');
+        filters.customFilter = (s) => s.toLowerCase();
+        expect(await renderPrompt(prompt, { text: 'Hello' }, filters)).toBe('hello');
+      } finally {
+        clearPromptTemplateCache();
+      }
+    });
+
     it('should not share a cache key between filtered and filterless templates', async () => {
       clearPromptTemplateCache();
       try {

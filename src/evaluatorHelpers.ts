@@ -233,21 +233,33 @@ const promptTemplateCache = new LRUCache<string, nunjucks.Template>({
 });
 
 let filterIdCounter = 0;
-const filterMapIds = new WeakMap<NunjucksFilterMap, number>();
+const filterMapIds = new WeakMap<NunjucksFilterMap, { id: number; entries: [string, unknown][] }>();
 
 function getFilterKey(filters?: NunjucksFilterMap): string {
-  if (!filters || Object.keys(filters).length === 0) {
+  if (!filters) {
     return '';
   }
-  let id = filterMapIds.get(filters);
-  if (id === undefined) {
-    filterIdCounter++;
-    id = filterIdCounter;
-    filterMapIds.set(filters, id);
+  const entries = Object.entries(filters);
+  if (entries.length === 0) {
+    return '';
   }
-  return `f${id}`;
+  // A map edited in place gets a new id, so templates compiled with the old filters aren't reused.
+  let cached = filterMapIds.get(filters);
+  const prev = cached?.entries;
+  const unchanged =
+    prev?.length === entries.length &&
+    entries.every(([name, fn], i) => prev[i][0] === name && prev[i][1] === fn);
+  if (!cached || !unchanged) {
+    cached = { id: ++filterIdCounter, entries };
+    filterMapIds.set(filters, cached);
+  }
+  return `f${cached.id}`;
 }
 
+/**
+ * Drops compiled templates. Called at the start of each evaluation so a rerun in the same
+ * process (e.g. `--watch`) picks up changed `{% include %}` / `{% import %}` files.
+ */
 export function clearPromptTemplateCache(): void {
   promptTemplateCache.clear();
 }
