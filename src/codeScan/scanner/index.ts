@@ -256,9 +256,10 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
     const files = await processDiff(absoluteRepoPath, baseBranch, compareRef);
 
     const includedFiles = files.filter((f) => !f.skipReason && f.patch);
+    const skippedFileCount = files.length - includedFiles.length;
 
     logger.debug(
-      `Files changed: ${files.length} (${includedFiles.length} included, ${files.filter((f) => f.skipReason).length} skipped)`,
+      `Files changed: ${files.length} (${includedFiles.length} included, ${skippedFileCount} skipped)`,
     );
 
     // Check if there are no files to scan
@@ -273,7 +274,15 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
           logger.info(msg);
         }
       } else {
-        displayResults({ success: true, comments: [], review: 'No files to scan' }, outputFormat);
+        displayResults(
+          {
+            success: true,
+            comments: [],
+            review: 'No files to scan',
+            skippedFiles: skippedFileCount,
+          },
+          outputFormat,
+        );
       }
 
       // Exit with code 0 (success) when no files to scan
@@ -317,6 +326,7 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
       spinner,
       abortController,
     });
+    scanResponse.skippedFiles = Math.max(scanResponse.skippedFiles ?? 0, skippedFileCount);
 
     // Stop spinner silently
     if (spinner) {
