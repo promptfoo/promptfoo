@@ -1,3 +1,4 @@
+import { runInNewContext } from 'node:vm';
 import fs from 'fs';
 import path from 'path';
 
@@ -104,6 +105,53 @@ describe('AssertionSchema', () => {
 });
 
 describe('VarsSchema', () => {
+  it('accepts cross-context vars without copying', () => {
+    const vars = runInNewContext('({ input: "hello", count: 2, enabled: true, data: { id: 1 } })');
+    expect(Object.getPrototypeOf(vars)).not.toBe(Object.prototype);
+    expect(VarsSchema.parse(vars)).toBe(vars);
+    expect(TestCaseSchema.safeParse({ vars }).success).toBe(true);
+  });
+
+  it('accepts null-prototype vars in both contexts', () => {
+    for (const vars of [
+      Object.assign(Object.create(null), { input: 'hello' }),
+      runInNewContext('Object.assign(Object.create(null), { input: "hello" })'),
+    ]) {
+      expect(VarsSchema.parse(vars)).toBe(vars);
+    }
+  });
+
+  it('accepts constructor and symbol keys in both contexts', () => {
+    for (const vars of [
+      { constructor: 'user variable', input: 'hello', [Symbol.toStringTag]: 'Vars' },
+      runInNewContext(
+        '({ constructor: "user variable", input: "hello", [Symbol.toStringTag]: "Vars" })',
+      ),
+    ]) {
+      expect(VarsSchema.parse(vars)).toBe(vars);
+    }
+  });
+
+  it.each([
+    '[]',
+    'new Map()',
+    'new Set()',
+    'new Date()',
+    'new (class { input = "hello"; })()',
+    'Object.create({ inherited: true })',
+    'Object.create(Object.create(null))',
+    'Object.create({ constructor: Object })',
+    `Object.create(Object.assign(Object.create(null), {
+      constructor: Object.assign(function Fake() {}, { toString: () => Object.toString() })
+    }))`,
+    '({ input: null })',
+    '({ input: undefined })',
+    '({ input: Symbol("invalid") })',
+    '({ input: () => "invalid" })',
+  ])('rejects invalid cross-context vars: %s', (source) => {
+    expect(VarsSchema.safeParse(runInNewContext(source)).success).toBe(false);
+  });
+
   it('should validate and transform various types of values', () => {
     const testCases = [
       { input: { key: 'string value' }, expected: { key: 'string value' } },
