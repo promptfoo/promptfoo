@@ -10,7 +10,7 @@
   },
   "dependencies": {
     "@hono/node-server": "2.1.5",
-    "@modelcontextprotocol/sdk": "^1.32.1",
+    "@modelcontextprotocol/sdk": "^1.32.2",
     "zod": "^4.3.6"
   },
   "devDependencies": {
