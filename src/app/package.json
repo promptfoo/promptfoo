@@ -22,7 +22,7 @@
   },
   "devDependencies": {
     "@babel/core": "^8.0.0",
-    "@babel/core-7": "npm:@babel/core@8.0.10",
+    "@babel/core-7": "npm:@babel/core@7.29.7",
     "@chromatic-com/storybook": "^5.5.1",
     "@storybook/addon-a11y": "^10.6.2",
     "@storybook/addon-docs": "^10.6.2",
