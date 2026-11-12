@@ -5,8 +5,8 @@ prompts:
   - 'Write a concise {{language}} function that returns the {{n}}th Fibonacci number.'
 
 providers:
-  - id: openai:chat:moonshotai/Kimi-K2.7-Code
-    label: Nebius Token Factory - Kimi K2.7 Code
+  - id: openai:chat:openai/gpt-oss-120b
+    label: Nebius Token Factory - GPT OSS 120B
     config:
       apiBaseUrl: https://api.tokenfactory.nebius.com/v1
       apiKey: '{{env.NEBIUS_API_KEY}}'

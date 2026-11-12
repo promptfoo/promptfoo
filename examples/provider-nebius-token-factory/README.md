@@ -19,8 +19,10 @@ Use Nebius Token Factory through promptfoo's generic OpenAI-compatible Chat Comp
    npx promptfoo@latest eval
    ```
 
-The config uses `openai:chat:moonshotai/Kimi-K2.7-Code` with `apiBaseUrl` set to `https://api.tokenfactory.nebius.com/v1`. Replace the model ID with another current chat model from the [Token Factory catalog](https://tokenfactory.nebius.com/api/public/models_info) if needed.
+The config uses `openai:chat:openai/gpt-oss-120b` with `apiBaseUrl` set to `https://api.tokenfactory.nebius.com/v1`. Replace the model ID with another current chat model from the [Token Factory catalog](https://tokenfactory.nebius.com/api/public/models_info) if needed.
 
 ## API scope
 
 This recipe uses the stateless Chat Completions endpoint. It does not configure promptfoo's OpenAI Responses provider or rely on persisted response state.
+
+The sample model is listed in the public Token Factory catalog as of November 12, 2026. These assertions are smoke checks of response shape, not a coding-correctness benchmark. No authenticated evaluation was run for this refresh.
