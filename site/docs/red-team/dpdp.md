@@ -49,7 +49,7 @@ redteam:
   plugins:
     - dpdp
   strategies:
-    - jailbreak
+    - jailbreak:meta
     - jailbreak:composite
 ```
 
@@ -331,7 +331,7 @@ redteam:
     - dpdp
     - owasp:llm:02
   strategies:
-    - jailbreak
+    - jailbreak:meta
     - jailbreak:composite
 ```
 

@@ -220,6 +220,35 @@ const FrameworkCard = ({
     [nonCompliantPlugins, sortPluginsByASR],
   );
 
+  // Plugins mapped to this framework. The flat list view only counts and lists these, so
+  // results from plugins outside the framework do not appear as tested or passed.
+  const frameworkPlugins = useMemo(() => {
+    const plugins = new Set<string>();
+    Object.values(ALIASED_PLUGIN_MAPPINGS[framework] || {}).forEach(({ plugins: mapped }) => {
+      expandPluginCollections(mapped, categoryStats).forEach((plugin) => plugins.add(plugin));
+    });
+    return plugins;
+  }, [framework, categoryStats]);
+
+  const testedFrameworkPlugins = useMemo(
+    () =>
+      Array.from(frameworkPlugins).filter(
+        (plugin) => categoryStats[plugin] && categoryStats[plugin].total > 0,
+      ),
+    [frameworkPlugins, categoryStats],
+  );
+
+  const compliantFrameworkPlugins = useMemo(
+    () =>
+      sortPluginsByASR(
+        testedFrameworkPlugins.filter(
+          (plugin) =>
+            categoryStats[plugin].pass / categoryStats[plugin].total >= pluginPassRateThreshold,
+        ),
+      ),
+    [testedFrameworkPlugins, categoryStats, pluginPassRateThreshold, sortPluginsByASR],
+  );
+
   return (
     <Card
       className={cn(
@@ -365,12 +394,7 @@ const FrameworkCard = ({
                   variant={nonCompliantPlugins.length === 0 ? 'success' : 'destructive'}
                   className="h-5 whitespace-nowrap text-[0.7rem]"
                 >
-                  {nonCompliantPlugins.length} /{' '}
-                  {
-                    Object.keys(categoryStats).filter((plugin) => categoryStats[plugin].total > 0)
-                      .length
-                  }{' '}
-                  failed
+                  {nonCompliantPlugins.length} / {testedFrameworkPlugins.length} failed
                 </Badge>
               </div>
               <div>
@@ -391,30 +415,14 @@ const FrameworkCard = ({
                 ))}
 
                 {/* Passing plugins */}
-                {(() => {
-                  const compliantPlugins = Object.keys(categoryStats).filter(
-                    (plugin) =>
-                      categoryStats[plugin].total > 0 &&
-                      categoryStats[plugin].pass / categoryStats[plugin].total >=
-                        pluginPassRateThreshold,
-                  );
-                  return compliantPlugins.length > 0 ? (
-                    <div className="mt-2 bg-emerald-50/50 px-2 py-1 dark:bg-emerald-950/20">
-                      <span className="text-xs font-bold text-emerald-600 dark:text-emerald-500">
-                        Passed:
-                      </span>
-                    </div>
-                  ) : null;
-                })()}
-                {(() => {
-                  const compliantPlugins = Object.keys(categoryStats).filter(
-                    (plugin) =>
-                      categoryStats[plugin].total > 0 &&
-                      categoryStats[plugin].pass / categoryStats[plugin].total >=
-                        pluginPassRateThreshold,
-                  );
-                  return sortPluginsByASR(compliantPlugins);
-                })().map((plugin, index) => (
+                {compliantFrameworkPlugins.length > 0 && (
+                  <div className="mt-2 bg-emerald-50/50 px-2 py-1 dark:bg-emerald-950/20">
+                    <span className="text-xs font-bold text-emerald-600 dark:text-emerald-500">
+                      Passed:
+                    </span>
+                  </div>
+                )}
+                {compliantFrameworkPlugins.map((plugin, index) => (
                   <FrameworkPluginResult
                     key={`${plugin}-${framework}-${index}`}
                     evalId={evalId}
