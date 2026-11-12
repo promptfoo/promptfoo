@@ -25,7 +25,7 @@ Once merged, the scanner will automatically run on future pull requests. Authent
 
 The action installs the scanner before requesting its short-lived OIDC token, so slow installs do not expire the token before scanning.
 
-The action runs the scanner with its bundled Node.js 24 runtime. Older action releases and workflow steps that run Promptfoo directly require Node.js `>=22.22.0` on the runner's `PATH`. Configure Node.js 24 LTS for compatibility:
+The action runs the scanner with its bundled Node.js 24 runtime. For workflow steps that install and run Promptfoo directly, use Node.js 24 or later for full-repository scans. Diff-only scans also support Node.js 22.22 or later. Configure the runtime before installing Promptfoo:
 
 ```yaml
 - name: Set up Node.js

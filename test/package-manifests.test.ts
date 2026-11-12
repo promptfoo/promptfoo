@@ -200,6 +200,7 @@ const KNOWN_BAD_RELEASES = new Map([
   ['@cacheable/utils', '2.5.1'], // Shai-Hulud compromise (#10301)
   ['@hono/node-server', '<2.1.3'], // GHSA-frvp-7c67-39w9, GHSA-9mqv-5hh9-4cgg, GHSA-rmxm-3fg6-px4f
   ['@modelcontextprotocol/sdk', '<1.32.0'], // GHSA-6prh-2h8m-c8cw
+  ['@modelcontextprotocol/server-filesystem', '<2.3.0 || >=2025.1.14 <=2026.8.31'], // GHSA-p9cv-8g75-4xcg, GHSA-7m4x-rv66-mxhh
   ['@simple-git/argv-parser', '<2.0.1'], // GHSA-v5rq-49vh-5v5c; upstream fixes VISUAL in 2.0.1
   ['body-parser', '<1.20.9 || >=2.0.0 <2.4.0'], // GHSA-27r3-jxmh-p828
   ['cache-manager', '7.2.10'], // Shai-Hulud compromise (#10301)

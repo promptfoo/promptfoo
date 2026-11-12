@@ -45,19 +45,13 @@ describe('read-only code scan transport', () => {
     const [list, read] = write.mock.calls.map(([line]) => JSON.parse(line));
     expect(read.params.arguments.path).toBe('marker.txt');
     expect(list.id).not.toEqual(read.id);
-    const hiddenTools = [
-      'write_file',
-      'edit_file',
-      'create_directory',
-      'move_file',
-      'list_directory_with_sizes',
-      'future_tool',
-    ];
+    const hiddenTools = ['write_file', 'edit_file', 'create_directory', 'move_file', 'future_tool'];
     const safe = { name: 'read_text_file', description: 'Read text' };
+    const withSizes = { name: 'list_directory_with_sizes' };
     fromServer({ id: read.id, result: { content: [] } });
     fromServer({
       id: list.id,
-      result: { tools: [safe, ...hiddenTools.map((name) => ({ name }))] },
+      result: { tools: [safe, withSizes, ...hiddenTools.map((name) => ({ name }))] },
     });
     expect(
       response.mock.calls.map(([event]) => [
@@ -67,7 +61,7 @@ describe('read-only code scan transport', () => {
       ]),
     ).toEqual([
       [9, 1, { content: [] }],
-      [8, 1, { tools: [safe] }],
+      [8, 1, { tools: [safe, withSizes] }],
     ]);
     write.mockClear();
     for (const name of hiddenTools) {
@@ -83,14 +77,20 @@ describe('read-only code scan transport', () => {
   });
 
   it('keeps the directory supplied by the local launcher in control of the scan', async () => {
-    const { request, fromServer, write } = await setup();
+    const { request, fromServer, write, response } = await setup();
     const init = {
       protocolVersion: '2025-11-25',
       clientInfo: { name: 'scanner', version: '1' },
       capabilities: { roots: { listChanged: true } },
     };
     request({ method: 'initialize', id: 1, params: init });
-    expect(JSON.parse(write.mock.calls[0][0]).params).toEqual({ ...init, capabilities: {} });
+    const forwarded = JSON.parse(write.mock.calls[0][0]);
+    expect(forwarded.params).toEqual({ ...init, capabilities: {} });
+    fromServer({
+      id: forwarded.id,
+      result: { capabilities: { tools: { listChanged: true }, resources: {}, prompts: {} } },
+    });
+    expect(response.mock.calls[0][0].message.result.capabilities).toEqual({ tools: {} });
     fromServer({ method: 'ping', id: 9 });
     expect(JSON.parse(write.mock.calls[1][0])).toEqual({ jsonrpc: '2.0', id: 9, result: {} });
     fromServer({ method: 'roots/list', id: 10 });

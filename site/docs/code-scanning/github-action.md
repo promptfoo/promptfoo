@@ -25,7 +25,7 @@ The easiest way to get started is by installing the Promptfoo Scanner GitHub App
 4. **Review the setup PR**: A pull request will be automatically opened in each repository you selected in step 2—it adds the Code Scan Action workflow to `.github/workflows/promptfoo-code-scan.yml`
 5. **Merge the PR**: you can tweak the workflow configuration if desired, and merge when ready.
 
-Once merged, the scanner will automatically run on future pull requests, posting review comments for any security issues found. The action runs the scanner with its bundled Node.js 24 runtime, but older action releases and direct CLI steps require Node.js `>=22.22.0` on the runner. The [manual workflow](#workflow-configuration) configures Node.js 24 LTS for compatibility.
+Once merged, the scanner will automatically run on future pull requests, posting review comments for any security issues found. The action runs the scanner with its bundled Node.js 24 runtime. Direct CLI steps need Node.js 24 or later for full-repository scans. Diff-only scans also support Node.js 22.22 or later. The [manual workflow](#workflow-configuration) sets up Node.js 24 before installing Promptfoo.
 
 :::info
 When using the GitHub App:

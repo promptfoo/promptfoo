@@ -8,6 +8,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CodeScanOutputFormat, type FileRecord } from '../../src/types/codeScan';
 
 describe('Scanner machine-readable output', () => {
+  const originalNodeVersion = process.versions.node;
+
   function mockScanner({
     initialLogLevel = 'info',
     loadConfigError,
@@ -105,6 +107,7 @@ describe('Scanner machine-readable output', () => {
   }
 
   function mockMcpLifecycle(connectError?: Error) {
+    Object.defineProperty(process.versions, 'node', { value: '24.0.0' });
     const events: string[] = [];
     const mcpProcess = { pid: 1234 };
     let constructorArgs: unknown[] = [];
@@ -155,6 +158,7 @@ describe('Scanner machine-readable output', () => {
   });
 
   afterEach(() => {
+    Object.defineProperty(process.versions, 'node', { value: originalNodeVersion });
     vi.restoreAllMocks();
   });
 
@@ -311,6 +315,21 @@ describe('Scanner machine-readable output', () => {
       setLogLevelMock.mock.invocationCallOrder[1] ?? Number.POSITIVE_INFINITY,
     );
     expect(getLogLevel()).toBe('debug');
+  });
+
+  it('requires Node 24 before connecting for a full scan but permits diff-only scans on Node 22', async () => {
+    mockScanner();
+    Object.defineProperty(process.versions, 'node', { value: '22.22.0' });
+    const stderr = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { executeScan } = await import('../../src/codeScan/scanner/index');
+    const { createAgentClient } = await import('../../src/util/agent/agentClient');
+
+    await executeScan('/test/repo', { json: true, diffsOnly: false });
+    expect(stderr).toHaveBeenCalledWith(expect.stringMatching(/Node.js 24.*--diffs-only/));
+    expect(createAgentClient).not.toHaveBeenCalled();
+
+    await executeScan('/test/repo', { json: true, diffsOnly: true });
+    expect(createAgentClient).toHaveBeenCalledOnce();
   });
 
   it('preserves MCP setup and successful cleanup order without the facade', async () => {

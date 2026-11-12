@@ -187,7 +187,7 @@ describe('filesystem MCP launcher', () => {
     );
     expect(mocks.spawn).toHaveBeenCalledWith(
       process.execPath,
-      [serverEntry, rootDir],
+      [serverEntry, '--read-only', '--confine-roots', '--', rootDir],
       expect.objectContaining({ cwd: path.dirname(serverEntry) }),
     );
   });
@@ -212,7 +212,14 @@ describe('filesystem MCP launcher', () => {
       startFilesystemMcpServer(rootDir);
       expect(mocks.spawn).toHaveBeenCalledWith(
         process.execPath,
-        [`--max-old-space-size=${heapLimit}`, serverEntry, rootDir],
+        [
+          `--max-old-space-size=${heapLimit}`,
+          serverEntry,
+          '--read-only',
+          '--confine-roots',
+          '--',
+          rootDir,
+        ],
         expect.anything(),
       );
       expect(mocks.spawn.mock.calls[0][2].env).not.toHaveProperty('NODE_OPTIONS');
@@ -229,7 +236,7 @@ describe('filesystem MCP launcher', () => {
         startFilesystemMcpServer(rootDir);
         expect(mocks.spawn).toHaveBeenCalledWith(
           process.execPath,
-          [serverEntry, rootDir],
+          [serverEntry, '--read-only', '--confine-roots', '--', rootDir],
           expect.anything(),
         );
         expect(mocks.spawn.mock.calls[0][2].env).not.toHaveProperty('NODE_OPTIONS');
@@ -265,7 +272,7 @@ describe('filesystem MCP launcher', () => {
     startFilesystemMcpServer(rootDir);
     expect(mocks.spawn).toHaveBeenCalledWith(
       process.execPath,
-      [siblingEntry, rootDir],
+      [siblingEntry, '--read-only', '--confine-roots', '--', rootDir],
       expect.anything(),
     );
   });
@@ -286,6 +293,9 @@ describe('filesystem MCP launcher', () => {
         '--experimental-loader',
         pathToFileURL(esmLoader).href,
         serverEntry,
+        '--read-only',
+        '--confine-roots',
+        '--',
         rootDir,
       ],
       expect.objectContaining({ cwd: path.dirname(pnpLoader) }),

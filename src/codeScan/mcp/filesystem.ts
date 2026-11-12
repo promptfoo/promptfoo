@@ -77,8 +77,9 @@ function getFilesystemMcpLaunch(rootDir: string): { args: string[]; cwd: string 
   };
 
   const entry = outsideRoot(resolveFilesystemMcpServerEntry());
+  const serverArgs = [entry, '--read-only', '--confine-roots', '--', canonicalRoot];
   if (!process.versions.pnp) {
-    return { args: [...nodeArgs, entry, canonicalRoot], cwd: dirname(entry) };
+    return { args: [...nodeArgs, ...serverArgs], cwd: dirname(entry) };
   }
 
   // Resolve only the installed package's loaders; never inherit ambient NODE_OPTIONS.
@@ -96,8 +97,7 @@ function getFilesystemMcpLaunch(rootDir: string): { args: string[]; cwd: string 
       pnpLoader,
       '--experimental-loader',
       pathToFileURL(outsideRoot(esmLoader)).href,
-      entry,
-      canonicalRoot,
+      ...serverArgs,
     ],
     cwd: dirname(pnpLoader),
   };

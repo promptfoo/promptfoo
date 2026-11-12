@@ -20,6 +20,7 @@ const readOnlyTools = new Set([
   'get_file_info',
   'list_allowed_directories',
   'list_directory',
+  'list_directory_with_sizes',
   'read_file',
   'read_media_file',
   'read_multiple_files',
@@ -129,6 +130,10 @@ export class SocketIoMcpBridge {
             continue;
           }
           this.wireIdMap.delete(wireId);
+          if (mapping.method === 'initialize' && message.result?.capabilities) {
+            // The hosted client can discover and call tools through this bridge.
+            message.result.capabilities = message.result.capabilities.tools ? { tools: {} } : {};
+          }
           if (mapping.method === 'tools/list' && Array.isArray(message.result?.tools)) {
             message.result.tools = message.result.tools.filter(isReadOnlyTool);
           }
