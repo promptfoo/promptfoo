@@ -47,7 +47,7 @@ Most CLI options from [`promptfoo code-scans run`](/docs/code-scanning/cli) can 
 | `api-host`          | Promptfoo API host URL                                                                                                                   | `https://api.promptfoo.app` |
 | `min-severity`      | Minimum severity to report (`low`, `medium`, `high`, `critical`)                                                                         | `medium`                    |
 | `minimum-severity`  | Alias for `min-severity`. Takes effect only when `min-severity` is unset; if both are set, `min-severity` wins and a warning is emitted. | None                        |
-| `config-path`       | Path to `.promptfoo-code-scan.yaml` config file                                                                                          | Auto-detected               |
+| `config-path`       | Path to the scan configuration file                                                                                                      | None                        |
 | `guidance`          | Custom guidance to tailor the scan (see [CLI docs][1])                                                                                   | None                        |
 | `guidance-file`     | Path to file containing custom guidance (see [CLI docs][1])                                                                              | None                        |
 | `enable-fork-prs`   | Enable scanning PRs from forked repositories                                                                                             | `false`                     |
@@ -136,7 +136,7 @@ The action sets `sarif-path` only when a scan actually completes, so keep the up
 
 ### Configuration File
 
-Create a `.promptfoo-code-scan.yaml` in your repository root. See the [CLI documentation](/docs/code-scanning/cli#configuration-file) for all available options.
+To use `.promptfoo-code-scan.yaml`, set the action's `config-path` input to that file. Set `diffsOnly: true` in the file to limit hosted access to the diff. See the [CLI documentation](/docs/code-scanning/cli#configuration-file) for all available options.
 
 ```yaml
 # Minimum severity level to report
