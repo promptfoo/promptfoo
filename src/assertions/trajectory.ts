@@ -180,8 +180,10 @@ export const handleTrajectoryToolUsed = (params: AssertionParams): GradingResult
   }
 
   const matcher = expected.matcher;
-  const min = matcher.min ?? 1;
   const max = matcher.max;
+  // A max-only bound is a usage budget, so it has no lower bound (as in skill-used and
+  // trajectory:step-count). Defaulting to 1 here would make `max: 0` impossible to satisfy.
+  const min = matcher.min ?? (max === undefined ? 1 : 0);
   if (!matcher.pattern && !matcher.name) {
     throw new Error(
       'trajectory:tool-used assertion object must include a name or pattern property',
