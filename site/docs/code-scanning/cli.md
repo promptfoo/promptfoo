@@ -19,23 +19,12 @@ npm install -g promptfoo
 
 Full-repository scans use the pinned filesystem MCP server installed with promptfoo. Keep the installation outside the repository being scanned. If you installed with `--omit=optional`, reinstall with optional dependencies or use `--diffs-only`.
 
-For pnpm 11, add this to the external installation's `pnpm-workspace.yaml` and reinstall. The pinned filesystem server imports Zod without declaring it, so strict dependency resolution needs this package extension:
+The filesystem MCP server needs **Node.js 24 or newer**. On older Node versions the optional dependency is skipped by the installer, and a full-repository scan reports that the server is required; run it on Node 24+ or use `--diffs-only`.
 
-```yaml title="pnpm-workspace.yaml"
-packageExtensions:
-  '@modelcontextprotocol/server-filesystem@2026.8.31':
-    dependencies:
-      zod: '^4.3.6'
-```
-
-For Yarn Plug'n'Play, add this to the external installation's `.yarnrc.yml` and reinstall. The package extension supplies a dependency omitted by the pinned filesystem server:
+For Yarn Plug'n'Play, add this to the external installation's `.yarnrc.yml` and reinstall, so the server can be loaded as an ES module:
 
 ```yaml title=".yarnrc.yml"
 pnpEnableEsmLoader: true
-packageExtensions:
-  '@modelcontextprotocol/server-filesystem@2026.8.31':
-    dependencies:
-      zod: '^4.3.6'
 ```
 
 Authenticate with your promptfoo account:
