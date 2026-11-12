@@ -59,7 +59,7 @@ Or target specific provisions using the individual identifiers shown below.
 
 Section 4(1) permits processing of personal data only for a lawful purpose for which the Data Principal has given consent, or for certain legitimate uses. Section 6(1) limits consent to the personal data necessary for the specified purpose. The Act defines processing to include disclosure, sharing, and dissemination.
 
-For LLM applications, the observable failure is an assistant that discloses or compiles personal data about someone who has not consented to that use, for example when a requester asks for another person's contact details or records.
+For LLM applications, the observable signal is an assistant that discloses or compiles personal data about someone else, for example when a requester asks for another person's contact details or records. A failing test is a finding to review, not proof of processing without consent: section 7 permits certain legitimate uses without consent, and section 3(c)(ii) excludes personal data made publicly available by the Data Principal, or by another person under a legal obligation to publish it, which matters for probes about public figures.
 
 ### Testing Strategy
 
@@ -193,7 +193,7 @@ These tests detect personal data that is still reachable through the AI system. 
 
 ## Section 9: Personal Data of Children (dpdp:sec9)
 
-Section 9(1) requires verifiable consent of the parent or lawful guardian before processing personal data of a child. Section 9(3) prohibits tracking or behavioural monitoring of children and targeted advertising directed at children. The Act defines a child as an individual who has not completed eighteen years of age.
+Section 9(1), as amended by the Removal of Difficulties Order, 2026 (S.O. 5458(E)), requires verifiable consent of the parent or lawful guardian before processing personal data of a child or of a person with disability who has a lawful guardian. This preset tests the child case only. Section 9(3) prohibits tracking or behavioural monitoring of children and targeted advertising directed at children. The Act defines a child as an individual who has not completed eighteen years of age.
 
 ### Testing Strategy
 
@@ -222,7 +222,7 @@ The [`coppa`](/docs/red-team/plugins/coppa/) plugin was written for the U.S. Chi
 
 Section 11(1) gives a Data Principal the right to obtain a summary of her personal data being processed, the identities of other Data Fiduciaries and Data Processors with whom it has been shared, and related information. Rule 14(2) provides that she makes the request using the means and furnishing the particulars the Data Fiduciary requires.
 
-The red team concern is that an access request channel can be abused to obtain another person's data.
+The red team concern is that an access request channel can be abused to obtain another person's data. These tests check that failure, which is also a section 8(5) safeguards issue. They do not test whether a genuine access request is honoured.
 
 ### Testing Strategy
 
@@ -253,7 +253,7 @@ redteam:
 
 Section 12(2) requires a Data Fiduciary, on a request from the Data Principal, to correct inaccurate or misleading personal data, complete incomplete data, and update it.
 
-An AI agent that can edit records must not let one user change another person's data, and must not make changes beyond what was requested and authorized.
+An AI agent that can edit records must not let one user change another person's data, and must not make changes beyond what was requested and authorized. These tests check that misuse. They do not test whether a genuine correction request is carried out.
 
 ### Testing Strategy
 
@@ -285,11 +285,11 @@ The following obligations are not mapped because a red team probe cannot observe
 
 - **Section 8(6) and Rule 7, breach intimation**: Notifying the Board and each affected Data Principal is an organizational process.
 - **Section 5 and Rule 3, notice**: The content and presentation of notices are reviewed against the text, not tested by prompting.
-- **Section 10 and Rule 13, Significant Data Fiduciary duties**: Data Protection Impact Assessments, audits, and the Data Protection Officer are governance measures.
+- **Section 10 and Rule 13, Significant Data Fiduciary duties**: Data Protection Impact Assessments, data audits, the Data Protection Officer, and the Rule 13(3) due diligence on algorithmic software are governance measures.
 - **Section 13, grievance redressal**: Response periods and mechanisms are operational.
 - **Section 16 and Rule 15, processing outside India**: Transfer restrictions depend on government notification and orders, and on where data is hosted, not on model behavior.
 
-The DPDP Act has no separate category of sensitive personal data and no provision equivalent to GDPR Article 22 on automated decision-making, so this preset does not include bias plugins. Add them separately if your use case calls for them.
+The DPDP Act has no separate category of sensitive personal data and no provision equivalent to GDPR Article 22 on automated decision-making, so this preset does not include bias plugins. Until section 44(2) commences and omits section 43A of the Information Technology Act, 2000, the Information Technology (Reasonable Security Practices and Procedures and Sensitive Personal Data or Information) Rules, 2011 continue to apply to sensitive personal data. For Significant Data Fiduciaries, Rule 13(3) requires due diligence that algorithmic software is not likely to pose a risk to the rights of Data Principals. Add bias plugins separately if your use case calls for them.
 
 ## Custom DPDP Testing
 
@@ -340,5 +340,7 @@ redteam:
 - [The Digital Personal Data Protection Act, 2023 (No. 22 of 2023), Gazette of India, 11 August 2023](https://www.meity.gov.in/static/uploads/2024/06/2bf1f0e9f04e6fb4f8fef35e82c42aa5.pdf)
 - [Digital Personal Data Protection Rules, 2025, G.S.R. 846(E), 13 November 2025](https://egazette.gov.in/WriteReadData/2025/267650.pdf)
 - [Commencement notification, G.S.R. 843(E), 13 November 2025](https://egazette.gov.in/WriteReadData/2025/267647.pdf)
+- [Corrigendum to the Rules, G.S.R. 892(E), 10 December 2025](https://egazette.gov.in/WriteReadData/2025/268455.pdf)
+- [Digital Personal Data Protection (Removal of Difficulties) Order, 2026, S.O. 5458(E), 5 October 2026](https://egazette.gov.in/WriteReadData/2026/276885.pdf)
 
 To learn more about setting up AI red teaming, see [Introduction to LLM red teaming](/docs/red-team/) and [Configuration details](/docs/red-team/configuration/).
