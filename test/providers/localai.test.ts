@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { LocalAiChatProvider, LocalAiCompletionProvider } from '../../src/providers/localai';
+import {
+  LocalAiChatProvider,
+  LocalAiCompletionProvider,
+  LocalAiEmbeddingProvider,
+} from '../../src/providers/localai';
 
 const createChatResponseData = () => ({
   data: { choices: [{ message: { content: 'Test output' } }] },
@@ -151,5 +155,46 @@ describe('LocalAI empty choices handling', () => {
     const result = await provider.callApi('Test prompt');
 
     expect(result.error).toContain('Malformed response data');
+  });
+});
+
+describe.each([
+  { source: 'env', baseUrl: 'http://localai.example/v1' },
+  { source: 'env', baseUrl: 'http://localai.example/v1/' },
+  { source: 'env', baseUrl: 'http://localai.example/v1///' },
+  { source: 'config', baseUrl: 'http://localai.example/v1/' },
+])('LocalAI base URL from $source: $baseUrl', ({ source, baseUrl }) => {
+  const options =
+    source === 'env' ? { env: { LOCALAI_BASE_URL: baseUrl } } : { config: { apiBaseUrl: baseUrl } };
+
+  beforeEach(() => {
+    vi.resetAllMocks();
+  });
+
+  it.each([
+    {
+      endpoint: 'chat/completions',
+      call: () => new LocalAiChatProvider('test-model', options).callApi('Test prompt'),
+      data: { choices: [{ message: { content: 'Test output' } }] },
+    },
+    {
+      endpoint: 'completions',
+      call: () => new LocalAiCompletionProvider('test-model', options).callApi('Test prompt'),
+      data: { choices: [{ text: 'Test output' }] },
+    },
+    {
+      endpoint: 'embeddings',
+      call: () => new LocalAiEmbeddingProvider('test-model', options).callEmbeddingApi('Test'),
+      data: { data: [{ embedding: [0.1, 0.2] }] },
+    },
+  ])('requests $endpoint without a doubled slash', async ({ endpoint, call, data }) => {
+    vi.mocked(fetchWithCache).mockResolvedValue({ data } as any);
+
+    const result = await call();
+
+    expect(result.error).toBeUndefined();
+    expect(vi.mocked(fetchWithCache).mock.calls[0][0]).toBe(
+      `http://localai.example/v1/${endpoint}`,
+    );
   });
 });
