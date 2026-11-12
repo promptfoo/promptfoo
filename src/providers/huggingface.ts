@@ -64,8 +64,6 @@ const HuggingFaceTextGenerationKeys = new Set<keyof HuggingfaceTextGenerationOpt
   'return_full_text',
   'num_return_sequences',
   'do_sample',
-  'use_cache',
-  'wait_for_model',
 ]);
 
 /**
@@ -243,12 +241,20 @@ export class HuggingfaceTextGenerationProvider implements ApiProvider {
       ? this.config.apiEndpoint
       : `${HF_INFERENCE_API_URL}/models/${this.modelName}`;
 
+    // The Inference API reads use_cache and wait_for_model from `options`, not `parameters`.
+    const options = {
+      ...(this.config.use_cache !== undefined && { use_cache: this.config.use_cache }),
+      ...(this.config.wait_for_model !== undefined && {
+        wait_for_model: this.config.wait_for_model,
+      }),
+    };
     const params = {
       inputs: prompt,
       parameters: {
         return_full_text: this.config.return_full_text ?? false,
         ...this.getConfig(),
       },
+      ...(Object.keys(options).length > 0 && { options }),
     };
 
     logger.debug(`Huggingface Inference API request: ${url}`, { params });
