@@ -2,6 +2,8 @@
 
 Evaluate two camera inspection reports with `gemini-decision-1`. Each request asks whether the camera is damaged (`noul`), where it should go (`choice`), and how severely its function is impaired (`score`).
 
+## Run the example
+
 Set `GOOGLE_API_KEY` or `GEMINI_API_KEY` to your Gemini Developer API key, then run the example.
 
 ```sh

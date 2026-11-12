@@ -5,12 +5,21 @@ import {
   isAbortError,
 } from '../../util/fetch/errors';
 import { renderVarsInObject } from '../../util/render';
-import { getNunjucksEngine } from '../../util/templates';
-import { resolveProviderApiKey } from '../credentials';
+import {
+  type DecisionGradingConfig,
+  decisionLabelEntries,
+  gradeDecisionScore,
+  makeNoulOrScoreQuestion,
+  readTextDecisionRubric,
+  resolveDecisionThreshold,
+} from '../decisionGrading';
 import { getRequestTimeoutMs } from '../shared';
-import { classifyDecision, type DecisionGradingConfig, gradeDecision } from './decisionGrading';
-import { decisionsQuestionsSchema, parseDecisionsResponse } from './decisionSchema';
-import { calculateGoogleCost, getGoogleApiBaseUrl } from './util';
+import {
+  type DecisionAnswers,
+  decisionsQuestionsSchema,
+  parseDecisionsResponse,
+} from './decisionSchema';
+import { calculateGoogleCost, getGoogleApiBaseUrl, getNativeGeminiApiKey } from './util';
 
 import type {
   ApiProvider,
@@ -23,6 +32,9 @@ import type {
 import type { GoogleProviderConfig } from './types';
 
 type DecisionsConfig = GoogleProviderConfig & DecisionGradingConfig & { questions?: unknown };
+type DecisionsResult =
+  | (Omit<ProviderResponse, 'output' | 'error'> & { output: DecisionAnswers })
+  | { error: string; metadata?: ProviderResponse['metadata'] };
 
 const mediaTypes = new Set(['image', 'audio', 'video', 'document']);
 
@@ -59,6 +71,7 @@ function parseDecisionInput(prompt: string): string | Record<string, unknown> | 
 
 export class GoogleDecisionsProvider implements ApiProvider {
   readonly config: DecisionsConfig;
+  readonly handlesOwnRetries = true;
 
   constructor(
     readonly modelName: string,
@@ -71,15 +84,17 @@ export class GoogleDecisionsProvider implements ApiProvider {
     return this.options.id ?? `google:decisions:${this.modelName}`;
   }
 
+  getApiKey(): string | undefined {
+    return getNativeGeminiApiKey(this.config, this.options.env);
+  }
+
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     if (context?.isGrading) {
-      return gradeDecision(prompt, context, this.config, (input, questions) =>
-        this.ask(input, questions, options),
-      );
+      return this.grade(prompt, context, options);
     }
     const questions = context?.prompt?.config?.questions ?? this.config.questions;
     return this.ask(
@@ -89,20 +104,88 @@ export class GoogleDecisionsProvider implements ApiProvider {
     );
   }
 
+  private async grade(
+    prompt: string,
+    context: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
+    if (context.prompt.label !== 'llm-rubric') {
+      return {
+        error: `Gemini Decisions cannot grade \`${context.prompt.label}\` assertions. Use llm-rubric or classifier.`,
+      };
+    }
+    const rubric = readTextDecisionRubric(prompt, context.vars, 'Gemini Decisions');
+    if ('error' in rubric) {
+      return rubric;
+    }
+    const { levels, threshold: configuredThreshold } = { ...this.config, ...context.prompt.config };
+    const threshold = resolveDecisionThreshold(configuredThreshold);
+    if (threshold === undefined) {
+      return { error: 'Gemini Decisions threshold must be a number from 0 to 1.' };
+    }
+    const question = makeNoulOrScoreQuestion(rubric.instructions, levels);
+    const result = await this.ask(rubric.input, { grade: question }, options);
+    if ('error' in result) {
+      return result;
+    }
+    const answer = result.output.grade;
+    if (answer.type === 'choice') {
+      return { error: 'Missing Gemini Decisions rubric score.' };
+    }
+    const top = question.type === 'score' ? question.criteria.length - 1 : 1;
+    const { pass, score } = gradeDecisionScore(
+      answer.type === 'noul' ? answer.noul : answer.score,
+      top,
+      threshold,
+    );
+    return {
+      ...result,
+      output: {
+        pass,
+        score,
+        ...(!pass && { reason: `Gemini Decisions score ${score} < threshold ${threshold}` }),
+      },
+    };
+  }
+
   async callClassificationApi(
     prompt: string,
     options?: CallApiOptionsParams,
   ): Promise<ProviderClassificationResponse> {
-    return classifyDecision(prompt, this.config, (input, questions) =>
-      this.ask(input, questions, options),
+    const { instructions, labels } = this.config;
+    if (
+      !instructions ||
+      !labels ||
+      typeof labels !== 'object' ||
+      (Array.isArray(labels) &&
+        (!labels.every((label) => typeof label === 'string') ||
+          new Set(labels).size !== labels.length))
+    ) {
+      return { error: 'Gemini Decisions classifier requires instructions and distinct labels.' };
+    }
+    const criteria = Object.fromEntries(
+      decisionLabelEntries(labels).map(([label, description]) => [label, description ?? '']),
     );
+    const result = await this.ask(
+      prompt,
+      { classification: { type: 'choice', instructions, criteria } },
+      options,
+    );
+    if ('error' in result) {
+      return result;
+    }
+    const { output, ...response } = result;
+    const answer = output.classification;
+    return answer.type === 'choice'
+      ? { ...response, classification: answer.probabilities }
+      : { ...response, error: 'Missing Gemini Decisions classifier probabilities.' };
   }
 
   private async ask(
     input: ReturnType<typeof parseDecisionInput>,
     questions: unknown,
     options?: CallApiOptionsParams,
-  ): Promise<ProviderResponse> {
+  ): Promise<DecisionsResult> {
     const signal = options?.abortSignal;
     signal?.throwIfAborted();
     if (this.config.vertexai) {
@@ -117,13 +200,7 @@ export class GoogleDecisionsProvider implements ApiProvider {
         error: `Invalid Gemini Decisions questions at ${['questions', ...issue.path].join('.')}: ${issue.message}`,
       };
     }
-    const rawKey = resolveProviderApiKey(this.config, this.options.env, [
-      'GOOGLE_API_KEY',
-      'GEMINI_API_KEY',
-      'PALM_API_KEY',
-      'GOOGLE_GENERATIVE_AI_API_KEY',
-    ]);
-    const apiKey = rawKey && getNunjucksEngine().renderString(rawKey, {});
+    const apiKey = this.getApiKey();
     if (!apiKey) {
       return {
         error:
@@ -131,6 +208,7 @@ export class GoogleDecisionsProvider implements ApiProvider {
       };
     }
     const baseUrl = getGoogleApiBaseUrl(this.config, this.options.env).replace(/\/+$/, '');
+    const redactApiKey = (value: unknown) => String(value).split(apiKey).join('[REDACTED]');
     const headers = new Headers(this.config.headers);
     headers.set('Content-Type', 'application/json');
     headers.set('x-goog-api-key', apiKey);
@@ -154,7 +232,7 @@ export class GoogleDecisionsProvider implements ApiProvider {
       );
       if (status < 200 || status >= 300 || data?.error) {
         return {
-          error: `Gemini Decisions API error (HTTP ${status}): ${String(data?.error?.message ?? statusText).replaceAll(apiKey, '[REDACTED]')}`,
+          error: `Gemini Decisions API error (HTTP ${status}): ${redactApiKey(data?.error?.message ?? statusText)}`,
         };
       }
       const response = parseDecisionsResponse(data, parsed.data);
@@ -189,12 +267,12 @@ export class GoogleDecisionsProvider implements ApiProvider {
       }
       if (error instanceof HttpRateLimitError) {
         return {
-          error: formatRateLimitErrorMessage(error).replaceAll(apiKey, '[REDACTED]'),
+          error: redactApiKey(formatRateLimitErrorMessage(error)),
           metadata: {
             rateLimitKind: error.kind,
             http: {
               status: error.status,
-              statusText: error.statusText.replaceAll(apiKey, '[REDACTED]'),
+              statusText: redactApiKey(error.statusText),
               headers:
                 error.retryAfterMs === undefined
                   ? {}
@@ -204,7 +282,7 @@ export class GoogleDecisionsProvider implements ApiProvider {
         };
       }
       return {
-        error: `Gemini Decisions API call failed: ${String(error).replaceAll(apiKey, '[REDACTED]')}`,
+        error: `Gemini Decisions API call failed: ${redactApiKey(error)}`,
       };
     }
   }

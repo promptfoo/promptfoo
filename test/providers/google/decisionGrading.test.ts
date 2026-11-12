@@ -4,7 +4,7 @@ import { matchesClassification } from '../../../src/matchers/classification';
 import { matchesLlmRubric } from '../../../src/matchers/llmGrading';
 import { GoogleDecisionsProvider } from '../../../src/providers/google/decisions';
 
-import type { DecisionGradingConfig } from '../../../src/providers/google/decisionGrading';
+import type { DecisionGradingConfig } from '../../../src/providers/decisionGrading';
 
 vi.mock('../../../src/cache', async (importOriginal) => ({
   ...(await importOriginal()),
@@ -87,6 +87,26 @@ describe('Gemini Decisions grading', () => {
         classification: { type: 'choice', instructions, criteria: { billing: '', account: '' } },
       },
     });
+  });
+
+  it('compares the full-precision score with the threshold from prompt config', async () => {
+    const levels = ['Wrong', 'Right'];
+    const score = 0.4999996;
+    respond({
+      grade: {
+        type: 'score',
+        score,
+        confidence: 1 - score,
+        probabilities: { 0: 1 - score, 1: score },
+        legend: { 0: levels[0], 1: levels[1] },
+      },
+    });
+    const result = await provider({ threshold: 0.4 }).callApi('', {
+      isGrading: true,
+      prompt: { raw: '', label: 'llm-rubric', config: { levels, threshold: 0.5 } },
+      vars: { rubric: 'Is this correct?', output: 'Sometimes.' },
+    });
+    expect(result.output).toMatchObject({ pass: false, score });
   });
 
   it('reports matcher attachments as an error before grading a text placeholder', async () => {

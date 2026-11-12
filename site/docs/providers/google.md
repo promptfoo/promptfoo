@@ -363,7 +363,12 @@ assert:
           other: Offers another remedy or no remedy
 ```
 
-A rubric passes when its yes probability reaches the provider's `config.threshold` (default `0.5`). For a scored rubric, set `config.levels` to an ordered list of descriptions. Promptfoo divides the returned score by the highest level index before applying the threshold. A classifier compares the probability of the specified label with the assertion's `threshold`.
+To run the same text-grading assertions with TypeSafe Jev or OpenAI Decisions, change the provider ID to `typesafe:jev-1.13.0` or `openai:decisions:gpt-6-luna` and supply that provider's API key.
+
+- `llm-rubric` uses the yes probability as its score. For a scored rubric that works with all three providers, supply 2–10 string descriptions in `config.levels`, ordered from lowest to highest. Promptfoo divides the returned score by the highest level index. The provider's `config.threshold` defaults to `0.5` for either rubric.
+- `classifier` accepts `config.instructions` and `config.labels`. Use a list of label strings or a map of labels to descriptions. Use `null` for a label that needs no description. The assertion compares the probability of its requested label with its own `threshold`.
+
+For direct evaluations, Gemini and Jev use question IDs as keys in both `config.questions` and `output`, with question types `noul`, `choice`, and `score`. OpenAI takes an ordered question list, calls its yes/no question a `predicate`, and exposes the ordered answers through `JSON.parse(output).answers`. Each API has its own criteria format. See the [TypeSafe Jev provider](./typesafe.md) and [OpenAI Decisions provider](./openai-decisions.md) for examples.
 
 ## Available Models
 

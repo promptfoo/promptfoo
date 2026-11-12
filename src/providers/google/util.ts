@@ -16,6 +16,7 @@ import { parseFileUrl } from '../../util/functions/loadFunction';
 import { renderVarsInObject } from '../../util/index';
 import { getAjv } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
+import { resolveProviderApiKey } from '../credentials';
 import { resolveProviderEnv } from '../env';
 import { encodePcmToWav } from '../pcm';
 import {
@@ -281,6 +282,19 @@ export function mergeGoogleRequestTools(
     ...configuredTools,
     ...(Array.isArray(passthroughTools) ? passthroughTools : [passthroughTools]),
   ];
+}
+
+export function getNativeGeminiApiKey(
+  config: { apiKey?: string; apiKeyEnvar?: string },
+  env?: Readonly<Record<string, string | undefined>>,
+): string | undefined {
+  const key = resolveProviderApiKey(config, env, [
+    'GOOGLE_API_KEY',
+    'GEMINI_API_KEY',
+    'PALM_API_KEY',
+    'GOOGLE_GENERATIVE_AI_API_KEY',
+  ]);
+  return key ? getNunjucksEngine().renderString(key, {}) : undefined;
 }
 
 /** Resolve native Gemini endpoints consistently across text and image adapters. */

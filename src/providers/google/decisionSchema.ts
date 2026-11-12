@@ -96,7 +96,8 @@ const responseSchema = z.looseObject({
 function sameKeys(left: object, right: object): boolean {
   const keys = Object.keys(left);
   return (
-    keys.length === Object.keys(right).length && keys.every((key) => Object.hasOwn(right, key))
+    keys.length === Object.keys(right).length &&
+    keys.every((key) => Object.prototype.hasOwnProperty.call(right, key))
   );
 }
 
@@ -119,7 +120,10 @@ export function parseDecisionsResponse(
     if (question.type === 'noul' || !sameKeys(question.criteria, answer.probabilities)) {
       return undefined;
     }
-    if (answer.type === 'choice' && !Object.hasOwn(answer.probabilities, answer.choice)) {
+    if (
+      answer.type === 'choice' &&
+      !Object.prototype.hasOwnProperty.call(answer.probabilities, answer.choice)
+    ) {
       return undefined;
     }
     if (answer.type === 'score' && question.type === 'score') {
