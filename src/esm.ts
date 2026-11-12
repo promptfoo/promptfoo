@@ -227,15 +227,21 @@ export function getDirectory(): string {
 
 function getNamedExport(mod: Record<string, unknown>, name: string, bindToModule = false) {
   const exported = mod[name];
-  return bindToModule && typeof exported === 'function' ? exported.bind(mod) : exported;
+  const transpiledDefault = bindToModule && name === 'default' && mod.__esModule === true;
+  return bindToModule && !transpiledDefault && typeof exported === 'function'
+    ? exported.bind(mod)
+    : exported;
 }
 
 function bindDefaultExport(
   exported: unknown,
-  owner: { default?: unknown } | undefined,
+  owner: { default?: unknown; __esModule?: unknown } | undefined,
   bindToModule = false,
 ) {
-  return bindToModule && owner?.default && typeof exported === 'function'
+  return bindToModule &&
+    owner?.default &&
+    owner.__esModule !== true &&
+    typeof exported === 'function'
     ? exported.bind(owner)
     : exported;
 }

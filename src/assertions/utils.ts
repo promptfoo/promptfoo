@@ -66,7 +66,9 @@ export async function resolveJavaScriptFileFunction(
   } else if (typeof requiredModule === 'function') {
     return requiredModule;
   } else if (typeof requiredModule?.default === 'function') {
-    return requiredModule.default.bind(requiredModule);
+    return requiredModule.__esModule === true
+      ? requiredModule.default
+      : requiredModule.default.bind(requiredModule);
   }
   if (functionName) {
     throw new Error(

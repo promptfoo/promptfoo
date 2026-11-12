@@ -1,3 +1,5 @@
+import { execFileSync } from 'node:child_process';
+import { pathToFileURL } from 'node:url';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -36,6 +38,16 @@ describe('JavaScript file graders with the real module loader', () => {
         expected: 'hello',
         grade(output) { return output === this.expected; },
       };`,
+      functionName: 'grade',
+    },
+    {
+      name: 'transpiled default-object named method',
+      filename: 'grader.cjs',
+      source: `Object.defineProperty(exports, '__esModule', { value: true });
+        exports.default = {
+          expected: 'hello',
+          grade(output) { return output === this.expected; },
+        };`,
       functionName: 'grade',
     },
     {
@@ -104,6 +116,43 @@ describe('JavaScript file graders with the real module loader', () => {
 
     expect(await grade('hello', {})).toBe(true);
   });
+
+  it.each([
+    { extension: 'cjs', functionName: undefined },
+    { extension: 'js', functionName: undefined },
+    { extension: 'js', functionName: 'default' },
+  ])(
+    'keeps a transpiled .$extension default unbound (export: $functionName)',
+    ({ extension, functionName }) => {
+      const filePath = path.join(directory, `transpiled-grader.${extension}`);
+      fs.writeFileSync(
+        filePath,
+        `Object.defineProperty(exports, '__esModule', { value: true });
+        exports.default = function(output) {
+          'use strict';
+          return this === undefined && output === 'hello';
+        };`,
+      );
+      const utilsUrl = pathToFileURL(path.resolve(__dirname, '../../src/assertions/utils.ts')).href;
+
+      // Vitest's interop can unwrap compiler-generated objects before our loader sees them.
+      const result = execFileSync(
+        process.execPath,
+        [
+          '--import',
+          'tsx',
+          '--input-type=module',
+          '--eval',
+          `import { resolveJavaScriptFileFunction } from ${JSON.stringify(utilsUrl)};
+          const grade = await resolveJavaScriptFileFunction(${JSON.stringify(filePath)}, ${JSON.stringify(functionName)});
+          console.log(JSON.stringify(await grade('hello')));`,
+        ],
+        { encoding: 'utf8' },
+      );
+
+      expect(JSON.parse(result.trim())).toBe(true);
+    },
+  );
 
   it.each([
     {
