@@ -9,6 +9,7 @@ export const FRAMEWORK_COMPLIANCE_IDS = [
   'iso:42001',
   'gdpr',
   'dod:ai:ethics',
+  'dpdp',
 ] as const;
 export type FrameworkComplianceId = (typeof FRAMEWORK_COMPLIANCE_IDS)[number];
 

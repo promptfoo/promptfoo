@@ -130,6 +130,7 @@ Examples of allowed framework IDs:
 - `iso:42001`
 - `gdpr`
 - `dod:ai:ethics`
+- `dpdp`
 
 ```yaml
 redteam:

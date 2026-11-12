@@ -45,6 +45,7 @@ Promptfoo also supports various risk management frameworks based on common secur
 | [**ISO/IEC 42001**](/docs/red-team/iso-42001/)                       | iso:42001       | iso:42001:privacy          |
 | [**Data Protection**](/docs/red-team/gdpr/)                          | gdpr            | gdpr:art5                  |
 | [**EU AI Act**](/docs/red-team/eu-ai-act/)                           | eu:ai-act       | eu:ai-act:art5             |
+| [**India DPDP Act**](/docs/red-team/dpdp/)                           | dpdp            | dpdp:sec8-5                |
 | **Promptfoo Recommended**                                            | default         | default                    |
 
 ## Available Plugins

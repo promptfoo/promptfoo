@@ -198,9 +198,9 @@ describe('FrameworkCompliance', () => {
 
     renderFrameworkCompliance(categoryStats, 0.9, undefined);
 
-    // Should render FrameworkCards for all frameworks (9 total)
+    // Should render FrameworkCards for all frameworks (10 total)
     const frameworkCardCalls = mockFrameworkCard.mock.calls;
-    expect(frameworkCardCalls.length).toBe(9); // All FRAMEWORK_COMPLIANCE_IDS
+    expect(frameworkCardCalls.length).toBe(10); // All FRAMEWORK_COMPLIANCE_IDS
   });
 
   it('should pass frameworksToShow to CSVExporter', () => {
