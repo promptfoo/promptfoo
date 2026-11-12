@@ -1,0 +1,87 @@
+# Reusable eval job for trusted GitLab pipelines with a container executor.
+# Pin remote includes with include:integrity or a reviewed commit SHA.
+.promptfoo-eval:
+  image:
+    name: ghcr.io/promptfoo/promptfoo:0.124.1@sha256:a9213a6d35ecc60ac29f0dbb1183f2f8457f0a9e3f3f29d16f09277c87834c08
+    entrypoint: ['']
+  stage: test
+  variables:
+    PROMPTFOO_CONFIG: promptfooconfig.yaml
+    PROMPTFOO_OUTPUT_DIR: .promptfoo-results
+    PROMPTFOO_CACHE_PATH: .promptfoo/cache
+    PROMPTFOO_PASS_RATE_THRESHOLD: '100'
+    PROMPTFOO_SHARE: 'false'
+    PROMPTFOO_DISABLE_UPDATE: 'true'
+    # This is a CLI job, not a hosted server; allow ordinary {{env.NAME}} templates.
+    PROMPTFOO_SELF_HOSTED: 'false'
+  cache:
+    key: 'promptfoo-$CI_PROJECT_ID-$CI_JOB_NAME_SLUG-$CI_COMMIT_SHA'
+    paths:
+      - $PROMPTFOO_CACHE_PATH/
+  script:
+    - |
+      set -eu
+      : "${PROMPTFOO_OUTPUT_DIR:?PROMPTFOO_OUTPUT_DIR must not be empty}"
+      mkdir -p "$PROMPTFOO_OUTPUT_DIR"
+      if find "$PROMPTFOO_OUTPUT_DIR/." -mindepth 1 -maxdepth 1 -print -quit | grep -q .; then
+        rm -f "$PROMPTFOO_OUTPUT_DIR/results.json" "$PROMPTFOO_OUTPUT_DIR/results.junit.xml"
+        echo 'PROMPTFOO_OUTPUT_DIR must be empty before running an eval.' >&2
+        exit 1
+      fi
+
+      : "${PROMPTFOO_CONFIG:?PROMPTFOO_CONFIG must point to a config file}"
+      threshold="$(node -e '
+        const input = process.argv[1];
+        const value = Number(input);
+        if (!/^(?:\d+(?:\.\d+)?|\.\d+)$/.test(input) || !Number.isFinite(value) || value < 0 || value > 100) {
+          console.error("PROMPTFOO_PASS_RATE_THRESHOLD must be a decimal percentage from 0 through 100.");
+          process.exit(1);
+        }
+        console.log(value);
+      ' -- "${PROMPTFOO_PASS_RATE_THRESHOLD:-}")"
+      set -- eval \
+        --config "$PROMPTFOO_CONFIG" \
+        --no-progress-bar \
+        --output "$PROMPTFOO_OUTPUT_DIR/results.json" \
+        --output "$PROMPTFOO_OUTPUT_DIR/results.junit.xml"
+      if [ "${CI_PIPELINE_SOURCE:-}" = schedule ]; then
+        set -- "$@" --no-cache
+      fi
+      case "${PROMPTFOO_SHARE:-false}" in
+        true) set -- "$@" --share ;;
+        false) set -- "$@" --no-share ;;
+        *) echo 'PROMPTFOO_SHARE must be true or false.' >&2; exit 1 ;;
+      esac
+
+      # Preserve CLI failures, then independently check a successful process's results.
+      promptfoo "$@"
+      node --input-type=module - "$PROMPTFOO_OUTPUT_DIR/results.json" "$threshold" <<'PROMPTFOO_CHECK_RESULTS'
+      import { readFile } from 'node:fs/promises';
+
+      const [, , resultsPath, threshold] = process.argv;
+      const result = JSON.parse(await readFile(resultsPath, 'utf8'));
+      const stats = result?.results?.stats;
+      const counts = [stats?.successes, stats?.failures, stats?.errors];
+      if (!counts.every((count) => Number.isSafeInteger(count) && count >= 0)) {
+        throw new Error('Eval results must contain non-negative integer success, failure, and error counts.');
+      }
+      const total = counts.reduce((sum, count) => sum + count, 0);
+      if (!Number.isSafeInteger(total) || total === 0) {
+        throw new Error('Eval results must contain at least one test.');
+      }
+      const passRate = (stats.successes / total) * 100;
+      console.log(`${stats.successes}/${total} tests passed; required pass rate: ${threshold}%.`);
+      if (passRate < Number(threshold)) {
+        process.exitCode = 1;
+      }
+      PROMPTFOO_CHECK_RESULTS
+  artifacts:
+    when: always
+    access: developer
+    expire_in: 1 week
+    paths:
+      - $PROMPTFOO_OUTPUT_DIR/results.json
+      - $PROMPTFOO_OUTPUT_DIR/results.junit.xml
+    reports:
+      junit: $PROMPTFOO_OUTPUT_DIR/results.junit.xml
+  allow_failure: false
