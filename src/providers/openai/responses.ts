@@ -880,6 +880,14 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     return undefined;
   }
 
+  protected getObservableToolCost(
+    data: unknown,
+    modelName: string,
+    config: OpenAiBillingConfig,
+  ): number {
+    return calculateObservableOpenAIToolCost(data, modelName, config);
+  }
+
   protected applyBilling(
     result: ProviderResponse,
     data: any,
@@ -943,7 +951,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     }
     const observableToolCost = cached
       ? 0
-      : calculateObservableOpenAIToolCost(data, billingLookupModel, config);
+      : this.getObservableToolCost(data, billingLookupModel, config);
 
     return {
       ...result,
