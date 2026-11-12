@@ -88,7 +88,7 @@ promptfoo eval --prompt "Hello, how are you?" --providers google:gemini-3.8-flas
 In addition to authentication, you can configure:
 
 - `GOOGLE_API_HOST` - Override the Google API host (defaults to `generativelanguage.googleapis.com`)
-- `GOOGLE_API_BASE_URL` - Override the Google API base URL (defaults to `https://generativelanguage.googleapis.com`)
+- `GOOGLE_API_BASE_URL` - Override the Google API base URL (defaults to `https://generativelanguage.googleapis.com`; a trailing slash is optional)
 
 Example with custom host:
 
