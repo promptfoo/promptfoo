@@ -549,13 +549,15 @@ export class VertexChatProvider extends GoogleGenericProvider {
     }
 
     try {
-      const output = outputFromMessage(data as any, showThinking);
-
-      if (!output) {
+      // An empty completion is a valid answer that assertions can grade;
+      // only a response without a content array is malformed.
+      if (!Array.isArray(data?.content)) {
         return {
           error: `No output found in Claude API response: ${JSON.stringify(data)}`,
         };
       }
+
+      const output = outputFromMessage(data as any, showThinking);
 
       const tokenUsage: TokenUsage = {
         ...getTokenUsage(data, false),
@@ -1342,13 +1344,10 @@ export class VertexChatProvider extends GoogleGenericProvider {
     }
 
     try {
-      // Extract the completion text from the response
-      let output = '';
-      if (data.choices && data.choices.length > 0) {
-        output = data.choices[0].message.content;
-      }
+      // Extract the completion text; an empty string is a valid completion.
+      const output = data?.choices?.[0]?.message?.content;
 
-      if (!output) {
+      if (typeof output !== 'string') {
         return {
           error: `No output found in Llama API response: ${JSON.stringify(data)}`,
         };
