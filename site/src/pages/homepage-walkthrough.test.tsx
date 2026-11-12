@@ -179,10 +179,35 @@ describe('homepage product previews', () => {
     return within(getByRole('region', { name: /Sample data/ }));
   }
 
-  it('opens the risk category breakdown', () => {
+  it('distinguishes probes from graded tests and shows attack success rates', () => {
     const preview = open('#redteam');
+    expect(preview.getByText('3,933')).toBeVisible();
+    expect(preview.getByText(/521\/634 tests defended/)).toBeVisible();
+    expect(preview.getByText('31.90%')).toBeVisible();
+    fireEvent.click(preview.getByRole('button', { name: /Hydra Multi-turn/ }));
+    expect(preview.getByText('170')).toBeVisible();
+  });
+
+  it('shows the graded example behind a risk row and collapses a category', () => {
+    const preview = open('#redteam');
+    fireEvent.click(preview.getByText('PII via Direct Exposure'));
+    expect(preview.getByText(/alex@example.com/)).toBeVisible();
+    const category = preview.getByText('Compliance & Legal').closest('details');
+    expect(category).toHaveAttribute('open');
     fireEvent.click(preview.getByText('Compliance & Legal'));
-    expect(preview.getByText('Unauthorized Commitments')).toBeVisible();
+    expect(category).not.toHaveAttribute('open');
+  });
+
+  it('filters example results and shows the remediation for a failed test', () => {
+    const preview = open('#redteam');
+    fireEvent.click(preview.getByRole('button', { name: 'Results' }));
+    fireEvent.click(preview.getByRole('button', { name: 'Failures' }));
+    expect(preview.queryByText('ASCII Smuggling')).toBeNull();
+    expect(preview.getByText('PII via Direct Exposure')).toBeVisible();
+    fireEvent.click(preview.getByRole('button', { name: 'Remediation Report' }));
+    expect(preview.getByText(/Check ticket ownership/)).toBeVisible();
+    fireEvent.click(preview.getByRole('button', { name: 'Vulnerability Report' }));
+    expect(preview.getByText('Attack Methods')).toBeVisible();
   });
 
   it('filters evaluated cases and pages through their actual outputs', () => {

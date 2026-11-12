@@ -18,7 +18,9 @@ export function PreviewFrame({
   className,
   backgroundImage,
   children,
+  header,
 }: FrameProps & {
+  header?: React.ReactNode;
   title: string;
   ratio: number;
   logo?: React.ReactNode;
@@ -37,15 +39,17 @@ export function PreviewFrame({
           } as React.CSSProperties
         }
       >
-        <div className={styles.chrome}>
-          {logo}
-          <b>{product}</b>
-          <span className={styles.divider} aria-hidden="true">
-            /
-          </span>
-          <span>{title}</span>
-          <small>{sampleLabel}</small>
-        </div>
+        {header ?? (
+          <div className={styles.chrome}>
+            {logo}
+            <b>{product}</b>
+            <span className={styles.divider} aria-hidden="true">
+              /
+            </span>
+            <span>{title}</span>
+            <small>{sampleLabel}</small>
+          </div>
+        )}
         {children}
       </section>
     </div>
