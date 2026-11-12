@@ -1,7 +1,8 @@
 ---
 title: HopBase
 sidebar_label: HopBase
-description: Configure HopBase models in promptfoo using the OpenAI-compatible and Anthropic Messages providers to compare GPT, Claude, GLM, and other models from one base URL.
+description: Configure HopBase in promptfoo with the OpenAI-compatible and Anthropic Messages providers to compare GPT, Claude, GLM, and other models from one base URL.
+sidebar_position: 42
 ---
 
 # HopBase
@@ -38,12 +39,16 @@ providers:
     config:
       apiBaseUrl: https://api.hop-base.com/v1
       apiKeyEnvar: HOPBASE_API_KEY
+      headers:
+        OpenAI-Organization: ''
       omitDefaults: true
       max_completion_tokens: 512
   - id: openai:chat:glm-5.3
     config:
       apiBaseUrl: https://api.hop-base.com/v1
       apiKeyEnvar: HOPBASE_API_KEY
+      headers:
+        OpenAI-Organization: ''
       omitDefaults: true
       max_tokens: 1024
       showThinking: false
@@ -51,6 +56,8 @@ providers:
     config:
       apiBaseUrl: https://api.hop-base.com/v1
       apiKeyEnvar: HOPBASE_API_KEY
+      headers:
+        OpenAI-Organization: ''
       omitDefaults: true
       max_tokens: 512
 ```
@@ -66,11 +73,18 @@ To test Claude models through the native Messages API, set `apiBaseUrl` on the A
 ```yaml
 providers:
   - id: anthropic:messages:claude-sonnet-5-5
+    env:
+      ANTHROPIC_CUSTOM_HEADERS: ''
     config:
       apiBaseUrl: https://api.hop-base.com
       apiKeyEnvar: HOPBASE_API_KEY
       max_tokens: 512
+      thinking:
+        type: between_tools
+      showThinking: false
 ```
+
+The empty `ANTHROPIC_CUSTOM_HEADERS` value keeps headers meant for another Anthropic endpoint out of HopBase requests. Claude Sonnet 5.5 thinks by default, and thinking tokens count toward `max_tokens`. `thinking: { type: between_tools }` skips up-front thinking for short, tool-free answers; to keep thinking on, remove it and raise `max_tokens`. `showThinking: false` excludes thinking text from the answer used by assertions.
 
 ## Grading
 
@@ -84,6 +98,8 @@ defaultTest:
       config:
         apiBaseUrl: https://api.hop-base.com/v1
         apiKeyEnvar: HOPBASE_API_KEY
+        headers:
+          OpenAI-Organization: ''
         omitDefaults: true
         max_completion_tokens: 1024
 ```

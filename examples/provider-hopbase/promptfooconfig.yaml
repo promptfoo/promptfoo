@@ -29,10 +29,16 @@ providers:
       showThinking: false
   - id: anthropic:messages:claude-sonnet-5-5
     label: 'Claude Sonnet 5.5 (Messages API)'
+    env:
+      ANTHROPIC_CUSTOM_HEADERS: ''
     config:
       apiBaseUrl: https://api.hop-base.com
       apiKeyEnvar: HOPBASE_API_KEY
       max_tokens: 512
+      # Sonnet 5.5 thinks by default; between_tools skips up-front thinking for a tool-free answer.
+      thinking:
+        type: between_tools
+      showThinking: false
 
 defaultTest:
   options:
