@@ -128,16 +128,13 @@ export function renderEnvOnlyInObject<T>(
     }
 
     if (typeof value === 'object' && value !== null) {
-      const result: Record<string, unknown> = {};
-      for (const key in value) {
-        // Conversation history is runtime data and may contain untrusted model output.
-        // Preserve it as literal data instead of rendering env templates.
-        result[key] =
-          key === '_conversation'
-            ? (value as Record<string, unknown>)[key]
-            : render((value as Record<string, unknown>)[key]);
-      }
-      return result;
+      return Object.fromEntries(
+        Object.entries(value).map(([key, child]) => [
+          key,
+          // Conversation history is runtime data and may contain untrusted model output.
+          key === '_conversation' ? child : render(child),
+        ]),
+      );
     }
 
     return value;
@@ -159,11 +156,9 @@ export function renderVarsInObject<T>(obj: T, vars?: Record<string, VarValue>): 
     return obj.map((item) => renderVarsInObject(item, vars)) as unknown as T;
   }
   if (typeof obj === 'object' && obj !== null) {
-    const result: Record<string, unknown> = {};
-    for (const key in obj) {
-      result[key] = renderVarsInObject((obj as Record<string, unknown>)[key], vars);
-    }
-    return result as T;
+    return Object.fromEntries(
+      Object.entries(obj).map(([key, value]) => [key, renderVarsInObject(value, vars)]),
+    ) as T;
   } else if (typeof obj === 'function') {
     const fn = obj as Function;
     return renderVarsInObject(fn({ vars }) as T);

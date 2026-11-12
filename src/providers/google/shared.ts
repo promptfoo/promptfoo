@@ -128,6 +128,8 @@ const GEMINI_3_5_FLASH_LITE_COST = {
  * @see https://cloud.google.com/vertex-ai/generative-ai/pricing
  */
 export const GOOGLE_MODELS: GoogleModel[] = [
+  // Gemini Decisions bills only input tokens, including the questions.
+  ...modelsWithCost(['gemini-decision-1'], { input: 0.1 / 1e6, output: 0 }),
   // Fairwind allowlisted Vertex model; the Flash introductory discount does not apply.
   {
     id: 'gemini-3.8-flash-cyber',

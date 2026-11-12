@@ -287,6 +287,7 @@ A model ID selects a provider route; it does not enable every operation offered 
 | `embedContent`                                                | Text strings through `google:embedding:`; multimodal embedding inputs are not exposed                                                                     |
 | Live WebSocket API                                            | Finite text/audio eval sessions, transcripts, and function callbacks through `google:live:`                                                               |
 | Interactions API                                              | File transcription, Gemini Omni video, and Gemini Robotics ER                                                                                             |
+| [Decisions API](#gemini-decisions-api)                        | Yes/no probabilities, classifications, and ordered scores through `google:decisions:gemini-decision-1`                                                    |
 | Video generation                                              | Gemini Omni uses Interactions (`google:gemini-omni-1.1-flash`). For Veo, use the Vertex long-running prediction API (`vertex:video:`).                    |
 | Native Gemini images                                          | Model-specific image provider; the legacy `google:image:` prefix instead selects Imagen's prediction format                                               |
 | Cached content                                                | Reference an existing cache with `passthrough.cachedContent`; cache creation and deletion are not provided                                                |
@@ -294,6 +295,75 @@ A model ID selects a provider route; it does not enable every operation offered 
 | Lyria music                                                   | No dedicated adapters                                                                                                                                     |
 
 Use a [custom provider](/docs/providers/custom-api) when you need an operation or response format outside these routes. `passthrough` adds request fields to an existing route; it does not change the API protocol. Consult the [Gemini API reference](https://ai.google.dev/api) for upstream capabilities.
+
+### Gemini Decisions API
+
+Use `google:decisions:gemini-decision-1` with a Gemini Developer API key (`GOOGLE_API_KEY` or `GEMINI_API_KEY`). Each rendered prompt becomes the shared input for up to 1,000 questions in `config.questions`. Promptfoo returns the answers as an object keyed by question ID, so JavaScript assertions can read each answer directly.
+
+```yaml title="promptfooconfig.yaml"
+prompts:
+  - '{{inspection}}'
+
+providers:
+  - id: google:decisions:gemini-decision-1
+    config:
+      questions:
+        damaged:
+          type: noul
+          instructions: Does the inspection report describe physical damage to the product?
+
+tests:
+  - vars:
+      inspection: The camera lens is cracked.
+    assert:
+      - type: javascript
+        value: output.damaged.noul > 0.8
+```
+
+| Question type | Criteria                                            | Answer fields                                                                                                       |
+| ------------- | --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `noul`        | Optional `true_description` and `false_description` | `noul` is the probability of yes, from 0.01 to 0.99.                                                                |
+| `choice`      | Map of 2–255 option keys to descriptions            | `choice` is the selected key. `probabilities` gives the probability of each option.                                 |
+| `score`       | Array of 2–255 descriptions, lowest level first     | `score` is the probability-weighted average of the zero-based level indices. `legend` maps indices to descriptions. |
+
+Every answer includes `confidence`. A score also includes its per-level `probabilities`. To evaluate all three question types in one request, run the [product inspection example](https://github.com/promptfoo/promptfoo/tree/main/examples/google-decisions).
+
+For multimodal input, use a prompt containing JSON-encoded native content blocks. Supply image, audio, video, or PDF content as base64 `data` or a supported `uri`, with the corresponding `mime_type`.
+
+```yaml
+prompts:
+  - |
+    [
+      {"type": "text", "text": "Photo from the product inspection."},
+      {"type": "image", "uri": "{{photoUrl}}", "mime_type": "image/jpeg"}
+    ]
+```
+
+Use a Gemini Files API URI or a publicly accessible or signed HTTPS URL for `photoUrl`. For supported media formats and request limits, see [Google's Decisions API guide](https://aistudio.google.com/docs/decisions-api).
+
+#### Grade another provider's output
+
+To evaluate text output, select Gemini Decisions as the provider for an `llm-rubric` or `classifier` assertion. Promptfoo uses the output under test as input and builds the question from the assertion.
+
+```yaml
+assert:
+  - type: llm-rubric
+    value: The support reply offers a replacement for the damaged camera.
+    provider: google:decisions:gemini-decision-1
+  - type: classifier
+    value: replacement
+    threshold: 0.8
+    provider:
+      id: google:decisions:gemini-decision-1
+      config:
+        instructions: What remedy does the support reply offer?
+        labels:
+          replacement: Sends a new camera
+          refund: Returns the purchase price
+          other: Offers another remedy or no remedy
+```
+
+A rubric passes when its yes probability reaches the provider's `config.threshold` (default `0.5`). For a scored rubric, set `config.levels` to an ordered list of descriptions. Promptfoo divides the returned score by the highest level index before applying the threshold. A classifier compares the probability of the specified label with the assertion's `threshold`.
 
 ## Available Models
 
