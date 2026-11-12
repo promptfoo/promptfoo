@@ -90,6 +90,8 @@ Use `vertex:<model-id>` with the ID published for Google-managed Claude. Copy da
 
 **Claude 5:**
 
+- `vertex:claude-fable-5-2` - Claude Fable 5.2 with always-on adaptive thinking, $8/$40 per MTok, and $0.20/MTok cache reads
+- `vertex:claude-mythos-5-2` - Claude Mythos 5.2 (provider approval required)
 - `vertex:claude-fable-5-1` - Claude Fable 5.1 with always-on adaptive thinking and $0.25/MTok cache reads
 - `vertex:claude-mythos-5-1` - Claude Mythos 5.1 (provider approval required)
 - `vertex:claude-fable-5` - Claude Fable 5 with a 1M-token context window and always-on adaptive thinking
@@ -115,7 +117,7 @@ curl -X POST \
   -d '{"publisherModelConfig":{"dataSharingEnabledProvider":"anthropic"}}'
 ```
 
-The `claude-mythos-5` and `claude-mythos-5-1` IDs require approval from the provider.
+The `claude-mythos-5`, `claude-mythos-5-1`, and `claude-mythos-5-2` IDs require approval from the provider.
 
 **Claude 4.8:**
 
@@ -172,8 +174,8 @@ The following models have been retired on Vertex AI according to [Google's partn
 Supported Claude models require explicit access enablement through the [Vertex AI Model Garden](https://console.cloud.google.com/vertex-ai/publishers). Navigate to the Model Garden, search for "Claude", and enable the supported models you need.
 :::
 
-Claude context limits vary by model. Fable 5, Mythos 5, Opus 5.5, Opus 5, and Sonnet 5
-have a 1M-token context window.
+Claude context limits vary by model. Fable and Mythos 5 through 5.2, Opus 5.5, Opus 5, and
+Sonnet 5 have a 1M-token context window.
 
 ### Llama Models
 
@@ -379,7 +381,7 @@ export GOOGLE_CLOUD_PROJECT="your-project-id"
 
 #### Option 3: Service Account via Config (Alternative)
 
-You can also provide service account credentials directly in your configuration:
+You can also provide service account credentials directly in your configuration. With `google-auth-library` 11.3.2 or later, explicit credential JSON and `keyFilename` still work but emit deprecation warnings. Use Application Default Credentials to avoid these warnings. Only load credential configurations from trusted sources.
 
 ```yaml
 providers:
@@ -789,6 +791,8 @@ Re-authenticate using:
 ```sh
 gcloud auth application-default login
 ```
+
+When diagnosing Application Default Credentials on Google Cloud, set `GOOGLE_SDK_NODE_LOGGING=gcp-metadata` to see metadata requests and responses at debug severity. For Google Auth requests and responses, use `GOOGLE_SDK_NODE_LOGGING=auth`. Both loggers can include access tokens in debug output. Redact credentials before sharing logs.
 
 ### Claude Model Access Errors
 
