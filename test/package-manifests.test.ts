@@ -198,7 +198,8 @@ const TYPESCRIPT_SOURCE_EXTENSIONS = new Set(['.ts', '.tsx', '.mts', '.cts']);
 const KNOWN_BAD_RELEASES = new Map([
   ['@azure/msal-node', '>=5.0.0-beta.0 <7.1.0'], // GHSA-xcx6-jx8p-x3h5
   ['@cacheable/utils', '2.5.1'], // Shai-Hulud compromise (#10301)
-  ['@hono/node-server', '<2.1.3'], // GHSA-frvp-7c67-39w9, GHSA-9mqv-5hh9-4cgg, GHSA-rmxm-3fg6-px4f
+  // Also covers GHSA-frvp-7c67-39w9, GHSA-9mqv-5hh9-4cgg, and GHSA-rmxm-3fg6-px4f.
+  ['@hono/node-server', '<2.1.6'], // GHSA-jpvv-r467-5p4w, GHSA-7v5p-43qr-wch5, GHSA-qv5m-9pm6-hqp3
   ['@modelcontextprotocol/sdk', '<1.32.0'], // GHSA-6prh-2h8m-c8cw
   ['@simple-git/argv-parser', '<2.0.1'], // GHSA-v5rq-49vh-5v5c; upstream fixes VISUAL in 2.0.1
   ['body-parser', '<1.20.9 || >=2.0.0 <2.4.0'], // GHSA-27r3-jxmh-p828
