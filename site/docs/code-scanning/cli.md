@@ -59,7 +59,7 @@ promptfoo code-scans run [repo-path] [options]
 | `--api-key <key>`                 | Promptfoo API key                                                                                   | From `promptfoo auth` or `PROMPTFOO_API_KEY` env var |
 | `--base <ref>`                    | Base branch/commit to compare against                                                               | Auto-detects either main or master                   |
 | `--compare <ref>`                 | Branch/commit to scan                                                                               | `HEAD`                                               |
-| `--config <path>`                 | Path to config file                                                                                 | `.promptfoo-code-scan.yaml`                          |
+| `--config <path>`                 | Path to config file                                                                                 | None                                                 |
 | `--guidance <text>`               | Custom guidance to tailor the scan                                                                  | None                                                 |
 | `--guidance-file <path>`          | Load guidance from a file                                                                           | None                                                 |
 | `--api-host <url>`                | Promptfoo API host URL                                                                              | `https://api.promptfoo.app`                          |
@@ -112,15 +112,21 @@ SARIF output includes location-backed findings that GitHub Code Scanning can dis
 
 ## Configuration File
 
-Create a `.promptfoo-code-scan.yaml` file in your repository root:
+To use a configuration file, pass its path explicitly:
+
+```bash
+promptfoo code-scans run --config .promptfoo-code-scan.yaml
+```
+
+For example, this `.promptfoo-code-scan.yaml` limits the scan to the diff:
 
 ```yaml
 # Minimum severity level to report (low|medium|high|critical)
 # Both minSeverity and minimumSeverity are supported
 minSeverity: medium
 
-# Scan only PR diffs without filesystem exploration (default: false = explore full repo)
-diffsOnly: false
+# Limit the hosted scanner to the diff. The default is a full scan.
+diffsOnly: true
 
 # Optional: Custom guidance to tailor the scan to your needs
 guidance: |
