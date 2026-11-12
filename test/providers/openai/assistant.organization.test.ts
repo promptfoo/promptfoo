@@ -73,10 +73,15 @@ describe('OpenAiAssistantProvider organization header on the wire', () => {
     expect(headers['openai-organization']).toBe('explicit-org');
   });
 
-  it('sends the organization to api.openai.com', async () => {
+  // api.openai.com no longer serves the Assistants API, so an OpenAI endpoint configured
+  // through env is where an ambient organization still reaches the wire.
+  it('sends the organization to an OpenAI endpoint configured through env', async () => {
     const provider = new OpenAiAssistantProvider('asst_1', {
       config: { apiKey: 'test-key' },
-      env: { OPENAI_ORGANIZATION: 'env-org' },
+      env: {
+        OPENAI_API_BASE_URL: 'https://proxy.openai.example.com/v1',
+        OPENAI_ORGANIZATION: 'env-org',
+      },
     });
 
     const headers = await captureRequestHeaders(provider);
@@ -87,6 +92,7 @@ describe('OpenAiAssistantProvider organization header on the wire', () => {
     const provider = new OpenAiAssistantProvider('asst_1', {
       config: {
         apiKey: 'test-key',
+        apiBaseUrl: 'https://gateway.example.com/v1',
         organization: 'config-org',
         headers: { 'openai-organization': 'custom-org' },
       },
