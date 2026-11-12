@@ -7,7 +7,7 @@ npx promptfoo@latest init --example eval-f-score
 cd eval-f-score
 ```
 
-This project evaluates GPT-4o-mini's zero-shot performance on IMDB movie review sentiment analysis using promptfoo. Each model response includes:
+This project evaluates GPT-4.1-mini's zero-shot performance on IMDB movie review sentiment analysis using promptfoo. Each model response includes:
 
 - Sentiment classification
 - Confidence score (1-10)
@@ -18,7 +18,7 @@ This project evaluates GPT-4o-mini's zero-shot performance on IMDB movie review 
 Set your OpenAI API key and run the evaluation:
 
 ```bash
-promptfoo eval
+npx promptfoo@latest eval --no-cache
 ```
 
 ## Dataset
@@ -28,10 +28,12 @@ The evaluation uses the IMDB dataset from HuggingFace's datasets library, sample
 - `text`: The movie review content
 - `sentiment`: The label ("positive" or "negative")
 
-To modify the sample size or generate a new dataset, you can use `prepare_data.py`. First, install the Python dependencies:
+To modify the sample size or generate a new dataset, you can use `prepare_data.py`. This optional step requires Python 3.10 or newer; evaluating the included CSV does not require Python. Create an isolated environment and install the dependencies:
 
 ```bash
-pip install -r requirements.txt
+python3 -m venv venv
+source venv/bin/activate
+python -m pip install -r requirements.txt
 ```
 
 Then run the preparation script:
@@ -40,32 +42,20 @@ Then run the preparation script:
 python prepare_data.py
 ```
 
+Run the offline dependency regression checks without downloading IMDB:
+
+```bash
+python -m unittest discover -p '*_test.py'
+```
+
 ## Metrics Overview
 
-The evaluation implements F-score and related metrics using promptfoo's assertion system:
+The JavaScript assertion returns a pass/fail accuracy grade together with `namedScores` for the four confusion-matrix counters. Correct positive and negative classifications both pass. The counters are aggregated without adding extra assertions to the overall score:
 
-1. **Base Metrics** calculated for each test case using JavaScript assertions:
-
-```yaml
-- type: javascript
-  value: "output.sentiment === 'positive' && context.vars.sentiment === 'positive' ? 1 : 0"
-  metric: true_positives
-```
-
-2. **Derived Metrics** calculated from base metrics after the evaluation completes:
-
-```yaml
-- name: precision
-  value: true_positives / (true_positives + false_positives)
-
-- name: f1_score
-  value: 2 * true_positives / (2 * true_positives + false_positives + false_negatives)
-```
-
-The evaluation tracks:
-
-- **True/False Positives/Negatives**: Base metrics for classification
+- **True/False Positives/Negatives**: Counts with `positive` as the positive class
 - **Precision**: TP / (TP + FP)
 - **Recall**: TP / (TP + FN)
-- **F1 Score**: 2 × (precision × recall) / (precision + recall)
+- **F1 Score**: 2 × TP / (2 × TP + FP + FN)
 - **Accuracy**: (TP + TN) / Total
+
+Precision, recall, and F1 are reported as zero when their denominator is zero (for example, a batch containing only correctly classified negative reviews). The formulas are in `derivedMetrics` in `promptfooconfig.yaml`.
