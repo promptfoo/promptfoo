@@ -277,6 +277,17 @@ describe('loadFromJavaScriptFile', () => {
     expect(mockFn).toHaveBeenCalledWith('arg1');
   });
 
+  it('preserves the receiver of an exported grader method', async () => {
+    const grader = {
+      expected: 'hello',
+      default(output: string) {
+        return output === this.expected;
+      },
+    };
+    vi.mocked(importModule).mockResolvedValue(grader);
+    expect(await loadFromJavaScriptFile('/test.cjs', 'grade', ['hello'])).toBe(true);
+  });
+
   it('should throw error when module does not export a function', async () => {
     vi.mocked(importModule).mockResolvedValue({ notAFunction: 'value' });
 
@@ -286,10 +297,10 @@ describe('loadFromJavaScriptFile', () => {
   });
 
   it('should throw error when named function does not exist', async () => {
-    vi.mocked(importModule).mockResolvedValue({ otherFn: () => {} });
+    vi.mocked(importModule).mockResolvedValue(undefined);
 
     await expect(loadFromJavaScriptFile('/test.js', 'nonExistentFn', [])).rejects.toThrow(
-      'Assertion malformed',
+      'Assertion malformed: /test.js must export a function named "nonExistentFn"',
     );
   });
 });

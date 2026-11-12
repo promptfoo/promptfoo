@@ -326,7 +326,7 @@ describe('evaluate function', () => {
     const testSuite = {
       prompts: ['test prompt'],
       providers: [],
-      tests: [{ options: { provider: 'openai:gpt-3.5-turbo' } }],
+      tests: [{ options: { provider: 'openai:gpt-4.1-mini' } }],
     };
     await evaluate(testSuite);
     expect(doEvaluate).toHaveBeenCalledWith(
@@ -1262,7 +1262,7 @@ describe('evaluate with external defaultTest', () => {
     const externalDefaultTest = {
       assert: [{ type: 'equals' as const, value: 'test' }],
       vars: { foo: 'bar' },
-      options: { provider: 'openai:gpt-4' },
+      options: { provider: 'openai:gpt-4.1' },
     };
 
     const mockApiProvider = createMockProvider({
