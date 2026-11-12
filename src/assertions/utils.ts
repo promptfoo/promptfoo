@@ -60,7 +60,7 @@ export async function resolveJavaScriptFileFunction(
   functionName: string | undefined,
   // biome-ignore lint/suspicious/noExplicitAny: I think this is hotloading JS
 ): Promise<(...args: any[]) => any> {
-  const requiredModule = await importModule(filePath, functionName);
+  const requiredModule = await importModule(filePath, functionName, { bindToModule: true });
   if (functionName && typeof requiredModule?.[functionName] === 'function') {
     return requiredModule[functionName].bind(requiredModule);
   } else if (typeof requiredModule === 'function') {

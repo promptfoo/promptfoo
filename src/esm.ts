@@ -225,6 +225,21 @@ export function getDirectory(): string {
   );
 }
 
+function getNamedExport(mod: Record<string, unknown>, name: string, bindToModule = false) {
+  const exported = mod[name];
+  return bindToModule && typeof exported === 'function' ? exported.bind(mod) : exported;
+}
+
+function bindDefaultExport(
+  exported: unknown,
+  owner: { default?: unknown } | undefined,
+  bindToModule = false,
+) {
+  return bindToModule && owner?.default && typeof exported === 'function'
+    ? exported.bind(owner)
+    : exported;
+}
+
 /**
  * ESM-only module loader - simplified without eval() or CommonJS fallback
  * Uses Node.js native ESM import with proper URL resolution
@@ -232,8 +247,9 @@ export function getDirectory(): string {
 export async function importModule(
   modulePath: string,
   functionName?: string,
-  options?: { cacheCjsFallback?: boolean },
+  options?: { cacheCjsFallback?: boolean; bindToModule?: boolean },
 ) {
+  const bindToModule = options?.bindToModule;
   const loadPath = await normalizeModuleExtension(modulePath);
   logger.debug(
     `Attempting to import module: ${JSON.stringify({ resolvedPath: safeResolve(modulePath), moduleId: modulePath })}`,
@@ -249,16 +265,17 @@ export async function importModule(
     // Native dynamic import - no eval() needed in ESM-only environment
     const importedModule = await import(resolvedPathStr);
 
-    const mod = importedModule?.default?.default || importedModule?.default || importedModule;
+    const nestedDefault = importedModule?.default?.default;
+    const mod = nestedDefault || importedModule?.default || importedModule;
     logger.debug(
       `Successfully imported module: ${JSON.stringify({ resolvedPath, moduleId: modulePath })}`,
     );
 
     if (functionName) {
       logger.debug(`Returning named export: ${functionName}`);
-      return mod[functionName];
+      return getNamedExport(mod, functionName, bindToModule);
     }
-    return mod;
+    return bindDefaultExport(mod, importedModule?.default, bindToModule);
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : String(err);
 
@@ -283,8 +300,10 @@ export async function importModule(
         if (functionName) {
           logger.debug(`Returning named export: ${functionName}`);
           return options?.cacheCjsFallback
-            ? Promise.resolve(mod).then((value) => value[functionName])
-            : mod[functionName];
+            ? Promise.resolve(mod).then((value) =>
+                getNamedExport(value, functionName, bindToModule),
+              )
+            : getNamedExport(mod, functionName, bindToModule);
         }
         return mod;
       } catch (cjsErr) {

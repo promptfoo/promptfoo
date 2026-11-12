@@ -1,0 +1,153 @@
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
+
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { resolveJavaScriptFileFunction } from '../../src/assertions/utils';
+import { clearCjsModuleCache, importModule } from '../../src/esm';
+
+describe('JavaScript file graders with the real module loader', () => {
+  let directory: string;
+
+  beforeEach(() => {
+    directory = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-grader-receiver-'));
+    fs.writeFileSync(path.join(directory, 'package.json'), '{"type":"module"}');
+  });
+
+  afterEach(() => {
+    clearCjsModuleCache();
+    fs.rmSync(directory, { recursive: true, force: true });
+  });
+
+  it.each([
+    {
+      name: 'CommonJS named method',
+      filename: 'grader.cjs',
+      source: `module.exports = {
+        expected: 'hello',
+        grade(output) { return output === this.expected; },
+      };`,
+      functionName: 'grade',
+    },
+    {
+      name: 'ESM default-object named method',
+      filename: 'grader.mjs',
+      source: `export default {
+        expected: 'hello',
+        grade(output) { return output === this.expected; },
+      };`,
+      functionName: 'grade',
+    },
+    {
+      name: 'CommonJS unnamed default method',
+      filename: 'grader.cjs',
+      source: `module.exports = {
+        expected: 'hello',
+        default(output) { return output === this.expected; },
+      };`,
+      functionName: undefined,
+    },
+    {
+      name: 'ESM named export with sibling state',
+      filename: 'grader.mjs',
+      source: `export const expected = 'hello';
+        export function grade(output) { return output === this.expected; }`,
+      functionName: 'grade',
+    },
+    {
+      name: 'CommonJS fallback inside an ESM package',
+      filename: 'grader.js',
+      source: `module.exports = {
+        expected: 'hello',
+        grade(output) { return output === this.expected; },
+      };`,
+      functionName: 'grade',
+    },
+    {
+      name: 'TypeScript default-object named method',
+      filename: 'grader.ts',
+      source: `export default {
+        expected: 'hello',
+        grade(output: string) { return output === this.expected; },
+      };`,
+      functionName: 'grade',
+    },
+  ])('preserves the receiver of a $name', async ({ filename, source, functionName }) => {
+    const filePath = path.join(directory, filename);
+    fs.writeFileSync(filePath, source);
+
+    const grade = await resolveJavaScriptFileFunction(filePath, functionName);
+
+    expect(await grade('hello', {})).toBe(true);
+    expect(await grade('different', {})).toBe(false);
+  });
+
+  it.each([
+    {
+      filename: 'grader.mjs',
+      source: `export default function(output) {
+        return this === undefined && output === 'hello';
+      }`,
+    },
+    {
+      filename: 'grader.cjs',
+      source: `'use strict';
+        module.exports = function(output) {
+          return this === undefined && output === 'hello';
+        };`,
+    },
+  ])('keeps a standalone $filename function unbound', async ({ filename, source }) => {
+    const filePath = path.join(directory, filename);
+    fs.writeFileSync(filePath, source);
+
+    const grade = await resolveJavaScriptFileFunction(filePath, undefined);
+
+    expect(await grade('hello', {})).toBe(true);
+  });
+
+  it.each([
+    {
+      filename: 'grader.mjs',
+      source: `export default {
+        expected: 'hello',
+        grade(output) { return output === this.expected; },
+      };`,
+      cacheCjsFallback: false,
+    },
+    ...[false, true].map((cacheCjsFallback) => ({
+      filename: 'grader.js',
+      source: `'use strict'; module.exports = {
+        expected: 'hello',
+        grade(output) { return output === this.expected; },
+      };`,
+      cacheCjsFallback,
+    })),
+  ])(
+    'keeps binding opt-in for $filename (CJS cache: $cacheCjsFallback)',
+    async ({ filename, source, cacheCjsFallback }) => {
+      const filePath = path.join(directory, filename);
+      fs.writeFileSync(filePath, source);
+
+      const unbound = await importModule(filePath, 'grade', { cacheCjsFallback });
+      expect(() => unbound('hello')).toThrow(TypeError);
+
+      const bound = await importModule(filePath, 'grade', {
+        cacheCjsFallback,
+        bindToModule: true,
+      });
+      expect(bound('hello')).toBe(true);
+    },
+  );
+
+  it.each([
+    { functionName: 'missing', source: 'module.exports = { grade() { return true; } };' },
+    { functionName: 'grade', source: 'module.exports = { grade: true };' },
+  ])('rejects an export that is not a grader function', async ({ functionName, source }) => {
+    const filePath = path.join(directory, 'grader.cjs');
+    fs.writeFileSync(filePath, source);
+
+    await expect(resolveJavaScriptFileFunction(filePath, functionName)).rejects.toThrow(
+      `must export a function named "${functionName}"`,
+    );
+  });
+});
