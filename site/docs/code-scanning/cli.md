@@ -19,7 +19,9 @@ npm install -g promptfoo
 
 Install and run promptfoo with Node.js 24 or later for full-repository scans. On Node.js 22.22 or later, you can scan changed lines with `promptfoo code-scans run --diffs-only`.
 
-Full-repository scans expose read-only tools for the scanned repository through the filesystem MCP server installed with promptfoo. Keep the installation outside the repository being scanned. If you installed with `--omit=optional`, reinstall with optional dependencies or use `--diffs-only`.
+During a full scan, the hosted scanner can request file contents throughout the selected checkout, including untracked files. Use a checkout containing only files you intend to share, or pass `--diffs-only` to limit the scanner to the diff.
+
+Full scans use the read-only filesystem MCP server installed with promptfoo. Keep the installation outside the repository being scanned. If you installed with `--omit=optional`, reinstall with optional dependencies or use `--diffs-only`.
 
 Use a stable checkout for a full scan. Directory listings read the live filesystem, so use a separate checkout if another process may replace directories while the scan runs.
 
