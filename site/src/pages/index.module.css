@@ -353,25 +353,9 @@ html {
   font-weight: bold;
 }
 
-.walkthroughImage {
-  width: 100%;
-  border-radius: 16px;
-  box-shadow:
-    0 20px 40px -10px rgba(0, 0, 0, 0.15),
-    0 10px 20px -5px rgba(229, 58, 58, 0.1);
-  transition: all var(--animation-speed-medium) var(--animation-ease-smooth);
-  animation: scaleIn 0.6s ease-out;
-  position: relative;
-  cursor: pointer;
-}
-
-.walkthroughImage:hover {
-  transform: scale(1.015);
-}
-
 .walkthroughImageContainer {
   width: 65%;
-  position: relative;
+  min-width: 0;
 }
 
 .codeBox {
@@ -456,7 +440,7 @@ html {
   .walkthroughContent {
     flex-direction: column;
     width: 100%;
-    padding: 0 1rem;
+    padding: 0;
   }
 
   .walkthroughDescription,

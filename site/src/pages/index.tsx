@@ -2,29 +2,30 @@ import React from 'react';
 
 import Head from '@docusaurus/Head';
 import Link from '@docusaurus/Link';
-import { useColorMode } from '@docusaurus/theme-common';
 import AccountBalanceIcon from '@mui/icons-material/AccountBalance';
 import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
 import BusinessCenterIcon from '@mui/icons-material/BusinessCenter';
 import CheckIcon from '@mui/icons-material/Check';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
-import CodeIcon from '@mui/icons-material/Code';
-import CompareIcon from '@mui/icons-material/Compare';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import DashboardIcon from '@mui/icons-material/Dashboard';
-import DescriptionIcon from '@mui/icons-material/Description';
 import FlightIcon from '@mui/icons-material/Flight';
 import HealthAndSafetyIcon from '@mui/icons-material/HealthAndSafety';
 import IntegrationInstructionsIcon from '@mui/icons-material/IntegrationInstructions';
 import PsychologyIcon from '@mui/icons-material/Psychology';
 import RouterIcon from '@mui/icons-material/Router';
-import SecurityIcon from '@mui/icons-material/Security';
 import ShieldIcon from '@mui/icons-material/Shield';
 import SignalCellularAltIcon from '@mui/icons-material/SignalCellularAlt';
 import StorefrontIcon from '@mui/icons-material/Storefront';
 import Layout from '@theme/Layout';
 import clsx from 'clsx';
 import AnimatedCounter from '../components/AnimatedCounter';
+import CodeReview from '../components/react/illustrative/CodeReview.react';
+import EvalResults from '../components/react/illustrative/EvalResults.react';
+import GuardrailDashboard from '../components/react/illustrative/GuardrailDashboard.react';
+import McpDashboard from '../components/react/illustrative/McpDashboard.react';
+import ModelRankings from '../components/react/illustrative/ModelRankings.react';
+import VulnerabilityReport from '../components/react/illustrative/VulnerabilityReport.react';
 import { SITE_CONSTANTS } from '../constants';
 import styles from './index.module.css';
 
@@ -143,7 +144,6 @@ const HASH_TO_STEP: Record<string, number> = {
 };
 
 function HomepageWalkthrough() {
-  const isDarkTheme = useColorMode().colorMode === 'dark';
   // Default to Red Teaming. The hash is applied after mount instead of in the initializer:
   // reading `window.location.hash` during render would make the first client render disagree
   // with the server-rendered HTML (which never has a hash) and blow up hydration.
@@ -176,8 +176,7 @@ function HomepageWalkthrough() {
       id: 1,
       caption: 'Red Teaming',
       mobileCaption: 'Red Team',
-      image: '/img/redteam-vulnerability-report-hero.png',
-      image2x: '/img/redteam-vulnerability-report-hero@2x.png',
+      preview: <VulnerabilityReport />,
       description: (
         <>
           <p className={styles.walkthroughHeading}>Automated red teaming for agents & RAGs</p>
@@ -202,17 +201,12 @@ function HomepageWalkthrough() {
           </p>
         </>
       ),
-      icon: <SecurityIcon />,
-      destinationUrl: '/red-teaming',
     },
     {
       id: 5,
       caption: 'Evaluations',
       mobileCaption: 'Evals',
-      image: '/img/claude-vs-gpt-example.png',
-      image2x: '/img/claude-vs-gpt-example@2x.png',
-      imageDark: '/img/claude-vs-gpt-example-dark.png',
-      image2xDark: '/img/claude-vs-gpt-example-dark@2x.png',
+      preview: <EvalResults />,
       description: (
         <>
           <p className={styles.walkthroughHeading}>Build reliable prompts, RAGs, and agents</p>
@@ -229,15 +223,12 @@ function HomepageWalkthrough() {
           </p>
         </>
       ),
-      icon: <CompareIcon />,
-      destinationUrl: '/docs/intro',
     },
     {
       id: 6,
       caption: 'Code Scanning',
       mobileCaption: 'Code Scan',
-      image: '/img/docs/code-scanning/github.png',
-      image2x: '/img/docs/code-scanning/github.png',
+      preview: <CodeReview />,
       description: (
         <>
           <p className={styles.walkthroughHeading}>Find AI vulnerabilities before they're merged</p>
@@ -266,15 +257,12 @@ function HomepageWalkthrough() {
           </p>
         </>
       ),
-      icon: <CodeIcon />,
-      destinationUrl: '/code-scanning',
     },
     {
       id: 3,
       caption: 'Model Security',
       mobileCaption: 'Models',
-      image: '/img/model-ranking-framed.png',
-      image2x: '/img/model-ranking-framed.png',
+      preview: <ModelRankings />,
       description: (
         <>
           <p className={styles.walkthroughHeading}>Complete lifecycle model security</p>
@@ -296,15 +284,12 @@ function HomepageWalkthrough() {
           </p>
         </>
       ),
-      icon: <DescriptionIcon />,
-      destinationUrl: '/model-security',
     },
     {
       id: 2,
       caption: 'Guardrails',
       mobileCaption: 'Guardrails',
-      image: '/img/guardrails-framed.png',
-      image2x: '/img/guardrails-framed.png',
+      preview: <GuardrailDashboard />,
       description: (
         <>
           <p className={styles.walkthroughHeading}>
@@ -329,15 +314,12 @@ function HomepageWalkthrough() {
           </p>
         </>
       ),
-      icon: <SecurityIcon />,
-      destinationUrl: '/guardrails',
     },
     {
       id: 4,
       caption: 'MCP',
       mobileCaption: 'MCP',
-      image: '/img/mcp-proxy-dashboard.png',
-      image2x: '/img/mcp-proxy-dashboard.png',
+      preview: <McpDashboard />,
       description: (
         <>
           <p className={styles.walkthroughHeading}>
@@ -360,8 +342,6 @@ function HomepageWalkthrough() {
           </p>
         </>
       ),
-      icon: <DescriptionIcon />,
-      destinationUrl: '/mcp',
     },
   ];
 
@@ -396,6 +376,8 @@ function HomepageWalkthrough() {
                   styles.walkthroughTab,
                   selectedStep === step.id && styles.walkthroughTabActive,
                 )}
+                type="button"
+                aria-pressed={selectedStep === step.id}
                 onClick={() => setSelectedStep(step.id)}
               >
                 {isMobile ? step.mobileCaption : step.caption}
@@ -403,27 +385,8 @@ function HomepageWalkthrough() {
             ))}
           </div>
           <div className={styles.walkthroughContent}>
-            <div className={styles.walkthroughImageContainer}>
-              <Link to={selectedStepData?.destinationUrl || '#'}>
-                <img
-                  src={
-                    isDarkTheme && selectedStepData?.imageDark
-                      ? selectedStepData.imageDark
-                      : selectedStepData?.image
-                  }
-                  srcSet={
-                    isDarkTheme && selectedStepData?.image2xDark
-                      ? `${selectedStepData.imageDark} 1x, ${selectedStepData.image2xDark} 2x`
-                      : `${selectedStepData?.image} 1x, ${selectedStepData?.image2x} 2x`
-                  }
-                  alt={`${selectedStepData?.caption}`}
-                  className={styles.walkthroughImage}
-                />
-              </Link>
-            </div>
-            <div className={styles.walkthroughDescription}>
-              {steps.find((step) => step.id === selectedStep)?.description}
-            </div>
+            <div className={styles.walkthroughImageContainer}>{selectedStepData?.preview}</div>
+            <div className={styles.walkthroughDescription}>{selectedStepData?.description}</div>
           </div>
         </div>
       </div>

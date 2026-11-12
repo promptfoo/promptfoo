@@ -2,7 +2,7 @@ import { act } from 'react';
 import { hydrateRoot } from 'react-dom/client';
 import { renderToString } from 'react-dom/server';
 
-import { fireEvent, render } from '@testing-library/react';
+import { fireEvent, render, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import Home from './index';
 
@@ -169,5 +169,60 @@ describe('homepage walkthrough deep links', () => {
     expect(registration).toBeDefined();
     unmount();
     expect(removeListener).toHaveBeenCalledWith('hashchange', registration![1]);
+  });
+});
+
+describe('homepage product previews', () => {
+  function open(hash: string) {
+    setHash(hash);
+    const { getByRole } = render(<Home />);
+    return within(getByRole('region', { name: /Sample data/ }));
+  }
+
+  it('opens the risk category breakdown', () => {
+    const preview = open('#redteam');
+    fireEvent.click(preview.getByText('Compliance & Legal'));
+    expect(preview.getByText('Unauthorized Commitments')).toBeVisible();
+  });
+
+  it('filters evaluated cases and pages through their actual outputs', () => {
+    const preview = open('#evals');
+    fireEvent.click(preview.getByRole('button', { name: 'Failures' }));
+    expect(preview.getByText('Case 1 / 5')).toBeVisible();
+    expect(preview.getByText('The capital is Rome.')).toBeVisible();
+    fireEvent.click(preview.getByRole('button', { name: 'Next case' }));
+    expect(preview.getByText('Seven')).toBeVisible();
+    fireEvent.click(preview.getByRole('button', { name: 'Hide charts' }));
+    expect(preview.queryByText('Pass rate by model')).toBeNull();
+  });
+
+  it('reveals the remediation for the reviewed diff', () => {
+    const preview = open('#codescanning');
+    fireEvent.click(preview.getByText('Suggested Fix'));
+    expect(preview.getByText(/Scope the Dropbox connector/)).toBeVisible();
+  });
+
+  it('reorders the model rows by the selected score', () => {
+    const preview = open('#modelsecurity');
+    const sort = preview.getByRole('button', { name: 'Trust & Safety' });
+    fireEvent.click(sort);
+    expect(preview.getAllByRole('rowheader')[0]).toHaveTextContent('Claude 3.7 Sonnet');
+    fireEvent.click(sort);
+    expect(preview.getAllByRole('rowheader')[0]).toHaveTextContent('DeepSeek V3');
+  });
+
+  it('updates the guardrail metrics and charts together', () => {
+    const preview = open('#guardrails');
+    expect(preview.getByText('69.8%')).toBeVisible();
+    fireEvent.click(preview.getByRole('button', { name: 'Past hour' }));
+    expect(preview.getByText('64.9%')).toBeVisible();
+    expect(preview.getByRole('img', { name: /Flagged: 2 to 6/ })).toBeVisible();
+  });
+
+  it('opens an MCP alert from the full list', () => {
+    const preview = open('#mcp');
+    fireEvent.click(preview.getByRole('button', { name: 'View all' }));
+    fireEvent.click(preview.getByText('Unapproved MCP Server'));
+    expect(preview.getByText(/outside the application’s allowlist/)).toBeVisible();
   });
 });
