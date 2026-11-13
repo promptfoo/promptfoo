@@ -37,11 +37,10 @@ export default defineConfig({
         'src/**/*.d.ts',
         'src/**/*.test.ts',
         'src/**/*.test.tsx',
+        'src/**/*.browser.tsx',
         'src/setupTests.ts',
         'src/test/**',
       ],
-      // @ts-expect-error - 'all' is valid in Vitest v8 coverage but types are incomplete
-      all: true,
     },
   },
   resolve: {

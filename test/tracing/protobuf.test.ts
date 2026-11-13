@@ -1,3 +1,5 @@
+import { cp, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import path from 'path';
 
 import protobuf from 'protobufjs';
@@ -7,6 +9,7 @@ import {
   decodeExportTraceServiceRequest,
   encodeExportTraceServiceRequest,
 } from '../../src/tracing/protobuf';
+import { encodeOTLPRequest } from './otlpRequestFixture';
 
 // Mock the logger
 vi.mock('../../src/logger', () => ({
@@ -18,43 +21,48 @@ vi.mock('../../src/logger', () => ({
   },
 }));
 
-// Helper to create protobuf-encoded OTLP data
-let protoRoot: protobuf.Root | null = null;
-let ExportTraceServiceRequest: protobuf.Type | null = null;
-
-async function getProtoRoot(): Promise<protobuf.Root> {
-  if (protoRoot) {
-    return protoRoot;
-  }
-  const protoDir = path.join(__dirname, '../../src/tracing/proto');
-
-  // Create a new Root with the proto directory as the include path
-  const root = new protobuf.Root();
-  root.resolvePath = (_origin: string, target: string) => {
-    return path.join(protoDir, target);
-  };
-  await root.load('opentelemetry/proto/collector/trace/v1/trace_service.proto');
-
-  protoRoot = root;
-  return protoRoot;
-}
-
-async function encodeOTLPRequest(data: any): Promise<Buffer> {
-  const root = await getProtoRoot();
-  if (!ExportTraceServiceRequest) {
-    ExportTraceServiceRequest = root.lookupType(
-      'opentelemetry.proto.collector.trace.v1.ExportTraceServiceRequest',
-    );
-  }
-  const message = ExportTraceServiceRequest.create(data);
-  const encoded = ExportTraceServiceRequest.encode(message).finish();
-  return Buffer.from(encoded);
-}
-
 describe('Protobuf decoding', () => {
   afterEach(() => {
     vi.resetAllMocks();
     vi.restoreAllMocks();
+  });
+
+  it('shares first schema loads and retries after a missing type is repaired', async () => {
+    vi.resetModules();
+    const esm = await import('../../src/esm');
+    const codec = await import('../../src/tracing/protobuf');
+    const dir = await mkdtemp(path.join(tmpdir(), 'promptfoo-otlp-schema-'));
+    const protoDir = path.join(dir, 'tracing/proto');
+    const serviceDir = path.join(protoDir, 'opentelemetry/proto/collector/trace/v1');
+    const originalProtoDir = path.join(esm.getDirectory(), 'tracing/proto');
+    vi.spyOn(esm, 'getDirectory').mockReturnValue(dir);
+    const load = vi.spyOn(protobuf.Root.prototype, 'load');
+    try {
+      await mkdir(serviceDir, { recursive: true });
+      await writeFile(
+        path.join(serviceDir, 'trace_service.proto'),
+        'syntax="proto3"; message Other {}',
+      );
+      await Promise.all([
+        expect(codec.decodeExportTraceServiceRequest(Buffer.alloc(0))).rejects.toThrow(
+          'no such type',
+        ),
+        expect(codec.encodeExportTraceServiceRequest({})).rejects.toThrow('no such type'),
+      ]);
+      expect(load).toHaveBeenCalledTimes(1);
+
+      await cp(originalProtoDir, protoDir, { recursive: true });
+      const [decoded, encoded] = await Promise.all([
+        codec.decodeExportTraceServiceRequest(Buffer.alloc(0)),
+        codec.encodeExportTraceServiceRequest({}),
+      ]);
+      expect(decoded.resourceSpans).toEqual([]);
+      expect(encoded).toHaveLength(0);
+      await codec.decodeExportTraceServiceRequest(encoded);
+      expect(load).toHaveBeenCalledTimes(2);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 
   describe('bytesToHex', () => {
@@ -127,46 +135,13 @@ describe('Protobuf decoding', () => {
       expect(span.attributes).toEqual([expect.objectContaining({ key: 'gen_ai.request.model' })]);
     });
 
-    it('should decode a simple protobuf trace request', async () => {
-      const traceIdBytes = new Uint8Array([
-        0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff, 0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88,
-        0x99,
-      ]);
-      const spanIdBytes = new Uint8Array([0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88]);
-
-      const testData = {
-        resourceSpans: [
-          {
-            resource: {
-              attributes: [{ key: 'service.name', value: { stringValue: 'test-service' } }],
-            },
-            scopeSpans: [
-              {
-                scope: {
-                  name: 'test-tracer',
-                  version: '1.0.0',
-                },
-                spans: [
-                  {
-                    traceId: traceIdBytes,
-                    spanId: spanIdBytes,
-                    name: 'test-span',
-                    kind: 1,
-                    startTimeUnixNano: 1700000000000000000n,
-                    endTimeUnixNano: 1700000001000000000n,
-                    status: {
-                      code: 0,
-                      message: 'OK',
-                    },
-                  },
-                ],
-              },
-            ],
-          },
-        ],
-      };
-
-      const encoded = await encodeOTLPRequest(testData);
+    it('decodes a trace serialized by the OpenTelemetry JavaScript SDK', async () => {
+      // @opentelemetry/otlp-transformer 0.300.0 ProtobufTraceSerializer; independent of our schema.
+      const encoded = Buffer.from(
+        'Co0BCiIKHgoMc2VydmljZS5uYW1lEg4KDHRlc3Qtc2VydmljZRAAEmcKFAoLdGVzdC10cmFjZXISBTEuMC4wEk8KEKq7zN3u' +
+          '/wARIjNEVWZ3iJkSCBEiM0RVZneIKgl0ZXN0LXNwYW4wATkAACo2/pyXF0EAysRx/pyXF1AAYABwAHoGEgJPSxgAhQEBAQAA',
+        'base64',
+      );
       const decoded = await decodeExportTraceServiceRequest(encoded);
 
       expect(decoded.resourceSpans).toHaveLength(1);
@@ -174,6 +149,8 @@ describe('Protobuf decoding', () => {
       expect(decoded.resourceSpans[0].scopeSpans[0].spans).toHaveLength(1);
 
       const span = decoded.resourceSpans[0].scopeSpans[0].spans[0];
+      expect(bytesToHex(span.traceId, 32)).toBe('aabbccddeeff00112233445566778899');
+      expect(bytesToHex(span.spanId, 16)).toBe('1122334455667788');
       expect(span.name).toBe('test-span');
       expect(span.kind).toBe(1);
     });
@@ -210,7 +187,7 @@ describe('Protobuf decoding', () => {
         ],
       };
 
-      const encoded = await encodeOTLPRequest(testData);
+      const encoded = encodeOTLPRequest(testData);
       const decoded = await decodeExportTraceServiceRequest(encoded);
 
       const spans = decoded.resourceSpans[0].scopeSpans[0].spans;
@@ -259,7 +236,7 @@ describe('Protobuf decoding', () => {
         ],
       };
 
-      const encoded = await encodeOTLPRequest(testData);
+      const encoded = encodeOTLPRequest(testData);
       const decoded = await decodeExportTraceServiceRequest(encoded);
 
       const span = decoded.resourceSpans[0].scopeSpans[0].spans[0];
@@ -307,7 +284,7 @@ describe('Protobuf decoding', () => {
         ],
       };
 
-      const encoded = await encodeOTLPRequest(testData);
+      const encoded = encodeOTLPRequest(testData);
       const decoded = await decodeExportTraceServiceRequest(encoded);
 
       const resourceAttrs = decoded.resourceSpans[0].resource?.attributes;
@@ -357,7 +334,7 @@ describe('Protobuf decoding', () => {
         resourceSpans: [],
       };
 
-      const encoded = await encodeOTLPRequest(testData);
+      const encoded = encodeOTLPRequest(testData);
       const decoded = await decodeExportTraceServiceRequest(encoded);
 
       expect(decoded.resourceSpans).toEqual([]);
@@ -389,7 +366,7 @@ describe('Protobuf decoding', () => {
         ],
       };
 
-      const encoded = await encodeOTLPRequest(testData);
+      const encoded = encodeOTLPRequest(testData);
       // Pass as Buffer instead of Uint8Array
       const decoded = await decodeExportTraceServiceRequest(Buffer.from(encoded));
 
