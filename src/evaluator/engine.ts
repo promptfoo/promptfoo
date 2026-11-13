@@ -9,11 +9,11 @@ import {
   MODEL_GRADED_ASSERTION_TYPES,
   runCompareAssertion,
 } from '../assertions/index';
+import { validateAssertions } from '../assertions/validateAssertions';
 import { getCache, isCacheEnabled, withCacheEnabled, withCacheNamespace } from '../cache';
 import cliState from '../cliState';
 import { DEFAULT_MAX_CONCURRENCY } from '../constants';
 import { getEnvBool, getEvalTimeoutMs, getMaxEvalTimeMs, isCI } from '../envars';
-import { validateAssertions } from '../assertions/validateAssertions';
 import { runExtensionHook } from '../evaluatorHelpers';
 import logger, { isDebugEnabled } from '../logger';
 import { selectMaxScore } from '../matchers/comparison';

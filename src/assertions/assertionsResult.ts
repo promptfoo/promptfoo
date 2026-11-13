@@ -335,7 +335,13 @@ export class AssertionsResult {
     const metricWeight = metricOnly || weight === 0 ? 1 : weight;
     if (metric) {
       const sum = result.score * metricWeight;
-      this.addNamedScore(metric, sum, metricWeight, metricOnly ? sum : 0, metricOnly ? metricWeight : 0);
+      this.addNamedScore(
+        metric,
+        sum,
+        metricWeight,
+        metricOnly ? sum : 0,
+        metricOnly ? metricWeight : 0,
+      );
     }
 
     if (result.namedScores) {
