@@ -218,7 +218,7 @@ redteam:
   graderLanguage: Japanese
 ```
 
-The instruction is appended to every LLM grading rubric, so all explanations and justifications in the `reason` field will be written in the specified language. Note that purely deterministic graders (e.g. `cross-session-leak`, `ascii-smuggling`) already determine pass/fail from string matching; the `reason` they write will also respect this setting when a grader language is configured.
+Promptfoo asks the LLM grader to write its explanation in the selected language. The grader retains machine-readable markers required by the rubric. Deterministic verdicts and provider errors keep their existing wording.
 
 For more details on customizing graders, see [Configuring the Grader](/docs/red-team/troubleshooting/grading-results#customizing-graders-for-specific-plugins-in-the-open-source).
 
