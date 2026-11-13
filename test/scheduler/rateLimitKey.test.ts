@@ -66,6 +66,25 @@ describe('getRateLimitKey', () => {
       expect(key1).not.toBe(key2);
     });
 
+    it('separates credentials with the same suffix', () => {
+      const provider1 = createMockProvider('openai:gpt-4', { apiKey: 'synthetic-alpha-1234' });
+      const provider2 = createMockProvider('openai:gpt-4', { apiKey: 'synthetic-beta-1234' });
+
+      expect(getRateLimitKey(provider1)).not.toBe(getRateLimitKey(provider2));
+    });
+
+    it('does not treat separators in an endpoint as quota fields', () => {
+      const provider1 = createMockProvider('openai:gpt-4', {
+        apiBaseUrl: 'https://example.test/|organization:tenant',
+      });
+      const provider2 = createMockProvider('openai:gpt-4', {
+        apiBaseUrl: 'https://example.test/',
+        organization: 'tenant',
+      });
+
+      expect(getRateLimitKey(provider1)).not.toBe(getRateLimitKey(provider2));
+    });
+
     it('should generate same key for same API key', () => {
       const provider1 = createMockProvider('openai:gpt-4', {
         apiKey: 'sk-same-key',
