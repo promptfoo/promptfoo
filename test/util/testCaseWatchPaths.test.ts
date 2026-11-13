@@ -3,7 +3,7 @@ import * as os from 'os';
 import * as path from 'path';
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { resolveTestsWatchPaths } from '../../src/util/testCaseReader';
+import { readTests, resolveTestsWatchPaths } from '../../src/util/testCaseReader';
 
 import type { TestSuiteConfig } from '../../src/types/index';
 
@@ -46,13 +46,39 @@ describe('resolveTestsWatchPaths', () => {
     ]);
   });
 
-  it('expands a glob, because chokidar v5 does not', () => {
+  it('reads and watches the same workbook when its directory and filename contain a hash', async () => {
+    const directory = path.join(base, 'C# fixtures');
+    fs.mkdirSync(directory);
+    const workbook = path.join(directory, 'cases#2.XLSX');
+    fs.copyFileSync(path.join(__dirname, '../fixtures/xlsx-xml-entities.xlsx'), workbook);
+
+    const reference = 'file://C# fixtures/cases#2.XLSX#Sheet1';
+    expect(await readTests([reference], base)).toMatchObject([
+      { vars: { 'q&a': 'Does AT&T <b> work?' } },
+    ]);
+    expect(resolve(reference)).toEqual([workbook]);
+    await expect(readTests([reference + '#missing'], base)).rejects.toThrow(
+      'Sheet "Sheet1#missing" not found',
+    );
+  });
+
+  it('expands a glob, because chokidar does not', () => {
     // Exactly the matches, and nothing else: glob order is not guaranteed.
     const watched = resolve('file://tests/*.yaml' as TestSuiteConfig['tests']);
     expect([...watched].sort()).toEqual([
       path.join(base, 'tests/a.yaml'),
       path.join(base, 'tests/b.yaml'),
     ]);
+  });
+
+  it('watches the files matched by POSIX punctuation and printable classes', () => {
+    const symbol = path.join(base, 'fixtures/case-€.yaml');
+    const letter = path.join(base, 'fixtures/case-a.yaml');
+    fs.writeFileSync(symbol, '[]');
+    fs.writeFileSync(letter, '[]');
+
+    expect(resolve('file://fixtures/case-[[:punct:]].yaml')).toEqual([symbol]);
+    expect(resolve('file://fixtures/case-[[:print:]].yaml').sort()).toEqual([letter, symbol]);
   });
 
   it('expands test globs beneath a directory containing brackets', () => {

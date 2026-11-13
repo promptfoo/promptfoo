@@ -18,7 +18,7 @@ import type { TestCasesWithMetadata } from '@promptfoo/types';
 interface DatasetDialogProps {
   openDialog: boolean;
   handleClose: () => void;
-  testCase: TestCasesWithMetadata & { recentEvalDate: string };
+  testCase: Pick<TestCasesWithMetadata, 'id' | 'testCases' | 'prompts'>;
 }
 
 const ROWS_PER_PAGE = 10;
