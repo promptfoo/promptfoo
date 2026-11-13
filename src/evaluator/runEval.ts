@@ -5,7 +5,7 @@ import { getCache, isCacheEnabled, withCacheEnabled, withCacheNamespace } from '
 import cliState from '../cliState';
 import { FILE_METADATA_KEY } from '../constants';
 import { getEnvBool, getEnvInt } from '../envars';
-import { collectFileMetadata, renderPrompt } from '../evaluatorHelpers';
+import { collectFileMetadata, renderPrompt, setRuntimeFileVarNames } from '../evaluatorHelpers';
 import logger from '../logger';
 import { type AgentWorkspace, createAgentWorkspaceForConfig } from '../providers/agentWorkspace';
 import { providerRegistry } from '../providers/providerRegistry';
@@ -392,6 +392,7 @@ function createRunEvalSetup({
 
 async function renderRunEvalPrompt({
   filters,
+  nestedFileVarNames,
   isRedteam,
   provider,
   promptForRender,
@@ -406,6 +407,7 @@ async function renderRunEvalPrompt({
   test: AtomicTestCase;
   testSuite?: TestSuite;
   vars: Vars;
+  nestedFileVarNames: ReadonlySet<string>;
 }): Promise<RenderedRunEvalPrompt> {
   const skipRenderVars = shouldSkipRedteamInjectVar(test, testSuite, isRedteam)
     ? [getRedteamInjectVar(test, promptForRender, testSuite)]
@@ -416,6 +418,7 @@ async function renderRunEvalPrompt({
     filters,
     provider,
     skipRenderVars,
+    nestedFileVarNames,
   );
   if (isRedteam) {
     throwIfTargetPromptExceedsMaxChars(renderedPrompt, testSuite?.redteam?.maxCharsPerMessage);
@@ -1341,7 +1344,18 @@ export async function runEvalInternal(
     test,
     vars: state.vars,
   });
+  // Only authored configuration can authorize local file reads. Conversation
+  // history and stored provider outputs can contain arbitrary strings.
+  const nestedFileVarNames = new Set(
+    Object.keys(test.vars ?? {}).filter(
+      (name) =>
+        !test.metadata?.__promptfoo?.remote &&
+        name !== '_conversation' &&
+        !Object.hasOwn(registers ?? {}, name),
+    ),
+  );
   Object.assign(state.vars, registers);
+  setRuntimeFileVarNames(state.vars, Object.keys(registers ?? {}));
   Object.assign(
     state.vars,
     getEvalRuntimeVars({
@@ -1362,6 +1376,7 @@ export async function runEvalInternal(
   try {
     const rendered = await renderRunEvalPrompt({
       filters,
+      nestedFileVarNames,
       isRedteam,
       provider,
       promptForRender: state.promptForRender,

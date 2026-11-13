@@ -489,7 +489,14 @@ describe('evaluatorHelpers', () => {
 
         vi.spyOn(fs, 'readFileSync').mockReturnValueOnce('<h1>Sample Report</h1>');
 
-        const renderedPrompt = await renderPrompt(prompt, vars, {});
+        const renderedPrompt = await renderPrompt(
+          prompt,
+          vars,
+          {},
+          undefined,
+          undefined,
+          new Set(Object.keys(vars)),
+        );
 
         expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('report.txt'), 'utf8');
         expect(renderedPrompt).toBe('Report: <h1>Sample Report</h1>');
@@ -503,7 +510,14 @@ describe('evaluatorHelpers', () => {
 
         vi.spyOn(fs, 'readFileSync').mockReturnValueOnce('deep content');
 
-        const renderedPrompt = await renderPrompt(prompt, vars, {});
+        const renderedPrompt = await renderPrompt(
+          prompt,
+          vars,
+          {},
+          undefined,
+          undefined,
+          new Set(Object.keys(vars)),
+        );
 
         expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('nested.txt'), 'utf8');
         expect(renderedPrompt).toBe('Deep: deep content');
@@ -517,7 +531,14 @@ describe('evaluatorHelpers', () => {
 
         vi.spyOn(fs, 'readFileSync').mockReturnValueOnce('from file');
 
-        const renderedPrompt = await renderPrompt(prompt, vars, {});
+        const renderedPrompt = await renderPrompt(
+          prompt,
+          vars,
+          {},
+          undefined,
+          undefined,
+          new Set(Object.keys(vars)),
+        );
 
         expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('item.txt'), 'utf8');
         expect(renderedPrompt).toBe('literal, from file');
@@ -531,7 +552,14 @@ describe('evaluatorHelpers', () => {
 
         vi.spyOn(fs, 'readFileSync').mockReturnValueOnce('key: value');
 
-        const renderedPrompt = await renderPrompt(prompt, vars, {});
+        const renderedPrompt = await renderPrompt(
+          prompt,
+          vars,
+          {},
+          undefined,
+          undefined,
+          new Set(Object.keys(vars)),
+        );
 
         expect(fs.readFileSync).toHaveBeenCalledWith(
           expect.stringContaining('schema.yaml'),
@@ -546,7 +574,14 @@ describe('evaluatorHelpers', () => {
           data: { label: 'just a string', count: 42 },
         };
 
-        const renderedPrompt = await renderPrompt(prompt, vars, {});
+        const renderedPrompt = await renderPrompt(
+          prompt,
+          vars,
+          {},
+          undefined,
+          undefined,
+          new Set(Object.keys(vars)),
+        );
 
         // readFileSync should NOT have been called
         expect(fsMocks.readFileSync).not.toHaveBeenCalled();
@@ -559,7 +594,14 @@ describe('evaluatorHelpers', () => {
           safe: { inner: 'file://should-not-load.txt' },
         };
 
-        const renderedPrompt = await renderPrompt(prompt, vars, {}, undefined, ['safe']);
+        const renderedPrompt = await renderPrompt(
+          prompt,
+          vars,
+          {},
+          undefined,
+          ['safe'],
+          new Set(Object.keys(vars)),
+        );
 
         // The file should NOT be loaded because `safe` is in skipRenderVars
         expect(fsMocks.readFileSync).not.toHaveBeenCalled();
@@ -574,7 +616,14 @@ describe('evaluatorHelpers', () => {
           _conversation: [{ output: 'file:///etc/passwd' }],
         };
 
-        const renderedPrompt = await renderPrompt(prompt, vars, {});
+        const renderedPrompt = await renderPrompt(
+          prompt,
+          vars,
+          {},
+          undefined,
+          undefined,
+          new Set(Object.keys(vars)),
+        );
 
         expect(fsMocks.readFileSync).not.toHaveBeenCalled();
         expect(renderedPrompt).toBe('file:///etc/passwd');
@@ -586,7 +635,14 @@ describe('evaluatorHelpers', () => {
         node.self = node;
         const vars = { node };
 
-        const renderedPrompt = await renderPrompt(prompt, vars, {});
+        const renderedPrompt = await renderPrompt(
+          prompt,
+          vars,
+          {},
+          undefined,
+          undefined,
+          new Set(Object.keys(vars)),
+        );
 
         expect(renderedPrompt).toBe('Root');
       });
@@ -596,7 +652,14 @@ describe('evaluatorHelpers', () => {
         const prompt = toPrompt('{{ created_at }}');
         const vars = { created_at: dateObj };
 
-        const renderedPrompt = await renderPrompt(prompt, vars, {});
+        const renderedPrompt = await renderPrompt(
+          prompt,
+          vars,
+          {},
+          undefined,
+          undefined,
+          new Set(Object.keys(vars)),
+        );
 
         expect(renderedPrompt).toBe(dateObj.toString());
       });
@@ -608,7 +671,14 @@ describe('evaluatorHelpers', () => {
 
         vi.spyOn(fs, 'readFileSync').mockReturnValue('shared content');
 
-        const renderedPrompt = await renderPrompt(prompt, vars, {});
+        const renderedPrompt = await renderPrompt(
+          prompt,
+          vars,
+          {},
+          undefined,
+          undefined,
+          new Set(Object.keys(vars)),
+        );
 
         expect(renderedPrompt).toBe('A: shared content B: shared content');
       });
@@ -624,7 +694,14 @@ describe('evaluatorHelpers', () => {
 
         vi.spyOn(fs, 'readFileSync').mockReturnValueOnce('resolved text');
 
-        const renderedPrompt = await renderPrompt(prompt, vars, {});
+        const renderedPrompt = await renderPrompt(
+          prompt,
+          vars,
+          {},
+          undefined,
+          undefined,
+          new Set(Object.keys(vars)),
+        );
 
         expect(renderedPrompt).toBe('resolved text (type: custom-type)');
       });
@@ -637,7 +714,14 @@ describe('evaluatorHelpers', () => {
 
         vi.spyOn(fs, 'readFileSync').mockReturnValueOnce('safe label');
 
-        const renderedPrompt = await renderPrompt(prompt, vars, {});
+        const renderedPrompt = await renderPrompt(
+          prompt,
+          vars,
+          {},
+          undefined,
+          undefined,
+          new Set(Object.keys(vars)),
+        );
 
         expect(renderedPrompt).toBe('safe label');
         expect(Object.prototype.hasOwnProperty.call(vars.item, '__proto__')).toBe(true);
@@ -652,7 +736,14 @@ describe('evaluatorHelpers', () => {
           },
         };
 
-        const renderedPrompt = await renderPrompt(prompt, vars, {});
+        const renderedPrompt = await renderPrompt(
+          prompt,
+          vars,
+          {},
+          undefined,
+          undefined,
+          new Set(Object.keys(vars)),
+        );
 
         expect(fsMocks.readFileSync).not.toHaveBeenCalled();
         expect(renderedPrompt).toBe('JS: file://helpers/script.js PY: file://helpers/script.py');
@@ -664,7 +755,14 @@ describe('evaluatorHelpers', () => {
           doc: { content: 'file://document.pdf' },
         };
 
-        const renderedPrompt = await renderPrompt(prompt, vars, {});
+        const renderedPrompt = await renderPrompt(
+          prompt,
+          vars,
+          {},
+          undefined,
+          undefined,
+          new Set(Object.keys(vars)),
+        );
 
         expect(renderedPrompt).toBe('PDF: Extracted PDF text');
       });
@@ -681,7 +779,14 @@ describe('evaluatorHelpers', () => {
           Buffer.from(samplePngBase64, 'base64') as any,
         );
 
-        const renderedPrompt = await renderPrompt(prompt, vars, {});
+        const renderedPrompt = await renderPrompt(
+          prompt,
+          vars,
+          {},
+          undefined,
+          undefined,
+          new Set(Object.keys(vars)),
+        );
 
         expect(renderedPrompt).toContain('data:image/png;base64,');
       });
@@ -701,7 +806,14 @@ describe('evaluatorHelpers', () => {
 
         vi.spyOn(fs, 'readFileSync').mockReturnValueOnce(bytes as any);
 
-        const renderedPrompt = await renderPrompt(prompt, vars, {}, mockGoogleProvider as any);
+        const renderedPrompt = await renderPrompt(
+          prompt,
+          vars,
+          {},
+          mockGoogleProvider as any,
+          undefined,
+          new Set(Object.keys(vars)),
+        );
 
         expect(renderedPrompt).toBe(`Audio: ${bytes.toString('base64')}`);
         const { contents } = geminiFormatAndSystemInstructions(bytes.toString('base64'), vars);
@@ -728,7 +840,14 @@ describe('evaluatorHelpers', () => {
 
           vi.spyOn(fs, 'readFileSync').mockReturnValueOnce('windows data');
 
-          const renderedPrompt = await renderPrompt(prompt, vars, {});
+          const renderedPrompt = await renderPrompt(
+            prompt,
+            vars,
+            {},
+            undefined,
+            undefined,
+            new Set(Object.keys(vars)),
+          );
 
           expect(renderedPrompt).toBe('Doc: windows data');
           expect(mockPathResolve).toHaveBeenCalledWith(

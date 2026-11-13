@@ -1911,6 +1911,7 @@ function processImagesInContents(
 
   const base64ToMimeType = new Map<string, string>();
 
+  const seen = new WeakSet<object>();
   function registerMediaValue(value: unknown) {
     if (typeof value === 'string') {
       let mimeType = getMimeTypeFromBase64(value);
@@ -1926,13 +1927,16 @@ function processImagesInContents(
       if (mimeType && (mimeType !== 'video/mp4' || base64ToMimeType.get(value) !== 'audio/mp4')) {
         base64ToMimeType.set(value, mimeType);
       }
-    } else if (Array.isArray(value)) {
-      for (const item of value) {
-        registerMediaValue(item);
+    } else if (value && typeof value === 'object' && !seen.has(value)) {
+      if (
+        !Array.isArray(value) &&
+        ![null, Object.prototype].includes(Object.getPrototypeOf(value))
+      ) {
+        return;
       }
-    } else if (typeof value === 'object' && value !== null) {
-      for (const val of Object.values(value)) {
-        registerMediaValue(val);
+      seen.add(value);
+      for (const item of Object.values(value)) {
+        registerMediaValue(item);
       }
     }
   }

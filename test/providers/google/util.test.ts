@@ -2560,7 +2560,7 @@ describe('util', () => {
         expect(contents).toEqual([]);
       });
 
-      it('should register media values nested inside arrays and objects within contextVars', () => {
+      it('should register media values nested inside cyclic arrays and objects within contextVars', () => {
         const rawImage =
           '/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/2wBDAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAAAAX/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwA/8A/9k=';
         const prompt = JSON.stringify([
@@ -2569,7 +2569,10 @@ describe('util', () => {
             parts: [{ text: rawImage }],
           },
         ]);
+        const cyclic: Record<string, unknown> = {};
+        cyclic.self = cyclic;
         const contextVars = {
+          cyclic,
           items: [{ nestedImage: rawImage }],
           mediaList: [rawImage],
         };

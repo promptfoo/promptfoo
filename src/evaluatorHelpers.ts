@@ -312,6 +312,16 @@ async function loadNonScriptFile(
   return (await fs.readFile(filePath, 'utf8')).trim();
 }
 
+// A symbol preserves register provenance through strategy-level object spreads
+// while leaving the public/serialized variables unchanged.
+const runtimeFileVarNames = Symbol('runtimeFileVarNames');
+
+export function setRuntimeFileVarNames(vars: Record<string, VarValue>, names: string[]): void {
+  if (names.length > 0) {
+    Object.defineProperty(vars, runtimeFileVarNames, { value: new Set(names), enumerable: true });
+  }
+}
+
 /**
  * Renders a prompt template with variable substitution using Nunjucks.
  *
@@ -323,6 +333,7 @@ async function loadNonScriptFile(
  *                         rendering for. This is critical for red team testing where injection
  *                         variables contain attack payloads (e.g., SSTI, XSS) that should NOT be
  *                         evaluated by Promptfoo before reaching the target.
+ * @param nestedFileVarNames - Configured variables eligible for nested file loading.
  * @returns The rendered prompt string
  */
 export async function renderPrompt(
@@ -331,9 +342,14 @@ export async function renderPrompt(
   nunjucksFilters?: NunjucksFilterMap,
   provider?: ApiProvider,
   skipRenderVars?: string[],
+  nestedFileVarNames?: ReadonlySet<string>,
 ): Promise<string> {
   const nunjucks = getNunjucksEngine(nunjucksFilters);
   const loadedMimeTypes = setLoadedFileMimeTypes(vars);
+  const runtimeVars = (vars as typeof vars & { [runtimeFileVarNames]?: ReadonlySet<string> })[
+    runtimeFileVarNames
+  ];
+  const skipVars = runtimeVars ? [...(skipRenderVars ?? []), ...runtimeVars] : skipRenderVars;
 
   let basePrompt = prompt.raw;
 
@@ -406,7 +422,7 @@ export async function renderPrompt(
 
   // Load files
   for (const [varName, value] of Object.entries(vars)) {
-    if (skipRenderVars?.includes(varName) || varName === '_conversation') {
+    if (skipVars?.includes(varName) || varName === '_conversation') {
       continue;
     }
 
@@ -475,7 +491,7 @@ export async function renderPrompt(
         );
       }
       vars[varName] = javascriptOutput.output;
-    } else if (typeof value === 'object' && value !== null) {
+    } else if (nestedFileVarNames?.has(varName) && typeof value === 'object' && value !== null) {
       // Recursively expand any `file://` references nested inside a plain object
       // or array.  For example:
       //   vars:
@@ -515,13 +531,13 @@ export async function renderPrompt(
 
   // Remove any trailing newlines from vars, as this tends to be a footgun for JSON prompts.
   for (const key of Object.keys(vars)) {
-    if (typeof vars[key] === 'string' && !skipRenderVars?.includes(key)) {
+    if (typeof vars[key] === 'string' && !skipVars?.includes(key)) {
       vars[key] = (vars[key] as string).replace(/\n$/, '');
     }
   }
   // Resolve variable mappings
   const varsResolvedFromSkipped = new Set<string>();
-  resolveVariables(vars, skipRenderVars, varsResolvedFromSkipped);
+  resolveVariables(vars, skipVars, varsResolvedFromSkipped);
   // Third party integrations
   if (prompt.raw.startsWith('portkey://')) {
     const portKeyResult = await getPortkeyPrompt(prompt.raw.slice('portkey://'.length), vars);
@@ -614,7 +630,7 @@ export async function renderPrompt(
       Object.entries(vars).map(([key, value]) => {
         if (
           typeof value !== 'string' ||
-          skipRenderVars?.includes(key) ||
+          skipVars?.includes(key) ||
           varsResolvedFromSkipped.has(key)
         ) {
           return [key, value];
