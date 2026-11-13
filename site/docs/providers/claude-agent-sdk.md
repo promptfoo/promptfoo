@@ -21,14 +21,14 @@ You can reference this provider using either:
 
 ## Installation
 
-The Claude Agent SDK provider requires the `@anthropic-ai/claude-agent-sdk` package to be installed separately:
+The Claude Agent SDK and its native CLI are not included in the default Promptfoo install. Install them alongside Promptfoo in the project containing your eval config:
 
 ```bash
-npm install @anthropic-ai/claude-agent-sdk
+npm install promptfoo @anthropic-ai/claude-agent-sdk@^0.3.273
 ```
 
 :::note
-This is an optional dependency and only needs to be installed if you want to use the Claude Agent SDK provider. Note that Anthropic has released the claude-agent-sdk library with a [proprietary license](https://github.com/anthropics/claude-agent-sdk-typescript/blob/9f51899c3e04f15951949ceac81849265d545579/LICENSE.md).
+The provider checks for version `0.3.273` or later within `0.3.x` when called. It resolves the SDK from your config directory or its parents, including when Promptfoo is installed globally. Anthropic distributes the SDK under a [proprietary license](https://github.com/anthropics/claude-agent-sdk-typescript/blob/9f51899c3e04f15951949ceac81849265d545579/LICENSE.md).
 :::
 
 ## Setup
@@ -85,6 +85,7 @@ export CLAUDE_CODE_USE_VERTEX=true
 By default, Claude Agent SDK runs in a temporary directory with no tools enabled, using the `default` permission mode. This makes it behave similarly to the standard [Anthropic provider](/docs/providers/anthropic/). It has no access to the file system (read or write) and can't run system commands.
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - anthropic:claude-agent-sdk
 
@@ -131,7 +132,9 @@ prompts:
   - 'Refactor the authentication module to use async/await'
 ```
 
-> **Note:** when using `acceptEdits` and tools that allow side effects like writing to files, you'll need to consider how you will reset the files after each test run. See the [Managing Side Effects](#managing-side-effects) section for more information.
+> **Note:** when using `acceptEdits` and tools that allow side effects like writing to files, each call changes `working_dir` for the calls after it. Set `copy_working_dir: true` to run each eval step in a fresh copy of `working_dir` instead (see [isolated workspaces][isolated-workspaces]), or see [Managing Side Effects](#managing-side-effects) for other options.
+
+[isolated-workspaces]: /docs/guides/evaluate-coding-agents#isolated-workspaces
 
 ## Supported Parameters
 
@@ -140,6 +143,7 @@ prompts:
 | `apiKey`                             | string           | Anthropic API key                                                                                            | Environment variable     |
 | `apiKeyRequired`                     | boolean          | Require Promptfoo to find an Anthropic API key before calling the SDK. Set to `false` for local SDK auth.    | `true`                   |
 | `working_dir`                        | string           | Directory for file operations                                                                                | Temporary directory      |
+| `copy_working_dir`                   | boolean/string   | Run each eval step in a fresh copy of `working_dir` ([isolated workspaces][isolated-workspaces])             | false                    |
 | `model`                              | string           | Primary model to use (passed to Claude Agent SDK)                                                            | Claude Agent SDK default |
 | `fallback_model`                     | string           | Fallback model if primary fails. Accepts a comma-separated list, tried in order.                             | Claude Agent SDK default |
 | `max_turns`                          | number           | Maximum conversation turns                                                                                   | Claude Agent SDK default |
@@ -210,8 +214,8 @@ Model selection is optional, since Claude Agent SDK uses sensible defaults. When
 providers:
   - id: anthropic:claude-agent-sdk
     config:
-      model: claude-opus-4-6
-      fallback_model: claude-sonnet-4-5-20250929
+      model: claude-opus-5
+      fallback_model: claude-sonnet-5
 ```
 
 Claude Agent SDK also supports a number of [model aliases](https://docs.claude.com/en/docs/claude-code/model-config#model-aliases), which can also be used in the configuration.
@@ -253,6 +257,8 @@ By default, when a `working_dir` is specified, Claude Agent SDK has access to th
 
 Control Claude Agent SDK's permissions for modifying files and running system commands:
 
+Promptfoo explicitly uses `default` (manual approvals) when `permission_mode` is omitted, including with SDK 0.3.286 and later. Set `permission_mode: auto` to opt into automatic permission classification.
+
 | Mode                | Description                                                           |
 | ------------------- | --------------------------------------------------------------------- |
 | `default`           | Standard permissions                                                  |
@@ -261,6 +267,8 @@ Control Claude Agent SDK's permissions for modifying files and running system co
 | `bypassPermissions` | No restrictions (requires `allow_dangerously_skip_permissions: true`) |
 | `dontAsk`           | Deny permissions that aren't pre-approved (no prompts)                |
 | `auto`              | Use a model classifier to approve or deny permission prompts          |
+
+[Claude Code 2.1.278](https://github.com/anthropics/claude-code/releases/tag/v2.1.278), bundled with SDK 0.3.278, makes server-side permission classification the default for `auto` mode for Claude API and Enterprise users, as well as Bedrock, Vertex, Foundry, and gateway users. For Bedrock, Vertex, Foundry, and gateways, set `CLAUDE_CODE_AUTO_MODE_SERVER: '0'` in the provider's `config.env` to opt out and use the client-side classifier.
 
 :::warning
 Using `bypassPermissions` requires setting `allow_dangerously_skip_permissions: true` as a safety measure:
@@ -382,6 +390,13 @@ providers:
       strict_mcp_config: true # Only use configured servers (true by default)
 ```
 
+Server names are part of tool names (`mcp__<server>__<tool>`), which `append_allowed_tools` and
+`disallowed_tools` match. Without an explicit `name`, the adapter uses the `url` or `command`
+(`default` for a `path` server). Names must remain distinct after SDK normalization; for example,
+`tools.local` and `tools_local` collide. Set explicit names for colliding servers or URLs containing
+credentials, since names appear in tools and debug logs. Update tool permission rules when renaming
+a server.
+
 This direct SDK integration cannot enforce the shared MCP `tools` allowlist or non-empty
 `exclude_tools` filters, so those configurations fail closed instead of silently exposing a broader
 tool set. An empty `exclude_tools` list is a no-op.
@@ -421,7 +436,7 @@ providers:
 ```
 
 :::note
-Only the `local` type is currently supported. Relative paths in `path` resolve against the config file's directory.
+Only the `local` type is supported. Relative paths in `path` resolve against the config file's directory.
 :::
 
 ### Plugin Structure
@@ -520,6 +535,7 @@ Claude automatically invokes the relevant skill when a task matches the skill's 
 Promptfoo normalizes Claude `Skill` tool invocations into `response.metadata.skillCalls`, so skill evals can use the same `skill-used` assertion style as Codex. The underlying `Skill` tool calls are still available in [`response.metadata.toolCalls`](#tool-call-tracking) when you need the raw tool payload.
 
 ```yaml
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - id: anthropic:claude-agent-sdk
     config:
@@ -576,6 +592,7 @@ This ensures tests don't depend on user-specific skills that may not be present 
 ### Example: Complete Skills Testing Configuration
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - id: anthropic:claude-agent-sdk
     config:
@@ -661,10 +678,12 @@ providers:
           required: [analysis, confidence]
 ```
 
-When `output_format` is configured, the response will include structured output that conforms to the schema. The structured output is available in:
+When the SDK returns a value that conforms to `output_format`, Promptfoo exposes it in two response fields.
 
 - `output` - The parsed structured output (when available)
 - `metadata.structuredOutput` - The raw structured output value
+
+With SDK 0.3.302 and later, an API refusal that discards structured output produces a provider error. The provider response includes `error` and omits both `output` and `metadata.structuredOutput`.
 
 :::tip
 For evals that depend on parsing JSON from the model's reply, prefer `output_format` over asking for JSON in the prompt and then running `is-json` / `JSON.parse()`. Without it, Claude commonly wraps short JSON answers in Markdown fences or a leading sentence, which makes downstream parsers brittle. With it, the response arrives as a parsed object, so a JavaScript assertion can read fields directly.
@@ -729,13 +748,13 @@ providers:
         - context-1m-2025-08-07
 ```
 
-Currently available betas:
+Available betas:
 
 | Beta                    | Description                                        |
 | ----------------------- | -------------------------------------------------- |
 | `context-1m-2025-08-07` | Enable 1M token context window (Sonnet 4/4.5 only) |
 
-See the [Anthropic beta headers documentation](https://docs.anthropic.com/en/api/beta-headers) for more information.
+See the [Anthropic beta headers documentation](https://docs.claude.com/en/api/beta-headers) for more information.
 
 ## Sandbox Configuration
 
@@ -778,6 +797,8 @@ Available sandbox options:
 
 When `sandbox.enabled` is `true`, Claude Agent SDK defaults `failIfUnavailable` to `true`; set it to `false` only if you want the SDK to degrade gracefully when sandbox dependencies or platform support are missing.
 
+With Claude Agent SDK 0.3.296 or later, `sandbox` merges with an inline `settings.sandbox` object: explicit `sandbox` values take precedence, while deny and credential lists from both are combined. A `settings` file path cannot be combined with `sandbox`; use inline settings when configuring both.
+
 Use `credentials.envVars` with `mode: mask` to keep a credential out of sandboxed commands while allowing the proxy to inject it only for selected hosts. Each `injectHosts` entry must also be present in `network.allowedDomains`:
 
 ```yaml
@@ -795,7 +816,7 @@ sandbox:
 
 Leave `credentials.allowPlaintextInject` disabled unless the target is a trusted-network test fixture; plain HTTP cannot verify the upstream identity or protect the credential in transit.
 
-See the [Claude Code sandbox documentation](https://docs.anthropic.com/en/docs/claude-code/settings#sandbox-settings) for more details.
+See the [Claude Code sandbox documentation](https://docs.claude.com/en/docs/claude-code/settings#sandbox-settings) for more details.
 
 ## Settings
 
@@ -821,7 +842,9 @@ providers:
       settings: /path/to/settings.json
 ```
 
-For embedders that derive lockdown configuration from an enterprise policy, use `managed_settings` to load policy-tier settings above user/project layers (so user/project settings cannot widen restrictions set here):
+Use `managed_settings` to pass restrictions from an embedding application to the SDK. If the machine already has an administrator policy, that policy controls whether the SDK merges restrictions from the application.
+
+Setting `disableAllHooks`, `disableSkillShellExecution`, `allowedHttpHookUrls`, or `httpHookAllowedEnvVars` in `managed_settings` requires SDK 0.3.309 or later in the 0.3.x series. With `disableAllHooks: true`, the SDK allows only administrator-managed hooks. The SDK accepts empty `allowedHttpHookUrls` and `httpHookAllowedEnvVars` lists, but they only restrict HTTP hooks when other settings sources have no entries for the same list.
 
 ```yaml
 providers:
@@ -942,6 +965,8 @@ providers:
 ```
 
 ### Subagent Limits
+
+With SDK 0.3.302 and later, agents with access to the Agent (Task) tool can fork the current conversation by default. To disable fork subagents for an eval, set `CLAUDE_CODE_FORK_SUBAGENT` to `'0'` in the provider's `config.env`.
 
 Claude Agent SDK 0.3.217 limits concurrent subagents to 20. Promptfoo preserves the previous maximum nesting depth of five; set either limit to a positive integer when your eval needs different behavior:
 
@@ -1144,6 +1169,10 @@ providers:
 
 With SDK 0.3.257 and newer, reported thinking tokens appear in `tokenUsage.completionDetails.reasoning`. They are already included in completion and total token counts. Sessions resumed from older SDK versions may report only a partial thinking-token count.
 
+With SDK 0.3.311 and newer, each model in `metadata.modelUsage` can report cache writes by lifetime in `cacheCreationEphemeral5mInputTokens` and `cacheCreationEphemeral1hInputTokens`. Both counts are included in `cacheCreationInputTokens`. Writes with an unknown lifetime appear only in the total.
+
+For resumed, continued, or forked sessions, `cost`, `tokenUsage`, and `metadata.modelUsage` cover only the current call, including subagents. Cumulative SDK totals remain in `raw`, `metadata.sessionCost`, and `metadata.sessionModelUsage`. Promptfoo captures a pre-prompt baseline using the SDK's experimental usage API. If that API is unavailable, times out, or a local command bypasses the prompt hook, the output is preserved but per-call accounting is omitted with a warning and `metadata.usageAccounting: 'unavailable'`; cost assertions then fail rather than treating unknown cost as zero.
+
 ## Error Diagnostics
 
 When the SDK reports a model-call failure, the provider surfaces it in two places so assertions can branch on the underlying cause instead of the generic terminal subtype:
@@ -1230,7 +1259,7 @@ The receiver's `/v1/logs` endpoint accepts JSON only. The provider automatically
 
 ## Caching Behavior
 
-This provider automatically caches responses, and will read from the cache if the prompt, configuration, and files in the working directory (if `working_dir` is set) are the same as a previous run.
+This provider automatically caches responses, and will read from the cache if the prompt, configuration, and files in the working directory (if `working_dir` is set) are the same as a previous run. Calls that use `copy_working_dir` are never cached.
 
 When MCP servers are configured, caching is disabled by default because MCP tools typically interact with external state (APIs, file systems, databases), making cached responses unreliable. To opt back into caching for deterministic MCP tools (e.g., code search, static knowledge bases), set `cache_mcp: true`:
 
@@ -1278,6 +1307,7 @@ When using Claude Agent SDK with configurations that allow side effects, like wr
 
 This increases complexity, so first consider if you can achieve your goal with a read-only configuration. If you do need to test with side effects, here are some strategies that can help:
 
+- **Isolated workspaces**: Set `copy_working_dir: true` to run each eval step in a fresh copy of `working_dir` (see [isolated workspaces][isolated-workspaces])
 - **Serial execution**: Set `evaluateOptions.maxConcurrency: 1` in your config or use `--max-concurrency 1` CLI flag
 - **Hooks**: Use promptfoo [extension hooks](/docs/configuration/reference/#extension-hooks) to reset the environment after each test run
 - **Wrapper scripts**: Handle setup/cleanup outside of promptfoo

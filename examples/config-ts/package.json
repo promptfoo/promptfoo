@@ -10,12 +10,12 @@
     "view": "promptfoo view"
   },
   "dependencies": {
-    "openai": "^7.1.0",
+    "openai": "^7.20.0",
     "tsx": "^4.23.11",
     "zod": "^4.3.6"
   },
   "devDependencies": {
-    "@types/node": "^25.1.0",
+    "@types/node": "^26.0.0",
     "promptfoo": "latest"
   }
 }
