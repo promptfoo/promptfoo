@@ -13,6 +13,7 @@ import { getOpenAiEffectiveServiceTier } from '../openai/util';
 import { ResponsesProcessor } from '../responses/index';
 import { normalizeResponsesInput } from '../responses/input';
 import { readResponsesStream } from '../responses/stream';
+import { resolveResponseSchemaStrict } from '../responses/strict';
 import { getRequestTimeoutMs } from '../shared';
 import {
   assertXAIServiceTier,
@@ -125,7 +126,10 @@ function buildTextFormat(responseFormat: any) {
   if (responseFormat.type === 'json_schema') {
     const schema = responseFormat.schema || responseFormat.json_schema?.schema;
     const schemaName = responseFormat.json_schema?.name || responseFormat.name || 'response_schema';
-    const strict = responseFormat.json_schema?.strict ?? responseFormat.strict ?? true;
+    const strict = resolveResponseSchemaStrict(
+      responseFormat.json_schema?.strict,
+      responseFormat.strict,
+    );
     return {
       format: {
         type: 'json_schema',

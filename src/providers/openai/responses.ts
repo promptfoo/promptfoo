@@ -32,6 +32,7 @@ import {
   IncompleteResponsesStreamError,
   readResponsesStream,
 } from '../responses/stream';
+import { resolveResponseSchemaStrict } from '../responses/strict';
 import { getRequestTimeoutMs, LONG_RUNNING_MODEL_TIMEOUT_MS } from '../shared';
 import { buildChatSpanContext, extractProviderResponseAttributes, withGenAISpan } from '../tracing';
 import { OpenAiGenericProvider } from '.';
@@ -1144,7 +1145,10 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
         const schema = responseFormat.schema || responseFormat.json_schema?.schema;
         const schemaName =
           responseFormat.json_schema?.name || responseFormat.name || 'response_schema';
-        const strict = responseFormat.json_schema?.strict ?? responseFormat.strict ?? true;
+        const strict = resolveResponseSchemaStrict(
+          responseFormat.json_schema?.strict,
+          responseFormat.strict,
+        );
 
         textFormat = {
           format: {

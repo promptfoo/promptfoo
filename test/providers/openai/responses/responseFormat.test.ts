@@ -81,6 +81,12 @@ describe('OpenAiResponsesProvider response formats', () => {
       { description: 'nested false', nested: false, topLevel: undefined, expected: false },
       { description: 'top-level false', nested: undefined, topLevel: false, expected: false },
       {
+        description: 'rendered nested false overrides true',
+        nested: '{{ strictFlag }}' as const,
+        topLevel: true,
+        expected: false,
+      },
+      {
         description: 'omitted defaults to true',
         nested: undefined,
         topLevel: undefined,
@@ -110,11 +116,11 @@ describe('OpenAiResponsesProvider response formats', () => {
             type: 'json_schema',
             strict: topLevel,
             json_schema: { name: 'result_schema', strict: nested, schema },
-          } as any,
+          },
         },
       });
 
-      await provider.callApi('Test prompt');
+      await provider.callApi('Test prompt', { vars: { strictFlag: false } });
 
       const [, request] = vi.mocked(cache.fetchWithCache).mock.calls[0];
       const body = JSON.parse((request as { body: string }).body);

@@ -11,6 +11,7 @@ import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import { applyGpt6RequestRules, getGpt6ResponsesReasoning, isGpt6Model } from '../openai/gpt6';
 import { flattenResponseTool } from '../openai/util';
 import { ResponsesProcessor } from '../responses/index';
+import { resolveResponseSchemaStrict } from '../responses/strict';
 import { getRequestTimeoutMs, LONG_RUNNING_MODEL_TIMEOUT_MS } from '../shared';
 import { AzureGenericProvider } from './generic';
 import { calculateAzureCost } from './util';
@@ -210,7 +211,10 @@ export class AzureResponsesProvider extends AzureGenericProvider<AzureResponsesO
         const schema = responseFormat.schema || responseFormat.json_schema?.schema;
         const schemaName =
           responseFormat.json_schema?.name || responseFormat.name || 'response_schema';
-        const strict = responseFormat.json_schema?.strict ?? responseFormat.strict ?? true;
+        const strict = resolveResponseSchemaStrict(
+          responseFormat.json_schema?.strict,
+          responseFormat.strict,
+        );
 
         textFormat = {
           format: {

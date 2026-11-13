@@ -287,13 +287,18 @@ const NestedResponseFormat = z.strictObject({
     schema: SchemaDocument,
   }),
 });
+const Template = z
+  .templateLiteral([z.string(), '{{', z.string().regex(/[\s\S]+/), '}}', z.string()])
+  .describe('Runtime template expression');
+const ResponsesSchemaStrict = z
+  .union([z.boolean(), Template])
+  .nullable()
+  .optional()
+  .describe('Defaults to true; accepts runtime boolean templates');
 const FlatResponseFormat = z.strictObject({
   type: z.literal('json_schema'),
   name: z.string().optional(),
-  strict: z
-    .literal(true)
-    .optional()
-    .describe('Responses config.response_format uses strict mode at runtime'),
+  strict: ResponsesSchemaStrict,
   schema: SchemaDocument,
 });
 const BasicResponseFormat = z.strictObject({ type: z.enum(['text', 'json_object']) });
@@ -306,20 +311,16 @@ const ResponsesResponseFormat = z.union([
   FileReferenceInputSchema,
   BasicResponseFormat,
   NestedResponseFormat.extend({
+    strict: ResponsesSchemaStrict,
     json_schema: NestedResponseFormat.shape.json_schema.omit({ description: true }).extend({
-      strict: z
-        .literal(true)
-        .optional()
-        .describe('Responses config.response_format uses strict mode at runtime'),
+      strict: ResponsesSchemaStrict,
     }),
   }),
   FlatResponseFormat,
 ]);
 
 const ReasoningEffort = z.enum(['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']);
-const Template = z
-  .templateLiteral([z.string(), '{{', z.string().regex(/[\s\S]+/), '}}', z.string()])
-  .describe('Runtime template expression');
+
 const Reasoning = z.strictObject({
   context: z
     .union([z.enum(['auto', 'current_turn', 'all_turns']), Template])
