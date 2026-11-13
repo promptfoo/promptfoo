@@ -1355,7 +1355,9 @@ export async function runEvalInternal(
   let setup = state.setup;
   let latencyMs = 0;
   let providerCallCompleted = false;
-  let providerAccounting: Pick<EvaluateResult, 'cost' | 'incurredCost' | 'latencyMs' | 'tokenUsage' | 'response'> | undefined;
+  let providerAccounting:
+    | Pick<EvaluateResult, 'cost' | 'incurredCost' | 'latencyMs' | 'tokenUsage' | 'response'>
+    | undefined;
   let traceContext: Awaited<ReturnType<typeof generateTraceContextIfNeeded>> | undefined;
   // The step's copy_working_dir workspace, removed once its assertions have run.
   let workspace: AgentWorkspace | undefined;
@@ -1475,14 +1477,27 @@ export async function runEvalInternal(
             accumulateResponseTokenUsage(ret.tokenUsage, response);
           }
           // A failed transform can leave sensitive output and metadata unprocessed.
-          const { cached, cost, incurredCost, latencyMs: responseLatency, sessionId, tokenUsage } =
-            response;
+          const {
+            cached,
+            cost,
+            incurredCost,
+            latencyMs: responseLatency,
+            sessionId,
+            tokenUsage,
+          } = response;
           providerAccounting = {
             cost: ret.cost,
             ...(incurredCost !== undefined && { incurredCost }),
             latencyMs: ret.latencyMs,
             tokenUsage: ret.tokenUsage,
-            response: { cached, cost, incurredCost, latencyMs: responseLatency, sessionId, tokenUsage },
+            response: {
+              cached,
+              cost,
+              incurredCost,
+              latencyMs: responseLatency,
+              sessionId,
+              tokenUsage,
+            },
           };
           await applyRunEvalResponseOutcome({
             abortSignal,
