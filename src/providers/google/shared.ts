@@ -1,3 +1,5 @@
+import { isVertexLlama4Model } from './vertexLlama';
+
 /**
  * Interface for Google model cost with optional tiered pricing.
  * Tiered pricing applies when prompt tokens exceed a threshold.
@@ -14,9 +16,11 @@ export interface GoogleModelCost {
   videoOutput?: number;
   priorityMultiplier?: number;
   priorityCacheRead?: number;
+  priorityCacheReadAudio?: number;
   priorityAudioInput?: number;
   flexMultiplier?: number;
   flexCacheRead?: number;
+  flexCacheReadAudio?: number;
   flexAudioInput?: number;
 }
 
@@ -32,8 +36,45 @@ export interface GoogleModel {
   introductoryPricing?: { expiresAt: number; multiplier: number };
   /** Override pricing for Vertex AI when it differs from AI Studio. */
   vertexCost?: GoogleModelCost;
-  /** Multiplier applied to Vertex multi-region pricing when the model supports it. */
-  vertexRegionalMultiplier?: number;
+  /** Exact non-global Vertex pricing when it cannot be represented by a multiplier. */
+  vertexRegionalCost?: GoogleModelCost;
+  /** Multiplier for Vertex regional and multi-regional endpoints relative to global. */
+  vertexRegionalPremium?: number;
+}
+
+// These Vertex Gemini IDs use the global endpoint by default. Their model pages list either
+// global-only availability or global as the broadly available endpoint:
+// https://docs.cloud.google.com/vertex-ai/generative-ai/docs/learn/locations#generative_ai_models
+const VERTEX_GLOBAL_DEFAULT_MODELS = new Set([
+  'gemini-4-argon',
+  'gemini-4-argon-cyber-permissive',
+  'gemini-4-hydrogen',
+  'gemini-3.5-transcribe',
+  'gemini-3.5-transcribe-live',
+  'gemini-3.8-flash-tts',
+  'gemini-3.8-flash-lite-tts',
+  'gemini-3.8-flash',
+  'gemini-3.8-flash-cyber',
+  'gemini-3.7-flash',
+  'gemini-3.6-flash',
+  'gemini-3.5-flash',
+  'gemini-flash-latest',
+  'gemini-3.5-flash-lite',
+  'gemini-3.1-pro-preview',
+  'gemini-3.1-pro-preview-customtools',
+  'gemini-3.1-flash-lite',
+  'gemini-flash-lite-latest',
+  'gemini-3-flash-preview',
+]);
+
+export function getVertexModelDefaultRegion(modelName: string): string | undefined {
+  if (VERTEX_GLOBAL_DEFAULT_MODELS.has(modelName)) {
+    return 'global';
+  }
+  if (isVertexLlama4Model(modelName)) {
+    return 'us-east5';
+  }
+  return undefined;
 }
 
 export const GEMINI_FLASH_MODELS = [
@@ -42,6 +83,14 @@ export const GEMINI_FLASH_MODELS = [
   { id: 'gemini-3.6-flash', name: 'Gemini 3.6 Flash' },
   { id: 'gemini-3.5-flash-lite', name: 'Gemini 3.5 Flash-Lite' },
 ] as const;
+
+export const GEMINI_4_MODELS = [
+  { id: 'gemini-4-argon', name: 'Gemini 4 Argon' },
+  { id: 'gemini-4-hydrogen', name: 'Gemini 4 Hydrogen' },
+] as const;
+
+// Gemini models offered by `promptfoo redteam init`. All use the global Vertex endpoint.
+export const GEMINI_TARGET_MODELS = [...GEMINI_4_MODELS, ...GEMINI_FLASH_MODELS] as const;
 
 export function getVertexApiHostForRegion(region: string): string {
   if (region === 'global') {
@@ -54,6 +103,14 @@ export function getVertexApiHostForRegion(region: string): string {
 
   return `${region}-aiplatform.googleapis.com`;
 }
+
+const GEMINI_4_ARGON_COST = {
+  input: 4.0 / 1e6,
+  output: 20.0 / 1e6,
+  cacheRead: 0.2 / 1e6,
+  priorityMultiplier: 1.8,
+  flexMultiplier: 0.5,
+};
 
 const GEMINI_3_PRO_COST = { input: 2.0 / 1e6, output: 12.0 / 1e6, cacheRead: 0.2 / 1e6 };
 const GEMINI_3_PRO_TIERED_COST = {
@@ -70,13 +127,6 @@ const GEMINI_FLASH_INTRODUCTORY_PRICING = {
   expiresAt: Date.UTC(2027, 0, 1),
   multiplier: 0.5,
 };
-const GEMINI_3_5_FLASH_COST = {
-  input: 1.5 / 1e6,
-  output: 9.0 / 1e6,
-  cacheRead: 0.15 / 1e6,
-  priorityMultiplier: 1.8,
-  flexMultiplier: 0.5,
-};
 const GEMINI_3_5_FLASH_LITE_COST = {
   input: 0.3 / 1e6,
   output: 2.5 / 1e6,
@@ -86,12 +136,57 @@ const GEMINI_3_5_FLASH_LITE_COST = {
 };
 
 /**
- * Google AI Studio models with pricing data.
+ * Google AI Studio model pricing used for current requests and saved-evaluation cost scoring.
  * Prices are per token (from Google AI pricing page, converted from per-million).
  *
+ * Selected retired IDs remain here so historical results can still be scored. Membership in this
+ * table does not imply that Google still serves the endpoint.
+ *
  * Note: Vertex AI may have different pricing for some models.
+ * @see https://ai.google.dev/gemini-api/docs/pricing
+ * @see https://cloud.google.com/vertex-ai/generative-ai/pricing
  */
 export const GOOGLE_MODELS: GoogleModel[] = [
+  // Gemini 4 Argon receives a 50% discount through 2026-11-30.
+  {
+    id: 'gemini-4-argon',
+    cost: GEMINI_4_ARGON_COST,
+    introductoryPricing: { expiresAt: Date.UTC(2026, 11, 1), multiplier: 0.5 },
+    vertexRegionalPremium: 1.1,
+  },
+  // Fairwind allowlisted Vertex model; the Argon introductory discount does not apply.
+  {
+    id: 'gemini-4-argon-cyber-permissive',
+    vertexCost: GEMINI_4_ARGON_COST,
+    vertexRegionalPremium: 1.1,
+  },
+  {
+    id: 'gemini-4-hydrogen',
+    cost: {
+      input: 1.5 / 1e6,
+      output: 7.5 / 1e6,
+      cacheRead: 0.075 / 1e6,
+      priorityMultiplier: 1.8,
+      flexMultiplier: 0.5,
+    },
+    vertexRegionalPremium: 1.1,
+  },
+  // Gemini Decisions bills only input tokens, including the questions.
+  ...modelsWithCost(['gemini-decision-1'], { input: 0.1 / 1e6, output: 0 }),
+
+  // Fairwind allowlisted Vertex model; the Flash introductory discount does not apply.
+  {
+    id: 'gemini-3.8-flash-cyber',
+    vertexCost: {
+      input: 1.5 / 1e6,
+      output: 7.5 / 1e6,
+      cacheRead: 0.15 / 1e6,
+      priorityMultiplier: 1.8,
+      flexMultiplier: 0.5,
+    },
+    vertexRegionalPremium: 1.1,
+  },
+
   // Gemini 3.8, 3.7, and 3.6 Flash receive a 50% discount through 2026-12-31.
   ...['gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3.6-flash', 'gemini-flash-latest'].map(
     (id) => ({
@@ -104,16 +199,58 @@ export const GOOGLE_MODELS: GoogleModel[] = [
         flexMultiplier: 0.5,
       },
       introductoryPricing: GEMINI_FLASH_INTRODUCTORY_PRICING,
-      vertexRegionalMultiplier: 1.1,
+      vertexRegionalPremium: 1.1,
     }),
   ),
+
+  ...[
+    { id: 'gemini-3.8-flash-tts', audioOutput: 18 / 1e6 },
+    { id: 'gemini-3.8-flash-lite-tts', audioOutput: 12 / 1e6 },
+  ].map(({ id, audioOutput }) => ({
+    id,
+    cost: {
+      input: 1 / 1e6,
+      output: audioOutput,
+      audioOutput,
+      priorityMultiplier: 1.8,
+      flexMultiplier: 0.5,
+    },
+    // Vertex publishes standard-tier TTS rates, with introductory credits applied below.
+    vertexCost: { input: 1 / 1e6, output: audioOutput, audioOutput },
+    introductoryPricing: GEMINI_FLASH_INTRODUCTORY_PRICING,
+  })),
 
   // Gemini 3.5 models.
   {
     id: 'gemini-3.5-flash',
-    cost: { ...GEMINI_3_5_FLASH_COST, flexCacheRead: 0.08 / 1e6 },
-    vertexCost: GEMINI_3_5_FLASH_COST,
-    vertexRegionalMultiplier: 1.1,
+    cost: {
+      input: 1.5 / 1e6,
+      output: 9.0 / 1e6,
+      cacheRead: 0.15 / 1e6,
+      audioInput: 1.5 / 1e6,
+      priorityMultiplier: 1.8,
+      flexMultiplier: 0.5,
+      flexCacheRead: 0.08 / 1e6,
+    },
+    vertexCost: {
+      input: 1.5 / 1e6,
+      output: 9.0 / 1e6,
+      cacheRead: 0.15 / 1e6,
+      audioInput: 1.5 / 1e6,
+      priorityMultiplier: 1.8,
+      flexMultiplier: 0.5,
+      flexCacheRead: 0.075 / 1e6,
+    },
+    vertexRegionalCost: {
+      input: 1.65 / 1e6,
+      output: 9.9 / 1e6,
+      cacheRead: 0.165 / 1e6,
+      audioInput: 1.65 / 1e6,
+      priorityMultiplier: 1.8,
+      flexMultiplier: 0.5,
+      flexCacheRead: 0.0825 / 1e6,
+    },
+    vertexRegionalPremium: 1.1,
   },
   ...['gemini-3.5-flash-lite', 'gemini-flash-lite-latest'].map((id) => ({
     id,
@@ -123,19 +260,28 @@ export const GOOGLE_MODELS: GoogleModel[] = [
       flexCacheRead: 0.02 / 1e6,
     },
     vertexCost: GEMINI_3_5_FLASH_LITE_COST,
-    vertexRegionalMultiplier: 1.1,
+    vertexRegionalPremium: 1.1,
   })),
-  ...['gemini-omni-flash-preview', 'gemini-omni-1.1-flash', 'gemini-omni-1.1-flash-preview'].map(
-    (id) => ({
-      id,
-      cost: {
-        input: 1.5 / 1e6,
-        output: 9.0 / 1e6,
-        audioInput: 1.5 / 1e6,
-        videoOutput: 17.5 / 1e6,
-      },
-    }),
+  ...modelsWithCost(['gemini-3.5-transcribe'], {
+    input: 2 / 1e6,
+    audioInput: 2 / 1e6,
+    output: 12 / 1e6,
+  }),
+  ...modelsWithCost(
+    ['gemini-omni-flash-preview', 'gemini-omni-1.1-flash', 'gemini-omni-1.1-flash-preview'],
+    {
+      input: 1.5 / 1e6,
+      output: 9.0 / 1e6,
+      audioInput: 1.5 / 1e6,
+      videoOutput: 17.5 / 1e6,
+    },
   ),
+  ...modelsWithCost(['gemini-3.5-live-translate-preview'], {
+    input: 3.5 / 1e6,
+    output: 21.0 / 1e6,
+    audioInput: 3.5 / 1e6,
+    audioOutput: 21.0 / 1e6,
+  }),
 
   // Gemini 3.1 models.
   ...['gemini-3.1-pro-preview', 'gemini-3.1-pro-preview-customtools', 'gemini-pro-latest'].map(
@@ -144,17 +290,22 @@ export const GOOGLE_MODELS: GoogleModel[] = [
       cost: {
         ...GEMINI_3_PRO_COST,
         priorityMultiplier: 1.8,
+        flexMultiplier: 0.5,
+        flexCacheRead: GEMINI_3_PRO_COST.cacheRead,
       },
       tieredCost: {
         ...GEMINI_3_PRO_TIERED_COST,
         above: {
           ...GEMINI_3_PRO_TIERED_COST.above,
           priorityMultiplier: 1.8,
+          flexMultiplier: 0.5,
+          flexCacheRead: GEMINI_3_PRO_TIERED_COST.above.cacheRead,
         },
       },
     }),
   ),
-  // gemini-3.1-flash-lite (GA) and its preview alias share Flash-Lite pricing.
+  // gemini-3.1-flash-lite (GA) and its retired preview alias share Flash-Lite pricing. The preview
+  // entry is retained for historical saved-evaluation cost scoring.
   ...['gemini-3.1-flash-lite', 'gemini-3.1-flash-lite-preview'].map((id) => ({
     id,
     cost: {
@@ -167,13 +318,16 @@ export const GOOGLE_MODELS: GoogleModel[] = [
         ? {}
         : {
             priorityMultiplier: 1.8,
+            priorityAudioInput: 0.9 / 1e6,
             flexMultiplier: 0.5,
+            flexAudioInput: 0.25 / 1e6,
           }),
     },
+    ...(id === 'gemini-3.1-flash-lite-preview' ? {} : { vertexRegionalPremium: 1.1 }),
   })),
-  {
-    id: 'gemini-3.1-flash-live-preview',
-    cost: {
+  ...modelsWithCost(
+    ['gemini-3.8-live', 'gemini-3.8-live-extended-thinking', 'gemini-3.1-flash-live-preview'],
+    {
       input: 0.75 / 1e6,
       output: 4.5 / 1e6,
       audioInput: 3.0 / 1e6,
@@ -181,40 +335,52 @@ export const GOOGLE_MODELS: GoogleModel[] = [
       imageInput: 1.0 / 1e6,
       videoInputPerSecond: 0.000033333333333333335,
     },
-  },
-  {
-    id: 'gemini-live-2.5-flash-preview-native-audio-09-2025',
-    cost: {
-      input: 0.3 / 1e6,
-      output: 2.0 / 1e6,
-      cacheRead: 0.075 / 1e6,
-      audioInput: 3.0 / 1e6,
-      audioOutput: 12.0 / 1e6,
-    },
-  },
-  ...['gemini-2.5-flash-native-audio-latest', 'gemini-2.5-flash-native-audio-preview-12-2025'].map(
-    (id) => ({
-      id,
-      cost: { input: 0.5 / 1e6, output: 2.0 / 1e6, audioInput: 3.0 / 1e6, audioOutput: 12.0 / 1e6 },
-    }),
   ),
-  ...['gemini-2.5-flash-native-audio-preview-09-2025'].map((id) => ({
-    id,
-    cost: { input: 0.3 / 1e6, output: 2.5 / 1e6, audioInput: 1.0 / 1e6 },
-  })),
+  ...modelsWithCost(['gemini-3.5-transcribe-live'], {
+    input: 3.5 / 1e6,
+    output: 21 / 1e6,
+  }),
+  ...modelsWithCost(['gemini-live-2.5-flash-native-audio'], {
+    input: 0.5 / 1e6,
+    output: 2.0 / 1e6,
+    audioInput: 3.0 / 1e6,
+    audioOutput: 12.0 / 1e6,
+    imageInput: 3.0 / 1e6,
+  }),
+  ...modelsWithCost(['gemini-3.1-flash-tts-preview'], {
+    input: 1 / 1e6,
+    output: 20 / 1e6,
+    audioOutput: 20 / 1e6,
+  }),
+  ...modelsWithCost(['gemini-live-2.5-flash-preview-native-audio-09-2025'], {
+    input: 0.3 / 1e6,
+    output: 2.0 / 1e6,
+    cacheRead: 0.075 / 1e6,
+    audioInput: 3.0 / 1e6,
+    audioOutput: 12.0 / 1e6,
+  }),
+  ...modelsWithCost(
+    ['gemini-2.5-flash-native-audio-latest', 'gemini-2.5-flash-native-audio-preview-12-2025'],
+    { input: 0.5 / 1e6, output: 2.0 / 1e6, audioInput: 3.0 / 1e6, audioOutput: 12.0 / 1e6 },
+  ),
+  ...modelsWithCost(['gemini-2.5-flash-native-audio-preview-09-2025'], {
+    input: 0.3 / 1e6,
+    output: 2.5 / 1e6,
+    audioInput: 1.0 / 1e6,
+  }),
 
   // Gemini 3.0 models (Preview)
-  {
-    id: 'gemini-3-flash-preview',
-    cost: {
-      input: 0.5 / 1e6,
-      output: 3.0 / 1e6,
-      cacheRead: 0.05 / 1e6,
-      cacheReadAudio: 0.1 / 1e6,
-      audioInput: 1.0 / 1e6,
-      priorityMultiplier: 1.8,
-    },
-  },
+  ...modelsWithCost(['gemini-3-flash-preview'], {
+    input: 0.5 / 1e6,
+    output: 3.0 / 1e6,
+    cacheRead: 0.05 / 1e6,
+    cacheReadAudio: 0.1 / 1e6,
+    audioInput: 1.0 / 1e6,
+    priorityMultiplier: 1.8,
+    flexMultiplier: 0.5,
+    flexCacheRead: 0.05 / 1e6,
+    flexCacheReadAudio: 0.1 / 1e6,
+  }),
   {
     id: 'gemini-3-pro-preview',
     cost: { ...GEMINI_3_PRO_COST, priorityMultiplier: 1.8 },
@@ -236,36 +402,32 @@ export const GOOGLE_MODELS: GoogleModel[] = [
         ? { threshold: 200_000, above: { input: 2.5 / 1e6, output: 15.0 / 1e6 } }
         : GEMINI_2_5_PRO_TIERED_COST,
   })),
-  {
-    id: 'gemini-2.5-pro-preview-tts',
-    cost: { input: 1 / 1e6, output: 20 / 1e6, audioOutput: 20 / 1e6 },
-  },
-  {
-    id: 'gemini-2.5-flash-preview-tts',
-    cost: { input: 0.5 / 1e6, output: 10 / 1e6, audioOutput: 10 / 1e6 },
-  },
-  ...['gemini-2.5-flash', 'gemini-2.5-flash-preview-04-17'].map((id) => ({
-    id,
-    cost: {
-      input: 0.3 / 1e6,
-      output: 2.5 / 1e6,
-      cacheRead: 0.03 / 1e6,
-      cacheReadAudio: 0.1 / 1e6,
-      audioInput: 1.0 / 1e6,
-    },
-  })),
-  {
-    id: 'gemini-2.5-flash-lite',
-    cost: {
-      input: 0.1 / 1e6,
-      output: 0.4 / 1e6,
-      cacheRead: 0.01 / 1e6,
-      cacheReadAudio: 0.03 / 1e6,
-      audioInput: 0.3 / 1e6,
-    },
-  },
+  ...modelsWithCost(['gemini-2.5-pro-preview-tts'], {
+    input: 1 / 1e6,
+    output: 20 / 1e6,
+    audioOutput: 20 / 1e6,
+  }),
+  ...modelsWithCost(['gemini-2.5-flash-preview-tts'], {
+    input: 0.5 / 1e6,
+    output: 10 / 1e6,
+    audioOutput: 10 / 1e6,
+  }),
+  ...modelsWithCost(['gemini-2.5-flash', 'gemini-2.5-flash-preview-04-17'], {
+    input: 0.3 / 1e6,
+    output: 2.5 / 1e6,
+    cacheRead: 0.03 / 1e6,
+    cacheReadAudio: 0.1 / 1e6,
+    audioInput: 1.0 / 1e6,
+  }),
+  ...modelsWithCost(['gemini-2.5-flash-lite'], {
+    input: 0.1 / 1e6,
+    output: 0.4 / 1e6,
+    cacheRead: 0.01 / 1e6,
+    cacheReadAudio: 0.03 / 1e6,
+    audioInput: 0.3 / 1e6,
+  }),
 
-  // Gemini 2.0 models
+  // Retired Gemini 2.0 models retained for historical saved-evaluation cost scoring.
   ...['gemini-2.0-flash', 'gemini-2.0-flash-001'].map((id) => ({
     id,
     cost: {
@@ -282,15 +444,12 @@ export const GOOGLE_MODELS: GoogleModel[] = [
       audioInput: 1.0 / 1e6,
     },
   })),
-  ...['gemini-2.0-flash-lite', 'gemini-2.0-flash-lite-001'].map((id) => ({
-    id,
-    cost: {
-      input: 0.075 / 1e6,
-      output: 0.3 / 1e6,
-      cacheRead: 0.01875 / 1e6,
-      audioInput: 0.075 / 1e6,
-    },
-  })),
+  ...modelsWithCost(['gemini-2.0-flash-lite', 'gemini-2.0-flash-lite-001'], {
+    input: 0.075 / 1e6,
+    output: 0.3 / 1e6,
+    cacheRead: 0.01875 / 1e6,
+    audioInput: 0.075 / 1e6,
+  }),
   // Gemini 1.5 models
   {
     id: 'gemini-1.5-pro',
@@ -340,43 +499,47 @@ export const GOOGLE_MODELS: GoogleModel[] = [
   })),
 
   // Gemini 1.0 models
-  ...[
-    'gemini-1.0-pro',
-    'gemini-1.0-pro-001',
-    'gemini-1.0-pro-002',
-    'gemini-1.0-pro-vision',
-    'gemini-1.0-pro-vision-001',
-  ].map((id) => ({
-    id,
-    cost: { input: 0.5 / 1e6, output: 1.5 / 1e6 },
-  })),
+  ...modelsWithCost(
+    [
+      'gemini-1.0-pro',
+      'gemini-1.0-pro-001',
+      'gemini-1.0-pro-002',
+      'gemini-1.0-pro-vision',
+      'gemini-1.0-pro-vision-001',
+    ],
+    { input: 0.5 / 1e6, output: 1.5 / 1e6 },
+  ),
 
   // Legacy aliases
-  {
-    id: 'gemini-pro',
-    cost: { input: 0.5 / 1e6, output: 1.5 / 1e6 },
-  },
-  {
-    id: 'gemini-pro-vision',
-    cost: { input: 0.5 / 1e6, output: 1.5 / 1e6 },
-  },
+  ...modelsWithCost(['gemini-pro'], { input: 0.5 / 1e6, output: 1.5 / 1e6 }),
+  ...modelsWithCost(['gemini-pro-vision'], { input: 0.5 / 1e6, output: 1.5 / 1e6 }),
 
   // Gemini Robotics (1.5-preview is intentionally excluded as a shutdown model;
-  // see the shutdown-models test in test/providers/google/util.test.ts)
-  {
-    id: 'gemini-robotics-er-1.6-preview',
-    cost: { input: 1.0 / 1e6, output: 5.0 / 1e6 },
-  },
+  // see the shutdown-models test in test/providers/google/util.test.ts). ER 1.6 remains
+  // here for historical cost scoring until its announced August 31, 2026 shutdown.
+  ...modelsWithCost(['gemini-robotics-er-1.6-preview'], {
+    input: 1.0 / 1e6,
+    output: 5.0 / 1e6,
+    audioInput: 2.0 / 1e6,
+  }),
+  ...modelsWithCost(['gemini-robotics-er-2-preview'], {
+    input: 2.0 / 1e6,
+    output: 10.0 / 1e6,
+    cacheRead: 0.2 / 1e6,
+  }),
+  ...modelsWithCost(['gemini-robotics-er-2-streaming-preview'], {
+    input: 2.0 / 1e6,
+    output: 10.0 / 1e6,
+  }),
 
-  // Gemini Embedding
-  ...['gemini-embedding-2', 'gemini-embedding-2-preview'].map((id) => ({
-    id,
-    cost: { input: 0.2 / 1e6, output: 0 },
-  })),
-  {
-    id: 'gemini-embedding-001',
-    cost: { input: 0.15 / 1e6, output: 0 },
-  },
+  // Gemini Embedding. Google's model page and changelog use `gemini-embedding-2-preview`, while its
+  // lifecycle table uses `embedding-2-preview`. Retain both official preview IDs so existing configs
+  // and saved results continue to receive historical cost estimates.
+  ...modelsWithCost(['gemini-embedding-2', 'embedding-2-preview', 'gemini-embedding-2-preview'], {
+    input: 0.2 / 1e6,
+    output: 0,
+  }),
+  ...modelsWithCost(['gemini-embedding-001'], { input: 0.15 / 1e6, output: 0 }),
 
   // Models without pricing (no cost field) - legacy PaLM, Gemma, MedLM, etc.
   { id: 'aqa' },
@@ -407,3 +570,7 @@ export const GOOGLE_MODELS: GoogleModel[] = [
  * Used for model validation in ai.studio.ts.
  */
 export const CHAT_MODELS = GOOGLE_MODELS.map((m) => m.id);
+
+function modelsWithCost(ids: string[], cost: GoogleModelCost) {
+  return ids.map((id) => ({ id, cost: { ...cost } }));
+}

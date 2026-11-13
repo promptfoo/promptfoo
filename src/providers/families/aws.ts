@@ -1,8 +1,25 @@
 import { AwsBedrockConverseProvider } from '../bedrock/converse';
 import { AwsBedrockCompletionProvider, AwsBedrockEmbeddingProvider } from '../bedrock/index';
-import { isBedrockMantleResponsesModel, isRejectedPrefixedGrokId } from '../bedrock/mantle';
+import {
+  getBedrockRuntimeModelError,
+  getBedrockTextRoute,
+  isBedrockAnthropicMessagesModel,
+  isRejectedPrefixedGrokId,
+  isRejectedPrefixedMythosId,
+  requiresBedrockAnthropicMessagesModel,
+} from '../bedrock/routing';
 
 import type { ProviderFactory } from '../registryTypes';
+
+const NOVA_SONIC_MODEL_IDS = new Set([
+  'amazon.nova-sonic-v1:0',
+  'amazon.nova-2-sonic-v1:0',
+  'amazon.nova-2-5-sonic',
+]);
+
+function isUnsupportedNovaSonicGeoId(modelName: string): boolean {
+  return /^[^.]+\.amazon\.nova(?:-sonic-v1:0|-2-sonic-v1:0|-2-5-sonic)$/.test(modelName);
+}
 
 export const awsProviderFactories: ProviderFactory[] = [
   {
@@ -11,10 +28,103 @@ export const awsProviderFactories: ProviderFactory[] = [
       const splits = providerPath.split(':');
       const modelType = splits[1];
       const modelName = splits.slice(2).join(':');
+      const textRoute = getBedrockTextRoute(providerPath);
+
+      if (modelType === 'runtime') {
+        const api = splits[2];
+        const runtimeModel = splits.slice(3).join(':');
+        if (!runtimeModel || (api !== 'chat' && api !== 'responses')) {
+          throw new Error(
+            'Use bedrock:runtime:chat:<model-id> or bedrock:runtime:responses:<model-id>.',
+          );
+        }
+        const effectiveModel = providerOptions.config?.passthrough?.model ?? runtimeModel;
+        const modelError = getBedrockRuntimeModelError(
+          api === 'chat' ? 'runtime-chat' : 'runtime-responses',
+          effectiveModel,
+        );
+        if (modelError) {
+          throw new Error(modelError);
+        }
+        const { BedrockRuntimeChatProvider, BedrockRuntimeResponsesProvider } = await import(
+          '../bedrock/runtimeOpenai'
+        );
+        const Provider =
+          api === 'chat' ? BedrockRuntimeChatProvider : BedrockRuntimeResponsesProvider;
+        return new Provider(runtimeModel, {
+          ...providerOptions,
+          id: providerOptions.id ?? providerPath,
+        });
+      }
 
       // Mythos 5 requires Mantle's Messages endpoint. Both 5.1 models support
       // Runtime, including an explicit Messages route with US/global profiles.
       const isLegacyType = modelType === 'converse' || modelType === 'completion';
+      const bareModelName = splits.slice(1).join(':');
+      if (textRoute && (bareModelName === 'xai.grok-4.7' || modelName === 'xai.grok-4.7')) {
+        throw new Error(
+          'Grok 4.7 requires a Bedrock Runtime inference profile. Use ' +
+            '"bedrock:converse:us.xai.grok-4.7" or "bedrock:converse:global.xai.grok-4.7" ' +
+            'with AWS credentials in a supported region.',
+        );
+      }
+      const novaSonicSubtype =
+        modelType === 'nova-sonic'
+          ? { expectedModel: 'amazon.nova-sonic-v1:0', name: 'nova-sonic' }
+          : modelType === 'nova-2-sonic'
+            ? { expectedModel: 'amazon.nova-2-sonic-v1:0', name: 'nova-2-sonic' }
+            : modelType === 'nova-2-5-sonic'
+              ? { expectedModel: 'amazon.nova-2-5-sonic', name: 'nova-2-5-sonic' }
+              : undefined;
+
+      if (novaSonicSubtype && modelName) {
+        if (!NOVA_SONIC_MODEL_IDS.has(modelName)) {
+          throw new Error(
+            `Amazon Bedrock model "${modelName}" is an unsupported Nova Sonic model ID. ` +
+              `Use "bedrock:${novaSonicSubtype.name}:${novaSonicSubtype.expectedModel}".`,
+          );
+        }
+        if (modelName !== novaSonicSubtype.expectedModel) {
+          throw new Error(
+            `Amazon Bedrock model "${modelName}" does not match provider subtype ` +
+              `"${novaSonicSubtype.name}". Use ` +
+              `"bedrock:${novaSonicSubtype.name}:${novaSonicSubtype.expectedModel}".`,
+          );
+        }
+      }
+
+      const requestedNovaSonicModel =
+        novaSonicSubtype && !modelName
+          ? novaSonicSubtype.expectedModel
+          : NOVA_SONIC_MODEL_IDS.has(bareModelName)
+            ? bareModelName
+            : novaSonicSubtype && NOVA_SONIC_MODEL_IDS.has(modelName)
+              ? modelName
+              : undefined;
+      if (isUnsupportedNovaSonicGeoId(bareModelName) || isUnsupportedNovaSonicGeoId(modelName)) {
+        const rejectedModel = isUnsupportedNovaSonicGeoId(bareModelName)
+          ? bareModelName
+          : modelName;
+        const unprefixedModel = rejectedModel.replace(/^[^.]+\./, '');
+        throw new Error(
+          `Amazon Bedrock model "${rejectedModel}" does not support geo inference IDs. ` +
+            `Use the bare "bedrock:${unprefixedModel}" model ID in a supported region.`,
+        );
+      }
+      if (isLegacyType && NOVA_SONIC_MODEL_IDS.has(modelName)) {
+        throw new Error(
+          `Amazon Bedrock model "${modelName}" supports only InvokeModelWithBidirectionalStream, ` +
+            'not Converse or InvokeModel. Use its bare bedrock model ID.',
+        );
+      }
+      if (requestedNovaSonicModel) {
+        const { NovaSonicProvider } = await import('../bedrock/nova-sonic');
+        return new NovaSonicProvider(requestedNovaSonicModel, providerOptions);
+      }
+
+      // Mythos is available only through Bedrock's Anthropic-compatible Messages endpoint.
+      // Fable and Opus also support that endpoint when explicitly selected, while their bare
+      // forms continue through Bedrock Runtime below.
       const anthropicModel =
         modelType === 'messages'
           ? modelName
@@ -23,19 +133,13 @@ export const awsProviderFactories: ProviderFactory[] = [
             : isLegacyType
               ? modelName
               : undefined;
-      const prefixedMythosModel = anthropicModel?.match(/^[^.]+\.(anthropic\.claude-mythos-5)$/);
-      if (prefixedMythosModel) {
+      if (anthropicModel && isRejectedPrefixedMythosId(anthropicModel)) {
         throw new Error(
           `Amazon Bedrock model "${anthropicModel}" is not a valid Mythos model ID. ` +
-            `Use "bedrock:${prefixedMythosModel[1]}"; Mythos does not support geo or global inference IDs.`,
+            `Use "bedrock:anthropic.claude-mythos-5"; Mythos does not support geo or global inference IDs.`,
         );
       }
-      if (anthropicModel && /^(?:(?:us|global)\.)?anthropic\.claude-/.test(anthropicModel)) {
-        const {
-          createBedrockAnthropicMessagesProvider,
-          isBedrockAnthropicMessagesModel,
-          requiresBedrockAnthropicMessagesModel,
-        } = await import('../bedrock/anthropicMessages');
+      if (anthropicModel) {
         if (requiresBedrockAnthropicMessagesModel(anthropicModel) && isLegacyType) {
           throw new Error(
             `Amazon Bedrock model "${anthropicModel}" uses the Anthropic Messages API, not ` +
@@ -43,10 +147,10 @@ export const awsProviderFactories: ProviderFactory[] = [
               `"bedrock:${anthropicModel}" or "bedrock:messages:${anthropicModel}".`,
           );
         }
-        if (
-          isBedrockAnthropicMessagesModel(anthropicModel) &&
-          (modelType === 'messages' || requiresBedrockAnthropicMessagesModel(anthropicModel))
-        ) {
+        if (isBedrockAnthropicMessagesModel(anthropicModel) && textRoute?.apiMode === 'messages') {
+          const { createBedrockAnthropicMessagesProvider } = await import(
+            '../bedrock/anthropicMessages'
+          );
           return createBedrockAnthropicMessagesProvider(anthropicModel, {
             ...providerOptions,
             id: providerOptions.id ?? providerPath,
@@ -56,10 +160,27 @@ export const awsProviderFactories: ProviderFactory[] = [
       if (modelType === 'messages') {
         throw new Error(
           `Amazon Bedrock model "${modelName}" is not supported by the Anthropic Messages ` +
-            `provider. Use a us. or global. inference profile for Fable/Mythos 5.1. ` +
-            `Mantle supports anthropic.claude-fable-5, anthropic.claude-mythos-5, and ` +
-            `anthropic.claude-fable-5-1 (GovCloud West).`,
+            `provider. Check the AWS model card for the Runtime inference profile ID or the bare Mantle ID.`,
         );
+      }
+
+      // Explicit OpenAI-compatible Responses API route for Bedrock mantle models. Keep this
+      // separate from the legacy bare bedrock:<id> route so existing InvokeModel ids such as
+      // bedrock:openai.gpt-oss-120b-1:0 retain their current behavior, while the mantle id
+      // bedrock:responses:openai.gpt-oss-120b targets /v1/responses.
+      if (modelType === 'responses') {
+        if (!modelName) {
+          throw new Error(
+            'Amazon Bedrock Responses providers require a model id. Use ' +
+              'bedrock:responses:<model-id>, for example ' +
+              'bedrock:responses:openai.gpt-oss-120b.',
+          );
+        }
+        const { createBedrockOpenAiResponsesProvider } = await import('../bedrock/openaiResponses');
+        return createBedrockOpenAiResponsesProvider(modelName, {
+          ...providerOptions,
+          id: providerOptions.id ?? providerPath,
+        });
       }
 
       // Preserve the established Mantle Responses route for bare frontier model IDs and
@@ -83,23 +204,23 @@ export const awsProviderFactories: ProviderFactory[] = [
             ? splits[1]
             : undefined;
       // Prefixed Grok ids are never mantle ids — the mantle endpoint 404s on them. Most are
-      // simply invalid, but Grok 4.6 publishes Runtime profiles. Preserve their existing
-      // routing; recommend explicit Converse in docs because the current AWS card does not
-      // list InvokeModel. An explicit `bedrock:mantle:` request is rejected either way.
+      // simply invalid, but supported Grok Runtime profiles use InvokeModel or Converse.
+      // An explicit `bedrock:mantle:` request is rejected either way.
       const routedGrokModel = modelType === 'mantle' ? modelName : candidateResponsesModel;
       if (routedGrokModel && isRejectedPrefixedGrokId(routedGrokModel, modelType === 'mantle')) {
         throw new Error(
           `Amazon Bedrock model "${routedGrokModel}" is not a valid Grok mantle id. Use the bare ` +
             `"bedrock:xai.grok-4.3" id for mantle-served Grok models, or an inference profile ` +
-            `such as "bedrock:converse:us.xai.grok-4.6" for Grok models Bedrock serves natively.`,
+            `such as "bedrock:converse:us.xai.grok-4.6" or "bedrock:converse:us.xai.grok-4.7" ` +
+            `for Grok models Bedrock serves natively.`,
         );
       }
       // Gate the (heavy) openaiResponses import behind the lightweight routing predicate so
       // ordinary bedrock: models do not load the Responses stack at construction. The predicate
       // also excludes gpt-oss ids, which must fall through to InvokeModel below.
-      if (candidateResponsesModel && isBedrockMantleResponsesModel(candidateResponsesModel)) {
+      if (textRoute?.apiMode === 'responses') {
         const { createBedrockOpenAiResponsesProvider } = await import('../bedrock/openaiResponses');
-        return createBedrockOpenAiResponsesProvider(candidateResponsesModel, {
+        return createBedrockOpenAiResponsesProvider(textRoute.modelId, {
           ...providerOptions,
           id: providerOptions.id ?? providerPath,
         });
@@ -117,13 +238,11 @@ export const awsProviderFactories: ProviderFactory[] = [
 
       // Handle Converse API
       if (modelType === 'converse') {
+        // This route builds the provider directly, so it never reaches getHandlerForModel —
+        // check retirement here too, or a withdrawn model only fails at the remote API.
+        const { assertBedrockModelIsAvailable } = await import('../bedrock/index');
+        assertBedrockModelIsAvailable(modelName);
         return new AwsBedrockConverseProvider(modelName, providerOptions);
-      }
-
-      // Handle nova-sonic model
-      if (modelType === 'nova-sonic' || modelType.includes('amazon.nova-sonic')) {
-        const { NovaSonicProvider } = await import('../bedrock/nova-sonic');
-        return new NovaSonicProvider('amazon.nova-sonic-v1:0', providerOptions);
       }
 
       // Handle Luma Ray video model
@@ -140,15 +259,22 @@ export const awsProviderFactories: ProviderFactory[] = [
         return new LumaRayVideoProvider(videoModelName, providerOptions);
       }
 
-      // Preserve the full versioned ID for both bare and explicit Nova Reel video selectors.
+      if (modelType === 'video' && !modelName) {
+        throw new Error(
+          'The bedrock:video default, Amazon Nova Reel, has reached end of life. ' +
+            'To evaluate Luma Ray 2, select bedrock:video:luma.ray-v2:0 and set region to us-west-2.',
+        );
+      }
+      // Keep explicit Reel configurations available for privately extended deployments.
       if (
         modelType.includes('amazon.nova-reel') ||
-        (modelType === 'video' && (modelName.includes('amazon.nova-reel') || modelName === ''))
+        (modelType === 'video' && modelName.includes('amazon.nova-reel'))
       ) {
         const { NovaReelVideoProvider } = await import('../bedrock/nova-reel');
-        const videoModelName =
-          modelType === 'video' ? modelName || 'amazon.nova-reel-v1:1' : splits.slice(1).join(':');
-        return new NovaReelVideoProvider(videoModelName, providerOptions);
+        return new NovaReelVideoProvider(
+          modelType === 'video' ? modelName : bareModelName,
+          providerOptions,
+        );
       }
 
       // Handle Bedrock Agents
@@ -203,16 +329,11 @@ export const awsProviderFactories: ProviderFactory[] = [
         return new SageMakerCompletionProvider(modelType, providerOptions);
       }
 
-      // Handle 'sagemaker:<model-type>:<endpoint>'. JumpStart models are selected
-      // either by the explicit `jumpstart` model type or by an endpoint name
-      // containing 'jumpstart'; every other model type passes through unchanged.
-      const resolvedModelType =
-        endpointName.includes('jumpstart') || modelType === 'jumpstart' ? 'jumpstart' : modelType;
       return new SageMakerCompletionProvider(endpointName, {
         ...providerOptions,
         config: {
           ...providerOptions.config,
-          modelType: resolvedModelType,
+          modelType,
         },
       });
     },

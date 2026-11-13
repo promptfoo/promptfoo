@@ -2,13 +2,48 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearCache } from '../../../src/cache';
 import { GroqResponsesProvider } from '../../../src/providers/groq/index';
 import * as fetchModule from '../../../src/util/fetch/index';
+import { createResponseMessage } from '../../factories/literalFixtures';
 import { mockProcessEnv } from '../../util/utils';
+
+const createCompletedResponse = () => ({
+  id: 'resp_123',
+  model: 'openai/gpt-oss-120b',
+  output: [createResponseMessage('Hello, world!')],
+  usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
+});
 
 const GROQ_API_BASE = 'https://api.groq.com/openai/v1';
 
 vi.mock('../../../src/util/fetch/index.ts');
 
 describe('GroqResponsesProvider', () => {
+  it.each(['provider', 'prompt'] as const)(
+    'accepts nullable %s passthrough service tier',
+    async (layer) => {
+      const provider = new GroqResponsesProvider('openai/gpt-oss-120b', {
+        config: {
+          apiKey: 'test-key',
+          ...(layer === 'provider' && { passthrough: { service_tier: null } }),
+        },
+      });
+      const result = await provider.getOpenAiBody(
+        'Hello',
+        layer === 'prompt'
+          ? {
+              vars: {},
+              prompt: {
+                raw: 'Hello',
+                label: 'nullable',
+                config: { passthrough: { service_tier: null } },
+              },
+            }
+          : undefined,
+      );
+      expect(result.body.service_tier).toBeNull();
+      expect(result.config.service_tier).toBeNull();
+    },
+  );
+
   const mockedFetchWithRetries = vi.mocked(fetchModule.fetchWithRetries);
 
   beforeEach(() => {
@@ -126,6 +161,40 @@ describe('GroqResponsesProvider', () => {
   });
 
   describe('callApi', () => {
+    it('accepts Groq Responses service tiers and rejects Chat-only tiers', async () => {
+      for (const service_tier of ['auto', 'default', 'flex'] as const) {
+        const provider = new GroqResponsesProvider('openai/gpt-oss-120b', {
+          config: { service_tier },
+        });
+
+        expect((await provider.getOpenAiBody('Test prompt')).body.service_tier).toBe(service_tier);
+      }
+
+      const provider = new GroqResponsesProvider('openai/gpt-oss-120b', {
+        config: { service_tier: 'performance' as any },
+      });
+      await expect(provider.getOpenAiBody('Test prompt')).rejects.toThrow(
+        'Invalid Groq Responses service_tier "performance"',
+      );
+    });
+
+    it('uses the passthrough model for Groq reasoning capabilities', async () => {
+      const provider = new GroqResponsesProvider('openai/gpt-oss-120b', {
+        config: {
+          passthrough: { model: 'openai/gpt-oss-20b' },
+          reasoning_effort: 'medium',
+          temperature: 0.7,
+        },
+      });
+
+      const { body } = await provider.getOpenAiBody('Test prompt');
+
+      expect(body.model).toBe('openai/gpt-oss-20b');
+      expect(body.reasoning).toEqual({ effort: 'medium' });
+      expect(body.temperature).toBe(0.7);
+      expect(body.max_output_tokens).toBeUndefined();
+    });
+
     it('preserves temperature for Groq reasoning models', async () => {
       const provider = new GroqResponsesProvider('openai/gpt-oss-120b', {
         config: {
@@ -134,25 +203,11 @@ describe('GroqResponsesProvider', () => {
         },
       });
 
-      const mockResponse = new Response(
-        JSON.stringify({
-          id: 'resp_123',
-          model: 'openai/gpt-oss-120b',
-          output: [
-            {
-              type: 'message',
-              role: 'assistant',
-              content: [{ type: 'output_text', text: 'Hello, world!' }],
-            },
-          ],
-          usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
-        }),
-        {
-          status: 200,
-          statusText: 'OK',
-          headers: new Headers({ 'Content-Type': 'application/json' }),
-        },
-      );
+      const mockResponse = new Response(JSON.stringify(createCompletedResponse()), {
+        status: 200,
+        statusText: 'OK',
+        headers: new Headers({ 'Content-Type': 'application/json' }),
+      });
       mockedFetchWithRetries.mockResolvedValueOnce(mockResponse);
 
       await provider.callApi('Test prompt');
@@ -196,6 +251,7 @@ describe('GroqResponsesProvider', () => {
         }),
         expect.any(Number),
         undefined,
+        expect.any(Function),
       );
 
       expect(result.error).toContain('400');
@@ -204,34 +260,11 @@ describe('GroqResponsesProvider', () => {
     it('should process successful response', async () => {
       const provider = new GroqResponsesProvider('openai/gpt-oss-120b', {});
 
-      const mockResponse = new Response(
-        JSON.stringify({
-          id: 'resp_123',
-          model: 'openai/gpt-oss-120b',
-          output: [
-            {
-              type: 'message',
-              role: 'assistant',
-              content: [
-                {
-                  type: 'output_text',
-                  text: 'Hello, world!',
-                },
-              ],
-            },
-          ],
-          usage: {
-            input_tokens: 10,
-            output_tokens: 5,
-            total_tokens: 15,
-          },
-        }),
-        {
-          status: 200,
-          statusText: 'OK',
-          headers: new Headers({ 'Content-Type': 'application/json' }),
-        },
-      );
+      const mockResponse = new Response(JSON.stringify(createCompletedResponse()), {
+        status: 200,
+        statusText: 'OK',
+        headers: new Headers({ 'Content-Type': 'application/json' }),
+      });
       mockedFetchWithRetries.mockResolvedValueOnce(mockResponse);
 
       const result = await provider.callApi('Test prompt');

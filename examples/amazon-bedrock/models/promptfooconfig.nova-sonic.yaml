@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-# Legacy Nova Sonic: Bedrock end of life is September 14, 2026.
+# Retired Nova Sonic reference. Use promptfooconfig.nova-2-5-sonic.yaml instead.
 # https://docs.aws.amazon.com/bedrock/latest/userguide/model-lifecycle.html
 description: Amazon Bedrock Nova Sonic with a conversation
 

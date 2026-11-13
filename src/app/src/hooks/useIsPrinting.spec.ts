@@ -1,50 +1,26 @@
-import { mockBrowserProperty } from '@app/tests/browserMocks';
-import { renderHook } from '@testing-library/react';
+import { mockMatchMedia } from '@app/tests/browserMocks';
+import { act, renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useIsPrinting } from './useIsPrinting';
 
 describe('useIsPrinting', () => {
-  let mockMediaQueryList: {
-    matches: boolean;
-    addEventListener: ReturnType<typeof vi.fn>;
-    removeEventListener: ReturnType<typeof vi.fn>;
-  };
+  let matchMedia: ReturnType<typeof mockMatchMedia>;
+  const getMediaQueryList = () => matchMedia.mock.results[0].value;
 
   beforeEach(() => {
     // Reset the mock before each test
-    mockMediaQueryList = {
-      matches: false,
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
-    };
-
-    mockBrowserProperty(
-      window,
-      'matchMedia',
-      vi.fn().mockImplementation((query: string) => {
-        if (query === 'print') {
-          return mockMediaQueryList;
-        }
-        return {
-          matches: false,
-          addEventListener: vi.fn(),
-          removeEventListener: vi.fn(),
-        };
-      }) as typeof window.matchMedia,
-    );
+    matchMedia = mockMatchMedia();
   });
 
   it('should return false when not in print mode', () => {
-    mockMediaQueryList.matches = false;
-
     const { result } = renderHook(() => useIsPrinting());
 
     expect(result.current).toBe(false);
+    expect(matchMedia).toHaveBeenCalledExactlyOnceWith('print');
   });
 
   it('should return true when in print mode', () => {
-    mockMediaQueryList.matches = true;
-
+    matchMedia = mockMatchMedia({ matches: (query) => query === 'print' });
     const { result } = renderHook(() => useIsPrinting());
 
     expect(result.current).toBe(true);
@@ -53,7 +29,7 @@ describe('useIsPrinting', () => {
   it('should add event listener on mount', () => {
     renderHook(() => useIsPrinting());
 
-    expect(mockMediaQueryList.addEventListener).toHaveBeenCalledWith(
+    expect(getMediaQueryList().addEventListener).toHaveBeenCalledWith(
       'change',
       expect.any(Function),
     );
@@ -61,58 +37,43 @@ describe('useIsPrinting', () => {
 
   it('should remove event listener on unmount', () => {
     const { unmount } = renderHook(() => useIsPrinting());
+    const mediaQuery = getMediaQueryList();
+    const listener = vi.mocked(mediaQuery.addEventListener).mock.calls[0][1];
 
     unmount();
 
-    expect(mockMediaQueryList.removeEventListener).toHaveBeenCalledWith(
-      'change',
-      expect.any(Function),
-    );
+    expect(mediaQuery.removeEventListener).toHaveBeenCalledWith('change', listener);
   });
 
   it('should update when print mode changes', () => {
-    mockMediaQueryList.matches = false;
-
-    const { result, rerender } = renderHook(() => useIsPrinting());
+    const { result } = renderHook(() => useIsPrinting());
 
     expect(result.current).toBe(false);
 
-    // Get the change handler that was registered
-    const changeHandler = mockMediaQueryList.addEventListener.mock.calls[0][1];
+    // Get the media query list that owns the change listener
+    const mediaQuery = getMediaQueryList();
 
     // Simulate entering print mode
-    mockMediaQueryList.matches = true;
-    changeHandler({ matches: true } as MediaQueryListEvent);
-
-    rerender();
-
+    act(() => mediaQuery.dispatchEvent({ matches: true } as MediaQueryListEvent));
     expect(result.current).toBe(true);
 
     // Simulate exiting print mode
-    mockMediaQueryList.matches = false;
-    changeHandler({ matches: false } as MediaQueryListEvent);
-
-    rerender();
-
+    act(() => mediaQuery.dispatchEvent({ matches: false } as MediaQueryListEvent));
     expect(result.current).toBe(false);
   });
 
   it('should handle MediaQueryList object in handleChange', () => {
-    mockMediaQueryList.matches = false;
-
-    const { result, rerender } = renderHook(() => useIsPrinting());
+    const { result } = renderHook(() => useIsPrinting());
 
     expect(result.current).toBe(false);
 
     // Get the change handler that was registered
-    const changeHandler = mockMediaQueryList.addEventListener.mock.calls[0][1];
+    const changeHandler = vi.mocked(getMediaQueryList().addEventListener).mock.calls[0][1] as (
+      event: MediaQueryListEvent | MediaQueryList,
+    ) => void;
 
     // Simulate change with MediaQueryList object (not MediaQueryListEvent)
-    const mediaQueryListObj = { matches: true };
-    changeHandler(mediaQueryListObj as MediaQueryList);
-
-    rerender();
-
+    act(() => changeHandler({ matches: true } as MediaQueryList));
     expect(result.current).toBe(true);
   });
 });

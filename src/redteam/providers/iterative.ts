@@ -54,7 +54,9 @@ import {
   externalizeResponseForRedteamHistory,
   getGraderAssertionValue,
   getTargetResponse,
+  preserveSelectedError,
   redteamProviderManager,
+  resolveStoredGraderResult,
   runRedteamGrader,
   type TargetResponse,
 } from './shared';
@@ -138,6 +140,7 @@ export async function runRedteamConversation({
   excludeTargetOutputFromAgenticAttackGeneration,
   perTurnLayers = [],
   inputs,
+  attackerUsesRemoteProvider,
   targetId,
 }: {
   context?: CallApiContextParams;
@@ -154,6 +157,10 @@ export async function runRedteamConversation({
   excludeTargetOutputFromAgenticAttackGeneration: boolean;
   perTurnLayers?: LayerConfig[];
   inputs?: Inputs;
+  /** Whether the attacker is the remote task provider. Callers that resolved
+   * an explicit redteamProvider pass false so multi-input materialization
+   * stays on the local path even when remote generation is enabled. */
+  attackerUsesRemoteProvider?: boolean;
   targetId?: string;
 }): Promise<{
   output: string;
@@ -211,14 +218,16 @@ export async function runRedteamConversation({
   let bestResponse = '';
   let finalIteration = numIterations;
   let bestInjectVar: string | undefined = undefined;
+  let lastInjectVar: string | undefined;
   let targetPrompt: string | null = null;
   let storedGraderResult: GradingResult | undefined = undefined;
+  let bestGraderResult: GradingResult | undefined;
   let stopReason: StopReason = 'Max iterations reached';
 
   const sessionIds: string[] = [];
 
   const totalTokenUsage = createEmptyTokenUsage();
-  const usingRemoteRedteamProvider = shouldGenerateRemote();
+  const usingRemoteRedteamProvider = attackerUsesRemoteProvider ?? shouldGenerateRemote();
 
   const previousOutputs: {
     prompt: string;
@@ -459,6 +468,7 @@ export async function runRedteamConversation({
       promptIdx: context?.promptIdx,
     });
     lastResponse = targetResponse;
+    lastInjectVar = finalInjectVar;
     accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
     logger.debug('[Iterative] Raw target response', { response: targetResponse });
     if (targetResponse.error) {
@@ -627,7 +637,7 @@ export async function runRedteamConversation({
 
         const { grade, rubric } = await runRedteamGrader(
           grader,
-          newInjectVar,
+          finalInjectVar,
           targetResponse.output,
           iterationTest,
           gradingProvider,
@@ -636,10 +646,19 @@ export async function runRedteamConversation({
           undefined,
           gradingContext,
         );
-        storedGraderResult = accumulateGraderResult(storedGraderResult, {
-          ...grade,
-          assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
-        });
+        storedGraderResult = accumulateGraderResult(
+          storedGraderResult,
+          {
+            ...grade,
+            assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
+          },
+          {
+            prompt: finalInjectVar,
+            output: targetResponse.output,
+            pluginId: test.metadata?.pluginId,
+            assertion: assertToUse,
+          },
+        );
       }
     }
 
@@ -682,7 +701,8 @@ export async function runRedteamConversation({
       stopReason = 'Grader failed';
       finalIteration = i + 1;
       bestResponse = targetResponse.output;
-      bestInjectVar = newInjectVar;
+      bestInjectVar = finalInjectVar;
+      bestGraderResult = storedGraderResult;
       recordTurn(undefined, tracingOptions.includeInAttack ? computedTraceSummary : undefined);
       break;
     }
@@ -778,7 +798,8 @@ export async function runRedteamConversation({
       if (currentScore > highestScore) {
         highestScore = currentScore;
         bestResponse = targetResponse.output;
-        bestInjectVar = newInjectVar;
+        bestInjectVar = finalInjectVar;
+        bestGraderResult = storedGraderResult;
       }
 
       // Check if we should exit early (but don't break yet). A real failing grade already
@@ -847,25 +868,33 @@ export async function runRedteamConversation({
     }
   }
 
-  return {
-    output: bestResponse || lastResponse?.output || '',
-    ...(lastResponse?.error ? { error: lastResponse.error } : {}),
-    prompt: bestInjectVar,
-    metadata: {
-      finalIteration,
-      highestScore,
-      redteamHistory: previousOutputs,
-      redteamFinalPrompt: bestInjectVar,
-      storedGraderResult,
-      stopReason: stopReason,
-      sessionIds,
-      traceSnapshots:
-        traceSnapshots.length > 0
-          ? traceSnapshots.map((snapshot) => formatTraceForMetadata(snapshot))
-          : undefined,
+  const targetFailed = stopReason === 'Target error';
+  const selectedPrompt = targetFailed ? (targetPrompt ?? lastInjectVar) : (bestInjectVar ?? lastInjectVar);
+  return preserveSelectedError(
+    {
+      output:
+        targetFailed || bestInjectVar === undefined ? lastResponse?.output || '' : bestResponse,
+      ...(lastResponse?.error ? { error: lastResponse.error } : {}),
+      prompt: selectedPrompt,
+      metadata: {
+        finalIteration,
+        highestScore,
+        redteamHistory: previousOutputs,
+        redteamFinalPrompt: selectedPrompt,
+        storedGraderResult: targetFailed
+          ? undefined
+          : resolveStoredGraderResult(bestGraderResult, storedGraderResult),
+        stopReason: stopReason,
+        sessionIds,
+        traceSnapshots:
+          traceSnapshots.length > 0
+            ? traceSnapshots.map((snapshot) => formatTraceForMetadata(snapshot))
+            : undefined,
+      },
+      tokenUsage: totalTokenUsage,
     },
-    tokenUsage: totalTokenUsage,
-  };
+    lastResponse,
+  );
 }
 
 class RedteamIterativeProvider implements ApiProvider {
@@ -875,6 +904,7 @@ class RedteamIterativeProvider implements ApiProvider {
   private readonly excludeTargetOutputFromAgenticAttackGeneration: boolean;
   private readonly gradingProvider: RedteamFileConfig['provider'];
   private readonly perTurnLayers: LayerConfig[];
+  private readonly attackerUsesRemoteProvider: boolean;
   readonly inputs?: Inputs;
 
   constructor(readonly config: Record<string, VarValue>) {
@@ -894,9 +924,12 @@ class RedteamIterativeProvider implements ApiProvider {
     );
     this.perTurnLayers = (config._perTurnLayers as LayerConfig[]) ?? [];
 
-    // Redteam provider can be set from the config.
+    // Redteam provider can be set from the config. Remote task handlers only
+    // know the built-in default, so an explicit redteamProvider must stay
+    // local even when remote generation is enabled.
+    this.attackerUsesRemoteProvider = shouldGenerateRemote() && !config.redteamProvider;
 
-    if (shouldGenerateRemote()) {
+    if (this.attackerUsesRemoteProvider) {
       this.gradingProvider = new PromptfooChatCompletionProvider({
         task: 'judge',
         jsonOnly: true,
@@ -963,6 +996,7 @@ class RedteamIterativeProvider implements ApiProvider {
       excludeTargetOutputFromAgenticAttackGeneration:
         this.excludeTargetOutputFromAgenticAttackGeneration,
       inputs: this.inputs,
+      attackerUsesRemoteProvider: this.attackerUsesRemoteProvider,
       targetId: typeof this.config.targetId === 'string' ? this.config.targetId : undefined,
     });
   }
