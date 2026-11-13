@@ -11,16 +11,22 @@ import tempfile
 import time
 import unittest
 import venv
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 
-# Pull the official mirror in CI while retaining the image name used by the example.
+# Both registries serve the same pinned official image. Preserve the example tag.
 DOCKER_IMAGE_MIRRORS = {
     "python:3.9-alpine": (
-        "public.ecr.aws/docker/library/python"
-        "@sha256:c99b6eb43b3ac4d750db3d6e8b22268d5ea9a99deead7218ce3deda7f2ca029c"
+        (
+            "public.ecr.aws/docker/library/python"
+            "@sha256:c99b6eb43b3ac4d750db3d6e8b22268d5ea9a99deead7218ce3deda7f2ca029c"
+        ),
+        (
+            "docker.io/library/python"
+            "@sha256:c99b6eb43b3ac4d750db3d6e8b22268d5ea9a99deead7218ce3deda7f2ca029c"
+        ),
     ),
 }
 
@@ -37,6 +43,23 @@ class Example:
     check_dependencies: bool = True
     extra_requirements: tuple[str, ...] = ()
 
+
+OPENAI_AGENTS = Example(
+    "examples/openai-agents",
+    ("3.12", "3.14"),
+    (
+        ("tests", "test_sdk.py"),
+        (".", "*_test.py"),
+        ("../../.github/scripts/tests/openai_agents", "test_cli.py"),
+    ),
+    node=True,
+)
+GOOGLE_ADK = Example(
+    "examples/integration-google-adk",
+    ("3.12", "3.14"),
+    ((".", "*_test.py"), ("../../.github/scripts/tests/google_adk", "test_cli.py")),
+    node=True,
+)
 
 # Keep small helpers beside examples and larger CLI harnesses under scripts/tests.
 EXAMPLES = {
@@ -80,37 +103,16 @@ EXAMPLES = {
         ("3.10", "3.14"),
         ((".", "*_test.py"),),
     ),
-    "openai-agents": Example(
-        "examples/openai-agents",
-        ("3.12", "3.14"),
-        (
-            ("tests", "test_sdk.py"),
-            (".", "*_test.py"),
-            ("../../.github/scripts/tests/openai_agents", "test_cli.py"),
-        ),
-        node=True,
-    ),
-    "openai-agents-minimums": Example(
-        "examples/openai-agents",
-        ("3.10",),
-        (
-            ("tests", "test_sdk.py"),
-            (".", "*_test.py"),
-            ("../../.github/scripts/tests/openai_agents", "test_cli.py"),
-        ),
-        node=True,
+    "openai-agents": OPENAI_AGENTS,
+    "openai-agents-minimums": replace(
+        OPENAI_AGENTS,
+        python_versions=("3.10",),
         minimums=True,
         extra_requirements=("openai>=3.0,<4",),
     ),
-    "openai-agents-otel": Example(
-        "examples/openai-agents",
-        ("3.12",),
-        (
-            ("tests", "test_sdk.py"),
-            (".", "*_test.py"),
-            ("../../.github/scripts/tests/openai_agents", "test_cli.py"),
-        ),
-        node=True,
+    "openai-agents-otel": replace(
+        OPENAI_AGENTS,
+        python_versions=("3.12",),
         minimums=True,
         extra_requirements=(
             "opentelemetry-api>=1.44,<2",
@@ -134,33 +136,31 @@ EXAMPLES = {
         (("tests", "test_*.py"), ("tests", "smoke_cli.py")),
         node=True,
     ),
+    "image-classification": Example(
+        "examples/eval-image-classification",
+        ("3.11", "3.14"),
+        ((".", "test_dataset_gen.py"),),
+    ),
     "f-score": Example(
         "examples/eval-f-score",
         ("3.10", "3.14"),
         ((".", "dependencies_test.py"),),
     ),
-    "google-adk": Example(
-        "examples/integration-google-adk",
-        ("3.12", "3.14"),
-        ((".", "*_test.py"), ("../../.github/scripts/tests/google_adk", "test_cli.py")),
-        node=True,
-    ),
-    "google-adk-minimums": Example(
-        "examples/integration-google-adk",
-        ("3.10",),
-        ((".", "*_test.py"), ("../../.github/scripts/tests/google_adk", "test_cli.py")),
-        node=True,
+    "google-adk": GOOGLE_ADK,
+    "google-adk-minimums": replace(
+        GOOGLE_ADK,
+        python_versions=("3.10",),
         minimums=True,
     ),
-    "google-adk-litellm": Example(
-        "examples/integration-google-adk",
-        ("3.12",),
-        (
+    "google-adk-litellm": replace(
+        GOOGLE_ADK,
+        python_versions=("3.12",),
+        suites=(
             (".", "*_test.py"),
             ("../../.github/scripts/tests/google_adk", "test_litellm.py"),
         ),
-        node=True,
-        extra_requirements=("litellm>=1.101,<2",),
+        # LiteLLM imports MCP types for ordinary function-tool completions too.
+        extra_requirements=("litellm[mcp]>=1.101,<2",),
     ),
 }
 
@@ -260,11 +260,14 @@ def check_gate(selection: str, selected: str, tests: str) -> None:
         )
 
 
-def pull_docker_image(image: str, env: dict[str, str]) -> None:
-    """Retry registry throttling without retrying example execution."""
+def pull_docker_image(
+    image: str, env: dict[str, str], *, has_mirror: bool = False
+) -> bool:
+    """Return False if throttling warrants trying the next pinned mirror."""
     command = ("docker", "pull", image)
     delays = (10, 30, 60)
-    for attempt in range(len(delays) + 1):
+    attempt = 0
+    while True:
         print(f"+ {shlex.join(command)}", flush=True)
         try:
             result = subprocess.run(
@@ -278,18 +281,20 @@ def pull_docker_image(image: str, env: dict[str, str]) -> None:
         except subprocess.CalledProcessError as error:
             if error.stderr:
                 print(error.stderr, file=sys.stderr, end="", flush=True)
-            if (
-                attempt == len(delays)
-                or "toomanyrequests" not in (error.stderr or "").lower()
-            ):
+            rate_limited = "toomanyrequests" in (error.stderr or "").lower()
+            if attempt == len(delays) or not rate_limited:
+                # Only a quota error can have triggered an earlier retry.
+                if has_mirror and (attempt > 0 or rate_limited):
+                    return False
                 raise
             delay = delays[attempt]
+            attempt += 1
             print(f"Registry throttled Docker pull; retrying in {delay}s", flush=True)
             time.sleep(delay)
         else:
             if result.stderr:
                 print(result.stderr, file=sys.stderr, end="", flush=True)
-            return
+            return True
 
 
 def run_example(name: str) -> None:
@@ -336,8 +341,14 @@ def run_example(name: str) -> None:
         if example.check_dependencies:
             run(str(python), "-m", "pip", "check")
         for image in example.docker_images:
-            source = DOCKER_IMAGE_MIRRORS.get(image, image)
-            pull_docker_image(source, env)
+            sources = DOCKER_IMAGE_MIRRORS.get(image, (image,))
+            for index, source in enumerate(sources):
+                if pull_docker_image(source, env, has_mirror=index + 1 < len(sources)):
+                    break
+                print(
+                    "Docker pull encountered throttling; trying the next pinned mirror",
+                    flush=True,
+                )
             if source != image:
                 run("docker", "tag", source, image)
         for relative, pattern in example.suites:
