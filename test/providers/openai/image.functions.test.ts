@@ -417,23 +417,12 @@ describe('OpenAI Image Provider Functions', () => {
 
   describe('processApiResponse', () => {
     it('should handle error in data', async () => {
-      const mockDeleteFromCache = vi.fn();
       const data = {
         error: { message: 'Some API error' },
-        deleteFromCache: mockDeleteFromCache,
       };
 
-      const result = await processApiResponse(
-        data,
-        'prompt',
-        'url',
-        false,
-        'dall-e-2',
-        '512x512',
-        undefined,
-      );
+      const result = await processApiResponse(data, 'prompt', 'url', false, 'dall-e-2', '512x512');
 
-      expect(mockDeleteFromCache).toHaveBeenCalledWith();
       expect(result).toHaveProperty('error');
       expect(result.error).toContain('Some API error');
     });
@@ -552,10 +541,8 @@ describe('OpenAI Image Provider Functions', () => {
     });
 
     it('should handle errors during output formatting', async () => {
-      const mockDeleteFromCache = vi.fn();
       const data = {
         data: undefined,
-        deleteFromCache: mockDeleteFromCache,
       };
 
       const result = await processApiResponse(
@@ -565,20 +552,16 @@ describe('OpenAI Image Provider Functions', () => {
         false,
         'dall-e-2',
         '512x512',
-        undefined,
       );
 
       expect(result).toHaveProperty('error');
-      expect(result.error).toContain('API error: TypeError');
-      expect(result.error).toContain('Cannot read properties of undefined');
-      expect(mockDeleteFromCache).toHaveBeenCalledWith();
+      expect(result.error).toContain('No image URL found in response');
+      expect(result.error).not.toContain('TypeError');
     });
 
     it('should handle a specific error case with malformed response', async () => {
-      const mockDeleteFromCache = vi.fn();
       const data = {
         data: { data: 'not-an-array' },
-        deleteFromCache: mockDeleteFromCache,
       };
 
       const result = await processApiResponse(
@@ -588,12 +571,11 @@ describe('OpenAI Image Provider Functions', () => {
         false,
         'dall-e-2',
         '512x512',
-        undefined,
       );
 
       expect(result).toHaveProperty('error');
-      expect(result.error).toContain('API error:');
-      expect(mockDeleteFromCache).toHaveBeenCalledWith();
+      expect(result.error).toContain('No image URL found in response');
+      expect(result.error).not.toContain('TypeError');
     });
   });
 

@@ -17,41 +17,30 @@ SCRIPTS = (
 def is_dependency_manifest(path: str) -> bool:
     """Ignore tool-only pyprojects and unsupported project metadata formats."""
     manifest = pathlib.Path(path)
-    if not manifest.is_file():
-        return False
-    if manifest.match("requirements*.txt"):
-        return True
-    return manifest.name == "pyproject.toml" and "project" in tomllib.loads(
-        manifest.read_text()
-    )
+    if manifest.name == "pyproject.toml":
+        return manifest.is_file() and "project" in tomllib.loads(manifest.read_text())
+    return manifest.match("requirements*.txt") and manifest.is_file()
 
 
 def select_manifests(base: str, head: str) -> list[str]:
     """Use PR changes, or all tracked examples when the installer changes."""
-    changed = (
-        subprocess.check_output(
-            [
-                "git",
-                "diff",
-                "--name-only",
-                "-z",
-                "--diff-filter=ACMR",
-                base + "..." + head,
-                "--",
-                "examples/",
-                WORKFLOW,
-                *SCRIPTS,
-            ]
-        )
-        .decode()
-        .split("\0")
+
+    def git_paths(*args: str) -> list[str]:
+        return subprocess.check_output(["git", *args]).decode().split("\0")
+
+    selectors = (WORKFLOW, *SCRIPTS)
+    changed = git_paths(
+        "diff",
+        "--name-only",
+        "-z",
+        "--diff-filter=ACMR",
+        base + "..." + head,
+        "--",
+        "examples/",
+        *selectors,
     )
-    if any(path in changed for path in (WORKFLOW, *SCRIPTS)):
-        changed = (
-            subprocess.check_output(["git", "ls-files", "-z", "--", "examples/"])
-            .decode()
-            .split("\0")
-        )
+    if any(path in changed for path in selectors):
+        changed = git_paths("ls-files", "-z", "--", "examples/")
     return sorted(path for path in changed if path and is_dependency_manifest(path))
 
 
