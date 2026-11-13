@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { matchesSearchRubric } from '../../src/matchers/search';
 
 import type { ApiProvider, ProviderResponse } from '../../src/types/index';
 
@@ -59,8 +60,6 @@ describe('matchesSearchRubric', () => {
   });
 
   it('resolves string grading providers before checking web search capability', async () => {
-    const { matchesSearchRubric } = await import('../../src/matchers/search');
-
     const result = await matchesSearchRubric('Confirm current facts', 'output', {
       provider: 'openai:responses:gpt-5.5-2026-04-23',
     });
@@ -79,7 +78,6 @@ describe('matchesSearchRubric', () => {
   });
 
   it('keeps reserved output and rubric vars ahead of user vars', async () => {
-    const { matchesSearchRubric } = await import('../../src/matchers/search');
     mocks.loadApiProvider.mockResolvedValue(mocks.webSearchProvider);
 
     await matchesSearchRubric(
@@ -111,15 +109,12 @@ describe('matchesSearchRubric', () => {
   });
 
   it('throws when grading config is missing', async () => {
-    const { matchesSearchRubric } = await import('../../src/matchers/search');
-
     await expect(matchesSearchRubric('Confirm current facts', 'output')).rejects.toThrow(
       'Cannot grade output without grading config',
     );
   });
 
   it('uses configured providers that already support web search', async () => {
-    const { matchesSearchRubric } = await import('../../src/matchers/search');
     mocks.loadApiProvider.mockResolvedValue(mocks.webSearchProvider);
 
     const result = await matchesSearchRubric('Confirm current facts', 'output', {
@@ -134,7 +129,6 @@ describe('matchesSearchRubric', () => {
   });
 
   it('applies assertion thresholds to parsed search results', async () => {
-    const { matchesSearchRubric } = await import('../../src/matchers/search');
     mocks.webSearchProvider.callApi = vi.fn(
       async (): Promise<ProviderResponse> => ({
         output: JSON.stringify({ pass: true, score: 0.4, reason: 'too weak' }),
@@ -159,7 +153,6 @@ describe('matchesSearchRubric', () => {
   });
 
   it('returns a failure when the search provider returns no output', async () => {
-    const { matchesSearchRubric } = await import('../../src/matchers/search');
     mocks.webSearchProvider.callApi = vi.fn(
       async (): Promise<ProviderResponse> => ({
         error: 'search unavailable',
@@ -186,7 +179,6 @@ describe('matchesSearchRubric', () => {
     '{"pass": "false"}',
     '{"pass": null}',
   ])('tags an unusable search verdict as a grader failure: %s', async (output) => {
-    const { matchesSearchRubric } = await import('../../src/matchers/search');
     mocks.webSearchProvider.callApi = vi.fn(
       async (): Promise<ProviderResponse> => ({
         output,
@@ -207,7 +199,6 @@ describe('matchesSearchRubric', () => {
   });
 
   it('accepts a valid negative verdict inside surrounding text', async () => {
-    const { matchesSearchRubric } = await import('../../src/matchers/search');
     vi.mocked(mocks.webSearchProvider.callApi).mockResolvedValue({
       output: 'Search complete.\n```json\n{"pass": false, "reason": "Fact is incorrect"}\n```',
     });
@@ -223,7 +214,6 @@ describe('matchesSearchRubric', () => {
   });
 
   it('redacts credentials in the persisted search provider id', async () => {
-    const { matchesSearchRubric } = await import('../../src/matchers/search');
     const originalId = mocks.webSearchProvider.id;
     mocks.webSearchProvider.id = () =>
       'https://judge:hunter2@api.perplexity.ai/chat/completions?api_key=sk-live-1234567890abcdef';
@@ -241,7 +231,6 @@ describe('matchesSearchRubric', () => {
   });
 
   it('throws when no web search provider can be resolved', async () => {
-    const { matchesSearchRubric } = await import('../../src/matchers/search');
     mocks.getDefaultProviders.mockResolvedValue({
       webSearchProvider: null,
       llmRubricProvider: null,
