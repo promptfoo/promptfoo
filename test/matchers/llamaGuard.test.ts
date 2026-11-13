@@ -174,6 +174,21 @@ describe('matchesLlamaGuard safety hardening', () => {
     expect(result.metadata).toMatchObject({ graderError: true });
   });
 
+  it.each([
+    'unsafe\nI cannot classify this',
+    'nonsense\nS1',
+    'unsafe\nS2\nextra text',
+    'unsafe\nS2,',
+    'unsafe\nS15',
+  ])('fails grading for an invalid or unsupported filtered verdict %j', async (output) => {
+    const result = await matchesLlamaGuard(
+      { userPrompt: 'input', assistantResponse: 'output', categories: ['S1'] },
+      { provider: createMockProvider({ response: { output } }) },
+    );
+
+    expect(result).toMatchObject({ pass: false, score: 0, metadata: { graderError: true } });
+  });
+
   it('fails an unfiltered unsafe verdict whose category is unknown to us', async () => {
     // A future taxonomy addition (e.g. S15) must not pass just because we do not
     // recognize the code.
