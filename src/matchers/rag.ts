@@ -1,4 +1,5 @@
 import { serializeContext } from '../assertions/contextUtils';
+import { withCacheNamespace } from '../cache';
 import {
   ANSWER_RELEVANCY_GENERATE,
   CONTEXT_FAITHFULNESS_LONGFORM,
@@ -12,11 +13,16 @@ import {
 import { getDefaultProviders } from '../providers/defaults';
 import invariant from '../util/invariant';
 import { accumulateTokenUsage } from '../util/tokenUsageUtils';
-import { callGradingProvider, callProviderWithContext, getAndCheckProvider } from './providers';
+import {
+  callEmbeddingProvider,
+  callGradingProvider,
+  callProviderWithContext,
+  getAndCheckProvider,
+} from './providers';
 import { loadRubricPrompt, renderLlmRubricPrompt } from './rubric';
 import {
   cosineSimilarity,
-  fail,
+  graderFail,
   normalizeMatcherTokenUsage,
   splitIntoSentences,
   splitTextIntoSentences,
@@ -56,16 +62,22 @@ export async function matchesAnswerRelevance(
   const candidateQuestions: string[] = [];
   for (let i = 0; i < 3; i++) {
     // TODO(ian): Parallelize
-    const resp = await callProviderWithContext(
-      textProvider,
-      promptText,
-      'answer-relevance',
-      { answer: parsedOutput },
-      providerCallContext,
+    // Each sample uses its own cache namespace. Otherwise the identical prompt hits the
+    // cache and every question after the first is a copy of it.
+    const resp = await withCacheNamespace(
+      i === 0 ? undefined : `answer-relevance:sample:${i}`,
+      () =>
+        callProviderWithContext(
+          textProvider,
+          promptText,
+          'answer-relevance',
+          { answer: parsedOutput },
+          providerCallContext,
+        ),
     );
     accumulateTokenUsage(tokensUsed, resp.tokenUsage);
     if (resp.error || !resp.output) {
-      return fail(resp.error || 'No output', tokensUsed);
+      return graderFail(resp.error || 'No output', tokensUsed);
     }
 
     invariant(
@@ -80,16 +92,15 @@ export async function matchesAnswerRelevance(
     `Provider ${embeddingProvider.id()} must implement callEmbeddingApi for similarity check`,
   );
 
-  const callEmbeddingApi = embeddingProvider.callEmbeddingApi.bind(embeddingProvider);
   const inputEmbeddingResp = await callGradingProvider(
     embeddingProvider,
     'answer-relevance.embedding',
-    () => callEmbeddingApi(input),
+    (context) => callEmbeddingProvider(embeddingProvider, input, context),
     { callContext: providerCallContext, operationName: 'embeddings' },
   );
   accumulateTokenUsage(tokensUsed, inputEmbeddingResp.tokenUsage);
   if (inputEmbeddingResp.error || !inputEmbeddingResp.embedding) {
-    return fail(inputEmbeddingResp.error || 'No embedding', tokensUsed);
+    return graderFail(inputEmbeddingResp.error || 'No embedding', tokensUsed);
   }
   const inputEmbedding = inputEmbeddingResp.embedding;
 
@@ -100,12 +111,12 @@ export async function matchesAnswerRelevance(
     const resp = await callGradingProvider(
       embeddingProvider,
       'answer-relevance.embedding',
-      () => callEmbeddingApi(question),
+      (context) => callEmbeddingProvider(embeddingProvider, question, context),
       { callContext: providerCallContext, operationName: 'embeddings' },
     );
     accumulateTokenUsage(tokensUsed, resp.tokenUsage);
     if (resp.error || !resp.embedding) {
-      return fail(resp.error || 'No embedding', tokensUsed);
+      return graderFail(resp.error || 'No embedding', tokensUsed);
     }
     const questionSimilarity = cosineSimilarity(inputEmbedding, resp.embedding);
     similarities.push(questionSimilarity);
@@ -179,7 +190,7 @@ export async function matchesContextRecall(
     providerCallContext,
   );
   if (resp.error || !resp.output) {
-    return fail(resp.error || 'No output', resp.tokenUsage);
+    return graderFail(resp.error || 'No output', resp.tokenUsage);
   }
 
   invariant(typeof resp.output === 'string', 'context-recall produced malformed response');
@@ -215,7 +226,28 @@ export async function matchesContextRecall(
     });
   }
 
-  const score = sentences.length > 0 ? numerator / sentences.length : 0;
+  // A well-formed recall response classifies every answer sentence with
+  // [Attributed] / [Not Attributed]. Nonempty output with no classification
+  // lines at all -- a refusal, an apology, an out-of-format explanation -- is a
+  // malformed grading attempt, not a genuine 0.00 recall verdict. Tag it as a
+  // grader error so inverse assertions cannot turn it into a spurious pass.
+  if (sentences.length === 0) {
+    return {
+      pass: false,
+      score: 0,
+      reason: 'Grader returned no [Attributed]/[Not Attributed] classifications',
+      tokensUsed: normalizeMatcherTokenUsage(resp.tokenUsage),
+      metadata: {
+        sentenceAttributions: [],
+        totalSentences: 0,
+        attributedSentences: 0,
+        score: 0,
+        graderError: true,
+      },
+    };
+  }
+
+  const score = numerator / sentences.length;
   const pass = score >= threshold - Number.EPSILON;
 
   const metadata = {
@@ -234,31 +266,6 @@ export async function matchesContextRecall(
     tokensUsed: normalizeMatcherTokenUsage(resp.tokenUsage),
     metadata,
   };
-}
-
-/**
- * A leading list marker is the grader's formatting, not part of the extracted sentence,
- * so `1. Paris is…`, `(2) Paris is…` and `a) Paris is…` all still match `Paris is…` in
- * the context. The marker must be followed by whitespace, so a sentence that genuinely
- * opens with a number ("1991 saw…") is left alone. Only ASCII letters are treated as
- * markers — a CJK sentence can begin with a single character that is a word, not a label.
- */
-const LIST_MARKER_PREFIX = /^\s*(?:[-*\u2022\u2013\u2014]|\(?\d+[.)]|\(?[a-zA-Z][.)])\s+/;
-
-/**
- * Normalises text for context membership checks: strips a leading list marker, lowercases,
- * and collapses everything that is not a letter or number into single spaces.
- *
- * Uses the Unicode letter/number properties rather than `[a-z0-9]`. An ASCII-only class
- * erases CJK, Arabic, Cyrillic and similar scripts entirely, which would drop every
- * extraction in a non-Latin RAG eval and score it 0.
- */
-function normalizeForMatch(text: string): string {
-  return text
-    .replace(LIST_MARKER_PREFIX, '')
-    .toLowerCase()
-    .replace(/[^\p{L}\p{N}]+/gu, ' ')
-    .trim();
 }
 
 export async function matchesContextRelevance(
@@ -294,7 +301,7 @@ export async function matchesContextRelevance(
     providerCallContext,
   );
   if (resp.error || !resp.output) {
-    return fail(resp.error || 'No output', resp.tokenUsage);
+    return graderFail(resp.error || 'No output', resp.tokenUsage);
   }
 
   invariant(typeof resp.output === 'string', 'context-relevance produced malformed response');
@@ -318,63 +325,50 @@ export async function matchesContextRelevance(
   // text with no newlines, so counting by line alone would treat a multi-sentence
   // answer as one unit and undercount relevance (e.g. echoing the whole context
   // would score 1/N instead of 1.0).
-  //
-  // Only units that actually occur in the context count. The rubric requires verbatim
-  // extraction ("you're not allowed to make any changes to sentences from given
-  // context"), so anything absent from the context is the grader talking rather than
-  // extracting. Most often that is the rubric's own trailing `candidate sentences:`
-  // cue echoed back by chat models, which segmented into a unit and inflated the
-  // numerator — the denominator is derived from the context, so counting free text on
-  // the other side of the ratio made the score model-dependent.
-  //
-  // Matching is on normalised containment, not equality: graders routinely echo a
-  // sentence without its terminal punctuation or with altered whitespace, and a
-  // pre-segmented context may hold several sentences per unit. See
-  // {@link normalizeForMatch}.
   const insufficientInformation = resp.output.includes(CONTEXT_RELEVANCE_BAD);
   const segmentRelevant = contextIsPreSegmented ? splitIntoSentences : splitTextIntoSentences;
-  const normalizedContext = normalizeForMatch(contextString);
-  const matchesContext = (text: string) => {
-    const normalized = normalizeForMatch(text);
-    return normalized.length > 0 && normalizedContext.includes(normalized);
-  };
+  const segments = insufficientInformation ? [] : segmentRelevant(resp.output);
 
-  // A grader may put its cue on the same line as the first extraction
-  // ("candidate sentences: Alpha is first."). The label is only dropped when doing so
-  // turns a non-matching segment into a verbatim context sentence, so a context
-  // sentence that legitimately contains a colon is left alone.
-  const withoutInlineLabel = (text: string) => {
-    const stripped = text.replace(/^[^:\n]{0,80}:\s+/, '');
-    return stripped !== text && matchesContext(stripped) ? stripped : text;
-  };
+  // Only count segments whose sentences are quoted from the context. A grader line can
+  // join nonadjacent sentences from a chunk, but still counts as one selected unit.
+  // Dedupe on normalized text so reformatted repeats count once.
+  const normalizeForComparison = (value: string) => value.toLowerCase().replace(/\s+/g, ' ').trim();
+  const contextNormalized = normalizeForComparison(contextString);
+  const quotedSegments = new Map<string, string>();
+  for (const segment of segments) {
+    // A list marker needs following whitespace; otherwise preserve numbers like 1.2 and -5.
+    const key = normalizeForComparison(segment.replace(/^\s*(?:\d+[.)]|[-*])\s+/, ''));
+    const sentences = splitTextIntoSentences(key);
+    if (
+      sentences.length > 0 &&
+      sentences.every((sentence) => contextNormalized.includes(sentence)) &&
+      !quotedSegments.has(key)
+    ) {
+      quotedSegments.set(key, segment);
+    }
+  }
+  const relevantSentences = [...quotedSegments.values()];
 
-  // A segment that is nothing but a list marker carries no content. Sentence-mode
-  // splitting leaves `A.` standing alone, and it normalises to `a` — a substring of
-  // very nearly any context — so without this it would be counted as a relevant
-  // sentence and inflate the numerator, which is the failure this filter exists to
-  // prevent. `splitTextIntoSentences` already drops the numeric form.
-  const isMarkerOnly = (text: string) => /^\s*\(?[\p{N}A-Za-z][.)]\s*$/u.test(text);
+  // Nonempty output that quotes nothing from the context (a refusal, an apology, an
+  // out-of-format explanation) is a malformed grading attempt, not a low-relevance verdict.
+  // Tag it as a grader error so inverse assertions cannot turn it into a spurious pass.
+  const graderError = segments.length > 0 && relevantSentences.length === 0;
 
-  const isFromContext = (text: string) => !isMarkerOnly(text) && matchesContext(text);
+  if (graderError) {
+    return {
+      pass: false,
+      score: 0,
+      reason: 'Grader output does not quote the provided context',
+      tokensUsed: normalizeMatcherTokenUsage(resp.tokenUsage),
+      metadata: {
+        graderError: true,
+        graderOutputs: {
+          final: resp.output,
+        },
+      },
+    };
+  }
 
-  // Chatter is dropped BEFORE segmentation rather than after. `splitTextIntoSentences`
-  // picks line mode as soon as the completion spans two or more non-empty lines, so an
-  // echoed cue on its own line switches the rest of the response to line mode too — a
-  // line carrying two context sentences would then count as one unit, turning a 2/3
-  // score into 1/3. Removing the chatter first restores the segmentation the response
-  // would have had without it.
-  const graderOutput = resp.output
-    .split('\n')
-    .filter(
-      (line) =>
-        line.trim() === '' ||
-        splitTextIntoSentences(line).map(withoutInlineLabel).some(isFromContext),
-    )
-    .join('\n');
-
-  const relevantSentences = insufficientInformation
-    ? []
-    : [...new Set(segmentRelevant(graderOutput).map(withoutInlineLabel))].filter(isFromContext);
   // Cap at the total so the score never exceeds 1.
   const numerator = Math.min(relevantSentences.length, totalContextUnits);
 
@@ -458,7 +452,7 @@ export async function matchesContextFaithfulness(
   );
   accumulateTokenUsage(tokensUsed, resp.tokenUsage);
   if (resp.error || !resp.output) {
-    return fail(resp.error || 'No output', tokensUsed);
+    return graderFail(resp.error || 'No output', tokensUsed);
   }
 
   invariant(typeof resp.output === 'string', 'context-faithfulness produced malformed response');
@@ -466,6 +460,9 @@ export async function matchesContextFaithfulness(
   const contextString = serializeContext(context);
 
   const statements = splitIntoSentences(resp.output);
+  if (statements.length === 0) {
+    return graderFail('Could not extract context-faithfulness statements', tokensUsed);
+  }
   promptText = await renderLlmRubricPrompt(nliPrompt, {
     ...(vars || {}),
     context: contextString,
@@ -485,7 +482,7 @@ export async function matchesContextFaithfulness(
   );
   accumulateTokenUsage(tokensUsed, resp.tokenUsage);
   if (resp.error || !resp.output) {
-    return fail(resp.error || 'No output', tokensUsed);
+    return graderFail(resp.error || 'No output', tokensUsed);
   }
 
   invariant(typeof resp.output === 'string', 'context-faithfulness produced malformed response');
@@ -494,25 +491,30 @@ export async function matchesContextFaithfulness(
   finalAnswer = finalAnswer.toLowerCase();
   let verdicts = resp.output.toLowerCase().trim();
   let score = 0;
-  if (statements.length > 0) {
-    if (verdicts.includes(finalAnswer)) {
-      verdicts = verdicts.slice(verdicts.indexOf(finalAnswer) + finalAnswer.length);
-      const parsedVerdicts = verdicts.split('.').filter((answer) => answer.trim() !== '');
-      if (parsedVerdicts.length > 0) {
-        const unsupportedVerdicts = parsedVerdicts.filter(
-          (answer) => !answer.includes('yes'),
-        ).length;
-        const missingVerdicts = Math.max(0, statements.length - parsedVerdicts.length);
-        score = 1 - (unsupportedVerdicts + missingVerdicts) / statements.length;
-      }
-    } else {
-      const noVerdictCount = verdicts.split('verdict: no').length - 1;
-      const yesVerdictCount = verdicts.split('verdict: yes').length - 1;
-      if (noVerdictCount + yesVerdictCount > 0) {
-        const missingVerdicts = Math.max(0, statements.length - noVerdictCount - yesVerdictCount);
-        score = 1 - (noVerdictCount + missingVerdicts) / statements.length;
-      }
+  let parsedVerdict = false;
+  if (verdicts.includes(finalAnswer)) {
+    verdicts = verdicts.slice(verdicts.indexOf(finalAnswer) + finalAnswer.length);
+    const parsedVerdicts = verdicts.split('.').filter((answer) => answer.trim() !== '');
+    if (
+      parsedVerdicts.length > 0 &&
+      parsedVerdicts.every((answer) => /\b(?:yes|no)\b/.test(answer))
+    ) {
+      parsedVerdict = true;
+      const unsupportedVerdicts = parsedVerdicts.filter((answer) => !answer.includes('yes')).length;
+      const missingVerdicts = Math.max(0, statements.length - parsedVerdicts.length);
+      score = 1 - (unsupportedVerdicts + missingVerdicts) / statements.length;
     }
+  } else {
+    const noVerdictCount = verdicts.split('verdict: no').length - 1;
+    const yesVerdictCount = verdicts.split('verdict: yes').length - 1;
+    if (noVerdictCount + yesVerdictCount > 0) {
+      parsedVerdict = true;
+      const missingVerdicts = Math.max(0, statements.length - noVerdictCount - yesVerdictCount);
+      score = 1 - (noVerdictCount + missingVerdicts) / statements.length;
+    }
+  }
+  if (!parsedVerdict) {
+    return graderFail('Could not parse context-faithfulness verdicts', tokensUsed);
   }
   score = Math.min(1, Math.max(0, score));
   const pass = score >= threshold - Number.EPSILON;
