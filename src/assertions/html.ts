@@ -165,6 +165,7 @@ const HTML_NAMESPACE = 'http://www.w3.org/1999/xhtml';
 
 interface FollowingContext {
   nextElement: string | undefined;
+  previous?: HtmlChildNode;
   hasMoreContent: boolean;
 }
 
@@ -192,7 +193,7 @@ function getFollowingContext(element: HtmlElement): FollowingContext {
     let hasMoreContent = false;
     for (let i = siblings.length - 1; i >= 0; i--) {
       const sibling = siblings[i];
-      parentCache.set(sibling, { nextElement, hasMoreContent });
+      parentCache.set(sibling, { nextElement, hasMoreContent, previous: siblings[i - 1] });
       if (isElementNode(sibling)) {
         // Always update: this is the nearest following element for earlier siblings.
         nextElement = sibling.tagName.toLowerCase();
@@ -205,6 +206,26 @@ function getFollowingContext(element: HtmlElement): FollowingContext {
   }
   return (
     parentCache.get(element as HtmlChildNode) ?? { nextElement: undefined, hasMoreContent: false }
+  );
+}
+
+// parse5's adoption-agency recovery moves a paragraph out of its source
+// link and inserts a reconstructed link inside it, with no source location.
+function hasUnclosedParagraphInLink(element: HtmlElement, previous: HtmlNode | undefined): boolean {
+  const start = element.sourceCodeLocation?.startTag;
+  const link =
+    previous && isElementNode(previous) && previous.tagName === 'a'
+      ? previous.sourceCodeLocation
+      : undefined;
+  return Boolean(
+    start &&
+      link?.startTag &&
+      link.endTag &&
+      link.startTag.endOffset <= start.startOffset &&
+      link.endTag.startOffset >= start.endOffset &&
+      element.childNodes.some(
+        (child) => isElementNode(child) && child.tagName === 'a' && !hasSourceCodeLocation(child),
+      ),
   );
 }
 
@@ -226,9 +247,11 @@ function isUnclosedElement(element: HtmlElement, input: string): boolean {
   if (!location.startTag || location.endTag) {
     return false;
   }
-  // Whether the source start tag was explicitly self-closed (`<tag ... />`).
-  const startTagSource = input.slice(location.startTag.startOffset, location.startTag.endOffset);
-  const explicitlySelfClosed = startTagSource.trimEnd().endsWith('/>');
+  // A slash after an unquoted attribute value belongs to that value.
+  const slashOffset = location.startTag.endOffset - 2;
+  const explicitlySelfClosed =
+    input[slashOffset] === '/' &&
+    Object.values(location.attrs ?? {}).every((attr) => attr.endOffset <= slashOffset);
   if (element.namespaceURI !== HTML_NAMESPACE) {
     // Foreign content permits actual self-closing syntax; a missing end tag
     // without it (e.g. `<svg><circle></svg>`) is unclosed.
@@ -251,7 +274,10 @@ function isUnclosedElement(element: HtmlElement, input: string): boolean {
     ? OPTIONAL_END_TAG_RULES[tagName]
     : undefined;
   if (rule) {
-    const { nextElement, hasMoreContent } = getFollowingContext(element);
+    const { nextElement, hasMoreContent, previous } = getFollowingContext(element);
+    if (tagName === 'p' && hasUnclosedParagraphInLink(element, previous)) {
+      return true;
+    }
     return !rule(nextElement, hasMoreContent);
   }
   return true;

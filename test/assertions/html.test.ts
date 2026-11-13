@@ -677,4 +677,14 @@ describe('handleIsHtml', () => {
     const result = handleIsHtml(params);
     expect(result.pass).toBe(true);
   });
+  it.each([
+    ['<div><a href="/"><p>x</a></div>', false],
+    ['<div><a href="/"><p>x</p></a></div>', true],
+    ['<div><p>x<a href="/">y</a></div>', true],
+    ['<div><svg><circle r=1/></svg></div>', false],
+    ['<div><svg><circle r="1"/></svg></div>', true],
+  ])('validates source end tags for %s', (input, pass) => {
+    const result = handleIsHtml({ ...defaultParams, outputString: input, inverse: false });
+    expect(result.pass).toBe(pass);
+  });
 });
