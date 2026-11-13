@@ -12,7 +12,7 @@ import { readAssertions } from '../../assertions/index';
 import { validateAssertions } from '../../assertions/validateAssertions';
 import cliState from '../../cliState';
 import { getEnvBool, isCI, isTemplateProcessEnvDisabled } from '../../envars';
-import { importModule } from '../../esm';
+import { clearCjsModuleCache, ensureTypescriptLoader, importModule } from '../../esm';
 import logger from '../../logger';
 import { readPrompts } from '../../prompts/index';
 import { loadApiProviders, resolveProviderConfigs } from '../../providers/index';
@@ -35,7 +35,7 @@ import {
   UnifiedConfigSchema,
 } from '../../types/index';
 import { isApiProvider } from '../../types/providers';
-import { maybeLoadFromExternalFile } from '../../util/file';
+import { maybeLoadFromExternalFile, pathExists } from '../../util/file';
 import { isJavascriptFile } from '../../util/fileExtensions';
 import { readFilters, renderEnvOnlyInObject } from '../../util/index';
 import invariant from '../../util/invariant';
@@ -345,12 +345,17 @@ export async function readConfig(configPath: string): Promise<UnifiedConfig> {
   return cliState.withEnv(undefined, () => readConfigInScope(configPath));
 }
 
-async function readConfigInScope(configPath: string): Promise<UnifiedConfig> {
-  let ret: UnifiedConfig & {
-    targets?: UnifiedConfig['providers'];
-    plugins?: RedteamPluginObject[];
-    strategies?: RedteamStrategyObject[];
-  };
+type LoadedConfig = UnifiedConfig & {
+  targets?: UnifiedConfig['providers'];
+  plugins?: RedteamPluginObject[];
+  strategies?: RedteamStrategyObject[];
+};
+
+async function readConfigInScope(
+  configPath: string,
+  cacheCjsFallback = false,
+): Promise<UnifiedConfig> {
+  let ret: LoadedConfig;
   const ext = path.parse(configPath).ext;
   const isDeclarative = ext === '.json' || ext === '.yaml' || ext === '.yml';
   if (isDeclarative) {
@@ -358,11 +363,29 @@ async function readConfigInScope(configPath: string): Promise<UnifiedConfig> {
     ret = await dereferenceConfig(rawConfig as UnifiedConfig);
   } else if (isJavascriptFile(configPath)) {
     // importModule normalizes ERR_MODULE_NOT_FOUND to ENOENT for missing files
-    ret = await importModule(configPath);
+    ret = cacheCjsFallback
+      ? await importModule(configPath, undefined, { cacheCjsFallback: true })
+      : await importModule(configPath);
   } else {
     throw new Error(`Unsupported configuration file format: ${ext}`);
   }
 
+  try {
+    return normalizeLoadedConfig(ret, configPath, isDeclarative);
+  } catch (error) {
+    if (cacheCjsFallback) {
+      // A failed default-config load must be retryable after the file is repaired.
+      clearCjsModuleCache({ path: configPath, exports: ret });
+    }
+    throw error;
+  }
+}
+
+function normalizeLoadedConfig(
+  ret: LoadedConfig,
+  configPath: string,
+  isDeclarative: boolean,
+): UnifiedConfig {
   // Render environment variable templates (e.g., {{ env.VAR }}) before validation.
   // This allows env vars to be used in paths and other config values.
   // Runtime templates like {{ vars.x }} are preserved for later evaluation.
@@ -450,7 +473,12 @@ async function readConfigInScope(configPath: string): Promise<UnifiedConfig> {
 
 export async function maybeReadConfig(configPath: string): Promise<UnifiedConfig | undefined> {
   try {
-    return await readConfig(configPath);
+    // Later JS configs can rely on the loader initialized by a missing TS candidate.
+    await ensureTypescriptLoader(configPath);
+    if (!(await pathExists(configPath))) {
+      return undefined;
+    }
+    return await cliState.withEnv(undefined, () => readConfigInScope(configPath, true));
   } catch (error) {
     // If file doesn't exist, return undefined
     // Note: readConfig normalizes ERR_MODULE_NOT_FOUND to ENOENT for missing JS/TS files
@@ -638,7 +666,7 @@ async function prepareCombinedConfig(
     (config) => typeof config.prompts === 'string' || Array.isArray(config.prompts),
   );
 
-  let prompts: UnifiedConfig['prompts'] = configsAreStringOrArray ? [] : {};
+  const promptLabels = configsAreStringOrArray ? undefined : new Map<string, string>();
   const promptBasePaths = new Map<string | Prompt, string>();
 
   const resolveConfigPath = (basePath: string, reference: string): string => {
@@ -728,28 +756,21 @@ async function prepareCombinedConfig(
     };
   };
 
-  const seenPrompts = new Set<string | Prompt>();
-  const addSeenPrompt = (prompt: string | Prompt, basePath: string) => {
+  const addPrompt = (basePath: string, source: string | Prompt) => {
+    const prompt = makeAbsolute(basePath, source);
     if (!promptBasePaths.has(prompt)) {
       promptBasePaths.set(prompt, basePath);
     }
-    if (typeof prompt === 'string') {
-      seenPrompts.add(prompt);
-    } else if (typeof prompt === 'object' && prompt.id) {
-      seenPrompts.add(prompt);
-    } else if (PromptSchema.safeParse(prompt).success) {
-      seenPrompts.add(prompt);
-    } else {
+    if (typeof prompt !== 'string' && !prompt.id && !PromptSchema.safeParse(prompt).success) {
       throw new Error('Invalid prompt object');
     }
   };
   configSources.forEach(({ config, basePath }) => {
     if (typeof config.prompts === 'string') {
-      invariant(Array.isArray(prompts), 'Cannot mix string and map-type prompts');
-      const absolutePrompt = makeAbsolute(basePath, config.prompts);
-      addSeenPrompt(absolutePrompt, basePath);
+      invariant(!promptLabels, 'Cannot mix string and map-type prompts');
+      addPrompt(basePath, config.prompts);
     } else if (Array.isArray(config.prompts)) {
-      invariant(Array.isArray(prompts), 'Cannot mix configs with map and array-type prompts');
+      invariant(!promptLabels, 'Cannot mix configs with map and array-type prompts');
       config.prompts.forEach((prompt) => {
         invariant(
           typeof prompt === 'string' ||
@@ -757,31 +778,23 @@ async function prepareCombinedConfig(
               (typeof prompt.raw === 'string' || typeof prompt.label === 'string')),
           `Invalid prompt: ${JSON.stringify(prompt)}. Prompts must be either a string or an object with a 'raw' or 'label' string property.`,
         );
-        addSeenPrompt(makeAbsolute(basePath, prompt as string | Prompt), basePath);
+        addPrompt(basePath, prompt as string | Prompt);
       });
     } else {
       // Object format such as { 'prompts/prompt1.txt': 'foo', 'prompts/prompt2.txt': 'bar' }
-      invariant(
-        typeof prompts === 'object' && !Array.isArray(prompts),
-        'Cannot mix configs with map and array-type prompts',
-      );
-      prompts = {
-        ...prompts,
-        ...Object.fromEntries(
-          Object.entries(config.prompts).map(([prompt, label]) => {
-            const absolutePrompt = prompt.startsWith('file://')
-              ? resolveConfigPath(basePath, prompt)
-              : prompt;
-            promptBasePaths.set(absolutePrompt, basePath);
-            return [absolutePrompt, label];
-          }),
-        ),
-      };
+      invariant(promptLabels, 'Cannot mix configs with map and array-type prompts');
+      for (const [prompt, label] of Object.entries(config.prompts)) {
+        const absolutePrompt = prompt.startsWith('file://')
+          ? resolveConfigPath(basePath, prompt)
+          : prompt;
+        promptBasePaths.set(absolutePrompt, basePath);
+        promptLabels.set(absolutePrompt, label);
+      }
     }
   });
-  if (Array.isArray(prompts)) {
-    prompts.push(...Array.from(seenPrompts));
-  }
+  const prompts = promptLabels
+    ? Object.fromEntries(promptLabels)
+    : Array.from(promptBasePaths.keys());
 
   let scenarios: UnifiedConfig['scenarios'];
   for (const { config, basePath } of configSources) {
@@ -1197,7 +1210,7 @@ async function resolveLoadedConfig(
 
   let parsedScenarios = config.scenarios;
   // Parse testCases for each scenario
-  if (parsedScenarios && (!Array.isArray(parsedScenarios) || parsedScenarios.length > 0)) {
+  if (parsedScenarios) {
     parsedScenarios = (await maybeLoadFromExternalFile(parsedScenarios)) as Scenario[];
     // Flatten the scenarios array in case glob patterns were used
     parsedScenarios = parsedScenarios.flat().map((scenario) =>
