@@ -177,7 +177,7 @@ interface BedrockCohereCommandGenerationOptions extends BedrockOptions {
   truncate?: string;
 }
 
-interface BedrockCohereCommandRGenerationOptions extends BedrockOptions {
+interface CohereCommandROptions {
   message?: string;
   chat_history?: Array<{
     role: 'USER' | 'CHATBOT';
@@ -223,51 +223,12 @@ interface BedrockCohereCommandRGenerationOptions extends BedrockOptions {
   raw_prompting?: boolean;
 }
 
-interface CohereCommandRRequestParams {
+interface BedrockCohereCommandRGenerationOptions extends BedrockOptions, CohereCommandROptions {}
+
+// The request builder supplies the message and history even when config omits them.
+interface CohereCommandRRequestParams extends CohereCommandROptions {
   message: string;
-  chat_history: {
-    role: 'USER' | 'CHATBOT';
-    message: string;
-  }[];
-  documents?: {
-    title: string;
-    snippet: string;
-  }[];
-  search_queries_only?: boolean;
-  preamble?: string;
-  max_tokens?: number;
-  temperature?: number;
-  p?: number;
-  k?: number;
-  prompt_truncation?: string;
-  frequency_penalty?: number;
-  presence_penalty?: number;
-  seed?: number;
-  return_prompt?: boolean;
-  tools?: {
-    name: string;
-    description: string;
-    parameter_definitions: {
-      [parameterName: string]: {
-        description: string;
-        type: string;
-        required: boolean;
-      };
-    };
-  }[];
-  tool_results?: {
-    call: {
-      name: string;
-      parameters: {
-        [parameterName: string]: string;
-      };
-    };
-    outputs: {
-      text: string;
-    }[];
-  }[];
-  stop_sequences?: string[];
-  raw_prompting?: boolean;
+  chat_history: NonNullable<CohereCommandROptions['chat_history']>;
 }
 
 interface BedrockMistralGenerationOptions extends BedrockOptions {
@@ -289,9 +250,12 @@ export interface BedrockAI21GenerationOptions extends BedrockOptions {
 
 interface BedrockAmazonNovaGenerationOptions extends BedrockOptions {
   interfaceConfig?: {
+    maxTokens?: number;
     max_new_tokens?: number;
     temperature?: number;
+    topP?: number;
     top_p?: number;
+    topK?: number;
     top_k?: number;
     stopSequences?: string[];
   };
@@ -602,22 +566,6 @@ export interface NovaReelVideoOptions extends BedrockOptions {
   downloadFromS3?: boolean; // Default: true - download and store to blob storage
 }
 
-/**
- * Nova Reel async invoke response
- */
-export interface NovaReelInvocationResponse {
-  invocationArn: string;
-  status: 'InProgress' | 'Completed' | 'Failed';
-  submitTime?: string;
-  endTime?: string;
-  outputDataConfig?: {
-    s3OutputDataConfig: {
-      s3Uri: string;
-    };
-  };
-  failureMessage?: string;
-}
-
 // =============================================================================
 // Luma Ray 2 Video Generation Types
 // =============================================================================
@@ -669,19 +617,6 @@ export interface LumaRayVideoOptions extends BedrockOptions {
 
   /** Whether to download video from S3 to blob storage (default: true) */
   downloadFromS3?: boolean;
-}
-
-export interface LumaRayInvocationResponse {
-  invocationArn: string;
-  status: 'InProgress' | 'Completed' | 'Failed';
-  submitTime?: string;
-  endTime?: string;
-  failureMessage?: string;
-  outputDataConfig?: {
-    s3OutputDataConfig?: {
-      s3Uri: string;
-    };
-  };
 }
 
 export interface IBedrockModel {
@@ -1366,11 +1301,11 @@ export const BEDROCK_MODEL = {
         addConfigParam(params, 'system', systemPrompt, undefined, undefined);
       }
 
-      const inferenceConfig: any = config.interfaceConfig ? { ...config.interfaceConfig } : {};
+      const { max_new_tokens, top_p, top_k, ...inferenceConfig } = config.interfaceConfig ?? {};
       addConfigParam(
         inferenceConfig,
-        'max_new_tokens',
-        config?.interfaceConfig?.max_new_tokens,
+        'maxTokens',
+        config.interfaceConfig?.maxTokens ?? max_new_tokens,
         getEnvInt('AWS_BEDROCK_MAX_TOKENS'),
         undefined,
       );
@@ -1381,6 +1316,9 @@ export const BEDROCK_MODEL = {
         getEnvFloat('AWS_BEDROCK_TEMPERATURE'),
         0,
       );
+
+      addConfigParam(inferenceConfig, 'topP', config.interfaceConfig?.topP ?? top_p);
+      addConfigParam(inferenceConfig, 'topK', config.interfaceConfig?.topK ?? top_k);
 
       addConfigParam(params, 'inferenceConfig', inferenceConfig, undefined, undefined);
       addConfigParam(params, 'toolConfig', config.toolConfig, undefined, undefined);
@@ -2355,8 +2293,6 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'anthropic.claude-3-7-sonnet-20250219-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-3-haiku-20240307-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-fable-5': BEDROCK_MODEL.CLAUDE_MESSAGES,
-  'anthropic.claude-fable-5-1': BEDROCK_MODEL.CLAUDE_MESSAGES,
-  'anthropic.claude-mythos-5-1': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-opus-4-1-20250805-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-opus-4-6-v1': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-opus-4-7': BEDROCK_MODEL.CLAUDE_MESSAGES,
@@ -2463,6 +2399,8 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'us.anthropic.claude-fable-5': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-fable-5-1': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-mythos-5-1': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'us.anthropic.claude-fable-5-2': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'us.anthropic.claude-mythos-5-2': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-opus-4-1-20250805-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-opus-4-6-v1': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-opus-4-7': BEDROCK_MODEL.CLAUDE_MESSAGES,
@@ -2590,6 +2528,8 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'global.anthropic.claude-fable-5': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'global.anthropic.claude-fable-5-1': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'global.anthropic.claude-mythos-5-1': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'global.anthropic.claude-fable-5-2': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'global.anthropic.claude-mythos-5-2': BEDROCK_MODEL.CLAUDE_MESSAGES,
   // Claude Sonnet 5 uses the global endpoint like the other Claude 5-generation
   // models (Fable 5, Opus 4.7/4.8) rather than the older `apac.` prefix.
   'global.anthropic.claude-sonnet-5': BEDROCK_MODEL.CLAUDE_MESSAGES,
@@ -2633,17 +2573,32 @@ export const RETIRED_BEDROCK_MODELS = new Set([
   'meta.llama2-70b-chat-v1',
 ]);
 
-/** Reject withdrawn models and IDs that require a cross-region inference profile. */
-export function assertBedrockModelIsAvailable(modelName: string): void {
-  // A system inference profile or foundation model ARN ends in the ID it resolves to.
-  // Application inference profile ARNs hide the model, so they cannot be checked here.
-  const modelId = modelName.startsWith('arn:')
+// Only system-profile and foundation-model ARNs expose their model ID.
+function getBedrockModelId(modelName: string): string {
+  return modelName.startsWith('arn:')
     ? (/:(?:inference-profile|foundation-model)\/([^/]+)$/.exec(modelName)?.[1] ?? modelName)
     : modelName;
+}
+
+// AWS serves these only through inference profiles: the bare ID returns "on-demand throughput
+// isn't supported" (verified live for Fable 5.1 and 5.2, 2026-11-09).
+const INFERENCE_PROFILE_ONLY_MODELS = new Set([
+  'xai.grok-4.7',
+  'zai.glm-5.3',
+  'moonshotai.kimi-k3',
+  'anthropic.claude-fable-5-1',
+  'anthropic.claude-mythos-5-1',
+  'anthropic.claude-fable-5-2',
+  'anthropic.claude-mythos-5-2',
+]);
+
+/** Reject withdrawn models and IDs that require a cross-region inference profile. */
+export function assertBedrockModelIsAvailable(modelName: string): void {
+  const modelId = getBedrockModelId(modelName);
   if (RETIRED_BEDROCK_MODELS.has(modelId.replace(INFERENCE_PROFILE_PREFIX, ''))) {
     throw new Error(`Unknown Amazon Bedrock model: ${modelName}`);
   }
-  if (modelId === 'xai.grok-4.7' || modelId === 'zai.glm-5.3' || modelId === 'moonshotai.kimi-k3') {
+  if (INFERENCE_PROFILE_ONLY_MODELS.has(modelId)) {
     throw new Error(
       `Amazon Bedrock model "${modelId}" requires a cross-region inference profile. ` +
         `Use "bedrock:us.${modelId}" or "bedrock:global.${modelId}"` +
@@ -3049,8 +3004,25 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
   }
 }
 
+// A text request represents one input. A batch cannot be scored as its vector.
+function onlyEmbeddingResult(items: unknown) {
+  return Array.isArray(items) && items.length === 1 ? items[0] : undefined;
+}
+
 interface BedrockEmbeddingOptions extends BedrockOptions {
   input_type?: 'search_document' | 'search_query' | 'classification' | 'clustering';
+  embeddingPurpose?:
+    | 'GENERIC_INDEX'
+    | 'GENERIC_RETRIEVAL'
+    | 'TEXT_RETRIEVAL'
+    | 'IMAGE_RETRIEVAL'
+    | 'VIDEO_RETRIEVAL'
+    | 'DOCUMENT_RETRIEVAL'
+    | 'AUDIO_RETRIEVAL'
+    | 'CLASSIFICATION'
+    | 'CLUSTERING';
+  embeddingDimension?: 256 | 384 | 1024 | 3072;
+  truncationMode?: 'START' | 'END' | 'NONE';
 }
 
 export class AwsBedrockEmbeddingProvider
@@ -3081,16 +3053,28 @@ export class AwsBedrockEmbeddingProvider
     _context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<ProviderEmbeddingResponse> {
-    const params = this.modelName.includes('cohere.embed')
-      ? {
-          texts: [text],
-          input_type: this.config.input_type ?? 'search_document',
-        }
-      : {
-          inputText: text,
-        };
+    const modelId = getBedrockModelId(this.modelName).replace(INFERENCE_PROFILE_PREFIX, '');
+    const isNovaEmbedding = modelId === 'amazon.nova-2-multimodal-embeddings-v1:0';
+    const isMarengo3 = modelId === 'twelvelabs.marengo-embed-3-0-v1:0';
+    let params: Record<string, unknown>;
+    if (isNovaEmbedding) {
+      params = {
+        taskType: 'SINGLE_EMBEDDING',
+        singleEmbeddingParams: {
+          embeddingPurpose: this.config.embeddingPurpose ?? 'GENERIC_INDEX',
+          embeddingDimension: this.config.embeddingDimension ?? 3072,
+          text: { value: text, truncationMode: this.config.truncationMode ?? 'NONE' },
+        },
+      };
+    } else if (isMarengo3) {
+      params = { inputType: 'text', text: { inputText: text } };
+    } else if (this.modelName.includes('cohere.embed')) {
+      params = { texts: [text], input_type: this.config.input_type ?? 'search_document' };
+    } else {
+      params = { inputText: text };
+    }
 
-    logger.debug('Calling AWS Bedrock API for embeddings', { params });
+    logger.debug('Calling AWS Bedrock API for embeddings', { modelId: this.modelName });
     let response;
     try {
       const bedrockInstance = await this.getBedrockInstance();
@@ -3109,34 +3093,37 @@ export class AwsBedrockEmbeddingProvider
         error: `API call error: ${String(err)}`,
       };
     }
-    logger.debug(
-      `AWS Bedrock API response (embeddings): ${JSON.stringify(response.body.transformToString())}`,
-    );
-
+    let data;
     try {
-      const data = JSON.parse(response.body.transformToString());
-      // Titan Text API returns embeddings in the `embedding` field
-      // Cohere API returns embeddings in the `embeddings` field
-      const embeddings = data?.embeddings?.float ?? data?.embeddings;
-      const embedding =
-        data?.embedding ??
-        (Array.isArray(embeddings) && embeddings.length === 1 ? embeddings[0] : undefined);
-      if (
-        !Array.isArray(embedding) ||
-        embedding.length === 0 ||
-        !embedding.every((value: unknown) => typeof value === 'number' && Number.isFinite(value))
-      ) {
-        throw new Error('No valid embedding found in AWS Bedrock API response');
-      }
+      data = JSON.parse(response.body.transformToString());
+    } catch {
       return {
-        embedding,
-      };
-    } catch (err) {
-      return {
-        error: `API response error: ${String(err)}: ${JSON.stringify(
-          response.body.transformToString(),
-        )}`,
+        error: 'API response error: Could not decode AWS Bedrock embedding response as JSON',
       };
     }
+
+    let embedding;
+    if (isNovaEmbedding) {
+      embedding = onlyEmbeddingResult(data?.embeddings)?.embedding;
+    } else if (isMarengo3) {
+      // Marengo also documents a single object in place of the one-item array.
+      const item = data?.data;
+      embedding = (Array.isArray(item) ? onlyEmbeddingResult(item) : item)?.embedding;
+    } else {
+      embedding =
+        data?.embedding ?? onlyEmbeddingResult(data?.embeddings?.float ?? data?.embeddings);
+    }
+    if (
+      !Array.isArray(embedding) ||
+      embedding.length === 0 ||
+      !embedding.every((value: unknown) => typeof value === 'number' && Number.isFinite(value))
+    ) {
+      return { error: 'API response error: No valid embedding found in AWS Bedrock API response' };
+    }
+    logger.debug('Received AWS Bedrock embedding', {
+      modelId: this.modelName,
+      dimensions: embedding.length,
+    });
+    return { embedding };
   }
 }
