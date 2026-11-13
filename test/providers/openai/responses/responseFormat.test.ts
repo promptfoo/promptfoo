@@ -120,7 +120,10 @@ describe('OpenAiResponsesProvider response formats', () => {
         },
       });
 
-      await provider.callApi('Test prompt', { vars: { strictFlag: false } });
+      await provider.callApi('Test prompt', {
+        prompt: { raw: 'Test prompt', label: 'Test prompt' },
+        vars: { strictFlag: false },
+      });
 
       const [, request] = vi.mocked(cache.fetchWithCache).mock.calls[0];
       const body = JSON.parse((request as { body: string }).body);
