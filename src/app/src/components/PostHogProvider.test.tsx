@@ -110,6 +110,23 @@ describe('PostHogProvider', () => {
     });
   });
 
+  it('skips PostHog when the server disables network at runtime', async () => {
+    vi.stubEnv('VITE_POSTHOG_KEY', 'test-posthog-key');
+    vi.stubEnv('VITE_PROMPTFOO_DISABLE_TELEMETRY', 'false');
+    vi.stubEnv('VITE_PROMPTFOO_NO_NETWORK', 'false');
+    const marker = document.createElement('meta');
+    marker.name = 'promptfoo-no-network';
+    document.head.append(marker);
+    try {
+      const { PostHogProvider } = await import('./PostHogProvider');
+      render(<PostHogProvider>Test page</PostHogProvider>);
+      expect(posthog.init).not.toHaveBeenCalled();
+      expect(screen.getByText('Test page')).toBeInTheDocument();
+    } finally {
+      marker.remove();
+    }
+  });
+
   describe('when no-network mode is enabled', () => {
     beforeEach(() => {
       vi.stubEnv('VITE_POSTHOG_KEY', 'test-posthog-key');
