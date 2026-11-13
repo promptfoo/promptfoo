@@ -9,7 +9,7 @@ const assertionArraySchemas = new Set<object>([
   AssertionSetSchema.shape.assert,
 ]);
 
-const jsonReferenceSchema = {
+const jsonReferenceSchema: z.core.JSONSchema.JSONSchema = {
   type: 'object',
   required: ['$ref'],
   properties: { $ref: { type: 'string' } },
