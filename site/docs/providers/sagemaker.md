@@ -365,6 +365,8 @@ Supported model types:
 | `jumpstart`   | AWS JumpStart foundation models    | `json.generated_text`             |
 | `custom`      | Custom model formats               | Depends on model                  |
 
+Hugging Face and JumpStart responses with an empty `generated_text` value return an empty string, so assertions can evaluate it without an explicit response path.
+
 :::info Important clarification about model types
 
 The `modelType` setting helps format requests and responses according to specific patterns expected by different model containers deployed on SageMaker.
