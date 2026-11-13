@@ -81,7 +81,7 @@ Repeat indexes use separate cache entries; add `--no-cache` when every run must 
 
 ### Rating Feedback Links
 
-Set `feedback.pass` or `feedback.fail` to open an HTTPS link when a reviewer marks a result passed or failed in the web UI. Links open in a new tab when the rating is set. Use `defaultTest` to apply them to every test.
+Set `feedback.pass` or `feedback.fail` to offer an HTTPS feedback link alongside the corresponding manual rating in the web UI. The link shows its destination host and opens in a new tab when clicked. Use `defaultTest` to apply feedback links to every test.
 
 ```yaml title="promptfooconfig.yaml"
 providers:
@@ -280,7 +280,7 @@ Variables are automatically mapped from column headers.
 
 ### Excel (XLSX/XLS) Support
 
-Excel files (.xlsx and .xls) are supported as an optional feature. To use Excel files:
+Use an Excel Open XML workbook (`.xlsx`) for test cases. If you have an Excel 97–2003 workbook (`.xls`), open it in Excel or LibreOffice and save it as `.xlsx` before importing it.
 
 1. Install the `read-excel-file` package as a peer dependency:
 
@@ -297,6 +297,8 @@ Excel files (.xlsx and .xls) are supported as an optional feature. To use Excel 
 
 - `file://test_cases.xlsx#Sheet2` - Select sheet by name
 - `file://test_cases.xlsx#2` - Select sheet by 1-based index (2 = second sheet)
+
+The `#` after the workbook extension starts the sheet selector. For example, `file://cases#2.xlsx#Data#2026` selects the worksheet `Data#2026` in `cases#2.xlsx`.
 
 ```yaml title="promptfooconfig.yaml"
 # Use a specific sheet by name

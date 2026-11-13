@@ -918,7 +918,7 @@ describe('EvalOutputCell', () => {
     expect(written).toContain('rowId=1');
   });
 
-  it('shows checkmark after copying link', async () => {
+  it('resets the link and output copy indicators independently', async () => {
     timers = useTestTimers();
     const clipboard = mockClipboardWriteText();
 
@@ -935,11 +935,20 @@ describe('EvalOutputCell', () => {
     expect(clipboard.writeText).toHaveBeenCalled();
     expect(shareButton.querySelector('.lucide-check')).toBeInTheDocument();
 
-    act(() => {
-      timers?.advanceBy(3000);
+    act(() => timers?.advanceBy(1000));
+    const copyButton = screen.getByRole('button', { name: /Copy output to clipboard/i });
+    await act(async () => {
+      dispatchClick(copyButton);
+      await clipboard.writeText.mock.results[1]?.value;
     });
+    expect(shareButton.querySelector('.lucide-check')).toBeInTheDocument();
+    expect(copyButton.querySelector('.lucide-check')).toBeInTheDocument();
 
+    act(() => timers?.advanceBy(2000));
     expect(shareButton.querySelector('.lucide-link')).toBeInTheDocument();
+    expect(copyButton.querySelector('.lucide-check')).toBeInTheDocument();
+    act(() => timers?.advanceBy(1000));
+    expect(copyButton.querySelector('.lucide-check')).not.toBeInTheDocument();
   });
 
   it('clears the link feedback timer on unmount after copying link', async () => {
@@ -2368,6 +2377,26 @@ describe('EvalOutputCell extra actions hover behavior', () => {
       'View output and test details',
     ]);
   });
+  it.each(['google:gemini-nano-banana-2.1', 'custom-image-target'])(
+    'keeps structured images visible after long text from %s',
+    (provider) => {
+      const explanation = 'A detailed explanation of the generated image. '.repeat(10);
+      const { container } = renderWithProviders(
+        <EvalOutputCell
+          {...defaultProps}
+          maxTextLength={250}
+          output={{
+            ...defaultProps.output,
+            provider,
+            text: explanation,
+            images: [{ data: 'data:image/png;base64,aW1hZ2U=', mimeType: 'image/png' }],
+          }}
+        />,
+      );
+      expect(container.querySelectorAll('img')).toHaveLength(1);
+      expect(container.textContent).toContain(explanation.trim());
+    },
+  );
 });
 
 describe('isImageProvider helper function', () => {
@@ -2826,7 +2855,7 @@ describe('EvalOutputCell thumbs up/down toggle functionality', () => {
     expect(mockOnRating).toHaveBeenCalledWith(true, undefined, 'Important comment');
   });
 
-  it('opens the configured feedback link when setting a pass rating', async () => {
+  it('saves the rating and reveals a separate feedback link with its destination', async () => {
     const openSpy = vi.spyOn(window, 'open').mockReturnValue(null);
     const props = createPropsForToggleTest();
     props.evaluationId = 'eval-123';
@@ -2840,11 +2869,15 @@ describe('EvalOutputCell thumbs up/down toggle functionality', () => {
 
     await userEvent.click(screen.getByLabelText('Mark test passed'));
 
-    expect(openSpy).toHaveBeenCalledWith(
+    expect(mockOnRating).toHaveBeenCalledWith(true, undefined, 'Initial comment');
+    expect(openSpy).not.toHaveBeenCalled();
+    const link = screen.getByRole('link', { name: 'Open feedback on reviews.example.com' });
+    expect(link).toHaveAttribute(
+      'href',
       'https://reviews.example.com/results/test-id?eval=eval-123&test=case%2F123&rating=pass',
-      '_blank',
-      'noopener,noreferrer',
     );
+    expect(link).toHaveAttribute('target', '_blank');
+    expect(link).toHaveAttribute('rel', 'noopener noreferrer');
     openSpy.mockRestore();
   });
 
@@ -2858,6 +2891,7 @@ describe('EvalOutputCell thumbs up/down toggle functionality', () => {
     renderWithProviders(<EvalOutputCell {...props} />);
     await userEvent.click(screen.getByLabelText('Mark test passed'));
     expect(openSpy).not.toHaveBeenCalled();
+    expect(screen.queryByRole('link', { name: /open feedback/i })).not.toBeInTheDocument();
     expect(mockOnRating).toHaveBeenCalledWith(true, undefined, 'Initial comment');
     openSpy.mockRestore();
   });
@@ -2872,6 +2906,7 @@ describe('EvalOutputCell thumbs up/down toggle functionality', () => {
     renderWithProviders(<EvalOutputCell {...props} />);
     await userEvent.click(screen.getByLabelText('Mark test passed'));
     expect(openSpy).not.toHaveBeenCalled();
+    expect(screen.queryByRole('link', { name: /open feedback/i })).not.toBeInTheDocument();
     expect(mockOnRating).toHaveBeenCalledWith(true, undefined, 'Initial comment');
     openSpy.mockRestore();
   });
@@ -2886,10 +2921,11 @@ describe('EvalOutputCell thumbs up/down toggle functionality', () => {
 
     const thumbsUpButton = screen.getByLabelText('Mark test passed');
     await userEvent.click(thumbsUpButton);
-    openSpy.mockClear();
+    expect(screen.getByRole('link', { name: /open feedback/i })).toBeInTheDocument();
     await userEvent.click(thumbsUpButton);
 
     expect(openSpy).not.toHaveBeenCalled();
+    expect(screen.queryByRole('link', { name: /open feedback/i })).not.toBeInTheDocument();
     openSpy.mockRestore();
   });
 });

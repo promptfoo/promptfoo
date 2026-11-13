@@ -27,6 +27,23 @@ export const createFsModuleFactory =
     };
   };
 
+export const createFileUtilitiesFactory = (): MockModuleFactory => async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    maybeLoadFromExternalFile: vi.fn((x) => x),
+    renderVarsInObject: vi.fn((x) => x),
+  };
+};
+
+export const createRequireModuleFactory = (): MockModuleFactory => () => {
+  const mockRequire: NodeJS.Require = {
+    resolve: vi.fn() as unknown as NodeJS.RequireResolve,
+  } as unknown as NodeJS.Require;
+  return {
+    createRequire: vi.fn().mockReturnValue(mockRequire),
+  };
+};
+
 export const createWarningOrderedLoggerFactory = (): MockModuleFactory => () => ({
   default: {
     debug: vi.fn(),
@@ -64,6 +81,19 @@ export const createNodeHttpHandlerFactory = (): MockModuleFactory => () => ({
     };
   }),
 });
+
+export const createPathFactory = (): MockModuleFactory => async () => {
+  const actualPath = await vi.importActual<typeof import('path')>('path');
+  const mocked = {
+    ...actualPath,
+    resolve: vi.fn(),
+    extname: vi.fn(),
+  };
+  return {
+    ...mocked,
+    default: mocked,
+  };
+};
 
 export const createBedrockCacheFactory =
   (mockGet: Mock, mockSet: Mock, getMockIsCacheEnabled: () => Mock): MockModuleFactory =>
@@ -123,6 +153,29 @@ export const createExecFileFactory =
     };
   };
 
+export const createReadFileFactory =
+  (mockReadFile: Mock): MockModuleFactory =>
+  async (importOriginal) => {
+    const actual = await importOriginal<typeof import('fs')>();
+    return {
+      ...actual,
+      promises: {
+        ...actual.promises,
+        readFile: mockReadFile,
+      },
+    };
+  };
+
+export const createChildLoggerFactory = (): MockModuleFactory => () => ({
+  default: {
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
+    child: vi.fn().mockReturnValue({}),
+  },
+});
+
 export const createRequestLoggerFactory = (): MockModuleFactory => () => ({
   default: {
     debug: vi.fn(),
@@ -132,6 +185,17 @@ export const createRequestLoggerFactory = (): MockModuleFactory => () => ({
   },
   logRequestResponse: vi.fn(),
 });
+
+export const createGeneratorFsPromisesFactory =
+  (fsMocks: { readFileSync: Mock; writeFileSync: Mock }): MockModuleFactory =>
+  () => ({
+    default: {
+      readFile: fsMocks.readFileSync,
+      writeFile: fsMocks.writeFileSync,
+    },
+    readFile: fsMocks.readFileSync,
+    writeFile: fsMocks.writeFileSync,
+  });
 
 export const createLocalGenerationFactory = (): MockModuleFactory => async (importOriginal) => {
   return {
@@ -150,3 +214,11 @@ export const createOpenAiCacheFactory = (): MockModuleFactory => async (importOr
     disableCache: vi.fn(),
   };
 };
+
+export const createUuidModuleFactory = (): MockModuleFactory => () => ({
+  isUuid: vi.fn((str: string) => {
+    // Check if the string looks like a UUID
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    return uuidRegex.test(str);
+  }),
+});
