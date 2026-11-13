@@ -171,20 +171,39 @@ describe('LlamaProvider', () => {
         '200 OK: generation failed',
       ],
     ])('returns the server error for %i %s', async (status, statusText, data, expected) => {
-      vi.mocked(fetchWithCache).mockResolvedValue(
-        createMockFetchResponse(data, { status, statusText }),
-      );
+      const deleteFromCache = vi.fn().mockResolvedValue(undefined);
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        ...createMockFetchResponse(data, { status, statusText }),
+        deleteFromCache,
+      });
 
       expect(await new LlamaProvider(modelName).callApi(prompt)).toEqual({
         error: `API response error: ${expected}`,
       });
+      expect(deleteFromCache).toHaveBeenCalledTimes(status === 200 ? 1 : 0);
     });
 
-    it.each([null, {}, { content: 0 }])('rejects a malformed completion %j', async (data) => {
-      vi.mocked(fetchWithCache).mockResolvedValue(createMockFetchResponse(data));
+    it.each([null, {}, { content: 0 }])('evicts a malformed completion %j', async (data) => {
+      const deleteFromCache = vi.fn().mockResolvedValue(undefined);
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        ...createMockFetchResponse(data),
+        deleteFromCache,
+      });
 
       expect(await new LlamaProvider(modelName).callApi(prompt)).toEqual({
         error: 'API response error: expected a string in the content field',
+      });
+      expect(deleteFromCache).toHaveBeenCalledOnce();
+    });
+
+    it('preserves the completion error if cache eviction fails', async () => {
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        ...createMockFetchResponse({ error: 'generation failed' }),
+        deleteFromCache: vi.fn().mockRejectedValue(new Error('cache unavailable')),
+      });
+
+      expect(await new LlamaProvider(modelName).callApi(prompt)).toEqual({
+        error: 'API response error: 200 OK: generation failed',
       });
     });
   });

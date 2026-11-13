@@ -1,4 +1,5 @@
 import { fetchWithCache } from '../cache';
+import logger from '../logger';
 import { resolveProviderEnv } from './env';
 import { getRequestTimeoutMs } from './shared';
 
@@ -80,7 +81,7 @@ export class LlamaProvider implements ApiProvider {
     }
 
     try {
-      const { data, cached, latencyMs, status, statusText } =
+      const { data, cached, latencyMs, status, statusText, deleteFromCache } =
         await fetchWithCache<LlamaCompletionResponse | null>(
           `${url}/completion`,
           {
@@ -93,7 +94,13 @@ export class LlamaProvider implements ApiProvider {
           getRequestTimeoutMs(),
         );
 
-      if (status < 200 || status >= 300 || data?.error) {
+      const isSuccessfulStatus = status >= 200 && status < 300;
+      if (isSuccessfulStatus && (data?.error || typeof data?.content !== 'string')) {
+        await deleteFromCache?.().catch(() => {
+          logger.warn('[Llama.cpp] Failed to evict invalid completion from cache');
+        });
+      }
+      if (!isSuccessfulStatus || data?.error) {
         const error = data?.error;
         const message = typeof error === 'string' ? error : (error?.message ?? data?.message);
         const httpStatus = `${status} ${statusText}`.trimEnd();
