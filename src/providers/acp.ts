@@ -282,8 +282,7 @@ export class AcpProvider implements ApiProvider {
       if (this.config.permission_mode === 'auto_approve') {
         clientBuilder.onRequest(acpSdk.methods.client.session.requestPermission, (ctx: any) => {
           const opts = ctx.params.options || [];
-          const first =
-            opts.find((o: any) => o.kind === 'allow_once' || o.kind === 'allow_always');
+          const first = opts.find((o: any) => o.kind === 'allow_once' || o.kind === 'allow_always');
           return {
             outcome: first?.optionId
               ? { outcome: 'selected', optionId: first.optionId }
@@ -494,7 +493,21 @@ export class AcpProvider implements ApiProvider {
       Object.assign(base, process.env);
     } else {
       // Minimal shell env
-      for (const key of ['PATH', 'HOME', 'SHELL', 'USER', 'LANG', 'TERM', 'TMPDIR', 'SystemRoot', 'ComSpec', 'PATHEXT', 'USERPROFILE', 'TEMP', 'TMP']) {
+      for (const key of [
+        'PATH',
+        'HOME',
+        'SHELL',
+        'USER',
+        'LANG',
+        'TERM',
+        'TMPDIR',
+        'SystemRoot',
+        'ComSpec',
+        'PATHEXT',
+        'USERPROFILE',
+        'TEMP',
+        'TMP',
+      ]) {
         if (process.env[key]) {
           base[key] = process.env[key]!;
         }
