@@ -47,7 +47,7 @@ import {
   accumulateResponseTokenUsage,
   createEmptyTokenUsage,
 } from '../util/tokenUsageUtils';
-import { transform } from '../util/transform';
+import { decodeCharSplitOutput, transform } from '../util/transform';
 import type winston from 'winston';
 
 import type {
@@ -1209,6 +1209,16 @@ async function transformRunEvalResponse({
     });
   }
   const providerTransformedOutput = processedResponse.output;
+
+  const charSplitDelimiter = test.metadata?.charSplitDelimiter;
+  if (
+    test.metadata?.strategyId === 'char-split' &&
+    typeof charSplitDelimiter === 'string' &&
+    charSplitDelimiter.length === 1 &&
+    typeof processedResponse.output === 'string'
+  ) {
+    processedResponse.output = decodeCharSplitOutput(processedResponse.output, charSplitDelimiter);
+  }
 
   const testTransform = test.options?.transform || test.options?.postprocess;
   if (testTransform) {

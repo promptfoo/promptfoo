@@ -10,6 +10,16 @@ import { isSafeMode, SafeModeError } from './safeMode';
 import type { Vars } from '../types/index';
 import type { TransformContext, TransformFunction } from '../types/transform';
 
+/**
+ * Decode the persisted character-split response format before custom test transforms.
+ * A doubled delimiter encodes one literal delimiter.
+ */
+export function decodeCharSplitOutput(output: string, delimiter: string): string {
+  const escaped = delimiter.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const pattern = new RegExp(`(${escaped}){2}|(?<=\\S)${escaped}(?=\\S)`, 'g');
+  return output.replace(pattern, (_match, doubled) => (doubled ? delimiter : ''));
+}
+
 export const INLINE_FUNCTION_LABEL = '[inline function]';
 export const INLINE_STRING_LABEL = '[inline transform]';
 export const FILE_TRANSFORM_LABEL = '[file transform]';
