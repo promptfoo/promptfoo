@@ -238,6 +238,12 @@ tests:
       - type: trajectory:tool-used
         value: search_orders
 
+      # max-only counts are budgets, so max: 0 means the tool must never be called
+      - type: trajectory:tool-used
+        value:
+          name: cancel_order
+          max: 0
+
       - type: trajectory:tool-args-match
         value:
           name: search_orders

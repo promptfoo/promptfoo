@@ -937,6 +937,24 @@ describe('trajectory assertions', () => {
       });
     });
 
+    it('keeps requiring a match when min is present but not a number', () => {
+      const value = { name: 'missing_tool', max: 2, min: '2' };
+      const params: AssertionParams = {
+        ...defaultParams,
+        baseType: 'trajectory:tool-used',
+        assertion: { type: 'trajectory:tool-used', value },
+        renderedValue: value,
+      };
+
+      const result = handleTrajectoryToolUsed(params);
+      expect(result).toEqual({
+        pass: false,
+        score: 0,
+        reason: 'Matched tool "missing_tool" 0 time(s) (expected 1-2)',
+        assertion: params.assertion,
+      });
+    });
+
     it('fails when required tools are missing', () => {
       const params: AssertionParams = {
         ...defaultParams,
