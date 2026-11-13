@@ -4,7 +4,6 @@ import path from 'path';
 import { getCache, isCacheEnabled } from '../cache';
 import cliState from '../cliState';
 import { getEnvInt } from '../envars';
-import { omitEvalRuntimeVars } from '../evaluatorHelpers';
 import logger from '../logger';
 import { getConfiguredPythonPath } from '../python/pythonUtils';
 import { PythonWorkerPool } from '../python/workerPool';
@@ -13,7 +12,7 @@ import { processConfigFileReferences } from '../util/fileReference';
 import { parsePathOrGlob } from '../util/index';
 import { safeJsonStringify } from '../util/json';
 import { providerRegistry } from './providerRegistry';
-import { sanitizeScriptContext } from './scriptContext';
+import { getScriptCacheVars, sanitizeScriptContext } from './scriptContext';
 import {
   applyCachedCallApiMetadata,
   buildScriptArgs,
@@ -240,11 +239,11 @@ export class PythonProvider implements ApiProvider {
     const fileHash = sha256(await fs.readFile(absPath, 'utf-8'));
 
     // Create cache key including the function name to ensure different functions don't share caches.
-    // Runtime vars like __evalId are positional per-run identifiers; keeping them out lets an
-    // identical call in a later eval run hit the cache instead of re-executing (and re-paying).
+    // The per-run __evalId is intentionally omitted so an
+    // identical call in a later eval can hit the cache instead of re-executing (and re-paying).
     const cacheKey = `python:${this.scriptPath}:${this.functionName || 'default'}:${apiType}:${fileHash}:${prompt}:${JSON.stringify(
       this.options,
-    )}:${JSON.stringify(context?.vars ? omitEvalRuntimeVars(context.vars) : context?.vars)}`;
+    )}:${JSON.stringify(getScriptCacheVars(context?.vars))}`;
     logger.debug(`PythonProvider cache key: ${cacheKey}`);
 
     const cache = await getCache();

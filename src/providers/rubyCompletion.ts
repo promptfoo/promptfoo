@@ -2,14 +2,13 @@ import fs from 'fs/promises';
 import path from 'path';
 
 import { getCache, isCacheEnabled } from '../cache';
-import { omitEvalRuntimeVars } from '../evaluatorHelpers';
 import logger from '../logger';
 import { runRuby } from '../ruby/rubyUtils';
 import { sha256 } from '../util/createHash';
 import { processConfigFileReferences } from '../util/fileReference';
 import { parsePathOrGlob } from '../util/index';
 import { safeJsonStringify } from '../util/json';
-import { sanitizeScriptContext } from './scriptContext';
+import { getScriptCacheVars, sanitizeScriptContext } from './scriptContext';
 import {
   applyCachedCallApiMetadata,
   buildScriptArgs,
@@ -140,11 +139,11 @@ export class RubyProvider implements ApiProvider {
     const fileHash = sha256(await fs.readFile(absPath, 'utf-8'));
 
     // Create cache key including the function name to ensure different functions don't share caches.
-    // Runtime vars like __evalId are positional per-run identifiers; keeping them out lets an
-    // identical call in a later eval run hit the cache instead of re-executing (and re-paying).
+    // The per-run __evalId is intentionally omitted so an
+    // identical call in a later eval can hit the cache instead of re-executing (and re-paying).
     const cacheKey = `ruby:${this.scriptPath}:${this.functionName || 'default'}:${apiType}:${fileHash}:${prompt}:${safeJsonStringify(
       this.options,
-    )}:${safeJsonStringify(context?.vars ? omitEvalRuntimeVars(context.vars) : context?.vars)}`;
+    )}:${safeJsonStringify(getScriptCacheVars(context?.vars))}`;
     logger.debug(`RubyProvider cache key: ${cacheKey}`);
 
     const cache = await getCache();
