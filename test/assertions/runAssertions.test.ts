@@ -8,6 +8,7 @@ import {
   getGradingAssertionHash,
   getGradingInputHash,
 } from '../../src/redteam/grading/storedResult';
+import { createMockProvider } from '../factories/provider';
 import { mockProcessEnv, TestGrader } from '../util/utils';
 
 import type {
@@ -273,6 +274,98 @@ describe('runAssertions', () => {
       pass: true,
       reason: 'Aggregate score 0.33 ≥ 0.25 threshold',
     });
+  });
+
+  describe('similarity score compatibility', () => {
+    const createSimilarityProvider = (similarities: Record<string, number>) =>
+      Object.assign(createMockProvider(), {
+        callSimilarityApi: async (expected: string) => ({ similarity: similarities[expected] }),
+      });
+
+    it('preserves full-precision negative metrics excluded from the aggregate', async () => {
+      const provider = createSimilarityProvider({ reference: -0.123456789 });
+      const result = await runAssertions({
+        prompt: 'Some prompt',
+        provider,
+        test: {
+          options: { provider },
+          assert: [
+            { type: 'equals', value: 'output' },
+            { type: 'similar', value: 'reference', metric: 'raw_cosine', weight: 0 },
+          ],
+        },
+        providerResponse: { output: 'output' },
+      });
+
+      expect(result).toMatchObject({
+        pass: true,
+        score: 1,
+        namedScores: { raw_cosine: -0.123456789 },
+        namedScoreWeights: { raw_cosine: 1 },
+      });
+      expect(result.componentResults?.[1]).toMatchObject({ pass: true, score: -0.123456789 });
+    });
+
+    it('applies a negative aggregate threshold to the signed cosine score', async () => {
+      const provider = createSimilarityProvider({ reference: -0.5 });
+      const result = await runAssertions({
+        prompt: 'Some prompt',
+        provider,
+        test: {
+          options: { provider },
+          threshold: -0.25,
+          assert: [{ type: 'similar', value: 'reference', threshold: -0.75 }],
+        },
+        providerResponse: { output: 'output' },
+      });
+
+      expect(result).toMatchObject({ pass: false, score: -0.5 });
+      expect(result.componentResults?.[0]).toMatchObject({ pass: true, score: -0.5 });
+    });
+
+    it('applies an aggregate threshold greater than one to a raw dot product', async () => {
+      const provider = Object.assign(createMockProvider(), {
+        callEmbeddingApi: async (text: string) => ({ embedding: [Number(text)] }),
+      });
+      const result = await runAssertions({
+        prompt: 'Some prompt',
+        provider,
+        test: {
+          options: { provider },
+          threshold: 5,
+          assert: [{ type: 'similar:dot', value: '5', threshold: 5 }],
+        },
+        providerResponse: { output: '2' },
+      });
+
+      expect(result).toMatchObject({ pass: true, score: 10 });
+    });
+
+    it.each([
+      { type: 'similar', pass: false, score: -0.2 },
+      { type: 'not-similar', pass: true, score: 1.2 },
+    ] as const)(
+      'selects the closest negative cosine in $type arrays',
+      async ({ type, pass, score }) => {
+        const provider = createSimilarityProvider({ far: -0.9, closer: -0.2 });
+        const result = await runAssertions({
+          prompt: 'Some prompt',
+          provider,
+          test: {
+            options: { provider },
+            assert: [{ type, value: ['far', 'closer'] }],
+          },
+          providerResponse: { output: 'output' },
+        });
+
+        expect(result).toMatchObject({ pass, score });
+        if (type === 'not-similar') {
+          expect(result.componentResults?.[0].reason).toBe(
+            'Similarity -0.20 is less than threshold 0.75',
+          );
+        }
+      },
+    );
   });
 
   describe('assert-set', () => {

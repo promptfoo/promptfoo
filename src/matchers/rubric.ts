@@ -834,6 +834,45 @@ function graderFailureFromResponse(
   return failure;
 }
 
+function deriveVerdictFromGrader(
+  parsed: { pass?: unknown; score?: unknown },
+  threshold: number | undefined,
+): { pass: boolean; score: number } | undefined {
+  const hasThreshold = typeof threshold === 'number' && Number.isFinite(threshold);
+
+  // Without an explicit verdict, only a finite numeric score can be graded.
+  // Reject malformed values as grader errors so negation cannot make them pass.
+  if (parsed.pass === undefined || parsed.pass === null) {
+    const score =
+      typeof parsed.score === 'number'
+        ? parsed.score
+        : typeof parsed.score === 'string' && parsed.score.trim() !== ''
+          ? Number(parsed.score)
+          : NaN;
+    if (!Number.isFinite(score)) {
+      return undefined;
+    }
+    return { pass: hasThreshold ? score >= threshold : score > 0, score };
+  }
+
+  let pass =
+    typeof parsed.pass === 'boolean'
+      ? parsed.pass
+      : /^(true|yes|pass|y)$/i.test(String(parsed.pass));
+  const numericScore = Number(parsed.score);
+  const score =
+    typeof parsed.score === 'number'
+      ? parsed.score
+      : Number.isFinite(numericScore)
+        ? numericScore
+        : Number(pass);
+
+  if (hasThreshold) {
+    pass = pass && score >= threshold;
+  }
+  return { pass, score };
+}
+
 export async function runJsonGradingPrompt({
   assertion,
   checkName,
@@ -896,21 +935,17 @@ export async function runJsonGradingPrompt({
     return failure as Omit<GradingResult, 'assertion'>;
   }
 
-  let pass = parsed.pass ?? true;
-  if (typeof pass !== 'boolean') {
-    pass = /^(true|yes|pass|y)$/i.test(String(pass));
-  }
-
-  let score = parsed.score;
-  if (typeof score !== 'number') {
-    score = Number.isFinite(Number(score)) ? Number(score) : Number(pass);
-  }
-
   const threshold =
     typeof assertion?.threshold === 'string' ? Number(assertion.threshold) : assertion?.threshold;
-  if (typeof threshold === 'number' && Number.isFinite(threshold)) {
-    pass = pass && score >= threshold;
+
+  const verdict = deriveVerdictFromGrader(parsed, threshold);
+  if (!verdict) {
+    return graderFailureFromResponse(
+      'Grader response contained neither a pass verdict nor a finite numeric score',
+      resp,
+    );
   }
+  const { pass, score } = verdict;
 
   const reason =
     parsed.reason || (pass ? 'Grading passed' : `Score ${score} below threshold ${threshold}`);
