@@ -4,7 +4,7 @@ import { GeminiImageProvider } from '../../../src/providers/google/gemini-image'
 import * as googleUtil from '../../../src/providers/google/util';
 import { checkProviderApiKeys } from '../../../src/util/provider';
 import { createGoogleSearchTool, createImageUsageCounts } from '../../factories/literalFixtures';
-import { createGoogleImageEnvCleanup, mockProcessEnv } from '../../util/utils';
+import { mockGoogleImageEnv, mockProcessEnv } from '../../util/utils';
 import { createMockFetchResponse as createMockProviderResponse } from '../mockProviderResponses';
 
 const createInlineImageCandidate = () => ({
@@ -82,18 +82,11 @@ describe('GeminiImageProvider', () => {
       statusText: 'OK',
     });
 
+  let restoreImageEnv: () => void;
+
   beforeEach(() => {
     vi.clearAllMocks();
-    mockProcessEnv({ GOOGLE_API_KEY: 'test-api-key' });
-    mockProcessEnv({ GOOGLE_GENERATIVE_AI_API_KEY: undefined });
-    mockProcessEnv({ GEMINI_API_KEY: undefined });
-    mockProcessEnv({ GOOGLE_PROJECT_ID: undefined });
-    mockProcessEnv({ GOOGLE_CLOUD_PROJECT: undefined });
-    mockProcessEnv({ VERTEX_PROJECT_ID: undefined });
-    mockProcessEnv({ VERTEX_API_KEY: undefined });
-    mockProcessEnv({ VERTEX_REGION: undefined });
-    mockProcessEnv({ GOOGLE_CLOUD_LOCATION: undefined });
-    mockProcessEnv({ GOOGLE_LOCATION: undefined });
+    restoreImageEnv = mockGoogleImageEnv();
 
     mockLoadCredentials.mockImplementation((creds) => {
       if (typeof creds === 'object') {
@@ -104,7 +97,7 @@ describe('GeminiImageProvider', () => {
     mockResolveProjectId.mockResolvedValue('test-project');
   });
 
-  afterEach(createGoogleImageEnvCleanup());
+  afterEach(() => restoreImageEnv());
 
   describe('API key preflight', () => {
     let restoreEnv: () => void;
@@ -326,7 +319,7 @@ describe('GeminiImageProvider', () => {
         projectId: 'test-project',
       });
       const provider = new GeminiImageProvider('gemini-nano-banana-2.1', {
-        config: { projectId: 'test-project', region: 'us-central1', imageSize: '2K' },
+        config: { projectId: 'test-project', region: 'global', imageSize: '2K' },
       });
       expect((await provider.callApi('Draw a panorama')).error).toBeUndefined();
       expect(client.request).toHaveBeenCalledWith(
@@ -1174,6 +1167,59 @@ describe('GeminiImageProvider', () => {
       );
     });
 
+    it.each([
+      { region: 'us', env: undefined, location: 'us' },
+      { region: undefined, env: { GOOGLE_CLOUD_LOCATION: 'eu' }, location: 'eu' },
+      { region: 'global', env: { VERTEX_REGION: 'us' }, location: 'global' },
+    ])(
+      'routes and prices Flash Image at the effective $location location',
+      async ({ region, env, location }) => {
+        const provider = new GeminiImageProvider('gemini-3.1-flash-image', {
+          config: { projectId: 'test-project', region, imageSize: '2K' },
+          env,
+        });
+        const client = {
+          request: vi.fn().mockResolvedValue({
+            data: {
+              ...createMockImageData(),
+              usageMetadata: {
+                promptTokenCount: 100,
+                cachedContentTokenCount: 10,
+                candidatesTokensDetails: [{ modality: 'TEXT', tokenCount: 10 }],
+                thoughtsTokenCount: 5,
+              },
+            },
+          }),
+        };
+        mockGetGoogleClient.mockResolvedValue({ client: client as any, projectId: 'test-project' });
+        const result = await provider.callApi('Draw a sunrise');
+        const host =
+          location === 'global'
+            ? 'aiplatform.googleapis.com'
+            : `aiplatform.${location}.rep.googleapis.com`;
+        expect(client.request).toHaveBeenCalledWith(
+          expect.objectContaining({
+            url: `https://${host}/v1/projects/test-project/locations/${location}/publishers/google/models/gemini-3.1-flash-image:generateContent`,
+          }),
+        );
+        expect(result.cost).toBeCloseTo(
+          ((1680 * 60 + 90 * 0.5 + 10 * 0.05 + 15 * 3) * (location === 'global' ? 1 : 1.1)) / 1e6,
+          12,
+        );
+      },
+    );
+
+    it('rejects an unsupported Flash Image location before requesting credentials', async () => {
+      const provider = new GeminiImageProvider('gemini-3.1-flash-image', {
+        config: { projectId: 'test-project', region: 'us-central1' },
+      });
+      await expect(provider.callApi('Draw a sunrise')).resolves.toEqual({
+        error:
+          'Unsupported Vertex location "us-central1" for gemini-3.1-flash-image. Use global, us, or eu.',
+      });
+      expect(mockGetGoogleClient).not.toHaveBeenCalled();
+    });
+
     it('should use global endpoint with v1 for gemini-3.1-flash-image-preview', async () => {
       const provider = new GeminiImageProvider('gemini-3.1-flash-image-preview', {
         config: {
@@ -1204,12 +1250,24 @@ describe('GeminiImageProvider', () => {
       );
     });
 
-    it('should use global endpoint with v1 for gemini-3.1-flash-lite-image', async () => {
+    it.each(['gemini-nano-banana-2.1', 'gemini-3-pro-image', 'gemini-3.1-flash-lite-image'])(
+      'rejects an explicit EU location for global-only %s before requesting credentials',
+      async (model) => {
+        const provider = new GeminiImageProvider(model, {
+          config: { projectId: 'test-project', region: 'eu' },
+        });
+        await expect(provider.callApi('Draw a sunrise')).resolves.toEqual({
+          error: `Unsupported Vertex location "eu" for ${model}. Use global.`,
+        });
+        expect(mockGetGoogleClient).not.toHaveBeenCalled();
+        expect(mockFetchWithCache).not.toHaveBeenCalled();
+      },
+    );
+
+    it('uses global for Flash-Lite Image with a regional environment default', async () => {
       const provider = new GeminiImageProvider('gemini-3.1-flash-lite-image', {
-        config: {
-          projectId: 'test-project',
-          region: 'us-central1',
-        },
+        config: { projectId: 'test-project' },
+        env: { GOOGLE_CLOUD_LOCATION: 'us-central1' },
       });
 
       const mockClient = createMockVertexClient();
@@ -1288,7 +1346,7 @@ describe('GeminiImageProvider', () => {
         aspectRatio: '16:9',
         imageSize: '2K',
       });
-      expect(result.cost).toBe(0.101);
+      expect(result.cost).toBe(0.1008);
     });
 
     it('should pass imageSize config for gemini-3.1-flash-image-preview', async () => {
@@ -1597,7 +1655,7 @@ describe('GeminiImageProvider', () => {
 
       const result = await provider.callApi('Test prompt');
 
-      expect(result.cost).toBe(0.067);
+      expect(result.cost).toBe(0.0672);
     });
 
     it('should return correct cost for gemini-3.1-flash-lite-image (Nano Banana 2 Lite)', async () => {
@@ -1617,7 +1675,7 @@ describe('GeminiImageProvider', () => {
 
       const result = await provider.callApi('Test prompt');
 
-      expect(result.cost).toBe(0.067);
+      expect(result.cost).toBe(0.0672);
     });
 
     it('should return correct cost for gemini-3-pro-image (GA Nano Banana Pro)', async () => {
@@ -1631,10 +1689,10 @@ describe('GeminiImageProvider', () => {
     });
 
     it.each([
-      { model: 'gemini-3.1-flash-image', imageSize: '512px', expected: 0.045 },
-      { model: 'gemini-3.1-flash-image', imageSize: '1K', expected: 0.067 },
-      { model: 'gemini-3.1-flash-image', imageSize: '2K', expected: 0.101 },
-      { model: 'gemini-3.1-flash-image', imageSize: '4K', expected: 0.151 },
+      { model: 'gemini-3.1-flash-image', imageSize: '512px', expected: 0.04482 },
+      { model: 'gemini-3.1-flash-image', imageSize: '1K', expected: 0.0672 },
+      { model: 'gemini-3.1-flash-image', imageSize: '2K', expected: 0.1008 },
+      { model: 'gemini-3.1-flash-image', imageSize: '4K', expected: 0.1512 },
       { model: 'gemini-3-pro-image', imageSize: '2K', expected: 0.134 },
       { model: 'gemini-3-pro-image', imageSize: '4K', expected: 0.24 },
     ] as const)(
@@ -1657,7 +1715,7 @@ describe('GeminiImageProvider', () => {
 
       const result = await provider.callApi('Test prompt');
 
-      expect(result.cost).toBe(0.067);
+      expect(result.cost).toBe(0.0672);
     });
 
     it('preserves the reported estimate on cached responses', async () => {
@@ -1676,7 +1734,7 @@ describe('GeminiImageProvider', () => {
       const result = await provider.callApi('Test prompt');
 
       expect(result.cached).toBe(true);
-      expect(result.cost).toBe(0.067);
+      expect(result.cost).toBe(0.0672);
       expect(result.tokenUsage?.numRequests).toBe(0);
     });
 
@@ -1727,7 +1785,7 @@ describe('GeminiImageProvider', () => {
 
       const result = await provider.callApi('Test prompt');
 
-      expect(result.cost).toBe(0.151);
+      expect(result.cost).toBe(0.1512);
     });
 
     it('should not bill thought images as final images', async () => {
@@ -1756,7 +1814,7 @@ describe('GeminiImageProvider', () => {
 
       expect(result.images).toHaveLength(1);
       expect(result.images![0].data).toBe('data:image/png;base64,finalimage');
-      expect(result.cost).toBe(0.067);
+      expect(result.cost).toBe(0.0672);
     });
   });
 
