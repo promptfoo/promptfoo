@@ -44,7 +44,6 @@ export class ElevenLabsAgentsProvider implements ApiProvider {
   private cleanupPromise?: Promise<void>;
   private readonly resource = { shutdown: () => this.cleanup() };
   private creationWaiters = 0;
-  private initPromise: Promise<void> | null = null;
 
   constructor(
     modelName: string,
@@ -79,9 +78,6 @@ export class ElevenLabsAgentsProvider implements ApiProvider {
     if (id) {
       this.id = () => id;
     }
-
-    // Preserve the initial asynchronous readiness boundary.
-    this.initPromise = Promise.resolve();
   }
 
   id(): string {
@@ -112,12 +108,6 @@ export class ElevenLabsAgentsProvider implements ApiProvider {
     const signal = options?.abortSignal
       ? AbortSignal.any([this.operationController.signal, options.abortSignal])
       : this.operationController.signal;
-
-    // Wait for initialization
-    if (this.initPromise != null) {
-      await this.initPromise;
-      this.initPromise = null;
-    }
 
     const startTime = Date.now();
 
