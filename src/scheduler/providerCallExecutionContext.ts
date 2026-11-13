@@ -19,6 +19,12 @@ export interface ProviderCallExecutionContext {
   abortSignal?: AbortSignal;
   providerCallQueue?: ProviderCallQueue;
   rateLimitRegistry?: RateLimitRegistryRef;
+  /** Provider whose evaluator-owned slot is active for this call. */
+  rateLimitProvider?: ApiProvider;
+  /** A child scheduler owns retries; the parent must not replay the whole operation. */
+  onNestedScheduledCall?: () => void;
+  /** Preserve completed target work if a CLI pause interrupts its enclosing strategy. */
+  onTargetResponse?: (prompt: string, response: ProviderResponse) => void;
 }
 
 interface TracedProviderCallOptions {

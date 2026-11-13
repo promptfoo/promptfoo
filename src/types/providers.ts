@@ -68,10 +68,11 @@ interface AtomicTestCase {
   metadata?: Record<string, any>;
   options?: Record<string, any>;
 }
-export interface ProviderOptions {
+// Keep the legacy default while allowing adapters and callers to select a checked config type.
+export interface ProviderOptions<TConfig = any> {
   id?: ProviderId;
   label?: ProviderLabel;
-  config?: any;
+  config?: TConfig;
   prompts?: string[];
   transform?: string | TransformFunction;
   delay?: number;
@@ -120,6 +121,15 @@ export interface CallApiOptionsParams {
    * Signal that can be used to abort the request
    */
   abortSignal?: AbortSignal;
+  /**
+   * @internal Notify the scheduler before cancellable post-processing or a
+   * selected target-fetch backoff. Backoff observations retain their original
+   * quota deadline even when a coalesced consumer joins later.
+   */
+  onResponseHeaders?: (
+    headers: Record<string, string>,
+    backoff?: { headers: Record<string, string>; status: number; resetAt: number },
+  ) => void;
 }
 
 export interface ProviderCleanupContext {
@@ -151,6 +161,8 @@ export interface ApiProvider extends MinimalApiProvider {
   getAudioInputFormat?: () => 'openai' | 'google' | undefined;
   inputs?: Inputs;
   label?: ProviderLabel;
+  /** Effective prompt selectors after provider configuration has been resolved. */
+  prompts?: string[];
   transform?: string | TransformFunction;
   toJSON?: () => any;
   /**

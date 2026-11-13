@@ -1,4 +1,8 @@
-import { getEnvOverridesProvider } from './envOverrides';
+import {
+  getEnvOverridesProvider,
+  getExplicitProviderEnv,
+  getProviderEnvOverrides,
+} from './envOverrides';
 import { loadEnvFiles } from './util/envFile';
 
 import type { EnvOverrides } from './types/env';
@@ -491,10 +495,28 @@ type EnvVars = {
 // Allow string access to any key for environment variables not explicitly listed
 export type EnvVarKey = keyof EnvVars;
 
+/** Read explicit, registered, then retained provider values without consulting process.env. */
+export function getProviderEnvString(
+  env: EnvOverrides | undefined,
+  key: EnvVarKey,
+): string | undefined {
+  for (const layer of [getExplicitProviderEnv(env), getEnvOverrides('provider'), env]) {
+    if (layer && Object.prototype.hasOwnProperty.call(layer, key)) {
+      const value = layer[key as keyof EnvOverrides];
+      if (value !== undefined) {
+        return String(value);
+      }
+    }
+  }
+  return undefined;
+}
+
 /** Reads one config layer without mixing in process.env; a missing or failed provider is unset. */
-export function getEnvOverrides(layer: 'suite' | 'file' = 'suite'): EnvOverrides | undefined {
+export function getEnvOverrides(
+  layer: 'suite' | 'file' | 'provider' = 'suite',
+): EnvOverrides | undefined {
   try {
-    return getEnvOverridesProvider()?.(layer);
+    return layer === 'provider' ? getProviderEnvOverrides() : getEnvOverridesProvider()?.(layer);
   } catch {
     // All environment reads must still fall back normally when registration fails.
     return undefined;
@@ -521,9 +543,9 @@ export function getProcessEnv(): NodeJS.ProcessEnv {
 export function getEnvString(key: EnvVarKey): string | undefined;
 export function getEnvString(key: EnvVarKey, defaultValue: string): string;
 export function getEnvString(key: EnvVarKey, defaultValue?: string): string | undefined {
-  const envOverrides = getEnvOverrides();
-  if (envOverrides) {
-    const envValue = envOverrides[key as string];
+  // Keep provider values out of the template and subprocess environment layers.
+  for (const layer of ['provider', 'suite'] as const) {
+    const envValue = getEnvOverrides(layer)?.[key as string];
     if (envValue !== undefined) {
       return String(envValue);
     }
@@ -663,4 +685,12 @@ export function isCI() {
  */
 export function isNonInteractive() {
   return isCI() || !process.stdin.isTTY || !process.stdout.isTTY;
+}
+
+export function parseEnvFloat(value: string | undefined): number | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  const parsed = Number.parseFloat(value);
+  return Number.isNaN(parsed) ? undefined : parsed;
 }

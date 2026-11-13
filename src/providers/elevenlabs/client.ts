@@ -61,12 +61,18 @@ export class ElevenLabsClient {
 
     let lastError: Error | null = null;
 
-    const { headers: optionsHeaders, allowRetriesForNonIdempotent, ...restOptions } = options || {};
+    const {
+      headers: optionsHeaders,
+      signal: externalSignal,
+      allowRetriesForNonIdempotent,
+      ...restOptions
+    } = options || {};
     const headers = toPlainHeaders(optionsHeaders);
     const hasIdempotencyKey = 'idempotency-key' in headers;
     const effectiveRetries = allowRetriesForNonIdempotent || hasIdempotencyKey ? this.retries : 0;
 
     for (let attempt = 0; attempt <= effectiveRetries; attempt++) {
+      externalSignal?.throwIfAborted();
       try {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), this.timeout);
@@ -88,7 +94,9 @@ export class ElevenLabsClient {
             method: 'POST',
             headers,
             body: isFormData ? body : JSON.stringify(body),
-            signal: controller.signal,
+            signal: externalSignal
+              ? AbortSignal.any([controller.signal, externalSignal])
+              : controller.signal,
             ...restOptions,
           });
         } finally {
@@ -119,6 +127,7 @@ export class ElevenLabsClient {
         }
       } catch (error) {
         lastError = error as Error;
+        externalSignal?.throwIfAborted();
 
         // Don't retry on authentication errors
         if (error instanceof ElevenLabsAuthError) {
