@@ -3,7 +3,65 @@ import invariant from '../util/invariant';
 import { getActualPrompt } from '../util/providerResponse';
 import { getTableCellMedia, getTableCellText } from './evalTableCells';
 
-import type { EvaluateTable, EvaluateTableRow, ResultsFile } from '../types/index';
+import type { EvaluateResult, EvaluateTable, EvaluateTableRow, ResultsFile } from '../types/index';
+
+/** Build display-only variables without changing stored evaluation results. */
+export function getDisplayVars(result: Pick<EvaluateResult, 'vars' | 'response' | 'metadata'>) {
+  let displayVars = result.vars ? { ...result.vars } : undefined;
+
+  // Prefer the provider prompt; older results store it in metadata.
+  const actualPrompt =
+    getActualPrompt(result.response) || (result.metadata?.redteamFinalPrompt as string);
+
+  if (displayVars && actualPrompt) {
+    const varKeys = Object.keys(displayVars);
+    if (varKeys.length === 1 && varKeys[0] !== 'harmCategory') {
+      displayVars[varKeys[0]] = actualPrompt;
+    } else if (varKeys.length > 1) {
+      // Config is unavailable here; preserve the legacy prompt-key priority.
+      const targetKeys = ['prompt', 'query', 'question'];
+      const keyToUpdate = targetKeys.find((key) => displayVars?.[key]);
+      if (keyToUpdate) {
+        displayVars[keyToUpdate] = actualPrompt;
+      }
+    }
+  }
+
+  // Session metadata supplies display values for single and multi-turn runs.
+  if (!displayVars?.sessionId) {
+    const metadataSessionIds = result.metadata?.sessionIds;
+    if (Array.isArray(metadataSessionIds) && metadataSessionIds.length > 0) {
+      displayVars ??= {};
+      displayVars.sessionId = metadataSessionIds
+        .filter((id) => id != null && id !== '')
+        .map(String)
+        .join('\n');
+    } else if (result.metadata?.sessionId) {
+      displayVars ??= {};
+      displayVars.sessionId = result.metadata.sessionId;
+    }
+  }
+
+  // Runtime transforms can add variables absent from the test case.
+  const transformDisplayVars = result.response?.metadata?.transformDisplayVars as
+    | Record<string, string>
+    | undefined;
+  if (transformDisplayVars) {
+    displayVars ??= {};
+    for (const [key, value] of Object.entries(transformDisplayVars)) {
+      // Preserve existing values, including empty strings, zero, and false.
+      if (!(key in displayVars)) {
+        displayVars[key] = value;
+      } else if (displayVars[key] !== value) {
+        logger.debug(
+          `[convertResultsToTable] transformDisplayVars key '${key}' collides with result.vars; preserving original value`,
+        );
+      }
+    }
+  }
+
+  return displayVars;
+}
 
 /** Convert version 4+ results to display rows and ordered variable columns. */
 export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
@@ -30,11 +88,6 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
 
   const rowMap: Record<number, EvaluateTableRow> = {};
   for (const result of results.results) {
-    // vars
-    for (const varName of Object.keys(result.vars || {})) {
-      varsForHeader.add(varName);
-    }
-
     // row.vars is reassigned later from `orderedVars`; initialize empty.
     const row = rowMap[result.testIdx] || {
       description: result.description || undefined,
@@ -43,75 +96,20 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
       test: result.testCase,
     };
 
-    // Get the actual prompt from response.prompt (provider-reported) or legacy redteamFinalPrompt
-    // Check both result.response.metadata and result.metadata for legacy compatibility
-    const actualPrompt =
-      getActualPrompt(result.response) || (result.metadata?.redteamFinalPrompt as string);
-
-    if (result.vars && actualPrompt) {
-      const varKeys = Object.keys(result.vars);
-      if (varKeys.length === 1 && varKeys[0] !== 'harmCategory') {
-        result.vars[varKeys[0]] = actualPrompt;
-      } else if (varKeys.length > 1) {
-        // The injection variable is unavailable here; use the first populated prompt field.
-        const targetKeys = ['prompt', 'query', 'question'];
-        const keyToUpdate = targetKeys.find((key) => result.vars[key]);
-        if (keyToUpdate) {
-          result.vars[keyToUpdate] = actualPrompt;
-        }
-      }
+    const displayVars = getDisplayVars(result);
+    for (const varName of Object.keys(displayVars || {})) {
+      varsForHeader.add(varName);
     }
 
-    // Copy sessionId from metadata to vars for display if not already present
-    // Multi-turn strategies (IterativeMeta, Crescendo, etc.) store multiple sessionIds in metadata.sessionIds array
-    // Single-turn strategies store a single sessionId in metadata.sessionId
-    if (!result.vars?.sessionId) {
-      const metadataSessionIds = result.metadata?.sessionIds;
-      if (Array.isArray(metadataSessionIds) && metadataSessionIds.length > 0) {
-        result.vars = result.vars || {};
-        result.vars.sessionId = metadataSessionIds
-          .filter((id) => id != null && id !== '')
-          .map(String)
-          .join('\n');
-        varsForHeader.add('sessionId');
-      } else if (result.metadata?.sessionId) {
-        result.vars = result.vars || {};
-        result.vars.sessionId = result.metadata.sessionId;
-        varsForHeader.add('sessionId');
-      }
-    }
-
-    // Copy transformDisplayVars from response metadata to vars for display
-    // This handles layer mode where embeddedInjection is set at runtime, not in test case vars
-    const transformDisplayVars = result.response?.metadata?.transformDisplayVars as
-      | Record<string, string>
-      | undefined;
-    if (transformDisplayVars) {
-      result.vars = result.vars || {};
-      for (const [key, value] of Object.entries(transformDisplayVars)) {
-        // Use `key in` so a legitimate falsy value (empty string, 0, false)
-        // is not silently overwritten by the transform display value.
-        if (!(key in result.vars)) {
-          result.vars[key] = value;
-          varsForHeader.add(key);
-        } else if (result.vars[key] !== value) {
-          // Leave a breadcrumb for users debugging a "missing" display var.
-          logger.debug(
-            `[convertResultsToTable] transformDisplayVars key '${key}' collides with result.vars; preserving original value`,
-          );
-        }
-      }
-    }
-
-    varValuesForRow.set(result.testIdx, result.vars as Record<string, string>);
+    varValuesForRow.set(result.testIdx, displayVars as Record<string, string>);
     rowMap[result.testIdx] = row;
 
     // format text
     const resultText = getTableCellText(result);
 
     row.outputs[result.promptIdx] = {
-      id: result.id || `${result.testIdx}-${result.promptIdx}`,
       ...result,
+      id: result.id || `${result.testIdx}-${result.promptIdx}`,
       text: resultText || '',
       prompt: result.prompt.raw,
       provider: result.provider?.label || result.provider?.id || 'unknown provider',

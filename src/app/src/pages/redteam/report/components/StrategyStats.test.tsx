@@ -655,6 +655,33 @@ describe('StrategyStats', () => {
   });
 
   describe('getPromptDisplayString', () => {
+    it('renders multimodal chat content as text', async () => {
+      const user = userEvent.setup();
+      const prompt = JSON.stringify([
+        { role: 'user', content: [{ type: 'text', text: 'owned multimodal attack' }] },
+      ]);
+      render(
+        <StrategyStats
+          strategyStats={strategyStats}
+          failuresByPlugin={{
+            'plugin-C': [
+              {
+                prompt,
+                output: 'safe output',
+                metadata: { strategyId: 'prompt-injection' },
+                result: { metadata: { pluginId: 'plugin-C' } } as unknown as EvaluateResult,
+              },
+            ],
+          }}
+          passesByPlugin={{}}
+          plugins={[]}
+        />,
+      );
+      await openStrategyDrawer('prompt-injection');
+      await user.click(await screen.findByRole('tab', { name: /Successful Attacks/ }));
+      expect(screen.getByText(prompt, { exact: true })).toBeInTheDocument();
+    });
+
     it('should correctly parse and display JSON array prompts with lastPrompt.content', async () => {
       const user = userEvent.setup();
       const testPrompt = JSON.stringify([
