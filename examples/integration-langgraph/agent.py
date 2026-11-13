@@ -1,12 +1,8 @@
 import asyncio
-import os
 
 from langchain_openai import ChatOpenAI
 from langgraph.graph import StateGraph
 from pydantic import BaseModel
-
-# Load the OpenAI API key from environment variable
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 
 # Define the data structure (state) passed between nodes in the graph
@@ -17,9 +13,9 @@ class ResearchState(BaseModel):
 
 
 # Function to create and return the research agent graph
-def get_research_agent(model="gpt-4o"):
+def get_research_agent(model="gpt-4o", base_url=None):
     # Initialize the OpenAI LLM with the specified model and API key
-    llm = ChatOpenAI(model=model, api_key=OPENAI_API_KEY)
+    llm = ChatOpenAI(model=model, base_url=base_url)
 
     # Create a stateful graph with ResearchState as the shared state type
     graph = StateGraph(ResearchState)
@@ -35,7 +31,7 @@ def get_research_agent(model="gpt-4o"):
         prompt = f"Summarize the following:\n{state.raw_info}"
         response = llm.invoke(prompt)  # Call the LLM to get the summary
         return ResearchState(
-            query=state.query, raw_info=state.raw_info, summary=response.content
+            query=state.query, raw_info=state.raw_info, summary=response.text
         )
 
     # Node 3: Format the final summary for output
@@ -63,9 +59,9 @@ def get_research_agent(model="gpt-4o"):
 
 
 # Function to run the research agent with a given query prompt
-def run_research_agent(prompt):
+def run_research_agent(prompt, model="gpt-4o", base_url=None):
     # Get the compiled graph application
-    app = get_research_agent()
+    app = get_research_agent(model=model, base_url=base_url)
     # Run the asynchronous invocation and get the result
     result = asyncio.run(app.ainvoke(ResearchState(query=prompt)))
     return result

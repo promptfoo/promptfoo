@@ -71,7 +71,7 @@ providers:
   - id: anthropic:claude-agent-sdk
     label: review-standards-v1
     config:
-      model: claude-sonnet-4-6
+      model: claude-sonnet-5
       working_dir: ./fixtures/v1
       setting_sources: ['project']
       skills: ['review-standards']
@@ -81,7 +81,7 @@ providers:
   - id: anthropic:claude-agent-sdk
     label: review-standards-v2
     config:
-      model: claude-sonnet-4-6
+      model: claude-sonnet-5
       working_dir: ./fixtures/v2
       setting_sources: ['project']
       skills: ['review-standards']
@@ -282,7 +282,7 @@ providers:
     label: review-standards-v1
     config:
       provider_id: anthropic
-      model: claude-sonnet-4-20250514
+      model: claude-sonnet-5
       working_dir: ./fixtures/v1
       tools:
         read: true
@@ -300,7 +300,7 @@ providers:
     label: review-standards-v2
     config:
       provider_id: anthropic
-      model: claude-sonnet-4-20250514
+      model: claude-sonnet-5
       working_dir: ./fixtures/v2
       tools:
         read: true

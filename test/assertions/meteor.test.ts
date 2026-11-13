@@ -1,167 +1,29 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeAll, describe, expect, it, vi } from 'vitest';
+import { handleMeteorAssertion } from '../../src/assertions/meteor';
 
-import type { handleMeteorAssertion as originalHandleMeteorAssertion } from '../../src/assertions/meteor';
-import type { AssertionParams, GradingResult } from '../../src/types/index';
+const createUnrelatedTextParams = () => ({
+  assertion: { type: 'meteor', value: 'The cat sat on the mat' },
+  renderedValue: 'The cat sat on the mat',
+  outputString: 'The dog ran in the park',
+  inverse: false,
+});
 
-const mockHandleMeteorAssertion = async (params: AssertionParams): Promise<GradingResult> => {
-  const { assertion, renderedValue, outputString, inverse } = params;
-
-  if (
-    !outputString ||
-    (Array.isArray(renderedValue) && renderedValue.length === 0) ||
-    (!Array.isArray(renderedValue) && !renderedValue)
-  ) {
-    throw new Error('Invalid inputs');
-  }
-
-  const threshold = (assertion as any).threshold ?? 0.5;
-
-  let score = 0;
-  const references = Array.isArray(renderedValue) ? renderedValue : [renderedValue];
-
-  if (
-    outputString.includes(
-      'It is a guide to action that ensures the military will forever heed Party commands',
-    ) ||
-    (typeof renderedValue === 'string' &&
-      renderedValue.includes(
-        'It is a guide to action which ensures that the military always obeys the commands of the party',
-      ))
-  ) {
-    score = 0.7;
-    return {
-      pass: true,
-      score: inverse ? 1 - score : score,
-      reason: 'METEOR assertion passed',
-      assertion,
-    };
-  }
-
-  if (
-    (assertion as any).alpha === 0.85 &&
-    (assertion as any).beta === 2.0 &&
-    (assertion as any).gamma === 0.4 &&
-    outputString === 'The cat is sitting on the mat'
-  ) {
-    score = 0.76;
-    return {
-      pass: true,
-      score: inverse ? 1 - score : score,
-      reason: 'METEOR assertion passed',
-      assertion,
-    };
-  }
-
-  for (const reference of references) {
-    if (
-      reference === outputString ||
-      reference === outputString + '.' ||
-      outputString === reference + '.'
-    ) {
-      score = 0.99;
-      break;
+vi.mock('natural', () => ({
+  PorterStemmer: { stem: (word: string) => word.replace(/s$/, '') },
+  WordNet: class {
+    lookup(word: string, callback: (records: { synonyms: string[] }[]) => void) {
+      const synonyms: Record<string, string[]> = {
+        cat: ['feline'],
+        mat: ['rug'],
+        sat: ['sitting'],
+      };
+      callback([{ synonyms: synonyms[word] || [] }]);
     }
-  }
-
-  if (score === 0) {
-    for (const reference of references) {
-      if (
-        typeof reference === 'string' &&
-        typeof outputString === 'string' &&
-        reference.toLowerCase() === outputString.toLowerCase()
-      ) {
-        score = 0.99;
-        break;
-      }
-    }
-  }
-
-  if (
-    outputString === 'The cat is sitting on the mat' &&
-    (renderedValue === 'The cat sat on the mat' ||
-      (Array.isArray(renderedValue) && renderedValue.includes('The cat sat on the mat')))
-  ) {
-    score = 0.7;
-  }
-
-  if (
-    outputString === 'The cat is sitting on the mat' &&
-    (renderedValue === 'The cats are sitting on the mats' ||
-      (Array.isArray(renderedValue) && renderedValue.includes('The cats are sitting on the mats')))
-  ) {
-    score = 0.6;
-  }
-
-  if (
-    outputString === 'The cat sat on the mat' &&
-    (renderedValue === 'The feline sat on the rug' ||
-      (Array.isArray(renderedValue) && renderedValue.includes('The feline sat on the rug')))
-  ) {
-    score = 0.71;
-  }
-
-  if (score === 0) {
-    const similarPairs = [
-      [
-        'It is a guide to action that ensures that the military will forever heed Party commands',
-        'It is a guide to action which ensures that the military always obeys the commands of the party',
-      ],
-      ['The cat sat on the mat', 'The cat is sitting on the mat'],
-      ['The cat was sitting on the mat.', 'The cat sat on the mat.'],
-      ['The feline sat on the rug', 'The cat sat on the mat'],
-    ];
-
-    for (const reference of references) {
-      if (typeof reference !== 'string') {
-        continue;
-      }
-
-      for (const [str1, str2] of similarPairs) {
-        if (
-          (reference.includes(str1) && outputString.includes(str2)) ||
-          (reference.includes(str2) && outputString.includes(str1))
-        ) {
-          score = 0.7;
-          break;
-        }
-      }
-      if (score > 0) {
-        break;
-      }
-    }
-  }
-
-  if (
-    score === 0 &&
-    Array.isArray(renderedValue) &&
-    renderedValue.length > 2 &&
-    outputString.includes('military') &&
-    outputString.includes('commands of the party')
-  ) {
-    score = 0.7;
-  }
-
-  if (score === 0 && outputString.includes('dog ran in the park')) {
-    score = 0.3;
-  }
-
-  const pass = inverse ? score < threshold : score >= threshold;
-
-  return {
-    pass,
-    score: inverse ? 1 - score : score,
-    reason: pass
-      ? 'METEOR assertion passed'
-      : `METEOR score ${score.toFixed(4)} did not meet threshold ${threshold}`,
-    assertion,
-  };
-};
-
-vi.mock('../../src/assertions/meteor', () => ({
-  handleMeteorAssertion: mockHandleMeteorAssertion,
+  },
 }));
 
-const handleMeteorAssertion = mockHandleMeteorAssertion as typeof originalHandleMeteorAssertion;
+// Prime the lazy dependency once: concurrent imports can bypass Vitest's manual mock.
+beforeAll(() => handleMeteorAssertion(createUnrelatedTextParams() as any));
 
 interface MeteorAssertion {
   type: string;
@@ -240,12 +102,7 @@ describe('METEOR score calculation', () => {
     });
 
     it('should handle completely different sentences', async () => {
-      const params: TestParams = {
-        assertion: { type: 'meteor', value: 'The cat sat on the mat' },
-        renderedValue: 'The cat sat on the mat',
-        outputString: 'The dog ran in the park',
-        inverse: false,
-      };
+      const params: TestParams = createUnrelatedTextParams();
 
       const result = await handleMeteorAssertion(params as any);
       expect(result.pass).toBe(false);
@@ -347,12 +204,7 @@ describe('METEOR score calculation', () => {
     });
 
     it('should use default threshold of 0.5', async () => {
-      const params: TestParams = {
-        assertion: { type: 'meteor', value: 'The cat sat on the mat' },
-        renderedValue: 'The cat sat on the mat',
-        outputString: 'The dog ran in the park',
-        inverse: false,
-      };
+      const params: TestParams = createUnrelatedTextParams();
 
       const result = await handleMeteorAssertion(params as any);
       expect(result.pass).toBe(false);

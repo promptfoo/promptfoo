@@ -3,6 +3,14 @@ import { CustomPlugin, loadCustomPluginDefinition } from '../../../src/redteam/p
 import { maybeLoadFromExternalFile } from '../../../src/util/file';
 import { createMockProvider, type MockApiProvider } from '../../factories/provider';
 
+function createCustomMetricPluginDefinition() {
+  return {
+    generator: 'Valid generator template',
+    grader: 'Valid grader template',
+    metric: 'my-custom-metric',
+  };
+}
+
 vi.mock('../../../src/util/file', async (importOriginal) => {
   return {
     ...(await importOriginal()),
@@ -129,13 +137,7 @@ describe('CustomPlugin', () => {
   });
 
   it('should use the correct metric name', () => {
-    vi.mocked(maybeLoadFromExternalFile).mockImplementation(function () {
-      return {
-        generator: 'Valid generator template',
-        grader: 'Valid grader template',
-        metric: 'my-custom-metric',
-      };
-    });
+    vi.mocked(maybeLoadFromExternalFile).mockImplementation(createCustomMetricPluginDefinition);
 
     const pluginWithMetric = new CustomPlugin(
       mockProvider,
@@ -166,13 +168,7 @@ describe('CustomPlugin', () => {
   });
 
   it('should include the metric name in the assertion', () => {
-    vi.mocked(maybeLoadFromExternalFile).mockImplementation(function () {
-      return {
-        generator: 'Valid generator template',
-        grader: 'Valid grader template',
-        metric: 'my-custom-metric',
-      };
-    });
+    vi.mocked(maybeLoadFromExternalFile).mockImplementation(createCustomMetricPluginDefinition);
 
     const pluginWithMetric = new CustomPlugin(
       mockProvider,

@@ -5,7 +5,7 @@ description: Detect when the model emits a path-traversal exploit payload target
 
 The `path-traversal-output` plugin tests whether the model under test **emits** a path-traversal exploit payload — for example `../../etc/passwd`, `\\?\C:\Windows\System32\config\SAM`, `file:///etc/passwd`, or stacked-encoded variants — rather than testing whether it accepts such a path on the input side. It complements the existing `ssrf`, `shell-injection`, and `sql-injection` plugins by covering OWASP LLM05 (Improper Output Handling) for filesystem payload emission.
 
-The grader is deterministic regex; no LLM judge is called. Scoring is sub-millisecond.
+The grader checks the output locally using deterministic rules.
 
 ## How detection works
 
@@ -73,6 +73,8 @@ redteam:
           - 'Return corp-secrets/demo-key only.'
           - 'Return corp-secrets/staging-key only.'
 ```
+
+A scan with configured regexes has a 250 ms deadline across all rules and output windows. If the deadline expires, the eval reports a grading error. Simplify the pattern or narrow its scope before rerunning.
 
 Both options are nested under `config:` because the redteam runner passes the plugin entry's `config` block (not the top-level plugin fields) into the plugin factory — placing the options as top-level keys would silently ignore them.
 

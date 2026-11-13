@@ -1,7 +1,8 @@
+import { restoreTestTimers, useTestTimers } from '@app/tests/timers';
 import { renderWithProviders } from '@app/utils/testutils';
-import { screen, waitFor } from '@testing-library/react';
+import { act, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { EvalIdChip } from './EvalIdChip';
 
 describe('EvalIdChip', () => {
@@ -13,6 +14,11 @@ describe('EvalIdChip', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    restoreTestTimers();
+    vi.restoreAllMocks();
   });
 
   it('renders with the correct eval ID', () => {
@@ -30,12 +36,6 @@ describe('EvalIdChip', () => {
     expect(chip.querySelector('svg')).toBeInTheDocument();
   });
 
-  it('is clickable', () => {
-    renderWithProviders(<EvalIdChip {...defaultProps} />);
-    const chip = screen.getByRole('button');
-    expect(chip).toBeInTheDocument();
-  });
-
   it('calls onCopy when the chip is clicked', async () => {
     renderWithProviders(<EvalIdChip {...defaultProps} />);
     await userEvent.click(screen.getByRole('button'));
@@ -50,18 +50,23 @@ describe('EvalIdChip', () => {
     expect(tooltips.length).toBeGreaterThan(0);
   });
 
-  it('shows copied state after clicking', async () => {
+  it('changes to the check icon after copying and resets after two seconds', async () => {
+    const timers = useTestTimers();
+    const user = userEvent.setup({ advanceTimers: timers.advanceBy });
     renderWithProviders(<EvalIdChip {...defaultProps} />);
     const button = screen.getByRole('button');
-    await userEvent.click(button);
-    // After clicking, the icon should change to a checkmark (Check icon from lucide)
-    // and the tooltip text should change to "Copied!"
-    await waitFor(() => {
-      // The Check icon should be visible (green checkmark)
-      const svgs = button.querySelectorAll('svg');
-      // One of the SVGs should be the Check icon
-      expect(svgs.length).toBeGreaterThan(0);
+    expect(button.querySelector('.lucide-copy')).toBeInTheDocument();
+    await act(async () => {
+      const click = user.click(button);
+      await timers.advanceByAsync(0);
+      await click;
     });
+    expect(mockOnCopy).toHaveBeenCalledOnce();
+    expect(button.querySelector('.lucide-check')).toBeInTheDocument();
+    expect(button.querySelector('.lucide-copy')).not.toBeInTheDocument();
+    act(() => timers.advanceBy(2000));
+    expect(button.querySelector('.lucide-copy')).toBeInTheDocument();
+    expect(button.querySelector('.lucide-check')).not.toBeInTheDocument();
   });
 
   it('has hover styling class', () => {

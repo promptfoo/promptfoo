@@ -13,11 +13,6 @@ export function downloadBlob(blob: Blob, fileName: string) {
   URL.revokeObjectURL(url);
 }
 
-interface UseDownloadOptions {
-  onSuccess?: (fileName: string) => void;
-  onError?: (error: Error) => void;
-}
-
 export const DownloadFormat = {
   CSV: 'csv',
   JSON: 'json',
@@ -27,10 +22,9 @@ export type DownloadFormat = (typeof DownloadFormat)[keyof typeof DownloadFormat
 /**
  * Generic hook for downloading evaluation results
  * @param format The download format (csv or json)
- * @param options Callbacks for success and error events
  * @returns Download function and loading state
  */
-export function useDownloadEval(format: DownloadFormat, options?: UseDownloadOptions) {
+export function useDownloadEval(format: DownloadFormat) {
   const [isLoading, setIsLoading] = useState(false);
   const { showToast } = useToast();
 
@@ -40,21 +34,17 @@ export function useDownloadEval(format: DownloadFormat, options?: UseDownloadOpt
       try {
         const blob =
           format === 'csv' ? await downloadResultsCsv(evalId) : await downloadResultsJson(evalId);
-        const fileName = `${evalId}.${format}`;
-        downloadBlob(blob, fileName);
+        downloadBlob(blob, `${evalId}.${format}`);
         showToast(`${format.toUpperCase()} downloaded successfully`, 'success');
-        options?.onSuccess?.(fileName);
-        return fileName;
       } catch (error) {
         const err = error as Error;
         showToast(`Failed to download ${format.toUpperCase()}: ${err.message}`, 'error');
-        options?.onError?.(err);
         throw error;
       } finally {
         setIsLoading(false);
       }
     },
-    [format, options, showToast],
+    [format, showToast],
   );
 
   return { download, isLoading };

@@ -86,10 +86,12 @@ export function processPythonFile(
   filePath: string,
   prompt: Partial<Prompt>,
   functionName: string | undefined,
+  labelPath: string = filePath,
 ): Prompt[] {
   const fileContent = fs.readFileSync(filePath, 'utf-8');
   const label =
-    prompt.label ?? (functionName ? `${filePath}:${functionName}` : `${filePath}: ${fileContent}`);
+    prompt.label ??
+    (functionName ? `${labelPath}:${functionName}` : `${labelPath}: ${fileContent}`);
   return [
     {
       raw: fileContent,

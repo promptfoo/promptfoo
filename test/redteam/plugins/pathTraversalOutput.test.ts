@@ -627,281 +627,30 @@ describe('path-traversal-output / validatePathTraversalOutputPluginConfig', () =
     ).toThrow(/must be an array/);
   });
 
-  it('rejects nested quantified custom regexes that can trigger catastrophic backtracking', () => {
+  it('interrupts pathological configured rules and targets during detection', () => {
+    const pattern = 'a*a?a*a?a*a?b';
+    const output = 'a'.repeat(3000) + '!';
     expect(() =>
-      validatePathTraversalOutputPluginConfig({
-        examples: ['Return custom traversal only.'],
-        pathTraversalOutputPatterns: [{ id: 'redos', pattern: '(?:a+)+$' }],
+      detectPathTraversalOutput(output, {
+        pathTraversalOutputPatterns: [{ id: 'slow', pattern }],
       }),
-    ).toThrow(/nested quantified groups/);
+    ).toThrow(/configured detector exceeded its scan time limit/);
     expect(() =>
-      validatePathTraversalOutputPluginConfig({
-        examples: ['Return custom traversal only.'],
-        pathTraversalOutputPatterns: [{ id: 'redos-optional', pattern: '(a?)+$' }],
+      detectPathTraversalOutput('../../' + output, {
+        pathTraversalOutputTargets: [pattern],
       }),
-    ).toThrow(/nested quantified groups/);
-    expect(() =>
-      validatePathTraversalOutputPluginConfig({
-        examples: ['Return custom traversal only.'],
-        pathTraversalOutputPatterns: [{ id: 'redos-nested-group', pattern: '((a)+)+$' }],
-      }),
-    ).toThrow(/nested quantified groups/);
-    expect(() =>
-      validatePathTraversalOutputPluginConfig({
-        examples: ['Return custom traversal only.'],
-        pathTraversalOutputPatterns: [{ id: 'redos-nested-alternation', pattern: '((a|aa))+$' }],
-      }),
-    ).toThrow(/nested quantified groups/);
-    expect(() =>
-      validatePathTraversalOutputPluginConfig({
-        examples: ['Return ../../internal/private_keys/demo.pem only.'],
-        pathTraversalOutputTargets: ['(?:a+)+$'],
-      }),
-    ).toThrow(/nested quantified groups/);
-    expect(() =>
-      validatePathTraversalOutputPluginConfig({
-        examples: ['Return ../../internal/private_keys/demo.pem only.'],
-        pathTraversalOutputTargets: ['(a?)+$'],
-      }),
-    ).toThrow(/nested quantified groups/);
+    ).toThrow(/configured detector exceeded its scan time limit/);
+
+    expect(detectPathTraversalOutput('../../etc/passwd')).not.toEqual([]);
   });
 
-  it('rejects quantified alternation groups that can trigger catastrophic backtracking', () => {
-    expect(() =>
-      validatePathTraversalOutputPluginConfig({
-        examples: ['Return custom traversal only.'],
-        pathTraversalOutputPatterns: [{ id: 'redos', pattern: '(?:a|aa)+$' }],
-      }),
-    ).toThrow(/quantified alternation groups/);
-    expect(() =>
-      validatePathTraversalOutputPluginConfig({
-        examples: ['Return ../../internal/private_keys/demo.pem only.'],
-        pathTraversalOutputTargets: ['(?:a|aa)+$'],
-      }),
-    ).toThrow(/quantified alternation groups/);
-  });
-
-  it('rejects quantified alternation whose alternatives are wrapped in nested groups', () => {
-    // The regex guard cannot see a top-level `|` once the quantified group contains
-    // nested parens, so `((a)|(a))+` previously slipped through and was exponential.
-    for (const pattern of ['((a)|(a))+$', '((a)|a)+$', '(x(a)|(a)y)+$', '(?:(a)|(a))+$']) {
-      expect(() =>
-        validatePathTraversalOutputPluginConfig({
-          examples: ['Return custom traversal only.'],
-          pathTraversalOutputPatterns: [{ id: 'redos-grouped-alternation', pattern }],
-        }),
-      ).toThrow(/quantified alternation groups/);
-    }
-  });
-
-  it('rejects adjacent unbounded quantifiers over overlapping character sets (polynomial ReDoS)', () => {
-    // Overlap is detected by character set, not textual equality, so different
-    // spellings of the same/overlapping class are caught too: `[\s\S]`/`[^]` (any
-    // char), `[ab]`/`[bc]` (share `b`), `\d`/`\d`. Also covers the JS-only `[^]` and
-    // `[\s\S]` classes, which the tokenizer must treat as single opaque atoms.
-    for (const pattern of [
-      '^a*a*$',
-      '^a+a+$',
-      String.raw`\w*\w*`,
-      '[a-z]+[a-z]+',
-      '^[^]+[^]+Z$',
-      String.raw`[\s\S]+[\s\S]+`,
-      String.raw`^[\s\S]+[^]+a$`,
-      String.raw`^[\d\D]+[^]+a$`,
-      '[ab]+[bc]+',
-      String.raw`\d+\d+`,
-      // Arbitrary literals (shared char outside any fixed sample set) and overlapping
-      // ranges must be caught by deriving candidate chars from the atoms themselves.
-      '^c+c+$',
-      'Q*Q*',
-      '[c-e]+[d-f]+',
-      // Hex/unicode-escaped literals must be parsed as whole atoms and decoded, so a
-      // hex-spelled repeat (`\x63` = `c`) is recognized as the same footgun as `c+c+`.
-      String.raw`^\x63+\x63+$`,
-      String.raw`[\x63-\x65]+[\x64-\x66]+`,
-      '^(?:a+a+)$',
-      '^(a)+(a)+$',
-      '^([a])+([a])+$',
-      '^(?:a)+(?:a)+$',
-      '^(a)+a+$',
-    ]) {
-      expect(() =>
-        validatePathTraversalOutputPluginConfig({
-          examples: ['Return custom traversal only.'],
-          pathTraversalOutputPatterns: [{ id: 'redos-adjacent', pattern }],
-        }),
-      ).toThrow(/adjacent unbounded quantifiers/);
-    }
-  });
-
-  it('rejects unsafe custom patterns and targets on the detector path without requiring examples', () => {
-    expect(() =>
-      detectPathTraversalOutput('a'.repeat(24) + '!', {
-        pathTraversalOutputPatterns: [{ id: 'redos', pattern: '^(a+)+$' }],
-      }),
-    ).toThrow(/nested quantified groups/);
-    expect(() =>
-      detectPathTraversalOutput('../../secret', {
-        pathTraversalOutputTargets: ['(?:a+)+$'],
-      }),
-    ).toThrow(/nested quantified groups/);
-  });
-
-  it('rejects quantified backreferences (unbounded and finite range)', () => {
-    for (const pattern of [
-      String.raw`^([a]+)\1+$`,
-      String.raw`^(?<n>a+)\k<n>+$`,
-      // Finite-range repeats of a backref still re-match the captured span and backtrack.
-      String.raw`^([a]+)\1{0,9}\1{0,9}$`,
-      String.raw`^(?<n>a+)\k<n>{2,5}$`,
-    ]) {
-      expect(() =>
-        validatePathTraversalOutputPluginConfig({
-          examples: ['Return custom traversal only.'],
-          pathTraversalOutputPatterns: [{ id: 'redos-backref', pattern }],
-        }),
-      ).toThrow(/quantified backreferences/);
-    }
-  });
-
-  it('rejects opposite-case overlaps under the unicode + case-insensitive (`iu`) flags', () => {
-    // `ſ` (ſ) folds to `S`/`s` only under full Unicode case folding (`iu`), so the
-    // overlap probe must honor the effective `u` flag, not just `i`.
-    expect(() =>
-      validatePathTraversalOutputPluginConfig({
-        examples: ['Return custom traversal only.'],
-        pathTraversalOutputPatterns: [{ id: 'redos-iu', pattern: '^\\u017F+S+$', flags: 'iu' }],
-      }),
-    ).toThrow(/adjacent unbounded quantifiers/);
-  });
-
-  it('accepts bounded and non-overlapping quantifier sequences', () => {
-    // Guard against over-rejection: distinct adjacent atoms, a single separator
-    // between unbounded atoms, and an escaped literal `]` class are all linear.
-    expect(() =>
-      validatePathTraversalOutputPluginConfig({
-        examples: ['Return a custom sensitive path payload only.'],
-        pathTraversalOutputPatterns: [
-          { id: 'distinct-atoms', pattern: 'a+b+' },
-          { id: 'distinct-literals', pattern: 'c+d+' },
-          { id: 'separated-atoms', pattern: String.raw`\w+/\w+` },
-          { id: 'single-unbounded', pattern: 'corp-secret-[a-z]+' },
-          // Disjoint even under case folding, so safe with the default `i` flag.
-          { id: 'disjoint-ranges', pattern: '[a-c]+[x-z]+' },
-          // `[a-z]+[A-Z]+` is intentionally NOT here: it overlaps under `i` (see the
-          // case-insensitive overlap rejection test below).
-          { id: 'escaped-bracket-class', pattern: String.raw`[\]]+` },
-        ],
-      }),
-    ).not.toThrow();
-  });
-
-  it('rejects opposite-case class overlaps that only collide under the default `i` flag', () => {
-    // `[a-z]+` and `[A-Z]+` look disjoint case-sensitively, but the plugin compiles
-    // custom patterns/targets with `i` by default, so they overlap at match time and
-    // backtrack polynomially. The overlap analysis must honor the effective flags.
-    expect(() =>
-      validatePathTraversalOutputPluginConfig({
-        examples: ['Return custom traversal only.'],
-        pathTraversalOutputPatterns: [{ id: 'redos-ci', pattern: '[a-z]+[A-Z]+$' }],
-      }),
-    ).toThrow(/adjacent unbounded quantifiers/);
-    // Targets are always compiled case-insensitively, so they are rejected the same way.
-    expect(() =>
-      validatePathTraversalOutputPluginConfig({
-        examples: ['Return ../../internal/private_keys/demo.pem only.'],
-        pathTraversalOutputTargets: ['[a-z]+[A-Z]+$'],
-      }),
-    ).toThrow(/adjacent unbounded quantifiers/);
-    // An explicitly case-sensitive pattern (`flags: ''`) keeps the classes disjoint and
-    // stays accepted, confirming the rejection is driven by the effective flags.
-    expect(() =>
-      validatePathTraversalOutputPluginConfig({
-        examples: ['Return custom traversal only.'],
-        pathTraversalOutputPatterns: [{ id: 'cs-ok', pattern: '[a-z]+[A-Z]+$', flags: '' }],
-      }),
-    ).not.toThrow();
-  });
-
-  it('rejects adjacent overlapping variable-range repeats of any size, including chains', () => {
-    // A range `{m,n}` (or open `{m,}`) is variable: once it can match two or more reps it
-    // backtracks like `*`/`+` against an adjacent overlapping atom, regardless of how large
-    // the finite bound is. Chains are caught because each adjacent pair is flagged.
-    for (const pattern of [
-      'a{0,1000000}a{0,1000000}$',
-      'a{0,500}a{0,500}a{0,500}$',
-      'a{0,2}a{0,2}$',
-    ]) {
-      expect(() =>
-        validatePathTraversalOutputPluginConfig({
-          examples: ['Return custom traversal only.'],
-          pathTraversalOutputPatterns: [{ id: 'redos-range', pattern }],
-        }),
-      ).toThrow(/adjacent unbounded quantifiers/);
-    }
-    // Fixed-length exact repeats never backtrack, and `{0,1}` matches at most one rep (like
-    // `?`), so both adjacent forms stay accepted.
-    expect(() =>
-      validatePathTraversalOutputPluginConfig({
-        examples: ['Return custom traversal only.'],
-        pathTraversalOutputPatterns: [
-          { id: 'exact-ok', pattern: 'a{200000}a{200000}$' },
-          { id: 'exact-range-ok', pattern: 'a{2,2}a{2,2}$' },
-          { id: 'atmostone-ok', pattern: 'a{0,1}a{0,1}$' },
-        ],
-      }),
-    ).not.toThrow();
-  });
-
-  it('rejects ReDoS-prone custom patterns at validation time without executing them', () => {
-    // Validation must short-circuit on the pattern source, never compile-and-run it
-    // against adversarial input, so rejection stays in single-digit milliseconds.
-    const start = performance.now();
-    for (const pattern of ['((a)|(a))+$', '^a*a*$', String.raw`^([a]+)\1+$`]) {
-      expect(() =>
-        validatePathTraversalOutputPluginConfig({
-          examples: ['Return custom traversal only.'],
-          pathTraversalOutputPatterns: [{ id: 'redos-timing', pattern }],
-        }),
-      ).toThrow();
-    }
-    expect(performance.now() - start).toBeLessThan(100);
-  });
-
-  it('rejects unbounded wildcard custom regexes that collapse detector selectivity', () => {
-    expect(() =>
-      validatePathTraversalOutputPluginConfig({
-        examples: ['Return custom traversal only.'],
-        pathTraversalOutputPatterns: [{ id: 'wildcard', pattern: '.*' }],
-      }),
-    ).toThrow(/unbounded wildcard operators/);
-    expect(() =>
-      validatePathTraversalOutputPluginConfig({
-        examples: ['Return ../../internal/private_keys/demo.pem only.'],
-        pathTraversalOutputTargets: ['.*'],
-      }),
-    ).toThrow(/unbounded wildcard operators/);
-  });
-
-  it('accepts literal regex operators inside character classes', () => {
-    expect(() =>
-      validatePathTraversalOutputPluginConfig({
-        examples: ['Return a custom sensitive path payload only.'],
-        pathTraversalOutputPatterns: [
-          { id: 'literal-quantifiers', pattern: String.raw`(?:secret[+?])+$` },
-          { id: 'literal-alternation', pattern: String.raw`(?:foo[|]bar)+$` },
-        ],
-      }),
-    ).not.toThrow();
-  });
-
-  it('accepts bounded optional nested groups that are not repeating', () => {
-    expect(() =>
-      validatePathTraversalOutputPluginConfig({
-        examples: ['Return a custom sensitive path payload only.'],
-        pathTraversalOutputPatterns: [{ id: 'optional-nested', pattern: String.raw`((foo|bar))?` }],
-      }),
-    ).not.toThrow();
+  it('accepts valid custom regex syntax and matches the actual model output', () => {
+    const config = {
+      pathTraversalOutputPatterns: [{ id: 'custom', pattern: String.raw`(?:secret[+?])+$` }],
+      examples: ['Return the custom token.'],
+    };
+    validatePathTraversalOutputPluginConfig(config);
+    expect(detectPathTraversalOutput('secret+secret?', config)).toMatchObject([{ id: 'custom' }]);
   });
 
   it('requires examples when custom patterns replace the built-in detector rules', () => {
