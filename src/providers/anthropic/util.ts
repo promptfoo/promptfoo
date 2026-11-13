@@ -20,6 +20,12 @@ export function formatLegacyCompletionPrompt(prompt: string): string {
 // Model definitions with cost information
 export const ANTHROPIC_MODELS = [
   // Claude 5 models. These are pinned IDs, not `-latest` aliases.
+  // Fast mode on Fable/Mythos 5.2 ($16/$80) is not encoded here; set `inputCost` and
+  // `outputCost` to track it.
+  ...modelsWithCost(['claude-fable-5-2', 'claude-mythos-5-2'], {
+    input: 8 / 1e6, // $8 / MTok
+    output: 40 / 1e6, // $40 / MTok
+  }),
   ...modelsWithCost(
     ['claude-fable-5-1', 'claude-mythos-5-1', 'claude-fable-5', 'claude-mythos-5'],
     {
@@ -191,6 +197,7 @@ export const ANTHROPIC_SHORTHAND_MODEL_IDS = new Set([
 const CLAUDE_FABLE_MYTHOS_5_PATTERN = /(^|[^a-z0-9])claude-(?:fable|mythos)-5(?![a-z0-9])/i;
 const CLAUDE_MYTHOS_PREVIEW_RE = /(^|[^a-z0-9])claude-mythos-preview(?![a-z0-9])/i;
 const CLAUDE_FABLE_MYTHOS_51_PATTERN = /(^|[^a-z0-9])claude-(?:fable|mythos)-5-1(?![a-z0-9])/i;
+const CLAUDE_FABLE_MYTHOS_52_PATTERN = /(^|[^a-z0-9])claude-(?:fable|mythos)-5-2(?![a-z0-9])/i;
 const CLAUDE_HAIKU_55_PATTERN = /(^|[^a-z0-9])claude-haiku-5-5(?![a-z0-9])/i;
 const CLAUDE_OPUS_55_PATTERN = /(^|[^a-z0-9])claude-opus-5-5(?![a-z0-9])/i;
 // `claude-opus-5-5` must not read as Opus 5: a single-digit `-N` suffix is a point release, not
@@ -224,7 +231,7 @@ interface ClaudeModelFamily {
   samplingParamsDeprecated?: boolean;
   /** Thinking is always on; `thinking: { type: 'disabled' }` is rejected. */
   alwaysOnAdaptiveThinking?: boolean;
-  /** Rejects forced tool use even with adaptive thinking (Fable/Mythos 5.1). */
+  /** Rejects forced tool use even with adaptive thinking (Fable/Mythos 5.1 and 5.2). */
   forcedToolChoiceUnsupported?: boolean;
   /**
    * Omitting `thinking` runs adaptive thinking rather than no thinking, so requests that never
@@ -269,6 +276,19 @@ const CLAUDE_MODEL_FAMILIES: readonly ClaudeModelFamily[] = [
     warningName: 'Claude Mythos Preview',
     samplingParamsDeprecated: true,
     alwaysOnAdaptiveThinking: true,
+  },
+  // `CLAUDE_FABLE_MYTHOS_5_PATTERN` also matches the point releases, so each 5.x row must
+  // precede it: the warning name and cache-read multiplier come from the first matching row.
+  // Fable/Mythos 5.2 keep the 5.1 request rules (verified live): thinking can't be disabled,
+  // sampling params and forced `tool_choice` return 400, and cache reads cost 0.025x input.
+  {
+    match: CLAUDE_FABLE_MYTHOS_52_PATTERN,
+    warningName: 'Claude Fable 5.2 and Claude Mythos 5.2',
+    samplingParamsDeprecated: true,
+    alwaysOnAdaptiveThinking: true,
+    forcedToolChoiceUnsupported: true,
+    regionalPremium: true,
+    cacheReadMultiplier: 0.025,
   },
   {
     match: CLAUDE_FABLE_MYTHOS_51_PATTERN,
@@ -374,7 +394,7 @@ export function isClaudeOpus5Model(modelId: string): boolean {
   return CLAUDE_OPUS_5_PATTERN.test(modelId);
 }
 
-/** Matches the Claude 5 Fable and Mythos model IDs. */
+/** Matches the Claude 5 Fable and Mythos model IDs, including point releases such as 5.2. */
 export function isClaudeFableOrMythos5Model(modelId: string): boolean {
   return CLAUDE_FABLE_MYTHOS_5_PATTERN.test(modelId);
 }
