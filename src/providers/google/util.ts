@@ -16,6 +16,7 @@ import { parseFileUrl } from '../../util/functions/loadFunction';
 import { renderVarsInObject } from '../../util/index';
 import { getAjv } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
+import { resolveProviderApiKey } from '../credentials';
 import { resolveProviderEnv } from '../env';
 import { encodePcmToWav } from '../pcm';
 import {
@@ -282,6 +283,19 @@ export function mergeGoogleRequestTools(
     ...configuredTools,
     ...(Array.isArray(passthroughTools) ? passthroughTools : [passthroughTools]),
   ];
+}
+
+export function getNativeGeminiApiKey(
+  config: { apiKey?: string; apiKeyEnvar?: string },
+  env?: Readonly<Record<string, string | undefined>>,
+): string | undefined {
+  const key = resolveProviderApiKey(config, env, [
+    'GOOGLE_API_KEY',
+    'GEMINI_API_KEY',
+    'PALM_API_KEY',
+    'GOOGLE_GENERATIVE_AI_API_KEY',
+  ]);
+  return key ? getNunjucksEngine().renderString(key, {}) : undefined;
 }
 
 /** Resolve native Gemini endpoints consistently across text and image adapters. */
@@ -1431,7 +1445,7 @@ function isThoughtTextPart(part: Part): part is Part & { text: string } {
   return part.thought === true && typeof part.text === 'string';
 }
 
-export function formatCandidateContents(candidate: Candidate) {
+export function formatCandidateContents(candidate: Candidate, omitThoughtText = false) {
   // Check if the candidate was blocked or stopped for safety reasons
   if (
     candidate.finishReason &&
@@ -1468,7 +1482,7 @@ export function formatCandidateContents(candidate: Candidate) {
     let output = '';
     let is_text = true;
     for (const part of candidate.content.parts) {
-      if (isThoughtTextPart(part)) {
+      if (omitThoughtText && isThoughtTextPart(part)) {
         // Thought summaries are not part of the answer; see formatGeminiThinking.
         continue;
       }
@@ -1501,14 +1515,19 @@ export interface GeminiAnswer {
  * thoughts streamed across chunks can be labelled once.
  */
 export function mergeCandidateContents(answer: GeminiAnswer, candidate: Candidate): GeminiAnswer {
-  const content = formatCandidateContents(candidate);
+  const content = formatCandidateContents(candidate, true);
   const thoughtParts = (candidate.content?.parts ?? []).filter(isThoughtTextPart);
   const thoughts = answer.thoughts + thoughtParts.map((part) => part.text).join('');
-  if (thoughtParts.length > 0 && content === '') {
-    // A chunk holding only thoughts adds nothing to a text answer.
-    return { ...answer, thoughts, thoughtParts: [...(answer.thoughtParts ?? []), ...thoughtParts] };
-  }
-  return { ...answer, output: mergeParts(answer.output, content), thoughts };
+  // Text chunks omit thought parts while multipart chunks retain them. Save omitted parts
+  // in case a later tool call or image changes the output to a part array.
+  const omittedParts =
+    typeof content === 'string' && thoughtParts.length > 0
+      ? [...(answer.thoughtParts ?? []), ...thoughtParts]
+      : answer.thoughtParts;
+  const output = content === '' && thoughtParts.length > 0
+    ? answer.output
+    : mergeParts(answer.output, content);
+  return { output, thoughts, thoughtParts: omittedParts };
 }
 
 /**

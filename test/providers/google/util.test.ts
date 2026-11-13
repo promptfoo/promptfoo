@@ -5586,9 +5586,9 @@ describe('util', () => {
       const thought = { text: 'Let me calculate.', thought: true };
 
       expect(
-        formatCandidateContents({ content: { parts: [thought, { text: '42' }] } } as any),
+        formatCandidateContents({ content: { parts: [thought, { text: '42' }] } } as any, true),
       ).toBe('42');
-      expect(formatCandidateContents({ content: { parts: [thought] } } as any)).toBe('');
+      expect(formatCandidateContents({ content: { parts: [thought] } } as any, true)).toBe('');
     });
 
     it('returns parts with a thought image unchanged', () => {
@@ -5622,6 +5622,20 @@ describe('util', () => {
       );
       expect(formatGeminiThinking(answer, false)).toBe('42');
       expect(formatGeminiThinking({ output: '42', thoughts: '\n\n' }, undefined)).toBe('42');
+    });
+
+    it('retains a mixed text chunk’s thoughts when a later chunk contains a tool call', () => {
+      const thought = { text: 'Look it up.', thought: true };
+      const text = { text: 'Searching.' };
+      const call = { functionCall: { name: 'search', args: {} }, thoughtSignature: 'signature' };
+      const textAnswer = mergeCandidateContents(
+        { output: undefined, thoughts: '' },
+        { content: { parts: [thought, text] } } as any,
+      );
+      const answer = mergeCandidateContents(textAnswer, { content: { parts: [call] } } as any);
+
+      expect(formatGeminiThinking(answer, undefined)).toEqual([thought, text, call]);
+      expect(formatGeminiThinking(answer, false)).toEqual([text, call]);
     });
 
     it('drops thought text from part arrays only when showThinking is false', () => {
