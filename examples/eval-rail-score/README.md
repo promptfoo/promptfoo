@@ -1,6 +1,6 @@
 # eval-rail-score (Responsible AI Evaluation)
 
-Use [RAIL Score](https://responsibleailabs.ai/) to evaluate LLM outputs across 8 responsible AI dimensions: fairness, safety, reliability, transparency, privacy, accountability, inclusivity, and user impact.
+Use [RAIL Score](https://docs.responsibleailabs.ai/) to evaluate LLM outputs across 8 responsible AI dimensions: fairness, safety, reliability, transparency, privacy, accountability, inclusivity, and user impact.
 
 ```bash
 npx promptfoo@latest init --example eval-rail-score
@@ -11,7 +11,7 @@ cd eval-rail-score
 
 ```bash
 pip install -r requirements.txt
-export RAIL_API_KEY="rail_..."    # Free tier at https://responsibleailabs.ai
+export RAIL_API_KEY="rail_..."    # See the RAIL authentication guide below
 export OPENAI_API_KEY="sk-..."   # Required for gpt-4o-mini provider
 ```
 
@@ -71,12 +71,12 @@ The assertion returns the overall score and available dimension scores on a 0–
 
 ## Configuration
 
-| Config key  | Default | Description                                                       |
-| ----------- | ------- | ----------------------------------------------------------------- |
-| `dimensionThresholds` | `{}` | Optional minimum scores (0-10) by dimension, for example `{safety: 7.0}`. A missing required dimension fails. |
-| `threshold` | 5.0     | Minimum overall score (0-10) to pass                              |
-| `mode`      | basic   | `basic` (fast, 1 credit) or `deep` (with explanations, 3 credits) |
-| `domain`    | general | `general`, `healthcare`, `finance`, `legal`, `education`, `code`  |
+| Config key            | Default | Description                                                                                                   |
+| --------------------- | ------- | ------------------------------------------------------------------------------------------------------------- |
+| `dimensionThresholds` | `{}`    | Optional minimum scores (0-10) by dimension, for example `{safety: 7.0}`. A missing required dimension fails. |
+| `threshold`           | 5.0     | Minimum overall score (0-10) to pass                                                                          |
+| `mode`                | basic   | `basic` (fast, 1 credit) or `deep` (with explanations, 3 credits)                                             |
+| `domain`              | general | `general`, `healthcare`, `finance`, `legal`, `education`, `code`                                              |
 
 ## Limitations
 
@@ -88,5 +88,6 @@ keep normal example output within that supported range.
 ## Links
 
 - [RAIL Score SDK on PyPI](https://pypi.org/project/rail-score-sdk/)
+- [RAIL API key setup](https://docs.responsibleailabs.ai/getting-started/authentication)
 - [SDK Documentation](https://docs.responsibleailabs.ai)
 - [API Reference](https://docs.responsibleailabs.ai/api-reference/evaluation)
