@@ -287,11 +287,13 @@ export class XAIResponsesProvider implements ApiProvider {
 
   protected getApiUrl(): string {
     if (this.config.apiBaseUrl) {
-      return this.config.apiBaseUrl;
+      // Strip trailing slashes so a configured base URL like `https://host/v1/`
+      // does not produce double-slash request paths.
+      return this.config.apiBaseUrl.replace(/\/+$/, '');
     }
     const envApiBaseUrl = resolveProviderEnv(this.env, ['XAI_API_BASE_URL'])?.value;
     if (envApiBaseUrl) {
-      return envApiBaseUrl;
+      return envApiBaseUrl.replace(/\/+$/, '');
     }
     if (this.config.region) {
       return `https://${this.config.region}.api.x.ai/v1`;
