@@ -235,6 +235,13 @@ describe('XAI Video Provider', () => {
       expect(provider.getApiUrl()).toBe('https://custom.api.example.com');
     });
 
+        it('strips trailing slashes from a custom API URL', () => {
+      const provider = new XAIVideoProvider('grok-imagine-video', {
+        config: { apiBaseUrl: 'https://custom.api.example.com/' },
+      });
+      expect(provider.getApiUrl()).toBe('https://custom.api.example.com');
+    });
+
     it('uses a regional API URL when configured', () => {
       const provider = new XAIVideoProvider('grok-imagine-video', {
         config: { region: 'eu-west-1' },
