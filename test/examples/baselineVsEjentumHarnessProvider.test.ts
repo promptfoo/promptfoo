@@ -77,7 +77,7 @@ describe('baseline-vs-ejentum-harness provider', () => {
     const provider = new EjentumAugmentedProvider();
     const result = await provider.callApi('solve this');
     expect(result).toEqual({
-      error: 'EJENTUM_API_KEY is not set. Get a key at https://ejentum.com/dashboard',
+      error: 'EJENTUM_API_KEY is not set. Get a key at https://ejentum.com/account',
     });
     expect(fetchMock).not.toHaveBeenCalled();
   });
