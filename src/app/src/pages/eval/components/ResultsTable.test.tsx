@@ -176,21 +176,24 @@ function createNextPageExpectation(mockFetchEvalData: unknown, checkPageSize = f
 
 vi.mock('./store', async (importOriginal) => ({
   ...(await importOriginal<typeof import('./store')>()),
-  useTableStore: Object.assign(vi.fn(() => ({
-    config: {},
-    evalId: '123',
-    setTable: vi.fn(),
-    table: null,
-    version: 4,
-    fetchEvalData: vi.fn(),
-    filters: {
-      values: {},
-      appliedCount: 0,
-      options: {
-        metric: [],
+  useTableStore: Object.assign(
+    vi.fn(() => ({
+      config: {},
+      evalId: '123',
+      setTable: vi.fn(),
+      table: null,
+      version: 4,
+      fetchEvalData: vi.fn(),
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: {
+          metric: [],
+        },
       },
-    },
-  })), { getState: () => ({ refreshFailureSummary: vi.fn() }) }),
+    })),
+    { getState: () => ({ refreshFailureSummary: vi.fn() }) },
+  ),
   useResultsViewSettingsStore: vi.fn(() => ({
     inComparisonMode: false,
     renderMarkdown: true,

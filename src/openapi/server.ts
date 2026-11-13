@@ -543,13 +543,13 @@ export function createServerOpenApiRegistry() {
     tags: ['Eval'],
     summary: 'Group failed evaluation results by failure reason',
     request: {
-      params: params('GetFailureSummaryParams', EvalSchemas.FailureSummary.Params),
+      params: EvalSchemas.FailureSummary.Params,
     },
     responses: {
-      200: jsonResponse('GetFailureSummaryResponse', EvalSchemas.FailureSummary.Response),
-      400: validationError(),
-      404: notFound('Evaluation not found'),
-      500: serverError(),
+      200: jsonResponse(EvalSchemas.FailureSummary.Response),
+      400: jsonResponse(ErrorResponseSchema, 'Validation error'),
+      404: jsonResponse(ErrorResponseSchema, 'Evaluation not found'),
+      500: jsonResponse(ErrorResponseSchema, 'Server error'),
     },
   });
 
