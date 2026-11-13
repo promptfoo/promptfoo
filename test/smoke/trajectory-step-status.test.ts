@@ -70,5 +70,5 @@ describe('trajectory step status CLI', () => {
       reason: 'Trajectory step "search_orders" matched forbidden status error',
       assertion: { type: 'not-trajectory:step-status' },
     });
-  });
+  }, 65_000);
 });

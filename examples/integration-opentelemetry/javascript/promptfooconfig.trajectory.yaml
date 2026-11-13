@@ -31,6 +31,11 @@ tests:
           name: search_corpus
           status: success
 
+      - type: not-trajectory:step-status
+        value:
+          name: search_corpus
+          status: error
+
       - type: trajectory:tool-args-match
         value:
           name: search_corpus

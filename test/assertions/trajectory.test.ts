@@ -764,6 +764,24 @@ describe('trajectory:step-status', () => {
     });
   });
 
+  it.each(['http.response.status_code', 'http.status_code'])(
+    'matches HTTP status from %s when the span status is unset',
+    (key) => {
+      const params = statusParams(0);
+      const span = params.assertionValueContext.trace!.spans[1];
+      span.attributes = { ...span.attributes, [key]: 503 };
+      expect(handleTrajectoryStepStatus(params).pass).toBe(true);
+      params.assertion.value = { name: 'search_orders', status: 503 };
+      expect(handleTrajectoryStepStatus(params).pass).toBe(true);
+    },
+  );
+
+  it('accepts the serialized matcher passed by CSV assertions', () => {
+    const params = statusParams(2);
+    params.assertion.value = '{"name":"search_orders","status":"error"}';
+    expect(handleTrajectoryStepStatus(params).pass).toBe(true);
+  });
+
   it('does not treat a missing or zero status as success or error', () => {
     const params = statusParams(undefined);
     params.assertion.value = { name: 'search_orders', status: 'success' };
@@ -781,6 +799,7 @@ describe('trajectory:step-status', () => {
     params.inverse = true;
     expect(handleTrajectoryStepStatus(params)).toMatchObject({ pass: false, score: 0 });
   });
+
   it.each([
     [1, 'success'],
     [200, 'success'],

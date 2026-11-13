@@ -1,6 +1,5 @@
 import { isDeepStrictEqual } from 'node:util';
 
-import { TRAJECTORY_STEP_TYPES } from '../contracts/trajectory';
 import { isGraderFailure, matchesTrajectoryGoalSuccess } from '../matchers/llmGrading';
 import { renderVarsInObject } from '../util/render';
 import { matchesPattern } from './traceUtils';
@@ -12,6 +11,7 @@ import {
   matchesTrajectoryStepStatus,
   normalizeTrajectoryMatcher,
   summarizeTrajectoryForJudge,
+  TRAJECTORY_STEP_TYPES,
   type TrajectoryStepMatcher,
   type TrajectoryStepStatusMatcher,
 } from './trajectoryUtils';
@@ -228,6 +228,13 @@ function resolveStepStatusValue(
   value: unknown,
   vars: Record<string, VarValue>,
 ): TrajectoryStepStatusMatcher {
+  if (typeof value === 'string') {
+    try {
+      value = JSON.parse(value);
+    } catch {
+      throw new Error('trajectory:step-status assertion must have an object value');
+    }
+  }
   if (!isRecord(value)) {
     throw new Error('trajectory:step-status assertion must have an object value');
   }
