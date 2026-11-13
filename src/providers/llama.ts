@@ -1,5 +1,4 @@
 import { fetchWithCache } from '../cache';
-import logger from '../logger';
 import { resolveProviderEnv } from './env';
 import { getRequestTimeoutMs } from './shared';
 
@@ -96,9 +95,8 @@ export class LlamaProvider implements ApiProvider {
 
       const isSuccessfulStatus = status >= 200 && status < 300;
       if (isSuccessfulStatus && (data?.error || typeof data?.content !== 'string')) {
-        await deleteFromCache?.().catch(() => {
-          logger.warn('[Llama.cpp] Failed to evict invalid completion from cache');
-        });
+        // An eviction failure must not replace the completion error below.
+        await deleteFromCache?.().catch(() => undefined);
       }
       if (!isSuccessfulStatus || data?.error) {
         const error = data?.error;
