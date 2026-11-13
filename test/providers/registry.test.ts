@@ -2858,6 +2858,14 @@ describe('Provider Registry', () => {
           (await import('../../src/providers/google/interactions')).GoogleInteractionsProvider,
       ],
       [
+        'google:gemini-4-argon',
+        async () => (await import('../../src/providers/google/ai.studio')).AIStudioChatProvider,
+      ],
+      [
+        'google:gemini-4-hydrogen',
+        async () => (await import('../../src/providers/google/ai.studio')).AIStudioChatProvider,
+      ],
+      [
         'google:gemini-3.8-flash',
         async () => (await import('../../src/providers/google/ai.studio')).AIStudioChatProvider,
       ],
@@ -2888,6 +2896,14 @@ describe('Provider Registry', () => {
       [
         'palm:chat-bison',
         async () => (await import('../../src/providers/google/ai.studio')).AIStudioChatProvider,
+      ],
+      [
+        'vertex:gemini-4-argon',
+        async () => (await import('../../src/providers/google/vertex')).VertexChatProvider,
+      ],
+      [
+        'vertex:gemini-4-hydrogen',
+        async () => (await import('../../src/providers/google/vertex')).VertexChatProvider,
       ],
       [
         'vertex:gemini-3.8-flash',
@@ -3127,6 +3143,8 @@ describe('Provider Registry', () => {
     );
 
     it.each([
+      ['google:interactions:gemini-4-argon', true],
+      ['google:interactions:gemini-4-hydrogen', true],
       ['google:interactions:gemini-omni-flash-preview', true],
       ['palm:interactions:gemini-omni-flash-preview', true],
       ['google:interactions:gemini-omni-1.1-flash', false],
@@ -3156,6 +3174,8 @@ describe('Provider Registry', () => {
     );
 
     it.each([
+      'google:interactions:gemini-4-argon',
+      'google:interactions:gemini-4-hydrogen',
       'google:interactions:gemini-robotics-er-2-preview',
       'palm:interactions:gemini-robotics-er-2-preview',
       'google:interactions:gemini-omni-flash-preview',
@@ -3189,6 +3209,8 @@ describe('Provider Registry', () => {
     it.each([
       'google:interactions:gemini-3.5-flash',
       'palm:interactions:gemini-3.5-flash',
+      'vertex:interactions:gemini-4-argon',
+      'vertex:interactions:gemini-4-hydrogen',
       'vertex:interactions:gemini-robotics-er-2-preview',
       'vertex:interactions:gemini-omni-1.1-flash',
     ])(

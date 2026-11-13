@@ -9,6 +9,9 @@ const NATIVE_INTERACTIONS_MODELS = new Set([
   GEMINI_ROBOTICS_STANDARD_MODEL,
 ]);
 
+// Chat models that also accept google:interactions: but default to generateContent.
+const INTERACTIONS_OPT_IN_MODELS = new Set(['gemini-4-argon', 'gemini-4-hydrogen']);
+
 function isLiveOnlyModel(modelName: string): boolean {
   return (
     modelName === 'gemini-3.5-live-translate-preview' ||
@@ -202,7 +205,10 @@ export const googleProviderFactories: ProviderFactory[] = [
         validateGoogleModelRoute(modelName, serviceType, true);
 
         if (serviceType === 'interactions') {
-          if (!NATIVE_INTERACTIONS_MODELS.has(modelName)) {
+          if (
+            !NATIVE_INTERACTIONS_MODELS.has(modelName) &&
+            !INTERACTIONS_OPT_IN_MODELS.has(modelName)
+          ) {
             throw new Error(
               `The Gemini Interactions provider does not support model "${modelName}".`,
             );

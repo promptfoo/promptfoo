@@ -250,6 +250,8 @@ If you need more advanced features or enterprise capabilities, you can migrate t
 
 | Google AI Studio               | Vertex AI                                   | Notes                                    |
 | ------------------------------ | ------------------------------------------- | ---------------------------------------- |
+| `google:gemini-4-argon`        | `vertex:gemini-4-argon`                     | Vertex supports `global`, `us`, and `eu` |
+| `google:gemini-4-hydrogen`     | `vertex:gemini-4-hydrogen`                  | Vertex supports `global`, `us`, and `eu` |
 | `google:gemini-3.8-flash`      | `vertex:gemini-3.8-flash`                   | Vertex supports `global`, `us`, and `eu` |
 | `google:gemini-3.6-flash`      | `vertex:gemini-3.6-flash`                   | Vertex supports `global`, `us`, and `eu` |
 | `google:gemini-3.5-flash-lite` | `vertex:gemini-3.5-flash-lite`              | Vertex supports `global`, `us`, and `eu` |
@@ -286,7 +288,7 @@ A model ID selects a provider route; it does not enable every operation offered 
 | `generateContent`                                             | Chat, multimodal input, structured output, thinking, tools, and [speech output](https://ai.google.dev/gemini-api/docs/generate-content/speech-generation) |
 | `embedContent`                                                | Text strings through `google:embedding:`; multimodal embedding inputs are not exposed                                                                     |
 | Live WebSocket API                                            | Finite text/audio eval sessions, transcripts, and function callbacks through `google:live:`                                                               |
-| Interactions API                                              | File transcription, Gemini Omni video, and Gemini Robotics ER                                                                                             |
+| Interactions API                                              | File transcription, Gemini 4 Argon and Hydrogen, Gemini Omni video, and Gemini Robotics ER                                                                |
 | [Decisions API](#gemini-decisions-api)                        | Yes/no probabilities, classifications, and ordered scores through `google:decisions:gemini-decision-1`                                                    |
 | Video generation                                              | Gemini Omni uses Interactions (`google:gemini-omni-1.1-flash`). For Veo, use the Vertex long-running prediction API (`vertex:video:`).                    |
 | Native Gemini images                                          | Model-specific image provider; the legacy `google:image:` prefix instead selects Imagen's prediction format                                               |
@@ -380,6 +382,8 @@ Use distinct serving models when comparing results. Google can redirect a Gemini
 
 - `google:gemma-4-31b-it` - Gemma 4 31B instruction-tuned open model with strong reasoning, coding, and agentic capabilities
 - `google:gemma-4-26b-a4b-it` - Gemma 4 26B A4B instruction-tuned open model for lower-latency reasoning and coding evals
+- `google:gemini-4-argon` - [Gemini 4 Argon](#gemini-4), Google's flagship reasoning model for complex coding, knowledge work, and agentic workflows ($2/1M input, $10/1M output through November 30, 2026)
+- `google:gemini-4-hydrogen` - [Gemini 4 Hydrogen](#gemini-4), a fast Gemini 4 model for everyday coding, agentic workflows, multimodal analysis, and tool use ($1.50/1M input, $7.50/1M output)
 - `google:gemini-3.8-flash` - Latest Gemini Flash model for coding and agentic workflows ($0.75/1M input, $3.75/1M output through December 31, 2026)
 - `google:gemini-3.6-flash` - Previous-generation Gemini Flash model for coding and agentic tasks ($0.75/1M input, $3.75/1M output through December 31, 2026)
 - `google:gemini-3.5-flash-lite` - Fast, cost-efficient Gemini 3.5 model for high-volume agentic workflows ($0.30/1M input, $2.50/1M output)
@@ -454,6 +458,34 @@ behavior changes.
 :::note
 Gemini 3.5 Flash Cyber is currently available only through Google's limited-access CodeMender pilot and does not have a publicly documented Gemini API model ID. See the [Gemini model announcement](https://blog.google/innovation-and-ai/models-and-research/gemini-models/gemini-3-6-flash-3-5-flash-lite-3-5-flash-cyber/).
 :::
+
+### Gemini 4
+
+[Gemini 4 Argon](https://ai.google.dev/gemini-api/docs/models/gemini-4-argon) and [Gemini 4 Hydrogen](https://ai.google.dev/gemini-api/docs/models/gemini-4-hydrogen) accept text, image, video, audio, and PDF input and return text. Input, thinking, and output share a 1,048,576-token context window.
+
+| Model                      | Thinking levels                            | Price per 1M input / output tokens                | Free tier |
+| -------------------------- | ------------------------------------------ | ------------------------------------------------- | --------- |
+| `google:gemini-4-argon`    | `LOW`, `MEDIUM` (default), `HIGH`          | $2 / $10 through November 30, 2026, then $4 / $20 | No        |
+| `google:gemini-4-hydrogen` | `LOW`, `MEDIUM`, `HIGH` (default), `XHIGH` | $1.50 / $7.50                                     | Yes       |
+
+Output prices include thinking. Implicitly cached input costs 5% of the input rate, Priority requests cost 1.8 times the standard rate, and Flex requests cost half. Promptfoo uses these [rates](https://ai.google.dev/gemini-api/docs/pricing) in its cost estimates.
+
+```yaml
+providers:
+  - id: google:gemini-4-hydrogen
+    config:
+      generationConfig:
+        thinkingConfig:
+          thinkingLevel: XHIGH
+```
+
+Gemini 4 models ignore `temperature`, `topP`, and `topK`, and the Gemini API rejects penalties and multiple candidates, so promptfoo removes these parameters. Promptfoo also rejects `MINIMAL` thinking and `thinkingBudget` before sending a `google:` request.
+
+`maxOutputTokens` limits thinking and the answer together, so a low limit can end a response with `MAX_TOKENS` before any answer text is produced. For Argon, Google recommends raising limits below 32,768 to at least 32,768 and a client timeout of at least 15 minutes for `HIGH` thinking, which you can set with `REQUEST_TIMEOUT_MS=900000`.
+
+Gemini 4 models support implicit caching only, so do not set `cachedContent`. They do not support the Live API or audio and image output. To call them through the Interactions API, use `google:interactions:gemini-4-argon` or `google:interactions:gemini-4-hydrogen`. Promptfoo sends synchronous Interactions requests, so background execution and long decoding beyond 65,536 output tokens are not available.
+
+For Vertex AI, including the allowlisted Argon Cyber Permissive variant, see [Vertex Gemini models](/docs/providers/vertex#gemini-models).
 
 ### Text-to-speech
 
@@ -679,10 +711,11 @@ providers:
 
 | Level   | Description                                                                       |
 | ------- | --------------------------------------------------------------------------------- |
-| MINIMAL | Fewest tokens. Not supported by Gemini 3.1 Pro, Gemini 3.8 Flash, or its aliases. |
+| MINIMAL | Fewest tokens. Unsupported by Gemini 4, Gemini 3.1 Pro, or 3.8 Flash and aliases. |
 | LOW     | Fewer tokens. Suitable for simpler tasks.                                         |
 | MEDIUM  | Balanced approach for moderate complexity.                                        |
 | HIGH    | More tokens for deep reasoning.                                                   |
+| XHIGH   | Most tokens for the hardest problems. Supported only by Gemini 4 Hydrogen.        |
 
 Defaults vary by model: Gemini 3.8 Flash, 3.7 Flash, 3.6 Flash, and 3.5 Flash default to `MEDIUM`, Gemini 3.5 Flash-Lite defaults to `MINIMAL`, and Gemini 3.1 Pro defaults to `HIGH`.
 
