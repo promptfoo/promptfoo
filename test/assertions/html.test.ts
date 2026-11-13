@@ -24,6 +24,9 @@ const defaultParams = {
   test: {} as AtomicTestCase,
 };
 
+// Exactly 10 Mi UTF-16 code units; multibyte text distinguishes a byte limit.
+const maxSizeHtml = `<div>${'😀'.repeat(5 * 1024 * 1024 - 6)}x</div>`;
+
 describe('handleContainsHtml', () => {
   it('should pass when output contains HTML tags', () => {
     const params: AssertionParams = {
@@ -75,6 +78,12 @@ describe('handleContainsHtml', () => {
       '<p>Multiple &nbsp; HTML &lt; entities &gt;</p>',
       '<custom-element attr="value">Web component</custom-element>',
       '<div data-id="123" class="test">Modern HTML</div>',
+      '<!DOCTYPE html>',
+      '<body',
+      '<x></y>',
+      '<custom />',
+      '&amp;<!-- comment -->',
+      maxSizeHtml,
     ];
 
     htmlExamples.forEach((html) => {
@@ -102,6 +111,13 @@ describe('handleContainsHtml', () => {
       'if (a<b) { return c>d; }', // Code with comparison operators
       'The price is <$50',
       'Email me at <john@example.com>',
+      '<custom/>',
+      '</custom>',
+      ' class="value"',
+      '&amp;&amp;',
+      '<!-- a --><!-- b -->',
+      maxSizeHtml + 'x',
+      ' ' + maxSizeHtml,
     ];
 
     nonHtmlExamples.forEach((text) => {

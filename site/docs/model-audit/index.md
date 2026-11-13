@@ -163,7 +163,7 @@ See the [Advanced Usage](./usage.md) guide for detailed authentication setup for
 
 :::info Alternative Installation and Usage
 
-- **Standalone**: Install modelaudit directly using `pip install modelaudit`. `modelaudit scan` behaves the same as `promptfoo scan-model`.
+- **Standalone**: Install modelaudit directly using `pip install modelaudit`. With ModelAudit 0.2.56 or later, standalone scans can send README or model-card findings and excerpts to OpenAI when `OPENAI_API_KEY` is set. Use `modelaudit scan ./model --no-triage` to disable this. Promptfoo CLI and web scans withhold the key from ModelAudit.
 - **Web Interface**: For a GUI experience, use `promptfoo view` and navigate to `/model-audit` for visual scanning and configuration.
 
 :::
