@@ -240,8 +240,7 @@ function checkQuantityRules(
       return m2 ? m2.index : fwd.length;
     })();
     const window = normalized.slice(Math.max(0, index - 220) + sentStart, index + sentEnd);
-    if (!/probabilit|confiden(?:t|ce)\b|chance|likelihood|certainty|belief|odds/i.test(window))
-      return;
+    if (!/probabilit|confiden(?:t|ce)\b|chance|likelihood|certainty|belief/i.test(window)) return;
     violations.push({
       rule: 'percentage-range',
       severity: 'FAIL',
@@ -328,10 +327,12 @@ function phmLiteCheck(output) {
   // common independent-metric words (recall, precision, ...), so
   // "Market share was 60% while recall was 70%" is not summed, while
   // "Traffic shares: A took 60% and B took 70%" is.
-  const SHARE_CTX = /share|allocation|split|portion|breakdown|divided/i;
+  const SHARE_CTX = /\b(?:shares?|allocations?|splits?|portions?|breakdowns?|divided)\b/i;
+  const PERCENTAGE_CHANGE = /\bfrom\s+[\d.,]+\s*%\s+to\s+[\d.,]+\s*%/gi;
   const METRIC_CTX = /recall|precision|accuracy|margin|error rate|f1/i;
   for (const sentence of normalized.split(/[.!?]\s|\n/)) {
-    const pct = [...sentence.matchAll(/(\d[\d,]*(?:\.\d+)?(?:\s*[eE][+-]?\d+)?)\s*%/g)].map((x) =>
+    const breakdown = sentence.replace(PERCENTAGE_CHANGE, '');
+    const pct = [...breakdown.matchAll(/(\d[\d,]*(?:\.\d+)?(?:\s*[eE][+-]?\d+)?)\s*%/g)].map((x) =>
       Number(x[1].replace(/[\s,]/g, '')),
     );
     if (pct.length >= 2 && SHARE_CTX.test(sentence) && !METRIC_CTX.test(sentence)) {

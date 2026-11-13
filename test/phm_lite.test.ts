@@ -26,7 +26,6 @@ describe('PHM-Lite physics-consistency assertion', () => {
       'cross-sentence delta marker',
       'Conditions changed yesterday. The reaction consumed -5 kg of catalyst.',
     ],
-    ['abbreviation in algebra context', 'The equation, e.g. its leading term is 2c.'],
     ['accelerated to bare c', 'The projectile accelerated to 2c.'],
   ])('flags FAIL: %s', (_name, text) => {
     const r = phmLiteCheck(text);
@@ -39,6 +38,7 @@ describe('PHM-Lite physics-consistency assertion', () => {
     ['zero-second fall', 'fell 100 m in 0 s'],
     ['fall claim spanning a line break', 'The weight fell 100 m\nin 1 s.'],
     ['exponent-form fall quantities', 'fell 1e2 m in 1e0 s'],
+    ['abbreviation in share context', 'Traffic shares, e.g. A took 60% and B took 70% of traffic.'],
     ['percentage shares summing over 100%', 'Traffic shares: A took 6e1% and B took 7e1%.'],
     [
       'scientific-notation percentage sum',
@@ -54,6 +54,13 @@ describe('PHM-Lite physics-consistency assertion', () => {
     ['temperature difference', 'The temperature change was -300 °C.'],
     ['symbolic temperature difference', 'ΔT = -300 °C.'],
     ['probability context in another sentence', 'We checked the probability. Revenue grew 150%.'],
+    ['abbreviation in algebra context', 'The equation, e.g. its leading term is 2c.'],
+    ['valid odds ratio', 'The odds of winning are 150%.'],
+    [
+      'unrelated percentages with shareholder context',
+      'Shareholder returns were Fund A 60% and Fund B 70%.',
+    ],
+    ['one share observed twice', 'Traffic share increased from 60% to 70%.'],
     ['ordinary speeds', 'The car travels at 25 m/s. Water freezes at 0 degC.'],
     ['rounded light speed (1% tolerance)', 'Light travels at 3e8 m/s in vacuum.'],
     ['range separator (temperature)', 'The sensor operates over a range 0-300 °C.'],
@@ -70,7 +77,6 @@ describe('PHM-Lite physics-consistency assertion', () => {
     ['mass change, not absolute mass', 'The mass change was -5 kg after drying.'],
     ['repeated-denominator acceleration', 'Acceleration reached 5e8 meters per second per second.'],
     ['compact repeated denominator', 'Acceleration hit 5e8 m/s per second.'],
-    ['abbreviation in share context', 'Traffic shares, e.g. A took 60% and B took 70% of traffic.'],
     ['confidential word, not confidence', 'The confidential report says revenue grew 150%.'],
   ])('passes: %s', (_name, text) => {
     const r = phmLiteCheck(text);
