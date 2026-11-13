@@ -12,7 +12,6 @@ import { brotliCompressSync, gzipSync } from 'node:zlib';
 
 import { API } from 'typescript/unstable/sync';
 import { writePackedConsumerSbom } from './packedConsumerSbom';
-import { assertBuiltAssetsPackaged } from './packPackageArtifact';
 
 type PackFile = {
   mode: number;
@@ -104,6 +103,7 @@ function run(
       encoding: 'utf8',
       env: {
         ...process.env,
+        NODE_PATH: '',
         npm_config_audit: 'false',
         npm_config_fund: 'false',
         ...envOverrides,
@@ -146,6 +146,7 @@ async function runAsync(
         encoding: 'utf8',
         env: {
           ...process.env,
+          NODE_PATH: '',
           npm_config_audit: 'false',
           npm_config_fund: 'false',
           ...envOverrides,
@@ -198,11 +199,12 @@ function installConsumerPackages(
   );
 }
 
-function assertPackagedFiles(packResult: PackResult, compareSource: boolean): void {
+async function assertPackagedFiles(packResult: PackResult, compareSource: boolean): Promise<void> {
   const packagedPaths = new Set(packResult.files.map((file) => file.path));
   const missingPaths = requiredPackagedPaths.filter((file) => !packagedPaths.has(file));
   assert.deepEqual(missingPaths, [], `Missing packaged runtime assets: ${missingPaths.join(', ')}`);
   if (compareSource) {
+    const { assertBuiltAssetsPackaged } = await import('./packPackageArtifact');
     assertBuiltAssetsPackaged(ROOT, packResult.files);
   }
   assert(
@@ -654,7 +656,7 @@ assert.equal(summary.results[0].success, false);
 assert.equal(summary.results[0].score, 0);
 assert.ok(summary.results[0].response.error.includes(mode === 'installed'
   ? 'Repository is not a directory'
-  : 'npm install promptfoo @openai/codex-security@^0.2.0'));
+  : 'npm install promptfoo "@openai/codex-security@>=0.2.0 <0.9.0"'));
 if (mode === 'incompatible') {
   assert.ok(summary.results[0].response.error.includes('incompatible (0.1.31)'));
 }
@@ -709,7 +711,7 @@ ${script}
     } else if (mode === 'installed') {
       installConsumerPackages(
         'install supported Codex Security SDK',
-        ['@openai/codex-security@^0.2.0'],
+        ['@openai/codex-security@^0.8.0'],
         consumerDir,
         npmEnv,
       );
@@ -870,9 +872,6 @@ async function runInstalledCodingSdkEval(
   withOptionalDependencies: boolean,
 ): Promise<void> {
   const fixturesDir = path.join(consumerDir, 'coding-sdks');
-  fs.cpSync(path.join(ROOT, 'test/fixtures/package-artifact/coding-sdks'), fixturesDir, {
-    recursive: true,
-  });
   // The Codex SDK sends `exec` first. Let Node load that fixture on every platform.
   fs.copyFileSync(path.join(fixturesDir, 'codex.mjs'), path.join(consumerDir, 'exec'));
   const scriptPath = path.join(consumerDir, 'coding-sdks.mjs');
@@ -931,12 +930,24 @@ const record = await evaluate({
 }, { cache: false, maxConcurrency: 1, writeLatestResults: false });
 const { results } = await record.toEvaluateSummary();
 assert.equal(results.length, installed ? 4 : 2);
+const expectedSdkErrors = {
+  'openai:codex-sdk': {
+    install: 'npm install promptfoo "@openai/codex-sdk@>=0.156.1 <0.167.0"',
+    incompatible: 'found 0.154.0',
+  },
+  'anthropic:claude-agent-sdk': {
+    install: 'npm install promptfoo @anthropic-ai/claude-agent-sdk@^0.3.273',
+    incompatible: 'found 0.3.235',
+  },
+};
 for (const result of results) {
   if (!installed) {
     assert.equal(result.success, false);
-    assert.match(result.response.error, new RegExp('npm install promptfoo @(openai/codex-sdk|anthropic-ai/claude-agent-sdk)'));
+    const expected = expectedSdkErrors[result.provider.id];
+    assert.ok(expected, result.provider.id);
+    assert.ok(result.response.error.includes(expected.install), result.response.error);
     if (mode === 'incompatible') {
-      assert.match(result.response.error, /found 0\\.(154\\.0|3\\.235)/);
+      assert.ok(result.response.error.includes(expected.incompatible), result.response.error);
     }
   } else if (result.vars.input === 'fixture error') {
     assert.equal(result.success, false);
@@ -975,7 +986,7 @@ for (const result of results) {
     await runChecks('incompatible');
     installConsumerPackages(
       'install supported coding SDKs',
-      ['@openai/codex-sdk@^0.156.1', '@anthropic-ai/claude-agent-sdk@^0.3.273'],
+      ['@openai/codex-sdk@^0.165.0', '@anthropic-ai/claude-agent-sdk@^0.3.273'],
       consumerDir,
       npmEnv,
     );
@@ -986,16 +997,46 @@ for (const result of results) {
 async function runOptionalOpenAiAgentsChecks(
   consumerDir: string,
   configDir: string,
+  npmEnv: NodeJS.ProcessEnv,
+  withOptionalDependencies: boolean,
 ): Promise<void> {
   const sdkDir = path.join(consumerDir, 'node_modules', '@openai', 'agents');
   assert(!fs.existsSync(sdkDir), 'Default consumers should not install the optional Agents SDK');
   const checks = `
     const echo = await loadApiProvider('echo');
     assert.equal((await echo.callApi('ordinary evaluation')).output, 'ordinary evaluation');
-    await assert.rejects(
+    if (process.argv[2] === 'installed') {
+      const { Agent, Usage, setTracingDisabled } = await import('@openai/agents');
+      setTracingDisabled(true);
+      const inputs = [];
+      const agent = new Agent({
+        name: 'Installed package fixture',
+        model: {
+          async getResponse(request) {
+            inputs.push(request.input);
+            return {
+              usage: new Usage({ inputTokens: 3, outputTokens: 2, totalTokens: 5 }),
+              output: [{ type: 'message', role: 'assistant', status: 'completed',
+                content: [{ type: 'output_text', text: 'Real SDK fixture response' }] }],
+            };
+          },
+          async *getStreamedResponse() { throw new Error('Unexpected streaming request'); },
+        },
+      });
+      const provider = await loadApiProvider('openai:agents:fixture', {
+        options: { config: { agent, session: { type: 'memory' } } },
+      });
+      const first = await provider.callApi('Remember cedar.');
+      assert.equal(first.output, 'Real SDK fixture response');
+      assert.equal(first.tokenUsage.total, 5);
+      assert.equal((await provider.callApi('Recall it.')).output, first.output);
+      assert.equal(inputs.length, 2);
+      assert.match(JSON.stringify(inputs[1]), /Remember cedar/);
+    } else {
+      await assert.rejects(
       loadApiProvider('openai:agents:gpt-4.1-mini'),
       (error) => {
-        assert.match(error.message, /npm install promptfoo @openai\\/agents@\\^0\\.14\\.1/);
+        assert.ok(error.message.includes('npm install promptfoo @openai/agents@^0.21.0'), error.message);
         if (process.argv[2] === 'incompatible') {
           assert.match(error.message, /found 0\\.0\\.0/);
         } else {
@@ -1003,7 +1044,8 @@ async function runOptionalOpenAiAgentsChecks(
         }
         return true;
       },
-    );
+      );
+    }
   `;
   fs.writeFileSync(
     path.join(consumerDir, 'optional-agents.mjs'),
@@ -1061,6 +1103,15 @@ async function runOptionalOpenAiAgentsChecks(
     fs.rmSync(sdkDir, { recursive: true, force: true });
     fs.rmSync(loaderPackages, { recursive: true, force: true });
   }
+  if (withOptionalDependencies) {
+    installConsumerPackages(
+      'install supported OpenAI Agents SDK',
+      ['@openai/agents@^0.21.0'],
+      consumerDir,
+      npmEnv,
+    );
+    await runChecks('installed');
+  }
 }
 
 async function runOptionalSdkChecks(
@@ -1112,6 +1163,34 @@ async function runOptionalSdkChecks(
       consumerDir,
       npmEnv,
     );
+    await runChecks('installed');
+  }
+}
+
+async function runOptionalJksChecks(
+  consumerDir: string,
+  configDir: string,
+  npmEnv: NodeJS.ProcessEnv,
+  withOptionalDependencies: boolean,
+): Promise<void> {
+  const runChecks = async (state: string) => {
+    for (const format of ['esm', 'cjs']) {
+      console.log(
+        await runAsync(process.execPath, ['optional-jks.mjs', format, state], consumerDir, {
+          NODE_PATH: '',
+          NO_PROXY: '127.0.0.1,localhost',
+          no_proxy: '127.0.0.1,localhost',
+          PROMPTFOO_CONFIG_DIR: configDir,
+          PROMPTFOO_CACHE_ENABLED: 'false',
+          PROMPTFOO_DISABLE_TELEMETRY: '1',
+          PROMPTFOO_DISABLE_UPDATE: 'true',
+        }),
+      );
+    }
+  };
+  await runChecks('missing');
+  if (withOptionalDependencies) {
+    installConsumerPackages('install JKS support', ['jks-js@^1.1.5'], consumerDir, npmEnv);
     await runChecks('installed');
   }
 }
@@ -1431,7 +1510,7 @@ async function main(): Promise<void> {
 
     const [packResult] = packResults;
     assert.equal(packResult.name, 'promptfoo');
-    assertPackagedFiles(packResult, !suppliedTarball);
+    await assertPackagedFiles(packResult, !suppliedTarball);
 
     const tarballPath = suppliedTarball ?? path.join(artifactsDir, packResult.filename);
     assert(fs.existsSync(tarballPath), `Missing tarball: ${tarballPath}`);
@@ -1494,7 +1573,6 @@ async function main(): Promise<void> {
     // Consumer files live outside the repository so neither workspaces nor devDependencies
     // can satisfy undeclared package imports. Keep all user state local to this fixture.
     const consumerEnv = {
-      NODE_PATH: '',
       PROMPTFOO_CONFIG_DIR: configDir,
       PROMPTFOO_CACHE_PATH: path.join(tempDir, 'cache'),
       PROMPTFOO_DISABLE_TELEMETRY: '1',
@@ -1562,6 +1640,16 @@ async function main(): Promise<void> {
         );
       }
     }
+    if (values.profile === 'default') {
+      console.log(
+        await timeAsyncPhase('check installed HTTP quickstart', () =>
+          runAsync(process.execPath, ['http-quickstart.mjs'], consumerDir, consumerEnv),
+        ),
+      );
+    }
+    await timeAsyncPhase('check optional JKS support', () =>
+      runOptionalJksChecks(consumerDir, configDir, consumerNpmEnv, values.profile === 'default'),
+    );
     await timeAsyncPhase('optional coding SDKs', () =>
       runInstalledCodingSdkEval(
         consumerDir,
@@ -1571,7 +1659,12 @@ async function main(): Promise<void> {
       ),
     );
     await timeAsyncPhase('check optional OpenAI Agents SDK', () =>
-      runOptionalOpenAiAgentsChecks(consumerDir, configDir),
+      runOptionalOpenAiAgentsChecks(
+        consumerDir,
+        configDir,
+        consumerNpmEnv,
+        values.profile === 'default',
+      ),
     );
     await timeAsyncPhase('check optional Slack SDK', () =>
       runOptionalSdkChecks(consumerDir, configDir, consumerNpmEnv, values.profile === 'default', {
@@ -1586,7 +1679,7 @@ async function main(): Promise<void> {
       runOptionalSdkChecks(consumerDir, configDir, consumerNpmEnv, values.profile === 'default', {
         name: 'Langfuse',
         package: '@langfuse/client',
-        version: '^5.11.1',
+        version: '^6.0.0',
         script: 'optional-langfuse.mjs',
         env: {
           LANGFUSE_PUBLIC_KEY: '',

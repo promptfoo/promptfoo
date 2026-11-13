@@ -57,7 +57,6 @@ describe('embedding transport cancellation', () => {
     ],
     ['Azure', () => new AzureEmbeddingProvider('model', { config: openAiConfig })],
     ['Cohere', () => new CohereEmbeddingProvider('model', { apiKey: 'test-key' })],
-    ['Docker', () => new DMREmbeddingProvider('model', { config: openAiConfig })],
     [
       'AI Studio',
       () =>
@@ -81,17 +80,6 @@ describe('embedding transport cancellation', () => {
         return provider;
       },
     ],
-    [
-      'Vertex',
-      () => {
-        const provider = new VertexEmbeddingProvider('gemini-embedding-001');
-        vi.spyOn(provider, 'getProjectId').mockResolvedValue('fixture-project');
-        vi.spyOn(provider, 'getClientWithCredentials').mockResolvedValue({
-          request: (options: { signal?: AbortSignal }) => rejectAborted(options.signal),
-        } as never);
-        return provider;
-      },
-    ],
   ])('passes cancellation to the %s request and rejects with its reason', async (_name, create) => {
     const provider = create() as CancellableEmbeddingProvider;
     const reason = new Error('evaluation cancelled');
@@ -102,6 +90,55 @@ describe('embedding transport cancellation', () => {
       reason,
     );
     expect(new Set(signals)).toEqual(new Set([abortSignal]));
+  });
+
+  it.each(['gemini-embedding-001', 'gemini-embedding-2'])(
+    'does not authenticate %s when the evaluation is already cancelled',
+    async (model) => {
+      const provider = new VertexEmbeddingProvider(model);
+      const request = vi.fn();
+      const credentials = vi.spyOn(provider, 'getClientWithCredentials').mockResolvedValue({
+        request,
+        transporter: { defaults: {} },
+      } as never);
+      const project = vi.spyOn(provider, 'getProjectId').mockResolvedValue('fixture-project');
+      const reason = new Error('evaluation cancelled');
+
+      expect(provider.supportsEmbeddingCancellation).toBe(true);
+      await expect(
+        provider.callEmbeddingApi('text', undefined, { abortSignal: AbortSignal.abort(reason) }),
+      ).rejects.toBe(reason);
+      expect(credentials).not.toHaveBeenCalled();
+      expect(project).not.toHaveBeenCalled();
+      expect(request).not.toHaveBeenCalled();
+    },
+  );
+
+  it('does not probe Docker models when the evaluation is already cancelled', async () => {
+    const provider = new DMREmbeddingProvider('model', { config: openAiConfig });
+    const reason = new Error('evaluation cancelled');
+    await expect(
+      provider.callEmbeddingApi('text', undefined, { abortSignal: AbortSignal.abort(reason) }),
+    ).rejects.toBe(reason);
+    expect(fetchWithCache).not.toHaveBeenCalled();
+  });
+
+  it('passes cancellation through the Docker probe to the embedding request', async () => {
+    const provider = new DMREmbeddingProvider('model', { config: openAiConfig });
+    const controller = new AbortController();
+    const reason = new Error('evaluation cancelled');
+    vi.mocked(fetchWithCache).mockImplementation(async (url, options) => {
+      signals.push(options?.signal);
+      if (String(url).endsWith('/models')) {
+        return { data: { data: [{ id: 'model' }] } } as never;
+      }
+      controller.abort(reason);
+      throw options?.signal?.reason;
+    });
+    await expect(
+      provider.callEmbeddingApi('text', undefined, { abortSignal: controller.signal }),
+    ).rejects.toBe(reason);
+    expect(signals).toEqual([controller.signal, controller.signal]);
   });
 
   it('passes cancellation and its reason to an active SageMaker request', async () => {

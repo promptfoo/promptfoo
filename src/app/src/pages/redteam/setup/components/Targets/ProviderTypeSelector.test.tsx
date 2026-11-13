@@ -20,6 +20,81 @@ vi.mock('@app/hooks/useTelemetry', () => ({
 }));
 
 describe('ProviderTypeSelector', () => {
+  it.each([
+    ['Together AI', 'together', 'togetherai:meta-llama/Llama-3.3-70B-Instruct-Turbo', {}],
+    ['Hugging Face', 'huggingface', 'huggingface:chat:meta-llama/Meta-Llama-3-70B-Instruct', {}],
+    [
+      'AWS Bedrock Agents',
+      'bedrock-agent',
+      'bedrock-agent:your-agent-id',
+      { agentAliasId: 'your-agent-alias-id' },
+    ],
+    ['fal.ai', 'fal', 'fal:image:fal-ai/flux/dev', {}],
+    [
+      'Cloudflare AI',
+      'cloudflare-ai',
+      'cloudflare-ai:chat:@cf/meta/llama-3.3-70b-instruct-fp8-fast',
+      {},
+    ],
+    ['llama.cpp', 'llama.cpp', 'llama:local-model', { n_predict: 1024 }],
+    [
+      'Llamafile',
+      'llamafile',
+      'openai:chat:local-model',
+      {
+        type: 'llamafile',
+        apiBaseUrl: 'http://localhost:8080/v1',
+        apiKeyRequired: false,
+        useDefaultApiKey: false,
+      },
+    ],
+    [
+      'vLLM',
+      'vllm',
+      'openai:chat:your-served-model-name',
+      {
+        type: 'vllm',
+        apiBaseUrl: 'http://localhost:8000/v1',
+        apiKeyRequired: false,
+        useDefaultApiKey: false,
+      },
+    ],
+    [
+      'Text Generation WebUI',
+      'text-generation-webui',
+      'openai:chat:your-served-model-name',
+      {
+        type: 'text-generation-webui',
+        apiBaseUrl: 'http://localhost:5000/v1',
+        apiKeyRequired: false,
+        useDefaultApiKey: false,
+      },
+    ],
+    ['Ollama', 'ollama', 'ollama:llama3.2:3b', {}],
+    ['Databricks', 'databricks', 'databricks:databricks-meta-llama-3-3-70b-instruct', {}],
+    ['DeepSeek', 'deepseek', 'deepseek:deepseek-flash', {}],
+    ['Groq', 'groq', 'groq:openai/gpt-oss-120b', {}],
+    ['Cerebras', 'cerebras', 'cerebras:gpt-oss-120b', {}],
+  ])(
+    'emits the runtime configuration for %s and preserves the target label',
+    async (label, providerType, id, config) => {
+      const user = userEvent.setup();
+      const setProvider = vi.fn();
+      renderWithTooltipProvider(
+        <ProviderTypeSelector
+          provider={{ id: '', config: {}, label: 'My application' }}
+          setProvider={setProvider}
+        />,
+      );
+      const card = screen.getByText(label).closest('[role="button"]');
+      expect(card).not.toBeNull();
+      await user.click(card!);
+      expect(setProvider).toHaveBeenCalledWith(
+        { id, config, label: 'My application' },
+        providerType,
+      );
+    },
+  );
   it('prevents changing providers when model selection is disabled', async () => {
     const user = userEvent.setup();
     const setProvider = vi.fn();
@@ -56,7 +131,11 @@ describe('ProviderTypeSelector', () => {
       screen.getByText('AWS Bedrock Agents', { exact: true }).closest('[role="button"]')!,
     );
     expect(setProvider).toHaveBeenCalledWith(
-      { id: 'bedrock-agent:your-agent-id', config: {}, label: 'Agent' },
+      {
+        id: 'bedrock-agent:your-agent-id',
+        config: { agentAliasId: 'your-agent-alias-id' },
+        label: 'Agent',
+      },
       'bedrock-agent',
     );
   });

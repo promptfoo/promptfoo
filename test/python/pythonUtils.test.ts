@@ -77,17 +77,27 @@ vi.mock('../../src/util/secureTempFiles', () => ({
 }));
 
 // Must be hoisted for vi.mock factory
-const { mockPythonShellInstance, MockPythonShell } = vi.hoisted(() => {
+const { mockPythonShellInstance, MockPythonShell } = await vi.hoisted(async () => {
+  const { EventEmitter } = await import('node:events');
   const instance = {
-    stdout: { on: vi.fn() },
-    stderr: { on: vi.fn() },
+    stdout: { on: vi.fn(), removeListener: vi.fn() },
+    stderr: { on: vi.fn(), removeListener: vi.fn() },
     end: vi.fn(),
   };
-  // Create a proper class that can be used with 'new'
-  const MockPythonShell = vi.fn(function (this: typeof instance) {
-    Object.assign(this, instance);
-    return this;
-  }) as unknown as typeof import('python-shell').PythonShell;
+  const MockPythonShell = vi.fn(
+    class extends EventEmitter {
+      stdout = instance.stdout;
+      stderr = instance.stderr;
+      childProcess = new EventEmitter();
+
+      end(callback: (error: Error | null) => void) {
+        instance.end((error: Error | null) => {
+          callback(error);
+          this.childProcess.emit('close', error ? 1 : 0, null);
+        });
+      }
+    },
+  ) as unknown as typeof import('python-shell').PythonShell;
   return { mockPythonShellInstance: instance, MockPythonShell };
 });
 
