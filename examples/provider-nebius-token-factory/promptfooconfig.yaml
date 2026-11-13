@@ -9,7 +9,9 @@ providers:
     label: Nebius Token Factory - GPT OSS 120B
     config:
       apiBaseUrl: https://api.tokenfactory.nebius.com/v1
-      apiKey: '{{env.NEBIUS_API_KEY}}'
+      headers:
+        OpenAI-Organization: ""
+      apiKeyEnvar: NEBIUS_API_KEY
       max_tokens: 512
       temperature: 0
 

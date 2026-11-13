@@ -19,7 +19,7 @@ Use Nebius Token Factory through promptfoo's generic OpenAI-compatible Chat Comp
    npx promptfoo@latest eval
    ```
 
-The config uses `openai:chat:openai/gpt-oss-120b` with `apiBaseUrl` set to `https://api.tokenfactory.nebius.com/v1`. Replace the model ID with another current chat model from the [Token Factory catalog](https://tokenfactory.nebius.com/api/public/models_info) if needed.
+The config uses `openai:chat:openai/gpt-oss-120b` with `apiBaseUrl` set to `https://api.tokenfactory.nebius.com/v1`. The config reads the key from `NEBIUS_API_KEY` and suppresses the OpenAI organization header. Replace the model ID with another current chat model from the [Token Factory catalog](https://tokenfactory.nebius.com/api/public/models_info) if needed.
 
 ## API scope
 
