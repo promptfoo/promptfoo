@@ -1338,6 +1338,38 @@ describe('runEval', () => {
       }
     });
 
+    it.each([
+      { output: 'Test output' },
+      { output: 'Cached output', cached: true },
+      { error: 'Provider error' },
+    ])('measures elapsed latency across wall-clock rollback for %j', async (response) => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-01-01T00:00:00Z'));
+
+      const provider: ApiProvider = {
+        id: () => 'clock-rollback-provider',
+        callApi: async () => {
+          await Promise.resolve();
+          vi.setSystemTime(Date.now() - 5000);
+          vi.advanceTimersByTime(50);
+          return response;
+        },
+      };
+
+      const results = await runEval({
+        ...defaultOptions,
+        provider,
+        prompt: { raw: 'Test prompt', label: 'test-label' },
+        test: {},
+        conversations: {},
+        registers: {},
+      });
+
+      expect(results[0].latencyMs).toBe(50);
+      expect(results[0].success).toBe(!('error' in response));
+      expect(results[0].error).toBe('error' in response ? response.error : undefined);
+    });
+
     it('should respect provider latencyMs of 0', async () => {
       const providerWithZeroLatency: ApiProvider = {
         id: vi.fn().mockReturnValue('zero-latency-provider'),

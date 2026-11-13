@@ -1011,6 +1011,8 @@ See [Javascript assertions](/docs/configuration/expected-outputs/javascript).
 
 The `latency` assertion fails if the LLM call takes longer than the specified threshold. Duration is specified in milliseconds.
 
+When the provider does not supply latency, Promptfoo measures elapsed provider-call time with a monotonic clock, so wall-clock adjustments do not affect it. Provider-reported latency is used unchanged.
+
 Example:
 
 ```yaml
