@@ -838,6 +838,7 @@ describe('isConnectionError', () => {
 
   it('returns false for a clean HTTP/application error (not a connection failure)', () => {
     expect(isConnectionError(new Error('Bad Request: 400'))).toBe(false);
+    expect(isConnectionError(new Error('fetch failed due to an upstream policy'))).toBe(false);
   });
 
   it('returns false for a hard-quota rate-limit error whose code embeds `terminated`', () => {
@@ -884,50 +885,25 @@ describe('formatFetchError', () => {
     expect(formatFetchError(err)).toContain('(Code: ECONNREFUSED)');
   });
 
-  it('renders a non-Error object cause as JSON instead of [object Object]', () => {
-    const err = Object.assign(new Error('boom'), { cause: { reason: 'blocked', port: 443 } });
-    const out = formatFetchError(err);
-    expect(out).toContain('"reason":"blocked"');
-    expect(out).not.toContain('[object Object]');
-  });
-
-  it('redacts secret-bearing fields in an object cause (this string is logged unsanitized)', () => {
-    // The formatted string is interpolated into a plain log message, which the
-    // logger does NOT sanitize. A raw JSON.stringify would leak the header, so
-    // formatErrorCause routes object causes through sanitizeObject first.
-    const err = Object.assign(new Error('fetch failed'), {
-      cause: {
-        url: 'https://api.promptfoo.app/api/v1/task',
-        headers: { authorization: 'Bearer sk-supersecret-123', 'x-api-key': 'pk-live-leakme' },
-      },
+  it('does not serialize response bodies or credentials in object causes', () => {
+    const error = new Error('fetch failed', {
+      cause: { response: 'private test payload', headers: { authorization: 'fixture-token' } },
     });
-    const out = formatFetchError(err);
-    expect(out).not.toContain('sk-supersecret-123');
-    expect(out).not.toContain('pk-live-leakme');
-    expect(out).toContain('[REDACTED]');
-    // Non-sensitive diagnostic context is preserved.
-    expect(out).toContain('api/v1/task');
+    expect(formatFetchError(error)).toBe('Error: fetch failed');
   });
 
-  it('degrades safely (no throw) when an object cause is not JSON-serializable (BigInt)', () => {
-    // A raw JSON.stringify throws on a BigInt value; sanitizeObject absorbs it
-    // (returning a placeholder) so formatFetchError never throws inside a logging
-    // call and never emits a bare `[object Object]`.
-    const err = Object.assign(new Error('boom'), { cause: { attempts: 3n } });
-    expect(() => formatFetchError(err)).not.toThrow();
-    const out = formatFetchError(err);
-    expect(out).toContain('boom');
-    expect(out).not.toContain('[object Object]');
+  it('finds the transport cause behind a response-body error', () => {
+    const error = new Error('Failed to read response body', { cause: makeTerminatedError() });
+
+    expect(describeFetchError(error)).toContain('SocketError: other side closed');
+    expect(describeFetchError(error)).toContain('UND_ERR_SOCKET');
+    expect(describeFetchError(error)).toContain(CONNECTION_BLOCK_HINT);
   });
 
-  it('handles a circular object cause without throwing', () => {
-    const circular: Record<string, unknown> = { reason: 'blocked' };
-    circular.self = circular;
-    const err = Object.assign(new Error('boom'), { cause: circular });
-    // Must not throw: sanitizeObject collapses the cycle, so JSON.stringify
-    // succeeds and the non-circular field still surfaces.
-    expect(() => formatFetchError(err)).not.toThrow();
-    expect(formatFetchError(err)).toContain('"reason":"blocked"');
+  it('terminates when an error is its own cause', () => {
+    const error = new Error('fixture cycle');
+    error.cause = error;
+    expect(formatFetchError(error)).toBe('Error: fixture cycle');
   });
 
   it('stringifies non-Error values', () => {
