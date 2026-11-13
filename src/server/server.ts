@@ -376,12 +376,22 @@ export function createApp() {
   // Configure proper MIME types for JavaScript files
   app.use(setJavaScriptMimeType);
 
+  async function serveApp(_req: Request, res: Response): Promise<void> {
+    if (!isNetworkEgressDisabled()) {
+      res.sendFile('index.html', { root: staticDir, dotfiles: 'allow' });
+      return;
+    }
+
+    const html = await fs.promises.readFile(path.join(staticDir, 'index.html'), 'utf8');
+    res.setHeader('Cache-Control', 'no-store');
+    res.type('html').send(html.replace(/<head>/i, '<head><meta name="promptfoo-no-network">'));
+  }
+
+  app.get(['/', '/index.html'], serveApp);
   app.use(express.static(staticDir, { dotfiles: 'allow' }));
 
-  // Handle client routing, return all requests to the app
-  app.get('/*splat', (_req: Request, res: Response): void => {
-    res.sendFile('index.html', { root: staticDir, dotfiles: 'allow' });
-  });
+  // Serve the same HTML settings for client-side deep links.
+  app.get('/*splat', serveApp);
   app.use(defaultErrorHandler);
   return app;
 }

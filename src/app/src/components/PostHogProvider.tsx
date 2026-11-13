@@ -40,7 +40,8 @@ export const PostHogProvider = ({ children }: PostHogProviderProps) => {
       POSTHOG_KEY &&
       typeof window !== 'undefined' &&
       DISABLE_TELEMETRY !== 'true' &&
-      NO_NETWORK !== 'true'
+      NO_NETWORK !== 'true' &&
+      !document.querySelector('meta[name="promptfoo-no-network"]')
     ) {
       try {
         posthog.init(POSTHOG_KEY, {

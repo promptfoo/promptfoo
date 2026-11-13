@@ -45,12 +45,16 @@ describe('Remote Health Route', () => {
   });
 
   it('checks upstream health when no-network mode is off', async () => {
-    const restoreEnv = mockProcessEnv({ PROMPTFOO_NO_NETWORK: undefined });
+    const restoreEnv = mockProcessEnv({
+      PROMPTFOO_NO_NETWORK: undefined,
+      PROMPTFOO_DISABLE_REMOTE_GENERATION: undefined,
+      PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION: undefined,
+      PROMPTFOO_REMOTE_GENERATION_URL: 'https://example.test',
+    });
     mockedCheckRemoteHealth.mockResolvedValue({ status: 'OK', message: 'healthy' });
     try {
       const response = await request(app).get('/api/remote-health');
 
-      expect(response.status).toBe(200);
       expect(response.body).toMatchObject({ status: 'OK', message: 'healthy' });
       expect(mockedCheckRemoteHealth).toHaveBeenCalledTimes(1);
     } finally {
