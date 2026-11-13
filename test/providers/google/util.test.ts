@@ -5628,10 +5628,9 @@ describe('util', () => {
       const thought = { text: 'Look it up.', thought: true };
       const text = { text: 'Searching.' };
       const call = { functionCall: { name: 'search', args: {} }, thoughtSignature: 'signature' };
-      const textAnswer = mergeCandidateContents(
-        { output: undefined, thoughts: '' },
-        { content: { parts: [thought, text] } } as any,
-      );
+      const textAnswer = mergeCandidateContents({ output: undefined, thoughts: '' }, {
+        content: { parts: [thought, text] },
+      } as any);
       const answer = mergeCandidateContents(textAnswer, { content: { parts: [call] } } as any);
 
       expect(formatGeminiThinking(answer, undefined)).toEqual([thought, text, call]);

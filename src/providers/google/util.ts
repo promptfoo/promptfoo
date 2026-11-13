@@ -1524,9 +1524,8 @@ export function mergeCandidateContents(answer: GeminiAnswer, candidate: Candidat
     typeof content === 'string' && thoughtParts.length > 0
       ? [...(answer.thoughtParts ?? []), ...thoughtParts]
       : answer.thoughtParts;
-  const output = content === '' && thoughtParts.length > 0
-    ? answer.output
-    : mergeParts(answer.output, content);
+  const output =
+    content === '' && thoughtParts.length > 0 ? answer.output : mergeParts(answer.output, content);
   return { output, thoughts, thoughtParts: omittedParts };
 }
 
