@@ -32,7 +32,7 @@ providers:
 
 - Use the model ID exactly as RouterPlex lists it, after `openai:chat:`. IDs are case-sensitive and have no vendor prefix, for example `claude-sonnet-4-6`, `gpt-6-sol`, `gemini-3.8-flash`, or `deepseek-v4-pro`.
 - `omitDefaults: true` omits promptfoo's default output limit and temperature. Explicit settings and `OPENAI_MAX_TOKENS` / `OPENAI_TEMPERATURE` still apply.
-- Use `max_tokens` to cap output, including reasoning tokens for reasoning models.
+- Set `max_tokens` in Promptfoo to cap output. For recognized GPT reasoning models such as `gpt-6-sol`, the OpenAI provider sends that limit as `max_completion_tokens`. The limit includes reasoning tokens when the model supports them.
 - Check the [model catalog](https://routerplex.com/api/models) or `GET https://api.routerplex.com/v1/models` for current model IDs, context windows, and prices. The catalog also lists an image generation model, which this chat provider does not use.
 
 ## Comparing models
