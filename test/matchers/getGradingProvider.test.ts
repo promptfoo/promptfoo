@@ -175,7 +175,6 @@ describe('getGradingProvider', () => {
       expect(result).toBe(targetProvider);
       expect(logger.warn).toHaveBeenCalledWith(
         expect.stringContaining('defaultTest.provider is being used as the grader'),
-
       );
     });
 
