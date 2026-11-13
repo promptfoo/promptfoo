@@ -229,8 +229,9 @@ describe('BraintrustProvider', () => {
     expect(cancel).toHaveBeenCalledOnce();
   });
 
-  it('releases unsuccessful response bodies before propagating provider errors', async () => {
+  it('propagates the HTTP status and releases the body even for an oversized error', async () => {
     const unauthorizedResponse = response({ error: 'unauthorized' }, 401);
+    unauthorizedResponse.headers.set('content-length', '10485761');
     const cancel = vi.spyOn(unauthorizedResponse.body!, 'cancel');
     mockedFetch.mockResolvedValue(unauthorizedResponse);
 
