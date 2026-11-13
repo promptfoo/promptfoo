@@ -1,148 +1,105 @@
+import { randomBytes } from 'node:crypto';
+
 /**
- * Smoke fixture provider that emits OTLP JSON spans with a configurable status code.
- * Drives the trajectory:step-status smoke tests with zero external dependencies.
+ * Smoke-test provider that emits a single OTLP tool span to the promptfoo
+ * OTLP HTTP receiver, with status derived from the per-test `code` var.
+ *
+ * vars.code mapping to OTel span status.code:
+ *   1 (or "success")  → 1 (OK)
+ *   2 (or "error")    → 2 (ERROR), message from vars.message when provided
+ *   0 / "unset" / any → 0 (UNSET — explicit unset so numeric status=0 assertions match)
  */
-
-const OTLP_ENDPOINT =
-  process.env.PROMPTFOO_SMOKE_OTLP_ENDPOINT ||
-  `http://127.0.0.1:${process.env.PROMPTFOO_SMOKE_OTLP_PORT}/v1/traces`;
-
-const OTEL_STATUS_OK = 1;
-const OTEL_STATUS_UNSET = 0;
-const OTEL_SPAN_KIND_INTERNAL = 1;
-
-const NANOSECONDS_PER_MILLISECOND = 1_000_000n;
-
-function nowNanos() {
-  return (BigInt(Date.now()) * NANOSECONDS_PER_MILLISECOND).toString();
-}
-
-function randomHex(nibbles) {
-  return Array.from(
-    { length: nibbles },
-    () => '0123456789abcdef'[Math.floor(Math.random() * 16)],
-  ).join('');
-}
-
-function parseTraceparent(traceparent) {
-  if (!traceparent) {
-    return null;
-  }
-  const parts = traceparent.split('-');
-  if (parts.length !== 4) {
-    return null;
-  }
-  return {
-    traceId: parts[1],
-    spanId: parts[2],
-  };
-}
-
-function toOtlpAttribute(key, value) {
-  if (typeof value === 'string') {
-    return { key, value: { stringValue: value } };
-  }
-  if (typeof value === 'number' && Number.isFinite(value)) {
-    return { key, value: { intValue: String(value) } };
-  }
-  if (typeof value === 'boolean') {
-    return { key, value: { boolValue: value } };
-  }
-  if (value === null || value === undefined) {
-    return null;
-  }
-  return { key, value: { stringValue: JSON.stringify(value) } };
-}
-
 export default class TrajectoryStatusProvider {
-  #providerId;
-  config;
-
   constructor(options) {
-    this.#providerId = options?.id || 'trajectory-status';
+    this.providerId = options?.id || 'trajectory-status';
     this.config = options?.config || {};
   }
 
   id() {
-    return this.#providerId;
+    return this.providerId;
   }
 
-  async callApi(prompt, context) {
+  async callApi(_prompt, context) {
+    const port = process.env.PROMPTFOO_SMOKE_OTLP_PORT;
     const vars = context?.vars ?? {};
-    const code = Number(vars.code ?? OTEL_STATUS_OK);
-    const message = vars.message ? String(vars.message) : undefined;
+    const code = vars.code;
+    const message = vars.message;
 
-    const parent = parseTraceparent(context?.traceparent);
-    const traceId = parent?.traceId ?? randomHex(32);
-    const spanId = randomHex(16);
-    const startNanos = nowNanos();
-    const endNanos = startNanos;
+    // Build OTLP span status from vars.code. Always emit a status so that
+    // numeric assertions against code 0 (UNSET) also match.
+    let statusCode = 0; // UNSET default
+    let statusMessage;
+    if (code === 1 || code === 'success') {
+      statusCode = 1;
+    } else if (code === 2 || code === 'error') {
+      statusCode = 2;
+      if (message) {
+        statusMessage = String(message);
+      }
+    }
 
-    const attributes = [
-      toOtlpAttribute('tool.name', 'search_orders'),
-      toOtlpAttribute('tool.arguments', JSON.stringify({ query: 'smoke test' })),
-      toOtlpAttribute('prompt.text', prompt),
-      toOtlpAttribute('smoke.test_code', code),
-      context?.evaluationId ? toOtlpAttribute('evaluation.id', context.evaluationId) : null,
-      context?.testCaseId ? toOtlpAttribute('test.case.id', context.testCaseId) : null,
-    ].filter(Boolean);
+    const spanStatus = statusMessage
+      ? { code: statusCode, message: statusMessage }
+      : { code: statusCode };
 
-    const span = {
-      traceId,
-      spanId,
-      ...(parent?.spanId ? { parentSpanId: parent.spanId } : {}),
-      name: 'search_orders',
-      kind: OTEL_SPAN_KIND_INTERNAL,
-      startTimeUnixNano: startNanos,
-      endTimeUnixNano: endNanos,
-      attributes,
-      ...(code === OTEL_STATUS_UNSET
-        ? {}
-        : {
-            status: {
-              code,
-              ...(message ? { message } : {}),
-            },
-          }),
-    };
+    const [, traceId, parentSpanId] = context?.traceparent?.split('-') ?? [];
+    if (!traceId || !parentSpanId || !port) {
+      return { error: 'The smoke fixture requires an active evaluation trace and OTLP receiver' };
+    }
+    const spanId = randomBytes(8).toString('hex');
+    const nowNs = String(Date.now() * 1_000_000);
 
-    const payload = {
+    const otlpRequest = {
       resourceSpans: [
         {
           resource: {
             attributes: [
-              toOtlpAttribute('service.name', 'trajectory-status-fixture'),
-              toOtlpAttribute('service.version', '1.0.0'),
-            ].filter(Boolean),
+              { key: 'service.name', value: { stringValue: 'trajectory-status-smoke' } },
+            ],
           },
           scopeSpans: [
             {
-              scope: { name: 'trajectory-status-fixture', version: '1.0.0' },
-              spans: [span],
+              scope: { name: 'trajectory-status-provider' },
+              spans: [
+                {
+                  traceId,
+                  spanId,
+                  parentSpanId,
+                  name: 'search_orders',
+                  kind: 1, // INTERNAL
+                  startTimeUnixNano: nowNs,
+                  endTimeUnixNano: nowNs,
+                  attributes: [
+                    { key: 'gen_ai.tool.name', value: { stringValue: 'search_orders' } },
+                    {
+                      key: 'tool.arguments',
+                      value: { stringValue: JSON.stringify({ query: 'test query' }) },
+                    },
+                  ],
+                  ...(spanStatus ? { status: spanStatus } : {}),
+                },
+              ],
             },
           ],
         },
       ],
     };
 
-    try {
-      await fetch(OTLP_ENDPOINT, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
-      });
-    } catch (_error) {
-      // Best-effort OTLP emit; swallow so the fixture stays deterministic.
+    const response = await fetch(`http://127.0.0.1:${port}/v1/traces`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(otlpRequest),
+    });
+    if (!response.ok) {
+      return { error: `Smoke fixture OTLP delivery failed with HTTP ${response.status}` };
     }
 
-    const succeeded = code === OTEL_STATUS_OK;
+    const statusLabel =
+      code === 1 ? 'success' : code === 2 ? 'error' : code === 0 ? 'unset' : 'unset';
+
     return {
-      output: succeeded
-        ? `search_orders succeeded (status code ${code})`
-        : `search_orders ${code === OTEL_STATUS_UNSET ? 'unset' : 'failed'} (status code ${code}${message ? `: ${message}` : ''})`,
-      tokenUsage: { total: prompt.length, prompt: prompt.length, completion: 0 },
+      output: `Deterministic tool result (code=${String(code)}, status=${statusLabel})`,
+      tokenUsage: { total: 1, prompt: 0, completion: 1 },
     };
   }
 }
