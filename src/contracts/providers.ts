@@ -164,7 +164,13 @@ export interface ProviderClassificationResponse {
   tokenUsage?: Partial<TokenUsage>;
 }
 
+/** An invalid model call, which can satisfy a negated tool-call validity assertion. */
+export class InvalidToolCallError extends Error {
+  override name = 'InvalidToolCallError';
+}
+
 export interface FunctionToolCallValidator {
+  /** Throw InvalidToolCallError for invalid output. Other errors remain assertion failures. */
   validateFunctionToolCall(output: string | object, vars?: Record<string, VarValue>): void;
 }
 

@@ -20,15 +20,6 @@ const linkNode = { tagName: 'a' } as Parameters<typeof IMAGE_DATA_URL_TRANSFORM>
 
 describe('markdown-config', () => {
   describe('REMARK_PLUGINS', () => {
-    it('should be a stable reference (same object on multiple imports)', () => {
-      // This test verifies that REMARK_PLUGINS is defined at module level
-      // and doesn't create a new array on each access
-      const plugins1 = REMARK_PLUGINS;
-      const plugins2 = REMARK_PLUGINS;
-
-      expect(plugins1).toBe(plugins2);
-    });
-
     it('should contain remarkGfm plugin', () => {
       expect(REMARK_PLUGINS).toHaveLength(1);
       expect(typeof REMARK_PLUGINS[0]).toBe('function');
@@ -64,13 +55,6 @@ describe('markdown-config', () => {
 
     it('should handle empty strings', () => {
       expect(IDENTITY_URL_TRANSFORM('')).toBe('');
-    });
-
-    it('should be a stable function reference', () => {
-      // Verify the function doesn't get recreated
-      const fn1 = IDENTITY_URL_TRANSFORM;
-      const fn2 = IDENTITY_URL_TRANSFORM;
-      expect(fn1).toBe(fn2);
     });
   });
 

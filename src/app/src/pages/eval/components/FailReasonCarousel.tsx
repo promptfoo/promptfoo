@@ -100,7 +100,7 @@ const FailReasonCarousel = ({
         </span>
       )}
       {currentReason && renderMarkdown ? (
-        <MarkdownErrorBoundary fallback={currentReason}>
+        <MarkdownErrorBoundary key={currentReason} fallback={currentReason}>
           <div className="whitespace-pre-wrap">
             <ReactMarkdown
               components={markdownComponents}
@@ -112,7 +112,7 @@ const FailReasonCarousel = ({
           </div>
         </MarkdownErrorBoundary>
       ) : currentReason && dataImages.length > 0 ? (
-        <MarkdownErrorBoundary fallback={currentReason}>
+        <MarkdownErrorBoundary key={currentReason} fallback={currentReason}>
           <DataImagePreviewText
             text={currentReason}
             images={dataImages}
