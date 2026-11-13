@@ -789,7 +789,7 @@ describe('trajectory assertions', () => {
         ['unused_tool', true],
         ['search*', false],
       ])('supports zero bounds for %s', (pattern, positivePass) => {
-        const value = { pattern, min: 0, max: 0 };
+        const value = { pattern, max: 0 };
         const params: AssertionParams = {
           ...defaultParams,
           inverse,

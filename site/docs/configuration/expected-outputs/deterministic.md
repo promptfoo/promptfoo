@@ -793,7 +793,7 @@ tests:
 - An array of strings, such as `['search_orders', 'compose_reply']`
 - An object with `pattern`, `min`, and optional `max`
 
-Count bounds must be finite, non-negative integers, with `min <= max` when both are supplied. The default `min` is 1; use `min: 0` and `max: 0` to require no matching tools. Invalid bounds produce an error, including for `not-trajectory:tool-used`.
+Count bounds must be finite, non-negative integers, with `min <= max` when both are supplied. When no bounds are supplied, `min` defaults to 1. With only `max` set, `min` defaults to 0, so `max: 0` requires no matching tools. Invalid bounds produce an error, including for `not-trajectory:tool-used`.
 
 ### trajectory:tool-args-match {#trajectorytool-args-match}
 

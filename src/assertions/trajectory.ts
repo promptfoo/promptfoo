@@ -191,7 +191,7 @@ export const handleTrajectoryToolUsed = (params: AssertionParams): GradingResult
   }
 
   const matcher = expected.matcher;
-  const min = matcher.min ?? 1;
+  const min = matcher.min ?? (matcher.max === undefined ? 1 : 0);
   const max = matcher.max;
   if (!matcher.pattern && !matcher.name) {
     throw new Error(
