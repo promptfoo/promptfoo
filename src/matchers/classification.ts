@@ -58,7 +58,12 @@ export async function matchesClassification(
     };
   }
 
-  const score = expected === undefined ? Math.max(...scores) : resp.classification[expected] || 0;
+  const score =
+    expected === undefined
+      ? scores.reduce((max, score) => Math.max(max, score), 0)
+      : Object.hasOwn(resp.classification, expected)
+        ? resp.classification[expected]
+        : 0;
   const pass = score >= threshold - Number.EPSILON;
   const subject =
     expected === undefined
