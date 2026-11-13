@@ -1,4 +1,5 @@
 import { LRUCache } from 'lru-cache';
+import Clone from 'rfdc';
 import { hasTraceAwareAssertions, runAssertions } from '../assertions/index';
 import { extractAndStoreBinaryData } from '../blobs/extractor';
 import { getCache, isCacheEnabled, withCacheEnabled, withCacheNamespace } from '../cache';
