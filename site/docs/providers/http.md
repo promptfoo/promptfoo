@@ -361,6 +361,8 @@ You can override this behavior by specifying a `transformResponse` in the provid
 
 By default, the entire response is returned as the output. If your API responds with a JSON object and you want to pick out a specific value, use the `transformResponse` property to set a JavaScript snippet that manipulates the provided `json` object.
 
+JSON scalar values such as `false`, `0`, and an empty string are passed through to `json` unchanged.
+
 For example, this `transformResponse` configuration:
 
 ```yaml
