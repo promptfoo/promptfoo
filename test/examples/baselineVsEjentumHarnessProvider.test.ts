@@ -98,7 +98,11 @@ describe('baseline-vs-ejentum-harness provider', () => {
   });
 
   it('returns an error when Ejentum API returns non-OK status', async () => {
-    const response = mockResponse({ message: 'Unauthorized', request: 'private fixture' }, false, 401);
+    const response = mockResponse(
+      { message: 'Unauthorized', request: 'private fixture' },
+      false,
+      401,
+    );
     fetchMock.mockResolvedValueOnce(response);
     const mockUnderlying = { callApi: vi.fn() };
     const provider = new EjentumAugmentedProvider({
