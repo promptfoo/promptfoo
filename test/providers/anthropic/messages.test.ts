@@ -4977,6 +4977,8 @@ describe('AnthropicMessagesProvider', () => {
     'claude-mythos-5',
     'claude-fable-5-1',
     'claude-mythos-5-1',
+    'claude-fable-5-2',
+    'claude-mythos-5-2',
     'claude-opus-5-5',
   ])('%s model', (model) => {
     const mockResponse = (modelName: string) =>
@@ -5047,49 +5049,53 @@ describe('AnthropicMessagesProvider', () => {
     });
   });
 
-  describe.each(['claude-fable-5-1', 'claude-mythos-5-1', 'claude-opus-5-5', 'claude-sonnet-5-5'])(
-    '%s tool choice',
-    (model) => {
-      it.each([
-        { type: 'any' as const },
-        { type: 'tool' as const, name: 'get_weather' },
-        { type: 'auto' as const },
-        { type: 'none' as const },
-      ])('omits only unsupported forced tool choice: %j', async (tool_choice) => {
-        const warnSpy = vi.spyOn(logger, 'warn');
-        const provider = createProvider(model, {
-          config: {
-            tools: [{ name: 'get_weather', input_schema: { type: 'object', properties: {} } }],
-            tool_choice,
-            thinking: { type: 'adaptive' },
-          },
-        });
-        const createSpy = vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
-          id: 'msg-51',
-          type: 'message',
-          role: 'assistant',
-          model,
-          content: [{ type: 'text', text: 'ok' }],
-          stop_reason: 'end_turn',
-          stop_sequence: null,
-          usage: { input_tokens: 10, output_tokens: 5 },
-        } as Anthropic.Messages.Message);
-
-        await provider.callApi('Check the weather');
-
-        const params = createSpy.mock.calls[0][0];
-        expect(params.tools).toHaveLength(1);
-        if (tool_choice.type === 'any' || tool_choice.type === 'tool') {
-          expect(params).not.toHaveProperty('tool_choice');
-          expect(warnSpy).toHaveBeenCalledWith(
-            expect.stringContaining('(forced tool use) is not supported on Claude'),
-          );
-        } else {
-          expect(params.tool_choice).toEqual(tool_choice);
-        }
+  describe.each([
+    'claude-fable-5-1',
+    'claude-mythos-5-1',
+    'claude-fable-5-2',
+    'claude-mythos-5-2',
+    'claude-opus-5-5',
+    'claude-sonnet-5-5',
+  ])('%s tool choice', (model) => {
+    it.each([
+      { type: 'any' as const },
+      { type: 'tool' as const, name: 'get_weather' },
+      { type: 'auto' as const },
+      { type: 'none' as const },
+    ])('omits only unsupported forced tool choice: %j', async (tool_choice) => {
+      const warnSpy = vi.spyOn(logger, 'warn');
+      const provider = createProvider(model, {
+        config: {
+          tools: [{ name: 'get_weather', input_schema: { type: 'object', properties: {} } }],
+          tool_choice,
+          thinking: { type: 'adaptive' },
+        },
       });
-    },
-  );
+      const createSpy = vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
+        id: 'msg-51',
+        type: 'message',
+        role: 'assistant',
+        model,
+        content: [{ type: 'text', text: 'ok' }],
+        stop_reason: 'end_turn',
+        stop_sequence: null,
+        usage: { input_tokens: 10, output_tokens: 5 },
+      } as Anthropic.Messages.Message);
+
+      await provider.callApi('Check the weather');
+
+      const params = createSpy.mock.calls[0][0];
+      expect(params.tools).toHaveLength(1);
+      if (tool_choice.type === 'any' || tool_choice.type === 'tool') {
+        expect(params).not.toHaveProperty('tool_choice');
+        expect(warnSpy).toHaveBeenCalledWith(
+          expect.stringContaining('(forced tool use) is not supported on Claude'),
+        );
+      } else {
+        expect(params.tool_choice).toEqual(tool_choice);
+      }
+    });
+  });
 
   describe('claude-sonnet-5-5 thinking', () => {
     const mockResponse = () =>

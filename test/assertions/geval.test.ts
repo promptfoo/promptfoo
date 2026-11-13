@@ -624,14 +624,20 @@ describe('handleGEval', () => {
         pass: true,
         score: 0.9,
         reason: 'first criterion matched',
-        tokensUsed: { total: 10, prompt: 4, completion: 6 },
+        tokensUsed: {
+          total: 10,
+          prompt: 4,
+          completion: 6,
+          cached: 10,
+          incurredTokenUsage: { total: 0 },
+        },
       });
       mockMatchesGEval.mockResolvedValueOnce({
         pass: false,
         score: 0,
         reason: 'G-Eval result has invalid or missing score: "bad"',
         tokensUsed: { total: 17, prompt: 9, completion: 8 },
-        metadata: { graderError: true },
+        metadata: { graderError: true, diagnostic: { phase: 'evaluation' } },
       });
 
       const result = await handleGEval({
@@ -660,8 +666,10 @@ describe('handleGEval', () => {
           total: 27,
           prompt: 13,
           completion: 14,
+          cached: 10,
+          incurredTokenUsage: expect.objectContaining({ total: 17 }),
         }),
-        metadata: { graderError: true },
+        metadata: { graderError: true, diagnostic: { phase: 'evaluation' } },
       });
     });
 
