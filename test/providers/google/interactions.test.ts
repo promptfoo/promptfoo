@@ -1895,6 +1895,38 @@ describe('GoogleInteractionsProvider', () => {
     });
   });
 
+  it('sends Gemini 4 Hydrogen XHIGH thinking as xhigh without sampling fields', async () => {
+    mockFetchWithCache.mockResolvedValue({
+      data: {
+        status: 'completed',
+        steps: [{ type: 'model_output', content: [{ type: 'text', text: '130' }] }],
+        usage: { total_input_tokens: 47, total_output_tokens: 7, total_thought_tokens: 98 },
+      },
+      cached: false,
+    } as any);
+    const provider = new GoogleInteractionsProvider('gemini-4-hydrogen', {
+      config: {
+        apiKey: 'test-key',
+        generationConfig: {
+          temperature: 0.2,
+          topK: 10,
+          presencePenalty: 0.5,
+          candidateCount: 2,
+          thinkingConfig: { thinkingLevel: 'XHIGH' },
+        } as any,
+      },
+    });
+
+    const result = await provider.callApi('What is 13 * 10?');
+
+    const request = mockFetchWithCache.mock.calls[0]?.[1] as RequestInit;
+    const body = JSON.parse(request.body as string);
+    expect(body.model).toBe('gemini-4-hydrogen');
+    expect(body.generation_config).toEqual({ thinking_level: 'xhigh' });
+    expect(result.output).toBe('130');
+    expect(result.cost).toBeCloseTo((47 * 1.5 + (7 + 98) * 7.5) / 1e6, 12);
+  });
+
   it('rejects numeric thinkingBudget instead of sending an invalid thinkingConfig object', async () => {
     mockFetchWithCache.mockResolvedValue({
       data: { status: 'completed', steps: [] },

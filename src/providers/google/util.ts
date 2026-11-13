@@ -16,6 +16,7 @@ import { parseFileUrl } from '../../util/functions/loadFunction';
 import { renderVarsInObject } from '../../util/index';
 import { getAjv } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
+import { resolveProviderApiKey } from '../credentials';
 import { resolveProviderEnv } from '../env';
 import { encodePcmToWav } from '../pcm';
 import {
@@ -29,6 +30,7 @@ import {
 import { InvalidToolSchemaError } from '../toolSchemaError';
 import { loadCredentials } from './auth';
 import {
+  GEMINI_4_MODELS,
   GEMINI_FLASH_MODELS,
   GOOGLE_MODELS,
   type GoogleModel,
@@ -283,6 +285,19 @@ export function mergeGoogleRequestTools(
   ];
 }
 
+export function getNativeGeminiApiKey(
+  config: { apiKey?: string; apiKeyEnvar?: string },
+  env?: Readonly<Record<string, string | undefined>>,
+): string | undefined {
+  const key = resolveProviderApiKey(config, env, [
+    'GOOGLE_API_KEY',
+    'GEMINI_API_KEY',
+    'PALM_API_KEY',
+    'GOOGLE_GENERATIVE_AI_API_KEY',
+  ]);
+  return key ? getNunjucksEngine().renderString(key, {}) : undefined;
+}
+
 /** Resolve native Gemini endpoints consistently across text and image adapters. */
 export function getGoogleApiBaseUrl(
   config: CompletionOptions,
@@ -385,7 +400,7 @@ export function removeGoogleFunctionDeclarations(tools: unknown): Tool[] {
 }
 
 /**
- * Current Gemini Flash models ignore sampling parameters and reject penalties
+ * Gemini 4 and current Gemini Flash models ignore sampling parameters and reject penalties
  * and candidate counts. Remove typed and passthrough spellings.
  */
 export function removeDeprecatedGeminiGenerationParams<T>(
@@ -393,7 +408,9 @@ export function removeDeprecatedGeminiGenerationParams<T>(
   generationConfig: T,
   requestedModelName = modelName,
 ): T {
+  const isGemini4 = GEMINI_4_MODELS.some(({ id }) => modelName.startsWith(id));
   if (
+    !isGemini4 &&
     !GEMINI_FLASH_MODELS.some(({ id }) => modelName.startsWith(id)) &&
     modelName !== 'gemini-flash-latest' &&
     modelName !== 'gemini-flash-lite-latest'
@@ -427,10 +444,14 @@ export function removeDeprecatedGeminiGenerationParams<T>(
   }
 
   if (
+    isGemini4 ||
     modelName.startsWith('gemini-3.8-flash') ||
     modelName.startsWith('gemini-3.7-flash') ||
     modelName === 'gemini-flash-latest'
   ) {
+    const supportedThinkingLevels = modelName.startsWith('gemini-4-hydrogen')
+      ? 'LOW, MEDIUM, HIGH, or XHIGH'
+      : 'LOW, MEDIUM, or HIGH';
     for (const config of [sanitized.thinkingConfig, sanitized.thinking_config]) {
       const thinkingConfig = config as
         | {
@@ -445,13 +466,13 @@ export function removeDeprecatedGeminiGenerationParams<T>(
         thinkingConfig?.thinking_budget !== undefined
       ) {
         throw new Error(
-          `${requestedModelName} does not support thinkingBudget. Use thinkingLevel (LOW, MEDIUM, or HIGH).`,
+          `${requestedModelName} does not support thinkingBudget. Use thinkingLevel (${supportedThinkingLevels}).`,
         );
       }
       const thinkingLevel = thinkingConfig?.thinkingLevel ?? thinkingConfig?.thinking_level;
       if (typeof thinkingLevel === 'string' && thinkingLevel.toUpperCase() === 'MINIMAL') {
         throw new Error(
-          `${requestedModelName} does not support MINIMAL thinking. Use LOW, MEDIUM, or HIGH.`,
+          `${requestedModelName} does not support MINIMAL thinking. Use ${supportedThinkingLevels}.`,
         );
       }
     }

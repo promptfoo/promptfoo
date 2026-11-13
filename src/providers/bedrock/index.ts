@@ -2293,8 +2293,6 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'anthropic.claude-3-7-sonnet-20250219-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-3-haiku-20240307-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-fable-5': BEDROCK_MODEL.CLAUDE_MESSAGES,
-  'anthropic.claude-fable-5-1': BEDROCK_MODEL.CLAUDE_MESSAGES,
-  'anthropic.claude-mythos-5-1': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-opus-4-1-20250805-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-opus-4-6-v1': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'anthropic.claude-opus-4-7': BEDROCK_MODEL.CLAUDE_MESSAGES,
@@ -2401,6 +2399,8 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'us.anthropic.claude-fable-5': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-fable-5-1': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-mythos-5-1': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'us.anthropic.claude-fable-5-2': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'us.anthropic.claude-mythos-5-2': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-opus-4-1-20250805-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-opus-4-6-v1': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-opus-4-7': BEDROCK_MODEL.CLAUDE_MESSAGES,
@@ -2528,6 +2528,8 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'global.anthropic.claude-fable-5': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'global.anthropic.claude-fable-5-1': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'global.anthropic.claude-mythos-5-1': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'global.anthropic.claude-fable-5-2': BEDROCK_MODEL.CLAUDE_MESSAGES,
+  'global.anthropic.claude-mythos-5-2': BEDROCK_MODEL.CLAUDE_MESSAGES,
   // Claude Sonnet 5 uses the global endpoint like the other Claude 5-generation
   // models (Fable 5, Opus 4.7/4.8) rather than the older `apac.` prefix.
   'global.anthropic.claude-sonnet-5': BEDROCK_MODEL.CLAUDE_MESSAGES,
@@ -2578,13 +2580,25 @@ function getBedrockModelId(modelName: string): string {
     : modelName;
 }
 
+// AWS serves these only through inference profiles: the bare ID returns "on-demand throughput
+// isn't supported" (verified live for Fable 5.1 and 5.2, 2026-11-09).
+const INFERENCE_PROFILE_ONLY_MODELS = new Set([
+  'xai.grok-4.7',
+  'zai.glm-5.3',
+  'moonshotai.kimi-k3',
+  'anthropic.claude-fable-5-1',
+  'anthropic.claude-mythos-5-1',
+  'anthropic.claude-fable-5-2',
+  'anthropic.claude-mythos-5-2',
+]);
+
 /** Reject withdrawn models and IDs that require a cross-region inference profile. */
 export function assertBedrockModelIsAvailable(modelName: string): void {
   const modelId = getBedrockModelId(modelName);
   if (RETIRED_BEDROCK_MODELS.has(modelId.replace(INFERENCE_PROFILE_PREFIX, ''))) {
     throw new Error(`Unknown Amazon Bedrock model: ${modelName}`);
   }
-  if (modelId === 'xai.grok-4.7' || modelId === 'zai.glm-5.3' || modelId === 'moonshotai.kimi-k3') {
+  if (INFERENCE_PROFILE_ONLY_MODELS.has(modelId)) {
     throw new Error(
       `Amazon Bedrock model "${modelId}" requires a cross-region inference profile. ` +
         `Use "bedrock:us.${modelId}" or "bedrock:global.${modelId}"` +

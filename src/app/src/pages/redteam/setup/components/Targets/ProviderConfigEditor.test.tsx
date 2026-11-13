@@ -1979,7 +1979,7 @@ describe('ProviderConfigEditor', () => {
     'bedrock:converse:anthropic.claude-3-5-sonnet-20241022-v2:0',
     'bedrock:runtime:chat:qwen.qwen3-coder-next',
     'bedrock:mantle:openai.gpt-oss-120b',
-    'bedrock:messages:us.anthropic.claude-fable-5-1',
+    'bedrock:messages:us.anthropic.claude-fable-5-2',
     'bedrock:anthropic.claude-3-5-sonnet',
     // This legacy Converse-shaped ID resolves to Responses, which has no client MCP.
     'bedrock:converse:openai.gpt-5.5',

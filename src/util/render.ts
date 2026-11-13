@@ -128,22 +128,31 @@ export function renderEnvOnlyInObject<T>(
     }
 
     if (typeof value === 'object' && value !== null) {
-      const result: Record<string, unknown> = {};
-      for (const key in value) {
+      return mapObjectValues(value, (key, child) =>
         // Conversation history is runtime data and may contain untrusted model output.
-        // Preserve it as literal data instead of rendering env templates.
-        result[key] =
-          key === '_conversation'
-            ? (value as Record<string, unknown>)[key]
-            : render((value as Record<string, unknown>)[key]);
-      }
-      return result;
+        key === '_conversation' ? child : render(child),
+      );
     }
 
     return value;
   };
 
   return render(obj) as T;
+}
+
+/**
+ * Copy an object's enumerable keys, including inherited ones, into a plain object.
+ * Object.fromEntries keeps a literal "__proto__" key as data instead of changing the prototype.
+ */
+function mapObjectValues(
+  value: object,
+  map: (key: string, child: unknown) => unknown,
+): Record<string, unknown> {
+  const entries: [string, unknown][] = [];
+  for (const key in value) {
+    entries.push([key, map(key, (value as Record<string, unknown>)[key])]);
+  }
+  return Object.fromEntries(entries);
 }
 
 export function renderVarsInObject<T>(obj: T, vars?: Record<string, VarValue>): T {
@@ -159,11 +168,7 @@ export function renderVarsInObject<T>(obj: T, vars?: Record<string, VarValue>): 
     return obj.map((item) => renderVarsInObject(item, vars)) as unknown as T;
   }
   if (typeof obj === 'object' && obj !== null) {
-    const result: Record<string, unknown> = {};
-    for (const key in obj) {
-      result[key] = renderVarsInObject((obj as Record<string, unknown>)[key], vars);
-    }
-    return result as T;
+    return mapObjectValues(obj, (_key, value) => renderVarsInObject(value, vars)) as T;
   } else if (typeof obj === 'function') {
     const fn = obj as Function;
     return renderVarsInObject(fn({ vars }) as T);

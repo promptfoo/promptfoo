@@ -2159,6 +2159,76 @@ describe('Anthropic utilities', () => {
     });
   });
 
+  describe.each(['claude-fable-5-2', 'claude-mythos-5-2'])('Claude 5.2 model %s', (model) => {
+    const ids = [
+      model,
+      `anthropic:messages:${model}`,
+      `anthropic.${model}`,
+      `us.anthropic.${model}`,
+      `global.anthropic.${model}`,
+    ];
+
+    it('is registered at $8/$40 with 0.025x cache reads', () => {
+      expect(ANTHROPIC_MODELS.find((entry) => entry.id === model)?.cost).toEqual({
+        input: 8 / 1e6,
+        output: 40 / 1e6,
+      });
+      // 1000 * 8e-6 + 500 * 40e-6 = 0.028
+      expect(calculateAnthropicCost(model, {}, 1000, 500)).toBeCloseTo(0.028, 10);
+      // + 200 cache reads * 0.2e-6 + 100 five-minute writes * 10e-6 = 0.00004 + 0.001
+      expect(calculateAnthropicCost(model, {}, 1000, 500, 200, 100)).toBeCloseTo(0.02904, 10);
+      // One-hour cache writes bill at 2x input ($16 / MTok).
+      expect(calculateAnthropicCost(model, {}, 0, 0, 0, 100, 100)).toBeCloseTo(0.0016, 10);
+      // The full 1M context bills at the flat rate.
+      expect(calculateAnthropicCost(model, {}, 900_000, 10_000)).toBeCloseTo(7.6, 8);
+    });
+
+    it('applies the regional and US inference-geo premiums only where they bill', () => {
+      expect(calculateAnthropicCost(`us.anthropic.${model}`, {}, 1000, 500)).toBeCloseTo(
+        0.0308,
+        10,
+      );
+      expect(calculateAnthropicCost(`global.anthropic.${model}`, {}, 1000, 500)).toBeCloseTo(
+        0.028,
+        10,
+      );
+      expect(
+        calculateAnthropicCost(model, { extra_body: { inference_geo: 'us' } }, 1000, 500),
+      ).toBeCloseTo(0.0308, 10);
+    });
+
+    it('keeps the Fable 5.1 request rules (verified live)', () => {
+      for (const id of ids) {
+        expect(isSamplingParamsDeprecatedClaudeModel(id, { allowGenerationFallback: false })).toBe(
+          true,
+        );
+        expect(isAlwaysOnAdaptiveThinkingClaudeModel(id)).toBe(true);
+        expect(isForcedToolChoiceUnsupportedClaudeModel(id)).toBe(true);
+        expect(isClaudeRegionalPremiumModel(id)).toBe(true);
+        expect(claudeThinkingConsumesTokens(id, undefined)).toBe(true);
+        expect(getClaudeModelWarningName(id)).toBe('Claude Fable 5.2 and Claude Mythos 5.2');
+      }
+      for (const effort of [undefined, 'low', 'high', 'max'] as const) {
+        expect(normalizeClaudeThinkingConfig(model, { type: 'disabled' }, effort)).toBeUndefined();
+      }
+      expect(
+        normalizeClaudeThinkingConfig(
+          model,
+          { type: 'enabled', budget_tokens: 4096 } as any,
+          'high',
+        ),
+      ).toEqual({ type: 'adaptive' });
+    });
+
+    it('does not let neighboring IDs inherit 5.2 pricing or warnings', () => {
+      expect(getClaudeModelWarningName(`${model}0`)).toBe('Claude Fable 5 and Claude Mythos 5');
+      expect(getClaudeModelWarningName(model.replace('5-2', '5-1'))).toBe(
+        'Claude Fable 5.1 and Claude Mythos 5.1',
+      );
+      expect(calculateAnthropicCost(`${model}-latest`, {}, 1000, 500)).toBeUndefined();
+    });
+  });
+
   describe.each(['claude-fable-5-1', 'claude-mythos-5-1'])(
     'calculateAnthropicCost for %s',
     (model) => {

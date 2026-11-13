@@ -1,0 +1,49 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Evaluate product inspection decisions
+
+prompts:
+  - '{{inspection}}'
+
+providers:
+  - id: google:decisions:gemini-decision-1
+    config:
+      questions:
+        damaged:
+          type: noul
+          instructions: Does the report describe physical damage to the product itself?
+        disposition:
+          type: choice
+          instructions: What should happen to this product?
+          criteria:
+            stock: The product passed inspection and can be sold.
+            repair: The product has a defect that needs repair before sale.
+        severity:
+          type: score
+          instructions: How much does the defect affect the product's function?
+          criteria:
+            - Product works as intended.
+            - Product works, but one feature is impaired.
+            - Product cannot perform its primary function.
+
+defaultTest:
+  assert:
+    - type: javascript
+      value: output.disposition.choice === context.vars.expectedDisposition
+
+tests:
+  - vars:
+      inspection: The camera's lens is shattered. It cannot take a photo and requires a lens replacement.
+      expectedDisposition: repair
+    assert:
+      - type: javascript
+        value: output.damaged.noul > 0.8
+      - type: javascript
+        value: output.severity.score > 1.5
+  - vars:
+      inspection: The camera body and lens are undamaged. All features passed testing. Cleared for sale.
+      expectedDisposition: stock
+    assert:
+      - type: javascript
+        value: output.damaged.noul < 0.2
+      - type: javascript
+        value: output.severity.score < 0.5
