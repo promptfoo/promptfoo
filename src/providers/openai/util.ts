@@ -5,6 +5,7 @@ import { buildHttpRateLimitError } from '../../util/fetch';
 import { getAjv, safeJsonStringify } from '../../util/json';
 import { isSafeCost, isSafeTokenCount } from '../../util/numeric';
 import { isNonCredentialHeader, looksLikeSecret, sanitizeUrl } from '../../util/sanitizer';
+import { isKnownClaudeModelWithDeprecatedSampling } from '../anthropic/util';
 import { calculateCost } from '../shared';
 import { InvalidToolSchemaError } from '../toolSchemaError';
 import { prepareOpenAiFunctions } from './prepare';
@@ -763,6 +764,22 @@ export function isOpenAiFirstPartyApiUrl(apiUrl?: string): boolean {
     return OPENAI_FIRST_PARTY_API_HOSTNAMES.has(new URL(apiUrl).hostname.toLowerCase());
   } catch {
     return false;
+  }
+}
+
+/** Apply Claude's wire-format restriction after prompt and passthrough overrides are merged. */
+export function omitDeprecatedClaudeSamplingParams(body: Record<string, unknown>): void {
+  if (typeof body.model !== 'string') {
+    return;
+  }
+  // Only the fine-tune base identifies the model; later fields are user-defined.
+  const fineTuneBase = /(?:^|\/)ft:([^:]+)(?::|$)/.exec(body.model)?.[1];
+  const model = fineTuneBase ?? body.model;
+  const leaf = model.slice(model.lastIndexOf('/') + 1);
+  if (isKnownClaudeModelWithDeprecatedSampling(leaf)) {
+    delete body.temperature;
+    delete body.top_p;
+    delete body.top_k;
   }
 }
 
