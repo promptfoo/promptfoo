@@ -408,7 +408,7 @@ interface ParsedFaithfulnessVerdict {
 }
 
 const faithfulnessEntryPrefix =
-  /^(?:(?:(?:statement\s+)?\d+\s*[-\u2013\u2014.):\]]|verdict\s*:)\s*)+/;
+  /^(?:(?:(?:(?:statement|verdict)\s+)?\d+\s*[-\u2013\u2014.):\]]|verdict\s*:)\s*)+/;
 
 function parseFaithfulnessVerdict(
   value: string,
@@ -438,7 +438,7 @@ function parseFaithfulnessVerdict(
     );
   const unknownSuffix = unknownMatch ? unwrapped.slice(unknownMatch[0].length).trim() : '';
   const isKnownUnknown = Boolean(
-    unknownMatch && /^(?:$|[:(\[\-\u2013\u2014])/u.test(unknownSuffix),
+    unknownMatch && /^(?:$|[,:(\[\-\u2013\u2014])/u.test(unknownSuffix),
   );
   if (requireExplicitEntry) {
     return hasEntryPrefix || isKnownUnknown ? 'unknown' : undefined;
@@ -447,7 +447,7 @@ function parseFaithfulnessVerdict(
   // A labelled or compact value is still an ordered slot, even when it is unknown.
   const isCompactUnknown =
     !/^.$/u.test(unwrapped) && /^(?=.*\p{L})[\p{L}\p{N}]+(?:[/_-][\p{L}\p{N}]+)*$/u.test(unwrapped);
-  return hasEntryPrefix || isCompactUnknown ? 'unknown' : undefined;
+  return hasEntryPrefix || isKnownUnknown || isCompactUnknown ? 'unknown' : undefined;
 }
 
 function getFaithfulnessOrdinal(value: string): number | undefined {
@@ -456,7 +456,9 @@ function getFaithfulnessOrdinal(value: string): number | undefined {
     return Number.NaN;
   }
   const normalized = trimmed.replace(/^[^\p{L}\p{N}]*/u, '');
-  const ordinal = /^(?:statement\s+)?(\d+)\s*[-\u2013\u2014.):\]]/u.exec(normalized)?.[1];
+  const ordinal = /^(?:(?:statement|verdict)\s+)?(\d+)\s*[-\u2013\u2014.):\]]/u.exec(
+    normalized,
+  )?.[1];
   return ordinal ? Number(ordinal) : undefined;
 }
 
@@ -572,7 +574,7 @@ function parseFinalFaithfulnessVerdicts(
   const finalVerdicts = output
     .slice(markerIndex + marker.length)
     .replace(
-      /\s((?:statement\s+)?\d+\s*[-\u2013\u2014.):\]]\s*)(?=[^\p{L}\p{N}]*(?:yes|no|maybe|perhaps|unknown|unclear|undetermined|n\/a|not sure)(?![\p{L}\p{N}]))/gu,
+      /\s((?:(?:statement|verdict)\s+)?\d+\s*[-\u2013\u2014.):\]]\s*)(?=[^\p{L}\p{N}]*(?:yes|no|maybe|perhaps|unknown|unclear|undetermined|n\/a|not sure)(?![\p{L}\p{N}]))/gu,
       '\n$1',
     );
   const parsedVerdicts: FaithfulnessVerdict[] = [];
@@ -597,7 +599,7 @@ function parseFinalFaithfulnessVerdicts(
   // Keep ordered slots and only accept a comma list when every item looks like an entry.
   // Duplicate markers or ordinals and excess entries are ambiguous, so fail closed.
   for (const value of getFaithfulnessVerdictChunks(finalVerdicts)) {
-    const ordinal = /^\s*((?:statement\s+)?\d+)\s*$/.exec(value)?.[1];
+    const ordinal = /^\s*((?:(?:statement|verdict)\s+)?\d+)\s*$/.exec(value)?.[1];
     if (ordinal) {
       pendingOrdinal = ordinal;
       continue;

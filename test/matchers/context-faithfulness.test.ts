@@ -503,6 +503,7 @@ describe('matchesContextFaithfulness', () => {
       ],
       ['inline numbered list', 3, `${marker} 1) Yes 2) No 3) Yes`, 2 / 3, 0.5],
       ['comma-separated list', 3, `${marker} Yes, No, Yes`, 2 / 3, 0.5],
+      ['numbered Verdict labels', 2, `${marker} Verdict 1: No. Verdict 2: Yes.`, 0.5, 0.5],
       ['Oxford-comma conjunction list', 3, `${marker} Yes, No, and Yes`, 2 / 3, 0.5],
       ['comma conjunction list', 3, `${marker} Yes, No and Yes`, 2 / 3, 0.5],
       ['two-item conjunction list', 2, `${marker} No and Yes`, 0.5, 0.5],
@@ -651,6 +652,20 @@ describe('matchesContextFaithfulness', () => {
         0.5,
       ],
       ['extra positive verdicts', 2, `${marker} Yes. Yes. No. No.`, 0, 0.75],
+      [
+        'bare multiword unknown followed by excess verdicts',
+        2,
+        `${marker} Not sure. Yes. Yes.`,
+        0,
+        0.5,
+      ],
+      [
+        'comma-explained unknown followed by excess verdicts',
+        2,
+        `${marker} Maybe, insufficient evidence. Yes. Yes.`,
+        0,
+        0.5,
+      ],
       [
         'malformed suffix after excess comma verdicts',
         2,
