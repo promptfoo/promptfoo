@@ -358,9 +358,14 @@ async function fetchModelCost(
     if (!Array.isArray(resources)) {
       return undefined;
     }
-    const spec = resources.find((resource) => resource.model_id === modelId);
+    const spec = resources.find((resource) => resource?.model_id === modelId);
     if (!spec) {
-      return undefined;
+      // A valid catalog without this model is cacheable; malformed metadata must retry.
+      return resources.every(
+        (resource) => typeof resource?.model_id === 'string' && resource.model_id.length > 0,
+      )
+        ? {}
+        : undefined;
     }
     return {
       input: getPricingTierCost(spec.input_tier),
