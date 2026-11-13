@@ -19,10 +19,17 @@ import logger from '../logger';
 import { formatRateLimitErrorMessage, HttpRateLimitError } from '../util/fetch/errors';
 import { rateLimitTimingFromHeaders } from '../util/fetch/index';
 import { ellipsize } from '../util/text';
+import {
+  type DecisionGradingConfig,
+  decisionLabelEntries,
+  gradeDecisionScore,
+  makeNoulOrScoreQuestion,
+  resolveDecisionThreshold,
+} from './decisionGrading';
 import { getRequestTimeoutMs } from './shared';
 
+import type { EnvOverrides } from '../contracts/env';
 import type { EnvVarKey } from '../envars';
-import type { EnvOverrides } from '../types/env';
 import type {
   ApiProvider,
   CallApiContextParams,
@@ -31,7 +38,6 @@ import type {
   ProviderResponse,
 } from '../types/index';
 
-const DEFAULT_THRESHOLD = 0.5;
 // Without a Retry-After, the scheduler pauses a rate-limited provider for a minute.
 // TypeSafe's own SDKs back off for at most five seconds.
 const DEFAULT_RETRY_AFTER_MS = 2000;
@@ -79,20 +85,12 @@ export type TypeSafeQuestion =
       criteria: Record<string, TypeSafeEntry | null>;
     };
 
-export interface TypeSafeConfig {
+export interface TypeSafeConfig extends DecisionGradingConfig<TypeSafeEntry, TypeSafeEntry> {
   apiKey?: string;
   /** Defaults to https://api.typesafe.ai */
   apiBaseUrl?: string;
   /** Regular provider: the questions to ask about each prompt, keyed by an id you choose. */
   questions?: Record<string, TypeSafeQuestion>;
-  /** `llm-rubric`: minimum 0–1 score to pass. Defaults to 0.5. */
-  threshold?: number;
-  /** `llm-rubric`: ordered Score levels, low to high. Omit to ask a yes/no Noul question. */
-  levels?: TypeSafeEntry[];
-  /** `classifier`: what to decide. */
-  instructions?: TypeSafeEntry;
-  /** `classifier`: the options, as a list of labels or a label → description map. */
-  labels?: string[] | Record<string, TypeSafeEntry | null>;
 }
 
 interface TypeSafeResponseBody {
@@ -288,9 +286,7 @@ export class TypeSafeProvider implements ApiProvider {
         error: `${this.vendor.name} provider ${this.id()} needs \`instructions\` and \`labels\` in its config to classify, for example \`instructions: Which team should handle this?\` and \`labels: [billing, technical, sales]\`.`,
       };
     }
-    const criteria = Array.isArray(labels)
-      ? Object.fromEntries(labels.map((label) => [label, null]))
-      : labels;
+    const criteria = Object.fromEntries(decisionLabelEntries(labels));
     const result = await this.ask(
       toEntry(prompt),
       { classification: { type: 'choice', instructions, criteria } },
@@ -322,11 +318,10 @@ export class TypeSafeProvider implements ApiProvider {
   ): Promise<ProviderResponse> {
     const { name, model, prefix } = this.vendor;
     const { levels } = request.config;
-    const threshold = request.config.threshold ?? DEFAULT_THRESHOLD;
-    // An invalid threshold must not pass every output: `score >= ''` is always true.
-    if (typeof threshold !== 'number' || !(threshold >= 0 && threshold <= 1)) {
+    const threshold = resolveDecisionThreshold(request.config.threshold);
+    if (threshold === undefined) {
       return {
-        error: `${name} \`threshold\` must be a number from 0 to 1, got ${JSON.stringify(threshold)}.`,
+        error: `${name} \`threshold\` must be a number from 0 to 1, got ${JSON.stringify(request.config.threshold)}.`,
       };
     }
     if (levels !== undefined && (!Array.isArray(levels) || levels.length < 2)) {
@@ -337,14 +332,10 @@ export class TypeSafeProvider implements ApiProvider {
 
     let question: TypeSafeQuestion;
     try {
-      const instructions = this.instructionEntry(rubric);
-      question = levels
-        ? {
-            type: 'score',
-            instructions,
-            criteria: levels.map((level) => this.instructionEntry(level)),
-          }
-        : { type: 'noul', instructions };
+      question = makeNoulOrScoreQuestion(
+        this.instructionEntry(rubric),
+        levels?.map((level) => this.instructionEntry(level)),
+      );
     } catch (err) {
       return {
         error: `${name} request error: ${err instanceof Error ? err.message : String(err)}`,
@@ -364,9 +355,8 @@ export class TypeSafeProvider implements ApiProvider {
     }
 
     // Scale to 0–1. Rounding keeps float error from the division out of the threshold comparison.
-    const score = Number((raw / top).toFixed(6));
-    const pass = score >= threshold;
-    // Report evidence without a verdict: the matcher can apply a stricter assertion threshold.
+    const { score } = gradeDecisionScore(raw, top, threshold, 6);
+    // Report evidence without a verdict so the matcher can apply a stricter assertion threshold.
     const reason = levels
       ? `${model} Score ${raw} on levels 0–${top} (${score} normalized); nearest level: ${ellipsize(JSON.stringify(levels[Math.round(raw)]) ?? '', 200)}`
       : `${model} Noul probability ${raw}`;
@@ -520,7 +510,7 @@ export class TypeSafeProvider implements ApiProvider {
       await deleteFromCache?.();
       return {
         // A malformed answer can still be billed. Keep any reported accounting.
-        ...(body?.usage ? response : {}),
+        ...response,
         error: `${name} API returned an unexpected response${requestIdText}: ${ellipsize(String(fetched.data), 1000)}`,
       };
     };
