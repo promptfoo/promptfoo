@@ -8,6 +8,9 @@ packages:
 # `npm ci`, which has no equivalent setting, so this covers the optional local pnpm path
 # only -- Renovate remains the control that gates what actually reaches main.
 minimumReleaseAge: 14400
+# The exact filesystem server pin fixes GHSA-p9cv-8g75-4xcg.
+minimumReleaseAgeExclude:
+  - '@modelcontextprotocol/server-filesystem@2.3.0'
 
 # Build-script allowlist. pnpm 11 dropped the `pnpm` field in package.json ("The 'pnpm'
 # field in package.json is no longer read by pnpm") and renamed onlyBuiltDependencies to

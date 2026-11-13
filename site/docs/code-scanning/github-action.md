@@ -143,7 +143,7 @@ To use `.promptfoo-code-scan.yaml`, set the action's `config-path` input to that
 minSeverity: medium
 
 # Scan only PR diffs without filesystem exploration (default: false)
-diffsOnly: false
+diffsOnly: true
 
 # Custom guidance to tailor the scan
 guidance: |
