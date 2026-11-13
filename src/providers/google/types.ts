@@ -328,9 +328,10 @@ export interface CompletionOptions {
     // Thinking configuration for Gemini 2.5+ models
     // Gemini 3 Flash supports: MINIMAL, LOW, MEDIUM, HIGH
     // Gemini 3 Pro supports: LOW, HIGH
+    // Gemini 4 Hydrogen supports: LOW, MEDIUM, HIGH, XHIGH
     thinkingConfig?: {
       thinkingBudget?: number;
-      thinkingLevel?: 'MINIMAL' | 'LOW' | 'MEDIUM' | 'HIGH';
+      thinkingLevel?: 'MINIMAL' | 'LOW' | 'MEDIUM' | 'HIGH' | 'XHIGH';
     };
 
     // Image configuration for Gemini image models; the top-level
