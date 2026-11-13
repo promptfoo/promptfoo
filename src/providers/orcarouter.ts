@@ -1,15 +1,14 @@
-import { type EnvVarKey, getEnvString } from '../envars';
+import { type EnvVarKey, getEnvString, getProviderEnvString } from '../envars';
 import { renderVarsInObject } from '../util';
 import { OpenAiChatCompletionProvider } from './openai/chat';
+import { serializeProvider } from './serialization';
 
-import type { EnvOverrides } from '../types/env';
 import type {
   ApiProvider,
   CallApiContextParams,
   CallApiOptionsParams,
   ProviderOptions,
 } from '../types/providers';
-import type { OpenAiCompletionOptions } from './openai/types';
 
 /**
  * OrcaRouter provider — OpenAI-compatible meta-router (https://www.orcarouter.ai).
@@ -69,14 +68,7 @@ export class OrcaRouterProvider extends OpenAiChatCompletionProvider {
   }
 
   toJSON() {
-    return {
-      provider: 'orcarouter',
-      model: this.modelName,
-      config: {
-        ...this.config,
-        ...(this.config.apiKey && { apiKey: undefined }),
-      },
-    };
+    return serializeProvider(this, 'orcarouter');
   }
 
   /**
@@ -87,7 +79,7 @@ export class OrcaRouterProvider extends OpenAiChatCompletionProvider {
     const envar = this.config?.apiKeyEnvar || 'ORCAROUTER_API_KEY';
     return (
       this.config.apiKey ||
-      this.env?.[envar as keyof EnvOverrides] ||
+      getProviderEnvString(this.env, envar) ||
       getEnvString(envar as EnvVarKey)
     );
   }
@@ -173,7 +165,7 @@ export class OrcaRouterProvider extends OpenAiChatCompletionProvider {
       );
     if (
       'temperature' in body &&
-      (!this.supportsTemperature(config) || anyFallbackRejectsTemperature)
+      ((config.isReasoningModel !== false && !this.supportsTemperature()) || anyFallbackRejectsTemperature)
     ) {
       delete body.temperature;
     }
@@ -188,8 +180,8 @@ export class OrcaRouterProvider extends OpenAiChatCompletionProvider {
    * OpenAI-style `temperature` is the parameter they reject.
    * Reference: https://docs.orcarouter.ai/advanced/reasoning
    */
-  protected supportsTemperature(config: OpenAiCompletionOptions = this.config): boolean {
-    if (!super.supportsTemperature(config)) {
+  protected supportsTemperature(): boolean {
+    if (!super.supportsTemperature()) {
       return false;
     }
     return !reasoningUpstreamRejectsTemperature(this.modelName);

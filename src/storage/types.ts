@@ -97,6 +97,9 @@ export interface MediaStorageProvider {
    */
   retrieve(key: string): Promise<Buffer>;
 
+  /** Retrieve bytes with their persisted MIME type, when the provider supports it. */
+  retrieveWithMetadata?(key: string): Promise<{ data: Buffer; contentType?: string }>;
+
   /**
    * Check if media exists
    * @param key - Storage key

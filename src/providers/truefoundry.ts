@@ -1,5 +1,7 @@
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { OpenAiEmbeddingProvider } from './openai/embedding';
+import { isGpt6Model } from './openai/gpt6';
+import { serializeProvider } from './serialization';
 
 import type {
   ApiEmbeddingProvider,
@@ -9,7 +11,7 @@ import type {
   ProviderOptions,
   ProviderResponse,
 } from '../types/providers';
-import type { OpenAiCompletionOptions } from './openai/types';
+import type { OpenAiCompletionOptions, OpenAiSharedOptions } from './openai/types';
 
 type TrueFoundryMetadata = Record<string, any>;
 
@@ -30,6 +32,7 @@ type TrueFoundryCompletionOptions = OpenAiCompletionOptions & {
   loggingConfig?: TrueFoundryLoggingConfig;
   mcp_servers?: TrueFoundryMCPServer[];
   iteration_limit?: number;
+  openaiAccountNames?: string[];
 };
 
 type TrueFoundryProviderOptions = ProviderOptions & {
@@ -39,6 +42,7 @@ type TrueFoundryProviderOptions = ProviderOptions & {
 type JsonRecord = Record<string, unknown>;
 
 const TRUEFOUNDRY_GUARDRAIL_ERROR_TYPE = 'guardrail_checks_failed';
+const DEFAULT_TRUEFOUNDRY_OPENAI_ACCOUNT_NAMES = new Set(['openai-main']);
 const DOWNSTREAM_GUARDRAIL_ERROR_CODES = new Set(['content_filter', 'content_policy_violation']);
 const DOWNSTREAM_GUARDRAIL_MESSAGE_PATTERNS = [
   /\bresponse content blocked by label\b/i,
@@ -53,6 +57,19 @@ function isJsonRecord(value: unknown): value is JsonRecord {
 
 function getString(value: unknown): string | undefined {
   return typeof value === 'string' ? value : undefined;
+}
+
+function getTrueFoundryBillingModelName(modelName: string, openaiAccountNames?: string[]): string {
+  const separatorIndex = modelName.indexOf('/');
+  if (separatorIndex <= 0) {
+    return modelName;
+  }
+
+  const accountName = modelName.slice(0, separatorIndex);
+  const isOpenAiAccount =
+    DEFAULT_TRUEFOUNDRY_OPENAI_ACCOUNT_NAMES.has(accountName) ||
+    openaiAccountNames?.includes(accountName);
+  return isOpenAiAccount ? modelName.slice(separatorIndex + 1) : modelName;
 }
 
 function hasGuardrailCheck(value: unknown): boolean {
@@ -190,6 +207,17 @@ function normalizeGuardrailErrorResponse(response: ProviderResponse): ProviderRe
   };
 }
 
+function getTrueFoundryProviderOptions(providerOptions: TrueFoundryProviderOptions) {
+  return {
+    ...providerOptions,
+    config: {
+      ...providerOptions.config,
+      apiKeyEnvar: 'TRUEFOUNDRY_API_KEY',
+      apiBaseUrl: providerOptions.config?.apiBaseUrl || 'https://llm-gateway.truefoundry.com',
+    },
+  };
+}
+
 /**
  * TrueFoundry AI Gateway Provider
  *
@@ -200,14 +228,31 @@ function normalizeGuardrailErrorResponse(response: ProviderResponse): ProviderRe
  */
 export class TrueFoundryProvider extends OpenAiChatCompletionProvider {
   constructor(modelName: string, providerOptions: TrueFoundryProviderOptions = {}) {
-    super(modelName, {
-      ...providerOptions,
-      config: {
-        ...providerOptions.config,
-        apiKeyEnvar: 'TRUEFOUNDRY_API_KEY',
-        apiBaseUrl: providerOptions.config?.apiBaseUrl || 'https://llm-gateway.truefoundry.com',
-      },
-    });
+    super(modelName, getTrueFoundryProviderOptions(providerOptions));
+  }
+
+  protected getBillingModelName(config: OpenAiCompletionOptions): string {
+    const tfConfig = config as TrueFoundryCompletionOptions;
+    return getTrueFoundryBillingModelName(
+      super.getBillingModelName(config),
+      tfConfig.openaiAccountNames,
+    );
+  }
+
+  /**
+   * Override isReasoningModel to correctly detect OpenAI reasoning models
+   * despite TrueFoundry's provider-account/model-name format
+   */
+  protected isReasoningModel(): boolean {
+    // Extract the actual model name after the provider prefix (e.g., "openai/gpt-5-nano" -> "gpt-5-nano")
+    const actualModelName = this.modelName.split('/').pop() || this.modelName;
+    return (
+      actualModelName.startsWith('o1') ||
+      actualModelName.startsWith('o3') ||
+      actualModelName.startsWith('o4') ||
+      actualModelName.startsWith('gpt-5') ||
+      isGpt6Model(actualModelName)
+    );
   }
 
   /**
@@ -238,7 +283,7 @@ export class TrueFoundryProvider extends OpenAiChatCompletionProvider {
     }
 
     // Add TrueFoundry-specific body parameters (MCP servers, iteration limit)
-    const tfBody: Record<string, any> = {
+    const tfBody: typeof body = {
       ...body,
     };
 
@@ -283,14 +328,7 @@ export class TrueFoundryProvider extends OpenAiChatCompletionProvider {
   }
 
   toJSON() {
-    return {
-      provider: 'truefoundry',
-      model: this.modelName,
-      config: {
-        ...this.config,
-        ...(this.config.apiKey && { apiKey: undefined }),
-      },
-    };
+    return serializeProvider(this, 'truefoundry');
   }
 }
 
@@ -301,20 +339,25 @@ export class TrueFoundryProvider extends OpenAiChatCompletionProvider {
  */
 export class TrueFoundryEmbeddingProvider extends OpenAiEmbeddingProvider {
   constructor(modelName: string, providerOptions: TrueFoundryProviderOptions = {}) {
-    super(modelName, {
-      ...providerOptions,
-      config: {
-        ...providerOptions.config,
-        apiKeyEnvar: 'TRUEFOUNDRY_API_KEY',
-        apiBaseUrl: providerOptions.config?.apiBaseUrl || 'https://llm-gateway.truefoundry.com',
-      },
-    });
+    super(modelName, getTrueFoundryProviderOptions(providerOptions));
+  }
+
+  protected getBillingModelName(config: OpenAiSharedOptions): string {
+    const tfConfig = config as TrueFoundryCompletionOptions;
+    return getTrueFoundryBillingModelName(
+      super.getBillingModelName(config),
+      tfConfig.openaiAccountNames,
+    );
   }
 
   /**
    * Override callEmbeddingApi to add TrueFoundry-specific headers
    */
-  async callEmbeddingApi(text: string): Promise<ProviderResponse> {
+  async callEmbeddingApi(
+    text: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
     const tfConfig = this.config as TrueFoundryCompletionOptions;
 
     // Add TrueFoundry-specific headers
@@ -330,17 +373,12 @@ export class TrueFoundryEmbeddingProvider extends OpenAiEmbeddingProvider {
       headers['X-TFY-LOGGING-CONFIG'] = JSON.stringify(tfConfig.loggingConfig);
     }
 
-    // Temporarily set headers in config
-    const originalHeaders = this.config.headers;
-    this.config.headers = headers;
-
-    try {
-      // Call parent implementation
-      return await super.callEmbeddingApi(text);
-    } finally {
-      // Restore original headers
-      this.config.headers = originalHeaders;
-    }
+    // Keep generated headers local to this request.
+    const providerForRequest = new TrueFoundryEmbeddingProvider(this.modelName, {
+      config: { ...this.config, headers },
+      env: this.env,
+    });
+    return super.callEmbeddingApi.call(providerForRequest, text, context, options);
   }
 
   id(): string {
@@ -352,14 +390,7 @@ export class TrueFoundryEmbeddingProvider extends OpenAiEmbeddingProvider {
   }
 
   toJSON() {
-    return {
-      provider: 'truefoundry',
-      model: this.modelName,
-      config: {
-        ...this.config,
-        ...(this.config.apiKey && { apiKey: undefined }),
-      },
-    };
+    return serializeProvider(this, 'truefoundry');
   }
 }
 
