@@ -13,7 +13,6 @@ import {
 } from '../prompts/index';
 import { getDefaultProviders } from '../providers/defaults';
 import invariant from '../util/invariant';
-import { extractJsonObjects } from '../util/json';
 import { accumulateTokenUsage } from '../util/tokenUsageUtils';
 import {
   callEmbeddingProvider,
@@ -21,7 +20,7 @@ import {
   callProviderWithContext,
   getAndCheckProvider,
 } from './providers';
-import { loadRubricPrompt, renderLlmRubricPrompt } from './rubric';
+import { loadRubricPrompt, parseJsonGradingResponse, renderLlmRubricPrompt } from './rubric';
 import {
   cosineSimilarity,
   fail,
@@ -630,9 +629,9 @@ export async function matchesCitationFaithfulness(
   // Accept either a JSON string (default LLM grader) or an already-parsed object
   // (a custom JS/Python/HTTP grading provider can return one directly), matching
   // the other JSON grading paths instead of throwing on non-string output.
-  const parsed = (
-    typeof resp.output === 'string' ? extractJsonObjects(resp.output)[0] : resp.output
-  ) as { verdict?: string; reasoning?: string } | undefined;
+  const { parsed } = parseJsonGradingResponse('Citation faithfulness', resp) as {
+    parsed?: { verdict?: unknown; reasoning?: unknown };
+  };
   if (!parsed || typeof parsed.verdict !== 'string') {
     // Do not echo the raw grader output in the reason: it can contain the
     // candidate answer and the retrieved passages.

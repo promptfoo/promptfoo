@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { handleCitationFaithfulness } from '../../src/assertions/citationFaithfulness';
+import { handleCitationFaithfulness } from '../../src/assertions/contextFaithfulness';
 import * as contextUtils from '../../src/assertions/contextUtils';
 import * as matchers from '../../src/matchers/rag';
 
