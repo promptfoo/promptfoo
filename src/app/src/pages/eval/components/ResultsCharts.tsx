@@ -69,15 +69,10 @@ Chart.register(
 
 function HistogramChart({ table }: ChartProps) {
   const histogramCanvasRef = useRef(null);
-  const histogramChartInstance = useRef<Chart | null>(null);
 
   useEffect(() => {
     if (!histogramCanvasRef.current) {
       return;
-    }
-
-    if (histogramChartInstance.current) {
-      histogramChartInstance.current.destroy();
     }
 
     // Calculate bins and their counts
@@ -111,7 +106,7 @@ function HistogramChart({ table }: ChartProps) {
       };
     });
 
-    histogramChartInstance.current = new Chart(histogramCanvasRef.current, {
+    const chart = new Chart(histogramCanvasRef.current, {
       type: 'bar',
       data: {
         labels: bins,
@@ -161,6 +156,7 @@ function HistogramChart({ table }: ChartProps) {
         },
       },
     });
+    return () => chart.destroy();
   }, [table]);
 
   return <canvas ref={histogramCanvasRef} style={{ maxHeight: '300px' }}></canvas>;
@@ -169,16 +165,11 @@ function HistogramChart({ table }: ChartProps) {
 function PassRateChart({ table }: ChartProps) {
   const passRates = usePassRates();
   const passRateCanvasRef = useRef(null);
-  const passRateChartInstance = useRef<Chart | null>(null);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
     if (!passRateCanvasRef.current) {
       return;
-    }
-
-    if (passRateChartInstance.current) {
-      passRateChartInstance.current.destroy();
     }
 
     const datasets = table.head.prompts.map((prompt, promptIdx) => ({
@@ -187,7 +178,7 @@ function PassRateChart({ table }: ChartProps) {
       backgroundColor: COLOR_PALETTE[promptIdx % COLOR_PALETTE.length],
     }));
 
-    passRateChartInstance.current = new Chart(passRateCanvasRef.current, {
+    const chart = new Chart(passRateCanvasRef.current, {
       type: 'bar',
       data: {
         labels: ['Pass Rate (%)'],
@@ -213,6 +204,7 @@ function PassRateChart({ table }: ChartProps) {
         },
       },
     });
+    return () => chart.destroy();
   }, [table]);
 
   return <canvas ref={passRateCanvasRef} style={{ maxHeight: '300px' }}></canvas>;
@@ -220,18 +212,19 @@ function PassRateChart({ table }: ChartProps) {
 
 function ScatterChart({ table }: ChartProps) {
   const scatterCanvasRef = useRef(null);
-  const scatterChartInstance = useRef<Chart | null>(null);
-  const [xAxisPrompt, setXAxisPrompt] = useState(0);
-  const [yAxisPrompt, setYAxisPrompt] = useState(1);
+  const [selectedXAxisPrompt, setXAxisPrompt] = useState(0);
+  const [selectedYAxisPrompt, setYAxisPrompt] = useState(1);
+  const promptCount = table.head.prompts.length;
+  const xAxisPrompt = selectedXAxisPrompt < promptCount ? selectedXAxisPrompt : 0;
+  const yAxisPrompt =
+    selectedYAxisPrompt < promptCount
+      ? selectedYAxisPrompt
+      : Math.max(0, Math.min(1, promptCount - 1));
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
     if (!scatterCanvasRef.current) {
       return;
-    }
-
-    if (scatterChartInstance.current) {
-      scatterChartInstance.current.destroy();
     }
 
     const scores = table.body
@@ -277,7 +270,7 @@ function ScatterChart({ table }: ChartProps) {
       ];
     });
 
-    scatterChartInstance.current = new Chart(scatterCanvasRef.current, {
+    const chart = new Chart(scatterCanvasRef.current, {
       type: 'scatter',
       data: {
         datasets: [
@@ -364,6 +357,7 @@ function ScatterChart({ table }: ChartProps) {
         },
       },
     });
+    return () => chart.destroy();
   }, [table, xAxisPrompt, yAxisPrompt]);
 
   return (
@@ -418,15 +412,10 @@ function ScatterChart({ table }: ChartProps) {
 
 function MetricChart({ table }: ChartProps) {
   const metricCanvasRef = useRef(null);
-  const metricChartInstance = useRef<Chart | null>(null);
 
   useEffect(() => {
     if (!metricCanvasRef.current) {
       return;
-    }
-
-    if (metricChartInstance.current) {
-      metricChartInstance.current.destroy();
     }
 
     const namedScoreKeys = Object.keys(table.head.prompts[0].metrics?.namedScores || {});
@@ -492,7 +481,8 @@ function MetricChart({ table }: ChartProps) {
         },
       },
     };
-    metricChartInstance.current = new Chart(metricCanvasRef.current, config);
+    const chart = new Chart(metricCanvasRef.current, config);
+    return () => chart.destroy();
   }, [table]);
 
   return <canvas ref={metricCanvasRef} style={{ maxHeight: '300px' }}></canvas>;
