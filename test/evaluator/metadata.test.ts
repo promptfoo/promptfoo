@@ -227,6 +227,32 @@ describeEvaluator('evaluator metadata', () => {
     });
   });
 
+  it('persists native conversation output and rendered history without changing display output', async () => {
+    const parts = [
+      { inlineData: { mimeType: 'image/png', data: 'aW1hZ2U=' }, thoughtSignature: 'signed-image' },
+    ];
+    const provider: ApiProvider = {
+      id: () => 'native-history-persisted',
+      callApi: vi.fn().mockResolvedValue({ output: 'Display image', conversationOutput: parts }),
+    };
+    const suite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('{{ step }} {{ _conversation | dump }}')],
+      tests: [{ vars: { step: 'first' } }, { vars: { step: 'second' } }],
+    };
+    const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
+    await evaluate(suite, record, { maxConcurrency: 1 });
+    const reloaded = await Eval.findById(record.id);
+    expect(reloaded).toBeDefined();
+    const summary = await reloaded!.toEvaluateSummary();
+    expect(summary.results).toHaveLength(2);
+    expect(summary.results[0].response?.output).toBe('Display image');
+    expect(summary.results[0].response?.conversationOutput).toEqual(parts);
+    expect(summary.results[1].vars).not.toHaveProperty('_conversation');
+    expect(JSON.stringify(summary.results[1].prompt)).toContain('signed-image');
+    expect(JSON.stringify(summary)).toContain('signed-image');
+  });
+
   it('evaluate with _conversation variable', async () => {
     const mockApiProvider: ApiProvider = {
       id: vi.fn().mockReturnValue('test-provider'),
