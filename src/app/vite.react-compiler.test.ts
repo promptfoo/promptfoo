@@ -1,38 +1,22 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { BabelFileResult } from '@babel/core';
 
 const mockReactCompilerPreset = vi.hoisted(() => vi.fn());
-
-vi.mock('@babel/core', () => ({
-  transformAsync: vi.fn(),
-}));
 
 vi.mock('@vitejs/plugin-react', () => ({
   reactCompilerPreset: mockReactCompilerPreset,
 }));
 
-function createMockBabelResult(code: string, map: BabelFileResult['map'] | null): BabelFileResult {
-  return {
-    code,
-    map,
-    ast: null,
-    metadata: {},
-  };
-}
-
 describe('reactCompilerPlugin', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
     vi.resetModules();
-    mockReactCompilerPreset.mockReset();
-    mockReactCompilerPreset.mockReturnValue({
-      preset: () => ({ plugins: [['babel-plugin-react-compiler', {}]] }),
-    });
+    const { reactCompilerPreset } =
+      await vi.importActual<typeof import('@vitejs/plugin-react')>('@vitejs/plugin-react');
+    mockReactCompilerPreset.mockReset().mockImplementation(reactCompilerPreset);
   });
 
   it('skips files from node_modules', async () => {
     const { reactCompilerPlugin } = await import('./vite.shared');
-    const { transformAsync } = await import('@babel/core');
 
     const result = await reactCompilerPlugin().transform?.(
       'const Component = () => <div>Hello</div>;',
@@ -40,12 +24,10 @@ describe('reactCompilerPlugin', () => {
     );
 
     expect(result).toBeNull();
-    expect(transformAsync).not.toHaveBeenCalled();
   });
 
   it('skips files from node_modules with Windows path separators', async () => {
     const { reactCompilerPlugin } = await import('./vite.shared');
-    const { transformAsync } = await import('@babel/core');
 
     const result = await reactCompilerPlugin().transform?.(
       'const Component = () => <div>Hello</div>;',
@@ -53,12 +35,10 @@ describe('reactCompilerPlugin', () => {
     );
 
     expect(result).toBeNull();
-    expect(transformAsync).not.toHaveBeenCalled();
   });
 
   it('skips files with centralized React Compiler opt-outs', async () => {
     const { reactCompilerPlugin } = await import('./vite.shared');
-    const { transformAsync } = await import('@babel/core');
 
     const result = await reactCompilerPlugin().transform?.(
       'function ResultsTable() { return <div>Hello</div>; }',
@@ -66,35 +46,35 @@ describe('reactCompilerPlugin', () => {
     );
 
     expect(result).toBeNull();
-    expect(transformAsync).not.toHaveBeenCalled();
   });
 
-  it('passes the expected Babel configuration for app source files', async () => {
+  it.each([
+    ['ordinary props', '{ value }: { value: string }'],
+    ['defaulted props', '{ value = "default" }: { value?: string }'],
+  ])('memoizes TSX with %s and returns its original source map', async (_name, props) => {
     const { reactCompilerPlugin } = await import('./vite.shared');
-    const { transformAsync } = await import('@babel/core');
-    const transformedCode = 'const Component = () => React.createElement("div", null, "Hello");';
-
-    vi.mocked(transformAsync).mockResolvedValue(createMockBabelResult(transformedCode, null));
-
+    const code = `export function Component(${props}) { return <span>{value}</span>; }`;
     const result = await reactCompilerPlugin().transform?.(
-      'const Component = () => <div>Hello</div>;',
+      code,
       '/project/src/Component.tsx?query=1',
     );
 
-    expect(transformAsync).toHaveBeenCalledWith('const Component = () => <div>Hello</div>;', {
-      filename: '/project/src/Component.tsx',
-      babelrc: false,
-      configFile: false,
-      sourceMaps: true,
-      parserOpts: {
-        plugins: ['jsx', 'typescript'],
-      },
-      plugins: [['babel-plugin-react-compiler', {}]],
+    expect(result.code).toContain('react/compiler-runtime');
+    expect(JSON.parse(result.map)).toMatchObject({
+      sources: ['Component.tsx'],
+      sourcesContent: [code],
+      mappings: expect.any(String),
     });
-    expect(result).toEqual({
-      code: transformedCode,
-      map: null,
-    });
+  });
+
+  it('preserves dynamic imports alongside optimized components', async () => {
+    const { reactCompilerPlugin } = await import('./vite.shared');
+    const code = `const load = () => import("./dialog");
+      export function Component() { return <button onClick={load}>Open</button>; }`;
+    const result = await reactCompilerPlugin().transform?.(code, '/project/src/Component.tsx');
+
+    expect(result.code).toContain('react/compiler-runtime');
+    expect(result.code).toMatch(/import\(["']\.\/dialog["']\)/);
   });
 
   it('disables the compiler when preset creation fails', async () => {
@@ -103,7 +83,6 @@ describe('reactCompilerPlugin', () => {
     });
 
     const { reactCompilerPlugin } = await import('./vite.shared');
-    const { transformAsync } = await import('@babel/core');
     const plugin = reactCompilerPlugin();
     const warn = vi.fn();
 
@@ -116,7 +95,6 @@ describe('reactCompilerPlugin', () => {
     );
 
     expect(result).toBeNull();
-    expect(transformAsync).not.toHaveBeenCalled();
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('React Compiler will be disabled'));
   });
 
@@ -128,7 +106,6 @@ describe('reactCompilerPlugin', () => {
     });
 
     const { reactCompilerPlugin } = await import('./vite.shared');
-    const { transformAsync } = await import('@babel/core');
 
     const result = await reactCompilerPlugin().transform?.(
       'const Component = () => <div>Hello</div>;',
@@ -136,6 +113,5 @@ describe('reactCompilerPlugin', () => {
     );
 
     expect(result).toBeNull();
-    expect(transformAsync).not.toHaveBeenCalled();
   });
 });

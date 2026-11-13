@@ -1,4 +1,9 @@
-import { describe, expect, it } from 'vitest';
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
   clampCommentLines,
   extractValidLineRanges,
@@ -6,6 +11,154 @@ import {
 } from '../../../src/codeScan/util/diffLineRanges';
 
 describe('extractValidLineRanges', () => {
+  describe('Git file boundaries', () => {
+    let repository: string;
+    let before: string;
+    let after: string;
+    const filenames = [
+      'plain.ts',
+      'with space.ts',
+      'with\ttab.ts',
+      'with"quote.ts',
+      'with\\backslash.ts',
+      'café.ts',
+      '😀.ts',
+      'unicode\u2028separator.ts',
+      'unicode\u2029paragraph.ts',
+      'with\nnewline.ts',
+      'with\rcarriage.ts',
+      'with\x07bell.ts',
+      'with\bbackspace.ts',
+      'with\vvertical.ts',
+      'with\fformfeed.ts',
+    ];
+    const git = (args: string[], input?: string) =>
+      execFileSync('git', args, { cwd: repository, encoding: 'utf8', input }).trim();
+
+    beforeAll(() => {
+      repository = mkdtempSync(path.join(tmpdir(), 'promptfoo-diff-ranges-'));
+      git(['init', '--bare', '--quiet']);
+      const tree = (content: string) => {
+        const blob = git(['hash-object', '-w', '--stdin'], content);
+        return git(
+          ['mktree', '-z'],
+          filenames.map((filename) => `100644 blob ${blob}\t${filename}\0`).join(''),
+        );
+      };
+      before = tree('old\n');
+      after = tree('++ b/not-a-file.ts\nnew\n');
+    });
+
+    afterAll(() => {
+      rmSync(repository, { recursive: true, force: true });
+    });
+
+    it.each(['true', 'false'])('maps actual Git paths with core.quotePath=%s', (quotePath) => {
+      const diff = git(['-c', `core.quotePath=${quotePath}`, 'diff', before, after, '--']);
+
+      expect(extractValidLineRanges(diff)).toEqual(
+        new Map(filenames.map((filename) => [filename, [{ start: 1, end: 2 }]])),
+      );
+    });
+  });
+
+  it('does not count headers of deleted or binary files in the preceding hunk', () => {
+    const diff = `diff --git a/changed.ts b/changed.ts
+--- a/changed.ts
++++ b/changed.ts
+@@ -1 +1 @@
+-old
++new
+diff --git a/deleted.ts b/deleted.ts
+--- a/deleted.ts
++++ /dev/null
+@@ -1 +0,0 @@
+-deleted
+diff --git a/image.png b/image.png
+Binary files a/image.png and b/image.png differ
+diff --git a/renamed.ts b/new-name.ts
+similarity index 100%
+rename from renamed.ts
+rename to new-name.ts
+`;
+
+    expect(extractValidLineRanges(diff)).toEqual(new Map([['changed.ts', [{ start: 1, end: 1 }]]]));
+  });
+
+  it.each([
+    '"b/missing-quote.ts',
+    String.raw`"b/unknown\q.ts"`,
+    String.raw`"b/invalid\777.ts"`,
+    '"b/unescaped"quote.ts"',
+    '"b/trailing\\"',
+  ])('does not map malformed quoted header %s', (header) => {
+    const diff = `diff --git a/example b/example\n--- a/example\n+++ ${header}\n@@ -1 +1 @@\n-old\n+new\n`;
+
+    expect(extractValidLineRanges(diff)).toEqual(new Map());
+  });
+
+  it('does not split a file at a carriage return inside added source content', () => {
+    const diff =
+      'diff --git a/real.ts b/real.ts\n--- a/real.ts\n+++ b/real.ts\n@@ -1 +1 @@\n-old\n+prefix\rdiff --git a/fake.ts b/fake.ts\n';
+
+    expect(extractValidLineRanges(diff)).toEqual(new Map([['real.ts', [{ start: 1, end: 1 }]]]));
+  });
+
+  it('preserves multiple unified patches without Git section markers', () => {
+    const diff = `--- a/one.ts
++++ b/one.ts
+@@ -1 +1 @@
+-old
++new
+@@ -5 +5 @@
+-old
++new
+--- a/two.ts
++++ b/two.ts
+@@ -1 +1 @@
+-old
++new
+`;
+
+    expect(extractValidLineRanges(diff)).toEqual(
+      new Map([
+        [
+          'one.ts',
+          [
+            { start: 1, end: 1 },
+            { start: 5, end: 5 },
+          ],
+        ],
+        ['two.ts', [{ start: 1, end: 1 }]],
+      ]),
+    );
+  });
+
+  it('preserves a bare empty context line immediately before the next file', () => {
+    const diff = [
+      'diff --git a/one.ts b/one.ts',
+      '--- a/one.ts',
+      '+++ b/one.ts',
+      '@@ -1,2 +1,2 @@',
+      ' context',
+      '',
+      'diff --git a/two.ts b/two.ts',
+      '--- a/two.ts',
+      '+++ b/two.ts',
+      '@@ -1 +1 @@',
+      '-old',
+      '+new',
+      '',
+    ].join('\n');
+
+    expect(extractValidLineRanges(diff)).toEqual(
+      new Map([
+        ['one.ts', [{ start: 1, end: 2 }]],
+        ['two.ts', [{ start: 1, end: 1 }]],
+      ]),
+    );
+  });
+
   it('should handle empty diff', () => {
     expect(extractValidLineRanges('')).toEqual(new Map());
   });
@@ -102,6 +255,47 @@ deleted file mode 100644
 
     const ranges = extractValidLineRanges(diff);
     expect(ranges.has('src/deleted.ts')).toBe(false);
+  });
+
+  it('should not count a trailing newline as an extra context line', () => {
+    // GitHub's octokit diff media type is trailing-newline-terminated, which makes
+    // `unifiedDiff.split('\n')` produce a final empty-string element. That element
+    // must not be treated as a real content line.
+    const diffWithoutTrailingNewline = `diff --git a/src/foo.ts b/src/foo.ts
+--- a/src/foo.ts
++++ b/src/foo.ts
+@@ -10,3 +10,3 @@
+ context line 1
+-removed line
++added line
+ context line 3`;
+
+    const diffWithTrailingNewline = `${diffWithoutTrailingNewline}\n`;
+
+    expect(extractValidLineRanges(diffWithTrailingNewline).get('src/foo.ts')).toEqual(
+      extractValidLineRanges(diffWithoutTrailingNewline).get('src/foo.ts'),
+    );
+    expect(extractValidLineRanges(diffWithTrailingNewline).get('src/foo.ts')).toEqual([
+      { start: 10, end: 12 },
+    ]);
+  });
+
+  it('should still count a bare empty line inside a hunk as a context line', () => {
+    // Some diff producers emit '' instead of the strict single-space ' ' for empty
+    // context lines. Only the final split artifact from a trailing newline is
+    // skipped; a bare empty line mid-hunk must still advance the line counter.
+    const diff = [
+      'diff --git a/src/foo.ts b/src/foo.ts',
+      '--- a/src/foo.ts',
+      '+++ b/src/foo.ts',
+      '@@ -1,3 +1,3 @@',
+      ' line 1',
+      '', // bare empty context line mid-hunk: must be counted
+      '+line 3',
+      '', // trailing artifact from the terminating newline: must not be counted
+    ].join('\n');
+
+    expect(extractValidLineRanges(diff).get('src/foo.ts')).toEqual([{ start: 1, end: 3 }]);
   });
 });
 
