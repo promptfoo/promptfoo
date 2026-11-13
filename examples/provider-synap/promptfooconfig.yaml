@@ -11,6 +11,8 @@ providers:
     config:
       apiBaseUrl: https://synap.linkrra.com/v1
       apiKeyEnvar: SYNAP_API_KEY
+      headers:
+        OpenAI-Organization: ''
       temperature: 0
       max_tokens: 512
   - id: openai:chat:gpt-oss-20b
@@ -18,6 +20,8 @@ providers:
     config:
       apiBaseUrl: https://synap.linkrra.com/v1
       apiKeyEnvar: SYNAP_API_KEY
+      headers:
+        OpenAI-Organization: ''
       temperature: 0
       max_tokens: 512
       showThinking: false
@@ -29,6 +33,8 @@ defaultTest:
       config:
         apiBaseUrl: https://synap.linkrra.com/v1
         apiKeyEnvar: SYNAP_API_KEY
+        headers:
+          OpenAI-Organization: ''
         temperature: 0
         showThinking: false
 
@@ -36,12 +42,12 @@ tests:
   - vars:
       question: What is the chemical symbol for gold?
     assert:
-      - type: icontains
-        value: Au
+      - type: regex
+        value: \bAu\b
   - vars:
       question: Why does ice float on liquid water?
     assert:
       - type: icontains-any
-        value: [dense, density]
+        value: [less dense, lower density]
       - type: llm-rubric
         value: Explains that ice is less dense than liquid water.

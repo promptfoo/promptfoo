@@ -20,11 +20,13 @@ providers:
     config:
       apiBaseUrl: https://synap.linkrra.com/v1
       apiKeyEnvar: SYNAP_API_KEY
+      headers:
+        OpenAI-Organization: ''
       temperature: 0
       max_tokens: 512
 ```
 
-`apiBaseUrl` overrides OpenAI endpoint environment variables. `apiKeyEnvar` selects only `SYNAP_API_KEY`; a missing key does not fall back to `OPENAI_API_KEY`.
+`apiBaseUrl` overrides OpenAI endpoint environment variables. `apiKeyEnvar` selects only `SYNAP_API_KEY`; a missing key does not fall back to `OPENAI_API_KEY`. The empty `OpenAI-Organization` header overrides any inherited `OPENAI_ORGANIZATION` value.
 
 ## Configuration
 
