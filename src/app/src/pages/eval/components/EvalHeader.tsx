@@ -6,7 +6,6 @@ import {
   BreadcrumbItem,
   BreadcrumbLink,
   BreadcrumbList,
-  BreadcrumbPage,
   BreadcrumbSeparator,
 } from '@app/components/ui/breadcrumb';
 import { Button } from '@app/components/ui/button';
@@ -16,13 +15,14 @@ import {
   DropdownMenuContent,
   DropdownMenuTrigger,
 } from '@app/components/ui/dropdown-menu';
+import { Popover, PopoverContent, PopoverTrigger } from '@app/components/ui/popover';
 import { Tabs, TabsList, TabsTrigger } from '@app/components/ui/tabs';
 import { EVAL_ROUTES } from '@app/constants/routes';
 import { useToast } from '@app/hooks/useToast';
 import { cn } from '@app/lib/utils';
 import { fetchUserEmail, updateEvalAuthor } from '@app/utils/api';
 import { formatDuration } from '@app/utils/date';
-import { ChevronDown } from 'lucide-react';
+import { ChevronDown, Ellipsis } from 'lucide-react';
 import { Link } from 'react-router';
 import { AuthorChip } from './AuthorChip';
 import { EvalIdChip } from './EvalIdChip';
@@ -64,6 +64,7 @@ export default function EvalHeader({
   const [evalSelectorDialogOpen, setEvalSelectorDialogOpen] = React.useState(false);
   const [evalActionsOpen, setEvalActionsOpen] = React.useState(false);
   const [currentUserEmail, setCurrentUserEmail] = React.useState<string | null>(null);
+  const evalDetailsRef = React.useRef<HTMLDivElement>(null);
 
   React.useEffect(() => {
     fetchUserEmail().then((email) => {
@@ -127,31 +128,32 @@ export default function EvalHeader({
 
   return (
     <>
-      <div className="border-b border-border bg-white/80 dark:bg-zinc-900/80 backdrop-blur-sm shrink-0 print:bg-transparent print:border-none">
-        <div className={cn('px-4 py-4 print:px-0 print:max-w-none', contentClassName)}>
-          {/* Print: eval name as header */}
-          <h1 className="hidden print:block text-2xl font-bold">
-            {config?.description || evalId || 'Evaluation'}
-          </h1>
+      <div className="border-b border-border bg-card shrink-0 print:bg-transparent print:border-none">
+        <div className={cn('px-4 py-4 sm:px-6 print:px-0 print:max-w-none', contentClassName)}>
           <div className="flex flex-wrap items-center gap-3 eval-header print:hidden">
-            <Breadcrumb>
-              <BreadcrumbList>
-                <BreadcrumbItem>
+            <Breadcrumb className="min-w-0 flex-1">
+              <BreadcrumbList className="flex-nowrap">
+                <BreadcrumbItem className="shrink-0">
                   <BreadcrumbLink asChild>
                     <Link to={EVAL_ROUTES.LIST}>Evals</Link>
                   </BreadcrumbLink>
                 </BreadcrumbItem>
-                <BreadcrumbSeparator />
-                <BreadcrumbItem>
-                  <BreadcrumbPage
+                <BreadcrumbSeparator className="shrink-0" />
+                <BreadcrumbItem className="min-w-0">
+                  <button
+                    type="button"
+                    aria-current="page"
+                    aria-haspopup="dialog"
+                    aria-expanded={evalSelectorDialogOpen}
                     onClick={() => setEvalSelectorDialogOpen(true)}
-                    className="cursor-pointer hover:text-muted-foreground transition-colors"
+                    title={config?.description || evalId || 'Select eval'}
+                    className="inline-flex min-w-0 items-center gap-1 rounded-sm text-foreground transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   >
-                    <span className="inline-flex items-center gap-1">
-                      {config?.description || evalId || 'Select...'}
-                      <ChevronDown className="size-3.5 text-muted-foreground" />
+                    <span className="truncate">
+                      {config?.description || evalId || 'Select eval'}
                     </span>
-                  </BreadcrumbPage>
+                    <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" />
+                  </button>
                 </BreadcrumbItem>
               </BreadcrumbList>
             </Breadcrumb>
@@ -186,49 +188,107 @@ export default function EvalHeader({
               )}
             </div>
           </div>
-          {/* Screen: interactive chips */}
-          <div className="flex flex-wrap gap-2 items-center mt-2 print:hidden">
-            {evalId && <EvalIdChip evalId={evalId} onCopy={handleEvalIdCopyClick} />}
-            <AuthorChip
-              author={author}
-              onEditAuthor={handleEditAuthor}
-              currentUserEmail={currentUserEmail}
-              editable
-            />
+          <h1 className="hidden print:block text-2xl font-bold">
+            {config?.description || evalId || 'Evaluation'}
+          </h1>
+          <div className="mt-2 flex min-w-0 flex-nowrap items-center gap-3 print:hidden">
             {formattedDate && (
-              <Chip label="DATE" interactive={false}>
+              <Chip label="DATE" interactive={false} className="shrink-0">
                 {formattedDate}
               </Chip>
             )}
-            <Chip label="PROVIDERS" interactive={false}>
-              {uniqueProviderCount}
+            <Chip
+              label="AUTHOR"
+              interactive={false}
+              className="hidden min-w-0 max-w-64 md:inline-flex"
+            >
+              {author || 'Unknown'}
             </Chip>
-            <Chip label="TESTS" interactive={false}>
-              {totalResultsCount}
-            </Chip>
-            {isRedteam && (
-              <Chip label="PROBES" interactive={false}>
-                {probesCount}
-              </Chip>
-            )}
             {stats?.durationMs != null && (
-              <Chip label="DURATION" interactive={false}>
+              <Chip label="DURATION" interactive={false} className="hidden shrink-0 sm:inline-flex">
                 {formatDuration(stats.durationMs)}
               </Chip>
             )}
-            {Object.keys(config?.tags || {}).map((tag) => (
-              <Badge key={tag} variant="secondary" className="opacity-70">
-                {`${tag}: ${config?.tags?.[tag]}`}
-              </Badge>
-            ))}
+            <Chip label="PROVIDERS" interactive={false} className="hidden shrink-0 sm:inline-flex">
+              {uniqueProviderCount}
+            </Chip>
+            <Chip label="TESTS" interactive={false} className="shrink-0">
+              {totalResultsCount}
+            </Chip>
+            {evalId && (
+              <div className="hidden min-w-0 lg:block">
+                <EvalIdChip evalId={evalId} onCopy={handleEvalIdCopyClick} />
+              </div>
+            )}
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="size-7 shrink-0"
+                  aria-label="More evaluation details"
+                  title="More evaluation details"
+                >
+                  <Ellipsis className="size-4" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent
+                ref={evalDetailsRef}
+                align="end"
+                aria-label="Evaluation details"
+                onOpenAutoFocus={(event) => {
+                  event.preventDefault();
+                  evalDetailsRef.current?.focus();
+                }}
+                className="w-96 max-w-[calc(100vw-2rem)] max-h-[var(--radix-popover-content-available-height)] overflow-y-auto print:hidden"
+              >
+                <h2 className="mb-2 text-sm font-semibold">Evaluation details</h2>
+                <div className="flex flex-col items-start gap-1">
+                  {formattedDate && (
+                    <Chip label="DATE" interactive={false}>
+                      {formattedDate}
+                    </Chip>
+                  )}
+                  <AuthorChip
+                    author={author}
+                    onEditAuthor={handleEditAuthor}
+                    currentUserEmail={currentUserEmail}
+                    editable
+                  />
+                  {stats?.durationMs != null && (
+                    <Chip label="DURATION" interactive={false}>
+                      {formatDuration(stats.durationMs)}
+                    </Chip>
+                  )}
+                  <Chip label="PROVIDERS" interactive={false}>
+                    {uniqueProviderCount}
+                  </Chip>
+                  <Chip label="TESTS" interactive={false}>
+                    {totalResultsCount}
+                  </Chip>
+                  {isRedteam && (
+                    <Chip label="PROBES" interactive={false}>
+                      {probesCount}
+                    </Chip>
+                  )}
+                  {Object.keys(config?.tags || {}).map((tag) => (
+                    <Badge key={tag} variant="secondary" className="whitespace-normal break-all">
+                      {`${tag}: ${config?.tags?.[tag]}`}
+                    </Badge>
+                  ))}
+                  {evalId && <EvalIdChip evalId={evalId} onCopy={handleEvalIdCopyClick} />}
+                </div>
+              </PopoverContent>
+            </Popover>
           </div>
           {/* Print: clean property grid */}
           <div className="hidden print:block mt-2">
             <div className="grid grid-cols-3 gap-x-6 gap-y-1 text-sm">
-              {evalId && (
+              {formattedDate && (
                 <div>
-                  <span className="font-semibold text-gray-700">Eval ID:</span>{' '}
-                  <span>{evalId}</span>
+                  <span className="font-semibold text-gray-700">Date:</span>{' '}
+                  <span>{formattedDate}</span>
                 </div>
               )}
               {author && (
@@ -236,10 +296,10 @@ export default function EvalHeader({
                   <span className="font-semibold text-gray-700">Author:</span> <span>{author}</span>
                 </div>
               )}
-              {formattedDate && (
+              {stats?.durationMs != null && (
                 <div>
-                  <span className="font-semibold text-gray-700">Date:</span>{' '}
-                  <span>{formattedDate}</span>
+                  <span className="font-semibold text-gray-700">Duration:</span>{' '}
+                  <span>{formatDuration(stats.durationMs)}</span>
                 </div>
               )}
               <div>
@@ -256,18 +316,18 @@ export default function EvalHeader({
                   <span>{probesCount}</span>
                 </div>
               )}
-              {stats?.durationMs != null && (
-                <div>
-                  <span className="font-semibold text-gray-700">Duration:</span>{' '}
-                  <span>{formatDuration(stats.durationMs)}</span>
-                </div>
-              )}
               {Object.keys(config?.tags || {}).map((tag) => (
                 <div key={tag}>
                   <span className="font-semibold text-gray-700">{tag}:</span>{' '}
                   <span>{config?.tags?.[tag]}</span>
                 </div>
               ))}
+              {evalId && (
+                <div>
+                  <span className="font-semibold text-gray-700">Eval ID:</span>{' '}
+                  <span>{evalId}</span>
+                </div>
+              )}
             </div>
           </div>
           {children}

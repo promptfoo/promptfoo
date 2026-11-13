@@ -113,7 +113,7 @@ The assertions check that both JSON responses and the requested demo contain the
 The example uses Claude Sonnet 5. Other supported models include:
 
 - Claude Opus 5 (`claude-opus-5`)
-- Claude Fable 5 / 5.1 (`claude-fable-5`, `claude-fable-5-1`)
+- Claude Fable 5 / 5.1 / 5.2 (`claude-fable-5`, `claude-fable-5-1`, `claude-fable-5-2`)
 - Claude Opus 4.6–4.8 and Claude Sonnet 4.6
 - The 4.5 generation (`claude-opus-4-5`, `claude-sonnet-4-5`, `claude-haiku-4-5`)
 
