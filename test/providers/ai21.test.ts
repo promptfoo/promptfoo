@@ -76,20 +76,18 @@ describe('AI21ChatCompletionProvider', () => {
     await expect(provider.callApi('test prompt')).rejects.toThrow('AI21 API key is not set');
   });
 
-  it('should handle successful API call', async () => {
-    const mockResponse = createMockChatResponse('test response');
-
-    vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
-
+  it.each(['test response', ''])('returns completion %j with usage and cost', async (content) => {
+    vi.mocked(fetchWithCache).mockResolvedValue(createMockChatResponse(content));
     const provider = new AI21ChatCompletionProvider('jamba-mini', createApiKeyOptions());
 
     const result = await provider.callApi('test prompt');
-    expect(result.output).toBe('test response');
-    expect(result.tokenUsage).toEqual({
-      total: 10,
-      prompt: 5,
-      completion: 5,
+    expect(result).toMatchObject({
+      output: content,
+      cached: false,
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
     });
+    expect(result.error).toBeUndefined();
+    expect(result.cost).toBeGreaterThan(0);
   });
 
   it('should preserve explicit zero for top_p', async () => {
@@ -124,17 +122,21 @@ describe('AI21ChatCompletionProvider', () => {
     expect(result.error).toBe('API call error: API error message');
   });
 
-  it('should handle malformed API response', async () => {
-    const mockResponse = createMockFetchResponse({
-      choices: [],
-    });
-
-    vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
-
+  it.each([
+    null,
+    { choices: [] },
+    { choices: [{ message: {} }] },
+    { choices: [{ message: { content: null } }] },
+    { choices: [{ message: { content: 0 } }] },
+    { choices: [{ message: { content: false } }] },
+    { choices: [{ message: { content: { text: 'invalid' } } }] },
+  ])('rejects malformed response %j', async (data) => {
+    vi.mocked(fetchWithCache).mockResolvedValue(createMockFetchResponse(data));
     const provider = new AI21ChatCompletionProvider('jamba-mini', createApiKeyOptions());
 
     const result = await provider.callApi('test prompt');
     expect(result.error).toContain('Malformed response data');
+    expect(result.output).toBeUndefined();
   });
 
   it('should handle network errors', async () => {
@@ -144,17 +146,6 @@ describe('AI21ChatCompletionProvider', () => {
 
     const result = await provider.callApi('test prompt');
     expect(result.error).toBe('API call error: Error: Network error');
-  });
-
-  it('should calculate cost correctly', async () => {
-    const mockResponse = createMockChatResponse('test response');
-
-    vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
-
-    const provider = new AI21ChatCompletionProvider('jamba-mini', createApiKeyOptions());
-
-    const result = await provider.callApi('test prompt');
-    expect(result.cost).toBeDefined();
   });
 
   it('should preserve an explicit max_tokens value of 0', async () => {

@@ -3,7 +3,7 @@ import { getEventListeners } from 'node:events';
 import { setImmediate } from 'node:timers/promises';
 
 import { context, propagation, SpanStatusCode, trace } from '@opentelemetry/api';
-import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
+import { TracerProvider } from '@opentelemetry/sdk-trace';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { withCacheEnabled, withCacheNamespace } from '../../src/cache';
 import { loadApiProvider } from '../../src/providers';
@@ -12,13 +12,14 @@ import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { wrapProviderWithRateLimiting } from '../../src/scheduler/providerWrapper';
 import { getRateLimitKey } from '../../src/scheduler/rateLimitKey';
 import { RateLimitRegistry } from '../../src/scheduler/rateLimitRegistry';
+import { registerTracerProvider } from '../../src/tracing/tracerProvider';
 import { TokenUsageTracker } from '../../src/util/tokenUsage';
 import {
   accumulateResponseTokenUsage,
   createEmptyTokenUsage,
 } from '../../src/util/tokenUsageUtils';
 import { createDeferred, mockProcessEnv } from '../util/utils';
-import type { ReadableSpan, SpanProcessor } from '@opentelemetry/sdk-trace-node';
+import type { ReadableSpan, SpanProcessor } from '@opentelemetry/sdk-trace';
 
 import type { ApiProvider } from '../../src/types/providers';
 
@@ -30,7 +31,7 @@ describe('callback failures selected before real tool-span completion', () => {
   const registries: RateLimitRegistry[] = [];
   const drains: (() => void)[] = [];
   const pending: Promise<unknown>[] = [];
-  let tracerProvider: NodeTracerProvider;
+  let tracerProvider: TracerProvider;
   let restoreEnvironment: () => void;
   let onToolEnd: ((span: ReadableSpan) => void) | undefined;
 
@@ -54,8 +55,8 @@ describe('callback failures selected before real tool-span completion', () => {
       async forceFlush() {},
       async shutdown() {},
     };
-    tracerProvider = new NodeTracerProvider({ spanProcessors: [processor] });
-    tracerProvider.register();
+    tracerProvider = new TracerProvider({ spanProcessors: [processor] });
+    registerTracerProvider(tracerProvider);
   });
 
   afterEach(async () => {

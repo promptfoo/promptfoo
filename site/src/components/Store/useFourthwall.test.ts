@@ -72,7 +72,7 @@ describe('formatPrice', () => {
   });
 
   it('formats other currencies', () => {
-    expect(formatPrice({ value: 50, currency: 'EUR' })).toMatch(/50/);
+    expect(formatPrice({ value: 50, currency: 'EUR' })).toBe('€50.00');
   });
 
   it('handles zero values', () => {

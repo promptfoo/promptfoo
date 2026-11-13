@@ -1,5 +1,6 @@
 // Simple Express API server
 const express = require('express');
+const defaultErrorHandler = require('./defaultErrorHandler.cjs');
 const app = express();
 const port = 3000;
 
@@ -21,6 +22,8 @@ app.post('/users', (req, res) => {
   const { name } = req.body;
   res.status(201).json({ id: 3, name });
 });
+
+app.use(defaultErrorHandler);
 
 app.listen(port, () => {
   console.log(`Server running at http://localhost:${port}`);

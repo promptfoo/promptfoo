@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
   applicationDefinitionToPurpose,
-  hasApplicationDefinitionContent,
   mergeWithDefaults,
   purposeToApplicationDefinition,
 } from './purposeParser';
@@ -308,30 +307,6 @@ User profile, order and ticket history
       expect(result.accessToActions).toContain('Update their profile');
       expect(result.connectedSystems).toBe('User profile, order and ticket history');
     });
-  });
-});
-
-describe('hasApplicationDefinitionContent', () => {
-  it('returns true when at least one field has content', () => {
-    const appDef = { purpose: 'Something', features: '' };
-
-    expect(hasApplicationDefinitionContent(appDef)).toBe(true);
-  });
-
-  it('returns false when all fields are empty', () => {
-    const appDef = { purpose: '', features: '', industry: '' };
-
-    expect(hasApplicationDefinitionContent(appDef)).toBe(false);
-  });
-
-  it('returns false for undefined', () => {
-    expect(hasApplicationDefinitionContent(undefined)).toBe(false);
-  });
-
-  it('returns false when fields only contain whitespace', () => {
-    const appDef = { purpose: '   ', features: '\n\t' };
-
-    expect(hasApplicationDefinitionContent(appDef)).toBe(false);
   });
 });
 

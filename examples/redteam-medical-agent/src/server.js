@@ -3,6 +3,7 @@
  */
 
 const express = require('express');
+const defaultErrorHandler = require('./defaultErrorHandler.cjs');
 const cors = require('cors');
 const { handleMessage } = require('./agent');
 const fs = require('fs');
@@ -208,6 +209,8 @@ app.get('/', (req, res) => {
 });
 
 const port = process.env.PORT || 3090;
+
+app.use(defaultErrorHandler);
 
 app.listen(port, (error) => {
   if (error) {

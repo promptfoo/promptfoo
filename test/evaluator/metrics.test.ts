@@ -340,10 +340,22 @@ describeEvaluator('evaluator metrics and scoring', () => {
     expect(metrics1!.namedScores.MAPE).toBeCloseTo(0.15, 10);
   });
 
-  it('should keep derived scores and __count consistent across concurrent rows', async () => {
-    // The race also occurs when the dynamic import is already cached.
-    await import('mathjs');
+  it('rejects an unsupported formula before calling the provider, even in an unused branch', async () => {
+    const provider = { id: () => 'echo', callApi: vi.fn(async () => ({ output: 'ok' })) };
+    const suite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('test')],
+      tests: [{}],
+      derivedMetrics: [{ name: 'score', value: '1 ? 42 : sqrt(9)' }],
+    };
+    const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
+    await expect(evaluate(suite, record, {})).rejects.toThrow(
+      'Invalid formula for derived metric "score"',
+    );
+    expect(provider.callApi).not.toHaveBeenCalled();
+  });
 
+  it('should keep derived scores and __count consistent across concurrent rows', async () => {
     const provider: ApiProvider = {
       id: () => 'concurrent-metrics-provider',
       callApi: async () => ({ output: 'ok' }),

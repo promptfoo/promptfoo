@@ -1,4 +1,4 @@
-import { act, StrictMode } from 'react';
+import { act, type ComponentProps, StrictMode } from 'react';
 
 import useApiConfig from '@app/stores/apiConfig';
 import { restoreTestTimers, type TestTimers, useTestTimers } from '@app/tests/timers';
@@ -8,9 +8,12 @@ import { EVAL_TABLE_MAX_PAGE_SIZE } from '@promptfoo/types/evalConstants';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import EvalOutputCell from './EvalOutputCell';
 import * as ProviderDisplayModule from './ProviderDisplay';
 import ResultsTable from './ResultsTable';
 import { useResultsViewSettingsStore, useTableStore } from './store';
+
+type GradingResult = NonNullable<ComponentProps<typeof EvalOutputCell>['output']['gradingResult']>;
 
 function mockHeaderTable(mockTable: ReturnType<typeof createTableStore>['table']) {
   vi.mocked(useResultsViewSettingsStore).mockImplementation(() => createViewSettings());
@@ -171,7 +174,8 @@ function createNextPageExpectation(mockFetchEvalData: unknown, checkPageSize = f
   };
 }
 
-vi.mock('./store', () => ({
+vi.mock('./store', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./store')>()),
   useTableStore: vi.fn(() => ({
     config: {},
     evalId: '123',
@@ -681,10 +685,11 @@ describe('ResultsTable Metrics Display', () => {
     expect(screen.getByText('250')).toBeInTheDocument();
   });
 
-  it('renders object provider IDs and request/assert metrics in the prompt header', () => {
+  it('renders object provider IDs and total request/assert metrics in a filtered prompt header', () => {
     vi.mocked(useTableStore).mockImplementation(() =>
       createTableStore({
         inComparisonMode: false,
+        filteredMetrics: [{ assertPassCount: 0, assertFailCount: 5 }],
         table: {
           body: [
             {
@@ -729,6 +734,21 @@ describe('ResultsTable Metrics Display', () => {
     expect(screen.getByText('7')).toBeInTheDocument();
     expect(screen.getByText('Asserts:')).toBeInTheDocument();
     expect(screen.getByText('2/3 passed')).toBeInTheDocument();
+  });
+
+  it.each([
+    ['missing', undefined],
+    ['zero', { assertPassCount: 0, assertFailCount: 0 }],
+    ['error-only', { testErrorCount: 3 }],
+  ])('omits assertion counts for a prompt with %s metrics', (_name, metrics) => {
+    mockHeaderTable({
+      head: { prompts: [{ provider: 'test-provider', metrics }], vars: [] },
+      body: [],
+    });
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    expect(screen.getByText('test-provider')).toBeInTheDocument();
+    expect(screen.queryByText('Asserts:')).not.toBeInTheDocument();
   });
 
   it('keeps the prompt header divider visible above streamed result rows', () => {
@@ -1033,6 +1053,164 @@ describe('ResultsTable Metrics Display', () => {
       expect(audioSource).toHaveAttribute('src', 'data:audio/wav;base64,base64-audio');
       expect(audioSource).toHaveAttribute('type', 'audio/wav');
       expect(screen.getByText('/path/to/input.wav (audio/wav)')).toBeInTheDocument();
+    });
+
+    describe('audio strategy variables', () => {
+      beforeEach(() => {
+        vi.stubEnv('VITE_PUBLIC_BASENAME', '');
+        vi.spyOn(useApiConfig, 'getState').mockReturnValue({
+          ...useApiConfig.getState(),
+          apiBaseUrl: '',
+        });
+      });
+
+      afterEach(() => {
+        vi.restoreAllMocks();
+        vi.unstubAllEnvs();
+      });
+
+      it('replaces the audio player when its resolved source changes', () => {
+        const initialStore = useTableStore();
+        const setAudio = (value: string) => {
+          vi.mocked(useTableStore).mockReturnValue({
+            ...initialStore,
+            table: {
+              head: { prompts: [{}], vars: ['prompt'] },
+              body: [
+                {
+                  outputs: [
+                    {
+                      pass: true,
+                      score: 1,
+                      text: 'test output',
+                      metadata: {
+                        [FILE_METADATA_KEY]: { prompt: { path: 'input.txt', type: 'text' } },
+                      },
+                    },
+                  ],
+                  test: { metadata: { strategyId: 'audio', originalText: 'decoded prompt' } },
+                  vars: [value],
+                },
+              ],
+            },
+          });
+        };
+        setAudio('storageRef:first.wav');
+        const { container, rerender } = renderWithProviders(
+          <ResultsTable {...defaultProps} columnVisibility={{}} />,
+        );
+        const firstPlayer = container.querySelector('audio');
+        expect(firstPlayer).not.toBeNull();
+        setAudio('storageRef:second.wav');
+        rerender(<ResultsTable {...defaultProps} columnVisibility={{}} />);
+        expect(container.querySelector('audio')).not.toBe(firstPlayer);
+        expect(container.querySelector('audio source')).toHaveAttribute(
+          'src',
+          '/api/media/second.wav',
+        );
+      });
+
+      it.each([
+        ['blob', 'promptfoo://blob/audio-hash', '/api/blobs/audio-hash'],
+        ['storage', 'storageRef:audio/sample.mp3', '/api/media/audio/sample.mp3'],
+        ['raw base64', 'YWJj', 'data:audio/mp3;base64,YWJj'],
+        ['audio data URL', 'data:audio/wav;base64,YWJj', 'data:audio/wav;base64,YWJj'],
+        [
+          'other data URL',
+          'data:application/octet-stream;base64,YWJj',
+          'data:application/octet-stream;base64,YWJj',
+        ],
+        [
+          'HTTP URL',
+          'http://example.com/audio.mp3',
+          'data:audio/mp3;base64,http://example.com/audio.mp3',
+        ],
+        [
+          'HTTPS URL',
+          'https://example.com/audio.mp3',
+          'data:audio/mp3;base64,https://example.com/audio.mp3',
+        ],
+        [
+          'protocol-relative URL',
+          '//example.com/audio.mp3',
+          'data:audio/mp3;base64,//example.com/audio.mp3',
+        ],
+        [
+          'API path',
+          '/api/media/audio/sample.mp3',
+          'data:audio/mp3;base64,/api/media/audio/sample.mp3',
+        ],
+        ['file path', 'file://sample.mp3', 'data:audio/mp3;base64,file://sample.mp3'],
+        ['empty inline value', '', 'data:audio/mp3;base64,'],
+        ['empty blob reference', 'promptfoo://blob/', null],
+        ['slash-only blob reference', 'promptfoo://blob//', null],
+        ['multiple-slash blob reference', 'promptfoo://blob////', null],
+        ['empty storage reference', 'storageRef:', null],
+        ['slash-only storage reference', 'storageRef:/', null],
+        ['multiple-slash storage reference', 'storageRef:////', null],
+        [
+          'multiple leading slashes',
+          'storageRef:////audio/sample.mp3',
+          '/api/media/audio/sample.mp3',
+        ],
+        ['storage leading slash', 'storageRef:/audio/sample.mp3', '/api/media/audio/sample.mp3'],
+        [
+          'proxy basename',
+          'storageRef:audio/sample.mp3',
+          '/promptfoo/api/media/audio/sample.mp3',
+          '',
+          '/promptfoo',
+        ],
+        [
+          'trailing API slash',
+          'promptfoo://blob/audio-hash',
+          'https://api.example.test/promptfoo/api/blobs/audio-hash',
+          'https://api.example.test/promptfoo/',
+        ],
+      ])(
+        'preserves %s routing and decoded text',
+        async (_label, value, expected, apiBaseUrl = '', basename = '') => {
+          vi.stubEnv('VITE_PUBLIC_BASENAME', basename);
+          vi.mocked(useApiConfig.getState).mockReturnValue({
+            ...useApiConfig.getState(),
+            apiBaseUrl: apiBaseUrl ?? '',
+          });
+          vi.mocked(useTableStore).mockReturnValue({
+            ...useTableStore(),
+            table: {
+              head: { prompts: [{}], vars: ['prompt'] },
+              body: [
+                {
+                  outputs: [
+                    {
+                      pass: true,
+                      score: 1,
+                      text: 'test output',
+                      metadata: {
+                        [FILE_METADATA_KEY]: { prompt: { path: 'input.txt', type: 'text' } },
+                      },
+                    },
+                  ],
+                  test: { metadata: { strategyId: 'audio', originalText: 'decoded audio prompt' } },
+                  vars: [value],
+                },
+              ],
+            },
+          });
+
+          const { container } = renderWithProviders(<ResultsTable {...defaultProps} />);
+          if (expected === null) {
+            expect(await screen.findByText('Failed to load audio')).toBeInTheDocument();
+            expect(container.querySelector('audio source')).toBeNull();
+          } else {
+            await waitFor(() => {
+              expect(container.querySelector('audio source')).toHaveAttribute('src', expected);
+            });
+            expect(container.querySelector('audio source')).toHaveAttribute('type', 'audio/mp3');
+          }
+          expect(screen.getByText('decoded audio prompt')).toBeInTheDocument();
+        },
+      );
     });
 
     it('does not render file:// audio variables as invalid base64 audio', () => {
@@ -1590,213 +1768,40 @@ describe('ResultsTable Row Navigation', () => {
   });
 });
 
-describe('ResultsTable handleRating - highlight toggle fix', () => {
-  let mockSetTable: ReturnType<typeof vi.fn>;
-  let mockCallApi: any;
-
-  const createMockTableWithComponentResults = (componentResults?: any) => ({
-    body: [
-      {
-        outputs: [
-          {
-            id: 'test-output-1',
-            pass: true,
-            score: 1,
-            text: 'test output',
-            latencyMs: 100,
-            cost: 0.01,
-            failureReason: 0,
-            namedScores: {},
-            gradingResult: {
-              pass: true,
-              score: 1,
-              reason: 'Test passed',
-              comment: 'Initial comment',
-              ...(componentResults !== undefined && { componentResults }),
-            },
-          },
-        ],
-        test: {},
-        vars: [],
-        testIdx: 0,
-      },
-    ],
-    head: createPromptHead([], 1, 0),
-  });
-
-  const defaultProps = createDefaultProps();
+describe('ResultsTable rating actions', () => {
+  const automated = {
+    pass: false,
+    score: 0.5,
+    reason: 'Automated assertion',
+    assertion: { type: 'contains' as const, value: 'expected' },
+  };
+  const human = {
+    pass: true,
+    score: 1,
+    reason: 'Manual result (overrides all other grading results)',
+    assertion: { type: 'human' as const },
+  };
+  let setTable: ReturnType<typeof vi.fn>;
+  let callApi: ReturnType<typeof vi.mocked<typeof import('@app/utils/api').callApi>>;
 
   beforeEach(async () => {
     vi.clearAllMocks();
-    mockSetTable = vi.fn();
-    // Dynamically import and mock callApi
-    const apiModule = await import('@app/utils/api');
-    mockCallApi = vi.mocked(apiModule.callApi);
-    mockCallApi.mockResolvedValue({ ok: true });
+    setTable = vi.fn();
+    callApi = vi.mocked((await import('@app/utils/api')).callApi);
+    callApi.mockReset().mockResolvedValue({ ok: true } as Response);
   });
 
-  it('should not include empty componentResults when toggling highlight', async () => {
-    const mockTable = createMockTableWithComponentResults([]);
-
-    const mockStore = createTableStore({
-      setTable: mockSetTable,
-      table: mockTable,
-      isFetching: false,
-      filteredResultsCount: 1,
-    });
-
-    vi.mocked(useTableStore).mockImplementation(() => mockStore);
-
-    // We need to test the handleRating function directly
-    // Since it's inside the component, we'll capture it through the setTable calls
-    renderWithProviders(<ResultsTable {...defaultProps} />);
-
-    // The handleRating function is created in the component
-    // We need to trigger it through the component's internal logic
-    // For now, let's verify the behavior by checking what setTable would be called with
-
-    // Simulate calling handleRating for highlight toggle (isPass and score are undefined)
-    const _updatedTable = {
-      ...mockTable,
-      body: [
-        {
-          ...mockTable.body[0],
-          outputs: [
-            {
-              ...mockTable.body[0].outputs[0],
-              gradingResult: {
-                pass: true,
-                score: 1,
-                reason: 'Test passed',
-                comment: '!highlight New comment',
-                // componentResults should NOT be included here since it was empty
-              },
-            },
-          ],
-        },
-      ],
-    };
-
-    // Since we can't directly call handleRating, let's verify the logic would work correctly
-    // by checking what the gradingResult would look like after the update
-    const existingOutput = mockTable.body[0].outputs[0];
-    const { componentResults: _, ...existingGradingResultWithoutComponents } =
-      existingOutput.gradingResult || {};
-
-    const expectedGradingResult = {
-      ...existingGradingResultWithoutComponents,
-      pass: existingOutput.gradingResult?.pass ?? existingOutput.pass,
-      score: existingOutput.gradingResult?.score ?? existingOutput.score,
-      reason: existingOutput.gradingResult?.reason ?? 'Manual result',
-      comment: '!highlight New comment',
-    };
-
-    // componentResults should not be in the result
-    expect('componentResults' in expectedGradingResult).toBe(false);
-  });
-
-  it('should preserve non-empty componentResults when toggling highlight', async () => {
-    const existingComponentResults = [
-      {
-        pass: true,
-        score: 1,
-        reason: 'Existing assertion',
-        assertion: { type: 'contains' },
-      },
-    ];
-    const mockTable = createMockTableWithComponentResults(existingComponentResults);
-
-    vi.mocked(useTableStore).mockImplementation(() =>
-      createTableStore({
-        inComparisonMode: false,
-        setTable: mockSetTable,
-        table: mockTable,
-        renderMarkdown: true,
-        isFetching: false,
-        filteredResultsCount: 1,
-      }),
-    );
-
-    renderWithProviders(<ResultsTable {...defaultProps} />);
-
-    // Verify the logic for preserving non-empty componentResults
-    const existingOutput = mockTable.body[0].outputs[0];
-    const { componentResults: _, ...existingGradingResultWithoutComponents } =
-      existingOutput.gradingResult || {};
-
-    const expectedGradingResult = {
-      ...existingGradingResultWithoutComponents,
-      pass: existingOutput.gradingResult?.pass ?? existingOutput.pass,
-      score: existingOutput.gradingResult?.score ?? existingOutput.score,
-      reason: existingOutput.gradingResult?.reason ?? 'Manual result',
-      comment: '!highlight New comment',
-      // componentResults SHOULD be included since it was non-empty
-      componentResults: existingComponentResults,
-    };
-
-    expect(expectedGradingResult.componentResults).toEqual(existingComponentResults);
-  });
-
-  it('should update componentResults when rating (not just toggling highlight)', async () => {
-    const mockTable = createMockTableWithComponentResults([]);
-
-    vi.mocked(useTableStore).mockImplementation(() =>
-      createTableStore({
-        inComparisonMode: false,
-        setTable: mockSetTable,
-        table: mockTable,
-        renderMarkdown: true,
-        isFetching: false,
-        filteredResultsCount: 1,
-      }),
-    );
-
-    renderWithProviders(<ResultsTable {...defaultProps} />);
-
-    // When rating with isPass = true, componentResults should be updated
-    const existingOutput = mockTable.body[0].outputs[0];
-    const componentResults = [
-      {
-        pass: true,
-        score: 1,
-        reason: 'Manual result (overrides all other grading results)',
-        comment: 'Test comment',
-        assertion: { type: 'human' as const },
-      },
-    ];
-
-    const { componentResults: _, ...existingGradingResultWithoutComponents } =
-      existingOutput.gradingResult || {};
-
-    const expectedGradingResult = {
-      ...existingGradingResultWithoutComponents,
-      pass: true,
-      score: 1,
-      reason: 'Manual result (overrides all other grading results)',
-      comment: 'Test comment',
-      componentResults,
-    };
-
-    expect(expectedGradingResult.componentResults).toBeDefined();
-    expect(expectedGradingResult.componentResults).toHaveLength(1);
-    expect(expectedGradingResult.componentResults![0].assertion?.type).toBe('human');
-  });
-
-  it('handles missing gradingResult gracefully when toggling highlight', async () => {
-    const mockTable = {
+  function renderRatingTable(gradingResult?: Partial<GradingResult>, initialPass = false) {
+    const table = {
       body: [
         {
           outputs: [
             {
               id: 'test-output-1',
-              pass: true,
-              score: 1,
+              pass: initialPass,
+              score: 0.2,
               text: 'test output',
-              latencyMs: 100,
-              cost: 0.01,
-              failureReason: 0,
-              namedScores: {},
-              // No gradingResult
+              gradingResult,
             },
           ],
           test: {},
@@ -1804,337 +1809,208 @@ describe('ResultsTable handleRating - highlight toggle fix', () => {
           testIdx: 0,
         },
       ],
-      head: createPromptHead([], 1, 0),
+      head: createProviderHead(),
     };
-
     vi.mocked(useTableStore).mockImplementation(() =>
-      createTableStore({
-        inComparisonMode: false,
-        setTable: mockSetTable,
-        table: mockTable,
-        renderMarkdown: true,
-        isFetching: false,
-        filteredResultsCount: 1,
-      }),
+      createTableStore({ setTable, table, inComparisonMode: false, isFetching: false }),
     );
+    renderWithProviders(<ResultsTable {...createDefaultProps()} />);
+  }
 
-    renderWithProviders(<ResultsTable {...defaultProps} />);
-
-    // When there's no existing gradingResult, it should create one
-    const existingOutput = mockTable.body[0].outputs[0];
-    const expectedGradingResult = {
-      pass: existingOutput.pass,
-      score: existingOutput.score,
-      reason: 'Manual result',
-      comment: '!highlight New comment',
-    };
-
-    expect(expectedGradingResult.pass).toBe(true);
-    expect(expectedGradingResult.score).toBe(1);
-    expect('componentResults' in expectedGradingResult).toBe(false);
-  });
-});
-
-describe('ResultsTable handleRating', () => {
-  let mockSetTable: ReturnType<typeof vi.fn>;
-
-  const createMockTable = () => ({
-    body: [
-      {
-        outputs: [
-          {
-            id: 'test-output-1',
-            pass: false,
-            score: 0,
-            text: 'test output',
-            gradingResult: {
-              pass: false,
-              score: 0,
-              reason: 'Initial reason',
-              comment: 'Initial comment',
-            },
-          },
-        ],
-        test: {},
-        vars: [],
-      },
-    ],
-    head: createProviderHead(),
-  });
-
-  const defaultProps = {
-    ...createDefaultProps(),
-    selectedMetric: null,
-  };
-
-  beforeEach(() => {
-    mockSetTable = vi.fn();
-    vi.mocked(useTableStore).mockImplementation(() =>
-      createTableStore({
-        inComparisonMode: false,
-        setTable: mockSetTable,
-        table: createMockTable(),
-      }),
-    );
-  });
-
-  it('should update gradingResult with manual pass and score values when a user provides a rating', () => {
-    createMockTable();
-    renderWithProviders(<ResultsTable {...defaultProps} />);
-
-    const rowIndex = 0;
-    const promptIndex = 0;
-    const isPass = true;
-    const score = 0.75;
-
-    const evalOutputCell = screen.getByTestId('eval-output-cell');
-    act(() => {
-      (evalOutputCell.querySelector('button') as HTMLButtonElement).click();
+  async function savedRating() {
+    await waitFor(() => {
+      expect(callApi).toHaveBeenCalledWith(
+        '/eval/123/results/test-output-1/rating',
+        expect.objectContaining({ method: 'POST' }),
+      );
     });
+    expect(setTable).toHaveBeenCalledOnce();
+    const updatedOutput = setTable.mock.calls[0][0].body[0].outputs[0];
+    const request = callApi.mock.calls.find(
+      ([url]) => url === '/eval/123/results/test-output-1/rating',
+    )![1];
+    const payload = JSON.parse(request!.body as string) as GradingResult;
+    expect(payload).toEqual(updatedOutput.gradingResult);
+    return { payload, output: updatedOutput };
+  }
 
-    expect(mockSetTable).toHaveBeenCalledTimes(1);
-    const updatedTable = mockSetTable.mock.calls[0][0];
-    const updatedGradingResult = updatedTable.body[rowIndex].outputs[promptIndex].gradingResult;
-
-    expect(updatedGradingResult.pass).toBe(isPass);
-    expect(updatedGradingResult.score).toBe(score);
-    expect(updatedGradingResult.reason).toBe('Manual result (overrides all other grading results)');
-  });
-});
-
-describe('ResultsTable handleRating - Fallback to output values', () => {
-  let mockSetTable: ReturnType<typeof vi.fn>;
-
-  const createMockTableWithMissingGradingResultFields = () => ({
-    body: [
-      {
-        outputs: [
-          {
-            id: 'test-output-1',
-            pass: true,
-            score: 1,
-            text: 'test output',
-            latencyMs: 100,
-            cost: 0.01,
-            failureReason: 0,
-            namedScores: {},
-            gradingResult: {
-              reason: 'Test passed',
-              comment: 'Initial comment',
-              componentResults: [], // Added componentResults
-            },
-          },
-        ],
-        test: {},
-        vars: [],
-        testIdx: 0,
-      },
+  it.each([
+    ['missing grade', undefined],
+    ['missing pass and score', { reason: 'Existing reason' }],
+    [
+      'empty assertions',
+      { pass: false, score: 0.2, reason: 'Existing reason', componentResults: [] },
     ],
-    head: createPromptHead([], 1, 0),
-  });
-
-  const defaultProps = createDefaultProps();
-
-  beforeEach(() => {
-    vi.clearAllMocks();
-    mockSetTable = vi.fn();
-  });
-
-  it('should fallback to output pass and score when gradingResult is missing those fields', async () => {
-    const mockTable = createMockTableWithMissingGradingResultFields();
-
-    vi.mocked(useTableStore).mockImplementation(() =>
-      createTableStore({
-        inComparisonMode: false,
-        setTable: mockSetTable,
-        table: mockTable,
-        renderMarkdown: true,
-        isFetching: false,
-        filteredResultsCount: 1,
-      }),
-    );
-
-    renderWithProviders(<ResultsTable {...defaultProps} />);
-
-    // Verify the logic for preserving non-empty componentResults
-    const existingOutput = mockTable.body[0].outputs[0];
-    const { componentResults: _, ...existingGradingResultWithoutComponents } =
-      existingOutput.gradingResult || {};
-
-    const expectedGradingResult = {
-      ...existingGradingResultWithoutComponents,
-      pass: existingOutput.pass,
-      score: existingOutput.score,
-      reason: 'Manual result',
+    [
+      'automated assertions',
+      { pass: false, score: 0.2, reason: 'Existing reason', componentResults: [automated] },
+    ],
+  ] as const)('persists a highlight without replacing %s', async (_label, gradingResult) => {
+    renderRatingTable(gradingResult as Partial<GradingResult> | undefined);
+    const cell = vi.mocked(EvalOutputCell).mock.calls.slice(-1)[0][0];
+    await act(async () => {
+      await cell.onRating(undefined, undefined, '!highlight New comment');
+    });
+    const { payload, output } = await savedRating();
+    expect(payload).toMatchObject({
+      pass: false,
+      score: 0.2,
+      reason: gradingResult?.reason ?? 'Manual result',
       comment: '!highlight New comment',
-    };
-
-    expect(expectedGradingResult.pass).toBe(true);
-    expect(expectedGradingResult.score).toBe(1);
-  });
-});
-
-describe('ResultsTable handleRating - Updating existing human rating', () => {
-  let mockSetTable: ReturnType<typeof vi.fn>;
-
-  const createMockTableWithComponentResults = (componentResults: any[]) => ({
-    body: [
-      {
-        outputs: [
-          {
-            id: 'test-output-1',
-            pass: true,
-            score: 1,
-            text: 'test output',
-            latencyMs: 100,
-            cost: 0.01,
-            failureReason: 0,
-            namedScores: {},
-            gradingResult: {
-              pass: true,
-              score: 1,
-              reason: 'Test passed',
-              comment: 'Initial comment',
-              componentResults,
-            },
-          },
-        ],
-        test: {},
-        vars: [],
-        testIdx: 0,
-      },
-    ],
-    head: createPromptHead([], 1, 0),
+    });
+    expect(output).toMatchObject({ pass: false, score: 0.2 });
+    if (
+      gradingResult &&
+      'componentResults' in gradingResult &&
+      gradingResult.componentResults.length
+    ) {
+      expect(payload.componentResults).toEqual([automated]);
+    } else {
+      expect(payload).not.toHaveProperty('componentResults');
+    }
   });
 
-  const defaultProps = createDefaultProps();
+  it('persists a human rating when the existing grade has no component results', async () => {
+    renderRatingTable({ pass: false, score: 0.2, reason: 'Existing reason' });
 
-  beforeEach(() => {
-    vi.clearAllMocks();
-    mockSetTable = vi.fn();
-  });
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Rate' }));
 
-  it('should update existing human rating in componentResults', async () => {
-    const existingComponentResults = [
-      {
-        pass: true,
-        score: 1,
-        reason: 'Initial human rating',
-        comment: 'Initial comment',
-        assertion: { type: 'human' as const },
-      },
-      {
-        pass: false,
-        score: 0,
-        reason: 'Some other assertion',
-        assertion: { type: 'contains' as const },
-      },
-    ];
-    const mockTable = createMockTableWithComponentResults(existingComponentResults);
-
-    vi.mocked(useTableStore).mockImplementation(() =>
-      createTableStore({
-        inComparisonMode: false,
-        setTable: mockSetTable,
-        table: mockTable,
-        renderMarkdown: true,
-        isFetching: false,
-        filteredResultsCount: 1,
-      }),
-    );
-
-    // Simulate calling handleRating with updated values
-    const updatedIsPass = false;
-    const updatedScore = 0.5;
-    const updatedComment = 'Updated human rating';
-
-    // We need to test the handleRating function directly
-    // Since it's inside the component, we'll capture it through the setTable calls
-    renderWithProviders(<ResultsTable {...defaultProps} />);
-
-    // Simulate calling handleRating
-    const _updatedTable = {
-      ...mockTable,
-      body: [
-        {
-          ...mockTable.body[0],
-          outputs: [
-            {
-              ...mockTable.body[0].outputs[0],
-              gradingResult: {
-                ...mockTable.body[0].outputs[0].gradingResult,
-                pass: updatedIsPass,
-                score: updatedScore,
-                reason: 'Manual result (overrides all other grading results)',
-                comment: updatedComment,
-                componentResults: [
-                  {
-                    assertion: {
-                      type: 'human',
-                    },
-                    comment: updatedComment,
-                    pass: updatedIsPass,
-                    reason: 'Manual result (overrides all other grading results)',
-                    score: updatedScore,
-                  },
-                  {
-                    pass: false,
-                    score: 0,
-                    reason: 'Some other assertion',
-                    assertion: { type: 'contains' as const },
-                  },
-                ],
-              },
-            },
-          ],
-        },
-      ],
-    };
-
-    const existingOutput = mockTable.body[0].outputs[0];
-    const { componentResults: _, ...existingGradingResultWithoutComponents } =
-      existingOutput.gradingResult || {};
-
-    const expectedGradingResult = {
-      ...existingGradingResultWithoutComponents,
-      pass: updatedIsPass,
-      score: updatedScore,
+    const { payload, output } = await savedRating();
+    const expectedGrade = {
+      pass: true,
+      score: 0.75,
       reason: 'Manual result (overrides all other grading results)',
-      comment: updatedComment,
+      comment: 'test comment',
       componentResults: [
         {
-          pass: updatedIsPass,
-          score: updatedScore,
+          pass: true,
+          score: 0.75,
           reason: 'Manual result (overrides all other grading results)',
-          comment: updatedComment,
-          assertion: { type: 'human' as const },
-        },
-        {
-          pass: false,
-          score: 0,
-          reason: 'Some other assertion',
-          assertion: { type: 'contains' as const },
+          comment: 'test comment',
+          assertion: { type: 'human' },
         },
       ],
     };
-
-    // Assert that the componentResults are correctly updated
-    expect(expectedGradingResult.componentResults).toBeDefined();
-    expect(expectedGradingResult.componentResults).toHaveLength(2);
-    expect(expectedGradingResult.componentResults[0].pass).toBe(updatedIsPass);
-    expect(expectedGradingResult.componentResults[0].score).toBe(updatedScore);
-    expect(expectedGradingResult.componentResults[0].comment).toBe(updatedComment);
-    expect(expectedGradingResult.componentResults[0].reason).toBe(
-      'Manual result (overrides all other grading results)',
-    );
-    expect(expectedGradingResult.componentResults[0].assertion?.type).toBe('human');
-
-    // Assert that the other assertion is preserved
-    expect(expectedGradingResult.componentResults[1].pass).toBe(false);
-    expect(expectedGradingResult.componentResults[1].score).toBe(0);
-    expect(expectedGradingResult.componentResults[1].reason).toBe('Some other assertion');
-    expect(expectedGradingResult.componentResults[1].assertion?.type).toBe('contains');
+    expect(payload).toEqual(expectedGrade);
+    expect(output).toEqual({
+      id: 'test-output-1',
+      text: 'test output',
+      pass: true,
+      score: 0.75,
+      gradingResult: expectedGrade,
+    });
   });
+
+  it.each([
+    ['new', [automated]],
+    ['existing', [human, automated]],
+  ] as const)(
+    'persists a %s human rating and preserves automated assertions',
+    async (_label, components) => {
+      renderRatingTable({
+        pass: false,
+        score: 0.2,
+        reason: 'Existing reason',
+        componentResults: [...components],
+      });
+      await userEvent.setup().click(screen.getByRole('button', { name: 'Rate' }));
+      const { payload, output } = await savedRating();
+      expect(payload).toMatchObject({
+        pass: true,
+        score: 0.75,
+        reason: 'Manual result (overrides all other grading results)',
+        comment: 'test comment',
+      });
+      expect(output).toMatchObject({ pass: true, score: 0.75 });
+      expect(payload.componentResults).toHaveLength(2);
+      expect(payload.componentResults).toContainEqual(automated);
+      expect(payload.componentResults).toContainEqual({
+        pass: true,
+        score: 0.75,
+        reason: 'Manual result (overrides all other grading results)',
+        comment: 'test comment',
+        assertion: { type: 'human' },
+      });
+    },
+  );
+
+  it.each([
+    {
+      name: 'failed automated assertion',
+      initialPass: true,
+      components: [automated, human],
+      expectedPass: false,
+      expectedScore: 0.5,
+      remaining: [automated],
+      expectedReason: 'Automated assertion',
+    },
+    {
+      name: 'passing automated assertions',
+      initialPass: false,
+      components: [
+        { ...automated, pass: true, score: 0.8 },
+        { ...automated, pass: true, score: 0.9, assertion: { type: 'similar' as const } },
+        human,
+      ],
+      expectedPass: true,
+      expectedScore: 0.85,
+      remaining: [
+        { ...automated, pass: true, score: 0.8 },
+        { ...automated, pass: true, score: 0.9, assertion: { type: 'similar' as const } },
+      ],
+      expectedReason: 'Automated assertion',
+    },
+    {
+      name: 'mixed automated scores',
+      initialPass: true,
+      components: [
+        { ...automated, pass: true, score: 0.6 },
+        { ...automated, pass: false, score: 0.3 },
+        { ...automated, pass: true, score: 0.7 },
+        human,
+      ],
+      expectedPass: false,
+      expectedScore: 0.5333333333333333,
+      remaining: [
+        { ...automated, pass: true, score: 0.6 },
+        { ...automated, pass: false, score: 0.3 },
+        { ...automated, pass: true, score: 0.7 },
+      ],
+      expectedReason: 'Automated assertion',
+    },
+    {
+      name: 'no remaining assertions',
+      initialPass: false,
+      components: [human],
+      expectedPass: false,
+      expectedScore: 0.2,
+      remaining: [],
+      expectedReason: 'Manual rating cleared',
+    },
+  ])(
+    'clears the human rating with $name',
+    async ({ initialPass, components, expectedPass, expectedScore, remaining, expectedReason }) => {
+      renderRatingTable(
+        {
+          pass: initialPass,
+          score: 0.2,
+          reason: human.reason,
+          assertion: { type: 'human' },
+          componentResults: components,
+        },
+        initialPass,
+      );
+      await userEvent.setup().click(screen.getByRole('button', { name: 'Clear rating' }));
+      const { payload, output } = await savedRating();
+      expect(payload.pass).toBe(expectedPass);
+      expect(payload.score).toBeCloseTo(expectedScore);
+      expect(payload.reason).toBe(expectedReason);
+      expect(payload.componentResults).toEqual(remaining);
+      expect(payload).not.toHaveProperty('assertion');
+      expect(output.pass).toBe(expectedPass);
+      expect(output.score).toBeCloseTo(expectedScore);
+    },
+  );
 });
 
 describe('ResultsTable Empty State', () => {
@@ -3369,363 +3245,6 @@ describe('ResultsTable Header Column Updates on Eval Switch', () => {
   });
 });
 
-describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => {
-  let mockSetTable: ReturnType<typeof vi.fn>;
-  let mockCallApi: any;
-
-  const createMockTableWithHumanAssertion = () => ({
-    body: [
-      {
-        outputs: [
-          {
-            id: 'test-output-1',
-            pass: true,
-            score: 1,
-            text: 'test output',
-            latencyMs: 100,
-            cost: 0.01,
-            failureReason: 0,
-            namedScores: {},
-            gradingResult: {
-              pass: true,
-              score: 1,
-              reason: 'Manual result (overrides all other grading results)',
-              comment: 'User comment',
-              componentResults: [
-                {
-                  pass: false,
-                  score: 0.5,
-                  reason: 'Automated assertion',
-                  assertion: { type: 'contains' as const, value: 'test' },
-                },
-                {
-                  pass: true,
-                  score: 1,
-                  reason: 'Manual result (overrides all other grading results)',
-                  comment: 'User comment',
-                  assertion: { type: 'human' as const },
-                },
-              ],
-            },
-          },
-        ],
-        test: {},
-        vars: [],
-        testIdx: 0,
-      },
-    ],
-    head: createPromptHead([], 1, 0),
-  });
-
-  const defaultProps = createDefaultProps();
-
-  beforeEach(async () => {
-    vi.clearAllMocks();
-    mockSetTable = vi.fn();
-    const apiModule = await import('@app/utils/api');
-    mockCallApi = vi.mocked(apiModule.callApi);
-    mockCallApi.mockResolvedValue({ ok: true });
-  });
-
-  it('should remove human assertion and recalculate pass/score when isPass is null', () => {
-    const mockTable = createMockTableWithHumanAssertion();
-
-    vi.mocked(useTableStore).mockImplementation(() =>
-      createTableStore({
-        inComparisonMode: false,
-        setTable: mockSetTable,
-        table: mockTable,
-        renderMarkdown: true,
-        isFetching: false,
-        filteredResultsCount: 1,
-      }),
-    );
-
-    renderWithProviders(<ResultsTable {...defaultProps} />);
-
-    // Simulate handleRating being called with isPass = null
-    const existingOutput = mockTable.body[0].outputs[0];
-    const componentResults = [...(existingOutput.gradingResult?.componentResults || [])];
-
-    // Remove human assertion
-    const humanResultIndex = componentResults.findIndex(
-      (result) => result.assertion?.type === 'human',
-    );
-    expect(humanResultIndex).toBe(1);
-
-    componentResults.splice(humanResultIndex, 1);
-
-    // Recalculate pass/score
-    const passCount = componentResults.filter((r) => r.pass).length;
-    const finalPass = passCount === componentResults.length;
-    const scores = componentResults.map((r) => r.score).filter((s) => typeof s === 'number');
-    const finalScore = scores.reduce((a, b) => a + b, 0) / scores.length;
-
-    expect(componentResults).toHaveLength(1);
-    expect(componentResults[0].assertion?.type).toBe('contains');
-    expect(finalPass).toBe(false);
-    expect(finalScore).toBe(0.5);
-  });
-
-  it('persists a cleared human rating without manual override fields', async () => {
-    const user = userEvent.setup();
-    const mockTable = createMockTableWithHumanAssertion();
-
-    vi.mocked(useTableStore).mockImplementation(() =>
-      createTableStore({
-        inComparisonMode: false,
-        setTable: mockSetTable,
-        table: mockTable,
-        renderMarkdown: true,
-        isFetching: false,
-        filteredResultsCount: 1,
-      }),
-    );
-
-    renderWithProviders(<ResultsTable {...defaultProps} />);
-
-    await user.click(screen.getByRole('button', { name: 'Clear rating' }));
-
-    await waitFor(() => {
-      expect(mockCallApi).toHaveBeenCalledWith(
-        '/eval/123/results/test-output-1/rating',
-        expect.objectContaining({ method: 'POST' }),
-      );
-    });
-
-    const [, request] = mockCallApi.mock.calls[0];
-    const payload = JSON.parse(request.body);
-
-    expect(payload.pass).toBe(false);
-    expect(payload.score).toBe(0.5);
-    expect(payload.reason).toBe('Automated assertion');
-    expect(payload.assertion?.type).not.toBe('human');
-    expect(payload.componentResults).toHaveLength(1);
-    expect(payload.componentResults[0].assertion.type).toBe('contains');
-  });
-
-  it('should recalculate pass as true when all remaining assertions pass', () => {
-    const mockTable = {
-      body: [
-        {
-          outputs: [
-            {
-              id: 'test-output-1',
-              pass: true,
-              score: 1,
-              text: 'test output',
-              gradingResult: {
-                pass: true,
-                score: 1,
-                componentResults: [
-                  {
-                    pass: true,
-                    score: 0.8,
-                    reason: 'Assertion 1',
-                    assertion: { type: 'contains' as const },
-                  },
-                  {
-                    pass: true,
-                    score: 0.9,
-                    reason: 'Assertion 2',
-                    assertion: { type: 'similar' as const },
-                  },
-                  {
-                    pass: true,
-                    score: 1,
-                    reason: 'Manual result',
-                    assertion: { type: 'human' as const },
-                  },
-                ],
-              },
-            },
-          ],
-          test: {},
-          vars: [],
-        },
-      ],
-      head: createProviderHead(),
-    };
-
-    vi.mocked(useTableStore).mockImplementation(() =>
-      createTableStore({
-        setTable: mockSetTable,
-        table: mockTable,
-      }),
-    );
-
-    renderWithProviders(<ResultsTable {...defaultProps} />);
-
-    const existingOutput = mockTable.body[0].outputs[0];
-    const componentResults = [...(existingOutput.gradingResult?.componentResults || [])];
-
-    // Remove human assertion
-    const humanResultIndex = componentResults.findIndex(
-      (result) => result.assertion?.type === 'human',
-    );
-    componentResults.splice(humanResultIndex, 1);
-
-    // Recalculate
-    const passCount = componentResults.filter((r) => r.pass).length;
-    const finalPass = passCount === componentResults.length;
-    const scores = componentResults.map((r) => r.score).filter((s) => typeof s === 'number');
-    const finalScore = scores.reduce((a, b) => a + b, 0) / scores.length;
-
-    expect(finalPass).toBe(true);
-    expect(finalScore).toBeCloseTo(0.85, 2); // (0.8 + 0.9) / 2
-  });
-
-  it('should handle case when no assertions remain after removing human assertion', () => {
-    const mockTable = {
-      body: [
-        {
-          outputs: [
-            {
-              id: 'test-output-1',
-              pass: true,
-              score: 1,
-              text: 'test output',
-              gradingResult: {
-                pass: true,
-                score: 1,
-                componentResults: [
-                  {
-                    pass: true,
-                    score: 1,
-                    reason: 'Manual result',
-                    assertion: { type: 'human' as const },
-                  },
-                ],
-              },
-            },
-          ],
-          test: {},
-          vars: [],
-        },
-      ],
-      head: createProviderHead(),
-    };
-
-    vi.mocked(useTableStore).mockImplementation(() =>
-      createTableStore({
-        setTable: mockSetTable,
-        table: mockTable,
-      }),
-    );
-
-    renderWithProviders(<ResultsTable {...defaultProps} />);
-
-    const existingOutput = mockTable.body[0].outputs[0];
-    const componentResults = [...(existingOutput.gradingResult?.componentResults || [])];
-
-    // Remove human assertion
-    const humanResultIndex = componentResults.findIndex(
-      (result) => result.assertion?.type === 'human',
-    );
-    componentResults.splice(humanResultIndex, 1);
-
-    expect(componentResults).toHaveLength(0);
-
-    // When no assertions remain, the recalculation logic only runs if componentResults.length > 0
-    // So finalPass and finalScore should retain their original values or not be recalculated
-  });
-
-  it('should preserve custom score when provided alongside isPass', () => {
-    const mockTable = createMockTableWithHumanAssertion();
-
-    vi.mocked(useTableStore).mockImplementation(() =>
-      createTableStore({
-        setTable: mockSetTable,
-        table: mockTable,
-      }),
-    );
-
-    renderWithProviders(<ResultsTable {...defaultProps} />);
-
-    // When score is provided explicitly, it should be used instead of defaulting to 0/1
-    const customScore = 0.75;
-
-    // Verify logic: an explicit score takes precedence over pass/fail-derived scores.
-    const finalScore = customScore;
-
-    expect(finalScore).toBe(0.75);
-  });
-
-  it('should calculate average score correctly from remaining assertions', () => {
-    const mockTable = {
-      body: [
-        {
-          outputs: [
-            {
-              id: 'test-output-1',
-              pass: false,
-              score: 0.5,
-              text: 'test output',
-              gradingResult: {
-                pass: false,
-                score: 0.5,
-                componentResults: [
-                  {
-                    pass: true,
-                    score: 0.6,
-                    reason: 'Assertion 1',
-                    assertion: { type: 'contains' as const },
-                  },
-                  {
-                    pass: false,
-                    score: 0.3,
-                    reason: 'Assertion 2',
-                    assertion: { type: 'similar' as const },
-                  },
-                  {
-                    pass: true,
-                    score: 0.7,
-                    reason: 'Assertion 3',
-                    assertion: { type: 'regex' as const },
-                  },
-                  {
-                    pass: false,
-                    score: 0,
-                    reason: 'Manual fail',
-                    assertion: { type: 'human' as const },
-                  },
-                ],
-              },
-            },
-          ],
-          test: {},
-          vars: [],
-        },
-      ],
-      head: createProviderHead(),
-    };
-
-    vi.mocked(useTableStore).mockImplementation(() =>
-      createTableStore({
-        setTable: mockSetTable,
-        table: mockTable,
-      }),
-    );
-
-    renderWithProviders(<ResultsTable {...defaultProps} />);
-
-    const existingOutput = mockTable.body[0].outputs[0];
-    const componentResults = [...(existingOutput.gradingResult?.componentResults || [])];
-
-    // Remove human assertion
-    const humanResultIndex = componentResults.findIndex(
-      (result) => result.assertion?.type === 'human',
-    );
-    componentResults.splice(humanResultIndex, 1);
-
-    // Calculate average score
-    const scores = componentResults.map((r) => r.score).filter((s) => typeof s === 'number');
-    const averageScore = scores.reduce((a, b) => a + b, 0) / scores.length;
-
-    expect(averageScore).toBeCloseTo(0.5333, 4); // (0.6 + 0.3 + 0.7) / 3
-  });
-});
-
 describe('ResultsTable minimal scroll room detection', () => {
   const mockTable = {
     body: [createPassingRow()],
@@ -3791,7 +3310,8 @@ describe('ResultsTable minimal scroll room detection', () => {
     renderWithProviders(<ResultsTable {...defaultProps} />);
 
     const stickyContainer = screen.getByTestId('results-table-header');
-    expect(stickyContainer).toHaveClass('-mx-4', 'overflow-hidden', 'px-4');
+    expect(stickyContainer).toHaveClass('-mx-4', 'overflow-hidden');
+    expect(screen.getByTestId('results-table-header-scroll-container')).toHaveClass('px-4');
   });
 
   const verifyScrollRoom = async () => {

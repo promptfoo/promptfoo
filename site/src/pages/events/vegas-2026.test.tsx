@@ -1,3 +1,5 @@
+import type { ReactNode } from 'react';
+
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -6,6 +8,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { events, formatEventDate, getEventBySlug } from '../../data/events';
 import BlackHat2026 from './blackhat-2026';
 import Defcon2026 from './defcon-2026';
+
+vi.mock('@docusaurus/Link', () => ({
+  default: ({ children, to }: { children?: ReactNode; to?: string }) =>
+    to ? <a href={to}>{children}</a> : children,
+}));
 
 const SITE_ROOT = path.resolve(__dirname, '../../..');
 
@@ -333,18 +340,16 @@ describe('DEF CON 34 page specifics', () => {
     expect(container.textContent ?? '').toMatch(/Agency/);
   });
 
-  // The booth demo is the pitch, and the way to keep using it afterwards is the open
-  // source project. `@docusaurus/Link` is stubbed as a fragment in vitest.config.ts, so a
-  // `to=` target never reaches the DOM — hence the label fallback alongside the href
-  // check for raw anchors.
-  it('offers a route into the open-source project', () => {
-    const { container } = render(<Defcon2026 />);
-    const hrefs = [...container.querySelectorAll('a')].map((a) => a.getAttribute('href') ?? '');
-
-    const linkedCta = hrefs.some((href) => /github\.com|^\/docs\//.test(href));
-    const labelledCta = /github|red team docs/i.test(container.textContent ?? '');
-
-    expect(linkedCta || labelledCta).toBe(true);
+  it('offers links into the open-source project and red team docs', () => {
+    render(<Defcon2026 />);
+    expect(screen.getByRole('link', { name: 'Read the red team docs' })).toHaveAttribute(
+      'href',
+      '/docs/red-team/',
+    );
+    expect(screen.getByRole('link', { name: 'Run the demo yourself' })).toHaveAttribute(
+      'href',
+      'https://github.com/promptfoo/promptfoo',
+    );
   });
 
   it('describes Daybreak accurately without placing Promptfoo under the initiative', () => {

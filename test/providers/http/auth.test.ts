@@ -82,13 +82,13 @@ describe('RSA signature authentication', () => {
 
   beforeEach(() => {
     mockPrivateKey = '-----BEGIN PRIVATE KEY-----\nMOCK_KEY\n-----END PRIVATE KEY-----';
-    vi.mocked(fsPromises.readFile).mockImplementation((async (filePath, options) => {
+    vi.mocked(fsPromises.readFile).mockImplementation(async (filePath, options) => {
       if (filePath.toString() === '/path/to/key.pem') {
         return mockPrivateKey;
       }
 
-      return fsPromisesMocks.actualReadFile!(filePath as any, options as any);
-    }) as typeof fsPromises.readFile);
+      return fsPromisesMocks.actualReadFile!(filePath, options);
+    });
 
     mockUpdate = vi.fn();
     mockEnd = vi.fn();

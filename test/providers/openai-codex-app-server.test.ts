@@ -606,6 +606,7 @@ describe('OpenAICodexAppServerProvider', () => {
       completion: 5,
       total: 15,
       cached: 2,
+      completionDetails: { reasoning: 0 },
     });
     expect(result.cost).toBeCloseTo(0.000191);
     expect(result.metadata?.codexAppServer).toMatchObject({
@@ -5441,7 +5442,10 @@ describe('OpenAICodexAppServerProvider', () => {
       output_tokens: 50,
       reasoning_output_tokens: 12,
     });
-    expect(result.tokenUsage?.completionDetails?.cacheCreationInputTokens).toBe(10);
+    expect(result.tokenUsage?.completionDetails).toEqual({
+      reasoning: 12,
+      cacheCreationInputTokens: 10,
+    });
     expect(result.cost).toBeCloseTo(0.0033, 10);
   });
 

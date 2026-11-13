@@ -350,7 +350,7 @@ if (isQuickTest) {
 if (isComprehensive) {
   module.exports = {
     ...baseConfig,
-    providers: ['openai:gpt-5.2', 'anthropic:claude-sonnet-5', 'google:gemini-2.5-flash'],
+    providers: ['openai:gpt-5.2', 'anthropic:claude-sonnet-5', 'google:gemini-3.5-flash-lite'],
     tests: 'file://tests/comprehensive/', // Full test suite
     env: {
       LOG_LEVEL: 'info',

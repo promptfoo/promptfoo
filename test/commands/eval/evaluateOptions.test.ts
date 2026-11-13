@@ -1268,41 +1268,58 @@ describe('evaluateOptions behavior', () => {
       expect(options.suggestionsCount).toBe(5);
     });
 
-    it('should respect commandLineOptions.table from config', async () => {
-      const tempConfig = writeOptionsConfig(tmpDir, 'test-table.yaml', {
-        commandLineOptions: {
-          table: false,
-        },
-      });
+    it.each([false, true])(
+      'reads table output only when the table command flag is %s',
+      async (table) => {
+        const tempConfig = writeOptionsConfig(tmpDir, 'test-table.yaml', {});
 
-      const cmdObj: Partial<CommandLineOptions & Command> = {
-        write: false,
-        config: [tempConfig],
-      };
-
-      // We can't directly check table output, but we can verify the config loads
-      await doEval(cmdObj, {}, undefined, {});
-
-      // If this completes without error, the config was respected
-      expect(evaluateMock).toHaveBeenCalled();
-    });
-
-    it('should respect commandLineOptions.write = false from config', async () => {
-      const tempConfig = writeOptionsConfig(tmpDir, 'test-write.yaml', {
-        commandLineOptions: {
+        const cmdObj: Partial<CommandLineOptions & Command> = {
           write: false,
-        },
-      });
+          table,
+          config: [tempConfig],
+        };
 
-      const cmdObj: Partial<CommandLineOptions & Command> = {
-        table: false,
-        config: [tempConfig],
-      };
+        const getTable = vi.spyOn(Eval.prototype, 'getTable').mockResolvedValue({
+          head: { prompts: [], vars: [] },
+          body: [],
+        });
+        try {
+          await doEval(cmdObj, {}, undefined, {});
+          expect(evaluateMock).toHaveBeenCalledOnce();
+          expect(getTable).toHaveBeenCalledTimes(table ? 1 : 0);
+        } finally {
+          getTable.mockRestore();
+        }
+      },
+    );
 
-      await doEval(cmdObj, {}, undefined, {});
+    it.each([false, true])(
+      'requests persistence only when the write command flag is %s',
+      async (write) => {
+        const tempConfig = writeOptionsConfig(tmpDir, 'test-write.yaml', {});
 
-      // Verify eval completed successfully with write=false
-      expect(evaluateMock).toHaveBeenCalled();
-    });
+        const cmdObj: Partial<CommandLineOptions & Command> = {
+          table: false,
+          write,
+          config: [tempConfig],
+        };
+
+        const persistedRecord = new Eval({});
+        const create = vi.spyOn(Eval, 'create').mockResolvedValue(persistedRecord);
+        try {
+          await doEval(cmdObj, {}, undefined, {});
+          expect(evaluateMock).toHaveBeenCalledOnce();
+          expect(create).toHaveBeenCalledTimes(write ? 1 : 0);
+          const evalRecord = evaluateMock.mock.calls[0][1];
+          if (write) {
+            expect(evalRecord).toBe(persistedRecord);
+          } else {
+            expect(evalRecord.persisted).toBe(false);
+          }
+        } finally {
+          create.mockRestore();
+        }
+      },
+    );
   });
 });

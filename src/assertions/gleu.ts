@@ -77,10 +77,8 @@ export function calculateGleuScore(
       return 1;
     }
 
-    // Initialize counters for all n-grams
     let matchCount = 0;
-    let candidateTotal = 0;
-    let referenceTotal = 0;
+    let longerTextTotal = 0;
 
     // Consider all n-gram orders from minN to maxN
     for (let n = minN; n <= maxN; n++) {
@@ -104,22 +102,12 @@ export function calculateGleuScore(
         matchCount += Math.min(candidateCount, referenceCount);
       }
 
-      // Update total n-gram counts
-      candidateTotal += candidateNGrams.length;
-      referenceTotal += referenceNGrams.length;
+      // The longer text has at least as many n-grams at every order.
+      longerTextTotal += Math.max(candidateNGrams.length, referenceNGrams.length);
     }
 
-    // If either text has no n-grams of the specified lengths, return 0
-    if (candidateTotal === 0 || referenceTotal === 0) {
-      return 0;
-    }
-
-    // Calculate precision and recall
-    const precision = matchCount / candidateTotal;
-    const recall = matchCount / referenceTotal;
-
-    // GLEU is the minimum of precision and recall
-    return Math.min(precision, recall);
+    // The minimum of precision and recall uses the larger denominator.
+    return longerTextTotal === 0 ? 0 : matchCount / longerTextTotal;
   });
 
   // Return the maximum score across all references

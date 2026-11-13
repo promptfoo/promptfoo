@@ -485,13 +485,13 @@ export default function RedTeamSetupPage() {
 
   // Root container
   return (
-    <div className="fixed flex w-full bg-white dark:bg-zinc-900">
+    <div className="fixed flex w-full bg-background text-foreground">
       {/* Content wrapper */}
       <div className="flex min-w-0 grow flex-col transition-[margin] duration-200 md:flex-row">
         {/* Outer sidebar container */}
         <div
           data-testid="redteam-setup-sidebar"
-          className="hidden h-full flex-col border-r border-border md:flex"
+          className="hidden h-full flex-col border-r border-border bg-card md:flex"
           style={{ width: SIDEBAR_WIDTH, minWidth: SIDEBAR_WIDTH }}
         >
           {/* Inner sidebar (sticky) */}
@@ -504,7 +504,7 @@ export default function RedTeamSetupPage() {
           >
             {/* Status section */}
             <div
-              className="border-b border-r border-border bg-card p-4"
+              className="border-b border-border bg-card px-5 py-6"
               style={{ width: SIDEBAR_WIDTH, minWidth: SIDEBAR_WIDTH }}
             >
               <p className="mb-1 text-base font-medium text-foreground">
@@ -540,7 +540,7 @@ export default function RedTeamSetupPage() {
                 orientation="vertical"
                 className="w-full"
               >
-                <TabsList className="flex h-auto w-full flex-col rounded-none bg-card p-0">
+                <TabsList className="flex h-auto w-full flex-col gap-1 rounded-none bg-card p-3">
                   {TAB_CONFIG.map((tab) => {
                     const Icon = tab.icon;
                     return (
@@ -548,8 +548,8 @@ export default function RedTeamSetupPage() {
                         key={tab.value}
                         value={tab.value}
                         className={cn(
-                          'w-full justify-start gap-2 rounded-none border-b border-border px-4 py-3 text-sm font-normal',
-                          'data-[state=active]:bg-accent data-[state=active]:shadow-none',
+                          'w-full justify-start gap-3 rounded-md px-3 py-3 text-sm font-medium',
+                          'data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:shadow-none',
                           'hover:bg-muted/50',
                         )}
                       >

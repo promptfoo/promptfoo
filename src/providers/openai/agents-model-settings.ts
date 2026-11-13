@@ -30,7 +30,9 @@ function resolveRetryPolicy(
     ? TPolicy | undefined
     : undefined
   : undefined {
-  if (!policy) {
+  // Only a missing policy means "no policy". Other falsy values such as null, false, 0, or ''
+  // are configuration mistakes and are rejected below.
+  if (policy === undefined) {
     return undefined;
   }
 
@@ -49,29 +51,57 @@ function resolveRetryPolicy(
       case 'retryAfter':
         return retryPolicies.retryAfter();
       default:
-        return undefined;
+        throw invalidRetryPolicy();
     }
   }
 
+  if (policy === null || typeof policy !== 'object' || Object.keys(policy).length !== 1) {
+    throw invalidRetryPolicy();
+  }
+
   if ('httpStatus' in policy) {
+    if (
+      !Array.isArray(policy.httpStatus) ||
+      policy.httpStatus.length === 0 ||
+      !policy.httpStatus.every(
+        (status) => Number.isInteger(status) && status >= 100 && status <= 599,
+      )
+    ) {
+      throw invalidRetryPolicy();
+    }
     return retryPolicies.httpStatus(policy.httpStatus);
   }
 
   if ('any' in policy) {
-    const policies = policy.any
-      .map((nestedPolicy) => resolveRetryPolicy(nestedPolicy))
-      .filter((nestedPolicy): nestedPolicy is NonNullable<typeof nestedPolicy> => !!nestedPolicy);
-
-    return policies.length ? retryPolicies.any(...policies) : undefined;
+    return retryPolicies.any(...resolveNestedRetryPolicies(policy.any));
   }
 
   if ('all' in policy) {
-    const policies = policy.all
-      .map((nestedPolicy) => resolveRetryPolicy(nestedPolicy))
-      .filter((nestedPolicy): nestedPolicy is NonNullable<typeof nestedPolicy> => !!nestedPolicy);
-
-    return policies.length ? retryPolicies.all(...policies) : undefined;
+    return retryPolicies.all(...resolveNestedRetryPolicies(policy.all));
   }
 
-  return undefined;
+  throw invalidRetryPolicy();
+}
+
+function resolveNestedRetryPolicies(nestedPolicies: OpenAiAgentsRetryPolicyConfig[]) {
+  if (!Array.isArray(nestedPolicies) || nestedPolicies.length === 0) {
+    throw invalidRetryPolicy();
+  }
+  // Every nested policy must resolve. Dropping an invalid one would change what `any` and
+  // `all` retry on.
+  return nestedPolicies.map((nestedPolicy) => {
+    const resolved = resolveRetryPolicy(nestedPolicy);
+    if (!resolved) {
+      throw invalidRetryPolicy();
+    }
+    return resolved;
+  });
+}
+
+function invalidRetryPolicy(): Error {
+  return new Error(
+    'Invalid OpenAI Agents retry policy. Use one of "never", ' +
+      '"providerSuggested", "networkError", "retryAfter", { httpStatus: [...] }, ' +
+      '{ any: [...] }, or { all: [...] }.',
+  );
 }
