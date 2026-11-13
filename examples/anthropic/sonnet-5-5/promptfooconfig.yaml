@@ -1,0 +1,73 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Claude Sonnet 5.5 with adaptive thinking vs. between_tools
+
+prompts:
+  - |
+    {{task}}
+
+providers:
+  # Omitting thinking uses the model's adaptive default.
+  - id: anthropic:messages:claude-sonnet-5-5
+    label: sonnet-5.5-adaptive-high
+    config:
+      effort: high
+      max_tokens: 8000
+
+  # No up-front thinking; accepted at effort high or below.
+  - id: anthropic:messages:claude-sonnet-5-5
+    label: sonnet-5.5-between-tools-medium
+    config:
+      effort: medium
+      thinking:
+        type: between_tools
+      max_tokens: 8000
+
+defaultTest:
+  options:
+    provider: anthropic:messages:claude-sonnet-5-5
+
+tests:
+  # Multi-system bug diagnosis (intermittent failure)
+  - vars:
+      task: |
+        You're debugging a production issue where users can't log in. Here's what you know:
+
+        1. The frontend shows "Authentication failed" after username/password submission
+        2. Backend logs show successful JWT generation
+        3. Redis cache is returning stale session data
+        4. Database shows correct user credentials
+        5. The issue only affects 10% of login attempts
+        6. It started after deploying a load balancer configuration change
+
+        Propose likely causes and checks that would distinguish them. Explain how the
+        load balancer change could cause intermittent failures and suggest fixes.
+    assert:
+      - type: contains-any
+        value: ['load balancer', 'session', 'sticky', 'affinity', 'routing']
+        reason: Should discuss the load balancer or session state
+      - type: llm-rubric
+        value: |
+          The response should:
+          1. Connect the load balancer change to a plausible session-routing or cache issue
+          2. Explain the intermittent failures without claiming an unverified root cause
+          3. Propose diagnostic checks and fixes for the causes it identifies
+
+  # Code generation with error handling and caching
+  - vars:
+      task: |
+        Write a Python function that first checks Redis for a user. On a cache miss,
+        fetch the user from a REST API; if that request times out or fails, query the
+        database. Cache a successful lookup in Redis for 5 minutes. Include type hints
+        and error handling.
+    assert:
+      - type: contains
+        value: 'def'
+        reason: Should include a Python function definition
+      - type: contains-any
+        value: ['try', 'except', 'raise']
+        reason: Should include error handling
+      - type: llm-rubric
+        value: |
+          The code should check Redis before fetching from the API, fall back to the
+          database on API errors, cache successful lookups for 300 seconds, and include
+          type hints and error handling.
