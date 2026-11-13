@@ -144,7 +144,7 @@ These metrics are programmatic tests that are run on LLM output. [See all detail
 | [ruby](/docs/configuration/expected-outputs/ruby)                                                                  | provided Ruby function validates the output                                     |
 | [webhook](/docs/configuration/expected-outputs/deterministic/#webhook)                                             | webhook returns a boolean `pass` and an optional score from 0 to 1              |
 | [rouge-l](/docs/configuration/expected-outputs/deterministic/#rouge-l)                                             | Rouge-L (LCS) score is at least the threshold (default 0.75)                    |
-| [rouge-n](/docs/configuration/expected-outputs/deterministic/#rouge-n)                                             | Rouge-N score is above a given threshold (default 0.75)                         |
+| [rouge-n](/docs/configuration/expected-outputs/deterministic/#rouge-n)                                             | Rouge-N score is at least the threshold (default 0.75)                          |
 | [rouge-s](/docs/configuration/expected-outputs/deterministic/#rouge-s)                                             | Rouge-S (skip-bigram) score is at least the threshold (default 0.75)            |
 | [bleu](/docs/configuration/expected-outputs/deterministic/#bleu)                                                   | BLEU >= threshold (default 0.5); blank references are ignored                   |
 | [gleu](/docs/configuration/expected-outputs/deterministic/#gleu)                                                   | GLEU >= threshold (default 0.5); empty output scores 0                          |
@@ -167,6 +167,8 @@ These metrics are programmatic tests that are run on LLM output. [See all detail
 | [trajectory:tool-sequence](/docs/configuration/expected-outputs/deterministic/#trajectorytool-sequence)            | Ensure traced tool usage happened in the expected order                         |
 | [trajectory:step-count](/docs/configuration/expected-outputs/deterministic/#trajectorystep-count)                  | Count normalized trajectory steps by type or name pattern                       |
 | [guardrails](/docs/configuration/expected-outputs/guardrails)                                                      | Evaluate the target's normalized input or output guardrail signal               |
+
+Passing ROUGE assertions report `Assertion passed` in the result's `reason` field.
 
 Single-line [JavaScript assertions](/docs/configuration/expected-outputs/javascript) return the final expression after variable declarations and ignore semicolons inside comments. The final expression can use optional chaining and division, call an async function, consume a generator's yielded result, or return a grading result object. Multiline JavaScript assertions require an explicit `return`.
 

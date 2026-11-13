@@ -66,7 +66,7 @@ These assertions can check LLM output or provider metadata directly. Configured 
 | [python](/docs/configuration/expected-outputs/python)           | provided Python function validates the output                      |
 | [regex](#regex)                                                 | output matches regex                                               |
 | [rouge-l](#rouge-l)                                             | ROUGE-Lsum score is at least the threshold                         |
-| [rouge-n](#rouge-n)                                             | Rouge-N score is above a given threshold                           |
+| [rouge-n](#rouge-n)                                             | Rouge-N score is at least the threshold                            |
 | [rouge-s](#rouge-s)                                             | ROUGE-S skip-bigram score is at least the threshold                |
 | [starts-with](#starts-with)                                     | output starts with string                                          |
 | [trace-span-count](#trace-span-count)                           | Count spans matching names and attributes with min/max thresholds  |
@@ -1388,7 +1388,7 @@ tests:
 | `the very quick brown fox`      | 0.89    | 0.89    | 0.75    |
 | `brown fox quick the`           | 1.00    | 0.50    | 0.17    |
 
-All three ROUGE assertions take a string `value` and an optional `threshold` (default: `0.75`). They compare text case-insensitively and count repeated matches. Scores are F1 scores from 0 to 1; empty or whitespace-only text scores 0. The assertion passes when its score is at least the threshold. A `not-` assertion passes below the threshold and reports `1 - score`.
+All three ROUGE assertions take a string `value` and an optional `threshold` (default: `0.75`). They compare text case-insensitively and count repeated matches. Scores are F1 scores from 0 to 1; empty or whitespace-only text scores 0. The assertion passes when its score is at least the threshold. A `not-` assertion passes below the threshold and reports `1 - score`. A passing ROUGE assertion reports `Assertion passed` in the result's `reason` field.
 
 ```yaml
 assert:
