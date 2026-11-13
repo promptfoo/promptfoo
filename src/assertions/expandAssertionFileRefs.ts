@@ -54,7 +54,11 @@ function isAssertionSetLike(item: unknown): item is AssertionSetLike {
   );
 }
 
-function absolutizeFileRefs(value: unknown, baseDir: string): unknown {
+function absolutizeFileRefs(
+  value: unknown,
+  baseDir: string,
+  ancestors = new WeakSet<object>(),
+): unknown {
   if (typeof value === 'string') {
     if (!isFileRef(value)) {
       return value;
@@ -66,17 +70,26 @@ function absolutizeFileRefs(value: unknown, baseDir: string): unknown {
     const absolutePath = path.resolve(baseDir, filePath);
     return functionName ? `file://${absolutePath}:${functionName}` : `file://${absolutePath}`;
   }
-  if (Array.isArray(value)) {
-    return value.map((item) => absolutizeFileRefs(item, baseDir));
+  if (!value || typeof value !== 'object') {
+    return value;
   }
-  if (value && typeof value === 'object') {
-    const result: Record<string, unknown> = {};
-    for (const [key, nested] of Object.entries(value as Record<string, unknown>)) {
-      result[key] = absolutizeFileRefs(nested, baseDir);
+  if (ancestors.has(value)) {
+    throw new Error(`Cyclic value in assertion file included from ${baseDir}`);
+  }
+  ancestors.add(value);
+  try {
+    if (Array.isArray(value)) {
+      return value.map((item) => absolutizeFileRefs(item, baseDir, ancestors));
     }
-    return result;
+    return Object.fromEntries(
+      Object.entries(value).map(([key, nested]) => [
+        key,
+        absolutizeFileRefs(nested, baseDir, ancestors),
+      ]),
+    );
+  } finally {
+    ancestors.delete(value);
   }
-  return value;
 }
 
 function resolveAssertionFilePath(fileRef: string, baseDir: string): string {

@@ -187,7 +187,6 @@
 
 /* Sections */
 .highlightsSection,
-.whySection,
 .ctaSection {
   padding: 4rem 0;
 }
@@ -254,44 +253,6 @@
   margin: 0;
 }
 
-/* Why Grid */
-.whyGrid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-  gap: 2rem;
-}
-
-.whyItem {
-  padding: 1.5rem 0;
-  border-left: 2px solid rgba(249, 115, 22, 0.3);
-  padding-left: 1.5rem;
-}
-
-.whyNumber {
-  font-size: 2.5rem;
-  font-weight: 800;
-  background: linear-gradient(135deg, #f97316 0%, #8b5cf6 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-  margin-bottom: 0.75rem;
-  line-height: 1;
-}
-
-.whyItem h3 {
-  font-size: 1.125rem;
-  font-weight: 600;
-  color: #f1f5f9;
-  margin-bottom: 0.5rem;
-}
-
-.whyItem p {
-  font-size: 0.9rem;
-  color: #94a3b8;
-  line-height: 1.6;
-  margin: 0;
-}
-
 /* CTA Section */
 .ctaGrid {
   display: grid;
@@ -352,13 +313,6 @@
   height: 1.25rem;
 }
 
-/* Reduced Motion */
-@media (prefers-reduced-motion: reduce) {
-  .countdownSeparator {
-    animation: none;
-  }
-}
-
 /* Responsive */
 @media (max-width: 768px) {
   .heroBanner {
@@ -391,23 +345,6 @@
     font-size: 1.1rem;
   }
 
-  .countdown {
-    gap: 0.25rem;
-  }
-
-  .countdownItem {
-    min-width: 60px;
-    padding: 0.75rem;
-  }
-
-  .countdownNumber {
-    font-size: 1.5rem;
-  }
-
-  .countdownSeparator {
-    font-size: 1.5rem;
-  }
-
   .eventDetails {
     flex-direction: column;
     align-items: center;
@@ -436,7 +373,6 @@
   }
 
   .highlightsSection,
-  .whySection,
   .ctaSection {
     padding: 3rem 0;
   }

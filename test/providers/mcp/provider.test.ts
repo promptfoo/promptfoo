@@ -1,4 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import logger from '../../../src/logger';
+
+const createStructuredToolResult = () => ({
+  content: [{ type: 'text', text: 'raw response' }],
+  structuredContent: { answer: 'structured response' },
+});
+
+const createTraversalErrorResult = () => ({
+  content: [{ type: 'text', text: 'Path traversal not allowed' }],
+  isError: true,
+});
 
 const mcpClientMock = vi.hoisted(() => ({
   initialize: vi.fn().mockResolvedValue(undefined),
@@ -22,6 +33,14 @@ function createContext(payload: Record<string, unknown>) {
   } as any;
 }
 
+function deferred() {
+  let resolve!: () => void;
+  const promise = new Promise<void>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
+
 describe('MCPProvider', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -31,11 +50,24 @@ describe('MCPProvider', () => {
     mcpClientMock.cleanup.mockReset().mockResolvedValue(undefined);
   });
 
+  it('reads connected servers before a tool call and clears the accessor after cleanup', async () => {
+    const initializing = deferred();
+    mcpClientMock.initialize.mockReturnValueOnce(initializing.promise);
+    const provider = new MCPProvider({ config: { enabled: true } });
+    try {
+      expect(provider.getConnectedServers()).toEqual(['test-server']);
+      initializing.resolve();
+      await initializing.promise;
+      expect(provider.getConnectedServers()).toEqual(['test-server']);
+    } finally {
+      initializing.resolve();
+      await provider.cleanup();
+    }
+    expect(provider.getConnectedServers()).toEqual([]);
+  });
+
   it('should preserve existing output behavior without a response transform', async () => {
-    const rawResult = {
-      content: [{ type: 'text', text: 'raw response' }],
-      structuredContent: { answer: 'structured response' },
-    };
+    const rawResult = createStructuredToolResult();
     mcpClientMock.callTool.mockResolvedValue({
       content: 'normalized response',
       raw: rawResult,
@@ -55,11 +87,174 @@ describe('MCPProvider', () => {
     });
   });
 
+  it.each(['callApi', 'callTool'] as const)(
+    'does not dispatch %s after cancellation during initialization',
+    async (method) => {
+      const initialization = deferred();
+      mcpClientMock.initialize.mockReturnValue(initialization.promise);
+      const provider = new MCPProvider({ config: { enabled: true } });
+      const abort = new AbortController();
+      const reason = new Error('initialization cancelled');
+      const pending =
+        method === 'callApi'
+          ? provider.callApi(JSON.stringify({ tool: 'ping' }), undefined, {
+              abortSignal: abort.signal,
+            })
+          : provider.callTool('ping', {}, abort.signal);
+      void pending.catch(() => {});
+      try {
+        abort.abort(reason);
+        initialization.resolve();
+        await expect(pending).rejects.toBe(reason);
+        expect(mcpClientMock.callTool).not.toHaveBeenCalled();
+      } finally {
+        initialization.resolve();
+        await Promise.allSettled([pending]);
+      }
+    },
+  );
+
+  it('passes cancellation through an active MCP tool call and preserves its cause', async () => {
+    const started = deferred();
+    mcpClientMock.callTool.mockImplementation(
+      (_name, _args, signal: AbortSignal) =>
+        new Promise((_resolve, reject) => {
+          signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+          started.resolve();
+        }),
+    );
+    const provider = new MCPProvider({ config: { enabled: true } });
+    const abort = new AbortController();
+    const reason = new Error('active request cancelled');
+    const pending = provider.callApi(JSON.stringify({ tool: 'ping' }), undefined, {
+      abortSignal: abort.signal,
+    });
+    void pending.catch(() => {});
+    try {
+      await started.promise;
+      expect(mcpClientMock.callTool).toHaveBeenCalledExactlyOnceWith('ping', {}, abort.signal);
+      abort.abort(reason);
+      await expect(pending).rejects.toBe(reason);
+    } finally {
+      abort.abort(reason);
+      await Promise.allSettled([pending]);
+    }
+  });
+
+  it('merges config.defaultArgs into tool calls, with per-call args winning', async () => {
+    mcpClientMock.callTool.mockResolvedValue({ content: 'ok', raw: {} });
+
+    const provider = new MCPProvider({
+      config: {
+        enabled: true,
+        defaultArgs: { session_id: 'sess-1', user_role: 'customer' },
+      },
+    });
+    await provider.callApi(
+      '',
+      createContext({ tool: 'lookup_user', args: { id: '123', user_role: 'admin' } }),
+    );
+
+    expect(mcpClientMock.callTool).toHaveBeenCalledWith('lookup_user', {
+      session_id: 'sess-1',
+      user_role: 'admin',
+      id: '123',
+    });
+  });
+
+  it('keeps tool argument values out of debug logs and credentials out of saved metadata', async () => {
+    const debug = vi.spyOn(logger, 'debug').mockImplementation(() => undefined);
+    const configuredToken = 'configured-value';
+    const configuredPassword = 'nested-value';
+    const customValue = 'opaque-custom-value';
+    const promptKey = 'prompt-value';
+    const transform = vi.fn((_result, _content, context) => {
+      expect(context.toolArgs.sessionToken).toBe(configuredToken);
+      return { output: 'ok' };
+    });
+    mcpClientMock.callTool.mockResolvedValue({ content: 'ok', raw: {} });
+
+    try {
+      const provider = new MCPProvider({
+        config: {
+          enabled: true,
+          defaultArgs: {
+            sessionToken: configuredToken,
+            custom: customValue,
+            nested: { password: configuredPassword },
+          },
+          transformResponse: transform,
+        },
+      });
+      const result = await provider.callApi(
+        '',
+        createContext({ tool: 'lookup_user', args: { apiKey: promptKey, id: '123' } }),
+      );
+
+      expect(mcpClientMock.callTool).toHaveBeenCalledWith('lookup_user', {
+        sessionToken: configuredToken,
+        custom: customValue,
+        nested: { password: configuredPassword },
+        apiKey: promptKey,
+        id: '123',
+      });
+      expect(transform).toHaveBeenCalledOnce();
+      expect(result.metadata).toEqual({
+        toolName: 'lookup_user',
+        toolArgs: {
+          sessionToken: '[REDACTED]',
+          custom: customValue,
+          nested: { password: '[REDACTED]' },
+          apiKey: '[REDACTED]',
+          id: '123',
+        },
+        originalPayload: { tool: 'lookup_user', args: { apiKey: '[REDACTED]', id: '123' } },
+      });
+      expect(debug).toHaveBeenCalledWith('MCP Provider calling tool', {
+        toolName: 'lookup_user',
+        argumentNames: ['sessionToken', 'custom', 'nested', 'apiKey', 'id'],
+      });
+      const debugCalls = JSON.stringify(debug.mock.calls);
+      for (const value of [configuredToken, configuredPassword, customValue, promptKey]) {
+        expect(debugCalls).not.toContain(value);
+      }
+    } finally {
+      debug.mockRestore();
+    }
+  });
+
+  it('still accepts defaultArgs passed as a constructor option', async () => {
+    mcpClientMock.callTool.mockResolvedValue({ content: 'ok', raw: {} });
+
+    const provider = new MCPProvider({
+      config: { enabled: true },
+      defaultArgs: { session_id: 'from-options' },
+    });
+    await provider.callApi('', createContext({ tool: 'lookup_user', args: { id: '123' } }));
+
+    expect(mcpClientMock.callTool).toHaveBeenCalledWith('lookup_user', {
+      session_id: 'from-options',
+      id: '123',
+    });
+  });
+
+  it('applies defaults to direct tool calls and reports the arguments actually sent', async () => {
+    mcpClientMock.callTool.mockResolvedValue({ content: 'ok', raw: {} });
+    const provider = new MCPProvider({
+      config: { enabled: true, defaultArgs: { session: 'default', role: 'customer' } },
+    });
+
+    const result = await provider.callTool('lookup_user', { role: 'admin' });
+
+    expect(mcpClientMock.callTool).toHaveBeenCalledWith('lookup_user', {
+      session: 'default',
+      role: 'admin',
+    });
+    expect(result.metadata?.toolArgs).toEqual({ session: '[REDACTED]', role: 'admin' });
+  });
+
   it('should preserve MCP tool error results as direct provider output', async () => {
-    const rawResult = {
-      content: [{ type: 'text', text: 'Path traversal not allowed' }],
-      isError: true,
-    };
+    const rawResult = createTraversalErrorResult();
     mcpClientMock.callTool.mockResolvedValue({
       content: 'Path traversal not allowed',
       isError: true,
@@ -79,10 +274,7 @@ describe('MCPProvider', () => {
   });
 
   it('should preserve MCP tool error results as direct provider output via callApi', async () => {
-    const rawResult = {
-      content: [{ type: 'text', text: 'Path traversal not allowed' }],
-      isError: true,
-    };
+    const rawResult = createTraversalErrorResult();
     mcpClientMock.callTool.mockResolvedValue({
       content: 'Path traversal not allowed',
       isError: true,
@@ -117,10 +309,7 @@ describe('MCPProvider', () => {
   });
 
   it('should transform raw MCP results and merge provider metadata', async () => {
-    const rawResult = {
-      content: [{ type: 'text', text: 'raw response' }],
-      structuredContent: { answer: 'structured response' },
-    };
+    const rawResult = createStructuredToolResult();
     mcpClientMock.callTool.mockResolvedValue({
       content: 'normalized response',
       raw: rawResult,

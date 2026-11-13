@@ -53,6 +53,13 @@ describe('expandAssertionFileRefs', () => {
     expect(out?.[1]).toMatchObject({ type: 'contains', value: 'hello' });
   });
 
+  it('rejects circular YAML values in included assertions', async () => {
+    writeFixture('assertions/cyclic.yaml', '- type: is-json\n  value: &loop { nested: *loop }\n');
+    const input = [{ value: 'file://assertions/cyclic.yaml' }] as AssertionOrSet[];
+
+    await expect(expandAssertionFileRefs(input)).rejects.toThrow(/Cyclic value|alias/i);
+  });
+
   it('rebases nested file:// refs to absolute paths anchored at the loaded file', async () => {
     writeFixture('assertions/default.yaml', `- type: is-json\n  value: file://schemas/ok.json\n`);
     writeFixture('assertions/schemas/ok.json', '{"ok":true}');
