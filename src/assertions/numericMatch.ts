@@ -82,6 +82,10 @@ export function extractNumberTokens(text: string): NumberToken[] {
     }
     const rest = text.slice((match.index ?? 0) + token.length);
     const isSecFormName = !scale && !closeParen && SEC_FORM_SUFFIX_REGEX.test(rest);
+    const isSecItem =
+      !currency &&
+      !scale &&
+      /\bitem[ \t]+$/i.test(text.slice(Math.max(0, match.index - 12), match.index));
     const isPercentage = !scale && !closeParen && PERCENT_SUFFIX_REGEX.test(rest);
     const isBareYear =
       /^\d{4}$/.test(digits) &&
@@ -90,7 +94,7 @@ export function extractNumberTokens(text: string): NumberToken[] {
       !isNegative &&
       value >= 1900 &&
       value <= 2099;
-    tokens.push({ value, isIncidental: isSecFormName || isPercentage || isBareYear });
+    tokens.push({ value, isIncidental: isSecFormName || isSecItem || isPercentage || isBareYear });
   }
   return tokens;
 }
