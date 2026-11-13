@@ -5943,6 +5943,16 @@ it('keeps mutable prices independent across model aliases', () => {
 });
 
 describe('getGoogleApiBaseUrl', () => {
+  beforeEach(() => {
+    vi.stubEnv('GOOGLE_API_HOST', undefined);
+    vi.stubEnv('PALM_API_HOST', undefined);
+    vi.stubEnv('GOOGLE_API_BASE_URL', undefined);
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   it.each([
     [{ apiBaseUrl: 'https://proxy.example/google' }, {}, 'https://proxy.example/google'],
     [{ apiBaseUrl: 'https://proxy.example/google/' }, {}, 'https://proxy.example/google'],
