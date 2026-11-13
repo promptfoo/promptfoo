@@ -29,7 +29,7 @@ npx promptfoo redteam run
 The `atr-assertion.mjs` file:
 
 1. Loads ATR once and caches the engine across test cases
-2. Scans each final model output for known threat patterns
+2. Scans final text or serialized JSON output for known threat patterns
 3. Fails the test if any high/critical severity patterns match
 4. Reports the specific ATR rule IDs that triggered
 
@@ -70,7 +70,7 @@ const threats = matches.filter((m) => m.rule.tags.category === 'context-exfiltra
 
 ## Limitations
 
-ATR uses regex detection. It cannot catch:
+ATR matches patterns in the text. Review matches in context, including when a safe refusal quotes the original input. It cannot catch:
 
 - Novel semantic attacks that paraphrase known patterns
 - Context-dependent threats requiring conversation history

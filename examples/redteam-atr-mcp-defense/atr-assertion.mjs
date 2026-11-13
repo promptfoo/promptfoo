@@ -62,12 +62,11 @@ function getEngine() {
  *
  * Promptfoo invokes the default export with positional arguments
  * `(output, context)`. We accept both explicitly, ignore `context` (prefixed
- * with `_` to signal it is intentionally unused), coerce `output` to a
- * string (it can be `undefined` or non-string for some providers), and run
- * it through the ATR engine. The assertion fails when any rule whose
+ * with `_` to signal it is intentionally unused), and scan the output as
+ * text or serialized JSON. The assertion fails when any rule whose
  * severity is in {@link FAIL_SEVERITIES} matches.
  *
- * @param {string | undefined} output The model's final text output.
+ * @param {unknown} output The model's final output.
  * @param {object} [_context] Promptfoo assertion context (intentionally unused).
  * @returns {Promise<{ pass: boolean, score: number, reason: string }>}
  *   Standard Promptfoo assertion result.
@@ -84,7 +83,7 @@ export default async function atrAssertion(output, _context) {
 
   const matches = engine.evaluate({
     type: 'llm_output',
-    content: String(output ?? ''),
+    content: typeof output === 'string' ? output : JSON.stringify(output ?? ''),
     timestamp: new Date().toISOString(),
   });
 
