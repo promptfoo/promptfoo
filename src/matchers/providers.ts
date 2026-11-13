@@ -10,7 +10,6 @@ import {
   runProviderCallWithAbort,
 } from '../scheduler/providerCallExecutionContext';
 import { createProviderRateLimitOptions, isRateLimitWrapped } from '../scheduler/providerWrapper';
-import invariant from '../util/invariant';
 import { normalizeProviderRef } from '../util/providerRef';
 
 import type {
@@ -165,27 +164,6 @@ export function callProviderWithContext(
   );
 }
 
-async function loadFromProviderOptions(
-  provider: ProviderOptions,
-  configTransform?: LoadApiProviderContext['configTransform'],
-  providerPath = provider.id,
-) {
-  invariant(
-    typeof provider === 'object',
-    `Provider must be an object, but received a ${typeof provider}: ${provider}`,
-  );
-  invariant(
-    !Array.isArray(provider),
-    `Provider must be an object, but received an array: ${JSON.stringify(provider)}`,
-  );
-  invariant(provider.id, 'Provider supplied to assertion must have an id');
-  return loadApiProvider(providerPath ?? provider.id, {
-    options: provider as ProviderOptions,
-    ...(configTransform && { configTransform }),
-    basePath: cliState.basePath,
-  });
-}
-
 function isSimulatedUserProviderConfig(provider: GradingConfig['provider']): boolean {
   if (typeof provider === 'string') {
     return provider === 'promptfoo:simulated-user';
@@ -215,13 +193,17 @@ export async function getGradingProvider(
   defaultProvider: ApiProvider | null,
   configTransform?: LoadApiProviderContext['configTransform'],
 ): Promise<ApiProvider | null> {
+  if (Array.isArray(provider)) {
+    throw new Error(
+      'Provider must be an object or string, but received an array. Remove the array around the grading provider.',
+    );
+  }
+
+  const transformContext = configTransform ? { configTransform } : {};
   let finalProvider: ApiProvider | null;
   if (typeof provider === 'string') {
     // Defined as a string
-    finalProvider = await loadApiProvider(provider, {
-      basePath: cliState.basePath,
-      ...(configTransform && { configTransform }),
-    });
+    finalProvider = await loadApiProvider(provider, { basePath: cliState.basePath, ...transformContext });
   } else if (
     provider != null &&
     typeof provider === 'object' &&
@@ -231,7 +213,6 @@ export async function getGradingProvider(
     finalProvider = provider as ApiProvider;
   } else if (provider != null && typeof provider === 'object') {
     const typeValue = (provider as ProviderTypeMap)[type];
-    const providerRef = configTransform ? normalizeProviderRef(provider) : undefined;
     if (typeValue) {
       // Apply evaluation overrides only when the selected typed grader is loaded.
       // Capturing them in the test config would retain credentials across later runs.
@@ -239,43 +220,36 @@ export async function getGradingProvider(
         finalProvider = await loadApiProvider(typeValue, {
           basePath: cliState.basePath,
           env: cliState.env,
-          ...(configTransform && { configTransform }),
+          ...transformContext,
         });
       } else if (typeof typeValue.id === 'string') {
         finalProvider = await loadApiProvider(typeValue.id, {
           options: typeValue as ProviderOptions,
           basePath: cliState.basePath,
           env: cliState.env,
-          ...(configTransform && { configTransform }),
+          ...transformContext,
         });
       } else {
         finalProvider = await getGradingProvider(type, typeValue, defaultProvider, configTransform);
       }
-    } else if ((provider as ProviderOptions).id) {
-      // Defined as ProviderOptions
-      finalProvider = await loadFromProviderOptions(provider as ProviderOptions, configTransform);
-    } else if (providerRef?.kind === 'map') {
-      finalProvider = await loadFromProviderOptions(
-        providerRef.loadOptions,
-        configTransform,
-        providerRef.loadProviderPath,
-      );
-    } else if (Array.isArray(provider)) {
-      throw new Error(
-        `Provider must be an object or string, but received an array.\n\nCheck that the provider ${JSON.stringify(
-          provider[0],
-          null,
-          2,
-        )} is not nested in an array.`,
-      );
+    } else if ('id' in provider && typeof provider.id === 'string' && provider.id) {
+      finalProvider = await loadApiProvider(provider.id, {
+        options: provider,
+        basePath: cliState.basePath,
+        ...transformContext,
+      });
     } else {
-      throw new Error(
-        `Invalid provider definition for output type '${type}': ${JSON.stringify(
-          provider,
-          null,
-          2,
-        )}`,
-      );
+      const providerRef = configTransform ? normalizeProviderRef(provider) : undefined;
+      if (providerRef?.kind !== 'map') {
+        throw new Error(
+          `Invalid provider definition for output type '${type}'. Set a provider id or configure the '${type}' entry in the grading provider map.`,
+        );
+      }
+      finalProvider = await loadApiProvider(providerRef.loadProviderPath, {
+        options: providerRef.loadOptions,
+        basePath: cliState.basePath,
+        ...transformContext,
+      });
     }
   } else {
     // No provider specified - check defaultTest providers as fallback

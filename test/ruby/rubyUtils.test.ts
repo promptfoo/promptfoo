@@ -78,6 +78,35 @@ describe('Ruby utilities', () => {
       .mockResolvedValueOnce({ stdout: '', stderr: '' });
   });
 
+  describe('version probes', () => {
+    it.each(['ruby 3.3.0\n', 'jruby 9.4.0.0\n'])(
+      'accepts %s and preserves the executable path',
+      async (stdout) => {
+        mockExecFileAsync.mockReset().mockResolvedValue({ stdout, stderr: '' });
+        expect(await rubyUtils.tryPath('/custom/ruby')).toBe('/custom/ruby');
+        expect(mockExecFileAsync).toHaveBeenCalledWith('/custom/ruby', ['--version'], {
+          env: expect.any(Object),
+          timeout: 2500,
+          killSignal: 'SIGKILL',
+        });
+      },
+    );
+
+    it('rejects another interpreter version', async () => {
+      mockExecFileAsync.mockReset().mockResolvedValue({ stdout: 'Python 3.12.0', stderr: '' });
+      expect(await rubyUtils.tryPath('/custom/ruby')).toBeNull();
+    });
+
+    it.each([
+      new Error('ENOENT'),
+      Object.assign(new Error('Command failed'), { code: 1 }),
+      Object.assign(new Error('Command failed'), { killed: true }),
+    ])('returns null when a version probe fails', async (error) => {
+      mockExecFileAsync.mockReset().mockRejectedValue(error);
+      expect(await rubyUtils.tryPath('/custom/ruby')).toBeNull();
+    });
+  });
+
   it('passes file defaults to the Ruby provider', async () => {
     await cliState.withEnvFileOverrides({ PROMPTFOO_REVIEW_ENV_PROBE: 'file' }, () =>
       rubyUtils.runRuby('/path/to/script.rb', 'call_api', []),
