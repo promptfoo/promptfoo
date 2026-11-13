@@ -1,5 +1,5 @@
 import Eval from '@app/pages/eval/components/Eval';
-import { useParams, useSearchParams } from 'react-router-dom';
+import { useParams, useSearchParams } from 'react-router';
 import FilterModeProvider from './components/FilterModeProvider';
 
 export default function EvalPage() {

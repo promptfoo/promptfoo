@@ -17,7 +17,7 @@ install the requirements:
 ```sh
 python3 -m venv venv
 source venv/bin/activate
-pip install -r requirements.txt
+python -m pip install -r requirements.txt
 ```
 
 Set the OpenAI API key used by both providers:
@@ -29,5 +29,7 @@ export OPENAI_API_KEY=your-api-key
 Then run the eval:
 
 ```bash
-npx promptfoo eval
+npx promptfoo@latest eval --no-cache
 ```
+
+Keep the virtual environment active when running Promptfoo: the `exec:python` provider uses `python` from your `PATH`. The requirements list only the two LangChain packages imported by this example; the OpenAI SDK is installed by `langchain-openai`.

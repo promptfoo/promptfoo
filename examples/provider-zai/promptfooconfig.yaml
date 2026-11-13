@@ -1,0 +1,44 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Compare current Z.AI GLM models
+
+prompts:
+  - 'Answer in one sentence: {{question}}'
+
+providers:
+  - id: openai:chat:glm-5.3
+    config: &zai
+      apiBaseUrl: https://api.z.ai/api/paas/v4
+      apiKeyEnvar: ZAI_API_KEY
+      temperature: 1
+      top_p: 0.95
+      max_tokens: 8192
+      showThinking: false
+      inputCost: 0.0000014
+      outputCost: 0.0000044
+      passthrough:
+        reasoning_effort: low
+        thinking:
+          type: enabled
+          clear_thinking: false
+  - id: openai:chat:glm-5.3-flash
+    config:
+      <<: *zai
+      inputCost: 0.00000015
+      outputCost: 0.0000005
+  - id: openai:chat:glm-5.3-flashx
+    config:
+      <<: *zai
+      inputCost: 0.00000037
+      outputCost: 0.00000125
+
+tests:
+  - vars:
+      question: 'Why does a leap year have an extra day?'
+    assert:
+      - type: icontains-any
+        value: [orbit, solar, '365.25', '365.242']
+  - vars:
+      question: 'What is the sum of the first five positive integers?'
+    assert:
+      - type: contains
+        value: '15'

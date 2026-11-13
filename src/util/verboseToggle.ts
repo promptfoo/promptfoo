@@ -2,7 +2,6 @@ import chalk from 'chalk';
 import { isCI } from '../envars';
 import logger, { getLogLevel, setLogLevel } from '../logger';
 
-let isVerboseToggleEnabled = false;
 let cleanupFn: (() => void) | null = null;
 
 export interface VerboseToggleOptions {
@@ -43,7 +42,7 @@ export function initVerboseToggle(options: VerboseToggleOptions): (() => void) |
   }
 
   // Already enabled
-  if (isVerboseToggleEnabled) {
+  if (cleanupFn) {
     return cleanupFn;
   }
 
@@ -95,8 +94,6 @@ export function initVerboseToggle(options: VerboseToggleOptions): (() => void) |
     };
     process.on('exit', exitHandler);
 
-    isVerboseToggleEnabled = true;
-
     cleanupFn = () => {
       process.stdin.removeListener('data', handleKeypress);
       process.removeListener('exit', exitHandler);
@@ -104,7 +101,6 @@ export function initVerboseToggle(options: VerboseToggleOptions): (() => void) |
         process.stdin.setRawMode(false);
       }
       process.stdin.pause();
-      isVerboseToggleEnabled = false;
       cleanupFn = null;
     };
 
@@ -136,5 +132,5 @@ export function disableVerboseToggle(): void {
  * Returns whether verbose toggle is currently enabled
  */
 export function isVerboseToggleActive(): boolean {
-  return isVerboseToggleEnabled;
+  return cleanupFn !== null;
 }

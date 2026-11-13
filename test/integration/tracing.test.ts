@@ -6,8 +6,11 @@
  */
 
 import { SpanStatusCode } from '@opentelemetry/api';
-import { InMemorySpanExporter, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-base';
-import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
+import {
+  InMemorySpanExporter,
+  SimpleSpanProcessor,
+  TracerProvider,
+} from '@opentelemetry/sdk-trace';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   GenAIAttributes,
@@ -15,20 +18,21 @@ import {
   PromptfooAttributes,
   withGenAISpan,
 } from '../../src/tracing/genaiTracer';
+import { registerTracerProvider } from '../../src/tracing/tracerProvider';
 
 import type { GenAISpanContext, GenAISpanResult } from '../../src/tracing/genaiTracer';
 
 describe('OpenTelemetry Tracing Integration', () => {
-  let tracerProvider: NodeTracerProvider;
+  let tracerProvider: TracerProvider;
   let memoryExporter: InMemorySpanExporter;
 
   beforeAll(() => {
     // Set up an in-memory exporter for testing
     memoryExporter = new InMemorySpanExporter();
-    tracerProvider = new NodeTracerProvider({
-      spanProcessors: [new SimpleSpanProcessor(memoryExporter)],
+    tracerProvider = new TracerProvider({
+      spanProcessors: [new SimpleSpanProcessor({ exporter: memoryExporter })],
     });
-    tracerProvider.register();
+    registerTracerProvider(tracerProvider);
   });
 
   afterAll(async () => {

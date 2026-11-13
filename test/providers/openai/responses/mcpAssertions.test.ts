@@ -1,3 +1,4 @@
+import { createMockFetchResponse } from '../../mockProviderResponses';
 // Load-bearing: registers shared vi.mock / beforeEach hooks before any
 // module-under-test import below. See ./setup.ts for details.
 import './setup';
@@ -37,12 +38,7 @@ describe('OpenAiResponsesProvider MCP assertions', () => {
         usage: { input_tokens: 25, output_tokens: 20, total_tokens: 45 },
       };
 
-      vi.mocked(cache.fetchWithCache).mockResolvedValue({
-        data: mockApiResponse,
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
+      vi.mocked(cache.fetchWithCache).mockResolvedValue(createMockFetchResponse(mockApiResponse));
 
       const provider = new OpenAiResponsesProvider('gpt-4.1', {
         config: {
@@ -105,12 +101,7 @@ describe('OpenAiResponsesProvider MCP assertions', () => {
         usage: { input_tokens: 15, output_tokens: 10, total_tokens: 25 },
       };
 
-      vi.mocked(cache.fetchWithCache).mockResolvedValue({
-        data: mockApiResponse,
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
+      vi.mocked(cache.fetchWithCache).mockResolvedValue(createMockFetchResponse(mockApiResponse));
 
       const provider = new OpenAiResponsesProvider('gpt-4.1', {
         config: {

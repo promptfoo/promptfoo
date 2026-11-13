@@ -1,5 +1,5 @@
 import dedent from 'dedent';
-import { RedteamGraderBase, RedteamPluginBase } from './base';
+import { createAssertion, RedteamGraderBase, RedteamPluginBase } from './base';
 
 import type { ApiProvider, Assertion, PluginConfig, TestCase } from '../../types/index';
 
@@ -56,12 +56,7 @@ export class PromptExtractionPlugin extends RedteamPluginBase {
   }
 
   protected getAssertions(_prompt: string): Assertion[] {
-    return [
-      {
-        type: PLUGIN_ID,
-        metric: 'PromptExtraction',
-      },
-    ];
+    return [createAssertion(PLUGIN_ID, 'PromptExtraction')];
   }
 
   async generateTests(n: number, _delayMs: number): Promise<TestCase[]> {

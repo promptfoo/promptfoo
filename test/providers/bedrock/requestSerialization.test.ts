@@ -541,7 +541,7 @@ describe('Bedrock agent-runtime SDK serialization', () => {
   it.each([
     'us.anthropic.claude-opus-4-7',
     'eu.anthropic.claude-opus-4-7',
-    'apac.anthropic.claude-sonnet-4-20250514-v1:0',
+    'jp.anthropic.claude-sonnet-4-6',
     'global.anthropic.claude-opus-4-7',
     'jp.anthropic.claude-opus-4-7',
     'au.anthropic.claude-opus-4-7',

@@ -1,15 +1,8 @@
-import { beforeEach, describe, expect, it } from 'vitest';
-import {
-  initializeToolRegistry,
-  TOOL_DEFINITIONS,
-  toolRegistry,
-} from '../../../../src/commands/mcp/lib/toolRegistry';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { generateToolDocs, TOOL_DEFINITIONS } from '../../../../src/commands/mcp/lib/toolRegistry';
 
 describe('ToolRegistry', () => {
-  beforeEach(() => {
-    // Re-initialize the registry for each test
-    initializeToolRegistry();
-  });
+  afterEach(() => vi.useRealTimers());
 
   describe('TOOL_DEFINITIONS', () => {
     it('should define all 14 MCP tools', () => {
@@ -86,47 +79,50 @@ describe('ToolRegistry', () => {
     });
   });
 
-  describe('registry operations', () => {
-    it('should retrieve all registered tools', () => {
-      const tools = toolRegistry.getAll();
-      expect(tools.length).toBe(14);
-    });
+  it.each([
+    ['evaluation', 4],
+    ['generation', 3],
+    ['redteam', 2],
+    ['configuration', 3],
+    ['debugging', 2],
+  ] as const)('documents category %s with %i tools', (category, count) => {
+    expect(generateToolDocs().tools.filter((tool) => tool.category === category)).toHaveLength(
+      count,
+    );
+  });
 
-    it('should retrieve a tool by name', () => {
-      const tool = toolRegistry.get('list_evaluations');
-      expect(tool).toBeDefined();
-      expect(tool?.name).toBe('list_evaluations');
-      expect(tool?.category).toBe('evaluation');
-    });
+  it('documents list_evaluations as an evaluation tool', () => {
+    expect(
+      generateToolDocs().tools.find((tool) => tool.name === 'list_evaluations')?.category,
+    ).toBe('evaluation');
+  });
 
-    it('should return undefined for non-existent tool', () => {
-      const tool = toolRegistry.get('non_existent_tool');
-      expect(tool).toBeUndefined();
-    });
-
-    it('should get tools by category', () => {
-      const evaluationTools = toolRegistry.getByCategory('evaluation');
-      expect(evaluationTools.length).toBe(4);
-      expect(evaluationTools.every((t) => t.category === 'evaluation')).toBe(true);
-
-      const generationTools = toolRegistry.getByCategory('generation');
-      expect(generationTools.length).toBe(3);
-
-      const redteamTools = toolRegistry.getByCategory('redteam');
-      expect(redteamTools.length).toBe(2);
-
-      const configTools = toolRegistry.getByCategory('configuration');
-      expect(configTools.length).toBe(3);
-
-      const debuggingTools = toolRegistry.getByCategory('debugging');
-      expect(debuggingTools.length).toBe(2);
-      expect(debuggingTools.every((t) => t.category === 'debugging')).toBe(true);
-    });
+  it('projects fresh rows and reads the current time for each document', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-01-01T00:00:00Z'));
+    const first = generateToolDocs();
+    vi.setSystemTime(new Date('2026-01-01T00:00:01Z'));
+    const second = generateToolDocs();
+    expect(first.lastUpdated).toBe('2026-01-01T00:00:00.000Z');
+    expect(second.lastUpdated).toBe('2026-01-01T00:00:01.000Z');
+    expect(first.tools).not.toBe(second.tools);
+    for (const [i, tool] of first.tools.entries()) {
+      expect(Object.keys(tool)).toEqual([
+        'name',
+        'description',
+        'parameters',
+        'category',
+        'annotations',
+      ]);
+      expect(tool).not.toBe(second.tools[i]);
+      expect(tool).not.toBe(TOOL_DEFINITIONS[i]);
+      expect(tool.annotations).toBe(TOOL_DEFINITIONS[i].annotations);
+    }
   });
 
   describe('generateDocs', () => {
     it('should generate documentation object', () => {
-      const docs = toolRegistry.generateDocs();
+      const docs = generateToolDocs();
 
       expect(docs.totalTools).toBe(14);
       expect(docs.version).toBe('1.0.0');
@@ -135,7 +131,7 @@ describe('ToolRegistry', () => {
     });
 
     it('should include all tool fields in docs', () => {
-      const docs = toolRegistry.generateDocs();
+      const docs = generateToolDocs();
 
       for (const tool of docs.tools) {
         expect(tool.name).toBeDefined();

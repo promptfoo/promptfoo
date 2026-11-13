@@ -4,9 +4,9 @@ prompts:
   - 'Analyze the following customer support query: "{{query}}" and respond with structured JSON data.'
 
 providers:
-  # GPT-5.6 tiers with structured output
-  - id: openai:chat:gpt-5.6-luna
-    label: GPT-5.6 Luna External Schema
+  # OpenAI models with structured output
+  - id: openai:chat:gpt-6-luna
+    label: GPT-6 Luna External Schema
     config:
       reasoning_effort: none
       max_completion_tokens: 800

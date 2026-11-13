@@ -1,25 +1,27 @@
+import { EventEmitter } from 'node:events';
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { mockWriteFileSync, mockReadFileSync, mockGetDbSignalPath, mockLoggerWarn } = vi.hoisted(
-  () => ({
+const { mockWriteFileSync, mockReadFileSync, mockGetDbSignalPath, mockLoggerWarn, mockWatch } =
+  vi.hoisted(() => ({
     mockWriteFileSync: vi.fn(),
     mockReadFileSync: vi.fn(),
     mockGetDbSignalPath: vi.fn().mockReturnValue('/mock/path/signal.txt'),
     mockLoggerWarn: vi.fn(),
-  }),
-);
+    mockWatch: vi.fn(),
+  }));
 
 vi.mock('fs', () => ({
   default: {
     writeFileSync: mockWriteFileSync,
     readFileSync: mockReadFileSync,
     existsSync: vi.fn(),
-    watch: vi.fn(),
+    watch: mockWatch,
   },
   writeFileSync: mockWriteFileSync,
   readFileSync: mockReadFileSync,
   existsSync: vi.fn(),
-  watch: vi.fn(),
+  watch: mockWatch,
 }));
 
 vi.mock('../../src/logger', () => ({
@@ -36,11 +38,17 @@ vi.mock('../../src/database/index', () => ({
 import {
   readSignalEvalId,
   readSignalFile,
+  setupSignalWatcher,
   updateSignalFile,
   updateSignalFileForDeletedEvals,
 } from '../../src/database/signal';
 
 describe('signal', () => {
+  function lastWrittenSignal(): string {
+    const calls = mockWriteFileSync.mock.calls;
+    return calls[calls.length - 1]?.[1] as string;
+  }
+
   beforeEach(() => {
     vi.clearAllMocks();
     mockWriteFileSync.mockReset();
@@ -51,6 +59,39 @@ describe('signal', () => {
 
   afterEach(() => {
     vi.resetAllMocks();
+    vi.useRealTimers();
+  });
+
+  describe('setupSignalWatcher', () => {
+    it('coalesces changes at the trailing edge', () => {
+      vi.useFakeTimers();
+      const watcher = new EventEmitter();
+      mockWatch.mockReturnValue(watcher);
+      const onChange = vi.fn();
+      expect(setupSignalWatcher(onChange)).toBe(watcher);
+
+      watcher.emit('change');
+      vi.advanceTimersByTime(200);
+      watcher.emit('change');
+      vi.advanceTimersByTime(249);
+      expect(onChange).not.toHaveBeenCalled();
+      vi.advanceTimersByTime(1);
+      expect(onChange).toHaveBeenCalledOnce();
+      watcher.emit('close');
+    });
+
+    it('cancels a pending notification when the watcher closes', () => {
+      vi.useFakeTimers();
+      const watcher = new EventEmitter();
+      mockWatch.mockReturnValue(watcher);
+      const onChange = vi.fn();
+      setupSignalWatcher(onChange);
+      watcher.emit('change');
+      watcher.emit('close');
+      vi.runAllTimers();
+      expect(onChange).not.toHaveBeenCalled();
+      expect(vi.getTimerCount()).toBe(0);
+    });
   });
 
   describe('updateSignalFile', () => {
@@ -236,11 +277,6 @@ describe('signal', () => {
   });
 
   describe('signal coalescing within the debounce window', () => {
-    function lastWrittenSignal(): string {
-      const calls = mockWriteFileSync.mock.calls;
-      return calls[calls.length - 1]?.[1] as string;
-    }
-
     it('folds a pending delete into a following update so neither refresh is lost', () => {
       // A delete written <250ms ago is still pending when an unrelated eval save fires.
       mockReadFileSync.mockReturnValue(
@@ -479,17 +515,19 @@ describe('signal', () => {
       return undefined;
     }
 
-    it('old reader degrades a new JSON delete payload to an unscoped update (Eval.latest fallback)', () => {
-      const payload = JSON.stringify({
-        type: 'delete',
-        deletedEvalIds: ['eval-abc-2026-05-29T22:43:41'],
-        timestamp: '2026-05-30T22:00:00.000Z',
-      });
+    it.each([false, true])(
+      'old reader falls back to an unscoped update for deletion with pending update=%s',
+      (pendingUpdate) => {
+        if (pendingUpdate) {
+          mockReadFileSync.mockReturnValue(`eval-pending:${new Date().toISOString()}`);
+        }
+        updateSignalFileForDeletedEvals(['eval-abc-2026-05-29T22:43:41']);
 
-      // split(':')[0] === '{"type"' (7 chars), which fails the length > 8 guard, so the
-      // old server sees no scoped id and falls back to broadcasting the latest eval.
-      expect(legacyReadSignalEvalId(payload)).toBeUndefined();
-    });
+        // split(':')[0] === '{"type"' (7 chars), which fails the length > 8 guard, so the
+        // old server sees no scoped id and falls back to broadcasting the latest eval.
+        expect(legacyReadSignalEvalId(lastWrittenSignal())).toBeUndefined();
+      },
+    );
 
     it('new reader correctly parses legacy scoped signals an old CLI would write', () => {
       mockReadFileSync.mockReturnValue('eval-abc-2026-05-29T22:43:41:2026-05-29T22:43:42.000Z');

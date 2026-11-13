@@ -12,8 +12,8 @@ import { HelperText } from '@app/components/ui/helper-text';
 import { Input } from '@app/components/ui/input';
 import { Label } from '@app/components/ui/label';
 import { Spinner } from '@app/components/ui/spinner';
-import { useEmailVerification } from '@app/hooks/useEmailVerification';
 import { useToast } from '@app/hooks/useToast';
+import { checkEmailStatus, clearEmail, saveEmail } from '@app/utils/emailVerification';
 
 interface EmailVerificationDialogProps {
   open: boolean;
@@ -31,7 +31,6 @@ export function EmailVerificationDialog({
   const [email, setEmail] = useState('');
   const [emailError, setEmailError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const { saveEmail, clearEmail, checkEmailStatus } = useEmailVerification();
   const { showToast } = useToast();
 
   const validateEmail = (email: string): boolean => {

@@ -1,5 +1,6 @@
-import { getEnvString } from '../../../envars';
+import { isCacheEnabled } from '../../../cache';
 import logger from '../../../logger';
+import { getElevenLabsApiKey } from '../auth';
 import { ElevenLabsCache } from '../cache';
 import { ElevenLabsClient } from '../client';
 import { CostTracker } from '../cost-tracker';
@@ -187,7 +188,7 @@ export class ElevenLabsTTSProvider implements ApiProvider {
       seed: this.config.seed,
     });
 
-    const cached = await this.cache.get<TTSResponse>(cacheKey);
+    const cached = isCacheEnabled() ? await this.cache.get<TTSResponse>(cacheKey) : null;
     if (cached) {
       logger.debug('[ElevenLabs TTS] Cache hit');
       return this.buildResponse(cached, true, prompt.length, Date.now() - startTime);
@@ -252,7 +253,9 @@ export class ElevenLabsTTSProvider implements ApiProvider {
       };
 
       // Cache response
-      await this.cache.set(cacheKey, ttsResponse, audioData.sizeBytes);
+      if (isCacheEnabled()) {
+        await this.cache.set(cacheKey, ttsResponse);
+      }
 
       // Save to file if configured
       if (this.config.saveAudio && this.config.audioOutputPath) {
@@ -378,13 +381,7 @@ export class ElevenLabsTTSProvider implements ApiProvider {
   }
 
   private getApiKey(): string | undefined {
-    return (
-      this.config.apiKey ||
-      (this.config.apiKeyEnvar && this.env?.[this.config.apiKeyEnvar as keyof EnvOverrides]) ||
-      (this.config.apiKeyEnvar && getEnvString(this.config.apiKeyEnvar as any)) ||
-      this.env?.ELEVENLABS_API_KEY ||
-      getEnvString('ELEVENLABS_API_KEY')
-    );
+    return getElevenLabsApiKey(this, () => this.env);
   }
 
   private async handleStreamingRequest(
