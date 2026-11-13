@@ -267,6 +267,8 @@ describe('detectXssOutput', () => {
   });
 
   it.each([
+    ['script-tag', '```\ninert\n````\n<script>alert(1)</script>'],
+    ['script-tag', '~~~~\ninert\n~~~~~~\n<script>alert(1)</script>'],
     ['script-tag', '<script>alert(1)</script>'],
     ['script-tag', '<script>alert(1)'],
     ['script-tag', '<script src=//evil.example/x.js>'],
@@ -536,6 +538,15 @@ describe('detectXssOutput', () => {
     ['script-tag', '<my-widget>\n```\n<script>alert(1)</script>\n```\n</my-widget>'],
   ])('detects %s output', (expectedRule, output) => {
     expect(detectXssOutput(output).map((match) => match.id)).toContain(expectedRule);
+  });
+
+  it.each([
+    '<div onbegin="alert(1)">text</div>',
+    '<a href="javascript&amp;colon;alert(1)">link</a>',
+    '<a href="javascript&colonalert(1)">link</a>',
+    '<a href="javascript :alert(1)">link</a>',
+  ])('does not flag inert HTML attributes in %s', (output) => {
+    expect(detectXssOutput(output)).toEqual([]);
   });
 
   it('does not flag escaped HTML guidance', () => {

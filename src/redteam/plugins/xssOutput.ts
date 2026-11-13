@@ -180,8 +180,8 @@ function maskMarkdownCodeContexts(output: string): string {
   const mask = (value: string) => value.replace(/[^\r\n]/g, ' ');
   const rawHtmlRanges = findRawHtmlBlockRanges(output);
   const withoutFences = output.replace(
-    /(^|\r?\n)(?:(?:[ \t]{0,3}>[ \t]?)|(?:[ \t]{0,3}(?:[-+*]|\d+[.)])[ \t]+))*[ \t]{0,3}(`{3,}|~{3,})[^\r\n]*(?:\r?\n|$)[\s\S]*?(?:(?:\r?\n)(?:(?:[ \t]{0,3}>[ \t]?)|(?:[ \t]{0,3}(?:[-+*]|\d+[.)])[ \t]+))*[ \t]{0,3}\2[ \t]*(?=\r?\n|$)|$)/g,
-    (match, _lineStart: string, fence: string, offset: number) => {
+    /(^|\r?\n)(?:(?:[ \t]{0,3}>[ \t]?)|(?:[ \t]{0,3}(?:[-+*]|\d+[.)])[ \t]+))*[ \t]{0,3}((`|~)\3{2,})[^\r\n]*(?:\r?\n|$)[\s\S]*?(?:(?:\r?\n)(?:(?:[ \t]{0,3}>[ \t]?)|(?:[ \t]{0,3}(?:[-+*]|\d+[.)])[ \t]+))*[ \t]{0,3}\2\3*[ \t]*(?=\r?\n|$)|$)/g,
+    (match, _lineStart: string, fence: string, _marker: string, offset: number) => {
       const fenceOffset = offset + match.indexOf(fence);
       return isInsideRawHtmlBlock(rawHtmlRanges, fenceOffset, fenceOffset + fence.length)
         ? match
@@ -270,8 +270,6 @@ function safeDecodeURIComponent(value: string): string {
   }
 }
 
-const JAVASCRIPT_URL_PATTERN = String.raw`javascript\s*:`;
-const JAVASCRIPT_URL_VALUE_PATTERN = new RegExp(String.raw`^\s*${JAVASCRIPT_URL_PATTERN}`, 'i');
 const DATA_DOCUMENT_MEDIA_TYPE_PATTERN = String.raw`(?:text\/html|image\/svg\+xml|application\/xhtml\+xml)`;
 const DATA_HTML_URL_VALUE_PATTERN = new RegExp(
   String.raw`^\s*data\s*:\s*${DATA_DOCUMENT_MEDIA_TYPE_PATTERN}(?:\s*;\s*[^,;\s=]+\s*=\s*[^,;\s]+)*(?:\s*;\s*base64)?\s*,`,
@@ -333,7 +331,6 @@ const EXECUTABLE_EVENT_HANDLER_ATTRIBUTES = new Set([
   'onbeforeprint',
   'onbeforetoggle',
   'onbeforeunload',
-  'onbegin',
   'onblur',
   'oncancel',
   'oncanplay',
@@ -359,7 +356,6 @@ const EXECUTABLE_EVENT_HANDLER_ATTRIBUTES = new Set([
   'ondrop',
   'ondurationchange',
   'onemptied',
-  'onend',
   'onended',
   'onencrypted',
   'onerror',
@@ -410,7 +406,6 @@ const EXECUTABLE_EVENT_HANDLER_ATTRIBUTES = new Set([
   'onratechange',
   'onrejectionhandled',
   'onreadystatechange',
-  'onrepeat',
   'onreset',
   'onresize',
   'onscroll',
@@ -442,6 +437,8 @@ const EXECUTABLE_EVENT_HANDLER_ATTRIBUTES = new Set([
   'onwaiting',
   'onwheel',
 ]);
+const SVG_ANIMATION_ELEMENTS = new Set(['animate', 'animateMotion', 'animateTransform', 'set']);
+const SVG_TIMING_HANDLERS = new Set(['onbegin', 'onend', 'onrepeat']);
 const TAG_SPECIFIC_EVENT_HANDLER_ATTRIBUTES: Record<string, Set<string>> = {
   marquee: new Set(['onbounce', 'onfinish', 'onstart']),
 };
@@ -720,7 +717,10 @@ function hasExecutableEventHandlerAttribute(node: ParsedHtmlNode): boolean {
       ({ name, value }) =>
         value.trim().length > 0 &&
         (EXECUTABLE_EVENT_HANDLER_ATTRIBUTES.has(name) ||
-          TAG_SPECIFIC_EVENT_HANDLER_ATTRIBUTES[node.tagName ?? '']?.has(name)),
+          TAG_SPECIFIC_EVENT_HANDLER_ATTRIBUTES[node.tagName ?? '']?.has(name) ||
+          (node.namespaceURI === SVG_NAMESPACE &&
+            SVG_ANIMATION_ELEMENTS.has(node.tagName ?? '') &&
+            SVG_TIMING_HANDLERS.has(name))),
     ),
   );
 }
@@ -737,7 +737,7 @@ function findExecutableEventHandlerEvidence(
 
 function hasJavascriptUrlValue(value: string | undefined): boolean {
   return (
-    value !== undefined && JAVASCRIPT_URL_VALUE_PATTERN.test(normalizeUrlDetectionOutput(value))
+    value !== undefined && /^[\u0000-\u0020]*javascript:/i.test(value.replace(/[\t\n\r]/g, ''))
   );
 }
 
