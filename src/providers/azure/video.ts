@@ -278,7 +278,8 @@ export class AzureVideoProvider extends AzureGenericProvider {
 
       if (!response.ok) {
         return {
-          error: `Failed to download video: ${response.status} ${response.statusText}`,
+          error:
+            `Failed to download video: HTTP ${response.status} ${response.statusText}`.trimEnd(),
         };
       }
 
@@ -345,7 +346,7 @@ export class AzureVideoProvider extends AzureGenericProvider {
     });
 
     // Check for cached video
-    const cachedVideoKey = await checkVideoCache(cacheKey, PROVIDER_NAME);
+    const cachedVideoKey = (await checkVideoCache(cacheKey, PROVIDER_NAME))?.videoKey;
     if (cachedVideoKey) {
       logger.info(`[${PROVIDER_NAME}] Cache hit for video: ${cacheKey}`);
 

@@ -12,11 +12,13 @@ const CANDIDATES = {
 // Import the real example with an offline CrewAI boundary. Agent ignores unknown fields,
 // like CrewAI does, so passing model= instead of llm= cannot satisfy these assertions.
 const CHECK_EXAMPLE = String.raw`
+print("crewai fixture: script entry", flush=True)
 import importlib.util
 import json
 import os
 import sys
 from types import ModuleType, SimpleNamespace
+print("crewai fixture: imports complete", flush=True)
 
 class LLM:
     def __init__(self, model, api_key=None):
@@ -62,18 +64,22 @@ crewai = ModuleType("crewai")
 crewai.LLM, crewai.Agent, crewai.Task, crewai.Crew = LLM, Agent, Task, Crew
 sys.modules["crewai"] = crewai
 results = []
-for case in json.loads(sys.argv[2]):
+for index, case in enumerate(json.loads(sys.argv[2])):
     settings = case["settings"]
     observed = {}
     for key in ("OPENAI_API_KEY", "ANTHROPIC_API_KEY"):
         os.environ.pop(key, None)
     os.environ.update(case["credentials"])
+    print(f"crewai fixture: case {index} before example import", flush=True)
     spec = importlib.util.spec_from_file_location("recruitment_example", sys.argv[1])
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
+    print(f"crewai fixture: case {index} before call_api", flush=True)
     response = module.call_api("Find a Ruby engineer", {"config": settings.get("config", {})}, {})
+    print(f"crewai fixture: case {index} after call_api", flush=True)
     results.append({"response": response, "observed": observed})
-print(json.dumps(results))
+print(json.dumps(results), flush=True)
+print("crewai fixture: final output", flush=True)
 `;
 
 const cases = [
@@ -152,10 +158,17 @@ describe('integration-crewai example', () => {
       ],
       { encoding: 'utf8', timeout: 5000 },
     );
-    expect(result.error).toBeUndefined();
-    expect(result.status, result.stderr).toBe(0);
+    const lines = (result.stdout ?? '').split(/\r?\n/);
+    const stagePattern =
+      /^crewai fixture: (?:script entry|imports complete|case \d+ (?:before (?:example import|call_api)|after call_api)|final output)$/;
+    const stages =
+      lines.filter((line) => stagePattern.test(line)).join(', ') || 'no stage recorded';
+    if (result.error) {
+      throw new Error(`CrewAI fixture failed (stages: ${stages})`, { cause: result.error });
+    }
+    expect(result.status, `CrewAI fixture stages: ${stages}\n${result.stderr}`).toBe(0);
     expect(result.stderr).toBe('');
-    results = JSON.parse(result.stdout);
+    results = JSON.parse(lines.filter((line) => !stagePattern.test(line)).join('\n'));
     expect(results).toHaveLength(cases.length);
   });
 
