@@ -165,6 +165,8 @@ An assertion set groups multiple assertions and can define its own threshold, me
 | metric    | string                    | No       | Named metric for the set                                          |
 | config    | Record\<string, any\>     | No       | Shared config passed into every assertion in the set              |
 
+Shared config is shallow-merged with each child's config, with child keys taking precedence. Nested objects and arrays are replaced, not recursively merged.
+
 ### CommandLineOptions
 
 Set default values for command-line options. These defaults will be used unless overridden by command-line arguments.
