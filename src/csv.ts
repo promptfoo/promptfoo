@@ -298,7 +298,12 @@ export function testCaseFromCsvRow(row: CsvRow): TestCase {
         );
       }
     } else {
-      vars[key] = value;
+      Object.defineProperty(vars, key, {
+        value,
+        enumerable: true,
+        configurable: true,
+        writable: true,
+      });
     }
   }
 

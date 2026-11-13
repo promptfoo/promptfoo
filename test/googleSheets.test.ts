@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { testCaseFromCsvRow } from '../src/csv';
 import {
   checkGoogleSheetAccess,
   fetchCsvFromGoogleSheet,
@@ -209,6 +210,8 @@ describe('Google Sheets Integration', () => {
         ['toString', 'string-value'],
         ['name', 'normal-value'],
       ]);
+      const { vars } = testCaseFromCsvRow(row);
+      expect(Object.entries(vars ?? {})).toEqual(Object.entries(row));
     });
 
     it('keeps reserved characters in a sheet title inside a single URL segment', async () => {
