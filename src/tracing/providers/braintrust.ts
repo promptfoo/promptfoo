@@ -2,7 +2,6 @@ import logger from '../../logger';
 import { getNormalizedToolAttributes } from '../toolAttributes';
 import {
   fetchWithProxy,
-  MAX_TRACE_RESPONSE_BYTES,
   readLimitedResponse,
   releaseResponse,
   validateTraceProviderEndpoint,
@@ -183,18 +182,6 @@ export class BraintrustProvider implements TraceProvider {
         'Braintrust BTQL endpoint returned HTTP 404; check the endpoint and project configuration',
         { statusCode: response.status },
       );
-    }
-    if (!response.ok) {
-      await releaseResponse(response, 'Braintrust');
-      throw new TraceProviderError(`Braintrust returned HTTP ${response.status}`, {
-        statusCode: response.status,
-        retryable: response.status === 408 || response.status === 429 || response.status >= 500,
-      });
-    }
-
-    if (Number(response.headers.get('content-length')) > MAX_TRACE_RESPONSE_BYTES) {
-      await releaseResponse(response, 'Braintrust');
-      throw new TraceProviderError('Braintrust trace exceeds the maximum response size');
     }
     const body = await readLimitedResponse(response, 'Braintrust');
 
