@@ -74,7 +74,11 @@ function getAveragePassRate(row: MetricRow): number | undefined {
 }
 
 function getPassRateSpread(row: MetricRow): number | null {
-  const validPassRates = getPromptMetricScores(row)
+  const promptScores = getPromptMetricScores(row);
+  if (promptScores.some(({ hasScore, total }) => hasScore && total === undefined)) {
+    return null;
+  }
+  const validPassRates = promptScores
     .filter(({ hasScore, total }) => hasScore && typeof total === 'number' && total > 0)
     .map((metricScore) => getMetricPercentage(metricScore));
 
