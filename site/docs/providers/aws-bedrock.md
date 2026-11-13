@@ -965,27 +965,28 @@ temperatures are preserved; set `temperature: 0` only if that model supports sam
 
 #### Claude Fable and Mythos models
 
-[Claude Fable 5.1](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-anthropic-claude-fable-5-1.html)
-and [Claude Mythos 5.1](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-anthropic-claude-mythos-5-1.html)
-support InvokeModel, Converse, and the Anthropic-compatible Messages API on
-**Bedrock Runtime**. Use a `us.` or `global.` inference profile:
+[Claude Fable 5.2](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-anthropic-claude-fable-5-2.html),
+[Claude Mythos 5.2](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-anthropic-claude-mythos-5-2.html),
+and their 5.1 counterparts support InvokeModel, Converse, and the Anthropic-compatible
+Messages API on **Bedrock Runtime**. Use a `us.` or `global.` inference profile; the base model
+ID has no on-demand route:
 
 ```yaml
 providers:
-  - bedrock:us.anthropic.claude-fable-5-1
-  - bedrock:converse:us.anthropic.claude-mythos-5-1
-  - id: bedrock:messages:global.anthropic.claude-mythos-5-1
+  - bedrock:global.anthropic.claude-fable-5-2
+  - bedrock:converse:us.anthropic.claude-fable-5-2
+  - id: bedrock:messages:global.anthropic.claude-mythos-5-2
     config:
       region: us-east-1
       apiKey: '{{env.AWS_BEARER_TOKEN_BEDROCK}}'
 ```
 
-The `us.` profile keeps routing within its geography; `global.` permits worldwide
-routing. The Messages route uses
+The `us.` profile keeps routing within its geography and adds the 10% regional premium;
+`global.` permits worldwide routing at the base rate. The Messages route uses
 `https://bedrock-runtime.<region>.amazonaws.com/anthropic` and accepts a Bedrock
-API key or generates one from AWS credentials. Mythos 5.1 requires provider approval. Both 5.1 models retain always-on
-thinking and use a cache-read price of $0.25 per million tokens before regional
-premiums.
+API key or generates one from AWS credentials. The Mythos models require provider approval.
+Fable and Mythos 5.2 cost $8 / $40 per million input / output tokens before the premium, 5.1
+costs $10 / $50, and cache reads cost 2.5% of the input rate.
 
 Fable 5.1 also supports Mantle in **GovCloud West**: use
 `bedrock:messages:anthropic.claude-fable-5-1` with `region: us-gov-west-1`.
@@ -1840,6 +1841,24 @@ set `config.input_type: search_query` when embedding retrieval queries. The embe
 provider returns a single numeric vector for each input text. Titan continues to use
 its separate `inputText` request format.
 
+The `bedrock:embeddings:` route accepts **text input** and returns one numeric vector.
+It also supports these models through synchronous InvokeModel:
+
+| Model ID                                   | Configuration                                                                                                                                                            |
+| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `amazon.nova-2-multimodal-embeddings-v1:0` | `embeddingPurpose` (default `GENERIC_INDEX`), `embeddingDimension` (256, 384, 1024, or 3072; default 3072), `truncationMode` (`NONE`, `START`, or `END`; default `NONE`) |
+| `twelvelabs.marengo-embed-3-0-v1:0`        | 512-dimensional text embeddings; use a supported regional or `us.`/`eu.` inference profile ID                                                                            |
+
+For Nova retrieval queries, choose `TEXT_RETRIEVAL` for a text-only index or
+`GENERIC_RETRIEVAL` for mixed modalities. `NONE` rejects oversized text instead of
+silently truncating it. See the [Nova embedding schema](https://docs.aws.amazon.com/nova/latest/userguide/embeddings-schema.html).
+Marengo 3 accepts up to 500 text tokens; its vectors are incompatible with Marengo 2.7,
+so re-embed existing indexes when migrating. See [AWS's Marengo migration guide](https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-marengo-3.html).
+
+These models also offer media and asynchronous embedding APIs on AWS, which this
+text embedding route does not expose. Use a [custom provider](/docs/providers/custom-api/)
+for those workflows.
+
 To override the embeddings provider for all assertions that require embeddings (such as similarity), use `defaultTest`:
 
 ```yaml
@@ -2187,7 +2206,7 @@ See the [Knowledge Base contextTransform example](https://github.com/promptfoo/p
 
 ## Bedrock Agents
 
-Amazon Bedrock Agents uses the reasoning of foundation models (FMs), APIs, and data to break down user requests, gathers relevant information, and efficiently completes tasks—freeing teams to focus on high-value work. For detailed information on testing and evaluating deployed agents, see the [AWS Bedrock Agents Provider](./bedrock-agents.md) documentation.
+The `bedrock-agent:` provider invokes existing Bedrock Agents Classic deployments. AWS has [closed Agents Classic to new customers](https://docs.aws.amazon.com/bedrock/latest/userguide/agents-classic-maintenance-mode.html); this provider does not invoke AgentCore Runtime. See the [AWS Bedrock Agents Provider](./bedrock-agents.md) guide for session, memory, and trace evaluation.
 
 Quick example:
 
