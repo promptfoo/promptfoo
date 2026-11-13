@@ -434,43 +434,19 @@ const FrameworkCard = ({
 
                 {/* Untested plugins for this framework */}
                 {showUntestedPlugins &&
-                  Object.keys(ALIASED_PLUGIN_MAPPINGS[framework] || {})
-                    .flatMap((categoryId) => {
-                      // Get all plugins from this category
-                      const categoryPlugins =
-                        ALIASED_PLUGIN_MAPPINGS[framework]?.[categoryId]?.plugins || [];
-                      // Expand plugins using the utility function
-                      return Array.from(expandPluginCollections(categoryPlugins, categoryStats));
-                    })
-                    .filter((plugin) => !categoryStats[plugin] || categoryStats[plugin].total === 0)
-                    .sort((a, b) => {
-                      // Sort by severity first
-                      const severityA =
-                        riskCategorySeverityMap[a as keyof typeof riskCategorySeverityMap] ||
-                        Severity.Low;
-                      const severityB =
-                        riskCategorySeverityMap[b as keyof typeof riskCategorySeverityMap] ||
-                        Severity.Low;
-
-                      const severityOrder: Record<Severity, number> = {
-                        [Severity.Critical]: 0,
-                        [Severity.High]: 1,
-                        [Severity.Medium]: 2,
-                        [Severity.Low]: 3,
-                        [Severity.Informational]: 4,
-                      };
-
-                      return severityOrder[severityA] - severityOrder[severityB];
-                    })
-                    .map((plugin, index) => (
-                      <FrameworkPluginResult
-                        key={`${plugin}-${framework}-${index}`}
-                        evalId={evalId}
-                        plugin={plugin}
-                        getPluginASR={getPluginASR}
-                        type="untested"
-                      />
-                    ))}
+                  sortPluginsBySeverity(
+                    Array.from(frameworkPlugins).filter(
+                      (plugin) => !categoryStats[plugin] || categoryStats[plugin].total === 0,
+                    ),
+                  ).map((plugin, index) => (
+                    <FrameworkPluginResult
+                      key={`${plugin}-${framework}-${index}`}
+                      evalId={evalId}
+                      plugin={plugin}
+                      getPluginASR={getPluginASR}
+                      type="untested"
+                    />
+                  ))}
               </div>
             </div>
           )}

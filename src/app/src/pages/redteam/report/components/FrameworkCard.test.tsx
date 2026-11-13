@@ -300,6 +300,15 @@ describe('FrameworkCard', () => {
     expect(screen.queryByText('harmful:hate')).not.toBeInTheDocument();
   });
 
+  it('lists an untested plugin once when multiple DPDP provisions map to it', () => {
+    renderFrameworkCard({
+      framework: 'dpdp',
+      categoryStats: {},
+    });
+
+    expect(screen.getAllByText('pii:api-db')).toHaveLength(1);
+  });
+
   it('should scope tested and passed plugins to the framework mapping when other plugins ran', () => {
     renderFrameworkCard({
       framework: 'dpdp',
