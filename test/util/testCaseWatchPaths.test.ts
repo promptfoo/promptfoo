@@ -62,6 +62,29 @@ describe('resolveTestsWatchPaths', () => {
     );
   });
 
+  it('watches the literal test source when a second filename matches its bracket pattern', async () => {
+    const literal = path.join(base, 'suite[12].yaml');
+    fs.writeFileSync(literal, '- vars: { input: literal }');
+    fs.writeFileSync(path.join(base, 'suite1.yaml'), '- vars: { input: other }');
+    const reference = 'file://suite[12].yaml';
+
+    expect(await readTests(reference, base)).toMatchObject([{ vars: { input: 'literal' } }]);
+    expect(resolve(reference)).toEqual([literal]);
+    expect(resolve([reference])).toEqual([literal]);
+    expect(resolve({ path: reference })).toEqual([literal]);
+  });
+
+  it('watches the glob match that a raw vars reference actually loads', async () => {
+    const matched = path.join(base, 'vars1.yaml');
+    fs.writeFileSync(matched, 'input: matched');
+    fs.writeFileSync(path.join(base, 'vars[1].yaml'), 'input: literal');
+    const source = path.join(base, 'vars-source.yaml');
+    fs.writeFileSync(source, '- vars: vars[1].yaml');
+
+    expect(await readTests(source, base)).toMatchObject([{ vars: { input: 'matched' } }]);
+    expect(resolve(source)).toEqual([source, matched]);
+  });
+
   it('expands a glob, because chokidar does not', () => {
     // Exactly the matches, and nothing else: glob order is not guaranteed.
     const watched = resolve('file://tests/*.yaml' as TestSuiteConfig['tests']);
