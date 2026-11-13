@@ -14,10 +14,12 @@ import logger from '../../src/logger';
 import Eval from '../../src/models/eval';
 import { generateIdFromPrompt } from '../../src/models/prompt';
 import { EvalEvaluationStore } from '../../src/node/evaluationStore';
+import { nodeEvaluatorRuntime } from '../../src/node/evaluatorRuntime';
 import { generatePrompts } from '../../src/suggestions';
 import { ResultFailureReason, type TestSuite } from '../../src/types/index';
 import { promptYesNo } from '../../src/util/readline';
 import { createEmptyTokenUsage } from '../../src/util/tokenUsageUtils';
+import { createEvaluateResult } from '../factories/eval';
 import { mockApiProvider, toPrompt } from './helpers';
 import { describeEvaluator } from './lifecycle';
 
@@ -113,34 +115,60 @@ describeEvaluator('evaluator runtime ports', () => {
     },
   );
 
-  it('uses the store resume lookup without importing a concrete result model', async () => {
-    const evaluation = createInMemoryEvaluation({
-      persisted: true,
-      results: [
-        {
-          ...({} as EvaluateResult),
-          failureReason: ResultFailureReason.NONE,
-          promptIdx: 0,
-          testIdx: 0,
-        },
-      ],
-    });
-    const store = new InMemoryEvaluationStore(evaluation);
-    const readCompletedIndexPairs = vi.spyOn(store, 'readCompletedIndexPairs');
-    const runtime = createInMemoryRuntime(store);
-    const testSuite: TestSuite = {
-      providers: [mockApiProvider],
-      prompts: [toPrompt('Test prompt')],
-      tests: [{}],
-    };
-    cliState.resume = true;
-    cliState.retryMode = false;
-
-    await evaluate(testSuite, evaluation, {}, runtime);
-
-    expect(readCompletedIndexPairs).toHaveBeenCalledWith({ excludeErrors: false });
-    expect(evaluation.results).toHaveLength(1);
+  it('does not inherit Node suite resolution when an explicit runtime omits it', async () => {
+    const resolver = vi
+      .spyOn(nodeEvaluatorRuntime, 'resolveRuntimeTestSuite')
+      .mockImplementation(() => {
+        throw new Error('Unexpected Node resolver fallback');
+      });
+    try {
+      const evaluation = createInMemoryEvaluation();
+      const runtime = createInMemoryRuntime(new InMemoryEvaluationStore(evaluation));
+      await expect(
+        evaluate(
+          {
+            providers: [mockApiProvider],
+            prompts: [toPrompt('Test prompt')],
+            tests: [{}],
+          },
+          evaluation,
+          {},
+          runtime,
+        ),
+      ).resolves.toBe(evaluation);
+      expect(resolver).not.toHaveBeenCalled();
+    } finally {
+      resolver.mockRestore();
+    }
   });
+
+  it.each([false, true])(
+    'preserves step order on resume (lookup fails: %s)',
+    async (lookupFails) => {
+      const evaluation = createInMemoryEvaluation({
+        persisted: true,
+        results: [createEvaluateResult({ testIdx: 1 })],
+      });
+      const store = new InMemoryEvaluationStore(evaluation);
+      const readCompletedIndexPairs = vi.spyOn(store, 'readCompletedIndexPairs');
+      if (lookupFails) {
+        readCompletedIndexPairs.mockRejectedValue(new Error('lookup failed'));
+      }
+      const testSuite: TestSuite = {
+        providers: [mockApiProvider],
+        prompts: [toPrompt('Test prompt')],
+        tests: [{}, {}, {}],
+      };
+      cliState.resume = true;
+
+      await evaluate(testSuite, evaluation, { maxConcurrency: 1 }, createInMemoryRuntime(store));
+
+      expect(readCompletedIndexPairs).toHaveBeenCalledWith({ excludeErrors: false });
+      expect(evaluation.results.map((row) => row.testIdx)).toEqual(
+        lookupFails ? [1, 0, 1, 2] : [1, 0, 2],
+      );
+    },
+  );
 
   it.each<{
     name: string;

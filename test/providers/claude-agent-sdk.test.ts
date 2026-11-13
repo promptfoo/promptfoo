@@ -398,8 +398,20 @@ describe('ClaudeCodeSDKProvider', () => {
   });
 
   describe('resumed-session accounting', () => {
-    const prior = { ...createMockModelUsage(100, 20, 50, 5), thinkingTokens: 4, costUSD: 0.2 };
-    const current = { ...createMockModelUsage(110, 27, 53, 7), thinkingTokens: 6, costUSD: 0.201 };
+    const prior = {
+      ...createMockModelUsage(100, 20, 50, 5),
+      cacheCreationEphemeral5mInputTokens: 2,
+      cacheCreationEphemeral1hInputTokens: 3,
+      thinkingTokens: 4,
+      costUSD: 0.2,
+    };
+    const current = {
+      ...createMockModelUsage(110, 27, 53, 7),
+      cacheCreationEphemeral5mInputTokens: 4,
+      cacheCreationEphemeral1hInputTokens: 3,
+      thinkingTokens: 6,
+      costUSD: 0.201,
+    };
     const resultMessage = {
       type: 'result',
       subtype: 'success',
@@ -484,7 +496,13 @@ describe('ClaudeCodeSDKProvider', () => {
         usageAccounting: 'query',
         sessionCost: 0.202,
         modelUsage: {
-          sonnet: { inputTokens: 10, outputTokens: 7, contextWindow: 200000 },
+          sonnet: {
+            inputTokens: 10,
+            outputTokens: 7,
+            contextWindow: 200000,
+            cacheCreationEphemeral5mInputTokens: 2,
+            cacheCreationEphemeral1hInputTokens: 0,
+          },
           haiku: { inputTokens: 5, outputTokens: 3 },
         },
         sessionModelUsage: resultMessage.modelUsage,
@@ -1124,7 +1142,8 @@ describe('ClaudeCodeSDKProvider', () => {
 
       new ClaudeCodeSDKProvider({ config: { model: 'claude-3-5-sonnet-20241022' } });
       new ClaudeCodeSDKProvider({ config: { model: 'claude-fable-5-1' } });
-      new ClaudeCodeSDKProvider({ config: { model: 'claude-mythos-5-1' } });
+      new ClaudeCodeSDKProvider({ config: { model: 'claude-fable-5-2' } });
+      new ClaudeCodeSDKProvider({ config: { model: 'claude-mythos-5-2' } });
       new ClaudeCodeSDKProvider({ config: { fallback_model: 'claude-3-5-haiku-20241022' } });
 
       expect(warnSpy).not.toHaveBeenCalled();
@@ -7163,6 +7182,37 @@ describe('ClaudeCodeSDKProvider', () => {
         expect(toolSpan!.status?.code).toBe(1); // SpanStatusCode.OK
       });
 
+      const traceparent = '00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01';
+      const nativeChildSpan = { spanId: 'native-claude-span', parentSpanId: 'b7ad6b7169203331' };
+      const readToolTurn = {
+        type: 'assistant' as const,
+        parent_tool_use_id: null,
+        message: createMockBetaMessage([createReadToolUse()]),
+        session_id: 'test-session',
+      };
+
+      function mockStoredSpans(spans: (typeof nativeChildSpan)[]) {
+        const getTrace = vi.fn().mockResolvedValue({ spans });
+        vi.spyOn(traceStore, 'getTraceStore').mockReturnValue({
+          getTrace,
+        } as unknown as ReturnType<typeof traceStore.getTraceStore>);
+        return getTrace;
+      }
+
+      function callWithLocalTraceReceiver(parent?: string) {
+        cliState.setActiveOtlpReceiver(createOtlpOptions());
+        const provider = new ClaudeCodeSDKProvider(createTracedClaudeOptions());
+        return cliState.withRequestTracingConfig(
+          { enabled: true, otlp: { http: { enabled: true, port: 4318 } } },
+          () =>
+            provider.callApi('prompt', {
+              traceparent: parent,
+              prompt: { raw: 'prompt', label: 'prompt' },
+              vars: {},
+            }),
+        );
+      }
+
       it.each([
         {
           description:
@@ -7214,29 +7264,13 @@ describe('ClaudeCodeSDKProvider', () => {
           expectSyntheticSpans,
         }) => {
           const { emittedSpans } = installTracerSpy();
+          vi.spyOn(genaiTracer, 'getTraceparent').mockReturnValue(traceparent);
+          mockStoredSpans([nativeChildSpan]);
           mockQuery.mockReturnValue(
             createMockQuery([
-              {
-                type: 'assistant',
-                parent_tool_use_id: null,
-                message: createMockBetaMessage([createReadToolUse()]),
-                session_id: 'test-session',
-              },
+              readToolTurn,
               createReadToolResultMessage(),
-              {
-                type: 'result',
-                subtype: 'success',
-                session_id: 'test-session',
-                uuid: '12345678-1234-1234-1234-123456789abc',
-                result: 'ok',
-                usage: createMockUsage(10, 20),
-                total_cost_usd: 0.001,
-                duration_ms: 500,
-                duration_api_ms: 400,
-                is_error: false,
-                num_turns: 1,
-                permission_denials: [],
-              },
+              (await createMockResponse('ok').next()).value as SDKMessage,
             ]),
           );
 
@@ -7281,10 +7315,78 @@ describe('ClaudeCodeSDKProvider', () => {
         },
       );
 
+      it.each([
+        undefined,
+        'invalid',
+        '00-0af7651916cd43dd8448eb211c80319c',
+        '00-00000000000000000000000000000000-b7ad6b7169203331-01',
+        '00-0af7651916cd43dd8448eb211c80319c-0000000000000000-01',
+        '00-not-a-trace-id-not-a-span-id-01',
+      ])('preserves synthetic spans without a valid traceparent (%s)', async (traceparent) => {
+        const { emittedSpans } = installTracerSpy();
+        vi.spyOn(genaiTracer, 'getTraceparent').mockReturnValue(undefined);
+        const getTrace = mockStoredSpans([]);
+        mockQuery.mockReturnValue(
+          createMockQuery([
+            readToolTurn,
+            createReadToolResultMessage(),
+            (await createMockResponse('ok').next()).value as SDKMessage,
+          ]),
+        );
+        const result = await callWithLocalTraceReceiver(traceparent);
+
+        expect(mockQuery.mock.calls.at(-1)?.[0].options.env.TRACEPARENT).toBeUndefined();
+        expect(result.output).toBe('ok');
+        expect(emittedSpans.map((span) => span.name)).toEqual(['gen_ai.turn 1', 'tool Read']);
+        expect(getTrace).not.toHaveBeenCalled();
+      });
+
+      it.each([
+        { toolCompleted: true, nativeSpansArrived: false },
+        { toolCompleted: false, nativeSpansArrived: false },
+        { toolCompleted: true, nativeSpansArrived: true },
+        { toolCompleted: false, nativeSpansArrived: true },
+      ])(
+        'preserves missing-result evidence without duplicates (completed: $toolCompleted, native: $nativeSpansArrived)',
+        async ({ toolCompleted, nativeSpansArrived }) => {
+          vi.useFakeTimers();
+          try {
+            const { emittedSpans } = installTracerSpy();
+            const getTrace = mockStoredSpans(nativeSpansArrived ? [nativeChildSpan] : []);
+            mockQuery.mockReturnValue(
+              createMockQuery([
+                readToolTurn,
+                ...(toolCompleted ? [createReadToolResultMessage()] : []),
+              ]),
+            );
+            const resultPromise = callWithLocalTraceReceiver(traceparent);
+            await vi.runAllTimersAsync();
+            const result = await resultPromise;
+
+            expect(result.error).toBe("Claude Agent SDK call didn't return a result");
+            expect(emittedSpans.map((span) => span.name)).toEqual(
+              nativeSpansArrived ? [] : ['gen_ai.turn 1', 'tool Read'],
+            );
+            if (!nativeSpansArrived) {
+              expect(emittedSpans[1].attrs['tool.incomplete']).toBe(
+                toolCompleted ? undefined : true,
+              );
+            }
+            expect(getTrace).toHaveBeenCalled();
+          } finally {
+            vi.useRealTimers();
+          }
+        },
+      );
+
       it('waits for native Claude spans before returning a traced response', async () => {
         const { emittedSpans } = installTracerSpy();
         const traceId = '0af7651916cd43dd8448eb211c80319c';
         const parentSpanId = 'b7ad6b7169203331';
+        // An invalid active span should not shadow the valid evaluator context.
+        vi.spyOn(genaiTracer, 'getTraceparent').mockReturnValue(
+          `00-${traceId}-0000000000000000-01`,
+        );
         const getTrace = vi
           .fn()
           .mockResolvedValueOnce({
