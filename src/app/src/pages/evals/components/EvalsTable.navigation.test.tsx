@@ -19,7 +19,10 @@ function EvaluationRoutes() {
         element={
           <>
             <h1>Evaluation list</h1>
-            <EvalsTable onEvalSelected={(evalId) => navigate(EVAL_ROUTES.DETAIL(evalId))} />
+            <EvalsTable
+              showUtilityButtons
+              onEvalSelected={(evalId) => navigate(EVAL_ROUTES.DETAIL(evalId))}
+            />
           </>
         }
       />
@@ -34,6 +37,12 @@ function EvaluationRoutes() {
       />
     </Routes>
   );
+}
+
+async function showIdColumn(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(await screen.findByRole('button', { name: 'Columns' }));
+  await user.click(await screen.findByRole('menuitemcheckbox', { name: 'ID' }));
+  await user.keyboard('{Escape}');
 }
 
 describe('EvalsTable navigation', () => {
@@ -61,11 +70,12 @@ describe('EvalsTable navigation', () => {
     render(
       <TooltipProvider>
         <MemoryRouter>
-          <EvalsTable onEvalSelected={onEvalSelected} />
+          <EvalsTable showUtilityButtons onEvalSelected={onEvalSelected} />
         </MemoryRouter>
       </TooltipProvider>,
     );
 
+    await showIdColumn(user);
     const link = await screen.findByRole('link', { name: 'eval-1' });
     if (activation === 'click') {
       await user.click(link);
@@ -77,7 +87,7 @@ describe('EvalsTable navigation', () => {
     expect(onEvalSelected).toHaveBeenCalledExactlyOnceWith('eval-1');
   });
 
-  it.each(['ID link', 'description cell'])(
+  it.each(['ID link', 'description link'])(
     'returns to the list with one Back after clicking the %s',
     async (target) => {
       const user = userEvent.setup();
@@ -90,8 +100,12 @@ describe('EvalsTable navigation', () => {
         </TooltipProvider>,
       );
 
-      const link = await screen.findByRole('link', { name: 'eval-1' });
-      await user.click(target === 'ID link' ? link : screen.getByText('Example evaluation'));
+      if (target === 'ID link') {
+        await showIdColumn(user);
+        await user.click(await screen.findByRole('link', { name: 'eval-1' }));
+      } else {
+        await user.click(await screen.findByRole('link', { name: 'Example evaluation' }));
+      }
       expect(screen.getByRole('heading', { name: 'Evaluation detail' })).toBeInTheDocument();
 
       await user.click(screen.getByRole('button', { name: 'Back' }));
