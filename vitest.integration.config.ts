@@ -1,35 +1,12 @@
-import os from 'os';
-
 import { defineConfig } from 'vitest/config';
-
-const cpuCount = os.cpus().length;
-// Use most cores but leave 2 for system/main process
-const maxForks = Math.max(cpuCount - 2, 4);
+import { commonTestConfig } from './scripts/commonTestConfig.mjs';
 
 export default defineConfig({
   test: {
-    deps: {
-      interopDefault: true,
-    },
-    environment: 'node',
+    ...commonTestConfig(),
     exclude: ['**/node_modules/**'],
     globals: true,
     include: ['**/*.integration.test.ts'],
-    root: '.',
-    setupFiles: ['./vitest.setup.ts'],
-
-    // Run tests in random order to catch test isolation issues early.
-    // Tests should not depend on execution order or shared state.
-    // Override with --sequence.shuffle=false when debugging specific failures.
-    sequence: {
-      shuffle: true,
-    },
-
-    // Use forks for better memory isolation
-    pool: 'forks',
-    // Vitest 4 exposes fork worker options at the top level.
-    maxWorkers: maxForks,
-    isolate: true,
     execArgv: [
       '--max-old-space-size=4096', // 4GB per worker for integration tests
     ],
@@ -38,7 +15,5 @@ export default defineConfig({
     testTimeout: 60_000, // 60s per test
     hookTimeout: 60_000,
     teardownTimeout: 15_000,
-
-    maxConcurrency: 10,
   },
 });
