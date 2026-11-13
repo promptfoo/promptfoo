@@ -28,8 +28,7 @@ For new configurations, avoid legacy models such as `mistral-large2` and `llama3
 
 ### Basic Configuration
 
-```yaml title="promptfooconfig.yaml"
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+```yaml
 providers:
   - id: snowflake:claude-sonnet-4-6
     config:

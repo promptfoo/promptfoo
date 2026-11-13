@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { createMcpServerOptions } from '../../factories/literalFixtures';
 
 describe('MCP client optional dependency', () => {
   afterEach(() => {
@@ -16,13 +17,7 @@ describe('MCP client optional dependency', () => {
     }));
 
     const { MCPClient } = await import('../../../src/providers/mcp/client');
-    const client = new MCPClient({
-      enabled: true,
-      server: {
-        command: 'node',
-        args: ['server.js'],
-      },
-    });
+    const client = new MCPClient(createMcpServerOptions('node', 'server.js'));
     const initializePromise = client.initialize();
 
     await expect(initializePromise).rejects.toThrow(
@@ -45,13 +40,7 @@ describe('MCP client optional dependency', () => {
     try {
       const { MCPProvider } = await import('../../../src/providers/mcp');
       const provider = new MCPProvider({
-        config: {
-          enabled: true,
-          server: {
-            command: 'node',
-            args: ['server.js'],
-          },
-        },
+        config: createMcpServerOptions('node', 'server.js'),
       });
 
       await new Promise<void>((resolve) => setImmediate(resolve));

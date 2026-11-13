@@ -10,6 +10,17 @@ import logger from '../../../src/logger';
 import { AnthropicCompletionProvider } from '../../../src/providers/anthropic/completion';
 import { mockProcessEnv } from '../../util/utils';
 
+const createAnthropicTenantOptions = () => ({
+  config: { apiKey: 'sk-ant-tenant-a' },
+});
+const createCompletionResponse = () => ({
+  id: 'test-id',
+  model: 'claude-1',
+  stop_reason: 'stop_sequence',
+  type: 'completion' as const,
+  completion: 'Test output',
+});
+
 vi.mock('proxy-agent', async (importOriginal) => {
   return {
     ...(await importOriginal()),
@@ -37,18 +48,50 @@ describe('AnthropicCompletionProvider', () => {
   });
 
   describe('callApi', () => {
+    it.each([
+      { configured: 0.2, scoped: '0.4', global: '0.6', expected: 0.2 },
+      { configured: 0, scoped: '0.4', global: '0.6', expected: 0 },
+      { configured: undefined, scoped: '0.4', global: '0.6', expected: 0.4 },
+      { configured: undefined, scoped: '0', global: '0.6', expected: 0 },
+      { configured: undefined, scoped: undefined, global: '0.6', expected: 0.6 },
+      { configured: undefined, scoped: '', global: '0.6', expected: 0.6 },
+      { configured: undefined, scoped: 'invalid', global: '0.6', expected: 0.6 },
+      { configured: undefined, scoped: 'invalid', global: undefined, expected: 0 },
+    ])(
+      'resolves temperature from config=$configured, scoped=$scoped, global=$global',
+      async ({ configured, scoped, global, expected }) => {
+        mockProcessEnv({ ANTHROPIC_TEMPERATURE: global });
+        const provider = new AnthropicCompletionProvider('claude-2.1', {
+          config: { temperature: configured },
+          env: { ANTHROPIC_TEMPERATURE: scoped },
+        });
+        const create = vi.spyOn(provider.anthropic, 'post').mockResolvedValue({
+          id: 'test-id',
+          model: 'claude-2.1',
+          stop_reason: 'stop_sequence',
+          type: 'completion',
+          completion: 'Test output',
+        });
+
+        const result = await provider.callApi('Test prompt');
+
+        expect(create).toHaveBeenCalledExactlyOnceWith('/v1/complete', {
+          body: expect.objectContaining({ temperature: expected }),
+          headers: undefined,
+        });
+        expect(result).toMatchObject({
+          output: 'Test output',
+          tokenUsage: { numRequests: 1 },
+        });
+      },
+    );
+
     it('should return output for default behavior', async () => {
       const provider = new AnthropicCompletionProvider('claude-1');
-      vi.spyOn(provider.anthropic.completions, 'create').mockResolvedValue({
-        id: 'test-id',
-        model: 'claude-1',
-        stop_reason: 'stop_sequence',
-        type: 'completion',
-        completion: 'Test output',
-      });
+      vi.spyOn(provider.anthropic, 'post').mockResolvedValue(createCompletionResponse());
       const result = await provider.callApi('Test prompt');
 
-      expect(provider.anthropic.completions.create).toHaveBeenCalledTimes(1);
+      expect(provider.anthropic.post).toHaveBeenCalledTimes(1);
       expect(result).toMatchObject({
         output: 'Test output',
         tokenUsage: { numRequests: 1 },
@@ -57,25 +100,19 @@ describe('AnthropicCompletionProvider', () => {
 
     it('should return cached output with caching enabled', async () => {
       const provider = new AnthropicCompletionProvider('claude-1');
-      vi.spyOn(provider.anthropic.completions, 'create').mockResolvedValue({
-        id: 'test-id',
-        model: 'claude-1',
-        stop_reason: 'stop_sequence',
-        type: 'completion',
-        completion: 'Test output',
-      });
+      vi.spyOn(provider.anthropic, 'post').mockResolvedValue(createCompletionResponse());
       const result = await provider.callApi('Test prompt');
 
-      expect(provider.anthropic.completions.create).toHaveBeenCalledTimes(1);
+      expect(provider.anthropic.post).toHaveBeenCalledTimes(1);
       expect(result).toMatchObject({
         output: 'Test output',
         tokenUsage: { numRequests: 1 },
       });
 
-      vi.mocked(provider.anthropic.completions.create).mockClear();
+      vi.mocked(provider.anthropic.post).mockClear();
       const cachedResult = await provider.callApi('Test prompt');
 
-      expect(provider.anthropic.completions.create).toHaveBeenCalledTimes(0);
+      expect(provider.anthropic.post).toHaveBeenCalledTimes(0);
       expect(cachedResult.cached).toBe(true);
       expect(cachedResult).toMatchObject({
         output: 'Test output',
@@ -88,13 +125,7 @@ describe('AnthropicCompletionProvider', () => {
       const cache = await getCache();
       const getSpy = vi.spyOn(cache, 'get');
       const setSpy = vi.spyOn(cache, 'set');
-      vi.spyOn(provider.anthropic.completions, 'create').mockResolvedValue({
-        id: 'test-id',
-        model: 'claude-1',
-        stop_reason: 'stop_sequence',
-        type: 'completion',
-        completion: 'Test output',
-      });
+      vi.spyOn(provider.anthropic, 'post').mockResolvedValue(createCompletionResponse());
 
       await provider.callApi('Sensitive prompt sk-ant-secret');
 
@@ -119,14 +150,14 @@ describe('AnthropicCompletionProvider', () => {
       const cache = await getCache();
       const getSpy = vi.spyOn(cache, 'get').mockResolvedValue(undefined);
       vi.spyOn(cache, 'set').mockResolvedValue(undefined);
-      vi.spyOn(providerA.anthropic.completions, 'create').mockResolvedValue({
+      vi.spyOn(providerA.anthropic, 'post').mockResolvedValue({
         id: 'test-id-a',
         model: 'claude-1',
         stop_reason: 'stop_sequence',
         type: 'completion',
         completion: 'Tenant A output',
       });
-      vi.spyOn(providerB.anthropic.completions, 'create').mockResolvedValue({
+      vi.spyOn(providerB.anthropic, 'post').mockResolvedValue({
         id: 'test-id-b',
         model: 'claude-1',
         stop_reason: 'stop_sequence',
@@ -153,23 +184,21 @@ describe('AnthropicCompletionProvider', () => {
     });
 
     it('keeps unlabeled credentials isolated without persisting unreachable cache entries', async () => {
-      const providerA = new AnthropicCompletionProvider('claude-1', {
-        config: { apiKey: 'sk-ant-tenant-a' },
-      });
+      const providerA = new AnthropicCompletionProvider('claude-1', createAnthropicTenantOptions());
       const providerB = new AnthropicCompletionProvider('claude-1', {
         config: { apiKey: 'sk-ant-tenant-b' },
       });
       const persistentCache = await getCache();
       const getSpy = vi.spyOn(persistentCache, 'get');
       const setSpy = vi.spyOn(persistentCache, 'set');
-      vi.spyOn(providerA.anthropic.completions, 'create').mockResolvedValue({
+      vi.spyOn(providerA.anthropic, 'post').mockResolvedValue({
         id: 'msg-a',
         model: 'claude-1',
         stop_reason: 'stop_sequence',
         type: 'completion',
         completion: 'Tenant A response',
       });
-      vi.spyOn(providerB.anthropic.completions, 'create').mockResolvedValue({
+      vi.spyOn(providerB.anthropic, 'post').mockResolvedValue({
         id: 'msg-b',
         model: 'claude-1',
         stop_reason: 'stop_sequence',
@@ -186,18 +215,16 @@ describe('AnthropicCompletionProvider', () => {
       expect(resultB.output).toBe('Tenant B response');
       expect(cachedResultA).toMatchObject({ output: 'Tenant A response', cached: true });
       expect(cachedResultB).toMatchObject({ output: 'Tenant B response', cached: true });
-      expect(providerA.anthropic.completions.create).toHaveBeenCalledTimes(1);
-      expect(providerB.anthropic.completions.create).toHaveBeenCalledTimes(1);
+      expect(providerA.anthropic.post).toHaveBeenCalledTimes(1);
+      expect(providerB.anthropic.post).toHaveBeenCalledTimes(1);
       expect(getSpy).not.toHaveBeenCalled();
       expect(setSpy).not.toHaveBeenCalled();
     });
 
     it('isolates unlabeled completion cache entries by repeat namespace and honors clearCache', async () => {
-      const provider = new AnthropicCompletionProvider('claude-1', {
-        config: { apiKey: 'sk-ant-tenant-a' },
-      });
+      const provider = new AnthropicCompletionProvider('claude-1', createAnthropicTenantOptions());
       const create = vi
-        .spyOn(provider.anthropic.completions, 'create')
+        .spyOn(provider.anthropic, 'post')
         .mockResolvedValueOnce({ completion: 'fresh-1' } as any)
         .mockResolvedValueOnce({ completion: 'fresh-2' } as any)
         .mockResolvedValueOnce({ completion: 'fresh-3' } as any);
@@ -218,11 +245,9 @@ describe('AnthropicCompletionProvider', () => {
     it('expires unlabeled completion cache entries using PROMPTFOO_CACHE_TTL', async () => {
       const restoreEnv = mockProcessEnv({ PROMPTFOO_CACHE_TTL: '1' });
       const now = vi.spyOn(Date, 'now').mockReturnValue(1_000);
-      const provider = new AnthropicCompletionProvider('claude-1', {
-        config: { apiKey: 'sk-ant-tenant-a' },
-      });
+      const provider = new AnthropicCompletionProvider('claude-1', createAnthropicTenantOptions());
       const create = vi
-        .spyOn(provider.anthropic.completions, 'create')
+        .spyOn(provider.anthropic, 'post')
         .mockResolvedValueOnce({ completion: 'fresh-1' } as any)
         .mockResolvedValueOnce({ completion: 'fresh-2' } as any);
 
@@ -241,11 +266,9 @@ describe('AnthropicCompletionProvider', () => {
     });
 
     it('invalidates unlabeled completion cache entries when the cache is cleared directly', async () => {
-      const provider = new AnthropicCompletionProvider('claude-1', {
-        config: { apiKey: 'sk-ant-tenant-a' },
-      });
+      const provider = new AnthropicCompletionProvider('claude-1', createAnthropicTenantOptions());
       const create = vi
-        .spyOn(provider.anthropic.completions, 'create')
+        .spyOn(provider.anthropic, 'post')
         .mockResolvedValueOnce({ completion: 'fresh-1' } as any)
         .mockResolvedValueOnce({ completion: 'fresh-2' } as any);
 
@@ -258,11 +281,9 @@ describe('AnthropicCompletionProvider', () => {
     });
 
     it('invalidates unlabeled completion cache entries when a namespaced cache is cleared', async () => {
-      const provider = new AnthropicCompletionProvider('claude-1', {
-        config: { apiKey: 'sk-ant-tenant-a' },
-      });
+      const provider = new AnthropicCompletionProvider('claude-1', createAnthropicTenantOptions());
       const create = vi
-        .spyOn(provider.anthropic.completions, 'create')
+        .spyOn(provider.anthropic, 'post')
         .mockResolvedValueOnce({ completion: 'fresh-1' } as any)
         .mockResolvedValueOnce({ completion: 'fresh-2' } as any);
 
@@ -279,11 +300,9 @@ describe('AnthropicCompletionProvider', () => {
     it('keeps unlabeled completion cache entries when PROMPTFOO_CACHE_TTL is zero', async () => {
       const restoreEnv = mockProcessEnv({ PROMPTFOO_CACHE_TTL: '0' });
       const now = vi.spyOn(Date, 'now').mockReturnValue(1_000);
-      const provider = new AnthropicCompletionProvider('claude-1', {
-        config: { apiKey: 'sk-ant-tenant-a' },
-      });
+      const provider = new AnthropicCompletionProvider('claude-1', createAnthropicTenantOptions());
       const create = vi
-        .spyOn(provider.anthropic.completions, 'create')
+        .spyOn(provider.anthropic, 'post')
         .mockResolvedValue({ completion: 'fresh-1' } as any);
 
       try {
@@ -311,14 +330,14 @@ describe('AnthropicCompletionProvider', () => {
       const cache = await getCache();
       const getSpy = vi.spyOn(cache, 'get');
       const setSpy = vi.spyOn(cache, 'set');
-      vi.spyOn(providerA.anthropic.completions, 'create').mockResolvedValue({
+      vi.spyOn(providerA.anthropic, 'post').mockResolvedValue({
         id: 'test-id-a',
         model: 'claude-1',
         stop_reason: 'stop_sequence',
         type: 'completion',
         completion: 'Tenant A output',
       });
-      vi.spyOn(providerB.anthropic.completions, 'create').mockResolvedValue({
+      vi.spyOn(providerB.anthropic, 'post').mockResolvedValue({
         id: 'test-id-b',
         model: 'claude-1',
         stop_reason: 'stop_sequence',
@@ -331,8 +350,8 @@ describe('AnthropicCompletionProvider', () => {
 
       expect(getSpy).not.toHaveBeenCalled();
       expect(setSpy).not.toHaveBeenCalled();
-      expect(providerA.anthropic.completions.create).toHaveBeenCalledTimes(1);
-      expect(providerB.anthropic.completions.create).toHaveBeenCalledTimes(1);
+      expect(providerA.anthropic.post).toHaveBeenCalledTimes(1);
+      expect(providerB.anthropic.post).toHaveBeenCalledTimes(1);
     });
 
     it('should keep bypassing the response cache after captured ambient custom headers are cleared', async () => {
@@ -344,7 +363,7 @@ describe('AnthropicCompletionProvider', () => {
       const cache = await getCache();
       const getSpy = vi.spyOn(cache, 'get');
       const setSpy = vi.spyOn(cache, 'set');
-      vi.spyOn(provider.anthropic.completions, 'create').mockResolvedValue({
+      vi.spyOn(provider.anthropic, 'post').mockResolvedValue({
         id: 'test-id',
         model: 'claude-1',
         stop_reason: 'stop_sequence',
@@ -357,7 +376,7 @@ describe('AnthropicCompletionProvider', () => {
 
       expect(getSpy).not.toHaveBeenCalled();
       expect(setSpy).not.toHaveBeenCalled();
-      expect(provider.anthropic.completions.create).toHaveBeenCalledTimes(2);
+      expect(provider.anthropic.post).toHaveBeenCalledTimes(2);
     });
 
     it('should keep the non-secret cache namespace stable across module reloads', async () => {
@@ -433,7 +452,7 @@ describe('AnthropicCompletionProvider', () => {
     it('should avoid logging prompts and generated outputs in debug metadata', async () => {
       const provider = new AnthropicCompletionProvider('claude-1');
       const debugSpy = vi.spyOn(logger, 'debug').mockImplementation(() => {});
-      vi.spyOn(provider.anthropic.completions, 'create').mockResolvedValue({
+      vi.spyOn(provider.anthropic, 'post').mockResolvedValue({
         id: 'test-id',
         model: 'claude-1',
         stop_reason: 'stop_sequence',
@@ -452,28 +471,22 @@ describe('AnthropicCompletionProvider', () => {
 
     it('should return fresh output with caching disabled', async () => {
       const provider = new AnthropicCompletionProvider('claude-1');
-      vi.spyOn(provider.anthropic.completions, 'create').mockResolvedValue({
-        id: 'test-id',
-        model: 'claude-1',
-        stop_reason: 'stop_sequence',
-        type: 'completion',
-        completion: 'Test output',
-      });
+      vi.spyOn(provider.anthropic, 'post').mockResolvedValue(createCompletionResponse());
       const result = await provider.callApi('Test prompt');
 
-      expect(provider.anthropic.completions.create).toHaveBeenCalledTimes(1);
+      expect(provider.anthropic.post).toHaveBeenCalledTimes(1);
       expect(result).toMatchObject({
         output: 'Test output',
         tokenUsage: {},
       });
 
-      vi.mocked(provider.anthropic.completions.create).mockClear();
+      vi.mocked(provider.anthropic.post).mockClear();
 
       disableCache();
 
       const freshResult = await provider.callApi('Test prompt');
 
-      expect(provider.anthropic.completions.create).toHaveBeenCalledTimes(1);
+      expect(provider.anthropic.post).toHaveBeenCalledTimes(1);
       expect(freshResult).toMatchObject({
         output: 'Test output',
         tokenUsage: {},
@@ -482,9 +495,7 @@ describe('AnthropicCompletionProvider', () => {
 
     it('should handle API call error', async () => {
       const provider = new AnthropicCompletionProvider('claude-1');
-      vi.spyOn(provider.anthropic.completions, 'create').mockRejectedValue(
-        new Error('API call failed'),
-      );
+      vi.spyOn(provider.anthropic, 'post').mockRejectedValue(new Error('API call failed'));
 
       const result = await provider.callApi('Test prompt');
       expect(result).toMatchObject({
@@ -499,7 +510,7 @@ describe('AnthropicCompletionProvider', () => {
         const provider = new AnthropicCompletionProvider('claude-2.1', {
           config: { max_tokens_to_sample: 0 },
         });
-        vi.spyOn(provider.anthropic.completions, 'create').mockResolvedValue({
+        vi.spyOn(provider.anthropic, 'post').mockResolvedValue({
           id: 'test-id',
           model: 'claude-2.1',
           stop_reason: 'stop_sequence',
@@ -509,9 +520,10 @@ describe('AnthropicCompletionProvider', () => {
 
         await provider.callApi('Test prompt');
 
-        expect(provider.anthropic.completions.create).toHaveBeenCalledWith(
-          expect.objectContaining({ max_tokens_to_sample: 0 }),
-        );
+        expect(provider.anthropic.post).toHaveBeenCalledWith('/v1/complete', {
+          body: expect.objectContaining({ max_tokens_to_sample: 0 }),
+          headers: undefined,
+        });
       } finally {
         restoreEnv();
       }

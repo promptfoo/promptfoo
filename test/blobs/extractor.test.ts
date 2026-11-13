@@ -221,16 +221,17 @@ describe('Local blob extraction', () => {
     vi.resetAllMocks();
   });
 
-  it('stores extracted blobs locally without eagerly uploading them', async () => {
-    // Create a large enough data URL to trigger externalization (>1KB)
-    const largeBase64 = Buffer.alloc(2000).toString('base64');
-    const response: ProviderResponse = {
-      output: `data:image/png;base64,${largeBase64}`,
-    };
-
-    await extractAndStoreBinaryData(response);
-
-    // Should store locally
+  const base64 = Buffer.alloc(2000).toString('base64');
+  const image = { b64_json: base64 };
+  const uri = 'promptfoo://blob/abc123def456';
+  it.each([
+    ['a data URL', `data:image/png;base64,${base64}`, undefined],
+    ['one JSON image', JSON.stringify({ data: [null, image] }), [uri]],
+    ['two JSON images', JSON.stringify({ data: [image, image] }), [uri, uri]],
+  ] as const)('stores %s locally without eagerly uploading it', async (_label, output, uris) => {
+    const result = await extractAndStoreBinaryData({ output });
+    expect(result?.output).toBe(uris && uris.length > 1 ? JSON.stringify(uris) : uri);
+    expect(result?.metadata?.blobUris).toEqual(uris);
     expect(mockStoreBlob).toHaveBeenCalledTimes(1);
     expect(mockUploadBlobRemote).not.toHaveBeenCalled();
   });
@@ -246,6 +247,35 @@ describe('Local blob extraction', () => {
     expect(result?.images?.[0].data).toBeUndefined();
     expect(result?.images?.[0].blobRef).toBeDefined();
     expect(result?.images?.[0].blobRef?.uri).toContain('promptfoo://blob/');
+  });
+
+  it.each([
+    { field: 'output', mimeType: 'image/png', kind: 'image' },
+    { field: 'output', mimeType: 'audio/wav', kind: 'audio' },
+    { field: 'metadata', mimeType: 'image/png', kind: 'image' },
+    { field: 'metadata', mimeType: 'audio/wav', kind: 'audio' },
+  ])('decodes a $mimeType data URL in $field once', async ({ field, mimeType, kind }) => {
+    const bytes = Buffer.alloc(2000, 5);
+    const base64 = bytes.toString('base64');
+    const dataUrl = `data:${mimeType};base64,${base64}`;
+    const response: ProviderResponse =
+      field === 'output' ? { output: dataUrl } : { metadata: { preview: dataUrl } };
+    const decode = vi.spyOn(Buffer, 'from');
+
+    try {
+      const result = await extractAndStoreBinaryData(response);
+
+      expect(decode.mock.calls.filter(([value]) => value === base64)).toHaveLength(1);
+      expect(mockStoreBlob).toHaveBeenCalledExactlyOnceWith(bytes, mimeType, {
+        location: field === 'output' ? 'response.output' : 'response.metadata.preview',
+        kind,
+      });
+      expect(field === 'output' ? result?.output : result?.metadata?.preview).toBe(
+        'promptfoo://blob/abc123def456',
+      );
+    } finally {
+      decode.mockRestore();
+    }
   });
 
   it('should reuse the same image blob when output and images contain identical data URIs', async () => {
@@ -308,6 +338,51 @@ describe('Local blob extraction', () => {
 
     const result = await extractAndStoreBinaryData(response);
     expect(result).toEqual(response);
+  });
+
+  it('retries a failed JSON image store when metadata contains the same bytes', async () => {
+    const bytes = Buffer.alloc(2000, 7);
+    const base64 = bytes.toString('base64');
+    const response: ProviderResponse = {
+      output: JSON.stringify({ data: [{ b64_json: base64 }] }),
+      metadata: { preview: `data:image/png;base64,${base64}` },
+    };
+    mockStoreBlob.mockRejectedValueOnce(new Error('temporary write failure'));
+
+    const result = await extractAndStoreBinaryData(response);
+
+    expect(result?.output).toBe(response.output);
+    expect(result?.metadata?.preview).toBe('promptfoo://blob/abc123def456');
+    expect(mockStoreBlob).toHaveBeenCalledTimes(2);
+    expect(mockStoreBlob).toHaveBeenNthCalledWith(2, bytes, 'image/png', {
+      location: 'response.metadata.preview',
+      kind: 'image',
+    });
+    expect(response.metadata?.preview).toContain('data:image/png;base64,');
+  });
+
+  it('keeps audio and image references distinct for identical bytes', async () => {
+    const bytes = Buffer.alloc(2000, 9);
+    const base64 = bytes.toString('base64');
+    const context = { evalId: 'media-kinds', testIdx: 2, promptIdx: 3 };
+    const response: ProviderResponse = {
+      audio: { data: base64, format: 'wav' },
+      images: [{ data: `data:image/jpeg;base64,${base64}`, mimeType: 'image/png' }],
+    };
+
+    await extractAndStoreBinaryData(response, context);
+
+    expect(mockStoreBlob).toHaveBeenCalledTimes(2);
+    expect(mockStoreBlob).toHaveBeenNthCalledWith(1, bytes, 'audio/wav', {
+      ...context,
+      location: 'response.audio.data',
+      kind: 'audio',
+    });
+    expect(mockStoreBlob).toHaveBeenNthCalledWith(2, bytes, 'image/jpeg', {
+      ...context,
+      location: 'response.images[0].data',
+      kind: 'image',
+    });
   });
 
   it('should handle mixed images: externalize data URIs but keep existing blobRefs', async () => {

@@ -1,6 +1,9 @@
 import { SpanStatusCode } from '@opentelemetry/api';
-import { InMemorySpanExporter, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-base';
-import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
+import {
+  InMemorySpanExporter,
+  SimpleSpanProcessor,
+  TracerProvider,
+} from '@opentelemetry/sdk-trace';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { HttpProvider } from '../../src/providers/http';
 import { callGradingProvider } from '../../src/redteam/providers/shared';
@@ -19,6 +22,7 @@ import {
   withTestCaseSpan,
   withTracedProviderCall,
 } from '../../src/tracing/targetTracer';
+import { registerTracerProvider } from '../../src/tracing/tracerProvider';
 
 import type { ApiProvider, CallApiContextParams, TestSuite } from '../../src/types/index';
 
@@ -29,15 +33,15 @@ vi.mock('../../src/tracing/store', () => ({
 }));
 
 describe('test-case execution trace hierarchy', () => {
-  let tracerProvider: NodeTracerProvider;
+  let tracerProvider: TracerProvider;
   let exporter: InMemorySpanExporter;
 
   beforeAll(() => {
     exporter = new InMemorySpanExporter();
-    tracerProvider = new NodeTracerProvider({
-      spanProcessors: [new SimpleSpanProcessor(exporter)],
+    tracerProvider = new TracerProvider({
+      spanProcessors: [new SimpleSpanProcessor({ exporter: exporter })],
     });
-    tracerProvider.register();
+    registerTracerProvider(tracerProvider);
   });
 
   afterAll(async () => {

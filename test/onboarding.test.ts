@@ -161,6 +161,17 @@ describe('reportProviderAPIKeyWarnings', () => {
   });
 });
 
+const GOOGLE_ONBOARDING_MODELS = [
+  { id: 'vertex:gemini-4-argon', config: { region: 'global' } },
+  { id: 'vertex:gemini-4-hydrogen', config: { region: 'global' } },
+  { id: 'vertex:gemini-3.8-flash', config: { region: 'global' } },
+  { id: 'vertex:gemini-3.7-flash', config: { region: 'global' } },
+  { id: 'vertex:gemini-3.6-flash', config: { region: 'global' } },
+  { id: 'vertex:gemini-3.5-flash-lite', config: { region: 'global' } },
+  'vertex:gemini-3.1-pro-preview',
+  'vertex:gemini-2.5-pro',
+];
+
 describe('createDummyFiles', () => {
   let tempDir: string;
 
@@ -175,7 +186,7 @@ describe('createDummyFiles', () => {
     await rm(tempDir, { recursive: true, force: true });
   });
 
-  it('should generate a valid YAML configuration file that matches TestSuiteConfigSchema', async () => {
+  it('should generate a valid YAML configuration with the current OpenAI models', async () => {
     await createDummyFiles(tempDir, false);
 
     const configCall = mockFs.writeFileSync.mock.calls.find((call: any[]) =>
@@ -202,15 +213,52 @@ describe('createDummyFiles', () => {
     const config = validationResult.data!;
     expect(config.prompts).toHaveLength(2);
     expect(config.providers).toHaveLength(2);
-    expect(config.providers).toContain('openai:gpt-5.6-luna');
-    expect(config.providers).toContain('openai:gpt-5.6-terra');
+    expect(config.providers).toContain('openai:gpt-6-luna');
+    expect(config.providers).toContain('openai:gpt-6-sol');
   });
+
+  it.each(['compare', 'rag', 'agent'])(
+    'writes the advertised OpenAI models for an interactive %s setup',
+    async (action) => {
+      mockSelect.mockResolvedValueOnce(action);
+      if (action !== 'compare') {
+        mockSelect.mockResolvedValueOnce('javascript');
+      }
+      mockSelect.mockImplementationOnce(({ choices }) => {
+        const choice = choices.find(({ name }: { name: string }) => name.startsWith('[OpenAI]'));
+        expect(choice.name).toBe(
+          action === 'agent' ? '[OpenAI] GPT-6 Sol' : '[OpenAI] GPT-6 Luna and Sol',
+        );
+        return choice.value;
+      });
+
+      await createDummyFiles(tempDir, true);
+
+      const configCall = mockFs.writeFileSync.mock.calls.find((call: any[]) =>
+        call[0].toString().endsWith('promptfooconfig.yaml'),
+      );
+      const config = TestSuiteConfigSchema.parse(yaml.load(configCall?.[1] as string));
+      if (action === 'agent') {
+        expect(config.providers).toEqual([
+          expect.objectContaining({
+            id: 'openai:chat:gpt-6-sol',
+            config: expect.objectContaining({
+              reasoning_effort: 'none',
+              tools: [expect.objectContaining({ type: 'function' })],
+            }),
+          }),
+        ]);
+      } else {
+        expect(config.providers).toEqual(['openai:gpt-6-luna', 'openai:gpt-6-sol']);
+      }
+    },
+  );
 
   it('should generate valid YAML configuration for RAG setup', async () => {
     mockSelect
       .mockResolvedValueOnce('rag')
       .mockResolvedValueOnce('python')
-      .mockResolvedValueOnce('openai:gpt-4o');
+      .mockImplementationOnce(({ choices }) => choices[0].value);
 
     await createDummyFiles(tempDir, true);
 
@@ -260,56 +308,41 @@ describe('createDummyFiles', () => {
     expect(
       providerPrompt.choices.find((choice: { name: string }) => choice.name.startsWith('[Google]'))
         .value,
-    ).toEqual([
-      { id: 'vertex:gemini-3.8-flash', config: { region: 'global' } },
-      { id: 'vertex:gemini-3.7-flash', config: { region: 'global' } },
-      { id: 'vertex:gemini-3.6-flash', config: { region: 'global' } },
-      { id: 'vertex:gemini-3.5-flash-lite', config: { region: 'global' } },
-      'vertex:gemini-3.1-pro-preview',
-      'vertex:gemini-2.5-pro',
-    ]);
+    ).toEqual(GOOGLE_ONBOARDING_MODELS);
   });
 
-  it('should report Vertex provider prefixes when Google object providers are selected', async () => {
-    const googleProviders = [
-      { id: 'vertex:gemini-3.6-flash', config: { region: 'global' } },
-      { id: 'vertex:gemini-3.5-flash-lite', config: { region: 'global' } },
-    ];
-    mockSelect.mockResolvedValueOnce('compare').mockResolvedValueOnce(googleProviders);
-
-    const result = await createDummyFiles(tempDir, true);
-
-    expect(result.providerPrefixes).toEqual(['vertex', 'vertex']);
-
-    const configCall = mockFs.writeFileSync.mock.calls.find((call: any[]) =>
-      call[0].toString().endsWith('promptfooconfig.yaml'),
-    );
-    const parsedConfig = yaml.load(configCall?.[1] as string) as {
-      providers: Array<{ id: string; config: { region: string } }>;
-    };
-    expect(parsedConfig.providers).toEqual(googleProviders);
-  });
-
-  it('offers current Gemini Flash models during interactive onboarding', async () => {
-    const googleModels = [
-      { id: 'vertex:gemini-3.8-flash', config: { region: 'global' } },
-      { id: 'vertex:gemini-3.7-flash', config: { region: 'global' } },
-      { id: 'vertex:gemini-3.6-flash', config: { region: 'global' } },
-      { id: 'vertex:gemini-3.5-flash-lite', config: { region: 'global' } },
-      'vertex:gemini-3.1-pro-preview',
-      'vertex:gemini-2.5-pro',
-    ];
-    mockSelect.mockResolvedValueOnce('compare').mockResolvedValueOnce(googleModels);
+  it('should offer current Cohere direct API models', async () => {
+    mockSelect
+      .mockResolvedValueOnce('compare')
+      .mockResolvedValueOnce(['cohere:command-a-plus-05-2026', 'cohere:command-a-03-2025']);
 
     await createDummyFiles(tempDir, true);
+
+    const providerPrompt = mockSelect.mock.calls[1][0];
+    const cohereChoice = providerPrompt.choices.find((choice: { name: string }) =>
+      choice.name.startsWith('[Cohere]'),
+    );
+    expect(cohereChoice).toEqual({
+      name: '[Cohere] Command A+, Command A, ...',
+      value: ['cohere:command-a-plus-05-2026', 'cohere:command-a-03-2025'],
+    });
+  });
+
+  it('writes the advertised Gemini models and reports their Vertex prefixes', async () => {
+    mockSelect.mockResolvedValueOnce('compare').mockImplementationOnce(({ choices }) => {
+      return choices.find((choice: { name: string }) => choice.name.startsWith('[Google]')).value;
+    });
+
+    const result = await createDummyFiles(tempDir, true);
+    expect(result.providerPrefixes).toEqual(GOOGLE_ONBOARDING_MODELS.map(() => 'vertex'));
 
     expect(mockSelect).toHaveBeenNthCalledWith(
       2,
       expect.objectContaining({
         choices: expect.arrayContaining([
           expect.objectContaining({
-            name: '[Google] Gemini 3.8 Flash, 3.7 Flash, 3.6 Flash, 3.5 Flash-Lite, ...',
-            value: googleModels,
+            name: '[Google] Gemini 4 Argon, 4 Hydrogen, 3.8 Flash, 3.7 Flash, 3.6 Flash, 3.5 Flash-Lite, ...',
+            value: GOOGLE_ONBOARDING_MODELS,
           }),
         ]),
       }),
@@ -318,15 +351,18 @@ describe('createDummyFiles', () => {
     const configCall = mockFs.writeFileSync.mock.calls.find((call: any[]) =>
       call[0].toString().endsWith('promptfooconfig.yaml'),
     );
-    const config = yaml.load(configCall?.[1] as string) as { providers: typeof googleModels };
+    const config = yaml.load(configCall?.[1] as string) as {
+      providers: typeof GOOGLE_ONBOARDING_MODELS;
+    };
 
-    expect(config.providers).toEqual(googleModels);
+    expect(config.providers).toEqual(GOOGLE_ONBOARDING_MODELS);
   });
 
   it('offers supported Anthropic models instead of retired Opus 4.1', async () => {
-    mockSelect
-      .mockResolvedValueOnce('compare')
-      .mockResolvedValueOnce(['anthropic:messages:claude-opus-4-6']);
+    mockSelect.mockResolvedValueOnce('compare').mockImplementationOnce(({ choices }) => {
+      return choices.find((choice: { name: string }) => choice.name.startsWith('[Anthropic]'))
+        .value;
+    });
 
     await createDummyFiles(tempDir, true);
 
@@ -345,7 +381,9 @@ describe('createDummyFiles', () => {
     mockFs.existsSync.mockImplementation((path: string) => path.includes('promptfooconfig.yaml'));
 
     mockConfirm.mockResolvedValueOnce(true);
-    mockSelect.mockResolvedValueOnce('compare').mockResolvedValueOnce('openai:gpt-4o');
+    mockSelect
+      .mockResolvedValueOnce('compare')
+      .mockImplementationOnce(({ choices }) => choices[0].value);
 
     await createDummyFiles(tempDir, true);
 

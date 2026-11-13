@@ -1,10 +1,35 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { handleContextRecall } from '../../src/assertions/contextRecall';
 import * as contextUtils from '../../src/assertions/contextUtils';
+import { DEFAULT_RAG_ASSERTION_THRESHOLD } from '../../src/assertions/ragDefaults';
 import * as matchers from '../../src/matchers/rag';
 import { createMockProvider } from '../factories/provider';
 
 import type { AssertionParams, ProviderResponse } from '../../src/types/index';
+
+function createRecallParams(
+  prompt: string | undefined,
+  vars: Record<string, string>,
+  provider = createMockProvider({ response: {} }),
+): Omit<AssertionParams, 'assertion' | 'renderedValue' | 'inverse'> {
+  return {
+    prompt,
+    test: { vars: { ...vars }, options: {} },
+    baseType: 'context-recall',
+    assertionValueContext: {
+      prompt,
+      vars: { ...vars },
+      test: { vars: { ...vars }, options: {} },
+      logProbs: undefined,
+      provider,
+      providerResponse: undefined,
+    },
+    output: 'test output',
+    outputString: 'test output',
+    provider,
+    providerResponse: {} as ProviderResponse,
+  };
+}
 
 vi.mock('../../src/matchers/rag');
 vi.mock('../../src/assertions/contextUtils');
@@ -34,27 +59,11 @@ describe('handleContextRecall', () => {
     mockMatchesContextRecall.mockResolvedValue(mockResult);
     vi.mocked(contextUtils.resolveContext).mockResolvedValue('test context');
 
-    const mockProvider = createMockProvider({ response: {} });
-
     const params: AssertionParams = {
+      ...createRecallParams('test prompt', { context: 'test context' }),
       assertion: { type: 'context-recall', threshold: 0.8 },
       renderedValue: 'Expected fact',
-      prompt: 'test prompt',
-      test: { vars: { context: 'test context' }, options: {} },
-      baseType: 'context-recall',
-      assertionValueContext: {
-        prompt: 'test prompt',
-        vars: { context: 'test context' },
-        test: { vars: { context: 'test context' }, options: {} },
-        logProbs: undefined,
-        provider: mockProvider,
-        providerResponse: undefined,
-      },
       inverse: false,
-      output: 'test output',
-      outputString: 'test output',
-      provider: mockProvider,
-      providerResponse: {} as ProviderResponse,
     };
 
     const result = await handleContextRecall(params);
@@ -87,27 +96,11 @@ describe('handleContextRecall', () => {
     mockMatchesContextRecall.mockResolvedValue(mockResult);
     vi.mocked(contextUtils.resolveContext).mockResolvedValue('test context');
 
-    const mockProvider = createMockProvider({ response: {} });
-
     const params: AssertionParams = {
+      ...createRecallParams('test prompt', { context: 'incomplete context' }),
       assertion: { type: 'context-recall', threshold: 0.7 },
       renderedValue: 'Missing fact',
-      prompt: 'test prompt',
-      test: { vars: { context: 'incomplete context' }, options: {} },
-      baseType: 'context-recall',
-      assertionValueContext: {
-        prompt: 'test prompt',
-        vars: { context: 'incomplete context' },
-        test: { vars: { context: 'incomplete context' }, options: {} },
-        logProbs: undefined,
-        provider: mockProvider,
-        providerResponse: undefined,
-      },
       inverse: false,
-      output: 'test output',
-      outputString: 'test output',
-      provider: mockProvider,
-      providerResponse: {} as ProviderResponse,
     };
 
     const result = await handleContextRecall(params);
@@ -127,32 +120,16 @@ describe('handleContextRecall', () => {
     );
   });
 
-  it('should use default threshold of 0 when not provided', async () => {
+  it('should use default threshold of 0.5 when not provided', async () => {
     const mockResult = { pass: true, score: 1, reason: 'Perfect match' };
     mockMatchesContextRecall.mockResolvedValue(mockResult);
     vi.mocked(contextUtils.resolveContext).mockResolvedValue('test context');
 
-    const mockProvider = createMockProvider({ response: {} });
-
     const params: AssertionParams = {
+      ...createRecallParams('test prompt', { context: 'test context' }),
       assertion: { type: 'context-recall' },
       renderedValue: 'test value',
-      prompt: 'test prompt',
-      test: { vars: { context: 'test context' }, options: {} },
-      baseType: 'context-recall',
-      assertionValueContext: {
-        prompt: 'test prompt',
-        vars: { context: 'test context' },
-        test: { vars: { context: 'test context' }, options: {} },
-        logProbs: undefined,
-        provider: mockProvider,
-        providerResponse: undefined,
-      },
       inverse: false,
-      output: 'test output',
-      outputString: 'test output',
-      provider: mockProvider,
-      providerResponse: {} as ProviderResponse,
     };
 
     const result = await handleContextRecall(params);
@@ -162,11 +139,53 @@ describe('handleContextRecall', () => {
     expect(mockMatchesContextRecall).toHaveBeenCalledWith(
       'test context',
       'test value',
-      0,
+      0.5,
       {},
       { context: 'test context' },
       undefined,
     );
+  });
+
+  it('should invert omitted-threshold not-context-recall results', async () => {
+    const mockResult = {
+      pass: false,
+      score: 0.4,
+      reason: 'Recall 0.40 is < 0.5',
+      metadata: {
+        score: 0.4,
+        totalSentences: 1,
+        attributedSentences: 0,
+      },
+    };
+    mockMatchesContextRecall.mockResolvedValue(mockResult);
+    vi.mocked(contextUtils.resolveContext).mockResolvedValue('test context');
+
+    const params: AssertionParams = {
+      ...createRecallParams('test prompt', { context: 'test context' }),
+      assertion: { type: 'not-context-recall' },
+      renderedValue: 'test value',
+      inverse: true,
+    };
+
+    const result = await handleContextRecall(params);
+
+    expect(mockMatchesContextRecall).toHaveBeenCalledWith(
+      'test context',
+      'test value',
+      0.5,
+      {},
+      { context: 'test context' },
+      undefined,
+    );
+    expect(result.pass).toBe(true);
+    expect(result.score).toBe(0.6);
+    expect(result.reason).toBe('Recall 0.40 is < 0.5');
+    expect(result.metadata).toEqual({
+      context: 'test context',
+      score: 0.4,
+      totalSentences: 1,
+      attributedSentences: 0,
+    });
   });
 
   it('should fall back to prompt when no context variable', async () => {
@@ -174,27 +193,11 @@ describe('handleContextRecall', () => {
     mockMatchesContextRecall.mockResolvedValue(mockResult);
     vi.mocked(contextUtils.resolveContext).mockResolvedValue('test prompt');
 
-    const mockProvider = createMockProvider({ response: {} });
-
     const params: AssertionParams = {
+      ...createRecallParams('test prompt', {}),
       assertion: { type: 'context-recall' },
       renderedValue: 'test output',
-      prompt: 'test prompt',
-      test: { vars: {}, options: {} },
-      baseType: 'context-recall',
-      assertionValueContext: {
-        prompt: 'test prompt',
-        vars: {},
-        test: { vars: {}, options: {} },
-        logProbs: undefined,
-        provider: mockProvider,
-        providerResponse: undefined,
-      },
       inverse: false,
-      output: 'test output',
-      outputString: 'test output',
-      provider: mockProvider,
-      providerResponse: {} as ProviderResponse,
     };
 
     const result = await handleContextRecall(params);
@@ -212,7 +215,7 @@ describe('handleContextRecall', () => {
     expect(mockMatchesContextRecall).toHaveBeenCalledWith(
       'test prompt',
       'test output',
-      0,
+      0.5,
       {},
       {},
       undefined,
@@ -224,27 +227,13 @@ describe('handleContextRecall', () => {
     mockMatchesContextRecall.mockResolvedValue(mockResult);
     vi.mocked(contextUtils.resolveContext).mockResolvedValue('ctx');
 
-    const mockProvider = createMockProvider({ id: 'p', response: {} });
-
     const params: AssertionParams = {
+      ...createRecallParams('prompt', {}, createMockProvider({ id: 'p', response: {} })),
       assertion: { type: 'context-recall', contextTransform: 'expr' },
       renderedValue: 'val',
-      prompt: 'prompt',
-      test: { vars: {}, options: {} },
-      baseType: 'context-recall',
-      assertionValueContext: {
-        prompt: 'prompt',
-        vars: {},
-        test: { vars: {}, options: {} },
-        logProbs: undefined,
-        provider: mockProvider,
-        providerResponse: undefined,
-      },
       inverse: false,
       output: { context: 'hello' } as any,
       outputString: 'str',
-      provider: mockProvider,
-      providerResponse: {} as ProviderResponse,
     };
 
     const result = await handleContextRecall(params);
@@ -259,31 +248,15 @@ describe('handleContextRecall', () => {
       'prompt',
       {},
     );
-    expect(mockMatchesContextRecall).toHaveBeenCalledWith('ctx', 'val', 0, {}, {}, undefined);
+    expect(mockMatchesContextRecall).toHaveBeenCalledWith('ctx', 'val', 0.5, {}, {}, undefined);
   });
 
   it('should throw error when renderedValue is not a string', async () => {
-    const mockProvider = createMockProvider({ response: {} });
-
     const params: AssertionParams = {
+      ...createRecallParams('test prompt', { context: 'test context' }),
       assertion: { type: 'context-recall' },
       renderedValue: 123 as any,
-      prompt: 'test prompt',
-      test: { vars: { context: 'test context' }, options: {} },
-      baseType: 'context-recall',
-      assertionValueContext: {
-        prompt: 'test prompt',
-        vars: { context: 'test context' },
-        test: { vars: { context: 'test context' }, options: {} },
-        logProbs: undefined,
-        provider: mockProvider,
-        providerResponse: undefined,
-      },
       inverse: false,
-      output: 'test output',
-      outputString: 'test output',
-      provider: mockProvider,
-      providerResponse: {} as ProviderResponse,
     };
 
     await expect(handleContextRecall(params)).rejects.toThrow(
@@ -292,31 +265,70 @@ describe('handleContextRecall', () => {
   });
 
   it('should throw error when prompt is missing', async () => {
-    const mockProvider = createMockProvider({ response: {} });
-
     const params: AssertionParams = {
+      ...createRecallParams(undefined, { context: 'test context' }),
       assertion: { type: 'context-recall' },
       renderedValue: 'test value',
-      prompt: undefined,
-      test: { vars: { context: 'test context' }, options: {} },
-      baseType: 'context-recall',
-      assertionValueContext: {
-        prompt: undefined,
-        vars: { context: 'test context' },
-        test: { vars: { context: 'test context' }, options: {} },
-        logProbs: undefined,
-        provider: mockProvider,
-        providerResponse: undefined,
-      },
       inverse: false,
-      output: 'test output',
-      outputString: 'test output',
-      provider: mockProvider,
-      providerResponse: {} as ProviderResponse,
     };
 
     await expect(handleContextRecall(params)).rejects.toThrow(
       'context-recall assertion requires a prompt',
     );
+  });
+
+  it('should fail not-context-recall when recall is at or above the default threshold', async () => {
+    // The companion to the "invert a below-threshold result" case: a passing
+    // grade must invert to a failure. Without this, a regression that only ever
+    // returned `pass: true` from an inverse assertion would go unnoticed.
+    const mockResult = { pass: true, score: 0.9, reason: 'Context contains expected information' };
+    mockMatchesContextRecall.mockResolvedValue(mockResult);
+    vi.mocked(contextUtils.resolveContext).mockResolvedValue('test context');
+
+    const result = await handleContextRecall({
+      ...createRecallParams('test prompt', { context: 'test context' }),
+      assertion: { type: 'not-context-recall' },
+      renderedValue: 'Expected fact',
+      inverse: true,
+    } as AssertionParams);
+
+    expect(result.pass).toBe(false);
+    expect(result.score).toBeCloseTo(0.1);
+    expect(mockMatchesContextRecall).toHaveBeenCalledWith(
+      'test context',
+      'Expected fact',
+      DEFAULT_RAG_ASSERTION_THRESHOLD,
+      {},
+      { context: 'test context' },
+      undefined,
+    );
+  });
+
+  it('should not invert grader errors for not-context-recall', async () => {
+    // A grading provider that errored produced no verdict to invert. Flipping it
+    // would turn an infrastructure failure into a silent pass, so the
+    // grader-error result must survive the inverse untouched.
+    const mockResult = {
+      pass: false,
+      score: 0,
+      reason: 'grading provider failed',
+      metadata: { graderError: true as const },
+    };
+    mockMatchesContextRecall.mockResolvedValue(mockResult);
+    vi.mocked(contextUtils.resolveContext).mockResolvedValue('test context');
+
+    const result = await handleContextRecall({
+      ...createRecallParams('p', { context: 'ctx' }),
+      assertion: { type: 'not-context-recall' },
+      renderedValue: 'val',
+      inverse: true,
+      output: 'out',
+      outputString: 'out',
+    } as AssertionParams);
+
+    expect(result.pass).toBe(false);
+    expect(result.score).toBe(0);
+    expect(result.reason).toBe('grading provider failed');
+    expect(result.metadata).toEqual({ graderError: true, context: 'test context' });
   });
 });

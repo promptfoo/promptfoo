@@ -5,7 +5,7 @@ description: Configure Cloudera's OpenAI-compatible endpoints and Llama models f
 
 # Cloudera
 
-The Cloudera provider allows you to interact with Cloudera's AI endpoints using the OpenAI protocol. It supports chat completion models hosted on Cloudera's infrastructure.
+The Cloudera provider calls Cloudera-hosted chat models using the OpenAI protocol.
 
 ## Configuration
 
@@ -26,7 +26,7 @@ export CDP_TOKEN=your-token-here
 
 Here's a basic example of how to use the Cloudera provider:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: cloudera:your-model-name
     config:
@@ -37,7 +37,11 @@ providers:
 
 ## Configuration Options
 
-The Cloudera provider supports all the standard [OpenAI configuration options](/docs/providers/openai#configuring-parameters) plus these additional Cloudera-specific options:
+The Cloudera provider supports the standard [OpenAI configuration options](/docs/providers/openai#configuring-parameters) plus these additional Cloudera-specific options.
+
+By default, the provider builds `apiBaseUrl` from `domain`, `namespace`, and `endpoint` and reads
+the API key from `CDP_TOKEN`. Set `apiBaseUrl` to use a different base URL or `apiKeyEnvar` to
+read the key from a different environment variable.
 
 | Parameter   | Description                                                                        |
 | ----------- | ---------------------------------------------------------------------------------- |
@@ -84,6 +88,7 @@ The Cloudera provider is built on top of the OpenAI protocol, which means it sup
 Example chat conversation:
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - 'You are a helpful assistant. Answer the following question: {{user_input}}'
 

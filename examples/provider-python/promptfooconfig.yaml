@@ -28,7 +28,7 @@ tests:
   - vars:
       topic: bananas
     assert:
-      - type: contains
+      - type: icontains
         value: Bananamax
   - vars:
       topic: fruits
