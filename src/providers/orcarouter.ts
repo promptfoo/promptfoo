@@ -165,7 +165,8 @@ export class OrcaRouterProvider extends OpenAiChatCompletionProvider {
       );
     if (
       'temperature' in body &&
-      ((config.isReasoningModel !== false && !this.supportsTemperature()) || anyFallbackRejectsTemperature)
+      ((config.isReasoningModel !== false && !this.supportsTemperature()) ||
+        anyFallbackRejectsTemperature)
     ) {
       delete body.temperature;
     }
