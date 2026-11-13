@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { isApiProvider, isProviderOptions } from '../../src/types/providers';
 import { createMockProvider, createProviderResponse } from '../factories/provider';
 
-import type { ProviderOptions } from '../../src/types/providers';
+import type { ProviderResponse as PortableProviderResponse } from '../../src/contracts/providers';
+import type { ProviderOptions, ProviderResponse } from '../../src/types/providers';
 
 describe('isApiProvider', () => {
   it('should correctly identify valid ApiProvider objects', () => {
@@ -107,4 +108,15 @@ describe('isProviderOptions', () => {
       expect(isProviderOptions(options)).toBe(true);
     });
   });
+});
+
+describe('ProviderResponse metadata compatibility', () => {
+  it.each(['custom-provider', 17, { source: 'custom-provider' }])(
+    'accepts existing custom errorOrigin metadata: %j',
+    (errorOrigin) => {
+      const response: ProviderResponse = { metadata: { errorOrigin } };
+      const portable: PortableProviderResponse = response;
+      expect(portable.metadata?.errorOrigin).toEqual(errorOrigin);
+    },
+  );
 });
