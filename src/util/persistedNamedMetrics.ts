@@ -1,11 +1,8 @@
 import { getEnvBool } from '../envars';
 
-import type { GradingResult, Vars } from '../types/index';
 import type { NamedMetricAccumulator } from './namedMetrics';
 
-type NamedMetricGradingResult =
-  | Pick<GradingResult, 'componentResults' | 'namedScoreWeights'>
-  | Record<string, unknown>;
+type NamedMetricGradingResult = Record<string, unknown>;
 
 type MetricNameRenderer = (
   metric: string | undefined,
@@ -112,7 +109,7 @@ export function renderPersistedMetricName(
 function getContributingAssertionCounts(
   namedScores: Record<string, unknown>,
   gradingResult: NamedMetricGradingResult | null | undefined,
-  testVars: Vars,
+  testVars: Record<string, unknown>,
   renderComponentMetric: MetricNameRenderer,
 ): Map<string, number> | undefined {
   const counts = new Map<string, number>();
@@ -241,7 +238,7 @@ export function accumulateNamedMetrics(
   }: {
     namedScores: Record<string, unknown>;
     gradingResult: NamedMetricGradingResult | null | undefined;
-    testVars?: Vars;
+    testVars?: Record<string, unknown>;
   },
   renderComponentMetric: MetricNameRenderer = renderPersistedMetricName,
 ): void {
