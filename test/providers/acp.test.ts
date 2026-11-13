@@ -75,6 +75,7 @@ vi.mock('@agentclientprotocol/sdk', () => mockAcpSdk);
 
 // Mock child_process.spawn
 const mockChildProcess = {
+  once: vi.fn(),
   stdin: { write: vi.fn(), end: vi.fn() },
   stdout: { on: vi.fn(), pipe: vi.fn() },
   stderr: { on: vi.fn() },

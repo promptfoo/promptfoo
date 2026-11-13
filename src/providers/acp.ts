@@ -15,6 +15,7 @@ import {
   resolveAgenticWorkingDir,
 } from './agentic-utils';
 import { providerRegistry } from './providerRegistry';
+import { shouldBustProviderCache } from './shared';
 
 import type { EnvOverrides } from '../types/env';
 import type {
@@ -42,7 +43,7 @@ export interface AcpProviderConfig {
   /** Model to request (passed via ACP set_config_option) */
   model?: string;
 
-  /** Permission handling: auto_approve (default) or deny */
+  /** Permission handling: auto_approve or deny (default) */
   permission_mode?: 'auto_approve' | 'deny';
 
   /** Extra environment variables for the agent subprocess */
@@ -143,7 +144,11 @@ export class AcpProvider implements ApiProvider {
       resolveAgenticWorkingDir(this.config.working_dir, cliState.basePath) || process.cwd();
 
     // Check cache
-    const { cached, cacheResult } = await this.checkCache(prompt, workingDir);
+    const { cached, cacheResult } = await this.checkCache(
+      prompt,
+      workingDir,
+      shouldBustProviderCache(context),
+    );
     if (cached) {
       return cached;
     }
@@ -159,11 +164,7 @@ export class AcpProvider implements ApiProvider {
         traceparent: context?.traceparent,
         requestBody: prompt,
       },
-      async (span) => {
-        // Tag trace with the actual agent binary for filtering
-        const cmd = this.resolveCommand();
-        span.setAttribute('gen_ai.agent.binary', cmd.join(' '));
-
+      async () => {
         const startTime = Date.now();
 
         let result: ProviderResponse;
@@ -265,6 +266,9 @@ export class AcpProvider implements ApiProvider {
         env: agentEnv,
       });
 
+      const processError = new Promise<never>((_, reject) => {
+        agentProcess!.once('error', reject);
+      });
       const input = Writable.toWeb(agentProcess.stdin!);
       const output = Readable.toWeb(agentProcess.stdout!);
       const stream = acpSdk.ndJsonStream(input, output);
@@ -281,9 +285,11 @@ export class AcpProvider implements ApiProvider {
         clientBuilder.onRequest(acpSdk.methods.client.session.requestPermission, (ctx: any) => {
           const opts = ctx.params.options || [];
           const first =
-            opts.find((o: any) => o.kind === 'allow_once' || o.kind === 'allow_always') || opts[0];
+            opts.find((o: any) => o.kind === 'allow_once' || o.kind === 'allow_always');
           return {
-            outcome: { outcome: 'selected', optionId: first?.optionId || '' },
+            outcome: first?.optionId
+              ? { outcome: 'selected', optionId: first.optionId }
+              : { outcome: 'cancelled' },
           };
         });
       } else {
@@ -310,7 +316,7 @@ export class AcpProvider implements ApiProvider {
               tc = { id: tcId, name: '' };
               toolMap.set(tcId, tc);
             }
-            if (update.title) {
+            if (update.title && !tc.name) {
               tc.name = update.title;
             }
             if (update.rawInput) {
@@ -328,6 +334,7 @@ export class AcpProvider implements ApiProvider {
 
       // Connect and execute
       const promptResult = await Promise.race([
+        processError,
         clientBuilder.connectWith(stream, async (ctx: any) => {
           // Initialize
           await ctx.request(acpSdk.methods.agent.initialize, {
@@ -347,8 +354,8 @@ export class AcpProvider implements ApiProvider {
                   configId: 'model',
                   value: this.config.model,
                 });
-              } catch (err) {
-                logger.debug(`[ACP] Failed to set model: ${err}`);
+              } catch {
+                throw new Error('The ACP agent rejected the configured model');
               }
             }
 
@@ -384,6 +391,9 @@ export class AcpProvider implements ApiProvider {
                   reject(err);
                 };
                 abortSignal.addEventListener('abort', abortHandler, { once: true });
+                if (abortSignal.aborted) {
+                  abortHandler();
+                }
               }),
             ]
           : []),
@@ -455,14 +465,6 @@ export class AcpProvider implements ApiProvider {
         if (tc.id) {
           attributes['gen_ai.tool.call.id'] = tc.id;
         }
-        if (tc.input) {
-          const input = typeof tc.input === 'string' ? tc.input : JSON.stringify(tc.input);
-          attributes['tool.input'] = input.slice(0, 4096);
-        }
-        if (tc.output) {
-          const output = typeof tc.output === 'string' ? tc.output : JSON.stringify(tc.output);
-          attributes['tool.output'] = output.slice(0, 4096);
-        }
         if (tc.is_error) {
           attributes['tool.is_error'] = true;
         }
@@ -515,7 +517,8 @@ export class AcpProvider implements ApiProvider {
       Object.assign(base, this.config.env);
     }
 
-    // Propagate tracing if enabled
+    // Propagate only the current trace, and only when opted in.
+    delete base.TRACEPARENT;
     if (this.config.deep_tracing) {
       const traceparent = getTraceparent();
       if (traceparent) {
@@ -538,10 +541,11 @@ export class AcpProvider implements ApiProvider {
   private async checkCache(
     prompt: string,
     workingDir: string,
+    bustCache: boolean,
   ): Promise<{ cached?: ProviderResponse; cacheResult?: CacheCheckResult }> {
     try {
       const cacheResult = await initializeAgenticCache(
-        { cacheKeyPrefix: 'acp', workingDir },
+        { cacheKeyPrefix: 'acp', workingDir, bustCache },
         { prompt, config: this.config },
       );
       const cached = await getCachedResponse(cacheResult);
