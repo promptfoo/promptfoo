@@ -129,10 +129,7 @@ export class ElevenLabsWebSocketClient {
             type: 'error',
             data: parsed.error,
           });
-        } else if (parsed.isFinal) {
-          // Final output: generation is complete and carries no audio
-          callback({ type: 'flush' });
-        } else {
+        } else if (!parsed.isFinal) {
           logger.debug('[ElevenLabs WebSocket] Received unknown message type', {
             keys: Object.keys(parsed),
           });
@@ -140,6 +137,10 @@ export class ElevenLabsWebSocketClient {
             type: 'unknown',
             data: parsed,
           });
+        }
+
+        if (parsed.isFinal && !parsed.error) {
+          callback({ type: 'flush' });
         }
       } catch (error) {
         logger.error('[ElevenLabs WebSocket] Failed to parse message', { error });

@@ -43,18 +43,23 @@ async function connectClient() {
   return { client, socket: sockets[0] };
 }
 
-it('reports the final output message as the end of the stream', async () => {
-  const { client, socket } = await connectClient();
-  const messages: StreamingMessage[] = [];
-  client.onMessage((message) => messages.push(message));
+it.each([null, Buffer.from('tail').toString('base64')])(
+  'reports the final output message as the end of the stream (audio: %s)',
+  async (finalAudio) => {
+    const { client, socket } = await connectClient();
+    const messages: StreamingMessage[] = [];
+    client.onMessage((message) => messages.push(message));
 
-  const audio = Buffer.from('audio').toString('base64');
-  socket.emit('message', Buffer.from(JSON.stringify({ audio, isFinal: null })));
-  socket.emit('message', Buffer.from(JSON.stringify({ audio: null, isFinal: true })));
+    const audio = Buffer.from('audio').toString('base64');
+    socket.emit('message', Buffer.from(JSON.stringify({ audio, isFinal: null })));
+    socket.emit('message', Buffer.from(JSON.stringify({ audio: finalAudio, isFinal: true })));
 
-  expect(messages.map(({ type }) => type)).toEqual(['audio', 'flush']);
-  client.close();
-});
+    expect(messages.map(({ type }) => type)).toEqual(
+      finalAudio ? ['audio', 'audio', 'flush'] : ['audio', 'flush'],
+    );
+    client.close();
+  },
+);
 
 it('passes the close code and reason to the close handler', async () => {
   const { client, socket } = await connectClient();
