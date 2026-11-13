@@ -30,7 +30,7 @@ The answer is wrong or incomplete because the retriever never returned the relev
 **Best signals**
 
 - `contains` / `contains-all` on retrieval output
-- `context-recall`
+- `context-recall` with a reference answer in `value` and a `contextTransform` that returns the retrieved passages
 - `context-relevance` when you also want to inspect how much returned context is actually needed
 
 **Starter test**
@@ -68,16 +68,20 @@ The retriever returns documents, but they are noisy or unrelated to the user que
 
 **Starter test**
 
+Use this with a retrieval-only provider that returns the retrieved passages as its text output.
+
 ```yaml
+prompts:
+  - '{{ query }}'
+providers:
+  - file://retrieve.py
+
 tests:
   - vars:
       query: What is our parental leave policy?
-      context: |
-        handbook.md: Expense reimbursement requires manager approval above $500.
-        security.md: Passwords must be rotated every 90 days.
-
     assert:
       - type: context-relevance
+        contextTransform: output
         threshold: 0.5
 ```
 
@@ -161,26 +165,20 @@ The model invents a document name, link, or citation span.
 
 **Starter test**
 
+Ask the generator to return a JSON object with an `answer` and a `citations` array of exact file names or URLs. Compare each citation against the retrieved source IDs.
+
 ```yaml
 assert:
+  - type: is-json
   - type: javascript
     value: |
-      const allowedFiles = new Set(['handbook.md', 'benefits.pdf']);
-      const allowedUrls = new Set(['https://kb.example.com/benefits']);
-      const urls = Array.from(output.matchAll(/https?:\/\/[^\s)\]}>\,"']+/g), (m) =>
-        m[0].replace(/[.,;:!?]+$/, ''),
-      );
-      // Strip matched URLs before scanning for bare file tokens, otherwise a URL like
-      // https://kb.example.com/reports/quarterly.pdf also matches the file regex on its
-      // basename ("quarterly.pdf"), which then fails allowedFiles even though the URL
-      // itself is allowlisted.
-      const outputWithoutUrls = urls.reduce((text, url) => text.replaceAll(url, ''), output);
-      const files = Array.from(outputWithoutUrls.matchAll(/\b[\w.-]+\.(?:md|pdf)\b/g), (m) => m[0]);
-      return (
-        files.length + urls.length > 0 &&
-        files.every((name) => allowedFiles.has(name)) &&
-        urls.every((url) => allowedUrls.has(url))
-      );
+      const allowed = new Set([
+        'handbook.md',
+        'https://kb.example.com/wiki/Leave_(policy)',
+      ]);
+      const { citations } = JSON.parse(output);
+      return Array.isArray(citations) && citations.length > 0 &&
+        citations.every((source) => allowed.has(source));
 ```
 
 **Debug hint**
@@ -234,9 +232,17 @@ Two retrieved documents disagree, but the model answers with false confidence in
 **Starter test**
 
 ```yaml
-assert:
-  - type: llm-rubric
-    value: The answer should acknowledge conflicting evidence when the retrieved documents disagree.
+tests:
+  - vars:
+      query: How many weeks of leave are available?
+      context: |
+        The 2024 handbook says 12 weeks.
+        The 2025 policy memo says 16 weeks.
+    assert:
+      - type: llm-rubric
+        value: |
+          The answer should acknowledge the discrepancy in the following evidence.
+          {{ context }}
 ```
 
 **Debug hint**
