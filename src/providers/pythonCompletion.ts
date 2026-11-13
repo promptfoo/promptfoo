@@ -279,8 +279,7 @@ export class PythonProvider implements ApiProvider {
 
       const args = buildScriptArgs(apiType, prompt, optionsWithProcessedConfig, sanitizedContext);
 
-      // args carry the provider config (API keys included): pass them as the logger's sanitized context
-      logger.debug(`Executing python script ${absPath} via worker pool`, { args });
+      logger.debug(`Executing python script ${absPath} via worker pool`);
 
       const functionName = this.functionName || apiType;
       // Use worker pool instead of runPython

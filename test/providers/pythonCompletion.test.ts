@@ -11,7 +11,6 @@ import { PythonProvider } from '../../src/providers/pythonCompletion';
 import { getConfiguredPythonPath } from '../../src/python/pythonUtils';
 import { PythonWorkerPool } from '../../src/python/workerPool';
 import * as fileReference from '../../src/util/fileReference';
-import { sanitizeObject } from '../../src/util/sanitizer';
 import { createBasePathOptions } from '../factories/literalFixtures';
 import { createDeferred, mockProcessEnv } from '../util/utils';
 import type { Mock } from 'vitest';
@@ -212,9 +211,9 @@ describe('PythonProvider', () => {
       ]);
     });
 
-    it('should keep the provider config out of every log message', async () => {
+    it('should keep the provider config out of log messages and context', async () => {
       const secret = 'fake-api-key-for-this-test';
-      const provider = new PythonProvider('script.py', { config: { apiKey: secret } });
+      const provider = new PythonProvider('script.py', { config: { connection: { opaque: secret } } });
       // with the cache on, so the cache key and caching messages are logged too
       mockIsCacheEnabled.mockReturnValue(true);
       mockGetCache.mockResolvedValue({
@@ -228,15 +227,7 @@ describe('PythonProvider', () => {
       const calls = (['debug', 'info', 'warn', 'error'] as const).flatMap(
         (level) => vi.mocked(logger[level]).mock.calls,
       );
-      expect(calls.map(([message]) => String(message)).filter((m) => m.includes(secret))).toEqual(
-        [],
-      );
-      const call = calls.find(([message]) => String(message).startsWith('Executing python script'));
-      expect(call).toBeDefined();
-      const [, context] = call!;
-      // the args go in the context argument, which the logger sanitizes before writing
-      expect(JSON.stringify(context)).toContain(secret);
-      expect(JSON.stringify(sanitizeObject(context))).not.toContain(secret);
+      expect(JSON.stringify(calls)).not.toContain(secret);
     });
 
     describe('error handling', () => {

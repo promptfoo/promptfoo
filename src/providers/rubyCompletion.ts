@@ -181,8 +181,7 @@ export class RubyProvider implements ApiProvider {
 
       const args = buildScriptArgs(apiType, prompt, optionsWithProcessedConfig, sanitizedContext);
 
-      // args carry the provider config (API keys included): pass them as the logger's sanitized context
-      logger.debug(`Running ruby script ${absPath} with scriptPath ${this.scriptPath}`, { args });
+      logger.debug(`Running ruby script ${absPath} with scriptPath ${this.scriptPath}`);
 
       const functionName = this.functionName || apiType;
       const result = await runRuby(absPath, functionName, args, {

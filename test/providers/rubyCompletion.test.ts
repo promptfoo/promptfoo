@@ -7,7 +7,6 @@ import logger from '../../src/logger';
 import { RubyProvider } from '../../src/providers/rubyCompletion';
 import { runRuby } from '../../src/ruby/rubyUtils';
 import * as fileReference from '../../src/util/fileReference';
-import { sanitizeObject } from '../../src/util/sanitizer';
 import { createBasePathOptions } from '../factories/literalFixtures';
 
 const fsMocks = vi.hoisted(() => ({
@@ -155,12 +154,12 @@ describe('RubyProvider', () => {
       expect(result).toEqual({ output: 'test output', cached: false });
     });
 
-    it('should keep the provider config out of every log message', async () => {
+    it('should keep the provider config out of log messages and context', async () => {
       const secret = 'fake-api-key-for-this-test';
       const spies = (['debug', 'info', 'warn', 'error'] as const).map((level) =>
         vi.spyOn(logger, level),
       );
-      const provider = new RubyProvider('script.rb', { config: { apiKey: secret } });
+      const provider = new RubyProvider('script.rb', { config: { connection: { opaque: secret } } });
       // with the cache on, so the cache key and caching messages are logged too
       mockIsCacheEnabled.mockReturnValue(true);
       mockGetCache.mockResolvedValue({
@@ -173,15 +172,7 @@ describe('RubyProvider', () => {
 
       const calls = spies.flatMap((spy) => spy.mock.calls);
       spies.forEach((spy) => spy.mockRestore());
-      expect(calls.map(([message]) => String(message)).filter((m) => m.includes(secret))).toEqual(
-        [],
-      );
-      const call = calls.find(([message]) => String(message).startsWith('Running ruby script'));
-      expect(call).toBeDefined();
-      const [, context] = call!;
-      // the args go in the context argument, which the logger sanitizes before writing
-      expect(JSON.stringify(context)).toContain(secret);
-      expect(JSON.stringify(sanitizeObject(context))).not.toContain(secret);
+      expect(JSON.stringify(calls)).not.toContain(secret);
     });
 
     it('should not mutate the caller context when sanitizing', async () => {

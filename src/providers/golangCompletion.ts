@@ -105,8 +105,8 @@ export class GolangProvider implements ApiProvider {
 
       const args =
         apiType === 'call_api' ? [prompt, this.options, context] : [prompt, this.options];
-      // args carry the provider config (API keys included): pass them as the logger's sanitized context
-      logger.debug(`Running Golang script ${absPath} with scriptPath ${this.scriptPath}`, { args });
+
+      logger.debug(`Running Golang script ${absPath} with scriptPath ${this.scriptPath}`);
       const functionName = this.functionName || apiType;
 
       let tempDir: string | undefined;
