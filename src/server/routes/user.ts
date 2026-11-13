@@ -97,14 +97,7 @@ userRouter.get('/email/status', async (req: Request, res: Response): Promise<voi
     const { validate } = queryResult.data;
     const result = await checkEmailStatus({ validate });
 
-    res.json(
-      UserSchemas.EmailStatus.Response.parse({
-        hasEmail: result.hasEmail,
-        email: result.email,
-        status: result.status,
-        message: result.message,
-      }),
-    );
+    res.json(UserSchemas.EmailStatus.Response.parse(result));
   } catch (error) {
     logger.error(`Error checking email status: ${error}`);
     res.status(500).json({ error: 'Failed to check email status' });

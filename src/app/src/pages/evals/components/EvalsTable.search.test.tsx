@@ -2,7 +2,7 @@ import { TooltipProvider } from '@app/components/ui/tooltip';
 import { mockCallApiResponse } from '@app/tests/apiMocks';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import EvalsTable from './EvalsTable';
 
@@ -13,7 +13,7 @@ describe('EvalsTable search', () => {
     vi.clearAllMocks();
   });
 
-  it('searches displayed descriptions when the first row has no description', async () => {
+  it('searches names and hidden IDs and can select the current evaluation', async () => {
     mockCallApiResponse({
       data: [
         {
@@ -39,10 +39,16 @@ describe('EvalsTable search', () => {
       ],
     });
 
+    const onEvalSelected = vi.fn();
+
     render(
       <TooltipProvider delayDuration={0}>
         <MemoryRouter>
-          <EvalsTable onEvalSelected={vi.fn()} showUtilityButtons />
+          <EvalsTable
+            onEvalSelected={onEvalSelected}
+            focusedEvalId="eval-target"
+            showUtilityButtons
+          />
         </MemoryRouter>
       </TooltipProvider>,
     );
@@ -58,5 +64,20 @@ describe('EvalsTable search', () => {
       expect(screen.getByText('Persistent Python worker smoke test')).toBeInTheDocument();
       expect(screen.queryByText('eval-newest')).not.toBeInTheDocument();
     });
+
+    expect(screen.queryByRole('columnheader', { name: /^ID/ })).not.toBeInTheDocument();
+    const search = screen.getByRole('searchbox', { name: 'Search evaluations' });
+    await userEvent.clear(search);
+    await userEvent.type(search, 'eval-target');
+    await waitFor(() => {
+      expect(
+        screen.getByRole('link', { name: 'Persistent Python worker smoke test' }),
+      ).toBeInTheDocument();
+      expect(screen.queryByText('eval-newest')).not.toBeInTheDocument();
+    });
+    await userEvent.click(
+      screen.getByRole('link', { name: 'Persistent Python worker smoke test' }),
+    );
+    expect(onEvalSelected).toHaveBeenCalledExactlyOnceWith('eval-target');
   });
 });

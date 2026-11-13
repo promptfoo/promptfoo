@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, expectTypeOf, it } from 'vitest';
 import { ALL_PLUGINS, ALL_STRATEGIES } from '../../src/redteam/constants';
 import { BlobsSchemas } from '../../src/types/api/blobs';
 import {
@@ -129,32 +129,11 @@ describe('API schema red-team coverage', () => {
         MediaSchemas.Info.Params.safeParse({ type: 'audio', filename: 'abcdef123456.mp3' }).success,
       ).toBe(true);
       expect(
-        MediaSchemas.Info.Params.safeParse({
-          type: 'audio',
-          filename: 'abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890.mp3',
-        }).success,
-      ).toBe(true);
-      expect(
-        MediaSchemas.Info.Params.safeParse({
-          type: 'audio',
-          filename: `${'A'.repeat(64)}.MP3`,
-        }).success,
-      ).toBe(true);
-      expect(
         MediaSchemas.Info.Params.safeParse({ type: 'document', filename: 'abcdef123456.pdf' })
           .success,
       ).toBe(false);
       expect(
         MediaSchemas.Info.Params.safeParse({ type: 'audio', filename: '../../passwd' }).success,
-      ).toBe(false);
-    });
-
-    it.each([11, 13, 63, 65])('rejects %i-character media hashes', (length) => {
-      expect(
-        MediaSchemas.Info.Params.safeParse({
-          type: 'audio',
-          filename: `${'a'.repeat(length)}.mp3`,
-        }).success,
       ).toBe(false);
     });
 
@@ -299,6 +278,11 @@ describe('API schema red-team coverage', () => {
       expect(parsed.history).toEqual([]);
       expect(parsed.turn).toBe(0);
       expect(parsed.count).toBe(1);
+      expectTypeOf(parsed.plugin.config).toMatchTypeOf<Record<string, unknown>>();
+      expectTypeOf(parsed.strategy.config).toMatchTypeOf<Record<string, unknown>>();
+      expectTypeOf(parsed.history).toMatchTypeOf<unknown[]>();
+      expectTypeOf(parsed.turn).toEqualTypeOf<number>();
+      expectTypeOf(parsed.count).toEqualTypeOf<number>();
       expect(
         RedteamSchemas.GenerateTest.Request.parse({
           plugin: { id: VALID_PLUGIN_ID },

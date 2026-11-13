@@ -2,7 +2,7 @@ import React, { createContext, useCallback, useContext, useEffect, useState } fr
 
 import { useCart } from './useFourthwall';
 
-import type { FourthwallCart, FourthwallProduct } from './types';
+import type { FourthwallCart, FourthwallCartItem, FourthwallCatalogItem } from './types';
 
 const COUPON_STORAGE_KEY = 'promptfoo_coupon_code';
 
@@ -15,9 +15,12 @@ interface CartContextValue {
 
   // Cart actions
   addToCart: (variantId: string, quantity?: number) => Promise<FourthwallCart | undefined>;
-  removeFromCart: (itemId: string) => Promise<FourthwallCart | undefined>;
-  updateQuantity: (itemId: string, quantity: number) => Promise<FourthwallCart | undefined>;
-  clearCart: () => void;
+  addBundleToCart: (bundleId: string, variantIds: string[]) => Promise<FourthwallCart | undefined>;
+  removeFromCart: (item: FourthwallCartItem) => Promise<FourthwallCart | undefined>;
+  updateQuantity: (
+    item: FourthwallCartItem,
+    quantity: number,
+  ) => Promise<FourthwallCart | undefined>;
 
   // Cart drawer state
   isCartOpen: boolean;
@@ -25,8 +28,8 @@ interface CartContextValue {
   closeCart: () => void;
 
   // Product modal state
-  selectedProduct: FourthwallProduct | null;
-  openProductModal: (product: FourthwallProduct) => void;
+  selectedProduct: FourthwallCatalogItem | null;
+  openProductModal: (product: FourthwallCatalogItem) => void;
   closeProductModal: () => void;
 
   // Coupon state
@@ -43,13 +46,13 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     error,
     itemCount,
     addToCart: addToCartApi,
+    addBundleToCart: addBundleToCartApi,
     removeFromCart: removeFromCartApi,
     updateQuantity: updateQuantityApi,
-    clearCart: clearCartApi,
   } = useCart();
 
   const [isCartOpen, setIsCartOpen] = useState(false);
-  const [selectedProduct, setSelectedProduct] = useState<FourthwallProduct | null>(null);
+  const [selectedProduct, setSelectedProduct] = useState<FourthwallCatalogItem | null>(null);
   const [couponCode, setCouponCode] = useState<string | null>(null);
 
   const ingestCouponFromUrl = useCallback(() => {
@@ -68,7 +71,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       const newUrl = params.toString()
         ? `${window.location.pathname}?${params.toString()}`
         : window.location.pathname;
-      window.history.replaceState(window.history.state, '', newUrl);
+      window.history.replaceState(window.history.state, '', `${newUrl}${window.location.hash}`);
       return true;
     }
     return false;
@@ -91,25 +94,23 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 
   // Re-check URL on client-side navigations (Docusaurus SPA route changes)
   useEffect(() => {
-    const handleRouteChange = () => ingestCouponFromUrl();
-
     // Docusaurus uses pushState/replaceState for navigation
-    window.addEventListener('popstate', handleRouteChange);
+    window.addEventListener('popstate', ingestCouponFromUrl);
 
     // Patch pushState/replaceState to detect Docusaurus client-side navigation
     const originalPushState = window.history.pushState;
     const originalReplaceState = window.history.replaceState;
     window.history.pushState = function (...args) {
       originalPushState.apply(this, args);
-      handleRouteChange();
+      ingestCouponFromUrl();
     };
     window.history.replaceState = function (...args) {
       originalReplaceState.apply(this, args);
-      handleRouteChange();
+      ingestCouponFromUrl();
     };
 
     return () => {
-      window.removeEventListener('popstate', handleRouteChange);
+      window.removeEventListener('popstate', ingestCouponFromUrl);
       window.history.pushState = originalPushState;
       window.history.replaceState = originalReplaceState;
     };
@@ -127,7 +128,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   const openCart = useCallback(() => setIsCartOpen(true), []);
   const closeCart = useCallback(() => setIsCartOpen(false), []);
 
-  const openProductModal = useCallback((product: FourthwallProduct) => {
+  const openProductModal = useCallback((product: FourthwallCatalogItem) => {
     setSelectedProduct(product);
   }, []);
 
@@ -147,15 +148,26 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     [addToCartApi],
   );
 
+  const addBundleToCart = useCallback(
+    async (bundleId: string, variantIds: string[]) => {
+      const result = await addBundleToCartApi(bundleId, variantIds);
+      if (result) {
+        setIsCartOpen(true);
+      }
+      return result;
+    },
+    [addBundleToCartApi],
+  );
+
   const value: CartContextValue = {
     cart,
     isLoading,
     error,
     itemCount,
     addToCart,
+    addBundleToCart,
     removeFromCart: removeFromCartApi,
     updateQuantity: updateQuantityApi,
-    clearCart: clearCartApi,
     isCartOpen,
     openCart,
     closeCart,

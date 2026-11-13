@@ -14,7 +14,7 @@ export interface SystemError extends Error {
  * References:
  * - OpenAI: https://platform.openai.com/docs/guides/error-codes/api-errors
  * - Azure OpenAI: https://learn.microsoft.com/en-us/azure/ai-services/openai/reference
- * - Anthropic: https://docs.anthropic.com/en/api/errors
+ * - Anthropic: https://platform.claude.com/docs/en/api/errors
  *
  * Note: Azure OpenAI is known to return `insufficient_quota` for both billing
  * exhaustion AND per-minute deployment quota saturation. The
@@ -224,6 +224,30 @@ export class HttpRateLimitError extends Error {
   }
 }
 
+/** Recognize an HTTP status in provider diagnostics without treating token counts or IDs as statuses. */
+export function hasHttp429Status(message = ''): boolean {
+  return (
+    /\b(?:HTTP(?:\/[\d.]+)?|status(?:\s+code)?)\b[\s:(=]+429\b/i.test(message) ||
+    /^API call error: Status \w+, Code 429, Message:/i.test(message) ||
+    /^(?:[\w-]+ )*(?:error|failed|returned) (?:429|\(429\)):/i.test(message) ||
+    /"(?:code|status(?:Code)?)"\s*:\s*(?:429|"429")\s*[,}]/i.test(message) ||
+    /\berror(?:\s*\(429\)|:\s*429(?:[.!]?\s*$|\s*[:({\[]))/i.test(message) ||
+    /^\s*(?:429|\(429\))\s*$/.test(message) ||
+    /\b429\s+too many requests\b|\breturned\s+429[.!]?\s*$/i.test(message) ||
+    /\b429 status code \(no body\)$/i.test(message)
+  );
+}
+
+export function isRateLimitOrQuotaMessage(errorMessage: string): boolean {
+  const lower = errorMessage.toLowerCase();
+  return (
+    lower.includes('rate limit') ||
+    lower.includes('quota exceeded') ||
+    lower.includes('too many requests') ||
+    hasHttp429Status(errorMessage)
+  );
+}
+
 export function isHardQuotaCode(code: string | undefined): boolean {
   return code !== undefined && HARD_QUOTA_ERROR_CODES.has(code);
 }
@@ -315,6 +339,14 @@ export function extractRateLimitErrorCode(body: unknown): string | undefined {
   // over a transport-level code on an SDK wrapper.
   if (typeof root.error === 'object' && root.error !== null) {
     const err = root.error as Record<string, unknown>;
+    const metadata = err.metadata;
+    const providerCode =
+      typeof metadata === 'object' && metadata !== null
+        ? (metadata as Record<string, unknown>).provider_code
+        : undefined;
+    if (typeof providerCode === 'string' && isDefinitiveBillingCode(providerCode.toLowerCase())) {
+      return providerCode.toLowerCase();
+    }
     if (typeof err.code === 'string' && err.code.length > 0) {
       return err.code;
     }
@@ -434,4 +466,14 @@ export function isTransientConnectionError(error: Error | undefined): boolean {
  */
 export function isAbortError(error: unknown): boolean {
   return error instanceof Error && (error.name === 'AbortError' || error.name === 'AbortException');
+}
+
+export function getAbortError(signal: AbortSignal): Error {
+  const reason = signal.reason;
+  if (reason instanceof Error && reason.name === 'AbortError') {
+    return reason;
+  }
+  const error = new Error(reason instanceof Error ? reason.message : 'Request was aborted');
+  error.name = 'AbortError';
+  return error;
 }

@@ -83,8 +83,7 @@ export interface MediaStorageProvider {
 
   /**
    * Store media data
-   * @param data - Binary data to store. Callers must not mutate this borrowed buffer until the
-   * returned promise settles.
+   * @param data - Binary data to store
    * @param metadata - Associated metadata
    * @returns Storage result with reference
    */
@@ -97,6 +96,9 @@ export interface MediaStorageProvider {
    * @throws Error if not found
    */
   retrieve(key: string): Promise<Buffer>;
+
+  /** Retrieve bytes with their persisted MIME type, when the provider supports it. */
+  retrieveWithMetadata?(key: string): Promise<{ data: Buffer; contentType?: string }>;
 
   /**
    * Check if media exists
