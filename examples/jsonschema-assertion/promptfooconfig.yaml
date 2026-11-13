@@ -23,35 +23,23 @@ providers:
   - id: 'openai:gpt-6-sol'
     label: 'gpt-6-sol'
 
+defaultTest:
+  assert:
+    - type: is-json
+      value:
+        type: object
+        properties:
+          sentiment:
+            enum: ['positive', 'negative', 'neutral']
+          keywords:
+            type: array
+            items: { type: string }
+            maxItems: 3
+        required: ['sentiment', 'keywords']
+        additionalProperties: false
+
 tests:
   - vars:
       feedback: 'The product was exactly what I needed, shipping was fast.'
-    assert:
-      - type: 'is-json'
-        value:
-          type: 'object'
-          properties:
-            sentiment:
-              enum: ['positive', 'negative', 'neutral']
-            keywords:
-              type: 'array'
-              items: { type: 'string' }
-              maxItems: 3
-          required: ['sentiment', 'keywords']
-          additionalProperties: false
-
   - vars:
       feedback: 'Terrible experience - broken on arrival, support never replied.'
-    assert:
-      - type: 'is-json'
-        value:
-          type: 'object'
-          properties:
-            sentiment:
-              enum: ['positive', 'negative', 'neutral']
-            keywords:
-              type: 'array'
-              items: { type: 'string' }
-              maxItems: 3
-          required: ['sentiment', 'keywords']
-          additionalProperties: false

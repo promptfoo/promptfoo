@@ -30,12 +30,7 @@ npx promptfoo@latest view
 The prompt asks for JSON only: a `sentiment` enum (`positive`, `negative`,
 `neutral`) and up to three `keywords`. Each test passes a different customer
 feedback string through `{{feedback}}`, then asserts the reply against the
-schema.
-
-## Files
-
-- `promptfooconfig.yaml` — the eval configuration
-- `test.js` — zero-dependency sanity check for the schema logic, runs with `node test.js`
+schema defined once in `defaultTest.assert`.
 
 ## Key points
 
