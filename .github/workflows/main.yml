@@ -47,9 +47,10 @@ jobs:
           build_matrix='{"node":["22.22","26.x"]}'
 
           if [[ "$EVENT_NAME" == "pull_request" ]]; then
-            # PRs: add 1 macOS version only
+            # PRs: include the Node 24 Windows shard that runs Python process tests.
             extra_entries='
-              ,{"node":"22.22","os":"macOS-latest","shard":""}
+              ,{"node":"22.22","os":"macOS-latest","shard":""},
+              {"node":"24.x","os":"windows-2025-vs2026","shard":1}
             '
           else
             # Main/dispatch: add all macOS versions + remaining Windows shards
@@ -143,13 +144,13 @@ jobs:
         # CI. Real test/assertion failures still fail; see vitest.config.ts.
         env:
           PROMPTFOO_IGNORE_UNHANDLED_TEST_ERRORS: 'true'
-        run: npm run test${{ matrix.shard && format(' -- --shard={0}/3', matrix.shard) || '' }}${{ matrix.os == 'ubuntu-latest' && matrix.node == '22.22' && !matrix.shard && ' -- --coverage' || '' }}${{ startsWith(matrix.os, 'windows-') && ' --exclude=test/release-artifact.test.ts' || '' }}
+        run: npm run test${{ matrix.shard && format(' -- --shard={0}/3', matrix.shard) || '' }}${{ matrix.os == 'ubuntu-latest' && matrix.node == '22.22' && !matrix.shard && ' -- --coverage' || '' }}${{ startsWith(matrix.os, 'windows-') && ' --exclude=test/release-artifact.test.ts --exclude=test/examples/integrationCrewai.test.ts --exclude=test/examples/integrationInspectOsworldProvider.test.ts --exclude=test/python/python-subprocess-cancellation.test.ts --exclude=test/python/worker.lifecycle.test.ts' || '' }}
 
-      - name: Test release artifact acceptance without parallel workers
-        # Cold npm install/rebuild fixtures need the runner's CPU and disk without
-        # competing test forks. Run the unchanged suite once per Windows Node version.
+      - name: Test process fixtures without parallel workers
+        # Cold npm and Python processes can miss deadlines when competing
+        # with test forks. Run these unchanged suites once per Windows Node version.
         if: startsWith(matrix.os, 'windows-') && matrix.shard == 1
-        run: npm run test -- test/release-artifact.test.ts --maxWorkers=1
+        run: npm run test -- test/release-artifact.test.ts test/examples/integrationCrewai.test.ts test/examples/integrationInspectOsworldProvider.test.ts test/python/python-subprocess-cancellation.test.ts test/python/worker.lifecycle.test.ts --maxWorkers=1
 
       - name: Run built agent skill examples
         if: matrix.os != 'ubuntu-latest' && (!matrix.shard || matrix.shard == '1')
@@ -326,7 +327,7 @@ jobs:
       - *built-skill-examples
 
       - name: Upload package for platform acceptance
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: promptfoo-platform-package
           path: ${{ steps.package-artifact.outputs.tarball }}
@@ -370,7 +371,7 @@ jobs:
           go-version-file: src/golang/go.mod
 
       - &download-platform-package
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: promptfoo-platform-package
           path: ${{ runner.temp }}/package-artifact
@@ -389,7 +390,7 @@ jobs:
       - *test-package-artifact
 
       - name: Upload packed consumer inventory
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: sbom-runtime
           path: ${{ runner.temp }}/sbom-runtime
@@ -512,10 +513,11 @@ jobs:
     permissions:
       contents: read
     steps:
-      - name: Install shfmt
+      - name: Install shfmt 3.12.0
         run: |
           curl --fail --location --retry 3 --connect-timeout 15 --max-time 60 \
-            https://github.com/mvdan/sh/releases/download/v3.12.0/shfmt_v3.12.0_linux_amd64 \
+            --header 'Accept: application/octet-stream' \
+            https://api.github.com/repos/mvdan/sh/releases/assets/270490140 \
             --output "$RUNNER_TEMP/shfmt"
           printf '%s  %s\n' 'd9fbb2a9c33d13f47e7618cf362a914d029d02a6df124064fff04fd688a745ea' "$RUNNER_TEMP/shfmt" | sha256sum --check
           chmod +x "$RUNNER_TEMP/shfmt"
@@ -549,11 +551,7 @@ jobs:
 
       - *use-node
 
-      - name: Use Python
-        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
-        with:
-          # The pinned ModelAudit schema generator requires Python <3.14.
-          python-version: '3.13'
+      - *use-python-3-14
 
       # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669).
       # Pinned exact (not @latest): npm 12.0.0 blocks postinstall scripts not covered by
@@ -570,6 +568,9 @@ jobs:
         run: |
           npm run jsonSchema:generate
           npm run modelAuditSchema:generate
+
+      - name: Check local server OpenAPI spec
+        run: npm run openapi:check
 
       - name: Check for changes
         run: |
@@ -639,7 +640,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload docs browser inventory
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: sbom-site
           path: site/build/browser-inventory.json
@@ -660,11 +661,11 @@ jobs:
         with:
           node-version-file: '.nvmrc'
           package-manager-cache: false
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: sbom-runtime
           path: ${{ runner.temp }}/sbom-current
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: sbom-site
           path: ${{ runner.temp }}/sbom-site
@@ -707,7 +708,7 @@ jobs:
             --source-sha "$GITHUB_SHA" --base-sha "$BASE_SHA" \
             --output "$RUNNER_TEMP/sbom-report"
       - name: Upload SBOM comparison and next baseline
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: sbom-inventory
           path: ${{ runner.temp }}/sbom-report
@@ -792,7 +793,8 @@ jobs:
 
   webui:
     name: webui tests
-    timeout-minutes: 10
+    # Allow slow browser system dependency downloads before browser and coverage tests.
+    timeout-minutes: 20
     runs-on: ubuntu-latest
     permissions: *test-reporting-permissions # Required for OIDC authentication with Codecov
     steps:
@@ -810,6 +812,10 @@ jobs:
       # Browser binaries are opt-in; install the version from the locked SDK.
       - name: Install Chromium
         run: node node_modules/playwright/cli.js install --with-deps chromium
+
+      - name: Run Site Browser Tests
+        working-directory: site
+        run: npm run test:browser
 
       - name: Run App Browser Tests
         run: npm run test:app:browser
