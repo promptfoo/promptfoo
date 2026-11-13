@@ -1,0 +1,5 @@
+title: 'LiteLLM Proxy Provider'
+description: 'Use LiteLLM proxy to evaluate GPT, Claude, and Gemini through a unified interface'
+tags:
+  - Providers
+  - Integrations

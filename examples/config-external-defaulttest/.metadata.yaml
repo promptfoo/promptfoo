@@ -1,0 +1,4 @@
+title: 'External Default Test Configuration'
+description: 'Loading shared defaultTest settings from an external YAML file with file:// syntax'
+tags:
+  - Configuration

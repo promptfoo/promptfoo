@@ -1,0 +1,5 @@
+title: 'Red Team Provider Override'
+description: 'Use a custom provider for red team attack generation, separate from the target model being tested'
+tags:
+  - Red Teaming
+  - Configuration

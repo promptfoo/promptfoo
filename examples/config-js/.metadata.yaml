@@ -1,0 +1,4 @@
+title: 'JavaScript Configuration File'
+description: 'Using a JavaScript file (promptfooconfig.js) instead of YAML for configuration'
+tags:
+  - Configuration
