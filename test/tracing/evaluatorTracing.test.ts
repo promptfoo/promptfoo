@@ -1,4 +1,4 @@
-import { AlwaysOffSampler, NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
+import { AlwaysOffSampler, TracerProvider } from '@opentelemetry/sdk-trace';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
 import logger from '../../src/logger';
@@ -141,7 +141,7 @@ describe('evaluatorTracing', () => {
     });
 
     it('preserves the sampling decision of a valid unsampled root span', async () => {
-      const tracerProvider = new NodeTracerProvider({ sampler: new AlwaysOffSampler() });
+      const tracerProvider = new TracerProvider({ sampler: new AlwaysOffSampler() });
       const getTracer = vi
         .spyOn(genaiTracer, 'getGenAITracer')
         .mockReturnValue(tracerProvider.getTracer('unsampled-test-case'));

@@ -1,8 +1,8 @@
 # huggingface/hle (Humanity's Last Exam)
 
-Evaluate LLMs against [Humanity's Last Exam (HLE)](https://arxiv.org/abs/2501.14249), a challenging benchmark created by 1,000+ experts across 500+ institutions. HLE features 3,000+ questions spanning 100+ subjects, designed to push AI capabilities to their limits.
+Evaluate LLMs against [Humanity's Last Exam (HLE)](https://arxiv.org/abs/2501.14249), a benchmark of questions across academic subjects.
 
-**📖 [Read the complete HLE benchmark guide →](https://www.promptfoo.dev/docs/guides/hle-benchmark/)**
+See the [HLE benchmark guide](https://www.promptfoo.dev/docs/guides/hle-benchmark/) for setup and result interpretation.
 
 You can run this example with:
 
@@ -61,13 +61,8 @@ Each question is evaluated for accuracy using an LLM judge that compares the mod
 
 ## Current AI Performance
 
-HLE is designed to be extremely challenging. Recent model performance:
-
-- **OpenAI Deep Research**: 26.6% accuracy
-- **o4-mini**: 18.1% accuracy
-- **DeepSeek-R1**: 9.4% accuracy
-
-Low scores are expected - this benchmark represents the cutting edge of AI evaluation.
+Compare scores only after checking the model version, tools, and test subset used in each run.
+The examples below do not reproduce historical benchmark results.
 
 ## Customization
 
@@ -86,10 +81,17 @@ Compare multiple providers:
 
 ```yaml
 providers:
-  - anthropic:claude-sonnet-4-6
+  - anthropic:claude-sonnet-5
   - openai:o4-mini
-  - deepseek:deepseek-reasoner
+  - id: deepseek:deepseek-flash
+    config:
+      max_tokens: 8192
+      passthrough:
+        thinking:
+          type: enabled
 ```
+
+Set `DEEPSEEK_API_KEY` to use DeepSeek V4.1 Flash. This config enables [thinking mode](https://api-docs.deepseek.com/guides/thinking_mode/) with an [8192-token completion limit](https://api-docs.deepseek.com/api/create-chat-completion/).
 
 ### Different Prompting
 

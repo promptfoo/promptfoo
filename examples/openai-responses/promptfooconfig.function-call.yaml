@@ -4,13 +4,12 @@ prompts:
   - 'What is the weather like in {{location}}?'
 
 providers:
-  - id: openai:responses:gpt-6-astra
+  - id: openai:gpt-6-astra
     label: gpt-6-astra
     config:
       reasoning:
         effort: low
       max_output_tokens: 4096
-      tool_choice: auto
       tools:
         - type: function
           name: get_current_weather
@@ -26,13 +25,12 @@ providers:
                 enum: ['celsius', 'fahrenheit']
             required: ['location', 'unit']
 
-  - id: openai:responses:gpt-5.6-terra
-    label: gpt-5.6-terra
+  - id: openai:gpt-6-sol
+    label: gpt-6-sol
     config:
       reasoning:
         effort: medium
       max_output_tokens: 4096
-      tool_choice: auto
       tools:
         - type: function
           name: get_current_weather
@@ -48,13 +46,12 @@ providers:
                 enum: ['celsius', 'fahrenheit']
             required: ['location', 'unit']
 
-  - id: openai:responses:gpt-5.6-luna
-    label: gpt-5.6-luna
+  - id: openai:gpt-6-luna
+    label: gpt-6-luna
     config:
       reasoning:
         effort: low
       max_output_tokens: 4096
-      tool_choice: auto
       tools:
         - type: function
           name: get_current_weather
