@@ -1,13 +1,12 @@
 export interface Strategy {
   category: string;
-  categoryLink?: string;
   strategy: string;
   displayName: string;
   description: string;
   longDescription: string;
   cost: string;
   asrIncrease: string;
-  link?: string;
+  link: string;
   recommended?: boolean;
   isRemote?: boolean;
 }

@@ -110,20 +110,21 @@ describe('Chat completed quota during default disk publication', () => {
     async ({ boundary, traced, alreadyWrapped }) => {
       const cache = modules.cache.getCache();
       expect(cache.stores).toHaveLength(1);
-      const disk = cache.stores[0].store as KeyvFile;
-      expect(disk).toBeInstanceOf(modules.disk.KeyvFile);
-      expect(disk.opts.filename).toBe(path.join(cacheDirectory, 'cache.json'));
-      expect(disk.opts.writeDelay).toBe(100);
       const cacheSet = vi.spyOn(cache, 'set');
-      const publicationStarted = createDeferred<void>();
+      const publicationStarted = createDeferred<KeyvFile>();
       const secondQueued = createDeferred<void>();
       const events: string[] = [];
       let firstPublicationSettled = false;
-      const originalSet = disk.set.bind(disk);
-      vi.spyOn(disk, 'set').mockImplementation((key, value, ttl) => {
+      const originalSet = modules.disk.KeyvFile.prototype.set;
+      vi.spyOn(modules.disk.KeyvFile.prototype, 'set').mockImplementation(function (
+        this: KeyvFile,
+        key,
+        value,
+        ttl,
+      ) {
         const firstWrite = diskWrites.length === 0;
         // Delegate unchanged: KeyvFile schedules its own default delay and real I/O.
-        const publication = originalSet(key, value, ttl);
+        const publication = originalSet.call(this, key, value, ttl);
         diskWrites.push(publication);
         void publication.then(
           () => {
@@ -140,7 +141,7 @@ describe('Chat completed quota during default disk publication', () => {
         );
         if (firstWrite) {
           events.push('A publication started');
-          publicationStarted.resolve();
+          publicationStarted.resolve(this);
         }
         return publication;
       });
@@ -251,7 +252,10 @@ describe('Chat completed quota during default disk publication', () => {
 
       const first = runCall('A prompt', firstController.signal).catch((error: unknown) => error);
       pendingCalls.push(first);
-      await publicationStarted.promise;
+      const disk = await publicationStarted.promise;
+      expect(disk).toBeInstanceOf(modules.disk.KeyvFile);
+      expect(disk.opts.filename).toBe(path.join(cacheDirectory, 'cache.json'));
+      expect(disk.opts.writeDelay).toBe(100);
       expect(firstResponse.bodyUsed).toBe(true);
       expect(cacheSet).toHaveBeenCalledOnce();
       // Storage received the fully parsed body and its headers before the timer.
