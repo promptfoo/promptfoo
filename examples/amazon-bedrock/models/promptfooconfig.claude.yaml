@@ -10,12 +10,6 @@ providers:
       max_tokens: 2048
       region: us-east-2
       inferenceModelType: claude
-  - id: bedrock:us.anthropic.claude-opus-4-1-20250805-v1:0
-    label: Claude Opus 4.1
-    config:
-      temperature: 1
-      max_tokens: 2048
-      region: us-west-2
   # These models omit unsupported sampling controls.
   - id: bedrock:global.anthropic.claude-opus-5-5
     label: Claude Opus 5.5
