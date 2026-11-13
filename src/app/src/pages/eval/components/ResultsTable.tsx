@@ -1314,18 +1314,15 @@ function renderImageCellContent({
 }): React.ReactNode {
   return (
     <>
-      <img
-        src={imgSrc}
-        alt={alt}
-        style={{
-          maxWidth: '100%',
-          maxHeight: '200px',
-          height: 'auto',
-          objectFit: 'contain',
-          cursor: 'pointer',
-        }}
+      <Button
+        type="button"
+        variant="ghost"
+        className="h-auto max-w-full p-0 hover:bg-transparent"
+        aria-label={`Open image preview: ${alt}`}
         onClick={() => toggleLightbox(imgSrc)}
-      />
+      >
+        <img src={imgSrc} alt={alt} className="max-h-[200px] max-w-full h-auto object-contain" />
+      </Button>
       {lightboxOpen && lightboxImage === imgSrc && (
         <div className="lightbox" onClick={() => toggleLightbox()}>
           <img
@@ -1481,6 +1478,7 @@ interface ExtendedEvaluateTableOutput extends EvaluateTableOutput {
 }
 
 interface ExtendedEvaluateTableRow extends EvaluateTableRow {
+  originalRowPositionIndex: number;
   outputs: ExtendedEvaluateTableOutput[];
 }
 
@@ -1612,6 +1610,7 @@ function ResultsTable({
   const {
     evalId,
     table,
+    tablePageOffset,
     setTable,
     config,
     version,
@@ -1720,23 +1719,22 @@ function ResultsTable({
     [body, head, setTable, evalId, inComparisonMode, showToast],
   );
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: row positions should stay paired with the loaded body until the next page payload arrives.
   const tableBody = React.useMemo(() => {
-    const rowPositionOffset = pagination.pageIndex * pagination.pageSize;
     return body.map((row, rowIndex) => ({
       ...row,
+      originalRowPositionIndex: tablePageOffset + rowIndex,
       outputs: row.outputs.map((output, promptIndex) =>
         output == null
           ? null
           : {
               ...output,
               originalRowIndex: rowIndex,
-              originalRowPositionIndex: rowPositionOffset + rowIndex,
+              originalRowPositionIndex: tablePageOffset + rowIndex,
               originalPromptIndex: promptIndex,
             },
       ),
     })) as ExtendedEvaluateTableRow[];
-  }, [body]);
+  }, [body, tablePageOffset]);
 
   const transformDisplayVarKeys = React.useMemo(() => {
     const transformVarKeys = new Set<string>();
@@ -2219,20 +2217,31 @@ function ResultsTable({
           ...prev,
           pageIndex: safeRowPageIndex,
         }));
+        return;
       }
 
+      // Server pagination keeps the previous page's rows visible while loading.
+      if (isFetching) {
+        return;
+      }
+
+      let scrollFrame: number | undefined;
       const scrollToRow = () => {
         if (hasScrolled) {
           return;
         }
 
         const localRowIndex = rowIndex % pagination.pageSize;
+        // A failed page request leaves old rows in place with the same local DOM IDs.
+        if (tableBody[localRowIndex]?.originalRowPositionIndex !== rowIndex) {
+          return;
+        }
         const rowElement = document.querySelector(`#row-${localRowIndex}`);
 
         if (rowElement) {
           hasScrolled = true;
 
-          requestAnimationFrame(() => {
+          scrollFrame = requestAnimationFrame(() => {
             rowElement.scrollIntoView({
               behavior: 'smooth',
               block: 'nearest',
@@ -2244,15 +2253,8 @@ function ResultsTable({
       const tableContainer = document.getElementById('results-table-container') || document.body;
 
       const observer = new MutationObserver(() => {
+        scrollToRow();
         if (hasScrolled) {
-          observer.disconnect();
-          return;
-        }
-
-        const localRowIndex = rowIndex % pagination.pageSize;
-        const rowElement = document.querySelector(`#row-${localRowIndex}`);
-        if (rowElement) {
-          scrollToRow();
           observer.disconnect();
         }
       });
@@ -2261,6 +2263,11 @@ function ResultsTable({
         childList: true,
         subtree: true,
       });
+
+      scrollToRow();
+      if (hasScrolled) {
+        observer.disconnect();
+      }
 
       const timeoutId = setTimeout(() => {
         if (!hasScrolled) {
@@ -2272,6 +2279,9 @@ function ResultsTable({
       return () => {
         observer.disconnect();
         clearTimeout(timeoutId);
+        if (scrollFrame !== undefined) {
+          cancelAnimationFrame(scrollFrame);
+        }
       };
     }
   }, [
@@ -2279,6 +2289,8 @@ function ResultsTable({
     pagination.pageSize,
     reactTable,
     filteredResultsCount,
+    isFetching,
+    tableBody,
     locationHash,
     debouncedSearchText,
     failureFilter,
@@ -2465,8 +2477,10 @@ function ResultsTable({
             <Select
               value={String(pagination.pageSize)}
               onValueChange={(value) => {
+                clearRowDeepLink();
                 setPagination((prev) => ({
                   ...prev,
+                  pageIndex: 0,
                   pageSize: Number(value),
                 }));
                 window.scrollTo(0, 0);
