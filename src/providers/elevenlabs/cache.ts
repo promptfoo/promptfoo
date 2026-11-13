@@ -6,7 +6,6 @@ import logger from '../../logger';
 export interface CacheOptions {
   enabled: boolean;
   ttl?: number; // Time to live in seconds
-  maxSize?: number; // Max cache size in bytes
 }
 
 /**
@@ -52,7 +51,7 @@ export class ElevenLabsCache {
   /**
    * Set value in cache
    */
-  async set(key: string, value: any, _size?: number): Promise<void> {
+  async set(key: string, value: any): Promise<void> {
     if (!this.enabled) {
       return;
     }
@@ -63,33 +62,5 @@ export class ElevenLabsCache {
     await cache.set(key, value, this.ttl * 1000);
 
     logger.debug('[ElevenLabs Cache] Cached value', { key, ttl: this.ttl });
-  }
-
-  /**
-   * Delete value from cache
-   */
-  async delete(key: string): Promise<void> {
-    if (!this.enabled) {
-      return;
-    }
-
-    const cache = getCache();
-    await cache.del(key);
-
-    logger.debug('[ElevenLabs Cache] Deleted from cache', { key });
-  }
-
-  /**
-   * Clear all cache entries with elevenlabs prefix
-   */
-  async clear(): Promise<void> {
-    if (!this.enabled) {
-      return;
-    }
-
-    const cache = getCache();
-    await cache.clear();
-
-    logger.debug('[ElevenLabs Cache] Cache cleared');
   }
 }

@@ -72,6 +72,14 @@ describe('processJsonlFile', () => {
     expect(mockReadFileSync).toHaveBeenCalledWith(filePath, 'utf-8');
   });
 
+  it('should strip a UTF-8 byte order mark', () => {
+    mockReadFileSync.mockReturnValue('﻿[{"key1": "value1"}]\n[{"key2": "value2"}]');
+    expect(processJsonlFile('file.jsonl', {}).map((prompt) => prompt.raw)).toEqual([
+      '[{"key1": "value1"}]',
+      '[{"key2": "value2"}]',
+    ]);
+  });
+
   it('should throw an error if the file cannot be read', () => {
     const filePath = 'nonexistent.jsonl';
     mockReadFileSync.mockImplementation(() => {

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getEnvBool, getEnvString } from '../../src/envars';
 import { getUserEmail } from '../../src/globalConfig/accounts';
 import {
@@ -8,24 +8,25 @@ import {
   REDTEAM_SIMULATED_USER_TASK_ID,
 } from '../../src/providers/promptfoo';
 import { fetchWithRetries } from '../../src/util/fetch/index';
+import { createStatusResponse } from '../factories/literalFixtures';
+
+const { createDisabledCloudConfigFactory } = await vi.hoisted(
+  () => import('../factories/moduleMocks'),
+);
+
+const createGradingResponse = () => ({
+  result: 'test result',
+  tokenUsage: { total: 100 },
+});
 
 vi.mock('../../src/cache');
 vi.mock('../../src/envars');
 vi.mock('../../src/util/fetch/index.ts');
 vi.mock('../../src/globalConfig/accounts');
-vi.mock('../../src/globalConfig/cloud', async (importOriginal) => {
-  return {
-    ...(await importOriginal()),
+vi.mock('../../src/globalConfig/cloud', createDisabledCloudConfigFactory());
 
-    CloudConfig: class {
-      isEnabled() {
-        return false;
-      }
-      getApiHost() {
-        return 'https://api.promptfoo.app';
-      }
-    },
-  };
+afterEach(() => {
+  vi.resetAllMocks();
 });
 
 describe('PromptfooHarmfulCompletionProvider', () => {
@@ -39,15 +40,9 @@ describe('PromptfooHarmfulCompletionProvider', () => {
 
   beforeEach(() => {
     vi.resetAllMocks();
-    vi.mocked(getUserEmail).mockImplementation(function () {
-      return 'test@example.com';
-    });
-    vi.mocked(getEnvString).mockImplementation(function () {
-      return '';
-    });
-    vi.mocked(getEnvBool).mockImplementation(function () {
-      return false;
-    });
+    vi.mocked(getUserEmail).mockReturnValue('test@example.com');
+    vi.mocked(getEnvString).mockReturnValue('');
+    vi.mocked(getEnvBool).mockReturnValue(false);
     provider = new PromptfooHarmfulCompletionProvider(options);
   });
 
@@ -68,10 +63,10 @@ describe('PromptfooHarmfulCompletionProvider', () => {
   });
 
   it('should handle successful API call', async () => {
-    const mockResponse = new Response(JSON.stringify({ output: 'test output' }), {
-      status: 200,
-      statusText: 'OK',
-    });
+    const mockResponse = new Response(
+      JSON.stringify({ output: 'test output' }),
+      createStatusResponse(200, 'OK'),
+    );
     vi.mocked(fetchWithRetries).mockResolvedValue(mockResponse);
 
     const result = await provider.callApi('test prompt');
@@ -127,10 +122,7 @@ describe('PromptfooHarmfulCompletionProvider', () => {
   it('should filter out null and undefined values from output array', async () => {
     const mockResponse = new Response(
       JSON.stringify({ output: ['value1', null, 'value2', undefined] }),
-      {
-        status: 200,
-        statusText: 'OK',
-      },
+      createStatusResponse(200, 'OK'),
     );
     vi.mocked(fetchWithRetries).mockResolvedValue(mockResponse);
 
@@ -140,10 +132,10 @@ describe('PromptfooHarmfulCompletionProvider', () => {
   });
 
   it('should handle null output by returning empty array', async () => {
-    const mockResponse = new Response(JSON.stringify({ output: null }), {
-      status: 200,
-      statusText: 'OK',
-    });
+    const mockResponse = new Response(
+      JSON.stringify({ output: null }),
+      createStatusResponse(200, 'OK'),
+    );
     vi.mocked(fetchWithRetries).mockResolvedValue(mockResponse);
 
     const result = await provider.callApi('test prompt');
@@ -152,10 +144,7 @@ describe('PromptfooHarmfulCompletionProvider', () => {
   });
 
   it('should handle API error', async () => {
-    const mockResponse = new Response('API Error', {
-      status: 400,
-      statusText: 'Bad Request',
-    });
+    const mockResponse = new Response('API Error', createStatusResponse(400, 'Bad Request'));
     vi.mocked(fetchWithRetries).mockResolvedValue(mockResponse);
 
     const result = await provider.callApi('test prompt');
@@ -190,10 +179,10 @@ describe('PromptfooHarmfulCompletionProvider', () => {
 
   it('should pass abortSignal to fetchWithRetries', async () => {
     const abortController = new AbortController();
-    const mockResponse = new Response(JSON.stringify({ output: 'test output' }), {
-      status: 200,
-      statusText: 'OK',
-    });
+    const mockResponse = new Response(
+      JSON.stringify({ output: 'test output' }),
+      createStatusResponse(200, 'OK'),
+    );
     vi.mocked(fetchWithRetries).mockResolvedValue(mockResponse);
 
     await provider.callApi('test prompt', undefined, { abortSignal: abortController.signal });
@@ -226,15 +215,9 @@ describe('PromptfooChatCompletionProvider', () => {
 
   beforeEach(() => {
     vi.resetAllMocks();
-    vi.mocked(getUserEmail).mockImplementation(function () {
-      return 'test@example.com';
-    });
-    vi.mocked(getEnvString).mockImplementation(function () {
-      return '';
-    });
-    vi.mocked(getEnvBool).mockImplementation(function () {
-      return false;
-    });
+    vi.mocked(getUserEmail).mockReturnValue('test@example.com');
+    vi.mocked(getEnvString).mockReturnValue('');
+    vi.mocked(getEnvBool).mockReturnValue(false);
     provider = new PromptfooChatCompletionProvider(options);
   });
 
@@ -260,10 +243,7 @@ describe('PromptfooChatCompletionProvider', () => {
         result: 'test result',
         tokenUsage,
       }),
-      {
-        status: 200,
-        statusText: 'OK',
-      },
+      createStatusResponse(200, 'OK'),
     );
     vi.mocked(fetchWithRetries).mockResolvedValue(mockResponse);
 
@@ -302,10 +282,7 @@ describe('PromptfooChatCompletionProvider', () => {
       JSON.stringify({
         result: 'test result',
       }),
-      {
-        status: 200,
-        statusText: 'OK',
-      },
+      createStatusResponse(200, 'OK'),
     );
     vi.mocked(fetchWithRetries).mockResolvedValue(mockResponse);
 
@@ -362,10 +339,7 @@ describe('PromptfooChatCompletionProvider', () => {
         },
         tokenUsage: { total: 100 },
       }),
-      {
-        status: 200,
-        statusText: 'OK',
-      },
+      createStatusResponse(200, 'OK'),
     );
     vi.mocked(fetchWithRetries).mockResolvedValue(mockResponse);
 
@@ -393,10 +367,7 @@ describe('PromptfooChatCompletionProvider', () => {
       JSON.stringify({
         result: null,
       }),
-      {
-        status: 200,
-        statusText: 'OK',
-      },
+      createStatusResponse(200, 'OK'),
     );
     vi.mocked(fetchWithRetries).mockResolvedValue(mockResponse);
 
@@ -404,6 +375,83 @@ describe('PromptfooChatCompletionProvider', () => {
 
     expect(result.error).toBe('LLM did not return a result, likely refusal');
   });
+
+  it.each(['crescendo', 'judge'] as const)(
+    'preserves terminal %s provider errors and usage instead of stale output',
+    async (task) => {
+      const taskProvider = new PromptfooChatCompletionProvider({ ...options, task });
+      const tokenUsage = {
+        total: 73,
+        prompt: 45,
+        completion: 28,
+        cached: 12,
+        numRequests: 2,
+        completionDetails: { reasoning: 8 },
+      };
+      vi.mocked(fetchWithRetries).mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            error: 'Provider request failed',
+            result: 'partial output',
+            tokenUsage,
+          }),
+          { status: 200 },
+        ),
+      );
+
+      expect(await taskProvider.callApi('test prompt')).toEqual({
+        error: 'Provider request failed',
+        tokenUsage,
+      });
+      expect(fetchWithRetries).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it('preserves an explicit remote provider error without output or usage', async () => {
+    vi.mocked(fetchWithRetries).mockResolvedValue(
+      new Response(JSON.stringify({ error: 'Provider request failed' }), { status: 200 }),
+    );
+
+    expect(await provider.callApi('test prompt')).toEqual({ error: 'Provider request failed' });
+  });
+
+  it.each([
+    {
+      response: { result: 'I cannot assist with that request' },
+      output: 'I cannot assist with that request',
+    },
+    { response: {}, error: 'LLM did not return a result, likely refusal' },
+    { response: { error: 'Provider refused' }, error: 'Provider refused' },
+  ])('preserves explicit refusal and usage for $response', async ({ response, output, error }) => {
+    const tokenUsage = { total: 12, prompt: 8, completion: 4 };
+    vi.mocked(fetchWithRetries).mockResolvedValue(
+      new Response(JSON.stringify({ ...response, isRefusal: true, tokenUsage }), { status: 200 }),
+    );
+
+    expect(await provider.callApi('test prompt')).toEqual({
+      ...(output ? { output } : { error }),
+      isRefusal: true,
+      tokenUsage,
+    });
+  });
+
+  it.each([undefined, '', null, false, {}])(
+    'keeps successful fallback output when the error field is %s',
+    async (error) => {
+      const tokenUsage = { total: 23, prompt: 15, completion: 8, numRequests: 2 };
+      vi.mocked(fetchWithRetries).mockResolvedValue(
+        new Response(
+          JSON.stringify({ result: 'fallback result', error, isRefusal: false, tokenUsage }),
+          { status: 200 },
+        ),
+      );
+
+      expect(await provider.callApi('test prompt')).toEqual({
+        output: 'fallback result',
+        tokenUsage,
+      });
+    },
+  );
 
   it('preserves token usage when a remote task fails after calling a model', async () => {
     const tokenUsage = {
@@ -422,6 +470,98 @@ describe('PromptfooChatCompletionProvider', () => {
     expect(await provider.callApi('test prompt')).toEqual({
       error: 'LLM did not return a result, likely refusal',
       tokenUsage,
+    });
+  });
+
+  it('preserves an explicit permanent Meta coordination request error', async () => {
+    const providerError = {
+      status: 400,
+      type: 'invalid_request_error',
+      code: 'invalid_json',
+    };
+    const tokenUsage = { total: 73, prompt: 45, completion: 28, numRequests: 2 };
+    vi.mocked(fetchWithRetries).mockResolvedValue(
+      new Response(
+        JSON.stringify({ error: 'Coordination request failed', providerError, tokenUsage }),
+        {
+          status: 400,
+        },
+      ),
+    );
+    const metaProvider = new PromptfooChatCompletionProvider({
+      ...options,
+      task: 'meta-agent-decision',
+    });
+
+    expect(await metaProvider.callApi('test prompt')).toEqual({
+      error:
+        'Meta-agent request failed: the upstream provider rejected the coordination request as invalid JSON (invalid_json).',
+      metadata: { remoteGenerationError: providerError },
+      tokenUsage,
+    });
+    expect(fetchWithRetries).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    {
+      status: 429,
+      providerError: { status: 429, type: 'rate_limit_error', code: 'rate_limit_exceeded' },
+    },
+    { status: 500, providerError: { status: 500, type: 'server_error', code: 'invalid_json' } },
+    {
+      status: 500,
+      providerError: { status: 400, type: 'invalid_request_error', code: 'invalid_json' },
+    },
+    {
+      status: 400,
+      providerError: { status: 400, type: 'invalid_request_error', code: 'invalid_prompt' },
+    },
+    {
+      status: 400,
+      providerError: { status: 400, type: 'invalid_request_error', code: 'cyber_policy_violation' },
+    },
+    {
+      status: 400,
+      providerError: { status: 400, type: 'invalid_request_error', code: 'bio_policy_violation' },
+    },
+    { status: 400, providerError: { status: 400, type: 'server_error', code: 'invalid_json' } },
+    { status: 400, providerError: undefined },
+    { status: 200, providerError: undefined },
+  ])(
+    'does not classify other Meta errors as permanent: $status $providerError',
+    async ({ status, providerError }) => {
+      vi.mocked(fetchWithRetries).mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            error: 'Customer text mentions invalid_json and invalid_request_error',
+            providerError,
+          }),
+          { status },
+        ),
+      );
+      const metaProvider = new PromptfooChatCompletionProvider({
+        ...options,
+        task: 'meta-agent-decision',
+      });
+
+      expect(await metaProvider.callApi('test prompt')).toEqual({
+        error: 'Customer text mentions invalid_json and invalid_request_error',
+      });
+    },
+  );
+
+  it('keeps other remote strategies unchanged for the Meta request error envelope', async () => {
+    vi.mocked(fetchWithRetries).mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          providerError: { status: 400, type: 'invalid_request_error', code: 'invalid_json' },
+        }),
+        { status: 400 },
+      ),
+    );
+
+    expect(await provider.callApi('test prompt')).toEqual({
+      error: 'LLM did not return a result, likely refusal',
     });
   });
 
@@ -461,14 +601,8 @@ describe('PromptfooChatCompletionProvider', () => {
   it('should pass abortSignal to fetchWithRetries', async () => {
     const abortController = new AbortController();
     const mockResponse = new Response(
-      JSON.stringify({
-        result: 'test result',
-        tokenUsage: { total: 100 },
-      }),
-      {
-        status: 200,
-        statusText: 'OK',
-      },
+      JSON.stringify(createGradingResponse()),
+      createStatusResponse(200, 'OK'),
     );
     vi.mocked(fetchWithRetries).mockResolvedValue(mockResponse);
 
@@ -499,12 +633,8 @@ describe('PromptfooSimulatedUserProvider', () => {
 
   beforeEach(() => {
     vi.resetAllMocks();
-    vi.mocked(getUserEmail).mockImplementation(function () {
-      return 'test@example.com';
-    });
-    vi.mocked(getEnvBool).mockImplementation(function () {
-      return false;
-    });
+    vi.mocked(getUserEmail).mockReturnValue('test@example.com');
+    vi.mocked(getEnvBool).mockReturnValue(false);
     provider = new PromptfooSimulatedUserProvider(options, 'test-id');
   });
 
@@ -523,14 +653,8 @@ describe('PromptfooSimulatedUserProvider', () => {
 
   it('should handle successful API call', async () => {
     const mockResponse = new Response(
-      JSON.stringify({
-        result: 'test result',
-        tokenUsage: { total: 100 },
-      }),
-      {
-        status: 200,
-        statusText: 'OK',
-      },
+      JSON.stringify(createGradingResponse()),
+      createStatusResponse(200, 'OK'),
     );
     vi.mocked(fetchWithRetries).mockResolvedValue(mockResponse);
 
@@ -551,14 +675,8 @@ describe('PromptfooSimulatedUserProvider', () => {
       REDTEAM_SIMULATED_USER_TASK_ID,
     );
     const mockResponse = new Response(
-      JSON.stringify({
-        result: 'test result',
-        tokenUsage: { total: 100 },
-      }),
-      {
-        status: 200,
-        statusText: 'OK',
-      },
+      JSON.stringify(createGradingResponse()),
+      createStatusResponse(200, 'OK'),
     );
     vi.mocked(fetchWithRetries).mockResolvedValue(mockResponse);
 
@@ -572,10 +690,7 @@ describe('PromptfooSimulatedUserProvider', () => {
   });
 
   it('should handle API error response', async () => {
-    const mockResponse = new Response('API Error', {
-      status: 400,
-      statusText: 'Bad Request',
-    });
+    const mockResponse = new Response('API Error', createStatusResponse(400, 'Bad Request'));
     vi.mocked(fetchWithRetries).mockResolvedValue(mockResponse);
 
     const result = await provider.callApi(JSON.stringify([{ role: 'user', content: 'hello' }]));
@@ -615,14 +730,8 @@ describe('PromptfooSimulatedUserProvider', () => {
     });
 
     const mockResponse = new Response(
-      JSON.stringify({
-        result: 'test result',
-        tokenUsage: { total: 100 },
-      }),
-      {
-        status: 200,
-        statusText: 'OK',
-      },
+      JSON.stringify(createGradingResponse()),
+      createStatusResponse(200, 'OK'),
     );
     vi.mocked(fetchWithRetries).mockResolvedValue(mockResponse);
 
@@ -687,10 +796,7 @@ describe('PromptfooSimulatedUserProvider', () => {
         result: 'regular user response',
         tokenUsage: { total: 50 },
       }),
-      {
-        status: 200,
-        statusText: 'OK',
-      },
+      createStatusResponse(200, 'OK'),
     );
     vi.mocked(fetchWithRetries).mockResolvedValue(mockResponse);
 
@@ -716,14 +822,8 @@ describe('PromptfooSimulatedUserProvider', () => {
   it('should pass abortSignal to fetchWithRetries', async () => {
     const abortController = new AbortController();
     const mockResponse = new Response(
-      JSON.stringify({
-        result: 'test result',
-        tokenUsage: { total: 100 },
-      }),
-      {
-        status: 200,
-        statusText: 'OK',
-      },
+      JSON.stringify(createGradingResponse()),
+      createStatusResponse(200, 'OK'),
     );
     vi.mocked(fetchWithRetries).mockResolvedValue(mockResponse);
 

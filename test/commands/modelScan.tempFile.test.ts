@@ -1,54 +1,8 @@
 import os from 'os';
 import path from 'path';
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-
-// Mock fs module before importing the module under test
-vi.mock('fs', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('fs')>();
-  return {
-    ...actual,
-    default: {
-      ...actual,
-      readFileSync: vi.fn(),
-      unlinkSync: vi.fn(),
-      writeFileSync: vi.fn(),
-    },
-    readFileSync: vi.fn(),
-    unlinkSync: vi.fn(),
-    writeFileSync: vi.fn(),
-  };
-});
-
-vi.mock('../../src/logger', () => ({
-  default: {
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    debug: vi.fn(),
-  },
-}));
-
-vi.mock('../../src/models/modelAudit', () => ({
-  __esModule: true,
-  default: {
-    create: vi.fn().mockResolvedValue({ id: 'scan-test-123' }),
-    findByRevision: vi.fn().mockResolvedValue(null),
-  },
-}));
-
-vi.mock('../../src/util/huggingfaceMetadata', () => ({
-  isHuggingFaceModel: vi.fn().mockReturnValue(false),
-  getHuggingFaceMetadata: vi.fn().mockResolvedValue(null),
-  parseHuggingFaceModel: vi.fn().mockReturnValue(null),
-}));
-
-vi.mock('../../src/globalConfig/accounts', () => ({
-  getAuthor: vi.fn().mockReturnValue('test-author'),
-}));
-
+import { describe, expect, it } from 'vitest';
 import { createTempOutputPath, supportsCliUiWithOutput } from '../../src/commands/modelScan';
-import logger from '../../src/logger';
 
 describe('supportsCliUiWithOutput', () => {
   it('should return false for null version', () => {
@@ -129,60 +83,5 @@ describe('createTempOutputPath', () => {
     }
     // All paths should be unique
     expect(paths.size).toBe(10);
-  });
-});
-
-/**
- * These tests document the expected fs behavior patterns used in the temp file workflow.
- * They verify that the cleanup logic handles various fs scenarios correctly.
- * Note: These test the behavior patterns, not the internal functions directly
- * (which are not exported).
- */
-describe('temp file workflow - expected fs behavior patterns', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
-  afterEach(() => {
-    vi.resetAllMocks();
-  });
-
-  it('documents: temp file paths use createTempOutputPath format', () => {
-    // The temp file workflow uses createTempOutputPath to generate unique paths
-    const tempFilePath = createTempOutputPath();
-    expect(tempFilePath).toContain('promptfoo-modelscan-');
-    expect(tempFilePath).toMatch(/\.json$/);
-  });
-
-  it('documents: cleanup logs debug on failure (not error)', () => {
-    // When cleanup fails, it should log at debug level, not error
-    // This is because cleanup failures are not critical
-    const cleanupError = new Error('EPERM: operation not permitted');
-    const tempFilePath = createTempOutputPath();
-
-    // Simulate the cleanup behavior pattern from processScanResultsFromFile
-    try {
-      throw cleanupError;
-    } catch (error) {
-      logger.debug(`Failed to cleanup temp file ${tempFilePath}: ${error}`);
-    }
-
-    expect(logger.debug).toHaveBeenCalledWith(
-      expect.stringContaining('Failed to cleanup temp file'),
-    );
-    expect(logger.error).not.toHaveBeenCalled();
-  });
-
-  it('documents: JSON parsing throws on invalid content', () => {
-    // The workflow expects JSON.parse to throw on invalid content
-    const invalidJson = 'not valid json {{{';
-    expect(() => JSON.parse(invalidJson)).toThrow();
-  });
-
-  it('documents: empty string is falsy for output validation', () => {
-    // The workflow checks `if (!jsonOutput)` to detect empty output
-    const emptyOutput = '';
-    expect(!emptyOutput).toBe(true);
-    expect(!emptyOutput.trim()).toBe(true);
   });
 });

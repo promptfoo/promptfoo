@@ -1,141 +1,56 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-interface UseHoverIntentOptions {
-  /** Delay in milliseconds before hover is considered intentional */
-  delay?: number;
-  /** Whether to respect prefers-reduced-motion media query */
-  respectReducedMotion?: boolean;
-  /** Whether hover preview is enabled (for desktop detection) */
-  enabled?: boolean;
-}
-
-interface UseHoverIntentResult {
-  /** Whether the element is currently being hovered */
-  isHovering: boolean;
-  /** Whether the hover is intentional (after delay) */
-  isIntentional: boolean;
-  /** Props to spread on the target element */
-  hoverProps: {
-    onMouseEnter: () => void;
-    onMouseLeave: () => void;
-    onFocus: () => void;
-    onBlur: () => void;
-  };
-}
-
-/**
- * Detects whether the user has a hover-capable device.
- * Returns false for touch-only devices.
- */
-function hasHoverCapability(): boolean {
-  if (typeof window === 'undefined') {
-    return false;
-  }
-  return window.matchMedia('(hover: hover)').matches;
-}
-
-/**
- * Checks if the user prefers reduced motion.
- */
-function prefersReducedMotion(): boolean {
-  if (typeof window === 'undefined') {
-    return false;
-  }
-  return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-}
-
-/**
- * Hook for detecting intentional hover with configurable delay.
- * Useful for triggering actions only when user deliberately hovers.
- *
- * Features:
- * - Configurable delay before hover is considered "intentional"
- * - Respects prefers-reduced-motion preference
- * - Only activates on hover-capable devices
- * - Supports keyboard focus for accessibility
- */
-export function useHoverIntent({
-  delay = 300,
-  respectReducedMotion = true,
-  enabled = true,
-}: UseHoverIntentOptions = {}): UseHoverIntentResult {
-  const [isHovering, setIsHovering] = useState(false);
+/** Start a video preview after a deliberate hover or a shorter keyboard focus. */
+export function useHoverIntent() {
   const [isIntentional, setIsIntentional] = useState(false);
-  const timeoutRef = useRef<number | undefined>(undefined);
+  const pending = useRef<{ timer: number; deadline: number } | null>(null);
+  const enabled =
+    typeof window !== 'undefined' &&
+    window.matchMedia('(hover: hover)').matches &&
+    !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-  // Check device capabilities and user preferences
-  const isEffectivelyEnabled =
-    enabled && hasHoverCapability() && !(respectReducedMotion && prefersReducedMotion());
+  const cancelPending = useCallback(() => {
+    if (pending.current) {
+      clearTimeout(pending.current.timer);
+      pending.current = null;
+    }
+  }, []);
 
-  const markIntentional = useCallback(() => {
-    timeoutRef.current = undefined;
+  useEffect(() => cancelPending, [cancelPending]);
 
-    // Test environments can tear down jsdom between scheduling and execution.
-    // Avoid dispatching a React update once the browser global is already gone.
-    if (typeof window === 'undefined') {
+  function schedule(delay: number) {
+    if (!enabled) {
       return;
     }
 
-    setIsIntentional(true);
-  }, []);
-
-  // Clear timeout on unmount
-  useEffect(() => {
-    return () => {
-      if (timeoutRef.current !== undefined) {
-        clearTimeout(timeoutRef.current);
+    // Hover and focus can overlap. Keep whichever activates the preview first.
+    const deadline = performance.now() + delay;
+    if (pending.current && pending.current.deadline <= deadline) {
+      return;
+    }
+    cancelPending();
+    const timer = window.setTimeout(() => {
+      pending.current = null;
+      // The browser global can disappear while a test tears down its window.
+      if (typeof window !== 'undefined') {
+        setIsIntentional(true);
       }
-    };
-  }, []);
+    }, delay);
+    pending.current = { timer, deadline };
+  }
 
-  const onMouseEnter = useCallback(() => {
-    if (!isEffectivelyEnabled) {
-      return;
-    }
-
-    setIsHovering(true);
-    timeoutRef.current = window.setTimeout(markIntentional, delay);
-  }, [isEffectivelyEnabled, delay, markIntentional]);
-
-  const onMouseLeave = useCallback(() => {
-    setIsHovering(false);
+  function stop() {
+    cancelPending();
     setIsIntentional(false);
-
-    if (timeoutRef.current !== undefined) {
-      clearTimeout(timeoutRef.current);
-      timeoutRef.current = undefined;
-    }
-  }, []);
-
-  // Support keyboard focus for accessibility
-  const onFocus = useCallback(() => {
-    if (!isEffectivelyEnabled) {
-      return;
-    }
-
-    setIsHovering(true);
-    // For keyboard users, we can be more immediate
-    timeoutRef.current = window.setTimeout(markIntentional, delay / 2);
-  }, [isEffectivelyEnabled, delay, markIntentional]);
-
-  const onBlur = useCallback(() => {
-    setIsHovering(false);
-    setIsIntentional(false);
-
-    if (timeoutRef.current !== undefined) {
-      clearTimeout(timeoutRef.current);
-      timeoutRef.current = undefined;
-    }
-  }, []);
+  }
 
   return {
-    isHovering,
-    isIntentional: isEffectivelyEnabled && isIntentional,
+    isIntentional: enabled && isIntentional,
     hoverProps: {
-      onMouseEnter,
-      onMouseLeave,
-      onFocus,
-      onBlur,
+      onMouseEnter: () => schedule(300),
+      onMouseLeave: stop,
+      onFocus: () => schedule(150),
+      onBlur: stop,
     },
   };
 }

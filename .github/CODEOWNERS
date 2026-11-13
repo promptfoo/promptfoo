@@ -28,7 +28,7 @@
 /src/models/     @mldangelo-oai @wholley-oai @faizan-oai       # Data models
 /src/redteam/    @mldangelo-oai @zcrab-oai @wholley-oai        # Red team
 /src/commands/   @mldangelo-oai @zcrab-oai                     # CLI
-/src/types/      @mldangelo-oai @daneschneider-oai @faizan-oai     # Type definitions
+/src/types/      @mldangelo-oai @faizan-oai                  # Type definitions
 
 # ============================================================================
 # SOURCE - CORE MODULES
@@ -47,8 +47,8 @@
 # SOURCE - SPECIALIZED OWNERSHIP
 # ============================================================================
 
-/src/codeScan/      @daneschneider-oai                         # Code scanning
-/code-scan-action/  @daneschneider-oai                         # GitHub Action for code scan
+/src/codeScan/      @mldangelo-oai                         # Code scanning
+/code-scan-action/  @mldangelo-oai                         # GitHub Action for code scan
 /src/validators/    @faizan-oai @mldangelo-oai             # Validators
 
 # ============================================================================
@@ -65,8 +65,8 @@
 # ============================================================================
 
 /test/                  @mldangelo-oai                     # Test suite base
-/test/codeScans/        @daneschneider-oai
-/test/code-scan-action/ @daneschneider-oai                     # Tests for GitHub Action
+/test/codeScans/        @mldangelo-oai
+/test/code-scan-action/ @mldangelo-oai                     # Tests for GitHub Action
 /test/redteam/          @mldangelo-oai @zcrab-oai @wholley-oai
 /test/validators/       @faizan-oai @mldangelo-oai
 /test/providers/        @zcrab-oai @mldangelo-oai         # Provider tests
@@ -105,18 +105,6 @@
 # ============================================================================
 
 /drizzle/ @mldangelo-oai @wholley-oai @faizan-oai         # Database migrations
-
-# ============================================================================
-# MODEL AUDIT (overrides broader patterns)
-# ============================================================================
-
-/src/commands/modelScan.ts              @ychhabria         # Model scan CLI command
-/src/server/routes/modelAudit.ts        @ychhabria         # Model audit API route
-/src/util/modelAuditCliParser.ts        @ychhabria         # CLI parser utility
-/src/types/modelAudit.ts                @ychhabria         # Model audit types
-/src/app/src/pages/model-audit/         @ychhabria         # Model audit UI
-/test/commands/modelScan.test.ts        @ychhabria         # CLI tests
-/test/utils/modelAuditCliParser.test.ts @ychhabria         # Parser tests
 
 # ============================================================================
 # AI AGENT INSTRUCTIONS (override all other patterns)

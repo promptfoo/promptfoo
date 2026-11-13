@@ -4,11 +4,13 @@ import * as fs from 'fs';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as cacheModule from '../../src/cache';
+import cliState from '../../src/cliState';
 import {
   getFileHashes,
   parseScriptParts,
   ScriptCompletionProvider,
 } from '../../src/providers/scriptCompletion';
+import { mockProcessEnv } from '../util/utils';
 import type { MockedFunction } from 'vitest';
 
 vi.mock('child_process', async (importOriginal) => {
@@ -189,6 +191,29 @@ describe('ScriptCompletionProvider', () => {
     expect(provider.id()).toBe('exec:node script.js');
   });
 
+  it('passes file defaults to the child without changing the host environment', async () => {
+    const restore = mockProcessEnv({ PROMPTFOO_REVIEW_ENV_PROBE: 'host' });
+    vi.mocked(execFile).mockImplementation(function (_cmd, _args, options, callback) {
+      const env = (options as { env?: NodeJS.ProcessEnv }).env;
+      (callback as (error: Error | null, stdout: string, stderr: string) => void)(
+        null,
+        env?.PROMPTFOO_REVIEW_ENV_PROBE ?? 'missing',
+        '',
+      );
+      return { stdin: { end: vi.fn() } } as any;
+    });
+    try {
+      const result = await cliState.withEnvFileOverrides(
+        { PROMPTFOO_REVIEW_ENV_PROBE: 'file' },
+        () => provider.callApi('hello'),
+      );
+      expect(result.output).toBe('file');
+      expect(process.env.PROMPTFOO_REVIEW_ENV_PROBE).toBe('host');
+    } finally {
+      restore();
+    }
+  });
+
   it('should close stdin on the child process to prevent hanging', async () => {
     const stdinEnd = vi.fn();
     vi.mocked(execFile).mockImplementation(function (_cmd, _args, _options, callback) {
@@ -227,7 +252,7 @@ describe('ScriptCompletionProvider', () => {
       queueMicrotask(() => {
         stdinClosedBeforeCallback = stdinEnd.mock.calls.length > 0;
         if (typeof callback === 'function') {
-          callback(new Error(errorMessage), '', '');
+          callback(Object.assign(new Error(errorMessage), { cmd: _cmd }), '', '');
         }
       });
       return childProcess;
@@ -300,7 +325,7 @@ describe('ScriptCompletionProvider', () => {
     const errorMessage = 'Script execution failed';
     vi.mocked(execFile).mockImplementation(function (_cmd, _args, _options, callback) {
       if (typeof callback === 'function') {
-        callback(new Error(errorMessage), '', '');
+        callback(Object.assign(new Error(errorMessage), { cmd: _cmd }), '', '');
       }
       return {} as any;
     });
