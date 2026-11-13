@@ -985,7 +985,7 @@ describe('runEval', () => {
       registers: {},
     });
 
-    expect(results[0].response?.output, results[0].error).toBe('Hello.-test');
+    expect(results[0].response?.output, results[0].error ?? undefined).toBe('Hello.-test');
     expect(results[0].success).toBe(true);
   });
 
