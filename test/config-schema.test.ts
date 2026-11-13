@@ -269,23 +269,36 @@ describe('config-schema.json', () => {
       expect(mainDef.type).toBe('object');
     });
 
-    it('should regenerate to the same schema', async () => {
-      // This test ensures the schema generation is deterministic
-      // We'll check that key structures are present
+    it('declares the core configuration fields in the published schema', () => {
       const properties = schema.definitions?.PromptfooConfigSchema?.properties;
 
-      // Core properties that should always exist
-      expect(properties).toHaveProperty('prompts');
-      expect(properties).toHaveProperty('providers');
-      expect(properties).toHaveProperty('tests');
-      expect(properties).toHaveProperty('redteam');
-      expect(properties).toHaveProperty('scenarios');
-      expect(properties).toHaveProperty('defaultTest');
+      // These declarations drive editor completion even when additional properties are allowed.
+      for (const field of [
+        'prompts',
+        'providers',
+        'tests',
+        'redteam',
+        'scenarios',
+        'defaultTest',
+      ]) {
+        expect(properties).toHaveProperty(field);
+      }
     });
   });
 
   describe('runtime input parity', () => {
     const baseConfig = { prompts: ['hello'], providers: ['echo'] };
+
+    it.each(['scenarios', 'defaultTest'] as const)(
+      'rejects malformed %s in the published schema and at runtime',
+      (field) => {
+        const config = { ...baseConfig, [field]: 42 };
+        const validate = ajv.compile(schema);
+
+        expect(UnifiedConfigSchema.safeParse(config).success).toBe(false);
+        expect(validate(config), JSON.stringify(validate.errors)).toBe(false);
+      },
+    );
 
     it.each([
       ['providers', { providers: ['echo'] }, true],
