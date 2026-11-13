@@ -49,7 +49,7 @@ describe('Foundry Responses conversation and accounting', () => {
     callback = vi.fn(async (_args: string) => 'sunny');
     getAgent = vi.fn().mockResolvedValue({ id: 'agent_id', name: 'agent' });
     vi.spyOn(AzureFoundryAgentProvider.prototype as any, 'initializeClient').mockResolvedValue({
-      agents: { get: getAgent },
+      getAgent,
       getOpenAIClient: () => ({ responses: { create } }),
     });
   });
@@ -154,6 +154,7 @@ describe('Foundry Responses conversation and accounting', () => {
         .mockResolvedValueOnce(reply('last', [text('done')]));
       await provider({ passthrough: { conversation } }).callApi('weather?');
       expect(create.mock.calls[1][0]).toEqual({
+        agent_reference: { name: 'agent', type: 'agent_reference' },
         conversation,
         input: [{ type: 'function_call_output', call_id: 'call_one', output: 'sunny' }],
       });
