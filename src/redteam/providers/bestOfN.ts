@@ -183,8 +183,8 @@ export default class BestOfNProvider implements ApiProvider {
           }
 
           try {
-            // TODO(ian): Pass the strategy/plugin metadata maxCharsPerMessage limit here so
-            // plugin-scoped caps are enforced even when no top-level redteam cap is configured.
+            // The plugin- and strategy-scoped cap is enforced inside
+            // callTargetProvider; this keeps the global cap check explicit here.
             throwIfTargetPromptExceedsMaxChars(renderedPrompt);
             const response = await callTargetProvider(
               targetProvider,

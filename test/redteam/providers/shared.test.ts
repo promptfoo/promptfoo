@@ -838,6 +838,87 @@ describe('shared redteam provider utilities', () => {
       );
     });
 
+    it('rejects direct target calls that exceed the plugin-scoped maxCharsPerMessage', async () => {
+      const mockProvider = createMockProvider({
+        response: {
+          output: 'ok',
+          tokenUsage: { numRequests: 1 },
+        },
+      });
+      const context = createLimitedMessageContext() as CallApiContextParams;
+
+      expect(() => callTargetProvider(mockProvider, 'too long', context)).toThrow(
+        'Target prompt message at prompt exceeds maxCharsPerMessage=5: 8 characters.',
+      );
+      expect(mockProvider.callApi).not.toHaveBeenCalled();
+    });
+
+    it('prefers the strategy-scoped maxCharsPerMessage over the plugin-scoped cap on direct target calls', async () => {
+      const mockProvider = createMockProvider({
+        response: {
+          output: 'ok',
+          tokenUsage: { numRequests: 1 },
+        },
+      });
+      const context = {
+        prompt: { raw: '', label: '' },
+        vars: {},
+        test: {
+          metadata: {
+            strategyConfig: { maxCharsPerMessage: 5 },
+            pluginConfig: { maxCharsPerMessage: 100 },
+          },
+        },
+      } as CallApiContextParams;
+
+      expect(() => callTargetProvider(mockProvider, 'too long', context)).toThrow(
+        'Target prompt message at prompt exceeds maxCharsPerMessage=5: 8 characters.',
+      );
+      expect(mockProvider.callApi).not.toHaveBeenCalled();
+    });
+
+    it('passes direct target calls at exactly the plugin-scoped maxCharsPerMessage through unchanged', async () => {
+      const mockProvider = createMockProvider({
+        response: {
+          output: 'ok',
+          tokenUsage: { numRequests: 1 },
+        },
+      });
+      const context = createLimitedMessageContext() as CallApiContextParams;
+
+      const result = await callTargetProvider(mockProvider, 'short', context);
+
+      expect(mockProvider.callApi).toHaveBeenCalledWith('short', context, undefined);
+      expect(result.output).toBe('ok');
+    });
+
+    it('rejects over-cap direct target calls before opening a tracing span', async () => {
+      const mockProvider = createMockProvider({ response: { output: 'ok' } });
+      const context = createLimitedMessageContext() as CallApiContextParams;
+      const providerSpan = vi.fn(
+        async (
+          _options: Parameters<ProviderCallTracingContext['withProviderSpan']>[0],
+          invoke: Parameters<ProviderCallTracingContext['withProviderSpan']>[1],
+        ) => invoke(context),
+      );
+
+      await withProviderCallTracingContext(
+        {
+          getActiveTraceparent: () => undefined,
+          withGraderSpan: async (_options, invoke) => invoke(),
+          withProviderSpan: providerSpan,
+        },
+        async () => {
+          expect(() => callTargetProvider(mockProvider, 'too long', context)).toThrow(
+            'Target prompt message at prompt exceeds maxCharsPerMessage=5: 8 characters.',
+          );
+        },
+      );
+
+      expect(providerSpan).not.toHaveBeenCalled();
+      expect(mockProvider.callApi).not.toHaveBeenCalled();
+    });
+
     it('checks GOAT audio/image hybrid payload transcript text without counting base64 blobs', async () => {
       const mockProvider = createMockProvider({
         response: {

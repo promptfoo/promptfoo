@@ -666,6 +666,60 @@ describe('BestOfNProvider - Runtime Behavior', () => {
       ['input'],
     );
   });
+
+  it('skips candidates that exceed the plugin-scoped maxCharsPerMessage and sends only in-cap candidates', async () => {
+    const provider = new BestOfNProvider({
+      injectVar: 'input',
+      maxConcurrency: 1,
+    });
+    const context = {
+      ...createMockContext(mockTargetProvider),
+      test: {
+        metadata: {
+          pluginConfig: { maxCharsPerMessage: 5 },
+        },
+      },
+    } as CallApiContextParams;
+
+    mockFetchWithProxy.mockResolvedValue({
+      json: async () => ({
+        modifiedPrompts: ['too long', 'short'],
+      }),
+    });
+
+    const result = await provider.callApi('test prompt', context);
+
+    expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(1);
+    expect(mockTargetProvider.callApi).toHaveBeenCalledWith('short', expect.any(Object), undefined);
+    expect(result.output).toBe('target response');
+    expect(result.error).toBeUndefined();
+  });
+
+  it('makes zero target calls and reports the cap error when every candidate exceeds the plugin-scoped maxCharsPerMessage', async () => {
+    const provider = new BestOfNProvider({
+      injectVar: 'input',
+      maxConcurrency: 1,
+    });
+    const context = {
+      ...createMockContext(mockTargetProvider),
+      test: {
+        metadata: {
+          pluginConfig: { maxCharsPerMessage: 5 },
+        },
+      },
+    } as CallApiContextParams;
+
+    mockFetchWithProxy.mockResolvedValue({
+      json: async () => ({
+        modifiedPrompts: ['too long', 'also long'],
+      }),
+    });
+
+    const result = await provider.callApi('test prompt', context);
+
+    expect(mockTargetProvider.callApi).not.toHaveBeenCalled();
+    expect(result.error).toContain('maxCharsPerMessage=5');
+  });
 });
 
 describe('BestOfNProvider - Config Serialization', () => {

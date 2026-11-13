@@ -526,6 +526,11 @@ export function callTargetProvider(
   context?: CallApiContextParams,
   options?: CallApiOptionsParams,
 ): Promise<ProviderResponse> {
+  // Enforce the request-scoped cap here, before tracing and rate-limit scheduling,
+  // so strategies that call the target directly get the same plugin- and
+  // strategy-scoped check as the getTargetResponse path. The limit falls back to
+  // the global redteam cap when no scoped cap is configured.
+  throwIfTargetPromptExceedsMaxChars(targetPrompt, getTargetPromptMaxCharsPerMessage(context));
   const executionContext = getProviderCallExecutionContext();
   const tracingContext = getProviderCallTracingContext();
   const invoke = (onResponseHeaders?: CallApiOptionsParams['onResponseHeaders']) => {
@@ -615,7 +620,6 @@ export async function getTargetResponse(
   let targetRespRaw;
 
   try {
-    throwIfTargetPromptExceedsMaxChars(targetPrompt, getTargetPromptMaxCharsPerMessage(context));
     targetRespRaw = await callTargetProvider(targetProvider, targetPrompt, context, options);
   } catch (error) {
     // Re-throw abort errors to properly cancel the operation
