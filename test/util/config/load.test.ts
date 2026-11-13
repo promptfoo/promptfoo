@@ -1551,6 +1551,80 @@ describe('resolveConfigs', () => {
     vi.restoreAllMocks();
   });
 
+  describe('configured prompt filters', () => {
+    it.each([
+      ['configured filter', '^Keep$', undefined, ['Keep']],
+      ['CLI override', '^Keep$', '^Drop$', ['Drop']],
+      ['empty CLI override', '^Keep$', '', ['Keep', 'Drop']],
+      ['no filter', undefined, undefined, ['Keep', 'Drop']],
+      ['empty configured filter', '', undefined, ['Keep', 'Drop']],
+    ])('%s from defaults', async (_name, configured, cli, labels) => {
+      const prompts = [
+        { raw: 'hello', label: 'Keep' },
+        { raw: 'goodbye', label: 'Drop' },
+      ];
+      vi.mocked(readPrompts).mockResolvedValueOnce(prompts);
+      const result = await resolveConfigs(
+        { filterPrompts: cli },
+        { prompts, providers: ['echo'], commandLineOptions: { filterPrompts: configured } },
+      );
+      expect(result.testSuite.prompts.map((prompt) => prompt.label)).toEqual(labels);
+      expect(prompts.map((prompt) => prompt.label)).toEqual(['Keep', 'Drop']);
+      expect(result.commandLineOptions?.filterPrompts).toBe(configured);
+    });
+
+    it.each([
+      ['configured filter', undefined, ['Keep']],
+      ['CLI override', '^Drop$', ['Drop']],
+      ['empty CLI override', '', ['Keep', 'Drop']],
+    ])('%s from an explicit config file', async (_name, cli, labels) => {
+      const prompts = [
+        { raw: 'hello', label: 'Keep' },
+        { raw: 'goodbye', label: 'Drop' },
+      ];
+      vi.mocked(fs.existsSync).mockReturnValue(true);
+      vi.mocked(fs.readFileSync).mockReturnValue(
+        JSON.stringify({
+          prompts,
+          providers: ['echo'],
+          commandLineOptions: { filterPrompts: '^Keep$' },
+        }),
+      );
+      vi.mocked(globSync).mockReturnValueOnce(['config.json']);
+      vi.mocked(readPrompts).mockResolvedValueOnce(prompts);
+      const result = await resolveConfigs(
+        { config: ['config.json'], filterPrompts: cli },
+        { commandLineOptions: { filterPrompts: '^Drop$' } },
+      );
+      expect(result.testSuite.prompts.map((prompt) => prompt.label)).toEqual(labels);
+      expect(result.commandLineOptions?.filterPrompts).toBe('^Keep$');
+    });
+
+    it.each(['config', 'CLI'])('keeps no-match diagnostics for a %s filter', async (source) => {
+      vi.mocked(readPrompts).mockResolvedValueOnce([{ raw: 'hello', label: 'Keep' }]);
+      await expect(
+        resolveConfigs(source === 'CLI' ? { filterPrompts: '^Missing$' } : {}, {
+          prompts: ['hello'],
+          providers: ['echo'],
+          commandLineOptions: { filterPrompts: '^Missing$' },
+        }),
+      ).rejects.toThrow('No prompts found.');
+      expect(logger.warn).toHaveBeenCalledWith(
+        'No prompts matched the filter "^Missing$". Check your --filter-prompts value.',
+      );
+    });
+
+    it('reports an invalid configured regex', async () => {
+      vi.mocked(readPrompts).mockResolvedValueOnce([{ raw: 'hello', label: 'Keep' }]);
+      await expect(
+        resolveConfigs(
+          {},
+          { prompts: ['hello'], providers: ['echo'], commandLineOptions: { filterPrompts: '[' } },
+        ),
+      ).rejects.toThrow('Invalid regex pattern for --filter-prompts');
+    });
+  });
+
   it('should set cliState.basePath', async () => {
     const cmdObj = { config: ['config.json'] };
     const defaultConfig = {};
