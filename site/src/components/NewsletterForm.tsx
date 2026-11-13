@@ -1,8 +1,9 @@
 import React, { useEffect } from 'react';
 
 import styles from './NewsletterForm.module.css';
+import ThirdPartyContentGate from './ThirdPartyContentGate';
 
-const NewsletterForm: React.FC = () => {
+function NewsletterEmbed(): React.ReactElement {
   const containerRef = React.useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -23,10 +24,20 @@ const NewsletterForm: React.FC = () => {
     };
   }, []);
 
+  return <div className={styles.container} ref={containerRef} />;
+}
+
+const NewsletterForm: React.FC = () => {
   return (
-    <div className={styles.container} ref={containerRef}>
-      {/* The form will be injected here by the external script */}
-    </div>
+    <ThirdPartyContentGate
+      className={styles.container}
+      description="Load the newsletter signup form."
+      loadLabel="Load newsletter signup"
+      serviceName="EmailOctopus"
+      title="Newsletter Signup"
+    >
+      <NewsletterEmbed />
+    </ThirdPartyContentGate>
   );
 };
 
