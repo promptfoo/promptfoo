@@ -1,6 +1,6 @@
 ---
 sidebar_position: 2
-description: Benchmark RAG pipeline performance by evaluating document retrieval accuracy and LLM output quality with factuality and context faithfulness metrics for 2-step analysis
+description: Evaluate RAG pipelines with Promptfoo by checking retrieval accuracy, factuality, and whether generated answers stay faithful to the documents your system returns.
 ---
 
 # Evaluating RAG pipelines
