@@ -5,7 +5,7 @@ description: Configure Eden AI's EU-based, OpenAI-compatible gateway to evaluate
 
 # Eden AI
 
-[Eden AI](https://www.edenai.co/) is an EU-based, OpenAI-compatible LLM gateway. A single API key reaches models from many providers (OpenAI, Anthropic, Google, Mistral, Cohere and more), and it offers EU data residency, zero data retention, a DPA, and SOC 2 / ISO 27001. The Eden AI provider extends the [OpenAI provider](/docs/providers/openai/), so all of its options are supported.
+[Eden AI](https://www.edenai.co/) is an EU-based, OpenAI-compatible LLM gateway. Use an Eden AI API key to evaluate models available through its non-streaming chat completions endpoint. Consult [Eden AI’s trust center](https://trust.edenai.co/) for current security and compliance information.
 
 ## Setup
 
@@ -41,19 +41,18 @@ providers:
 
 ### Configuration Options
 
-The provider accepts every option the [OpenAI provider](/docs/providers/openai/) supports. Commonly used:
+The provider supports these chat settings, subject to the selected model’s capabilities:
 
 - `temperature`, `max_tokens`, `top_p`, `presence_penalty`, `frequency_penalty`
-- `stream`
 - `response_format` (JSON mode), `tools` / `tool_choice` (function calling)
 - `apiBaseUrl` — override the base URL (see EU data residency below)
 - `apiKey`, `apiKeyEnvar` — set the key directly or from a custom env var
 
-Any other parameter supported by the OpenAI provider is forwarded as-is.
+The adapter supports non-streaming chat completions. Use the Eden AI API documentation to confirm options for the selected model.
 
 ## EU data residency
 
-Eden AI offers an EU endpoint for data residency. Point the provider at it with `apiBaseUrl`:
+To use Eden AI’s EU endpoint, set `apiBaseUrl` as shown below. Check your Eden AI agreement for the applicable data handling terms.
 
 ```yaml
 providers:
