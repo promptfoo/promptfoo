@@ -4,21 +4,45 @@ import { describe, expect, it, vi } from 'vitest';
 import * as markdownConfig from './markdown-config';
 import VariableMarkdownCell from './VariableMarkdownCell';
 
+const markdownFailure = vi.hoisted(() => ({ enabled: false }));
+
+vi.mock('react-markdown', async (importOriginal) => {
+  const markdown = await importOriginal<typeof import('react-markdown')>();
+  return {
+    ...markdown,
+    default: (props: React.ComponentProps<typeof markdown.default>) => {
+      if (markdownFailure.enabled) {
+        throw new RangeError('Markdown parser exceeded its nesting limit');
+      }
+      return <markdown.default {...props} />;
+    },
+  };
+});
+
 describe('VariableMarkdownCell', () => {
   describe('rendering', () => {
     it.each([true, false])(
       'preserves literal content when image extraction fails (forced=%s)',
       (dataImagesOnly) => {
-        const value = `${'> '.repeat(8000)}![Preview](data:image/png;base64,AA==)`;
-        const { container } = render(
-          <VariableMarkdownCell
-            value={value}
-            maxTextLength={100000}
-            dataImagesOnly={dataImagesOnly}
-          />,
-        );
-        expect(screen.queryByRole('img')).not.toBeInTheDocument();
-        expect(container).toHaveTextContent(value);
+        const value = 'Before ![Preview](data:image/png;base64,AA==) after';
+        const extract = vi
+          .spyOn(markdownConfig, 'extractRenderableMarkdownImages')
+          .mockReturnValue([]);
+        markdownFailure.enabled = true;
+        try {
+          const { container } = render(
+            <VariableMarkdownCell
+              value={value}
+              maxTextLength={100}
+              dataImagesOnly={dataImagesOnly}
+            />,
+          );
+          expect(screen.queryByRole('img')).not.toBeInTheDocument();
+          expect(container).toHaveTextContent(value);
+        } finally {
+          markdownFailure.enabled = false;
+          extract.mockRestore();
+        }
       },
     );
 
