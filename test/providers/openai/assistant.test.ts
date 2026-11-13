@@ -52,11 +52,13 @@ vi.mock('openai');
 describe('OpenAI Provider', () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    vi.stubEnv('OPENAI_API_BASE_URL', 'https://gateway.example/v1');
     disableCache();
   });
 
   afterEach(() => {
     enableCache();
+    vi.unstubAllEnvs();
   });
 
   describe('OpenAiAssistantProvider', () => {
@@ -89,6 +91,7 @@ describe('OpenAI Provider', () => {
 
     const provider = new OpenAiAssistantProvider('test-assistant-id', {
       config: {
+        apiBaseUrl: 'https://gateway.example/v1',
         apiKey: 'test-key',
         organization: 'test-org',
         functionToolCallbacks: {
@@ -97,15 +100,13 @@ describe('OpenAI Provider', () => {
       },
     });
 
-    it.each(['gpt-transcribe', 'gpt-live-transcribe', 'gpt-5.3-codex-spark'])(
-      'should reject unsupported first-party model override %s in the direct constructor',
-      (modelName) => {
-        expect(
-          () =>
-            new OpenAiAssistantProvider('test-assistant-id', {
-              config: { apiKey: 'test-key', modelName },
-            }),
-        ).toThrow();
+    it.each(['https://api.openai.com/v1', 'https://eu.api.openai.com/v1'])(
+      'rejects the retired Assistants API at %s before initializing the SDK',
+      (apiBaseUrl) => {
+        expect(() => new OpenAiAssistantProvider('asst_test', { config: { apiBaseUrl } })).toThrow(
+          /retired the Assistants API.*openai:responses/,
+        );
+        expect(OpenAI).not.toHaveBeenCalled();
       },
     );
 
@@ -125,9 +126,7 @@ describe('OpenAI Provider', () => {
 
       expect(OpenAI).toHaveBeenCalledWith(
         expect.objectContaining({
-          defaultHeaders: expect.objectContaining({
-            'X-OpenAI-Originator': 'promptfoo',
-          }),
+          baseURL: 'https://gateway.example/v1',
         }),
       );
       expect(result.output).toBe('[Assistant] Test response');
