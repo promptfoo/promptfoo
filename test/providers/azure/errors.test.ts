@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest';
 import {
   formatContentFilterResponse,
   isContentFilterError,
-  isRateLimitError,
   isServiceError,
 } from '../../../src/providers/azure/errors';
+import { isRateLimitOrQuotaMessage } from '../../../src/util/fetch/errors';
 
 describe('isContentFilterError', () => {
   it.each([
@@ -26,18 +26,28 @@ describe('isContentFilterError', () => {
   });
 });
 
-describe('isRateLimitError', () => {
+describe('isRateLimitOrQuotaMessage', () => {
   it.each([
     'rate limit exceeded',
     'Rate limit reached',
     'HTTP 429 Too Many Requests',
     'Quota exceeded for daily tokens',
+    '429',
+    'Request failed with status code 429.',
+    'API error (429)',
   ])('matches %j', (msg) => {
-    expect(isRateLimitError(msg)).toBe(true);
+    expect(isRateLimitOrQuotaMessage(msg)).toBe(true);
   });
 
-  it('returns false for unrelated errors', () => {
-    expect(isRateLimitError('some other error')).toBe(false);
+  it.each([
+    'API error: 400 Bad Request: your messages resulted in 204291 tokens.',
+    '429 tokens exceed the limit',
+    'The model returned 429 tokens',
+    'Your input used 1,429 tokens',
+    'Request ID: req-429-x',
+    'some other error',
+  ])('does not classify %j as a rate limit', (msg) => {
+    expect(isRateLimitOrQuotaMessage(msg)).toBe(false);
   });
 });
 

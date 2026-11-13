@@ -24,6 +24,44 @@ const statusTool = {
   },
 };
 
+describe('GPT-6.1 Terra requests', () => {
+  it.each([undefined, 'high', 'none'] as const)(
+    'preserves sampling only with reasoning disabled (effort %s)',
+    async (reasoning_effort) => {
+      const config = { reasoning_effort, temperature: 0.4, top_p: 0.8 };
+      const { body: chat } = await new OpenAiChatCompletionProvider('gpt-6.1-terra', {
+        config,
+      }).getOpenAiBody('Say ready.');
+      const { body: responses } = await new OpenAiResponsesProvider('gpt-6.1-terra', {
+        config,
+      }).getOpenAiBody('Say ready.');
+
+      expect(chat.reasoning_effort).toBe(reasoning_effort);
+      expect(responses.reasoning?.effort).toBe(reasoning_effort);
+      for (const body of [chat, responses]) {
+        expect(body.temperature).toBe(reasoning_effort === 'none' ? 0.4 : undefined);
+        expect(body.top_p).toBe(reasoning_effort === 'none' ? 0.8 : undefined);
+      }
+    },
+  );
+
+  it('requires Responses for tools even with reasoning disabled', async () => {
+    const config = { reasoning_effort: 'none' as const, tools: [statusTool] };
+    await expect(
+      new OpenAiChatCompletionProvider('gpt-6.1-terra', { config }).getOpenAiBody(
+        'Get the status.',
+      ),
+    ).rejects.toThrow('Use openai:responses:gpt-6.1-terra');
+    const { body } = await new OpenAiResponsesProvider('gpt-6.1-terra', { config }).getOpenAiBody(
+      'Get the status.',
+    );
+    expect(body).toMatchObject({
+      reasoning: { effort: 'none' },
+      tools: [{ type: 'function', name: 'get_status' }],
+    });
+  });
+});
+
 describe('GPT-6.1 Sol requests', () => {
   let restoreEnv: () => void;
 

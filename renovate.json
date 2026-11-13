@@ -109,6 +109,13 @@
       "allowedVersions": "<6"
     },
     {
+      "description": "Keep the app's React Compiler compatibility alias on Babel 7 until the compiler supports Babel 8 for destructured defaults.",
+      "matchManagers": ["npm"],
+      "matchFileNames": ["src/app/package.json"],
+      "matchDepNames": ["@babel/core-7"],
+      "allowedVersions": "7.x"
+    },
+    {
       "description": "Group GitHub Actions packages together",
       "matchPackagePatterns": ["^@actions/"],
       "groupName": "GitHub Actions"
