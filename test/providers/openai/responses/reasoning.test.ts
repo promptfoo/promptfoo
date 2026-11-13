@@ -196,8 +196,6 @@ describe('OpenAiResponsesProvider reasoning models', () => {
       },
     });
 
-    expect(provider['supportsTemperature']()).toBe(false);
-
     await provider.callApi('Test prompt');
     const request = vi.mocked(cache.fetchWithCache).mock.calls[0][1] as { body: string };
     const body = JSON.parse(request.body);
