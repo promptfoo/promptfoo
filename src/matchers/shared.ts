@@ -11,8 +11,14 @@ import type { ApiProvider, GradingResult, TokenUsage } from '../types/index';
 export function formatResolvedGradingProvider(provider: ApiProvider): string {
   const id = provider.id();
   const label = typeof provider.label === 'string' ? provider.label.trim() : '';
-  const display = label && label !== id ? `${id} (${label})` : id;
-  return sanitizeProviderIdForLog(display);
+  const safeId = sanitizeProviderIdForLog(id);
+  if (!label || label === id) {
+    return safeId;
+  }
+  const safeLabel = label.replace(/[a-z][a-z0-9+.-]*:\/\/[^\s]+/gi, (url) =>
+    sanitizeProviderIdForLog(url),
+  );
+  return `${safeId} (${safeLabel})`;
 }
 
 /**

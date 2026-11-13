@@ -206,6 +206,20 @@ describe('formatResolvedGradingProvider', () => {
     );
   });
 
+  it('redacts URL credentials embedded in a configured judge label', () => {
+    const provider = {
+      id: () => 'openai:gpt-4.1-mini',
+      label: 'Judge https://user:label-password@judge.example/grade?api_key=label-token',
+      callApi: async () => ({ output: '' }),
+    } as ApiProvider;
+
+    const result = attachGradingProvider({ pass: true, score: 1, reason: 'ok' }, provider);
+
+    expect(result.metadata.gradingProvider).toContain('Judge https://***:***@judge.example/grade');
+    expect(result.metadata.gradingProvider).not.toContain('label-password');
+    expect(result.metadata.gradingProvider).not.toContain('label-token');
+  });
+
   it('leaves ordinary provider ids unchanged', () => {
     const provider = {
       id: () => 'openai:gpt-4.1-mini',
