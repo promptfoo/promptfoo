@@ -154,9 +154,7 @@ describe('loadYaml', () => {
 describe('loadConfigYaml', () => {
   it('distinguishes date-only literals from UTC midnight timestamps', () => {
     expect(
-      loadConfigYaml(
-        'values: [2024-01-02, 2024-01-02T00:00:00Z, 2024-01-02T01:00:00+01:00]',
-      ),
+      loadConfigYaml('values: [2024-01-02, 2024-01-02T00:00:00Z, 2024-01-02T01:00:00+01:00]'),
     ).toEqual({ values: ['2024-01-02', '2024-01-02T00:00:00.000Z', '2024-01-02T00:00:00.000Z'] });
   });
 });
