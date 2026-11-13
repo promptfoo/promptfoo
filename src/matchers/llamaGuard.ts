@@ -11,7 +11,8 @@ import { graderFail, normalizeMatcherTokenUsage } from './shared';
 
 import type { CallApiContextParams, GradingConfig, GradingResult } from '../types/index';
 
-const UNSAFE_VERDICT = /^unsafe[^\S\r\n]*\r?\n[^\S\r\n]*S[1-9]\d*(?:[^\S\r\n]*,[^\S\r\n]*S[1-9]\d*)*$/;
+const UNSAFE_VERDICT =
+  /^unsafe[^\S\r\n]*\r?\n[^\S\r\n]*S[1-9]\d*(?:[^\S\r\n]*,[^\S\r\n]*S[1-9]\d*)*$/;
 
 interface LlamaGuardMatchOptions {
   /** The user-side text to classify (used when `conversation` is absent). */
