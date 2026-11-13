@@ -4,6 +4,15 @@ import { describe, expect, it } from 'vitest';
 import { AudioPreviewButton } from './AudioPreviewButton';
 
 describe('AudioPreviewButton', () => {
+  it('animates the compact waveform only while previewing', async () => {
+    const user = userEvent.setup();
+    const { container } = render(<AudioPreviewButton audioUrl="/audio.wav" hash="audio-1" />);
+    await user.click(screen.getByRole('button', { name: 'Play audio preview' }));
+    expect(container.querySelectorAll('.animate-pulse')).toHaveLength(7);
+    await user.click(screen.getByRole('button', { name: 'Pause audio preview' }));
+    expect(container.querySelectorAll('.animate-pulse')).toHaveLength(0);
+  });
+
   it('does not intercept pointer input until the preview control is visible', async () => {
     const user = userEvent.setup();
     render(<AudioPreviewButton audioUrl="/audio.wav" hash="audio-1" />);

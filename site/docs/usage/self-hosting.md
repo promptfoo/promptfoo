@@ -281,6 +281,13 @@ first advance the checkout to the desired release, then rebuild and redeploy. Us
 tagged parent image must be refreshed. An unchanged build context produces the same Promptfoo
 version.
 
+To refresh Alpine packages even when the parent image is unchanged, change the
+`OS_PACKAGE_REFRESH` build argument on each rebuild:
+
+```sh
+docker build --pull --build-arg OS_PACKAGE_REFRESH="$(date +%s)" -t promptfoo:custom .
+```
+
 Custom Dockerfiles that bake Promptfoo into another base image should identify themselves so update
 notices do not suggest a host-level `npm` or `npx` command:
 
@@ -374,6 +381,8 @@ By default, promptfoo stores its SQLite database (`promptfoo.db`) in `/home/prom
 
 By default, promptfoo externalizes large binary outputs (for example, images/audio) to the local filesystem under `/home/promptfoo/.promptfoo/blobs` and replaces inline base64 with lightweight references. To keep media inline (legacy behavior), set `PROMPTFOO_INLINE_MEDIA=true`. Make sure your volume mapping includes `/home/promptfoo/.promptfoo/blobs` so media persists across restarts.
 
+`PROMPTFOO_MEDIA_PATH` applies only to legacy `storageRef` media, which defaults to `/home/promptfoo/.promptfoo/media`; it does not move the `blobs` directory. Set it before media storage is first used: that location stays fixed for the process.
+
 ### Custom Config Directory
 
 You can override the default internal configuration directory (`/home/promptfoo/.promptfoo`) using the `PROMPTFOO_CONFIG_DIR` environment variable. If set, promptfoo uses this path _inside the container_ for both configuration files and the `promptfoo.db` database. You still need to map this custom path to a persistent volume.
@@ -403,7 +412,7 @@ Place a `ui-providers.yaml` file in your `.promptfoo` directory (same location a
 providers:
   # Simple provider IDs
   - openai:gpt-5.4-mini
-  - anthropic:messages:claude-sonnet-4-5-20250929
+  - anthropic:messages:claude-sonnet-5
 
   # With labels and defaults
   - id: openai:gpt-5.1
@@ -446,7 +455,7 @@ data:
   ui-providers.yaml: |
     providers:
       - openai:gpt-5.1
-      - anthropic:messages:claude-sonnet-4-5-20250929
+      - anthropic:messages:claude-sonnet-5
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -519,8 +528,8 @@ providers:
 **Provider ID formats:**
 
 - **OpenAI:** `openai:gpt-5.1`, `openai:gpt-5.4-mini`
-- **Anthropic:** `anthropic:messages:claude-sonnet-4-5-20250929`
-- **AWS Bedrock:** `bedrock:us.anthropic.claude-sonnet-4-5-20250929-v1:0`
+- **Anthropic:** `anthropic:messages:claude-sonnet-5`
+- **AWS Bedrock:** `bedrock:us.anthropic.claude-sonnet-5`
 - **Azure OpenAI:** `azureopenai:chat:deployment-name`
 - **Custom HTTP:** `http://your-api.com/v1` or `https://...`
 

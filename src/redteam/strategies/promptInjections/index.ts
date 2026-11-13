@@ -12,12 +12,12 @@ export async function addInjections(
   const injections =
     sampleSize === 1
       ? // Take skeleton key (the first one) by default
-        [(prompt: string) => data[0].replace(/__PROMPT__/g, prompt)]
+        [(prompt: string) => data[0].replace(/__PROMPT__/g, () => prompt)]
       : // Otherwise, take random samples
         data
           .sort(() => 0.5 - Math.random())
           .slice(0, sampleSize)
-          .map((injection) => (prompt: string) => injection.replace(/__PROMPT__/g, prompt));
+          .map((injection) => (prompt: string) => injection.replace(/__PROMPT__/g, () => prompt));
 
   const filteredTests = harmfulOnly
     ? testCases.filter((t) => t.metadata?.pluginId?.startsWith('harmful:'))

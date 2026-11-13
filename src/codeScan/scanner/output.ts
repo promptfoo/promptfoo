@@ -12,6 +12,7 @@ import {
   CodeScanOutputFormat,
   CodeScanSeverity,
   countBySeverity,
+  filterBySeverity,
   formatSeverity,
   getSeverityRank,
   type ScanResponse,
@@ -109,15 +110,7 @@ export function displayScanResults(
 
     // 4. Detailed findings (only show issues with valid severity)
     if (severityCounts.total > 0) {
-      const validSeverities: CodeScanSeverity[] = [
-        CodeScanSeverity.CRITICAL,
-        CodeScanSeverity.HIGH,
-        CodeScanSeverity.MEDIUM,
-        CodeScanSeverity.LOW,
-      ];
-      const issuesWithSeverity = (comments || []).filter(
-        (c) => c.severity && validSeverities.includes(c.severity),
-      );
+      const issuesWithSeverity = filterBySeverity(comments || []);
 
       // Sort by severity (descending)
       const sortedComments = [...issuesWithSeverity].sort((a, b) => {

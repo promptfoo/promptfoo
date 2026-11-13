@@ -5,14 +5,15 @@ description: Configure TrueFoundry's enterprise-grade AI Gateway (LLM, MCP, and 
 
 # TrueFoundry
 
-[TrueFoundry](https://www.truefoundry.com/ai-gateway) provides an enterprise-grade AI Gateway that encompasses an LLM Gateway, MCP Gateway, and Agent Gateway. This enables enterprises to connect, observe, and govern agentic AI applications across providers from a single control plane. TrueFoundry's gateway is OpenAI-compatible and integrates seamlessly with promptfoo for testing and evaluation.
+[TrueFoundry](https://www.truefoundry.com/ai-gateway) routes requests to LLM providers and MCP
+servers. Promptfoo uses its OpenAI-compatible API for chat completions and embeddings.
 
 The TrueFoundry provider supports:
 
 - Chat completions from multiple LLM providers (OpenAI, Anthropic, Google Gemini, Groq, Mistral, and more)
 - Embeddings
 - Tool use and function calling
-- MCP (Model Context Protocol) servers for enhanced capabilities
+- MCP (Model Context Protocol) servers
 - Custom metadata and logging configuration
 - Real-time observability and monitoring
 
@@ -70,8 +71,7 @@ The TrueFoundry provider supports the following configuration options:
 
 For self-hosted or enterprise deployments, you can specify a custom API base URL:
 
-```yaml title="promptfooconfig.yaml"
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+```yaml
 providers:
   - id: truefoundry:openai-main/gpt-5
     config:
@@ -83,14 +83,16 @@ If not specified, the default URL `https://llm-gateway.truefoundry.com` is used.
 
 ### TrueFoundry-Specific Configuration
 
-TrueFoundry provides additional configuration options for metadata tracking and logging:
+TrueFoundry provides additional configuration options for metadata tracking, logging, and local
+OpenAI cost lookup:
 
-```yaml title="promptfooconfig.yaml"
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+```yaml
 providers:
-  - id: truefoundry:openai-main/gpt-5
+  - id: truefoundry:production-east/gpt-5
     config:
       temperature: 0.7
+      openaiAccountNames:
+        - production-east
       metadata:
         user_id: 'test-user'
         environment: 'production'
@@ -103,6 +105,9 @@ Configuration options:
 
 - `metadata`: Custom metadata to track with each request (object with key-value pairs)
 - `loggingConfig`: Logging configuration for observability (must include `enabled: true`)
+- `openaiAccountNames`: Additional TrueFoundry OpenAI account names to use for local OpenAI cost
+  lookup. `openai-main` is recognized by default. This option does not rewrite the model ID sent to
+  TrueFoundry.
 
 ## Model Support
 
@@ -120,11 +125,18 @@ providers:
 
 ### Anthropic Models
 
+For Claude 5, set `omitDefaults: true` to omit Promptfoo's default `temperature: 0`.
+Leave sampling parameters unset in your config and environment; explicit values still apply.
+
 ```yaml
 providers:
-  - truefoundry:anthropic-main/claude-sonnet-4.5
-  - truefoundry:anthropic-main/claude-3-5-sonnet-20241022
-  - truefoundry:anthropic-main/claude-3-opus-20240229
+  - id: truefoundry:anthropic-main/claude-sonnet-5
+    config:
+      omitDefaults: true
+  - id: truefoundry:anthropic-main/claude-opus-5
+    config:
+      omitDefaults: true
+  - truefoundry:anthropic-main/claude-haiku-4-5
 ```
 
 ### Google Gemini Models
@@ -233,7 +245,7 @@ tests:
 
 ## MCP Servers (Model Context Protocol)
 
-TrueFoundry supports MCP servers for enhanced tool capabilities. MCP servers provide access to integrated tools like web search, code execution, and more:
+TrueFoundry supports MCP servers for tool capabilities. MCP servers provide access to integrated tools like web search, code execution, and more:
 
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
@@ -276,7 +288,7 @@ Common integrations include:
 
 ## Complete Example
 
-Here's a comprehensive example demonstrating TrueFoundry's capabilities:
+Here's an example demonstrating TrueFoundry's capabilities:
 
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
@@ -300,10 +312,10 @@ providers:
             - name: 'web_search'
       iteration_limit: 10
 
-  - id: truefoundry:anthropic-main/claude-sonnet-4.5
-    label: 'Claude Sonnet 4.5 via TrueFoundry'
+  - id: truefoundry:anthropic-main/claude-sonnet-5
+    label: 'Claude Sonnet 5 via TrueFoundry'
     config:
-      temperature: 0.7
+      omitDefaults: true
       max_tokens: 1000
       metadata:
         user_id: 'eval-user'

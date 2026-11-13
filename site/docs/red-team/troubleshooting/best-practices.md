@@ -1,6 +1,6 @@
 ---
 title: Best Practices for Configuring AI Red Teaming
-description: Improve red team success by enriching context, combining strategies, enabling multi-turn attacks and calibrating graders
+description: Improve red team success by enriching context, combining strategies, enabling multi-turn attacks, and calibrating graders
 sidebar_label: Best Practices
 ---
 
@@ -21,49 +21,49 @@ Improves: _Attack Success Rate_, _False Positive Rate_, _Coverage_
   **Don't skimp on this!** It is the single most important part of your configuration. Include who the users are, what data and tools they can reach, and what the system must not do.
 
 - Extra context significantly improves the quality of generated test cases and reduces grader confusion. The whole system is tuned to emphasize Application Details.
-- Multi‑line descriptions are encouraged. Promptfoo passes the entire block to our attacker models so it can craft domain‑specific exploits.
+- Multi-line descriptions are encouraged. Promptfoo passes the entire block to our attacker models so it can craft domain-specific exploits.
 
 ## 2. Use a Diverse Suite of Strategies
 
 Improves: _Attack Success Rate_, _Coverage_
 
-There are many [strategies](/docs/red-team/strategies/) that can improve attack success rate, but we recommend at least enabling these three:
+There are many [strategies](/docs/red-team/strategies/) that can improve attack success rate, but we recommend at least enabling these:
 
 | Strategy                                                                | Why include it?                                               |
 | ----------------------------------------------------------------------- | ------------------------------------------------------------- |
+| [Meta-Agent Jailbreaks](/docs/red-team/strategies/meta/)                | Builds attack taxonomies and learns across attempts           |
 | [Composite Jailbreaks](/docs/red-team/strategies/composite-jailbreaks/) | Chains top research techniques                                |
-| [Iterative Jailbreak](/docs/red-team/strategies/iterative/)             | LLM‑as‑Judge refines a single prompt until it bypasses safety |
-| [Tree‑Based Jailbreak](/docs/red-team/strategies/tree/)                 | Explores branching attack paths (Tree of Attacks)             |
+| [Iterative Jailbreak](/docs/red-team/strategies/iterative/)             | LLM-as-Judge refines a single prompt until it bypasses safety |
+| [Tree-Based Jailbreak](/docs/red-team/strategies/tree/)                 | Explores branching attack paths (Tree of Attacks)             |
 
 Apply several [strategies](/docs/red-team/strategies/) together to maximize coverage. Here's what it looks like if you're editing a config directly:
 
 ```yaml
 redteam:
   strategies:
+    - jailbreak:meta
     - jailbreak
     - jailbreak:tree
     - jailbreak:composite
 ```
 
-## 3. Enable Multi‑Turn Attacks
+## 3. Enable Multi-Turn Attacks
 
 Improves: _Attack Success Rate_, _Coverage_
 
-If your target supports conversation state, enable:
+If your target supports conversation state, add **[Hydra](/docs/red-team/strategies/hydra/)** (`jailbreak:hydra`): a multi-turn branching agent that keeps memory across turns and shares what it learns across the whole scan.
 
-- **[Crescendo](/docs/red-team/strategies/multi-turn/)**: Gradually escalates harm over turns (based on research from Microsoft).
-- **[GOAT](/docs/red-team/strategies/goat/)**: Generates adaptive multi‑turn attack conversations (based on research from Meta).
-
-Multi‑turn approaches uncover failures that appear only after context builds up and routinely add 70–90% more successful attacks. Configure them in YAML just like any other strategy:
+Multi-turn approaches uncover failures that appear only after context builds up, and routinely add 70-90% more successful attacks.
 
 ```yaml
 redteam:
   strategies:
-    - crescendo
-    - goat
+    - jailbreak:hydra
 ```
 
-See the [Multi‑turn strategy guide](/docs/red-team/strategies/multi-turn/) for tuning maximum turns, back‑tracking, and session handling.
+[Crescendo](/docs/red-team/strategies/multi-turn/) (gradual escalation, from Microsoft research) and [GOAT](/docs/red-team/strategies/goat/) (adaptive attacker conversations, from Meta research) remain fully supported and reach a comparable attack success rate. Hydra is recommended first because it carries attacker memory across the entire scan rather than one conversation at a time.
+
+See the [Hydra strategy guide](/docs/red-team/strategies/hydra/) for tuning maximum turns, backtracking, and session handling.
 
 ## 4. Add Custom Prompts & Policies
 
@@ -78,9 +78,9 @@ Put on your thinking cap and try to make these _as specific as possible_ to your
 | Plugin                                                    | Purpose                                                                             |
 | --------------------------------------------------------- | ----------------------------------------------------------------------------------- |
 | [Intent (Custom Prompts)](/docs/red-team/plugins/intent/) | Supply known "danger phrases" to test. Great for compliance checklists              |
-| [Policy](/docs/red-team/plugins/policy/)                  | Encode organization‑specific rules; Promptfoo crafts attacks that try to break them |
+| [Policy](/docs/red-team/plugins/policy/)                  | Encode organization-specific rules; Promptfoo crafts attacks that try to break them |
 
-Declare them under [`plugins:`](/docs/red-team/plugins/) and pair with your high‑ASR strategies so the Promptfoo attacker can mutate your seed inputs or policy text into sophisticated exploits.
+Declare them under [`plugins:`](/docs/red-team/plugins/) and pair with your high-ASR strategies so the Promptfoo attacker can mutate your seed inputs or policy text into sophisticated exploits.
 
 ## 5. Calibrate Grading
 
@@ -90,11 +90,11 @@ Deciding whether LLM outputs are good or bad can be subjective, and Promptfoo ca
 
 There are two main levers to [reduce false positives](/docs/red-team/troubleshooting/false-positives/): add more context to the purpose, and add grader examples.
 
-1. **Context first**: An under‑specified purpose/application details is the #1 cause of false flags. The models that decide whether the output is OK or not depend on this.
+1. **Context first**: An under-specified purpose/application details is the #1 cause of false flags. The models that decide whether the output is OK or not depend on this.
 
    Your Application Details/Purpose should include all the detail a human red teamer would need to be productive right out of the gate. If the Promptfoo red teamer is behaving in a way that is suboptimal, the first thing you should do is modify your Application Details.
 
-2. **Grader examples**: Teach the evaluator by adding explicit pass/fail examples for edge‑cases. In [Enterprise](/docs/enterprise) there's a [UI for managing false positives](/docs/red-team/troubleshooting/grading-results/#customizing-graders-for-specific-plugins-in-promptfoo-enterprise) and grading examples as the system learns from your results. In open-source you can manually add examples:
+2. **Grader examples**: Teach the evaluator by adding explicit pass/fail examples for edge-cases. In [Enterprise](/docs/enterprise) there's a [UI for managing false positives](/docs/red-team/troubleshooting/grading-results/#customizing-graders-for-specific-plugins-in-promptfoo-enterprise) and grading examples as the system learns from your results. In open-source you can manually add examples:
 
    ```yaml
    graderExamples:
@@ -110,16 +110,16 @@ There are two main levers to [reduce false positives](/docs/red-team/troubleshoo
 
    Full guidance in ["About the Grader"](/docs/red-team/troubleshooting/grading-results/).
 
-   Iterate on these examples as you inspect reports. Grading improves quickly with just a handful of well‑chosen cases.
+   Iterate on these examples as you inspect reports. Grading improves quickly with just a handful of well-chosen cases.
 
 ## Key Takeaways
 
 - **Context is king**. A rich [Application Details section](/docs/red-team/quickstart/#provide-application-details) aka Purpose will deliver better attacks and better grading.
-- Combine multiple high‑ASR [strategies](/docs/red-team/strategies/) (single‑turn and multi‑turn) for broad coverage.
-- Use [custom prompts](/docs/red-team/plugins/intent/) and [policies](/docs/red-team/plugins/policy/) to test domain‑specific risks.
+- Combine multiple high-ASR [strategies](/docs/red-team/strategies/) (single-turn and multi-turn) for broad coverage.
+- Use [custom prompts](/docs/red-team/plugins/intent/) and [policies](/docs/red-team/plugins/policy/) to test domain-specific risks.
 - Calibrate the [grader](/docs/red-team/troubleshooting/grading-results/) with examples, and enable [Retry](/docs/red-team/strategies/retry/) to catch regressions.
 
-Follow these practices and Promptfoo will give you actionable, high‑signal red‑team reports you can trust.
+Follow these practices and Promptfoo will give you actionable, high-signal red-team reports you can trust.
 
 ## Related Documentation
 
