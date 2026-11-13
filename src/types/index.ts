@@ -915,9 +915,17 @@ export const VarsSchema = z.custom<Vars>((data) => {
   if (typeof data !== 'object' || data === null || Array.isArray(data)) {
     return false;
   }
-  // Ensure it's a plain object (not Map, Date, Set, etc.)
-  if (Object.getPrototypeOf(data) !== Object.prototype && Object.getPrototypeOf(data) !== null) {
-    return false;
+  const proto = Object.getPrototypeOf(data);
+  if (proto !== null && proto !== Object.prototype) {
+    // The CJS fallback uses another context's Object.prototype.
+    const ctor = Object.getOwnPropertyDescriptor(proto, 'constructor')?.value;
+    if (
+      Object.getPrototypeOf(proto) !== null ||
+      typeof ctor !== 'function' ||
+      Function.prototype.toString.call(ctor) !== Function.prototype.toString.call(Object)
+    ) {
+      return false;
+    }
   }
   return Object.values(data as Record<string, unknown>).every(isValidVarValue);
 });

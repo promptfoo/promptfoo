@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -350,6 +351,27 @@ describe('ESM utilities', () => {
     });
 
     describe('CJS fallback for .js files', () => {
+      it('validates vars loaded through the CJS fallback', () => {
+        // Native Node is needed; Vitest can bypass the fallback.
+        const script = `
+          import assert from 'node:assert/strict';
+          import { importModule } from './src/esm.ts';
+          import { TestCaseSchema } from './src/types/index.ts';
+          const cases = await importModule('./test/__fixtures__/testCasesCjsFallback.js');
+          assert.notEqual(Object.getPrototypeOf(cases[0].vars), Object.prototype);
+          assert.equal(cases[0].vars.input, 'hello');
+          assert.equal(cases[0].vars.count, 2);
+          assert.equal(TestCaseSchema.safeParse(cases[0]).success, true);
+          console.log('valid fallback vars');
+        `;
+        const output = execFileSync(process.execPath, ['--import', 'tsx', '--input-type=module'], {
+          cwd: path.resolve(testDir, '..'),
+          encoding: 'utf8',
+          input: script,
+        });
+        expect(output).toContain('valid fallback vars');
+      });
+
       it('loads CommonJS .js files via CJS fallback when ESM fails', async () => {
         const modulePath = path.resolve(testDir, '__fixtures__/testModuleCjsFallback.js');
 
