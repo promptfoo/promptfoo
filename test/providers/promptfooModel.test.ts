@@ -2,7 +2,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cloudConfig } from '../../src/globalConfig/cloud';
 import logger from '../../src/logger';
 import { PromptfooModelProvider } from '../../src/providers/promptfooModel';
+import { createChatCompletion } from '../factories/literalFixtures';
 import type { Mock } from 'vitest';
+
+const createRemoteChatResponse = () => ({
+  result: createChatCompletion('test response'),
+});
 
 describe('PromptfooModelProvider', () => {
   let mockFetch: Mock;
@@ -33,17 +38,7 @@ describe('PromptfooModelProvider', () => {
     const provider = new PromptfooModelProvider('test-model');
     const mockResponse = {
       ok: true,
-      json: () =>
-        Promise.resolve({
-          result: {
-            choices: [{ message: { content: 'test response' } }],
-            usage: {
-              total_tokens: 10,
-              prompt_tokens: 5,
-              completion_tokens: 5,
-            },
-          },
-        }),
+      json: () => Promise.resolve(createRemoteChatResponse()),
     };
     mockFetch.mockResolvedValue(mockResponse);
 
@@ -69,13 +64,7 @@ describe('PromptfooModelProvider', () => {
 
     const mockResponse = {
       ok: true,
-      json: () =>
-        Promise.resolve({
-          result: {
-            choices: [{ message: { content: 'test response' } }],
-            usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-          },
-        }),
+      json: () => Promise.resolve(createRemoteChatResponse()),
     };
     mockFetch.mockResolvedValue(mockResponse);
 
@@ -106,7 +95,9 @@ describe('PromptfooModelProvider', () => {
       text: () => Promise.resolve('Internal server error'),
     });
 
-    await expect(provider.callApi('test')).rejects.toThrow('PromptfooModel task API error: 500');
+    await expect(provider.callApi('test')).rejects.toThrow(
+      'PromptfooModel task API error: HTTP 500',
+    );
   });
 
   it('should handle invalid API responses', async () => {

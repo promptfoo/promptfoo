@@ -37,7 +37,6 @@ const DEFAULT_RESOLUTION = '2K';
 const DEFAULT_DURATION = 6;
 const DEFAULT_POLL_INTERVAL_MS = 5000;
 const DEFAULT_MAX_POLL_TIME_MS = 600000;
-const _VALID_RATIOS = new Set(['adaptive', '21:9', '16:9', '4:3', '1:1', '3:4', '9:16']);
 
 function getApiKey(config: MiniMaxVideoOptions, env?: MiniMaxVideoEnv): string | undefined {
   return config.apiKey || env?.MINIMAX_API_KEY || process.env.MINIMAX_API_KEY;
@@ -189,8 +188,9 @@ export class MiniMaxVideoProvider {
         }
         const task = statusData?.task || statusData?.data?.task || statusData?.data;
         taskStatus = task?.status;
-        videoUrl = task?.content?.url || task?.content?.video_url || task?.video_url;
-        if (videoUrl && ['Success', 'success', 'completed', '2'].includes(String(taskStatus))) {
+        const candidateUrl = task?.content?.url || task?.content?.video_url || task?.video_url;
+        if (typeof candidateUrl === 'string' && candidateUrl && ['Success', 'success', 'completed', '2'].includes(String(taskStatus))) {
+          videoUrl = candidateUrl;
           break;
         }
         if (['Fail', 'Failed', 'failed', 'error'].includes(String(taskStatus))) {
@@ -217,7 +217,6 @@ export class MiniMaxVideoProvider {
       return {
         output: formatVideoOutput(prompt, url),
         latencyMs: Date.now() - started,
-        cost: 0,
         video: {
           id: taskId,
           storageRef: { key: storageRef.key },

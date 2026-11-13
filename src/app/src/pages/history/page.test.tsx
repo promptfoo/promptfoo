@@ -1,8 +1,7 @@
 import React from 'react';
 
-import { EvalHistoryProvider } from '@app/contexts/EvalHistoryContext';
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import HistoryPage from './page';
 
@@ -15,11 +14,7 @@ vi.mock('@app/utils/api', () => ({
 }));
 
 const renderWithProviders = (ui: React.ReactElement) => {
-  return render(
-    <EvalHistoryProvider>
-      <MemoryRouter>{ui}</MemoryRouter>
-    </EvalHistoryProvider>,
-  );
+  return render(<MemoryRouter>{ui}</MemoryRouter>);
 };
 
 vi.mock('../../components/ErrorBoundary', () => ({

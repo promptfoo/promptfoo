@@ -1,6 +1,6 @@
 # openai-responses (OpenAI Responses API Examples)
 
-This directory contains examples for testing OpenAI's Responses API with promptfoo.
+These examples use OpenAI's Responses API. GPT-6 provider IDs such as `openai:gpt-6-sol` select Responses by default.
 
 You can run this example with:
 
@@ -13,42 +13,23 @@ cd openai-responses
 
 ### Basic Responses API (`promptfooconfig.yaml`)
 
-Basic example showing how to use the Responses API with GPT-5.6 Sol, Terra, and Luna, plus a GPT-4.1 comparison model.
+Basic example showing how to use the Responses API with GPT-6 Sol, Luna, and Astra, plus a GPT-4.1 comparison model.
 
 ### External Response Format (`promptfooconfig.external-format.yaml`)
 
-Example demonstrating how to load `response_format` configuration from external files. This is useful for:
-
-- Reusing complex JSON schemas across multiple configurations
-- Managing large schemas in separate files for better organization
-- Version controlling schemas independently
-
-This example compares inline vs. external file approach:
-
-- **Inline**: JSON schema defined directly in the config
-- **External**: JSON schema loaded from `response_format.json` using `file://` syntax
+Compares inline JSON schemas with schemas loaded from `response_format.json` using `file://`. External files let you reuse a schema across configurations.
 
 ### Function Calling (`promptfooconfig.function-call.yaml`)
 
-Example demonstrating function calling capabilities with the Responses API.
+Checks that the response contains a `get_current_weather` function call. This example uses the Responses API function-tool format; it does not execute the weather function.
 
 ### Function Callbacks (`promptfooconfig.function-callback.yaml`)
 
-Example showing how to use function callbacks to execute functions locally instead of just returning the function call. This allows you to:
-
-- Execute custom logic when the model calls a function
-- Return the result directly to the test assertions
-- Test end-to-end workflows including function execution
-
-Key differences from regular function calling:
-
-- Uses `functionToolCallbacks` to define JavaScript functions
-- Functions are executed locally and results are returned
-- Perfect for testing tool-using AI agents
+Uses `functionToolCallbacks` to run an `addNumbers` function locally when the model calls it. Assertions check the callback result.
 
 ### Reasoning Models (`promptfooconfig.reasoning.yaml`)
 
-Compare GPT-5.6 Sol, Terra, and Luna with GPT-6 Astra using explicit reasoning budgets.
+Compare GPT-6 Sol, Luna, and Astra using explicit reasoning effort settings.
 
 ### GPT-5.1 (`promptfooconfig.gpt-5.1.yaml`)
 
@@ -65,7 +46,7 @@ Example comparing GPT-5.2 with different reasoning effort levels:
 
 - **none**: No reasoning tokens for fastest responses
 - **medium**: Balanced reasoning for most tasks
-- **high**: Maximum reasoning for complex problem-solving
+- **high**: More reasoning for complex problem-solving
 
 ### GPT-5.5 (`promptfooconfig.gpt-5.5.yaml`)
 
@@ -98,14 +79,13 @@ Example using Codex models for code generation tasks.
 
 ### MCP (Model Context Protocol) (`promptfooconfig.mcp.yaml`)
 
-Example demonstrating OpenAI's MCP integration with remote MCP servers. This example uses the DeepWiki MCP server to query GitHub repositories.
+Example demonstrating OpenAI's MCP integration with remote MCP servers. It requires a call to DeepWiki's `ask_wiki_question` tool to query public GitHub repositories. Assertions check that the MCP call succeeds and that the answer includes the expected topic.
 
 #### MCP Features Demonstrated:
 
 - Remote MCP server integration
 - Tool filtering with `allowed_tools`
 - Approval settings configuration
-- Authentication headers (when needed)
 
 ## Running the Examples
 
@@ -113,46 +93,53 @@ To run any of these examples:
 
 ```bash
 # Basic Responses API example
-npx promptfoo eval -c promptfooconfig.yaml
+npx promptfoo@latest eval -c promptfooconfig.yaml --no-cache
 
 # External response format example
-npx promptfoo eval -c promptfooconfig.external-format.yaml
+npx promptfoo@latest eval -c promptfooconfig.external-format.yaml --no-cache
 
 # MCP example
-npx promptfoo eval -c promptfooconfig.mcp.yaml
+npx promptfoo@latest eval -c promptfooconfig.mcp.yaml --no-cache
 
 # Function calling example
-npx promptfoo eval -c promptfooconfig.function-call.yaml
+npx promptfoo@latest eval -c promptfooconfig.function-call.yaml --no-cache
 
 # Function callbacks example
-npx promptfoo eval -c promptfooconfig.function-callback.yaml
+npx promptfoo@latest eval -c promptfooconfig.function-callback.yaml --no-cache
 
 # Reasoning models example
-npx promptfoo eval -c promptfooconfig.reasoning.yaml
+npx promptfoo@latest eval -c promptfooconfig.reasoning.yaml --no-cache
 
 # GPT-5.1 example
-npx promptfoo eval -c promptfooconfig.gpt-5.1.yaml
+npx promptfoo@latest eval -c promptfooconfig.gpt-5.1.yaml --no-cache
 
 # GPT-5.2 example
-npx promptfoo eval -c promptfooconfig.gpt-5.2.yaml
+npx promptfoo@latest eval -c promptfooconfig.gpt-5.2.yaml --no-cache
 
 # GPT-5.5 example
-npx promptfoo eval -c promptfooconfig.gpt-5.5.yaml
+npx promptfoo@latest eval -c promptfooconfig.gpt-5.5.yaml --no-cache
 
 # GPT-5.6 example
-npx promptfoo eval -c promptfooconfig.gpt-5.6.yaml
+npx promptfoo@latest eval -c promptfooconfig.gpt-5.6.yaml --no-cache
 
 # GPT-6 Astra example
-npx promptfoo eval -c promptfooconfig.gpt-6-astra.yaml --no-cache
+npx promptfoo@latest eval -c promptfooconfig.gpt-6-astra.yaml --no-cache
+
+# Image input example
+npx promptfoo@latest eval -c promptfooconfig.image.yaml --no-cache
+
+# Web search example
+npx promptfoo@latest eval -c promptfooconfig.web-search.yaml --no-cache
 
 # Prompt caching example
-npx promptfoo eval -c promptfooconfig.prompt-cache.yaml
+npx promptfoo@latest eval -c promptfooconfig.prompt-cache.yaml --no-cache
 
 ```
 
 ## Prerequisites
 
-- OpenAI API key set in `OPENAI_API_KEY` environment variable
+- OpenAI API key set in the `OPENAI_API_KEY` environment variable
+- Model access for every configured provider; the basic, function-calling, and reasoning examples include GPT-6 Astra
 - For MCP examples: Access to remote MCP servers (some may require authentication)
 
 ## Notes
