@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback } from 'react';
 
 import { Chip } from '@app/components/ui/chip';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
+import { useCopyFeedback } from '@app/hooks/useCopyFeedback';
 import { Check, Copy } from 'lucide-react';
 
 interface EvalIdChipProps {
@@ -10,30 +11,11 @@ interface EvalIdChipProps {
 }
 
 export const EvalIdChip = ({ evalId, onCopy }: EvalIdChipProps) => {
-  const [copied, setCopied] = useState(false);
-  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => {
-    return () => {
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-      }
-    };
-  }, []);
-
+  const [copied, showCopied] = useCopyFeedback(2000);
   const handleCopy = useCallback(() => {
     onCopy();
-    setCopied(true);
-
-    if (timeoutRef.current) {
-      clearTimeout(timeoutRef.current);
-    }
-
-    timeoutRef.current = setTimeout(() => {
-      setCopied(false);
-      timeoutRef.current = null;
-    }, 2000);
-  }, [onCopy]);
+    showCopied();
+  }, [onCopy, showCopied]);
 
   return (
     <Tooltip>
