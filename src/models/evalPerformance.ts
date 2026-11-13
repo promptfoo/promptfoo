@@ -1,4 +1,4 @@
-import { sql } from 'drizzle-orm';
+import { inArray, sql } from 'drizzle-orm';
 import { HUMAN_ASSERTION_TYPE } from '../constants';
 import { getDb } from '../database/index';
 import { evalResultsTable } from '../database/tables';
@@ -23,42 +23,8 @@ interface CountCacheEntry {
 
 // Simple in-memory cache for counts with 5-minute TTL
 const countCache = new Map<string, CountCacheEntry>();
+const pendingDistinctCounts = new Map<string, symbol>();
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
-
-async function getResultCount(evalId: string, distinct: boolean): Promise<number> {
-  const cacheKey = `${distinct ? 'distinct' : 'total'}:${evalId}`;
-  const cached = countCache.get(cacheKey);
-
-  if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
-    logger.debug(
-      `Using cached ${distinct ? 'distinct count' : 'total row count'} for eval ${evalId}: ${cached.count}`,
-    );
-    return cached.count;
-  }
-
-  const db = await getDb();
-  const start = Date.now();
-
-  // Count distinct test indices (unique test cases) - this is what the UI shows as "results"
-  // Count all result rows - use this when iterating over all results
-  const result = await db
-    .select({ count: distinct ? sql<number>`COUNT(DISTINCT test_idx)` : sql<number>`COUNT(*)` })
-    .from(evalResultsTable)
-    .where(sql`eval_id = ${evalId}`)
-    .all();
-
-  const count = Number(result[0]?.count ?? 0);
-  const duration = Date.now() - start;
-
-  logger.debug(
-    `${distinct ? 'Distinct count' : 'Total row count'} query for eval ${evalId}: ${count} in ${duration}ms`,
-  );
-
-  // Cache the result
-  countCache.set(cacheKey, { count, timestamp: Date.now() });
-
-  return count;
-}
 
 /**
  * Get the count of distinct test indices for an eval.
@@ -67,8 +33,65 @@ async function getResultCount(evalId: string, distinct: boolean): Promise<number
  * Use getTotalResultRowCount() if you need the total number of result rows
  * (which may be higher when there are multiple prompts/providers per test case).
  */
-export function getCachedResultsCount(evalId: string): Promise<number> {
-  return getResultCount(evalId, true);
+export async function getCachedResultsCount(evalId: string): Promise<number> {
+  return (await getCachedResultsCounts([evalId])).get(evalId) ?? 0;
+}
+
+/** Get distinct test counts together, querying only cache misses in bounded batches. */
+export async function getCachedResultsCounts(
+  evalIds: readonly string[],
+): Promise<Map<string, number>> {
+  const counts = new Map<string, number>();
+  const missingIds: string[] = [];
+  for (const evalId of new Set(evalIds)) {
+    const cached = countCache.get(`distinct:${evalId}`);
+    if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+      counts.set(evalId, cached.count);
+    } else {
+      missingIds.push(evalId);
+    }
+  }
+
+  if (missingIds.length === 0) {
+    return counts;
+  }
+
+  const db = await getDb();
+  // Stay within SQLite's conservative bound-parameter limit, including older databases.
+  const BATCH_SIZE = 999;
+  for (let offset = 0; offset < missingIds.length; offset += BATCH_SIZE) {
+    const batch = missingIds.slice(offset, offset + BATCH_SIZE);
+    // An invalidation or newer read must prevent this snapshot from refilling the cache.
+    const token = Symbol();
+    for (const evalId of batch) {
+      pendingDistinctCounts.set(evalId, token);
+    }
+    try {
+      const rows = await db
+        .select({ evalId: evalResultsTable.evalId, count: sql<number>`COUNT(DISTINCT test_idx)` })
+        .from(evalResultsTable)
+        .where(inArray(evalResultsTable.evalId, batch))
+        .groupBy(evalResultsTable.evalId)
+        .all();
+      const batchCounts = new Map(rows.map((row) => [row.evalId, Number(row.count)]));
+      const timestamp = Date.now();
+      for (const evalId of batch) {
+        const count = batchCounts.get(evalId) ?? 0;
+        counts.set(evalId, count);
+        if (pendingDistinctCounts.get(evalId) === token) {
+          countCache.set(`distinct:${evalId}`, { count, timestamp });
+        }
+      }
+    } finally {
+      for (const evalId of batch) {
+        if (pendingDistinctCounts.get(evalId) === token) {
+          pendingDistinctCounts.delete(evalId);
+        }
+      }
+    }
+  }
+
+  return counts;
 }
 
 /**
@@ -78,16 +101,44 @@ export function getCachedResultsCount(evalId: string): Promise<number> {
  *
  * Use this for progress tracking when iterating over all results (e.g., sharing).
  */
-export function getTotalResultRowCount(evalId: string): Promise<number> {
-  return getResultCount(evalId, false);
+export async function getTotalResultRowCount(evalId: string): Promise<number> {
+  const cacheKey = `total:${evalId}`;
+  const cached = countCache.get(cacheKey);
+
+  if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+    logger.debug(`Using cached total row count for eval ${evalId}: ${cached.count}`);
+    return cached.count;
+  }
+
+  const db = await getDb();
+  const start = Date.now();
+
+  // Count all result rows - use this when iterating over all results
+  const result = await db
+    .select({ count: sql<number>`COUNT(*)` })
+    .from(evalResultsTable)
+    .where(sql`eval_id = ${evalId}`)
+    .all();
+
+  const count = Number(result[0]?.count ?? 0);
+  const duration = Date.now() - start;
+
+  logger.debug(`Total row count query for eval ${evalId}: ${count} in ${duration}ms`);
+
+  // Cache the result
+  countCache.set(cacheKey, { count, timestamp: Date.now() });
+
+  return count;
 }
 
 export function clearCountCache(evalId?: string) {
   if (evalId) {
     countCache.delete(`distinct:${evalId}`);
+    pendingDistinctCounts.delete(evalId);
     countCache.delete(`total:${evalId}`);
   } else {
     countCache.clear();
+    pendingDistinctCounts.clear();
   }
 }
 
