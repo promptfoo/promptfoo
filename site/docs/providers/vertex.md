@@ -20,6 +20,28 @@ TTS cost estimates include the [published promotional credits](https://cloud.goo
 
 ### Gemini Models
 
+**Gemini 4:**
+
+- `vertex:gemini-4-argon` - Flagship reasoning model for complex coding, knowledge work, and agentic workflows ($2/1M input, $10/1M output on the global endpoint through November 30, 2026)
+- `vertex:gemini-4-argon-cyber-permissive` - Allowlisted Fairwind variant for cyber defense ($4/1M input, $20/1M output on the global endpoint)
+- `vertex:gemini-4-hydrogen` - Fast Gemini 4 model for everyday coding, agentic workflows, multimodal analysis, and tool use ($1.50/1M input, $7.50/1M output on the global endpoint)
+
+[Gemini 4 Argon](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/gemini/4-argon) and [Gemini 4 Hydrogen](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/gemini/4-hydrogen) are available on the `global` endpoint, which promptfoo uses by default, and on the `us` and `eu` multi-regions. Regional endpoints such as `us-central1` do not serve Argon. On [Vertex](https://cloud.google.com/gemini-enterprise-agent-platform/generative-ai/pricing), Argon has 50% promotional credits through November 30, 2026, then costs $4/1M input and $20/1M output on the global endpoint. The `us` and `eu` multi-regions add 10%, Priority requests cost 1.8 times the standard rate, and Batch requests cost half. Promptfoo includes the promotional credits, multi-region premium, and service tier in cost estimates, and prices Flex requests at the Batch rate.
+
+Vertex returns a 400 error for penalties, `MINIMAL` thinking, and any `thinkingBudget`, including `0`. See [Gemini 4](/docs/providers/google#gemini-4) for thinking levels and the parameters promptfoo removes or rejects; they apply to both APIs. Explicit context caching is not supported. For Argon, Google documents a 32,768-token output limit for non-streaming requests and 65,536 tokens for streaming requests, so set `streaming: true` for longer responses. A Hydrogen response can contain up to 65,536 output tokens either way.
+
+```yaml
+providers:
+  - id: vertex:gemini-4-hydrogen
+    config:
+      projectId: my-project-id
+      generationConfig:
+        thinkingConfig:
+          thinkingLevel: XHIGH
+```
+
+`gemini-4-argon-cyber-permissive` requires an allowlisted project in Google's Fairwind Program and is available on `global` and `us`. Promotional credits do not apply to it. Promptfoo defaults it to `global`.
+
 **Gemini 3.8:**
 
 - `vertex:gemini-3.8-flash` - Latest Gemini Flash model for coding and agentic workflows ($0.75/1M input, $3.75/1M output through December 31, 2026)
@@ -60,7 +82,7 @@ controls, which promptfoo removes automatically. Configure reasoning with
 
 - `vertex:gemini-3-flash-preview` - Frontier intelligence with Pro-grade reasoning at Flash-level speed, thinking, and grounding ($0.50/1M input, $3/1M output)
 
-Promptfoo defaults the Gemini 3 models above to the `global` endpoint. An explicit `config.region`,
+Promptfoo defaults the Gemini 4 and Gemini 3 models above to the `global` endpoint. An explicit `config.region`,
 `GOOGLE_CLOUD_LOCATION`, or `VERTEX_REGION` still takes precedence. Check each model's
 [supported regions](https://docs.cloud.google.com/vertex-ai/generative-ai/docs/learn/locations#generative_ai_models)
 before selecting a non-global endpoint. For current GA Gemini 3 models, see Google's
@@ -279,10 +301,10 @@ Vertex video extension adds 7 seconds to the source video. Promptfoo omits `dura
 
 ### Gemini Model Specifications
 
-Gemini models on Vertex AI (2.5 and 3.x):
+Gemini models on Vertex AI (2.5, 3.x, and 4):
 
 - Input context: up to 1M tokens
-- Output context: up to 65K tokens for Gemini 3.8 Flash, 3.7 Flash, 3.6 Flash, and 3.5 Flash-Lite
+- Output context: up to 65K tokens for Gemini 4 Argon, 4 Hydrogen, 3.8 Flash, 3.7 Flash, 3.6 Flash, and 3.5 Flash-Lite
 - Supports: Text, code, images, audio, video, and PDF inputs
 - Features: System instructions, structured JSON output, function calling, thinking, code execution, URL context, and grounding with Google Search or Google Maps
 
@@ -521,8 +543,8 @@ region supported by your model. Voice dialogue on Vertex Live and prediction-bas
 
 Different models are available in different regions. Common regions include:
 
-- `global` - Default for Gemini 3 chat models with either OAuth or API-key authentication. Supported by Gemini 3.8 Flash, 3.7 Flash, 3.6 Flash, and 3.5 Flash-Lite
-- `us`, `eu` - Multi-region endpoints supported by Gemini 3.8 Flash, 3.7 Flash, 3.6 Flash, and 3.5 Flash-Lite (10% pricing premium)
+- `global` - Default for Gemini 4 and Gemini 3 chat models with either OAuth or API-key authentication. Supported by Gemini 4 Argon, 4 Hydrogen, 3.8 Flash, 3.7 Flash, 3.6 Flash, and 3.5 Flash-Lite
+- `us`, `eu` - Multi-region endpoints supported by the same models (10% pricing premium)
 - `us-central1` - Default for prediction-based text embeddings and Vertex Live voice dialogue; model availability varies
 - `us-east4` - Additional capacity
 - `us-east5` - Claude models available
