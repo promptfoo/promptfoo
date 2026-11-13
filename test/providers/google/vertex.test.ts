@@ -10,6 +10,7 @@ import { GoogleAuthManager } from '../../../src/providers/google/auth';
 import * as vertexUtil from '../../../src/providers/google/util';
 import { VertexChatProvider, VertexEmbeddingProvider } from '../../../src/providers/google/vertex';
 import { fetchWithProxy } from '../../../src/util/fetch';
+import { mockProcessEnv } from '../../util/utils';
 import type { JSONClient } from 'google-auth-library/build/src/auth/googleauth';
 
 // Hoisted mocks for cache
@@ -4600,9 +4601,18 @@ describe('VertexChatProvider.callClaudeApi', () => {
     },
   );
 
-  it.each(['claude-fable-5', 'claude-fable-5-1', 'claude-mythos-5-1'])(
+  // Base cost of 5 input and 1 output tokens: $10/$50 per MTok, or $8/$40 on 5.2.
+  const FABLE_BASE_COSTS = [
+    ['claude-fable-5', 0.0001],
+    ['claude-fable-5-1', 0.0001],
+    ['claude-mythos-5-1', 0.0001],
+    ['claude-fable-5-2', 0.00008],
+    ['claude-mythos-5-2', 0.00008],
+  ] as const;
+
+  it.each(FABLE_BASE_COSTS)(
     'supports %s with adaptive-safe parameters and regional pricing',
-    async (model) => {
+    async (model, baseCost) => {
       provider = new VertexChatProvider(model, {
         config: { max_tokens: 32, temperature: 0.5, top_p: 0.9, top_k: 40 },
       });
@@ -4640,13 +4650,13 @@ describe('VertexChatProvider.callClaudeApi', () => {
       expect(sentBody.temperature).toBeUndefined();
       expect(sentBody.top_p).toBeUndefined();
       expect(sentBody.top_k).toBeUndefined();
-      expect(result.cost).toBeCloseTo(0.00011, 8);
+      expect(result.cost).toBeCloseTo(baseCost * 1.1, 10);
     },
   );
 
-  it.each(['claude-fable-5', 'claude-fable-5-1', 'claude-mythos-5-1'])(
+  it.each(FABLE_BASE_COSTS)(
     'uses base pricing for %s on the global Vertex region',
-    async (model) => {
+    async (model, baseCost) => {
       provider = new VertexChatProvider(model, {
         config: { region: 'global', max_tokens: 32 },
       });
@@ -4680,9 +4690,8 @@ describe('VertexChatProvider.callClaudeApi', () => {
 
       const request = mockRequest.mock.calls[0][0];
       expect(request.url).toContain('/locations/global/');
-      // Global region bills at the base Claude 5 rate (no 10% regional premium):
-      // 5 input * $10/MTok + 1 output * $50/MTok = $0.0001
-      expect(result.cost).toBeCloseTo(0.0001, 8);
+      // Global region bills at the base rate (no 10% regional premium).
+      expect(result.cost).toBeCloseTo(baseCost, 10);
     },
   );
 
@@ -5389,6 +5398,92 @@ describe('VertexChatProvider.callClaudeApi', () => {
         }
         throw new Error(`File not found: ${pathStr}`);
       });
+    });
+
+    it.each(
+      ['object', 'JSON string', 'file path', 'rendered file path'].flatMap((source) =>
+        ['{{ 7 * 7 }}', '{{ env.PROMPTFOO_SCHEMA_TEST_CANARY }}'].map((description) => ({
+          source,
+          description,
+        })),
+      ),
+    )(
+      'keeps runtime template text literal in $source: $description',
+      async ({ source, description }) => {
+        const restoreEnv = mockProcessEnv({ PROMPTFOO_SCHEMA_TEST_CANARY: 'schema-test-canary' });
+        try {
+          const schema = {
+            type: 'object',
+            properties: {
+              message: {
+                type: 'string',
+                description: '{{ description }}',
+                enum: ['{{ description }}'],
+              },
+            },
+            required: ['message'],
+          };
+          const schemaFile = 'file://test/response-schema.json';
+          const responseSchema =
+            source === 'object'
+              ? schema
+              : source === 'JSON string'
+                ? JSON.stringify(schema)
+                : source === 'file path'
+                  ? 'file://test/{{ schemaName }}.json'
+                  : '{{ schemaFile }}';
+          vi.mocked(fs.existsSync).mockReturnValue(true);
+          vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(schema));
+          const request = vi.fn().mockResolvedValue({
+            data: [{ candidates: [{ content: { parts: [{ text: '{"message":"ok"}' }] } }] }],
+          });
+          vi.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
+            client: { request } as unknown as JSONClient,
+            projectId: 'test-project-id',
+          });
+          provider = new VertexChatProvider('gemini-2.5-flash', {
+            config: { responseSchema },
+          });
+
+          await provider.callGeminiApi('test', {
+            vars: { description, schemaName: 'response-schema', schemaFile },
+            prompt: { raw: 'test', label: 'test' },
+          });
+
+          expect(request).toHaveBeenCalledWith(
+            expect.objectContaining({
+              data: expect.objectContaining({
+                generationConfig: expect.objectContaining({
+                  response_schema: {
+                    ...schema,
+                    properties: { message: { type: 'string', description, enum: [description] } },
+                  },
+                  response_mime_type: 'application/json',
+                }),
+              }),
+            }),
+          );
+          if (source === 'file path' || source === 'rendered file path') {
+            expect(fs.readFileSync).toHaveBeenCalledWith(
+              expect.stringContaining('response-schema.json'),
+              'utf8',
+            );
+          }
+        } finally {
+          restoreEnv();
+        }
+      },
+    );
+
+    it('rejects invalid inline JSON before calling the provider', async () => {
+      provider = new VertexChatProvider('gemini-2.5-flash', {
+        config: { responseSchema: '{"type": "object",}' },
+      });
+
+      await expect(provider.callGeminiApi('test')).rejects.toThrow(
+        'Invalid JSON in responseSchema',
+      );
+      expect(vertexUtil.getGoogleClient).not.toHaveBeenCalled();
     });
 
     it('should handle responseSchema with JSON string', async () => {
