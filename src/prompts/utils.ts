@@ -1,5 +1,5 @@
-import { generateIdFromPrompt } from '../models/prompt';
 import { VALID_FILE_EXTENSIONS } from './constants';
+import { generateIdFromPrompt } from './id';
 
 import type { Prompt } from '../types/index';
 
@@ -18,15 +18,11 @@ export function maybeFilePath(str: string): boolean {
     return false;
   }
 
+  // An extension can end the string or precede the last colon in a reference like prompts.py:generate.
+  const lastColon = str.lastIndexOf(':');
   return (
     str.startsWith('file://') ||
-    VALID_FILE_EXTENSIONS.some((ext) => {
-      const tokens = str.split(':'); // str may be file.js:functionName
-      // Checks if the second to last token or the last token ends with the extension
-      const pathOrFunctionToken = tokens[tokens.length - 1];
-      const pathToken = tokens[tokens.length - 2];
-      return pathOrFunctionToken?.endsWith(ext) || pathToken?.endsWith(ext);
-    }) ||
+    VALID_FILE_EXTENSIONS.some((ext) => str.endsWith(ext) || str.endsWith(ext, lastColon)) ||
     str.charAt(str.length - 3) === '.' ||
     str.charAt(str.length - 4) === '.' ||
     str.includes('*') ||
