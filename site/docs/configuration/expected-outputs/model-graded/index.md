@@ -231,7 +231,7 @@ default. If you do not have access to the selected default or prefer a different
 override the grader. There are several ways to do this, depending on your preferred workflow:
 
 :::note
-When none of these overrides is set, the grader falls back to `defaultTest.provider` — the provider that also generates the test responses — before the built-in default, so the same model grades its own output. Promptfoo prints a warning when it resolves this way; set an explicit grader at any level to silence it.
+Some model-graded assertions can fall back to `defaultTest.provider` before using the built-in grader. For tests that also generate responses with that provider, this can make a model grade its own output. Promptfoo warns when it selects this fallback for text grading.
 :::
 
 1. Using the `--grader` CLI option:
