@@ -21,8 +21,8 @@ JWT_SECRET = os.getenv("JWT_SECRET", "cloudswag-secret-change-in-production")
 JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
 
 # MCP Server Configuration
-# SQLite MCP server can be installed via: uvx mcp-server-sqlite
-# Using uvx to run the published package instead of a local script
+# The SQLite reference server runs in an isolated uvx environment with MCP v1.
+# See mcp_client.py for the compatible server version and SDK constraint.
 USE_UVX_SQLITE = os.getenv("USE_UVX_SQLITE", "true").lower() == "true"
 SQLITE_MCP_SERVER = Path(
     os.getenv("SQLITE_MCP_SERVER", "")

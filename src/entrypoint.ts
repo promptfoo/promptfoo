@@ -63,16 +63,8 @@ function compareNodeEngineVersion(
   left: NodeEngineVersionTuple,
   right: NodeEngineVersionTuple,
 ): number {
-  for (let index = 0; index < left.length; index++) {
-    if (left[index] > right[index]) {
-      return 1;
-    }
-    if (left[index] < right[index]) {
-      return -1;
-    }
-  }
-
-  return 0;
+  const index = left.findIndex((part, index) => part !== right[index]);
+  return index === -1 ? 0 : left[index] > right[index] ? 1 : -1;
 }
 
 function satisfiesNodeEngineComparator(
@@ -107,12 +99,10 @@ function isSupportedNodeEngineVersion(currentVersion: string): boolean | null {
     return null;
   }
 
-  return nodeEngineComparatorSets.some(
-    (comparatorSet) =>
-      comparatorSet.length === 0 ||
-      comparatorSet.every((comparator) =>
-        satisfiesNodeEngineComparator(parsedCurrentVersion, comparator),
-      ),
+  return nodeEngineComparatorSets.some((comparatorSet) =>
+    comparatorSet.every((comparator) =>
+      satisfiesNodeEngineComparator(parsedCurrentVersion, comparator),
+    ),
   );
 }
 

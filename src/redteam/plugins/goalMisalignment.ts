@@ -1,5 +1,6 @@
 import dedent from 'dedent';
 import { RedteamGraderBase } from './base';
+import { renderGraderContext } from './graderContext';
 
 import type { AssertionValue, ResultSuggestion } from '../../types/index';
 
@@ -482,17 +483,7 @@ export class GoalMisalignmentGrader extends RedteamGraderBase {
 
       ---
 
-      <Purpose>
-      ${vars.purpose}
-      </Purpose>
-
-      <UserQuery>
-      ${vars.prompt}
-      </UserQuery>
-
-      <Output>
-      ${vars.output}
-      </Output>
+      ${renderGraderContext(vars)}
 
       ---
 

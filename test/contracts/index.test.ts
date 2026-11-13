@@ -26,6 +26,7 @@ import {
   SuccessResponseSchema,
   UserSchemas,
 } from '../../src/contracts';
+import { ProviderOptionsSchema } from '../../src/validators/providers';
 
 describe('contracts leaf surface', () => {
   describe('barrel exports', () => {
@@ -76,6 +77,68 @@ describe('contracts leaf surface', () => {
   });
 
   describe('ProviderEnvOverridesSchema', () => {
+    it('preserves supported provider authentication, account and generation overrides', () => {
+      const env = {
+        ANTHROPIC_TEMPERATURE: '0',
+        CEREBRAS_API_KEY: 'fixture-cerebras-token',
+        DASHSCOPE_API_KEY: 'fixture-dashscope-token',
+        DEEPSEEK_API_KEY: 'fixture-deepseek-token',
+        F5_API_KEY: 'fixture-f5-token',
+        GOOGLE_CLOUD_PROJECT: 'fixture-project',
+        LITELLM_API_KEY: 'fixture-litellm-token',
+        LLAMA_API_KEY: 'fixture-llama-token',
+        LOCALAI_TEMPERATURE: '0',
+        PERPLEXITY_API_KEY: 'fixture-perplexity-token',
+        QWAK_TOKEN: 'fixture-qwak-token',
+        TOGETHER_API_KEY: 'fixture-together-token',
+        TRUEFOUNDRY_API_KEY: 'fixture-truefoundry-token',
+      };
+
+      expect(ProviderEnvOverridesSchema.parse(env)).toEqual(env);
+    });
+
+    it.each([
+      { PROMPTFOO_PYTHON: 'python3', PROMPTFOO_PYTHON_WORKERS: '2' },
+      { PROMPTFOO_PYTHON: '', PROMPTFOO_PYTHON_WORKERS: '' },
+    ])('preserves Python runtime overrides: %j', (env) => {
+      expect(ProviderEnvOverridesSchema.parse(env)).toEqual(env);
+    });
+
+    it.each(['PROMPTFOO_PYTHON', 'PROMPTFOO_PYTHON_WORKERS'])(
+      'rejects non-string %s values',
+      (key) => {
+        expect(ProviderEnvOverridesSchema.safeParse({ [key]: 2 }).success).toBe(false);
+      },
+    );
+
+    it('preserves Google Cloud project and location aliases', () => {
+      const env = {
+        GOOGLE_CLOUD_PROJECT: 'live-project',
+        GOOGLE_CLOUD_LOCATION: 'europe-west4',
+      };
+      expect(ProviderEnvOverridesSchema.parse(env)).toEqual(env);
+    });
+
+    it.each(['GOOGLE_CLOUD_PROJECT', 'GOOGLE_CLOUD_LOCATION'])(
+      'rejects non-string %s values',
+      (key) => {
+        expect(ProviderEnvOverridesSchema.safeParse({ [key]: 123 }).success).toBe(false);
+      },
+    );
+
+    it.each([
+      'AZURE_AI_PROJECT_URL',
+      'SNOWFLAKE_ACCOUNT_IDENTIFIER',
+      'GOOGLE_APPLICATION_CREDENTIALS',
+      'PROMPTFOO_TRACING_ENABLED',
+      'PROMPTFOO_MAX_CONCURRENCY',
+    ])('preserves %s strings and empty masks while rejecting other values', (key) => {
+      for (const value of ['fixture', '']) {
+        expect(ProviderEnvOverridesSchema.parse({ [key]: value })).toEqual({ [key]: value });
+      }
+      expect(ProviderEnvOverridesSchema.safeParse({ [key]: 123 }).success).toBe(false);
+    });
+
     it('parses a known env key', () => {
       const parsed = ProviderEnvOverridesSchema.safeParse({ OPENAI_API_KEY: 'sk-known' });
       expect(parsed.success).toBe(true);
@@ -86,13 +149,42 @@ describe('contracts leaf surface', () => {
 
     it('preserves AWS_BEARER_TOKEN_BEDROCK (used by the Bedrock OpenAI Responses path)', () => {
       const parsed = ProviderEnvOverridesSchema.safeParse({
+        AWS_ACCESS_KEY_ID: 'access-key',
         AWS_BEARER_TOKEN_BEDROCK: 'bedrock-api-key',
         AWS_BEDROCK_REGION: 'us-east-2',
+        AWS_PROFILE: 'bedrock-profile',
+        AWS_SECRET_ACCESS_KEY: 'secret-key',
+        AWS_SESSION_TOKEN: 'session-token',
       });
       expect(parsed.success).toBe(true);
       if (parsed.success) {
+        expect(parsed.data.AWS_ACCESS_KEY_ID).toBe('access-key');
         expect(parsed.data.AWS_BEARER_TOKEN_BEDROCK).toBe('bedrock-api-key');
         expect(parsed.data.AWS_BEDROCK_REGION).toBe('us-east-2');
+        expect(parsed.data.AWS_PROFILE).toBe('bedrock-profile');
+        expect(parsed.data.AWS_SECRET_ACCESS_KEY).toBe('secret-key');
+        expect(parsed.data.AWS_SESSION_TOKEN).toBe('session-token');
+      }
+    });
+
+    it('preserves GOOGLE_CLOUD_LOCATION for provider-scoped Vertex configuration', () => {
+      const parsed = ProviderEnvOverridesSchema.safeParse({
+        GOOGLE_CLOUD_LOCATION: 'us-central1',
+      });
+      expect(parsed.success).toBe(true);
+      if (parsed.success) {
+        expect(parsed.data.GOOGLE_CLOUD_LOCATION).toBe('us-central1');
+      }
+    });
+
+    it('preserves GOOGLE_CLOUD_PROJECT through provider config validation', () => {
+      const parsed = ProviderOptionsSchema.safeParse({
+        id: 'vertex:embedding:gemini-embedding-001',
+        env: { GOOGLE_CLOUD_PROJECT: 'provider-project' },
+      });
+      expect(parsed.success).toBe(true);
+      if (parsed.success) {
+        expect(parsed.data.env).toEqual({ GOOGLE_CLOUD_PROJECT: 'provider-project' });
       }
     });
 

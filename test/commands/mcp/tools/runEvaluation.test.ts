@@ -4,6 +4,7 @@ import path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../../../src/cliState';
+import * as resultFormatter from '../../../../src/commands/mcp/lib/resultFormatter';
 import { AnthropicMessagesProvider } from '../../../../src/providers/anthropic/messages';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
@@ -66,13 +67,7 @@ vi.mock('../../../../src/node/doEval', () => ({
   }),
 }));
 
-// `evaluate` is spied on rather than replaced so tests that exercise the real
-// filtered path still run actual providers; tests that only assert on the options
-// passed through opt out with `mockResolvedValueOnce`.
-vi.mock('../../../../src/evaluator', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../../../src/evaluator')>();
-  return { ...actual, evaluate: vi.fn(actual.evaluate) };
-});
+const { formatEvaluationResults, formatPromptsSummary } = resultFormatter;
 
 describe('runEvaluation tool', () => {
   beforeEach(() => {
@@ -96,12 +91,7 @@ describe('runEvaluation tool', () => {
       const callApi = vi
         .spyOn(AnthropicMessagesProvider.prototype, 'callApi')
         .mockResolvedValue({ output: 'offline fixture' });
-      const { registerRunEvaluationTool } = await import(
-        '../../../../src/commands/mcp/tools/runEvaluation'
-      );
-      const tool = vi.fn();
-      registerRunEvaluationTool({ tool } as unknown as McpServer);
-      const [, schema, handler] = tool.mock.calls[0];
+      const { schema, handler } = await getRunEvaluationTool();
       const advertisedMatch = schema.providerFilter.description.match(/"(anthropic:[^"]+)"/);
       expect(advertisedMatch).not.toBeNull();
       const advertisedFilter = advertisedMatch![1];
@@ -117,7 +107,7 @@ describe('runEvaluation tool', () => {
           configPath,
           JSON.stringify({
             prompts: ['{{topic}}'],
-            providers: ['anthropic:messages:claude-sonnet-4-6', 'echo'],
+            providers: ['anthropic:messages:claude-sonnet-5', 'echo'],
             tests: [
               {
                 vars: { topic: 'offline fixture' },
@@ -136,8 +126,8 @@ describe('runEvaluation tool', () => {
         });
         const response = JSON.parse(result.content[0].text);
         const expectedProviders = mixed
-          ? ['anthropic:claude-sonnet-4-6', 'echo']
-          : ['anthropic:claude-sonnet-4-6'];
+          ? ['anthropic:claude-sonnet-5', 'echo']
+          : ['anthropic:claude-sonnet-5'];
 
         expect(result.isError).toBe(false);
         expect(response.success).toBe(true);
@@ -150,8 +140,8 @@ describe('runEvaluation tool', () => {
         expect(callApi).toHaveBeenCalledTimes(1);
         const actualProvider = callApi.mock.contexts[0] as AnthropicMessagesProvider;
         expect(actualProvider).toBeInstanceOf(AnthropicMessagesProvider);
-        expect(actualProvider.id()).toBe('anthropic:claude-sonnet-4-6');
-        expect(actualProvider.modelName).toBe('claude-sonnet-4-6');
+        expect(actualProvider.id()).toBe('anthropic:claude-sonnet-5');
+        expect(actualProvider.modelName).toBe('claude-sonnet-5');
       } finally {
         Object.assign(cliState, originalState);
         await rm(tempDir, { recursive: true, force: true });
@@ -160,25 +150,27 @@ describe('runEvaluation tool', () => {
   );
 
   describe('result formatting', () => {
-    it('should use shared formatter for pagination', async () => {
-      const { formatEvaluationResults } = await import(
-        '../../../../src/commands/mcp/lib/resultFormatter'
-      );
+    const createSuccessfulEvaluation = (_: unknown, i: number) => ({
+      testCase: { description: `test case ${i}`, assert: [] },
+      vars: { index: i },
+      prompt: { label: 'test', raw: 'prompt text' },
+      provider: { id: 'provider', label: 'Provider' },
+      response: { output: `response ${i}` },
+      success: true,
+      score: 1,
+      namedScores: {},
+      cost: 0.001,
+      latencyMs: 100,
+    });
 
+    it('should use shared formatter for pagination', async () => {
       const mockSummary = {
         version: 3,
         stats: { successes: 5, failures: 2, errors: 0 },
         results: Array.from({ length: 10 }, (_, i) => ({
-          testCase: { description: `test case ${i}`, assert: [] },
-          vars: { index: i },
-          prompt: { label: 'test', raw: 'prompt text' },
-          provider: { id: 'provider', label: 'Provider' },
-          response: { output: `response ${i}` },
+          ...createSuccessfulEvaluation(_, i),
           success: i < 5,
           score: i < 5 ? 1 : 0,
-          namedScores: {},
-          cost: 0.001,
-          latencyMs: 100,
         })),
         prompts: [],
       };
@@ -193,25 +185,10 @@ describe('runEvaluation tool', () => {
     });
 
     it('should respect custom pagination options', async () => {
-      const { formatEvaluationResults } = await import(
-        '../../../../src/commands/mcp/lib/resultFormatter'
-      );
-
       const mockSummary = {
         version: 3,
         stats: { successes: 100, failures: 0, errors: 0 },
-        results: Array.from({ length: 100 }, (_, i) => ({
-          testCase: { description: `test case ${i}`, assert: [] },
-          vars: { index: i },
-          prompt: { label: 'test', raw: 'prompt text' },
-          provider: { id: 'provider', label: 'Provider' },
-          response: { output: `response ${i}` },
-          success: true,
-          score: 1,
-          namedScores: {},
-          cost: 0.001,
-          latencyMs: 100,
-        })),
+        results: Array.from({ length: 100 }, createSuccessfulEvaluation),
         prompts: [],
       };
 
@@ -230,25 +207,10 @@ describe('runEvaluation tool', () => {
     });
 
     it('should limit results to max 100', async () => {
-      const { formatEvaluationResults } = await import(
-        '../../../../src/commands/mcp/lib/resultFormatter'
-      );
-
       const mockSummary = {
         version: 3,
         stats: { successes: 200, failures: 0, errors: 0 },
-        results: Array.from({ length: 200 }, (_, i) => ({
-          testCase: { description: `test case ${i}`, assert: [] },
-          vars: { index: i },
-          prompt: { label: 'test', raw: 'prompt text' },
-          provider: { id: 'provider', label: 'Provider' },
-          response: { output: `response ${i}` },
-          success: true,
-          score: 1,
-          namedScores: {},
-          cost: 0.001,
-          latencyMs: 100,
-        })),
+        results: Array.from({ length: 200 }, createSuccessfulEvaluation),
         prompts: [],
       };
 
@@ -261,10 +223,6 @@ describe('runEvaluation tool', () => {
     });
 
     it('should truncate long text fields', async () => {
-      const { formatEvaluationResults } = await import(
-        '../../../../src/commands/mcp/lib/resultFormatter'
-      );
-
       const longText = 'x'.repeat(500);
       const mockSummary = {
         version: 3,
@@ -294,10 +252,6 @@ describe('runEvaluation tool', () => {
 
   describe('prompts summary formatting', () => {
     it('should format prompts summary for version 3', async () => {
-      const { formatPromptsSummary } = await import(
-        '../../../../src/commands/mcp/lib/resultFormatter'
-      );
-
       const mockSummary = {
         version: 3,
         stats: { successes: 1, failures: 0, errors: 0 },
@@ -316,10 +270,6 @@ describe('runEvaluation tool', () => {
     });
 
     it('should return empty array for non-version 3 summaries', async () => {
-      const { formatPromptsSummary } = await import(
-        '../../../../src/commands/mcp/lib/resultFormatter'
-      );
-
       const mockSummary = {
         version: 2,
         stats: { successes: 1, failures: 0, errors: 0 },
@@ -347,8 +297,8 @@ describe('runEvaluation tool', () => {
       const Eval = (await import('../../../../src/models/eval')).default;
       vi.spyOn(Eval, 'create').mockResolvedValueOnce({ id: 'filtered-eval-record' } as any);
 
-      const { evaluate } = await import('../../../../src/evaluator');
-      vi.mocked(evaluate).mockResolvedValueOnce({
+      const evaluator = await import('../../../../src/evaluator');
+      const evaluate = vi.spyOn(evaluator, 'evaluate').mockResolvedValueOnce({
         id: 'filtered-eval-123',
         toEvaluateSummary: vi.fn().mockResolvedValue({
           version: 3,
@@ -382,18 +332,7 @@ describe('runEvaluation tool', () => {
     });
 
     it('should error on mixed numeric and non-numeric filters', async () => {
-      const { registerRunEvaluationTool } = await import(
-        '../../../../src/commands/mcp/tools/runEvaluation'
-      );
-
-      let toolHandler: any;
-      const mockServer = {
-        tool: vi.fn((_name, _schema, handler) => {
-          toolHandler = handler;
-        }),
-      } as any;
-
-      registerRunEvaluationTool(mockServer);
+      const { handler: toolHandler } = await getRunEvaluationTool();
 
       const result = await toolHandler({
         configPath: 'test.yaml',
@@ -416,16 +355,7 @@ describe('runEvaluation tool', () => {
         },
       } as any);
 
-      const { registerRunEvaluationTool } = await import(
-        '../../../../src/commands/mcp/tools/runEvaluation'
-      );
-
-      let toolHandler: any;
-      registerRunEvaluationTool({
-        tool: vi.fn((_name, _schema, handler) => {
-          toolHandler = handler;
-        }),
-      } as any);
+      const { handler: toolHandler } = await getRunEvaluationTool();
 
       const result = await toolHandler({
         configPath: 'test.yaml',
@@ -450,16 +380,7 @@ describe('runEvaluation tool', () => {
         },
       } as any);
 
-      const { registerRunEvaluationTool } = await import(
-        '../../../../src/commands/mcp/tools/runEvaluation'
-      );
-
-      let toolHandler: any;
-      registerRunEvaluationTool({
-        tool: vi.fn((_name, _schema, handler) => {
-          toolHandler = handler;
-        }),
-      } as any);
+      const { handler: toolHandler } = await getRunEvaluationTool();
 
       const result = await toolHandler({
         configPath: 'test.yaml',
@@ -479,16 +400,7 @@ describe('runEvaluation tool', () => {
         new ConfigResolutionError('You must provide at least 1 prompt'),
       );
 
-      const { registerRunEvaluationTool } = await import(
-        '../../../../src/commands/mcp/tools/runEvaluation'
-      );
-
-      let toolHandler: any;
-      registerRunEvaluationTool({
-        tool: vi.fn((_name, _schema, handler) => {
-          toolHandler = handler;
-        }),
-      } as any);
+      const { handler: toolHandler } = await getRunEvaluationTool();
 
       const result = await toolHandler({
         configPath: 'test.yaml',
@@ -496,6 +408,12 @@ describe('runEvaluation tool', () => {
       });
 
       expect(result.isError).toBe(true);
+      expect(JSON.parse(result.content[0].text)).toEqual({
+        tool: 'run_evaluation',
+        success: false,
+        timestamp: expect.any(String),
+        error: 'You must provide at least 1 prompt',
+      });
       const logger = (await import('../../../../src/logger')).default;
       expect(logger.error).toHaveBeenCalledWith(
         'Evaluation execution failed: You must provide at least 1 prompt',
@@ -503,3 +421,14 @@ describe('runEvaluation tool', () => {
     });
   });
 });
+
+async function getRunEvaluationTool() {
+  const { registerRunEvaluationTool } = await import(
+    '../../../../src/commands/mcp/tools/runEvaluation'
+  );
+  const tool = vi.fn();
+  registerRunEvaluationTool({ tool } as unknown as McpServer);
+  expect(tool).toHaveBeenCalledTimes(1);
+  const [, schema, handler] = tool.mock.calls[0];
+  return { schema, handler };
+}

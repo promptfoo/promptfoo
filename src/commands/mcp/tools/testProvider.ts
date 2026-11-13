@@ -4,31 +4,6 @@ import { loadApiProvider, loadApiProviders } from '../../../providers/index';
 import { createToolResponse, withTimeout } from '../lib/utils';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
-import type { TokenUsage } from '../../../types/index';
-
-interface TestResult {
-  providerId: string;
-  success: boolean;
-  responseTime: number;
-  response?: string;
-  error?: string;
-  tokenUsage?: TokenUsage;
-  cost?: number;
-  timedOut: boolean;
-  metadata: {
-    prompt: string;
-    completedAt?: string;
-    failedAt?: string;
-    model?: string;
-    responseQuality?: string;
-    promptLength?: number;
-    responseLength?: number;
-    timeoutMs?: number;
-    errorType?: string;
-    isCustomPrompt?: boolean;
-  };
-}
-
 /**
  * Tool to test AI provider connectivity and response quality
  */
@@ -47,8 +22,8 @@ export function registerTestProviderTool(server: McpServer) {
         .describe(
           dedent`
             Provider to test. Examples:
-            - "openai:gpt-4o"
-            - "anthropic:claude-sonnet-4-6"
+            - "openai:gpt-5.6"
+            - "anthropic:claude-sonnet-5"
             - {"id": "custom-provider", "config": {...}}
             - path to custom provider file
           `,
@@ -100,9 +75,6 @@ export function registerTestProviderTool(server: McpServer) {
         `;
 
       try {
-        // Extract provider ID for error messages
-        const _providerId = typeof provider === 'string' ? provider : provider.id;
-
         // Load the provider
         const apiProvider = await loadProvider(provider);
 
@@ -122,7 +94,7 @@ export function registerTestProviderTool(server: McpServer) {
           // Evaluate response quality (skip correctness check for custom prompts)
           const responseQuality = evaluateResponseQuality(response.output, isCustomPrompt);
 
-          const testResult: TestResult = {
+          return createToolResponse('test_provider', true, {
             providerId: typeof apiProvider.id === 'function' ? apiProvider.id() : apiProvider.id,
             success: true,
             responseTime,
@@ -139,32 +111,13 @@ export function registerTestProviderTool(server: McpServer) {
               responseLength: response.output?.length || 0,
               isCustomPrompt,
             },
-          };
-
-          return createToolResponse('test_provider', true, testResult);
+          });
         } catch (error) {
-          const endTime = Date.now();
           const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-          const timedOut = errorMessage.includes('timed out');
-
-          const testResult: TestResult = {
-            providerId: typeof apiProvider.id === 'function' ? apiProvider.id() : apiProvider.id,
-            success: false,
-            responseTime: endTime - startTime,
-            error: errorMessage,
-            timedOut,
-            metadata: {
-              prompt: defaultPrompt,
-              failedAt: new Date(endTime).toISOString(),
-              timeoutMs,
-              errorType: timedOut ? 'timeout' : 'api_error',
-            },
-          };
-
           return createToolResponse(
             'test_provider',
             false,
-            testResult,
+            undefined,
             `Provider test failed: ${errorMessage}`,
           );
         }
@@ -177,10 +130,7 @@ export function registerTestProviderTool(server: McpServer) {
           return createToolResponse(
             'test_provider',
             false,
-            {
-              providerId,
-              suggestion: 'Set the appropriate environment variables or update your config file.',
-            },
+            undefined,
             `Invalid credentials for provider "${providerId}". Check your API keys and configuration.`,
           );
         }
@@ -189,12 +139,7 @@ export function registerTestProviderTool(server: McpServer) {
           return createToolResponse(
             'test_provider',
             false,
-            {
-              providerId,
-              suggestion:
-                'Use format like "openai:gpt-4" or check available providers with "promptfoo providers"',
-              examples: ['openai:gpt-4o', 'anthropic:claude-sonnet-4-6', 'azure:deployment-name'],
-            },
+            undefined,
             `Provider "${providerId}" not found. Check the provider ID format.`,
           );
         }
@@ -202,7 +147,7 @@ export function registerTestProviderTool(server: McpServer) {
         return createToolResponse(
           'test_provider',
           false,
-          { providerId, originalError: errorMessage },
+          undefined,
           `Failed to test provider: ${errorMessage}`,
         );
       }
