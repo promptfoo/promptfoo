@@ -71,7 +71,11 @@ export class LlamaProvider implements ApiProvider {
       logit_bias: this.config?.logit_bias,
     };
 
-    const url = resolveProviderEnv(this.env, ['LLAMA_BASE_URL'])?.value || 'http://localhost:8080';
+    // Strip trailing slashes so a configured base URL like `http://host:8080/`
+    // does not produce double-slash request paths.
+    const url = (
+      resolveProviderEnv(this.env, ['LLAMA_BASE_URL'])?.value || 'http://localhost:8080'
+    ).replace(/\/+$/, '');
 
     interface LlamaCompletionResponse {
       content: string;
