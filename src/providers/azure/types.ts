@@ -1,6 +1,10 @@
+import type {
+  AzureChatConfigInput,
+  AzureResponsesConfigInput,
+} from '../../contracts/providerConfig/azure';
 import type { EnvOverrides } from '../../types/env';
 import type { MCPConfig } from '../mcp/types';
-import type { AssistantFunctionCallback, GPT5ReasoningEffort } from '../openai/types';
+import type { AssistantFunctionCallback } from '../openai/types';
 
 /**
  * Options for configuring retry behavior
@@ -17,6 +21,16 @@ interface RetryOptions {
   /** Error message patterns that should trigger a retry */
   retryableErrorMessages?: string[];
 }
+
+type AzureResponseFormatSchema =
+  | `file://${string}`
+  | {
+      type: 'object';
+      properties: Record<string, any>;
+      required?: string[];
+      additionalProperties: false;
+      $defs?: Record<string, any>;
+    };
 
 export interface AzureCompletionOptions {
   // Azure identity params
@@ -59,45 +73,48 @@ export interface AzureCompletionOptions {
   frequency_penalty?: number;
   presence_penalty?: number;
   best_of?: number;
-  functions?: {
-    name: string;
-    description?: string;
-    parameters: any;
-  }[];
+  functions?:
+    | AzureChatConfigInput['functions']
+    | {
+        name: string;
+        description?: string;
+        parameters: any;
+      }[];
   function_call?: 'none' | 'auto' | { name: string };
-  tools?: {
-    type: string;
-    function: {
-      name: string;
-      description?: string;
-      parameters: any;
-    };
-  }[];
+  tools?:
+    | AzureChatConfigInput['tools']
+    | AzureResponsesConfigInput['tools']
+    | {
+        type: string;
+        function: {
+          name: string;
+          description?: string;
+          parameters: any;
+        };
+      }[];
   tool_choice?:
+    | AzureChatConfigInput['tool_choice']
+    | AzureResponsesConfigInput['tool_choice']
     | 'none'
     | 'auto'
     | 'required'
     | { type: 'function'; function?: { name: string } }
     | { type: 'function'; name: string };
   response_format?:
+    | AzureChatConfigInput['response_format']
+    | `file://${string}`
     | { type: 'json_object' }
     | {
         type: 'json_schema';
         json_schema: {
           name: string;
           strict: boolean;
-          schema: {
-            type: 'object';
-            properties: Record<string, any>;
-            required?: string[];
-            additionalProperties: false;
-            $defs?: Record<string, any>;
-          };
+          schema: AzureResponseFormatSchema;
         };
       };
-  stop?: string[];
+  stop?: AzureChatConfigInput['stop'];
   seed?: number;
-  reasoning_effort?: GPT5ReasoningEffort;
+  reasoning_effort?: AzureChatConfigInput['reasoning_effort'];
   /**
    * Controls the verbosity of the model's responses. Only used for reasoning models (GPT-5, o1, o3, etc.).
    */
@@ -126,6 +143,26 @@ export interface AzureChatResponsesOptions extends AzureCompletionOptions {
    * Only values explicitly set via config or environment variables will be sent.
    */
   omitDefaults?: boolean;
+}
+
+/**
+ * Options specific to the Azure Responses provider.
+ */
+export interface AzureResponsesOptions extends Omit<AzureChatResponsesOptions, 'response_format'> {
+  reasoning?: AzureResponsesConfigInput['reasoning'];
+  response_format?:
+    | AzureResponsesConfigInput['response_format']
+    | AzureCompletionOptions['response_format']
+    | {
+        /** Flattened schema format accepted by Azure Responses. */
+        type: 'json_schema';
+        name?: string;
+        schema: AzureResponseFormatSchema;
+      };
+  /**
+   * Specifies the latency tier used to process the request.
+   */
+  service_tier?: 'auto' | 'default' | 'flex' | 'priority' | null;
 }
 
 export interface AzureModelCost {
@@ -204,7 +241,7 @@ export type AzureAssistantOptions = AzureCompletionOptions & {
 };
 
 export interface AzureProviderOptions<
-  TConfig extends AzureCompletionOptions = AzureCompletionOptions,
+  TConfig extends AzureCompletionOptions | AzureResponsesOptions = AzureCompletionOptions,
 > {
   config?: TConfig;
   id?: string;

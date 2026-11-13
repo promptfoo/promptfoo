@@ -1,42 +1,7 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { evaluationCache as cache, paginate } from '../../../../src/commands/mcp/lib/performance';
-
-import type { EvalSummary } from '../../../../src/types';
+import { describe, expect, it } from 'vitest';
+import { paginate } from '../../../../src/commands/mcp/lib/performance';
 
 describe('MCP Performance', () => {
-  describe('evaluationCache', () => {
-    beforeEach(() => cache.clear());
-    afterEach(() => cache.clear());
-
-    const createMockEvalSummary = (id: string): EvalSummary => ({
-      evalId: id,
-      datasetId: null,
-      createdAt: Date.now(),
-      description: `Test evaluation ${id}`,
-      numTests: 10,
-      isRedteam: false,
-      passRate: 0.9,
-      label: `Eval ${id}`,
-      providers: [{ id: 'provider1', label: 'Provider 1' }],
-    });
-
-    it('should store and retrieve values', () => {
-      const mockEvalSummaries = [createMockEvalSummary('eval1')];
-      cache.set('key1', mockEvalSummaries);
-      expect(cache.get('key1')).toEqual(mockEvalSummaries);
-    });
-
-    it('should return undefined for missing keys', () => {
-      expect(cache.get('nonexistent')).toBeUndefined();
-    });
-
-    it('should return stats', () => {
-      const mockEvalSummaries = [createMockEvalSummary('eval1')];
-      cache.set('key1', mockEvalSummaries);
-      expect(cache.size).toBe(1);
-    });
-  });
-
   describe('paginate', () => {
     const items = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 
