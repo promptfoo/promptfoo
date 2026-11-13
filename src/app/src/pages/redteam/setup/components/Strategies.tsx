@@ -20,7 +20,7 @@ import {
   strategyDisplayNames,
 } from '@promptfoo/redteam/constants';
 import { AlertTriangle, ChevronRight } from 'lucide-react';
-import { Link as RouterLink } from 'react-router-dom';
+import { Link as RouterLink } from 'react-router';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import EstimationsDisplay from './EstimationsDisplay';
 import PageWrapper from './PageWrapper';
