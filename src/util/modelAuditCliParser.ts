@@ -4,6 +4,17 @@
 
 import { z } from 'zod';
 
+// ModelAudit 0.2.56+ uses an inherited OpenAI key to send scan findings for triage.
+export function getModelAuditDelegationEnv(parentEnv = process.env): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = { ...parentEnv, PROMPTFOO_DELEGATED: 'true' };
+  for (const key of Object.keys(env)) {
+    if (key.toUpperCase() === 'OPENAI_API_KEY') {
+      delete env[key];
+    }
+  }
+  return env;
+}
+
 const ModelAuditCliOptionsSchema = z.object({
   // Core output control
   blacklist: z.array(z.string()).optional(),
