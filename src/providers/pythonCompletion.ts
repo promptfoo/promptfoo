@@ -10,7 +10,6 @@ import { PythonWorkerPool } from '../python/workerPool';
 import { sha256 } from '../util/createHash';
 import { processConfigFileReferences } from '../util/fileReference';
 import { parsePathOrGlob } from '../util/index';
-import { safeJsonStringify } from '../util/json';
 import { providerRegistry } from './providerRegistry';
 import { sanitizeScriptContext } from './scriptContext';
 import {
@@ -278,9 +277,8 @@ export class PythonProvider implements ApiProvider {
 
       const args = buildScriptArgs(apiType, prompt, optionsWithProcessedConfig, sanitizedContext);
 
-      logger.debug(
-        `Executing python script ${absPath} via worker pool with args: ${safeJsonStringify(args)}`,
-      );
+      // args carry the provider config (API keys included): pass them as the logger's sanitized context
+      logger.debug(`Executing python script ${absPath} via worker pool`, { args });
 
       const functionName = this.functionName || apiType;
       // Use worker pool instead of runPython

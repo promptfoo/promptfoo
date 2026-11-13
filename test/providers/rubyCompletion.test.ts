@@ -3,9 +3,11 @@ import path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getCache, isCacheEnabled } from '../../src/cache';
+import logger from '../../src/logger';
 import { RubyProvider } from '../../src/providers/rubyCompletion';
 import { runRuby } from '../../src/ruby/rubyUtils';
 import * as fileReference from '../../src/util/fileReference';
+import { sanitizeObject } from '../../src/util/sanitizer';
 import { createBasePathOptions } from '../factories/literalFixtures';
 
 const fsMocks = vi.hoisted(() => ({
@@ -151,6 +153,26 @@ describe('RubyProvider', () => {
         { rubyExecutable: undefined },
       );
       expect(result).toEqual({ output: 'test output', cached: false });
+    });
+
+    it('should keep the provider config out of the debug message text', async () => {
+      const secret = 'fake-api-key-for-this-test';
+      const debugSpy = vi.spyOn(logger, 'debug');
+      const provider = new RubyProvider('script.rb', { config: { apiKey: secret } });
+      mockRunRuby.mockResolvedValue({ output: 'test output' });
+
+      await provider.callApi('test prompt');
+
+      const call = debugSpy.mock.calls.find(([message]) =>
+        String(message).startsWith('Running ruby script'),
+      );
+      debugSpy.mockRestore();
+      expect(call).toBeDefined();
+      const [message, context] = call!;
+      expect(message).not.toContain(secret);
+      // the args go in the context argument, which the logger sanitizes before writing
+      expect(JSON.stringify(context)).toContain(secret);
+      expect(JSON.stringify(sanitizeObject(context))).not.toContain(secret);
     });
 
     it('should not mutate the caller context when sanitizing', async () => {

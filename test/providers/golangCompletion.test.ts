@@ -7,7 +7,9 @@ import path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
+import logger from '../../src/logger';
 import { GolangProvider } from '../../src/providers/golangCompletion';
+import { sanitizeObject } from '../../src/util/sanitizer';
 import { createBasePathOptions } from '../factories/literalFixtures';
 
 const { createFsModuleFactory, createExecFileFactory } = await vi.hoisted(
@@ -298,6 +300,23 @@ describe('GolangProvider', () => {
     for (const call of mockExecFile.mock.calls) {
       expect(call[2]).toMatchObject({ env: { PROMPTFOO_REVIEW_ENV_PROBE: 'file' } });
     }
+  });
+
+  it('keeps the provider config out of the debug message text', async () => {
+    const secret = 'fake-api-key-for-this-test';
+    const provider = new GolangProvider('script.go', { config: { apiKey: secret } });
+
+    await provider.callApi('hello');
+
+    const call = vi
+      .mocked(logger.debug)
+      .mock.calls.find(([message]) => String(message).startsWith('Running Golang script'));
+    expect(call).toBeDefined();
+    const [message, context] = call!;
+    expect(message).not.toContain(secret);
+    // the args go in the context argument, which the logger sanitizes before writing
+    expect(JSON.stringify(context)).toContain(secret);
+    expect(JSON.stringify(sanitizeObject(context))).not.toContain(secret);
   });
 
   describe('constructor', () => {

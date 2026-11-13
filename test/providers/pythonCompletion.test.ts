@@ -11,6 +11,7 @@ import { PythonProvider } from '../../src/providers/pythonCompletion';
 import { getConfiguredPythonPath } from '../../src/python/pythonUtils';
 import { PythonWorkerPool } from '../../src/python/workerPool';
 import * as fileReference from '../../src/util/fileReference';
+import { sanitizeObject } from '../../src/util/sanitizer';
 import { createBasePathOptions } from '../factories/literalFixtures';
 import { createDeferred, mockProcessEnv } from '../util/utils';
 import type { Mock } from 'vitest';
@@ -209,6 +210,24 @@ describe('PythonProvider', () => {
         { config: {} },
         { someContext: true },
       ]);
+    });
+
+    it('should keep the provider config out of the debug message text', async () => {
+      const secret = 'fake-api-key-for-this-test';
+      const provider = new PythonProvider('script.py', { config: { apiKey: secret } });
+      mockPoolInstance.execute.mockResolvedValue({ output: 'test output' });
+
+      await provider.callApi('test prompt');
+
+      const call = vi
+        .mocked(logger.debug)
+        .mock.calls.find(([message]) => String(message).startsWith('Executing python script'));
+      expect(call).toBeDefined();
+      const [message, context] = call!;
+      expect(message).not.toContain(secret);
+      // the args go in the context argument, which the logger sanitizes before writing
+      expect(JSON.stringify(context)).toContain(secret);
+      expect(JSON.stringify(sanitizeObject(context))).not.toContain(secret);
     });
 
     describe('error handling', () => {
