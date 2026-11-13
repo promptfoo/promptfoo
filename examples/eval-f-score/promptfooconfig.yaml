@@ -41,47 +41,41 @@ defaultTest:
     # Basic JSON validation
     - type: is-json
 
-    # Track binary classification metrics
+    # Return the confusion matrix with the accuracy grade so zero-valued
+    # counters do not count as failed assertions or change the overall score.
     - type: javascript
-      value: 'output.sentiment === context.vars.sentiment'
-      metric: accuracy
-
-    # For F1 score components (treating 'positive' as the positive class)
-    - type: javascript
-      value: "output.sentiment === 'positive' && context.vars.sentiment === 'positive' ? 1 : 0"
-      metric: true_positives
-      weight: 0
-
-    - type: javascript
-      value: "output.sentiment === 'positive' && context.vars.sentiment === 'negative' ? 1 : 0"
-      metric: false_positives
-      weight: 0
-
-    - type: javascript
-      value: "output.sentiment === 'negative' && context.vars.sentiment === 'positive' ? 1 : 0"
-      metric: false_negatives
-      weight: 0
-
-    - type: javascript
-      value: "output.sentiment === 'negative' && context.vars.sentiment === 'negative' ? 1 : 0"
-      metric: true_negatives
-      weight: 0
+      value: |
+        const predicted = output.sentiment;
+        const expected = context.vars.sentiment;
+        const correct = predicted === expected;
+        return {
+          pass: correct,
+          score: Number(correct),
+          reason: correct ? 'Correct sentiment' : `Expected ${expected}, got ${predicted}`,
+          namedScores: {
+            accuracy: Number(correct),
+            true_positives: Number(predicted === 'positive' && expected === 'positive'),
+            false_positives: Number(predicted === 'positive' && expected === 'negative'),
+            false_negatives: Number(predicted === 'negative' && expected === 'positive'),
+            true_negatives: Number(predicted === 'negative' && expected === 'negative'),
+          },
+        };
 
 derivedMetrics:
   # Precision = TP / (TP + FP)
   - name: precision
-    value: true_positives / (true_positives + false_positives)
+    value: 'true_positives + false_positives > 0 ? true_positives / (true_positives + false_positives) : 0'
 
   # Recall = TP / (TP + FN)
   - name: recall
-    value: true_positives / (true_positives + false_negatives)
+    value: 'true_positives + false_negatives > 0 ? true_positives / (true_positives + false_negatives) : 0'
 
   # F1 Score = 2 * (precision * recall) / (precision + recall)
   - name: f1_score
-    value: 2 * true_positives / (2 * true_positives + false_positives + false_negatives)
+    value: '2 * true_positives + false_positives + false_negatives > 0 ? 2 * true_positives / (2 * true_positives + false_positives + false_negatives) : 0'
 
   # Accuracy = (TP + TN) / (TP + TN + FP + FN)
   - name: accuracy_score
-    value: (true_positives + true_negatives) / (true_positives + true_negatives + false_positives + false_negatives)
+    value: 'true_positives + true_negatives + false_positives + false_negatives > 0 ? (true_positives + true_negatives) / (true_positives + true_negatives + false_positives + false_negatives) : 0'
 
 tests: file://imdb_eval_sample.csv

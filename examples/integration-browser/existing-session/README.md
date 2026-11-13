@@ -69,7 +69,8 @@ providers:
 ## Prerequisites
 
 ```bash
-npm install playwright @playwright/browser-chromium playwright-extra puppeteer-extra-plugin-stealth
+npm install promptfoo "playwright@^1.63.0" "playwright-extra@^4.3.6" "puppeteer-extra-plugin-stealth@^2.11.2"
+npx playwright install chromium
 ```
 
 ## Files

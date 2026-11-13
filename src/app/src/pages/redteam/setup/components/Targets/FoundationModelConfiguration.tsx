@@ -1,15 +1,31 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 
 import { Button } from '@app/components/ui/button';
 import { Input } from '@app/components/ui/input';
 import { Label } from '@app/components/ui/label';
+import { NumberInput } from '@app/components/ui/number-input';
 import {
+  type BedrockApiMode,
+  getBedrockRuntimeModelError,
+  getBedrockTextRoute,
+  isBedrockAnthropicMessagesModel,
+  isBedrockGptOssResponsesModel,
+  isBedrockMantleResponsesModel,
+  isBedrockOpenAiChatModel,
+  isBedrockOpenAiResponsesModel,
+  isRejectedPrefixedGrokId,
+  isRejectedPrefixedMythosId,
+  requiresBedrockAnthropicMessagesModel,
+} from '@promptfoo/providers/bedrock/routing';
+import {
+  DEFAULT_BEDROCK_TARGET_ID,
   DEFAULT_GOOGLE_TARGET_ID,
   DEFAULT_OPENAI_TARGET_ID,
   DEFAULT_VERTEX_TARGET_ID,
   OPENAI_TARGET_PLACEHOLDER,
 } from '../constants';
 import { SetupSection } from '../SetupSection';
+import BedrockAuthentication from './BedrockAuthentication';
 
 import type { ProviderOptions } from '../../types';
 
@@ -19,7 +35,63 @@ interface FoundationModelConfigurationProps {
   providerType: string;
 }
 
-type BedrockApiMode = 'invoke' | 'converse';
+const BEDROCK_API_OPTIONS: { value: BedrockApiMode; label: string }[] = [
+  { value: 'responses', label: 'Responses API (OpenAI Models)' },
+  { value: 'invoke', label: 'InvokeModel' },
+  { value: 'converse', label: 'Converse' },
+  { value: 'chat', label: 'Chat Completions' },
+  { value: 'messages', label: 'Anthropic Messages' },
+  { value: 'runtime-chat', label: 'Chat Completions (Bedrock Runtime)' },
+  { value: 'runtime-responses', label: 'Responses (Bedrock Runtime)' },
+];
+
+/** APIs that run client-side tools configured under config.mcp. */
+function supportsBedrockMcp(apiMode?: BedrockApiMode): boolean {
+  return (
+    apiMode === 'converse' ||
+    apiMode === 'chat' ||
+    apiMode === 'runtime-chat' ||
+    apiMode === 'messages'
+  );
+}
+
+function resolveBedrockTokenLimit(
+  mode?: BedrockApiMode,
+  modelId = '',
+  config?: ProviderOptions['config'],
+) {
+  const key =
+    mode === 'responses' || mode === 'runtime-responses'
+      ? 'max_output_tokens'
+      : mode === 'runtime-chat' || (mode === 'invoke' && modelId.includes('openai.gpt-oss'))
+        ? 'max_completion_tokens'
+        : 'max_tokens';
+  // Converse prefers its native camelCase field; the UI continues to write its supported alias.
+  const fields =
+    mode === 'converse'
+      ? ['maxTokens', 'max_tokens']
+      : key === 'max_completion_tokens'
+        ? [key, 'max_tokens']
+        : [key];
+  // Match Converse's nullish fallback without changing explicit null on the other APIs.
+  const source = fields.find((field) =>
+    mode === 'converse' ? config?.[field] != null : config?.[field] !== undefined,
+  );
+  return { key, fields, value: source === undefined ? undefined : config?.[source] };
+}
+
+const BEDROCK_API_HELP: Record<BedrockApiMode, string> = {
+  invoke: 'Uses the model-specific InvokeModel API on Bedrock Runtime.',
+  converse:
+    'Uses the Bedrock Converse API on Bedrock Runtime, with native tool calling and MCP support.',
+  responses: 'Uses the OpenAI-compatible Responses API.',
+  chat: 'Uses the OpenAI-compatible Chat Completions API.',
+  messages: 'Uses the Anthropic Messages API.',
+  'runtime-chat':
+    'Uses OpenAI-compatible Chat Completions on Bedrock Runtime with Runtime model IDs.',
+  'runtime-responses':
+    'Uses OpenAI-compatible Responses on Bedrock Runtime. Background inference and server-side tools are unavailable.',
+};
 
 interface MCPServerConfig {
   name: string;
@@ -29,24 +101,80 @@ interface MCPServerConfig {
   url?: string;
 }
 
-const getBedrockApiModeFromId = (id?: string): BedrockApiMode =>
-  id?.startsWith('bedrock:converse:') ? 'converse' : 'invoke';
-
 const getBedrockModelFromId = (id?: string): string => {
-  if (!id) {
-    return '';
-  }
-  if (id.startsWith('bedrock:converse:')) {
-    return id.slice('bedrock:converse:'.length);
-  }
-  if (id.startsWith('bedrock:')) {
-    return id.slice('bedrock:'.length);
-  }
-  return id;
+  return getBedrockTextRoute(id || 'bedrock:')?.modelId ?? id ?? '';
 };
 
-const buildBedrockProviderId = (apiMode: BedrockApiMode, modelId: string): string =>
-  apiMode === 'converse' ? `bedrock:converse:${modelId}` : `bedrock:${modelId}`;
+const BEDROCK_GPT_SHORTHAND = /^gpt-(?:\d|oss-)/;
+
+const buildBedrockProviderId = (apiMode: BedrockApiMode, modelId: string): string => {
+  // Accept familiar GPT names in the editor; persist Bedrock's canonical namespace.
+  // Do not guess namespaces for custom IDs, inference profiles, or ARNs.
+  if (BEDROCK_GPT_SHORTHAND.test(modelId)) {
+    modelId = `openai.${modelId}`;
+  }
+  if (apiMode === 'runtime-chat' || apiMode === 'runtime-responses') {
+    modelId = modelId.replace(/^(openai\.gpt-oss-(?:20b|120b))$/, '$1-1:0');
+    return `bedrock:runtime:${apiMode === 'runtime-chat' ? 'chat' : 'responses'}:${modelId}`;
+  }
+  if (apiMode === 'responses' || apiMode === 'chat') {
+    const prefix = apiMode === 'chat' ? 'mantle' : 'responses';
+    return `bedrock:${prefix}:${modelId.replace(/^(openai\.gpt-oss-(?:20b|120b))-1:0$/, '$1')}`;
+  }
+  if (apiMode === 'messages') {
+    return `bedrock:messages:${modelId}`;
+  }
+  modelId = modelId.replace(/^(openai\.gpt-oss-(?:20b|120b))$/, '$1-1:0');
+  return apiMode === 'converse' ? `bedrock:converse:${modelId}` : `bedrock:${modelId}`;
+};
+
+// Match the backend's model-family checks, not a regional availability catalog.
+const getBedrockApiError = (apiMode: BedrockApiMode, modelId: string): string | undefined => {
+  if (!modelId) {
+    return 'Enter a model ID.';
+  }
+  if (apiMode === 'runtime-chat' || apiMode === 'runtime-responses') {
+    const error = getBedrockRuntimeModelError(apiMode, modelId);
+    if (error) {
+      return error;
+    }
+  }
+  if (apiMode !== 'chat' && isRejectedPrefixedMythosId(modelId)) {
+    return 'Mythos 5 requires the bare anthropic.claude-mythos-5 ID and Anthropic Messages API.';
+  }
+  if (
+    (apiMode === 'invoke' || apiMode === 'converse' || apiMode === 'chat') &&
+    isRejectedPrefixedGrokId(modelId, apiMode === 'chat')
+  ) {
+    return 'This Grok inference-profile ID is not supported by the selected API.';
+  }
+  if (
+    apiMode === 'responses' &&
+    !isBedrockMantleResponsesModel(modelId) &&
+    !isBedrockGptOssResponsesModel(modelId)
+  ) {
+    return 'Responses requires a bare OpenAI frontier or Grok ID, or a GPT OSS ID without -1:0.';
+  }
+  if (apiMode === 'messages' && !isBedrockAnthropicMessagesModel(modelId)) {
+    return 'This model ID is not supported by the Bedrock Anthropic Messages adapter.';
+  }
+  if (apiMode === 'invoke' || apiMode === 'converse') {
+    if (isBedrockMantleResponsesModel(modelId)) {
+      return 'This model uses the Responses API. Select Responses or enter a model for the selected API.';
+    }
+    if (requiresBedrockAnthropicMessagesModel(modelId)) {
+      return 'This model requires the Anthropic Messages API.';
+    }
+  }
+  if (
+    apiMode === 'chat' &&
+    isBedrockOpenAiResponsesModel(modelId) &&
+    !isBedrockOpenAiChatModel(modelId)
+  ) {
+    return 'This OpenAI model requires the Responses API.';
+  }
+  return undefined;
+};
 
 const isServerConfigured = (server: MCPServerConfig): boolean =>
   Boolean(server.command || server.path || server.url);
@@ -62,28 +190,122 @@ const FoundationModelConfiguration = ({
   providerType,
 }: FoundationModelConfigurationProps) => {
   const isBedrock = providerType === 'bedrock';
-  const bedrockApiMode = getBedrockApiModeFromId(selectedTarget.id);
-  const [modelId, setModelId] = useState(
-    isBedrock ? getBedrockModelFromId(selectedTarget.id) : selectedTarget.id || '',
+  const bedrockRoute = isBedrock ? getBedrockTextRoute(selectedTarget.id || 'bedrock:') : undefined;
+  const [bedrockApiMode, setBedrockApiMode] = useState(bedrockRoute?.apiMode);
+  const {
+    key: tokenLimitKey,
+    fields: tokenLimitFields,
+    value: tokenLimit,
+  } = resolveBedrockTokenLimit(
+    bedrockApiMode,
+    getBedrockModelFromId(selectedTarget.id),
+    selectedTarget.config,
   );
+  const hasAlternateTokenLimit = tokenLimitFields.some(
+    (field) => field !== tokenLimitKey && selectedTarget.config?.[field] !== undefined,
+  );
+  const lastEditedTarget = useRef<{ id: string; providerType: string } | undefined>(undefined);
+  const isBedrockHttpApi =
+    bedrockApiMode === 'responses' ||
+    bedrockApiMode === 'runtime-responses' ||
+    bedrockApiMode === 'chat' ||
+    bedrockApiMode === 'messages' ||
+    bedrockApiMode === 'runtime-chat';
+  const isBedrockNativeApi = bedrockApiMode === 'invoke' || bedrockApiMode === 'converse';
+  const [modelDraft, setModelDraft] = useState({
+    modelId: isBedrock ? getBedrockModelFromId(selectedTarget.id) : selectedTarget.id || '',
+    providerId: selectedTarget.id || '',
+  });
+  const { modelId } = modelDraft;
+  const bedrockApiError =
+    isBedrock && bedrockApiMode
+      ? getBedrockApiError(bedrockApiMode, getBedrockModelFromId(modelDraft.providerId))
+      : undefined;
   const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
   const [isMcpOpen, setIsMcpOpen] = useState(Boolean(selectedTarget.config?.mcp?.servers?.length));
   const [isBedrockSettingsOpen, setIsBedrockSettingsOpen] = useState(
-    isBedrock && Boolean(selectedTarget.config?.region || selectedTarget.config?.profile),
+    isBedrock &&
+      Boolean(
+        selectedTarget.config?.region ||
+          selectedTarget.config?.profile ||
+          selectedTarget.config?.apiKey ||
+          selectedTarget.config?.accessKeyId ||
+          selectedTarget.config?.secretAccessKey ||
+          selectedTarget.config?.sessionToken ||
+          selectedTarget.config?.apiKeyRequired === false,
+      ),
   );
 
   useEffect(() => {
-    setModelId(isBedrock ? getBedrockModelFromId(selectedTarget.id) : selectedTarget.id || '');
-  }, [isBedrock, selectedTarget.id]);
+    // Parent echoes of our own edits must not replace the draft or re-infer the API
+    // from a partially typed model ID. External target changes still rehydrate both.
+    if (
+      lastEditedTarget.current?.id === selectedTarget.id &&
+      lastEditedTarget.current?.providerType === providerType
+    ) {
+      return;
+    }
+    lastEditedTarget.current = undefined;
+    const route =
+      providerType === 'bedrock' ? getBedrockTextRoute(selectedTarget.id || 'bedrock:') : undefined;
+    setBedrockApiMode(route?.apiMode);
+    setModelDraft({
+      modelId:
+        providerType === 'bedrock'
+          ? getBedrockModelFromId(selectedTarget.id)
+          : selectedTarget.id || '',
+      providerId: selectedTarget.id || '',
+    });
+  }, [providerType, selectedTarget.id]);
 
   const handleModelIdChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newId = e.target.value;
-    setModelId(newId);
-    updateCustomTarget('id', isBedrock ? buildBedrockProviderId(bedrockApiMode, newId) : newId);
+    const providerId =
+      isBedrock && bedrockApiMode ? buildBedrockProviderId(bedrockApiMode, newId) : newId;
+    setModelDraft({ modelId: newId, providerId });
+    updateProviderId(providerId);
   };
 
-  const updateBedrockApiMode = (apiMode: BedrockApiMode) => {
-    updateCustomTarget('id', buildBedrockProviderId(apiMode, modelId));
+  const updateTokenLimit = (key: string, value: unknown, fields = tokenLimitFields) => {
+    const config = { ...selectedTarget.config };
+    for (const field of [...tokenLimitFields, ...fields]) {
+      delete config[field];
+    }
+    updateCustomTarget('config', { ...config, [key]: value });
+  };
+
+  const updateProviderId = (id: string, apiMode = bedrockApiMode) => {
+    const destination = resolveBedrockTokenLimit(apiMode, getBedrockModelFromId(id));
+    const hasCompetingLimit = [...tokenLimitFields, ...destination.fields].some(
+      (field) => field !== destination.key && selectedTarget.config?.[field] !== undefined,
+    );
+    if (tokenLimitKey !== destination.key || hasCompetingLimit) {
+      updateTokenLimit(destination.key, tokenLimit, destination.fields);
+    }
+    lastEditedTarget.current = { id, providerType };
+    updateCustomTarget('id', id);
+  };
+
+  const handleBedrockApiChange = (apiMode: BedrockApiMode) => {
+    const id = buildBedrockProviderId(apiMode, modelId);
+    const convertedModel = getBedrockModelFromId(id);
+    setBedrockApiMode(apiMode);
+    setModelDraft({
+      modelId: modelId.startsWith('gpt-')
+        ? convertedModel.replace(/^openai\./, '')
+        : convertedModel,
+      providerId: id,
+    });
+    updateProviderId(id, apiMode);
+    // Only an explicit API switch removes MCP. Partially typed model IDs can
+    // resolve to another API while the user's selected API is still unchanged.
+    if (
+      selectedTarget.config?.mcp !== undefined &&
+      supportsBedrockMcp(bedrockApiMode) &&
+      !supportsBedrockMcp(apiMode)
+    ) {
+      updateCustomTarget('mcp', undefined);
+    }
   };
 
   const updateMCPServers = (servers: MCPServerConfig[]) => {
@@ -148,9 +370,8 @@ const FoundationModelConfiguration = ({
       },
       anthropic: {
         name: 'Anthropic',
-        defaultModel: 'anthropic:messages:claude-sonnet-4-5-20250929',
-        placeholder:
-          'anthropic:messages:claude-sonnet-4-5-20250929, anthropic:messages:claude-haiku-4-5-20251001',
+        defaultModel: 'anthropic:messages:claude-sonnet-5',
+        placeholder: 'anthropic:messages:claude-opus-5-5, anthropic:messages:claude-sonnet-5-5',
         docUrl: 'https://www.promptfoo.dev/docs/providers/anthropic',
         envVar: 'ANTHROPIC_API_KEY',
       },
@@ -170,8 +391,8 @@ const FoundationModelConfiguration = ({
       },
       mistral: {
         name: 'Mistral AI',
-        defaultModel: 'mistral:mistral-large-latest',
-        placeholder: 'mistral:mistral-large-latest, mistral:mistral-small-latest',
+        defaultModel: 'mistral:mistral-medium-3-5',
+        placeholder: 'mistral:mistral-medium-3-5, mistral:mistral-large-latest',
         docUrl: 'https://www.promptfoo.dev/docs/providers/mistral',
         envVar: 'MISTRAL_API_KEY',
       },
@@ -184,15 +405,15 @@ const FoundationModelConfiguration = ({
       },
       groq: {
         name: 'Groq',
-        defaultModel: 'groq:llama-3.1-70b-versatile',
-        placeholder: 'groq:llama-3.1-70b-versatile, groq:mixtral-8x7b-32768',
+        defaultModel: 'groq:openai/gpt-oss-120b',
+        placeholder: 'groq:openai/gpt-oss-120b, groq:openai/gpt-oss-20b',
         docUrl: 'https://www.promptfoo.dev/docs/providers/groq',
         envVar: 'GROQ_API_KEY',
       },
       deepseek: {
         name: 'DeepSeek',
-        defaultModel: 'deepseek:deepseek-chat',
-        placeholder: 'deepseek:deepseek-chat, deepseek:deepseek-coder',
+        defaultModel: 'deepseek:deepseek-flash',
+        placeholder: 'deepseek:deepseek-flash, deepseek:deepseek-v4-pro',
         docUrl: 'https://www.promptfoo.dev/docs/providers/deepseek',
         envVar: 'DEEPSEEK_API_KEY',
       },
@@ -205,15 +426,15 @@ const FoundationModelConfiguration = ({
       },
       bedrock: {
         name: 'AWS Bedrock',
-        defaultModel: 'bedrock:global.anthropic.claude-sonnet-5',
-        placeholder: 'global.anthropic.claude-sonnet-5',
+        defaultModel: DEFAULT_BEDROCK_TARGET_ID,
+        placeholder: 'gpt-5.6-sol',
         docUrl: 'https://www.promptfoo.dev/docs/providers/aws-bedrock',
         envVar: 'AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY',
       },
       openrouter: {
         name: 'OpenRouter',
-        defaultModel: 'openrouter:openai/gpt-5.4',
-        placeholder: 'openrouter:openai/gpt-5.4, openrouter:anthropic/claude-opus-4.7',
+        defaultModel: 'openrouter:openai/gpt-6-sol',
+        placeholder: 'openrouter:openai/gpt-6-sol, openrouter:anthropic/claude-opus-5.5',
         docUrl: 'https://www.promptfoo.dev/docs/providers/openrouter',
         envVar: 'OPENROUTER_API_KEY',
       },
@@ -232,6 +453,14 @@ const FoundationModelConfiguration = ({
 
   const providerInfo = getProviderInfo(providerType);
 
+  if (isBedrock && !bedrockApiMode) {
+    return (
+      <p className="mt-4 text-sm text-muted-foreground">
+        This Bedrock provider uses a specialized API. Edit its configuration in the YAML editor.
+      </p>
+    );
+  }
+
   return (
     <div className="mt-4">
       <h3 className="mb-4 text-lg font-semibold">{providerInfo.name} Configuration</h3>
@@ -247,14 +476,25 @@ const FoundationModelConfiguration = ({
                 id="bedrock-api-mode"
                 className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background"
                 value={bedrockApiMode}
-                onChange={(e) => updateBedrockApiMode(e.target.value as BedrockApiMode)}
+                aria-describedby="bedrock-api-help"
+                onChange={(e) => handleBedrockApiChange(e.target.value as BedrockApiMode)}
               >
-                <option value="invoke">InvokeModel</option>
-                <option value="converse">Converse</option>
+                {BEDROCK_API_OPTIONS.map(({ value, label }) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
               </select>
-              <p className="text-sm text-muted-foreground">
-                Use Converse for Bedrock-native tool calling and MCP servers. InvokeModel keeps the
-                legacy direct model API.
+              <p id="bedrock-api-help" className="text-sm text-muted-foreground">
+                {bedrockApiMode && BEDROCK_API_HELP[bedrockApiMode]}{' '}
+                {isBedrockHttpApi &&
+                  (selectedTarget.config?.apiBaseUrl
+                    ? 'Uses your custom endpoint from Advanced Configuration.'
+                    : bedrockApiMode?.startsWith('runtime-')
+                      ? 'Promptfoo uses the Bedrock Runtime endpoint. You can configure a custom endpoint under Advanced Configuration.'
+                      : bedrockApiMode === 'messages'
+                        ? 'Promptfoo selects Bedrock Mantle or Runtime based on the model ID. You can configure a custom endpoint under Advanced Configuration.'
+                        : 'Promptfoo defaults to the Bedrock Mantle endpoint. You can configure a custom endpoint under Advanced Configuration.')}
               </p>
             </div>
           )}
@@ -266,11 +506,46 @@ const FoundationModelConfiguration = ({
             id="model-id"
             value={modelId}
             onChange={handleModelIdChange}
-            placeholder={providerInfo.placeholder}
+            placeholder={
+              isBedrock &&
+              (bedrockApiMode === 'runtime-responses' || bedrockApiMode === 'runtime-chat')
+                ? 'us.openai.gpt-5.6-sol'
+                : providerInfo.placeholder
+            }
+            aria-invalid={Boolean(bedrockApiError)}
+            aria-describedby={
+              isBedrock
+                ? bedrockApiError
+                  ? 'bedrock-model-help bedrock-model-error'
+                  : 'bedrock-model-help'
+                : undefined
+            }
           />
+          {isBedrock && (
+            <p id="bedrock-model-help" className="text-sm text-muted-foreground">
+              {bedrockApiMode === 'runtime-responses' || bedrockApiMode === 'runtime-chat' ? (
+                <>
+                  Closed OpenAI GPT models require a system inference profile, such as{' '}
+                  <code>us.openai.gpt-5.6-sol</code> or <code>global.openai.gpt-5.6-sol</code>.
+                  Other models use their Runtime model IDs.
+                </>
+              ) : (
+                <>
+                  Choose an API, then enter its model ID. GPT names such as <code>gpt-5.6-sol</code>{' '}
+                  are saved with Bedrock's <code>openai.</code> prefix. Full Bedrock model IDs are
+                  also accepted.
+                </>
+              )}
+            </p>
+          )}
+          {bedrockApiError && (
+            <p id="bedrock-model-error" role="alert" className="text-sm text-destructive">
+              {bedrockApiError}
+            </p>
+          )}
           <p className="text-sm text-muted-foreground">
             {isBedrock
-              ? `Saved as ${buildBedrockProviderId(bedrockApiMode, modelId || '<model>')}. `
+              ? `Provider ID: ${selectedTarget.id || 'bedrock:<model>'}. `
               : 'Specify the model to use. '}
             See{' '}
             <a
@@ -285,10 +560,10 @@ const FoundationModelConfiguration = ({
           </p>
         </div>
 
-        {isBedrock && bedrockApiMode === 'converse' && (
+        {isBedrock && supportsBedrockMcp(bedrockApiMode) && (
           <SetupSection
             title="MCP Servers"
-            description="Configure Model Context Protocol servers for Bedrock Converse tool calling"
+            description="Configure Model Context Protocol servers for Bedrock tool calling"
             isExpanded={isMcpOpen}
             onExpandedChange={setIsMcpOpen}
             className="mt-4"
@@ -392,7 +667,7 @@ const FoundationModelConfiguration = ({
         {isBedrock && (
           <SetupSection
             title="Bedrock Settings"
-            description="AWS region and credential profile (required for non-default-region deployments)"
+            description="Configure the AWS region and authentication"
             isExpanded={isBedrockSettingsOpen}
             onExpandedChange={setIsBedrockSettingsOpen}
             className="mt-4"
@@ -404,43 +679,48 @@ const FoundationModelConfiguration = ({
                   id="bedrock-region"
                   value={selectedTarget.config?.region ?? ''}
                   onChange={(e) => updateCustomTarget('region', e.target.value || undefined)}
-                  placeholder="us-east-1"
+                  placeholder="Use environment or provider default"
                 />
                 <p className="text-sm text-muted-foreground">
-                  Defaults to <code>us-east-1</code> if unset. Set this when using inference
-                  profiles or models pinned to a specific region.
+                  {isBedrockHttpApi ? (
+                    <>
+                      Overrides <code>AWS_BEDROCK_REGION</code>, <code>AWS_REGION</code>, and{' '}
+                      <code>AWS_DEFAULT_REGION</code>. When none is set, the provider uses its
+                      model-specific default. Choose a region that supports your model and API.
+                    </>
+                  ) : (
+                    <>
+                      Overrides <code>AWS_BEDROCK_REGION</code>; otherwise defaults to{' '}
+                      <code>us-east-1</code>. Choose a region that supports your model or inference
+                      profile.
+                    </>
+                  )}
                 </p>
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="bedrock-profile">AWS Profile</Label>
-                <Input
-                  id="bedrock-profile"
-                  value={selectedTarget.config?.profile ?? ''}
-                  onChange={(e) => updateCustomTarget('profile', e.target.value || undefined)}
-                  placeholder="default"
-                />
-                <p className="text-sm text-muted-foreground">
-                  Optional - SSO profile name from <code>~/.aws/config</code>. Falls back to the
-                  default credential chain when unset.
-                </p>
-              </div>
+              <BedrockAuthentication
+                config={selectedTarget.config ?? {}}
+                isHttpApi={isBedrockHttpApi}
+                updateCustomTarget={updateCustomTarget}
+              />
 
-              <div className="space-y-2">
-                <Label htmlFor="bedrock-inference-model-type">Inference Model Type</Label>
-                <Input
-                  id="bedrock-inference-model-type"
-                  value={selectedTarget.config?.inferenceModelType ?? ''}
-                  onChange={(e) =>
-                    updateCustomTarget('inferenceModelType', e.target.value || undefined)
-                  }
-                  placeholder="claude, nova, llama, mistral, ..."
-                />
-                <p className="text-sm text-muted-foreground">
-                  Required when the model ID is an Application Inference Profile ARN. Otherwise
-                  inferred from the model ID.
-                </p>
-              </div>
+              {isBedrockNativeApi && (
+                <div className="space-y-2">
+                  <Label htmlFor="bedrock-inference-model-type">Inference Model Type</Label>
+                  <Input
+                    id="bedrock-inference-model-type"
+                    value={selectedTarget.config?.inferenceModelType ?? ''}
+                    onChange={(e) =>
+                      updateCustomTarget('inferenceModelType', e.target.value || undefined)
+                    }
+                    placeholder="claude, nova, llama, mistral, ..."
+                  />
+                  <p className="text-sm text-muted-foreground">
+                    Required when the model ID is an Application Inference Profile ARN. Otherwise
+                    inferred from the model ID.
+                  </p>
+                </div>
+              )}
             </div>
           </SetupSection>
         )}
@@ -455,78 +735,93 @@ const FoundationModelConfiguration = ({
           <div className="grid gap-4">
             <div className="space-y-2">
               <Label htmlFor="temperature">Temperature</Label>
-              <Input
+              <NumberInput
                 id="temperature"
-                type="number"
                 min={0}
                 max={2}
                 step={0.1}
-                value={selectedTarget.config?.temperature ?? ''}
-                onChange={(e) =>
-                  updateCustomTarget('temperature', parseFloat(e.target.value) || undefined)
-                }
+                allowDecimals
+                value={selectedTarget.config?.temperature}
+                onChange={(v) => updateCustomTarget('temperature', v)}
               />
               <p className="text-sm text-muted-foreground">Controls randomness (0.0 to 2.0)</p>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="max-tokens">Max Tokens</Label>
+              <Label htmlFor="max-tokens">
+                {bedrockApiMode === 'responses' || bedrockApiMode === 'runtime-responses'
+                  ? 'Max Output Tokens'
+                  : 'Max Tokens'}
+              </Label>
               <Input
                 id="max-tokens"
                 type="number"
-                min={1}
-                value={selectedTarget.config?.max_tokens ?? ''}
-                onChange={(e) =>
-                  updateCustomTarget('max_tokens', parseInt(e.target.value) || undefined)
-                }
+                min={isBedrock ? 0 : 1}
+                value={tokenLimit ?? ''}
+                onChange={(e) => {
+                  const value = e.target.value === '' ? undefined : parseInt(e.target.value, 10);
+                  if (hasAlternateTokenLimit) {
+                    updateTokenLimit(tokenLimitKey, value);
+                  } else {
+                    updateCustomTarget(tokenLimitKey, value);
+                  }
+                }}
               />
               <p className="text-sm text-muted-foreground">Maximum number of tokens to generate</p>
             </div>
 
             <div className="space-y-2">
               <Label htmlFor="top-p">Top P</Label>
-              <Input
+              <NumberInput
                 id="top-p"
-                type="number"
                 min={0}
                 max={1}
                 step={0.01}
-                value={selectedTarget.config?.top_p ?? ''}
-                onChange={(e) =>
-                  updateCustomTarget('top_p', parseFloat(e.target.value) || undefined)
-                }
+                allowDecimals
+                value={selectedTarget.config?.top_p}
+                onChange={(v) => updateCustomTarget('top_p', v)}
               />
               <p className="text-sm text-muted-foreground">
                 Nucleus sampling parameter (0.0 to 1.0)
               </p>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="api-key">API Key</Label>
-              <Input
-                id="api-key"
-                type="password"
-                value={selectedTarget.config?.apiKey ?? ''}
-                onChange={(e) => updateCustomTarget('apiKey', e.target.value || undefined)}
-              />
-              <p className="text-sm text-muted-foreground">
-                Optional - defaults to {providerInfo.envVar} environment variable
-              </p>
-            </div>
+            {!isBedrock && (
+              <div className="space-y-2">
+                <Label htmlFor="api-key">API Key</Label>
+                <Input
+                  id="api-key"
+                  type="password"
+                  value={selectedTarget.config?.apiKey ?? ''}
+                  onChange={(e) => updateCustomTarget('apiKey', e.target.value || undefined)}
+                />
+                <p className="text-sm text-muted-foreground">
+                  Optional - defaults to {providerInfo.envVar} environment variable
+                </p>
+              </div>
+            )}
 
-            <div className="space-y-2">
-              <Label htmlFor="api-base-url">API Base URL</Label>
-              <Input
-                id="api-base-url"
-                type="url"
-                value={selectedTarget.config?.apiBaseUrl ?? ''}
-                onChange={(e) => updateCustomTarget('apiBaseUrl', e.target.value || undefined)}
-                placeholder="https://api.openai.com/v1"
-              />
-              <p className="text-sm text-muted-foreground">
-                For proxies, local models (Ollama, LMStudio), or custom API endpoints
-              </p>
-            </div>
+            {(!isBedrock || isBedrockHttpApi) && (
+              <div className="space-y-2">
+                <Label htmlFor="api-base-url">API Base URL</Label>
+                <Input
+                  id="api-base-url"
+                  type="url"
+                  value={selectedTarget.config?.apiBaseUrl ?? ''}
+                  onChange={(e) => updateCustomTarget('apiBaseUrl', e.target.value || undefined)}
+                  placeholder={
+                    isBedrock
+                      ? 'Use the provider-selected Bedrock endpoint'
+                      : 'https://api.openai.com/v1'
+                  }
+                />
+                <p className="text-sm text-muted-foreground">
+                  {isBedrock
+                    ? 'Optional override for a trusted proxy or custom endpoint supporting the selected API. Bedrock credentials are sent to this URL.'
+                    : 'For proxies, local models (Ollama, LMStudio), or custom API endpoints'}
+                </p>
+              </div>
+            )}
           </div>
         </SetupSection>
       </div>
