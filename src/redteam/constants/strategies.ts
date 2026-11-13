@@ -156,8 +156,10 @@ export function isUnicodeNormalizationForm(form: unknown): form is UnicodeNormal
 
 type StrategyConfigLike = Record<string, unknown> | undefined;
 
-export interface InvalidUnicodeNormalizationForm {
-  form: unknown;
+const MAX_LAYER_NESTING_DEPTH = 64;
+
+export interface UnicodeNormalizationConfigIssue {
+  message: string;
   path: Array<string | number>;
 }
 
@@ -168,22 +170,37 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
 }
 
 /**
- * Finds invalid Unicode normalization forms on a strategy or in nested Layer steps.
+ * Validates Unicode normalization configuration, including nested Layer steps.
  */
-export function findInvalidUnicodeNormalizationForms(
+export function findUnicodeNormalizationConfigIssues(
   strategyId: string,
   config: StrategyConfigLike,
   configPath: Array<string | number> = ['config'],
-): InvalidUnicodeNormalizationForm[] {
+  depth = 0,
+): UnicodeNormalizationConfigIssue[] {
   if (strategyId === 'unicode-normalization') {
     const form = config?.form;
     return form !== undefined && !isUnicodeNormalizationForm(form)
-      ? [{ form, path: [...configPath, 'form'] }]
+      ? [
+          {
+            message: 'Unicode normalization strategy form must be one of: NFC, NFD, NFKC, NFKD',
+            path: [...configPath, 'form'],
+          },
+        ]
       : [];
   }
 
   if (strategyId !== 'layer' || !Array.isArray(config?.steps)) {
     return [];
+  }
+
+  if (depth >= MAX_LAYER_NESTING_DEPTH) {
+    return [
+      {
+        message: `Layer nesting exceeds ${MAX_LAYER_NESTING_DEPTH} levels`,
+        path: configPath,
+      },
+    ];
   }
 
   return config.steps.flatMap((step, index) => {
@@ -196,12 +213,12 @@ export function findInvalidUnicodeNormalizationForms(
       return [];
     }
 
-    return findInvalidUnicodeNormalizationForms(stepRecord.id, asRecord(stepRecord.config), [
-      ...configPath,
-      'steps',
-      index,
-      'config',
-    ]);
+    return findUnicodeNormalizationConfigIssues(
+      stepRecord.id,
+      asRecord(stepRecord.config),
+      [...configPath, 'steps', index, 'config'],
+      depth + 1,
+    );
   });
 }
 
@@ -212,12 +229,18 @@ export function findInvalidUnicodeNormalizationForms(
 export function isUnicodeNormalizationOnlyStrategy(
   strategyId: string,
   config: StrategyConfigLike,
+  depth = 0,
 ): boolean {
   if (strategyId === 'unicode-normalization') {
     return true;
   }
 
-  if (strategyId !== 'layer' || !Array.isArray(config?.steps) || config.steps.length === 0) {
+  if (
+    strategyId !== 'layer' ||
+    depth >= MAX_LAYER_NESTING_DEPTH ||
+    !Array.isArray(config?.steps) ||
+    config.steps.length === 0
+  ) {
     return false;
   }
 
@@ -230,7 +253,7 @@ export function isUnicodeNormalizationOnlyStrategy(
     return (
       !!stepRecord &&
       typeof stepRecord.id === 'string' &&
-      isUnicodeNormalizationOnlyStrategy(stepRecord.id, asRecord(stepRecord.config))
+      isUnicodeNormalizationOnlyStrategy(stepRecord.id, asRecord(stepRecord.config), depth + 1)
     );
   });
 }

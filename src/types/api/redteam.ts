@@ -2,7 +2,7 @@ import { z } from 'zod';
 import {
   ALL_PLUGINS,
   ALL_STRATEGIES,
-  findInvalidUnicodeNormalizationForms,
+  findUnicodeNormalizationConfigIssues,
 } from '../../redteam/constants';
 import {
   ConversationMessageSchema,
@@ -52,12 +52,8 @@ const TestCaseGenerationStrategySchema = z
     config: StrategyConfigSchema.prefault({}),
   })
   .superRefine(({ id, config }, ctx) => {
-    for (const invalidForm of findInvalidUnicodeNormalizationForms(id, config)) {
-      ctx.addIssue({
-        code: 'custom',
-        message: 'Unicode normalization form must be one of: NFC, NFD, NFKC, NFKD',
-        path: invalidForm.path,
-      });
+    for (const issue of findUnicodeNormalizationConfigIssues(id, config)) {
+      ctx.addIssue({ code: 'custom', ...issue });
     }
   });
 

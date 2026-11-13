@@ -3,6 +3,7 @@ import {
   ADDITIONAL_STRATEGIES,
   AGENTIC_STRATEGIES,
   ALL_STRATEGIES,
+  findUnicodeNormalizationConfigIssues,
   getDefaultNFanout,
   isCustomStrategy,
   isFanoutStrategy,
@@ -47,4 +48,14 @@ describe('strategies constants', () => {
     expect(isUnicodeNormalizationForm('nfkd')).toBe(false);
     expect(isUnicodeNormalizationForm(undefined)).toBe(false);
   });
+});
+
+it('rejects excessively nested Layer config without overflowing the stack', () => {
+  let config: Record<string, unknown> = { steps: ['unicode-normalization'] };
+  for (let depth = 0; depth < 4000; depth++) {
+    config = { steps: [{ id: 'layer', config }] };
+  }
+  expect(findUnicodeNormalizationConfigIssues('layer', config)[0]?.message).toBe(
+    'Layer nesting exceeds 64 levels',
+  );
 });
