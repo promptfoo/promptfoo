@@ -865,7 +865,8 @@ describe('trajectory assertions', () => {
       expect(result).toEqual({
         pass: false,
         score: 0,
-        reason: 'Matched tool "search_orders" 1 time(s) (expected 0-0). Matches: tool:search_orders',
+        reason:
+          'Matched tool "search_orders" 1 time(s) (expected 0-0). Matches: tool:search_orders',
         assertion: params.assertion,
       });
     });
