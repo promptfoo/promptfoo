@@ -4,15 +4,16 @@ import * as os from 'os';
 import path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import cliState from '../../src/cliState';
 import { generateSignature } from '../../src/providers/http';
+import { readPfxPrivateKey } from '../../src/util/pfx';
+import { runCommand } from '../../src/util/runCommand';
 
-const { readPkcs12 } = vi.hoisted(() => ({ readPkcs12: vi.fn() }));
-
-vi.mock('pem', () => ({ default: { readPkcs12 } }));
+vi.mock('../../src/util/runCommand', () => ({ runCommand: vi.fn() }));
 
 describe('PFX signature paths (generateSignature)', () => {
   beforeEach(() => {
-    readPkcs12.mockReset();
+    vi.mocked(runCommand).mockReset();
   });
 
   afterEach(() => {
@@ -34,8 +35,6 @@ describe('PFX signature paths (generateSignature)', () => {
   });
 
   it('throws when PFX file path does not exist', async () => {
-    readPkcs12.mockImplementation((_path, _opts, cb) => cb(new Error('ENOENT'), null));
-
     const signatureAuth = {
       type: 'pfx' as const,
       pfxPath: '/missing/cert.p12',
@@ -75,7 +74,9 @@ describe('PFX signature paths (generateSignature)', () => {
   });
 
   it('throws when PFX content has wrong password', async () => {
-    readPkcs12.mockImplementation((_buf, _opts, cb) => cb(new Error('invalid password'), null));
+    vi.mocked(runCommand).mockRejectedValue(
+      Object.assign(new Error('openssl failed'), { stderr: 'Mac verify error: invalid password' }),
+    );
 
     const signatureAuth = {
       type: 'pfx' as const,
@@ -89,22 +90,168 @@ describe('PFX signature paths (generateSignature)', () => {
     await expect(generateSignature(signatureAuth, Date.now())).rejects.toThrow(
       /Invalid PFX file format or wrong password/,
     );
+    const filename = vi.mocked(runCommand).mock.calls[0][1][2];
+    await expect(fs.access(filename)).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+
+  it.each([
+    ['EACCES', /OPENSSL_BIN.*executable/i],
+    ['EPERM', /OPENSSL_BIN.*executable/i],
+    ['ENOENT', /OpenSSL is required.*OPENSSL_BIN/i],
+    [1, /Invalid PFX file format or wrong password/],
+  ] as const)(
+    'reports OpenSSL failures safely without retrying a padded password (%s)',
+    async (code, message) => {
+      vi.mocked(runCommand).mockRejectedValue(
+        Object.assign(new Error('child diagnostic'), {
+          code,
+          stdout: 'private-key-output',
+          stderr: 'asn1 encoding routines:wrong tag: raw stderr',
+        }),
+      );
+      const failure = readPfxPrivateKey('fixture.p12', ' padded-password ');
+      await expect(failure).rejects.toThrow(message);
+      await expect(failure).rejects.not.toThrow(
+        /private-key-output|padded-password|raw stderr|child diagnostic/,
+      );
+      expect(runCommand).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it('reports an unavailable legacy provider without retrying a padded password', async () => {
+    vi.mocked(runCommand)
+      .mockRejectedValueOnce(
+        Object.assign(new Error('unsupported algorithm'), { stderr: 'unsupported: RC2-40-CBC' }),
+      )
+      .mockRejectedValue(
+        Object.assign(new Error('child diagnostic'), {
+          stdout: 'private-key-output',
+          stderr: 'pkcs12: unable to load provider legacy at raw stderr',
+        }),
+      );
+    const failure = readPfxPrivateKey('fixture.p12', ' padded-password ');
+    await expect(failure).rejects.toThrow(/provider.*OPENSSL_MODULES/i);
+    await expect(failure).rejects.not.toThrow(
+      /private-key-output|padded-password|raw stderr|child diagnostic/,
+    );
+    expect(runCommand).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(runCommand).mock.calls[1][1]).toContain('-legacy');
+  });
+
+  it.each([
+    {
+      label: 'literal padding',
+      password: '  secret\t ',
+      accepted: '  secret\t ',
+      attempts: ['  secret\t '],
+    },
+    {
+      label: 'configuration padding',
+      password: '  secret\t ',
+      accepted: 'secret',
+      attempts: ['  secret\t ', 'secret'],
+    },
+    { label: 'empty archive password', password: '   ', accepted: '', attempts: ['   ', ''] },
+  ])(
+    'passes $label through stdin and preserves compatibility',
+    async ({ password, accepted, attempts }) => {
+      const key = '-----BEGIN PRIVATE KEY-----\nYQ==\n-----END PRIVATE KEY-----';
+      vi.mocked(runCommand).mockImplementation(async (_binary, args, options) => {
+        expect(args).toEqual([
+          'pkcs12',
+          '-in',
+          'fixture.p12',
+          '-nocerts',
+          '-nodes',
+          '-passin',
+          'stdin',
+        ]);
+        if (options?.input !== accepted + '\n') {
+          throw Object.assign(new Error('openssl failed'), {
+            stderr: 'Mac verify error: invalid password?',
+          });
+        }
+        return { stdout: key, stderr: '' };
+      });
+
+      await expect(readPfxPrivateKey('fixture.p12', password)).resolves.toBe(key);
+      expect(vi.mocked(runCommand).mock.calls.map(([, , options]) => options?.input)).toEqual(
+        attempts.map((value) => value + '\n'),
+      );
+    },
+  );
+
+  describe.each(['bad decrypt', 'pkcs12 cipherfinal error'])(
+    'PKCS#12 archives without a MAC (%s)',
+    (diagnostic) => {
+      const childError = Object.assign(new Error('child diagnostic'), {
+        code: 1,
+        stdout: 'private key output',
+        stderr: `OpenSSL:${diagnostic}:child diagnostic`,
+      });
+
+      it('retries with the trimmed password', async () => {
+        const key = '-----BEGIN PRIVATE KEY-----\nYQ==\n-----END PRIVATE KEY-----';
+        const run = vi.mocked(runCommand);
+        run.mockRejectedValueOnce(childError).mockResolvedValueOnce({ stdout: key, stderr: '' });
+
+        await expect(readPfxPrivateKey('fixture.p12', ' secret ')).resolves.toBe(key);
+        expect(run.mock.calls.map(([, , options]) => options?.input)).toEqual([
+          ' secret \n',
+          'secret\n',
+        ]);
+      });
+
+      it('returns a sanitized error when both passwords fail', async () => {
+        const run = vi.mocked(runCommand).mockRejectedValue(childError);
+
+        await expect(readPfxPrivateKey('fixture.p12', ' wrong ')).rejects.toThrow(
+          /^Invalid PFX file format or wrong password$/,
+        );
+        expect(run.mock.calls.map(([, , options]) => options?.input)).toEqual([
+          ' wrong \n',
+          'wrong\n',
+        ]);
+      });
+    },
+  );
+
+  it('uses the OpenSSL executable selected by the current invocation', async () => {
+    const { privateKey } = crypto.generateKeyPairSync('rsa', { modulusLength: 2048 });
+    const key = privateKey.export({ format: 'pem', type: 'pkcs8' }).toString();
+    vi.mocked(runCommand).mockResolvedValue({ stdout: key, stderr: '' });
+    const signatureAuth = {
+      type: 'pfx',
+      pfxPassword: 'secret',
+      pfxContent: Buffer.from('fixture').toString('base64'),
+      signatureDataTemplate: '{{signatureTimestamp}}',
+      signatureAlgorithm: 'SHA256',
+    };
+
+    await Promise.all(
+      ['first-openssl', 'second-openssl'].map((binary) =>
+        cliState.withEnv({ OPENSSL_BIN: binary }, () =>
+          generateSignature(signatureAuth, Date.now()),
+        ),
+      ),
+    );
+
+    expect(
+      vi
+        .mocked(runCommand)
+        .mock.calls.map(([binary]) => binary)
+        .sort(),
+    ).toEqual(['first-openssl', 'second-openssl']);
   });
 
   it('succeeds when PFX content yields a key', async () => {
-    const expectedKey = '-----BEGIN PRIVATE KEY-----\nMOCK\n-----END PRIVATE KEY-----';
-    readPkcs12.mockImplementation((_buf, _opts, cb) =>
-      cb(null, {
-        key: expectedKey,
-        cert: 'CERT',
-      }),
-    );
-
-    // Mock crypto signing
-    const update = vi.fn();
-    const end = vi.fn();
-    const sign = vi.fn().mockReturnValue(Buffer.from('sig'));
-    vi.spyOn(crypto, 'createSign').mockReturnValue({ update, end, sign } as any);
+    const { privateKey, publicKey } = crypto.generateKeyPairSync('rsa', { modulusLength: 2048 });
+    const expectedKey = privateKey.export({ format: 'pem', type: 'pkcs8' }).toString();
+    vi.mocked(runCommand)
+      .mockRejectedValueOnce(
+        Object.assign(new Error('unsupported algorithm'), { stderr: 'unsupported: RC2-40-CBC' }),
+      )
+      .mockResolvedValueOnce({ stdout: expectedKey, stderr: '' });
 
     const signatureAuth = {
       type: 'pfx' as const,
@@ -115,8 +262,20 @@ describe('PFX signature paths (generateSignature)', () => {
       signatureValidityMs: 300000,
     };
 
-    const result = await generateSignature(signatureAuth, Date.now());
-    expect(sign).toHaveBeenCalledExactlyOnceWith(expectedKey);
-    expect(result).toBe(Buffer.from('sig').toString('base64'));
+    const timestamp = Date.now();
+    const result = await generateSignature(signatureAuth, timestamp);
+    const [binary, args, options] = vi.mocked(runCommand).mock.calls[0];
+    expect(options?.input).toBe('ok\n');
+    expect(args).not.toContain('ok');
+    expect(runCommand).toHaveBeenNthCalledWith(2, binary, [...args, '-legacy'], options);
+    await expect(fs.access(args[2])).rejects.toMatchObject({ code: 'ENOENT' });
+    expect(
+      crypto.verify(
+        'SHA256',
+        Buffer.from(String(timestamp)),
+        publicKey,
+        Buffer.from(result, 'base64'),
+      ),
+    ).toBe(true);
   });
 });

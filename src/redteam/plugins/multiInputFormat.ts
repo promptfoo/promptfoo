@@ -42,10 +42,6 @@ export function hasMultiInput(inputs?: InputsSchema): inputs is InputsSchema {
  */
 export function buildFormatExample(inputs: InputsSchema): string {
   const keys = getInputKeys(inputs);
-  if (keys.length === 0) {
-    return '{}';
-  }
-
   const parts = keys.map((key, i) => {
     const value = i === 0 ? 'content' : 'value';
     return `"${key}": "${value}"`;
@@ -123,10 +119,8 @@ function parsePromptBlockEntries(generatedPrompts: string): { __prompt: string }
 }
 
 function getPromptLineIndices(lines: string[]): number[] {
-  return lines
-    .map((line, index) => ({ line: line.trim(), index }))
-    .filter(({ line }) => hasPromptMarker(line)) // Match "Prompt:" or "Prompt :" (French typography)
-    .map(({ index }) => index);
+  // Match "Prompt:" or "Prompt :" (French typography)
+  return lines.flatMap((line, index) => (hasPromptMarker(line.trim()) ? [index] : []));
 }
 
 function promptHasMultipleContentLines(

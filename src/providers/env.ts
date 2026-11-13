@@ -1,4 +1,5 @@
 import { type EnvVarKey, getEnvOverrides, getEnvString } from '../envars';
+import { getExplicitProviderEnv } from '../envOverrides';
 
 /** Resolve aliases within each scope; an empty value masks only that variable. */
 export function resolveProviderEnv(
@@ -8,7 +9,14 @@ export function resolveProviderEnv(
 ): { name: string; value: string } | undefined {
   const masked = new Set<string>();
   const ambient = Object.fromEntries(names.map((name) => [name, getEnvString(name as EnvVarKey)]));
-  for (const layer of [env, getEnvOverrides(), getEnvOverrides('file'), ambient]) {
+  for (const layer of [
+    getExplicitProviderEnv(env),
+    getEnvOverrides('provider'),
+    env,
+    getEnvOverrides(),
+    getEnvOverrides('file'),
+    ambient,
+  ]) {
     // A few providers historically prefer a different alias in the host environment.
     for (const name of layer === ambient ? ambientNames : names) {
       const value = layer?.[name];

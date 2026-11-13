@@ -1,4 +1,3 @@
-import { EvalHistoryProvider } from '@app/contexts/EvalHistoryContext';
 import { ToastProvider } from '@app/contexts/ToastContext';
 import TargetConfiguration from '@app/pages/redteam/setup/components/Targets/TargetConfiguration';
 import TargetTypeSelection from '@app/pages/redteam/setup/components/Targets/TargetTypeSelection';
@@ -95,13 +94,11 @@ function EvalSetup() {
   return (
     <MemoryRouter>
       <ToastProvider>
-        <EvalHistoryProvider>
-          <ProvidersListSection
-            providers={normalizeProviders(config.providers)}
-            onChange={(providers) => updateConfig({ providers })}
-          />
-          <RunTestSuiteButton />
-        </EvalHistoryProvider>
+        <ProvidersListSection
+          providers={normalizeProviders(config.providers)}
+          onChange={(providers) => updateConfig({ providers })}
+        />
+        <RunTestSuiteButton />
       </ToastProvider>
     </MemoryRouter>
   );

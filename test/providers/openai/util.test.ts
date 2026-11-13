@@ -3,10 +3,13 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   assertOpenAiApiModel,
   calculateOpenAICost,
+  calculateSafeOpenAICost,
   failApiCall,
   formatOpenAiError,
+  getChatCompletionRefusal,
   getOpenAiEffectiveServiceTier,
   getTokenUsage,
+  getTokenUsageWithRequestCount,
   normalizeOpenAiServiceTierForWire,
   OPENAI_BILLING_MODELS,
   OPENAI_CHAT_MODELS,
@@ -18,8 +21,10 @@ import {
   OPENAI_TRANSCRIPTION_MODELS,
   OPENAI_TTS_MODELS,
   RETIRED_OPENAI_MODEL_IDS,
+  validateChatCompletionMessage,
   validateFunctionCall,
 } from '../../../src/providers/openai/util';
+import { isProviderResponseRateLimited } from '../../../src/scheduler/types';
 
 vi.mock('../../../src/cache');
 
@@ -97,6 +102,7 @@ const retiredChatModelIds = [
   'gpt-4o-audio-preview-2024-12-17',
   'gpt-4o-audio-preview-2025-06-03',
   'gpt-4o-mini-audio-preview',
+  'gpt-4o-mini-audio-preview-2024-12-17',
   'gpt-5-chat-latest',
   'codex-mini-latest',
   'gpt-5.1-chat-latest',
@@ -123,6 +129,7 @@ const otherRetiredModelIds = [
   'gpt-4o-realtime-preview-2024-12-17',
   'gpt-4o-realtime-preview-2025-06-03',
   'gpt-4o-mini-realtime-preview',
+  'gpt-4o-mini-realtime-preview-2024-12-17',
   'gpt-realtime-mini-2025-10-06',
   'text-moderation-007',
   'text-moderation-latest',
@@ -152,6 +159,19 @@ describe('failApiCall', () => {
     expect(result).toEqual({
       error: `API error: invalid_request_error 400 Bad request`,
     });
+  });
+
+  it.each([
+    ['requests', true],
+    ['insufficient_quota', false],
+  ] as const)('preserves the SDK rate-limit classification for %s', (type, retryable) => {
+    const error = new OpenAI.APIError(
+      429,
+      { type, message: 'Please try later' },
+      undefined,
+      new Headers(),
+    );
+    expect(isProviderResponseRateLimited(failApiCall(error), undefined)).toBe(retryable);
   });
 
   it('should format generic errors', () => {
@@ -231,6 +251,44 @@ describe('getTokenUsage', () => {
     });
   });
 
+  it('should read completion details from output_tokens_details for Responses-style usage', () => {
+    const data = {
+      usage: {
+        total_tokens: 45,
+        prompt_tokens: 15,
+        completion_tokens: 30,
+        output_tokens_details: {
+          reasoning_tokens: 100,
+        },
+      },
+    };
+
+    const result = getTokenUsage(data, false);
+    expect(result).toEqual({
+      total: 45,
+      prompt: 15,
+      completion: 30,
+      numRequests: 1,
+      completionDetails: {
+        reasoning: 100,
+      },
+    });
+  });
+
+  it('should prefer completion_tokens_details over output_tokens_details', () => {
+    const data = {
+      usage: {
+        total_tokens: 45,
+        prompt_tokens: 15,
+        completion_tokens: 30,
+        completion_tokens_details: { reasoning_tokens: 7 },
+        output_tokens_details: { reasoning_tokens: 100 },
+      },
+    };
+
+    expect(getTokenUsage(data, false).completionDetails).toEqual({ reasoning: 7 });
+  });
+
   it('should preserve provider-side cache read and write tokens', () => {
     const data = {
       usage: {
@@ -255,6 +313,41 @@ describe('getTokenUsage', () => {
         cacheCreationInputTokens: 4,
       },
     });
+  });
+
+  it('drops malformed usage fields while preserving valid fields', () => {
+    expect(
+      getTokenUsage(
+        {
+          usage: {
+            total_tokens: Number.MAX_VALUE,
+            prompt_tokens: -1,
+            completion_tokens: 2,
+            completion_tokens_details: {
+              reasoning_tokens: 'private',
+              accepted_prediction_tokens: 1,
+            },
+          },
+        },
+        false,
+      ),
+    ).toEqual({
+      prompt: 0,
+      completion: 2,
+      numRequests: 1,
+      completionDetails: { acceptedPrediction: 1 },
+    });
+  });
+
+  it('bounds adversarial nested usage without coercion', () => {
+    let cachedTokens: unknown = 1;
+    for (let i = 0; i < 5_000; i++) {
+      cachedTokens = [cachedTokens];
+    }
+
+    expect(
+      getTokenUsage({ usage: { prompt_tokens_details: { cached_tokens: cachedTokens } } }, false),
+    ).toEqual({ prompt: 0, completion: 0, numRequests: 1 });
   });
 
   it('should read cached tokens from top-level usage.cached_tokens (e.g. Moonshot)', () => {
@@ -312,6 +405,221 @@ describe('getTokenUsage', () => {
 
     expect(result.completionDetails).toEqual({
       cacheCreationInputTokens: expected,
+    });
+  });
+});
+
+describe('getTokenUsageWithRequestCount', () => {
+  it('preserves valid usage and explicit fresh request accounting', () => {
+    expect(
+      getTokenUsageWithRequestCount(
+        {
+          usage: {
+            total_tokens: 100,
+            prompt_tokens: 40,
+            completion_tokens: 60,
+          },
+        },
+        false,
+      ),
+    ).toEqual({
+      total: 100,
+      prompt: 40,
+      completion: 60,
+      numRequests: 1,
+    });
+  });
+
+  it('does not count a cached error as a new request', () => {
+    expect(getTokenUsageWithRequestCount({}, true)).toEqual({ numRequests: 0 });
+  });
+
+  it('drops malformed usage fields without losing request accounting', () => {
+    expect(
+      getTokenUsageWithRequestCount(
+        {
+          usage: {
+            total_tokens: { private: 'must-not-appear' },
+            prompt_tokens: { private: 'must-not-appear' },
+            completion_tokens: { private: 'must-not-appear' },
+          },
+        },
+        false,
+      ),
+    ).toEqual({ prompt: 0, completion: 0, numRequests: 1 });
+  });
+
+  it('drops negative and unsafe token counts while preserving valid fields', () => {
+    expect(
+      getTokenUsageWithRequestCount(
+        {
+          usage: {
+            total_tokens: Number.MAX_VALUE,
+            prompt_tokens: -1,
+            completion_tokens: 2,
+          },
+        },
+        false,
+      ),
+    ).toEqual({ prompt: 0, completion: 2, numRequests: 1 });
+  });
+
+  it('drops absurd safe-integer token counts that would corrupt aggregation', () => {
+    expect(
+      getTokenUsageWithRequestCount(
+        {
+          usage: {
+            total_tokens: Number.MAX_SAFE_INTEGER,
+            prompt_tokens: Number.MAX_SAFE_INTEGER,
+            completion_tokens: 2,
+          },
+        },
+        false,
+      ),
+    ).toEqual({ prompt: 0, completion: 2, numRequests: 1 });
+  });
+
+  it('bounds coercion failures from adversarial nested usage', () => {
+    let cachedTokens: unknown = 1;
+    for (let i = 0; i < 5_000; i++) {
+      cachedTokens = [cachedTokens];
+    }
+
+    const result = getTokenUsageWithRequestCount(
+      { usage: { prompt_tokens_details: { cached_tokens: cachedTokens } } },
+      false,
+    );
+
+    expect(result).toEqual({ prompt: 0, completion: 0, numRequests: 1 });
+  });
+});
+
+describe('calculateSafeOpenAICost', () => {
+  const config = { inputCost: 0.001, outputCost: 0.002 };
+
+  it('preserves cost for valid usage', () => {
+    expect(
+      calculateSafeOpenAICost('gpt-4o', config, {
+        usage: { prompt_tokens: 3, completion_tokens: 2 },
+      }),
+    ).toBe(0.007);
+  });
+
+  it('prefers a safe provider-reported cost without local overrides', () => {
+    expect(
+      calculateSafeOpenAICost(
+        'openai/gpt-4o',
+        {},
+        {
+          usage: { prompt_tokens: 3, completion_tokens: 2, cost: 0.0042 },
+        },
+      ),
+    ).toBe(0.0042);
+  });
+
+  it('prefers explicit local cost overrides over provider-reported cost', () => {
+    expect(
+      calculateSafeOpenAICost('gpt-4o', config, {
+        usage: { prompt_tokens: 3, completion_tokens: 2, cost: 99 },
+      }),
+    ).toBe(0.007);
+  });
+
+  it('applies complete local overrides to vendor-qualified model IDs', () => {
+    expect(
+      calculateSafeOpenAICost('openai/gpt-4o', config, {
+        usage: { prompt_tokens: 3, completion_tokens: 2, cost: 99 },
+      }),
+    ).toBe(0.007);
+  });
+
+  it('does not fall back to provider cost when local overrides cannot be safely calculated', () => {
+    expect(
+      calculateSafeOpenAICost('openai/gpt-4o', config, {
+        usage: { prompt_tokens: -1, completion_tokens: 2, cost: 99 },
+      }),
+    ).toBeUndefined();
+  });
+
+  it.each([
+    ['negative counts', { prompt_tokens: -2, completion_tokens: -1 }],
+    ['unsafe counts', { prompt_tokens: 1e308, completion_tokens: 1e308 }],
+    ['mixed-type counts', { prompt_tokens: 3, completion_tokens: '2' }],
+  ])('omits cost for %s', (_description, usage) => {
+    expect(calculateSafeOpenAICost('gpt-4o', config, { usage })).toBeUndefined();
+  });
+
+  it.each([-1, Number.POSITIVE_INFINITY, '0.01'])('rejects unsafe reported cost %s', (cost) => {
+    expect(
+      calculateSafeOpenAICost('openai/unknown-model', {}, { usage: { cost } }),
+    ).toBeUndefined();
+  });
+});
+
+describe('validateChatCompletionMessage', () => {
+  it('accepts a complete custom tool call', () => {
+    const toolCall = {
+      id: 'call_custom',
+      type: 'custom',
+      custom: { name: 'shell', input: 'echo hello' },
+    };
+
+    expect(validateChatCompletionMessage({ tool_calls: [toolCall] })?.toolCalls).toEqual([
+      toolCall,
+    ]);
+  });
+
+  it('requires a usable payload', () => {
+    expect(validateChatCompletionMessage({ content: null })).toBeUndefined();
+    expect(validateChatCompletionMessage({ content: '' })).toBeUndefined();
+    expect(validateChatCompletionMessage({ content: [] }, { allowStructuredContent: true })).toBe(
+      undefined,
+    );
+  });
+
+  it('treats an audio payload as usable only when the caller allows it', () => {
+    const audio = { id: 'audio-1', data: 'UklGRg==', transcript: 'Hi' };
+
+    expect(validateChatCompletionMessage({ content: null, audio })).toBeUndefined();
+    expect(
+      validateChatCompletionMessage({ content: null, audio }, { allowAudio: true })?.audio,
+    ).toEqual(audio);
+    expect(
+      validateChatCompletionMessage({ content: null, audio: {} }, { allowAudio: true }),
+    ).toBeUndefined();
+  });
+
+  it('validates required fields for structured content parts', () => {
+    expect(
+      validateChatCompletionMessage(
+        { content: [{ type: 'text' }] },
+        { allowStructuredContent: true },
+      ),
+    ).toBeUndefined();
+    expect(
+      validateChatCompletionMessage(
+        { content: [{ type: 'text', text: 'Hello' }] },
+        { allowStructuredContent: true },
+      )?.structuredContent,
+    ).toEqual([{ type: 'text', text: 'Hello' }]);
+  });
+
+  it('normalizes refusals and content-filter responses', () => {
+    const refusalMessage = validateChatCompletionMessage({ refusal: 'Cannot comply' });
+    const filteredMessage = validateChatCompletionMessage(
+      { content: null },
+      { finishReason: 'content_filter' },
+    );
+
+    expect(getChatCompletionRefusal(refusalMessage!, 'stop')).toEqual({
+      output: 'Cannot comply',
+      isRefusal: true,
+      guardrails: { flagged: true },
+    });
+    expect(getChatCompletionRefusal(filteredMessage!, 'content_filter')).toEqual({
+      output: 'Content filtered by provider',
+      isRefusal: true,
+      guardrails: { flagged: true },
     });
   });
 });
@@ -686,8 +994,6 @@ describe('calculateOpenAICost', () => {
     'gpt-5.2-pro',
     'gpt-5.2-pro-2025-12-11',
     'gpt-5.3-codex',
-    'o1-pro',
-    'o1-pro-2025-03-19',
     'o3-pro',
     'o3-pro-2025-06-10',
   ])('should keep active Responses-only model %s out of Chat Completions routing', (model) => {
@@ -699,11 +1005,6 @@ describe('calculateOpenAICost', () => {
     expect(OPENAI_CHAT_MODELS.some((model) => model.id === 'gpt-audio-1.5')).toBe(true);
     expect(OPENAI_REALTIME_MODELS.some((model) => model.id === 'gpt-realtime-1.5')).toBe(true);
     expect(OPENAI_REALTIME_MODELS.some((model) => model.id === 'gpt-realtime-2')).toBe(true);
-    expect(
-      OPENAI_REALTIME_MODELS.some(
-        (model) => model.id === 'gpt-4o-mini-realtime-preview-2024-12-17',
-      ),
-    ).toBe(true);
   });
 
   it('excludes retired audio and realtime previews while retaining historical billing', () => {
@@ -719,12 +1020,8 @@ describe('calculateOpenAICost', () => {
     }
   });
 
-  it.each([
-    'gpt-4o-mini-audio-preview-2024-12-17',
-    'gpt-4o-mini-search-preview',
-    'gpt-4o-search-preview',
-    'gpt-5-chat',
-  ])('keeps legacy discovery exclusion %s separate from confirmed shutdowns', (model) => {
+  it('keeps the legacy gpt-5-chat discovery exclusion separate from confirmed shutdowns', () => {
+    const model = 'gpt-5-chat';
     expect(OPENAI_CHAT_MODELS.some((candidate) => candidate.id === model)).toBe(false);
     expect(OPENAI_RESPONSES_ONLY_MODELS.some((candidate) => candidate.id === model)).toBe(false);
     expect(RETIRED_OPENAI_MODEL_IDS.has(model)).toBe(false);
@@ -939,8 +1236,7 @@ describe('calculateOpenAICost', () => {
     ['davinci-002', 2, 2],
     ['gpt-3.5-turbo-instruct', 1.5, 2],
     ['gpt-3.5-turbo-instruct-0914', 1.5, 2],
-  ])('should recognize and price legacy Completions model %s', (model, inputRate, outputRate) => {
-    expect(OPENAI_COMPLETION_MODELS.some((candidate) => candidate.id === model)).toBe(true);
+  ])('should retain pricing for legacy Completions model %s', (model, inputRate, outputRate) => {
     expect(OPENAI_CHAT_MODELS.some((candidate) => candidate.id === model)).toBe(false);
     expect(calculateOpenAICost(model, {}, 1000, 500)).toBeCloseTo(
       (1000 * inputRate + 500 * outputRate) / 1e6,
@@ -1305,13 +1601,6 @@ describe('OpenAI model catalogs', () => {
     'o3-deep-research-2025-06-26',
     'o4-mini-deep-research',
     'o4-mini-deep-research-2025-06-26',
-  ])('does not advertise retired or legacy model %s', (model) => {
-    expect(activeModels).not.toContain(model);
-    // Removing suggestions must not erase historical cost estimates.
-    expect(calculateOpenAICost(model, {}, 1000, 500)).toBeGreaterThan(0);
-  });
-
-  it.each([
     'gpt-3.5-turbo',
     'gpt-3.5-turbo-1106',
     'gpt-3.5-turbo-instruct',
@@ -1325,6 +1614,13 @@ describe('OpenAI model catalogs', () => {
     'o1-pro',
     'o3-mini',
     'o4-mini',
+  ])('does not advertise retired or legacy model %s', (model) => {
+    expect(activeModels).not.toContain(model);
+    // Removing suggestions must not erase historical cost estimates.
+    expect(calculateOpenAICost(model, {}, 1000, 500)).toBeGreaterThan(0);
+  });
+
+  it.each([
     'gpt-5-2025-08-07',
     'gpt-audio-mini',
     'gpt-audio-mini-2025-12-15',

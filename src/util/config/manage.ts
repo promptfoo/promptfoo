@@ -20,7 +20,7 @@ export function getConfigDirectoryPath(createIfNotExists: boolean = false): stri
   if (createIfNotExists && isNodeEnvironment) {
     try {
       // mkdirSync with recursive:true is idempotent - no need to check existence first
-      fs.mkdirSync(p, { recursive: true });
+      fs.mkdirSync(p, { recursive: true, mode: 0o700 });
     } catch {
       // Silently ignore filesystem errors in browser environment
     }

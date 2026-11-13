@@ -1,4 +1,4 @@
-import { getEnvString } from '../envars';
+import { getEnvString, getProviderEnvString } from '../envars';
 import invariant from '../util/invariant';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { OpenAiCompletionProvider } from './openai/completion';
@@ -27,11 +27,14 @@ function getCloudflareApiConfig(
   env?: EnvOverrides,
 ): { accountId: string; apiToken: string } {
   const namedApiToken = config?.apiKeyEnvar
-    ? (env?.[config.apiKeyEnvar] ?? getEnvString(config.apiKeyEnvar as EnvVarKey))
+    ? (getProviderEnvString(env, config.apiKeyEnvar) ??
+      getEnvString(config.apiKeyEnvar as EnvVarKey))
     : undefined;
   const apiTokenCandidate =
     config?.apiKey ||
-    (namedApiToken ?? env?.CLOUDFLARE_API_KEY ?? getEnvString('CLOUDFLARE_API_KEY'));
+    (namedApiToken ??
+      getProviderEnvString(env, 'CLOUDFLARE_API_KEY') ??
+      getEnvString('CLOUDFLARE_API_KEY'));
 
   invariant(
     apiTokenCandidate,
@@ -39,11 +42,14 @@ function getCloudflareApiConfig(
   );
 
   const namedAccountId = config?.accountIdEnvar
-    ? (env?.[config.accountIdEnvar] ?? getEnvString(config.accountIdEnvar as EnvVarKey))
+    ? (getProviderEnvString(env, config.accountIdEnvar) ??
+      getEnvString(config.accountIdEnvar as EnvVarKey))
     : undefined;
   const accountIdCandidate =
     config?.accountId ||
-    (namedAccountId ?? env?.CLOUDFLARE_ACCOUNT_ID ?? getEnvString('CLOUDFLARE_ACCOUNT_ID'));
+    (namedAccountId ??
+      getProviderEnvString(env, 'CLOUDFLARE_ACCOUNT_ID') ??
+      getEnvString('CLOUDFLARE_ACCOUNT_ID'));
 
   invariant(
     accountIdCandidate,

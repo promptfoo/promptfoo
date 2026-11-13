@@ -1,5 +1,5 @@
 import { parseDataUrl } from '../../util/dataUrl';
-import { calculateCost as calculateCostBase } from '../shared';
+import { calculateCost as calculateCostBase, type ModelCost } from '../shared';
 import type Anthropic from '@anthropic-ai/sdk';
 
 import type { TokenUsage } from '../../types/index';
@@ -13,9 +13,19 @@ import type {
   WebSearchToolConfig20260318,
 } from './types';
 
+export function formatLegacyCompletionPrompt(prompt: string): string {
+  return `\n\nHuman: ${prompt} \n\nAssistant:`;
+}
+
 // Model definitions with cost information
 export const ANTHROPIC_MODELS = [
   // Claude 5 models. These are pinned IDs, not `-latest` aliases.
+  // Fast mode on Fable/Mythos 5.2 ($16/$80) is not encoded here; set `inputCost` and
+  // `outputCost` to track it.
+  ...modelsWithCost(['claude-fable-5-2', 'claude-mythos-5-2'], {
+    input: 8 / 1e6, // $8 / MTok
+    output: 40 / 1e6, // $40 / MTok
+  }),
   ...modelsWithCost(
     ['claude-fable-5-1', 'claude-mythos-5-1', 'claude-fable-5', 'claude-mythos-5'],
     {
@@ -23,6 +33,13 @@ export const ANTHROPIC_MODELS = [
       output: 50 / 1e6, // $50 / MTok
     },
   ),
+  // Haiku 5.5 uses these rates through 100K input tokens; larger prompts are
+  // priced in calculateAnthropicCost, including cached input in the threshold.
+  ...modelsWithCost(['claude-haiku-5-5'], {
+    input: 0.1 / 1e6,
+    output: 0.5 / 1e6,
+    longContext: { threshold: 100_000, input: 0.5 / 1e6, output: 2.5 / 1e6 },
+  }),
   // Claude Opus 5.5 — 1M context billed at a flat rate. Fast mode ($8/$40, Claude API only)
   // is a separate research-preview rate that is intentionally not encoded here.
   ...modelsWithCost(['claude-opus-5-5'], {
@@ -180,6 +197,8 @@ export const ANTHROPIC_SHORTHAND_MODEL_IDS = new Set([
 const CLAUDE_FABLE_MYTHOS_5_PATTERN = /(^|[^a-z0-9])claude-(?:fable|mythos)-5(?![a-z0-9])/i;
 const CLAUDE_MYTHOS_PREVIEW_RE = /(^|[^a-z0-9])claude-mythos-preview(?![a-z0-9])/i;
 const CLAUDE_FABLE_MYTHOS_51_PATTERN = /(^|[^a-z0-9])claude-(?:fable|mythos)-5-1(?![a-z0-9])/i;
+const CLAUDE_FABLE_MYTHOS_52_PATTERN = /(^|[^a-z0-9])claude-(?:fable|mythos)-5-2(?![a-z0-9])/i;
+const CLAUDE_HAIKU_55_PATTERN = /(^|[^a-z0-9])claude-haiku-5-5(?![a-z0-9])/i;
 const CLAUDE_OPUS_55_PATTERN = /(^|[^a-z0-9])claude-opus-5-5(?![a-z0-9])/i;
 // `claude-opus-5-5` must not read as Opus 5: a single-digit `-N` suffix is a point release, not
 // a dated snapshot, so it is excluded while `claude-opus-5-20260801`-style suffixes still match.
@@ -212,7 +231,7 @@ interface ClaudeModelFamily {
   samplingParamsDeprecated?: boolean;
   /** Thinking is always on; `thinking: { type: 'disabled' }` is rejected. */
   alwaysOnAdaptiveThinking?: boolean;
-  /** Rejects forced tool use even with adaptive thinking (Fable/Mythos 5.1). */
+  /** Rejects forced tool use even with adaptive thinking (Fable/Mythos 5.1 and 5.2). */
   forcedToolChoiceUnsupported?: boolean;
   /**
    * Omitting `thinking` runs adaptive thinking rather than no thinking, so requests that never
@@ -245,10 +264,31 @@ interface ClaudeModelFamily {
  */
 const CLAUDE_MODEL_FAMILIES: readonly ClaudeModelFamily[] = [
   {
+    match: CLAUDE_HAIKU_55_PATTERN,
+    warningName: 'Claude Haiku 5.5',
+    samplingParamsDeprecated: true,
+    thinkingOnByDefault: true,
+    disabledThinkingEffortCapped: true,
+    regionalPremium: true,
+  },
+  {
     match: CLAUDE_MYTHOS_PREVIEW_RE,
     warningName: 'Claude Mythos Preview',
     samplingParamsDeprecated: true,
     alwaysOnAdaptiveThinking: true,
+  },
+  // `CLAUDE_FABLE_MYTHOS_5_PATTERN` also matches the point releases, so each 5.x row must
+  // precede it: the warning name and cache-read multiplier come from the first matching row.
+  // Fable/Mythos 5.2 keep the 5.1 request rules (verified live): thinking can't be disabled,
+  // sampling params and forced `tool_choice` return 400, and cache reads cost 0.025x input.
+  {
+    match: CLAUDE_FABLE_MYTHOS_52_PATTERN,
+    warningName: 'Claude Fable 5.2 and Claude Mythos 5.2',
+    samplingParamsDeprecated: true,
+    alwaysOnAdaptiveThinking: true,
+    forcedToolChoiceUnsupported: true,
+    regionalPremium: true,
+    cacheReadMultiplier: 0.025,
   },
   {
     match: CLAUDE_FABLE_MYTHOS_51_PATTERN,
@@ -292,6 +332,7 @@ const CLAUDE_MODEL_FAMILIES: readonly ClaudeModelFamily[] = [
   {
     match: CLAUDE_SONNET_55_PATTERN,
     warningName: 'Claude Sonnet 5.5',
+    cacheReadMultiplier: 0.05,
     samplingParamsDeprecated: true,
     thinkingOnByDefault: true,
     disabledThinkingEffortCapped: true,
@@ -338,6 +379,11 @@ function hasClaudeCapability(modelId: string, capability: ClaudeCapability): boo
   return CLAUDE_MODEL_FAMILIES.some((family) => family[capability] && family.match.test(modelId));
 }
 
+/** Matches Claude Haiku 5.5 model IDs across hosting providers. */
+export function isClaudeHaiku55Model(modelId: string): boolean {
+  return CLAUDE_HAIKU_55_PATTERN.test(modelId);
+}
+
 /** Matches Claude Opus 5.5 model IDs. */
 export function isClaudeOpus55Model(modelId: string): boolean {
   return CLAUDE_OPUS_55_PATTERN.test(modelId);
@@ -348,7 +394,7 @@ export function isClaudeOpus5Model(modelId: string): boolean {
   return CLAUDE_OPUS_5_PATTERN.test(modelId);
 }
 
-/** Matches the Claude 5 Fable and Mythos model IDs. */
+/** Matches the Claude 5 Fable and Mythos model IDs, including point releases such as 5.2. */
 export function isClaudeFableOrMythos5Model(modelId: string): boolean {
   return CLAUDE_FABLE_MYTHOS_5_PATTERN.test(modelId);
 }
@@ -482,7 +528,26 @@ export function clampMaxTokensForThinkingBudget(
 }
 
 export function normalizeAnthropicModelName(modelName: string): string {
-  return modelName.replace(/^(?:(?:global|us|eu|jp|au)\.)?anthropic\./, '');
+  const normalized = modelName.replace(
+    /^(?:(?:global|us|us-gov|eu|jp|au|in|ca)\.)?anthropic\./,
+    '',
+  );
+  // Haiku 4.5 has a versioned ID on Bedrock Runtime and a short ID on Mantle.
+  return normalized !== modelName && normalized === 'claude-haiku-4-5-20251001-v1:0'
+    ? 'claude-haiku-4-5-20251001'
+    : normalized;
+}
+
+/** Shared gateways may use opaque deployment aliases. Only match complete known model IDs. */
+export function isKnownClaudeModelWithDeprecatedSampling(modelId: string): boolean {
+  const canonical = normalizeAnthropicModelName(modelId)
+    .replace(/-v\d+:\d+$/, '') // Bedrock revision
+    .replace(/(?:[-@]\d{8}|-latest)$/, '') // dated snapshot or model alias
+    .replace(/(\d)\.(\d)/, '$1-$2'); // OpenRouter uses dotted versions
+  return CLAUDE_MODEL_FAMILIES.some(
+    ({ match, samplingParamsDeprecated }) =>
+      samplingParamsDeprecated && match.exec(canonical)?.[0] === canonical,
+  );
 }
 
 /**
@@ -633,7 +698,7 @@ export function normalizeClaudeThinkingConfig<
 export const CLAUDE_REGIONAL_ENDPOINT_PREMIUM = 1.1;
 const CLAUDE_US_INFERENCE_GEO_MULTIPLIER = 1.1;
 const CLAUDE_46_OR_LATER_MODEL_PATTERN =
-  /^claude-(?:(?:opus|sonnet)-4-(?:6|7|8)(?:-|$)|(?:fable|mythos|opus|sonnet)-5(?:-|$))/;
+  /^claude-(?:(?:opus|sonnet)-4-(?:6|7|8)(?:-|$)|(?:fable|mythos|opus|sonnet|haiku)-5(?:-|$))/;
 
 /**
  * Mark a cost config for the Claude regional endpoint premium (see isClaudeRegionalPremiumModel),
@@ -862,9 +927,12 @@ export function calculateAnthropicCost(
     (hasExplicitPricing
       ? ANTHROPIC_COMPATIBILITY_ALIAS_MODELS.find((model) => model.id === pricingModelName)
       : undefined);
+  const totalInputTokens =
+    (promptTokens ?? 0) + (cacheReadTokens ?? 0) + (cacheCreationTokens ?? 0);
   const modelInfo =
-    pricingModelName !== modelName && pricingModelName === 'claude-sonnet-5'
-      ? { id: pricingModelName, cost: { input: 3 / 1e6, output: 15 / 1e6 } }
+    registeredModel?.cost.longContext &&
+    totalInputTokens > registeredModel.cost.longContext.threshold
+      ? { ...registeredModel, cost: registeredModel.cost.longContext }
       : registeredModel;
   // A model name that normalizeAnthropicModelName rewrote carries a Bedrock
   // prefix. Bare and geo-prefixed Bedrock IDs bill at the regional premium;
@@ -899,8 +967,8 @@ export function calculateAnthropicCost(
   const cacheCreation = cacheCreationTokens ?? 0;
   const cacheCreation1h = cacheCreation1hTokens ?? 0;
 
-  // This shared helper does not infer size-based tiers. Provider-specific callers can supply
-  // explicit input/output rates, while cache pricing is applied whenever cache tokens are present.
+  // Haiku 5.5 tiers are selected above. Explicit input/output rates still take precedence,
+  // and cache pricing is applied whenever cache tokens are present.
   // The `typeof` guards narrow `number | undefined` to `number`; `Number.isFinite` alone already
   // rejects `undefined` at runtime but does not narrow the type.
   if (
@@ -1149,6 +1217,6 @@ export function processAnthropicTools(
   return { processedTools, requiredBetaFeatures };
 }
 
-function modelsWithCost(ids: string[], cost: { input: number; output: number }) {
+function modelsWithCost(ids: string[], cost: ModelCost) {
   return ids.map((id) => ({ id, cost: { ...cost } }));
 }

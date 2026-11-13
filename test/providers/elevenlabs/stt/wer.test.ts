@@ -37,6 +37,16 @@ describe('calculateWER', () => {
     expect(calculateWER(composed, decomposed).wer).toBe(0);
   });
 
+  it.each([
+    ['red blue', 'blue red', 'REF: red  blue\nHYP: blue red \nOPS: SSSS SSSS'],
+    ['a long a', 'long a long', 'REF: **** a long a\nHYP: long a long *\nOPS: IIII        D'],
+  ])(
+    'preserves the preferred alignment when minimum edit paths tie: %s → %s',
+    (ref, hyp, alignment) => {
+      expect(calculateWER(ref, hyp).details?.alignment).toBe(alignment);
+    },
+  );
+
   it('treats words that differ only by an accent as different words', () => {
     const result = calculateWER('résumé', 'resume');
 

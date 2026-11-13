@@ -1,28 +1,29 @@
 import { context, propagation, SpanStatusCode, trace } from '@opentelemetry/api';
 import {
   InMemorySpanExporter,
-  NodeTracerProvider,
   SimpleSpanProcessor,
-} from '@opentelemetry/sdk-trace-node';
+  TracerProvider,
+} from '@opentelemetry/sdk-trace';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../src/cache';
 import { OpenClawChatProvider } from '../../src/providers/openclaw/chat';
 import { OpenClawResponsesProvider } from '../../src/providers/openclaw/responses';
+import { registerTracerProvider } from '../../src/tracing/tracerProvider';
 
 vi.mock('../../src/cache', () => ({
   fetchWithCache: vi.fn(),
 }));
 
 describe('OpenClaw provider tracing', () => {
-  let tracerProvider: NodeTracerProvider;
+  let tracerProvider: TracerProvider;
   let exporter: InMemorySpanExporter;
 
   beforeAll(() => {
     exporter = new InMemorySpanExporter();
-    tracerProvider = new NodeTracerProvider({
-      spanProcessors: [new SimpleSpanProcessor(exporter)],
+    tracerProvider = new TracerProvider({
+      spanProcessors: [new SimpleSpanProcessor({ exporter: exporter })],
     });
-    tracerProvider.register();
+    registerTracerProvider(tracerProvider);
   });
 
   beforeEach(() => {

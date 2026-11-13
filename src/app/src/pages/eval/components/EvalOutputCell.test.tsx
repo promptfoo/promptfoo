@@ -913,7 +913,7 @@ describe('EvalOutputCell', () => {
     expect(written).toContain('rowId=1');
   });
 
-  it('shows checkmark after copying link', async () => {
+  it('resets the link and output copy indicators independently', async () => {
     timers = useTestTimers();
     const clipboard = mockClipboardWriteText();
 
@@ -930,11 +930,20 @@ describe('EvalOutputCell', () => {
     expect(clipboard.writeText).toHaveBeenCalled();
     expect(shareButton.querySelector('.lucide-check')).toBeInTheDocument();
 
-    act(() => {
-      timers?.advanceBy(3000);
+    act(() => timers?.advanceBy(1000));
+    const copyButton = screen.getByRole('button', { name: /Copy output to clipboard/i });
+    await act(async () => {
+      dispatchClick(copyButton);
+      await clipboard.writeText.mock.results[1]?.value;
     });
+    expect(shareButton.querySelector('.lucide-check')).toBeInTheDocument();
+    expect(copyButton.querySelector('.lucide-check')).toBeInTheDocument();
 
+    act(() => timers?.advanceBy(2000));
     expect(shareButton.querySelector('.lucide-link')).toBeInTheDocument();
+    expect(copyButton.querySelector('.lucide-check')).toBeInTheDocument();
+    act(() => timers?.advanceBy(1000));
+    expect(copyButton.querySelector('.lucide-check')).not.toBeInTheDocument();
   });
 
   it('clears the link feedback timer on unmount after copying link', async () => {
@@ -2363,6 +2372,26 @@ describe('EvalOutputCell extra actions hover behavior', () => {
       'View output and test details',
     ]);
   });
+  it.each(['google:gemini-nano-banana-2.1', 'custom-image-target'])(
+    'keeps structured images visible after long text from %s',
+    (provider) => {
+      const explanation = 'A detailed explanation of the generated image. '.repeat(10);
+      const { container } = renderWithProviders(
+        <EvalOutputCell
+          {...defaultProps}
+          maxTextLength={250}
+          output={{
+            ...defaultProps.output,
+            provider,
+            text: explanation,
+            images: [{ data: 'data:image/png;base64,aW1hZ2U=', mimeType: 'image/png' }],
+          }}
+        />,
+      );
+      expect(container.querySelectorAll('img')).toHaveLength(1);
+      expect(container.textContent).toContain(explanation.trim());
+    },
+  );
 });
 
 describe('isImageProvider helper function', () => {

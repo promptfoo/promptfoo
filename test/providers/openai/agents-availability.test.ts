@@ -43,31 +43,34 @@ describe('optional OpenAI Agents modules', () => {
   it('explains co-installation before importing a module when the SDK is absent', async () => {
     const load = vi.fn();
     await expect(loadOpenAiAgentsModule(load)).rejects.toThrow(
-      'npm install promptfoo @openai/agents@^0.14.1',
+      'npm install promptfoo @openai/agents@^0.21.0',
     );
     await expect(loadOpenAiAgentsModule(load)).rejects.toThrow(
-      'npm install -g promptfoo @openai/agents@^0.14.1',
+      'npm install -g promptfoo @openai/agents@^0.21.0',
     );
     expect(load).not.toHaveBeenCalled();
   });
 
-  it.each(['0.11.8', '0.14.0', '0.15.0', '0.18.0', 'invalid', undefined])(
+  it.each(['0.11.8', '0.14.0', '0.15.0', '0.18.0', '0.22.0', 'invalid', undefined])(
     'rejects unsupported SDK metadata %j before importing a module',
     async (version) => {
       installFixture(version);
       const load = vi.fn();
       await expect(loadOpenAiAgentsModule(load)).rejects.toThrow(
-        `require @openai/agents@^0.14.1 (found ${version ?? 'unknown'})`,
+        `require @openai/agents ^0.14.1 || ^0.21.0 (found ${version ?? 'unknown'})`,
       );
       expect(load).not.toHaveBeenCalled();
     },
   );
 
-  it('loads the module for a compatible SDK with restricted package metadata exports', async () => {
-    installFixture('0.14.123');
-    const module = { loadTools: vi.fn() };
-    await expect(loadOpenAiAgentsModule(async () => module)).resolves.toBe(module);
-  });
+  it.each(['0.14.123', '0.21.0'])(
+    'loads SDK %s with restricted package metadata exports',
+    async (version) => {
+      installFixture(version);
+      const module = { loadTools: vi.fn() };
+      await expect(loadOpenAiAgentsModule(async () => module)).resolves.toBe(module);
+    },
+  );
 
   it("checks Promptfoo's SDK instead of an unrelated current-directory installation", async () => {
     installFixture('0.14.123');
@@ -102,7 +105,7 @@ describe('optional OpenAI Agents modules', () => {
       loadOpenAiAgentsModule(async () => {
         throw error;
       }),
-    ).rejects.toThrow('npm install promptfoo @openai/agents@^0.14.1');
+    ).rejects.toThrow('npm install promptfoo @openai/agents@^0.21.0');
   });
 
   it.each([

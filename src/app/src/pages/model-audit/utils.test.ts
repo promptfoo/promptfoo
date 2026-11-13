@@ -1,10 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  getIssueFilePath,
-  getSeverityLabel,
-  getSeverityValue,
-  hasModelAuditFindings,
-} from './utils';
+import { getIssueFilePath, getSeverityLabel, hasModelAuditFindings } from './utils';
 
 describe('getSeverityLabel', () => {
   it('should return "critical" for "error" severity', () => {
@@ -15,18 +10,6 @@ describe('getSeverityLabel', () => {
     expect(getSeverityLabel('warning')).toBe('warning');
     expect(getSeverityLabel('info')).toBe('info');
     expect(getSeverityLabel('debug')).toBe('debug');
-  });
-});
-
-describe('getSeverityValue', () => {
-  it('should return "error" for "critical" label', () => {
-    expect(getSeverityValue('critical')).toBe('error');
-  });
-
-  it('should return the same value for other labels', () => {
-    expect(getSeverityValue('warning')).toBe('warning');
-    expect(getSeverityValue('info')).toBe('info');
-    expect(getSeverityValue('debug')).toBe('debug');
   });
 });
 

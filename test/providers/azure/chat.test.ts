@@ -649,7 +649,7 @@ describe('AzureChatCompletionProvider', () => {
       expect(body).not.toHaveProperty('reasoning_effort');
     });
 
-    it.each(['claude-fable-5', 'claude-fable-5-1', 'claude-mythos-5-1'])(
+    it.each(['claude-fable-5', 'claude-fable-5-1', 'claude-mythos-5-1', 'claude-fable-5-2'])(
       'omits sampling params for %s while keeping the standard chat body',
       async (model) => {
         const provider = new AzureChatCompletionProvider(model, createSampledAzureOptions());
@@ -661,7 +661,7 @@ describe('AzureChatCompletionProvider', () => {
       },
     );
 
-    it.each(['claude-fable-5-1', 'claude-mythos-5-1', 'claude-opus-5-5', 'claude-sonnet-5-5'])(
+    it.each(['claude-fable-5-2', 'claude-mythos-5-2', 'claude-opus-5-5', 'claude-sonnet-5-5'])(
       'omits forced tool choice for %s',
       async (model) => {
         const provider = new AzureChatCompletionProvider(model, {

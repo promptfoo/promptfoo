@@ -324,11 +324,8 @@ export class AssertionsResult {
 
     if (typeof this.threshold === 'number' && !Number.isNaN(this.threshold)) {
       // A numeric test threshold overrides the pass/fail status of individual assertions.
-      // Gate on `typeof === 'number'` (not a truthy check) so a threshold of 0 is honored —
-      // `score >= 0` is always true, i.e. "collect assertion scores but never fail on an
-      // individual failure". Guarding on the type (rather than `!== undefined`) keeps a
-      // `null`/`NaN` threshold — e.g. an empty `threshold:` in YAML — from silently
-      // force-passing every assertion via `score >= null`.
+      // Honor zero and negative thresholds, but do not coerce an empty YAML threshold
+      // (null) to zero. A zero threshold can still fail when the aggregate score is negative.
       pass = score >= this.threshold;
       const comparator = pass ? '≥' : '<';
       reason = `Aggregate score ${score.toFixed(2)} ${comparator} ${this.threshold} threshold`;

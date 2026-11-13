@@ -1,20 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { handleCost } from '../../src/assertions/cost';
+import { createNumericAssertionParams } from '../factories/assertionParams';
 
-import type { AssertionParams } from '../../src/types';
-
-const params = (overrides: Partial<AssertionParams>): AssertionParams =>
-  ({
-    assertion: { type: 'cost', threshold: 0.01 },
-    baseType: 'cost',
-    assertionValueContext: {} as any,
-    inverse: false,
-    output: '',
-    outputString: '',
-    providerResponse: { output: '' },
-    test: {},
-    ...overrides,
-  }) as AssertionParams;
+const params = createNumericAssertionParams('cost', 0.01);
 
 describe('handleCost', () => {
   it('passes when cost is within threshold', () => {

@@ -62,7 +62,7 @@ import type {
 } from '../../../types/index';
 import type { RedteamGradingContext } from '../../grading/types';
 import type { BaseRedteamMetadata } from '../../types';
-import type { FlaggedTurn, Message } from '../shared';
+import type { FlaggedTurn, Message, SuccessfulAttack } from '../shared';
 
 const DEFAULT_MAX_TURNS = 10;
 const DEFAULT_MAX_BACKTRACKS = 10;
@@ -125,11 +125,7 @@ export interface CustomMetadata extends BaseRedteamMetadata {
   customResult: boolean;
   customConfidence: number | null;
   stopReason: RoundBacktrackingStopReason;
-  successfulAttacks?: Array<{
-    turn: number;
-    prompt: string;
-    response: string;
-  }>;
+  successfulAttacks?: SuccessfulAttack[];
   totalSuccessfulAttacks?: number;
   storedGraderResult?: GradingResult;
 }
@@ -169,11 +165,7 @@ export class CustomProvider implements ApiProvider {
   private stateful: boolean;
   private excludeTargetOutputFromAgenticAttackGeneration: boolean;
   private readonly perTurnLayers: LayerConfig[];
-  private successfulAttacks: Array<{
-    turn: number;
-    prompt: string;
-    response: string;
-  }> = [];
+  private successfulAttacks: SuccessfulAttack[] = [];
 
   constructor(config: CustomConfig) {
     invariant(config.strategyText, 'CustomProvider requires strategyText in config');

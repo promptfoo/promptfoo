@@ -5,8 +5,6 @@ import {
   GenAIAttributes,
   type GenAISpanContext,
   type GenAISpanResult,
-  getCurrentSpanId,
-  getCurrentTraceId,
   getTraceparent,
   PromptfooAttributes,
   sanitizeBody,
@@ -778,22 +776,6 @@ describe('genaiTracer', () => {
 
       // Format: 00-traceId-spanId-traceFlags
       expect(traceparent).toBe('00-mock-trace-id-1234567890abcdef-mock-span-id-12345678-01');
-    });
-  });
-
-  describe('getCurrentTraceId', () => {
-    it('should return trace ID from active span', () => {
-      const traceId = getCurrentTraceId();
-
-      expect(traceId).toBe('mock-trace-id-1234567890abcdef');
-    });
-  });
-
-  describe('getCurrentSpanId', () => {
-    it('should return span ID from active span', () => {
-      const spanId = getCurrentSpanId();
-
-      expect(spanId).toBe('mock-span-id-12345678');
     });
   });
 

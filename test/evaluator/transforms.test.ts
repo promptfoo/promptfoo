@@ -1,3 +1,5 @@
+import { createTokenOutput } from '../factories/literalFixtures';
+
 import './setup';
 
 import { randomUUID } from 'crypto';
@@ -97,10 +99,7 @@ describeEvaluator('evaluator transforms', () => {
   it('evaluate with provider transform', async () => {
     const mockApiProviderWithTransform: ApiProvider = {
       id: vi.fn().mockReturnValue('test-provider-transform'),
-      callApi: vi.fn().mockResolvedValue({
-        output: 'Original output',
-        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
-      }),
+      callApi: vi.fn().mockResolvedValue(createTokenOutput('Original output')),
       transform: '`Transformed: ${output}`',
     };
 
@@ -251,10 +250,7 @@ describeEvaluator('evaluator transforms', () => {
   it('evaluate with provider transform and test transform', async () => {
     const mockApiProviderWithTransform: ApiProvider = {
       id: vi.fn().mockReturnValue('test-provider-transform'),
-      callApi: vi.fn().mockResolvedValue({
-        output: 'Original output',
-        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
-      }),
+      callApi: vi.fn().mockResolvedValue(createTokenOutput('Original output')),
       transform: '`ProviderTransformed: ${output}`',
     };
 
@@ -307,10 +303,7 @@ describeEvaluator('evaluator transforms', () => {
   it('evaluate with multiple transforms', async () => {
     const mockApiProviderWithTransform: ApiProvider = {
       id: vi.fn().mockReturnValue('test-provider-transform'),
-      callApi: vi.fn().mockResolvedValue({
-        output: 'Original output',
-        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
-      }),
+      callApi: vi.fn().mockResolvedValue(createTokenOutput('Original output')),
       transform: '`Provider: ${output}`',
     };
 
@@ -344,10 +337,7 @@ describeEvaluator('evaluator transforms', () => {
   it('evaluate with provider transform and test postprocess (deprecated)', async () => {
     const mockApiProviderWithTransform: ApiProvider = {
       id: vi.fn().mockReturnValue('test-provider-transform'),
-      callApi: vi.fn().mockResolvedValue({
-        output: 'Original output',
-        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
-      }),
+      callApi: vi.fn().mockResolvedValue(createTokenOutput('Original output')),
       transform: '`Provider: ${output}`',
     };
 
@@ -385,10 +375,7 @@ describeEvaluator('evaluator transforms', () => {
   it('evaluate with provider transform, test transform, and test postprocess (deprecated)', async () => {
     const mockApiProviderWithTransform: ApiProvider = {
       id: vi.fn().mockReturnValue('test-provider-transform'),
-      callApi: vi.fn().mockResolvedValue({
-        output: 'Original output',
-        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
-      }),
+      callApi: vi.fn().mockResolvedValue(createTokenOutput('Original output')),
       transform: '`Provider: ${output}`',
     };
 
