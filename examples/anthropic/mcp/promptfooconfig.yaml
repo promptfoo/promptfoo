@@ -5,11 +5,10 @@ prompts:
   - 'Answer the question using the available MCP tools, then summarize what you found in 2-3 sentences. Question: {{question}}'
 
 providers:
-  - id: anthropic:messages:claude-sonnet-4-6
-    label: 'Claude Sonnet 4.6 + deepwiki MCP'
+  - id: anthropic:messages:claude-sonnet-5
+    label: 'Claude Sonnet 5 + deepwiki MCP'
     config:
       max_tokens: 1500
-      temperature: 0
       # Cap how many MCP rounds promptfoo will run per request. Default is 8.
       max_tool_calls: 5
       mcp:

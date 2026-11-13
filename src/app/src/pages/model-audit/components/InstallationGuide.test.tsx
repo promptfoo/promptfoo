@@ -18,4 +18,17 @@ describe('InstallationGuide', () => {
       'sm:items-center',
     );
   });
+
+  it('links the installation guide to the installation section of the docs', () => {
+    render(
+      <TooltipProvider>
+        <InstallationGuide onRetryCheck={vi.fn()} isChecking={false} />
+      </TooltipProvider>,
+    );
+
+    expect(screen.getByRole('link', { name: 'installation guide' })).toHaveAttribute(
+      'href',
+      'https://www.promptfoo.dev/docs/model-audit/#installation',
+    );
+  });
 });

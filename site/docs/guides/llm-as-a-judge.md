@@ -760,13 +760,26 @@ npx promptfoo view
 Inspect the exported JSON to compare human labels against judge results:
 
 ```bash
-jq -r '.results.results[] | [.metadata.expected_label, (if .success then "pass" else "fail" end)] | @tsv' results.json
+jq -r '.results.results[] |
+  (if .failureReason == 2 or
+      (.gradingResult.pass | type) != "boolean" or
+      ([.gradingResult, .gradingResult.componentResults[]?] |
+        any(.metadata.graderError == true))
+    then "not judged"
+    elif .gradingResult.pass then "pass"
+    else "fail" end) as $judgment |
+  [.metadata.expected_label, $judgment] | @tsv' results.json
 ```
+
+For example, a run with two valid judgments and one error would show:
 
 ```text
 fail    fail
 pass    pass
+fail    not judged
 ```
+
+Here, `failureReason: 2` denotes an execution error ([`ResultFailureReason.ERROR`](https://github.com/promptfoo/promptfoo/blob/6fb013584d2f0e4a2e9b7848feff2e6110420aae/src/types/index.ts#L380-L387)); `metadata.graderError` marks a grader failure. Missing verdicts are also not judged. Exclude these rows from agreement calculations and report their count alongside the number of judged rows. This example uses one rubric assertion per row; with multiple assertions, compare the relevant assertion's verdict rather than the aggregate result.
 
 Refine rubric wording until agreement is >90%.
 
@@ -777,6 +790,8 @@ Run against holdout examples (that you never tuned on) to check for overfitting:
 ```bash
 npx promptfoo eval -c eval/promptfooconfig.yaml --filter-metadata split=holdout -o holdout-results.json --no-cache
 ```
+
+Apply the jq command from [Step 4](#step-4-run-and-measure-agreement) to `holdout-results.json` as well. Calculate agreement only among judged rows, and report judged and unjudged counts separately for both the development and holdout sets.
 
 If holdout agreement is significantly lower than development agreement, your rubric is overfit.
 
@@ -1115,11 +1130,12 @@ paths, TTLs, and explicit cache clearing.
 
 ### Grader model selection
 
-| Provider ID                                     | Reliability | Cost   | Use for                     |
-| ----------------------------------------------- | ----------- | ------ | --------------------------- |
-| `openai:responses:gpt-5.4`                      | High        | Higher | Production, complex rubrics |
-| `openai:responses:gpt-5-mini`                   | Medium      | Low    | Development, simple checks  |
-| `anthropic:messages:claude-sonnet-4-5-20250929` | High        | Medium | Production                  |
+Compare candidate graders against human-labeled examples from your task. Measure agreement, cost, and latency before choosing a production grader.
+
+| Provider  | Example grader IDs                                                         |
+| --------- | -------------------------------------------------------------------------- |
+| OpenAI    | `openai:responses:gpt-5.4`, `openai:responses:gpt-5-mini`                  |
+| Anthropic | `anthropic:messages:claude-sonnet-5`, `anthropic:messages:claude-opus-5-5` |
 
 Override via CLI:
 
@@ -1157,7 +1173,7 @@ judge to treat candidate output as untrusted data. See [LLM judge prompt templat
 
 ### What is the best LLM judge model?
 
-`openai:responses:gpt-5.4` and `anthropic:messages:claude-sonnet-4-5-20250929` are reliable for production. Use `openai:responses:gpt-5-mini` for development. The judge should be at least as capable as the system under test.
+Choose a model that agrees with human judgments on your rubric. Test it on both clear-cut and borderline cases, then compare its error rate, cost, and latency with other candidates. See [Grader model selection](#grader-model-selection) for example provider IDs.
 
 ### How do you do majority vote LLM judging?
 
