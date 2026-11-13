@@ -2,7 +2,10 @@ import React from 'react';
 
 import { act, cleanup, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createBrowserHistory, router } from '../../test/storeRouter';
 import { CartProvider, useCartContext } from './CartProvider';
+
+vi.mock('@docusaurus/router', async () => (await import('../../test/storeRouter')).router);
 
 function Coupon() {
   const { couponCode } = useCartContext();
@@ -22,11 +25,15 @@ afterEach(() => {
 });
 
 function renderCoupon() {
-  return render(
-    <CartProvider>
-      <Coupon />
-    </CartProvider>,
+  const history = createBrowserHistory();
+  render(
+    <router.Router history={history}>
+      <CartProvider>
+        <Coupon />
+      </CartProvider>
+    </router.Router>,
   );
+  return history;
 }
 
 describe('coupon URL cleanup', () => {
@@ -35,7 +42,7 @@ describe('coupon URL cleanup', () => {
     ['/store?coupon=save10&utm_source=mail#size-guide', '/store?utm_source=mail#size-guide'],
   ])('preserves the fragment when consuming %s on mount', (entry, expected) => {
     const historyState = { position: 'store-entry' };
-    window.history.replaceState(historyState, '', entry);
+    window.history.replaceState({ state: historyState }, '', entry);
     const historyLength = window.history.length;
 
     renderCoupon();
@@ -43,26 +50,22 @@ describe('coupon URL cleanup', () => {
     expect(screen.getByLabelText('Coupon')).toHaveTextContent('SAVE10');
     expect(localStorage.getItem('promptfoo_coupon_code')).toBe('SAVE10');
     expect(window.location.pathname + window.location.search + window.location.hash).toBe(expected);
-    expect(window.history.state).toEqual(historyState);
+    expect(window.history.state.state).toEqual(historyState);
     expect(window.history.length).toBe(historyLength);
   });
 
   it('preserves encoded fragments and unrelated query values after client-side navigation', () => {
-    renderCoupon();
+    const history = renderCoupon();
     const historyState = { position: 'new-route' };
 
     act(() => {
-      window.history.pushState(
-        historyState,
-        '',
-        '/store?coupon=save20&campaign=summer#size%20guide',
-      );
+      history.push('/store?coupon=save20&campaign=summer#size%20guide', historyState);
     });
 
     expect(screen.getByLabelText('Coupon')).toHaveTextContent('SAVE20');
     expect(window.location.search).toBe('?campaign=summer');
     expect(window.location.hash).toBe('#size%20guide');
-    expect(window.history.state).toEqual(historyState);
+    expect(window.history.state.state).toEqual(historyState);
   });
 
   it('preserves the fragment even when coupon storage is unavailable', () => {

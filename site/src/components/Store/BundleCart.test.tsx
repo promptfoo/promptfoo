@@ -3,6 +3,7 @@ import React from 'react';
 import { act, render, renderHook, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { router } from '../../test/storeRouter';
 import { CartDrawer } from './CartDrawer';
 import { CartProvider } from './CartProvider';
 import { ProductGrid } from './ProductGrid';
@@ -123,11 +124,15 @@ function renderCatalog(
     return response(mixedCart, failure ? 500 : 200);
   });
   return render(
-    <CartProvider>
-      <Catalog />
-    </CartProvider>,
+    <router.MemoryRouter>
+      <CartProvider>
+        <Catalog />
+      </CartProvider>
+    </router.MemoryRouter>,
   );
 }
+
+vi.mock('@docusaurus/router', async () => (await import('../../test/storeRouter')).router);
 
 beforeEach(() => {
   localStorage.clear();
