@@ -625,6 +625,9 @@ const config: Config = {
             const entries = await fsPromises.readdir(dir, { withFileTypes: true });
 
             for (const entry of entries) {
+              if (entry.name === 'AGENTS.md' || entry.name === 'CLAUDE.md') {
+                continue;
+              }
               const fullPath = join(dir, entry.name);
               if (entry.isDirectory()) {
                 await getMdFiles(fullPath);
