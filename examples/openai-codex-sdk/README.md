@@ -14,17 +14,17 @@ cd openai-codex-sdk
 Install the OpenAI Codex SDK:
 
 ```bash
-npm install @openai/codex-sdk@^0.156.1
+npm install promptfoo "@openai/codex-sdk@>=0.156.1 <0.167.0"
 ```
 
-**Requirements**: Node.js `>=22.22.0` and Codex SDK/CLI `>=0.156.1` for these GPT-6 examples. Codex runs its own agent loop; providers such as `openai:gpt-6-sol` make direct model calls.
+**Requirements**: Node.js `>=22.22.0` and the [supported Codex SDK](https://www.promptfoo.dev/docs/providers/openai-codex-sdk/) with its bundled CLI for these GPT-6 examples. Codex runs its own agent loop; providers such as `openai:gpt-6-sol` make direct model calls.
 
 Authenticate with Codex using one of these options:
 
 1. Sign in with ChatGPT through the Codex CLI:
 
 ```bash
-npx @openai/codex@^0.156.1 login
+npx --no-install codex login
 ```
 
 2. Or set your OpenAI API key:
@@ -131,7 +131,7 @@ If you run this config from the repo root, set `CODEX_SANDBOX_WORKING_DIR="$PWD/
 
 ### Run on Amazon Bedrock
 
-This example runs Codex against GPT-5.6 Sol, Terra, and Luna hosted on Amazon Bedrock by setting `model_provider: amazon-bedrock` with a Bedrock model ID (for example, `openai.gpt-5.6-sol`). It requires AWS credentials and Bedrock model access in a supported Region: `us-east-1`/`us-east-2` for Sol, plus `us-west-2` for Terra and Luna.
+Run Codex through Amazon Bedrock's Mantle Responses API. The example uses GPT-6.1 Terra in `us-east-1` and reads a Bedrock API key from `AWS_BEARER_TOKEN_BEDROCK`. [Setup and model access](./bedrock/README.md)
 
 **Location**: `./bedrock/`
 
@@ -149,7 +149,7 @@ Export `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` first; they are forwarded
 - **Git Integration**: Automatic repository detection (can be disabled)
 - **Structured Output**: Native JSON schema support with Zod
 - **Streaming Events**: Real-time progress updates
-- **Custom Binary**: Override Codex binary path with `codex_path_override`
+- **Custom Binary**: Override Codex binary path with `codex_path_override`; promptfoo verifies that its version matches the SDK pin unless `skip_codex_version_check: true` is set explicitly
 
 ## Configuration Options
 

@@ -12,6 +12,7 @@ import { getGpt6Variant } from '../../../src/providers/openai/gpt6';
 import { OpenAiResponsesProvider } from '../../../src/providers/openai/responses';
 import { OpenRouterProvider } from '../../../src/providers/openrouter';
 import { TrueFoundryProvider } from '../../../src/providers/truefoundry';
+import { createUnsetOpenAiGenerationEnv } from '../../factories/literalFixtures';
 import { mockProcessEnv } from '../../util/utils';
 
 const statusTool = {
@@ -23,16 +24,49 @@ const statusTool = {
   },
 };
 
+describe('GPT-6.1 Terra requests', () => {
+  it.each([undefined, 'high', 'none'] as const)(
+    'preserves sampling only with reasoning disabled (effort %s)',
+    async (reasoning_effort) => {
+      const config = { reasoning_effort, temperature: 0.4, top_p: 0.8 };
+      const { body: chat } = await new OpenAiChatCompletionProvider('gpt-6.1-terra', {
+        config,
+      }).getOpenAiBody('Say ready.');
+      const { body: responses } = await new OpenAiResponsesProvider('gpt-6.1-terra', {
+        config,
+      }).getOpenAiBody('Say ready.');
+
+      expect(chat.reasoning_effort).toBe(reasoning_effort);
+      expect(responses.reasoning?.effort).toBe(reasoning_effort);
+      for (const body of [chat, responses]) {
+        expect(body.temperature).toBe(reasoning_effort === 'none' ? 0.4 : undefined);
+        expect(body.top_p).toBe(reasoning_effort === 'none' ? 0.8 : undefined);
+      }
+    },
+  );
+
+  it('requires Responses for tools even with reasoning disabled', async () => {
+    const config = { reasoning_effort: 'none' as const, tools: [statusTool] };
+    await expect(
+      new OpenAiChatCompletionProvider('gpt-6.1-terra', { config }).getOpenAiBody(
+        'Get the status.',
+      ),
+    ).rejects.toThrow('Use openai:responses:gpt-6.1-terra');
+    const { body } = await new OpenAiResponsesProvider('gpt-6.1-terra', { config }).getOpenAiBody(
+      'Get the status.',
+    );
+    expect(body).toMatchObject({
+      reasoning: { effort: 'none' },
+      tools: [{ type: 'function', name: 'get_status' }],
+    });
+  });
+});
+
 describe('GPT-6.1 Sol requests', () => {
   let restoreEnv: () => void;
 
   beforeEach(() => {
-    restoreEnv = mockProcessEnv({
-      OPENAI_MAX_TOKENS: undefined,
-      OPENAI_MAX_COMPLETION_TOKENS: undefined,
-      OPENAI_TEMPERATURE: undefined,
-      OPENAI_TOP_P: undefined,
-    });
+    restoreEnv = mockProcessEnv(createUnsetOpenAiGenerationEnv());
   });
 
   afterEach(() => {
@@ -242,12 +276,7 @@ describe('GPT-6 Astra requests', () => {
   let restoreEnv: () => void;
 
   beforeEach(() => {
-    restoreEnv = mockProcessEnv({
-      OPENAI_MAX_TOKENS: undefined,
-      OPENAI_MAX_COMPLETION_TOKENS: undefined,
-      OPENAI_TEMPERATURE: undefined,
-      OPENAI_TOP_P: undefined,
-    });
+    restoreEnv = mockProcessEnv(createUnsetOpenAiGenerationEnv());
   });
 
   afterEach(() => {
@@ -668,12 +697,7 @@ describe.each(['gpt-6-sol', 'gpt-6-luna'])('%s requests', (model) => {
   let restoreEnv: () => void;
 
   beforeEach(() => {
-    restoreEnv = mockProcessEnv({
-      OPENAI_MAX_TOKENS: undefined,
-      OPENAI_MAX_COMPLETION_TOKENS: undefined,
-      OPENAI_TEMPERATURE: undefined,
-      OPENAI_TOP_P: undefined,
-    });
+    restoreEnv = mockProcessEnv(createUnsetOpenAiGenerationEnv());
   });
 
   afterEach(() => {
@@ -820,17 +844,106 @@ describe.each(['gpt-6-sol', 'gpt-6-luna'])('%s requests', (model) => {
       config: { max_completion_tokens: 55, passthrough: { max_tokens: 99 } },
     }).getOpenAiBody('Say ready.');
     expect(canonical.max_completion_tokens).toBe(55);
-
-    const restoreCaps = mockProcessEnv({ OPENAI_MAX_TOKENS: '71' });
-    try {
-      const { body: fromEnvironment } = await new OpenAiChatCompletionProvider(model).getOpenAiBody(
-        'Say ready.',
-      );
-      expect(fromEnvironment.max_completion_tokens).toBe(71);
-    } finally {
-      restoreCaps();
-    }
   });
+
+  it.each([
+    [{ OPENAI_MAX_TOKENS: '71' }, undefined],
+    [{ OPENAI_MAX_COMPLETION_TOKENS: '72' }, 72],
+    [{ OPENAI_MAX_TOKENS: '71', OPENAI_MAX_COMPLETION_TOKENS: '72' }, 72],
+  ])(
+    'caps native and gateway Chat output from the reasoning environment limit only: %j',
+    async (environment, expected) => {
+      const restoreCaps = mockProcessEnv({
+        OPENAI_MAX_TOKENS: undefined,
+        OPENAI_MAX_COMPLETION_TOKENS: undefined,
+        ...environment,
+      });
+      try {
+        for (const provider of [
+          new OpenAiChatCompletionProvider(model),
+          new OpenAiChatCompletionProvider(model, {
+            config: { apiBaseUrl: 'https://proxy.example.test/v1' },
+          }),
+          new TrueFoundryProvider(`openai-main/${model}`, { config: {} }),
+        ]) {
+          const { body } = await provider.getOpenAiBody('Say ready.');
+          expect(body.max_completion_tokens).toBe(expected);
+          expect(body).not.toHaveProperty('max_tokens');
+        }
+      } finally {
+        restoreCaps();
+      }
+    },
+  );
+
+  it.each([
+    ['provider config', { config: { reasoning_effort: 'none' } }, undefined],
+    ['provider passthrough', { config: { passthrough: { reasoning_effort: 'none' } } }, undefined],
+    ['prompt config', {}, { reasoning_effort: 'none' }],
+    [
+      'a rendered template',
+      { config: { passthrough: { reasoning_effort: '{{ effort }}' } } },
+      undefined,
+    ],
+  ] as const)(
+    'keeps OPENAI_MAX_TOKENS as the Chat output limit when reasoning is turned off in %s',
+    async (_source, options, promptConfig) => {
+      const context = {
+        vars: { effort: 'none' },
+        prompt: { raw: 'Say ready.', label: 'ready', config: promptConfig },
+      };
+      const restoreCaps = mockProcessEnv({
+        OPENAI_MAX_TOKENS: '71',
+        OPENAI_MAX_COMPLETION_TOKENS: undefined,
+      });
+      try {
+        // Without reasoning the limit only bounds the visible output, as max_tokens does.
+        const { body } = await new OpenAiChatCompletionProvider(model, options).getOpenAiBody(
+          'Say ready.',
+          context,
+        );
+        expect(body.reasoning_effort).toBe('none');
+        expect(body.max_completion_tokens).toBe(71);
+        expect(body).not.toHaveProperty('max_tokens');
+      } finally {
+        restoreCaps();
+      }
+
+      const restoreBoth = mockProcessEnv({
+        OPENAI_MAX_TOKENS: '71',
+        OPENAI_MAX_COMPLETION_TOKENS: '72',
+      });
+      try {
+        const { body } = await new OpenAiChatCompletionProvider(model, options).getOpenAiBody(
+          'Say ready.',
+          context,
+        );
+        expect(body.max_completion_tokens).toBe(72);
+      } finally {
+        restoreBoth();
+      }
+    },
+  );
+
+  it.each([undefined, 'low', 'high'] as const)(
+    'ignores OPENAI_MAX_TOKENS for a native Chat request that reasons at %s',
+    async (effort) => {
+      const restoreCaps = mockProcessEnv({
+        OPENAI_MAX_TOKENS: '71',
+        OPENAI_MAX_COMPLETION_TOKENS: undefined,
+      });
+      try {
+        const { body } = await new OpenAiChatCompletionProvider(model, {
+          config: { reasoning_effort: effort },
+        }).getOpenAiBody('Say ready.');
+        expect(body.reasoning_effort).toBe(effort);
+        expect(body).not.toHaveProperty('max_completion_tokens');
+        expect(body).not.toHaveProperty('max_tokens');
+      } finally {
+        restoreCaps();
+      }
+    },
+  );
 
   it.each(['none', 'high'] as const)(
     'rejects native Chat config.reasoning at %s',
@@ -1159,7 +1272,7 @@ describe.each(['gpt-6-sol', 'gpt-6-luna'])('%s requests', (model) => {
           context,
         );
         for (const result of [body, ignoredUpdate]) {
-          expect(result.reasoning.effort).toBe(effort);
+          expect(result.reasoning?.effort).toBe(effort);
           if (keepsSampling) {
             expect(result).toMatchObject({ temperature: 0, top_p: 0.8 });
           } else {
@@ -1935,7 +2048,7 @@ describe.each(['gpt-6-sol', 'gpt-6-luna'])('%s requests', (model) => {
           vars: {},
           prompt: { ...prompt, config: { passthrough: { logprobs: true } } },
         });
-        expect(inherited.reasoning.effort).toBe(effort);
+        expect(inherited.reasoning?.effort).toBe(effort);
         expect(inherited.max_completion_tokens).toBe(64);
       }
       const { body: directBaseCleared } = await new OpenRouterProvider(`openai/${model}`, {
@@ -1986,7 +2099,7 @@ describe.each(['gpt-6-sol', 'gpt-6-luna'])('%s requests', (model) => {
         prompt: { ...prompt, config: override },
       });
       expect(body.reasoning).not.toHaveProperty('max_tokens');
-      expect(body.reasoning.exclude).toBe(true);
+      expect(body.reasoning?.exclude).toBe(true);
       expect(body.temperature).toBe(0.4);
     }
     const { body: cleared } = await budgetProvider.getOpenAiBody('Say ready.', {
