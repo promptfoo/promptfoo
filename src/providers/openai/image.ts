@@ -1,10 +1,11 @@
-import { fetchWithCache } from '../../cache';
+import { type FetchWithCacheResult, fetchWithCache } from '../../cache';
 import logger from '../../logger';
 import { isSecretField, sanitizeUrl } from '../../util/sanitizer';
 import { ellipsize } from '../../util/text';
 import { getRequestTimeoutMs } from '../shared';
 import { OpenAiGenericProvider } from '.';
 import { calculateOpenAIUsageCost } from './billing';
+import { type ImageEditOptions, validateImageEditConfig } from './imageEdit';
 import {
   appendOpenAiApiPath,
   assertOpenAiApiModel,
@@ -29,6 +30,8 @@ type OpenAiImageModel =
   | 'gpt-image-2'
   | 'gpt-image-2.5-sunburst'
   | 'gpt-image-2.5-flare'
+  | 'gpt-image-2.6-sunburst'
+  | 'gpt-image-2.6-flare'
   | 'gpt-image-1'
   | 'gpt-image-1-mini'
   | 'chatgpt-image-latest'
@@ -154,6 +157,13 @@ type GptImage25Options = Omit<GptImageCommonOptions, 'quality'> & {
   background?: GptImage1Background;
 };
 
+type GptImage26Options = Omit<GptImage25Options, 'output_format'> & {
+  complexity?: 'low' | 'medium' | 'high';
+  output_format?: GptImageOutputFormat | 'gif' | 'svg';
+  frame_count?: number;
+  frame_duration_ms?: number;
+};
+
 type DallE2Options = CommonImageOptions & {
   size?: DallE2Size;
   image?: string; // Base64-encoded image or image URL
@@ -163,16 +173,28 @@ type DallE2Options = CommonImageOptions & {
 
 type OpenAiImageOptions = OpenAiSharedOptions & {
   model?: OpenAiImageModel;
-} & (DallE2Options | DallE3Options | GptImage1Options | GptImage2Options | GptImage25Options);
+} & (
+    | DallE2Options
+    | DallE3Options
+    | GptImage1Options
+    | GptImage2Options
+    | GptImage25Options
+    | (GptImage26Options & ({ operation?: 'generation' } | ImageEditOptions))
+  );
 
 const GPT_IMAGE_QUALITIES = ['low', 'medium', 'high', 'auto'] as const;
-const GPT_IMAGE25_QUALITIES = [...GPT_IMAGE_QUALITIES, 'xhigh', 'max'] as const;
+const EXTENDED_GPT_IMAGE_QUALITIES = [...GPT_IMAGE_QUALITIES, 'xhigh', 'max'] as const;
 const GPT_IMAGE1_BACKGROUNDS = ['transparent', 'opaque', 'auto'] as const;
 const GPT_IMAGE2_BACKGROUNDS = ['opaque', 'auto'] as const;
 const GPT_IMAGE_OUTPUT_FORMATS = ['png', 'jpeg', 'webp'] as const;
+const GPT_IMAGE26_OUTPUT_FORMATS = [...GPT_IMAGE_OUTPUT_FORMATS, 'gif', 'svg'] as const;
 const GPT_IMAGE_MODERATION_VALUES = ['auto', 'low'] as const;
 
 // Helper functions to check model types (including dated variants like gpt-image-1.5-2025-12-16)
+function isGptImage26(model: string): boolean {
+  return model === 'gpt-image-2.6-flare' || model === 'gpt-image-2.6-sunburst';
+}
+
 function isGptImage25(model: string): boolean {
   return /^gpt-image-2\.5-(sunburst|flare)(-\d{4}-\d{2}-\d{2})?$/.test(model);
 }
@@ -199,6 +221,7 @@ function isGptImage15(model: string): boolean {
 
 function isGptImageModel(model: string): boolean {
   return (
+    isGptImage26(model) ||
     isGptImage25(model) ||
     isGptImage2(model) ||
     isGptImage1(model) ||
@@ -208,6 +231,9 @@ function isGptImageModel(model: string): boolean {
 }
 
 function getGptImageModelDisplayName(model: string): string {
+  if (isGptImage26(model)) {
+    return 'GPT Image 2.6';
+  }
   if (isGptImage25(model)) {
     return 'GPT Image 2.5';
   }
@@ -231,8 +257,10 @@ function validateCustomImageSize(
     return { valid: true };
   }
 
-  const constraints =
-    'Valid sizes are auto or WIDTHxHEIGHT where both dimensions are multiples of 16, the maximum edge is 3840px, the long edge to short edge ratio is at most 3:1, and total pixels are between 655,360 and 8,294,400.';
+  const isImage26 = isGptImage26(model);
+  const constraints = isImage26
+    ? 'Use auto or WIDTHxHEIGHT with positive multiples of 16 and an aspect ratio between 1:3 and 3:1.'
+    : 'Valid sizes are auto or WIDTHxHEIGHT where both dimensions are multiples of 16, the maximum edge is 3840px, the long edge to short edge ratio is at most 3:1, and total pixels are between 655,360 and 8,294,400.';
 
   const sizeMatch = /^(\d+)x(\d+)$/.exec(size);
   if (!sizeMatch) {
@@ -249,14 +277,15 @@ function validateCustomImageSize(
   const totalPixels = width * height;
 
   if (
-    width <= 0 ||
-    height <= 0 ||
-    longEdge > GPT_IMAGE2_MAX_EDGE ||
+    shortEdge <= 0 ||
+    !Number.isSafeInteger(longEdge) ||
     width % 16 !== 0 ||
     height % 16 !== 0 ||
     longEdge / shortEdge > 3 ||
-    totalPixels < GPT_IMAGE2_MIN_PIXELS ||
-    totalPixels > GPT_IMAGE2_MAX_PIXELS
+    (!isImage26 &&
+      (longEdge > GPT_IMAGE2_MAX_EDGE ||
+        totalPixels < GPT_IMAGE2_MIN_PIXELS ||
+        totalPixels > GPT_IMAGE2_MAX_PIXELS))
   ) {
     return {
       valid: false,
@@ -285,7 +314,7 @@ export function validateSizeForModel(
     };
   }
 
-  if (isGptImage2(model) || isGptImage25(model)) {
+  if (isGptImage2(model) || isGptImage25(model) || isGptImage26(model)) {
     return validateCustomImageSize(size, model);
   }
 
@@ -341,9 +370,8 @@ function validateGptImageQualityForModel(
     return { valid: true };
   }
 
-  const validQualities: readonly string[] = isGptImage25(model)
-    ? GPT_IMAGE25_QUALITIES
-    : GPT_IMAGE_QUALITIES;
+  const validQualities: readonly string[] =
+    isGptImage25(model) || isGptImage26(model) ? EXTENDED_GPT_IMAGE_QUALITIES : GPT_IMAGE_QUALITIES;
   if (typeof quality !== 'string' || !validQualities.includes(quality)) {
     return {
       valid: false,
@@ -411,13 +439,13 @@ function validateOutputFormatForModel(
     return { valid: true };
   }
 
-  if (
-    typeof outputFormat !== 'string' ||
-    !GPT_IMAGE_OUTPUT_FORMATS.includes(outputFormat as GptImageOutputFormat)
-  ) {
+  const formats: readonly string[] = isGptImage26(model)
+    ? GPT_IMAGE26_OUTPUT_FORMATS
+    : GPT_IMAGE_OUTPUT_FORMATS;
+  if (typeof outputFormat !== 'string' || !formats.includes(outputFormat)) {
     return {
       valid: false,
-      message: `Invalid output_format "${String(outputFormat)}" for ${getGptImageModelDisplayName(model)}. Valid output formats are: ${GPT_IMAGE_OUTPUT_FORMATS.join(', ')}.`,
+      message: `Invalid output_format "${String(outputFormat)}" for ${getGptImageModelDisplayName(model)}. Valid output formats are: ${formats.join(', ')}.`,
     };
   }
 
@@ -477,7 +505,60 @@ function validateModerationForModel(
   return { valid: true };
 }
 
-function validateUnsupportedImageOptions(config: any): { valid: boolean; message?: string } {
+function isIntegerInRange(value: unknown, min: number, max: number): boolean {
+  return typeof value === 'number' && Number.isInteger(value) && value >= min && value <= max;
+}
+
+function validateImage26Options(
+  config: Record<string, unknown>,
+  model: string,
+): { valid: boolean; message?: string } {
+  const { complexity, frame_count, frame_duration_ms, output_format } = config;
+  const hasFrameOptions = frame_count !== undefined || frame_duration_ms !== undefined;
+  if (!isGptImage26(model)) {
+    return complexity !== undefined || hasFrameOptions
+      ? {
+          valid: false,
+          message: 'complexity, frame_count, and frame_duration_ms require GPT Image 2.6.',
+        }
+      : { valid: true };
+  }
+  if (
+    complexity !== undefined &&
+    complexity !== 'low' &&
+    complexity !== 'medium' &&
+    complexity !== 'high'
+  ) {
+    return { valid: false, message: 'complexity must be low, medium, or high.' };
+  }
+  if (hasFrameOptions && output_format !== 'gif') {
+    return {
+      valid: false,
+      message: 'frame_count and frame_duration_ms require output_format: "gif".',
+    };
+  }
+  if (frame_count !== undefined && !isIntegerInRange(frame_count, 2, 64)) {
+    return { valid: false, message: 'frame_count must be an integer between 2 and 64.' };
+  }
+  if (frame_duration_ms !== undefined && !isIntegerInRange(frame_duration_ms, 20, 2000)) {
+    return { valid: false, message: 'frame_duration_ms must be an integer between 20 and 2000.' };
+  }
+  if (output_format === 'svg' && (config.n ?? 1) !== 1) {
+    return { valid: false, message: 'SVG output requires n: 1.' };
+  }
+  if (
+    (output_format === 'svg' || output_format === 'gif') &&
+    config.prompt_rewriter !== undefined
+  ) {
+    return { valid: false, message: 'prompt_rewriter is unsupported for SVG and GIF output.' };
+  }
+  return { valid: true };
+}
+
+function validateUnsupportedImageOptions(
+  config: any,
+  model: string,
+): { valid: boolean; message?: string } {
   if (config.stream === true) {
     return {
       valid: false,
@@ -494,6 +575,21 @@ function validateUnsupportedImageOptions(config: any): { valid: boolean; message
     };
   }
 
+  if (isGptImage26(model) && config.operation === 'edit') {
+    const message = validateImageEditConfig(config);
+    return message ? { valid: false, message } : { valid: true };
+  }
+
+  if (
+    config.images !== undefined ||
+    config.markup !== undefined ||
+    (isGptImage26(model) && config.mask !== undefined)
+  ) {
+    return {
+      valid: false,
+      message: 'Image references, markup, and masks require GPT Image 2.6 with operation: edit.',
+    };
+  }
   if (
     config.image !== undefined ||
     config.mask !== undefined ||
@@ -516,8 +612,9 @@ function validateImageRequestConfig(
 ): { valid: boolean; message?: string } {
   return (
     [
-      validateUnsupportedImageOptions(config),
+      validateUnsupportedImageOptions(config, model),
       validateNForModel(config.n, model),
+      validateImage26Options(config, model),
       validateSizeForModel(size, model),
       validateGptImageQualityForModel('quality' in config ? config.quality : undefined, model),
       validateOutputFormatForModel(
@@ -541,6 +638,10 @@ function validateImageRequestConfig(
 
 function getMimeTypeForOutputFormat(outputFormat?: string): string {
   switch (outputFormat) {
+    case 'gif':
+      return 'image/gif';
+    case 'svg':
+      return 'image/svg+xml';
     case 'jpeg':
       return 'image/jpeg';
     case 'webp':
@@ -606,16 +707,18 @@ export function formatOutput(
   responseFormat?: string,
   outputFormat?: string,
 ): string | { error: string } {
+  const image = Array.isArray(data?.data) ? data.data[0] : undefined;
+
   if (responseFormat === 'b64_json') {
-    const b64Json = data.data[0].b64_json;
-    if (!b64Json) {
+    const b64Json = image?.b64_json;
+    if (typeof b64Json !== 'string' || !b64Json) {
       return { error: `No base64 image data found in response: ${JSON.stringify(data)}` };
     }
 
     return `data:${getMimeTypeForOutputFormat(outputFormat)};base64,${b64Json}`;
   } else {
-    const url = data.data[0].url;
-    if (!url) {
+    const url = image?.url;
+    if (typeof url !== 'string' || !url) {
       return { error: `No image URL found in response: ${JSON.stringify(data)}` };
     }
 
@@ -664,28 +767,21 @@ export function prepareRequestBody(
   }
 
   if (isGptImageModel(model)) {
-    if ('quality' in config && config.quality) {
-      body.quality = config.quality;
+    for (const field of ['quality', 'background', 'output_format', 'moderation']) {
+      if (config[field]) {
+        body[field] = config[field];
+      }
     }
-
-    // Background options are model-dependent.
-    if ('background' in config && config.background) {
-      body.background = config.background;
-    }
-
-    // Output format: png, jpeg, or webp
-    if ('output_format' in config && config.output_format) {
-      body.output_format = config.output_format;
-    }
-
-    // Compression level for jpeg/webp (0-100)
-    if ('output_compression' in config && config.output_compression !== undefined) {
+    if (config.output_compression !== undefined) {
       body.output_compression = config.output_compression;
     }
+  }
 
-    // Moderation: auto or low
-    if ('moderation' in config && config.moderation) {
-      body.moderation = config.moderation;
+  if (isGptImage26(model)) {
+    for (const field of ['complexity', 'frame_count', 'frame_duration_ms']) {
+      if (config[field] !== undefined) {
+        body[field] = config[field];
+      }
     }
   }
 
@@ -702,8 +798,8 @@ export function calculateImageCost(
   const gptImageQuality =
     quality === 'medium' || quality === 'high' || quality === 'low' ? quality : 'low';
 
-  // GPT Image 2.5 shares token rates with GPT Image 2, but not per-image token usage.
-  if (isGptImage25(model)) {
+  // Sunburst and Flare do not have fixed per-image prices.
+  if (isGptImage25(model) || isGptImage26(model)) {
     return undefined;
   }
 
@@ -769,7 +865,7 @@ export async function callOpenAiImageApi(
   body: Record<string, any>,
   headers: Record<string, string>,
   timeout: number,
-): Promise<{ data: any; cached: boolean; status: number; statusText: string; latencyMs?: number }> {
+): Promise<FetchWithCacheResult<any>> {
   let sendsToOpenAiApi = false;
   let hasSensitiveUrl = false;
   try {
@@ -792,7 +888,9 @@ export async function callOpenAiImageApi(
     ([key, value]) => !isSensitiveHeader(key) && hasSensitiveOpenAiCacheString(value),
   );
   const serializedBody = JSON.stringify(body);
-  const hasSensitiveBody = hasSensitiveOpenAiCacheString(serializedBody);
+  // Edit references may be private inputs or account-scoped file IDs.
+  const hasSensitiveBody =
+    body.images !== undefined || hasSensitiveOpenAiCacheString(serializedBody);
   const bustCache =
     hasSensitiveUrl ||
     hasSensitiveHeaderValue ||
@@ -818,8 +916,7 @@ export async function processApiResponse(
   outputFormat?: string,
   billingConfig: OpenAiImageOptions = {},
 ): Promise<ProviderResponse> {
-  if (data.error) {
-    await data?.deleteFromCache?.();
+  if (data?.error) {
     return {
       error: formatOpenAiError(data),
     };
@@ -831,9 +928,11 @@ export async function processApiResponse(
       return formattedOutput;
     }
 
-    const exactUsageCost = calculateOpenAIUsageCost(model, billingConfig, data.usage, {
-      cachedResponse: cached,
-    });
+    // SVG also bills an authoring model whose usage is not itemized in the image ledger.
+    const exactUsageCost =
+      isGptImage26(model) && outputFormat === 'svg'
+        ? undefined
+        : calculateOpenAIUsageCost(model, billingConfig, data.usage, { cachedResponse: cached });
     const cost = exactUsageCost ?? (cached ? 0 : calculateImageCost(model, size, quality, n));
     const tokenUsage = getImageTokenUsage(data, cached);
     const images = buildStructuredImageOutputs(data, outputFormat);
@@ -849,7 +948,6 @@ export async function processApiResponse(
       ...(responseFormat === 'b64_json' ? { isBase64: true, format: 'json' } : {}),
     };
   } catch (err) {
-    await data?.deleteFromCache?.();
     return {
       error: `API error: ${String(err)}: ${JSON.stringify(data)}`,
     };
@@ -887,14 +985,20 @@ export class OpenAiImageProvider extends OpenAiGenericProvider {
     // GPT Image models always return b64_json, so we treat them as such regardless of config
     const responseFormat = isGptImageModel(model) ? 'b64_json' : config.response_format || 'url';
 
-    if (operation !== 'generation') {
+    const isEdit = operation === 'edit' && isGptImage26(model);
+    if (operation !== 'generation' && !isEdit) {
       return {
-        error: `Only 'generation' operations are currently supported. '${operation}' operations are not implemented.`,
+        error: isGptImage26(model)
+          ? `Unsupported operation '${operation}' for GPT Image 2.6. Use 'generation' or 'edit'.`
+          : `Only 'generation' operations are currently supported. '${operation}' operations are not implemented.`,
       };
     }
 
-    const endpoint = '/images/generations';
-    const size = config.size || DEFAULT_SIZE;
+    const endpoint = isEdit ? '/images/edits' : '/images/generations';
+    const outputFormat = 'output_format' in config ? config.output_format : undefined;
+    const size =
+      config.size ||
+      (isEdit || (isGptImage26(model) && outputFormat === 'gif') ? 'auto' : DEFAULT_SIZE);
 
     const requestValidation = validateImageRequestConfig(config, model, size as string);
     if (!requestValidation.valid) {
@@ -902,6 +1006,9 @@ export class OpenAiImageProvider extends OpenAiGenericProvider {
     }
 
     const body = prepareRequestBody(model, prompt, size as string, responseFormat, config);
+    if (isEdit && 'images' in config) {
+      Object.assign(body, { images: config.images, markup: config.markup, mask: config.mask });
+    }
 
     const headers = {
       'Content-Type': 'application/json',
@@ -909,31 +1016,29 @@ export class OpenAiImageProvider extends OpenAiGenericProvider {
       ...this.getOpenAiRequestHeaders(config.headers),
     };
 
-    let data, status, statusText;
-    let cached = false;
-    let latencyMs: number | undefined;
+    let response: FetchWithCacheResult<any>;
     try {
-      ({ data, cached, status, statusText, latencyMs } = await callOpenAiImageApi(
+      response = await callOpenAiImageApi(
         appendOpenAiApiPath(this.getApiUrl(), endpoint),
         body,
         headers,
         getRequestTimeoutMs(),
-      ));
-
-      if (status < 200 || status >= 300) {
-        return {
-          error: `API error: ${status} ${statusText}\n${typeof data === 'string' ? data : JSON.stringify(data)}`,
-        };
-      }
+      );
     } catch (err) {
       logger.error(`API call error: ${String(err)}`);
-      await data?.deleteFromCache?.();
       return {
         error: `API call error: ${String(err)}`,
       };
     }
 
-    return processApiResponse(
+    const { data, cached, status, statusText, latencyMs } = response;
+    if (status < 200 || status >= 300) {
+      return {
+        error: `API error: ${status} ${statusText}\n${typeof data === 'string' ? data : JSON.stringify(data)}`,
+      };
+    }
+
+    const result = await processApiResponse(
       data,
       prompt,
       responseFormat,
@@ -943,8 +1048,14 @@ export class OpenAiImageProvider extends OpenAiGenericProvider {
       latencyMs,
       config.quality,
       config.n ?? 1,
-      'output_format' in config ? config.output_format : undefined,
+      outputFormat,
       config,
     );
+    if (result.error) {
+      await response.deleteFromCache?.().catch((error) => {
+        logger.warn('[OpenAI Image] Failed to evict invalid response from cache', { error });
+      });
+    }
+    return result;
   }
 }

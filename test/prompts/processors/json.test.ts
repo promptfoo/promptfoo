@@ -43,6 +43,18 @@ describe('processJsonFile', () => {
     expect(mockReadFileSync).toHaveBeenCalledWith(filePath, 'utf8');
   });
 
+  it('should strip a UTF-8 byte order mark', () => {
+    const filePath = 'file.json';
+    const fileContent = JSON.stringify([{ role: 'user', content: '{{question}}' }]);
+    mockReadFileSync.mockReturnValue(`﻿${fileContent}`);
+    expect(processJsonFile(filePath, {})).toEqual([
+      {
+        raw: fileContent,
+        label: `${filePath}: ${fileContent}`,
+      },
+    ]);
+  });
+
   it('should throw an error if the file cannot be read', () => {
     const filePath = 'nonexistent.json';
     mockReadFileSync.mockImplementation(() => {

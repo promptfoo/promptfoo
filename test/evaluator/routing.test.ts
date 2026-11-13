@@ -1,3 +1,5 @@
+import { createTokenOutput } from '../factories/literalFixtures';
+
 import './setup';
 
 import { randomUUID } from 'crypto';
@@ -17,6 +19,9 @@ import {
 import { mockApiProvider, toPrompt } from './helpers';
 import { describeEvaluator } from './lifecycle';
 
+const createVariableTest = () => ({
+  vars: { var1: 'value1', var2: 'value2' },
+});
 function duplicateProvider(id: string, output: string, label?: string): ApiProvider {
   return createMockProvider({ id, label, response: createProviderResponse({ output }) });
 }
@@ -65,11 +70,7 @@ describeEvaluator('evaluator prompt and provider routing', () => {
       providerPromptMap: {
         'test-provider': ['Test prompt 1'],
       },
-      tests: [
-        {
-          vars: { var1: 'value1', var2: 'value2' },
-        },
-      ],
+      tests: [createVariableTest()],
     };
     const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
     await evaluate(testSuite, evalRecord, {});
@@ -130,11 +131,7 @@ describeEvaluator('evaluator prompt and provider routing', () => {
       providerPromptMap: {
         'test-provider': ['prompt1', 'group1'],
       },
-      tests: [
-        {
-          vars: { var1: 'value1', var2: 'value2' },
-        },
-      ],
+      tests: [createVariableTest()],
     };
     const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
     await evaluate(testSuite, evalRecord, {});
@@ -632,19 +629,13 @@ describeEvaluator('evaluator prompt and provider routing', () => {
     const provider1: ApiProvider = {
       id: () => 'provider-1',
       label: 'default-provider',
-      callApi: vi.fn().mockResolvedValue({
-        output: 'Output 1',
-        tokenUsage: { total: 5, prompt: 2, completion: 3, cached: 0, numRequests: 1 },
-      }),
+      callApi: vi.fn().mockResolvedValue(createTokenOutput('Output 1', 5, 2, 3)),
     };
 
     const provider2: ApiProvider = {
       id: () => 'provider-2',
       label: 'other-provider',
-      callApi: vi.fn().mockResolvedValue({
-        output: 'Output 2',
-        tokenUsage: { total: 5, prompt: 2, completion: 3, cached: 0, numRequests: 1 },
-      }),
+      callApi: vi.fn().mockResolvedValue(createTokenOutput('Output 2', 5, 2, 3)),
     };
 
     const testSuite: TestSuite = {
@@ -706,19 +697,13 @@ describeEvaluator('evaluator prompt and provider routing', () => {
     const provider1: ApiProvider = {
       id: () => 'provider-1',
       label: 'provider-one',
-      callApi: vi.fn().mockResolvedValue({
-        output: 'Output 1',
-        tokenUsage: { total: 5, prompt: 2, completion: 3, cached: 0, numRequests: 1 },
-      }),
+      callApi: vi.fn().mockResolvedValue(createTokenOutput('Output 1', 5, 2, 3)),
     };
 
     const provider2: ApiProvider = {
       id: () => 'provider-2',
       label: 'provider-two',
-      callApi: vi.fn().mockResolvedValue({
-        output: 'Output 2',
-        tokenUsage: { total: 5, prompt: 2, completion: 3, cached: 0, numRequests: 1 },
-      }),
+      callApi: vi.fn().mockResolvedValue(createTokenOutput('Output 2', 5, 2, 3)),
     };
 
     const testSuite: TestSuite = {
@@ -759,19 +744,13 @@ describeEvaluator('evaluator prompt and provider routing', () => {
     const provider1: ApiProvider = {
       id: () => 'provider-1',
       label: 'model-a',
-      callApi: vi.fn().mockResolvedValue({
-        output: 'Output from model-a',
-        tokenUsage: { total: 5, prompt: 2, completion: 3, cached: 0, numRequests: 1 },
-      }),
+      callApi: vi.fn().mockResolvedValue(createTokenOutput('Output from model-a', 5, 2, 3)),
     };
 
     const provider2: ApiProvider = {
       id: () => 'provider-2',
       label: 'model-b',
-      callApi: vi.fn().mockResolvedValue({
-        output: 'Output from model-b',
-        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
-      }),
+      callApi: vi.fn().mockResolvedValue(createTokenOutput('Output from model-b')),
     };
 
     const testSuite: TestSuite = {
@@ -809,19 +788,13 @@ describeEvaluator('evaluator prompt and provider routing', () => {
     const provider1: ApiProvider = {
       id: () => 'provider-1',
       label: 'model-a',
-      callApi: vi.fn().mockResolvedValue({
-        output: 'Output from model-a',
-        tokenUsage: { total: 5, prompt: 2, completion: 3, cached: 0, numRequests: 1 },
-      }),
+      callApi: vi.fn().mockResolvedValue(createTokenOutput('Output from model-a', 5, 2, 3)),
     };
 
     const provider2: ApiProvider = {
       id: () => 'provider-2',
       label: 'model-b',
-      callApi: vi.fn().mockResolvedValue({
-        output: 'Output from model-b',
-        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
-      }),
+      callApi: vi.fn().mockResolvedValue(createTokenOutput('Output from model-b')),
     };
 
     const testSuite: TestSuite = {

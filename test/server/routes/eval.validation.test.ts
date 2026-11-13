@@ -1,10 +1,9 @@
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import type { Server } from 'node:http';
 
-import request from 'supertest';
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { setupTestServer } from '../../util/testServer';
 
 // Mock dependencies BEFORE imports
 vi.mock('../../../src/models/eval');
@@ -22,30 +21,12 @@ const mockedEval = vi.mocked(Eval);
 const mockedEvalQueries = vi.mocked(EvalQueries);
 
 describe('Eval Routes - Zod Validation', () => {
-  let api: ReturnType<typeof request.agent>;
-  let server: Server;
   let mockFindById: ReturnType<typeof vi.fn>;
   let mockSave: ReturnType<typeof vi.fn>;
   let mockGetMetadataKeysFromEval: ReturnType<typeof vi.fn>;
   let mockGetMetadataValuesFromEval: ReturnType<typeof vi.fn>;
 
-  beforeAll(async () => {
-    await new Promise<void>((resolve, reject) => {
-      server = createApp().listen(0, '127.0.0.1', (error?: Error) =>
-        error ? reject(error) : resolve(),
-      );
-    });
-    api = request.agent(server);
-  });
-
-  afterAll(async () => {
-    if (!server.listening) {
-      return;
-    }
-    await new Promise<void>((resolve, reject) => {
-      server.close((error) => (error ? reject(error) : resolve()));
-    });
-  });
+  const api = setupTestServer(createApp);
 
   beforeEach(() => {
     vi.resetAllMocks();

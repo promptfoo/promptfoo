@@ -1,8 +1,14 @@
 import OpenAI from 'openai';
-import { maybeLoadFromExternalFileWithVars } from '../../util/index';
+import { InvalidToolCallError } from '../../contracts/providers';
+import logger from '../../logger';
+import { buildHttpRateLimitError } from '../../util/fetch';
 import { getAjv, safeJsonStringify } from '../../util/json';
+import { isSafeCost, isSafeTokenCount } from '../../util/numeric';
 import { isNonCredentialHeader, looksLikeSecret, sanitizeUrl } from '../../util/sanitizer';
+import { isKnownClaudeModelWithDeprecatedSampling } from '../anthropic/util';
 import { calculateCost } from '../shared';
+import { InvalidToolSchemaError } from '../toolSchemaError';
+import { prepareOpenAiFunctions } from './prepare';
 
 import type { TokenUsage, VarValue } from '../../types/index';
 import type { ProviderConfig } from '../shared';
@@ -290,6 +296,34 @@ type OpenAIModelInfo = {
   cost?: OpenAIModelCost;
 };
 
+// OpenAI explicitly includes fine-tuned versions in the October 23, 2026 shutdown.
+const RETIRED_OPENAI_FINE_TUNE_BASES = new Set([
+  'gpt-3.5-turbo',
+  'gpt-3.5-turbo-0125',
+  'gpt-3.5-turbo-completions',
+  'gpt-4',
+  'gpt-4-0613',
+  'gpt-4-0613-completions',
+  'gpt-4-completions',
+  'gpt-4-1106-preview',
+  'gpt-4-turbo',
+  'gpt-4-turbo-2024-04-09',
+  'gpt-4-turbo-completions',
+  'gpt-4.1-nano',
+  'gpt-4.1-nano-2025-04-14',
+  'gpt-4o-2024-05-13',
+  'gpt-image-1',
+  'o1',
+  'o1-2024-12-17',
+  'o1-pro',
+  'o1-pro-2025-03-19',
+  'o3-mini',
+  'o3-mini-2025-01-31',
+  'ft-o4-mini-2025-04-16',
+  'o4-mini',
+  'o4-mini-2025-04-16',
+]);
+
 /**
  * Model IDs whose published OpenAI shutdown dates have passed.
  *
@@ -297,9 +331,54 @@ type OpenAIModelInfo = {
  * current first-party routing registries. Do not add models before their shutdown date.
  */
 export const RETIRED_OPENAI_MODEL_IDS: ReadonlySet<string> = new Set([
-  // Additional current-main shutdowns, reconciled with the published lifecycle catalog.
+  // https://developers.openai.com/api/docs/deprecations#past-deprecations
+  ...RETIRED_OPENAI_FINE_TUNE_BASES,
+  'gpt-5.4-cyber',
+  'gpt-3.5-turbo-1106',
+  'gpt-3.5-turbo-instruct',
+  'babbage-002',
+  'davinci-002',
+  'sora-2',
+  'sora-2-2025-10-06',
+  'sora-2-2025-12-08',
+  'sora-2-pro',
+  'sora-2-pro-2025-10-06',
+  'gpt-4o-mini-search-preview',
+  'gpt-4o-search-preview',
+  'gpt-4o-mini-audio-preview-2024-12-17',
+  'gpt-4o-mini-realtime-preview-2024-12-17',
+  'dall-e-2',
+  'dall-e-3',
+  'gpt-4.5-preview',
+  'gpt-4-turbo-preview-completions',
   'gpt-5.2-chat-latest',
   'gpt-5.3-chat-latest',
+  // Retired GPT-3, InstructGPT, Codex, edit and first-generation embedding models.
+  'ada',
+  'babbage',
+  'curie',
+  'davinci',
+  'text-ada-001',
+  'text-babbage-001',
+  'text-curie-001',
+  'text-davinci-001',
+  'text-davinci-002',
+  'text-davinci-003',
+  'text-davinci-edit-001',
+  'code-davinci-edit-001',
+  'code-davinci-001',
+  'code-davinci-002',
+  'code-cushman-001',
+  'code-cushman-002',
+  ...['ada', 'babbage', 'curie', 'davinci'].flatMap((base) => [
+    `text-similarity-${base}-001`,
+    `text-search-${base}-doc-001`,
+    `text-search-${base}-query-001`,
+  ]),
+  'code-search-ada-code-001',
+  'code-search-ada-text-001',
+  'code-search-babbage-code-001',
+  'code-search-babbage-text-001',
   // Retired before 2026.
   'gpt-3.5-turbo-0301',
   'gpt-3.5-turbo-0613',
@@ -355,12 +434,7 @@ export const RETIRED_OPENAI_MODEL_IDS: ReadonlySet<string> = new Set([
 
 // Preserve current-main discovery exclusions without inferring an exact shutdown from a
 // missing catalog entry. These IDs may still be used with explicitly configured endpoints.
-const LEGACY_OPENAI_DISCOVERY_EXCLUSIONS = new Set([
-  'gpt-4o-mini-audio-preview-2024-12-17',
-  'gpt-4o-mini-search-preview',
-  'gpt-4o-search-preview',
-  'gpt-5-chat',
-]);
+const LEGACY_OPENAI_DISCOVERY_EXCLUSIONS = new Set(['gpt-3.5-turbo-instruct-0914', 'gpt-5-chat']);
 
 function excludeRetiredModels(models: OpenAIModelInfo[]): OpenAIModelInfo[] {
   return models.filter(
@@ -547,6 +621,15 @@ const OPENAI_CHAT_AND_RETIRED_MODELS: OpenAIModelInfo[] = [
       output: 15 / 1e6,
     },
   }),
+  ...modelsWithCost(['gpt-6.1-terra'], {
+    input: 1 / 1e6,
+    output: 5 / 1e6,
+    longContext: {
+      threshold: GPT_LONG_CONTEXT_THRESHOLD,
+      input: 2 / 1e6,
+      output: 7.5 / 1e6,
+    },
+  }),
   ...modelsWithCost(['gpt-6-luna'], {
     input: 0.1 / 1e6,
     output: 0.5 / 1e6,
@@ -627,8 +710,7 @@ const OPENAI_CHAT_AND_RETIRED_MODELS: OpenAIModelInfo[] = [
   }),
 ];
 
-// Retired previews remain for historical billing; the dated mini preview remains routable until
-// OpenAI publishes its shutdown date.
+// Retain retired audio previews for historical billing and compatible gateways.
 const LEGACY_OPENAI_AUDIO_MODELS: OpenAIModelInfo[] = [
   ...modelsWithCost(
     [
@@ -661,6 +743,7 @@ export const OPENAI_CODEX_ONLY_MODELS: OpenAIModelInfo[] = [{ id: 'gpt-5.3-codex
 
 const OPENAI_FIRST_PARTY_API_HOSTNAMES = new Set([
   'api.openai.com',
+  'gov.api.openai.com',
   'us.api.openai.com',
   'eu.api.openai.com',
   'au.api.openai.com',
@@ -681,6 +764,22 @@ export function isOpenAiFirstPartyApiUrl(apiUrl?: string): boolean {
     return OPENAI_FIRST_PARTY_API_HOSTNAMES.has(new URL(apiUrl).hostname.toLowerCase());
   } catch {
     return false;
+  }
+}
+
+/** Apply Claude's wire-format restriction after prompt and passthrough overrides are merged. */
+export function omitDeprecatedClaudeSamplingParams(body: Record<string, unknown>): void {
+  if (typeof body.model !== 'string') {
+    return;
+  }
+  // Only the fine-tune base identifies the model; later fields are user-defined.
+  const fineTuneBase = /(?:^|\/)ft:([^:]+)(?::|$)/.exec(body.model)?.[1];
+  const model = fineTuneBase ?? body.model;
+  const leaf = model.slice(model.lastIndexOf('/') + 1);
+  if (isKnownClaudeModelWithDeprecatedSampling(leaf)) {
+    delete body.temperature;
+    delete body.top_p;
+    delete body.top_k;
   }
 }
 
@@ -768,7 +867,11 @@ export function assertOpenAiApiModel(
 
   assertOpenAiModelEndpointCompatibility(model, options);
   const normalizedModel = model.split('/').pop() ?? model;
-  if (RETIRED_OPENAI_MODEL_IDS.has(normalizedModel)) {
+  const [, fineTuneBase] = /^ft:([^:]+):/.exec(normalizedModel) ?? [];
+  if (
+    RETIRED_OPENAI_MODEL_IDS.has(normalizedModel) ||
+    (fineTuneBase && RETIRED_OPENAI_FINE_TUNE_BASES.has(fineTuneBase))
+  ) {
     throw new Error(
       `OpenAI model ${model} has been retired and is no longer available from OpenAI's first-party API. Use a current model or configure a custom OpenAI-compatible apiBaseUrl.`,
     );
@@ -860,7 +963,7 @@ const OPENAI_DEEP_RESEARCH_AND_RETIRED_MODELS: OpenAIModelInfo[] = [
 export const OPENAI_DEEP_RESEARCH_MODELS = OPENAI_DEEP_RESEARCH_AND_RETIRED_MODELS;
 
 // See https://platform.openai.com/docs/models/model-endpoint-compatibility
-export const OPENAI_COMPLETION_MODELS: OpenAIModelInfo[] = [
+const OPENAI_COMPLETION_AND_RETIRED_MODELS: OpenAIModelInfo[] = [
   ...modelsWithCost(['gpt-3.5-turbo-instruct'], {
     input: 1.5 / 1e6,
     output: 2 / 1e6,
@@ -878,6 +981,8 @@ export const OPENAI_COMPLETION_MODELS: OpenAIModelInfo[] = [
     output: 2 / 1e6,
   }),
 ];
+
+export const OPENAI_COMPLETION_MODELS = excludeRetiredModels(OPENAI_COMPLETION_AND_RETIRED_MODELS);
 
 /**
  * Realtime model IDs that exist on a different endpoint family from the conversational
@@ -927,7 +1032,7 @@ const OPENAI_REALTIME_AND_RETIRED_MODELS: OpenAIModelInfo[] = [
     audioInput: 10 / 1e6,
     audioOutput: 20 / 1e6,
   }),
-  // Deprecated preview snapshot; OpenAI has not published a shutdown date.
+  // Historical snapshot retained for billing.
   ...realtimeModelsWithCost(['gpt-4o-mini-realtime-preview-2024-12-17'], {
     input: 0.6 / 1e6,
     output: 2.4 / 1e6,
@@ -985,7 +1090,13 @@ export const OPENAI_REALTIME_MODELS = excludeRetiredModels([
   ...RETIRED_OPENAI_REALTIME_MODELS,
 ]);
 
-export type RetiredOpenAiModelRoute = 'chat' | 'moderation' | 'responses' | 'tts' | 'realtime';
+export type RetiredOpenAiModelRoute =
+  | 'chat'
+  | 'completion'
+  | 'moderation'
+  | 'responses'
+  | 'tts'
+  | 'realtime';
 
 /**
  * Returns the endpoint family historically used by a retired model ID, including gateway prefixes.
@@ -995,6 +1106,11 @@ export type RetiredOpenAiModelRoute = 'chat' | 'moderation' | 'responses' | 'tts
  */
 export function getRetiredOpenAiModelRoute(modelName: string): RetiredOpenAiModelRoute | undefined {
   const modelId = modelName.split('/').pop() ?? modelName;
+  // The dated instruct snapshot is absent from OpenAI's catalog. Preserve its legacy route
+  // without assuming it shared the documented shutdown date of the alias.
+  if (modelId === 'gpt-3.5-turbo-instruct-0914') {
+    return 'completion';
+  }
   if (!RETIRED_OPENAI_MODEL_IDS.has(modelId)) {
     return undefined;
   }
@@ -1003,6 +1119,9 @@ export function getRetiredOpenAiModelRoute(modelName: string): RetiredOpenAiMode
     LEGACY_OPENAI_AUDIO_MODELS.some(({ id }) => id === modelId)
   ) {
     return 'chat';
+  }
+  if (OPENAI_COMPLETION_AND_RETIRED_MODELS.some(({ id }) => id === modelId)) {
+    return 'completion';
   }
   if (OPENAI_TTS_AND_RETIRED_MODELS.some(({ id }) => id === modelId)) {
     return 'tts';
@@ -1029,7 +1148,7 @@ export const OPENAI_BILLING_MODELS: OpenAIModelInfo[] = [
   ...OPENAI_CHAT_AND_RETIRED_MODELS,
   ...OPENAI_TTS_AND_RETIRED_MODELS,
   ...LEGACY_OPENAI_AUDIO_MODELS,
-  ...OPENAI_COMPLETION_MODELS,
+  ...OPENAI_COMPLETION_AND_RETIRED_MODELS,
   ...OPENAI_REALTIME_AND_RETIRED_MODELS,
   ...RETIRED_OPENAI_REALTIME_MODELS,
   ...OPENAI_RESPONSES_ONLY_AND_RETIRED_MODELS,
@@ -1146,14 +1265,57 @@ export function calculateOpenAICost(
   return totalCost;
 }
 
+/**
+ * Calculate cost without trusting provider-controlled usage or cost fields.
+ */
+export function calculateSafeOpenAICost(
+  modelName: string,
+  config: ProviderConfig,
+  data: any,
+): number | undefined {
+  const promptTokens = data?.usage?.prompt_tokens;
+  const completionTokens = data?.usage?.completion_tokens;
+  const localCost =
+    isSafeTokenCount(promptTokens) && isSafeTokenCount(completionTokens)
+      ? calculateOpenAICost(modelName, config, promptTokens, completionTokens)
+      : undefined;
+  const hasLocalOverride =
+    config.cost !== undefined || config.inputCost !== undefined || config.outputCost !== undefined;
+  if (hasLocalOverride) {
+    if (isSafeCost(localCost)) {
+      return localCost;
+    }
+    const inputCost = config.inputCost ?? config.cost;
+    const outputCost = config.outputCost ?? config.cost;
+    if (
+      isSafeTokenCount(promptTokens) &&
+      isSafeTokenCount(completionTokens) &&
+      isSafeCost(inputCost) &&
+      isSafeCost(outputCost)
+    ) {
+      const configuredCost = inputCost * promptTokens + outputCost * completionTokens;
+      return isSafeCost(configuredCost) ? configuredCost : undefined;
+    }
+    return undefined;
+  }
+  return isSafeCost(data?.usage?.cost)
+    ? data.usage.cost
+    : isSafeCost(localCost)
+      ? localCost
+      : undefined;
+}
+
 export function failApiCall(err: any) {
   if (err instanceof OpenAI.APIError) {
     const errorType = err.error?.type || err.type || 'unknown';
     const errorMessage = err.error?.message || err.message || 'Unknown error';
     const statusCode = err.status ? ` ${err.status}` : '';
-    return {
-      error: `API error: ${errorType}${statusCode} ${errorMessage}`,
-    };
+    const error = `API error: ${errorType}${statusCode} ${errorMessage}`;
+    if (err.status === 429) {
+      const rateLimit = buildHttpRateLimitError({ status: err.status, headers: err.headers }, err);
+      return { error, metadata: { rateLimitKind: rateLimit.kind } };
+    }
+    return { error };
   }
   return {
     error: `API error: ${String(err)}`,
@@ -1207,24 +1369,247 @@ export function getOpenAICompletionTokenDetails(
 }
 
 export function getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
-  if (data.usage) {
-    if (cached) {
-      // Cached responses don't count as a new request
-      return { cached: data.usage.total_tokens, total: data.usage.total_tokens };
-    } else {
-      const completionDetails = getOpenAICompletionTokenDetails(data.usage);
-      return {
-        total: data.usage.total_tokens,
-        prompt: data.usage.prompt_tokens || 0,
-        completion: data.usage.completion_tokens || 0,
-        numRequests: 1,
-        ...(completionDetails ? { completionDetails } : {}),
-      };
+  if (!isRecord(data?.usage)) {
+    return {};
+  }
+
+  const usage = data.usage;
+  const total = isSafeTokenCount(usage.total_tokens) ? usage.total_tokens : undefined;
+  if (cached) {
+    return total === undefined ? {} : { cached: total, total };
+  }
+
+  const tokenUsage: Partial<TokenUsage> = { numRequests: 1 };
+  if (total !== undefined) {
+    tokenUsage.total = total;
+  }
+  tokenUsage.prompt = isSafeTokenCount(usage.prompt_tokens) ? usage.prompt_tokens : 0;
+  tokenUsage.completion = isSafeTokenCount(usage.completion_tokens) ? usage.completion_tokens : 0;
+
+  const promptDetails = isRecord(usage.prompt_tokens_details)
+    ? usage.prompt_tokens_details
+    : isRecord(usage.input_tokens_details)
+      ? usage.input_tokens_details
+      : undefined;
+  const completionDetails = isRecord(usage.completion_tokens_details)
+    ? usage.completion_tokens_details
+    : isRecord(usage.output_tokens_details)
+      ? usage.output_tokens_details
+      : undefined;
+  const details: NonNullable<TokenUsage['completionDetails']> = {};
+  const detailMappings = [
+    ['reasoning', completionDetails?.reasoning_tokens],
+    ['acceptedPrediction', completionDetails?.accepted_prediction_tokens],
+    ['rejectedPrediction', completionDetails?.rejected_prediction_tokens],
+    // Some OpenAI-compatible APIs (e.g. Moonshot) report cached prompt tokens at the
+    // top level of usage instead of inside prompt_tokens_details. Nested details win.
+    ['cacheReadInputTokens', promptDetails?.cached_tokens ?? usage.cached_tokens],
+    ['cacheCreationInputTokens', getOpenAICacheWriteInputTokens(usage)],
+  ] as const;
+  for (const [field, value] of detailMappings) {
+    if (isSafeTokenCount(value)) {
+      details[field] = value;
     }
   }
-  return {};
+  if (Object.keys(details).length > 0) {
+    tokenUsage.completionDetails = details;
+  }
+  return tokenUsage;
 }
 
+export function getTokenUsageWithRequestCount(data: any, cached: boolean): Partial<TokenUsage> {
+  return { ...getTokenUsage(data, cached), numRequests: cached ? 0 : 1 };
+}
+
+export interface ValidatedChatCompletionMessage {
+  audio: Record<string, unknown> | undefined;
+  content: string | null | undefined;
+  functionCall: Record<string, unknown> | undefined;
+  reasoning: string | undefined;
+  refusal: string | undefined;
+  structuredContent: Record<string, unknown>[] | undefined;
+  toolCalls: Record<string, unknown>[] | undefined;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+function hasNamedPayload(value: unknown): value is Record<string, unknown> {
+  return isRecord(value) && typeof value.name === 'string' && value.name.trim().length > 0;
+}
+
+function hasFunctionPayload(value: unknown): value is Record<string, unknown> {
+  return hasNamedPayload(value) && typeof value.arguments === 'string';
+}
+
+function isToolCall(value: unknown): value is Record<string, unknown> {
+  if (!isRecord(value) || typeof value.id !== 'string') {
+    return false;
+  }
+  return (
+    // OpenRouter sometimes omits the discriminator on a complete function
+    // payload; treat it as 'function' rather than discarding the message.
+    // An explicit unknown type still fails, and `custom` keeps its own shape.
+    ((value.type === 'function' || value.type === undefined) &&
+      hasFunctionPayload(value.function)) ||
+    (value.type === 'custom' &&
+      hasNamedPayload(value.custom) &&
+      typeof value.custom.input === 'string')
+  );
+}
+
+function hasUrlPayload(value: unknown): boolean {
+  return isRecord(value) && typeof value.url === 'string' && value.url.trim().length > 0;
+}
+
+function isStructuredContentPart(value: unknown): value is Record<string, unknown> {
+  if (!isRecord(value)) {
+    return false;
+  }
+  switch (value.type) {
+    case 'text':
+      return typeof value.text === 'string' && value.text.trim().length > 0;
+    case 'image_url':
+      return hasUrlPayload(value.image_url);
+    default:
+      return false;
+  }
+}
+
+/**
+ * Validate the response fields that providers inspect before returning a completion.
+ */
+export function validateChatCompletionMessage(
+  value: unknown,
+  options: { allowAudio?: boolean; allowStructuredContent?: boolean; finishReason?: string } = {},
+): ValidatedChatCompletionMessage | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  const functionCall = hasFunctionPayload(value.function_call) ? value.function_call : undefined;
+  if (value.function_call != null && !functionCall) {
+    return undefined;
+  }
+
+  if (
+    value.tool_calls != null &&
+    (!Array.isArray(value.tool_calls) || !value.tool_calls.every(isToolCall))
+  ) {
+    return undefined;
+  }
+  const toolCalls =
+    Array.isArray(value.tool_calls) && value.tool_calls.length > 0 ? value.tool_calls : undefined;
+
+  const hasContent = Object.prototype.hasOwnProperty.call(value, 'content');
+  const content =
+    value.content === null || typeof value.content === 'string' ? value.content : undefined;
+  const structuredContent =
+    options.allowStructuredContent &&
+    Array.isArray(value.content) &&
+    value.content.every(isStructuredContentPart)
+      ? value.content
+      : undefined;
+  if (hasContent && content === undefined && structuredContent === undefined) {
+    return undefined;
+  }
+
+  // Audio models answer with `content: null` plus an audio payload; accept it
+  // only where the caller knows how to surface it.
+  const audio =
+    options.allowAudio &&
+    isRecord(value.audio) &&
+    (typeof value.audio.transcript === 'string' || typeof value.audio.data === 'string')
+      ? value.audio
+      : undefined;
+
+  const reasoning =
+    typeof value.reasoning === 'string' && value.reasoning.trim() ? value.reasoning : undefined;
+  const hasUsableContent =
+    (typeof content === 'string' && content.trim().length > 0) ||
+    (structuredContent !== undefined && structuredContent.length > 0);
+  const refusal =
+    typeof value.refusal === 'string' && value.refusal.trim().length > 0
+      ? value.refusal
+      : undefined;
+  if (
+    !functionCall &&
+    !toolCalls &&
+    !hasUsableContent &&
+    audio === undefined &&
+    reasoning === undefined &&
+    !refusal &&
+    options.finishReason !== 'content_filter'
+  ) {
+    return undefined;
+  }
+
+  return {
+    audio,
+    content,
+    functionCall,
+    reasoning,
+    refusal,
+    structuredContent,
+    toolCalls,
+  };
+}
+
+export function getChatCompletionRefusal(
+  message: ValidatedChatCompletionMessage,
+  finishReason: string | undefined,
+): { output: string; isRefusal: true; guardrails: { flagged: true } } | undefined {
+  if (message.refusal) {
+    return { output: message.refusal, isRefusal: true, guardrails: { flagged: true } };
+  }
+  if (finishReason === 'content_filter') {
+    return {
+      output:
+        typeof message.content === 'string' && message.content.trim()
+          ? message.content
+          : 'Content filtered by provider',
+      isRefusal: true,
+      guardrails: { flagged: true },
+    };
+  }
+  return undefined;
+}
+
+/**
+ * Parse the raw completion content as JSON, falling back to `output` when the
+ * payload is absent or unparseable. `logLabel` prefixes the warning emitted on
+ * a parse failure.
+ */
+export function parseChatCompletionJsonOutput(
+  message: ValidatedChatCompletionMessage,
+  output: string | object,
+  logLabel: string,
+): string | object {
+  const jsonCandidate =
+    typeof message.content === 'string'
+      ? message.content
+      : typeof output === 'string'
+        ? output
+        : undefined;
+  if (!jsonCandidate) {
+    return output;
+  }
+  try {
+    return JSON.parse(jsonCandidate);
+  } catch (error) {
+    logger.warn(`${logLabel}: ${String(error)}`);
+    return output;
+  }
+}
+
+/** API function definition, including functions that accept no arguments. */
+type OpenAiFunctionDefinition = Pick<
+  OpenAI.FunctionDefinition,
+  'name' | 'description' | 'parameters' | 'strict'
+>;
+
+// Retain the historical tool shape for adapters which prepare this resolved form.
 export interface OpenAiFunction {
   name: string;
   description?: string;
@@ -1242,37 +1627,63 @@ export interface OpenAiTool {
 
 export function validateFunctionCall(
   output: string | object,
-  functions?: OpenAiFunction[],
+  functions?: OpenAiFunctionDefinition[] | string,
   vars?: Record<string, VarValue>,
 ) {
-  if (typeof output === 'object' && 'function_call' in output) {
+  if (output && typeof output === 'object' && 'function_call' in output) {
     output = (output as { function_call: any }).function_call;
   }
   const functionCall = output as { arguments: string; name: string };
   if (
+    !functionCall ||
     typeof functionCall !== 'object' ||
     typeof functionCall.name !== 'string' ||
     typeof functionCall.arguments !== 'string'
   ) {
-    throw new Error(
+    throw new InvalidToolCallError(
       `OpenAI did not return a valid-looking function call: ${JSON.stringify(functionCall)}`,
     );
   }
 
   // Parse function call and validate it against schema
-  const interpolatedFunctions = maybeLoadFromExternalFileWithVars(
-    functions,
-    vars,
-  ) as OpenAiFunction[];
-  const functionArgs = JSON.parse(functionCall.arguments);
-  const functionName = functionCall.name;
-  const functionSchema = interpolatedFunctions?.find((f) => f.name === functionName)?.parameters;
-  if (!functionSchema) {
-    throw new Error(`Called "${functionName}", but there is no function with that name`);
+  let interpolatedFunctions: ReturnType<typeof prepareOpenAiFunctions>;
+  try {
+    interpolatedFunctions = prepareOpenAiFunctions(functions, vars);
+  } catch (err) {
+    throw new InvalidToolSchemaError((err as Error).message);
   }
-  const validate = getAjv().compile(functionSchema);
+  if (!interpolatedFunctions?.length) {
+    throw new InvalidToolSchemaError(
+      `Called "${functionCall.name}", but there is no function with that name`,
+    );
+  }
+  let functionArgs;
+  try {
+    functionArgs = JSON.parse(functionCall.arguments);
+  } catch (err) {
+    throw new InvalidToolCallError((err as Error).message);
+  }
+  const functionName = functionCall.name;
+  const definition = interpolatedFunctions.find((f) => f.name === functionName);
+  if (!definition) {
+    throw new InvalidToolCallError(
+      `Called "${functionName}", but there is no function with that name`,
+    );
+  }
+  let validate;
+  try {
+    validate = getAjv().compile(
+      definition.parameters ?? {
+        type: 'object',
+        properties: {},
+        additionalProperties: false,
+      },
+    );
+  } catch (err) {
+    throw new InvalidToolSchemaError((err as Error).message);
+  }
   if (!validate(functionArgs)) {
-    throw new Error(
+    throw new InvalidToolCallError(
       `Call to "${functionName}" does not match schema: ${JSON.stringify(validate.errors)}`,
     );
   }
@@ -1331,10 +1742,12 @@ function transcriptionModelsWithCost(
   return ids.map((id) => ({ id, cost: { ...cost } }));
 }
 
-export function flattenResponseTool(tool: any) {
-  if (tool?.type !== 'function' || !tool.function) {
+export function flattenResponseTool<T>(tool: T): T | Record<string, unknown> {
+  const record = getRecord(tool);
+  const definition = getRecord(record?.function);
+  if (record?.type !== 'function' || !definition) {
     return tool;
   }
-  const { function: functionDefinition, ...rest } = tool;
-  return { ...rest, ...functionDefinition };
+  const { function: _definition, ...rest } = record;
+  return { ...rest, ...definition };
 }

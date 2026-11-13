@@ -16,12 +16,12 @@ import {
   OPENAI_COMPLETION_MODELS,
 } from './util';
 
-import type { EnvOverrides } from '../../types/env';
 import type {
   CallApiContextParams,
   CallApiOptionsParams,
   ProviderResponse,
 } from '../../types/index';
+import type { ProviderOptions } from '../../types/providers';
 import type { OpenAiCompletionOptions } from './types';
 
 export class OpenAiCompletionProvider extends OpenAiGenericProvider {
@@ -40,7 +40,7 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
 
   constructor(
     modelName: string,
-    options: { config?: OpenAiCompletionOptions; id?: string; env?: EnvOverrides } = {},
+    options: Pick<ProviderOptions<OpenAiCompletionOptions>, 'config' | 'id' | 'env'> = {},
   ) {
     super(modelName, options);
     this.config = options.config || {};
@@ -163,9 +163,15 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
       };
     }
 
-    if (data.error) {
+    if (data?.error) {
       return {
         error: formatOpenAiError(data),
+      };
+    }
+    if (!data?.choices?.[0]) {
+      return {
+        error: `Malformed response data: ${JSON.stringify(data)}`,
+        cached,
       };
     }
     try {

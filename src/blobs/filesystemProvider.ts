@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as fsPromises from 'node:fs/promises';
 import * as path from 'node:path';
@@ -6,6 +5,7 @@ import { setTimeout as sleep } from 'node:timers/promises';
 
 import logger from '../logger';
 import { getConfigDirectoryPath } from '../util/config/manage';
+import { sha256 } from '../util/createHash';
 import { BLOB_SCHEME, DEFAULT_FILESYSTEM_SUBDIR } from './constants';
 
 import type {
@@ -21,10 +21,6 @@ interface FilesystemProviderConfig {
 }
 
 const BLOB_HASH_REGEX = /^[a-f0-9]{64}$/i;
-
-function computeHash(data: Buffer): string {
-  return createHash('sha256').update(data).digest('hex');
-}
 
 function buildUri(hash: string): string {
   return `${BLOB_SCHEME}${hash}`;
@@ -98,7 +94,7 @@ export class FilesystemBlobStorageProvider implements BlobStorageProvider {
   }
 
   async store(data: Buffer, mimeType: string): Promise<BlobStoreResult> {
-    const hash = computeHash(data);
+    const hash = sha256(data);
     const filePath = this.getFilePath(hash);
     await fsPromises.mkdir(path.dirname(filePath), { recursive: true });
 

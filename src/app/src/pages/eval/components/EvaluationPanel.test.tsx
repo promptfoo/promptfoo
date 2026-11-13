@@ -403,6 +403,16 @@ describe('EvaluationPanel', () => {
     expect(container.querySelectorAll('.lucide-corner-down-right')).toHaveLength(2);
   });
 
+  it('shows a zero count for an empty assertion set and a dash for an empty leaf', () => {
+    const leaf = { pass: true, score: 1, reason: 'No children' };
+    const emptySet = { ...leaf, metadata: { assertionSet: { type: 'assert-set' } } };
+    render(<EvaluationPanel gradingResults={[emptySet, leaf]} />);
+
+    const [, setRow, leafRow] = screen.getAllByRole('row');
+    expect(setRow.children[3]).toHaveTextContent('0 nested assertions');
+    expect(leafRow.children[3]).toHaveTextContent(/^-$/);
+  });
+
   it('renders sibling rows after nested children when child results are not duplicated at top level', () => {
     const gradingResults: GradingResult[] = [
       {

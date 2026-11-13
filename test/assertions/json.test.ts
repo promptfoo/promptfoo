@@ -8,6 +8,12 @@ import { createAtomicTestCase } from '../factories/testSuite';
 
 import type { AssertionParams, AssertionValue } from '../../src/types/index';
 
+const createNameSchema = () => ({
+  type: 'object',
+  required: ['name'],
+  properties: { name: { type: 'string' } },
+});
+
 const mockProvider = createMockProvider({
   id: 'mock',
   response: createProviderResponse({ output: 'mock' }),
@@ -96,6 +102,15 @@ describe('handleIsJson', () => {
     expect(result.pass).toBe(true);
   });
 
+  it('rejects an encoded scheme instead of validating against the built-in JSON meta-schema', () => {
+    const params = makeParams({
+      assertion: { type: 'is-json' },
+      renderedValue: '$ref: "%68ttp://json-schema.org/draft-07/schema#"',
+      outputString: '{}',
+    });
+    expect(() => handleIsJson(params)).toThrow('URI scheme is malformed.');
+  });
+
   it('validates against a YAML string schema', () => {
     const pass = handleIsJson(
       makeParams({
@@ -122,11 +137,7 @@ describe('handleIsJson', () => {
       makeParams({
         assertion: { type: 'is-json', value: 'file://schema.json' },
         renderedValue: 'file://schema.json' as AssertionValue,
-        valueFromScript: {
-          type: 'object',
-          required: ['name'],
-          properties: { name: { type: 'string' } },
-        },
+        valueFromScript: createNameSchema(),
         outputString: '{"name": "promptfoo"}',
       }),
     );
@@ -196,11 +207,7 @@ describe('handleContainsJson', () => {
       makeParams({
         assertion: { type: 'contains-json', value: 'file://schema.json' },
         renderedValue: 'file://schema.json' as AssertionValue,
-        valueFromScript: {
-          type: 'object',
-          required: ['name'],
-          properties: { name: { type: 'string' } },
-        },
+        valueFromScript: createNameSchema(),
         outputString: 'result: {"name": "promptfoo"}',
       }),
     );

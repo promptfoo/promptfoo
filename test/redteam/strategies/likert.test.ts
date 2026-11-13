@@ -1,3 +1,7 @@
+const { createLoggerModuleWithLevel } = await vi.hoisted(
+  async () => import('../../factories/logger'),
+);
+
 import { SingleBar } from 'cli-progress';
 import { beforeEach, describe, expect, it, Mocked, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
@@ -10,6 +14,7 @@ import {
   neverGenerateRemote,
 } from '../../../src/redteam/remoteGeneration';
 import { addLikertTestCases } from '../../../src/redteam/strategies/likert';
+import { createMockFetchResponse } from '../../providers/mockProviderResponses';
 
 import type { TestCase } from '../../../src/types/index';
 
@@ -17,15 +22,7 @@ vi.mock('cli-progress');
 vi.mock('../../../src/cache');
 vi.mock('../../../src/globalConfig/accounts');
 vi.mock('../../../src/redteam/remoteGeneration');
-vi.mock('../../../src/logger', () => ({
-  default: {
-    debug: vi.fn(),
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-  },
-  getLogLevel: vi.fn().mockReturnValue('info'),
-}));
+vi.mock('../../../src/logger', () => createLoggerModuleWithLevel());
 
 describe('likert strategy', () => {
   let mockProgressBar: Mocked<SingleBar>;
@@ -40,12 +37,8 @@ describe('likert strategy', () => {
     vi.mocked(SingleBar).mockImplementation(function () {
       return mockProgressBar;
     });
-    vi.mocked(getUserEmail).mockImplementation(function () {
-      return 'test@example.com';
-    });
-    vi.mocked(getRemoteGenerationUrl).mockImplementation(function () {
-      return 'http://test.com';
-    });
+    vi.mocked(getUserEmail).mockReturnValue('test@example.com');
+    vi.mocked(getRemoteGenerationUrl).mockReturnValue('http://test.com');
     vi.mocked(getRemoteGenerationHeaders).mockImplementation((extra) => ({
       'Content-Type': 'application/json',
       ...extra,
@@ -54,9 +47,7 @@ describe('likert strategy', () => {
       (strategyName) =>
         `${strategyName} requires remote generation, which has been explicitly disabled.`,
     );
-    vi.mocked(neverGenerateRemote).mockImplementation(function () {
-      return false;
-    });
+    vi.mocked(neverGenerateRemote).mockReturnValue(false);
   });
 
   const testCases: TestCase[] = [
@@ -75,14 +66,9 @@ describe('likert strategy', () => {
   ];
 
   it('should generate likert test cases successfully', async () => {
-    const mockResponse = {
-      data: {
-        modifiedPrompts: ['modified prompt 1', 'modified prompt 2'],
-      },
-      cached: false,
-      status: 200,
-      statusText: 'OK',
-    };
+    const mockResponse = createMockFetchResponse({
+      modifiedPrompts: ['modified prompt 1', 'modified prompt 2'],
+    });
 
     vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
@@ -95,14 +81,12 @@ describe('likert strategy', () => {
   });
 
   it('should handle API errors gracefully', async () => {
-    const mockResponse = {
-      data: {
+    const mockResponse = createMockFetchResponse(
+      {
         error: 'API error',
       },
-      cached: false,
-      status: 500,
-      statusText: 'Error',
-    };
+      { status: 500, statusText: 'Error' },
+    );
 
     vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
@@ -115,9 +99,7 @@ describe('likert strategy', () => {
   });
 
   it('should throw error when remote generation is disabled', async () => {
-    vi.mocked(neverGenerateRemote).mockImplementation(function () {
-      return true;
-    });
+    vi.mocked(neverGenerateRemote).mockReturnValue(true);
 
     await expect(addLikertTestCases(testCases, 'prompt', {})).rejects.toThrow(
       'Likert jailbreak strategy requires remote generation, which has been explicitly disabled.',
@@ -142,14 +124,9 @@ describe('likert strategy', () => {
   });
 
   it('should include user email in payload', async () => {
-    const mockResponse = {
-      data: {
-        modifiedPrompts: ['modified'],
-      },
-      cached: false,
-      status: 200,
-      statusText: 'OK',
-    };
+    const mockResponse = createMockFetchResponse({
+      modifiedPrompts: ['modified'],
+    });
 
     vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
@@ -169,12 +146,9 @@ describe('likert strategy', () => {
   });
 
   it('does not serialize strategy config into the remote payload', async () => {
-    vi.mocked(fetchWithCache).mockResolvedValue({
-      data: { modifiedPrompts: ['modified'] },
-      cached: false,
-      status: 200,
-      statusText: 'OK',
-    });
+    vi.mocked(fetchWithCache).mockResolvedValue(
+      createMockFetchResponse({ modifiedPrompts: ['modified'] }),
+    );
 
     await addLikertTestCases(testCases, 'prompt', {
       env: { CANARY: 'env-secret' },
@@ -195,12 +169,9 @@ describe('likert strategy', () => {
   });
 
   it('forwards targetId without serializing unrelated config', async () => {
-    vi.mocked(fetchWithCache).mockResolvedValue({
-      data: { modifiedPrompts: ['modified'] },
-      cached: false,
-      status: 200,
-      statusText: 'OK',
-    });
+    vi.mocked(fetchWithCache).mockResolvedValue(
+      createMockFetchResponse({ modifiedPrompts: ['modified'] }),
+    );
 
     await addLikertTestCases(testCases, 'prompt', {
       targetId: 'cloud-target-123',

@@ -38,23 +38,6 @@ const TEST_CASE_FIELDS = new Set([
   'threshold',
   'metadata',
 ]);
-const FULL_CONFIG_ONLY_FIELDS = new Set([
-  'targets',
-  'tests',
-  'scenarios',
-  'defaultTest',
-  'evaluateOptions',
-  'commandLineOptions',
-  'env',
-  'derivedMetrics',
-  'extensions',
-  'redteam',
-  'sharing',
-  'outputPath',
-  'nunjucksFilters',
-  'tracing',
-  'writeLatestResults',
-]);
 
 export function isFullYamlConfig(value: unknown): value is ConfigDraft {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
@@ -62,10 +45,5 @@ export function isFullYamlConfig(value: unknown): value is ConfigDraft {
   }
 
   const keys = Object.keys(value);
-  const looksLikeSingleTestCase =
-    keys.length > 0 &&
-    keys.every((key) => TEST_CASE_FIELDS.has(key)) &&
-    !keys.some((key) => FULL_CONFIG_ONLY_FIELDS.has(key));
-
-  return !looksLikeSingleTestCase;
+  return keys.length === 0 || keys.some((key) => !TEST_CASE_FIELDS.has(key));
 }

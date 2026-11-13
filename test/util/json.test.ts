@@ -707,6 +707,21 @@ describe('json utilities', () => {
         const expected = 'url: http://example.com/path # trailing comment';
         expect(convertSlashCommentsToHash(input)).toBe(expected);
       });
+
+      it('should convert a trailing comment after multiple even backslash runs', () => {
+        // Value is "C:\\Users\\" — ends with \\, closing " is not escaped.
+        const input = '"C:\\\\Users\\\\" // comment';
+        const expected = '"C:\\\\Users\\\\" # comment';
+        expect(convertSlashCommentsToHash(input)).toBe(expected);
+      });
+
+      it('should not close string on triple-backslash-quote (odd count = escaped)', () => {
+        // "\\\\" is three backslashes + closing quote: two escaped backslashes,
+        // then an escaped quote -> string not closed at that quote.
+        const input = '"text\\\\\\" still inside" // comment';
+        const expected = '"text\\\\\\" still inside" # comment';
+        expect(convertSlashCommentsToHash(input)).toBe(expected);
+      });
     });
 
     it('should skip non-object YAML values', () => {

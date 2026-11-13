@@ -34,7 +34,6 @@ import {
   type AtomicTestCase,
   type CallApiContextParams,
   type GradingResult,
-  isApiProvider,
   type TraceData,
   type VarValue,
 } from '../types/index';
@@ -101,7 +100,12 @@ import {
   handleTrajectoryToolSequence,
   handleTrajectoryToolUsed,
 } from './trajectory';
-import { coerceString, getFinalTest, loadFromJavaScriptFile, processFileReference } from './utils';
+import {
+  coerceString,
+  getFinalTest,
+  processFileReference,
+  resolveJavaScriptFileFunction,
+} from './utils';
 import { handleWebhook } from './webhook';
 import { handleWordCount } from './wordCount';
 import { handleIsXml } from './xml';
@@ -283,7 +287,7 @@ const ASSERTION_HANDLERS: Record<
           pass: false,
           score: 0,
           reason:
-            'METEOR assertion requires the natural package. Please install it using: npm install natural@^8.1.0',
+            'METEOR assertion requires the natural package. Please install it using: npm install natural@^8.2.6',
           assertion: params.assertion,
         };
       }
@@ -372,6 +376,11 @@ export function getAssertionBaseType(assertion: Assertion): AssertionType {
   return inverse ? (assertion.type.slice(4) as AssertionType) : (assertion.type as AssertionType);
 }
 
+// Zero-weight assertions record their scores without failing the test.
+function applyAssertionWeight(result: GradingResult, weight: number | undefined): GradingResult {
+  return weight === 0 ? { ...result, pass: true } : result;
+}
+
 /**
  * Execute a single assertion against provider output.
  *
@@ -440,13 +449,7 @@ async function runAssertionInternal({
   const { cost, logProbs, output: originalOutput } = providerResponse;
   let output = originalOutput;
 
-  // Preserve assertion getter ordering without serializing live SDK clients.
-  invariant(
-    assertion.type,
-    `Assertion must have a type: ${JSON.stringify(assertion, (key, value) =>
-      key === 'provider' && isApiProvider(value) ? '[ApiProvider]' : value,
-    )}`,
-  );
+  invariant(assertion.type, 'Assertion must have a type');
 
   if (assertion.transform) {
     output = await transform(assertion.transform, output, {
@@ -489,6 +492,8 @@ async function runAssertionInternal({
   type ValueFromScriptType = string | boolean | number | GradingResult | object | undefined;
   let renderedValue = assertion.value;
   let valueFromScript: ValueFromScriptType;
+  const scriptFailure = (reason: string): GradingResult =>
+    applyAssertionWeight({ pass: false, score: 0, reason, assertion }, assertion.weight);
   if (typeof renderedValue === 'string') {
     if (renderedValue.startsWith('file://')) {
       const basePath = cliState.basePath || '';
@@ -505,42 +510,29 @@ async function runAssertionInternal({
       filePath = path.resolve(basePath, filePath);
 
       if (isJavascriptFile(filePath)) {
-        valueFromScript = await loadFromJavaScriptFile(filePath, functionName, [output, context]);
-        logger.debug(`Javascript script ${filePath} output: ${valueFromScript}`);
-      } else if (filePath.endsWith('.py')) {
+        // Load errors (missing file or export) are config mistakes and still throw.
+        const assertionFunction = await resolveJavaScriptFileFunction(filePath, functionName);
         try {
-          const pythonScriptOutput = await runPython<ValueFromScriptType>(
-            filePath,
-            functionName || 'get_assert',
-            [output, context],
-          );
-          valueFromScript = pythonScriptOutput;
-          logger.debug(`Python script ${filePath} output: ${valueFromScript}`);
+          valueFromScript = await assertionFunction(output, context);
         } catch (error) {
-          return {
-            pass: false,
-            score: 0,
-            reason: (error as Error).message,
-            assertion,
-          };
+          return scriptFailure(
+            `Custom function threw error: ${(error as Error)?.message ?? String(error)}`,
+          );
         }
-      } else if (filePath.endsWith('.rb')) {
+        logger.debug(`Javascript script ${filePath} output: ${valueFromScript}`);
+      } else if (filePath.endsWith('.py') || filePath.endsWith('.rb')) {
         try {
-          const { runRuby } = await import('../ruby/rubyUtils.js');
-          const rubyScriptOutput = await runRuby<ValueFromScriptType>(
+          const runScript = filePath.endsWith('.py')
+            ? runPython
+            : (await import('../ruby/rubyUtils.js')).runRuby;
+          valueFromScript = await runScript<ValueFromScriptType>(
             filePath,
             functionName || 'get_assert',
             [output, context],
           );
-          valueFromScript = rubyScriptOutput;
-          logger.debug(`Ruby script ${filePath} output: ${valueFromScript}`);
+          logger.debug(`Script ${filePath} output: ${valueFromScript}`);
         } catch (error) {
-          return {
-            pass: false,
-            score: 0,
-            reason: (error as Error).message,
-            assertion,
-          };
+          return scriptFailure((error as Error).message);
         }
       } else {
         renderedValue = processFileReference(renderedValue);
@@ -554,7 +546,13 @@ async function runAssertionInternal({
         );
       }
 
-      valueFromScript = await Promise.resolve(requiredModule(output, context));
+      try {
+        valueFromScript = await Promise.resolve(requiredModule(output, context));
+      } catch (error) {
+        return scriptFailure(
+          `Custom function threw error: ${(error as Error)?.message ?? String(error)}`,
+        );
+      }
     } else {
       // It's a normal string value
       renderedValue = nunjucks.renderString(renderedValue, resolvedVars);
@@ -678,15 +676,7 @@ async function runAssertionInternal({
       result.metadata.renderedAssertionValue = renderedValue;
     }
 
-    // If weight is 0, treat this as a metric-only assertion that can't fail
-    if (assertion.weight === 0) {
-      return {
-        ...result,
-        pass: true, // Force pass for weight=0 assertions
-      };
-    }
-
-    return result;
+    return applyAssertionWeight(result, assertion.weight);
   }
 
   throw new Error(`Unknown assertion type: ${assertion.type}`);

@@ -3,7 +3,7 @@ import { isResponseHeadersObserverErrorResponse } from '../util/fetch/responseHe
  * Shared types for the scheduler module.
  */
 
-import { isHttpRateLimitError } from '../util/fetch/errors';
+import { hasHttp429Status, isHttpRateLimitError } from '../util/fetch/errors';
 
 import type { ProviderResponse } from '../types/providers';
 
@@ -20,13 +20,24 @@ export interface RateLimitExecuteOptions<T> {
   isRateLimited?: (result: T | undefined, error?: Error) => boolean;
   /** Extract retry-after delay from result or error */
   getRetryAfter?: (result: T | undefined, error?: Error) => number | undefined;
+  /** Detect retryable result-level transient failures that are not rate limits. */
+  isRetryableResult?: (result: T) => boolean;
+  /** Merge bounded prior retry results into the terminal result. */
+  finalizeResult?: (result: T, retryResults: readonly T[]) => T;
   /** Preserve a structured failure result when retries are exhausted. Defaults to throwing. */
   onRateLimitExhausted?: (result: T, error: Error) => T;
+  /** Returning false vetoes another attempt, e.g. a nested call that already retried. */
+  canRetry?: () => boolean;
 }
 
-// Word-bounded: a bare "429" substring also matches token counts and request
-// IDs, e.g. "prompt is too long: 204291 tokens".
-const HTTP_429_RE = /\b429\b/;
+export function isRateLimitError(error: Error | undefined): boolean {
+  const message = error?.message?.toLowerCase() ?? '';
+  return (
+    hasHttp429Status(message) ||
+    message.includes('rate limit') ||
+    message.includes('too many requests')
+  );
+}
 
 /**
  * Default rate limit detection for ProviderResponse.
@@ -79,12 +90,10 @@ export function isProviderResponseRateLimited(
     // Check HTTP status code (most reliable)
     result?.metadata?.http?.status === 429 ||
       // Check error field in response
-      HTTP_429_RE.test(responseError ?? '') ||
+      hasHttp429Status(responseError) ||
       responseError?.toLowerCase?.().includes?.('rate limit') ||
       // Check thrown error message
-      HTTP_429_RE.test(error?.message ?? '') ||
-      error?.message?.toLowerCase().includes('rate limit') ||
-      error?.message?.toLowerCase().includes('too many requests'),
+      isRateLimitError(error),
   );
 }
 

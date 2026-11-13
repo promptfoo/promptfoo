@@ -8,7 +8,7 @@ describe('registerCleanupHandlers', () => {
 
   it('aborts the scan for each registered termination signal', () => {
     const handlers = new Map<string, () => void>();
-    vi.spyOn(process, 'once').mockImplementation(((event, listener) => {
+    vi.spyOn(process, 'once').mockImplementation(((event: string | symbol, listener: unknown) => {
       if (typeof event === 'string' && typeof listener === 'function') {
         handlers.set(event, listener as () => void);
       }

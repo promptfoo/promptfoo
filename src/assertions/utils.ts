@@ -5,6 +5,7 @@ import Clone from 'rfdc';
 import cliState from '../cliState';
 import { importModule } from '../esm';
 import { type Assertion, type AssertionSet, isApiProvider, type TestCase } from '../types/index';
+import { GRADING_PROVIDER_TYPE_KEYS, isProviderTypeMap } from '../util/gradingProvider';
 import { loadYaml } from '../util/yamlLoad';
 
 const clone = Clone();
@@ -20,6 +21,16 @@ function cloneAssertion(assertion: Assertion | AssertionSet): Assertion | Assert
   }
   if (isApiProvider(assertion.provider)) {
     return { ...clone({ ...assertion, provider: undefined }), provider: assertion.provider };
+  }
+  if (isProviderTypeMap(assertion.provider)) {
+    const provider = { ...assertion.provider };
+    for (const key of GRADING_PROVIDER_TYPE_KEYS) {
+      const entry = provider[key];
+      if (entry && !isApiProvider(entry)) {
+        provider[key] = clone(entry);
+      }
+    }
+    return { ...clone({ ...assertion, provider: undefined }), provider };
   }
   return clone(assertion);
 }
@@ -74,24 +85,41 @@ export function getFinalTest(test: TestCase, assertion: Assertion) {
   return Object.freeze(ret);
 }
 
+/**
+ * Imports a JavaScript assertion file and returns the function it exports.
+ * Throws when the file cannot be loaded or does not export a function.
+ */
+export async function resolveJavaScriptFileFunction(
+  filePath: string,
+  functionName: string | undefined,
+  // biome-ignore lint/suspicious/noExplicitAny: I think this is hotloading JS
+): Promise<(...args: any[]) => any> {
+  const requiredModule = await importModule(filePath, functionName);
+  if (functionName && typeof requiredModule?.[functionName] === 'function') {
+    return requiredModule[functionName].bind(requiredModule);
+  } else if (typeof requiredModule === 'function') {
+    return requiredModule;
+  } else if (typeof requiredModule?.default === 'function') {
+    return requiredModule.default.bind(requiredModule);
+  }
+  if (functionName) {
+    throw new Error(
+      `Assertion malformed: ${filePath} must export a function named "${functionName}"`,
+    );
+  }
+  throw new Error(
+    `Assertion malformed: ${filePath} must export a function or have a default export as a function`,
+  );
+}
+
 export async function loadFromJavaScriptFile(
   filePath: string,
   functionName: string | undefined,
   args: unknown[],
   // biome-ignore lint/suspicious/noExplicitAny: I think this is hotloading JS
 ): Promise<any> {
-  const requiredModule = await importModule(filePath, functionName);
-  if (functionName && typeof requiredModule[functionName] === 'function') {
-    return requiredModule[functionName](...args);
-  } else if (typeof requiredModule === 'function') {
-    return requiredModule(...args);
-  } else if (requiredModule.default && typeof requiredModule.default === 'function') {
-    return requiredModule.default(...args);
-  } else {
-    throw new Error(
-      `Assertion malformed: ${filePath} must export a function or have a default export as a function`,
-    );
-  }
+  const fn = await resolveJavaScriptFileFunction(filePath, functionName);
+  return fn(...args);
 }
 
 export function processFileReference(fileRef: string): object | string {

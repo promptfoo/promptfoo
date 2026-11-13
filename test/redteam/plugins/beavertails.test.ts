@@ -57,7 +57,6 @@ describe('BeavertailsGrader', () => {
 
   it('should have the correct plugin ID', () => {
     expect(grader.id).toBe('promptfoo:redteam:beavertails');
-    expect('promptfoo:redteam:beavertails').toBe('promptfoo:redteam:beavertails');
   });
 
   describe('getResult', () => {

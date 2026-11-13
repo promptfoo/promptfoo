@@ -10,6 +10,7 @@ import {
 } from '../../src/assertions/utils';
 import cliState from '../../src/cliState';
 import { importModule } from '../../src/esm';
+import { createStringAssertion } from '../factories/literalFixtures';
 import { createMockProvider as createFactoryProvider } from '../factories/provider';
 
 import type { ApiProvider, Assertion, TestCase } from '../../src/types/index';
@@ -121,6 +122,19 @@ describe('getFinalTest', () => {
   const createMockProvider = (id: string): ApiProvider =>
     createFactoryProvider({ id, response: {} });
 
+  it('preserves nested live grading providers while isolating their configuration map', () => {
+    const judge = Object.assign(createMockProvider('judge'), { client: {} });
+    Object.assign(judge.client, { judge });
+    const provider = { text: judge, embedding: { id: 'embed', config: { model: 'fixture' } } };
+    const assertion: Assertion = { type: 'llm-rubric', provider };
+    const result = getFinalTest({ assert: [assertion] }, assertion);
+    const copied = (result.assert?.[0] as Assertion).provider;
+    expect(copied).toEqual(provider);
+    expect(copied).not.toBe(provider);
+    expect(copied).toHaveProperty('text', judge);
+    expect((copied as typeof provider).embedding).not.toBe(provider.embedding);
+  });
+
   it('should correctly merge test and assertion data', () => {
     const mockApiProvider = createMockProvider('mockProvider');
     const testCase: TestCase = {
@@ -206,10 +220,7 @@ describe('getFinalTest', () => {
       },
     };
 
-    const assertion: Assertion = {
-      type: 'equals',
-      value: 'expected value',
-    };
+    const assertion: Assertion = createStringAssertion('equals', 'expected value');
 
     const result = getFinalTest(testCase, assertion);
     expect(result.options?.provider).toBe(testProvider);
@@ -240,10 +251,7 @@ describe('getFinalTest', () => {
       options: {},
     };
 
-    const assertion: Assertion = {
-      type: 'equals',
-      value: 'expected value',
-    };
+    const assertion: Assertion = createStringAssertion('equals', 'expected value');
 
     const result = getFinalTest(testCase, assertion);
     expect(result.options?.provider).toBeUndefined();
@@ -343,6 +351,17 @@ describe('loadFromJavaScriptFile', () => {
     expect(mockFn).toHaveBeenCalledWith('arg1');
   });
 
+  it('preserves the receiver of an exported grader method', async () => {
+    const grader = {
+      expected: 'hello',
+      default(output: string) {
+        return output === this.expected;
+      },
+    };
+    vi.mocked(importModule).mockResolvedValue(grader);
+    expect(await loadFromJavaScriptFile('/test.cjs', 'grade', ['hello'])).toBe(true);
+  });
+
   it('should throw error when module does not export a function', async () => {
     vi.mocked(importModule).mockResolvedValue({ notAFunction: 'value' });
 
@@ -352,10 +371,10 @@ describe('loadFromJavaScriptFile', () => {
   });
 
   it('should throw error when named function does not exist', async () => {
-    vi.mocked(importModule).mockResolvedValue({ otherFn: () => {} });
+    vi.mocked(importModule).mockResolvedValue(undefined);
 
     await expect(loadFromJavaScriptFile('/test.js', 'nonExistentFn', [])).rejects.toThrow(
-      'Assertion malformed',
+      'Assertion malformed: /test.js must export a function named "nonExistentFn"',
     );
   });
 });

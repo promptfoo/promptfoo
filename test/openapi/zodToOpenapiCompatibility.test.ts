@@ -1,14 +1,11 @@
-import {
-  extendZodWithOpenApi,
-  OpenAPIRegistry,
-  OpenApiGeneratorV31,
-} from '@asteasolutions/zod-to-openapi';
+// Exercise consumer-style static imports: initialize Zod before constructing contracts.
+import './zodOpenApiSetup';
+
+import { OpenAPIRegistry, OpenApiGeneratorV31 } from '@asteasolutions/zod-to-openapi';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { HttpProviderConfigFieldsSchema } from '../../src/contracts/providerConfig/http';
 import { McpConfigInputSchema } from '../../src/contracts/providerConfig/mcp';
-
-extendZodWithOpenApi(z);
 
 function generateSchemas(registry: OpenAPIRegistry) {
   return new OpenApiGeneratorV31(registry.definitions).generateDocument({
@@ -43,6 +40,11 @@ describe('zod-to-openapi compatibility', () => {
 
   it('preserves MCP descriptions and deprecation without inventing timeout defaults', () => {
     const registry = new OpenAPIRegistry();
+    // Recursive JSON values need a named component in zod-to-openapi.
+    registry.register(
+      'McpDefaultArgumentValue',
+      McpConfigInputSchema.shape.defaultArgs.unwrap().valueType,
+    );
     registry.registerPath({
       method: 'post',
       path: '/mcp-config',
@@ -70,6 +72,15 @@ describe('zod-to-openapi compatibility', () => {
         },
       },
     });
+    expect(schema).toMatchObject({
+      properties: {
+        defaultArgs: {
+          type: 'object',
+          additionalProperties: { $ref: '#/components/schemas/McpDefaultArgumentValue' },
+        },
+      },
+    });
+    expect(document.components?.schemas?.McpDefaultArgumentValue).toHaveProperty('anyOf');
     expect(schema).not.toHaveProperty('properties.timeout.default');
   });
 

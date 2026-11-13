@@ -6,12 +6,15 @@ requires-python = ">=3.10"
 dependencies = [
     "fastapi>=0.141.1,<1",
     "uvicorn>=0.53.0,<1",
-    "anthropic>=1.7.0,<2",
+    "anthropic>=2.3,<3",
     "mcp>=2.2.0,<3",
     "pydantic>=2.13.5,<3",
     "pyjwt>=2.14.0,<3",
     "python-dotenv>=1.2.3,<2",
 ]
+
+[project.optional-dependencies]
+test = ["httpx2"]
 
 [build-system]
 requires = ["hatchling"]

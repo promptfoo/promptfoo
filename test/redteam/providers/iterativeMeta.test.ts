@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { runAssertions } from '../../../src/assertions/index';
 import { runEval } from '../../../src/evaluator';
 import RedteamIterativeMetaProvider, {
   runMetaAgentRedteam,
@@ -12,6 +13,7 @@ import {
   createTokenUsage,
   type MockApiProvider,
 } from '../../factories/provider';
+import { createMockTracingOptions } from '../../factories/tracing';
 import { createSelectedObserverErrorResponse } from '../../util/selectedObserverError';
 import { createSelectedToolErrorTarget } from '../../util/selectedToolErrorTarget';
 
@@ -65,19 +67,7 @@ vi.mock('../../../src/redteam/remoteGeneration', async (importOriginal) => {
 });
 
 // Tracing mocks
-const mockResolveTracingOptions = vi.hoisted(() =>
-  vi.fn(() => ({
-    enabled: false,
-    includeInAttack: true,
-    includeInGrading: true,
-    includeInternalSpans: false,
-    maxSpans: 50,
-    maxDepth: 5,
-    maxRetries: 3,
-    retryDelayMs: 500,
-    sanitizeAttributes: true,
-  })),
-);
+const mockResolveTracingOptions = vi.hoisted(() => vi.fn(() => createMockTracingOptions(false)));
 
 const mockFetchTraceContext = vi.hoisted(() => vi.fn());
 const mockFormatTraceSummary = vi.hoisted(() => vi.fn(() => 'Trace summary'));
@@ -506,6 +496,127 @@ describe('RedteamIterativeMetaProvider', () => {
       expect(result.metadata.vulnerabilityAchieved).toBe(true);
       expect(result.metadata.stopReason).toBe('Grader failed');
     });
+
+    it.each(
+      [true, false].flatMap((pass) => [
+        { pass, freshGradingFails: false },
+        { pass, freshGradingFails: true },
+      ]),
+    )(
+      'preserves the next valid verdict or final grading error: %j',
+      async ({ pass, freshGradingFails }) => {
+        const mockGrader = {
+          getResult: vi
+            .fn<any>()
+            .mockResolvedValueOnce({
+              grade: {
+                pass: false,
+                score: 0,
+                reason: 'Grading provider returned 503',
+                metadata: { graderError: true },
+              },
+            })
+            .mockResolvedValueOnce({
+              grade: { pass, score: pass ? 1 : 0, reason: 'Valid verdict' },
+            })
+            .mockRejectedValue(new Error('Final grading failed')),
+        };
+
+        mockGetGraderById.mockReturnValue(mockGrader);
+
+        const test: AtomicTestCase = {
+          vars: { query: 'test' },
+          assert: [
+            {
+              type: 'promptfoo:redteam:harmful',
+              metric: 'Harmful',
+              ...(freshGradingFails && { transform: (output: unknown) => output }),
+            },
+          ],
+          metadata: { pluginId: 'harmful', strategyId: 'jailbreak:meta' },
+          provider: 'promptfoo:redteam:iterative:meta',
+        };
+        const result = await runMetaAgentRedteam({
+          context: {
+            vars: { query: 'test' },
+            prompt: { raw: 'test', label: 'test' },
+            originalProvider: mockTargetProvider,
+          },
+          filters: undefined,
+          injectVar: 'query',
+          numIterations: 2,
+          options: undefined,
+          prompt: { raw: 'test', label: 'test' },
+          agentProvider: mockAgentProvider,
+          gradingProvider: mockGradingProvider,
+          targetProvider: mockTargetProvider,
+          test,
+          vars: { query: 'test' },
+        });
+
+        expect(result.metadata.redteamHistory[0]).toMatchObject({
+          graderPassed: undefined,
+          graderError: 'Grading provider returned 503',
+        });
+        const grading = runAssertions({ prompt: 'test', test, providerResponse: result });
+        if (freshGradingFails) {
+          await expect(grading).rejects.toThrow('Final grading failed');
+        } else {
+          expect((await grading).componentResults?.[0].metadata?.gradingIncomplete).toBe(true);
+        }
+        expect(result.metadata.vulnerabilityAchieved).toBe(!pass);
+        expect(result.metadata.finalIteration).toBe(2);
+        expect(mockGrader.getResult).toHaveBeenCalledTimes(freshGradingFails ? 3 : 2);
+        const nextRequest = JSON.parse(mockAgentProvider.callApi.mock.calls[1][0]);
+        expect(nextRequest.lastAttempt).not.toHaveProperty('graderPassed');
+        expect(nextRequest.lastAttempt.graderReason).toBe('Grading provider returned 503');
+      },
+    );
+
+    it.each([1, 2])(
+      'resolves only the last layered grading error after %i turns',
+      async (turns) => {
+        let calls = 0;
+        const getResult = vi.fn(async () => ({
+          grade:
+            ++calls <= turns
+              ? { pass: false, score: 0, reason: 'Outage', metadata: { graderError: true } }
+              : { pass: true, score: 1, reason: 'Recovered' },
+        }));
+        mockGetGraderById.mockReturnValue({ getResult });
+        const test: AtomicTestCase = {
+          vars: { query: 'test' },
+          assert: [{ type: 'promptfoo:redteam:pii', transform: (output) => output }],
+          metadata: { pluginId: 'pii', strategyId: 'jailbreak:meta' },
+          provider: 'promptfoo:redteam:iterative:meta',
+        };
+        const result = await runMetaAgentRedteam({
+          context: {
+            vars: test.vars!,
+            prompt: { raw: '{{query}}', label: 'test' },
+            originalProvider: mockTargetProvider,
+            test,
+          },
+          injectVar: 'query',
+          numIterations: turns,
+          filters: undefined,
+          prompt: { raw: '{{query}}', label: 'test' },
+          agentProvider: mockAgentProvider,
+          gradingProvider: mockGradingProvider,
+          targetProvider: mockTargetProvider,
+          test,
+          vars: test.vars!,
+          perTurnLayers: ['base64'],
+        });
+        expect(result.metadata.redteamFinalPrompt).not.toBe(
+          result.metadata.redteamHistory[0].prompt,
+        );
+        const grading = await runAssertions({ prompt: 'test', test, providerResponse: result });
+        expect(getResult).toHaveBeenCalledTimes(turns + 1);
+        expect(grading).toMatchObject({ pass: true, score: 1 });
+        expect(Boolean(grading.componentResults?.[0].metadata?.gradingIncomplete)).toBe(turns > 1);
+      },
+    );
 
     it('passes target provider raw response into the grader', async () => {
       const mockGrader = {
@@ -1535,17 +1646,7 @@ describe('RedteamIterativeMetaProvider', () => {
 
     it('should fetch trace context when tracing is enabled', async () => {
       // Enable tracing
-      mockResolveTracingOptions.mockReturnValue({
-        enabled: true,
-        includeInAttack: true,
-        includeInGrading: true,
-        includeInternalSpans: false,
-        maxSpans: 50,
-        maxDepth: 5,
-        maxRetries: 3,
-        retryDelayMs: 500,
-        sanitizeAttributes: true,
-      });
+      mockResolveTracingOptions.mockReturnValue(createMockTracingOptions());
 
       // Mock trace context
       mockFetchTraceContext.mockResolvedValue({
@@ -1589,17 +1690,7 @@ describe('RedteamIterativeMetaProvider', () => {
     });
 
     it('skips trace retrieval when an iterative-meta target response came from cache', async () => {
-      mockResolveTracingOptions.mockReturnValue({
-        enabled: true,
-        includeInAttack: true,
-        includeInGrading: true,
-        includeInternalSpans: false,
-        maxSpans: 50,
-        maxDepth: 5,
-        maxRetries: 3,
-        retryDelayMs: 500,
-        sanitizeAttributes: true,
-      });
+      mockResolveTracingOptions.mockReturnValue(createMockTracingOptions());
       mockGetTargetResponse.mockResolvedValue({ output: 'Cached target response', cached: true });
 
       const result = await runMetaAgentRedteam({
@@ -1627,17 +1718,7 @@ describe('RedteamIterativeMetaProvider', () => {
 
     it('should NOT fetch trace context when traceparent is missing', async () => {
       // Enable tracing
-      mockResolveTracingOptions.mockReturnValue({
-        enabled: true,
-        includeInAttack: true,
-        includeInGrading: true,
-        includeInternalSpans: false,
-        maxSpans: 50,
-        maxDepth: 5,
-        maxRetries: 3,
-        retryDelayMs: 500,
-        sanitizeAttributes: true,
-      });
+      mockResolveTracingOptions.mockReturnValue(createMockTracingOptions());
 
       const result = await runMetaAgentRedteam({
         context: {
@@ -1785,17 +1866,7 @@ describe('RedteamIterativeMetaProvider', () => {
 
     it('should handle fetchTraceContext returning null gracefully', async () => {
       // Enable tracing
-      mockResolveTracingOptions.mockReturnValue({
-        enabled: true,
-        includeInAttack: true,
-        includeInGrading: true,
-        includeInternalSpans: false,
-        maxSpans: 50,
-        maxDepth: 5,
-        maxRetries: 3,
-        retryDelayMs: 500,
-        sanitizeAttributes: true,
-      });
+      mockResolveTracingOptions.mockReturnValue(createMockTracingOptions());
 
       // Return null (no trace found)
       mockFetchTraceContext.mockResolvedValue(null);

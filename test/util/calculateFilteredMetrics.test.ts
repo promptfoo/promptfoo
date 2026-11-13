@@ -1,3 +1,4 @@
+import { clearEvalTables } from '../util/evalDb';
 /**
  * Unit tests for calculateFilteredMetrics utility.
  *
@@ -22,14 +23,7 @@ describe('calculateFilteredMetrics', () => {
     await runDbMigrations();
   });
 
-  beforeEach(async () => {
-    const db = await getDb();
-    await db.run('DELETE FROM eval_results');
-    await db.run('DELETE FROM evals_to_datasets');
-    await db.run('DELETE FROM evals_to_prompts');
-    await db.run('DELETE FROM evals_to_tags');
-    await db.run('DELETE FROM evals');
-  });
+  beforeEach(() => clearEvalTables());
 
   afterEach(() => {
     vi.resetAllMocks();
@@ -215,6 +209,35 @@ describe('calculateFilteredMetrics', () => {
         metadata: {},
       });
     }
+
+    it('counts cached target rows separately from cached tokens and graders under filtering', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 0 });
+      await addTokenResult(eval_, {
+        testIdx: 0,
+        responseCached: true,
+        tokenUsage: { total: 0 },
+      });
+      await addTokenResult(eval_, {
+        testIdx: 1,
+        tokenUsage: { total: 10, cached: 10 },
+        gradingCached: true,
+        gradingUsage: { total: 5, cached: 5 },
+      });
+      await addTokenResult(eval_, {
+        testIdx: 2,
+        responseCached: true,
+        tokenUsage: { total: 20 },
+      });
+
+      const metrics = await calculateFilteredMetrics({
+        evalId: eval_.id,
+        numPrompts: 1,
+        whereSql: sql`eval_id = ${eval_.id} AND test_idx < 2`,
+      });
+
+      expect(metrics[0].testPassCount).toBe(2);
+      expect(metrics[0].testCacheHitCount).toBe(1);
+    });
 
     it('should aggregate token usage correctly', async () => {
       const eval_ = await EvalFactory.create({

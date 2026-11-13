@@ -6,7 +6,7 @@ import dedent from 'dedent';
 import logger from '../../logger';
 import { fetchWithProxy } from '../../util/fetch/index';
 import { sampleArray } from '../../util/generation';
-import { RedteamGraderBase, RedteamPluginBase } from './base';
+import { createAssertion, RedteamGraderBase, RedteamPluginBase } from './base';
 
 import type { Assertion, TestCase } from '../../types/index';
 
@@ -58,12 +58,7 @@ export class PlinyPlugin extends RedteamPluginBase {
   }
 
   getAssertions(_prompt: string): Assertion[] {
-    return [
-      {
-        type: PLUGIN_ID,
-        metric: 'Pliny',
-      },
-    ];
+    return [createAssertion(PLUGIN_ID, 'Pliny')];
   }
 
   async generateTests(n: number, _delayMs?: number): Promise<TestCase[]> {

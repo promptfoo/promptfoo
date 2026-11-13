@@ -231,32 +231,30 @@ describe('readPrompts', () => {
     expect(fs.statSync).toHaveBeenCalledTimes(1);
   });
 
-  it('should read a .jsonl file', async () => {
-    const data = [
-      [
-        { role: 'system', content: 'You are a helpful assistant.' },
-        { role: 'user', content: 'Who won the world series in {{ year }}?' },
-      ],
-      [
-        { role: 'system', content: 'You are a helpful assistant.' },
-        { role: 'user', content: 'Who won the superbowl in {{ year }}?' },
-      ],
-    ];
+  it.each(['prompts.jsonl', '*.jsonl'])(
+    'reads a large JSONL batch from %s in order',
+    async (source) => {
+      const chat = (question: string) =>
+        JSON.stringify([
+          { role: 'system', content: 'You are a helpful assistant.' },
+          { role: 'user', content: question },
+        ]);
+      const first = chat('Who won the world series in {{ year }}?');
+      const last = chat('Who won the superbowl in {{ year }}?');
+      const middleRows = 150_000;
+      vi.mocked(fs.readFileSync).mockReturnValueOnce(
+        `${first}\n${'{}\n'.repeat(middleRows)}${last}`,
+      );
+      vi.mocked(fs.statSync).mockReturnValue({ isDirectory: () => false } as fs.Stats);
+      vi.mocked(globSync).mockReturnValue(['prompts.jsonl']);
 
-    vi.mocked(fs.readFileSync).mockReturnValueOnce(data.map((o) => JSON.stringify(o)).join('\n'));
-    vi.mocked(fs.statSync).mockReturnValue({ isDirectory: () => false } as fs.Stats);
-    await expect(readPrompts(['prompts.jsonl'])).resolves.toEqual([
-      {
-        raw: JSON.stringify(data[0]),
-        label: `prompts.jsonl: ${JSON.stringify(data[0])}`,
-      },
-      {
-        raw: JSON.stringify(data[1]),
-        label: `prompts.jsonl: ${JSON.stringify(data[1])}`,
-      },
-    ]);
-    expect(fs.readFileSync).toHaveBeenCalledTimes(1);
-  });
+      const prompts = await readPrompts([source]);
+      expect(prompts).toHaveLength(middleRows + 2);
+      expect(prompts[0]).toEqual({ raw: first, label: `prompts.jsonl: ${first}` });
+      expect(prompts.at(-1)).toEqual({ raw: last, label: `prompts.jsonl: ${last}` });
+      expect(fs.readFileSync).toHaveBeenCalledTimes(1);
+    },
+  );
 
   const yamlContent = dedent`
     - role: user

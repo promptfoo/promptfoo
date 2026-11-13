@@ -5,6 +5,7 @@ import path from 'node:path';
 
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createDeferred, mockProcessEnv } from '../util/utils';
+import type { KeyvFile } from 'keyv-file';
 
 import type * as CacheModule from '../../src/cache';
 import type * as ProvidersModule from '../../src/providers';
@@ -36,6 +37,7 @@ const diagnostics = [
 describe('public Chat outcomes during default disk publication', () => {
   let cacheModule: typeof CacheModule;
   let loadApiProvider: typeof ProvidersModule.loadApiProvider;
+  let KeyvFileClass: typeof KeyvFile;
   let restoreEnvironment: () => void;
   let cacheDirectory: string;
   let target: ApiProvider;
@@ -55,12 +57,9 @@ describe('public Chat outcomes during default disk publication', () => {
     });
     cacheModule = await import('../../src/cache');
     ({ loadApiProvider } = await import('../../src/providers'));
-    const { KeyvFile } = await import('keyv-file');
+    ({ KeyvFile: KeyvFileClass } = await import('keyv-file'));
     const stores = cacheModule.getCache().stores;
     expect(stores).toHaveLength(1);
-    expect(stores[0].store).toBeInstanceOf(KeyvFile);
-    expect(stores[0].store.opts.filename).toBe(path.join(cacheDirectory, 'cache.json'));
-    expect(stores[0].store.opts.writeDelay).toBe(100);
   });
 
   beforeEach(async () => {
@@ -103,13 +102,28 @@ describe('public Chat outcomes during default disk publication', () => {
   function observePublication() {
     const cache = cacheModule.getCache();
     const set = cache.set.bind(cache);
-    const started = createDeferred<void>();
+    const started = createDeferred<KeyvFile>();
     const observation = {
-      started: started.promise,
+      started: started.promise.then((disk) => {
+        expect(disk).toBeInstanceOf(KeyvFileClass);
+        expect(disk.opts.filename).toBe(path.join(cacheDirectory, 'cache.json'));
+        expect(disk.opts.writeDelay).toBe(100);
+      }),
       settled: false,
       response: undefined as Record<string, unknown> | undefined,
       events: [] as string[],
     };
+    const originalSet = KeyvFileClass.prototype.set;
+    vi.spyOn(KeyvFileClass.prototype, 'set').mockImplementationOnce(function (
+      this: KeyvFile,
+      key,
+      value,
+      ttl,
+    ) {
+      const publication = originalSet.call(this, key, value, ttl);
+      started.resolve(this);
+      return publication;
+    });
     vi.spyOn(cache, 'set').mockImplementationOnce((key, value, ttl) => {
       observation.response = JSON.parse(value as string);
       observation.events.push('completed response entering publication');
@@ -127,7 +141,6 @@ describe('public Chat outcomes during default disk publication', () => {
           observation.events.push('publication rejected');
         },
       );
-      started.resolve();
       return publication;
     });
     return observation;

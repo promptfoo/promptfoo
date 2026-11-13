@@ -7,7 +7,7 @@ import {
   type TokenUsage,
   type VarValue,
 } from '../contracts/shared';
-import { TRACE_CREDENTIAL_PATH_SEGMENT } from '../contracts/traceProviderEndpoint';
+import { hasTraceCredentialPath } from '../contracts/traceProviderEndpoint';
 import { PromptConfigSchema, PromptSchema } from '../contracts/validators/prompts';
 import { NunjucksFilterMapSchema, StringOrFunctionSchema } from '../contracts/validators/shared';
 import { isJavascriptFile, JAVASCRIPT_EXTENSIONS } from '../validation/fileExtensions';
@@ -234,6 +234,8 @@ export interface RunEvalOptions {
   testIdx: number;
   promptIdx: number;
   repeatIndex: number;
+  /** Stable identifier shared by repeated executions of the same expanded test case. */
+  repeatGroupId?: string;
 
   conversations?: EvalConversations;
   registers?: EvalRegisters;
@@ -335,6 +337,7 @@ const PromptMetricsSchema = z.object({
   testPassCount: z.number(),
   testFailCount: z.number(),
   testErrorCount: z.number(),
+  testCacheHitCount: z.number().optional(),
   assertPassCount: z.number(),
   assertFailCount: z.number(),
   totalLatencyMs: z.number(),
@@ -415,6 +418,10 @@ export interface EvaluateResult {
   evaluationId?: string;
   /** W3C trace ID generated for this row when tracing is enabled. */
   traceId?: string;
+  /** Zero-based execution index when this row is part of a repeated test. */
+  repeatIndex?: number;
+  /** Stable identifier shared by repeated executions of the same expanded test case. */
+  repeatGroupId?: string;
 }
 
 export interface EvaluateTableOutput {
@@ -463,6 +470,42 @@ export interface EvaluateStats {
   durationMs?: number;
   generationDurationMs?: number;
   evaluationDurationMs?: number;
+  /**
+   * Rows served from the response cache. Disclosed alongside the latency/token
+   * stats so an all-cached re-run is distinguishable from a freshly measured one.
+   */
+  cacheHits?: number;
+}
+
+export interface RepeatStabilityConfidenceInterval {
+  /** Confidence level used for this interval. */
+  confidenceLevel: 0.95;
+  lower: number;
+  upper: number;
+}
+
+export interface RepeatStabilityGroup {
+  repeatGroupId: string;
+  promptIdx: number;
+  provider: Pick<ProviderOptions, 'id' | 'label'>;
+  description?: string;
+  promptLabel?: string;
+  repetitions: number;
+  passed: number;
+  failed: number;
+  errors: number;
+  cached: number;
+  passRate?: number;
+  passRateConfidenceInterval?: RepeatStabilityConfidenceInterval;
+  unstable: boolean;
+}
+
+export interface RepeatStabilitySummary {
+  totalGroups: number;
+  unstableGroups: number;
+  groupsWithErrors: number;
+  cachedResults: number;
+  groups: RepeatStabilityGroup[];
 }
 
 export interface EvaluateSummaryV3 {
@@ -471,6 +514,7 @@ export interface EvaluateSummaryV3 {
   results: EvaluateResult[];
   prompts: CompletedPrompt[];
   stats: EvaluateStats;
+  repeatStability?: RepeatStabilitySummary;
 }
 
 export interface EvaluateSummaryV2 {
@@ -775,6 +819,9 @@ export const AssertionSchema = z.object({
 
   // Extract context from the output using a transform
   contextTransform: StringOrFunctionSchema.optional(),
+
+  // Opt-in string normalization for equals/contains; true selects NFC.
+  normalizeUnicode: z.union([z.boolean(), z.enum(['NFC', 'NFD', 'NFKC', 'NFKD'])]).optional(),
 });
 
 export type Assertion = z.infer<typeof AssertionSchema>;
@@ -1074,13 +1121,7 @@ export type DerivedMetric = z.infer<typeof DerivedMetricSchema>;
 
 const TraceProviderEndpointSchema = z.url().refine((endpoint) => {
   const url = new URL(endpoint);
-  const hasCredentialPath = url.pathname.split('/').some((segment) => {
-    try {
-      return TRACE_CREDENTIAL_PATH_SEGMENT.test(decodeURIComponent(segment));
-    } catch {
-      return true;
-    }
-  });
+  const hasCredentialPath = hasTraceCredentialPath(url.pathname);
   return (
     (url.protocol === 'http:' || url.protocol === 'https:') &&
     !url.username &&

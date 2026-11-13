@@ -330,14 +330,6 @@ html {
   }
 }
 
-.demoSubtitle {
-  font-size: 1.5rem;
-  color: #888;
-  text-transform: uppercase;
-  letter-spacing: 0.2em;
-  font-weight: 300;
-}
-
 .demoGrid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
@@ -615,15 +607,6 @@ html {
     gap: 1rem;
   }
 
-  .benefitItem {
-    flex-direction: column;
-    text-align: center;
-  }
-
-  .benefitIcon {
-    margin: 0 auto 1rem;
-  }
-
   .statsGrid {
     grid-template-columns: repeat(2, 1fr);
   }
@@ -635,10 +618,6 @@ html {
 
   .demoTitle {
     font-size: 2.5rem;
-  }
-
-  .demoSubtitle {
-    font-size: 1.125rem;
   }
 
   .demoCardInner {
