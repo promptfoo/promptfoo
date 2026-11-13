@@ -268,6 +268,8 @@ For output-based model-graded assertions (`llm-rubric`, `factuality`, `g-eval`,
 no explicit grader is configured — **after** `--grader`, `assertion.provider`, and
 `test.options.provider` / `defaultTest.options.provider` have all been checked and found absent.
 
+Promptfoo warns when it selects this fallback for text grading.
+
 In practice this means the following config generates responses **and** grades them with `gpt-4.1`:
 
 ```yaml
@@ -326,11 +328,6 @@ tests:
 ```
 
 This works at every level where a grader can be set — per-assertion (`assertion.provider`), per-test (`test.options.provider`), and globally (`defaultTest.options.provider`).
-
-If no explicit grader is configured, promptfoo also falls back to `defaultTest.provider` before the
-built-in grading provider. That keeps single-provider configs backwards compatible, but it means the
-same provider may generate and grade the output. Configure `defaultTest.options.provider`,
-`test.options.provider`, `assertion.provider`, or `--grader` when you want a separate judge.
 
 If you configure a full provider object globally, do not also add a shorthand
 `provider: openai:chat:...` to the assertion. Assertion-level providers take precedence, so the
