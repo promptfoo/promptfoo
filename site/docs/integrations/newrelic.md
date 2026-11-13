@@ -7,7 +7,7 @@ description: Export Promptfoo eval traces to New Relic over OTLP. Configure an i
 
 # New Relic integration
 
-[New Relic](https://newrelic.com/) is an observability platform with a native [OTLP endpoint](https://docs.newrelic.com/docs/opentelemetry/best-practices/opentelemetry-otlp/). Promptfoo emits OpenTelemetry spans during evals and exports them to any OTLP backend, so traces reach New Relic without an agent or a collector.
+[New Relic](https://newrelic.com/) is an observability platform with a native [OTLP endpoint](https://docs.newrelic.com/docs/opentelemetry/best-practices/opentelemetry-otlp/). Promptfoo exports eval spans as OTLP/HTTP JSON. An OpenTelemetry Collector receives those spans and forwards them to New Relic using its recommended OTLP/HTTP protobuf transport.
 
 ## What gets exported
 
@@ -28,22 +28,42 @@ Traces are also written to Promptfoo's local trace store by default, so the buil
 
    Or set `PROMPTFOO_TRACING_ENABLED=true` in the environment.
 
-3. Point the exporter at New Relic:
+3. Install the [OpenTelemetry Collector](https://opentelemetry.io/docs/collector/installation/) and save this configuration as `otelcol.yaml`:
 
-   ```bash
-   export PROMPTFOO_OTEL_ENDPOINT="https://otlp.nr-data.net:4318/v1/traces"
-   export OTEL_EXPORTER_OTLP_HEADERS="api-key=YOUR_NEW_RELIC_LICENSE_KEY"
+   ```yaml
+   receivers:
+     otlp:
+       protocols:
+         http:
+           endpoint: 127.0.0.1:4318
+   exporters:
+     otlphttp/newrelic:
+       endpoint: https://otlp.nr-data.net:4318
+       headers:
+         api-key: ${env:NEW_RELIC_LICENSE_KEY}
+   service:
+     pipelines:
+       traces:
+         receivers: [otlp]
+         exporters: [otlphttp/newrelic]
    ```
 
-   For accounts in New Relic's EU data center, use `https://otlp.eu01.nr-data.net:4318/v1/traces`.
+   For New Relic's EU data center, set the exporter endpoint to `https://otlp.eu01.nr-data.net:4318`.
 
-4. Run your eval:
+4. Start the Collector with the ingest key in its environment:
 
    ```bash
+   otelcol --config otelcol.yaml
+   ```
+
+5. Point Promptfoo at the Collector's full traces URL and run the eval:
+
+   ```bash
+   export PROMPTFOO_OTEL_ENDPOINT="http://127.0.0.1:4318/v1/traces"
    npx promptfoo@latest eval
    ```
 
-Promptfoo passes the endpoint URL to the OTLP exporter unchanged, so include the `/v1/traces` path. The standard `OTEL_EXPORTER_OTLP_ENDPOINT` variable works as an alternative to `PROMPTFOO_OTEL_ENDPOINT` and is treated the same way, including the full path requirement.
+   If another local process uses port 4318, change the Collector receiver port and the Promptfoo endpoint together.
 
 ## Configuration reference
 
@@ -51,7 +71,6 @@ Promptfoo passes the endpoint URL to the OTLP exporter unchanged, so include the
 | ----------------------------- | --------------------------------------------- | ----------- |
 | `PROMPTFOO_TRACING_ENABLED`   | Enable tracing for the eval                   | `false`     |
 | `PROMPTFOO_OTEL_ENDPOINT`     | Full OTLP HTTP traces URL, used verbatim      | unset       |
-| `OTEL_EXPORTER_OTLP_HEADERS`  | Headers for the exporter, e.g. `api-key=...`  | unset       |
 | `PROMPTFOO_OTEL_SERVICE_NAME` | `service.name` on exported spans              | `promptfoo` |
 | `PROMPTFOO_OTEL_LOCAL_EXPORT` | Also store spans in the local trace store     | `true`      |
 | `PROMPTFOO_OTEL_DEBUG`        | OpenTelemetry debug logging for export issues | `false`     |
@@ -68,9 +87,9 @@ This export covers spans Promptfoo generates itself. Spans that your application
 
 If spans do not appear in New Relic:
 
-1. Set `PROMPTFOO_OTEL_DEBUG=true` to surface exporter errors.
+1. Set `PROMPTFOO_OTEL_DEBUG=true` to surface errors reaching the Collector. Check the Collector logs for errors forwarding to New Relic.
 2. Check that the endpoint region matches your account. A US license key against the EU endpoint fails, and vice versa.
-3. Confirm the header value is a license key. Other key types are rejected.
+3. Confirm the Collector has `NEW_RELIC_LICENSE_KEY` in its environment and that the value is a license key.
 
 ## See also
 
