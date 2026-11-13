@@ -1,12 +1,13 @@
+import { once } from 'node:events';
+import { createServer } from 'node:http';
+
 import { describe, expect, it } from 'vitest';
+import { withCacheEnabled } from '../../src/cache';
 import { createEdenAiProvider } from '../../src/providers/edenai';
 import { mockProcessEnv } from '../util/utils';
 
 import type { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 
-// The provider extends OpenAiChatCompletionProvider; the Eden AI-specific wiring
-// (base URL, key resolution, id/routing) is what we assert here. The underlying
-// HTTP behaviour is covered by the OpenAI provider's own tests.
 function asChat(provider: ReturnType<typeof createEdenAiProvider>) {
   return provider as unknown as OpenAiChatCompletionProvider & {
     getApiUrl: () => string;
@@ -39,6 +40,9 @@ describe('createEdenAiProvider routing', () => {
       /only supports chat completions/,
     );
     expect(() => createEdenAiProvider('edenai:responses:openai/gpt-4o-mini')).toThrow(
+      /only supports chat completions/,
+    );
+    expect(() => createEdenAiProvider('edenai:messages:anthropic/claude-sonnet-4-5')).toThrow(
       /only supports chat completions/,
     );
   });
@@ -103,16 +107,25 @@ describe('EdenAiProvider configuration', () => {
     });
   });
 
-  it('redacts an explicit apiKey from toJSON output', () => {
+  it('does not serialize credentials from configuration or headers', () => {
     const provider = asChat(
       createEdenAiProvider('edenai:openai/gpt-4o-mini', {
-        config: { apiKey: 'sk-secret', temperature: 0.2 },
+        config: {
+          apiKey: 'fixture-secret',
+          headers: { Authorization: 'Bearer fixture-auth', 'X-Api-Key': 'fixture-header' },
+          temperature: 0.2,
+        },
       }),
     );
     const json = provider.toJSON();
-    expect(json.config.apiKey).toBeUndefined();
     expect(json.config.temperature).toBe(0.2);
-    expect(JSON.stringify(json)).not.toContain('sk-secret');
+    expect(JSON.stringify(json)).not.toMatch(/fixture-(secret|auth|header)/);
+  });
+
+  it('rejects streaming instead of silently dropping it', () => {
+    expect(() =>
+      createEdenAiProvider('edenai:openai/gpt-4o-mini', { config: { stream: true } }),
+    ).toThrow(/only supports non-streaming/);
   });
 });
 
@@ -157,6 +170,78 @@ describe('EdenAiProvider key resolution', () => {
       expect((provider as any).getApiKey()).toBe('sk-custom');
     } finally {
       restore();
+    }
+  });
+});
+
+describe('Eden AI HTTP contract', () => {
+  it('sends a chat request, reports cost once, and handles HTTP errors', async () => {
+    const requests: Array<{
+      url?: string;
+      authorization?: string;
+      organization?: string;
+      model: string;
+    }> = [];
+    const server = createServer(async (req, res) => {
+      let raw = '';
+      for await (const chunk of req) {
+        raw += chunk;
+      }
+      const body = JSON.parse(raw);
+      requests.push({
+        url: req.url,
+        authorization: req.headers.authorization,
+        organization: req.headers['openai-organization'] as string | undefined,
+        model: body.model,
+      });
+      res.setHeader('content-type', 'application/json');
+      if (body.messages[0].content === 'invalid fixture') {
+        res.statusCode = 400;
+        res.end(JSON.stringify({ error: { message: 'fixture rejected input' } }));
+        return;
+      }
+      res.end(
+        JSON.stringify({
+          choices: [
+            { message: { role: 'assistant', content: 'fixture response' }, finish_reason: 'stop' },
+          ],
+          usage: { prompt_tokens: 3, completion_tokens: 1, total_tokens: 4 },
+          cost: 0.0123,
+        }),
+      );
+    });
+    server.listen(0, '127.0.0.1');
+    await once(server, 'listening');
+    try {
+      const address = server.address();
+      if (!address || typeof address === 'string') {
+        throw new Error('Fixture did not bind a TCP address');
+      }
+      const provider = createEdenAiProvider('edenai:openai/gpt-4o-mini', {
+        config: { apiKey: 'fixture-key', apiBaseUrl: `http://127.0.0.1:${address.port}/v3` },
+      });
+      await withCacheEnabled(true, async () => {
+        const response = await provider.callApi('fixture prompt');
+        expect(response).toMatchObject({
+          output: 'fixture response',
+          cost: 0.0123,
+          tokenUsage: { prompt: 3, completion: 1, total: 4 },
+        });
+        const repeated = await provider.callApi('fixture prompt');
+        expect(repeated.cached).toBe(true);
+        expect(repeated.cost).toBeUndefined();
+      });
+      expect((await provider.callApi('invalid fixture')).error).toContain('fixture rejected input');
+      expect(requests).toHaveLength(2);
+      expect(requests[0]).toEqual({
+        url: '/v3/chat/completions',
+        authorization: 'Bearer fixture-key',
+        organization: undefined,
+        model: 'openai/gpt-4o-mini',
+      });
+    } finally {
+      server.closeAllConnections();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
     }
   });
 });

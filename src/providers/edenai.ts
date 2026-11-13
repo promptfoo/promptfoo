@@ -1,4 +1,5 @@
 import { getEnvString } from '../envars';
+import { sanitizeObject } from '../util/sanitizer';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 
 import type { EnvVarKey } from '../envars';
@@ -10,23 +11,6 @@ import type { OpenAiCompletionOptions } from './openai/types';
 const EDENAI_API_BASE_URL = 'https://api.edenai.run/v3';
 const EDENAI_API_KEY_ENVAR = 'EDENAI_API_KEY';
 const DEFAULT_EDENAI_MODEL = 'openai/gpt-4o-mini';
-
-// OpenAI-style subtypes that this chat-only provider does not implement. Eden AI
-// is reached through chat completions, so reject these with a clear error instead
-// of silently sending them to /chat/completions (see src/providers/AGENTS.md).
-const UNSUPPORTED_EDENAI_SUBTYPES = new Set([
-  'completion',
-  'embedding',
-  'embeddings',
-  'assistant',
-  'responses',
-  'realtime',
-  'moderation',
-  'image',
-  'audio',
-  'transcription',
-  'speech',
-]);
 
 type EdenAiConfig = OpenAiCompletionOptions;
 
@@ -42,20 +26,14 @@ function getProviderEnvString(env: EnvOverrides | undefined, key: EnvVarKey): st
   return undefined;
 }
 
-// Eden AI (https://www.edenai.co) is an EU-based, OpenAI-compatible LLM gateway.
-// A single API key reaches models from many providers (OpenAI, Anthropic, Google,
-// Mistral, Cohere and more) with vendor-prefixed ids such as `openai/gpt-4o-mini`
-// or `anthropic/claude-sonnet-4-5`, and it offers EU data residency, zero data
-// retention, a DPA and SOC 2 / ISO 27001. Because it speaks the OpenAI
-// /chat/completions schema, the standard chat provider handles requests once the
-// base URL and key envar are pointed at it. For EU data residency, set
-// `apiBaseUrl: https://api.eu.edenai.run/v3`.
-// https://www.edenai.co/docs
 class EdenAiProvider extends OpenAiChatCompletionProvider {
   config: EdenAiConfig;
 
   constructor(modelName: string, providerOptions: EdenAiProviderOptions) {
     const edenaiConfig = providerOptions.config ?? {};
+    if (edenaiConfig.stream) {
+      throw new Error('The Eden AI provider only supports non-streaming chat completions');
+    }
     const resolvedConfig: EdenAiConfig = {
       ...edenaiConfig,
       apiKeyEnvar: edenaiConfig.apiKeyEnvar ?? EDENAI_API_KEY_ENVAR,
@@ -131,10 +109,7 @@ class EdenAiProvider extends OpenAiChatCompletionProvider {
     return {
       provider: 'edenai',
       model: this.modelName,
-      config: {
-        ...this.config,
-        ...(this.config.apiKey && { apiKey: undefined }),
-      },
+      config: sanitizeObject({ ...this.config, apiKey: undefined }, { sanitizeUrls: true }),
     };
   }
 }
@@ -147,17 +122,16 @@ export function createEdenAiProvider(
   // after the optional `chat:` segment is the model id. Eden AI ids are
   // vendor-prefixed with a slash (e.g. `openai/gpt-4o-mini`), which passes
   // through the colon split unchanged.
-  const splits = providerPath.split(':');
-  const rest = splits.slice(1);
-  if (rest[0] === 'chat') {
-    rest.shift();
-  } else if (UNSUPPORTED_EDENAI_SUBTYPES.has(rest[0] ?? '')) {
+  const model = providerPath.split(':').slice(1);
+  if (model[0] === 'chat') {
+    model.shift();
+  }
+  const modelName = model.join(':') || DEFAULT_EDENAI_MODEL;
+  if (!/^[^/:]+\/.+$/.test(modelName)) {
     throw new Error(
-      `Eden AI provider only supports chat completions, but got "${providerPath}". ` +
-        `The "${rest[0]}" subtype is not supported. Use "edenai:<vendor/model>" ` +
-        '(for example edenai:openai/gpt-4o-mini) or "edenai:chat:<vendor/model>".',
+      `Eden AI provider only supports chat completions. Use "edenai:<vendor/model>" ` +
+        `or "edenai:chat:<vendor/model>" (received "${providerPath}").`,
     );
   }
-  const modelName = rest.join(':') || DEFAULT_EDENAI_MODEL;
   return new EdenAiProvider(modelName, options);
 }
