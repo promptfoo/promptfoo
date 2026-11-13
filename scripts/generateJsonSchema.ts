@@ -57,7 +57,11 @@ const schemaContent = z.toJSONSchema(UnifiedConfigSchema, {
       rewriteNodeToStringSchema(jsonSchema as Record<string, unknown>);
     }
     const items = jsonSchema.items;
-    if (assertionArraySchemas.has(zodSchema) && typeof items === 'object' && !Array.isArray(items)) {
+    if (
+      assertionArraySchemas.has(zodSchema) &&
+      typeof items === 'object' &&
+      !Array.isArray(items)
+    ) {
       jsonSchema.items = { anyOf: [...(items.anyOf ?? [items]), jsonReferenceSchema] };
     }
   },
