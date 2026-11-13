@@ -2313,9 +2313,6 @@ export class HttpProvider implements ApiProvider {
       } catch {
         logger.warn(
           '[HTTP Provider] Content-Type is application/json, but body is a string. This is likely to cause unexpected results. It should be an object or array.',
-          // Pass as context so the logger redacts credentials (e.g. Authorization) instead of
-          // interpolating rendered headers into the message.
-          { body, headers },
         );
       }
     }

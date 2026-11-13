@@ -90,8 +90,9 @@ describe('HttpProvider', () => {
     );
   });
 
-  it('should not interpolate request headers into the string-body JSON warning', async () => {
+  it('does not log request headers or body with the string-body JSON warning', async () => {
     const secret = 'Bearer sk-live-warning-header-secret-1234567890';
+    const privateNote = 'synthetic private note';
     const warnSpy = vi.spyOn(logger, 'warn');
     try {
       provider = new HttpProvider(mockUrl, {
@@ -99,7 +100,7 @@ describe('HttpProvider', () => {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: secret },
           // A string template that is not valid JSON before rendering triggers the warning.
-          body: '{"messages": {{ prompt }}}',
+          body: `{"messages": {{ prompt }}, "privateNote": "${privateNote}"}`,
           transformResponse: (data: any) => data.result,
         },
       });
@@ -116,11 +117,9 @@ describe('HttpProvider', () => {
         String(message).includes('Content-Type is application/json, but body is a string'),
       );
       expect(warningCall).toBeDefined();
-      const [message, context] = warningCall!;
-      expect(message).not.toContain(secret);
-      // Headers are passed as a log context, which the logger sanitizes before writing.
-      expect(context).toEqual(expect.objectContaining({ headers: expect.any(Object) }));
-      expect(JSON.stringify(sanitizeObject(context))).not.toContain(secret);
+      expect(warningCall).toHaveLength(1);
+      expect(warningCall?.[0]).not.toContain(secret);
+      expect(warningCall?.[0]).not.toContain(privateNote);
     } finally {
       warnSpy.mockRestore();
     }
