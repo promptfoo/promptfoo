@@ -32,7 +32,7 @@ Each `intent` line becomes a test case. The `artprompt` strategy then:
 2. Replaces it with `[MASK]` in the request.
 3. Renders the word as an ASCII art banner and appends instructions to silently decode it.
 
-The graders check whether the target answered the reconstructed harmful request. A higher attack success rate means the model is more susceptible to ASCII-art obfuscation.
+The supplied requests use fictional topics so you can inspect the generated inputs without testing a harmful request. To measure a policy failure, use an authorized test target with a restriction on those topics and choose assertions that check that policy.
 
 See the [ArtPrompt strategy docs](https://www.promptfoo.dev/docs/red-team/strategies/artprompt/) for details.
 
