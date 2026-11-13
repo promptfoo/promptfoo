@@ -720,6 +720,27 @@ describe('getMetadataPathValue', () => {
 });
 
 describe('projectEvidenceValues', () => {
+  it('limits property reads before serializing wide metadata', () => {
+    const entries: Record<string, unknown> = {};
+    let reads = 0;
+    for (let index = 0; index < 10_000; index++) {
+      Object.defineProperty(entries, `entry${index}`, {
+        enumerable: true,
+        get() {
+          reads++;
+          return index;
+        },
+      });
+    }
+    const [result] = projectEvidenceValues(
+      [{ from: 'metadata.entries', label: 'entries', maxBytes: 20 }],
+      { entries },
+    )!;
+    expect(reads).toBeLessThanOrEqual(20);
+    expect(Buffer.byteLength(result.value)).toBeLessThanOrEqual(20);
+    expect(result.truncated).toBe(true);
+  });
+
   it('returns undefined when metadata is null', () => {
     const ev: AssertionEvidence[] = [{ from: 'metadata.fileChanges', label: 'c', maxBytes: 1024 }];
     expect(projectEvidenceValues(ev, null)).toBeUndefined();

@@ -62,71 +62,42 @@ export function getMetadataPathValue(metadata: unknown, path: string): unknown {
  * references (common in trace entries or summaries) while still eliding real
  * cycles.
  */
-function breakCyclesAgainstRoot<T>(
-  value: T,
-  root: object | null,
-  path?: string,
-  maxDepth: number = MAX_EVIDENCE_DEPTH,
-): T {
-  if (root === null || value === null || (typeof value !== 'object' && !Array.isArray(value))) {
-    return value;
+function isolateEvidenceValue(value: unknown, root: object | null, path: string, maxBytes: number) {
+  if (root === null || value === null || typeof value !== 'object') {
+    return { value, limited: false };
   }
 
-  // Collect every ancestor from root down through value. Walking the validated
-  // path (when available) is more reliable than DFS discovery because it never
-  // follows cycles arbitrarily and naturally handles the cyclic-endpoint case
-  // where the endpoint IS one of its own ancestors.
-  const ancestors: object[] = [];
-  if (path && path.startsWith('metadata')) {
-    const parts = path.split('.').slice(1);
-    ancestors.push(root as object);
-    let current: unknown = root;
-    for (const part of parts) {
-      if (current === null || current === undefined || typeof current !== 'object') {
-        break;
-      }
-      const rec = current as Record<string, unknown>;
-      const next = rec[part];
-      if (next !== null && next !== undefined && typeof next === 'object') {
-        ancestors.push(next as object);
-      }
-      current = next;
+  // The path is known here, so discover ancestors without scanning sibling fields.
+  const ancestors: object[] = [root];
+  let current: unknown = root;
+  for (const part of path.split('.').slice(1)) {
+    if (current === null || typeof current !== 'object') {
+      break;
     }
-  } else {
-    // Fallback: discover ancestors by DFS (only used when no path is available).
-    function collectAncestors(v: unknown, target: unknown): boolean {
-      if (v === null || v === undefined || typeof v !== 'object') {
-        return false;
-      }
-      ancestors.push(v as object);
-      if (v === target) {
-        return true;
-      }
-      if (Array.isArray(v)) {
-        for (const item of v) {
-          if (collectAncestors(item, target)) {
-            return true;
-          }
-        }
-      } else {
-        for (const child of Object.values(v as Record<string, unknown>)) {
-          if (collectAncestors(child, target)) {
-            return true;
-          }
-        }
-      }
-      ancestors.pop();
-      return false;
+    current = (current as Record<string, unknown>)[part];
+    if (current !== null && typeof current === 'object') {
+      ancestors.push(current);
     }
-    collectAncestors(root, value);
   }
 
   // Build the ancestor set for back-reference elision. We exclude:
   //   - The endpoint itself (which we're cloning and must preserve)
   //   - Any ancestor that IS the same object as the endpoint (cyclic-endpoint
   //     case where the selected path points to an ancestor)
-  const endpointObj = value as unknown;
-  const ancestorSet = new WeakSet<object>(ancestors.filter((a) => a !== endpointObj));
+  const ancestorSet = new WeakSet<object>(ancestors.filter((ancestor) => ancestor !== value));
+  // A byte limit cannot usefully include more entries than bytes. Cap the
+  // walk as well, so a small projection need not clone an entire wide subtree.
+  let remainingEntries = Math.max(0, Math.min(maxBytes, 65_536));
+  let limited = false;
+
+  function takeEntry(): boolean {
+    if (!(remainingEntries > 0)) {
+      limited = true;
+      return false;
+    }
+    remainingEntries--;
+    return true;
+  }
 
   function clone(v: unknown, pathAncestors: object[] = [], depth: number = 0): unknown {
     if (v === null || v === undefined) {
@@ -138,7 +109,7 @@ function breakCyclesAgainstRoot<T>(
     // Bounded depth — replace anything past the limit with a sentinel so we
     // can still serialise the outer structure without blowing up on nested
     // monstrosities.
-    if (depth >= maxDepth) {
+    if (depth >= MAX_EVIDENCE_DEPTH) {
       return '[Max depth exceeded]';
     }
     const obj = v as object;
@@ -154,16 +125,28 @@ function breakCyclesAgainstRoot<T>(
     }
     const nextAncestors = [...pathAncestors, obj];
     if (Array.isArray(v)) {
-      return v.map((item) => clone(item, nextAncestors, depth + 1));
+      const out: unknown[] = [];
+      for (let index = 0; index < v.length && takeEntry(); index++) {
+        out.push(clone(v[index], nextAncestors, depth + 1));
+      }
+      return out;
     }
-    const out: Record<string, unknown> = {};
-    for (const [k, child] of Object.entries(v as Record<string, unknown>)) {
-      out[k] = clone(child, nextAncestors, depth + 1);
+    const record = v as Record<string, unknown>;
+    const out: Record<string, unknown> = Object.create(null);
+    for (const key in record) {
+      if (!Object.hasOwn(record, key)) {
+        continue;
+      }
+      if (!takeEntry()) {
+        break;
+      }
+      out[key] = clone(record[key], nextAncestors, depth + 1);
     }
     return out;
   }
 
-  return clone(value) as T;
+  const isolated = clone(value);
+  return { value: isolated, limited };
 }
 
 /**
@@ -267,12 +250,12 @@ export function projectEvidenceValues(
     // through a selected child's parent pointer. Pass the validated path so
     // ancestors are collected correctly even when the selected endpoint IS a
     // cyclic ancestor (e.g. `metadata.self = metadata` with `from: metadata.self`).
-    const isolated = breakCyclesAgainstRoot(rawValue, rootObj, item.from);
+    const isolated = isolateEvidenceValue(rawValue, rootObj, item.from, item.maxBytes);
 
     // Serialise → escape → truncate. Escape BEFORE truncation so the byte limit
     // bounds the FINAL grader-facing content — an HTML-rich payload would
     // otherwise expand 4-5× after truncation and exceed the requested limit.
-    const serialized = serializeEvidenceValue(isolated);
+    const serialized = serializeEvidenceValue(isolated.value);
     const escaped = escapeEvidenceContent(serialized);
     const truncated = truncateToMaxBytes(escaped, item.maxBytes);
 
@@ -280,7 +263,7 @@ export function projectEvidenceValues(
       from: item.from,
       label: item.label || item.from,
       value: truncated.value,
-      truncated: truncated.truncated,
+      truncated: isolated.limited || truncated.truncated,
       maxBytes: item.maxBytes,
     });
   }
