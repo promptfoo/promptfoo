@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Generate checked-in JSON Schema artifacts for the current ModelAudit release.
 
-Use Python 3.10-3.13 and install the pinned release before running this script:
+Use Python 3.10-3.14 and install the pinned release before running this script:
 
     npm ci
     python3 -m pip install --no-deps -r scripts/modelaudit_schema_requirements.txt
@@ -26,7 +26,7 @@ HAS_ERRORS_DESCRIPTION = "Whether operational errors occurred during scanning"
 REPO_ROOT = Path(__file__).resolve().parents[1]
 REQUIREMENTS_PATH = REPO_ROOT / "scripts" / "modelaudit_schema_requirements.txt"
 MIN_PYTHON_VERSION = (3, 10)
-MAX_PYTHON_VERSION = (3, 14)
+MAX_PYTHON_VERSION = (3, 15)
 SCHEMA_PATH = REPO_ROOT / "site" / "static" / "schemas" / "modelaudit" / SCHEMA_FILENAME
 EXAMPLE_PATH = (
     REPO_ROOT / "site" / "static" / "examples" / "modelaudit" / EXAMPLE_FILENAME
@@ -77,7 +77,7 @@ def validate_python_version() -> None:
     if not (MIN_PYTHON_VERSION <= version_info[:2] < MAX_PYTHON_VERSION):
         version = f"{version_info.major}.{version_info.minor}"
         raise RuntimeError(
-            "ModelAudit schema generation requires Python 3.10-3.13; "
+            "ModelAudit schema generation requires Python 3.10-3.14; "
             f"found Python {version}. Use a supported Python and run: {install_hint()}"
         )
 

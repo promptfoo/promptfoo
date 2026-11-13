@@ -415,24 +415,26 @@ describe('ProviderRateLimitState', () => {
       expect(metrics.rateLimitHits).toBeGreaterThan(0);
     });
 
-    it.each(['returned', 'thrown'])(
+    it.each(['returned', 'thrown', 'generic thrown'])(
       'does not retry or throttle on a %s token-count error containing 429',
       async (mode) => {
-        const response = { error: 'HTTP 400: prompt is too long: 204291 tokens' };
+        const response = { error: 'HTTP 400: prompt is too long: 429 tokens' };
         const cause = new Error(response.error);
         const call = vi.fn(async () => {
-          if (mode === 'thrown') {
+          if (mode !== 'returned') {
             throw cause;
           }
           return response;
         });
         const pending = state
-          .executeWithRetry('token-count', call, { isRateLimited: isProviderResponseRateLimited })
+          .executeWithRetry('token-count', call, {
+            isRateLimited: mode === 'generic thrown' ? undefined : isProviderResponseRateLimited,
+          })
           .catch((error) => error);
 
         await vi.runAllTimersAsync();
 
-        expect(await pending).toBe(mode === 'thrown' ? cause : response);
+        expect(await pending).toBe(mode === 'returned' ? response : cause);
         expect(call).toHaveBeenCalledTimes(1);
         expect(state.getMetrics()).toMatchObject({
           rateLimitHits: 0,
