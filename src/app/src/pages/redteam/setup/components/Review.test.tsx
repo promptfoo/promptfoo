@@ -587,6 +587,36 @@ Application Details:
     expect(sectionTitles.length).toBe(1);
   });
 
+  it('preserves nested fences and section-like content in the application details preview', () => {
+    const content =
+      'Example:\n```json\n{"id":"123"}\n```\nKey Features and Capabilities:\n````\nKeep this text too.';
+    mockUseRedTeamConfig.mockReturnValue({
+      config: {
+        ...defaultConfig,
+        purpose: `Application Purpose:\n\`\`\`\`\`\n${content}\n\`\`\`\`\`\n\nKey Features and Capabilities:\n\`\`\`\nReal features\n\`\`\``,
+      },
+      updateConfig: mockUpdateConfig,
+    });
+
+    renderWithProviders(
+      <Review
+        navigateToPlugins={vi.fn()}
+        navigateToStrategies={vi.fn()}
+        navigateToPurpose={vi.fn()}
+      />,
+    );
+
+    clickElement(screen.getByRole('button', { name: /application details/i }));
+    clickElement(screen.getByRole('button', { name: 'Application Purpose' }));
+
+    expect(
+      screen.getByText((_, element) => element?.tagName === 'P' && element.textContent === content),
+    ).toBeInTheDocument();
+    const featuresButton = screen.getByRole('button', { name: 'Key Features and Capabilities' });
+    clickElement(featuresButton);
+    expect(screen.getByText('Real features')).toBeInTheDocument();
+  });
+
   it('handles extremely long section headers and content without breaking layout', async () => {
     const longHeader = 'This is an extremely long section header that should wrap appropriately:';
     const longContent =

@@ -204,18 +204,27 @@ export default function Review({
     const sections: { title: string; content: string }[] = [];
     const lines = config.purpose.split('\n');
     let currentSection: { title: string; content: string } | null = null;
-    let inCodeBlock = false;
+    let codeFence: string | null = null;
     let contentLines: string[] = [];
 
     for (const line of lines) {
-      // Check if we're entering or exiting a code block
-      if (line === '```') {
-        inCodeBlock = !inCodeBlock;
+      // Only the matching outer fence closes a section; nested fences are content.
+      if (codeFence === null && /^`{3,}$/.test(line)) {
+        codeFence = line;
+        continue;
+      }
+      if (line === codeFence) {
+        codeFence = null;
         continue;
       }
 
       // Check if this is a section header (ends with colon and not in code block)
-      if (!inCodeBlock && line.endsWith(':') && !line.startsWith(' ') && !line.startsWith('\t')) {
+      if (
+        codeFence === null &&
+        line.endsWith(':') &&
+        !line.startsWith(' ') &&
+        !line.startsWith('\t')
+      ) {
         // Save previous section if exists
         if (currentSection) {
           currentSection.content = contentLines.join('\n').trim();

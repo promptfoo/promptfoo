@@ -66,7 +66,8 @@ export const hasModelAuditFindings = (results: {
 }): boolean => {
   return Boolean(
     results.has_errors ||
-      (results.failed_checks ?? results.failedChecks ?? 0) > 0 ||
+      (results.failed_checks ?? 0) > 0 ||
+      (results.failedChecks ?? 0) > 0 ||
       results.checks?.some((check) => check.status === 'failed') ||
       results.issues?.some(
         (issue) =>

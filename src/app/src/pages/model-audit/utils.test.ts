@@ -98,6 +98,23 @@ describe('getIssueFilePath', () => {
 });
 
 describe('hasModelAuditFindings', () => {
+  it.each([
+    { failed_checks: 1 },
+    { failedChecks: 1 },
+    { failed_checks: 0, failedChecks: 1 },
+    { failed_checks: 1, failedChecks: 0 },
+    { failed_checks: 1, failedChecks: 2 },
+  ])('treats a positive failure count in either naming variant as findings: %j', (results) => {
+    expect(hasModelAuditFindings(results)).toBe(true);
+  });
+
+  it.each([{}, { failed_checks: 0 }, { failedChecks: 0 }, { failed_checks: 0, failedChecks: 0 }])(
+    'keeps absent or zero failure counts clean: %j',
+    (results) => {
+      expect(hasModelAuditFindings(results)).toBe(false);
+    },
+  );
+
   it('treats warning rows and failed checks as findings', () => {
     expect(hasModelAuditFindings({ issues: [{ severity: 'warning' }] })).toBe(true);
     expect(hasModelAuditFindings({ checks: [{ status: 'failed' }] })).toBe(true);
