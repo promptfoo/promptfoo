@@ -423,7 +423,7 @@ providers:
           thinkingLevel: XHIGH
 ```
 
-Gemini 4 Hydrogen thinks at `HIGH` by default and also supports `LOW`, `MEDIUM`, and `XHIGH`. Gemini 4 Argon returns a 400 error for `XHIGH`. Hydrogen ignores `temperature`, `topP`, and `topK`, and the Gemini API rejects penalties and multiple candidates, so promptfoo removes these parameters. It rejects `MINIMAL` thinking and `thinkingBudget` before sending a request.
+Gemini 4 Hydrogen thinks at `HIGH` by default and also supports `LOW`, `MEDIUM`, and `XHIGH`. Gemini 4 Argon returns a 400 error for `XHIGH`. Hydrogen ignores `temperature`, `topP`, and `topK`, and the Gemini API rejects penalties and multiple candidates, so promptfoo removes these parameters. For `google:gemini-4-hydrogen`, promptfoo also rejects `MINIMAL` thinking and `thinkingBudget` before sending a request.
 
 `maxOutputTokens` limits thinking and the answer together, so a low limit can end a response with `MAX_TOKENS` before any answer text is produced. Hydrogen supports implicit caching only, so do not set `cachedContent`. It does not support the Live API or audio and image output. To call the model through the Interactions API, use `google:interactions:gemini-4-hydrogen`. Promptfoo sends synchronous Interactions requests, so background execution and long decoding beyond 65,536 output tokens are not available.
 
@@ -657,8 +657,9 @@ providers:
 | LOW     | Fewer tokens. Suitable for simpler tasks.                                         |
 | MEDIUM  | Balanced approach for moderate complexity.                                        |
 | HIGH    | More tokens for deep reasoning.                                                   |
+| XHIGH   | Most tokens for the hardest problems. Supported only by Gemini 4 Hydrogen.        |
 
-Defaults vary by model: Gemini 3.8 Flash, 3.7 Flash, 3.6 Flash, and 3.5 Flash default to `MEDIUM`, Gemini 3.5 Flash-Lite defaults to `MINIMAL`, and Gemini 3.1 Pro defaults to `HIGH`.
+Defaults vary by model: Gemini 4 Hydrogen defaults to `HIGH`, Gemini 4 Argon, 3.8 Flash, 3.7 Flash, 3.6 Flash, and 3.5 Flash default to `MEDIUM`, Gemini 3.5 Flash-Lite defaults to `MINIMAL`, and Gemini 3.1 Pro defaults to `HIGH`.
 
 #### Gemini 2.5 Models (thinkingBudget)
 

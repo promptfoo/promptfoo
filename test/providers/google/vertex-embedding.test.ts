@@ -421,6 +421,15 @@ describe('Vertex embedding SDK cancellation', () => {
   });
 });
 
+describe('Vertex Gemini 4 Hydrogen', () => {
+  it('defaults to global and keeps an explicit multi-region', () => {
+    expect(new VertexChatProvider('gemini-4-hydrogen').getRegion()).toBe('global');
+    expect(
+      new VertexChatProvider('gemini-4-hydrogen', { config: { region: 'eu' } }).getRegion(),
+    ).toBe('eu');
+  });
+});
+
 describe('Vertex Flash Cyber catalog', () => {
   it('defaults to global and keeps the explicit US location', () => {
     expect(new VertexChatProvider('gemini-3.8-flash-cyber').getRegion()).toBe('global');

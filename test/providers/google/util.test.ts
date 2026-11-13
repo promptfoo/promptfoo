@@ -3968,6 +3968,18 @@ describe('util', () => {
           12,
         );
       });
+
+      it('prices Vertex Priority requests on the global endpoint', () => {
+        expect(
+          calculateGoogleCost(
+            'gemini-4-hydrogen',
+            { region: 'global', service_tier: 'priority' },
+            1000,
+            500,
+            true,
+          ),
+        ).toBeCloseTo((1000 * 2.7 + 500 * 13.5) / 1e6, 12);
+      });
     });
 
     it.each(['gemini-3.5-flash-lite', 'gemini-flash-lite-latest'])(
