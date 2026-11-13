@@ -1,3 +1,5 @@
+import { createTokenOutput } from '../factories/literalFixtures';
+
 import './setup';
 
 import { randomUUID } from 'crypto';
@@ -37,10 +39,7 @@ describeEvaluator('evaluator options and hooks', () => {
   it('should apply prompt config to provider call', async () => {
     const mockApiProvider: ApiProvider = {
       id: vi.fn().mockReturnValue('test-provider'),
-      callApi: vi.fn().mockResolvedValue({
-        output: 'Test response',
-        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
-      }),
+      callApi: vi.fn().mockResolvedValue(createTokenOutput('Test response')),
     };
 
     const testSuite: TestSuite = {
@@ -98,17 +97,14 @@ describeEvaluator('evaluator options and hooks', () => {
           },
         }),
       }),
-      undefined,
+      expect.any(Object),
     );
   });
 
   it('should apply dynamic prompt function config to provider call', async () => {
     const mockDynamicConfigProvider: ApiProvider = {
       id: vi.fn().mockReturnValue('test-provider'),
-      callApi: vi.fn().mockResolvedValue({
-        output: 'Test response',
-        tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
-      }),
+      callApi: vi.fn().mockResolvedValue(createTokenOutput('Test response')),
     };
 
     const testSuite: TestSuite = {
@@ -153,7 +149,7 @@ describeEvaluator('evaluator options and hooks', () => {
           },
         }),
       }),
-      undefined,
+      expect.any(Object),
     );
   });
 
@@ -173,6 +169,16 @@ describeEvaluator('evaluator options and hooks', () => {
 
     const mockedRunExtensionHook = vi.mocked(runExtensionHook);
     mockedRunExtensionHook.mockClear();
+    mockedRunExtensionHook.mockImplementation(async (_extensions, hookName, context) => {
+      if ('suite' in context) {
+        expect(context.suite).not.toBe(testSuite);
+        expect(testSuite).not.toHaveProperty('providerPromptMap');
+        expect(context.suite.providerPromptMap).toEqual(
+          hookName === 'beforeAll' ? { 'test-provider': ['Test prompt {{ var1 }}'] } : {},
+        );
+      }
+      return context;
+    });
     const evalRecord = persisted
       ? await Eval.create({}, testSuite.prompts, { id: randomUUID() })
       : new Eval({});
@@ -185,7 +191,7 @@ describeEvaluator('evaluator options and hooks', () => {
       1,
       [mockExtension],
       'beforeAll',
-      expect.objectContaining({ suite: testSuite }),
+      expect.objectContaining({ suite: expect.objectContaining(testSuite) }),
     );
 
     // Check beforeEach call
@@ -252,9 +258,10 @@ describeEvaluator('evaluator options and hooks', () => {
             response: expect.objectContaining({ output: 'Test output' }),
           }),
         ],
-        suite: testSuite,
+        suite: expect.objectContaining(testSuite),
       }),
     );
+    expect(testSuite).not.toHaveProperty('providerPromptMap');
   });
 
   it('retains an in-memory timeout row for afterAll and summary reads', async () => {

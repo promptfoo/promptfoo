@@ -6,13 +6,16 @@
  */
 
 import { createHmac } from 'crypto';
+import * as fs from 'fs';
+import * as path from 'path';
 
 import { getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
+import { resolveBedrockMantleRegion } from './mantle';
 import { createBedrockRequestHandler } from './util';
 import type { BedrockRuntime, Trace } from '@aws-sdk/client-bedrock-runtime';
-import type { AwsCredentialIdentity, AwsCredentialIdentityProvider } from '@aws-sdk/types';
+import type { AwsCredentialIdentity, AwsCredentialIdentityProvider } from '@smithy/types';
 
 import type { EnvOverrides } from '../../types/env';
 
@@ -116,6 +119,9 @@ export abstract class AwsBedrockGenericProvider {
   env?: EnvOverrides;
   bedrock?: BedrockRuntime;
   config: BedrockOptions;
+  // Agent Runtime clients are reused. Once one sees configured credentials, its
+  // responses cannot safely enter a shared cache, even if the config is later cleared.
+  protected allowSharedAgentRuntimeCache = true;
 
   constructor(
     modelName: string,
@@ -145,6 +151,13 @@ export abstract class AwsBedrockGenericProvider {
 
   requiresApiKey(): boolean {
     return false;
+  }
+
+  protected checkAgentRuntimeCacheIdentity(): void {
+    const { accessKeyId, profile, secretAccessKey, sessionToken } = this.config;
+    if (accessKeyId || profile || secretAccessKey || sessionToken || this.getApiKey()) {
+      this.allowSharedAgentRuntimeCache = false;
+    }
   }
 
   protected getApiKey(): string | undefined {
@@ -221,11 +234,24 @@ export abstract class AwsBedrockGenericProvider {
   }
 
   getRegion(): string {
-    return (
-      this.config?.region ||
-      this.env?.AWS_BEDROCK_REGION ||
-      getEnvString('AWS_BEDROCK_REGION') ||
-      'us-east-1'
-    );
+    return resolveBedrockMantleRegion(this.config, this.env, 'us-east-1');
   }
+}
+
+/** Load image data from a file:// path or return already encoded data. */
+export function loadBedrockImageData(imagePath: string): { data?: string; error?: string } {
+  if (imagePath.startsWith('file://')) {
+    const filePath = imagePath.slice(7);
+    // Resolve to absolute path and validate no path traversal
+    const resolvedPath = path.resolve(filePath);
+    if (filePath.includes('..') && resolvedPath !== path.resolve(path.normalize(filePath))) {
+      return { error: `Invalid image path (path traversal detected): ${filePath}` };
+    }
+    if (!fs.existsSync(resolvedPath)) {
+      return { error: `Image file not found: ${resolvedPath}` };
+    }
+    return { data: fs.readFileSync(resolvedPath).toString('base64') };
+  }
+  // Assume it's already base64
+  return { data: imagePath };
 }
