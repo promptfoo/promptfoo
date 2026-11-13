@@ -13,7 +13,7 @@ import { type SQL, sql } from 'drizzle-orm';
 import { type ReadOnlyDatabase, withReadTransaction } from '../database/index';
 import logger from '../logger';
 import { ResultFailureReason } from '../types/index';
-import { accumulateNamedMetrics } from './namedMetrics';
+import { accumulateNamedMetrics } from './persistedNamedMetrics';
 
 import type { PromptMetrics, Vars } from '../types/index';
 
