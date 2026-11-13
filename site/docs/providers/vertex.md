@@ -1180,7 +1180,22 @@ When using `thinkingBudget`:
 
 **Note:** You cannot use both `thinkingLevel` and `thinkingBudget` in the same request.
 
-To see the model's thought summaries, set `generationConfig.thinkingConfig.includeThoughts: true`. Promptfoo puts them before the answer as `Thinking: <summary>`, followed by a blank line, as it does for other reasoning providers. Set `showThinking: false` in the provider config to keep only the answer, for example when assertions check the answer text.
+#### Thought summaries
+
+Set `generationConfig.thinkingConfig.includeThoughts: true` to return the model's thought summaries. Promptfoo puts them before the answer as `Thinking: <summary>`, followed by a blank line, as it does for other reasoning providers. Set `showThinking: false` to keep only the answer, for example when `equals` or `is-json` assertions check it:
+
+```yaml
+providers:
+  - id: vertex:gemini-4-hydrogen
+    config:
+      showThinking: false
+      generationConfig:
+        thinkingConfig:
+          thinkingLevel: LOW
+          includeThoughts: true
+```
+
+Function-call and other multipart outputs are returned as Gemini parts, where thought summaries are parts marked `thought: true`. `showThinking: false` removes those parts too.
 
 ### Search Grounding
 
