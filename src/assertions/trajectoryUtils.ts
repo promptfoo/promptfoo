@@ -31,6 +31,7 @@ export interface TrajectoryStep {
   name: string;
   spanName: string;
   statusCode?: number;
+  httpStatusCode?: number;
   statusMessage?: string;
   type: TrajectoryStepType;
 }
@@ -315,6 +316,16 @@ function isMessageSpan(span: TraceSpan): boolean {
   return span.name === 'agent response' || span.name === 'send input';
 }
 
+function getHttpStatusCode(attributes: TraceSpan['attributes']): number | undefined {
+  for (const key of ['http.response.status_code', 'http.status_code']) {
+    const value = attributes?.[key];
+    if (typeof value === 'number' && Number.isInteger(value) && value >= 100 && value <= 599) {
+      return value;
+    }
+  }
+  return undefined;
+}
+
 export function extractTrajectorySteps(trace: TraceData): TrajectoryStep[] {
   const commandToolNames = getTraceCommandToolNames(trace);
 
@@ -392,8 +403,10 @@ export function extractTrajectorySteps(trace: TraceData): TrajectoryStep[] {
         aliases.add('message');
       }
 
+      const httpStatusCode = getHttpStatusCode(span.attributes);
       return {
         aliases: [...aliases],
+        ...(httpStatusCode === undefined ? {} : { httpStatusCode }),
         ...(args === undefined ? {} : { args }),
         attributes: span.attributes || {},
         endTime: span.endTime,
@@ -457,18 +470,15 @@ export function matchesTrajectoryStepStatus(
   }
 
   const status = matcher.status;
-  const code = step.statusCode;
-  const isSet = code !== undefined;
-  if (!isSet) {
-    return false;
-  }
-
+  const { statusCode, httpStatusCode } = step;
+  const semanticCode = statusCode === undefined || statusCode === 0 ? httpStatusCode : statusCode;
   const statusMatches =
     typeof status === 'number'
-      ? code === status
-      : status === 'success'
-        ? code === 1 || (code >= 200 && code < 400)
-        : code === 2 || (code >= 400 && code < 600);
+      ? status === statusCode || status === httpStatusCode
+      : semanticCode !== undefined &&
+        (status === 'success'
+          ? semanticCode === 1 || (semanticCode >= 200 && semanticCode < 400)
+          : semanticCode === 2 || (semanticCode >= 400 && semanticCode < 600));
   if (!statusMatches) {
     return false;
   }

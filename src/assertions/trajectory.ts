@@ -228,6 +228,13 @@ function resolveStepStatusValue(
   value: unknown,
   vars: Record<string, VarValue>,
 ): TrajectoryStepStatusMatcher {
+  if (typeof value === 'string') {
+    try {
+      value = JSON.parse(value);
+    } catch {
+      throw new Error('trajectory:step-status assertion must have an object value');
+    }
+  }
   if (!isRecord(value)) {
     throw new Error('trajectory:step-status assertion must have an object value');
   }
