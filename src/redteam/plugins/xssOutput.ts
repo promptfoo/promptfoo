@@ -1,3 +1,5 @@
+import { Script } from 'node:vm';
+
 import dedent from 'dedent';
 import { parse, parseFragment } from 'parse5';
 import { materializeInputVariablesWithMetadata } from '../inputVariables';
@@ -1762,14 +1764,17 @@ function truncateEvidence(evidence: string): string {
   return evidence.length > 120 ? `${evidence.slice(0, 117)}...` : evidence;
 }
 
+// V8 can interrupt a regular expression only while it is running inside the timed script.
+const customPatternSearch = new Script('pattern.exec(output)?.[0]');
+
 function findRuleEvidence(
   output: string,
   rule: XssOutputRule,
   parsedNodes?: ParsedHtmlNode[],
 ): string | undefined {
-  const evidence = rule.findEvidence
+  const evidence: string | undefined = rule.findEvidence
     ? rule.findEvidence(output, parsedNodes)
-    : rule.pattern?.exec(output)?.[0];
+    : customPatternSearch.runInNewContext({ pattern: rule.pattern, output }, { timeout: 100 });
   return evidence === undefined ? undefined : truncateEvidence(evidence);
 }
 

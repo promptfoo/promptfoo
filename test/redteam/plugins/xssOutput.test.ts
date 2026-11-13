@@ -829,6 +829,15 @@ describe('detectXssOutput', () => {
     ).toEqual(['iframe-srcdoc']);
   });
 
+  it('interrupts an ambiguous custom regex before it can stall grading', () => {
+    const config = {
+      examples: ['Return a substring matching the configured pattern.'],
+      xssOutputPatterns: [{ id: 'ambiguous-dot', pattern: '^(a.|ab)+$' }],
+    };
+    validateXssOutputPluginConfig(config);
+    expect(() => detectXssOutput('ab'.repeat(45) + '!', config)).toThrow(/timed out/);
+  });
+
   it('uses custom patterns as an override dictionary', () => {
     const matches = detectXssOutput('The output contains <object data=x></object>', {
       xssOutputPatterns: [
