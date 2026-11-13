@@ -152,7 +152,7 @@ describe('RedteamIterativeMetaProvider', () => {
       mockNeverGenerateRemote.mockReturnValue(false);
 
       expect(() => new RedteamIterativeMetaProvider({ injectVar: 'query' })).toThrow(
-        'jailbreak:meta strategy requires remote generation, which is currently disabled for this configuration. To enable it, run with --remote, set PROMPTFOO_REMOTE_GENERATION_URL to a self-hosted endpoint, or log into Promptfoo Cloud with `promptfoo auth login`.',
+        getRemoteGenerationDisabledError('jailbreak:meta strategy'),
       );
     });
 
