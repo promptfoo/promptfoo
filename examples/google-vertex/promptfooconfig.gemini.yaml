@@ -1,318 +1,39 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-
-description: 'Evaluation of Gemini models with function calling capabilities'
+description: Check Gemini tool arguments on Vertex AI
 
 prompts:
-  - label: 'Direct Question'
-    raw: |
-      What's the weather like in {{city}} and what are some good restaurants there?
-
-  - label: 'Detailed Query'
-    raw: |
-      I'm planning to visit {{city}}. Could you help me understand:
-      1. The current weather conditions
-      2. Some recommended places to eat, focusing on {{cuisine}} restaurants
+  - 'Look up the weather at {{airport}} airport using its three-letter code.'
 
 providers:
-  - id: vertex:gemini-2.5-pro
-    config:
-      generationConfig:
-        temperature: 0.7
-        maxOutputTokens: 1024
-      toolConfig: &geminiToolConfig
-        functionCallingConfig:
-          mode: 'AUTO'
-      tools: &geminiTools
-        - functionDeclarations:
-            - name: 'get_weather'
-              description: 'Get weather information for a location'
-              parameters:
-                type: 'OBJECT'
-                properties:
-                  location:
-                    type: 'STRING'
-                    description: 'City name'
-                required: ['location']
-            - name: 'search_places'
-              description: 'Search for places of interest'
-              parameters:
-                type: 'OBJECT'
-                properties:
-                  query:
-                    type: 'STRING'
-                    description: 'Search query'
-                  type:
-                    type: 'STRING'
-                    description: 'Type of place'
-                    enum: ['restaurant', 'hotel', 'attraction']
-                required: ['query']
-
   - id: vertex:gemini-3.8-flash
     config:
+      expressMode: false
       region: global
-      generationConfig:
-        maxOutputTokens: 2048
-        thinkingConfig:
-          thinkingLevel: MEDIUM
-      toolConfig: *geminiToolConfig
-      tools: *geminiTools
-
-  - id: vertex:gemini-3.7-flash
-    config:
-      region: global
-      generationConfig:
-        maxOutputTokens: 2048
-        thinkingConfig:
-          thinkingLevel: MEDIUM
-      toolConfig: *geminiToolConfig
-      tools: *geminiTools
-
-  - id: vertex:gemini-3.6-flash
-    config:
-      region: global
-      generationConfig:
-        maxOutputTokens: 2048
-        thinkingConfig:
-          thinkingLevel: HIGH
-      toolConfig: *geminiToolConfig
-      tools: *geminiTools
-
-  - id: vertex:gemini-3.5-flash-lite
-    config:
-      region: global
-      generationConfig:
-        maxOutputTokens: 2048
-        thinkingConfig:
-          thinkingLevel: LOW
-      toolConfig: *geminiToolConfig
-      tools: *geminiTools
-
-  - id: vertex:gemini-3.5-flash
-    config:
-      region: global # Gemini 3.5 Flash is served on Vertex AI's global endpoint
-      apiHost: aiplatform.googleapis.com
-      generationConfig:
-        temperature: 0.7
-        maxOutputTokens: 2048
-      toolConfig:
-        functionCallingConfig:
-          mode: 'AUTO'
       tools:
         - functionDeclarations:
-            - name: 'get_weather'
-              description: 'Get weather information for a location'
+            - name: get_weather
+              description: Look up the weather at an airport.
               parameters:
-                type: 'OBJECT'
+                type: OBJECT
                 properties:
-                  location:
-                    type: 'STRING'
-                    description: 'City name'
-                required: ['location']
-            - name: 'search_places'
-              description: 'Search for places of interest'
-              parameters:
-                type: 'OBJECT'
-                properties:
-                  query:
-                    type: 'STRING'
-                    description: 'Search query'
-                  type:
-                    type: 'STRING'
-                    description: 'Type of place'
-                    enum: ['restaurant', 'hotel', 'attraction']
-                required: ['query']
-
-  - id: vertex:gemini-2.5-flash
-    config:
-      generationConfig:
-        temperature: 0.7
-        maxOutputTokens: 2048
+                  airport:
+                    type: STRING
+                    description: Three-letter IATA airport code.
+                required: [airport]
       toolConfig:
         functionCallingConfig:
-          mode: 'AUTO'
-      tools:
-        - functionDeclarations:
-            - name: 'get_weather'
-              description: 'Get weather information for a location'
-              parameters:
-                type: 'OBJECT'
-                properties:
-                  location:
-                    type: 'STRING'
-                    description: 'City name'
-                required: ['location']
-            - name: 'search_places'
-              description: 'Search for places of interest'
-              parameters:
-                type: 'OBJECT'
-                properties:
-                  query:
-                    type: 'STRING'
-                    description: 'Search query'
-                  type:
-                    type: 'STRING'
-                    description: 'Type of place'
-                    enum: ['restaurant', 'hotel', 'attraction']
-                required: ['query']
+          mode: ANY
 
-  - id: vertex:gemini-2.5-flash-lite
-    config:
-      generationConfig:
-        temperature: 0
-        maxOutputTokens: 1024
-      toolConfig:
-        functionCallingConfig:
-          mode: 'AUTO'
-      tools:
-        - functionDeclarations:
-            - name: 'get_weather'
-              description: 'Get weather information for a location'
-              parameters:
-                type: 'OBJECT'
-                properties:
-                  location:
-                    type: 'STRING'
-                    description: 'City name'
-                required: ['location']
-            - name: 'search_places'
-              description: 'Search for places of interest'
-              parameters:
-                type: 'OBJECT'
-                properties:
-                  query:
-                    type: 'STRING'
-                    description: 'Search query'
-                  type:
-                    type: 'STRING'
-                    description: 'Type of place'
-                    enum: ['restaurant', 'hotel', 'attraction']
-                required: ['query']
+defaultTest:
+  assert:
+    - type: is-valid-function-call
+    - type: javascript
+      value: |
+        const calls = Array.isArray(output) ? output.filter((part) => part.functionCall) : [];
+        return calls.length === 1 && calls[0].functionCall.args?.airport === context.vars.airport;
 
 tests:
-  - description: Test with major city
-    vars:
-      city: 'San Francisco'
-      cuisine: 'Italian'
-    assert:
-      - type: contains-json
-        value: |
-          {
-            "type": "object",
-            "required": ["functionCall"],
-            "properties": {
-              "functionCall": {
-                "type": "object",
-                "required": ["name", "args"],
-                "properties": {
-                  "name": {
-                    "type": "string",
-                    "enum": ["get_weather"]
-                  },
-                  "args": {
-                    "type": "object",
-                    "required": ["location"],
-                    "properties": {
-                      "location": {
-                        "type": "string"
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
-      - type: contains-json
-        value: |
-          {
-            "type": "object",
-            "required": ["functionCall"],
-            "properties": {
-              "functionCall": {
-                "type": "object",
-                "required": ["name", "args"],
-                "properties": {
-                  "name": {
-                    "type": "string",
-                    "enum": ["search_places"]
-                  },
-                  "args": {
-                    "type": "object",
-                    "required": ["query", "type"],
-                    "properties": {
-                      "query": {
-                        "type": "string"
-                      },
-                      "type": {
-                        "type": "string",
-                        "enum": ["restaurant"]
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
-
-  - description: Test with smaller city
-    vars:
-      city: 'Boulder, Colorado'
-      cuisine: 'Mexican'
-    assert:
-      - type: contains-json
-        value: |
-          {
-            "type": "object",
-            "required": ["functionCall"],
-            "properties": {
-              "functionCall": {
-                "type": "object",
-                "required": ["name", "args"],
-                "properties": {
-                  "name": {
-                    "type": "string",
-                    "enum": ["get_weather"]
-                  },
-                  "args": {
-                    "type": "object",
-                    "required": ["location"],
-                    "properties": {
-                      "location": {
-                        "type": "string"
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
-      - type: contains-json
-        value: |
-          {
-            "type": "object",
-            "required": ["functionCall"],
-            "properties": {
-              "functionCall": {
-                "type": "object",
-                "required": ["name", "args"],
-                "properties": {
-                  "name": {
-                    "type": "string",
-                    "enum": ["search_places"]
-                  },
-                  "args": {
-                    "type": "object",
-                    "required": ["query", "type"],
-                    "properties": {
-                      "query": {
-                        "type": "string"
-                      },
-                      "type": {
-                        "type": "string",
-                        "enum": ["restaurant"]
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
+  - vars:
+      airport: SFO
+  - vars:
+      airport: LHR

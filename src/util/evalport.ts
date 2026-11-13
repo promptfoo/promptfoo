@@ -1,4 +1,5 @@
 import { ResultFailureReason } from '../types/index';
+import { sanitizeObject } from './sanitizer';
 
 import type {
   Assertion,
@@ -304,10 +305,18 @@ function buildStoredAssertion(
     stored.value = storedValue;
   }
   if (assertion.config !== undefined && isPlainRecord(assertion.config)) {
-    stored.config = assertion.config;
+    stored.config = sanitizeObject(assertion.config, {
+      context: 'EvalPort assertion config',
+      sanitizeUrls: true,
+      maxDepth: Number.POSITIVE_INFINITY,
+    });
   }
   if (typeof assertion.provider === 'string' || isPlainRecord(assertion.provider)) {
-    stored.provider = assertion.provider;
+    stored.provider = sanitizeObject(assertion.provider, {
+      context: 'EvalPort assertion provider',
+      sanitizeUrls: true,
+      maxDepth: Number.POSITIVE_INFINITY,
+    });
   }
   if (typeof assertion.transform === 'string') {
     stored.transform = assertion.transform;
@@ -649,7 +658,11 @@ function graderToPromptfooAssertion(
   }
   // Foreign framework-native grader with no promptfoo equivalent: import
   // the test without a fabricated assertion (preserved in test metadata).
-  return foreignGraderToAssertion(grader, expectedOutput);
+  const assertion = foreignGraderToAssertion(grader, expectedOutput);
+  if (assertion && typeof grader.weight === 'number') {
+    assertion.weight = grader.weight;
+  }
+  return assertion;
 }
 
 function foreignGraderToAssertion(
@@ -945,20 +958,28 @@ export function evaluateResultsToEvalPortResultSet(
   );
   const passedCount = evalPortResults.filter((result) => result.passed).length;
   const providerIds = [...new Set(results.map((result) => result.provider?.id).filter(Boolean))];
-  const byGrader: Record<string, { passed: number; failed: number; avg_score: number }> = {};
+  const byGrader = new Map<
+    string,
+    { passed: number; failed: number; avg_score: number; scored: number }
+  >();
   for (const result of evalPortResults) {
     for (const graderResult of result.grader_results) {
-      const entry = byGrader[graderResult.grader_id] ?? { passed: 0, failed: 0, avg_score: 0 };
+      const entry = byGrader.get(graderResult.grader_id) ?? {
+        passed: 0,
+        failed: 0,
+        avg_score: 0,
+        scored: 0,
+      };
       if (graderResult.passed) {
         entry.passed += 1;
       } else {
         entry.failed += 1;
       }
       if (typeof graderResult.score === 'number') {
-        const count = entry.passed + entry.failed;
-        entry.avg_score += (graderResult.score - entry.avg_score) / count;
+        entry.scored += 1;
+        entry.avg_score += (graderResult.score - entry.avg_score) / entry.scored;
       }
-      byGrader[graderResult.grader_id] = entry;
+      byGrader.set(graderResult.grader_id, entry);
     }
   }
 
@@ -988,7 +1009,12 @@ export function evaluateResultsToEvalPortResultSet(
           ? numericScores.reduce((sum, score) => sum + score, 0) / numericScores.length
           : 0,
       duration_ms: evalPortResults.reduce((sum, result) => sum + (result.duration_ms ?? 0), 0),
-      by_grader: byGrader,
+      by_grader: Object.fromEntries(
+        Array.from(byGrader, ([id, { passed, failed, avg_score }]) => [
+          id,
+          { passed, failed, avg_score },
+        ]),
+      ),
     },
   };
 }
@@ -1035,19 +1061,19 @@ function resolveImportedRowContext(
   const storedScores = isPlainRecord(storedMeta?.namedScores)
     ? (storedMeta.namedScores as Record<string, unknown>)
     : undefined;
-  const namedScores: Record<string, number> = {};
+  const namedScores = new Map<string, number>();
   if (storedScores === undefined) {
     // Foreign data: derive names from grader IDs.
     for (const graderResult of result.grader_results) {
       if (typeof graderResult.score === 'number') {
-        namedScores[graderResult.grader_id] = graderResult.score;
+        namedScores.set(graderResult.grader_id, graderResult.score);
       }
     }
   } else {
     // Promptfoo artifact: keep the original metric names.
     for (const [name, value] of Object.entries(storedScores)) {
       if (typeof value === 'number') {
-        namedScores[name] = value;
+        namedScores.set(name, value);
       }
     }
   }
@@ -1059,7 +1085,7 @@ function resolveImportedRowContext(
       options?.providerId ??
       (typeof storedMeta?.providerId === 'string' ? storedMeta.providerId : undefined) ??
       (typeof resultSet.provider?.model === 'string' ? resultSet.provider.model : 'evalport'),
-    namedScores,
+    namedScores: Object.fromEntries(namedScores),
     score:
       typeof storedScore === 'number' && Number.isFinite(storedScore) ? storedScore : fallbackScore,
   };

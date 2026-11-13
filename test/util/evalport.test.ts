@@ -337,6 +337,18 @@ describe('evalport interchange', () => {
       expect(Object.keys(resultSet.summary?.by_grader ?? {})).toEqual([suiteGraderId]);
     });
 
+    it('treats a prototype-like suite grader ID as data', () => {
+      const assertion = { type: 'equals', value: 'Paris' } as const;
+      const suite = promptfooTestsToEvalPortSuite([{ assert: [assertion] }], { suiteId: 's' });
+      suite.graders[0].id = '__proto__';
+      const resultSet = evaluateResultsToEvalPortResultSet(
+        [makeResult({ gradingResult: { pass: true, score: 1, reason: 'pass', assertion } })],
+        { suiteId: 's', suite },
+      );
+      expect(Object.hasOwn(resultSet.summary!.by_grader!, '__proto__')).toBe(true);
+      expect(Object.hasOwn(Object.prototype, 'avg_score')).toBe(false);
+    });
+
     it('falls back to per-result grader IDs when no suite is supplied', () => {
       const resultSet = evaluateResultsToEvalPortResultSet(
         [

@@ -56,6 +56,8 @@ const resultSet = evaluateSummaryToEvalPortResultSet(output.results ?? output, {
 
 ## Import
 
+Only run tests imported from a trusted suite. A suite can contain executable graders and transforms. Review exported artifacts for sensitive test inputs and outputs before sharing them.
+
 ```javascript
 import { evalPortSuiteToPromptfooTests } from 'promptfoo';
 
