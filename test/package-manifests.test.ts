@@ -213,7 +213,10 @@ const KNOWN_BAD_RELEASES = new Map([
   ['fast-uri', '<2.4.8 || >=3.0.0 <3.1.9 || >=4.0.0 <4.2.3'], // GHSA-w74x-v6f9-j3xg, GHSA-wjr9-j795-jxcr, GHSA-xhq7-xmqj-769h, GHSA-333x-w4r6-6crp
   ['glob', '14.0.2'], // Bundles minimatch 11.0.0 (GHSA-g3hv-75wg-m249)
   ['image-size', '>=0.6.3 <=2.0.2'], // GHSA-5p2g-fcmc-qvqq, GHSA-w3rx-r6r6-pgpr
-  ['hono', '<4.13.11'], // GHSA-hxh3-vqpv-xpqv, GHSA-5r4p-p66f-jhc7
+  // Also covers GHSA-hxh3-vqpv-xpqv and GHSA-5r4p-p66f-jhc7.
+  // GHSA-4m76-xfj5-7975, GHSA-46wx-v44x-9hh2, GHSA-h7mg-cq63-vhpq,
+  // GHSA-4h7h-rv7c-7m2v, GHSA-3gg2-335m-rxc6.
+  ['hono', '<4.13.16'],
   ['ibm-cloud-sdk-core', '5.6.3'], // Escaped quotes expose JSON secret suffixes in debug logs (#11472)
   ['js-yaml', '<3.15.2 || >=4.0.0 <4.3.2 || >=5.0.0 <5.2.3'], // #10356, GHSA-2883-xcg3-v3hh
   ['keyv', '6.0.0'], // Shai-Hulud compromise (#10301)
