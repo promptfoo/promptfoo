@@ -2,6 +2,7 @@ import chalk from 'chalk';
 import { evaluate } from '../evaluator';
 import logger from '../logger';
 import Eval from '../models/eval';
+import { asEvaluateResult } from '../models/evalResult';
 import { generateIdFromPrompt } from '../models/prompt';
 import { OPTIMIZE_PROMPT_SYSTEM_MESSAGE } from '../prompts/index';
 import { getDefaultProviders } from '../providers/defaults';
@@ -15,7 +16,6 @@ import { extractFirstJsonObject, safeJsonStringify } from '../util/json';
 import { getProviderPromptOverride, isPromptAllowed } from '../util/promptMatching';
 import { sanitizeObject } from '../util/sanitizer';
 
-import type EvalResult from '../models/evalResult';
 import type { UnifiedConfig } from '../types/index';
 import type { InternalEvaluateOptions } from '../types/internal';
 
@@ -131,8 +131,14 @@ function createOptimizationExamples(results: EvaluateResult[]) {
   }));
 }
 
-function toEvaluateResult(result: EvalResult | EvaluateResult): EvaluateResult {
-  return 'toEvaluateResult' in result ? result.toEvaluateResult() : result;
+function selectPromptFeedback(evalRecord: Eval, promptIndex: number) {
+  const rows = evalRecord.results
+    .map((row) => asEvaluateResult(row))
+    .filter((row) => row.promptIdx === promptIndex);
+  return {
+    failures: rows.filter((row) => !row.success).slice(0, MAX_FAILURE_EXAMPLES),
+    successes: rows.filter((row) => row.success).slice(0, MAX_SUCCESS_EXAMPLES),
+  };
 }
 
 function buildCandidateGenerationPayload(params: {
@@ -531,57 +537,6 @@ function buildCandidateProviderPromptMap(
   );
 }
 
-function buildCandidateTests(
-  tests: TestSuite['tests'],
-  routingPrompt: Prompt,
-  seedPrompt: Prompt,
-  candidateLabels: string[],
-): TestSuite['tests'] {
-  if (!tests) {
-    return tests;
-  }
-
-  return tests.map((test) => ({
-    ...test,
-    prompts: extendPromptFilter(test.prompts, routingPrompt, seedPrompt, candidateLabels),
-  }));
-}
-
-function buildCandidateDefaultTest(
-  defaultTest: TestSuite['defaultTest'],
-  routingPrompt: Prompt,
-  seedPrompt: Prompt,
-  candidateLabels: string[],
-): TestSuite['defaultTest'] {
-  if (!defaultTest || typeof defaultTest !== 'object') {
-    return defaultTest;
-  }
-
-  return {
-    ...defaultTest,
-    prompts: extendPromptFilter(defaultTest.prompts, routingPrompt, seedPrompt, candidateLabels),
-  };
-}
-
-function buildCandidateScenarios(
-  scenarios: TestSuite['scenarios'],
-  routingPrompt: Prompt,
-  seedPrompt: Prompt,
-  candidateLabels: string[],
-): TestSuite['scenarios'] {
-  return scenarios?.map((scenario) => ({
-    ...scenario,
-    config: scenario.config.map((test) => ({
-      ...test,
-      prompts: extendPromptFilter(test.prompts, routingPrompt, seedPrompt, candidateLabels),
-    })),
-    tests: scenario.tests.map((test) => ({
-      ...test,
-      prompts: extendPromptFilter(test.prompts, routingPrompt, seedPrompt, candidateLabels),
-    })),
-  }));
-}
-
 function createCandidateTestSuite(
   testSuite: TestSuite,
   routingPrompt: Prompt,
@@ -603,6 +558,14 @@ function createCandidateTestSuite(
     .map((prompt) => prompt.label)
     .filter(Boolean) as string[];
 
+  const withCandidatePrompts = <T extends { prompts?: string[] }>(test: T) => ({
+    ...test,
+    prompts: extendPromptFilter(test.prompts, routingPrompt, seedPrompt, candidateLabels),
+  });
+  const mapTests = (tests: TestSuite['tests']) => tests && tests.map(withCandidatePrompts);
+  const mapDefaultTest = (test: TestSuite['defaultTest']) =>
+    test && typeof test === 'object' ? withCandidatePrompts(test) : test;
+
   return {
     ...testSuite,
     prompts: [seedPrompt, ...candidatePrompts],
@@ -612,19 +575,13 @@ function createCandidateTestSuite(
       seedPrompt,
       candidateLabels,
     ),
-    tests: buildCandidateTests(testSuite.tests, routingPrompt, seedPrompt, candidateLabels),
-    defaultTest: buildCandidateDefaultTest(
-      testSuite.defaultTest,
-      routingPrompt,
-      seedPrompt,
-      candidateLabels,
-    ),
-    scenarios: buildCandidateScenarios(
-      testSuite.scenarios,
-      routingPrompt,
-      seedPrompt,
-      candidateLabels,
-    ),
+    tests: mapTests(testSuite.tests),
+    defaultTest: mapDefaultTest(testSuite.defaultTest),
+    scenarios: testSuite.scenarios?.map((scenario) => ({
+      ...scenario,
+      config: scenario.config.map(withCandidatePrompts),
+      tests: scenario.tests.map(withCandidatePrompts),
+    })),
   };
 }
 
@@ -799,21 +756,13 @@ export async function optimizePromptTestSuite(
     throw new Error('Prompt optimization currently supports string prompts only.');
   }
 
-  const baselineResults = baselineEval.results
-    .map(toEvaluateResult)
-    .filter((result) => result.promptIdx === baselinePromptIndex);
-  let currentFailures = baselineResults
-    .filter((result) => !result.success)
-    .slice(0, MAX_FAILURE_EXAMPLES);
-  let currentSuccesses = baselineResults
-    .filter((result) => result.success)
-    .slice(0, MAX_SUCCESS_EXAMPLES);
+  let feedback = selectPromptFeedback(baselineEval, baselinePromptIndex);
   let currentPrompt = baselinePrompt;
   let currentValidationPrompt = baselineValidationPrompt;
   let currentPromptSource = baselineSourcePrompt;
   const history: PromptOptimizationHistoryItem[] = [
     {
-      failures: createOptimizationExamples(currentFailures),
+      failures: createOptimizationExamples(feedback.failures),
       prompt: baselineSourcePrompt.raw,
       score: scoreOf(baselinePrompt),
     },
@@ -830,8 +779,7 @@ export async function optimizePromptTestSuite(
   for (let round = 1; round <= DEFAULT_ROUNDS; round += 1) {
     const candidates = await generateRoundCandidatesOrStop(round, {
       prompt: currentPromptSource.raw,
-      failures: currentFailures,
-      successes: currentSuccesses,
+      ...feedback,
       history,
     });
     // Later rounds frequently fail to produce *new* candidates as the prompt
@@ -900,19 +848,11 @@ export async function optimizePromptTestSuite(
         label: roundBestPrompt.label,
       };
       const chosenPromptIndex = findPromptIndex(candidateEval.prompts, roundBestPrompt);
-      const chosenResults = candidateEval.results
-        .map(toEvaluateResult)
-        .filter((result) => result.promptIdx === chosenPromptIndex);
-      currentFailures = chosenResults
-        .filter((result) => !result.success)
-        .slice(0, MAX_FAILURE_EXAMPLES);
-      currentSuccesses = chosenResults
-        .filter((result) => result.success)
-        .slice(0, MAX_SUCCESS_EXAMPLES);
+      feedback = selectPromptFeedback(candidateEval, chosenPromptIndex);
     }
 
     history.push({
-      failures: createOptimizationExamples(currentFailures),
+      failures: createOptimizationExamples(feedback.failures),
       prompt: currentPromptSource.raw,
       score: scoreOf(currentPrompt),
     });
