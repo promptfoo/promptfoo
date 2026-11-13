@@ -1,4 +1,5 @@
 import { fetchWithCache } from '../../cache';
+import { parseDataUrl } from '../../util/dataUrl';
 import {
   formatRateLimitErrorMessage,
   HttpRateLimitError,
@@ -53,15 +54,23 @@ function isContentBlock(value: unknown): value is Record<string, unknown> {
   );
 }
 
+// Promptfoo loads image file vars as data URLs, but the API accepts only raw base64 `data`.
+function toNativeBlock(block: Record<string, unknown>): Record<string, unknown> {
+  const dataUrl = typeof block.data === 'string' ? parseDataUrl(block.data) : null;
+  return dataUrl
+    ? { ...block, data: dataUrl.base64Data, mime_type: block.mime_type ?? dataUrl.mimeType }
+    : block;
+}
+
 // An ordinary JSON document can itself be the text being classified.
 function parseDecisionInput(prompt: string): string | Record<string, unknown> | unknown[] {
   try {
     const value: unknown = JSON.parse(prompt);
-    if (
-      isContentBlock(value) ||
-      (Array.isArray(value) && value.length > 0 && value.every(isContentBlock))
-    ) {
-      return value;
+    if (isContentBlock(value)) {
+      return toNativeBlock(value);
+    }
+    if (Array.isArray(value) && value.length > 0 && value.every(isContentBlock)) {
+      return value.map(toNativeBlock);
     }
   } catch {
     // Plain text is a native Decisions input.

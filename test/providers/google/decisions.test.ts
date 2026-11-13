@@ -104,6 +104,27 @@ describe('GoogleDecisionsProvider', () => {
     expect(JSON.parse(mockFetch.mock.calls[0][1]?.body as string).input).toEqual(input);
   });
 
+  it('sends an image file var, which promptfoo loads as a data URL, as raw base64', async () => {
+    const blocks = [
+      { type: 'text', text: 'Review this delivery.' },
+      { type: 'image', data: 'data:image/png;base64,iVBORw0KGgo=' },
+      { type: 'image', mime_type: 'image/webp', data: 'data:image/png;base64,UklGRg==' },
+    ];
+    await provider().callApi(JSON.stringify(blocks));
+    expect(JSON.parse(mockFetch.mock.calls[0][1]?.body as string).input).toEqual([
+      blocks[0],
+      { type: 'image', mime_type: 'image/png', data: 'iVBORw0KGgo=' },
+      { type: 'image', mime_type: 'image/webp', data: 'UklGRg==' },
+    ]);
+
+    await provider().callApi(JSON.stringify(blocks[1]));
+    expect(JSON.parse(mockFetch.mock.calls[1][1]?.body as string).input).toEqual({
+      type: 'image',
+      mime_type: 'image/png',
+      data: 'iVBORw0KGgo=',
+    });
+  });
+
   it.each([
     '{"customer":"example","order":3}',
     '{"type":"text","score":1}',
