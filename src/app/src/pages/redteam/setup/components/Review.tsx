@@ -655,6 +655,17 @@ export default function Review({
         }),
       });
 
+      if (response.status === 409) {
+        confirmedRunTargetRef.current = confirmedTarget;
+        setIsRunning(false);
+        setIsJobStatusDialogOpen(true);
+        return;
+      }
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        throw new Error(body.error || `Request failed (${response.status})`);
+      }
+
       const { id } = await response.json();
 
       // Save job ID to persistent store and start polling

@@ -1418,19 +1418,45 @@ Application Details:
         }
         if (url === '/redteam/run') {
           return {
+            ok: true,
             json: async () => ({ id: 'test-job-id' }),
           } as any;
         }
         if (url.startsWith('/eval/job/')) {
-          return {
-            json: async () => ({
-              status: 'running',
-              logs: ['Running tests...'],
-            }),
-          } as any;
+          return Response.json({ status: 'in-progress', logs: ['Running tests...'] });
         }
         return { json: async () => ({}) } as any;
       });
+    });
+
+    it('offers the existing-job dialog when another run wins after preflight', async () => {
+      vi.mocked(checkEmailStatusApi, { partial: true }).mockResolvedValue({ canProceed: true });
+      const original = vi.mocked(callApi).getMockImplementation()!;
+      vi.mocked(callApi).mockImplementation(async (url, ...args) => {
+        if (url === '/redteam/run') {
+          return Response.json(
+            { error: 'Job already running', jobId: 'other-job' },
+            { status: 409 },
+          );
+        }
+        return original(url, ...args);
+      });
+      renderWithProviders(
+        <Review
+          navigateToPlugins={vi.fn()}
+          navigateToStrategies={vi.fn()}
+          navigateToPurpose={vi.fn()}
+        />,
+      );
+
+      await userEvent
+        .setup({ delay: null })
+        .click(screen.getByRole('button', { name: /run now/i }));
+
+      expect(await screen.findByRole('dialog', { name: 'Job Already Running' })).toBeVisible();
+      expect(vi.mocked(callApi).mock.calls.some(([url]) => url.startsWith('/eval/job/'))).toBe(
+        false,
+      );
     });
 
     it('sends per-plugin settings through the real serializer when running', async () => {

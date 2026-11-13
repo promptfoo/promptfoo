@@ -102,6 +102,12 @@ export const RedteamRunResponseSchema = z.object({
 
 export type RedteamRunResponse = z.infer<typeof RedteamRunResponseSchema>;
 
+export const RedteamRunConflictSchema = z.object({
+  success: z.literal(false),
+  error: z.string(),
+  jobId: z.string().uuid(),
+});
+
 // POST /api/redteam/cancel
 
 export const RedteamCancelResponseSchema = MessageResponseSchema;
@@ -135,7 +141,11 @@ export type RedteamStatusResponse = z.infer<typeof RedteamStatusResponseSchema>;
 /** Grouped schemas for server-side validation. */
 export const RedteamSchemas = {
   GenerateTest: { Request: TestCaseGenerationSchema, Response: TestCaseGenerationResponseSchema },
-  Run: { Request: RedteamRunRequestSchema, Response: RedteamRunResponseSchema },
+  Run: {
+    Request: RedteamRunRequestSchema,
+    Response: RedteamRunResponseSchema,
+    Conflict: RedteamRunConflictSchema,
+  },
   Cancel: { Response: RedteamCancelResponseSchema },
   Task: {
     Params: RedteamTaskParamsSchema,

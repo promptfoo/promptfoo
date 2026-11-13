@@ -249,10 +249,9 @@ describe('huggingfaceDatasets', () => {
         headers: {},
       }),
     );
-    // Note: Second call might have different length due to concurrent fetching and remaining calculation
     expect(vi.mocked(fetchWithCache)).toHaveBeenNthCalledWith(
       2,
-      expect.stringContaining('dataset=test%2Fdataset&split=test&config=default&offset=2'),
+      'https://datasets-server.huggingface.co/rows?dataset=test%2Fdataset&split=test&config=default&offset=2&length=1',
       expect.objectContaining({
         headers: {},
       }),
@@ -401,10 +400,11 @@ describe('huggingfaceDatasets', () => {
     });
   });
 
-  it('should handle limit larger than page size', async () => {
+  it.each([105, 150])('should handle a 120-row limit with %i dataset rows', async (totalRows) => {
+    const expectedRows = Math.min(totalRows, 120);
     vi.mocked(fetchWithCache).mockResolvedValueOnce(
       createMockFetchResponse({
-        num_rows_total: 150,
+        num_rows_total: totalRows,
         features: [{ name: 'text', type: { dtype: 'string', _type: 'Value' } }],
         rows: Array(100)
           .fill(null)
@@ -414,9 +414,9 @@ describe('huggingfaceDatasets', () => {
 
     vi.mocked(fetchWithCache).mockResolvedValueOnce(
       createMockFetchResponse({
-        num_rows_total: 150,
+        num_rows_total: totalRows,
         features: [{ name: 'text', type: { dtype: 'string', _type: 'Value' } }],
-        rows: Array(20)
+        rows: Array(expectedRows - 100)
           .fill(null)
           .map((_, i) => ({ row: { text: `Item ${i + 101}` } })),
       }) as any,
@@ -440,8 +440,8 @@ describe('huggingfaceDatasets', () => {
       }),
     );
 
-    expect(tests).toHaveLength(120);
-    expect(tests[119].vars?.text).toBe('Item 120');
+    expect(tests).toHaveLength(expectedRows);
+    expect(tests.at(-1)?.vars?.text).toBe(`Item ${expectedRows}`);
 
     // Check that disableVarExpansion is set for all test cases
     tests.forEach((test) => {
@@ -514,13 +514,16 @@ describe('huggingfaceDatasets', () => {
         }) as any;
       });
 
-      const tests = await fetchHuggingFaceDataset('huggingface://datasets/test/dataset');
+      const tests = await fetchHuggingFaceDataset(
+        'huggingface://datasets/test owner/data+set?length=7&dataset=legacy&offset=50&tag=full+set',
+      );
       const texts = tests.map((test) => test.vars?.text);
-      const calledOffsets = vi
-        .mocked(fetchWithCache)
-        .mock.calls.map(([url]) => new URL(String(url)).searchParams.get('offset'));
-
-      expect(calledOffsets).toContain('100');
+      expect(vi.mocked(fetchWithCache).mock.calls.map(([url]) => url)).toEqual(
+        [0, 100, 200, 300].map(
+          (offset) =>
+            `https://datasets-server.huggingface.co/rows?dataset=test%20owner%2Fdata%2Bset&split=test&config=default&length=100&dataset=legacy&offset=${offset}&tag=full+set`,
+        ),
+      );
       expect(tests).toHaveLength(totalRows);
       expect(texts).toContain(`${rowPrefix}150`);
       expect(new Set(texts).size).toBe(totalRows);

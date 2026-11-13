@@ -14,7 +14,6 @@ import {
 } from '../database/tables';
 import { getAuthor } from '../globalConfig/accounts';
 import logger from '../logger';
-import { hashPrompt } from '../prompts/utils';
 import { PLUGIN_CATEGORIES } from '../redteam/constants';
 import { calculateAttackSuccessRate } from '../redteam/metrics';
 import { getRiskCategorySeverityMap } from '../redteam/sharedFrontend';
@@ -73,6 +72,7 @@ import EvalResult, {
   projectTracesForOutput,
   stripTraceLinkageFromMetadata,
 } from './evalResult';
+import { generateIdFromPrompt } from './prompt';
 
 import type { EvalResultsFilterMode, TraceData } from '../types/index';
 
@@ -98,6 +98,46 @@ interface MetadataKeyResult {
 
 export function createEvalId(createdAt: Date = new Date()) {
   return `eval-${randomSequence(3)}-${createdAt.toISOString().slice(0, 19)}`;
+}
+
+type EvalRelationDb = Pick<Awaited<ReturnType<typeof getDb>>, 'insert'>;
+
+export async function insertEvalPrompts(tx: EvalRelationDb, evalId: string, prompts: Prompt[]) {
+  for (const prompt of prompts) {
+    const label = prompt.label || prompt.display || prompt.raw;
+    const promptId = generateIdFromPrompt(prompt);
+    await tx
+      .insert(promptsTable)
+      .values({ id: promptId, prompt: label })
+      .onConflictDoNothing()
+      .run();
+    await tx.insert(evalsToPromptsTable).values({ evalId, promptId }).onConflictDoNothing().run();
+    logger.debug(`Inserting prompt ${promptId}`);
+  }
+}
+
+export async function insertEvalDatasetAndTags(
+  tx: EvalRelationDb,
+  evalId: string,
+  dataset: typeof datasetsTable.$inferInsert,
+  config: Pick<UnifiedConfig, 'tags'>,
+) {
+  await tx.insert(datasetsTable).values(dataset).onConflictDoNothing().run();
+  await tx
+    .insert(evalsToDatasetsTable)
+    .values({ evalId, datasetId: dataset.id })
+    .onConflictDoNothing()
+    .run();
+  logger.debug(`Inserting dataset ${dataset.id}`);
+
+  if (config.tags) {
+    for (const [name, value] of Object.entries(config.tags)) {
+      const tagId = sha256(`${name}:${value}`);
+      await tx.insert(tagsTable).values({ id: tagId, name, value }).onConflictDoNothing().run();
+      await tx.insert(evalsToTagsTable).values({ evalId, tagId }).onConflictDoNothing().run();
+      logger.debug(`Inserting tag ${tagId}`);
+    }
+  }
 }
 
 /** Result from queries extracting variable keys with eval IDs */
@@ -527,30 +567,7 @@ export default class Eval {
         })
         .run();
 
-      for (const prompt of renderedPrompts) {
-        const label = prompt.label || prompt.display || prompt.raw;
-        const promptId = hashPrompt(prompt);
-
-        await tx
-          .insert(promptsTable)
-          .values({
-            id: promptId,
-            prompt: label,
-          })
-          .onConflictDoNothing()
-          .run();
-
-        await tx
-          .insert(evalsToPromptsTable)
-          .values({
-            evalId,
-            promptId,
-          })
-          .onConflictDoNothing()
-          .run();
-
-        logger.debug(`Inserting prompt ${promptId}`);
-      }
+      await insertEvalPrompts(tx, evalId, renderedPrompts);
 
       if (opts?.results && opts.results.length > 0) {
         const res = await tx
@@ -571,52 +588,7 @@ export default class Eval {
         logger.debug(`Inserted ${res.rowsAffected} eval results`);
       }
 
-      await tx
-        .insert(datasetsTable)
-        .values({
-          id: datasetId,
-          tests: config.tests,
-        })
-        .onConflictDoNothing()
-        .run();
-
-      await tx
-        .insert(evalsToDatasetsTable)
-        .values({
-          evalId,
-          datasetId,
-        })
-        .onConflictDoNothing()
-        .run();
-
-      logger.debug(`Inserting dataset ${datasetId}`);
-
-      if (config.tags) {
-        for (const [tagKey, tagValue] of Object.entries(config.tags)) {
-          const tagId = sha256(`${tagKey}:${tagValue}`);
-
-          await tx
-            .insert(tagsTable)
-            .values({
-              id: tagId,
-              name: tagKey,
-              value: tagValue,
-            })
-            .onConflictDoNothing()
-            .run();
-
-          await tx
-            .insert(evalsToTagsTable)
-            .values({
-              evalId,
-              tagId,
-            })
-            .onConflictDoNothing()
-            .run();
-
-          logger.debug(`Inserting tag ${tagId}`);
-        }
-      }
+      await insertEvalDatasetAndTags(tx, evalId, { id: datasetId, tests: config.tests }, config);
     });
 
     invalidateEvaluationCache(evalId);

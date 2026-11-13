@@ -4601,9 +4601,18 @@ describe('VertexChatProvider.callClaudeApi', () => {
     },
   );
 
-  it.each(['claude-fable-5', 'claude-fable-5-1', 'claude-mythos-5-1'])(
+  // Base cost of 5 input and 1 output tokens: $10/$50 per MTok, or $8/$40 on 5.2.
+  const FABLE_BASE_COSTS = [
+    ['claude-fable-5', 0.0001],
+    ['claude-fable-5-1', 0.0001],
+    ['claude-mythos-5-1', 0.0001],
+    ['claude-fable-5-2', 0.00008],
+    ['claude-mythos-5-2', 0.00008],
+  ] as const;
+
+  it.each(FABLE_BASE_COSTS)(
     'supports %s with adaptive-safe parameters and regional pricing',
-    async (model) => {
+    async (model, baseCost) => {
       provider = new VertexChatProvider(model, {
         config: { max_tokens: 32, temperature: 0.5, top_p: 0.9, top_k: 40 },
       });
@@ -4641,13 +4650,13 @@ describe('VertexChatProvider.callClaudeApi', () => {
       expect(sentBody.temperature).toBeUndefined();
       expect(sentBody.top_p).toBeUndefined();
       expect(sentBody.top_k).toBeUndefined();
-      expect(result.cost).toBeCloseTo(0.00011, 8);
+      expect(result.cost).toBeCloseTo(baseCost * 1.1, 10);
     },
   );
 
-  it.each(['claude-fable-5', 'claude-fable-5-1', 'claude-mythos-5-1'])(
+  it.each(FABLE_BASE_COSTS)(
     'uses base pricing for %s on the global Vertex region',
-    async (model) => {
+    async (model, baseCost) => {
       provider = new VertexChatProvider(model, {
         config: { region: 'global', max_tokens: 32 },
       });
@@ -4681,9 +4690,8 @@ describe('VertexChatProvider.callClaudeApi', () => {
 
       const request = mockRequest.mock.calls[0][0];
       expect(request.url).toContain('/locations/global/');
-      // Global region bills at the base Claude 5 rate (no 10% regional premium):
-      // 5 input * $10/MTok + 1 output * $50/MTok = $0.0001
-      expect(result.cost).toBeCloseTo(0.0001, 8);
+      // Global region bills at the base rate (no 10% regional premium).
+      expect(result.cost).toBeCloseTo(baseCost, 10);
     },
   );
 

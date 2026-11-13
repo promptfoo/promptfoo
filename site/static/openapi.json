@@ -4739,7 +4739,7 @@
         "operationId": "runRedteam",
         "tags": ["Redteam"],
         "summary": "Start a redteam run",
-        "description": "Starting a run cancels the previous active red team on this server. Poll GET /api/eval/job/{id} with the returned ID for progress and results.",
+        "description": "A server accepts one active red team job at a time. Poll GET /api/eval/job/{id} with the returned ID for progress and results.",
         "requestBody": {
           "description": "JSON request body",
           "required": true,
@@ -4786,6 +4786,22 @@
                   },
                   "required": ["error"],
                   "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "A red team job is already running",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "enum": [false] },
+                    "error": { "type": "string" },
+                    "jobId": { "type": "string", "format": "uuid" }
+                  },
+                  "required": ["success", "error", "jobId"]
                 }
               }
             }

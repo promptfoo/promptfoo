@@ -174,7 +174,8 @@ function createNextPageExpectation(mockFetchEvalData: unknown, checkPageSize = f
   };
 }
 
-vi.mock('./store', () => ({
+vi.mock('./store', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./store')>()),
   useTableStore: vi.fn(() => ({
     config: {},
     evalId: '123',
@@ -684,10 +685,11 @@ describe('ResultsTable Metrics Display', () => {
     expect(screen.getByText('250')).toBeInTheDocument();
   });
 
-  it('renders object provider IDs and request/assert metrics in the prompt header', () => {
+  it('renders object provider IDs and total request/assert metrics in a filtered prompt header', () => {
     vi.mocked(useTableStore).mockImplementation(() =>
       createTableStore({
         inComparisonMode: false,
+        filteredMetrics: [{ assertPassCount: 0, assertFailCount: 5 }],
         table: {
           body: [
             {
@@ -732,6 +734,21 @@ describe('ResultsTable Metrics Display', () => {
     expect(screen.getByText('7')).toBeInTheDocument();
     expect(screen.getByText('Asserts:')).toBeInTheDocument();
     expect(screen.getByText('2/3 passed')).toBeInTheDocument();
+  });
+
+  it.each([
+    ['missing', undefined],
+    ['zero', { assertPassCount: 0, assertFailCount: 0 }],
+    ['error-only', { testErrorCount: 3 }],
+  ])('omits assertion counts for a prompt with %s metrics', (_name, metrics) => {
+    mockHeaderTable({
+      head: { prompts: [{ provider: 'test-provider', metrics }], vars: [] },
+      body: [],
+    });
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    expect(screen.getByText('test-provider')).toBeInTheDocument();
+    expect(screen.queryByText('Asserts:')).not.toBeInTheDocument();
   });
 
   it('keeps the prompt header divider visible above streamed result rows', () => {
