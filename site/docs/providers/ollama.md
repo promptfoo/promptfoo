@@ -46,7 +46,7 @@ We also support the `/api/embed` endpoint via `ollama:embeddings:<model name>` (
 
 Supported environment variables:
 
-- `OLLAMA_BASE_URL` - protocol, host name, and port (defaults to `http://localhost:11434`)
+- `OLLAMA_BASE_URL` - server base URL (defaults to `http://localhost:11434`). Reverse-proxy path prefixes are preserved, and a trailing slash is optional.
 - `OLLAMA_API_KEY` - (optional) api key that is passed as the Bearer token in the Authorization Header when calling the API
 - `REQUEST_TIMEOUT_MS` - request timeout in milliseconds
 

@@ -2,12 +2,28 @@ import {
   CLAUDE_REGIONAL_ENDPOINT_PREMIUM,
   calculateCacheInputCost,
   isClaudeFableOrMythos5Model,
+  isClaudeHaiku55Model,
   isClaudeOpus5Model,
   isClaudeOpus55Model,
   isClaudeRegionalPremiumModel,
   isClaudeSonnet5Model,
   isClaudeSonnet55Model,
 } from '../anthropic/util';
+import { calculateOpenAIUsageCost } from '../openai/billing';
+import { getBedrockGovCloudTextRates } from './openaiGovCloudPricing';
+
+/** A first-party Runtime endpoint determines the billing region, including FIPS and PrivateLink. */
+export function getBedrockRuntimeBillingRegion(region: string, endpoint?: string): string {
+  if (!endpoint) {
+    return region;
+  }
+  const hostname = URL.parse(endpoint)?.hostname.replace(/\.+$/, '');
+  return (
+    /^(?:[a-z0-9-]+\.)?bedrock-runtime(?:-fips)?\.([a-z0-9-]+)(?:\.vpce)?\.(?:api\.aws|amazonaws\.com(?:\.cn)?)$/.exec(
+      hostname ?? '',
+    )?.[1] ?? region
+  );
+}
 
 export type BedrockServiceTier = {
   type: 'priority' | 'default' | 'flex' | 'reserved';
@@ -48,7 +64,11 @@ function isNovaPromptCachingModel(normalizedModelId: string): boolean {
  * different rates and must not be used here. Last reconciled 2026-09-01.
  */
 const BEDROCK_PRICING: Record<string, BedrockPricing> = {
-  // Claude 5
+  // Claude 5. Fable/Mythos point releases must precede `anthropic.claude-fable-5`: lookup is
+  // first-match `includes()`, so a missing row silently bills 5.2 at Fable 5's $10/$50.
+  // Fable/Mythos 5.2: $8/$40 global, $8.80/$44 regional (AWS price list, 2026-11-09).
+  'anthropic.claude-fable-5-2': { input: 8, output: 40 },
+  'anthropic.claude-mythos-5-2': { input: 8, output: 40 },
   'anthropic.claude-fable-5-1': { input: 10, output: 50 },
   'anthropic.claude-mythos-5-1': { input: 10, output: 50 },
   'anthropic.claude-fable-5': { input: 10, output: 50 },
@@ -73,7 +93,7 @@ const BEDROCK_PRICING: Record<string, BedrockPricing> = {
   // contains `anthropic.claude-sonnet-5`.
   'anthropic.claude-sonnet-5-5': { input: 2, output: 10 },
   // Claude Sonnet 5 (standard list pricing; full 1M context bills at the standard rate)
-  'anthropic.claude-sonnet-5': { input: 3, output: 15 },
+  'anthropic.claude-sonnet-5': { input: 2, output: 10 },
   // Claude Sonnet 4.x — the point releases must precede the bare `-4` prefix: lookup is first-match-wins
   // on `includes()`, and AWS publishes long-context meters only for Sonnet 4 itself. 4.5 and
   // 4.6 bill their full context flat, so they must not inherit Sonnet 4's surcharge — add an
@@ -89,6 +109,12 @@ const BEDROCK_PRICING: Record<string, BedrockPricing> = {
     input: 3,
     output: 15,
     longContext: { threshold: 200_000, input: 6, output: 22.5 },
+  },
+  // AWS Haiku 5.5 pricing: higher rates apply strictly above 100K total input tokens.
+  'anthropic.claude-haiku-5-5': {
+    input: 0.1,
+    output: 0.5,
+    longContext: { threshold: 100_000, input: 0.5, output: 2.5 },
   },
   // Claude Haiku 4.5
   'anthropic.claude-haiku-4': { input: 1, output: 5 },
@@ -308,6 +334,15 @@ const EU_SOUTH_1_AND_EU_WEST_1_PRICING: Record<string, BedrockPricing> = {
 const US_GOV_PRICING: Record<string, BedrockPricing> = {
   // AWS publishes GovCloud rates directly; do not apply the commercial regional premium again.
   'anthropic.claude-opus-4-8': { input: 6, output: 30 },
+  'anthropic.claude-opus-5-5': { input: 4.8, output: 24 },
+  'anthropic.claude-opus-5': { input: 6, output: 30 },
+  'anthropic.claude-sonnet-5-5': { input: 2.4, output: 12 },
+  'anthropic.claude-sonnet-5': { input: 2.4, output: 12 },
+  'anthropic.claude-haiku-5-5': {
+    input: 0.12,
+    output: 0.6,
+    longContext: { threshold: 100_000, input: 0.6, output: 3 },
+  },
   'nemotron-nano-12b-v2': { input: 0.24, output: 0.72 },
   'nemotron-nano-3-30b': { input: 0.072, output: 0.288 },
   'nemotron-nano': { input: 0.072, output: 0.276 },
@@ -383,11 +418,22 @@ function getBedrockRegionPricing(
   normalizedModelId: string,
   region?: string,
 ): Record<string, BedrockPricing> | undefined {
-  if (region) {
-    return BEDROCK_REGION_PRICING[region.toLowerCase()];
-  }
-  if (normalizedModelId.startsWith('us-gov.') || normalizedModelId.includes('/us-gov.')) {
+  if (normalizedModelId.startsWith('us-gov.') || normalizedModelId.startsWith('arn:aws-us-gov:')) {
     return US_GOV_PRICING;
+  }
+  return region ? BEDROCK_REGION_PRICING[region.toLowerCase()] : undefined;
+}
+
+/** An explicit profile overrides the configured region when a proxy routes a Messages request. */
+export function getGovCloudClaudePricing(
+  modelId: string,
+  region?: string,
+): BedrockPricing | undefined {
+  if (modelId.startsWith('us-gov.anthropic.claude-')) {
+    return US_GOV_PRICING[modelId.slice('us-gov.'.length)];
+  }
+  if (modelId.startsWith('anthropic.claude-') && region?.startsWith('us-gov-')) {
+    return US_GOV_PRICING[modelId];
   }
   return undefined;
 }
@@ -396,6 +442,11 @@ export function getBedrockPricing(
   normalizedModelId: string,
   region?: string,
 ): BedrockPricing | undefined {
+  // GLM 5.3 has profile-specific rates in calculateBedrockCost. Never inherit
+  // GLM 5's substring match for a bare or otherwise unsupported model ID.
+  if (normalizedModelId.includes('zai.glm-5.3')) {
+    return undefined;
+  }
   if (normalizedModelId.includes('openai.gpt-oss-') && region) {
     const pricing = GPT_OSS_REGION_PRICING[region.toLowerCase()];
     if (!pricing) {
@@ -431,6 +482,19 @@ export function getBedrockPricing(
   return undefined;
 }
 
+export function selectBedrockTokenRates(
+  normalizedModelId: string,
+  pricing: BedrockPricing,
+  totalInputTokens: number,
+) {
+  return pricing.longContext &&
+    (isClaudeHaiku55Model(normalizedModelId)
+      ? totalInputTokens > pricing.longContext.threshold
+      : totalInputTokens >= pricing.longContext.threshold)
+    ? pricing.longContext
+    : pricing;
+}
+
 function hasPublishedRegionalPricing(normalizedModelId: string, region?: string): boolean {
   const regionPricing = getBedrockRegionPricing(normalizedModelId, region);
   return regionPricing
@@ -448,9 +512,9 @@ const BEDROCK_INVOKE_PRICING_MODEL_PREFIXES = [
   'openai.gpt-oss-',
 ] as const;
 
-/** Only the documented US and global Grok 4.6 Runtime inference profiles. */
-export function isBedrockGrok46Profile(modelId: string): boolean {
-  return /(?:^|inference-profile\/)(?:us|global)\.xai\.grok-4\.6$/.test(modelId.toLowerCase());
+/** The documented US and global Grok 4.6/4.7 Runtime inference profiles. */
+export function isBedrockGrokRuntimeProfile(modelId: string): boolean {
+  return /(?:^|:inference-profile\/)(?:us|global)\.xai\.grok-4\.[67]$/.test(modelId.toLowerCase());
 }
 
 /**
@@ -476,7 +540,117 @@ export function calculateBedrockCost(
   }
 
   const normalizedModelId = modelId.toLowerCase();
-  if (isBedrockGrok46Profile(normalizedModelId)) {
+  // Every GPT-6 system profile goes to the shared Runtime billing table, which owns the
+  // list of priced variants and returns no cost for the others.
+  const gptProfile =
+    /^(?:arn:aws:bedrock:([a-z0-9-]+):\d{12}:inference-profile\/)?(us|global)\.openai\.(gpt-6(?:\.\d+)?-[a-z]+)$/.exec(
+      normalizedModelId,
+    );
+  if (gptProfile) {
+    const [, arnRegion, profile, model] = gptProfile;
+    const sourceRegion = region ?? arnRegion;
+    const sourceRegionPattern =
+      profile === 'us'
+        ? /^(?:us-(?:east|west)-[12]|ca-(?:central|west)-1)$/
+        : /^(?:af|ap|ca|eu|il|me|mx|sa|us)-[a-z]+-\d+$/;
+    const inputTokens = promptTokens + cacheReadTokens + cacheWriteTokens;
+    if (
+      (arnRegion && region && arnRegion !== region) ||
+      !sourceRegionPattern.test(sourceRegion ?? '') ||
+      [inputTokens, promptTokens, completionTokens, cacheReadTokens, cacheWriteTokens].some(
+        (count) => !Number.isSafeInteger(count) || count < 0,
+      ) ||
+      cacheWrite1hTokens !== 0
+    ) {
+      return undefined;
+    }
+    // Converse reports uncached input separately. The shared AWS Runtime billing path
+    // expects total input, with the cache meters identified inside that total.
+    return calculateOpenAIUsageCost(
+      model,
+      {},
+      {
+        input_tokens: inputTokens,
+        output_tokens: completionTokens,
+        input_tokens_details: {
+          cached_tokens: cacheReadTokens,
+          cache_write_tokens: cacheWriteTokens,
+        },
+      },
+      {
+        provider: 'bedrock',
+        region: sourceRegion,
+        bedrockProfile: profile,
+        serviceTier: serviceTier?.type,
+      },
+    );
+  }
+  const govCloudProfile =
+    /^(?:arn:aws-us-gov:bedrock:us-gov-(?:east|west)-1:\d{12}:inference-profile\/)?us-gov\.openai\.(gpt-5\.6-(?:terra|luna))$/.exec(
+      normalizedModelId,
+    );
+  if (govCloudProfile) {
+    if (
+      (region && !/^us-gov-(?:east|west)-1$/.test(region)) ||
+      (serviceTier?.type && serviceTier.type !== 'default') ||
+      cacheWrite1hTokens > 0
+    ) {
+      return undefined;
+    }
+    const rates = getBedrockGovCloudTextRates(
+      govCloudProfile[1],
+      promptTokens + cacheReadTokens + cacheWriteTokens,
+    )!;
+    return (
+      promptTokens * rates.input +
+      cacheReadTokens * rates.cachedInput +
+      cacheWriteTokens * rates.cacheWriteInput +
+      completionTokens * rates.output
+    );
+  }
+  // AWS model cards publish separate geo/global cache rates for these Runtime
+  // profiles. Converse inputTokens excludes the separately reported cache tokens.
+  const grok47 = /(?:^|:inference-profile\/)(us|global)\.xai\.grok-4\.7$/.exec(normalizedModelId);
+  const kimi3 = /(?:^|:inference-profile\/)(us|in|global)\.moonshotai\.kimi-k3$/.exec(
+    normalizedModelId,
+  );
+  const glm53 = /(?:^|:inference-profile\/)(us|global)\.zai\.glm-5\.3$/.exec(normalizedModelId);
+  if (grok47 || kimi3 || glm53) {
+    // AWS specifies Kimi's non-default tier multipliers for the US and global profiles.
+    if (
+      (kimi3?.[1] === 'in' && serviceTier && serviceTier.type !== 'default') ||
+      (grok47 && cacheWriteTokens > 0)
+    ) {
+      return undefined;
+    }
+    const globalProfile = (grok47 ?? kimi3 ?? glm53)?.[1] === 'global';
+    const govCloudGrok =
+      grok47 && (region?.startsWith('us-gov-') || normalizedModelId.startsWith('arn:aws-us-gov:'));
+    // The geographic ID is shared by the commercial and GovCloud partitions.
+    if (grok47 && !globalProfile && !region && !normalizedModelId.startsWith('arn:')) {
+      return undefined;
+    }
+    if (govCloudGrok && globalProfile) {
+      return undefined;
+    }
+    const rates = grok47
+      ? { input: 2, output: 6, read: 0.5, write: 0 }
+      : kimi3
+        ? { input: 3, output: 15, read: 0.3, write: 3.75 }
+        : { input: 1.68, output: 5.28, read: 0.312, write: 2.1 };
+    const multiplier =
+      (globalProfile ? 1 : govCloudGrok ? 1.32 : 1.1) *
+      (serviceTier?.type === 'priority' ? 1.75 : serviceTier?.type === 'flex' ? 0.5 : 1);
+    return (
+      ((promptTokens * rates.input +
+        completionTokens * rates.output +
+        cacheReadTokens * rates.read +
+        cacheWriteTokens * rates.write) /
+        1_000_000) *
+      multiplier
+    );
+  }
+  if (isBedrockGrokRuntimeProfile(normalizedModelId)) {
     // AWS publishes Standard rates for these profiles, with a separate cached-input rate.
     // No other service tier or cache-write price is established by the model card.
     if ((serviceTier?.type && serviceTier.type !== 'default') || cacheWriteTokens > 0) {
@@ -510,10 +684,7 @@ export function calculateBedrockCost(
   // Long-context tiers are billed on total input size, which for Anthropic means the uncached
   // prompt plus any cache reads and writes (`input_tokens` excludes cached tokens).
   const totalInputTokens = promptTokens + cacheReadTokens + cacheWriteTokens;
-  const tier =
-    pricing.longContext && totalInputTokens >= pricing.longContext.threshold
-      ? pricing.longContext
-      : pricing;
+  const tier = selectBedrockTokenRates(normalizedModelId, pricing, totalInputTokens);
 
   const inputRate = (tier.input / 1_000_000) * pricingMultiplier;
   const inputCost = normalizedModelId.includes('anthropic.claude')
@@ -552,11 +723,24 @@ export function calculateBedrockInvokeModelCost(
   cacheWriteTokens = 0,
   region?: string,
   cacheWrite1hTokens = 0,
+  serviceTier?: BedrockServiceTier,
 ): number | undefined {
   const normalizedModelId = modelId.toLowerCase();
+  if (serviceTier && !['default', 'priority', 'flex'].includes(serviceTier.type)) {
+    return undefined;
+  }
+  // These new models expose OpenAI cache counters on InvokeModel. Until those
+  // counters are normalized here, do not reuse the Converse cost calculation.
   if (
-    !isBedrockGrok46Profile(normalizedModelId) &&
+    normalizedModelId.includes('zai.glm-5.3') ||
+    normalizedModelId.includes('moonshotai.kimi-k3')
+  ) {
+    return undefined;
+  }
+  if (
+    !isBedrockGrokRuntimeProfile(normalizedModelId) &&
     !isClaudeFableOrMythos5Model(normalizedModelId) &&
+    !isClaudeHaiku55Model(normalizedModelId) &&
     !isClaudeOpus5Model(normalizedModelId) &&
     !isClaudeOpus55Model(normalizedModelId) &&
     !isClaudeSonnet55Model(normalizedModelId) &&
@@ -573,7 +757,7 @@ export function calculateBedrockInvokeModelCost(
     cacheReadTokens,
     cacheWriteTokens,
     region,
-    undefined,
+    serviceTier,
     cacheWrite1hTokens,
   );
 }
