@@ -125,11 +125,10 @@ describe('Navigation', () => {
     expect(modelAuditItem.closest('a')).toHaveAttribute('href', MODEL_AUDIT_ROUTES.SETUP);
   });
 
-  it('activates the Create button when on model audit setup page', () => {
+  it('marks New active and Browse inactive on the Model Audit setup page', () => {
     renderNavigation({ initialEntries: [MODEL_AUDIT_ROUTES.SETUP] });
-    const createButton = screen.getByText('New').closest('button');
-    // The Create button gets a visual highlight when active, but specific class depends on implementation
-    expect(createButton).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'New' })).toHaveClass('bg-primary/10');
+    expect(screen.getByRole('button', { name: 'Browse' })).not.toHaveClass('bg-primary/10');
   });
 
   it('changes theme preference from the compact theme button', async () => {
@@ -223,6 +222,8 @@ describe('Navigation', () => {
     const navBar = screen.getByRole('banner');
     const modelAuditLink = within(navBar).getByRole('link', { name: 'Model Audit' });
     expect(modelAuditLink).toHaveClass('bg-primary/10');
+    expect(modelAuditLink).toHaveAttribute('aria-current', 'page');
+    expect(screen.getByRole('button', { name: 'Browse' })).toHaveClass('bg-primary/10');
     expect(modelAuditLink).toHaveClass('text-foreground');
   });
 
