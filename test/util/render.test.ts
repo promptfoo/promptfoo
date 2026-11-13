@@ -100,6 +100,19 @@ describe('renderVarsInObject', () => {
     expect(rendered.__proto__.text).toBe('Hello world');
   });
 
+  it('keeps inherited enumerable config values through provider config and runtime rendering', () => {
+    const input = Object.assign(Object.create({ temperature: 0, label: '{{ variable }}' }), {
+      seed: 1,
+    });
+    const config = renderEnvOnlyInObject(input, {});
+    expect(config).toEqual({ seed: 1, temperature: 0, label: '{{ variable }}' });
+    expect(renderVarsInObject(input, { variable: 'world' })).toEqual({
+      seed: 1,
+      temperature: 0,
+      label: 'world',
+    });
+  });
+
   it('should handle function objects by calling them with vars', async () => {
     const mockFunction = vi.fn().mockReturnValue({ result: '{{ value }}' });
     const vars = { value: 'function_result' };
