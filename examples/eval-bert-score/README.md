@@ -1,68 +1,81 @@
 # eval-bert-score (BERTScore Evaluation)
 
-Use BERTScore to measure semantic similarity between LLM outputs and reference text.
+Measure semantic similarity between model outputs and reference text with BERTScore.
 
-```bash
+```sh
 npx promptfoo@latest init --example eval-bert-score
 cd eval-bert-score
 ```
 
 ## Setup
 
-```bash
-pip install -r requirements.txt
+Use Python 3.10 or newer and keep the virtual environment active when running Promptfoo:
+
+```sh
+python3 -m venv venv
+source venv/bin/activate
 ```
 
-Note: First run will download the BERT model (~1.4GB).
+BERTScore installs its own Torch and Transformers dependencies. If you only need CPU inference, install the CPU build of Torch before the requirements:
 
-## Usage
+```sh
+python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+```
 
-### Basic Example
+Then install the example and configure its model provider:
+
+```sh
+python -m pip install -r requirements.txt
+export OPENAI_API_KEY=your-api-key
+```
+
+The first evaluation downloads the default English `roberta-large` model (about 1.4 GB). Allow enough disk space and memory. You can also set `PROMPTFOO_PYTHON` to the absolute path of `venv/bin/python` instead of keeping the environment active.
+
+## Run the examples
+
+```sh
+npx promptfoo@latest eval --no-cache
+npx promptfoo@latest eval -c promptfooconfig-advanced.yaml --no-cache
+```
+
+The assertion returns BERTScore F1 for Promptfoo to compare with the threshold. The basic example uses one reference; the advanced example scores several references together and returns the best match:
 
 ```yaml
-# promptfooconfig.yaml
+prompts:
+  - 'Explain: {{topic}}'
+providers:
+  - openai:gpt-4.1-nano
+defaultTest:
+  options:
+    disableVarExpansion: true
 tests:
   - vars:
-      text: 'Hello world'
-      reference: 'Hi there'
+      topic: gradient descent
+      reference:
+        - An optimization algorithm that adjusts parameters to minimize error
+        - A method for finding a minimum by moving in the direction of steepest descent
     assert:
       - type: python
         value: file://bertscore_check.py
-        threshold: 0.7 # Pass if similarity > 70%
+        threshold: 0.75
 ```
 
-Run: `promptfoo eval`
+Each assertion starts a Python process and loads a scorer. Missing references and scoring errors return a failed assertion with a reason.
 
-### Advanced Example
+Calibrate thresholds against your own examples; semantic similarity does not establish factual correctness. To change models, set `vars.bertScoreModel` to a Hugging Face identifier or local directory. Models outside BERTScore's supported list also require `vars.bertScoreLayers`.
 
-Compare against multiple valid references:
+Run the offline assertion checks with:
 
-```yaml
-# promptfooconfig-advanced.yaml
-assert:
-  - type: python
-    value: |
-      from bert_score import score
-      references = [
-          "First valid answer",
-          "Second valid answer",
-          "Third valid answer"
-      ]
-      scores = []
-      for ref in references:
-          _, _, F1 = score([output], [ref], lang='en', verbose=False)
-          scores.append(F1.item())
-      return max(scores)  # Use best match
+```sh
+python -m unittest discover -p '*_test.py'
 ```
 
-Run: `promptfoo eval -c promptfooconfig-advanced.yaml`
+In a repository checkout with Node dependencies and this example's Python requirements installed, run the Linux/macOS integration smoke from the repository root:
 
-## How It Works
+```sh
+python examples/eval-bert-score/tests/smoke_cli.py
+```
 
-BERTScore returns a similarity score from 0 to 1:
+The smoke creates a tiny model locally and runs the real scorer through both configs with an echo provider. It checks scoring and reference handling without API credentials or model downloads. The randomly initialized model does not test semantic accuracy.
 
-- 0.9+ = Nearly identical meaning
-- 0.7-0.9 = Similar meaning
-- <0.7 = Different meaning
-
-[Learn more](https://arxiv.org/abs/1904.09675)
+[Learn more about BERTScore](https://arxiv.org/abs/1904.09675).
