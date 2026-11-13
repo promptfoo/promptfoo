@@ -1,5 +1,3 @@
-import React from 'react';
-
 import { useUserStore } from '@app/stores/userStore';
 import { act, render, screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes, useNavigate, useSearchParams } from 'react-router';
@@ -16,10 +14,6 @@ vi.mock('./components/Report', () => ({
 
 vi.mock('./components/ReportIndex', () => ({
   default: () => <div>ReportIndex Component</div>,
-}));
-
-vi.mock('@app/contexts/UserContext', () => ({
-  UserProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 
 vi.mock('react-router', async () => {
