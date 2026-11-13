@@ -108,22 +108,13 @@ SonarQube integration is available in [Promptfoo Enterprise](/docs/enterprise/).
 
 ### 3. Quality Gates
 
-Fail the build when quality thresholds aren't met:
+By default, `eval` requires a 100% pass rate. To require at least 95%, set the threshold on the eval command:
 
 ```bash
-# Fail on any test failures
-npx promptfoo@latest eval --fail-on-error
-
-# Custom threshold checking
-npx promptfoo@latest eval -o results.json
-PASS_RATE=$(jq '.results.stats.successes / (.results.stats.successes + .results.stats.failures) * 100' results.json)
-if (( $(echo "$PASS_RATE < 95" | bc -l) )); then
-  echo "Quality gate failed: Pass rate ${PASS_RATE}% < 95%"
-  exit 1
-fi
+PROMPTFOO_PASS_RATE_THRESHOLD=95 npx promptfoo@latest eval -o results.json
 ```
 
-See [assertions and metrics](/docs/configuration/expected-outputs) for comprehensive validation options.
+See the [CLI exit-code behavior](/docs/usage/command-line#promptfoo-eval) for threshold semantics and [assertions and metrics](/docs/configuration/expected-outputs) for validation options.
 
 ## Platform-Specific Guides
 
