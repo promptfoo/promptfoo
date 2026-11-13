@@ -776,7 +776,10 @@ describe('TypeSafeProvider', () => {
 
       const result = await createProvider().callApi('', context);
 
-      expect(result).toEqual({
+      expect(result).toMatchObject({
+        cached: false,
+        latencyMs: 12,
+        metadata: { typesafe: { requestId: 'req_123' } },
         error: `TypeSafe API returned an unexpected response (request id req_123): ${response.data}`,
       });
       expect(response.deleteFromCache).toHaveBeenCalledOnce();
@@ -875,7 +878,10 @@ describe('TypeSafeProvider', () => {
         },
       }).callApi('Payouts are failing!');
 
-      expect(result).toEqual({
+      expect(result).toMatchObject({
+        cached: false,
+        latencyMs: 12,
+        metadata: { typesafe: { requestId: 'req_123' } },
         error: `TypeSafe API returned an unexpected response (request id req_123): ${response.data}`,
       });
       expect(response.deleteFromCache).toHaveBeenCalledOnce();

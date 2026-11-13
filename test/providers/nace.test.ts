@@ -925,6 +925,9 @@ describe('NaceProvider', () => {
       const result = await createProvider().callApi('', context);
 
       expect(result).toEqual({
+        cached: false,
+        latencyMs: 12,
+        metadata: { nace: { model: 'drex-max', requestId: 'req_123' } },
         error: `Nace API returned an unexpected response (request id req_123): ${response.data}`,
       });
       expect(response.deleteFromCache).toHaveBeenCalledOnce();
