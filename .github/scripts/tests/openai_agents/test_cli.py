@@ -1,6 +1,8 @@
 """Exercise every original OpenAI Agents eval case with real SDKs over HTTP."""
 
+import asyncio
 import importlib.metadata
+import io
 import json
 import os
 import shutil
@@ -14,6 +16,7 @@ import unittest
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from unittest.mock import patch
 
 from fixture import ResponsesFixture
 
@@ -37,6 +40,81 @@ process.stdout.write(JSON.stringify(config));
 """
 
 
+def isolated_environment_paths(work: Path) -> dict[str, str]:
+    home = work / "home"
+    home.mkdir()
+    temporary = work / "tmp"
+    temporary.mkdir()
+    env_file = work / "empty.env"
+    env_file.touch()
+    return {
+        "HOME": str(home),
+        "USERPROFILE": str(home),
+        "XDG_STATE_HOME": str(home / ".local" / "state"),
+        "TMPDIR": str(temporary),
+        # envars loads defaults before main processes the explicit --env-file flag.
+        "DOTENV_PATH": str(env_file),
+    }
+
+
+class EnvironmentIsolationTests(unittest.TestCase):
+    def test_import_time_defaults_cannot_reload_checkout_settings(self):
+        with tempfile.TemporaryDirectory(prefix="promptfoo-agents-env-") as directory:
+            work = Path(directory)
+            checkout = work / "synthetic-checkout"
+            checkout.mkdir()
+            (checkout / ".env").write_text(
+                "PROMPTFOO_QA_SYNTHETIC_SECRET=fixture-secret\n"
+                "OPENAI_API_HOST=fixture.invalid/v1\n"
+            )
+            env = {"PATH": os.environ["PATH"], **isolated_environment_paths(work)}
+            command = [
+                "node",
+                "--import",
+                str(ROOT / "node_modules/tsx/dist/loader.mjs"),
+                "--input-type=module",
+                "-e",
+                "import {pathToFileURL} from 'node:url'; "
+                "await import(pathToFileURL(process.argv[1]).href); "
+                "process.stdout.write(JSON.stringify({"
+                "secret: process.env.PROMPTFOO_QA_SYNTHETIC_SECRET ?? null, "
+                "host: process.env.OPENAI_API_HOST ?? null}));",
+                str(ROOT / "src/envars.ts"),
+            ]
+            result = subprocess.check_output(
+                command, cwd=checkout, env=env, text=True, timeout=20
+            )
+            self.assertEqual(json.loads(result), {"secret": None, "host": None})
+
+            # Prove this fixture catches the original eager-loading failure.
+            del env["DOTENV_PATH"]
+            control = subprocess.check_output(
+                command, cwd=checkout, env=env, text=True, timeout=20
+            )
+            self.assertEqual(
+                json.loads(control),
+                {"secret": "fixture-secret", "host": "fixture.invalid/v1"},
+            )
+
+    def test_sdk_snapshots_are_removed_with_the_temporary_workspace(self):
+        from agents.sandbox.snapshot import LocalSnapshot
+        from agents.sandbox.snapshot_defaults import default_local_snapshot_base_dir
+
+        with tempfile.TemporaryDirectory(prefix="promptfoo-agents-state-") as directory:
+            work = Path(directory)
+            env = isolated_environment_paths(work)
+            with patch.dict(os.environ, env, clear=True):
+                self.assertEqual(Path.home(), work / "home")
+                self.assertEqual(Path(os.environ["USERPROFILE"]), work / "home")
+                base = default_local_snapshot_base_dir()
+                self.assertTrue(base.is_relative_to(work))
+                snapshot = LocalSnapshot(id="fixture-snapshot", base_path=base)
+                asyncio.run(snapshot.persist(io.BytesIO(b"synthetic snapshot")))
+            artifact = base / "fixture-snapshot.tar"
+            self.assertEqual(artifact.read_bytes(), b"synthetic snapshot")
+        self.assertFalse(artifact.exists())
+
+
 class OpenAIAgentsCliTest(unittest.TestCase):
     cli = ("node", str(ROOT / "dist/src/entrypoint.js"))
 
@@ -44,9 +122,6 @@ class OpenAIAgentsCliTest(unittest.TestCase):
         fixture = ResponsesFixture(failure)
         errors = []
         exports = []
-        with socket.socket() as available:
-            available.bind(("127.0.0.1", 0))
-            trace_port = available.getsockname()[1]
 
         class Handler(BaseHTTPRequestHandler):
             def read_payload(self):
@@ -136,6 +211,10 @@ class OpenAIAgentsCliTest(unittest.TestCase):
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         try:
+            # Bind the fixture first so it cannot take the receiver's released port.
+            with socket.socket() as available:
+                available.bind(("127.0.0.1", 0))
+                trace_port = available.getsockname()[1]
             with tempfile.TemporaryDirectory(
                 prefix="promptfoo-agents-cli-"
             ) as temporary:
@@ -150,8 +229,6 @@ class OpenAIAgentsCliTest(unittest.TestCase):
                         "*.sqlite3*", "__pycache__", ".venv", ".env", ".env.*"
                     ),
                 )
-                child_tmp = work / "tmp"
-                child_tmp.mkdir()
                 try:
                     importlib.metadata.version("opentelemetry-sdk")
                     optional = True
@@ -169,8 +246,8 @@ class OpenAIAgentsCliTest(unittest.TestCase):
                 for proxy in ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY"):
                     env[proxy] = env[proxy.lower()] = ""
                 env["NO_PROXY"] = env["no_proxy"] = "*"
+                env.update(isolated_environment_paths(work))
                 env.update(
-                    TMPDIR=str(child_tmp),
                     PYTHONDONTWRITEBYTECODE="1",
                     OPENAI_API_KEY="local-test-key",
                     OPENAI_AGENT_MODEL="gpt-6-luna",
@@ -212,8 +289,6 @@ class OpenAIAgentsCliTest(unittest.TestCase):
                 )
                 config_path = work / "config.json"
                 config_path.write_text(json.dumps(config))
-                env_file = work / "empty.env"
-                env_file.touch()
                 output = work / "results.json"
                 process = subprocess.Popen(
                     [
@@ -224,7 +299,7 @@ class OpenAIAgentsCliTest(unittest.TestCase):
                         "--no-cache",
                         "--no-share",
                         "--env-file",
-                        str(env_file),
+                        env["DOTENV_PATH"],
                         "-j",
                         "1",
                         "-o",
@@ -257,7 +332,7 @@ class OpenAIAgentsCliTest(unittest.TestCase):
                 self.assertFalse(errors, (errors, log))
                 self.assertTrue(output.is_file(), log)
                 self.assertFalse(
-                    list(child_tmp.glob("sandbox-local-*")),
+                    list(Path(env["TMPDIR"]).glob("sandbox-local-*")),
                     "SDK sandbox cleanup left a workspace after the CLI exited",
                 )
                 data = json.loads(output.read_text())["results"]
@@ -397,6 +472,33 @@ class OpenAIAgentsCliTest(unittest.TestCase):
 
     def test_wrong_arguments(self):
         self.run_config("wrong-tool-args")
+
+
+class FixturePortTests(unittest.TestCase):
+    def test_fixture_holds_its_port_when_the_receiver_port_is_chosen(self):
+        bind = socket.socket.bind
+        fixture = None
+
+        class PortsChecked(Exception):
+            pass
+
+        def check_bind(connection, address):
+            nonlocal fixture
+            bind(connection, address)
+            if address != ("127.0.0.1", 0):
+                return
+            if fixture is None:
+                fixture = connection
+                return
+            self.assertGreaterEqual(fixture.fileno(), 0, "fixture socket was released")
+            self.assertNotEqual(connection.getsockname()[1], fixture.getsockname()[1])
+            raise PortsChecked
+
+        with (
+            patch.object(socket.socket, "bind", check_bind),
+            self.assertRaises(PortsChecked),
+        ):
+            OpenAIAgentsCliTest().run_config()
 
 
 if __name__ == "__main__":

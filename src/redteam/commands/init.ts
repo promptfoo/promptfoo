@@ -11,7 +11,7 @@ import dedent from 'dedent';
 import { getUserEmail, setUserEmail } from '../../globalConfig/accounts';
 import { readGlobalConfig, writeGlobalConfigPartial } from '../../globalConfig/globalConfig';
 import logger from '../../logger';
-import { GEMINI_FLASH_MODELS } from '../../providers/google/shared';
+import { GEMINI_TARGET_MODELS } from '../../providers/google/shared';
 import telemetry, { type EventProperties } from '../../telemetry';
 import { promptfooCommand } from '../../util/promptfooCommand';
 import { extractVariablesFromTemplate, getNunjucksEngine } from '../../util/templates';
@@ -57,7 +57,7 @@ targets:
   - {{ provider }}
   {% else -%}
   - id: {{ provider.id }}
-    label: {{ provider.label }}
+    label: {{ provider.label | dump }}
     config:
       {% for k, v in provider.config -%}
       {{ k }}: {{ v | dump }}
@@ -116,7 +116,7 @@ import urllib.parse
 import json
 
 def call_api(prompt, options, context):
-    parsed_url = urllib.parse.urlparse('https://example.com/api/chat)
+    parsed_url = urllib.parse.urlparse('https://example.com/api/chat')
     conn = http.client.HTTPSConnection(parsed_url.netloc)
 
     headers = {'Content-Type': 'application/json'}
@@ -306,8 +306,12 @@ export async function redteamInit(directory: string | undefined) {
   } else {
     const providerChoices = [
       { name: `I'll choose later`, value: 'Other' },
-      { name: 'openai:gpt-5-mini', value: 'openai:gpt-5-mini' },
-      { name: 'openai:gpt-5', value: 'openai:gpt-5' },
+      { name: 'openai:gpt-5.6', value: 'openai:gpt-5.6' },
+      { name: 'openai:gpt-5.4-mini', value: 'openai:gpt-5.4-mini' },
+      {
+        name: 'anthropic:claude-fable-5-2',
+        value: 'anthropic:messages:claude-fable-5-2',
+      },
       {
         name: 'anthropic:claude-fable-5',
         value: 'anthropic:messages:claude-fable-5',
@@ -315,6 +319,10 @@ export async function redteamInit(directory: string | undefined) {
       {
         name: 'anthropic:claude-opus-5-5',
         value: 'anthropic:messages:claude-opus-5-5',
+      },
+      {
+        name: 'anthropic:claude-sonnet-5-5',
+        value: 'anthropic:messages:claude-sonnet-5-5',
       },
       {
         name: 'anthropic:claude-opus-5',
@@ -333,19 +341,15 @@ export async function redteamInit(directory: string | undefined) {
         value: 'anthropic:messages:claude-opus-4-6',
       },
       {
-        name: 'anthropic:claude-opus-4-5-20251101',
-        value: 'anthropic:messages:claude-opus-4-5-20251101',
-      },
-      {
-        name: 'anthropic:claude-sonnet-4-5-20250929',
-        value: 'anthropic:messages:claude-sonnet-4-5-20250929',
+        name: 'anthropic:claude-sonnet-4-6',
+        value: 'anthropic:messages:claude-sonnet-4-6',
       },
       {
         name: 'anthropic:claude-haiku-4-5',
         value: 'anthropic:messages:claude-haiku-4-5',
       },
       ...['google', 'vertex'].flatMap((provider) =>
-        GEMINI_FLASH_MODELS.map(({ id, name }) => ({
+        GEMINI_TARGET_MODELS.map(({ id, name }) => ({
           name: `Google${provider === 'vertex' ? ' Vertex' : ''} ${name}`,
           value: `${provider}:${id}`,
         })),
@@ -365,13 +369,13 @@ export async function redteamInit(directory: string | undefined) {
     recordOnboardingStep('choose provider', { value: selectedProvider });
 
     if (selectedProvider === 'Other') {
-      providers = [{ id: 'openai:gpt-5-mini', label }];
+      providers = [{ id: 'openai:gpt-5.6', label }];
     } else {
       providers = [
         {
           id: selectedProvider,
           label,
-          ...(GEMINI_FLASH_MODELS.some(({ id }) => selectedProvider === `vertex:${id}`)
+          ...(GEMINI_TARGET_MODELS.some(({ id }) => selectedProvider === `vertex:${id}`)
             ? { config: { region: 'global' } }
             : {}),
         },
