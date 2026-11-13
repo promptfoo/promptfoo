@@ -223,8 +223,11 @@ describe('baseline-vs-ejentum-harness provider', () => {
       callApi: vi.fn().mockResolvedValue({ output: 'done' }),
       cleanup: vi.fn().mockResolvedValue(undefined),
     };
-    const loader = Promise.withResolvers<typeof mockUnderlying>();
-    const mockLoadApiProvider = vi.fn().mockReturnValue(loader.promise);
+    let resolveLoader!: (value: typeof mockUnderlying) => void;
+    const loaderPromise = new Promise<typeof mockUnderlying>((resolve) => {
+      resolveLoader = resolve;
+    });
+    const mockLoadApiProvider = vi.fn().mockReturnValue(loaderPromise);
 
     const provider = new EjentumAugmentedProvider({
       config: { model: 'gpt-5.4-mini' },
@@ -239,7 +242,7 @@ describe('baseline-vs-ejentum-harness provider', () => {
     ]);
 
     expect(mockLoadApiProvider).toHaveBeenCalledTimes(1);
-    loader.resolve(mockUnderlying);
+    resolveLoader(mockUnderlying);
     const results = await concurrentCalls;
 
     expect(results).toHaveLength(4);
