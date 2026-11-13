@@ -11,6 +11,11 @@ import { mockProcessEnv } from '../util/utils';
 
 import type { ProviderCallTracingContext } from '../../src/scheduler/providerCallExecutionContext';
 
+const createConversationInput = () => ({
+  userPrompt: 'test prompt',
+  assistantResponse: 'test response',
+});
+
 describe('matchesModeration', () => {
   const mockModerationResponse = {
     flags: [],
@@ -87,10 +92,7 @@ describe('matchesModeration', () => {
       .spyOn(OpenAiModerationProvider.prototype, 'callModerationApi')
       .mockResolvedValue(mockModerationResponse);
 
-    await matchesModeration({
-      userPrompt: 'test prompt',
-      assistantResponse: 'test response',
-    });
+    await matchesModeration(createConversationInput());
 
     expect(openAiSpy).toHaveBeenCalledWith('test prompt', 'test response');
   });
@@ -142,10 +144,7 @@ describe('matchesModeration', () => {
       mockModerationResponse,
     );
 
-    const result = await matchesModeration({
-      userPrompt: 'test prompt',
-      assistantResponse: 'test response',
-    });
+    const result = await matchesModeration(createConversationInput());
 
     expect(result.tokensUsed).toEqual(normalizedTokenUsage);
   });
@@ -156,10 +155,7 @@ describe('matchesModeration', () => {
       .spyOn(ReplicateModerationProvider.prototype, 'callModerationApi')
       .mockResolvedValue(mockModerationResponse);
 
-    await matchesModeration({
-      userPrompt: 'test prompt',
-      assistantResponse: 'test response',
-    });
+    await matchesModeration(createConversationInput());
 
     expect(replicateSpy).toHaveBeenCalledWith('test prompt', 'test response');
   });
@@ -170,15 +166,9 @@ describe('matchesModeration', () => {
       .spyOn(ReplicateModerationProvider.prototype, 'callModerationApi')
       .mockResolvedValue(mockModerationResponse);
 
-    await matchesModeration(
-      {
-        userPrompt: 'test prompt',
-        assistantResponse: 'test response',
-      },
-      {
-        provider: LLAMA_GUARD_REPLICATE_PROVIDER,
-      },
-    );
+    await matchesModeration(createConversationInput(), {
+      provider: LLAMA_GUARD_REPLICATE_PROVIDER,
+    });
 
     expect(replicateSpy).toHaveBeenCalledWith('test prompt', 'test response');
   });

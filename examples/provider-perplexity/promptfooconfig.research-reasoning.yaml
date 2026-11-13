@@ -1,31 +1,24 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: Research and reasoning with Perplexity specialized models
+description: Compare Perplexity research and reasoning models on both prompts
 
 prompts:
   - 'Create a comprehensive report on {{research_topic}} with the latest findings and data.'
   - 'Solve the following math problem, showing your step-by-step reasoning: {{math_problem}}'
 
+# Both models run both prompts for each test case.
 providers:
   - id: perplexity:sonar-deep-research
     config:
       temperature: 0.1
       max_tokens: 4000
       search_domain_filter: ['arxiv.org', 'researchgate.net', 'scholar.google.com']
-      web_search_options:
-        search_context_size: 'high'
-      # This provider will be used for the first prompt only
+      passthrough:
+        reasoning_effort: 'high' # low, medium (default), or high
 
   - id: perplexity:sonar-reasoning-pro
     config:
       temperature: 0.2
       max_tokens: 3000
-      # This provider will be used for the second prompt only
-
-  - id: perplexity:r1-1776
-    config:
-      temperature: 0.2
-      max_tokens: 2000
-      # Offline model without search capabilities
 
 tests:
   - vars:

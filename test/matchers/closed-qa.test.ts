@@ -6,16 +6,18 @@ import { mockProcessEnv } from '../util/utils';
 
 import type { GradingConfig } from '../../src/types/index';
 
+const createMixedVerdictResponse = () => ({
+  output: 'foo \n \n bar\n Y Y \n',
+  tokenUsage: { total: 10, prompt: 5, completion: 5 },
+});
+
 describe('matchesClosedQa', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.resetAllMocks();
 
     vi.spyOn(DefaultGradingProvider, 'callApi').mockReset();
-    vi.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValue({
-      output: 'foo \n \n bar\n Y Y \n',
-      tokenUsage: { total: 10, prompt: 5, completion: 5 },
-    });
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValue(createMixedVerdictResponse());
   });
 
   afterEach(() => {
@@ -28,10 +30,7 @@ describe('matchesClosedQa', () => {
     const output = 'Sample output';
     const grading = {};
 
-    vi.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValueOnce({
-      output: 'foo \n \n bar\n Y Y \n',
-      tokenUsage: { total: 10, prompt: 5, completion: 5 },
-    });
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValueOnce(createMixedVerdictResponse());
 
     await expect(matchesClosedQa(input, expected, output, grading)).resolves.toEqual({
       pass: true,
@@ -89,46 +88,45 @@ describe('matchesClosedQa', () => {
     );
   });
 
-  it('should mark provider errors as grader errors', async () => {
-    const input = 'Input text';
-    const expected = 'Expected output';
-    const output = 'Sample output';
-    const grading = {
-      provider: createMockProvider({
-        callApi: vi.fn().mockResolvedValue({
-          error: 'grader unavailable',
-          tokenUsage: { total: 10, prompt: 5, completion: 5 },
-        }),
-      }),
-    };
+  it('should tag a grading provider error as a grader failure', async () => {
+    // `metadata.graderError` lets inverse-aware callers (e.g.
+    // not-model-graded-closedqa) propagate the failure instead of flipping a
+    // transport error into a pass.
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValueOnce({
+      error: 'Grader provider unavailable',
+    });
 
-    await expect(matchesClosedQa(input, expected, output, grading)).resolves.toMatchObject({
+    await expect(
+      matchesClosedQa('Input text', 'Expected output', 'Sample output', {}),
+    ).resolves.toEqual({
       pass: false,
+      reason: 'Grader provider unavailable',
       score: 0,
-      reason: 'grader unavailable',
+      tokensUsed: {
+        total: expect.any(Number),
+        prompt: expect.any(Number),
+        completion: expect.any(Number),
+        cached: expect.any(Number),
+        completionDetails: expect.any(Object),
+        numRequests: 0,
+      },
       metadata: { graderError: true },
     });
   });
 
-  it('should mark malformed grader responses as grader errors', async () => {
-    const input = 'Input text';
-    const expected = 'Expected output';
-    const output = 'Sample output';
-    const grading = {
-      provider: createMockProvider({
-        callApi: vi.fn().mockResolvedValue({
-          output: 'Maybe',
-          tokenUsage: { total: 10, prompt: 5, completion: 5 },
-        }),
-      }),
-    };
+  it('should tag an empty grading provider response as a grader failure', async () => {
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValueOnce({ output: undefined });
 
-    await expect(matchesClosedQa(input, expected, output, grading)).resolves.toMatchObject({
-      pass: false,
-      score: 0,
-      reason: 'Model grader produced a malformed response:\nMaybe',
-      metadata: { graderError: true },
-    });
+    const result = await matchesClosedQa('Input text', 'Expected output', 'Sample output', {});
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        pass: false,
+        reason: 'No output',
+        score: 0,
+        metadata: { graderError: true },
+      }),
+    );
   });
 
   it('should handle input, criteria, and completion that need escaping', async () => {
@@ -164,6 +162,27 @@ describe('matchesClosedQa', () => {
       },
     });
     expect(isJson).toBeTruthy();
+  });
+
+  it('should mark malformed grader responses as grader errors', async () => {
+    const input = 'Input text';
+    const expected = 'Expected output';
+    const output = 'Sample output';
+    const grading = {
+      provider: createMockProvider({
+        callApi: vi.fn().mockResolvedValue({
+          output: 'Maybe',
+          tokenUsage: { total: 10, prompt: 5, completion: 5 },
+        }),
+      }),
+    };
+
+    await expect(matchesClosedQa(input, expected, output, grading)).resolves.toMatchObject({
+      pass: false,
+      score: 0,
+      reason: 'Model grader produced a malformed response:\nMaybe',
+      metadata: { graderError: true },
+    });
   });
 
   it('should use Nunjucks templating when PROMPTFOO_DISABLE_TEMPLATING is set', async () => {

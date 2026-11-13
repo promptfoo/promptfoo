@@ -1,5 +1,6 @@
 import logger from '../../logger';
 import { MCPProvider } from '../../providers/mcp/index';
+import { getProviderPath } from './providerPath';
 
 import type { ApiProvider } from '../../types/index';
 
@@ -8,20 +9,6 @@ import type { ApiProvider } from '../../types/index';
  */
 function isMcpProviderPath(providerPath: string): boolean {
   return providerPath === 'mcp' || providerPath.startsWith('mcp:');
-}
-
-/**
- * Helper function to get provider path from ApiProvider
- */
-function getProviderPath(provider: ApiProvider): string | null {
-  // Try to get the provider ID/path - this might vary depending on how providers store their identifier
-  if (typeof provider.id === 'function') {
-    return provider.id();
-  }
-  if (typeof provider.id === 'string') {
-    return provider.id;
-  }
-  return null;
 }
 
 /**

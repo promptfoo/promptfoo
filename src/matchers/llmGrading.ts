@@ -27,7 +27,7 @@ import {
   renderLlmRubricPrompt,
   runJsonGradingPrompt,
 } from './rubric';
-import { fail, graderFail, normalizeMatcherTokenUsage, tryParse } from './shared';
+import { graderFail, normalizeMatcherTokenUsage, tryParse } from './shared';
 
 import type {
   Assertion,
@@ -425,8 +425,10 @@ export async function matchesClosedQa(
     } else if (resp.output.trimEnd().endsWith('N')) {
       reason = `The submission does not meet the criterion:\n${resp.output}`;
     } else {
-      reason = `Model grader produced a malformed response:\n${resp.output}`;
-      return graderFail(reason, resp.tokenUsage);
+      return graderFail(
+        `Model grader produced a malformed response:\n${resp.output}`,
+        resp.tokenUsage,
+      );
     }
     return {
       pass,
@@ -435,7 +437,7 @@ export async function matchesClosedQa(
       tokensUsed: normalizeMatcherTokenUsage(resp.tokenUsage),
     };
   } catch (err) {
-    return fail(`Error parsing output: ${(err as Error).message}`, resp.tokenUsage);
+    return graderFail(`Error parsing output: ${(err as Error).message}`, resp.tokenUsage);
   }
 }
 
