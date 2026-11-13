@@ -61,7 +61,6 @@ import { validateTestProviderReferences } from '../validateTestProviderReference
 import { loadYaml } from '../yamlLoad';
 import { DEFAULT_CONFIG_EXTENSIONS } from './extensions';
 
-import type { EnvOverrides } from '../../types/env';
 
 const KNOWN_TOP_LEVEL_CONFIG_KEYS: ReadonlySet<string> = new Set([
   ...Object.keys(TestSuiteConfigSchema.shape),
@@ -150,7 +149,7 @@ export function enforceUnknownConfigKeyDiagnosticsForConfig(
 
 export function resolveStrictConfigEnabled(
   env: UnifiedConfig['env'] | undefined,
-  envFile: EnvOverrides | undefined = cliState.envFileOverrides,
+  envFile = cliState.envFileOverrides,
 ): boolean {
   if (isRecord(env)) {
     const override = (env as Record<string, unknown>).PROMPTFOO_STRICT_CONFIG;
