@@ -26,7 +26,7 @@ beforeAll(async () => {
   port = (server.address() as AddressInfo).port;
   await new Promise<void>((resolve, reject) => {
     server.close((error) => (error ? reject(error) : resolve()));
-  }, 65_000);
+  });
 });
 
 afterAll(() => {
