@@ -171,7 +171,7 @@ Each tool call entry contains:
 
 ## Caching
 
-Responses are cached based on the prompt, provider configuration, and a working directory fingerprint (file modification times). Changing source files automatically invalidates the cache.
+Within a Promptfoo process, responses are cached using the prompt, a keyed configuration fingerprint, and the working directory fingerprint. Restarting Promptfoo or changing source files invalidates those entries. The provider bypasses this cache when `inherit_process_env` is enabled.
 
 Disable caching for a run:
 
