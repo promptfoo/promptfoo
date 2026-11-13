@@ -1,8 +1,43 @@
 import chalk from 'chalk';
 import Table from 'cli-table3';
 import { TERMINAL_MAX_WIDTH } from './constants';
-import { type EvaluateTable, ResultFailureReason } from './types/index';
+import { type EvaluateTable, type GradingResult, ResultFailureReason } from './types/index';
 import { ellipsize } from './util/text';
+
+function formatAssertionGroups(result: GradingResult | null | undefined): string {
+  const groups = (result?.componentResults ?? []).filter(
+    (component) => component?.metadata?.assertionSet?.type === 'assert-set',
+  );
+
+  function format(component: GradingResult, depth: number): string {
+    const set = component.metadata?.assertionSet;
+    const label =
+      set?.metric ||
+      component.assertion?.metric ||
+      set?.type ||
+      component.assertion?.type ||
+      'assertion';
+    const threshold = set?.threshold;
+    const hasScore = typeof component.score === 'number' && Number.isFinite(component.score);
+    let detail = hasScore ? `score ${component.score.toFixed(2)}` : 'score unavailable';
+    if (set?.type === 'assert-set') {
+      detail +=
+        typeof threshold === 'number' && Number.isFinite(threshold)
+          ? hasScore
+            ? ` ${component.score >= threshold ? '>=' : '<'} ${threshold}`
+            : `; threshold ${threshold}`
+          : '; all assertions must pass';
+    }
+    return `${'  '.repeat(depth)}[${component.pass ? 'PASS' : 'FAIL'}] ${label} (${detail})`;
+  }
+
+  return groups
+    .flatMap((group) => [
+      format(group, 0),
+      ...(group.componentResults ?? []).filter(Boolean).map((child) => format(child, 1)),
+    ])
+    .join('\n');
+}
 
 export function generateTable(
   evaluateTable: EvaluateTable,
@@ -27,8 +62,9 @@ export function generateTable(
   for (const row of evaluateTable.body.slice(0, maxRows)) {
     table.push([
       ...row.vars.map((v) => ellipsize(v, tableCellMaxLength)),
-      ...row.outputs.map(({ pass, text, failureReason: failureType }) => {
-        text = ellipsize(text, tableCellMaxLength);
+      ...row.outputs.map(({ pass, text, gradingResult, failureReason: failureType }) => {
+        const groups = formatAssertionGroups(gradingResult);
+        text = ellipsize(groups ? `\n${groups}\n---\n${text}` : text, tableCellMaxLength);
         if (pass) {
           return chalk.green('[PASS] ') + text;
         }
