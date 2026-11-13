@@ -5,7 +5,7 @@ import { getCache, isCacheEnabled, withCacheEnabled, withCacheNamespace } from '
 import cliState from '../cliState';
 import { FILE_METADATA_KEY } from '../constants';
 import { getEnvBool, getEnvInt } from '../envars';
-import { collectFileMetadata, renderPrompt } from '../evaluatorHelpers';
+import { collectFileMetadata, renderPrompt, setRuntimeFileVarNames } from '../evaluatorHelpers';
 import logger from '../logger';
 import { type AgentWorkspace, createAgentWorkspaceForConfig } from '../providers/agentWorkspace';
 import { providerRegistry } from '../providers/providerRegistry';
@@ -1348,10 +1348,14 @@ export async function runEvalInternal(
   // history and stored provider outputs can contain arbitrary strings.
   const nestedFileVarNames = new Set(
     Object.keys(test.vars ?? {}).filter(
-      (name) => name !== '_conversation' && !Object.hasOwn(registers ?? {}, name),
+      (name) =>
+        !test.metadata?.__promptfoo?.remote &&
+        name !== '_conversation' &&
+        !Object.hasOwn(registers ?? {}, name),
     ),
   );
   Object.assign(state.vars, registers);
+  setRuntimeFileVarNames(state.vars, Object.keys(registers ?? {}));
   Object.assign(
     state.vars,
     getEvalRuntimeVars({

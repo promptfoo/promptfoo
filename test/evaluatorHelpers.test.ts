@@ -281,6 +281,23 @@ describe('evaluatorHelpers', () => {
       expect(({} as Record<string, unknown>).polluted).toBeUndefined();
     });
 
+    it('resolves a shared file object once across authored var aliases', async () => {
+      const shared = { report: 'file://data/shared.txt' };
+      const vars = { first: shared, second: { shared } };
+      const read = vi.spyOn(fs, 'readFileSync').mockReturnValueOnce('shared contents');
+      const rendered = await renderPrompt(
+        toPrompt('{{ first.report }}|{{ second.shared.report }}'),
+        vars,
+        {},
+        undefined,
+        undefined,
+        new Set(Object.keys(vars)),
+      );
+      expect(rendered).toBe('shared contents|shared contents');
+      expect(read).toHaveBeenCalledTimes(1);
+      expect(vars.first).toBe(vars.second.shared);
+    });
+
     it('leaves nested paths in runtime vars as literal text', async () => {
       const vars = { stored: { report: 'file://untrusted-runtime-reference.txt' } };
       const rendered = await renderPrompt(toPrompt('{{ stored.report }}'), vars);
