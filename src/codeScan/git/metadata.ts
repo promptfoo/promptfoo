@@ -4,8 +4,8 @@
  * Extracts metadata about the current branch and commits.
  */
 
-import { type LogResult, simpleGit } from 'simple-git';
 import { GitMetadataError } from '../../types/codeScan';
+import { runGit } from './command';
 
 import type { GitMetadata } from '../../types/codeScan';
 
@@ -21,44 +21,38 @@ export async function extractMetadata(
   baseBranch: string,
   compareRef: string,
 ): Promise<GitMetadata> {
-  const git = simpleGit(repoPath);
-
   try {
-    // Store original refs
-    const baseRef = baseBranch;
-    const compareRefValue = compareRef;
-
-    // Resolve to exact SHAs
-    const baseSha = (await git.revparse([baseBranch])).trim();
-    const compareSha = (await git.revparse([compareRef])).trim();
-
-    // Get commits between base and compare ref
-    const log: LogResult = await git.log({
-      from: baseBranch,
-      to: compareRef,
-    });
-
-    // Extract commit messages
-    const commitMessages = log.all.map((commit) => {
-      return `${commit.hash.substring(0, 7)}: ${commit.message}`;
-    });
-
-    // Get author from most recent commit
-    const author = log.latest?.author_name || 'Unknown';
-
-    // Get timestamp from most recent commit
-    const timestamp = log.latest?.date || new Date().toISOString();
+    const resolveRef = (ref: string) =>
+      runGit(repoPath, ['rev-parse', '--verify', '--end-of-options', ref]);
+    const [baseSha, compareSha] = await Promise.all([
+      resolveRef(baseBranch),
+      resolveRef(compareRef),
+    ]);
+    const stdout = await runGit(repoPath, [
+      'log',
+      '--no-show-signature',
+      '-z',
+      '--format=%H%x00%s%x00%aN%x00%aI',
+      `${baseSha}...${compareSha}`,
+      '--',
+    ]);
+    // Each record contains four NUL-delimited fields, including the mailmapped author.
+    const fields = stdout.split('\0');
+    const commitMessages: string[] = [];
+    for (let i = 0; i + 3 < fields.length; i += 4) {
+      commitMessages.push(`${fields[i].slice(0, 7)}: ${fields[i + 1]}`);
+    }
 
     return {
       branch: compareRef,
       baseBranch,
-      baseRef,
+      baseRef: baseBranch,
       baseSha,
-      compareRef: compareRefValue,
+      compareRef,
       compareSha,
       commitMessages,
-      author,
-      timestamp,
+      author: fields[2] || 'Unknown',
+      timestamp: fields[3] || new Date().toISOString(),
     };
   } catch (error) {
     throw new GitMetadataError(

@@ -4,8 +4,6 @@ import { persist } from 'zustand/middleware';
 interface ApiConfig {
   apiBaseUrl: string | undefined;
   setApiBaseUrl: (apiBaseUrl: string) => void;
-  fetchingPromise: Promise<Response> | null;
-  setFetchingPromise: (fetchingPromise: Promise<Response> | null) => void;
   persistApiBaseUrl: boolean;
   enablePersistApiBaseUrl: () => void;
 }
@@ -17,8 +15,6 @@ const useApiConfig = create<ApiConfig>()(
       setApiBaseUrl: (apiBaseUrl: string) => set({ apiBaseUrl }),
       persistApiBaseUrl: false,
       enablePersistApiBaseUrl: () => set({ persistApiBaseUrl: true }),
-      fetchingPromise: null,
-      setFetchingPromise: (fetchingPromise: Promise<Response> | null) => set({ fetchingPromise }),
     }),
     {
       name: 'api-config-storage',
