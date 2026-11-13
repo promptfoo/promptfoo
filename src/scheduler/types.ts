@@ -1,8 +1,9 @@
+import { isResponseHeadersObserverErrorResponse } from '../util/fetch/responseHeadersObserver';
 /**
  * Shared types for the scheduler module.
  */
 
-import { isHttpRateLimitError } from '../util/fetch/errors';
+import { hasHttp429Status, isHttpRateLimitError } from '../util/fetch/errors';
 
 import type { ProviderResponse } from '../types/providers';
 
@@ -11,14 +12,31 @@ import type { ProviderResponse } from '../types/providers';
  * Used by RateLimitRegistry.execute() and provider wrappers.
  */
 export interface RateLimitExecuteOptions<T> {
+  /** Cancel queue and retry waits for this caller. */
+  abortSignal?: AbortSignal;
   /** Extract rate limit headers from the result */
   getHeaders?: (result: T) => Record<string, string> | undefined;
   /** Detect if the result indicates a rate limit */
   isRateLimited?: (result: T | undefined, error?: Error) => boolean;
   /** Extract retry-after delay from result or error */
   getRetryAfter?: (result: T | undefined, error?: Error) => number | undefined;
+  /** Detect retryable result-level transient failures that are not rate limits. */
+  isRetryableResult?: (result: T) => boolean;
+  /** Merge bounded prior retry results into the terminal result. */
+  finalizeResult?: (result: T, retryResults: readonly T[]) => T;
   /** Preserve a structured failure result when retries are exhausted. Defaults to throwing. */
   onRateLimitExhausted?: (result: T, error: Error) => T;
+  /** Returning false vetoes another attempt, e.g. a nested call that already retried. */
+  canRetry?: () => boolean;
+}
+
+export function isRateLimitError(error: Error | undefined): boolean {
+  const message = error?.message?.toLowerCase() ?? '';
+  return (
+    hasHttp429Status(message) ||
+    message.includes('rate limit') ||
+    message.includes('too many requests')
+  );
 }
 
 /**
@@ -36,7 +54,12 @@ export function isProviderResponseRateLimited(
   result: ProviderResponse | undefined,
   error: Error | undefined,
 ): boolean {
-  // Respect explicit rate-limit policy decisions as well as hard quotas.
+  if (isResponseHeadersObserverErrorResponse(result)) {
+    return false;
+  }
+  // Tool diagnostics may mention their own quota without describing the model request.
+  const responseError = result?.metadata?.errorOrigin === 'tool' ? undefined : result?.error;
+  // Structured signal — never retry a hard quota.
   if (
     result?.metadata?.rateLimitRetryable === false ||
     result?.metadata?.rateLimitKind === 'quota'
@@ -56,7 +79,7 @@ export function isProviderResponseRateLimited(
   // exceeded: ..."`), so this is a substring match rather than a
   // startsWith. The substring is specific enough that false positives are
   // implausible in normal API error envelopes.
-  if (result?.error?.includes('Quota exceeded:')) {
+  if (responseError?.includes('Quota exceeded:')) {
     return false;
   }
   if (error?.message?.includes('Quota exceeded:')) {
@@ -67,12 +90,10 @@ export function isProviderResponseRateLimited(
     // Check HTTP status code (most reliable)
     result?.metadata?.http?.status === 429 ||
       // Check error field in response
-      result?.error?.includes?.('429') ||
-      result?.error?.toLowerCase?.().includes?.('rate limit') ||
+      hasHttp429Status(responseError) ||
+      responseError?.toLowerCase?.().includes?.('rate limit') ||
       // Check thrown error message
-      error?.message?.includes('429') ||
-      error?.message?.toLowerCase().includes('rate limit') ||
-      error?.message?.toLowerCase().includes('too many requests'),
+      isRateLimitError(error),
   );
 }
 

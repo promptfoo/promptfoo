@@ -243,16 +243,16 @@ If `tokenUrl` is not specified, the provider automatically discovers the token e
 2. RFC 8414 path-aware: `{origin}/.well-known/oauth-authorization-server{path}`
 3. Root level: `{origin}/.well-known/oauth-authorization-server`
 
-For maximum compatibility, explicitly configure `tokenUrl` when possible.
+Discovered token endpoints must use the same origin (scheme, host, and port) as the configured server URL. Discovery and discovered token requests reject redirects to keep OAuth credentials at that origin. If your identity provider uses a different origin or a redirecting endpoint, configure its final `tokenUrl` explicitly.
 
 **Token Refresh Behavior:**
 
 When using OAuth authentication:
 
 1. The provider requests an access token from `tokenUrl` (or discovered endpoint) before connecting
-2. Tokens are proactively refreshed 60 seconds before expiration
+2. Each HTTP request carries the current token. Tokens refresh before expiry without reconnecting, using a margin of 60 seconds or half the remaining lifetime when issued, whichever is shorter
 3. Concurrent requests share the same refresh operation (no duplicate token fetches)
-4. If a token expires during an evaluation, the provider automatically reconnects with a fresh token
+4. If the server rejects a token with HTTP 401, the provider fetches a new token and resends that request once. Other failures, including tool errors, are returned without a retry
 
 #### Authentication Options Reference
 
@@ -307,6 +307,19 @@ providers:
       defaultArgs: # Tool call arguments override these defaults
         session_id: 'test-session'
         user_role: 'customer'
+```
+
+For portable configuration validation, `McpConfigInputSchema` accepts JSON values in `defaultArgs` and string response transforms. `McpClientConfigInputSchema` covers connection and tool-filter settings for nested model-provider `config.mcp` blocks. Parsing these schemas does not open connections, launch servers, or load transform files. In-process callers can continue to use function response transforms with the runtime schema.
+
+When exporting through `zod-to-openapi`, extend Zod before loading the contracts and register the recursive default-value schema as a named component. For static imports, load a separate Zod setup module before importing the contracts; calling the extension after static imports is too late for the recursive schema:
+
+```typescript
+extendZodWithOpenApi(z);
+const { McpConfigInputSchema } = await import('promptfoo/contracts');
+registry.register(
+  'McpDefaultArgumentValue',
+  McpConfigInputSchema.shape.defaultArgs.unwrap().valueType,
+);
 ```
 
 Tools and response transforms receive the full arguments. Debug logs list argument names only. Promptfoo redacts credential fields such as `session_id` and `apiKey` in saved result metadata and tool traces. Use the separate [server authentication](#authentication) settings for credentials that authenticate the connection itself.

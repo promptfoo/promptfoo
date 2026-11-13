@@ -71,16 +71,13 @@ export function invertScore(score: number): number {
 }
 
 export function cosineSimilarity(vecA: number[], vecB: number[]): number {
-  if (vecA.length !== vecB.length) {
-    throw new Error('Vectors must be of equal length');
-  }
-  const dotProduct = vecA.reduce((acc, val, idx) => acc + val * vecB[idx], 0);
+  const product = dotProduct(vecA, vecB);
   const vecAMagnitude = Math.sqrt(vecA.reduce((acc, val) => acc + val * val, 0));
   const vecBMagnitude = Math.sqrt(vecB.reduce((acc, val) => acc + val * val, 0));
   if (vecAMagnitude === 0 || vecBMagnitude === 0) {
     return 0;
   }
-  return dotProduct / (vecAMagnitude * vecBMagnitude);
+  return product / (vecAMagnitude * vecBMagnitude);
 }
 
 export function dotProduct(vecA: number[], vecB: number[]): number {
