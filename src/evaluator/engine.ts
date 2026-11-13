@@ -1208,7 +1208,11 @@ async function prepareTestCaseForEval(
     ...testCase.metadata,
   };
   testCase.prompts = testCase.prompts ?? defaultTest?.prompts;
-  testCase.provider = await resolveDefaultTestProvider(defaultTest, testCase, defaultTestProviderCache);
+  testCase.provider = await resolveDefaultTestProvider(
+    defaultTest,
+    testCase,
+    defaultTestProviderCache,
+  );
   testCase.assertScoringFunction =
     testCase.assertScoringFunction || defaultTest?.assertScoringFunction;
   testCase.providers = testCase.providers ?? defaultTest?.providers;

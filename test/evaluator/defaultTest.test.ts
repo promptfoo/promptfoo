@@ -202,10 +202,11 @@ describe('evaluator defaultTest merging', () => {
       const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
       await evaluate(testSuite, evalRecord, {});
     }
-    const echoLoads = mockLoadApiProvider.mock.calls.filter(([providerId]) => providerId === 'echo');
+    const echoLoads = mockLoadApiProvider.mock.calls.filter(
+      ([providerId]) => providerId === 'echo',
+    );
     expect(echoLoads.map(([, options]) => options.basePath)).toEqual(basePaths);
   });
-
 });
 
 describe('Evaluator with external defaultTest', () => {
