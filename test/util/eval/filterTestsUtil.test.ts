@@ -182,9 +182,21 @@ describe('filterTestsUtil', () => {
         expect(result).toHaveLength(0);
       });
 
-      it('should handle non-json file path as eval ID', async () => {
+      it('reads a mixed-case report when no stored evaluation has its name', async () => {
+        vi.mocked(Eval.findById).mockResolvedValue(undefined);
+
+        const result = await filterTestsByResults(
+          mockTestSuite,
+          'results.JsOn',
+          (row) => row.success,
+        );
+        expect(util.readOutput).toHaveBeenCalledWith('results.JsOn');
+        expect(result[0]?.vars?.var1).toBe('test1');
+      });
+
+      it.each(['results.txt', 'nightly-eval.JSON'])('keeps eval ID %s', async (id) => {
         const mockEval = {
-          id: 'results.txt',
+          id,
           toEvaluateSummary: vi.fn().mockResolvedValue({
             version: 2,
             timestamp: new Date().toISOString(),
@@ -200,13 +212,10 @@ describe('filterTestsUtil', () => {
         };
         vi.mocked(Eval.findById).mockResolvedValue(mockEval as any);
 
-        const result = await filterTestsByResults(
-          mockTestSuite,
-          'results.txt',
-          (result) => result.success,
-        );
+        const result = await filterTestsByResults(mockTestSuite, id, (result) => result.success);
         expect(result).toHaveLength(1);
         expect(result[0]?.vars?.var1).toBe('test1');
+        expect(Eval.findById).toHaveBeenCalledWith(id);
         expect(util.readOutput).not.toHaveBeenCalled();
       });
 
