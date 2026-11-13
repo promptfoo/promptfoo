@@ -232,6 +232,7 @@ export const VertexGeminiConfigInputSchema = GeminiSharedConfigInputSchema.exten
   publisher: z.string().optional(),
   credentials: z.string().optional(),
   expressMode: z.boolean().optional(),
+  strictMutualExclusivity: z.boolean().optional(),
   keyFilename: z.string().optional(),
   scopes: z.union([z.string(), z.array(z.string())]).optional(),
   googleAuthOptions: JsonObject.optional(),
@@ -244,7 +245,7 @@ export const VertexGeminiConfigInputSchema = GeminiSharedConfigInputSchema.exten
 });
 
 const Model =
-  'gemini-(?!(?:omni-flash-preview|omni-1\\.1-flash(?:-preview)?|robotics-er-2-preview|3\\.5-live-translate-preview|3\\.5-transcribe-live)$)(?!robotics-er-2-streaming-)(?![^:]*-image)(?!nano-banana-2\\.1$)[^:]+';
+  'gemini-(?!(?:omni-flash-preview|robotics-er-2-preview|3\\.5-live-translate-preview|3\\.5-transcribe-live)$)(?!robotics-er-2-streaming-)(?![^:]*-image)(?!nano-banana-2\\.1$)[^:]+';
 const Options = z.strictObject({
   inputs: InputsInputSchema.optional(),
   label: z.string().optional(),
@@ -254,16 +255,19 @@ const Options = z.strictObject({
   env: ProviderEnvOverridesSchema.catchall(z.string()).optional(),
 });
 export const GoogleAiStudioProviderOptionsInputSchema = Options.extend({
-  id: z.string().regex(
-    new RegExp(
-      // google:gemini-3.5-transcribe routes to Interactions; Vertex keeps it on GenerateContent.
-      `^(?:google|palm):(?!gemini-3\\.5-transcribe$)(?:${Model}|gemini-omni-1\\.1-flash-preview)$`,
+  // These IDs route to Interactions here but stay on GenerateContent for Vertex.
+  id: z
+    .string()
+    .regex(
+      new RegExp(`^(?:google|palm):(?!gemini-(?:omni-1\\.1-flash|3\\.5-transcribe)$)${Model}$`),
     ),
-  ),
   config: GoogleAiStudioConfigInputSchema.optional(),
 });
 export const VertexGeminiProviderOptionsInputSchema = Options.extend({
-  id: z.string().regex(new RegExp(`^vertex:(?:chat:)?${Model}$`)),
+  // Vertex routes the Omni 1.1 preview to Interactions; AI Studio keeps it on GenerateContent.
+  id: z
+    .string()
+    .regex(new RegExp(`^vertex:(?:chat:)?(?!gemini-omni-1\\.1-flash-preview$)${Model}$`)),
   config: VertexGeminiConfigInputSchema.optional(),
 });
 export const GeminiProviderOptionsInputSchema = z.union([

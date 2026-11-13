@@ -15,6 +15,8 @@ const validate = new Ajv({ strict: false }).compile(GeminiProviderOptionsInputJs
 describe('portable Gemini configuration', () => {
   const cases: [unknown, boolean][] = [
     [{ id: 'google:gemini-omni-1.1-flash-preview' }, true],
+    [{ id: 'vertex:gemini-omni-1.1-flash' }, true],
+    [{ id: 'vertex:chat:gemini-omni-1.1-flash' }, true],
     ...[
       { tools: { googleSearch: {} } },
       {
@@ -87,6 +89,7 @@ describe('portable Gemini configuration', () => {
           credentials: 'file://key.json',
           projectId: '{{ project }}',
           expressMode: false,
+          strictMutualExclusivity: true,
           scopes: ['scope'],
           modelArmor: { promptTemplate: 'template' },
         },
@@ -128,6 +131,9 @@ describe('portable Gemini configuration', () => {
       'google:gemini-2.5-flash-image',
       'google:gemini-omni-flash-preview',
       'vertex:gemini-omni-1.1-flash-preview',
+      'vertex:chat:gemini-omni-1.1-flash-preview',
+      'google:gemini-omni-1.1-flash',
+      'palm:gemini-omni-1.1-flash',
       'vertex:gemini-robotics-er-2-preview',
       'google:gemini-3.5-live-translate-preview',
       'google:gemini-robotics-er-2-streaming-preview',
