@@ -150,6 +150,7 @@ describe('util', () => {
   it.each([
     'gemini-4-argon',
     'gemini-4-argon-cyber-permissive',
+    'gemini-4-hydrogen',
     'gemini-flash-latest',
     'gemini-flash-lite-latest',
   ])('uses the global Vertex endpoint by default for %s', (modelId) => {
@@ -3420,6 +3421,7 @@ describe('util', () => {
     it.each([
       'gemini-4-argon',
       'gemini-4-argon-cyber-permissive',
+      'gemini-4-hydrogen',
       'gemini-3.8-flash',
       'gemini-3.7-flash',
       'gemini-3.6-flash',
@@ -3450,6 +3452,18 @@ describe('util', () => {
       expect(generationConfig.temperature).toBe(0.7);
     });
 
+    it.each([
+      { thinkingConfig: { thinkingLevel: 'XHIGH' } },
+      { thinking_config: { thinking_level: 'xhigh' } },
+    ])('keeps XHIGH thinking for Gemini 4 Hydrogen', (generationConfig) => {
+      expect(
+        removeDeprecatedGeminiGenerationParams('gemini-4-hydrogen', {
+          ...generationConfig,
+          temperature: 0.2,
+        }),
+      ).toEqual(generationConfig);
+    });
+
     it('preserves sampling controls for models that still support them', () => {
       const generationConfig = { temperature: 0.7, topP: 0.9, topK: 40 };
 
@@ -3466,6 +3480,10 @@ describe('util', () => {
       {
         modelName: 'gemini-4-argon',
         generationConfig: { thinking_config: { thinking_level: 'minimal' } },
+      },
+      {
+        modelName: 'gemini-4-hydrogen',
+        generationConfig: { thinkingConfig: { thinkingLevel: 'MINIMAL' } },
       },
       {
         modelName: 'gemini-3.8-flash',
@@ -3514,6 +3532,10 @@ describe('util', () => {
         generationConfig: { thinking_config: { thinking_budget: 1024 } },
       },
       {
+        modelName: 'gemini-4-hydrogen',
+        generationConfig: { thinkingConfig: { thinkingBudget: 0 } },
+      },
+      {
         modelName: 'gemini-3.8-flash',
         generationConfig: { thinkingConfig: { thinkingBudget: 1024 } },
       },
@@ -3549,6 +3571,33 @@ describe('util', () => {
         `${modelName} does not support thinkingBudget. Use thinkingLevel`,
       );
     });
+
+    it.each([
+      {
+        modelName: 'gemini-4-hydrogen',
+        generationConfig: { thinkingConfig: { thinkingBudget: 1024 } },
+        message:
+          'gemini-4-hydrogen does not support thinkingBudget. Use thinkingLevel (LOW, MEDIUM, HIGH, or XHIGH).',
+      },
+      {
+        modelName: 'gemini-4-hydrogen',
+        generationConfig: { thinking_config: { thinking_level: 'minimal' } },
+        message:
+          'gemini-4-hydrogen does not support MINIMAL thinking. Use LOW, MEDIUM, HIGH, or XHIGH.',
+      },
+      {
+        modelName: 'gemini-4-argon',
+        generationConfig: { thinkingConfig: { thinkingLevel: 'MINIMAL' } },
+        message: 'gemini-4-argon does not support MINIMAL thinking. Use LOW, MEDIUM, or HIGH.',
+      },
+    ])(
+      'lists the thinking levels $modelName supports',
+      ({ modelName, generationConfig, message }) => {
+        expect(() => removeDeprecatedGeminiGenerationParams(modelName, generationConfig)).toThrow(
+          message,
+        );
+      },
+    );
   });
 
   describe('calculateGoogleCost', () => {
@@ -3870,6 +3919,55 @@ describe('util', () => {
           ).toBeUndefined();
         },
       );
+    });
+
+    describe('Gemini 4 Hydrogen pricing', () => {
+      it.each([
+        { date: '2026-11-12', now: Date.UTC(2026, 10, 12) },
+        { date: '2026-12-01', now: Date.UTC(2026, 11, 1) },
+        { date: '2027-01-01', now: Date.UTC(2027, 0, 1) },
+      ])('uses list prices with no introductory discount on $date', ({ now }) => {
+        vi.spyOn(Date, 'now').mockReturnValue(now);
+
+        expect(calculateGoogleCost('gemini-4-hydrogen', {}, 1000, 500)).toBeCloseTo(
+          (1000 * 1.5 + 500 * 7.5) / 1e6,
+          12,
+        );
+      });
+
+      it('applies cached, priority, and flex rates', () => {
+        const costForTier = (serviceTier?: string) =>
+          calculateGoogleCost(
+            'gemini-4-hydrogen',
+            serviceTier ? { service_tier: serviceTier } : {},
+            1000,
+            500,
+            false,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            400,
+          );
+
+        expect(costForTier()).toBeCloseTo((600 * 1.5 + 400 * 0.075 + 500 * 7.5) / 1e6, 12);
+        expect(costForTier('priority')).toBeCloseTo(
+          (600 * 2.7 + 400 * 0.135 + 500 * 13.5) / 1e6,
+          12,
+        );
+        expect(costForTier('flex')).toBeCloseTo((600 * 0.75 + 400 * 0.0375 + 500 * 3.75) / 1e6, 12);
+      });
+
+      it.each([
+        { region: 'global', expected: (1000 * 1.5 + 500 * 7.5) / 1e6 },
+        { region: 'us', expected: (1000 * 1.65 + 500 * 8.25) / 1e6 },
+        { region: 'eu', expected: (1000 * 1.65 + 500 * 8.25) / 1e6 },
+      ])('prices Vertex $region requests', ({ region, expected }) => {
+        expect(calculateGoogleCost('gemini-4-hydrogen', { region }, 1000, 500, true)).toBeCloseTo(
+          expected,
+          12,
+        );
+      });
     });
 
     it.each(['gemini-3.5-flash-lite', 'gemini-flash-lite-latest'])(

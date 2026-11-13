@@ -48,6 +48,7 @@ export interface GoogleModel {
 const VERTEX_GLOBAL_DEFAULT_MODELS = new Set([
   'gemini-4-argon',
   'gemini-4-argon-cyber-permissive',
+  'gemini-4-hydrogen',
   'gemini-3.5-transcribe',
   'gemini-3.5-transcribe-live',
   'gemini-3.8-flash-tts',
@@ -86,6 +87,7 @@ export const GEMINI_FLASH_MODELS = [
 // Gemini models offered as targets by `promptfoo redteam init`. All use the global Vertex endpoint.
 export const GEMINI_TARGET_MODELS = [
   { id: 'gemini-4-argon', name: 'Gemini 4 Argon' },
+  { id: 'gemini-4-hydrogen', name: 'Gemini 4 Hydrogen' },
   ...GEMINI_FLASH_MODELS,
 ] as const;
 
@@ -155,6 +157,17 @@ export const GOOGLE_MODELS: GoogleModel[] = [
   {
     id: 'gemini-4-argon-cyber-permissive',
     vertexCost: GEMINI_4_ARGON_COST,
+    vertexRegionalPremium: 1.1,
+  },
+  {
+    id: 'gemini-4-hydrogen',
+    cost: {
+      input: 1.5 / 1e6,
+      output: 7.5 / 1e6,
+      cacheRead: 0.075 / 1e6,
+      priorityMultiplier: 1.8,
+      flexMultiplier: 0.5,
+    },
     vertexRegionalPremium: 1.1,
   },
 

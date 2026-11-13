@@ -299,6 +299,7 @@ describe('createDummyFiles', () => {
         .value,
     ).toEqual([
       { id: 'vertex:gemini-4-argon', config: { region: 'global' } },
+      { id: 'vertex:gemini-4-hydrogen', config: { region: 'global' } },
       { id: 'vertex:gemini-3.8-flash', config: { region: 'global' } },
       { id: 'vertex:gemini-3.7-flash', config: { region: 'global' } },
       { id: 'vertex:gemini-3.6-flash', config: { region: 'global' } },
@@ -328,6 +329,7 @@ describe('createDummyFiles', () => {
   it('writes the advertised Gemini models and reports their Vertex prefixes', async () => {
     const googleModels = [
       { id: 'vertex:gemini-4-argon', config: { region: 'global' } },
+      { id: 'vertex:gemini-4-hydrogen', config: { region: 'global' } },
       { id: 'vertex:gemini-3.8-flash', config: { region: 'global' } },
       { id: 'vertex:gemini-3.7-flash', config: { region: 'global' } },
       { id: 'vertex:gemini-3.6-flash', config: { region: 'global' } },
@@ -347,7 +349,7 @@ describe('createDummyFiles', () => {
       expect.objectContaining({
         choices: expect.arrayContaining([
           expect.objectContaining({
-            name: '[Google] Gemini 4 Argon, 3.8 Flash, 3.7 Flash, 3.6 Flash, 3.5 Flash-Lite, ...',
+            name: '[Google] Gemini 4 Argon, 4 Hydrogen, 3.8 Flash, 3.7 Flash, 3.6 Flash, 3.5 Flash-Lite, ...',
             value: googleModels,
           }),
         ]),
