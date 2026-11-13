@@ -55,10 +55,7 @@ export function VideoHoverPreview({
   const [isTouchPlaying, setIsTouchPlaying] = useState(false);
   const isTouchDevice = useIsTouchDevice();
 
-  const { isIntentional, hoverProps } = useHoverIntent({
-    delay: 300,
-    respectReducedMotion: true,
-  });
+  const { isIntentional, hoverProps } = useHoverIntent();
 
   // Whether the user wants to play: intentional hover (desktop) or tap (touch)
   const wantsToPlay = isTouchDevice ? isTouchPlaying : isIntentional;

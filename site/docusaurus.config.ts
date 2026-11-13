@@ -114,6 +114,13 @@ const config: Config = {
 
   themeConfig: {
     image: 'img/thumbnail.png',
+    mermaid: {
+      options: {
+        // Mermaid 12 defaults to ELK and the neo look.
+        layout: 'dagre',
+        look: 'classic',
+      },
+    },
     colorMode: {
       defaultMode: 'light',
       disableSwitch: false,
@@ -242,7 +249,7 @@ const config: Config = {
           position: 'right',
         },
         {
-          href: 'https://discord.gg/promptfoo',
+          href: 'https://discord.gg/gHPS9jjfbs',
           position: 'right',
           className: 'header-discord-link',
           'aria-label': 'Discord community',
@@ -393,7 +400,7 @@ const config: Config = {
             },
             {
               label: 'Discord',
-              href: 'https://discord.gg/promptfoo',
+              href: 'https://discord.gg/gHPS9jjfbs',
             },
             {
               label: 'LinkedIn',
@@ -591,6 +598,15 @@ const config: Config = {
           {
             from: '/docs/guides/agent-eval',
             to: '/docs/guides/evaluate-coding-agents/',
+          },
+          // Paths that never existed but that Promptfoo's web UIs have linked to
+          {
+            from: '/docs/model-audit/installation',
+            to: '/docs/model-audit/#installation',
+          },
+          {
+            from: '/docs/red-team/configuration/multi-input',
+            to: '/docs/red-team/multi-input/',
           },
         ],
       },
