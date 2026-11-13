@@ -250,7 +250,7 @@
     "@opencode-ai/sdk": "^1.19.4",
     "@smithy/node-http-handler": "^4.4.14",
     "google-auth-library": "^11.3.2",
-    "hono": "^4.13.16",
+    "hono": "^4.13.18",
     "natural": "^8.2.6",
     "node-sql-parser": "^5.4.0",
     "pdf-parse": "^2.4.5",

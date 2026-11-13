@@ -215,7 +215,8 @@ const KNOWN_BAD_RELEASES = new Map([
   // Also covers GHSA-hxh3-vqpv-xpqv and GHSA-5r4p-p66f-jhc7.
   // GHSA-4m76-xfj5-7975, GHSA-46wx-v44x-9hh2, GHSA-h7mg-cq63-vhpq,
   // GHSA-4h7h-rv7c-7m2v, GHSA-3gg2-335m-rxc6.
-  ['hono', '<4.13.16'],
+  // GHSA-92p4-j3wq-jmqx, GHSA-39q9-qp46-w8xg, GHSA-h25j-2p75-qj33, GHSA-74fm-fwc7-3fwp.
+  ['hono', '<4.13.18'],
   ['ibm-cloud-sdk-core', '5.6.3'], // Escaped quotes expose JSON secret suffixes in debug logs (#11472)
   ['js-yaml', '<3.15.2 || >=4.0.0 <4.3.2 || >=5.0.0 <5.2.3'], // #10356, GHSA-2883-xcg3-v3hh
   ['keyv', '6.0.0'], // Shai-Hulud compromise (#10301)
