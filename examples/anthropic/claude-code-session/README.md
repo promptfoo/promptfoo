@@ -59,5 +59,5 @@ promptfoo view
 ## Configuration
 
 See `promptfooconfig.yaml` — both the main provider and the `llm-rubric`
-grader point at `anthropic:messages:claude-sonnet-4-6` with
+grader point at `anthropic:messages:claude-sonnet-5` with
 `apiKeyRequired: false` so the entire eval runs on your Claude subscription.
