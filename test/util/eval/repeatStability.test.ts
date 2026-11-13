@@ -24,6 +24,55 @@ describe('calculateRepeatStability', () => {
     expect(calculateRepeatStability([createEvaluateResult()])).toBeUndefined();
   });
 
+  it.each([
+    {
+      name: 'missing and literal undefined provider IDs',
+      first: { repeatGroupId: 'group', promptIdx: 0, provider: {} },
+      second: { repeatGroupId: 'group', promptIdx: 0, provider: { id: 'undefined' } },
+    },
+    {
+      name: 'missing and literal undefined provider labels',
+      first: { repeatGroupId: 'group', promptIdx: 0, provider: { id: 'provider' } },
+      second: {
+        repeatGroupId: 'group',
+        promptIdx: 0,
+        provider: { id: 'provider', label: 'undefined' },
+      },
+    },
+    {
+      name: 'null characters in provider IDs and labels',
+      first: { repeatGroupId: 'group', promptIdx: 0, provider: { id: 'a\u0000b', label: 'c' } },
+      second: { repeatGroupId: 'group', promptIdx: 0, provider: { id: 'a', label: 'b\u0000c' } },
+    },
+    {
+      name: 'null characters in repeat group IDs and provider IDs',
+      first: { repeatGroupId: 'group', promptIdx: 0, provider: { id: '1\u0000provider' } },
+      second: { repeatGroupId: 'group\u00000', promptIdx: 1, provider: { id: 'provider' } },
+    },
+  ])('keeps distinct groups for $name', ({ first, second }) => {
+    const summary = calculateRepeatStability([
+      ...[0, 1].map((repeatIndex) =>
+        createEvaluateResult({ ...first, repeatIndex, success: true }),
+      ),
+      ...[0, 1].map((repeatIndex) =>
+        createEvaluateResult({
+          ...second,
+          repeatIndex,
+          success: false,
+          failureReason: ResultFailureReason.ASSERT,
+        }),
+      ),
+    ]);
+
+    expect(summary).toMatchObject({ totalGroups: 2, unstableGroups: 0 });
+    expect(summary?.groups).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ ...first, repetitions: 2, passed: 2, failed: 0, passRate: 1 }),
+        expect.objectContaining({ ...second, repetitions: 2, passed: 0, failed: 2, passRate: 0 }),
+      ]),
+    );
+  });
+
   it('groups repeated results and reports instability, errors, and cache use', () => {
     const base = {
       repeatGroupId: 'test-0-vars-0',
@@ -341,6 +390,24 @@ describe('calculateRepeatStability', () => {
 });
 
 describe('getWilsonScoreInterval', () => {
+  it.each([
+    [Number.NaN, 3],
+    [1, Number.NaN],
+    [Number.POSITIVE_INFINITY, 3],
+    [1, Number.POSITIVE_INFINITY],
+    [Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY],
+    [Number.NEGATIVE_INFINITY, 3],
+    [1, Number.NEGATIVE_INFINITY],
+    [1.5, 3],
+    [1, 3.5],
+    [-1, 3],
+    [4, 3],
+    [0, -1],
+    [0, 0],
+  ])('rejects invalid counts: passed=%s, total=%s', (passed, total) => {
+    expect(getWilsonScoreInterval(passed, total)).toBeUndefined();
+  });
+
   it('handles boundary pass rates without leaving the probability range', () => {
     expect(getWilsonScoreInterval(0, 3)).toMatchObject({ confidenceLevel: 0.95, lower: 0 });
     expect(getWilsonScoreInterval(3, 3)).toMatchObject({ confidenceLevel: 0.95, upper: 1 });

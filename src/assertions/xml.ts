@@ -9,7 +9,12 @@ type XmlTag =
   | { kind: 'declaration'; start: number; end: number };
 
 type OpenXmlTag = { name: string; start: number };
-type XmlCandidate = { start: number; end: number; parentStart?: number };
+type XmlCandidate = {
+  start: number;
+  end: number;
+  parentStart?: number;
+  fragments?: XmlCandidate[];
+};
 type XmlValidationResult = { isValid: boolean; reason: string; isWellFormed: boolean };
 
 function getLastOpenTag(stack: OpenXmlTag[]): OpenXmlTag | undefined {
@@ -371,6 +376,7 @@ function orderXmlCandidates(candidates: XmlCandidate[]): XmlCandidate[] {
       start: siblings[0].start,
       end: siblings[siblings.length - 1].end,
       parentStart,
+      fragments: siblings,
     });
   }
 
@@ -518,8 +524,6 @@ export function validateXml(
 ): { isValid: boolean; reason: string } {
   // XMLParser.parse() is a lenient data extractor, so validate the entire
   // document with a well-formedness parser before extracting its values.
-  // contains-xml intentionally remains lenient because it accepts fragments
-  // embedded in otherwise non-XML output.
   let unsupportedReason: string | undefined;
   let doctypeParseError: string | undefined;
   let standalone = false;
@@ -575,8 +579,26 @@ export function containsXml(
       continue;
     }
 
+    const fragments = (xmlCandidate.fragments ?? [xmlCandidate])
+      .map((fragment) => outputString.slice(fragment.start, fragment.end))
+      .filter((fragment) => {
+        // Check each fragment independently so intervening output need not be
+        // XML and namespace bindings cannot leak between fragments.
+        try {
+          new SaxesParser({ xmlns: true }).write(fragment).close();
+          return true;
+        } catch {
+          return false;
+        }
+      });
+    if (fragments.length === 0) {
+      continue;
+    }
+
+    // The data extractor supports multiple roots, preserving required paths
+    // that span well-formed sibling fragments.
     const { isValid, isWellFormed, reason } = validateXmlCandidate(
-      outputString.slice(xmlCandidate.start, xmlCandidate.end),
+      fragments.join(''),
       requiredElements,
     );
     if (isValid) {

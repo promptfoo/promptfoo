@@ -883,9 +883,8 @@ describe('HttpProvider - OAuth Token Refresh Deduplication', () => {
     });
 
     // First call will fail, but subsequent calls should retry
-    const promise1 = provider.callApi('test 1').catch((err: Error) => {
-      expect(err.message).toMatch(/token|auth|refresh|401|fetch/i);
-    });
+    const promise1 = provider.callApi('test 1');
+    const firstCallRejected = expect(promise1).rejects.toThrow(/token|auth|refresh|401|fetch/i);
     await firstRefreshStarted.promise;
     // Second call should trigger a retry
     const promise2 = provider.callApi('test 2');
@@ -893,7 +892,7 @@ describe('HttpProvider - OAuth Token Refresh Deduplication', () => {
 
     const response2 = await promise2;
     expect(response2.error).toBeUndefined();
-    await promise1;
+    await firstCallRejected;
 
     // Should have attempted token refresh twice (initial + retry)
     const tokenRefreshCalls = vi
@@ -967,9 +966,8 @@ describe('HttpProvider - OAuth Token Refresh Deduplication', () => {
       return apiResponse;
     });
 
-    const promise1 = provider.callApi('same prompt').catch((err: Error) => {
-      expect(err.message).toMatch(/token|auth|refresh|401|fetch/i);
-    });
+    const promise1 = provider.callApi('same prompt');
+    const firstCallRejected = expect(promise1).rejects.toThrow(/token|auth|refresh|401|fetch/i);
     await firstRefreshStarted.promise;
     const promise2 = provider.callApi('same prompt');
     const promise3 = provider.callApi('same prompt');
@@ -981,7 +979,7 @@ describe('HttpProvider - OAuth Token Refresh Deduplication', () => {
     const [response2, response3] = await Promise.all([promise2, promise3]);
     expect(response2.error).toBeUndefined();
     expect(response3.error).toBeUndefined();
-    await promise1;
+    await firstCallRejected;
 
     const tokenRefreshCalls = vi
       .mocked(fetchWithCache)
@@ -996,7 +994,7 @@ describe('HttpProvider - OAuth Token Refresh Deduplication', () => {
     }
   });
 
-  it('should use cached token if refresh is already in progress', async () => {
+  it('should share an in-progress token refresh between callers', async () => {
     const provider = new HttpProvider(mockUrl, {
       config: {
         method: 'POST',
@@ -1378,9 +1376,8 @@ describe('HttpProvider - File Auth', () => {
       },
     });
 
-    const promise1 = provider.callApi('same prompt').catch((err: Error) => {
-      expect(err.message).toMatch(/token|auth|refresh|401|fetch/i);
-    });
+    const promise1 = provider.callApi('same prompt');
+    const firstCallRejected = expect(promise1).rejects.toThrow(/token|auth|refresh|401|fetch/i);
     await firstRefreshStarted.promise;
     const promise2 = provider.callApi('same prompt');
     const promise3 = provider.callApi('same prompt');
@@ -1392,7 +1389,7 @@ describe('HttpProvider - File Auth', () => {
     const [response2, response3] = await Promise.all([promise2, promise3]);
     expect(response2.error).toBeUndefined();
     expect(response3.error).toBeUndefined();
-    await promise1;
+    await firstCallRejected;
 
     expect(authFn).toHaveBeenCalledTimes(2);
 
