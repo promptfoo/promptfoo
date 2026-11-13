@@ -189,6 +189,19 @@ describe('OpenAI tool history in provider requests', () => {
     ).toThrow('matching function name');
   });
 
+  it('treats a null tool_call_id on an ordinary turn as absent', () => {
+    const messages = [{ role: 'user', content: 'hello', tool_call_id: null }];
+    expect(maybeCoerceToGeminiFormat(messages).contents).toEqual([
+      { role: 'user', parts: [{ text: 'hello' }] },
+    ]);
+    expect(anthropic(messages).extractedMessages).toEqual([
+      { role: 'user', content: [{ type: 'text', text: 'hello' }] },
+    ]);
+    expect(() => anthropic([{ role: 'tool', tool_call_id: null, content: 'r' }])).toThrow(
+      'tool_call_id',
+    );
+  });
+
   it('retains the plain-text fallback for JSON arrays with null entries', () => {
     expect(anthropic([null]).extractedMessages).toEqual([
       { role: 'user', content: [{ type: 'text', text: '[null]' }] },

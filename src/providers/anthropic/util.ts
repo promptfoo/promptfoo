@@ -1,5 +1,9 @@
 import { parseDataUrl } from '../../util/dataUrl';
-import { calculateCost as calculateCostBase, type ModelCost, parseToolCallArguments } from '../shared';
+import {
+  calculateCost as calculateCostBase,
+  type ModelCost,
+  parseToolCallArguments,
+} from '../shared';
 import type Anthropic from '@anthropic-ai/sdk';
 
 import type { TokenUsage } from '../../types/index';
@@ -814,7 +818,7 @@ export function parseMessages(messages: string): {
       (msg) => msg.role === 'system' || msg.role === 'developer',
     );
     for (const msg of parsed.filter((item) => item.role && !systemMessages.includes(item))) {
-      if (msg.role === 'tool' || msg.tool_call_id !== undefined) {
+      if (msg.role === 'tool' || msg.tool_call_id != null) {
         if (typeof msg.tool_call_id !== 'string' || !msg.tool_call_id) {
           throw new Error('Tool result requires a tool_call_id');
         }

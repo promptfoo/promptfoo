@@ -1111,7 +1111,7 @@ export function maybeCoerceToGeminiFormat(
     const toolNames = new Map<string, string>();
     coercedContents = [];
     for (const item of contents) {
-      if (item.role === 'tool' || item.tool_call_id !== undefined) {
+      if (item.role === 'tool' || item.tool_call_id != null) {
         const name = toolNames.get(item.tool_call_id) ?? item.name;
         if (
           typeof item.tool_call_id !== 'string' ||
