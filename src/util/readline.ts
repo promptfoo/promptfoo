@@ -24,16 +24,12 @@ export async function promptUser(question: string): Promise<string> {
 
       // Handle errors
       rl.on('error', (err) => {
-        if (rl) {
-          rl.close();
-        }
+        rl!.close();
         reject(err);
       });
 
       rl.question(question, (answer) => {
-        if (rl) {
-          rl.close();
-        }
+        rl!.close();
         resolve(answer);
       });
     } catch (err) {
