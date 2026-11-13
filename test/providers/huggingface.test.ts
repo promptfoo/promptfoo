@@ -329,6 +329,37 @@ describe('HuggingfaceChatCompletionProvider', () => {
   });
 });
 
+describe('HuggingfaceTextGenerationProvider inference responses', () => {
+  const provider = new HuggingfaceTextGenerationProvider('fixture/generator');
+  const malformed = { error: expect.stringContaining('Malformed response data') };
+
+  afterEach(async () => {
+    vi.clearAllMocks();
+    await clearCache();
+  });
+
+  it.each([
+    [{ generated_text: '' }, { output: '' }],
+    [[{ generated_text: '' }], { output: '' }],
+    [{ generated_text: 'Output' }, { output: 'Output' }],
+    [[{ generated_text: 'Output' }], { output: 'Output' }],
+    [
+      { error: 'Model unavailable', generated_text: '' },
+      { error: 'API call error: Model unavailable' },
+    ],
+    [null, malformed],
+    [{}, malformed],
+    [{ generated_text: 0 }, malformed],
+    [[], malformed],
+  ])('handles inference response %j', async (body, expected) => {
+    mockFetch.mockResolvedValue({
+      ...defaultMockResponse,
+      text: vi.fn().mockResolvedValue(JSON.stringify(body)),
+    });
+    expect(await provider.callApi('Test prompt')).toEqual(expected);
+  });
+});
+
 describe('HuggingfaceTextGenerationProvider chat delegation', () => {
   beforeEach(() => {
     mockProcessEnv({ HF_TOKEN: 'test-hf-token' });

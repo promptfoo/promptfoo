@@ -11,7 +11,7 @@ import dedent from 'dedent';
 import { getUserEmail, setUserEmail } from '../../globalConfig/accounts';
 import { readGlobalConfig, writeGlobalConfigPartial } from '../../globalConfig/globalConfig';
 import logger from '../../logger';
-import { GEMINI_FLASH_MODELS } from '../../providers/google/shared';
+import { GEMINI_TARGET_MODELS } from '../../providers/google/shared';
 import telemetry, { type EventProperties } from '../../telemetry';
 import { promptfooCommand } from '../../util/promptfooCommand';
 import { extractVariablesFromTemplate, getNunjucksEngine } from '../../util/templates';
@@ -309,8 +309,8 @@ export async function redteamInit(directory: string | undefined) {
       { name: 'openai:gpt-5.6', value: 'openai:gpt-5.6' },
       { name: 'openai:gpt-5.4-mini', value: 'openai:gpt-5.4-mini' },
       {
-        name: 'anthropic:claude-fable-5-1',
-        value: 'anthropic:messages:claude-fable-5-1',
+        name: 'anthropic:claude-fable-5-2',
+        value: 'anthropic:messages:claude-fable-5-2',
       },
       {
         name: 'anthropic:claude-fable-5',
@@ -349,7 +349,7 @@ export async function redteamInit(directory: string | undefined) {
         value: 'anthropic:messages:claude-haiku-4-5',
       },
       ...['google', 'vertex'].flatMap((provider) =>
-        GEMINI_FLASH_MODELS.map(({ id, name }) => ({
+        GEMINI_TARGET_MODELS.map(({ id, name }) => ({
           name: `Google${provider === 'vertex' ? ' Vertex' : ''} ${name}`,
           value: `${provider}:${id}`,
         })),
@@ -375,7 +375,7 @@ export async function redteamInit(directory: string | undefined) {
         {
           id: selectedProvider,
           label,
-          ...(GEMINI_FLASH_MODELS.some(({ id }) => selectedProvider === `vertex:${id}`)
+          ...(GEMINI_TARGET_MODELS.some(({ id }) => selectedProvider === `vertex:${id}`)
             ? { config: { region: 'global' } }
             : {}),
         },
