@@ -278,8 +278,8 @@ export default function ResultsView({
     setComparisonEvalIds,
     hiddenVarNamesBySchema,
     setHiddenVarNamesForSchema,
-    showCharts = null,
-    toggleShowCharts = () => {},
+    showCharts,
+    toggleShowCharts,
   } = useResultsViewSettingsStore();
 
   const { updateConfig } = useMainStore();

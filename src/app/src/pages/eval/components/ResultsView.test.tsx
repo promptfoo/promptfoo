@@ -116,6 +116,8 @@ function createViewSettings() {
     setComparisonEvalIds: vi.fn(),
     hiddenVarNamesBySchema: {},
     setHiddenVarNamesForSchema: vi.fn(),
+    showCharts: null,
+    toggleShowCharts: vi.fn(),
   };
 }
 
