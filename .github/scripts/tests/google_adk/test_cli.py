@@ -4,11 +4,13 @@ import json
 import os
 import signal
 import socket
+import sqlite3
 import subprocess
 import sys
 import tempfile
 import threading
 import unittest
+from contextlib import closing
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -16,40 +18,50 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[4]
 EXAMPLE = ROOT / "examples/integration-google-adk"
+TRIP_NOTE_SUMMARY = "Cloudy with drizzle. Bring an umbrella."
 
 
-def isolated_environment_paths(work: Path) -> dict[str, str]:
+def isolated_cli_directory(
+    parent: Path, capture_content: bool
+) -> tuple[Path, dict[str, str]]:
+    work = parent / "example"
+    work.mkdir()
     home = work / "home"
     state = home / ".local" / "state"
     state.mkdir(parents=True)
     temporary = work / "tmp"
     temporary.mkdir()
-    env_file = work / "empty.env"
-    env_file.touch()
-    return {
-        "HOME": str(home),
-        "USERPROFILE": str(home),
-        "XDG_STATE_HOME": str(state),
-        "TMPDIR": str(temporary),
-        # envars loads defaults before main processes the explicit --env-file flag.
-        "DOTENV_PATH": str(env_file),
+    capture_mode = "SPAN_ONLY" if capture_content else "NO_CONTENT"
+    (work / ".env").write_text(
+        f"OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT={capture_mode}\n"
+        f"ADK_CAPTURE_MESSAGE_CONTENT_IN_SPANS={str(capture_content).lower()}\n"
+    )
+    env = {
+        key: value
+        for key, value in os.environ.items()
+        if key in ("PATH", "SYSTEMROOT", "LANG", "LC_ALL")
     }
+    env.update(
+        HOME=str(home),
+        USERPROFILE=str(home),
+        XDG_STATE_HOME=str(state),
+        TMPDIR=str(temporary),
+    )
+    return work, env
 
 
 class GoogleAdkCliTest(unittest.TestCase):
     backend = "gemini"
     cli = ("node", str(ROOT / "dist/src/entrypoint.js"))
 
-    def test_import_time_defaults_cannot_reload_checkout_settings(self):
+    def test_implicit_env_loads_example_policy_without_checkout_settings(self):
         with tempfile.TemporaryDirectory(prefix="promptfoo-adk-env-") as directory:
-            work = Path(directory)
-            checkout = work / "synthetic-checkout"
-            checkout.mkdir()
+            checkout = Path(directory)
             (checkout / ".env").write_text(
                 "PROMPTFOO_QA_SYNTHETIC_SECRET=fixture-secret\n"
                 "OPENAI_API_HOST=fixture.invalid/v1\n"
             )
-            env = {"PATH": os.environ["PATH"], **isolated_environment_paths(work)}
+            work, env = isolated_cli_directory(checkout, capture_content=False)
             for key in ("HOME", "USERPROFILE", "XDG_STATE_HOME", "TMPDIR"):
                 self.assertTrue(Path(env[key]).is_relative_to(work))
                 self.assertTrue(Path(env[key]).is_dir())
@@ -59,27 +71,87 @@ class GoogleAdkCliTest(unittest.TestCase):
                 str(ROOT / "node_modules/tsx/dist/loader.mjs"),
                 "--input-type=module",
                 "-e",
-                "import {pathToFileURL} from 'node:url'; "
-                "await import(pathToFileURL(process.argv[1]).href); "
-                "process.stdout.write(JSON.stringify({"
-                "secret: process.env.PROMPTFOO_QA_SYNTHETIC_SECRET ?? null, "
-                "host: process.env.OPENAI_API_HOST ?? null}));",
+                (
+                    "import {pathToFileURL} from 'node:url'; "
+                    "await import(pathToFileURL(process.argv[1]).href); "
+                    "console.log(JSON.stringify(process.argv.slice(2).map(k => process.env[k] ?? null)));"
+                ),
                 str(ROOT / "src/envars.ts"),
+                "OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT",
+                "ADK_CAPTURE_MESSAGE_CONTENT_IN_SPANS",
+                "PROMPTFOO_QA_SYNTHETIC_SECRET",
+                "OPENAI_API_HOST",
             ]
-            result = subprocess.check_output(
-                command, cwd=checkout, env=env, text=True, timeout=20
-            )
-            self.assertEqual(json.loads(result), {"secret": None, "host": None})
 
-            # The old startup defaults import both values from this same fixture.
-            del env["DOTENV_PATH"]
-            control = subprocess.check_output(
-                command, cwd=checkout, env=env, text=True, timeout=20
-            )
+            def read_settings(cwd):
+                return json.loads(
+                    subprocess.check_output(
+                        command, cwd=cwd, env=env, text=True, timeout=20
+                    )
+                )
+
+            self.assertEqual(read_settings(work), ["NO_CONTENT", "false", None, None])
             self.assertEqual(
-                json.loads(control),
-                {"secret": "fixture-secret", "host": "fixture.invalid/v1"},
+                read_settings(checkout),
+                [None, None, "fixture-secret", "fixture.invalid/v1"],
             )
+
+    def assert_span_content(self, database: Path, row, capture_content: bool) -> None:
+        # The CLI JSON export truncates long attributes. Read the receiver's full payloads.
+        with closing(sqlite3.connect(f"{database.as_uri()}?mode=ro", uri=True)) as db:
+            spans = db.execute(
+                "SELECT name, attributes FROM spans WHERE trace_id = ?",
+                (row["traceId"],),
+            ).fetchall()
+        tools = [attrs for name, attrs in spans if name.startswith("execute_tool ")]
+        models = [
+            attrs
+            for name, attrs in spans
+            if name == "call_llm" or name.startswith("generate_content ")
+        ]
+        self.assertTrue(tools, "Missing ADK tool spans")
+        self.assertTrue(models, "Missing ADK model spans")
+
+        if not capture_content:
+            # Legacy ADK writes empty JSON; v2 omits payload attributes. Metadata remains.
+            for raw in tools + models:
+                attributes = json.loads(raw)
+                for key in (
+                    "gcp.vertex.agent.llm_request",
+                    "gcp.vertex.agent.llm_response",
+                    "gcp.vertex.agent.tool_call_args",
+                    "gcp.vertex.agent.tool_response",
+                    "gen_ai.input.messages",
+                    "gen_ai.output.messages",
+                    "gen_ai.system_instructions",
+                    "gen_ai.tool.call.arguments",
+                    "gen_ai.tool.call.result",
+                ):
+                    self.assertIn(
+                        attributes.get(key), (None, "", "{}", "[]", {}, []), key
+                    )
+
+        output = json.loads(row["response"]["output"])
+        if "steps_json" in row["vars"]:
+            prompts = json.loads(row["vars"]["steps_json"])
+            tool_values = (
+                output["session_state"]["last_city"],
+                TRIP_NOTE_SUMMARY,
+                output["artifact_names"][0],
+            )
+        else:
+            prompts = [row["vars"]["task"]]
+            tool_values = ("Tokyo", output["session_state"]["weather_snapshot"])
+
+        # A provider-specific attribute or model history can repeat a tool payload.
+        all_attributes = "\n".join(tools + models)
+        for group, values in (
+            (tools, tool_values),
+            (models, [*prompts, output["final_answer"]]),
+        ):
+            attributes = "\n".join(group) if capture_content else all_attributes
+            for value in values:
+                self.assertEqual(value in attributes, capture_content, value)
 
     def run_configs(self, failure=None) -> None:
         requests = []
@@ -151,7 +223,7 @@ class GoogleAdkCliTest(unittest.TestCase):
                                 "name": "save_trip_note",
                                 "args": {
                                     "city": city,
-                                    "summary": "Cloudy with drizzle. Bring an umbrella.",
+                                    "summary": TRIP_NOTE_SUMMARY,
                                 },
                             }
                         }
@@ -235,13 +307,8 @@ class GoogleAdkCliTest(unittest.TestCase):
         thread.start()
         try:
             with tempfile.TemporaryDirectory(prefix="promptfoo-adk-test-") as temporary:
-                work = Path(temporary)
-                env = {
-                    key: value
-                    for key, value in os.environ.items()
-                    if key in ("PATH", "SYSTEMROOT", "LANG", "LC_ALL")
-                }
-                env.update(isolated_environment_paths(work))
+                capture_content = failure != "no-content"
+                work, env = isolated_cli_directory(Path(temporary), capture_content)
                 # No inherited SDK credentials, model routing, proxies or trace exporters.
                 for proxy in ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY"):
                     env[proxy] = env[proxy.lower()] = ""
@@ -298,14 +365,12 @@ class GoogleAdkCliTest(unittest.TestCase):
                                 str(config_path),
                                 "--no-cache",
                                 "--no-share",
-                                "--env-file",
-                                env["DOTENV_PATH"],
                                 "-j",
                                 "1",
                                 "-o",
                                 str(output),
                             ],
-                            cwd=ROOT,
+                            cwd=work,
                             env=env,
                             stdout=subprocess.PIPE,
                             stderr=subprocess.STDOUT,
@@ -322,6 +387,12 @@ class GoogleAdkCliTest(unittest.TestCase):
                         data = json.loads(output.read_text())["results"]
                         self.assertEqual(len(data["results"]), 1)
                         row = data["results"][0]
+                        if failure in (None, "no-content"):
+                            self.assert_span_content(
+                                work / "promptfoo" / "promptfoo.db",
+                                row,
+                                capture_content,
+                            )
                         if failure:
                             self.assertNotEqual(process.returncode, 0, log)
                             self.assertFalse(row["success"], row)
@@ -337,20 +408,28 @@ class GoogleAdkCliTest(unittest.TestCase):
                                 self.assertFalse(row["response"].get("error"), row)
                                 self.assertEqual(data["stats"]["failures"], 1)
                                 self.assertEqual(data["stats"]["errors"], 0)
-                                self.assertTrue(
-                                    any(
-                                        not item["pass"]
-                                        and item["assertion"]["type"]
-                                        == "trajectory:tool-args-match"
-                                        for item in row["gradingResult"][
-                                            "componentResults"
-                                        ]
-                                    ),
-                                    row,
+                                components = row["gradingResult"]["componentResults"]
+                                failed_types = {
+                                    item["assertion"]["type"]
+                                    for item in components
+                                    if not item["pass"]
+                                }
+                                self.assertIn(
+                                    "trajectory:tool-args-match", failed_types
                                 )
+                                if failure == "no-content":
+                                    for item in components:
+                                        self.assertEqual(
+                                            item["pass"],
+                                            item["assertion"]["type"]
+                                            != "trajectory:tool-args-match",
+                                            item,
+                                        )
                             print(f"ADK {backend} {name}: {failure} rejected")
                             continue
-                        self.assertEqual(process.returncode, 0, log)
+                        self.assertEqual(
+                            process.returncode, 0, f"{log}\n{row['gradingResult']}"
+                        )
                         self.assertEqual(data["stats"]["successes"], 1)
                         self.assertEqual(data["stats"]["failures"], 0)
                         self.assertEqual(data["stats"]["errors"], 0)
@@ -397,6 +476,9 @@ class GoogleAdkCliTest(unittest.TestCase):
 
     def test_api_errors_are_not_successful_outputs(self) -> None:
         self.run_configs(failure="api-error")
+
+    def test_disabling_capture_hides_model_and_tool_content(self) -> None:
+        self.run_configs(failure="no-content")
 
     def test_wrong_tool_arguments_fail_original_trace_assertions(self) -> None:
         self.run_configs(failure="wrong-tool-args")

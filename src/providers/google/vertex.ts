@@ -28,12 +28,15 @@ import {
   getRequestTimeoutMs,
   parseChatPrompt,
   shouldBustProviderCache,
+  waitForPromiseWithAbort,
   withResponseCacheMetadata,
 } from '../shared';
 import { GoogleAuthManager } from './auth';
 import { GoogleGenericProvider, type GoogleProviderOptions } from './base';
+import { getEmbedding2OptionError, isEmbeddingVector, isGeminiEmbedding2 } from './embedding';
 import { getVertexApiHostForRegion } from './shared';
 import {
+  calculateGoogleCost,
   calculateGoogleCostFromUsage,
   collectGroundingMetadata,
   collectThoughtSignatures,
@@ -58,6 +61,8 @@ import {
   resolveGoogleToolConfig,
   resolveProjectId,
 } from './util';
+import { getVertexLlamaWireId, isVertexLlama4Model } from './vertexLlama';
+import type { gaxios } from 'google-auth-library';
 
 import type { EnvOverrides } from '../../types/env';
 import type {
@@ -99,11 +104,6 @@ const VERTEX_CLAUDE_SONNET_4_5_LONG_CONTEXT_PRICING = {
   output: 22.5 / 1e6,
 };
 
-const VERTEX_LLAMA_4_MODELS = new Set([
-  'llama-4-maverick-17b-128e-instruct-maas',
-  'llama-4-scout-17b-16e-instruct-maas',
-]);
-
 interface VertexLlamaModelSafetySettings {
   enabled: boolean;
   llama_guard_settings: Record<string, unknown>;
@@ -124,7 +124,7 @@ type VertexLlamaSafetyRequestConfig =
   | { error: string };
 
 function getRequiredVertexLlamaRegion(modelName: string): 'us-central1' | 'us-east5' {
-  return VERTEX_LLAMA_4_MODELS.has(modelName) ? 'us-east5' : 'us-central1';
+  return isVertexLlama4Model(modelName) ? 'us-east5' : 'us-central1';
 }
 
 function getVertexLlamaRegionError(modelName: string, region: string): string | undefined {
@@ -133,7 +133,7 @@ function getVertexLlamaRegionError(modelName: string, region: string): string | 
     return undefined;
   }
 
-  const availabilitySubject = VERTEX_LLAMA_4_MODELS.has(modelName)
+  const availabilitySubject = isVertexLlama4Model(modelName)
     ? `Llama model ${modelName} is`
     : 'Llama models are';
   return `${availabilitySubject} only available in the ${requiredRegion} region. Current region: ${region}. Please set region: '${requiredRegion}' in your configuration.`;
@@ -143,7 +143,7 @@ function getVertexLlamaSafetyRequestConfig(
   modelName: string,
   llamaConfig: GoogleProviderConfig['llamaConfig'],
 ): VertexLlamaSafetyRequestConfig {
-  if (VERTEX_LLAMA_4_MODELS.has(modelName)) {
+  if (isVertexLlama4Model(modelName)) {
     if (
       llamaConfig?.safetySettings?.enabled === true ||
       llamaConfig?.safetySettings?.llama_guard_settings !== undefined
@@ -211,6 +211,8 @@ function applyVertexClaudeLongContextPricing(
 }
 
 type VertexEmbeddingPredictResponse = {
+  embedding?: { values?: number[] };
+  usageMetadata?: { promptTokenCount?: number; totalTokenCount?: number };
   predictions?: Array<{
     embeddings?: {
       values?: number[];
@@ -219,10 +221,6 @@ type VertexEmbeddingPredictResponse = {
       };
     };
   }>;
-};
-
-type VertexEmbeddingProviderConfig = GoogleProviderConfig & {
-  autoTruncate?: boolean;
 };
 
 function getVertexApiHost(
@@ -715,7 +713,9 @@ export class VertexChatProvider extends GoogleGenericProvider {
               modality.toUpperCase(),
             ) ?? ['AUDIO'],
           speechConfig: config.generationConfig?.speechConfig ?? {
-            voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Kore' } },
+            voiceConfig: this.modelName.startsWith('gemini-3.8-')
+              ? { voice: 'Kore' }
+              : { prebuiltVoiceConfig: { voiceName: 'Kore' } },
           },
         }),
       },
@@ -741,6 +741,15 @@ export class VertexChatProvider extends GoogleGenericProvider {
           },
         }),
     };
+    if (
+      ['gemini-3.8-flash-tts', 'gemini-3.8-flash-lite-tts'].includes(this.modelName) &&
+      (body.systemInstruction || ('system_instruction' in body && body.system_instruction))
+    ) {
+      return {
+        error: `${this.modelName} on Vertex does not support system instructions. Put delivery instructions in speechMetadata.style.`,
+      };
+    }
+
     body.generationConfig = removeDeprecatedGeminiGenerationParams(
       this.modelName,
       body.generationConfig,
@@ -829,6 +838,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
             logger.debug(`Gemini API express mode error:\n${JSON.stringify(errorData)}`);
             return {
               error: `API call error: ${res.status} ${res.statusText}${errorData ? `: ${JSON.stringify(errorData)}` : ''}`,
+              metadata: { http: { status: res.status, statusText: res.statusText } },
             };
           }
 
@@ -983,7 +993,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
             };
           } else if (candidate.content?.parts) {
             output = mergeParts(output, formatCandidateContents(candidate));
-          } else {
+          } else if (candidate.finishReason !== 'STOP') {
             return {
               error: `No output found in response: ${JSON.stringify(data)}`,
             };
@@ -996,6 +1006,22 @@ export class VertexChatProvider extends GoogleGenericProvider {
           };
         }
 
+        // Vertex may return the text and timing/speaker data in an audioTranscription part.
+        const transcriptionParts =
+          this.modelName === 'gemini-3.5-transcribe'
+            ? dataWithResponse.flatMap((datum) => datum.candidates?.[0]?.content?.parts ?? [])
+            : [];
+        const audioTranscriptions = transcriptionParts.flatMap(
+          (part) => part.audioTranscription ?? [],
+        );
+        if (audioTranscriptions.length) {
+          const transcript = transcriptionParts
+            .map((part) => part.text || part.audioTranscription?.text || '')
+            .filter(Boolean);
+          if (transcript.length) {
+            output = transcript.join('\n');
+          }
+        }
         const lastData = dataWithResponse[dataWithResponse.length - 1];
         const promptTokenCount = lastData.usageMetadata?.promptTokenCount;
         const completionTokenCount = lastData.usageMetadata?.candidatesTokenCount;
@@ -1048,6 +1074,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
           metadata: {
             ...(thoughtSignatures.length > 0 && { thoughtSignatures }),
             ...(actualServiceTier && { serviceTier: actualServiceTier }),
+            ...(audioTranscriptions.length > 0 && { audioTranscriptions }),
             ...(typeof lastData.usageMetadata?.trafficType === 'string' && {
               trafficType: lastData.usageMetadata.trafficType,
             }),
@@ -1212,7 +1239,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
 
     // Prepare the request body for Llama models
     const body = {
-      model: `meta/${this.modelName}`,
+      model: getVertexLlamaWireId(this.modelName),
       messages,
       max_tokens: this.config.maxOutputTokens || 1024,
       stream: false,
@@ -1360,7 +1387,7 @@ export class VertexEmbeddingProvider implements ApiEmbeddingProvider {
   readonly supportsEmbeddingCancellation = true;
 
   modelName: string;
-  config: VertexEmbeddingProviderConfig;
+  config: GoogleProviderConfig;
   env?: EnvOverrides;
 
   constructor(modelName: string, options: GoogleProviderOptions = {}) {
@@ -1382,6 +1409,9 @@ export class VertexEmbeddingProvider implements ApiEmbeddingProvider {
   }
 
   getRegion(): string {
+    if (isGeminiEmbedding2(this.modelName)) {
+      return GoogleAuthManager.resolveRegion(this.config, this.env, undefined, 'global');
+    }
     return GoogleAuthManager.resolveRegion(this.config, this.env);
   }
 
@@ -1406,48 +1436,95 @@ export class VertexEmbeddingProvider implements ApiEmbeddingProvider {
     _context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<ProviderEmbeddingResponse> {
-    // See https://cloud.google.com/vertex-ai/generative-ai/docs/embeddings/get-text-embeddings#get_text_embeddings_for_a_snippet_of_text
-    const body = {
-      instances: [{ content: input }],
-      parameters: {
-        autoTruncate: this.config.autoTruncate || false,
-      },
-    };
+    const abortSignal = options?.abortSignal;
+    abortSignal?.throwIfAborted();
+    const embedContent = isGeminiEmbedding2(this.modelName);
+    if (embedContent) {
+      const error = getEmbedding2OptionError(this.config, this.modelName);
+      if (error) {
+        throw new Error(error);
+      }
+    }
+    const dimensions = this.config.outputDimensionality;
+    const body = embedContent
+      ? {
+          content: { parts: [{ text: input }] },
+          ...(dimensions !== undefined && {
+            embedContentConfig: { outputDimensionality: dimensions },
+          }),
+        }
+      : {
+          instances: [
+            {
+              content: input,
+              ...(this.config.taskType !== undefined && { task_type: this.config.taskType }),
+              ...(this.config.title !== undefined && { title: this.config.title }),
+            },
+          ],
+          parameters: {
+            autoTruncate: this.config.autoTruncate ?? false,
+            ...(dimensions !== undefined && { outputDimensionality: dimensions }),
+          },
+        };
 
     let data: VertexEmbeddingPredictResponse = {};
     try {
-      const client = await this.getClientWithCredentials();
-      const projectId = await this.getProjectId();
+      const client = await waitForPromiseWithAbort(this.getClientWithCredentials(), abortSignal);
+      const projectId = await waitForPromiseWithAbort(this.getProjectId(), abortSignal);
       const url = `https://${this.getApiHost()}/${this.getApiVersion()}/projects/${projectId}/locations/${this.getRegion()}/publishers/google/models/${
         this.modelName
-      }:predict`;
-      const res = await client.request({
-        url,
-        method: 'POST',
-        data: body,
-        ...(options?.abortSignal && { signal: options.abortSignal }),
-      });
-      data = res.data as VertexEmbeddingPredictResponse;
+      }:${embedContent ? 'embedContent' : 'predict'}`;
+      const res = await waitForPromiseWithAbort<{ data: VertexEmbeddingPredictResponse }>(
+        client.request({
+          url,
+          method: 'POST',
+          data: body,
+          timeout: client.transporter.defaults.timeout ?? getRequestTimeoutMs(),
+          ...(abortSignal && {
+            signal: abortSignal,
+            adapter: ((requestOptions, defaultAdapter) => {
+              // Gaxios can replace the caller signal after OAuth refresh or a timed-out retry.
+              abortSignal.throwIfAborted();
+              requestOptions.signal = requestOptions.signal
+                ? AbortSignal.any([abortSignal, requestOptions.signal])
+                : abortSignal;
+              const adapter = client.transporter.defaults.adapter;
+              return adapter
+                ? adapter(requestOptions, defaultAdapter)
+                : defaultAdapter(requestOptions);
+            }) satisfies NonNullable<gaxios.GaxiosOptions['adapter']>,
+          }),
+        }),
+        abortSignal,
+      );
+      data = res.data;
     } catch (err) {
-      options?.abortSignal?.throwIfAborted();
+      abortSignal?.throwIfAborted();
       logger.error(`Vertex API call error: ${err}`);
       throw err;
     }
 
-    logger.debug(`Vertex embeddings API response: ${JSON.stringify(data)}`);
-
     const prediction = data.predictions?.[0];
     const embeddingData = prediction?.embeddings;
-    if (!embeddingData?.values) {
-      const errorMsg = `No valid embeddings returned from API: ${JSON.stringify(data)}`;
-      logger.error(errorMsg);
-      throw new Error(errorMsg);
+    const values = embedContent ? data.embedding?.values : embeddingData?.values;
+    if (!isEmbeddingVector(values)) {
+      throw new Error('No valid embeddings returned from Vertex API.');
     }
 
+    const promptTokens = embedContent ? data.usageMetadata?.promptTokenCount : undefined;
     return {
-      embedding: embeddingData.values,
+      embedding: values,
+      ...(embedContent && {
+        cost:
+          promptTokens === undefined
+            ? undefined
+            : calculateGoogleCost(this.modelName, this.config, promptTokens, 0, true),
+      }),
       tokenUsage: {
-        total: embeddingData.statistics?.token_count ?? 0,
+        ...(embedContent && { prompt: promptTokens }),
+        total: embedContent
+          ? (data.usageMetadata?.totalTokenCount ?? data.usageMetadata?.promptTokenCount)
+          : (embeddingData?.statistics?.token_count ?? 0),
         numRequests: 1,
       },
     };

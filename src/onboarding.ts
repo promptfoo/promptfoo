@@ -390,7 +390,8 @@ export async function createDummyFiles(
   }
 
   const prompts: string[] = [];
-  const providers: (string | ProviderOptions)[] = [];
+  const defaultProviders = ['openai:gpt-6-luna', 'openai:gpt-6-sol'];
+  let providers: (string | ProviderOptions)[];
   let action: string;
   let language: string;
 
@@ -468,7 +469,7 @@ export async function createDummyFiles(
     }
 
     const choices: { name: string; value: (string | ProviderOptions)[] }[] = [
-      { name: `I'll choose later`, value: ['openai:gpt-6-luna', 'openai:gpt-6-sol'] },
+      { name: `I'll choose later`, value: defaultProviders },
       {
         name: action === 'agent' ? '[OpenAI] GPT-6 Sol' : '[OpenAI] GPT-6 Luna and Sol',
         value:
@@ -500,12 +501,12 @@ export async function createDummyFiles(
                   },
                 },
               ]
-            : ['openai:gpt-6-luna', 'openai:gpt-6-sol'],
+            : defaultProviders,
       },
       {
         name: '[Anthropic] Claude Fable, Opus, Sonnet, Haiku, ...',
         value: [
-          'anthropic:messages:claude-fable-5',
+          'anthropic:messages:claude-fable-5-2',
           'anthropic:messages:claude-opus-5-5',
           'anthropic:messages:claude-opus-4-8',
           'anthropic:messages:claude-sonnet-5-5',
@@ -515,9 +516,11 @@ export async function createDummyFiles(
         ],
       },
       {
-        name: '[Google] Gemini 3.8 Flash, 3.7 Flash, 3.6 Flash, 3.5 Flash-Lite, ...',
+        name: '[Google] Gemini 4 Argon, 4 Hydrogen, 3.8 Flash, 3.7 Flash, 3.6 Flash, 3.5 Flash-Lite, ...',
         value: [
           ...[
+            'gemini-4-argon',
+            'gemini-4-hydrogen',
             'gemini-3.8-flash',
             'gemini-3.7-flash',
             'gemini-3.6-flash',
@@ -586,71 +589,48 @@ export async function createDummyFiles(
       },
     ];
 
-    /**
-     * The potential of the object type here is given by the agent action conditional
-     * for openai as a value choice
-     */
-    const providerChoice = await select({
+    providers = await select({
       message: 'Which model provider would you like to use?',
       choices,
       loop: false,
       pageSize: process.stdout.rows - 6,
     });
-    const providerChoices: (string | ProviderOptions)[] = Array.isArray(providerChoice)
-      ? providerChoice
-      : [providerChoice];
-
     recordOnboardingStep('choose providers', {
-      value: providerChoices.map((choice) =>
+      value: providers.map((choice) =>
         typeof choice === 'string' ? choice : JSON.stringify(choice),
       ),
     });
 
     // Tell the user if they have providers selected without relevant API keys set in env.
-    reportProviderAPIKeyWarnings(providerChoices).forEach((warningText) =>
-      logger.warn(warningText),
-    );
+    reportProviderAPIKeyWarnings(providers).forEach((warningText) => logger.warn(warningText));
 
-    if (providerChoices.length > 0) {
-      if (providerChoices.length > 3) {
-        providers.push(
-          ...providerChoices.map((choice) => (Array.isArray(choice) ? choice[0] : choice)),
-        );
-      } else {
-        providers.push(...providerChoices);
-      }
-
-      const providerIds = providerChoices.filter((choice) => typeof choice === 'string');
-      if (providerIds.some((id) => id.startsWith('file://') && id.endsWith('.js'))) {
-        await writeFile({
-          file: 'provider.js',
-          contents: JAVASCRIPT_PROVIDER,
-          required: true,
-        });
-      }
-      if (providerIds.some((id) => id.startsWith('exec:'))) {
-        // Generate platform-appropriate executable provider script
-        const isWindows = process.platform === 'win32';
-        await writeFile({
-          file: isWindows ? 'provider.bat' : 'provider.sh',
-          contents: isWindows ? WINDOWS_PROVIDER : BASH_PROVIDER,
-          required: true,
-        });
-      }
-      if (
-        providerIds.some(
-          (id) => id.startsWith('python:') || (id.startsWith('file://') && id.endsWith('.py')),
-        )
-      ) {
-        await writeFile({
-          file: 'provider.py',
-          contents: PYTHON_PROVIDER,
-          required: true,
-        });
-      }
-    } else {
-      providers.push('openai:gpt-6-luna');
-      providers.push('openai:gpt-6-sol');
+    const providerIds = providers.filter((choice) => typeof choice === 'string');
+    if (providerIds.some((id) => id.startsWith('file://') && id.endsWith('.js'))) {
+      await writeFile({
+        file: 'provider.js',
+        contents: JAVASCRIPT_PROVIDER,
+        required: true,
+      });
+    }
+    if (providerIds.some((id) => id.startsWith('exec:'))) {
+      // Generate platform-appropriate executable provider script
+      const isWindows = process.platform === 'win32';
+      await writeFile({
+        file: isWindows ? 'provider.bat' : 'provider.sh',
+        contents: isWindows ? WINDOWS_PROVIDER : BASH_PROVIDER,
+        required: true,
+      });
+    }
+    if (
+      providerIds.some(
+        (id) => id.startsWith('python:') || (id.startsWith('file://') && id.endsWith('.py')),
+      )
+    ) {
+      await writeFile({
+        file: 'provider.py',
+        contents: PYTHON_PROVIDER,
+        required: true,
+      });
     }
 
     if (action === 'compare') {
@@ -688,8 +668,7 @@ export async function createDummyFiles(
     language = 'not_sure';
     prompts.push(`Write a tweet about {{topic}}`);
     prompts.push(`Write a concise, funny tweet about {{topic}}`);
-    providers.push('openai:gpt-6-luna');
-    providers.push('openai:gpt-6-sol');
+    providers = defaultProviders;
   }
 
   const nunjucks = getNunjucksEngine();
