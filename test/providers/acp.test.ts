@@ -282,6 +282,8 @@ describe('AcpProvider', () => {
         id: 'tc-1',
         name: 'Read',
       });
+      expect(result.metadata?.toolCalls[0]).not.toHaveProperty('input');
+      expect(result.metadata?.toolCalls[0]).not.toHaveProperty('output');
     });
 
     it('should handle timeout', async () => {
@@ -729,18 +731,13 @@ describe('AcpProvider', () => {
         config: { command: 'kiro-cli acp', model: 'unsupported-model' },
       });
 
-      sessionPromptCallback = () => {
-        emitSessionUpdate({
-          sessionUpdate: 'agent_message_chunk',
-          content: { type: 'text', text: 'Done anyway.' },
-        });
-      };
+      sessionPromptCallback = vi.fn();
       sessionNextUpdateResults = [{ kind: 'stop', response: { stopReason: 'end_turn' } }];
 
       const result = await provider.callApi('Hello');
       expect(result.error).toContain('The ACP agent rejected the configured model');
       expect(result.output).toBe('');
-      expect(mockSession.prompt).not.toHaveBeenCalled();
+      expect(sessionPromptCallback).not.toHaveBeenCalled();
     });
   });
 

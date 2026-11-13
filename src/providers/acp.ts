@@ -1,3 +1,5 @@
+import { createHmac, randomBytes } from 'node:crypto';
+
 import { SpanStatusCode } from '@opentelemetry/api';
 import { z } from 'zod';
 import cliState from '../cliState';
@@ -60,14 +62,14 @@ export interface AcpProviderConfig {
 export interface AcpToolCallEntry {
   id: string;
   name: string;
-  input?: unknown;
-  output?: unknown;
   is_error?: boolean;
 }
 
 // ---------------------------------------------------------------------------
 // Config Validation
 // ---------------------------------------------------------------------------
+
+const configCacheKey = randomBytes(32);
 
 const AcpConfigSchema = z.object({
   command: z.union([z.string().min(1), z.array(z.string().min(1)).min(1)]),
@@ -315,12 +317,6 @@ export class AcpProvider implements ApiProvider {
             if (update.title && !tc.name) {
               tc.name = update.title;
             }
-            if (update.rawInput) {
-              tc.input = update.rawInput;
-            }
-            if (update.rawOutput) {
-              tc.output = update.rawOutput;
-            }
             if (update.status === 'failed') {
               tc.is_error = true;
             }
@@ -498,7 +494,7 @@ export class AcpProvider implements ApiProvider {
       Object.assign(base, process.env);
     } else {
       // Minimal shell env
-      for (const key of ['PATH', 'HOME', 'SHELL', 'USER', 'LANG', 'TERM', 'TMPDIR']) {
+      for (const key of ['PATH', 'HOME', 'SHELL', 'USER', 'LANG', 'TERM', 'TMPDIR', 'SystemRoot', 'ComSpec', 'PATHEXT', 'USERPROFILE', 'TEMP', 'TMP']) {
         if (process.env[key]) {
           base[key] = process.env[key]!;
         }
@@ -536,10 +532,19 @@ export class AcpProvider implements ApiProvider {
     workingDir: string,
     bustCache: boolean,
   ): Promise<{ cached?: ProviderResponse; cacheResult?: CacheCheckResult }> {
+    if (this.config.inherit_process_env) {
+      return {};
+    }
     try {
+      // Command arguments and environment values can carry credentials. Keep the
+      // configuration fingerprint usable only within this Promptfoo process.
+      const { env, ...config } = this.config;
+      const configFingerprint = createHmac('sha256', configCacheKey)
+        .update(JSON.stringify({ ...config, env: env && Object.entries(env).sort() }))
+        .digest('hex');
       const cacheResult = await initializeAgenticCache(
         { cacheKeyPrefix: 'acp', workingDir, bustCache },
-        { prompt, config: this.config },
+        { prompt, configFingerprint },
       );
       const cached = await getCachedResponse(cacheResult);
       if (cached) {
