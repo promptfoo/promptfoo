@@ -1,59 +1,28 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   checkGoogleSheetAccess,
+  fetchCsvFromGoogleSheet,
   fetchCsvFromGoogleSheetAuthenticated,
   fetchCsvFromGoogleSheetUnauthenticated,
   writeCsvToGoogleSheet,
 } from '../src/googleSheets';
 import logger from '../src/logger';
 import { fetchWithProxy } from '../src/util/fetch/index';
-import { createMockResponse } from './util/utils';
-import type { Mock } from 'vitest';
+import { createMockResponse, mockProcessEnv } from './util/utils';
 
 import type { CsvRow } from '../src/types/index';
 
-interface MockSpreadsheets {
-  get: Mock;
-  values: {
-    get: Mock;
-    update: Mock;
-  };
-  batchUpdate: Mock;
-}
+vi.mock('../src/util/fetch/index', () => ({ fetchWithProxy: vi.fn() }));
 
-vi.mock('../src/util/fetch/index', () => ({
-  fetchWithProxy: vi.fn(),
-}));
-
-const mockSpreadsheetsApi = {
-  get: vi.fn(),
-  values: {
-    get: vi.fn(),
-    update: vi.fn(),
-  },
-  batchUpdate: vi.fn(),
-};
-
-// Update mock setup for better auth handling
-const mockAuthClient = {
-  getClient: vi.fn().mockResolvedValue({}),
-};
-
+const request = vi.fn();
+const getUniverseDomain = vi.fn();
 const mockGoogleAuth = vi.fn(function GoogleAuthMock() {
-  return mockAuthClient;
+  return { request, getUniverseDomain };
 });
+vi.mock('google-auth-library', () => ({ GoogleAuth: mockGoogleAuth }));
 
-// Mock Google Sheets API
-vi.mock('@googleapis/sheets', () => {
-  return {
-    sheets: vi.fn(() => ({
-      spreadsheets: mockSpreadsheetsApi,
-    })),
-    auth: {
-      GoogleAuth: mockGoogleAuth,
-    },
-  };
-});
+const expectedGet = { method: 'GET', retry: true, headers: expect.any(Object) };
+const spreadsheetUrl = 'https://sheets.googleapis.com/v4/spreadsheets/1234567890';
 
 describe('Google Sheets Integration', () => {
   const TEST_SHEET_URL = 'https://docs.google.com/spreadsheets/d/1234567890/edit';
@@ -62,8 +31,11 @@ describe('Google Sheets Integration', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    request.mockReset();
+    getUniverseDomain.mockResolvedValue('googleapis.com');
     vi.spyOn(logger, 'error').mockImplementation(() => {});
     vi.spyOn(logger, 'info').mockImplementation(() => {});
+    return mockProcessEnv({ GOOGLE_CLOUD_UNIVERSE_DOMAIN: 'googleapis.com' });
   });
 
   afterEach(() => {
@@ -129,22 +101,34 @@ describe('Google Sheets Integration', () => {
       expect(fetchWithProxy).toHaveBeenCalledWith(expectedUrl);
     });
 
-    it('should throw error on non-200 response', async () => {
-      vi.mocked(fetchWithProxy).mockResolvedValue(createMockResponse({ status: 403 }));
+    it('should read the gid from the URL fragment', async () => {
+      vi.mocked(fetchWithProxy).mockResolvedValue(
+        createMockResponse({ text: () => Promise.resolve('header\nvalue') }),
+      );
 
-      await expect(fetchCsvFromGoogleSheetUnauthenticated(TEST_SHEET_URL)).rejects.toThrow(
+      await fetchCsvFromGoogleSheetUnauthenticated(`${TEST_SHEET_URL}#gid=98765`);
+      expect(fetchWithProxy).toHaveBeenCalledWith(
+        'https://docs.google.com/spreadsheets/d/1234567890/export?format=csv&gid=98765',
+      );
+    });
+
+    it('propagates a public CSV export failure without requesting credentials', async () => {
+      vi.mocked(fetchWithProxy)
+        .mockResolvedValueOnce(createMockResponse({ status: 200 }))
+        .mockResolvedValueOnce(createMockResponse({ status: 403 }));
+
+      await expect(fetchCsvFromGoogleSheet(TEST_SHEET_URL)).rejects.toThrow(
         'Failed to fetch CSV from Google Sheets URL',
       );
+      expect(mockGoogleAuth).not.toHaveBeenCalled();
     });
   });
 
   describe('fetchCsvFromGoogleSheetAuthenticated', () => {
-    const spreadsheets = mockSpreadsheetsApi as MockSpreadsheets;
-
     beforeEach(() => {
       vi.clearAllMocks();
       // Set up default sheet response
-      spreadsheets.get.mockResolvedValue({
+      request.mockReset().mockResolvedValueOnce({
         data: {
           sheets: [
             {
@@ -164,6 +148,29 @@ describe('Google Sheets Integration', () => {
       });
     });
 
+    it('negotiates gzip for metadata and values through the Google Auth transport', async () => {
+      const { OAuth2Client } =
+        await vi.importActual<typeof import('google-auth-library')>('google-auth-library');
+      const fetch = vi
+        .fn<typeof globalThis.fetch>()
+        .mockResolvedValueOnce(Response.json({ sheets: [{ properties: { title: 'Sheet1' } }] }))
+        .mockResolvedValueOnce(Response.json({ values: [['header'], ['value']] }));
+      const client = new OAuth2Client({ transporterOptions: { fetchImplementation: fetch } });
+      client.setCredentials({ access_token: 'fixture-token' });
+      request.mockReset().mockImplementation((options) => client.request(options));
+
+      await expect(fetchCsvFromGoogleSheetAuthenticated(TEST_SHEET_URL)).resolves.toEqual([
+        { header: 'value' },
+      ]);
+      expect(fetch).toHaveBeenCalledTimes(2);
+      for (const [, options] of fetch.mock.calls) {
+        const headers = new Headers(options?.headers);
+        expect(headers.get('Accept-Encoding')).toBe('gzip');
+        expect(headers.get('User-Agent')).toContain('(gzip)');
+        expect(headers.get('Authorization')).toBe('Bearer fixture-token');
+      }
+    });
+
     it('should fetch and parse authenticated sheet data', async () => {
       const mockResponse = {
         data: {
@@ -173,37 +180,102 @@ describe('Google Sheets Integration', () => {
           ],
         },
       };
-      spreadsheets.values.get.mockResolvedValue(mockResponse);
+      request.mockResolvedValueOnce(mockResponse);
 
       const result = await fetchCsvFromGoogleSheetAuthenticated(TEST_SHEET_URL);
       expect(result).toEqual([{ header1: 'value1', header2: 'value2', header3: '' }]);
-      expect(spreadsheets.get).toHaveBeenCalledWith({
-        spreadsheetId: '1234567890',
-        auth: mockAuthClient,
-      });
-      expect(spreadsheets.values.get).toHaveBeenCalledWith({
-        spreadsheetId: '1234567890',
-        range: 'Sheet1',
-        auth: mockAuthClient,
+      expect(request).toHaveBeenCalledWith({ url: spreadsheetUrl, ...expectedGet });
+      expect(request).toHaveBeenCalledWith({
+        url: `${spreadsheetUrl}/values/Sheet1`,
+        ...expectedGet,
       });
     });
 
+    it('keeps reserved characters in a sheet title inside a single URL segment', async () => {
+      request
+        .mockReset()
+        .mockResolvedValueOnce({ data: { sheets: [{ properties: { title: 'Sales / Q1?#' } }] } })
+        .mockResolvedValueOnce({ data: { values: [['header']] } });
+      await fetchCsvFromGoogleSheetAuthenticated(TEST_SHEET_URL);
+      expect(request).toHaveBeenLastCalledWith({
+        url: `${spreadsheetUrl}/values/Sales%20%2F%20Q1%3F%23`,
+        ...expectedGet,
+      });
+      expect(mockGoogleAuth).toHaveBeenCalledWith({
+        scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
+      });
+    });
+
+    it('rejects path traversal segments before issuing a request', async () => {
+      await expect(
+        fetchCsvFromGoogleSheetAuthenticated('https://docs.google.com/spreadsheets/d/../edit'),
+      ).rejects.toThrow('Invalid Google Sheets path segment');
+      expect(request).not.toHaveBeenCalled();
+    });
+
+    it('uses the configured Google universe when credentials match', async () => {
+      const restore = mockProcessEnv({ GOOGLE_CLOUD_UNIVERSE_DOMAIN: 'example.test' });
+      try {
+        getUniverseDomain.mockResolvedValue('example.test');
+        request.mockResolvedValueOnce({ data: { values: [['header']] } });
+        await fetchCsvFromGoogleSheetAuthenticated(TEST_SHEET_URL);
+        expect(request).toHaveBeenLastCalledWith({
+          url: 'https://sheets.example.test/v4/spreadsheets/1234567890/values/Sheet1',
+          ...expectedGet,
+        });
+      } finally {
+        restore();
+      }
+    });
+
+    it('requires the credential universe to match the configured endpoint', async () => {
+      getUniverseDomain.mockResolvedValue('different.example');
+      await expect(fetchCsvFromGoogleSheetAuthenticated(TEST_SHEET_URL)).rejects.toThrow(
+        'does not match',
+      );
+      expect(request).not.toHaveBeenCalled();
+    });
+
     it('should handle gid parameter correctly', async () => {
-      spreadsheets.values.get.mockResolvedValue({
+      request.mockResolvedValueOnce({
         data: {
           values: [['header'], ['value']],
         },
       });
 
       await fetchCsvFromGoogleSheetAuthenticated(TEST_SHEET_URL_WITH_GID);
-      expect(spreadsheets.get).toHaveBeenCalledWith({
-        spreadsheetId: '1234567890',
-        auth: mockAuthClient,
+      expect(request).toHaveBeenCalledWith({ url: spreadsheetUrl, ...expectedGet });
+      expect(request).toHaveBeenCalledWith({
+        url: `${spreadsheetUrl}/values/TestSheet`,
+        ...expectedGet,
       });
-      expect(spreadsheets.values.get).toHaveBeenCalledWith({
-        spreadsheetId: '1234567890',
-        range: 'TestSheet',
-        auth: mockAuthClient,
+    });
+
+    it('should read the gid from the URL fragment', async () => {
+      request.mockResolvedValueOnce({ data: { values: [['header'], ['value']] } });
+
+      await fetchCsvFromGoogleSheetAuthenticated(`${TEST_SHEET_URL}#gid=98765`);
+      expect(request).toHaveBeenCalledWith({
+        url: `${spreadsheetUrl}/values/TestSheet`,
+        ...expectedGet,
+      });
+    });
+
+    it('should select gid 0 even when it is not the first sheet', async () => {
+      request.mockReset().mockResolvedValueOnce({
+        data: {
+          sheets: [
+            { properties: { sheetId: 98765, title: 'TestSheet' } },
+            { properties: { sheetId: 0, title: 'Sheet1' } },
+          ],
+        },
+      });
+      request.mockResolvedValueOnce({ data: { values: [['header'], ['value']] } });
+
+      await fetchCsvFromGoogleSheetAuthenticated(`${TEST_SHEET_URL}?gid=0`);
+      expect(request).toHaveBeenCalledWith({
+        url: `${spreadsheetUrl}/values/Sheet1`,
+        ...expectedGet,
       });
     });
 
@@ -214,7 +286,7 @@ describe('Google Sheets Integration', () => {
     });
 
     it('should throw error when no sheets found', async () => {
-      spreadsheets.get.mockResolvedValue({
+      request.mockReset().mockResolvedValueOnce({
         data: {
           sheets: [],
         },
@@ -235,12 +307,10 @@ describe('Google Sheets Integration', () => {
   });
 
   describe('Range behavior and backwards compatibility', () => {
-    const spreadsheets = mockSpreadsheetsApi as MockSpreadsheets;
-
     beforeEach(() => {
       vi.clearAllMocks();
       // Set up default sheet response
-      spreadsheets.get.mockResolvedValue({
+      request.mockReset().mockResolvedValueOnce({
         data: {
           sheets: [
             {
@@ -265,15 +335,14 @@ describe('Google Sheets Integration', () => {
         },
       };
 
-      spreadsheets.values.get.mockResolvedValue(mockResponse);
+      request.mockResolvedValueOnce(mockResponse);
 
       const result = await fetchCsvFromGoogleSheetAuthenticated(TEST_SHEET_URL);
 
       // Verify the API was called with just the sheet name
-      expect(spreadsheets.values.get).toHaveBeenCalledWith({
-        spreadsheetId: '1234567890',
-        range: 'Sheet1',
-        auth: mockAuthClient,
+      expect(request).toHaveBeenCalledWith({
+        url: `${spreadsheetUrl}/values/Sheet1`,
+        ...expectedGet,
       });
 
       // Verify all data was returned
@@ -294,7 +363,7 @@ describe('Google Sheets Integration', () => {
         },
       };
 
-      spreadsheets.values.get.mockResolvedValue(mockResponse);
+      request.mockResolvedValueOnce(mockResponse);
 
       const result = await fetchCsvFromGoogleSheetAuthenticated(TEST_SHEET_URL);
 
@@ -319,7 +388,7 @@ describe('Google Sheets Integration', () => {
         },
       };
 
-      spreadsheets.values.get.mockResolvedValue(mockResponse);
+      request.mockResolvedValueOnce(mockResponse);
 
       const result = await fetchCsvFromGoogleSheetAuthenticated(TEST_SHEET_URL);
 
@@ -341,7 +410,7 @@ describe('Google Sheets Integration', () => {
         },
       };
 
-      spreadsheets.values.get.mockResolvedValue(mockResponse);
+      request.mockResolvedValueOnce(mockResponse);
 
       const result = await fetchCsvFromGoogleSheetAuthenticated(TEST_SHEET_URL);
 
@@ -357,7 +426,7 @@ describe('Google Sheets Integration', () => {
       const row1 = Array.from({ length: 100 }, (_, i) => `Val${i + 1}`);
       const testData = [headers, row1];
 
-      spreadsheets.get.mockResolvedValue({
+      request.mockReset().mockResolvedValueOnce({
         data: {
           sheets: [
             {
@@ -370,17 +439,16 @@ describe('Google Sheets Integration', () => {
         },
       });
 
-      spreadsheets.values.get.mockResolvedValue({
+      request.mockResolvedValueOnce({
         data: { values: testData },
       });
 
       const result = await fetchCsvFromGoogleSheetAuthenticated(TEST_SHEET_URL);
 
       // Verify the API was called with just the sheet name (not a huge range)
-      expect(spreadsheets.values.get).toHaveBeenCalledWith({
-        spreadsheetId: '1234567890',
-        range: 'WideSheet',
-        auth: mockAuthClient,
+      expect(request).toHaveBeenCalledWith({
+        url: `${spreadsheetUrl}/values/WideSheet`,
+        ...expectedGet,
       });
 
       // Verify all 100 columns were retrieved
@@ -408,17 +476,44 @@ describe('Google Sheets Integration', () => {
           headers.reduce((acc, header) => ({ ...acc, [header]: 'value' }), {}),
         ];
 
-        spreadsheets.values.update.mockResolvedValue({});
-        spreadsheets.batchUpdate.mockResolvedValue({});
+        request.mockReset().mockResolvedValue({});
 
         await writeCsvToGoogleSheet(mockRows, TEST_SHEET_URL);
 
-        const updateCall = spreadsheets.values.update.mock.calls[0][0];
-        const range = updateCall.range;
+        const create = request.mock.calls[0][0];
+        expect(create).toMatchObject({ url: `${spreadsheetUrl}:batchUpdate`, method: 'POST' });
+        const title = create.data.requests[0].addSheet.properties.title;
+        const range = decodeURIComponent(request.mock.calls[1][0].url.split('/values/')[1]);
+        expect(range.startsWith(`${title}!A1:`)).toBe(true);
         const endColumn = range.match(/!A1:([A-Z]+)\d+/)?.[1];
 
         expect(endColumn).toBe(expected);
       }
+    });
+  });
+
+  describe('writeCsvToGoogleSheet', () => {
+    it('should write to the sheet a fragment gid selects instead of adding one', async () => {
+      request.mockReset().mockResolvedValueOnce({
+        data: { sheets: [{ properties: { sheetId: 0, title: 'Results' } }] },
+      });
+      request.mockResolvedValueOnce({});
+
+      await writeCsvToGoogleSheet([{ input: 'hi', output: 'hello' }], `${TEST_SHEET_URL}#gid=0`);
+
+      expect(request).toHaveBeenCalledTimes(2);
+      expect(request).toHaveBeenLastCalledWith({
+        url: `${spreadsheetUrl}/values/Results%21A1%3AB2`,
+        method: 'PUT',
+        retry: true,
+        params: { valueInputOption: 'USER_ENTERED' },
+        data: {
+          values: [
+            ['input', 'output'],
+            ['hi', 'hello'],
+          ],
+        },
+      });
     });
   });
 });

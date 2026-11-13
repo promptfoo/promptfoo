@@ -13,15 +13,15 @@ import {
   createValidator,
   formatVideoOutput,
   generateVideoCacheKey,
-  readCacheMapping,
+  isVideoCacheReferenceUrlSafe,
   storeCacheMapping,
 } from '../video';
 import { OpenAiGenericProvider } from '.';
 import {
   appendOpenAiApiPath,
-  assertOpenAiApiModel,
   hasSensitiveOpenAiCachePath,
   hasSensitiveOpenAiCacheString,
+  isOpenAiFirstPartyApiUrl,
 } from './util';
 
 import type { MediaStorageRef } from '../../storage/types';
@@ -159,13 +159,11 @@ function hasAuthenticatedInputReference(reference: OpenAiVideoOptions['input_ref
   if (!imageUrl || !/^https?:\/\//i.test(imageUrl)) {
     return false;
   }
+  if (!isVideoCacheReferenceUrlSafe(imageUrl)) {
+    return true;
+  }
   try {
-    const parsedUrl = new URL(imageUrl);
-    const normalizedUrl = parsedUrl.toString();
-    return (
-      sanitizeUrl(normalizedUrl) !== normalizedUrl ||
-      hasSensitiveOpenAiCachePath(decodeURIComponent(parsedUrl.pathname))
-    );
+    return hasSensitiveOpenAiCachePath(decodeURIComponent(new URL(imageUrl).pathname));
   } catch {
     return true;
   }
@@ -245,7 +243,7 @@ export function calculateVideoCost(
 // =============================================================================
 
 /**
- * OpenAI Video Provider for Sora video generation.
+ * Sora-compatible Videos API provider for custom endpoints.
  *
  * Supports:
  * - Text-to-video generation
@@ -465,7 +463,8 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
 
       if (!response.ok) {
         return {
-          error: `Failed to download ${variant}: ${response.status} ${response.statusText}`,
+          error:
+            `Failed to download ${variant}: HTTP ${response.status} ${response.statusText}`.trimEnd(),
         };
       }
 
@@ -496,6 +495,13 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
     context?: CallApiContextParams,
     _callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
+    const apiUrl = this.getApiUrl();
+    if (isOpenAiFirstPartyApiUrl(apiUrl)) {
+      throw new Error(
+        'OpenAI retired the Videos API on September 24, 2026. Configure a custom apiBaseUrl that supports the Videos API to use openai:video.',
+      );
+    }
+
     // Validate API key
     if (this.requiresApiKey() && !this.getApiKey()) {
       throw new Error(this.getMissingApiKeyErrorMessage());
@@ -507,7 +513,6 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
     };
 
     const model = (config.model || this.modelName) as OpenAiVideoModel;
-    assertOpenAiApiModel(model, this.getApiUrl());
     const size = (config.size || DEFAULT_SIZE) as OpenAiVideoCreateSize;
     const seconds = config.seconds || DEFAULT_SECONDS;
     const evalId = context?.evaluationId;
@@ -534,15 +539,12 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
 
     // Generate deterministic cache key from inputs
     // Note: remix_video_id is excluded from cache key as remixes should always regenerate
-    const apiUrl = this.getApiUrl();
     const requestHeaders = this.getAuthHeaders(config.headers);
-    let sendsToOpenAiApi = false;
     let hasSensitiveUrlCredentials = false;
     let hasSensitiveUrlPath = false;
     try {
       const parsedApiUrl = new URL(apiUrl);
       const normalizedApiUrl = parsedApiUrl.toString();
-      sendsToOpenAiApi = parsedApiUrl.hostname.toLowerCase() === 'api.openai.com';
       hasSensitiveUrlCredentials = sanitizeUrl(normalizedApiUrl) !== normalizedApiUrl;
       hasSensitiveUrlPath = hasSensitiveOpenAiCachePath(decodeURIComponent(parsedApiUrl.pathname));
     } catch {
@@ -567,11 +569,10 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
     );
     const cacheScope = {
       ...safeCacheHeaders,
-      ...(sendsToOpenAiApi ? {} : { 'api-base-url': sanitizeUrl(apiUrl) }),
+      'api-base-url': sanitizeUrl(apiUrl),
     };
     const usesAuthenticatedCustomEndpoint =
-      !sendsToOpenAiApi &&
-      (hasSensitiveUrlCredentials || Object.keys(requestHeaders).some(isSensitiveCacheHeader));
+      hasSensitiveUrlCredentials || Object.keys(requestHeaders).some(isSensitiveCacheHeader);
     const hasProjectDiscriminator = Object.keys(safeCacheHeaders).some((key) =>
       /(?:^|[-_])(?:project|tenant|account)(?:[-_]|$)/i.test(key),
     );
@@ -601,22 +602,19 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
     });
 
     // Check for cached video (skip for remix operations)
-    const cachedVideoKey =
+    const mapping =
       config.remix_video_id || !canCacheVideo
         ? null
         : await checkVideoCache(cacheKey, PROVIDER_NAME);
-    if (cachedVideoKey) {
+    if (mapping) {
       logger.info(`[${PROVIDER_NAME}] Cache hit for video: ${cacheKey}`);
 
       const storage = getMediaStorage();
 
-      // Read the cache mapping from filesystem to get thumbnail/spritesheet keys
-      const mapping = await readCacheMapping(cacheKey);
-      const thumbnailKey = mapping?.thumbnailKey;
-      const spritesheetKey = mapping?.spritesheetKey;
+      const { videoKey, thumbnailKey, spritesheetKey } = mapping;
 
       // Build storage ref URL for video using the actual stored key
-      const videoUrl = buildStorageRefUrl(cachedVideoKey);
+      const videoUrl = buildStorageRefUrl(videoKey);
 
       // Check for optional assets using actual stored keys
       const hasThumbnail = thumbnailKey && (await storage.exists(thumbnailKey));
@@ -631,7 +629,7 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
         cost: 0,
         video: {
           id: undefined, // No Sora ID for cached results
-          storageRef: { key: cachedVideoKey }, // Structured storage reference (preferred)
+          storageRef: { key: videoKey }, // Structured storage reference (preferred)
           url: videoUrl, // Legacy URL format for backwards compatibility
           format: 'mp4',
           size,

@@ -14,8 +14,13 @@ import type { Prompt } from '../../types/index';
  * @returns An array of one `Prompt` object.
  * @throws Will throw an error if the file cannot be read.
  */
-export function processJsonFile(filePath: string, prompt: Partial<Prompt>): Prompt[] {
-  const fileContents = fs.readFileSync(filePath, 'utf8');
+export function processJsonFile(
+  filePath: string,
+  prompt: Partial<Prompt>,
+  labelPath: string = filePath,
+): Prompt[] {
+  // Drop a UTF-8 byte order mark (Windows PowerShell 5.1 writes one); JSON.parse rejects it.
+  const fileContents = fs.readFileSync(filePath, 'utf8').replace(/^﻿/, '');
 
   // Try to parse and resolve file:// references
   let processedContents = fileContents;
@@ -32,7 +37,7 @@ export function processJsonFile(filePath: string, prompt: Partial<Prompt>): Prom
   return [
     {
       raw: processedContents,
-      label: prompt.label || `${filePath}: ${processedContents}`,
+      label: prompt.label || `${labelPath}: ${processedContents}`,
       config: prompt.config,
     },
   ];
