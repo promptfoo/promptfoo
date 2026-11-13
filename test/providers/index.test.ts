@@ -62,8 +62,9 @@ import { mockProcessEnv } from '../util/utils';
 
 import type { ApiProvider, ProviderFunction, ProviderOptionsMap } from '../../src/types/index';
 
-const { createProxyAgentFactory, createExecFileFactory, createLocalGenerationFactory } =
-  await vi.hoisted(() => import('../factories/moduleMocks'));
+const { createProxyAgentFactory, createLocalGenerationFactory } = await vi.hoisted(
+  () => import('../factories/moduleMocks'),
+);
 
 const createEmptyHttpBody = () => ({
   body: {},
@@ -100,7 +101,34 @@ const createJsonProviderConfig = () => ({
 vi.mock('proxy-agent', createProxyAgentFactory());
 
 const mockExecFile = vi.hoisted(() => vi.fn());
-vi.mock('child_process', createExecFileFactory(mockExecFile));
+vi.mock('child_process', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('child_process')>();
+  const { promisify } = await import('node:util');
+  // Preserve execFile's custom promise result when replacing its callback implementation.
+  Object.defineProperty(mockExecFile, promisify.custom, {
+    value: (...args: unknown[]) => {
+      let child;
+      const promise = new Promise((resolve, reject) => {
+        child = mockExecFile(...args, (error: Error | null, stdout: string, stderr: string) => {
+          if (error) {
+            reject(error);
+          } else {
+            resolve({ stdout, stderr });
+          }
+        });
+      });
+      return Object.assign(promise, { child });
+    },
+  });
+  return {
+    ...actual,
+    default: {
+      ...actual,
+      execFile: mockExecFile,
+    },
+    execFile: mockExecFile,
+  };
+});
 
 vi.mock('../../src/esm', async () => ({
   ...(await vi.importActual('../../src/esm')),
