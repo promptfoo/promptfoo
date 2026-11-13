@@ -280,15 +280,8 @@ describe('prompt optimizer', () => {
     );
   });
 
-  it('defaults to the first prompt and provider', async () => {
-    const provider = createMockProvider({
-      id: 'optimizer-provider',
-      response: {
-        output: JSON.stringify({
-          candidates: [{ hypothesis: 'Tighten the wording.', prompt: 'Optimized A' }],
-        }),
-      },
-    });
+  it('defaults to the first prompt and provider and samples their feedback in order', async () => {
+    const provider = createMockProvider({ id: 'optimizer-provider' });
     vi.mocked(provider.callApi)
       .mockResolvedValueOnce(optimizerResponse('Optimized A'))
       .mockResolvedValueOnce(optimizerResponse('Alternative A 2'))
@@ -302,7 +295,13 @@ describe('prompt optimizer', () => {
       synthesizeProvider: provider,
     } as any);
 
-    const baselineEval = evalWith([completedPrompt('Prompt A', 'A', 0.6)], []);
+    const reasons = Array.from({ length: 8 }, (_, index) => `Feedback ${index}`);
+    const rows = reasons.flatMap((reason) => [
+      evalResult(1, false, 'Another prompt'),
+      evalResult(0, false, reason),
+      evalResult(0, true, reason),
+    ]);
+    const baselineEval = evalWith([completedPrompt('Prompt A', 'A', 0.6)], rows);
     const candidateEval = evalWith(
       [
         completedPrompt('Prompt A', 'A', 0.6),
@@ -331,6 +330,11 @@ describe('prompt optimizer', () => {
 
     await optimizePromptTestSuite({}, testSuite);
 
+    const request = JSON.parse(String(vi.mocked(provider.callApi).mock.calls[0][0]));
+    const { failures, successes } = JSON.parse(request[1].content);
+    const reasonOf = (example: { gradingReason: string }) => example.gradingReason;
+    expect(failures.map(reasonOf)).toEqual(reasons.slice(0, 6));
+    expect(successes.map(reasonOf)).toEqual(reasons.slice(0, 3));
     expect(vi.mocked(evaluate).mock.calls[0][0].prompts).toEqual([{ raw: 'Prompt A', label: 'A' }]);
     expect(vi.mocked(evaluate).mock.calls[0][0].providers[0].id()).toBe('target-provider-a');
   });
