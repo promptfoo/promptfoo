@@ -847,6 +847,43 @@ sys.exit(4)
     }
   }, 20_000);
 
+  it('explains minimal setup when the Inspect executable is missing', async () => {
+    const tempDir = makeTempDir();
+    const providerDir = path.join(tempDir, 'example');
+    fs.mkdirSync(providerDir, { recursive: true });
+    fs.copyFileSync(
+      path.join(process.cwd(), 'examples', 'integration-inspect-osworld', 'provider.py'),
+      path.join(providerDir, 'provider.py'),
+    );
+
+    const missingInspect = path.join(tempDir, 'missing-inspect');
+    const provider = new PythonProvider('file://provider.py', {
+      config: {
+        basePath: path.relative(process.cwd(), providerDir),
+        inspectCommand: [missingInspect],
+        pythonExecutable: pythonExecutable(),
+        timeout: 10_000,
+        timeoutSeconds: 10,
+      },
+    });
+
+    try {
+      const result = await provider.callApi('ignored', {
+        vars: { sample_id: 'sample-123' },
+      } as any);
+
+      expect(result.error).toContain(`Could not find Inspect CLI command '${missingInspect}'`);
+      const guidance = result.error?.split('Install prerequisites with ')[1];
+      expect(guidance).toContain("python -m pip install 'inspect-evals[osworld]'");
+      expect(guidance).toContain('plus the SDK for your selected model');
+      expect(guidance).toContain('providers[0].config.inspectCommand');
+      expect(guidance).not.toMatch(/openai|anthropic|opentelemetry/i);
+      expect(result.output).toBeUndefined();
+    } finally {
+      await provider.shutdown();
+    }
+  }, 20_000);
+
   it('does not persist captured Inspect failure output or command secrets', async () => {
     const tempDir = makeTempDir();
     const providerDir = path.join(tempDir, 'example');

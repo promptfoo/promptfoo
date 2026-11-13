@@ -1,5 +1,6 @@
 import type Anthropic from '@anthropic-ai/sdk';
 
+import type { AnthropicMessagesConfigInput } from '../../contracts/providerConfig/anthropic';
 import type { MCPConfig } from '../mcp/types';
 import type { OpenAIToolChoice } from '../shared';
 
@@ -36,6 +37,11 @@ export interface OutputFormat {
   };
 }
 
+// Sonnet 5.5 adds this wire value before the pinned SDK's thinking union includes it.
+export type ClaudeThinkingConfig =
+  | Anthropic.Messages.ThinkingConfigParam
+  | { type: 'between_tools' };
+
 /** The reasoning-depth ladder Claude accepts on `output_config.effort`. */
 export type ClaudeEffort = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 
@@ -46,6 +52,7 @@ export type ClaudeEffort = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
  */
 export interface AnthropicBaseOptions {
   apiKey?: string;
+  apiKeyEnvar?: string;
   apiBaseUrl?: string;
   /**
    * When `false`, skip promptfoo's upfront API key check and authenticate
@@ -77,9 +84,15 @@ export interface AnthropicMessageOptions extends AnthropicBaseOptions {
   stop_sequences?: string[]; // Custom stop sequences
   stream?: boolean; // Enable streaming for long-running operations like extended thinking
   temperature?: number;
-  thinking?: Anthropic.Messages.ThinkingConfigParam;
-  tool_choice?: Anthropic.Messages.ToolChoice | OpenAIToolChoice;
-  tools?: (Anthropic.Messages.ToolUnion | AnthropicToolConfig)[];
+  thinking?: ClaudeThinkingConfig;
+  tool_choice?:
+    | Anthropic.Messages.ToolChoice
+    | OpenAIToolChoice
+    | AnthropicMessagesConfigInput['tool_choice'];
+  // Authoring values are loaded and converted before entering the SDK request.
+  tools?:
+    | (Anthropic.Messages.ToolUnion | AnthropicToolConfig)[]
+    | AnthropicMessagesConfigInput['tools'];
   top_k?: number;
   top_p?: number;
   beta?: string[]; // For features like 'output-128k-2025-02-19', 'web-fetch-2025-09-10', 'structured-outputs-2025-11-13'
@@ -91,11 +104,11 @@ export interface AnthropicMessageOptions extends AnthropicBaseOptions {
    * not sent to Anthropic.
    */
   max_tool_calls?: number;
-  output_format?: OutputFormat; // Structured outputs - JSON schema for response format
+  output_format?: OutputFormat | AnthropicMessagesConfigInput['output_format']; // Structured outputs - JSON schema for response format
 }
 
-export interface AnthropicCompletionOptions {
-  apiKey?: string;
+export interface AnthropicCompletionOptions
+  extends Pick<AnthropicBaseOptions, 'apiKey' | 'apiKeyEnvar' | 'apiBaseUrl' | 'headers'> {
   max_tokens_to_sample?: number;
   temperature?: number;
   top_p?: number;

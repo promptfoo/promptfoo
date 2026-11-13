@@ -187,3 +187,8 @@ describe('HYPERBOLIC_REASONING_MODELS', () => {
     }
   });
 });
+
+it('keeps mutable prices independent across model aliases', () => {
+  const costs = HYPERBOLIC_CHAT_MODELS.map(({ cost }) => cost);
+  expect(new Set(costs).size).toBe(costs.length);
+});
