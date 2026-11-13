@@ -1,12 +1,10 @@
 import promptfoo from 'promptfoo';
 import type { ApiProvider, ProviderOptions, ProviderResponse } from 'promptfoo';
 
-// import promptfoo from '../../dist/src/index.js';
-// import type { ApiProvider, ProviderOptions, ProviderResponse } from '../../src/types/providers';
-
 export default class CustomApiProvider implements ApiProvider {
   protected providerId: string;
   public config: any;
+  private apiKey: string | undefined;
 
   constructor(options: ProviderOptions) {
     // The caller may override Provider ID (e.g. when using multiple instances of the same provider)
@@ -14,6 +12,7 @@ export default class CustomApiProvider implements ApiProvider {
 
     // The config object contains any options passed to the provider in the config file.
     this.config = options.config;
+    this.apiKey = this.config?.apiKey ?? options.env?.OPENAI_API_KEY;
   }
 
   id(): string {
@@ -34,20 +33,20 @@ export default class CustomApiProvider implements ApiProvider {
     };
 
     // Fetch the data from the API using promptfoo's cache. You can use your own fetch implementation if preferred.
-    const { data, cached: _cached } = await promptfoo.cache.fetchWithCache(
+    const { data } = await promptfoo.cache.fetchWithCache(
       'https://api.openai.com/v1/chat/completions',
       {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+          Authorization: `Bearer ${this.apiKey ?? process.env.OPENAI_API_KEY}`,
         },
         body: JSON.stringify(body),
       },
       10_000 /* 10 second timeout */,
     );
 
-    const ret: ProviderResponse = {
+    return {
       output: data.choices[0].message.content,
       tokenUsage: {
         total: data.usage.total_tokens,
@@ -55,6 +54,5 @@ export default class CustomApiProvider implements ApiProvider {
         completion: data.usage.completion_tokens,
       },
     };
-    return ret;
   }
 }
