@@ -9,6 +9,7 @@ import {
   validateResolution,
   XAIVideoProvider,
 } from '../../../src/providers/xai/video';
+import { isProviderResponseRateLimited } from '../../../src/scheduler/types';
 import * as fetch from '../../../src/util/fetch/index';
 import { sleep } from '../../../src/util/time';
 
@@ -39,6 +40,7 @@ describe('XAI Video Provider', () => {
   const mockRequestId = 'test-request-id-123';
   const mockVideoUrl = 'https://vidgen.x.ai/test-video.mp4';
   const mockStorageKey = 'video/abc123.mp4';
+  const cachedMapping = { videoKey: mockStorageKey };
   const video15Models = [
     'grok-imagine-video-1.5',
     'grok-imagine-video-1.5-preview',
@@ -433,7 +435,7 @@ describe('XAI Video Provider', () => {
     });
 
     it('returns cached result when available', async () => {
-      vi.mocked(videoUtils.checkVideoCache).mockResolvedValue(mockStorageKey);
+      vi.mocked(videoUtils.checkVideoCache).mockResolvedValue(cachedMapping);
 
       const provider = new XAIVideoProvider('grok-imagine-video', {
         config: { cacheNamespace: 'test-account' },
@@ -526,7 +528,7 @@ describe('XAI Video Provider', () => {
       expect(result.error).toContain('Content policy violation');
     });
 
-    it('handles video download failure', async () => {
+    it.each([404, 429])('reports HTTP %i during video download', async (status) => {
       // Mock job creation
       const createResponse = {
         ok: true,
@@ -545,8 +547,8 @@ describe('XAI Video Provider', () => {
       // Mock download failure
       const downloadResponse = {
         ok: false,
-        status: 404,
-        statusText: 'Not Found',
+        status,
+        statusText: '',
       };
 
       vi.mocked(fetch.fetchWithProxy)
@@ -557,7 +559,8 @@ describe('XAI Video Provider', () => {
       const provider = new XAIVideoProvider('grok-imagine-video');
       const result = await provider.callApi(mockPrompt);
 
-      expect(result.error).toContain('Failed to download video');
+      expect(isProviderResponseRateLimited(result, undefined)).toBe(status === 429);
+      expect(result.error).toContain(`Failed to download video: HTTP ${status}`);
     });
 
     it('handles invalid duration parameter', async () => {
@@ -1214,12 +1217,12 @@ describe('XAI Video Provider', () => {
         vi.mocked(videoUtils.generateVideoCacheKey).mockImplementation(
           actualVideoUtils.generateVideoCacheKey,
         );
-        const cache = new Map<string, string>();
+        const cache = new Map<string, videoUtils.VideoCacheMapping>();
         vi.mocked(videoUtils.checkVideoCache).mockImplementation(
           async (key) => cache.get(key) ?? null,
         );
-        vi.mocked(videoUtils.storeCacheMapping).mockImplementation(async (key, value) => {
-          cache.set(key, value);
+        vi.mocked(videoUtils.storeCacheMapping).mockImplementation(async (key, videoKey) => {
+          cache.set(key, { videoKey });
         });
         vi.mocked(fetch.fetchWithProxy).mockImplementation(async (url) => {
           if (String(url).endsWith('/videos/generations')) {
@@ -1302,7 +1305,7 @@ describe('XAI Video Provider', () => {
     ])(
       'bypasses persistent caching when account or endpoint identity is unsafe: %j',
       async (config) => {
-        vi.mocked(videoUtils.checkVideoCache).mockResolvedValue(mockStorageKey);
+        vi.mocked(videoUtils.checkVideoCache).mockResolvedValue(cachedMapping);
         vi.mocked(fetch.fetchWithProxy)
           .mockResolvedValueOnce({
             ok: true,
@@ -1382,7 +1385,7 @@ describe('XAI Video Provider', () => {
       async (model) => {
         const imageUrl = 'https://example.com/image.jpg';
 
-        vi.mocked(videoUtils.checkVideoCache).mockResolvedValue(mockStorageKey);
+        vi.mocked(videoUtils.checkVideoCache).mockResolvedValue(cachedMapping);
 
         const provider = new XAIVideoProvider(model, {
           config: {
@@ -1461,7 +1464,7 @@ describe('XAI Video Provider', () => {
     );
 
     it('bypasses persistent caching for colliding Video 1.5 access_token image URLs', async () => {
-      vi.mocked(videoUtils.checkVideoCache).mockResolvedValue(mockStorageKey);
+      vi.mocked(videoUtils.checkVideoCache).mockResolvedValue(cachedMapping);
       vi.mocked(fetch.fetchWithProxy).mockImplementation(async (url) => {
         if (url === 'https://api.x.ai/v1/videos/generations') {
           return {
@@ -1533,7 +1536,7 @@ describe('XAI Video Provider', () => {
         actualVideoUtils.generateVideoCacheKey,
       );
       vi.mocked(videoUtils.checkVideoCache).mockImplementation(async (cacheKey) =>
-        cacheKey === scopedKey ? mockStorageKey : null,
+        cacheKey === scopedKey ? cachedMapping : null,
       );
 
       const result = await new XAIVideoProvider('grok-imagine-video', {
@@ -1549,7 +1552,7 @@ describe('XAI Video Provider', () => {
     it.each([false, true])(
       'bypasses persistent caching for signed Video 1.5 reference-image URLs with mixed inputs %s',
       async (mixedInputs) => {
-        vi.mocked(videoUtils.checkVideoCache).mockResolvedValue(mockStorageKey);
+        vi.mocked(videoUtils.checkVideoCache).mockResolvedValue(cachedMapping);
         vi.mocked(fetch.fetchWithProxy).mockImplementation(async (url) => {
           if (url === 'https://api.x.ai/v1/videos/generations') {
             return {
@@ -1608,7 +1611,7 @@ describe('XAI Video Provider', () => {
     );
 
     it('bypasses persistent caching for colliding credential path reference-image URLs', async () => {
-      vi.mocked(videoUtils.checkVideoCache).mockResolvedValue(mockStorageKey);
+      vi.mocked(videoUtils.checkVideoCache).mockResolvedValue(cachedMapping);
       vi.mocked(fetch.fetchWithProxy).mockImplementation(async (url) => {
         if (url === 'https://api.x.ai/v1/videos/generations') {
           return {
@@ -1662,7 +1665,7 @@ describe('XAI Video Provider', () => {
     ] as const)(
       'bypasses cache for mixed inputs with a named path in %s from %s config',
       async (field, scope) => {
-        vi.mocked(videoUtils.checkVideoCache).mockResolvedValue(mockStorageKey);
+        vi.mocked(videoUtils.checkVideoCache).mockResolvedValue(cachedMapping);
         vi.mocked(fetch.fetchWithProxy)
           .mockResolvedValueOnce({
             ok: true,
@@ -1722,7 +1725,7 @@ describe('XAI Video Provider', () => {
       vi.mocked(videoUtils.generateVideoCacheKey).mockImplementation(
         actualVideoUtils.generateVideoCacheKey,
       );
-      vi.mocked(videoUtils.checkVideoCache).mockResolvedValue(mockStorageKey);
+      vi.mocked(videoUtils.checkVideoCache).mockResolvedValue(cachedMapping);
       const firstResourceUrl =
         'https://media.example.com/123e4567-e89b-12d3-a456-426614174000/reference.png';
       const secondResourceUrl =
@@ -1753,7 +1756,7 @@ describe('XAI Video Provider', () => {
     it('uses distinct cache references for image and reference-image modes', async () => {
       const sharedUrl = 'https://example.com/shared.jpg';
 
-      vi.mocked(videoUtils.checkVideoCache).mockResolvedValue('cached-video-key');
+      vi.mocked(videoUtils.checkVideoCache).mockResolvedValue(cachedMapping);
 
       await new XAIVideoProvider('grok-imagine-video', {
         config: { cacheNamespace: 'test-account', image: { url: sharedUrl } },
@@ -1783,12 +1786,12 @@ describe('XAI Video Provider', () => {
       vi.mocked(videoUtils.generateVideoCacheKey).mockImplementation(
         actualVideoUtils.generateVideoCacheKey,
       );
-      const cache = new Map<string, string>();
+      const cache = new Map<string, videoUtils.VideoCacheMapping>();
       vi.mocked(videoUtils.checkVideoCache).mockImplementation(
         async (key) => cache.get(key) ?? null,
       );
-      vi.mocked(videoUtils.storeCacheMapping).mockImplementation(async (key, storageKey) => {
-        cache.set(key, storageKey);
+      vi.mocked(videoUtils.storeCacheMapping).mockImplementation(async (key, videoKey) => {
+        cache.set(key, { videoKey });
       });
       vi.mocked(videoUtils.storeVideoContent).mockImplementation(async (_buffer, metadata) => ({
         storageRef: {
@@ -1910,7 +1913,7 @@ describe('XAI Video Provider', () => {
       vi.mocked(videoUtils.generateVideoCacheKey).mockImplementation(
         actualVideoUtils.generateVideoCacheKey,
       );
-      vi.mocked(videoUtils.checkVideoCache).mockResolvedValue(mockStorageKey);
+      vi.mocked(videoUtils.checkVideoCache).mockResolvedValue(cachedMapping);
       const imageUrl = 'https://example.com/frame.jpg';
       const configurations = [
         { image: { url: `${imageUrl};reference_audios:eve` } },
@@ -1936,7 +1939,7 @@ describe('XAI Video Provider', () => {
     });
 
     it('includes reference voice IDs in the cache key', async () => {
-      vi.mocked(videoUtils.checkVideoCache).mockResolvedValue('cached-video-key');
+      vi.mocked(videoUtils.checkVideoCache).mockResolvedValue(cachedMapping);
 
       await new XAIVideoProvider('grok-imagine-video-1.5', {
         config: {
@@ -1957,7 +1960,7 @@ describe('XAI Video Provider', () => {
     });
 
     it('uses unambiguous cache identities for mixed reference media', async () => {
-      vi.mocked(videoUtils.checkVideoCache).mockResolvedValue('cached-video-key');
+      vi.mocked(videoUtils.checkVideoCache).mockResolvedValue(cachedMapping);
       const baseUrl = 'https://img.example/p.jpg';
 
       await new XAIVideoProvider('grok-imagine-video-1.5', {
