@@ -29,6 +29,7 @@ import {
 import { InvalidToolSchemaError } from '../toolSchemaError';
 import { loadCredentials } from './auth';
 import {
+  GEMINI_4_MODELS,
   GEMINI_FLASH_MODELS,
   GOOGLE_MODELS,
   type GoogleModel,
@@ -384,8 +385,6 @@ export function removeGoogleFunctionDeclarations(tools: unknown): Tool[] {
   });
 }
 
-const GEMINI_4_MODEL_PREFIXES = ['gemini-4-argon', 'gemini-4-hydrogen'];
-
 /**
  * Gemini 4 and current Gemini Flash models ignore sampling parameters and reject penalties
  * and candidate counts. Remove typed and passthrough spellings.
@@ -395,7 +394,7 @@ export function removeDeprecatedGeminiGenerationParams<T>(
   generationConfig: T,
   requestedModelName = modelName,
 ): T {
-  const isGemini4 = GEMINI_4_MODEL_PREFIXES.some((prefix) => modelName.startsWith(prefix));
+  const isGemini4 = GEMINI_4_MODELS.some(({ id }) => modelName.startsWith(id));
   if (
     !isGemini4 &&
     !GEMINI_FLASH_MODELS.some(({ id }) => modelName.startsWith(id)) &&
