@@ -29,7 +29,7 @@ export class SequenceProvider implements ApiProvider {
 
     const typedConfig = config as SequenceProviderConfig;
     this.sequenceInputs = typedConfig.inputs;
-    this.separator = typedConfig.separator || '\n---\n';
+    this.separator = typedConfig.separator ?? '\n---\n';
     this.identifier = id || 'sequence-provider';
   }
 
