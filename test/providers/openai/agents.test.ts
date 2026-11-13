@@ -230,6 +230,8 @@ import {
   MemorySession,
   OpenAIConversationsSession,
   OpenAIResponsesCompactionSession,
+  RunToolCallItem,
+  RunToolCallOutputItem,
   setDefaultOpenAIClient,
   setTraceProcessors,
   tool,
@@ -288,6 +290,234 @@ describe('OpenAiAgentsProvider', () => {
     cliState.basePath = undefined;
     setDefaultOpenAIClient(undefined as never);
     vi.unstubAllEnvs();
+  });
+
+  describe('tool-call metadata', () => {
+    const createCall = (callId = 'call_1', args = '{"orderId":"42"}', name = 'lookup_order') =>
+      new RunToolCallItem(
+        { type: 'function_call', callId, name, arguments: args, status: 'completed' },
+        new Agent(createSupportAgentDefinition()),
+      );
+    const createOutput = (callId = 'call_1', output: unknown = { status: 'shipped' }) =>
+      new RunToolCallOutputItem(
+        {
+          type: 'function_call_result',
+          callId,
+          name: 'lookup_order',
+          status: 'completed',
+          output: 'Tool result',
+        },
+        new Agent(createSupportAgentDefinition()),
+        output,
+      );
+    const runWithItems = (newItems: unknown[]) => {
+      mockRun.mockResolvedValue({
+        finalOutput: 'Agent answer',
+        usage: { totalTokens: 12, promptTokens: 7, completionTokens: 5 },
+        newItems,
+      });
+    };
+    const createProvider = (options: Partial<OpenAiAgentsOptions> = {}) =>
+      new OpenAiAgentsProvider('gpt-5-mini', {
+        config: { agent: createSupportAgentDefinition(), includeToolCalls: true, ...options },
+      });
+
+    it.each(['includeToolCalls', 'includeToolResults'] as const)(
+      'rejects non-boolean %s before running the agent',
+      async (option) => {
+        const provider = createProvider({ [option]: 'false' } as unknown as OpenAiAgentsOptions);
+        await expect(provider.callApi('hello')).rejects.toThrow(`${option} must be a boolean`);
+        expect(mockRun).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each([undefined, false])(
+      'does not collect metadata when includeToolCalls is %s',
+      async (includeToolCalls) => {
+        runWithItems([createCall(), createOutput()]);
+        const response = await createProvider({
+          includeToolCalls,
+          includeToolResults: true,
+        }).callApi('hello');
+        expect(response).not.toHaveProperty('metadata');
+      },
+    );
+
+    it('exposes an observed empty list without changing the answer, usage or tracing', async () => {
+      const response = await createProvider().callApi('lookup_order was mentioned, but not called');
+      expect(response).toEqual({
+        output: 'Agent answer',
+        tokenUsage: { total: 12, prompt: 7, completion: 5 },
+        cached: false,
+        cost: undefined,
+        metadata: { toolCalls: [], toolCallsComplete: true },
+      });
+      expect(addTraceProcessor).not.toHaveBeenCalled();
+    });
+
+    it('projects SDK requests and completed results without exposing output bodies by default', async () => {
+      runWithItems([createCall(), createOutput()]);
+      const response = await createProvider().callApi('hello');
+      expect(response.metadata).toEqual({
+        toolCallsComplete: true,
+        toolCalls: [
+          {
+            callId: 'call_1',
+            name: 'lookup_order',
+            rawArguments: '{"orderId":"42"}',
+            arguments: { orderId: '42' },
+            argumentParseStatus: 'parsed',
+            callStatus: 'completed',
+            resultPresent: true,
+            resultStatus: 'completed',
+            executionMode: 'real',
+          },
+        ],
+      });
+      expect(response.output).toBe('Agent answer');
+    });
+
+    it('preserves repeated requests and correlates out-of-order results by ID', async () => {
+      runWithItems([
+        createCall('a'),
+        createCall('b'),
+        createOutput('b', 'second'),
+        createOutput('a', 'first'),
+      ]);
+      const response = await createProvider({ includeToolResults: true }).callApi('hello');
+      expect(response.metadata?.toolCalls).toMatchObject([
+        { callId: 'a', result: 'first' },
+        { callId: 'b', result: 'second' },
+      ]);
+    });
+
+    it('keeps requests without results, including approval interruptions', async () => {
+      runWithItems([createCall()]);
+      mockRun.mockResolvedValueOnce({
+        finalOutput: undefined,
+        newItems: [createCall()],
+        interruptions: [{ type: 'tool_approval_item' }],
+      });
+      const response = await createProvider().callApi('hello');
+      expect(response.metadata?.toolCalls).toMatchObject([
+        { callId: 'call_1', resultPresent: false },
+      ]);
+      expect(response.metadata?.toolCalls[0]).not.toHaveProperty('resultStatus');
+    });
+
+    it.each(['in_progress', 'incomplete'] as const)(
+      'preserves a %s result without reporting completion',
+      async (status) => {
+        const result = createOutput();
+        if (result.rawItem.type === 'function_call_result') {
+          result.rawItem.status = status;
+        }
+        runWithItems([createCall(), result]);
+        expect((await createProvider().callApi('hello')).metadata?.toolCalls).toMatchObject([
+          { resultPresent: true, resultStatus: status },
+        ]);
+      },
+    );
+
+    it.each([false, 'mock'] as const)(
+      'identifies synthetic results with executeTools=%s',
+      async (executeTools) => {
+        runWithItems([createCall(), createOutput()]);
+        expect(
+          (await createProvider({ executeTools }).callApi('hello')).metadata?.toolCalls,
+        ).toMatchObject([
+          { resultPresent: true, resultStatus: 'completed', executionMode: 'mock' },
+        ]);
+      },
+    );
+
+    it('retains malformed arguments without failing the final answer', async () => {
+      runWithItems([createCall('call_1', '{broken')]);
+      const response = await createProvider().callApi('hello');
+      expect(response.output).toBe('Agent answer');
+      expect(response.metadata?.toolCalls[0]).toMatchObject({
+        rawArguments: '{broken',
+        argumentParseStatus: 'invalid',
+        resultPresent: false,
+      });
+      expect(response.metadata?.toolCalls[0]).not.toHaveProperty('arguments');
+    });
+
+    it.each(['null', '[]', '42', '"text"'])('preserves valid non-object JSON %s', async (args) => {
+      runWithItems([createCall('call_1', args)]);
+      expect((await createProvider().callApi('hello')).metadata?.toolCalls[0]).toMatchObject({
+        arguments: JSON.parse(args),
+        argumentParseStatus: 'parsed',
+      });
+    });
+
+    it('includes structured results only on opt-in and does not infer business success', async () => {
+      runWithItems([createCall(), createOutput('call_1', { error: 'Order not found' })]);
+      const call = (await createProvider({ includeToolResults: true }).callApi('hello')).metadata
+        ?.toolCalls[0];
+      expect(call).toMatchObject({
+        resultStatus: 'completed',
+        result: { error: 'Order not found' },
+      });
+      expect(call).not.toHaveProperty('success');
+    });
+
+    it('makes optional output JSON-safe and tolerates serialization failures', async () => {
+      const circular: Record<string, unknown> = { value: 1 };
+      circular.self = circular;
+      runWithItems([
+        createCall('a'),
+        createOutput('a', circular),
+        createCall('b'),
+        createOutput('b', 1n),
+      ]);
+      const response = await createProvider({ includeToolResults: true }).callApi('hello');
+      expect(response.output).toBe('Agent answer');
+      expect(response.metadata?.toolCalls).toMatchObject([
+        { result: { value: 1 } },
+        { resultOmitted: true },
+      ]);
+      expect(() => JSON.stringify(response)).not.toThrow();
+    });
+
+    it('does not falsely correlate duplicate or unmatched IDs', async () => {
+      runWithItems([
+        createCall('a'),
+        createCall('a'),
+        createOutput('a'),
+        createOutput('orphan'),
+        createCall('b'),
+        createOutput('b'),
+        createOutput('b'),
+      ]);
+      expect((await createProvider().callApi('hello')).metadata?.toolCalls).toMatchObject([
+        { callId: 'a', resultPresent: false },
+        { callId: 'a', resultPresent: false },
+        { callId: 'b', resultPresent: false },
+      ]);
+    });
+
+    it('excludes handoffs and non-function items and retains calls by handoff agents', async () => {
+      const handoffCall = { type: 'handoff_call_item', rawItem: createCall().rawItem };
+      const hostedCall = new RunToolCallItem(
+        { type: 'hosted_tool_call', name: 'web_search', providerData: {} },
+        new Agent(createSupportAgentDefinition()),
+      );
+      runWithItems([handoffCall, hostedCall, createCall('child')]);
+      expect((await createProvider().callApi('hello')).metadata?.toolCalls).toMatchObject([
+        { callId: 'child', name: 'lookup_order' },
+      ]);
+    });
+
+    it('preserves runner errors and cancellation', async () => {
+      const error = new Error('Run cancelled');
+      mockRun.mockRejectedValueOnce(error);
+      const controller = new AbortController();
+      await expect(
+        createProvider().callApi('hello', undefined, { abortSignal: controller.signal }),
+      ).rejects.toBe(error);
+      expect(mockRun.mock.calls[0][2].signal).toBe(controller.signal);
+    });
   });
 
   it('creates a real SDK agent from inline definitions', async () => {

@@ -1,0 +1,39 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: SDK tool metadata without tracing
+
+env:
+  OPENAI_AGENTS_DISABLE_TRACING: '1'
+
+prompts:
+  - '{{query}}'
+
+providers:
+  - id: openai:agents:tool-metadata-fixture
+    config:
+      agent: file://../providers/openai-agents-tool-calls.ts
+      apiKeyRequired: false
+      includeToolCalls: true
+      includeToolResults: true
+
+defaultTest:
+  assert:
+    - type: contains
+      value: lookup_order
+    - type: tool-call-f1
+      value: [lookup_order]
+      threshold: 1
+    - type: tool-call
+      value:
+        name: lookup_order
+        arguments:
+          orderId: '42'
+      config:
+        requireCompleted: true
+
+tests:
+  - description: A completed tool invocation passes
+    vars:
+      query: Please call the tool for order 42
+  - description: Mentioning the tool without calling it fails
+    vars:
+      query: Only mention lookup_order

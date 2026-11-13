@@ -7,6 +7,7 @@ This example evaluates a D&D-themed agent built with the OpenAI Agents SDK. The 
 - **Independent D&D scenarios**: Each test starts a fresh agent run; conversation history is not shared between tests
 - **Tool calls**: Agent uses `roll_dice`, `check_inventory`, `describe_scene`, and `check_character_stats` tools
 - **File-based Configuration**: Agent and tools organized in separate TypeScript files
+- **Tool assertions without tracing**: Inventory checks use SDK metadata to verify a completed `check_inventory` call with the expected player ID
 - **Scenario checks**: Rubric and content assertions evaluate selected player actions
 
 The agents use `gpt-6-luna` through the SDK’s default Responses API.
