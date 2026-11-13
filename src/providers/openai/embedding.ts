@@ -10,12 +10,12 @@ import {
   normalizeOpenAiBillingModelName,
 } from './util';
 
-import type { EnvOverrides } from '../../types/env';
 import type {
   CallApiContextParams,
   CallApiOptionsParams,
   ProviderEmbeddingResponse,
 } from '../../types/index';
+import type { ProviderOptions } from '../../types/providers';
 import type { OpenAiSharedOptions } from './types';
 
 type OpenAiEmbeddingOptions = OpenAiSharedOptions & {
@@ -50,7 +50,7 @@ export class OpenAiEmbeddingProvider extends OpenAiGenericProvider {
 
   constructor(
     modelName: string,
-    options: { config?: OpenAiEmbeddingOptions; id?: string; env?: EnvOverrides } = {},
+    options: Pick<ProviderOptions<OpenAiEmbeddingOptions>, 'config' | 'id' | 'env'> = {},
   ) {
     super(modelName, options);
   }

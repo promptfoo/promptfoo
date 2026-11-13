@@ -14,6 +14,6 @@ cd vertex-live
 npx promptfoo@latest eval --no-cache -j 1
 ```
 
-This example uses `gemini-live-2.5-flash-native-audio` in `us-central1`. Authentication uses Google Cloud OAuth; Gemini API keys do not apply. The provider returns audio and a transcript in `output.text`.
+The provider authenticates with Google Cloud OAuth and returns a spoken answer with its transcript in `output.text`. Set `VERTEX_REGION` to select a supported location.
 
-See the [Vertex Live docs](https://www.promptfoo.dev/docs/providers/vertex/#live-api) for other locations, tools, and Gemini 3.8 Live availability. For Gemini 3.8 through the Gemini API, use the `google-live` example.
+See the [Vertex Live docs](https://www.promptfoo.dev/docs/providers/vertex/#live-api) for configuration and model availability.
