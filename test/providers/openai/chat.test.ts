@@ -3304,6 +3304,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
     it('should honor prompt-level isReasoningModel: false over model-name detection', async () => {
       const provider = new OpenAiChatCompletionProvider('o3-mini', {
         config: {
+          apiBaseUrl: 'https://example.com/v1',
           isReasoningModel: true,
           max_completion_tokens: 2048,
           reasoning: { effort: 'high' },
