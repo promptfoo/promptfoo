@@ -20,6 +20,19 @@ describe('codexSkillMetadata', () => {
       expect(prefixes).toContain('C:/codex/home');
     });
 
+    it.each([
+      ['/custom//root///', '/custom//root'],
+      ['C:\\custom\\root\\', 'C:/custom/root'],
+      ['/custom/root', '/custom/root'],
+      ['/custom/root/leaf', '/custom/root/leaf'],
+    ])('preserves interior path separators in %s', (codexHome, expected) => {
+      expect(getCodexSkillRootPrefixes({ codexHome })).toEqual([expected, '/etc/codex']);
+    });
+
+    it.each(['', '/', '////', '\\\\'])('omits empty roots after normalizing %j', (codexHome) => {
+      expect(getCodexSkillRootPrefixes({ codexHome })).toEqual(['/etc/codex']);
+    });
+
     it('deduplicates equal prefixes', () => {
       const prefixes = getCodexSkillRootPrefixes({ codexHome: '/etc/codex' });
       expect(prefixes).toEqual(['/etc/codex']);

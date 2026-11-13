@@ -10,6 +10,13 @@ import { afterEach, describe, expect, it } from 'vitest';
 import cliState from '../../src/cliState';
 import { HttpProvider } from '../../src/providers/http';
 import { normalizeFilePath, resolvePath } from '../../src/providers/httpMultipart';
+import { createDebugContextFixture } from '../factories/literalFixtures';
+
+const createQueryField = () => ({
+  kind: 'field',
+  name: 'documentQuery',
+  value: '{{prompt}}',
+});
 
 interface MockFileSummary {
   filename: string;
@@ -158,11 +165,7 @@ describe('HttpProvider structured multipart requests', () => {
                 format: 'pdf',
               },
             },
-            {
-              kind: 'field',
-              name: 'documentQuery',
-              value: '{{prompt}}',
-            },
+            createQueryField(),
           ],
         },
         transformResponse: 'json.summary',
@@ -206,11 +209,7 @@ describe('HttpProvider structured multipart requests', () => {
                 path: 'file://{{documentPath}}',
               },
             },
-            {
-              kind: 'field',
-              name: 'documentQuery',
-              value: '{{prompt}}',
-            },
+            createQueryField(),
           ],
         },
         transformResponse: 'json.summary',
@@ -322,11 +321,7 @@ describe('HttpProvider structured multipart requests', () => {
               name: 'files',
               source: { type: 'generated', format: 'pdf' },
             },
-            {
-              kind: 'field',
-              name: 'documentQuery',
-              value: '{{prompt}}',
-            },
+            createQueryField(),
             {
               kind: 'field',
               name: 'api_key',
@@ -338,11 +333,7 @@ describe('HttpProvider structured multipart requests', () => {
       },
     });
 
-    const result = await provider.callApi('Query', {
-      debug: true,
-      prompt: { raw: 'Query', label: 'query' },
-      vars: {},
-    });
+    const result = await provider.callApi('Query', createDebugContextFixture('Query', 'query'));
 
     expect(result.metadata?.multipart.fields).toContainEqual({
       field: 'api_key',
@@ -366,22 +357,14 @@ describe('HttpProvider structured multipart requests', () => {
               filename: 'sk-secret-filename-that-should-not-appear',
               source: { type: 'generated', format: 'pdf' },
             },
-            {
-              kind: 'field',
-              name: 'documentQuery',
-              value: '{{prompt}}',
-            },
+            createQueryField(),
           ],
         },
         transformResponse: 'json.summary',
       },
     });
 
-    const result = await provider.callApi('Query', {
-      debug: true,
-      prompt: { raw: 'Query', label: 'query' },
-      vars: {},
-    });
+    const result = await provider.callApi('Query', createDebugContextFixture('Query', 'query'));
 
     expect(result.metadata?.multipart.files[0]).toMatchObject({
       field: 'files',
@@ -419,13 +402,7 @@ describe('HttpProvider structured multipart requests', () => {
       config: {
         method: 'GET',
         multipart: {
-          parts: [
-            {
-              kind: 'field',
-              name: 'documentQuery',
-              value: '{{prompt}}',
-            },
-          ],
+          parts: [createQueryField()],
         },
       },
     });
@@ -455,11 +432,7 @@ describe('HttpProvider structured multipart requests', () => {
                 text: 'Benign generated report used to test multipart transport.',
               },
             },
-            {
-              kind: 'field',
-              name: 'documentQuery',
-              value: '{{prompt}}',
-            },
+            createQueryField(),
           ],
         },
         transformResponse: 'json.summary',
