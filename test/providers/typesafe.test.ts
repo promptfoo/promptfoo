@@ -125,6 +125,16 @@ describe('TypeSafeProvider', () => {
         headers: { 'Content-Type': 'application/json', Authorization: 'Bearer test-key' },
       });
     });
+
+    it('strips trailing slashes from the configured base URL when building the request URL', async () => {
+      mockAnswer({ type: 'noul', noul: 0.9 });
+      await createProvider({ apiBaseUrl: 'http://localhost:8080/' }).callApi(
+        '',
+        rubricContext('Is polite', 'Thanks!'),
+      );
+
+      expect(lastRequest().url).toBe('http://localhost:8080/v1/systemone');
+    });
   });
 
   describe('llm-rubric grading', () => {
