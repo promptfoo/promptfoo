@@ -1,30 +1,19 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: Google Veo image-to-video generation
+description: Animate a starting image with Veo
 
 prompts:
-  - 'Animate this image: {{animation}}'
+  - 'The raccoon turns toward the camera.'
 
 providers:
-  - id: google:video:veo-3.1-generate-preview
+  - id: vertex:video:veo-3.1-generate-001
     config:
-      # Provide your own image path here
-      image: file://assets/start-frame.jpg
-      aspectRatio: '16:9'
-      durationSeconds: 6
-
-defaultTest:
-  assert:
-    - type: javascript
-      value: |
-        const video = context.providerResponse?.video?.blobRef;
-        return video?.mimeType === 'video/mp4' && video.sizeBytes > 0;
+      region: us-central1
+      image: file://assets/raccoon.jpg
+      durationSeconds: 4
 
 tests:
-  - vars:
-      animation: The camera slowly zooms in while the scene comes to life
-  - vars:
-      animation: Gentle motion with leaves rustling and clouds drifting
-
-# Note: You need to create an assets/ directory with your images
-# mkdir assets
-# cp /path/to/your/image.jpg assets/start-frame.jpg
+  - assert:
+      - type: javascript
+        value: |
+          const video = context.providerResponse?.video?.blobRef;
+          return video?.mimeType === 'video/mp4' && video.sizeBytes > 0;
