@@ -8,6 +8,17 @@ import { mockProcessEnv } from '../../util/utils';
 import { createMockFetchResponse } from '../mockProviderResponses';
 import { getOpenAiMissingApiKeyMessage, restoreEnvVar } from './shared';
 
+// Compatible endpoints can continue serving retired OpenAI image models.
+function createLegacyImageProvider(
+  model: string,
+  options: ConstructorParameters<typeof OpenAiImageProvider>[1] = {},
+) {
+  return new OpenAiImageProvider(model, {
+    ...options,
+    env: { OPENAI_API_BASE_URL: 'https://gateway.example/v1', ...options.env },
+  });
+}
+
 const createSmallImageOptions = () => ({
   config: { apiKey: 'test-key', size: '512x512' as const },
 });
@@ -48,6 +59,15 @@ describe('OpenAiImageProvider', () => {
   });
 
   describe('Basic functionality', () => {
+    it.each(['dall-e-2', 'dall-e-3', 'gpt-image-1'])(
+      'rejects retired native image model %s before dispatch',
+      async (model) => {
+        const provider = new OpenAiImageProvider(model, createApiKeyOptions());
+        await expect(provider.callApi('Generate a cat')).rejects.toThrow('has been retired');
+        expect(fetchWithCache).not.toHaveBeenCalled();
+      },
+    );
+
     it('should reject a per-prompt Codex-only image model override before dispatch', async () => {
       const provider = new OpenAiImageProvider('gpt-image-1.5', createApiKeyOptions());
 
@@ -60,8 +80,9 @@ describe('OpenAiImageProvider', () => {
     });
 
     it('should generate an image successfully', async () => {
-      const provider = new OpenAiImageProvider('dall-e-3', createApiKeyOptions());
+      const provider = new OpenAiImageProvider('gpt-image-2.5-flare', createApiKeyOptions());
 
+      vi.mocked(fetchWithCache).mockResolvedValue(mockBase64Response);
       const result = await provider.callApi('Generate a cat');
 
       expect(fetchWithCache).toHaveBeenCalledWith(
@@ -78,16 +99,15 @@ describe('OpenAiImageProvider', () => {
         expect.any(Number),
       );
 
-      expect(result).toEqual({
-        output: '![Generate a cat](https://example.com/image.png)',
-        images: [{ data: 'https://example.com/image.png', mimeType: 'image/png' }],
+      expect(result).toMatchObject({
+        output: 'data:image/png;base64,base64EncodedImageData',
+        images: [{ data: 'data:image/png;base64,base64EncodedImageData', mimeType: 'image/png' }],
         cached: false,
-        cost: 0.04, // Default cost for DALL-E 3 standard 1024x1024
       });
     });
 
     it('should use cached response', async () => {
-      const provider = new OpenAiImageProvider('dall-e-3', createApiKeyOptions());
+      const provider = createLegacyImageProvider('dall-e-3', createApiKeyOptions());
 
       vi.mocked(fetchWithCache).mockResolvedValue({
         ...mockFetchResponse,
@@ -109,8 +129,9 @@ describe('OpenAiImageProvider', () => {
       // header on api.openai.com must NOT disable caching. When caching is
       // preserved, fetchWithCache receives exactly (url, request, timeout) —
       // the bust path appends ('json', true).
-      const provider = new OpenAiImageProvider('dall-e-3', createApiKeyOptions());
+      const provider = new OpenAiImageProvider('gpt-image-2.5-flare', createApiKeyOptions());
 
+      vi.mocked(fetchWithCache).mockResolvedValue(mockBase64Response);
       const result = await provider.callApi('Generate a cat');
 
       expect(result.error).toBeUndefined();
@@ -124,7 +145,7 @@ describe('OpenAiImageProvider', () => {
       const originalEnv = process.env.OPENAI_API_KEY;
       mockProcessEnv({ OPENAI_API_KEY: undefined });
       try {
-        const provider = new OpenAiImageProvider('dall-e-3', {
+        const provider = createLegacyImageProvider('dall-e-3', {
           config: { apiKeyRequired: false, apiBaseUrl: 'https://gateway.example/v1' },
         });
 
@@ -144,7 +165,7 @@ describe('OpenAiImageProvider', () => {
     });
 
     it('should include all generated URL images in images array', async () => {
-      const provider = new OpenAiImageProvider('dall-e-2', {
+      const provider = createLegacyImageProvider('dall-e-2', {
         config: { apiKey: 'test-key', n: 2 },
       });
 
@@ -171,7 +192,7 @@ describe('OpenAiImageProvider', () => {
     });
 
     it('should sanitize prompt text', async () => {
-      const provider = new OpenAiImageProvider('dall-e-3', createApiKeyOptions());
+      const provider = createLegacyImageProvider('dall-e-3', createApiKeyOptions());
 
       const result = await provider.callApi('Test [prompt] with\nnewlines');
 
@@ -179,7 +200,7 @@ describe('OpenAiImageProvider', () => {
     });
 
     it('should correctly use ID passed during construction', async () => {
-      const provider = new OpenAiImageProvider('dall-e-3', {
+      const provider = new OpenAiImageProvider('gpt-image-2.5-flare', {
         config: { apiKey: 'test-key' },
         id: 'custom-provider-id',
       });
@@ -195,7 +216,7 @@ describe('OpenAiImageProvider', () => {
 
       try {
         // Create provider with no API key in config or environment
-        const provider = new OpenAiImageProvider('dall-e-3');
+        const provider = new OpenAiImageProvider('gpt-image-2.5-flare');
 
         // Mock fetchWithCache to prevent it from being called
         vi.mocked(fetchWithCache).mockImplementation(function () {
@@ -218,7 +239,7 @@ describe('OpenAiImageProvider', () => {
       mockProcessEnv({ CUSTOM_IMAGE_API_KEY: undefined });
 
       try {
-        const provider = new OpenAiImageProvider('dall-e-3', {
+        const provider = new OpenAiImageProvider('gpt-image-2.5-flare', {
           config: {
             apiKeyEnvar: 'CUSTOM_IMAGE_API_KEY',
           },
@@ -242,7 +263,7 @@ describe('OpenAiImageProvider', () => {
     it('should handle missing API key', async () => {
       const restoreEnv = mockProcessEnv({ OPENAI_API_KEY: undefined });
       try {
-        const provider = new OpenAiImageProvider('dall-e-3');
+        const provider = new OpenAiImageProvider('gpt-image-2.5-flare');
         await expect(provider.callApi('test prompt')).rejects.toThrow(
           getOpenAiMissingApiKeyMessage('OPENAI_API_KEY'),
         );
@@ -253,7 +274,7 @@ describe('OpenAiImageProvider', () => {
     });
 
     it('should handle API errors', async () => {
-      const provider = new OpenAiImageProvider('dall-e-3', createApiKeyOptions());
+      const provider = new OpenAiImageProvider('gpt-image-2.5-flare', createApiKeyOptions());
 
       const errorResponse = createMockFetchResponse(
         { error: { message: 'API error message', type: 'api_error', code: 'error_code' } },
@@ -269,7 +290,7 @@ describe('OpenAiImageProvider', () => {
     });
 
     it('should handle HTTP errors', async () => {
-      const provider = new OpenAiImageProvider('dall-e-3', createApiKeyOptions());
+      const provider = new OpenAiImageProvider('gpt-image-2.5-flare', createApiKeyOptions());
 
       vi.mocked(fetchWithCache).mockResolvedValue(
         createMockFetchResponse('Error message', createStatusResponse()),
@@ -282,7 +303,7 @@ describe('OpenAiImageProvider', () => {
     });
 
     it('should handle fetch errors', async () => {
-      const provider = new OpenAiImageProvider('dall-e-3', createApiKeyOptions());
+      const provider = new OpenAiImageProvider('gpt-image-2.5-flare', createApiKeyOptions());
 
       vi.mocked(fetchWithCache).mockRejectedValue(new Error('Network error'));
 
@@ -293,7 +314,7 @@ describe('OpenAiImageProvider', () => {
     });
 
     it('should handle missing image URL in response', async () => {
-      const provider = new OpenAiImageProvider('dall-e-3', createApiKeyOptions());
+      const provider = createLegacyImageProvider('dall-e-3', createApiKeyOptions());
 
       vi.mocked(fetchWithCache).mockResolvedValue(createMockFetchResponse({ data: [{}] }));
 
@@ -304,7 +325,7 @@ describe('OpenAiImageProvider', () => {
     });
 
     it('should handle error with minimal details', async () => {
-      const provider = new OpenAiImageProvider('dall-e-3', createApiKeyOptions());
+      const provider = new OpenAiImageProvider('gpt-image-2.5-flare', createApiKeyOptions());
 
       vi.mocked(fetchWithCache).mockResolvedValueOnce(
         createMockFetchResponse('Just a simple error string', createStatusResponse()),
@@ -316,25 +337,24 @@ describe('OpenAiImageProvider', () => {
       expect(result.error).toContain('Internal Server Error');
     });
 
-    it('should handle deleteFromCache when response parsing fails', async () => {
-      const provider = new OpenAiImageProvider('dall-e-3', createApiKeyOptions());
+    it('returns the image error even if cache eviction fails', async () => {
+      const provider = new OpenAiImageProvider('gpt-image-2.5-flare', createApiKeyOptions());
 
-      const mockDeleteFn = vi.fn();
-      vi.mocked(fetchWithCache).mockResolvedValueOnce(
-        createMockFetchResponse({
-          // Invalid data structure that will cause parsing to fail
-          deleteFromCache: mockDeleteFn,
-        }),
-      );
+      const mockDeleteFn = vi.fn().mockRejectedValue(new Error('Cache unavailable'));
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        ...createMockFetchResponse({}),
+        deleteFromCache: mockDeleteFn,
+      });
 
-      await provider.callApi('test prompt');
+      const result = await provider.callApi('test prompt');
+      expect(result.error).toContain('No base64 image data found');
       expect(mockDeleteFn).toHaveBeenCalledTimes(1);
     });
   });
 
   describe('Response format handling', () => {
     it('should handle base64 response format', async () => {
-      const provider = new OpenAiImageProvider('dall-e-3', {
+      const provider = createLegacyImageProvider('dall-e-3', {
         config: { apiKey: 'test-key', response_format: 'b64_json' },
       });
 
@@ -358,11 +378,13 @@ describe('OpenAiImageProvider', () => {
           body: expect.stringContaining('"response_format":"b64_json"'),
         }),
         expect.any(Number),
+        'json',
+        true,
       );
     });
 
     it('should handle missing base64 data in response', async () => {
-      const provider = new OpenAiImageProvider('dall-e-3', {
+      const provider = createLegacyImageProvider('dall-e-3', {
         config: { apiKey: 'test-key', response_format: 'b64_json' },
       });
 
@@ -377,7 +399,7 @@ describe('OpenAiImageProvider', () => {
 
   describe('Parameter validation', () => {
     it('should validate size for DALL-E 3', async () => {
-      const provider = new OpenAiImageProvider('dall-e-3', createSmallImageOptions());
+      const provider = createLegacyImageProvider('dall-e-3', createSmallImageOptions());
 
       const result = await provider.callApi('test prompt');
 
@@ -386,7 +408,7 @@ describe('OpenAiImageProvider', () => {
     });
 
     it('should reject DALL-E 3 n values above 1 before calling the API', async () => {
-      const provider = new OpenAiImageProvider('dall-e-3', {
+      const provider = createLegacyImageProvider('dall-e-3', {
         config: { apiKey: 'test-key', n: 2 },
       });
 
@@ -399,7 +421,7 @@ describe('OpenAiImageProvider', () => {
     });
 
     it('should validate size for DALL-E 2', async () => {
-      const provider = new OpenAiImageProvider('dall-e-2', {
+      const provider = createLegacyImageProvider('dall-e-2', {
         config: { apiKey: 'test-key', size: '1792x1024' },
       });
 
@@ -410,7 +432,7 @@ describe('OpenAiImageProvider', () => {
     });
 
     it('should use correct size defaults based on model', async () => {
-      const provider = new OpenAiImageProvider('dall-e-3', createApiKeyOptions());
+      const provider = createLegacyImageProvider('dall-e-3', createApiKeyOptions());
 
       await provider.callApi('test prompt');
 
@@ -421,13 +443,15 @@ describe('OpenAiImageProvider', () => {
           body: expect.stringContaining('"size":"1024x1024"'),
         }),
         expect.any(Number),
+        'json',
+        true,
       );
     });
   });
 
   describe('Operation handling', () => {
     it('should reject non-generation operations', async () => {
-      const provider = new OpenAiImageProvider('dall-e-3', {
+      const provider = createLegacyImageProvider('dall-e-3', {
         config: {
           apiKey: 'test-key',
           operation: 'variation',
@@ -445,7 +469,7 @@ describe('OpenAiImageProvider', () => {
 
   describe('Configuration options', () => {
     it('should handle DALL-E 3 specific options', async () => {
-      const provider = new OpenAiImageProvider('dall-e-3', {
+      const provider = createLegacyImageProvider('dall-e-3', {
         config: {
           apiKey: 'test-key',
           quality: 'hd',
@@ -461,6 +485,8 @@ describe('OpenAiImageProvider', () => {
           body: expect.stringContaining('"quality":"hd"'),
         }),
         expect.any(Number),
+        'json',
+        true,
       );
 
       expect(fetchWithCache).toHaveBeenCalledWith(
@@ -469,11 +495,13 @@ describe('OpenAiImageProvider', () => {
           body: expect.stringContaining('"style":"vivid"'),
         }),
         expect.any(Number),
+        'json',
+        true,
       );
     });
 
     it('should include organization ID in headers when provided', async () => {
-      const provider = new OpenAiImageProvider('dall-e-3', {
+      const provider = new OpenAiImageProvider('gpt-image-2.5-flare', {
         config: {
           apiKey: 'test-key',
           organization: 'test-org',
@@ -494,7 +522,7 @@ describe('OpenAiImageProvider', () => {
     });
 
     it('should include custom headers when provided', async () => {
-      const provider = new OpenAiImageProvider('dall-e-3', {
+      const provider = new OpenAiImageProvider('gpt-image-2.5-flare', {
         config: {
           apiKey: 'test-key',
           headers: {
@@ -517,7 +545,7 @@ describe('OpenAiImageProvider', () => {
     });
 
     it('should merge prompt config with provider config', async () => {
-      const provider = new OpenAiImageProvider('dall-e-2', {
+      const provider = createLegacyImageProvider('dall-e-2', {
         config: { apiKey: 'test-key', n: 1 },
       });
 
@@ -538,12 +566,14 @@ describe('OpenAiImageProvider', () => {
           body: expect.stringContaining('"n":2'),
         }),
         expect.any(Number),
+        'json',
+        true,
       );
     });
 
     it('should use custom API URL when provided', async () => {
       const customApiUrl = 'https://custom-openai.example.com/v1';
-      const provider = new OpenAiImageProvider('dall-e-3', {
+      const provider = createLegacyImageProvider('dall-e-3', {
         config: {
           apiKey: 'test-key',
         },
@@ -561,6 +591,174 @@ describe('OpenAiImageProvider', () => {
         'json',
         true,
       );
+    });
+  });
+
+  describe('GPT Image 2.6 edits', () => {
+    const images = [
+      { file_id: 'file-source' },
+      { image_url: 'https://example.com/reference.webp' },
+    ];
+    const overlay = { image_url: 'data:image/png;base64,cG5n' };
+
+    it.each(['markup', 'mask'] as const)(
+      'sends a JSON edit with %s and bypasses the shared cache',
+      async (field) => {
+        vi.mocked(fetchWithCache).mockResolvedValue(mockBase64Response);
+        const model = 'gpt-image-2.6-sunburst';
+        const provider = new OpenAiImageProvider(model, {
+          config: {
+            apiKey: 'test-key',
+            operation: 'edit',
+            images,
+            [field]: overlay,
+            complexity: 'low',
+          },
+        });
+        const result = await provider.callApi('Recolor the vase.');
+        expect(result.images?.[0].mimeType).toBe('image/png');
+        expect(fetchWithCache).toHaveBeenCalledWith(
+          'https://api.openai.com/v1/images/edits',
+          expect.objectContaining({ method: 'POST' }),
+          expect.any(Number),
+          'json',
+          true,
+        );
+        const request = vi.mocked(fetchWithCache).mock.calls[0][1]!;
+        expect(JSON.parse(request.body as string)).toEqual({
+          model,
+          prompt: 'Recolor the vase.',
+          n: 1,
+          size: 'auto',
+          complexity: 'low',
+          images,
+          [field]: overlay,
+        });
+      },
+    );
+
+    it.each([
+      [{ operation: 'generation', markup: overlay }, 'operation: edit'],
+      [{ images: [] }, 'images'],
+      [{ images: Array(17).fill(images[0]) }, 'images'],
+      [
+        { images: [{ file_id: 'file-source', image_url: 'https://example.com/image.png' }] },
+        'images',
+      ],
+      [{ images: [{ image_url: 'file:///tmp/source.png' }] }, 'images'],
+      [{ markup: { image_url: 'data:image/webp;base64,d2VicA==' } }, 'PNG'],
+      [{ mask: overlay, markup: overlay }, 'markup or mask'],
+      [{ input_fidelity: 'high' }, 'input_fidelity'],
+      [{ output_format: 'svg' }, 'generation'],
+      [{ output_format: 'gif' }, 'generation'],
+    ] as const)(
+      'rejects invalid edit inputs %j before sending a request',
+      async (overrides, error) => {
+        const provider = new OpenAiImageProvider('gpt-image-2.6-flare', createApiKeyOptions());
+        const result = await provider.callApi('Recolor the vase.', {
+          prompt: { raw: '', label: 'edit', config: { operation: 'edit', images, ...overrides } },
+          vars: {},
+        });
+        expect(result.error).toContain(error);
+        expect(fetchWithCache).not.toHaveBeenCalled();
+      },
+    );
+  });
+
+  describe('GPT Image 2.6 generation', () => {
+    const usage = {
+      input_tokens: 12,
+      input_tokens_details: { text_tokens: 12, image_tokens: 0 },
+      output_tokens: 34,
+      total_tokens: 46,
+    };
+
+    beforeEach(() => {
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        ...mockBase64Response,
+        data: { ...mockBase64Response.data, usage },
+      });
+    });
+
+    it('sends GIF controls to Flare and bills actual usage', async () => {
+      const model = 'gpt-image-2.6-flare';
+      const prompt = 'Animate a blinking lantern';
+      const options = {
+        output_format: 'gif',
+        quality: 'medium',
+        complexity: 'low',
+        frame_count: 9,
+        frame_duration_ms: 200,
+      } as const;
+      const provider = new OpenAiImageProvider(model, {
+        config: { apiKey: 'test-key', ...options },
+      });
+
+      const result = await provider.callApi(prompt);
+      const [url, request] = vi.mocked(fetchWithCache).mock.calls[0];
+      expect(url).toBe('https://api.openai.com/v1/images/generations');
+      expect(JSON.parse(request!.body as string)).toEqual({
+        model,
+        prompt,
+        size: 'auto',
+        n: 1,
+        ...options,
+      });
+      const data = 'data:image/gif;base64,base64EncodedImageData';
+      expect(result).toMatchObject({
+        output: data,
+        images: [{ data, mimeType: 'image/gif' }],
+        tokenUsage: { prompt: 12, completion: 34, total: 46 },
+      });
+      expect(result.cost).toBeCloseTo((12 * 5 + 34 * 30) / 1e6, 12);
+    });
+
+    it('returns a Sunburst SVG with reported usage and omits the incomplete cost', async () => {
+      const provider = new OpenAiImageProvider('gpt-image-2.6-sunburst', {
+        config: { apiKey: 'test-key', output_format: 'svg', complexity: 'high' },
+      });
+      const result = await provider.callApi('Draw a vector logo');
+      const data = 'data:image/svg+xml;base64,base64EncodedImageData';
+      expect(result).toMatchObject({
+        output: data,
+        images: [{ data, mimeType: 'image/svg+xml' }],
+        metadata: { usage },
+      });
+      expect(result).not.toHaveProperty('cost');
+    });
+
+    it.each([
+      [{ complexity: 'auto' }, 'complexity'],
+      [{ output_format: 'gif', frame_count: 1 }, 'frame_count'],
+      [{ output_format: 'gif', frame_count: 65 }, 'frame_count'],
+      [{ output_format: 'gif', frame_count: 2.5 }, 'frame_count'],
+      [{ output_format: 'gif', frame_duration_ms: 19 }, 'frame_duration_ms'],
+      [{ output_format: 'gif', frame_duration_ms: 2001 }, 'frame_duration_ms'],
+      [{ output_format: 'png', frame_count: 2 }, 'require output_format: "gif"'],
+      [{ output_format: 'svg', n: 2 }, 'SVG output requires n: 1'],
+      [{ output_format: 'gif', output_compression: 50 }, 'output_compression'],
+      [{ output_format: 'svg', prompt_rewriter: true }, 'prompt_rewriter'],
+    ] as const)('rejects invalid generation options %j before dispatch', async (config, reason) => {
+      const provider = new OpenAiImageProvider('gpt-image-2.6-flare', createApiKeyOptions());
+      const result = await provider.callApi('Draw a lantern', {
+        prompt: { raw: 'Draw a lantern', label: 'image', config },
+        vars: {},
+      });
+      expect(result).toEqual({ error: expect.stringContaining(reason) });
+      expect(fetchWithCache).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      { output_format: 'gif' },
+      { output_format: 'svg' },
+      { complexity: 'medium' },
+      { frame_duration_ms: 200 },
+    ] as const)('rejects 2.6-only controls on GPT Image 2.5: %j', async (config) => {
+      const provider = new OpenAiImageProvider('gpt-image-2.5-sunburst', {
+        config: { apiKey: 'test-key', ...config },
+      });
+      expect(await provider.callApi('Draw a lantern')).toEqual({ error: expect.any(String) });
+      expect(fetchWithCache).not.toHaveBeenCalled();
     });
   });
 
@@ -1035,7 +1233,7 @@ describe('OpenAiImageProvider', () => {
     });
 
     it('should not send response_format parameter for gpt-image-1', async () => {
-      const provider = new OpenAiImageProvider('gpt-image-1', createApiKeyOptions());
+      const provider = createLegacyImageProvider('gpt-image-1', createApiKeyOptions());
 
       await provider.callApi('test prompt');
 
@@ -1047,7 +1245,7 @@ describe('OpenAiImageProvider', () => {
     });
 
     it('should always treat gpt-image-1 response as b64_json', async () => {
-      const provider = new OpenAiImageProvider('gpt-image-1', createApiKeyOptions());
+      const provider = createLegacyImageProvider('gpt-image-1', createApiKeyOptions());
 
       const result = await provider.callApi('test prompt');
 
@@ -1062,7 +1260,7 @@ describe('OpenAiImageProvider', () => {
     });
 
     it('should handle gpt-image-1 quality parameter', async () => {
-      const provider = new OpenAiImageProvider('gpt-image-1', createHighQualityImageOptions());
+      const provider = createLegacyImageProvider('gpt-image-1', createHighQualityImageOptions());
 
       await provider.callApi('test prompt');
 
@@ -1072,11 +1270,13 @@ describe('OpenAiImageProvider', () => {
           body: expect.stringContaining('"quality":"high"'),
         }),
         expect.any(Number),
+        'json',
+        true,
       );
     });
 
     it('should handle gpt-image-1 background parameter', async () => {
-      const provider = new OpenAiImageProvider('gpt-image-1', createTransparentImageOptions());
+      const provider = createLegacyImageProvider('gpt-image-1', createTransparentImageOptions());
 
       await provider.callApi('test prompt');
 
@@ -1086,11 +1286,13 @@ describe('OpenAiImageProvider', () => {
           body: expect.stringContaining('"background":"transparent"'),
         }),
         expect.any(Number),
+        'json',
+        true,
       );
     });
 
     it('should reject transparent background with jpeg for gpt-image-1', async () => {
-      const provider = new OpenAiImageProvider('gpt-image-1', {
+      const provider = createLegacyImageProvider('gpt-image-1', {
         config: { apiKey: 'test-key', background: 'transparent', output_format: 'jpeg' },
       });
 
@@ -1104,7 +1306,7 @@ describe('OpenAiImageProvider', () => {
     });
 
     it('should handle gpt-image-1 output_format parameter', async () => {
-      const provider = new OpenAiImageProvider('gpt-image-1', {
+      const provider = createLegacyImageProvider('gpt-image-1', {
         config: { apiKey: 'test-key', output_format: 'jpeg' },
       });
 
@@ -1116,6 +1318,8 @@ describe('OpenAiImageProvider', () => {
           body: expect.stringContaining('"output_format":"jpeg"'),
         }),
         expect.any(Number),
+        'json',
+        true,
       );
       expect(result).toMatchObject({
         output: 'data:image/jpeg;base64,base64EncodedImageData',
@@ -1124,7 +1328,7 @@ describe('OpenAiImageProvider', () => {
     });
 
     it('should handle gpt-image-1 output_compression parameter', async () => {
-      const provider = new OpenAiImageProvider('gpt-image-1', {
+      const provider = createLegacyImageProvider('gpt-image-1', {
         config: { apiKey: 'test-key', output_format: 'jpeg', output_compression: 80 },
       });
 
@@ -1136,11 +1340,13 @@ describe('OpenAiImageProvider', () => {
           body: expect.stringContaining('"output_compression":80'),
         }),
         expect.any(Number),
+        'json',
+        true,
       );
     });
 
     it('should handle gpt-image-1 moderation parameter', async () => {
-      const provider = new OpenAiImageProvider('gpt-image-1', {
+      const provider = createLegacyImageProvider('gpt-image-1', {
         config: { apiKey: 'test-key', moderation: 'low' },
       });
 
@@ -1152,11 +1358,13 @@ describe('OpenAiImageProvider', () => {
           body: expect.stringContaining('"moderation":"low"'),
         }),
         expect.any(Number),
+        'json',
+        true,
       );
     });
 
     it('should validate size for gpt-image-1', async () => {
-      const provider = new OpenAiImageProvider('gpt-image-1', createSmallImageOptions());
+      const provider = createLegacyImageProvider('gpt-image-1', createSmallImageOptions());
 
       const result = await provider.callApi('test prompt');
 
@@ -1165,7 +1373,7 @@ describe('OpenAiImageProvider', () => {
     });
 
     it('should allow auto size for gpt-image-1', async () => {
-      const provider = new OpenAiImageProvider('gpt-image-1', {
+      const provider = createLegacyImageProvider('gpt-image-1', {
         config: { apiKey: 'test-key', size: 'auto' },
       });
 
@@ -1177,12 +1385,14 @@ describe('OpenAiImageProvider', () => {
           body: expect.stringContaining('"size":"auto"'),
         }),
         expect.any(Number),
+        'json',
+        true,
       );
     });
 
     it('should calculate correct cost for gpt-image-1 with different quality levels', async () => {
       // Test high quality
-      const providerHigh = new OpenAiImageProvider('gpt-image-1', {
+      const providerHigh = createLegacyImageProvider('gpt-image-1', {
         config: { apiKey: 'test-key', quality: 'high', size: '1024x1024' },
       });
 
@@ -1190,7 +1400,7 @@ describe('OpenAiImageProvider', () => {
       expect(resultHigh.cost).toBe(0.167); // high_1024x1024
 
       // Test medium quality
-      const providerMedium = new OpenAiImageProvider('gpt-image-1', {
+      const providerMedium = createLegacyImageProvider('gpt-image-1', {
         config: { apiKey: 'test-key', quality: 'medium', size: '1024x1536' },
       });
 

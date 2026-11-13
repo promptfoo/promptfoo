@@ -54,19 +54,17 @@ describe('ESM utilities', () => {
       expect(result).toMatch(/golang$/);
     });
 
-    it('caches wrapper directory paths', () => {
-      const first = getWrapperDir('python');
-      const second = getWrapperDir('python');
-      expect(first).toBe(second);
-    });
-
-    it('clears cache when clearWrapperDirCache is called', () => {
-      const first = getWrapperDir('python');
+    it('resolves a wrapper directory once until the cache is cleared', () => {
       clearWrapperDirCache();
-      // After clearing, the next call should still return the same path
-      // (the path computation is deterministic)
+      const join = vi.spyOn(path, 'join');
+      const resolutions = () => join.mock.calls.filter((args) => args.at(-1) === 'python');
+      const first = getWrapperDir('python');
       const second = getWrapperDir('python');
       expect(first).toBe(second);
+      expect(resolutions()).toHaveLength(1);
+      clearWrapperDirCache();
+      expect(getWrapperDir('python')).toBe(first);
+      expect(resolutions()).toHaveLength(2);
     });
   });
 

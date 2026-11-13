@@ -166,38 +166,3 @@ describe('CustomTargetConfiguration - Config Field Handling', () => {
     expect(mockUpdateCustomTarget).toHaveBeenCalledWith('id', newId);
   });
 });
-
-describe('updateCustomTarget function behavior', () => {
-  it('should update the config field correctly', () => {
-    // This test documents the expected behavior of the updateCustomTarget function
-    // when handling the 'config' field specifically
-
-    const mockSelectedTarget = {
-      id: 'custom',
-      config: { temperature: 0.5 },
-      label: 'Custom Target',
-    };
-
-    // Simulate the updateCustomTarget function logic for the 'config' field
-    const updateCustomTarget = (field: string, value: any) => {
-      const updatedTarget = { ...mockSelectedTarget };
-
-      if (field === 'config') {
-        // This is the fix: replace entire config object instead of nesting
-        updatedTarget.config = value;
-      } else {
-        // For other fields, add to config
-        (updatedTarget.config as any)[field] = value;
-      }
-
-      return updatedTarget;
-    };
-
-    // Test the fix: updating config field should replace, not nest
-    const newConfig = { temperature: 0.7, max_tokens: 100 };
-    const result = updateCustomTarget('config', newConfig);
-
-    expect(result.config).toEqual(newConfig);
-    expect(result.config).not.toHaveProperty('config'); // No nesting
-  });
-});
