@@ -574,15 +574,20 @@ export async function matchesGEval(
   let result;
 
   try {
-    const resultObjects = extractJsonObjects(resp.output);
+    const resultObjects = extractJsonObjects(resp.output) as {
+      score?: unknown;
+      reason?: unknown;
+    }[];
     const resultObject =
-      resultObjects.find((obj) => obj.score != null) ??
+      resultObjects.find(
+        (obj) => obj.score != null && typeof obj.reason === 'string' && obj.reason.trim(),
+      ) ??
       resultObjects.find((obj) => 'score' in obj) ??
       resultObjects[0];
     if (!resultObject) {
       return failWithTokens(`LLM-proposed evaluation result is not in JSON format: ${resp.output}`);
     }
-    result = resultObject as { score?: unknown; reason?: unknown };
+    result = resultObject;
   } catch (err) {
     return failWithTokens(
       `LLM-proposed evaluation result is not in JSON format: ${(err as Error).message}\n\n${resp.output}`,
