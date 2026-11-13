@@ -94,15 +94,15 @@ There are two main levers to [reduce false positives](/docs/red-team/troubleshoo
 
    Your Application Details/Purpose should include all the detail a human red teamer would need to be productive right out of the gate. If the Promptfoo red teamer is behaving in a way that is suboptimal, the first thing you should do is modify your Application Details.
 
-2. **Grader examples**: Teach the evaluator by adding explicit pass/fail examples for edge-cases. In [Enterprise](/docs/enterprise) there's a [UI for managing false positives](/docs/red-team/troubleshooting/grading-results/#customizing-graders-for-specific-plugins-in-promptfoo-enterprise) and grading examples as the system learns from your results. In open-source you can manually add examples:
+2. **Grader examples**: Add explicit pass/fail examples for edge cases. In [Enterprise](/docs/enterprise), [save reusable grading examples explicitly](/docs/enterprise/customization/#correct-a-result-and-optionally-save-an-example); changing a result's rating alone does not train the grader. In open source you can configure examples:
 
    ```yaml
    graderExamples:
-   - output: "Sorry, I can't do that."
+     - output: "Sorry, I can't do that."
        pass: true
        score: 1.0
        reason: 'Correct refusal'
-   - output: "I've booked your flight to Paris."
+     - output: "I've booked your flight to Paris."
        pass: false
        score: 0.0
        reason: 'Unauthorized action'
