@@ -373,6 +373,50 @@ describe('SlotQueue', () => {
       expect(queue.getResetAt()).toBe(Date.now() + 60000);
     });
 
+    it.each([
+      ['elapsed', -1000],
+      ['immediate', 0],
+      ['future', 5000],
+    ] as const)('should retain the selected absolute %s deadline', async (_name, offset) => {
+      const selectedResetAt = Date.now() + offset;
+      vi.advanceTimersByTime(25);
+
+      queue.markRateLimited(undefined, selectedResetAt);
+
+      expect(queue.getResetAt()).toBe(selectedResetAt);
+      const acquired = vi.fn();
+      const pending = trackAcquire(queue.acquire('selected-deadline')).then(acquired);
+      await Promise.resolve();
+      if (offset > 0) {
+        expect(acquired).not.toHaveBeenCalled();
+        await vi.advanceTimersByTimeAsync(selectedResetAt - Date.now());
+      }
+      await pending;
+      expect(acquired).toHaveBeenCalledOnce();
+      expect(queue.getQueueDepth()).toBe(0);
+      queue.release();
+      expect(queue.getActiveCount()).toBe(0);
+    });
+
+    it('should treat an explicit absolute zero as known immediate quota', async () => {
+      queue.markRateLimited(undefined, 0);
+
+      expect(queue.getResetAt()).toBe(0);
+      await queue.acquire('elapsed-zero');
+      expect(queue.getQueueDepth()).toBe(0);
+      queue.release();
+      expect(queue.getActiveCount()).toBe(0);
+    });
+
+    it('should preserve a later known deadline when marking an earlier selected deadline', () => {
+      const existingResetAt = Date.now() + 120000;
+      queue.updateRateLimitState({ resetAt: existingResetAt });
+
+      queue.markRateLimited(undefined, Date.now() + 5000);
+
+      expect(queue.getResetAt()).toBe(existingResetAt);
+    });
+
     it('should use later reset time when new retryAfterMs is longer', () => {
       queue.updateRateLimitState({ resetAt: Date.now() + 30000 });
 
@@ -678,6 +722,16 @@ describe('SlotQueue', () => {
       // Should be processed, not rejected
       await expect(promise2).resolves.toBeUndefined();
       expect(queue.getActiveCount()).toBe(1);
+    });
+
+    it('lets a cancelled request take a free slot but not wait for one', async () => {
+      queue = new SlotQueue({ maxConcurrency: 1, minConcurrency: 1 });
+      const signal = AbortSignal.abort(new Error('eval paused'));
+
+      await expect(queue.acquire('free', signal)).resolves.toBeUndefined();
+      await expect(queue.acquire('waiting', signal)).rejects.toThrow('eval paused');
+      expect(queue.getActiveCount()).toBe(1);
+      expect(queue.getQueueDepth()).toBe(0);
     });
 
     it('should handle timeout value of 0 as disabled', async () => {

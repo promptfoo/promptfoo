@@ -1,4 +1,4 @@
-import { getEnvString } from '../envars';
+import { getEnvString, getProviderEnvString } from '../envars';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 
 import type { ProviderOptions } from '../types/index';
@@ -9,7 +9,7 @@ export interface HeliconeGatewayOptions extends OpenAiCompletionOptions {
   baseUrl?: string;
   /** Router name for custom routing (optional, uses /ai endpoint if not specified) */
   router?: string;
-  /** Model name in provider/model format (e.g., openai/gpt-4o, anthropic/claude-3-5-sonnet) */
+  /** Model name in provider/model format (e.g., openai/gpt-4o, anthropic/claude-sonnet-5) */
   model?: string;
 }
 
@@ -60,7 +60,7 @@ export class HeliconeGatewayProvider extends OpenAiChatCompletionProvider {
   getApiKey(): string | undefined {
     return (
       this.config.apiKey ||
-      this.env?.HELICONE_API_KEY ||
+      getProviderEnvString(this.env, 'HELICONE_API_KEY') ||
       getEnvString('HELICONE_API_KEY') ||
       'placeholder-api-key'
     );
