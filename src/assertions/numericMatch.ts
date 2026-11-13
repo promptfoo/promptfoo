@@ -187,7 +187,7 @@ export function handleNumericMatch({
     Number.isFinite(tolerance) && tolerance >= 0,
     '"numeric-match" assertion threshold must be a non-negative number',
   );
-  const mode: NumericMatchMode = assertion.config?.mode ?? 'closest';
+  const mode: NumericMatchMode = assertion.config?.mode ?? 'first';
   invariant(
     NUMERIC_MATCH_MODES.includes(mode),
     `"numeric-match" assertion config.mode must be one of: ${NUMERIC_MATCH_MODES.join(', ')}`,

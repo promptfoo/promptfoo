@@ -1087,8 +1087,8 @@ With this assertion, `$416.2 billion`, `416,161 million`, `$416.16B` and `416161
 
 | `mode`              | Number graded                                                         |
 | ------------------- | --------------------------------------------------------------------- |
-| `closest` (default) | The number closest to the expected value                              |
-| `first`             | The first number, skipping SEC form names, bare years and percentages |
+| `closest`           | The number closest to the expected value                              |
+| `first` (default)   | The first number, skipping SEC form names, bare years and percentages |
 | `last`              | The last number, skipping SEC form names, bare years and percentages  |
 
 In `first` and `last` modes, SEC form names (`10-K`, `10-Q`, `8-K`, `20-F`), bare four-digit years (`2025`) and percentages (`6%`) are skipped, so `In fiscal 2025, net sales grew 6% to $416.2 billion.` grades `$416.2 billion`. If only skipped numbers remain, they are used. `closest` is lenient when an output lists several figures; use `first` or `last` with a `Final answer` line to grade the stated answer strictly.

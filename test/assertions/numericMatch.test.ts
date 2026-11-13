@@ -138,6 +138,12 @@ describe('handleNumericMatch', () => {
     expect(far.score).toBe(0);
   });
 
+  it('does not accept an incidental matching figure by default', () => {
+    const output = 'Revenue was $391B. The peer reported $416.2B.';
+    expect(runNumericMatch(output, 416.161e9).pass).toBe(false);
+    expect(runNumericMatch(output, 416.161e9, { mode: 'closest' }).pass).toBe(true);
+  });
+
   it('supports first, last and closest modes', () => {
     const output = 'Last year 391 billion, this year 416 billion, next year 450 billion';
     expect(runNumericMatch(output, 416e9, { mode: 'first' }).pass).toBe(false);
