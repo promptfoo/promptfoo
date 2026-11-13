@@ -1,7 +1,5 @@
 """Promptfoo Python providers for the Google ADK integration example."""
 
-from __future__ import annotations
-
 import asyncio
 import json
 import logging

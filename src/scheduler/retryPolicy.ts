@@ -95,6 +95,7 @@ export function shouldRetry(
       causeCode === 'UND_ERR_CONNECT_TIMEOUT' ||
       causeCode === 'UND_ERR_SOCKET' ||
       message.includes('timeout') ||
+      message.startsWith('websocket request timed out after ') ||
       message.includes('econnrefused') ||
       message.includes('network') ||
       message.includes('503') ||

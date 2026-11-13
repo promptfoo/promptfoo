@@ -1,3 +1,5 @@
+const { createLoggerModule } = await vi.hoisted(async () => import('../../factories/logger'));
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ElevenLabsClient } from '../../../src/providers/elevenlabs/client';
 import {
@@ -8,14 +10,7 @@ import {
 import { fetchWithProxy } from '../../../src/util/fetch/index';
 
 vi.mock('../../../src/util/fetch/index.ts');
-vi.mock('../../../src/logger', () => ({
-  default: {
-    debug: vi.fn(),
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-  },
-}));
+vi.mock('../../../src/logger', () => createLoggerModule());
 
 const mockFetch = vi.mocked(fetchWithProxy);
 
