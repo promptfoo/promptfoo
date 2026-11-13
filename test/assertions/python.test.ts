@@ -809,7 +809,7 @@ describe('Python file references', { timeout: 15000 }, () => {
     expect(result.reason).toContain('finite scores and weights. Got type object.');
     expect(result.reason).not.toContain('diagnostic-placeholder');
     expect(result.reason).not.toContain('requestHeaders');
-    expect(result.metadata).toBeUndefined();
+    expect(result.metadata).toEqual({ scriptError: true });
   });
 
   describe('Python threshold edge cases', () => {
