@@ -256,7 +256,8 @@ export function testCaseFromCsvRow(row: CsvRow): TestCase {
         const [expectedKey, configKey] = configParts;
 
         // The unnumbered config still targets the first populated assertion.
-        const targetIndex = expectedKey === '__expected' ? '*' : getNumberedAssertionColumn(expectedKey);
+        const targetIndex =
+          expectedKey === '__expected' ? '*' : getNumberedAssertionColumn(expectedKey);
 
         if (targetIndex === undefined) {
           logger.error(
