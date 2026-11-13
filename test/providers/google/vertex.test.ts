@@ -3262,23 +3262,27 @@ describe('VertexChatProvider.callLlamaApi', () => {
     vi.clearAllMocks();
   });
 
-  it('returns an empty Llama completion as valid output', async () => {
-    mockVertexRequest({
-      choices: [{ message: { content: '' } }],
-      usage: { total_tokens: 10, prompt_tokens: 10, completion_tokens: 0 },
-    });
-    provider = new VertexChatProvider('llama-4-scout-17b-16e-instruct-maas', {
-      config: { region: 'us-east5' },
-    });
+  it.each(['stop', 'length'])(
+    'returns an empty Llama completion (finish_reason %s) as valid output',
+    async (finish_reason) => {
+      mockVertexRequest({
+        choices: [{ message: { content: '' }, finish_reason }],
+        usage: { total_tokens: 10, prompt_tokens: 10, completion_tokens: 0 },
+      });
+      provider = new VertexChatProvider('llama-4-scout-17b-16e-instruct-maas', {
+        config: { region: 'us-east5' },
+      });
 
-    const response = await provider.callLlamaApi('test prompt');
+      const response = await provider.callLlamaApi('test prompt');
 
-    expect(response.error).toBeUndefined();
-    expect(response).toMatchObject({
-      output: '',
-      tokenUsage: { total: 10, prompt: 10, completion: 0 },
-    });
-  });
+      expect(response.error).toBeUndefined();
+      expect(response).toMatchObject({
+        output: '',
+        tokenUsage: { total: 10, prompt: 10, completion: 0 },
+        finishReason: finish_reason,
+      });
+    },
+  );
 
   it.each([
     { choices: [] },
@@ -3817,24 +3821,43 @@ describe('VertexChatProvider.callClaudeApi', () => {
     vi.clearAllMocks();
   });
 
-  it('returns an empty Claude completion as valid output', async () => {
-    mockVertexRequest({
-      id: 'test-id',
-      type: 'message',
-      role: 'assistant',
-      model: 'claude-3-5-sonnet-v2@20241022',
-      content: [{ type: 'text', text: '' }],
-      stop_reason: 'end_turn',
-      stop_sequence: null,
-      usage: { input_tokens: 20, output_tokens: 1 },
-    });
-    provider = new VertexChatProvider('claude-3-5-sonnet-v2@20241022');
+  it.each([
+    { name: 'an empty text block', content: [{ type: 'text', text: '' }], stop: 'end_turn' },
+    { name: 'an empty content array', content: [], stop: 'end_turn' },
+    {
+      name: 'only thinking that used up max_tokens',
+      content: [{ type: 'thinking', thinking: 'Considering...', signature: 'sig' }],
+      stop: 'max_tokens',
+    },
+  ])(
+    'returns an empty Claude completion ($name) with usage, cost, and finish reason',
+    async ({ content, stop }) => {
+      mockVertexRequest({
+        id: 'test-id',
+        type: 'message',
+        role: 'assistant',
+        model: 'claude-sonnet-4-5@20250929',
+        content,
+        stop_reason: stop,
+        stop_sequence: null,
+        usage: { input_tokens: 20, output_tokens: 10 },
+      });
+      provider = new VertexChatProvider('claude-sonnet-4-5@20250929', {
+        config: { region: 'global' },
+      });
 
-    const response = await provider.callClaudeApi('test prompt');
+      const response = await provider.callClaudeApi('test prompt');
 
-    expect(response.error).toBeUndefined();
-    expect(response).toMatchObject({ output: '', tokenUsage: { prompt: 20, completion: 1 } });
-  });
+      expect(response.error).toBeUndefined();
+      expect(response).toMatchObject({
+        output: '',
+        tokenUsage: { prompt: 20, completion: 10 },
+        finishReason: stop === 'max_tokens' ? 'length' : 'stop',
+      });
+      // Billed tokens still cost money: 20 * $3/MTok + 10 * $15/MTok.
+      expect(response.cost).toBeCloseTo(0.00021, 10);
+    },
+  );
 
   it('rejects a Claude response without a content array', async () => {
     const data = { id: 'test-id', type: 'message', role: 'assistant', stop_reason: 'end_turn' };

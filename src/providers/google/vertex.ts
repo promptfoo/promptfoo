@@ -9,6 +9,7 @@ import {
   withGenAISpan,
 } from '../../tracing/genaiTracer';
 import { fetchWithProxy } from '../../util/fetch/index';
+import { normalizeFinishReason } from '../../util/finishReason';
 import { loadYaml } from '../../util/yamlLoad';
 import {
   applyClaudeRegionalPremium,
@@ -558,6 +559,8 @@ export class VertexChatProvider extends GoogleGenericProvider {
       }
 
       const output = outputFromMessage(data as any, showThinking);
+      // Says why an empty completion is empty (e.g. `length` when thinking used up max_tokens).
+      const finishReason = normalizeFinishReason(data.stop_reason);
 
       const tokenUsage: TokenUsage = {
         ...getTokenUsage(data, false),
@@ -590,6 +593,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
         cached: false,
         output,
         tokenUsage,
+        ...(finishReason && { finishReason }),
         cost: calculateAnthropicCost(
           pricingModelName,
           effectivePricingConfig,
@@ -1290,6 +1294,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
         message: {
           content: string;
         };
+        finish_reason?: string | null;
       }>;
       usage?: {
         total_tokens: number;
@@ -1361,10 +1366,12 @@ export class VertexChatProvider extends GoogleGenericProvider {
         numRequests: 1,
       };
 
+      const finishReason = normalizeFinishReason(data.choices?.[0]?.finish_reason);
       const response = {
         cached: false,
         output,
         tokenUsage,
+        ...(finishReason && { finishReason }),
       };
 
       if (cache && cacheKey) {
