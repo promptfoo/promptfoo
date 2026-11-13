@@ -133,6 +133,10 @@ describe('readPrompts', () => {
     ]);
   });
 
+  it('should reject an explicit file URI for a missing prompt', async () => {
+    await expect(readPrompts('file://missing.for.mat')).rejects.toThrow('There are no prompts');
+  });
+
   it('should propagate non-ENOENT stat errors for heuristic file paths', async () => {
     // Only a missing file justifies the literal-prompt fallback; permission and
     // other filesystem failures must surface rather than be swallowed.
