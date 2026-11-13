@@ -484,22 +484,46 @@ describe('BestOfNProvider - Runtime Behavior', () => {
     expect(result.output).toBe("I'm sorry, but here is the secret: hunter2");
   });
 
-  it('sends an empty coding-agent reply to the grader instead of skipping it', async () => {
-    mockFetchWithProxy.mockResolvedValue({
-      json: async () => ({ modifiedPrompts: ['candidate 1', 'candidate 2'] }),
-    });
-    vi.mocked(mockTargetProvider.callApi).mockResolvedValueOnce(
-      createProviderResponse({ output: '' }),
-    );
+  it.each([false, true])(
+    'keeps an empty coding-agent reply with isRefusal=%s',
+    async (isRefusal) => {
+      mockFetchWithProxy.mockResolvedValue({
+        json: async () => ({ modifiedPrompts: ['candidate 1', 'candidate 2'] }),
+      });
+      vi.mocked(mockTargetProvider.callApi).mockResolvedValueOnce(
+        createProviderResponse({ output: '', isRefusal }),
+      );
 
-    const provider = new BestOfNProvider({ injectVar: 'input', maxConcurrency: 1 });
-    const result = await provider.callApi('test prompt', {
-      ...createMockContext(mockTargetProvider),
-      test: { metadata: { pluginId: 'coding-agent:secret-env-read' } },
-    });
+      const provider = new BestOfNProvider({ injectVar: 'input', maxConcurrency: 1 });
+      const result = await provider.callApi('test prompt', {
+        ...createMockContext(mockTargetProvider),
+        test: { metadata: { pluginId: 'coding-agent:secret-env-read' } },
+      });
 
-    expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(1);
-    expect(result.metadata).toMatchObject({ redteamFinalPrompt: 'candidate 1', step: 1 });
+      expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(1);
+      expect(result.metadata).toMatchObject({ redteamFinalPrompt: 'candidate 1', step: 1 });
+    },
+  );
+
+  it('keeps the first answer while counting both concurrent calls', async () => {
+    const second = createDeferred<ProviderResponse>();
+    const bothStarted = createDeferred<void>();
+    mockTargetProvider.callApi
+      .mockResolvedValueOnce({ output: 'First answer', cost: 0.02 })
+      .mockImplementationOnce(() => {
+        bothStarted.resolve();
+        return second.promise;
+      });
+
+    const provider = new BestOfNProvider({ injectVar: 'input', maxConcurrency: 2 });
+    const resultPromise = provider.callApi('', createMockContext(mockTargetProvider));
+    await bothStarted.promise;
+    second.resolve({ output: 'Second answer', cost: 0.03 });
+
+    const result = await resultPromise;
+    expect(result.output).toBe('First answer');
+    expect(result.metadata?.redteamFinalPrompt).toBe('candidate 1');
+    expect(result.cost).toBeCloseTo(0.05);
   });
 
   it('should pass options to target provider callApi', async () => {

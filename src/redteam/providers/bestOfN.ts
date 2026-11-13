@@ -181,7 +181,7 @@ export default class BestOfNProvider implements ApiProvider {
           if (options?.abortSignal?.aborted) {
             completion.cancellation ??= { error: options.abortSignal.reason };
           }
-          if (completedErrorResponse || completion.cancellation) {
+          if (successfulResponse || completedErrorResponse || completion.cancellation) {
             return;
           }
 
@@ -214,7 +214,11 @@ export default class BestOfNProvider implements ApiProvider {
             currentStep++;
             // A refusal is not a successful jailbreak, so keep sampling candidates until the
             // target answers or the candidates run out.
-            if (!response.error && !isRefusalResponse(response, keepEmptyResponses)) {
+            if (
+              !successfulResponse &&
+              !response.error &&
+              !isRefusalResponse(response, keepEmptyResponses)
+            ) {
               successfulResponse = response;
               successfulResponse.prompt = candidatePrompt;
               successfulResponse.metadata = {
@@ -222,7 +226,6 @@ export default class BestOfNProvider implements ApiProvider {
                 redteamFinalPrompt: candidatePrompt,
                 step: currentStep,
               };
-              return false; // Stop processing more candidates
             }
           } catch (err) {
             if (isCallerAbortError(err, options?.abortSignal)) {
@@ -306,11 +309,11 @@ function isCodingAgentPlugin(pluginId: unknown): boolean {
 }
 
 function isRefusalResponse(response: ProviderResponse, keepEmptyResponses: boolean): boolean {
-  if (response.isRefusal === true) {
-    return true;
-  }
   if (keepEmptyResponses) {
     return false;
+  }
+  if (response.isRefusal === true) {
+    return true;
   }
   if (response.output === undefined || response.output === null) {
     return !hasMediaOutput(response);
