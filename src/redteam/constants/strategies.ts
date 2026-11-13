@@ -71,6 +71,7 @@ export const DATASET_PLUGINS = [
 ] as const;
 
 export const ADDITIONAL_STRATEGIES = [
+  'arabic-presentation-forms',
   'audio',
   'authoritative-markup-injection',
   'base64',
@@ -238,6 +239,7 @@ export function isUnicodeNormalizationOnlyStrategy(
  * Set of strategy IDs that represent encoding transformations where originalText should be shown
  */
 export const ENCODING_STRATEGIES = new Set([
+  'arabic-presentation-forms',
   'base64',
   'hex',
   'rot13',

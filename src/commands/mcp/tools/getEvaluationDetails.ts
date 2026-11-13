@@ -41,75 +41,46 @@ export function registerGetEvaluationDetailsTool(server: McpServer) {
           return createToolResponse(
             'get_evaluation_details',
             false,
-            {
-              providedId: id,
-              suggestion: 'Check if the evaluation ID is correct or if it has been deleted.',
-            },
+            undefined,
             `Evaluation with ID '${id}' not found. Use list_evaluations to find valid IDs.`,
           );
         }
 
-        // Extract key metrics for easier consumption
         const evalData = {
           ...result.result,
           config: redactAzureBlobSasTokens(result.result.config),
         };
-        const summary = {
+        const summary: EvaluationDetailsSummary = {
           id,
-        } as EvaluationDetailsSummary;
+          totalTests: 0,
+          passedTests: 0,
+          failedTests: 0,
+          // Preserve the MCP summary defaults for persisted evaluations.
+          providers: [],
+          prompts: 0,
+        };
 
-        // Handle different eval data structures
-        const results =
-          'results' in evalData && 'results' in (evalData.results as any)
-            ? (evalData.results as any).results
-            : 'results' in evalData && Array.isArray(evalData.results)
-              ? evalData.results
-              : [];
+        const rows = evalData.results.results;
+        if (Array.isArray(rows)) {
+          summary.totalTests = rows.length;
+          summary.passedTests = rows.filter((row) => row.success).length;
+          summary.failedTests = rows.length - summary.passedTests;
 
-        if (Array.isArray(results)) {
-          summary.totalTests = results.length;
-          summary.passedTests = results.filter((r: any) => r.success).length;
-          summary.failedTests = results.filter((r: any) => !r.success).length;
-        } else {
-          summary.totalTests = 0;
-          summary.passedTests = 0;
-          summary.failedTests = 0;
-        }
-
-        if ('table' in evalData && evalData.table) {
-          const table = evalData.table as any;
-          if (table.head) {
-            summary.providers = table.head.providers || [];
-            summary.prompts = table.head.prompts?.length || 0;
-          } else {
-            summary.providers = [];
-            summary.prompts = 0;
-          }
-        } else {
-          summary.providers = [];
-          summary.prompts = 0;
-        }
-
-        if (filter && filter !== 'all' && Array.isArray(results)) {
-          const filteredResults = results.filter((r: any) => {
-            switch (filter) {
-              case 'failures':
-                return !r.success;
-              case 'passes':
-                return r.success && !r.error;
-              case 'errors':
-                return !!r.error;
-              case 'highlights':
-                return r.metadata?.highlighted || r.metadata?.starred;
-              default:
-                return true;
-            }
-          });
-
-          if ('results' in evalData && 'results' in (evalData.results as any)) {
-            (evalData.results as any).results = filteredResults;
-          } else if ('results' in evalData && Array.isArray(evalData.results)) {
-            (evalData as any).results = filteredResults;
+          if (filter && filter !== 'all') {
+            evalData.results.results = rows.filter((row) => {
+              switch (filter) {
+                case 'failures':
+                  return !row.success;
+                case 'passes':
+                  return row.success && !row.error;
+                case 'errors':
+                  return !!row.error;
+                case 'highlights':
+                  return row.metadata?.highlighted || row.metadata?.starred;
+                default:
+                  return true;
+              }
+            });
           }
         }
         return createToolResponse('get_evaluation_details', true, {
