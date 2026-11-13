@@ -100,7 +100,10 @@ export async function getRefusalScore(
       : refusalResponse.output;
 
   logger.debug(`[${context.logPrefix}] Refusal score parsed response`, { parsed });
-  invariant(parsed != null && typeof parsed.value === 'boolean', 'Expected refusal grader value to be a boolean');
+  invariant(
+    parsed != null && typeof parsed.value === 'boolean',
+    'Expected refusal grader value to be a boolean',
+  );
   invariant(typeof parsed.metadata === 'number', 'Expected refusal grader metadata to be a number');
 
   return [parsed.value, parsed.rationale];
