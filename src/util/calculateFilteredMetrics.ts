@@ -526,22 +526,32 @@ async function aggregateAssertions(
       prompt_idx,
       SUM(
         CASE
-          WHEN json_valid(grading_result) AND json_type(json_extract(grading_result, '$.componentResults')) = 'array' THEN
+          WHEN json_type(
+            CASE WHEN json_valid(grading_result) THEN grading_result END,
+            '$.componentResults'
+          ) = 'array' THEN
             (
               SELECT COUNT(*)
               FROM json_each(json_extract(grading_result, '$.componentResults'))
-              WHERE CAST(json_extract(json_each.value, '$.pass') AS INTEGER) = 1
+              WHERE CASE WHEN json_each.type = 'object'
+                THEN CAST(json_extract(json_each.value, '$.pass') AS INTEGER)
+              END = 1
             )
           ELSE 0
         END
       ) as assert_pass_count,
       SUM(
         CASE
-          WHEN json_valid(grading_result) AND json_type(json_extract(grading_result, '$.componentResults')) = 'array' THEN
+          WHEN json_type(
+            CASE WHEN json_valid(grading_result) THEN grading_result END,
+            '$.componentResults'
+          ) = 'array' THEN
             (
               SELECT COUNT(*)
               FROM json_each(json_extract(grading_result, '$.componentResults'))
-              WHERE CAST(json_extract(json_each.value, '$.pass') AS INTEGER) = 0
+              WHERE CASE WHEN json_each.type = 'object'
+                THEN CAST(json_extract(json_each.value, '$.pass') AS INTEGER)
+              END = 0
             )
           ELSE 0
         END
