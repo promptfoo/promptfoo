@@ -9,6 +9,8 @@ import type {
   ProviderResponse,
 } from '../types/index';
 
+export { normalizeFinishReason } from '../util/finishReason';
+
 /** An explicit bustCache setting takes precedence over the legacy debug fallback. */
 export function shouldBustProviderCache(
   context?: Pick<CallApiContextParams, 'bustCache' | 'debug'>,

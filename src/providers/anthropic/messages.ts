@@ -14,13 +14,12 @@ import {
   withGenAISpan,
 } from '../../tracing/genaiTracer';
 import { maybeLoadResponseFormatFromExternalFile } from '../../util/file';
-import { normalizeFinishReason } from '../../util/finishReason';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { McpClientSession } from '../mcp/session';
 import { transformMCPToolsToAnthropic } from '../mcp/transform';
 import { getMcpErrorMessage, isMcpErrorResult, normalizeMcpToolContent } from '../mcp/util';
-import { transformToolChoice, transformTools } from '../shared';
+import { normalizeFinishReason, transformToolChoice, transformTools } from '../shared';
 import {
   CLAUDE_CODE_IDENTITY_PROMPT,
   CLAUDE_CODE_OAUTH_BETA_FEATURES,
