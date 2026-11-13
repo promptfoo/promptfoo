@@ -4,10 +4,11 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it, vi } from 'vitest';
 import {
   accumulateNamedMetrics,
-  type NamedMetricAccumulator,
   renderPersistedMetricName,
 } from '../../src/util/persistedNamedMetrics';
 import { mockProcessEnv } from './utils';
+
+import type { NamedMetricAccumulator } from '../../src/util/namedMetrics';
 
 describe('accumulateNamedMetrics', () => {
   it.each([false, true])(
