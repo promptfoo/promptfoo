@@ -198,7 +198,8 @@ const TYPESCRIPT_SOURCE_EXTENSIONS = new Set(['.ts', '.tsx', '.mts', '.cts']);
 const KNOWN_BAD_RELEASES = new Map([
   ['@azure/msal-node', '>=5.0.0-beta.0 <7.1.0'], // GHSA-xcx6-jx8p-x3h5
   ['@cacheable/utils', '2.5.1'], // Shai-Hulud compromise (#10301)
-  ['@hono/node-server', '<2.1.3'], // GHSA-frvp-7c67-39w9, GHSA-9mqv-5hh9-4cgg, GHSA-rmxm-3fg6-px4f
+  // Also covers GHSA-frvp-7c67-39w9, GHSA-9mqv-5hh9-4cgg, and GHSA-rmxm-3fg6-px4f.
+  ['@hono/node-server', '<2.1.6'], // GHSA-jpvv-r467-5p4w, GHSA-7v5p-43qr-wch5, GHSA-qv5m-9pm6-hqp3
   ['@modelcontextprotocol/sdk', '<1.32.0'], // GHSA-6prh-2h8m-c8cw
   ['@simple-git/argv-parser', '<2.0.1'], // GHSA-v5rq-49vh-5v5c; upstream fixes VISUAL in 2.0.1
   ['body-parser', '<1.20.9 || >=2.0.0 <2.4.0'], // GHSA-27r3-jxmh-p828
@@ -211,12 +212,16 @@ const KNOWN_BAD_RELEASES = new Map([
   ['fast-uri', '<2.4.8 || >=3.0.0 <3.1.9 || >=4.0.0 <4.2.3'], // GHSA-w74x-v6f9-j3xg, GHSA-wjr9-j795-jxcr, GHSA-xhq7-xmqj-769h, GHSA-333x-w4r6-6crp
   ['glob', '14.0.2'], // Bundles minimatch 11.0.0 (GHSA-g3hv-75wg-m249)
   ['image-size', '>=0.6.3 <=2.0.2'], // GHSA-5p2g-fcmc-qvqq, GHSA-w3rx-r6r6-pgpr
-  ['hono', '<4.13.11'], // GHSA-hxh3-vqpv-xpqv, GHSA-5r4p-p66f-jhc7
+  // Also covers GHSA-hxh3-vqpv-xpqv and GHSA-5r4p-p66f-jhc7.
+  // GHSA-4m76-xfj5-7975, GHSA-46wx-v44x-9hh2, GHSA-h7mg-cq63-vhpq,
+  // GHSA-4h7h-rv7c-7m2v, GHSA-3gg2-335m-rxc6.
+  // GHSA-92p4-j3wq-jmqx, GHSA-39q9-qp46-w8xg, GHSA-h25j-2p75-qj33, GHSA-74fm-fwc7-3fwp.
+  ['hono', '<4.13.18'],
   ['ibm-cloud-sdk-core', '5.6.3'], // Escaped quotes expose JSON secret suffixes in debug logs (#11472)
   ['js-yaml', '<3.15.2 || >=4.0.0 <4.3.2 || >=5.0.0 <5.2.3'], // #10356, GHSA-2883-xcg3-v3hh
   ['keyv', '6.0.0'], // Shai-Hulud compromise (#10301)
   ['postcss-selector-parser', '<6.1.5 || >=7.0.0 <7.1.6'], // GHSA-rj75-hqrm-r3gf
-  ['serialize-javascript', '7.1.1'], // GHSA-gfhx-hw2g-v5hg
+  ['serialize-javascript', '<7.1.3'], // GHSA-gfhx-hw2g-v5hg, GHSA-m5mm-p8h7-m29v
   ['sharp', '<0.35.5'], // GHSA-wq5f-xc86-pv6w (bundled librsvg)
   ['simple-git', '<=3.36.0'], // GHSA-858h-whjf-mvg5
   ['smol-toml', '<=1.8.0'], // GHSA-r4xh-jqrq-34v2
