@@ -133,7 +133,7 @@ describe('PromptsSection', () => {
     expect(onOpenYamlEditor).toHaveBeenCalledTimes(1);
   });
 
-  it("should add a new prompt to the list when the 'Add Prompt' button is clicked, the PromptDialog is filled, and the prompt is submitted", async () => {
+  it('adds another prompt without closing the editor, then closes on Add', async () => {
     const user = userEvent.setup();
     setupStore([]);
 
@@ -150,17 +150,24 @@ describe('PromptsSection', () => {
     expect(screen.getByRole('dialog')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Add Prompt' })).toBeInTheDocument();
 
+    const firstPrompt = 'Write a haiku.';
+    await fillPromptText(user, firstPrompt);
+    await user.click(screen.getByRole('button', { name: 'Add Another' }));
+    expect(mockUpdateConfig).toHaveBeenCalledWith({ prompts: [firstPrompt] });
+    updateStoreAndRerender([firstPrompt], rerender);
+    expect(screen.getByRole('textbox')).toHaveValue('');
+    expect(screen.getByRole('textbox')).toHaveFocus();
+
     const newPromptText = 'Write a story about a robot who discovers music.';
     await fillPromptText(user, newPromptText);
 
     await submitPromptDialog(user);
 
-    expect(mockUpdateConfig).toHaveBeenCalledTimes(1);
-    expect(mockUpdateConfig).toHaveBeenCalledWith({
-      prompts: [newPromptText],
-    });
+    expect(mockUpdateConfig).toHaveBeenCalledTimes(2);
+    expect(mockUpdateConfig).toHaveBeenLastCalledWith({ prompts: [firstPrompt, newPromptText] });
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
 
-    updateStoreAndRerender([newPromptText], rerender);
+    updateStoreAndRerender([firstPrompt, newPromptText], rerender);
 
     expect(screen.getByText(/Write a story about a robot/)).toBeInTheDocument();
     expect(screen.queryByText('No prompts added yet.')).not.toBeInTheDocument();

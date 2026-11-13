@@ -813,7 +813,7 @@ export default function ResultsView({
   return (
     <>
       <div
-        className="flex flex-col bg-zinc-50 dark:bg-zinc-950 print:bg-white"
+        className="flex flex-col bg-background text-foreground print:bg-white"
         style={{
           isolation: 'isolate',
           minHeight: 'calc(100vh - var(--nav-height) - var(--update-banner-height, 0px))',
@@ -848,8 +848,8 @@ export default function ResultsView({
                         debouncedUpdate(value);
                       }}
                       onClear={handleClearSearch}
-                      containerClassName="w-[200px]"
-                      className="h-8 text-xs"
+                      containerClassName="w-full sm:w-72"
+                      className="h-9 text-sm"
                     />
                     <FiltersForm />
                     <div className="flex-1" />
@@ -874,7 +874,7 @@ export default function ResultsView({
                     {chartsToggleButton}
                   </div>
                   <div className="flex flex-wrap gap-2 items-center">
-                    <span className="text-xs font-medium text-muted-foreground">Display:</span>
+                    <span className="sr-only">Display:</span>
                     <FilterModeSelector
                       filterMode={filterMode}
                       onChange={handleFilterModeChange}
