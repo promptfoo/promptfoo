@@ -24,7 +24,6 @@ vi.mock('../../src/providers', () => ({
   loadApiProvider: vi.fn(),
 }));
 
-vi.mock('../../src/cliState');
 vi.mock('../../src/logger');
 
 describe('getGradingProvider', () => {

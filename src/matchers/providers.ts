@@ -276,7 +276,7 @@ export async function getGradingProvider(
         finalProvider &&
         scope &&
         type === 'text' &&
-        fallback.source === 'defaultTest.provider' &&
+        fallback?.source === 'defaultTest.provider' &&
         !warnedImplicitGraders.has(scope)
       ) {
         warnedImplicitGraders.add(scope);
