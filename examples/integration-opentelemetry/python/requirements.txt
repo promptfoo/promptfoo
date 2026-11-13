@@ -1,9 +1,3 @@
-# OpenTelemetry SDK for Python
-opentelemetry-api>=1.28.0
-opentelemetry-sdk>=1.28.0
-
-# OTLP HTTP exporter (uses protobuf format by default)
-opentelemetry-exporter-otlp-proto-http>=1.28.0
-
-# Semantic conventions for standard attribute names
-opentelemetry-semantic-conventions>=0.49b0
+opentelemetry-api>=1.44,<2
+opentelemetry-sdk>=1.44,<2
+opentelemetry-exporter-otlp-proto-http>=1.44,<2

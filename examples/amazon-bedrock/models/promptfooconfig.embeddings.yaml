@@ -1,0 +1,31 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Compare text similarity with two Bedrock embedding models
+
+prompts:
+  - A quiet garden filled with flowers.
+
+providers:
+  - echo
+
+defaultTest:
+  assert:
+    - type: similar
+      value: A peaceful flower garden.
+      threshold: 0.7
+
+tests:
+  - description: Nova
+    options:
+      provider:
+        embedding:
+          id: bedrock:embeddings:amazon.nova-2-multimodal-embeddings-v1:0
+          config:
+            region: us-east-1
+            embeddingDimension: 256
+  - description: Marengo
+    options:
+      provider:
+        embedding:
+          id: bedrock:embeddings:twelvelabs.marengo-embed-3-0-v1:0
+          config:
+            region: us-east-1

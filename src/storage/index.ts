@@ -20,7 +20,7 @@
  * ```
  */
 
-import { getEnvString } from '../envars';
+import { getEnvBool, getEnvString } from '../envars';
 import logger from '../logger';
 import { LocalFileSystemProvider } from './localFileSystemProvider';
 
@@ -37,6 +37,8 @@ let defaultProvider: MediaStorageProvider | null = null;
  *
  * For OSS, this returns a LocalFileSystemProvider.
  * For cloud deployments, this can be overridden.
+ * The first local path is retained for the process so persisted references remain readable.
+ * Configure PROMPTFOO_MEDIA_PATH before first use; later evaluation scopes do not switch it.
  */
 export function getMediaStorage(config?: LocalStorageConfig): MediaStorageProvider {
   if (!defaultProvider) {
@@ -93,6 +95,5 @@ export async function mediaExists(key: string): Promise<boolean> {
  * Set PROMPTFOO_INLINE_MEDIA=true to disable and use legacy inline base64.
  */
 export function isMediaStorageEnabled(): boolean {
-  const inline = getEnvString('PROMPTFOO_INLINE_MEDIA');
-  return inline !== 'true' && inline !== '1';
+  return !getEnvBool('PROMPTFOO_INLINE_MEDIA');
 }

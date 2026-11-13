@@ -3,6 +3,15 @@ import { handleContainsSql, handleIsSql } from '../../src/assertions/sql';
 
 import type { Assertion, AssertionParams, GradingResult } from '../../src/types/index';
 
+const createMysqlOptions = () => ({
+  databaseType: 'MySQL',
+});
+
+const createSqlOptions = (databaseType: string, allowedTables: string) => ({
+  databaseType,
+  allowedTables: [allowedTables],
+});
+
 const assertion: Assertion = {
   type: 'is-sql',
 };
@@ -10,6 +19,20 @@ const assertion: Assertion = {
 describe('is-sql assertion', () => {
   // -------------------------------------------------- Basic Tests ------------------------------------------------------ //
   describe('Basic tests', () => {
+    const createInvalidSqlCheck = () => async (outputString: string) => {
+      const result: GradingResult = await handleIsSql({
+        assertion,
+        renderedValue: undefined,
+        outputString,
+        inverse: false,
+      } as AssertionParams);
+      expect(result).toMatchObject({
+        pass: false,
+        reason: 'SQL statement does not conform to the provided MySQL database syntax.',
+        score: 0,
+      });
+    };
+
     it('should pass when the output string is a valid SQL statement', async () => {
       const renderedValue = undefined;
       const outputString = 'SELECT id, name FROM users';
@@ -119,19 +142,7 @@ describe('is-sql assertion', () => {
       'SELECT SQL_NO_CACHE first_name last_name FROM employees',
       'SELECT first_name /* separator */ last_name FROM employees',
       'SELECT DISTINCTIVE name FROM users',
-    ])('should fail a likely missing comma between columns: %s', async (outputString) => {
-      const result: GradingResult = await handleIsSql({
-        assertion,
-        renderedValue: undefined,
-        outputString,
-        inverse: false,
-      } as AssertionParams);
-      expect(result).toMatchObject({
-        pass: false,
-        reason: 'SQL statement does not conform to the provided MySQL database syntax.',
-        score: 0,
-      });
-    });
+    ])('should fail a likely missing comma between columns: %s', createInvalidSqlCheck());
 
     it.each(['PostgreSQL', 'TransactSQL', 'BigQuery'])(
       'should not treat MySQL-only modifiers as modifiers in %s',
@@ -191,19 +202,7 @@ describe('is-sql assertion', () => {
       },
     );
 
-    it.each(['', '   '])('should fail empty SQL: %j', async (outputString) => {
-      const result: GradingResult = await handleIsSql({
-        assertion,
-        renderedValue: undefined,
-        outputString,
-        inverse: false,
-      } as AssertionParams);
-      expect(result).toMatchObject({
-        pass: false,
-        reason: 'SQL statement does not conform to the provided MySQL database syntax.',
-        score: 0,
-      });
-    });
+    it.each(['', '   '])('should fail empty SQL: %j', createInvalidSqlCheck());
 
     it('should handle many unmatched dollar-quote tags without pathological backtracking', async () => {
       const outputString = `SELECT ${Array.from(
@@ -409,9 +408,7 @@ describe('is-sql assertion', () => {
     });
 
     it('should fail if the output SQL statement conforms to PostgreSQL but not MySQL', async () => {
-      const renderedValue = {
-        databaseType: 'MySQL',
-      };
+      const renderedValue = createMysqlOptions();
       const outputString = `SELECT first_name, last_name FROM employees WHERE first_name ILIKE 'john%'`;
       const result: GradingResult = await handleIsSql({
         assertion,
@@ -447,9 +444,7 @@ describe('is-sql assertion', () => {
     });
 
     it('should fail if the output SQL statement uses PostgreSQL-only syntax on MySQL', async () => {
-      const renderedValue = {
-        databaseType: 'MySQL',
-      };
+      const renderedValue = createMysqlOptions();
       const outputString = 'SELECT generate_series(1, 10);';
       const result: GradingResult = await handleIsSql({
         assertion,
@@ -466,9 +461,7 @@ describe('is-sql assertion', () => {
     });
 
     it('should fail when using generate_series in MySQL even with valid syntax', async () => {
-      const renderedValue = {
-        databaseType: 'MySQL',
-      };
+      const renderedValue = createMysqlOptions();
       const outputString = 'SELECT * FROM table_name WHERE id IN (SELECT generate_series(1, 5));';
       const result: GradingResult = await handleIsSql({
         assertion,
@@ -488,10 +481,10 @@ describe('is-sql assertion', () => {
   // ------------------------------------------ Allowed Table/Column List Tests ------------------------------------------ //
   describe('Allowed Table/Column List Tests', () => {
     it('should fail if the output SQL statement violates allowedTables', async () => {
-      const renderedValue = {
-        databaseType: 'MySQL',
-        allowedTables: ['(select|update|insert|delete)::null::departments'],
-      };
+      const renderedValue = createSqlOptions(
+        'MySQL',
+        '(select|update|insert|delete)::null::departments',
+      );
       const outputString = `SELECT * FROM employees`;
       const result: GradingResult = await handleIsSql({
         assertion,
@@ -508,10 +501,10 @@ describe('is-sql assertion', () => {
     });
 
     it('should pass if the output SQL statement does not violate allowedTables', async () => {
-      const renderedValue = {
-        databaseType: 'MySQL',
-        allowedTables: ['(select|update|insert|delete)::null::departments'],
-      };
+      const renderedValue = createSqlOptions(
+        'MySQL',
+        '(select|update|insert|delete)::null::departments',
+      );
       const outputString = `SELECT * FROM departments`;
       const result: GradingResult = await handleIsSql({
         assertion,
@@ -629,10 +622,7 @@ describe('is-sql assertion', () => {
 
     // Issue #1491: Verify correct behavior when table name differs from expected
     it('should fail when SQL uses wrong table name (issue #1491)', async () => {
-      const renderedValue = {
-        databaseType: 'MySQL',
-        allowedTables: ['select::null::data_table'],
-      };
+      const renderedValue = createSqlOptions('MySQL', 'select::null::data_table');
       // LLM generated SQL with "data" instead of "data_table"
       const outputString = `SELECT * FROM data WHERE id = 1`;
       const result: GradingResult = await handleIsSql({
@@ -648,10 +638,7 @@ describe('is-sql assertion', () => {
     });
 
     it('should pass when SQL correctly uses allowed table name', async () => {
-      const renderedValue = {
-        databaseType: 'MySQL',
-        allowedTables: ['select::null::data_table'],
-      };
+      const renderedValue = createSqlOptions('MySQL', 'select::null::data_table');
       const outputString = `SELECT * FROM data_table WHERE id = 1`;
       const result: GradingResult = await handleIsSql({
         assertion,
@@ -668,10 +655,7 @@ describe('is-sql assertion', () => {
     });
 
     it('should handle double-quoted table names in PostgreSQL mode', async () => {
-      const renderedValue = {
-        databaseType: 'PostgreSQL',
-        allowedTables: ['select::null::data_table'],
-      };
+      const renderedValue = createSqlOptions('PostgreSQL', 'select::null::data_table');
       const outputString = `SELECT * FROM "data_table" WHERE id = 1`;
       const result: GradingResult = await handleIsSql({
         assertion,
@@ -688,10 +672,7 @@ describe('is-sql assertion', () => {
     });
 
     it('should fail when double-quoted table name differs from allowed', async () => {
-      const renderedValue = {
-        databaseType: 'PostgreSQL',
-        allowedTables: ['select::null::data_table'],
-      };
+      const renderedValue = createSqlOptions('PostgreSQL', 'select::null::data_table');
       // Using "data" instead of "data_table"
       const outputString = `SELECT * FROM "data" WHERE id = 1`;
       const result: GradingResult = await handleIsSql({

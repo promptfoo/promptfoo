@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useState } from 'react';
 
 import { Alert, AlertContent, AlertDescription, AlertTitle } from '@app/components/ui/alert';
 import { Button } from '@app/components/ui/button';
@@ -34,9 +34,8 @@ const getManagedPromptsLabel = (prompts: unknown): string => {
 };
 
 const PromptsSection = ({ onOpenYamlEditor }: PromptsSectionProps) => {
-  const [promptDialogOpen, setPromptDialogOpen] = useState(false);
-  const [editingPromptIndex, setEditingPromptIndex] = useState<number | null>(null);
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [editorTarget, setEditorTarget] = useState<number | 'add' | null>(null);
+  const editingPromptIndex = typeof editorTarget === 'number' ? editorTarget : null;
   const [promptToDelete, setPromptToDelete] = useState<number | null>(null);
 
   const { config, updateConfig } = useStore();
@@ -47,18 +46,6 @@ const PromptsSection = ({ onOpenYamlEditor }: PromptsSectionProps) => {
     (Array.isArray(rawPrompts) && rawPrompts.every((prompt) => typeof prompt === 'string'));
   const prompts = canEditInlinePrompts ? ((rawPrompts || []) as string[]) : [];
   const setPrompts = (p: string[]) => updateConfig({ prompts: p });
-  const newPromptInputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    if (editingPromptIndex !== null && editingPromptIndex > 0 && newPromptInputRef.current) {
-      newPromptInputRef.current.focus();
-    }
-  }, [editingPromptIndex]);
-
-  const handleEditPrompt = (index: number) => {
-    setEditingPromptIndex(index);
-    setPromptDialogOpen(true);
-  };
 
   const handleAddPromptFromFile = (event: React.ChangeEvent<HTMLInputElement>) => {
     event.stopPropagation();
@@ -100,7 +87,6 @@ const PromptsSection = ({ onOpenYamlEditor }: PromptsSectionProps) => {
   const handleRemovePrompt = (event: React.MouseEvent, indexToRemove: number) => {
     event.stopPropagation();
     setPromptToDelete(indexToRemove);
-    setDeleteDialogOpen(true);
   };
 
   const confirmDeletePrompt = () => {
@@ -108,12 +94,6 @@ const PromptsSection = ({ onOpenYamlEditor }: PromptsSectionProps) => {
       setPrompts(prompts.filter((_, index) => index !== promptToDelete));
       setPromptToDelete(null);
     }
-    setDeleteDialogOpen(false);
-  };
-
-  const cancelDeletePrompt = () => {
-    setPromptToDelete(null);
-    setDeleteDialogOpen(false);
   };
 
   // Highlight template variables in prompt text
@@ -182,7 +162,7 @@ const PromptsSection = ({ onOpenYamlEditor }: PromptsSectionProps) => {
               </Tooltip>
 
               <Button
-                onClick={() => setPromptDialogOpen(true)}
+                onClick={() => setEditorTarget('add')}
                 className="dark:bg-blue-600 dark:hover:bg-blue-500"
               >
                 Add Prompt
@@ -215,7 +195,7 @@ const PromptsSection = ({ onOpenYamlEditor }: PromptsSectionProps) => {
               {prompts.map((prompt, index) => (
                 <div
                   key={index}
-                  onClick={() => handleEditPrompt(index)}
+                  onClick={() => setEditorTarget(index)}
                   className={cn(
                     'flex cursor-pointer flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between',
                     'hover:bg-muted/50 transition-colors',
@@ -225,7 +205,7 @@ const PromptsSection = ({ onOpenYamlEditor }: PromptsSectionProps) => {
                     type="button"
                     onClick={(event) => {
                       event.stopPropagation();
-                      handleEditPrompt(index);
+                      setEditorTarget(index);
                     }}
                     aria-label={`Open prompt ${index + 1} for editing`}
                     className="flex-1 rounded-sm text-left text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:mr-4"
@@ -241,7 +221,7 @@ const PromptsSection = ({ onOpenYamlEditor }: PromptsSectionProps) => {
                           size="icon"
                           onClick={(e) => {
                             e.stopPropagation();
-                            handleEditPrompt(index);
+                            setEditorTarget(index);
                           }}
                           aria-label={`Edit prompt ${index + 1}`}
                         >
@@ -293,9 +273,9 @@ const PromptsSection = ({ onOpenYamlEditor }: PromptsSectionProps) => {
       {/* Prompt Dialog */}
       {canEditInlinePrompts && (
         <PromptDialog
-          open={promptDialogOpen}
+          open={editorTarget !== null}
           prompt={editingPromptIndex === null ? '' : prompts[editingPromptIndex]}
-          index={editingPromptIndex === null ? 0 : editingPromptIndex}
+          index={editingPromptIndex ?? 0}
           isEditing={editingPromptIndex !== null}
           onAdd={(newPrompt) => {
             if (editingPromptIndex === null) {
@@ -303,17 +283,16 @@ const PromptsSection = ({ onOpenYamlEditor }: PromptsSectionProps) => {
             } else {
               handleChangePrompt(editingPromptIndex, newPrompt);
             }
-            setEditingPromptIndex(null);
           }}
-          onCancel={() => {
-            setEditingPromptIndex(null);
-            setPromptDialogOpen(false);
-          }}
+          onCancel={() => setEditorTarget(null)}
         />
       )}
 
       {/* Delete Confirmation Dialog */}
-      <Dialog open={deleteDialogOpen} onOpenChange={(open) => !open && cancelDeletePrompt()}>
+      <Dialog
+        open={promptToDelete !== null}
+        onOpenChange={(open) => !open && setPromptToDelete(null)}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Delete prompt?</DialogTitle>
@@ -322,7 +301,7 @@ const PromptsSection = ({ onOpenYamlEditor }: PromptsSectionProps) => {
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="outline" onClick={cancelDeletePrompt}>
+            <Button variant="outline" onClick={() => setPromptToDelete(null)}>
               Cancel
             </Button>
             <Button variant="destructive" onClick={confirmDeletePrompt}>

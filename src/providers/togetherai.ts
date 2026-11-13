@@ -1,10 +1,11 @@
+import { resolveProviderCreatorInput } from './creator';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { OpenAiCompletionProvider } from './openai/completion';
 import { OpenAiEmbeddingProvider } from './openai/embedding';
 import { splitLocalOptions } from './openai/localOptions';
 
-import type { EnvOverrides } from '../types/env';
-import type { ApiProvider, ProviderOptions } from '../types/index';
+import type { ApiProvider } from '../types/index';
+import type { ProviderCreatorOptions } from './creator';
 import type { OpenAiCompletionOptions } from './openai/types';
 
 // The chat provider resolves these itself: it loads `file://` references, renders Nunjucks
@@ -44,12 +45,9 @@ const providersByType = new Map<
  */
 export function createTogetherAiProvider(
   providerPath: string,
-  options: {
-    config?: ProviderOptions;
-    id?: string;
-    env?: EnvOverrides;
-  } = {},
+  options: ProviderCreatorOptions = {},
 ): ApiProvider {
+  const providerOptions = resolveProviderCreatorInput(options);
   const splits = providerPath.split(':');
 
   // Without an explicit type the whole remainder is the model name and we default to chat.
@@ -57,13 +55,11 @@ export function createTogetherAiProvider(
   const Provider = routed ?? OpenAiChatCompletionProvider;
   const modelName = splits.slice(routed ? 2 : 1).join(':');
 
-  const config = options.config?.config || {};
+  const config = providerOptions.config || {};
   const isChat = Provider === OpenAiChatCompletionProvider;
   const { modelParameters } = splitLocalOptions(config, isChat ? chatResolvedOptionNames : []);
   const togetherAiConfig = {
-    ...options.config,
-    id: options.id ?? options.config?.id,
-    env: options.config?.env ?? options.env,
+    ...providerOptions,
     config: {
       ...config,
       apiBaseUrl: config.apiBaseUrl || 'https://api.together.xyz/v1',
