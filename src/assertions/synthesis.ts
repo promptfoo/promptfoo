@@ -422,8 +422,6 @@ export function convertQuestionToPythonPrompt(prompts: string[], question: strin
 interface GeneratedQuestion {
   label: string;
   question: string;
-  question_source: string;
-  question_type: string;
 }
 
 export async function synthesize({
@@ -474,7 +472,25 @@ export async function synthesize({
     respObjects.length >= 1,
     `Expected at least one JSON object in the response for questions, got ${respObjects.length}`,
   );
-  const questionsWrapper = respObjects[0] as { questions: GeneratedQuestion[] };
+  const questionsWrapper = respObjects.find((obj): obj is { questions: GeneratedQuestion[] } => {
+    const questions = (obj as { questions?: unknown }).questions;
+    return (
+      Array.isArray(questions) &&
+      questions.every(
+        (question) =>
+          question !== null &&
+          typeof question === 'object' &&
+          typeof question.label === 'string' &&
+          typeof question.question === 'string',
+      )
+    );
+  });
+  invariant(
+    questionsWrapper,
+    () =>
+      `Expected a JSON object of the form {questions: [...]} in the questions response, but the provider returned a different shape. ` +
+      `Check the provider's transformResponse and that it returns the model's text content.`,
+  );
   const questions = sampleArray(questionsWrapper.questions, numQuestions);
 
   logger.debug(

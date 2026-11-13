@@ -86,57 +86,32 @@ const ReportDownloadButton = ({ evalDescription, evalData }: ReportDownloadButto
       : `report.${extension}`;
   };
 
-  const handleCsvDownload = () => {
+  const handleDownload = (format: 'csv' | 'json') => {
     setIsDownloading(true);
 
     // Track report export
     recordEvent('webui_action', {
       action: 'redteam_report_export',
-      format: 'csv',
+      format,
     });
 
     try {
-      const csv = convertEvalDataToCsv(evalData);
-      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const content =
+        format === 'csv' ? convertEvalDataToCsv(evalData) : JSON.stringify(evalData, null, 2);
+      const blob = new Blob([content], {
+        type: format === 'csv' ? 'text/csv;charset=utf-8;' : 'application/json;charset=utf-8;',
+      });
       const link = document.createElement('a');
       if (link.download !== undefined) {
         const url = URL.createObjectURL(blob);
         link.setAttribute('href', url);
-        link.setAttribute('download', getFilename('csv'));
+        link.setAttribute('download', getFilename(format));
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
       }
     } catch (error) {
-      console.error('Error generating CSV:', error);
-    } finally {
-      setIsDownloading(false);
-    }
-  };
-
-  const handleJsonDownload = () => {
-    setIsDownloading(true);
-
-    // Track report export
-    recordEvent('webui_action', {
-      action: 'redteam_report_export',
-      format: 'json',
-    });
-
-    try {
-      const jsonData = JSON.stringify(evalData, null, 2);
-      const blob = new Blob([jsonData], { type: 'application/json;charset=utf-8;' });
-      const link = document.createElement('a');
-      if (link.download !== undefined) {
-        const url = URL.createObjectURL(blob);
-        link.setAttribute('href', url);
-        link.setAttribute('download', getFilename('json'));
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-      }
-    } catch (error) {
-      console.error('Error generating JSON:', error);
+      console.error(format === 'csv' ? 'Error generating CSV:' : 'Error generating JSON:', error);
     } finally {
       setIsDownloading(false);
     }
@@ -173,8 +148,8 @@ const ReportDownloadButton = ({ evalDescription, evalData }: ReportDownloadButto
       </Tooltip>
       <DropdownMenuContent align="end">
         <DropdownMenuItem onClick={handlePdfDownload}>PDF</DropdownMenuItem>
-        <DropdownMenuItem onClick={handleCsvDownload}>CSV</DropdownMenuItem>
-        <DropdownMenuItem onClick={handleJsonDownload}>JSON</DropdownMenuItem>
+        <DropdownMenuItem onClick={() => handleDownload('csv')}>CSV</DropdownMenuItem>
+        <DropdownMenuItem onClick={() => handleDownload('json')}>JSON</DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );
