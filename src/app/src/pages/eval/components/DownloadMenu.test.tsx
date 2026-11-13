@@ -3,6 +3,7 @@ import { renderWithProviders } from '@app/utils/testutils';
 import { screen } from '@testing-library/dom';
 import { act, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import * as yaml from 'js-yaml';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DownloadDialog } from './DownloadMenu';
 import { useTableStore as useResultsViewStore } from './store';
@@ -44,16 +45,19 @@ vi.mock('../../../utils/api/downloads', () => ({
   downloadResultsJson: mockDownloadJsonFn,
 }));
 
-const { yamlDumpMock } = vi.hoisted(() => ({
-  yamlDumpMock: vi.fn().mockReturnValue('mocked yaml'),
-}));
+vi.mock('js-yaml', { spy: true });
+const yamlDumpMock = vi.mocked(yaml.dump);
 
-vi.mock('js-yaml', () => ({
-  default: {
-    dump: yamlDumpMock,
-  },
-  dump: yamlDumpMock,
-}));
+async function readDownloadedBlob() {
+  await waitFor(() => expect(URL.createObjectURL).toHaveBeenCalled());
+  const blob = vi.mocked(URL.createObjectURL).mock.calls.slice(-1)[0][0] as Blob;
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsText(blob);
+  });
+}
 
 describe('DownloadMenu', () => {
   const mockTable = {
@@ -86,7 +90,6 @@ describe('DownloadMenu', () => {
     mockBrowserProperty(global.navigator, 'msSaveOrOpenBlob', vi.fn());
 
     yamlDumpMock.mockClear();
-    yamlDumpMock.mockReturnValue('mocked yaml');
 
     mockDownloadCsvFn.mockReset().mockResolvedValue(new Blob(['csv results']));
     mockDownloadJsonFn.mockReset().mockResolvedValue(new Blob(['json results']));
@@ -232,6 +235,22 @@ describe('DownloadMenu', () => {
       expect(global.URL.createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
       expect(HTMLAnchorElement.prototype.click).toHaveBeenCalled();
     });
+    expect(JSON.parse(await readDownloadedBlob())).toEqual([
+      {
+        chosen: [],
+        rejected: ['failed output'],
+        vars: { testVar: 'value' },
+        providers: ['provider1'],
+        prompts: ['label1'],
+      },
+      {
+        chosen: ['passed output'],
+        rejected: [],
+        vars: { testVar: 'value2' },
+        providers: ['provider1'],
+        prompts: ['label1'],
+      },
+    ]);
   });
 
   it('downloads Human Eval Test YAML when clicking the button', async () => {
@@ -242,6 +261,16 @@ describe('DownloadMenu', () => {
       expect(global.URL.createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
       expect(HTMLAnchorElement.prototype.click).toHaveBeenCalled();
     });
+    expect(yaml.load(await readDownloadedBlob())).toEqual([
+      {
+        vars: { testVar: 'value', output: 'failed output' },
+        assert: [{ type: 'javascript', value: '!JSON.parse(output).pass' }],
+      },
+      {
+        vars: { testVar: 'value2', output: 'passed output' },
+        assert: [{ type: 'javascript', value: 'JSON.parse(output).pass' }],
+      },
+    ]);
   });
 
   it('handles malformed output structures in DPO JSON export without crashing', async () => {
@@ -271,6 +300,22 @@ describe('DownloadMenu', () => {
     await waitFor(() => {
       expect(global.URL.createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
     });
+    expect(JSON.parse(await readDownloadedBlob())).toEqual([
+      {
+        chosen: [null],
+        rejected: [],
+        vars: { testVar: 'value' },
+        providers: ['provider1'],
+        prompts: ['label1'],
+      },
+      {
+        chosen: [],
+        rejected: ['passed output'],
+        vars: { testVar: 'value2' },
+        providers: ['provider1'],
+        prompts: ['label1'],
+      },
+    ]);
   });
 
   it('shows a toast when evalId is not available', async () => {
@@ -312,6 +357,16 @@ describe('DownloadMenu', () => {
     await waitFor(() => {
       expect(global.URL.createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
     });
+    expect(yaml.load(await readDownloadedBlob())).toEqual([
+      {
+        vars: { testVar: 'value', output: 'failed output' },
+        assert: [{ type: 'javascript', value: '!JSON.parse(output).pass' }],
+      },
+      {
+        vars: { testVar: 'value2', output: 'passed output' },
+        assert: [{ type: 'javascript', value: 'JSON.parse(output).pass' }],
+      },
+    ]);
   });
 
   it('handles deeply nested null properties in outputs without crashing', () => {
@@ -336,14 +391,24 @@ describe('DownloadMenu', () => {
     }).not.toThrow();
   });
 
-  it('downloads Burp Suite Payloads when clicking the button', async () => {
+  it('downloads unique escaped attack payload lines from the configured inject variable', async () => {
+    vi.mocked(useResultsViewStore).mockReturnValue({
+      table: {
+        ...mockTable,
+        body: [
+          { test: { vars: { attack: 'first\nline' } }, outputs: [] },
+          { test: { vars: { attack: 'quote " plus &' } }, outputs: [] },
+          { test: { vars: { attack: 'first\nline' } }, outputs: [] },
+          { test: { vars: { other: 'excluded' } }, outputs: [] },
+        ],
+      },
+      config: { redteam: { injectVar: 'attack' } },
+      evalId: mockEvalId,
+    });
     renderDownloadDialog();
     await userEvent.click(screen.getByText('Burp Payloads'));
-
-    await waitFor(() => {
-      expect(global.URL.createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
-      expect(HTMLAnchorElement.prototype.click).toHaveBeenCalled();
-    });
+    expect(await readDownloadedBlob()).toBe('first%5Cnline\nquote%20%5C%22%20plus%20%26');
+    expect(HTMLAnchorElement.prototype.click).toHaveBeenCalled();
   });
 
   it('properly categorizes download options into sections', async () => {
