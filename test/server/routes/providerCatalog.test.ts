@@ -185,16 +185,12 @@ describe('UI provider catalog credentials', () => {
       'The configured catalog provider could not complete the request.',
     );
     expect(rejected.text).not.toContain('synthetic-header-prefix');
-  }, 35_000);
 
-  it('keeps raw HTTP catalog credentials at the configured origin', async () => {
-    const catalog = await api.get('/api/providers').expect(200);
-    const reference = catalog.body.data.providers[1];
-    const job = await api
+    const rawJob = await api
       .post('/api/eval/job')
       .send({
         prompts: ['Hello'],
-        providers: [reference],
+        providers: [catalog.body.data.providers[1]],
         tests: [
           { vars: { resource: 'same-host' } },
           { vars: { resource: `/placeholder//${redirectedHost}/blocked` } },
@@ -202,16 +198,16 @@ describe('UI provider catalog credentials', () => {
         sharing: false,
       })
       .expect(200);
-    const result = await vi.waitFor(async () => {
-      const response = await api.get(`/api/eval/job/${job.body.id}`).expect(200);
+    const rawResult = await vi.waitFor(async () => {
+      const response = await api.get(`/api/eval/job/${rawJob.body.id}`).expect(200);
       expect(response.body.status).toBe('complete');
       return response;
     });
     expect(requests).toContainEqual({ path: '/same-host', auth: authorization, tenant: undefined });
     expect(redirectedRequests).toEqual([]);
-    expect(result.text).toContain(
+    expect(rawResult.text).toContain(
       'The configured catalog provider could not complete the request.',
     );
-    expect(result.text).not.toContain(authorization);
+    expect(rawResult.text).not.toContain(authorization);
   }, 35_000);
 });
