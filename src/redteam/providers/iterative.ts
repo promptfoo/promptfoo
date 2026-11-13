@@ -54,6 +54,7 @@ import {
   externalizeResponseForRedteamHistory,
   getGraderAssertionValue,
   getTargetResponse,
+  isTerminalTargetError,
   preserveSelectedError,
   redteamProviderManager,
   resolveStoredGraderResult,
@@ -472,6 +473,12 @@ export async function runRedteamConversation({
     accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
     logger.debug('[Iterative] Raw target response', { response: targetResponse });
     if (targetResponse.error) {
+      if (!isTerminalTargetError(targetResponse)) {
+        if (options?.abortSignal?.aborted) {
+          break;
+        }
+        continue;
+      }
       logger.info(`[Iterative] ${i + 1}/${numIterations} - Target error, stopping attack`, {
         error: targetResponse.error,
         response: targetResponse,
@@ -869,7 +876,9 @@ export async function runRedteamConversation({
   }
 
   const targetFailed = stopReason === 'Target error';
-  const selectedPrompt = targetFailed ? (targetPrompt ?? lastInjectVar) : (bestInjectVar ?? lastInjectVar);
+  const selectedPrompt = targetFailed
+    ? (targetPrompt ?? lastInjectVar)
+    : (bestInjectVar ?? lastInjectVar);
   return preserveSelectedError(
     {
       output:

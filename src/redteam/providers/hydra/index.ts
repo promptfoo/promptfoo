@@ -51,6 +51,7 @@ import {
   getTargetResponse,
   isConversationEndedResponse,
   type Message,
+  isTerminalTargetError,
   preserveSelectedError,
   runRedteamGrader,
   type TargetResponse,
@@ -680,6 +681,16 @@ export class HydraProvider implements ApiProvider {
         { role: 'assistant', content: targetResponse.output || '' },
       ];
       accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
+      if (isTerminalTargetError(targetResponse)) {
+        logger.info(`${this.logPrefix} Target error, stopping attack`, {
+          turn,
+          error: targetResponse.error,
+        });
+        // The dispatched request counts as an attempted round.
+        stopReason = 'Target error';
+        storedGraderResult = undefined;
+        break;
+      }
       if (targetResponse.error && options?.abortSignal?.aborted) {
         break;
       }
@@ -732,16 +743,11 @@ export class HydraProvider implements ApiProvider {
       }
 
       if (targetResponse.error) {
-        logger.info(`${this.logPrefix} Target error, stopping attack`, {
+        logger.info(`${this.logPrefix} Target turn could not complete`, {
           turn,
           error: targetResponse.error,
         });
-        // Remove the unanswered user message we added before calling the target,
-        // mirroring the transform-failure cleanup above, so conversation state
-        // (and roundsCompleted below) stays consistent when we stop here.
-        this.conversationHistory.pop();
-        stopReason = 'Target error';
-        break;
+        continue;
       }
 
       if (!Object.prototype.hasOwnProperty.call(targetResponse, 'output')) {

@@ -45,6 +45,7 @@ import {
   externalizeResponseForRedteamHistory,
   getGraderAssertionValue,
   getTargetResponse,
+  isTerminalTargetError,
   preserveSelectedError,
   redteamProviderManager,
   runRedteamGrader,
@@ -199,6 +200,7 @@ export async function runMetaAgentRedteam({
 
   // Track the last transformed prompt (e.g., fetchPrompt for indirect-web-pwn) for UI display
   let lastFinalAttackPrompt: string | undefined;
+  let failedTargetPrompt: string | undefined;
 
   for (let i = 0; i < numIterations; i++) {
     logger.debug(`[IterativeMeta] Starting iteration ${i + 1}/${numIterations}`, {
@@ -518,10 +520,17 @@ export async function runMetaAgentRedteam({
     });
 
     if (targetResponse.error) {
+      if (!isTerminalTargetError(targetResponse)) {
+        if (options?.abortSignal?.aborted) {
+          break;
+        }
+        continue;
+      }
       logger.info(`[IterativeMeta] ${i + 1}/${numIterations} - Target error, stopping attack`, {
         error: targetResponse.error,
       });
       stopReason = 'Target error';
+      failedTargetPrompt = targetPrompt;
       finalIteration = i + 1;
       break;
     }
@@ -715,14 +724,14 @@ export async function runMetaAgentRedteam({
         (stopReason === 'Target error'
           ? lastResponse?.output
           : bestResponse || lastResponse?.output) || '',
-      prompt: stopReason === 'Target error' ? lastFinalAttackPrompt : bestPrompt,
+      prompt: failedTargetPrompt ?? bestPrompt,
       ...(error ? { error } : {}),
       metadata: {
         finalIteration,
         vulnerabilityAchieved,
         // Use the last prompt sent to target (e.g., fetchPrompt for indirect-web-pwn layer)
         // This ensures UI shows what was actually sent, not the pre-transform jailbreak
-        redteamFinalPrompt: lastFinalAttackPrompt || bestPrompt,
+        redteamFinalPrompt: failedTargetPrompt ?? (lastFinalAttackPrompt || bestPrompt),
         storedGraderResult: stopReason === 'Target error' ? undefined : storedGraderResult,
         stopReason,
         redteamHistory,

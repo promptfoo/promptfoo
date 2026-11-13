@@ -1144,8 +1144,8 @@ describe('HydraProvider', () => {
       expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(1);
       expect(result.error).toBe('Target error: 502 Bad Gateway');
       expect(result.metadata?.stopReason).toBe('Target error');
-      // The unanswered user turn should not be counted as completed.
-      expect(result.metadata?.hydraRoundsCompleted).toBe(0);
+      // The dispatched target request counts as an attempted round.
+      expect(result.metadata?.hydraRoundsCompleted).toBe(1);
       // Agent is called once for the errored turn (no further turns, no learning update retry).
       expect(mockAgentProvider.callApi).toHaveBeenCalledTimes(2);
     });
@@ -1189,8 +1189,8 @@ describe('HydraProvider', () => {
       expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(2);
       expect(result.error).toBe('Target error: 502 Bad Gateway');
       expect(result.metadata?.stopReason).toBe('Target error');
-      // Only the first (answered) turn counts as completed.
-      expect(result.metadata?.hydraRoundsCompleted).toBe(1);
+      // Both dispatched requests count, while history only records answered turns.
+      expect(result.metadata?.hydraRoundsCompleted).toBe(2);
       // The successful first turn is recorded; the errored second turn is not.
       expect(result.metadata?.redteamHistory).toHaveLength(1);
     });

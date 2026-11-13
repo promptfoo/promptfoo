@@ -35,6 +35,7 @@ import {
 import { isCallerAbortError } from '../../util/fetch/requestSignal';
 import {
   composeResponseHeadersObservers,
+  isResponseHeadersObserverErrorResponse,
   preserveResponseHeadersObserverError,
   preserveResponseHeadersObserverErrorResponse,
 } from '../../util/fetch/responseHeadersObserver';
@@ -480,6 +481,16 @@ export type TargetResponse = {
     format?: string;
   };
 } & Omit<ProviderResponse, 'output'> & { output: string };
+
+/** Local callback errors and tool errors can recover on a later turn. */
+export function isTerminalTargetError(response: ProviderResponse): boolean {
+  return (
+    Boolean(response.error) &&
+    response.tokenUsage?.numRequests !== 0 &&
+    response.metadata?.errorOrigin !== 'tool' &&
+    !isResponseHeadersObserverErrorResponse(response)
+  );
+}
 
 /** Retain only the selected error's origin when a strategy rebuilds its response. */
 export function preserveSelectedError<T extends ProviderResponse>(
