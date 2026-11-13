@@ -165,9 +165,14 @@ describe('BrowserProvider', () => {
     expect(mockPage.$eval).toHaveBeenCalledWith('#content', expect.any(Function));
   });
 
-  it('should execute waitForNewChildren action', async () => {
+  it.each([
+    [undefined, 30000],
+    [0, 0],
+    [1500, 1500],
+  ])('uses target timeout %s for waitForNewChildren', async (timeoutMs, expectedTimeout) => {
     const provider = new BrowserProvider('test', {
       config: {
+        timeoutMs,
         steps: [
           {
             action: 'waitForNewChildren',
@@ -183,7 +188,7 @@ describe('BrowserProvider', () => {
     expect(mockPage.waitForFunction).toHaveBeenCalledWith(
       expect.any(Function),
       { parentSelector: '#parent', initialChildCount: 2 },
-      { timeout: 30000, polling: 'raf' },
+      { timeout: expectedTimeout, polling: 'raf' },
     );
   });
 
@@ -207,13 +212,17 @@ describe('BrowserProvider', () => {
     });
   });
 
-  it('should handle wait action', async () => {
+  it.each([
+    [undefined, 1000],
+    [0, 0],
+    [1500, 1500],
+  ])('uses wait duration %s or the default when unset', async (ms, expectedMs) => {
     const provider = new BrowserProvider('test', {
       config: {
         steps: [
           {
             action: 'wait',
-            args: { ms: 1000 },
+            args: { ms },
           },
         ],
       },
@@ -221,7 +230,7 @@ describe('BrowserProvider', () => {
 
     await provider.callApi('test');
 
-    expect(mockPage.waitForTimeout).toHaveBeenCalledWith(1000);
+    expect(mockPage.waitForTimeout).toHaveBeenCalledWith(expectedMs);
   });
 
   it('should handle errors gracefully', async () => {

@@ -1,6 +1,7 @@
 import { Button } from '@app/components/ui/button';
 import { Input } from '@app/components/ui/input';
 import { Label } from '@app/components/ui/label';
+import { NumberInput } from '@app/components/ui/number-input';
 import {
   Select,
   SelectContent,
@@ -65,14 +66,14 @@ const BrowserAutomationConfiguration = ({
 
         <div className="mt-4 space-y-2">
           <Label htmlFor="timeout-ms">Timeout (ms)</Label>
-          <Input
+          <NumberInput
             id="timeout-ms"
-            type="number"
-            value={selectedTarget.config.timeoutMs || 30000}
-            onChange={(e) => updateCustomTarget('timeoutMs', Number(e.target.value))}
+            value={selectedTarget.config.timeoutMs}
+            onChange={(v) => updateCustomTarget('timeoutMs', v)}
+            placeholder="30000"
           />
           <p className="text-sm text-muted-foreground">
-            Maximum time to wait for browser operations (in milliseconds)
+            Element wait timeout in milliseconds. Set to 0 to disable the timeout.
           </p>
         </div>
 
@@ -227,16 +228,13 @@ const BrowserAutomationConfiguration = ({
                 {step.action === 'wait' && (
                   <div className="space-y-2">
                     <Label htmlFor={`step-${index}-wait-time`}>Wait Time (ms)</Label>
-                    <Input
+                    <NumberInput
                       id={`step-${index}-wait-time`}
-                      type="number"
-                      value={step.args?.ms || 1000}
-                      onChange={(e) => {
+                      value={step.args?.ms}
+                      placeholder="1000"
+                      onChange={(ms) => {
                         const newSteps = [...(selectedTarget.config.steps || [])];
-                        newSteps[index] = {
-                          ...step,
-                          args: { ...step.args, ms: Number(e.target.value) },
-                        };
+                        newSteps[index] = { ...step, args: { ...step.args, ms } };
                         updateCustomTarget('steps', newSteps);
                       }}
                     />
@@ -279,34 +277,28 @@ const BrowserAutomationConfiguration = ({
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor={`step-${index}-delay`}>Initial Delay (ms)</Label>
-                      <Input
+                      <NumberInput
                         id={`step-${index}-delay`}
-                        type="number"
-                        value={step.args?.delay || 1000}
-                        onChange={(e) => {
+                        value={step.args?.delay}
+                        onChange={(delay) => {
                           const newSteps = [...(selectedTarget.config.steps || [])];
-                          newSteps[index] = {
-                            ...step,
-                            args: { ...step.args, delay: Number(e.target.value) },
-                          };
+                          newSteps[index] = { ...step, args: { ...step.args, delay } };
                           updateCustomTarget('steps', newSteps);
                         }}
+                        placeholder="1000"
                       />
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor={`step-${index}-timeout`}>Timeout (ms)</Label>
-                      <Input
+                      <NumberInput
                         id={`step-${index}-timeout`}
-                        type="number"
-                        value={step.args?.timeout || 30000}
-                        onChange={(e) => {
+                        value={step.args?.timeout}
+                        onChange={(timeout) => {
                           const newSteps = [...(selectedTarget.config.steps || [])];
-                          newSteps[index] = {
-                            ...step,
-                            args: { ...step.args, timeout: Number(e.target.value) },
-                          };
+                          newSteps[index] = { ...step, args: { ...step.args, timeout } };
                           updateCustomTarget('steps', newSteps);
                         }}
+                        placeholder={String(selectedTarget.config.timeoutMs ?? 30000)}
                       />
                     </div>
                   </div>
