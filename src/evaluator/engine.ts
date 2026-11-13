@@ -1242,7 +1242,7 @@ async function resolveDefaultTestProvider(
     let providerPromise = defaultTestProviderCache.get(defaultProvider);
     if (!providerPromise) {
       providerPromise = (async () => {
-        const { loadApiProvider } = await import('./providers');
+        const { loadApiProvider } = await import('../providers');
         return loadApiProvider(providerId, {
           options: defaultProvider as ProviderOptions,
           // Resolve relative file:// references against the config directory,
