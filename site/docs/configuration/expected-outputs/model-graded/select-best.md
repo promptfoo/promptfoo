@@ -78,6 +78,8 @@ Like other model-graded assertions, you can override the default grader:
        provider: openai:gpt-5-mini
    ```
 
+Resuming with redacted grader credentials requires a matching provider ID and nonsecret configuration. If a hook changed the grader’s settings or selected a runtime provider that cannot be reloaded, supply the matching grader configuration or rerun the eval.
+
 ### Customizing the Prompt
 
 You can customize the evaluation prompt using the `rubricPrompt` property:
