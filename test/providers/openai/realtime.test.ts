@@ -8,7 +8,7 @@ import logger from '../../../src/logger';
 import { OpenAiRealtimeProvider } from '../../../src/providers/openai/realtime';
 import * as util from '../../../src/util/index';
 import { createLocationProperties } from '../../factories/literalFixtures';
-import { mockProcessEnv } from '../../util/utils';
+import { createDeferred, mockProcessEnv } from '../../util/utils';
 import { getOpenAiMissingApiKeyMessage, restoreEnvVar } from './shared';
 
 import type { OpenAiRealtimeOptions } from '../../../src/providers/openai/realtime';
@@ -372,9 +372,9 @@ describe('OpenAI Realtime Provider', () => {
       },
     );
 
-    it('sends one user item after session readiness on the client-secret socket', async () => {
+    it('sends one user item after session readiness even with an empty client secret', async () => {
       const provider = new OpenAiRealtimeProvider('gpt-realtime-1.5');
-      const promise = provider.webSocketRequest('test-secret', 'hello');
+      const promise = provider.webSocketRequest('', 'hello');
 
       mockHandlers.open.forEach((handler) => handler());
       expect(sentWebSocketEvents(mockWs)).not.toEqual(
@@ -394,6 +394,30 @@ describe('OpenAI Realtime Provider', () => {
       emitOutputTextDone(handler, 'hello back');
       emitResponseDone(handler);
       await promise;
+    });
+
+    it('waits for the direct session config when readiness arrives during tool loading', async () => {
+      const tools = createDeferred<unknown[]>();
+      vi.spyOn(util, 'maybeLoadToolsFromExternalFile').mockReturnValueOnce(tools.promise);
+      const provider = new OpenAiRealtimeProvider('gpt-realtime', {
+        config: { tools: [createRealtimeTool('get_weather')] },
+      });
+      const result = provider.directWebSocketRequest('hello');
+      const opened = mockHandlers.open[0]();
+      const handler = lastMessageHandler();
+
+      await emitRealtimeEvent(handler, { type: 'session.created' });
+      expect(mockWs.send).not.toHaveBeenCalled();
+      tools.resolve([]);
+      await opened;
+      await emitRealtimeEvent(handler, { type: 'session.ready' });
+      expect(sentWebSocketEvents(mockWs).map((event) => event.type)).toEqual([
+        'session.update',
+        'conversation.item.create',
+      ]);
+
+      await emitResponseDone(handler);
+      await result;
     });
 
     it('does not expose audio when usage reports tokens without audio bytes', async () => {

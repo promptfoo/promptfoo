@@ -20,9 +20,14 @@ import {
 import { escapeRegExp } from '../../util/text';
 import { resolveProviderApiKey } from '../credentials';
 import {
+  decisionLabelEntries,
+  gradeDecisionScore,
+  readTextDecisionRubric,
+  resolveDecisionThreshold,
+} from '../decisionGrading';
+import {
   answersMatchDecisionQuestions,
   decisionGradingLevelsSchema,
-  decisionProbabilitySchema,
   decisionRequestSchema,
   decisionResponseSchema,
   parseDecisionsInput,
@@ -257,12 +262,10 @@ export class AzureDecisionsProvider extends AzureGenericProvider<AzureDecisionsO
       };
     }
     const { instructions, labels } = parsed.data;
-    const choices = Array.isArray(labels)
-      ? labels.map((value) => ({ value }))
-      : Object.entries(labels).map(([value, description]) => ({
-          value,
-          ...(description === null ? {} : { description }),
-        }));
+    const choices = decisionLabelEntries(labels).map(([value, description]) => ({
+      value,
+      ...(description === null ? {} : { description }),
+    }));
     const result = await this.ask(
       prompt,
       {
@@ -294,36 +297,13 @@ export class AzureDecisionsProvider extends AzureGenericProvider<AzureDecisionsO
     context: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    try {
-      const messages = z
-        .array(z.object({ content: z.unknown().optional() }))
-        .safeParse(JSON.parse(prompt));
-      const textPart = z.object({
-        type: z.enum(['text', 'input_text', 'output_text']),
-        text: z.string(),
-      });
-      if (
-        messages.success &&
-        messages.data.some(
-          ({ content }) =>
-            Array.isArray(content) && content.some((part) => !textPart.safeParse(part).success),
-        )
-      ) {
-        return {
-          error:
-            'Azure Decisions `llm-rubric` supports text output only; media attachments are not supported.',
-        };
-      }
-    } catch {
-      // Plain-text grading prompts have no structured attachments.
+    const rubric = readTextDecisionRubric(prompt, context.vars, 'Azure Decisions');
+    if ('error' in rubric) {
+      return rubric;
     }
-    const threshold = decisionProbabilitySchema.safeParse(config.threshold ?? 0.5);
-    if (!threshold.success) {
+    const threshold = resolveDecisionThreshold(config.threshold);
+    if (threshold === undefined) {
       return { error: 'Azure Decisions `threshold` must be a number from 0 to 1.' };
-    }
-    const { rubric, output } = context.vars;
-    if (rubric === undefined || output === undefined) {
-      return { error: 'Azure Decisions `llm-rubric` requires rubric and output variables.' };
     }
     const levels =
       config.levels === undefined
@@ -335,16 +315,11 @@ export class AzureDecisionsProvider extends AzureGenericProvider<AzureDecisionsO
           'Azure Decisions `levels` must list 2 to 10 strings or {label, description?} objects, ordered low to high.',
       };
     }
-    const instructions = typeof rubric === 'string' ? rubric : JSON.stringify(rubric);
+    const { instructions, input } = rubric;
     const question: DecisionQuestion = levels?.success
       ? { name: 'grade', type: 'score', instructions, levels: levels.data }
       : { name: 'grade', type: 'predicate', instructions };
-    const result = await this.ask(
-      typeof output === 'string' ? output : JSON.stringify(output),
-      { ...config, questions: [question] },
-      context,
-      options,
-    );
+    const result = await this.ask(input, { ...config, questions: [question] }, context, options);
     if (result.error) {
       return result;
     }
@@ -358,9 +333,8 @@ export class AzureDecisionsProvider extends AzureGenericProvider<AzureDecisionsO
     }
     const raw = answer.type === 'predicate' ? answer.probability : answer.score;
     const top = question.type === 'score' ? question.levels.length - 1 : 1;
-    const score = raw / top;
-    const pass = score >= threshold.data;
-    const comparison = `< threshold ${threshold.data}`;
+    const { score, pass } = gradeDecisionScore(raw, top, threshold);
+    const comparison = `< threshold ${threshold}`;
     const reason =
       answer.type === 'predicate'
         ? `Decisions predicate probability ${raw} ${comparison}`

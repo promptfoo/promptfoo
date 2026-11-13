@@ -398,8 +398,20 @@ describe('ClaudeCodeSDKProvider', () => {
   });
 
   describe('resumed-session accounting', () => {
-    const prior = { ...createMockModelUsage(100, 20, 50, 5), thinkingTokens: 4, costUSD: 0.2 };
-    const current = { ...createMockModelUsage(110, 27, 53, 7), thinkingTokens: 6, costUSD: 0.201 };
+    const prior = {
+      ...createMockModelUsage(100, 20, 50, 5),
+      cacheCreationEphemeral5mInputTokens: 2,
+      cacheCreationEphemeral1hInputTokens: 3,
+      thinkingTokens: 4,
+      costUSD: 0.2,
+    };
+    const current = {
+      ...createMockModelUsage(110, 27, 53, 7),
+      cacheCreationEphemeral5mInputTokens: 4,
+      cacheCreationEphemeral1hInputTokens: 3,
+      thinkingTokens: 6,
+      costUSD: 0.201,
+    };
     const resultMessage = {
       type: 'result',
       subtype: 'success',
@@ -484,7 +496,13 @@ describe('ClaudeCodeSDKProvider', () => {
         usageAccounting: 'query',
         sessionCost: 0.202,
         modelUsage: {
-          sonnet: { inputTokens: 10, outputTokens: 7, contextWindow: 200000 },
+          sonnet: {
+            inputTokens: 10,
+            outputTokens: 7,
+            contextWindow: 200000,
+            cacheCreationEphemeral5mInputTokens: 2,
+            cacheCreationEphemeral1hInputTokens: 0,
+          },
           haiku: { inputTokens: 5, outputTokens: 3 },
         },
         sessionModelUsage: resultMessage.modelUsage,
@@ -1124,7 +1142,8 @@ describe('ClaudeCodeSDKProvider', () => {
 
       new ClaudeCodeSDKProvider({ config: { model: 'claude-3-5-sonnet-20241022' } });
       new ClaudeCodeSDKProvider({ config: { model: 'claude-fable-5-1' } });
-      new ClaudeCodeSDKProvider({ config: { model: 'claude-mythos-5-1' } });
+      new ClaudeCodeSDKProvider({ config: { model: 'claude-fable-5-2' } });
+      new ClaudeCodeSDKProvider({ config: { model: 'claude-mythos-5-2' } });
       new ClaudeCodeSDKProvider({ config: { fallback_model: 'claude-3-5-haiku-20241022' } });
 
       expect(warnSpy).not.toHaveBeenCalled();

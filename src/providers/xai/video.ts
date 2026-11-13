@@ -763,7 +763,7 @@ export class XAIVideoProvider implements ApiProvider {
 
     // Check cache (skip for edits)
     if (!isEdit && cacheKey) {
-      const cachedVideoKey = await checkVideoCache(cacheKey, PROVIDER_NAME);
+      const cachedVideoKey = (await checkVideoCache(cacheKey, PROVIDER_NAME))?.videoKey;
       if (cachedVideoKey) {
         logger.info(`[${PROVIDER_NAME}] Cache hit for video: ${cacheKey}`);
 

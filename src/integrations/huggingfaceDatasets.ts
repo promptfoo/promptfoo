@@ -175,18 +175,20 @@ export async function fetchHuggingFaceDataset(
     return [];
   }
 
+  const pageParams = new URLSearchParams(queryParams);
+  function getPageUrl(offset: number, length: number): string {
+    pageParams.set('offset', offset.toString());
+    pageParams.set('length', length.toString());
+    return `${baseUrl}?dataset=${encodeURIComponent(`${owner}/${repo}`)}&${pageParams.toString()}`;
+  }
+
   // Single request optimization for small datasets
   if (userLimit !== undefined && userLimit <= pageSize) {
     logger.debug(
       `[HF Dataset] Single request optimization for ${owner}/${repo} (limit: ${userLimit})`,
     );
 
-    // Build single request URL with exact limit needed
-    const requestParams = new URLSearchParams(queryParams);
-    requestParams.set('offset', '0');
-    requestParams.set('length', userLimit.toString());
-
-    const url = `${baseUrl}?dataset=${encodeURIComponent(`${owner}/${repo}`)}&${requestParams.toString()}`;
+    const url = getPageUrl(0, userLimit);
 
     // Set up headers for authentication
     const hfToken =
@@ -236,20 +238,9 @@ export async function fetchHuggingFaceDataset(
 
   try {
     while (true) {
-      // Create a new URLSearchParams for this request
-      const requestParams = new URLSearchParams(queryParams);
-      requestParams.set('offset', offset.toString());
-
-      const remainingUserLimit =
-        userLimit === undefined ? undefined : Math.max(userLimit - offset, 0);
-      const remainingDatasetRows =
-        totalRows === undefined ? undefined : Math.max(totalRows - offset, 0);
+      const rowLimit = userLimit ?? totalRows;
       const requestedLength =
-        remainingUserLimit === undefined
-          ? remainingDatasetRows === undefined
-            ? pageSize
-            : Math.min(pageSize, remainingDatasetRows)
-          : Math.min(pageSize, remainingUserLimit);
+        rowLimit === undefined ? pageSize : Math.min(pageSize, Math.max(rowLimit - offset, 0));
 
       if (requestedLength <= 0) {
         logger.debug(
@@ -258,9 +249,7 @@ export async function fetchHuggingFaceDataset(
         break;
       }
 
-      requestParams.set('length', requestedLength.toString());
-
-      const url = `${baseUrl}?dataset=${encodeURIComponent(`${owner}/${repo}`)}&${requestParams.toString()}`;
+      const url = getPageUrl(offset, requestedLength);
       logger.debug(`[HF Dataset] Fetching page from ${url}`);
 
       const hfToken =
@@ -407,11 +396,10 @@ export async function fetchHuggingFaceDataset(
         for (let i = 0; i < maxConcurrent - 1; i++) {
           // Start from the next page and prefetch additional pages
           const futureOffset = offset + i * pageSize;
-          const futureParams = new URLSearchParams(queryParams);
-          futureParams.set('offset', futureOffset.toString());
-          futureParams.set('length', Math.min(pageSize, totalNeeded - futureOffset).toString());
-
-          const futureUrl = `${baseUrl}?dataset=${encodeURIComponent(`${owner}/${repo}`)}&${futureParams.toString()}`;
+          const futureUrl = getPageUrl(
+            futureOffset,
+            Math.min(pageSize, totalNeeded - futureOffset),
+          );
 
           const p = fetchWithCache<HuggingFaceResponse>(futureUrl, { headers })
             .then((resp) => ({

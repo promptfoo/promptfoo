@@ -913,7 +913,7 @@ describe('EvalOutputCell', () => {
     expect(written).toContain('rowId=1');
   });
 
-  it('shows checkmark after copying link', async () => {
+  it('resets the link and output copy indicators independently', async () => {
     timers = useTestTimers();
     const clipboard = mockClipboardWriteText();
 
@@ -930,11 +930,20 @@ describe('EvalOutputCell', () => {
     expect(clipboard.writeText).toHaveBeenCalled();
     expect(shareButton.querySelector('.lucide-check')).toBeInTheDocument();
 
-    act(() => {
-      timers?.advanceBy(3000);
+    act(() => timers?.advanceBy(1000));
+    const copyButton = screen.getByRole('button', { name: /Copy output to clipboard/i });
+    await act(async () => {
+      dispatchClick(copyButton);
+      await clipboard.writeText.mock.results[1]?.value;
     });
+    expect(shareButton.querySelector('.lucide-check')).toBeInTheDocument();
+    expect(copyButton.querySelector('.lucide-check')).toBeInTheDocument();
 
+    act(() => timers?.advanceBy(2000));
     expect(shareButton.querySelector('.lucide-link')).toBeInTheDocument();
+    expect(copyButton.querySelector('.lucide-check')).toBeInTheDocument();
+    act(() => timers?.advanceBy(1000));
+    expect(copyButton.querySelector('.lucide-check')).not.toBeInTheDocument();
   });
 
   it('clears the link feedback timer on unmount after copying link', async () => {

@@ -592,7 +592,7 @@ describe('NovaSonic Provider', () => {
           }),
           event({ contentEnd: { contentId: 'interruption', stopReason: 'INTERRUPTED' } }),
           event({ audioOutput: { content: Buffer.from([1, 2]).toString('base64') } }),
-          event({ audioOutput: { content: Buffer.from([3, 4]).toString('base64') } }),
+          event({ audioOutput: { content: Buffer.from([3, 4, 5, 6]).toString('base64') } }),
           event({ contentEnd: { contentId: 'audio', type: 'AUDIO', stopReason: 'END_TURN' } }),
           textStart('spoken', 'FINAL'),
           event({ textOutput: { contentId: 'spoken', role: 'ASSISTANT', content: 'Actual ' } }),
@@ -613,7 +613,17 @@ describe('NovaSonic Provider', () => {
         },
       );
       const provider = new NovaSonicProvider('amazon.nova-2-5-sonic', {
-        config: { region: 'us-east-1' },
+        config: {
+          region: 'us-east-1',
+          audioOutputConfiguration: {
+            audioType: 'SPEECH',
+            encoding: 'base64',
+            mediaType: 'audio/lpcm',
+            sampleRateHertz: 48_000,
+            sampleSizeBits: 24,
+            channelCount: 2,
+          },
+        },
       });
       const sentEvent = vi.spyOn(provider as any, 'sendEvent');
       const pending = provider.callApi('AA==');
@@ -624,9 +634,13 @@ describe('NovaSonic Provider', () => {
       expect(capture.events.filter((event) => event.promptEnd)).toHaveLength(1);
       expect(result.output).toBe('Actual speech\n');
       expect(result.audio?.transcript).toBe('Actual speech\n');
-      expect(Buffer.from(result.audio!.data!, 'base64').subarray(44)).toEqual(
-        Buffer.from([1, 2, 3, 4]),
-      );
+      const wav = Buffer.from(result.audio!.data!, 'base64');
+      expect(wav.readUInt16LE(22)).toBe(2);
+      expect(wav.readUInt32LE(24)).toBe(48_000);
+      expect(wav.readUInt32LE(28)).toBe(288_000);
+      expect(wav.readUInt16LE(32)).toBe(6);
+      expect(wav.readUInt16LE(34)).toBe(24);
+      expect(wav.subarray(44)).toEqual(Buffer.from([1, 2, 3, 4, 5, 6]));
       expect((provider as any).sessions.size).toBe(0);
     });
 

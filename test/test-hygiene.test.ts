@@ -196,7 +196,6 @@ const legacyModuleScopePersistentMockFiles = new Set<string>([
   'external/assertions.test.ts',
   'external/conversationRelevancy.test.ts',
   'globalConfig.test.ts',
-  'googleSheets.test.ts',
   'index.test.ts',
   'integration/envPath.test.ts',
   'migrate.test.ts',
