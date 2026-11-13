@@ -7,15 +7,9 @@ description: Red team LLM systems through systematic adversarial testing to dete
 
 # LLM red teaming
 
-LLM red teaming is a way to find vulnerabilities in AI systems _before_ they're deployed by using simulated adversarial inputs.
+LLM red teaming tests whether adversarial inputs can make an application violate its intended behavior. Depending on the application's capabilities, that might mean disclosing another user's data, misusing a connected tool, or producing prohibited content.
 
-As of today, there are multiple inherent security challenges with LLM architectures. Depending on your system's design, e.g. [RAG](/docs/red-team/rag/), [LLM agent](/docs/red-team/agents/), or [chatbot](/docs/red-team/llm-vulnerability-types/), you'll face different types of vulnerabilities.
-
-Almost every LLM app has potential issues with generation of off-topic, inappropriate, or harmful content that breaches business policies or other guidelines. As architectures become more complex, problems can arise in the form of information leakage and access control (RAG architectures), misuse of connected APIs or databases (in agents), and more.
-
-In order to identify these types of vulnerabilities before they make it to production, we need to generate a wide range of adversarial inputs and evaluate the LLM's responses.
-
-By systematically probing the LLM application, we can produce a report that quantifies the risk of misuse and provides suggestions for mitigation.
+Promptfoo generates test inputs, sends them to your application, and grades the responses. Use the results to investigate specific failures and check proposed fixes.
 
 :::tip
 Ready to run a red team? Jump to **[Quickstart](/docs/red-team/quickstart/)**.
@@ -27,34 +21,17 @@ Ready to run a red team? Jump to **[Quickstart](/docs/red-team/quickstart/)**.
 
 ## Why is LLM red teaming important?
 
-Red teaming is different from other AI security approaches because it provides a quantitative measure of risk _before_ deployment.
+Ordinary evals check expected uses of an application. Red team tests probe attempts to bypass its rules. Testing the deployed application interface also exercises the permissions, retrieval, tools, and safeguards around the model.
 
-By running thousands of probes and evaluating the AI's performance, developers can make informed decisions about acceptable risk levels in offline testbeds. Many organizations build this into their development cycle and into processes like CI/CD.
-
-This process is how the big foundation labs - OpenAI, Anthropic, Microsoft, and Google - evaluate their models before they release them to the public. For a while, AI red teams were confined to these elite labs. Now, AI red teaming is becoming more common as tools proliferate and best practices emerge.
-
-This is a new field and standards are emerging around the world, ranging from [OWASP LLM Top 10](https://owasp.org/www-project-top-10-for-large-language-model-applications/) to [NIST's AI Risk Management Framework](https://www.nist.gov/itl/ai-risk-management-framework) and the [EU AI Act](https://www.europarl.europa.eu/topics/en/article/20230601STO93804/eu-ai-act-first-regulation-on-artificial-intelligence).
-
-From what we've seen so far, most regulations/standards support a systematic benchmarking/red teaming process that quantifies risk via testing prior to deployment.
+Run these checks before a release and after changes that affect those controls. A run provides evidence about the tested cases and configuration, rather than a guarantee about all possible attacks.
 
 ## How LLM red teaming works
 
-The process of red teaming LLMs generally requires some degree of automation for a comprehensive evaluation. This is because LLMs have such a wide attack surface and are stochastic in nature (i.e. they are not consistent from one generation to the next).
+Configure a target and describe what it should and should not do. Choose [plugins](/docs/red-team/plugins) for the risks you want to test and [strategies](/docs/red-team/strategies) for how to deliver the attacks.
 
-A systematic approach looks like this:
+The test runner sends attacks through the target's provider and checks the returned responses. Review a flagged result's input, response, and grading reason to decide whether it shows a violation. For tool actions, include traces or other evidence of what happened.
 
-1. **Generate Adversarial Inputs**: Create or curate a diverse set of malicious intents targeting potential vulnerabilities. For each intent, wrap it in a prompt that attempts to exploit the target. You can incorporate methods like prompt injection and jailbreaking at this step.
-
-2. **Evaluate Responses**: Run these inputs through your LLM application to observe the model's behavior. This step is a great candidate for automation.
-
-3. **Analyze Vulnerabilities**: Evaluate the LLM's outputs automatically using deterministic and model-graded metrics, and examine the responses to identify weaknesses or undesirable behaviors.
-
-Once a process is set up, it can be applied in two primary ways:
-
-- **One-off runs**: Generate a comprehensive report that allows you to examine vulnerabilities and suggested mitigations.
-- **CI/CD integration**: Continuously monitor for vulnerabilities in your deployment pipeline, ensuring ongoing safety as your application evolves.
-
-The magic moment for managing AI risk usually comes after an organization is able to set up some continuous measurement of AI risk: whether through CI/CD, internal requirements, or some other form of scheduled runs.
+Save the cases that exposed a problem so you can rerun them after a fix. Add [CI checks](/docs/integrations/ci-cd) for known failures and scheduled runs to generate additional attacks.
 
 <div style={{ maxWidth: 760, margin: '0 auto' }}>
   ![llm security continuous monitoring](/img/continuous-monitoring.png)
@@ -105,9 +82,7 @@ For most developers and AppSec teams, black box testing is the more practical ap
 
 ## Common threats
 
-The number of threats AI apps face can be overwhelming because AI apps, often by definition, offer generative features with unpredictable results. As Tomasz Tunguz, Venture Capitalist at Theory, has [written](https://www.linkedin.com/posts/tomasztunguz_product-managers-designers-working-with-activity-7183149701674807296-4fAn/), "With AI, the rules have changed. Non-deterministic ML models introduce uncertainty & chaotic behavior."
-
-This non-deterministic behavior has implications on the product side, but it also has implications for those of us who are more paranoid.
+Choose threat categories based on the data your application can access, the actions it can take, and the policies it must follow. The [plugin catalog](/docs/red-team/plugins) maps these categories to available tests.
 
 ### Privacy violations
 
@@ -196,61 +171,25 @@ And yes, someone did actually [eat the glue pizza](https://www.businessinsider.c
 
 ## Best practices
 
-Based on our experience as practitioners deploying LLMs, we recommend the following best practices for effective red teaming:
+Use the following steps to turn a scan into changes you can verify.
 
 ### Step 1: Define your strategy
 
-Before running a red team, define a systematic process that encompasses:
+Define the user role, allowed data access, available tools, and prohibited behavior. Put these facts in the [application purpose](/docs/red-team/configuration#purpose) and plugin configuration so generation and grading use the same boundaries.
 
-1. **Vulnerability focus**: Identify which types of vulnerabilities are most critical for your application. This will depend on your use case (e.g., [RAG](/docs/red-team/rag/), [agents](/docs/red-team/agents/), chatbots) and industry.
-
-2. **Timing in development cycle**: Decide where in your process red teaming will occur. Checkpoints to consider include:
-   - **Model testing**, which can happen even before you start building the application, and is especially important when fine tuning.
-   - **Pre-deployment testing**, once the model has been hooked up to the application, tools, databases, etc.
-   - **Continuous integration/deployment (CI/CD) checks** to catch regressions and anomalies.
-   - **Post-deployment monitoring** to establish a feedback loop and maintain an understanding of how your application is behaving in production.
-
-3. **Resource allocation**: Balance the depth of testing with available time and resources. Certain automated attack strategies consume a large number of tokens, and a single red team can range anywhere from a few cents to hundreds of dollars!
-
-4. **Regulatory compliance**: Consider any industry-specific or regional requirements (e.g., GDPR, HIPAA) as well as standards (e.g. NIST AI RMF, OWASP LLM).
+Choose tests that match those capabilities. Set the test count and strategy limits based on the target requests and model calls you can afford to run.
 
 ### Step 2: Implementation
 
-Once you've defined your objectives, your process will probably look like this:
+Connect to the application with the authentication and session behavior you intend to test. Test the application endpoint when permissions or tool behavior matter, rather than sending prompts directly to its underlying model.
 
-1. **Generate diverse adversarial inputs**:
-   - Create a wide range of inputs targeting your identified vulnerability types.
-   - Automated generation tools are a huge help, especially to cover a breadth of use cases. But human ingenuity is still useful, especially for known problem areas.
-
-2. **Set up evaluation framework**:
-   - Choose or develop a tool for systematic LLM testing.
-   - Integrate with your development pipeline if applicable.
-
-3. **Execute tests**:
-   - Run your adversarial inputs through your LLM application.
-   - Ensure you're testing in an environment that closely mimics production. It's best to test end-to-end - so you can stress-test full tool access and/or guardrails.
-
-4. **Collect and organize results**:
-   - Store outputs in a structured format that can be subsequently analyzed. Most evaluation frameworks will do this for you.
+Start with a small run and inspect the requests and responses. Resolve connection or grading errors before increasing the test count. Save the configuration and results with the target version.
 
 ### Step 3: Analysis and remediation
 
-1. **Review flagged outputs**:
-   - Set a regular cadence for reviewing test results. This could involve both the security and development teams in the review process.
+Review failures against the application's stated rules, then prioritize confirmed violations by their impact. If the grader relied on incorrect context, correct it and rerun the affected cases.
 
-2. **Prioritize vulnerabilities**:
-   - Not all issues are created equal. There's a fuzzy line between AI security and AI safety issues, and as alluded to above, some fall on the model side versus the application side.
-   - Most teams we talk to find it most productive to focus on technical security vulnerabilities, as the foundation model problems are improving over time as AI research advances and tend to have smaller impact.
-
-3. **Develop mitigation strategies**:
-   - For each priority vulnerability, brainstorm potential fixes.
-   - This might include prompt engineering, additional safeguards, or architectural changes.
-
-4. **Implement and verify fixes**:
-   - Apply chosen mitigations and re-run the evaluation suite to confirm the effectiveness of your solutions.
-
-5. **Continuous improvement**:
-   - Regularly update your test suite with new adversarial inputs, and regenerate the redteam inputs to test variations and updated methods.
+After applying a fix, rerun the original failing cases under the same conditions. Check the actual responses and actions, then test variations and ordinary use cases for bypasses or regressions. A lower aggregate score alone does not verify a fix.
 
 ## Case Study: Discord's Clyde AI
 

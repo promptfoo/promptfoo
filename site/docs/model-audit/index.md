@@ -20,9 +20,7 @@ sidebar_position: 1
 
 ## Overview
 
-ModelAudit is a lightweight static security scanner for machine learning models accessible through Promptfoo. It scans AI/ML models for potential security risks before deployment.
-
-Promptfoo provides a wrapper command `promptfoo scan-model` that integrates ModelAudit scanning capabilities.
+Use `promptfoo scan-model` to inspect model files with [ModelAudit](https://github.com/promptfoo/modelaudit) before loading them into an application. ModelAudit performs static checks for suspicious code and model-file contents.
 
 ![example model scan results](/img/docs/modelaudit/modelaudit-result.png)
 
@@ -36,21 +34,7 @@ And displays the results:
 
 ## Purpose
 
-AI/ML models can introduce security risks through:
-
-- Malicious code embedded in pickled models
-- Suspicious TensorFlow operations
-- Potentially unsafe Keras Lambda layers
-- Dangerous pickle opcodes
-- Encoded payloads hidden in model structures
-- Risky configurations in model architectures
-- Malicious content in ZIP archives
-- Embedded executables in binary model files
-- Hidden credentials (API keys, tokens, passwords)
-- Network communication patterns (URLs, IPs, sockets)
-- JIT/Script execution in TorchScript and ONNX models
-
-ModelAudit helps identify these risks before models are deployed to production environments, ensuring a more secure AI pipeline.
+Use model scanning to review risks in the artifact itself, such as executable pickle contents or unsafe Keras layers. Use [red teaming](/docs/red-team/quickstart) to test how a running model or application responds to adversarial inputs. The checks available for an artifact depend on its [format and scanner](./scanners.md).
 
 ## Installation
 

@@ -5,18 +5,14 @@ description: Evaluate and secure LLM applications with automated testing, red te
 
 # Intro
 
-`promptfoo` is an [open-source](https://github.com/promptfoo/promptfoo) CLI and library for evaluating and red-teaming LLM apps.
+Promptfoo is an [open-source](https://github.com/promptfoo/promptfoo) CLI and library for testing LLM applications. Define test inputs, run them against prompts or applications, and compare the outputs against your requirements.
 
 With promptfoo, you can:
 
-- **Build reliable prompts, models, and RAGs** with benchmarks specific to your use-case
-- **Secure your apps** with automated [red teaming](/docs/red-team) and pentesting
-- **Speed up evaluations** with caching, concurrency, and live reloading
-- **Score outputs automatically** by defining [metrics](/docs/configuration/expected-outputs)
-- Use as a [CLI](/docs/usage/command-line), [library](/docs/usage/node-package), or in [CI/CD](/docs/integrations/github-action)
-- Use OpenAI, Anthropic, Azure, Google, HuggingFace, open-source models like Llama, or integrate custom API providers for [any LLM API](/docs/providers)
-
-The goal: **test-driven LLM development**, not trial-and-error.
+- Compare prompts or models on the same [test cases](/docs/configuration/guide).
+- Check outputs automatically with [assertions and metrics](/docs/configuration/expected-outputs).
+- Probe application security with [red teaming](/docs/red-team).
+- Run tests through the [CLI](/docs/usage/command-line), [Node library](/docs/usage/node-package), or [CI/CD](/docs/integrations/github-action).
 
 :::tip Get Started
 
@@ -41,21 +37,13 @@ Promptfoo also produces high-level vulnerability and risk reports:
 
 ## Why choose promptfoo?
 
-There are many different ways to evaluate prompts. Here are some reasons to consider promptfoo:
+Use Promptfoo when you want test cases and assertions that you can keep in version control and rerun after a change. Connect a [model provider](/docs/providers), an [HTTP endpoint](/docs/providers/http), or custom application code, then inspect results in the web UI or [export them](/docs/configuration/outputs).
 
-- **Developer friendly**: promptfoo is fast, with quality-of-life features like live reloads and caching.
-- **Battle-tested**: Originally built for LLM apps serving over 10 million users in production. Our tooling is flexible and can be adapted to many setups.
-- **Simple, declarative test cases**: Define evals without writing code or working with heavy notebooks.
-- **Language agnostic**: Use Python, Javascript, or any other language.
-- **Share & collaborate**: Built-in share functionality & web viewer for working with teammates.
-- **Open-source**: LLM evals are a commodity and should be served by 100% open-source projects with no strings attached.
-- **Private**: This software runs completely locally. The evals run on your machine and talk directly with the LLM.
+The CLI runs on your machine. Target requests and model-based grading use the providers you configure, and red teaming can use [remote generation](/docs/red-team/troubleshooting/remote-generation). Choose those services according to your data-handling requirements.
 
 ## Workflow and philosophy
 
-Test-driven prompt engineering is much more effective than trial-and-error.
-
-[Serious LLM development requires a systematic approach to prompt engineering](https://www.ianww.com/blog/2023/05/21/prompt-engineering-framework). Promptfoo streamlines the process of evaluating and improving language model performance.
+Keep representative inputs and known failures in a test suite. Rerun it when you change a prompt, model, or application component:
 
 1. **Define test cases**: Identify core use cases and failure modes. Prepare a set of prompts and test cases that represent these scenarios.
 2. **Configure evaluation**: Set up your evaluation by specifying prompts, test cases, and API providers.

@@ -18,6 +18,9 @@ Docusaurus-based documentation at [promptfoo.dev](https://www.promptfoo.dev/).
 
 ## Before Making Changes
 
+For public docs in `site/docs`, read [`docs/AGENTS.md`](docs/AGENTS.md). Apply its
+editorial standard when selecting content and reviewing the finished draft.
+
 ```bash
 # Search for existing docs
 grep -r "topic" site/docs/

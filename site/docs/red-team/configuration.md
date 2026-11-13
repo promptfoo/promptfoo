@@ -67,9 +67,9 @@ current-run accounting and should not be added to reusable configurations.
 
 ## Configuration Structure
 
-The red team configuration uses the following YAML structure:
+This outline shows the available fields and their types. It is not a runnable config. See the [quickstart](/docs/red-team/quickstart) for an example.
 
-```yaml
+```text
 targets:
   - id: openai:gpt-5
     label: customer-service-agent
@@ -250,7 +250,7 @@ plugins:
   - id: 'contracts'
     config:
       graderExamples:
-        - output: "Sorry, I can\'t do that."
+        - output: "Sorry, I can't do that."
           pass: true
           score: 1.0
           reason: "Doesn't book a flight"
@@ -832,21 +832,13 @@ A common use case is to use an alternative platform like [Azure](/docs/providers
 
 You can also use a [custom HTTP endpoint](/docs/providers/http/), local models via [Ollama](/docs/providers/ollama/), or [a custom Python implementation](/docs/providers/python/). See the full list of available providers [here](/docs/providers/).
 
-:::warning
-Your choice of attack provider is extremely important for the quality of your redteam tests. We recommend using a state-of-the-art model such as GPT 4.1.
-:::
-
 ### How attacks are generated
 
-By default, Promptfoo uses your local OpenAI key for redteam attack generation and grading. If you do not have a key, Promptfoo will automatically proxy requests to our API for generation and grading. The eval of your target model is always performed locally.
+The CLI sends test inputs through the configured target provider. Attack generation and grading are separate requests, which may use different services from the target.
 
-The `redteam.provider` configuration controls both attack generation and grading. For details on configuring grading behavior, see [Configuring the Grader](/docs/red-team/troubleshooting/grading-results/).
+`redteam.provider` configures the model used by generation and grading paths that support a custom provider. Some plugins and strategies require remote inference regardless of this setting. Check their entries in the [plugin](/docs/red-team/plugins) and [strategy](/docs/red-team/strategies) tables.
 
-You can force 100% local generation by setting the `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION` environment variable to `true`. Note that the quality of local generation depends greatly on the model that you configure, and is generally low for most models.
-
-:::note
-Custom plugins and strategies require an OpenAI key or your own provider configuration.
-:::
+When changing the provider, inspect generated attacks and try the grader on known passing and failing examples. See [Configuring the Grader](/docs/red-team/troubleshooting/grading-results/) for guidance and examples.
 
 ### Changing the model
 
@@ -891,17 +883,17 @@ Some providers such as Anthropic may disable your account for generating harmful
 
 ### Remote Generation
 
-By default, promptfoo uses a remote service for generating adversarial inputs. This service is optimized for high-quality, diverse test cases. However, you can disable this feature and fall back to local generation by setting the `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION` environment variable to `true`.
+Remote-capable generation paths use Promptfoo's service when remote generation is requested, a custom remote endpoint is set, you are logged into Promptfoo Cloud, or the required local credentials are unavailable. Other paths call the configured model provider directly.
 
-:::info Cloud Users
-If you're logged into Promptfoo Cloud, remote generation is preferred by default to ensure you benefit from cloud features and the latest improvements. You can still opt-out by setting `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION=true`.
-:::
+To disable Promptfoo remote generation for red teaming:
 
-:::warning
-Disabling remote generation may result in lower quality adversarial inputs. For best results, we recommend using the default remote generation service.
-:::
+```bash
+export PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION=true
+```
 
-If you need to use a custom provider for generation, you can still benefit from our remote service by leaving `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION` set to `false` (the default). This allows you to use a custom provider for your target model while still leveraging our optimized generation service for creating adversarial inputs.
+This does not make a hosted model local. Configure a local `redteam.provider` if generation and grading must stay on your machine, and select plugins and strategies that can run without remote inference. Configure your target separately.
+
+The broader `PROMPTFOO_DISABLE_REMOTE_GENERATION=true` flag also disables remote generation outside red teaming. Neither flag controls result uploads. Use `--no-share` to disable [sharing](/docs/usage/sharing) for a run.
 
 ### Custom Providers/Targets
 
