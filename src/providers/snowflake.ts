@@ -90,8 +90,11 @@ export class SnowflakeCortexProvider extends OpenAiChatCompletionProvider {
     }
 
     // Construct the base URL from account identifier if not provided
+    // Strip trailing slashes so a configured base URL like `https://host/` does
+    // not produce double-slash request paths.
     const apiBaseUrl =
-      providerOptions.config?.apiBaseUrl || `https://${accountIdentifier}.snowflakecomputing.com`;
+      providerOptions.config?.apiBaseUrl?.replace(/\/+$/, '') ||
+      `https://${accountIdentifier}.snowflakecomputing.com`;
 
     super(modelName, {
       ...providerOptions,
