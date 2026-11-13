@@ -1,7 +1,7 @@
 import React from 'react';
 
 import Editor from '@app/components/ui/code-editor';
-import Prism from '@app/lib/prism';
+import { highlightJS } from '@app/lib/codeHighlight';
 import dedent from 'dedent';
 
 import type { HttpProviderOptions } from '../../../types';
@@ -10,18 +10,6 @@ interface HttpStatusCodeTabProps {
   selectedTarget: HttpProviderOptions;
   updateCustomTarget: (field: string, value: unknown) => void;
 }
-
-const highlightJS = (code: string): string => {
-  try {
-    const grammar = Prism?.languages?.javascript;
-    if (!grammar) {
-      return code;
-    }
-    return Prism.highlight(code, grammar, 'javascript');
-  } catch {
-    return code;
-  }
-};
 
 const HttpStatusCodeTab: React.FC<HttpStatusCodeTabProps> = ({
   selectedTarget,

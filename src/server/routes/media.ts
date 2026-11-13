@@ -5,35 +5,23 @@
  */
 
 import express from 'express';
+import { isSafeInlineBlobMimeType } from '../../blobs';
 import logger from '../../logger';
 import { getMediaStorage, mediaExists, retrieveMedia } from '../../storage';
-import { MediaSchemas } from '../../types/api/media';
+import { MediaRouteParamsSchema, MediaSchemas } from '../../types/api/media';
 import { replyValidationError } from '../utils/errors';
 import type { Request, Response } from 'express';
 
 export const mediaRouter = express.Router();
 
-function getMediaApiUrl(req: Request, key: string): string {
-  const baseUrl = req.baseUrl || '/api/media';
-  return `${baseUrl.replace(/\/$/, '')}/${key}`;
-}
+mediaRouter.use((_req, res, next) => {
+  res.setHeader('Cache-Control', 'private, no-store');
+  next();
+});
 
 function isLocalFileUrl(url: string): boolean {
-  let schemeStart = 0;
-  while (
-    schemeStart < url.length &&
-    (url.charCodeAt(schemeStart) <= 0x20 || url.charAt(schemeStart).trim() === '')
-  ) {
-    schemeStart += 1;
-  }
-
-  // Match WHATWG preprocessing, plus Unicode whitespace, so malformed file URLs fail closed.
-  const normalizedUrl = url.slice(schemeStart).replace(/[\t\n\r]/g, '');
-  return /^file:/i.test(normalizedUrl);
-}
-
-function getBrowserSafeMediaUrl(storageUrl: string | null, apiUrl: string): string | null {
-  return storageUrl && isLocalFileUrl(storageUrl) ? apiUrl : storageUrl;
+  // Mirror browser URL preprocessing and strip leading Unicode whitespace as well.
+  return /^file:/i.test(url.replace(/[\t\n\r]/g, '').replace(/^[\s\u0000-\u0020]+/, ''));
 }
 
 /**
@@ -67,9 +55,9 @@ mediaRouter.get('/stats', async (_req: Request, res: Response): Promise<void> =>
  * Path format: /info/audio/abc123.mp3
  */
 mediaRouter.get('/info/:type/:filename', async (req: Request, res: Response): Promise<void> => {
-  res.setHeader('Cache-Control', 'private, no-store');
-
-  const paramsResult = MediaSchemas.Info.Params.safeParse(req.params);
+  const paramsResult = (
+    req.params.type === 'blob' ? MediaRouteParamsSchema : MediaSchemas.Info.Params
+  ).safeParse(req.params);
   if (!paramsResult.success) {
     replyValidationError(res, paramsResult.error);
     return;
@@ -86,16 +74,15 @@ mediaRouter.get('/info/:type/:filename', async (req: Request, res: Response): Pr
     }
 
     const storage = getMediaStorage();
-    const apiUrl = getMediaApiUrl(req, key);
-    let storageUrl: string | null = null;
+    const apiUrl = `${req.baseUrl || '/api/media'}/${key}`;
+    let url: string | null = null;
     try {
-      storageUrl = await storage.getUrl(key);
+      url = await storage.getUrl(key);
     } catch (error) {
-      logger.warn('[Media API] Failed to generate provider URL; using API access only', {
-        error,
-        key,
-        providerId: storage.providerId,
-      });
+      logger.warn('[Media API] Failed to generate provider URL', { error, key });
+    }
+    if (url && isLocalFileUrl(url)) {
+      url = apiUrl;
     }
 
     res.json(
@@ -104,7 +91,7 @@ mediaRouter.get('/info/:type/:filename', async (req: Request, res: Response): Pr
         data: {
           key,
           exists: true,
-          url: getBrowserSafeMediaUrl(storageUrl, apiUrl),
+          url,
           apiUrl,
         },
       }),
@@ -123,9 +110,9 @@ mediaRouter.get('/info/:type/:filename', async (req: Request, res: Response): Pr
  * The key is constructed from type + filename, e.g., "audio/abc123.mp3"
  */
 mediaRouter.get('/:type/:filename', async (req: Request, res: Response): Promise<void> => {
-  res.setHeader('Cache-Control', 'private, no-store');
-
-  const paramsResult = MediaSchemas.Get.Params.safeParse(req.params);
+  const paramsResult = (
+    req.params.type === 'blob' ? MediaRouteParamsSchema : MediaSchemas.Get.Params
+  ).safeParse(req.params);
   if (!paramsResult.success) {
     replyValidationError(res, paramsResult.error);
     return;
@@ -140,6 +127,31 @@ mediaRouter.get('/:type/:filename', async (req: Request, res: Response): Promise
     const exists = await mediaExists(key);
     if (!exists) {
       res.status(404).json({ error: 'Media not found' });
+      return;
+    }
+
+    if (type === 'blob') {
+      const storage = getMediaStorage();
+      const { data, contentType } = storage.retrieveWithMetadata
+        ? await storage.retrieveWithMetadata(key)
+        : { data: await storage.retrieve(key), contentType: undefined };
+      const mimeType =
+        typeof contentType === 'string' && /^[a-z]+\/[a-z0-9_+-]+$/i.test(contentType)
+          ? contentType
+          : 'application/octet-stream';
+      res.setHeader('Content-Type', mimeType);
+      if (!isSafeInlineBlobMimeType(mimeType)) {
+        res.setHeader('Content-Disposition', 'attachment');
+      }
+      res.setHeader('X-Content-Type-Options', 'nosniff');
+      res.setHeader('Content-Length', data.length);
+      res.setHeader(
+        'Cache-Control',
+        mimeType === 'application/octet-stream'
+          ? 'private, no-store'
+          : 'private, max-age=31536000, immutable',
+      );
+      res.send(data);
       return;
     }
 
@@ -164,9 +176,9 @@ mediaRouter.get('/:type/:filename', async (req: Request, res: Response): Promise
     const contentType = contentTypes[extension] || 'application/octet-stream';
 
     res.setHeader('Content-Type', contentType);
-    res.setHeader('Content-Length', data.length);
-    res.setHeader('Cache-Control', 'private, max-age=31536000, immutable');
     res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Content-Length', data.length);
+    res.setHeader('Cache-Control', 'private, max-age=31536000, immutable'); // 1 year cache (content-addressed)
     res.send(data);
   } catch (error) {
     logger.error('[Media API] Error serving media', { error });
@@ -175,6 +187,5 @@ mediaRouter.get('/:type/:filename', async (req: Request, res: Response): Promise
 });
 
 mediaRouter.use((_req: Request, res: Response): void => {
-  res.setHeader('Cache-Control', 'private, no-store');
   res.status(404).json({ error: 'Media route not found' });
 });
