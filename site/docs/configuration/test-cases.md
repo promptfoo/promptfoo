@@ -350,6 +350,12 @@ Here `"1,000"` is a single search term (the comma is preserved), while `in stock
 At the assertion-string level, escape a literal double quote inside a quoted value as `\"` or `""`. In a CSV file, remember to apply CSV escaping as well by doubling every double quote in the cell.
 :::
 
+When an assertion in a `__expected` cell omits its threshold, Promptfoo uses the
+same default or validation as the corresponding YAML assertion. To preserve a
+specific cutoff, write it explicitly, such as `similar(0.8):Paris` or
+`levenshtein(0):Paris`. The `cost` and `latency` assertions require an explicit
+threshold.
+
 ### Special CSV Columns
 
 | Column                                                      | Purpose                                                  | Example                                                           |
