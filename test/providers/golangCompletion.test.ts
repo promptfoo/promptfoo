@@ -303,7 +303,9 @@ describe('GolangProvider', () => {
 
   it('keeps the provider config out of log messages and context', async () => {
     const secret = 'fake-api-key-for-this-test';
-    const provider = new GolangProvider('script.go', { config: { connection: { opaque: secret } } });
+    const provider = new GolangProvider('script.go', {
+      config: { connection: { opaque: secret } },
+    });
 
     await provider.callApi('hello');
 

@@ -213,7 +213,9 @@ describe('PythonProvider', () => {
 
     it('should keep the provider config out of log messages and context', async () => {
       const secret = 'fake-api-key-for-this-test';
-      const provider = new PythonProvider('script.py', { config: { connection: { opaque: secret } } });
+      const provider = new PythonProvider('script.py', {
+        config: { connection: { opaque: secret } },
+      });
       // with the cache on, so the cache key and caching messages are logged too
       mockIsCacheEnabled.mockReturnValue(true);
       mockGetCache.mockResolvedValue({

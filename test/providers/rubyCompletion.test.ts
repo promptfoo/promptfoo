@@ -159,7 +159,9 @@ describe('RubyProvider', () => {
       const spies = (['debug', 'info', 'warn', 'error'] as const).map((level) =>
         vi.spyOn(logger, level),
       );
-      const provider = new RubyProvider('script.rb', { config: { connection: { opaque: secret } } });
+      const provider = new RubyProvider('script.rb', {
+        config: { connection: { opaque: secret } },
+      });
       // with the cache on, so the cache key and caching messages are logged too
       mockIsCacheEnabled.mockReturnValue(true);
       mockGetCache.mockResolvedValue({
