@@ -22,6 +22,13 @@ import {
   sanitizeUrlForLogging,
 } from '../../util/sanitizer';
 import { escapeRegExp } from '../../util/text';
+import {
+  type DecisionGradingConfig,
+  decisionLabelEntries,
+  gradeDecisionScore,
+  readTextDecisionRubric,
+  resolveDecisionThreshold,
+} from '../decisionGrading';
 import { normalizeResponsesInput } from '../responses/input';
 import { getResponsesTokenUsage } from '../responses/processor';
 import { getRequestTimeoutMs } from '../shared';
@@ -30,7 +37,7 @@ import { calculateOpenAIUsageCost } from './billing';
 import { hasHeaderOverride, OpenAiGenericProvider } from './index';
 import { appendOpenAiApiPath, assertOpenAiApiModel, hasSensitiveOpenAiCacheString } from './util';
 
-import type { EnvOverrides } from '../../types/env';
+import type { EnvOverrides } from '../../contracts/env';
 import type {
   CallApiContextParams,
   CallApiOptionsParams,
@@ -279,19 +286,14 @@ const responseSchema = z.object({
     ),
 });
 
-interface DecisionsOptions extends OpenAiSharedOptions {
+interface DecisionsOptions
+  extends OpenAiSharedOptions,
+    DecisionGradingConfig<string | z.infer<typeof levelSchema>> {
   model?: string;
   questions?: z.infer<typeof questionsSchema>;
   prompt_cache_key?: string | null;
   prompt_cache_options?: z.infer<typeof requestSchema.shape.prompt_cache_options>;
   safety_identifier?: string | null;
-  /** llm-rubric: minimum normalized score to pass. */
-  threshold?: number;
-  /** llm-rubric: ordered score levels, low to high. Omit for a predicate. */
-  levels?: Array<string | z.infer<typeof levelSchema>>;
-  /** classifier: what to decide and the possible string labels. */
-  instructions?: string;
-  labels?: string[] | Record<string, string | null>;
 }
 
 function hasSensitiveValue(value: unknown): boolean {
@@ -499,12 +501,10 @@ export class OpenAiDecisionsProvider extends OpenAiGenericProvider {
       };
     }
     const { instructions, labels } = parsed.data;
-    const choices = Array.isArray(labels)
-      ? labels.map((value) => ({ value }))
-      : Object.entries(labels).map(([value, description]) => ({
-          value,
-          ...(description === null ? {} : { description }),
-        }));
+    const choices = decisionLabelEntries(labels).map(([value, description]) => ({
+      value,
+      ...(description === null ? {} : { description }),
+    }));
     const result = await this.ask(
       prompt,
       {
@@ -536,38 +536,13 @@ export class OpenAiDecisionsProvider extends OpenAiGenericProvider {
     context: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    // The matcher puts attachments in the rendered prompt, while vars.output may be only a
-    // placeholder. Reject actual media parts rather than grading that placeholder as evidence.
-    try {
-      const messages = z
-        .array(z.object({ content: z.unknown().optional() }))
-        .safeParse(JSON.parse(prompt));
-      const textPart = z.object({
-        type: z.enum(['text', 'input_text', 'output_text']),
-        text: z.string(),
-      });
-      if (
-        messages.success &&
-        messages.data.some(
-          ({ content }) =>
-            Array.isArray(content) && content.some((part) => !textPart.safeParse(part).success),
-        )
-      ) {
-        return {
-          error:
-            'OpenAI Decisions `llm-rubric` supports text output only; media attachments are not supported.',
-        };
-      }
-    } catch {
-      // Plain-text grading prompts have no structured attachments.
+    const rubric = readTextDecisionRubric(prompt, context.vars, 'OpenAI Decisions');
+    if ('error' in rubric) {
+      return rubric;
     }
-    const threshold = probability.safeParse(config.threshold ?? 0.5);
-    if (!threshold.success) {
+    const threshold = resolveDecisionThreshold(config.threshold);
+    if (threshold === undefined) {
       return { error: 'OpenAI Decisions `threshold` must be a number from 0 to 1.' };
-    }
-    const { rubric, output } = context.vars;
-    if (rubric === undefined || output === undefined) {
-      return { error: 'OpenAI Decisions `llm-rubric` requires rubric and output variables.' };
     }
     const levels =
       config.levels === undefined ? undefined : gradingLevelsSchema.safeParse(config.levels);
@@ -577,16 +552,11 @@ export class OpenAiDecisionsProvider extends OpenAiGenericProvider {
           'OpenAI Decisions `levels` must list 2 to 10 strings or {label, description?} objects, ordered low to high.',
       };
     }
-    const instructions = typeof rubric === 'string' ? rubric : JSON.stringify(rubric);
+    const { instructions, input } = rubric;
     const question: z.infer<typeof questionSchema> = levels?.success
       ? { name: 'grade', type: 'score', instructions, levels: levels.data }
       : { name: 'grade', type: 'predicate', instructions };
-    const result = await this.ask(
-      typeof output === 'string' ? output : JSON.stringify(output),
-      { ...config, questions: [question] },
-      context,
-      options,
-    );
+    const result = await this.ask(input, { ...config, questions: [question] }, context, options);
     if (result.error) {
       return result;
     }
@@ -600,9 +570,8 @@ export class OpenAiDecisionsProvider extends OpenAiGenericProvider {
     }
     const raw = answer.type === 'predicate' ? answer.probability : answer.score;
     const top = question.type === 'score' ? question.levels.length - 1 : 1;
-    const score = raw / top;
-    const pass = score >= threshold.data;
-    const comparison = `< threshold ${threshold.data}`;
+    const { pass, score } = gradeDecisionScore(raw, top, threshold);
+    const comparison = `< threshold ${threshold}`;
     const reason =
       answer.type === 'predicate'
         ? `Decisions predicate probability ${raw} ${comparison}`
