@@ -1,23 +1,16 @@
-import fs from 'fs/promises';
-
 import { parse } from 'csv-parse/sync';
 import logger from '../../logger';
 import { getRequestTimeoutMs } from '../../providers/shared';
 import { fetchWithTimeout } from '../../util/fetch/index';
+import { sampleArray } from '../../util/generation';
 import { RedteamPluginBase } from './base';
 
 import type { Assertion, TestCase } from '../../types/index';
 
 const PLUGIN_ID = 'promptfoo:redteam:xstest';
 
-const PRODUCTION_DATASET_URL =
+const DATASET_URL =
   'https://raw.githubusercontent.com/paul-rottger/xstest/d7bb5bd738c1fcbc36edd83d5e7d1b71a3e2d84d/xstest_prompts.csv';
-
-// Development URL - for local testing
-// const DEV_DATASET_URL =
-//   '/path/to/xstest_prompts.csv';
-
-const DATASET_URL = PRODUCTION_DATASET_URL;
 
 interface XSTestRow {
   id: string;
@@ -43,24 +36,11 @@ export async function fetchDataset(limit: number): Promise<XSTestTestCase[]> {
   try {
     logger.debug(`[XSTest] Fetching dataset from ${DATASET_URL}`);
 
-    let csvData: string;
-
-    // Check if we're using a local file path or a URL
-    if (DATASET_URL.startsWith('http')) {
-      // Fetch from URL
-      const response = await fetchWithTimeout(DATASET_URL, {}, getRequestTimeoutMs());
-      if (!response.ok) {
-        throw new Error(`[XSTest] HTTP status: ${response.status} ${response.statusText}`);
-      }
-      csvData = await response.text();
-    } else {
-      // Read from local file
-      try {
-        csvData = await fs.readFile(DATASET_URL, 'utf8');
-      } catch (error) {
-        throw new Error(`[XSTest] Error reading local file: ${error}`);
-      }
+    const response = await fetchWithTimeout(DATASET_URL, {}, getRequestTimeoutMs());
+    if (!response.ok) {
+      throw new Error(`[XSTest] HTTP status: ${response.status} ${response.statusText}`);
     }
+    const csvData = await response.text();
 
     logger.debug(`[XSTest] Got ${csvData.length} bytes of CSV data`);
 
@@ -87,21 +67,18 @@ export async function fetchDataset(limit: number): Promise<XSTestTestCase[]> {
 
     logger.debug(`[XSTest] Found ${validRows.length} valid rows with prompts and labels`);
 
-    // Convert the raw data to test cases and shuffle them
-    const testCases = validRows
-      .map(
-        (row): XSTestTestCase => ({
-          vars: {
-            prompt: row.prompt,
-            focus: row.focus || '',
-            type: row.type || '',
-            label: row.label || '',
-            note: row.note || '',
-          },
-        }),
-      )
-      .sort(() => Math.random() - 0.5) // Shuffle the array
-      .slice(0, limit); // Take the first n items after shuffling
+    // Convert a random sample of the rows to test cases
+    const testCases = sampleArray(validRows, limit).map(
+      (row): XSTestTestCase => ({
+        vars: {
+          prompt: row.prompt,
+          focus: row.focus || '',
+          type: row.type || '',
+          label: row.label || '',
+          note: row.note || '',
+        },
+      }),
+    );
 
     logger.debug(`[XSTest] Generated ${testCases.length} test cases`);
     if (testCases.length === 0) {
