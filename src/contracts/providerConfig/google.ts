@@ -27,6 +27,19 @@ const Sampling = z.strictObject({
   topP: z.number().optional(),
   topK: z.number().optional(),
 });
+// Model support varies (XHIGH is Gemini 4 Hydrogen only); the Gemini API accepts either case.
+const ThinkingLevel = z.enum([
+  'MINIMAL',
+  'LOW',
+  'MEDIUM',
+  'HIGH',
+  'XHIGH',
+  'minimal',
+  'low',
+  'medium',
+  'high',
+  'xhigh',
+]);
 const CallingMode = z.enum([
   'MODE_UNSPECIFIED',
   'AUTO',
@@ -111,6 +124,7 @@ export const GeminiSharedConfigInputSchema = Sampling.extend({
       }),
     )
     .optional(),
+  // Runtime spreads generationConfig into the request, so untyped Gemini fields stay open JSON.
   generationConfig: Sampling.extend({
     response_mime_type: z.string().optional(),
     response_schema: JsonObject.optional(),
@@ -120,10 +134,20 @@ export const GeminiSharedConfigInputSchema = Sampling.extend({
     thinkingConfig: z
       .strictObject({
         thinkingBudget: z.number().optional(),
-        thinkingLevel: z.enum(['MINIMAL', 'LOW', 'MEDIUM', 'HIGH']).optional(),
+        thinkingLevel: ThinkingLevel.optional(),
+        includeThoughts: z.boolean().optional(),
       })
       .optional(),
-  }).optional(),
+    thinking_config: z
+      .strictObject({
+        thinking_budget: z.number().optional(),
+        thinking_level: ThinkingLevel.optional(),
+        include_thoughts: z.boolean().optional(),
+      })
+      .optional(),
+  })
+    .catchall(z.json())
+    .optional(),
   responseSchema: ResponseSchema.optional(),
   toolConfig: z
     .strictObject({
@@ -220,7 +244,7 @@ export const VertexGeminiConfigInputSchema = GeminiSharedConfigInputSchema.exten
 });
 
 const Model =
-  'gemini-(?!(?:omni-flash-preview|omni-1\\.1-flash(?:-preview)?|robotics-er-2-preview|3\\.5-live-translate-preview)$)(?!robotics-er-2-streaming-)(?![^:]*-image)(?!nano-banana-2\\.1$)[^:]+';
+  'gemini-(?!(?:omni-flash-preview|omni-1\\.1-flash(?:-preview)?|robotics-er-2-preview|3\\.5-live-translate-preview|3\\.5-transcribe-live)$)(?!robotics-er-2-streaming-)(?![^:]*-image)(?!nano-banana-2\\.1$)[^:]+';
 const Options = z.strictObject({
   inputs: InputsInputSchema.optional(),
   label: z.string().optional(),
@@ -230,9 +254,12 @@ const Options = z.strictObject({
   env: ProviderEnvOverridesSchema.catchall(z.string()).optional(),
 });
 export const GoogleAiStudioProviderOptionsInputSchema = Options.extend({
-  id: z
-    .string()
-    .regex(new RegExp(`^(?:google|palm):(?:${Model}|gemini-omni-1\\.1-flash-preview)$`)),
+  id: z.string().regex(
+    new RegExp(
+      // google:gemini-3.5-transcribe routes to Interactions; Vertex keeps it on GenerateContent.
+      `^(?:google|palm):(?!gemini-3\\.5-transcribe$)(?:${Model}|gemini-omni-1\\.1-flash-preview)$`,
+    ),
+  ),
   config: GoogleAiStudioConfigInputSchema.optional(),
 });
 export const VertexGeminiProviderOptionsInputSchema = Options.extend({

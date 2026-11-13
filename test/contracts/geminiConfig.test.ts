@@ -31,7 +31,25 @@ describe('portable Gemini configuration', () => {
       },
       { tools: ['file://one.json', 'file://two.yaml'] },
       { generationConfig: { response_schema: { type: 'object' } } },
+      // generationConfig is sent verbatim, so Gemini fields without a typed entry stay open.
+      { generationConfig: { responseMimeType: 'application/json', seed: 7, candidate_count: 1 } },
+      { generationConfig: { thinking_config: { thinking_budget: 0, include_thoughts: true } } },
     ].map((config): [unknown, boolean] => [{ id: 'google:gemini-2.5-flash', config }, true]),
+    ...[
+      { thinkingConfig: { thinkingLevel: 'XHIGH', includeThoughts: true } },
+      { thinkingConfig: { thinkingLevel: 'xhigh' } },
+      { thinking_config: { thinking_level: 'XHIGH' } },
+    ].flatMap((generationConfig): [unknown, boolean][] => [
+      [{ id: 'google:gemini-4-hydrogen', config: { generationConfig } }, true],
+      [{ id: 'vertex:gemini-4-hydrogen', config: { generationConfig } }, true],
+    ]),
+    [
+      {
+        id: 'vertex:gemini-3.5-transcribe',
+        config: { generationConfig: { audioTranscriptionConfig: { languageCodes: ['en-US'] } } },
+      },
+      true,
+    ],
     [{ id: 'google:gemini-2.5-flash', inputs: { question: '{{query}}' } }, true],
     [
       {
@@ -113,6 +131,9 @@ describe('portable Gemini configuration', () => {
       'vertex:gemini-robotics-er-2-preview',
       'google:gemini-3.5-live-translate-preview',
       'google:gemini-robotics-er-2-streaming-preview',
+      'google:gemini-3.5-transcribe',
+      'vertex:gemini-3.5-transcribe-live',
+      'google:interactions:gemini-4-hydrogen',
       'google:embedding:gemini-embedding-001',
       'vertex:video:veo',
       'vertex:claude-sonnet',
@@ -132,6 +153,8 @@ describe('portable Gemini configuration', () => {
       { maxOutputToken: 10 },
       { projectId: 'wrong-service' },
       { generationConfig: { thinkingConfig: { thinkingLevel: 'invalid' } } },
+      { generationConfig: { thinking_config: { thinking_level: 'invalid' } } },
+      { generationConfig: { thinkingConfig: { includeThoughts: 'yes' } } },
       { tools: [{ functionDeclarations: [{ name: 4 }] }] },
     ].map((config): [unknown, boolean] => [{ id: 'google:gemini-2.5-flash', config }, false]),
     [{ id: 'vertex:gemini-2.5-flash', config: { apiBaseUrl: 'unsupported' } }, false],

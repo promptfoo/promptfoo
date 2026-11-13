@@ -22,12 +22,13 @@ legacy runtime response-schema TypeScript declarations remains independent.
 
 GenerateContent sampling, thinking, safety, tools, streaming, speech configuration,
 MCP and serializable callback references are covered. Open JSON is intentional in
-schema documents, provider tool payloads, `passthrough`, and Google auth options.
+schema documents, provider tool payloads, `passthrough`, Google auth options, and
+`generationConfig` fields without a typed entry, because the runtime sends them verbatim.
 Executable callback functions and SDK auth clients belong to runtime configuration.
 
 Image generation, video, Live, embeddings, Interactions, and non-Gemini Vertex
 models are outside this contract. Model IDs dispatched to those APIs by the current
-factory are excluded, including implicit Omni, Robotics, Live Translate and native
+factory are excluded, including implicit Omni, Robotics, transcription, Live Translate and native
 image routes. `google:chat:<model>` is not a supported GenerateContent alias in the
 current factory. Future routing changes must update these route tests.
 
