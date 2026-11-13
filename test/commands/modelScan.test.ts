@@ -250,12 +250,10 @@ describe('modelScanCommand', () => {
       ],
       {
         stdio: 'inherit',
-        env: {
-          ...process.env,
-          PROMPTFOO_DELEGATED: 'true',
-        },
+        env: expect.objectContaining({ PROMPTFOO_DELEGATED: 'true' }),
       },
     );
+    expect(vi.mocked(spawn).mock.calls[0][2]?.env?.OPENAI_API_KEY).toBeUndefined();
   });
 
   it('should pass scanner selection options to modelaudit', async () => {

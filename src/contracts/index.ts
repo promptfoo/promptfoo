@@ -5,6 +5,20 @@ export * from './blobs.js';
 export * from './env.js';
 export * from './prompts.js';
 export {
+  type AnthropicCompletionConfigInput,
+  AnthropicCompletionConfigInputJsonSchema,
+  AnthropicCompletionConfigInputSchema,
+  type AnthropicMessagesConfigInput,
+  AnthropicMessagesConfigInputJsonSchema,
+  AnthropicMessagesConfigInputSchema,
+  type AnthropicProviderOptionsInput,
+  AnthropicProviderOptionsInputJsonSchema,
+  AnthropicProviderOptionsInputSchema,
+  type AnthropicSharedConfigInput,
+  AnthropicSharedConfigInputJsonSchema,
+  AnthropicSharedConfigInputSchema,
+} from './providerConfig/anthropic.js';
+export {
   type McpAuthInput,
   McpAuthInputJsonSchema,
   McpAuthInputSchema,
@@ -12,6 +26,26 @@ export {
   McpAuthSchema,
 } from './providerConfig/auth.js';
 export * from './providerConfig/google.js';
+export {
+  type AzureChatConfigInput,
+  AzureChatConfigInputJsonSchema,
+  AzureChatConfigInputSchema,
+  type AzureCompletionConfigInput,
+  AzureCompletionConfigInputJsonSchema,
+  AzureCompletionConfigInputSchema,
+  type AzureEmbeddingConfigInput,
+  AzureEmbeddingConfigInputJsonSchema,
+  AzureEmbeddingConfigInputSchema,
+  type AzureProviderOptionsInput,
+  AzureProviderOptionsInputJsonSchema,
+  AzureProviderOptionsInputSchema,
+  type AzureResponsesConfigInput,
+  AzureResponsesConfigInputJsonSchema,
+  AzureResponsesConfigInputSchema,
+  type AzureSharedConfigInput,
+  AzureSharedConfigInputJsonSchema,
+  AzureSharedConfigInputSchema,
+} from './providerConfig/azure.js';
 export {
   type HttpProviderConfigInput,
   HttpProviderConfigInputJsonSchema,
