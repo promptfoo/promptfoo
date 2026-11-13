@@ -20,7 +20,7 @@ import { parseFileUrl } from './functions/loadFunction';
 import { isPlainObject } from './objectUtils';
 import { safeResolve } from './pathUtils';
 import { renderVarsInObject } from './render';
-import { formatYamlTimestamp, loadYaml, stringifyYamlTimestamps } from './yamlLoad';
+import { loadConfigYaml } from './yamlLoad';
 
 import type { NunjucksFilterMap, OutputFile, VarValue } from '../types';
 
@@ -220,7 +220,7 @@ export function maybeLoadFromExternalFile(
           allContents.push(parsed);
         }
       } else if (matchedFile.endsWith('.yaml') || matchedFile.endsWith('.yml')) {
-        const parsed = stringifyYamlTimestamps(loadYaml(contents));
+        const parsed = loadConfigYaml(contents);
         if (parsed === null || parsed === undefined) {
           continue; // Skip empty files
         }
@@ -269,7 +269,7 @@ export function maybeLoadFromExternalFile(
   }
   if (finalPath.endsWith('.yaml') || finalPath.endsWith('.yml')) {
     try {
-      return stringifyYamlTimestamps(loadYaml(contents));
+      return loadConfigYaml(contents);
     } catch (error) {
       throw new Error(`Failed to parse YAML file ${finalPath}: ${error}`);
     }
@@ -355,10 +355,6 @@ export function maybeLoadConfigFromExternalFile(
       }
     }
     return result;
-  }
-  if (config instanceof Date) {
-    // Unquoted YAML timestamps are Dates, which have no own keys and would be rebuilt as `{}`.
-    return formatYamlTimestamp(config);
   }
   return maybeLoadFromExternalFile(config, context);
 }

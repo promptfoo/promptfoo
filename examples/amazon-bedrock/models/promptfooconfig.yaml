@@ -10,11 +10,13 @@ providers:
     config:
       region: us-west-2
       max_tokens: 2048
-  - id: bedrock:us.meta.llama4-scout-17b-instruct-v1:0
-    label: Llama 4 Scout 17B
+  - id: bedrock:converse:qwen.qwen3-vl-235b-a22b
+    label: Qwen3 VL
+    config:
+      region: us-east-1
   - id: bedrock:amazon.nova-pro-v1:0
     label: Nova Pro
-  - id: bedrock:mistral.pixtral-large-2502-v1:0
+  - id: bedrock:us.mistral.pixtral-large-2502-v1:0
     label: Pixtral Large 25.02
     config:
       region: us-west-2

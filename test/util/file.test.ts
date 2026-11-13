@@ -497,20 +497,6 @@ describe('file utilities', () => {
       });
     });
 
-    it('should convert Dates from unquoted YAML timestamps to strings instead of {}', () => {
-      const config = {
-        date: new Date('2024-01-02T00:00:00Z'),
-        instant: new Date('2024-01-02T10:00:00Z'),
-        nested: { list: [new Date('2024-01-03T00:00:00Z')] },
-      };
-
-      expect(maybeLoadConfigFromExternalFile(config)).toEqual({
-        date: '2024-01-02',
-        instant: '2024-01-02T10:00:00.000Z',
-        nested: { list: ['2024-01-03'] },
-      });
-    });
-
     it('should pass non-plain objects such as Buffer and Map through unchanged', () => {
       const buffer = Buffer.from('abc');
       const map = new Map([['a', 1]]);
