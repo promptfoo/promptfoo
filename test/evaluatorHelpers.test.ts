@@ -245,7 +245,14 @@ describe('evaluatorHelpers', () => {
         .mockReturnValueOnce('report content')
         .mockReturnValueOnce('notes content');
 
-      const renderedPrompt = await renderPrompt(prompt, vars, {});
+      const renderedPrompt = await renderPrompt(
+        prompt,
+        vars,
+        {},
+        undefined,
+        undefined,
+        new Set(Object.keys(vars)),
+      );
 
       expect(renderedPrompt).toBe(
         'report content|see file://data/mixed_report_tables.html.txt for details|notes content',
@@ -261,10 +268,23 @@ describe('evaluatorHelpers', () => {
 
       vi.spyOn(fs, 'readFileSync').mockReturnValueOnce('notes content');
 
-      const renderedPrompt = await renderPrompt(toPrompt('{{ payload.note }}'), vars, {});
+      const renderedPrompt = await renderPrompt(
+        toPrompt('{{ payload.note }}'),
+        vars,
+        {},
+        undefined,
+        undefined,
+        new Set(['payload']),
+      );
 
       expect(renderedPrompt).toBe('notes content');
       expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+    });
+
+    it('leaves nested paths in runtime vars as literal text', async () => {
+      const vars = { stored: { report: 'file://untrusted-runtime-reference.txt' } };
+      const rendered = await renderPrompt(toPrompt('{{ stored.report }}'), vars);
+      expect(rendered).toBe('file://untrusted-runtime-reference.txt');
     });
 
     it('should render a JSON prompt', async () => {

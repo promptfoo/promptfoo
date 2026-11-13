@@ -237,33 +237,29 @@ function detectMimeFromBase64(base64Data: string): string | null {
 async function resolveNestedFileReferences(
   value: VarValue,
   basePath: string,
-  seen: WeakSet<object> = new WeakSet(),
+  resolved: WeakMap<object, VarValue> = new WeakMap(),
 ): Promise<VarValue> {
-  if (Array.isArray(value)) {
-    // A cyclic vars graph (YAML anchors, a JS generator returning itself) must not
-    // recurse forever: resolve each container once and leave the back-edge as authored.
-    if (seen.has(value)) {
+  if (value && typeof value === 'object') {
+    if (resolved.has(value)) {
+      return resolved.get(value)!;
+    }
+    if (Array.isArray(value)) {
+      const result: VarValue[] = [];
+      resolved.set(value, result);
+      for (const item of value) {
+        result.push(await resolveNestedFileReferences(item as VarValue, basePath, resolved));
+      }
+      return result;
+    }
+    const prototype = Object.getPrototypeOf(value);
+    if (prototype !== null && prototype !== Object.prototype) {
       return value;
     }
-    seen.add(value);
-    const result: VarValue[] = [];
-    for (const item of value) {
-      result.push(await resolveNestedFileReferences(item as VarValue, basePath, seen));
-    }
-    return result;
-  }
-
-  if (value && typeof value === 'object' && Object.getPrototypeOf(value) === Object.prototype) {
-    if (seen.has(value)) {
-      return value;
-    }
-    seen.add(value);
-    const result: Record<string, VarValue> = {};
+    const result: Record<string, VarValue> = Object.create(prototype);
+    resolved.set(value, result);
     for (const [key, item] of Object.entries(value)) {
-      // defineProperty keeps a `__proto__` key an own property instead of writing
-      // through to the prototype, which would pollute it.
       Object.defineProperty(result, key, {
-        value: await resolveNestedFileReferences(item as VarValue, basePath, seen),
+        value: await resolveNestedFileReferences(item as VarValue, basePath, resolved),
         enumerable: true,
         configurable: true,
         writable: true,
@@ -271,7 +267,6 @@ async function resolveNestedFileReferences(
     }
     return result;
   }
-
   if (typeof value !== 'string' || !value.startsWith('file://')) {
     return value;
   }
@@ -316,6 +311,7 @@ async function resolveNestedFileReferences(
  *                         rendering for. This is critical for red team testing where injection
  *                         variables contain attack payloads (e.g., SSTI, XSS) that should NOT be
  *                         evaluated by Promptfoo before reaching the target.
+ * @param nestedFileVarNames - Configured variables eligible for nested file loading.
  * @returns The rendered prompt string
  */
 export async function renderPrompt(
@@ -324,6 +320,7 @@ export async function renderPrompt(
   nunjucksFilters?: NunjucksFilterMap,
   provider?: ApiProvider,
   skipRenderVars?: string[],
+  nestedFileVarNames?: ReadonlySet<string>,
 ): Promise<string> {
   const nunjucks = getNunjucksEngine(nunjucksFilters);
   const loadedMimeTypes = setLoadedFileMimeTypes(vars);
@@ -470,7 +467,7 @@ export async function renderPrompt(
         );
       }
       vars[varName] = javascriptOutput.output;
-    } else if (value !== null && typeof value === 'object') {
+    } else if (nestedFileVarNames?.has(varName) && value !== null && typeof value === 'object') {
       vars[varName] = await resolveNestedFileReferences(value, cliState.basePath || '');
     }
   }

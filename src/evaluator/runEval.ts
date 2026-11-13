@@ -392,6 +392,7 @@ function createRunEvalSetup({
 
 async function renderRunEvalPrompt({
   filters,
+  nestedFileVarNames,
   isRedteam,
   provider,
   promptForRender,
@@ -406,6 +407,7 @@ async function renderRunEvalPrompt({
   test: AtomicTestCase;
   testSuite?: TestSuite;
   vars: Vars;
+  nestedFileVarNames: ReadonlySet<string>;
 }): Promise<RenderedRunEvalPrompt> {
   const skipRenderVars = shouldSkipRedteamInjectVar(test, testSuite, isRedteam)
     ? [getRedteamInjectVar(test, promptForRender, testSuite)]
@@ -416,6 +418,7 @@ async function renderRunEvalPrompt({
     filters,
     provider,
     skipRenderVars,
+    nestedFileVarNames,
   );
   if (isRedteam) {
     throwIfTargetPromptExceedsMaxChars(renderedPrompt, testSuite?.redteam?.maxCharsPerMessage);
@@ -1341,6 +1344,13 @@ export async function runEvalInternal(
     test,
     vars: state.vars,
   });
+  // Only authored configuration can authorize local file reads. Conversation
+  // history and stored provider outputs can contain arbitrary strings.
+  const nestedFileVarNames = new Set(
+    Object.keys(test.vars ?? {}).filter(
+      (name) => name !== '_conversation' && !Object.hasOwn(registers ?? {}, name),
+    ),
+  );
   Object.assign(state.vars, registers);
   Object.assign(
     state.vars,
@@ -1362,6 +1372,7 @@ export async function runEvalInternal(
   try {
     const rendered = await renderRunEvalPrompt({
       filters,
+      nestedFileVarNames,
       isRedteam,
       provider,
       promptForRender: state.promptForRender,
