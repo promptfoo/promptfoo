@@ -230,15 +230,17 @@ describe('matchesLlamaGuard safety hardening', () => {
     expect(result.reason).toContain('unparseable verdict');
   });
 
-  it('rejects an unrecognized configured category code instead of failing open', async () => {
-    // `S01` is a typo for `S1`; filtering on it would remove every real violation.
-    await expect(
-      matchesLlamaGuard(
-        { userPrompt: 'p', assistantResponse: 'harmful', categories: ['S01'] },
-        { provider: createMockProvider({ response: { output: 'unsafe\nS1' } }) },
-      ),
-    ).rejects.toThrow(/Unknown LlamaGuard category code\(s\): S01/);
-  });
+  it.each(['S01', 'constructor', 'toString'])(
+    'rejects the unsupported configured category %s',
+    async (category) => {
+      await expect(
+        matchesLlamaGuard(
+          { userPrompt: 'p', assistantResponse: 'harmful', categories: [category] },
+          { provider: createMockProvider({ response: { output: 'unsafe\nS1' } }) },
+        ),
+      ).rejects.toThrow(`Unknown LlamaGuard category code(s): ${category}`);
+    },
+  );
 
   it('sends distinct user and assistant turns rather than one flattened message', async () => {
     // Chat providers wrap an unparseable string in a single user message, which would

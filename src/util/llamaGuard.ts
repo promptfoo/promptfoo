@@ -35,11 +35,11 @@ export interface LlamaGuardVerdict {
 }
 
 export function describeLlamaGuardCategory(code: string): string {
-  return LLAMAGUARD_CATEGORY_DESCRIPTIONS[code] ?? code;
+  return isKnownLlamaGuardCategory(code) ? LLAMAGUARD_CATEGORY_DESCRIPTIONS[code] : code;
 }
 
 export function isKnownLlamaGuardCategory(code: string): boolean {
-  return LLAMAGUARD_CATEGORY_DESCRIPTIONS[code] !== undefined;
+  return Object.hasOwn(LLAMAGUARD_CATEGORY_DESCRIPTIONS, code);
 }
 
 /**
@@ -77,7 +77,7 @@ export function parseLlamaGuardOutput(output: string): LlamaGuardVerdict {
       .split(',')
       .map((cat) => cat.trim())
       .filter(Boolean)) {
-      if (LLAMAGUARD_CATEGORY_DESCRIPTIONS[category]) {
+      if (isKnownLlamaGuardCategory(category)) {
         categories.push(category);
       } else {
         unknownCategories.push(category);
