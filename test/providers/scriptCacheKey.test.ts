@@ -160,6 +160,19 @@ describe('scriptVisibleContextCacheKey', () => {
     expect(first).not.toContain('harmful');
   });
 
+  it('keeps trace-like field names in user-defined nested metadata', () => {
+    const fingerprint = (traceId: string) =>
+      scriptVisibleContextCacheKey({ prompt, test: { metadata: { pluginConfig: { traceId } } } });
+
+    expect(fingerprint('tenant-a')).not.toBe(fingerprint('tenant-b'));
+  });
+
+  it('keeps script-visible own __proto__ data in cache keys', () => {
+    const metadata = JSON.parse('{"__proto__": {"project": "alpha"}}');
+    const withData = scriptVisibleContextCacheKey({ prompt, test: { metadata } });
+    expect(withData).not.toBe(scriptVisibleContextCacheKey({ prompt, test: { metadata: {} } }));
+  });
+
   it('changes when script-visible metadata or the prompt changes', () => {
     const base = scriptVisibleContextCacheKey({
       prompt,

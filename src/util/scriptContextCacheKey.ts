@@ -18,7 +18,7 @@ const PER_RUN_SCRIPT_METADATA_KEYS = new Set([
  * JSON-visible copy of a value the script receives. Functions are dropped, the
  * same way `JSON.stringify` drops them before the worker reads the context.
  * Object keys are sorted so key order does not split the cache. When
- * `omitPerRunKeys` is set, per-run tracing ids are removed at every depth.
+ * `omitPerRunKeys` is set, evaluator trace IDs are removed only at the metadata root.
  */
 function canonicalizeScriptVisible(
   value: unknown,
@@ -54,18 +54,18 @@ function canonicalizeScriptVisible(
   try {
     if (Array.isArray(value)) {
       return value.map((item) => {
-        const next = canonicalizeScriptVisible(item, omitPerRunKeys, stack);
+        const next = canonicalizeScriptVisible(item, false, stack);
         return next === undefined ? null : next;
       });
     }
 
     const source = value as Record<string, unknown>;
-    const result: Record<string, unknown> = {};
+    const result: Record<string, unknown> = Object.create(null);
     for (const key of Object.keys(source).sort()) {
       if (omitPerRunKeys && PER_RUN_SCRIPT_METADATA_KEYS.has(key)) {
         continue;
       }
-      const next = canonicalizeScriptVisible(source[key], omitPerRunKeys, stack);
+      const next = canonicalizeScriptVisible(source[key], false, stack);
       if (next !== undefined) {
         result[key] = next;
       }
