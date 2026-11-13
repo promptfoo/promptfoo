@@ -1,4 +1,20 @@
 import { type ApiProvider, isApiProvider, type ProviderTypeMap } from '../types/providers';
+import invariant from './invariant';
+
+export function normalizeGraderProvider<T extends { provider?: unknown; graderProvider?: unknown }>(
+  options: T | undefined,
+  path: string,
+): T | undefined {
+  if (options?.graderProvider === undefined) {
+    return options;
+  }
+  invariant(
+    options.provider === undefined,
+    `Specify only one of ${path}.provider or ${path}.graderProvider`,
+  );
+  const { graderProvider, ...rest } = options;
+  return { ...rest, provider: graderProvider } as T;
+}
 
 type ProviderTypeValue = NonNullable<ProviderTypeMap[keyof ProviderTypeMap]>;
 
