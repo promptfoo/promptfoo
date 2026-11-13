@@ -9,39 +9,35 @@ cd amazon-bedrock/video
 
 Video generation examples using AWS Bedrock's async invoke API.
 
-> **Legacy example:** Nova Reel (`amazon.nova-reel-v1:1`) has a [Bedrock end-of-life date of September 30, 2026](https://docs.aws.amazon.com/bedrock/latest/userguide/model-lifecycle.html). New customers cannot use this Legacy model. Keep the Nova Reel configuration only for existing workloads during the remaining legacy period; no successor using the same API is established for this example.
+> **Retired-model reference:** Nova Reel reached [end of life on September 30, 2026](https://docs.aws.amazon.com/bedrock/latest/userguide/model-lifecycle-legacy.html). Its configuration is retained for reference and private extended-access workloads. Use an Active model for new evaluations; model migrations are not automatic.
 
 ## Available Models
 
-| Model            | Config                           | Region         | Duration  |
-| ---------------- | -------------------------------- | -------------- | --------- |
-| Amazon Nova Reel | `promptfooconfig.nova-reel.yaml` | us-east-1      | 6s - 2min |
-| Luma Ray 2       | `promptfooconfig.luma-ray.yaml`  | us-west-2 only | 5s or 9s  |
+| Model                      | Config                           | Region         | Duration  |
+| -------------------------- | -------------------------------- | -------------- | --------- |
+| Amazon Nova Reel (retired) | `promptfooconfig.nova-reel.yaml` | us-east-1      | 6s - 2min |
+| Luma Ray 2                 | `promptfooconfig.luma-ray.yaml`  | us-west-2 only | 5s or 9s  |
 
 ## Prerequisites
 
 Video generation requires additional AWS setup beyond standard Bedrock access.
 
-### 1. Enable Model Access
+### 1. Check Model Access
 
-Visit the [AWS Bedrock Model Access page](https://console.aws.amazon.com/bedrock/home#/modelaccess) and enable:
-
-- **Nova Reel**: `amazon.nova-reel-v1:1` (us-east-1)
-- **Luma Ray 2**: `luma.ray-v2:0` (us-west-2)
+Check the [Luma Ray 2 model card](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-luma-ai-ray2.html) for current availability and account requirements. This example uses `luma.ray-v2:0` in `us-west-2`.
 
 ### 2. Create S3 Bucket
 
 Video outputs are written to S3. Create a bucket in the same region as your model:
 
 ```bash
-# For Nova Reel (us-east-1)
-aws s3 mb s3://your-bucket-nova-reel --region us-east-1
-
 # For Luma Ray 2 (us-west-2)
 aws s3 mb s3://your-bucket-luma-ray --region us-west-2
 ```
 
 ### 3. Configure IAM Permissions
+
+Replace the account and bucket below with your own. [StartAsyncInvoke](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_StartAsyncInvoke.html) uses `bedrock:InvokeModel` on the model and the new `async-invoke` resource. Polling requires `bedrock:GetAsyncInvoke` on that invocation.
 
 ```json
 {
@@ -49,11 +45,16 @@ aws s3 mb s3://your-bucket-luma-ray --region us-west-2
   "Statement": [
     {
       "Effect": "Allow",
-      "Action": ["bedrock:InvokeModel", "bedrock:StartAsyncInvoke", "bedrock:GetAsyncInvoke"],
+      "Action": "bedrock:InvokeModel",
       "Resource": [
-        "arn:aws:bedrock:*:*:model/amazon.nova-reel-v1:1",
-        "arn:aws:bedrock:*:*:model/luma.ray-v2:0"
+        "arn:aws:bedrock:us-west-2::foundation-model/luma.ray-v2:0",
+        "arn:aws:bedrock:us-west-2:123456789012:async-invoke/*"
       ]
+    },
+    {
+      "Effect": "Allow",
+      "Action": "bedrock:GetAsyncInvoke",
+      "Resource": "arn:aws:bedrock:us-west-2:123456789012:async-invoke/*"
     },
     {
       "Effect": "Allow",
@@ -75,16 +76,13 @@ npm install @aws-sdk/client-bedrock-runtime @aws-sdk/client-s3
 Update `s3OutputUri` in the config file, then run:
 
 ```bash
-# Nova Reel
-npx promptfoo@latest eval -c promptfooconfig.nova-reel.yaml
-
 # Luma Ray 2
 npx promptfoo@latest eval -c promptfooconfig.luma-ray.yaml
 ```
 
 ## Model Comparison
 
-### Amazon Nova Reel
+### Amazon Nova Reel (historical reference)
 
 - **Best for**: Longer videos, multi-shot narratives
 - **Resolution**: 1280x720 @ 24 FPS
@@ -103,7 +101,7 @@ npx promptfoo@latest eval -c promptfooconfig.luma-ray.yaml
 
 ## Configuration Options
 
-### Nova Reel
+### Nova Reel (historical reference)
 
 ```yaml
 config:

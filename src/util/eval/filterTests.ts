@@ -17,7 +17,7 @@
 
 import logger from '../../logger';
 import { ResultFailureReason } from '../../types/index';
-import { getTestCaseDeduplicationKey } from '../../util/comparison';
+import { deduplicateTestCases } from '../../util/comparison';
 import { filterByRange } from '../../util/filterRange';
 import { warnEmptyFilterRange } from '../../util/filterRangeWarn';
 import { filterTestsByResults } from './filterTestsUtil';
@@ -49,7 +49,7 @@ export interface FilterOptions {
   failingOnly?: string;
   /** Number of tests to take from the beginning */
   firstN?: number | string;
-  /** Key-value pair(s) (format: "key=value") to filter tests by metadata. Multiple values use AND logic. */
+  /** Metadata filters: comma-separated values use OR; separate filters use AND, even for the same key. */
   metadata?: string | string[];
   /** Key-value pair(s) (format: "key=value") to filter tests by metadata. Multiple values use OR logic. */
   metadataAny?: string | string[];
@@ -65,50 +65,89 @@ export interface FilterOptions {
 
 type Tests = NonNullable<TestSuite['tests']>;
 type TestFilterFn = (test: TestCase) => boolean;
-type MetadataFilter = { key: string; value: string };
+type MetadataFilter = { key: string; values: string[] };
 
 function parseMetadataFilters(
   filters: string | string[] | undefined,
   flag: '--filter-metadata' | '--filter-metadata-any',
 ): MetadataFilter[] {
-  const normalizedFilters = filters ? (Array.isArray(filters) ? filters : [filters]) : [];
-  return normalizedFilters.map((filter) => {
+  const normalized = filters === undefined ? [] : Array.isArray(filters) ? filters : [filters];
+  return normalized.map((filter) => {
     const [key, ...valueParts] = filter.split('=');
-    const value = valueParts.join('='); // Rejoin in case value contains '='
-    if (!key || value === undefined || value === '') {
+    const value = valueParts.join('=');
+    if (!key || !value) {
       throw new Error(`${flag} must be specified in key=value format`);
     }
-    return { key, value };
+    const values = splitMetadataFilterValue(value);
+    if (values.includes('')) {
+      throw new Error(`${flag} has an empty value in "${filter}"`);
+    }
+    return { key, values };
   });
 }
 
-function createMetadataFilter(options: FilterOptions): TestFilterFn | undefined {
-  if (!options.metadata && !options.metadataAny) {
+function createMetadataFilter(
+  testSuite: TestSuite,
+  options: FilterOptions,
+): TestFilterFn | undefined {
+  if (options.metadata === undefined && options.metadataAny === undefined) {
     return undefined;
   }
-
   const allFilters = parseMetadataFilters(options.metadata, '--filter-metadata');
   const anyFilters = parseMetadataFilters(options.metadataAny, '--filter-metadata-any');
-
-  logger.debug(
-    `Filtering for metadata conditions: AND [${allFilters.map((f) => `${f.key}=${f.value}`).join(', ')}], OR [${anyFilters.map((f) => `${f.key}=${f.value}`).join(', ')}]`,
-  );
+  const defaultMetadata =
+    anyFilters.length > 0 && typeof testSuite.defaultTest === 'object'
+      ? testSuite.defaultTest.metadata
+      : undefined;
 
   return (test) => {
-    if (!test.metadata) {
-      logger.debug(`Test has no metadata: ${test.description || 'unnamed test'}`);
+    const metadata = defaultMetadata ? { ...defaultMetadata, ...test.metadata } : test.metadata;
+    if (!metadata) {
       return false;
     }
-
-    const matches = ({ key, value }: MetadataFilter) => {
-      const testValue = test.metadata?.[key];
-      return Array.isArray(testValue)
-        ? testValue.some((item) => item.toString().includes(value))
-        : testValue !== undefined && testValue.toString().includes(value);
+    const matches = ({ key, values }: MetadataFilter) => {
+      const entry = metadata[key];
+      const entries = Array.isArray(entry) ? entry : [entry];
+      return entries.some((item) => {
+        const text = item?.toString();
+        return text !== undefined && values.some((value) => text.includes(value));
+      });
     };
-
     return allFilters.every(matches) && (anyFilters.length === 0 || anyFilters.some(matches));
   };
+}
+
+/**
+ * Splits a metadata filter value into its alternatives. Commas separate alternatives, and
+ * `\,` stands for a comma inside one.
+ *
+ * Backslashes are only special in a run directly before a comma, where each pair stands for
+ * one backslash: `a\\,b` is the alternatives `a\` and `b`, and `a\\\,b` is the single value
+ * `a\,b`. Anywhere else they are literal, so paths such as `C:\dir` need no escaping.
+ */
+function splitMetadataFilterValue(value: string): string[] {
+  const alternatives = [''];
+  let index = 0;
+  while (index < value.length) {
+    let end = index;
+    while (value[end] === '\\') {
+      end++;
+    }
+    const backslashes = end - index;
+    if (value[end] === ',') {
+      alternatives[alternatives.length - 1] += '\\'.repeat(Math.floor(backslashes / 2));
+      if (backslashes % 2 === 1) {
+        alternatives[alternatives.length - 1] += ',';
+      } else {
+        alternatives.push('');
+      }
+    } else {
+      // Not before a comma: the backslashes and the character after them are literal.
+      alternatives[alternatives.length - 1] += value.slice(index, end + 1);
+    }
+    index = end + 1;
+  }
+  return alternatives;
 }
 
 function createSeededRandom(seed: number): () => number {
@@ -204,9 +243,9 @@ async function filterErrorTests(
  */
 export async function filterTests(testSuite: TestSuite, options: FilterOptions): Promise<Tests> {
   let tests = testSuite.tests || [];
-  const metadataFilter = createMetadataFilter(options);
+  const metadataFilter = createMetadataFilter(testSuite, options);
 
-  logger.debug(`Starting filterTests with options: ${JSON.stringify(options)}`);
+  logger.debug(`Starting filterTests with ${Object.keys(options).length} options`);
   logger.debug(`Initial test count: ${tests.length}`);
 
   if (Object.keys(options).length === 0) {
@@ -244,16 +283,7 @@ export async function filterTests(testSuite: TestSuite, options: FilterOptions):
     );
 
     // Create a union of both sets, deduplicating by test identity
-    const seen = new Set<string>();
-
-    tests = [...failingOnlyTests, ...errorTests].filter((test) => {
-      const key = getTestCaseDeduplicationKey(test);
-      if (seen.has(key)) {
-        return false;
-      }
-      seen.add(key);
-      return true;
-    });
+    tests = deduplicateTestCases([...failingOnlyTests, ...errorTests]);
 
     logger.debug(
       `Combined failingOnly (${failingOnlyTests.length}) and errors (${errorTests.length}) filters: ${tests.length} unique tests`,
