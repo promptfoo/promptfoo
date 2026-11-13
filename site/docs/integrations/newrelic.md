@@ -37,7 +37,7 @@ Traces are also written to Promptfoo's local trace store by default, so the buil
          http:
            endpoint: 127.0.0.1:4318
    exporters:
-     otlphttp/newrelic:
+     otlp_http/newrelic:
        endpoint: https://otlp.nr-data.net:4318
        headers:
          api-key: ${env:NEW_RELIC_LICENSE_KEY}
@@ -45,7 +45,7 @@ Traces are also written to Promptfoo's local trace store by default, so the buil
      pipelines:
        traces:
          receivers: [otlp]
-         exporters: [otlphttp/newrelic]
+         exporters: [otlp_http/newrelic]
    ```
 
    For New Relic's EU data center, set the exporter endpoint to `https://otlp.eu01.nr-data.net:4318`.
