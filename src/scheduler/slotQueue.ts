@@ -4,7 +4,6 @@ interface QueuedRequest {
   id: string;
   resolve: () => void;
   reject: (error: unknown) => void;
-  queuedAt: number;
 }
 
 export interface SlotQueueOptions {
@@ -61,8 +60,7 @@ export class SlotQueue {
    */
   async acquire(requestId: string, abortSignal?: AbortSignal): Promise<void> {
     return new Promise((resolve, reject) => {
-      const queuedAt = Date.now();
-      let timeoutId: NodeJS.Timeout | null = null;
+      let timeoutId: NodeJS.Timeout | undefined;
       const cleanup = () => {
         if (timeoutId) {
           clearTimeout(timeoutId);
@@ -80,7 +78,6 @@ export class SlotQueue {
       const onAbort = () => removeAndReject(abortSignal?.reason);
       const request: QueuedRequest = {
         id: requestId,
-        queuedAt,
         resolve: () => {
           cleanup();
           this.activeCount++;
@@ -263,10 +260,8 @@ export class SlotQueue {
    * Schedule queue processing when rate limit window resets.
    */
   private scheduleResetProcessing(): void {
-    if (this.resetTimer) {
-      clearTimeout(this.resetTimer);
-      this.resetTimer = null;
-    }
+    clearTimeout(this.resetTimer ?? undefined);
+    this.resetTimer = null;
 
     const nextResetAt = this.getNextQuotaResetAt();
     if (nextResetAt && this.waiting.length > 0) {
@@ -352,10 +347,8 @@ export class SlotQueue {
    * Callers should handle these rejections (e.g., via .catch() on acquire promises).
    */
   dispose(): void {
-    if (this.resetTimer) {
-      clearTimeout(this.resetTimer);
-      this.resetTimer = null;
-    }
+    clearTimeout(this.resetTimer ?? undefined);
+    this.resetTimer = null;
     // Reject any waiting requests
     const waiting = this.waiting;
     this.waiting = [];

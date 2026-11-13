@@ -646,10 +646,10 @@ export async function maybeLoadToolsFromExternalFile(
     }
   }
 
-  // Handle arrays by recursively processing each item
+  // Array entries are already rendered; only load their file references.
   if (Array.isArray(rendered)) {
     const results = await Promise.all(
-      rendered.map((item) => maybeLoadToolsFromExternalFile(item, vars, abortSignal)),
+      rendered.map((item) => maybeLoadToolsFromExternalFile(item, undefined, abortSignal)),
     );
     // Flatten if all items are arrays (common case: multiple file:// references)
     if (results.every((r) => Array.isArray(r))) {

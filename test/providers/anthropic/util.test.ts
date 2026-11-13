@@ -11,6 +11,7 @@ import {
   isAlwaysOnAdaptiveThinkingClaudeModel,
   isBetweenToolsLowestThinkingClaudeModel,
   isClaudeFableOrMythos5Model,
+  isClaudeHaiku55Model,
   isClaudeOpus5Model,
   isClaudeOpus55Model,
   isClaudeRegionalPremiumModel,
@@ -26,6 +27,7 @@ import {
   processAnthropicTools,
   resolveClaudeSamplingParams,
 } from '../../../src/providers/anthropic/util';
+import { createLocationProperties } from '../../factories/literalFixtures';
 import type Anthropic from '@anthropic-ai/sdk';
 
 import type {
@@ -39,6 +41,45 @@ import type {
   WebSearchToolConfig20260318,
 } from '../../../src/providers/anthropic/types';
 
+const createLocationToolSchema = () => ({
+  type: 'object' as const,
+  properties: createLocationProperties(),
+  required: ['location'],
+  additionalProperties: false,
+});
+
+const createDirectWeatherToolUse = () => ({
+  type: 'tool_use' as const,
+  caller: { type: 'direct' as const },
+  id: 'tool1',
+  name: 'get_weather' as const,
+  input: { location: 'San Francisco, CA' },
+});
+
+const createThinkingTokenUsage = () => ({
+  usage: {
+    input_tokens: 100,
+    output_tokens: 50,
+    output_tokens_details: { thinking_tokens: 20 },
+  },
+});
+
+const createThinkingBlock = () => ({
+  type: 'thinking' as const,
+  thinking: 'I need to consider the weather',
+  signature: 'abc123',
+});
+
+const createRedactedThinkingBlock = () => ({
+  type: 'redacted_thinking' as const,
+  data: 'Some redacted thinking data',
+});
+
+const createWebFetchTool = () => ({
+  type: 'web_fetch_20250910' as const,
+  name: 'web_fetch' as const,
+});
+
 type AnthropicUsageWithOutputDetails = NonNullable<Anthropic.Messages.Message['usage']> & {
   output_tokens_details?: { thinking_tokens?: number } | null;
 };
@@ -46,6 +87,31 @@ type AnthropicUsageWithOutputDetails = NonNullable<Anthropic.Messages.Message['u
 type AnthropicTestMessage = Anthropic.Messages.Message & {
   usage: AnthropicUsageWithOutputDetails;
 };
+
+const createMockMessage = (content: AnthropicTestMessage['content']): AnthropicTestMessage => ({
+  content,
+  id: '',
+  model: '',
+  role: 'assistant',
+  stop_details: null,
+  stop_reason: null,
+  stop_sequence: null,
+  type: 'message',
+  container: null,
+  diagnostics: null,
+  usage: {
+    input_tokens: 0,
+    output_tokens: 0,
+    cache_creation: null,
+    cache_creation_input_tokens: 0,
+    cache_read_input_tokens: 0,
+    server_tool_use: null,
+    service_tier: null,
+    speed: null,
+    inference_geo: null,
+    output_tokens_details: null,
+  },
+});
 
 describe('Anthropic utilities', () => {
   // Claude's sampling rules, verified live against the Messages API and Bedrock.
@@ -435,10 +501,10 @@ describe('Anthropic utilities', () => {
       ['anthropic.claude-sonnet-5', 1.1],
       ['us.anthropic.claude-sonnet-5', 1.1],
       ['global.anthropic.claude-sonnet-5', 1],
-    ])('preserves independent Bedrock Sonnet 5 estimates for %s', (model, premium) => {
-      expect(calculateAnthropicCost(model, {}, 1000, 100)).toBeCloseTo(0.0045 * premium, 10);
+    ])('calculates Bedrock Sonnet 5 estimates for %s', (model, premium) => {
+      expect(calculateAnthropicCost(model, {}, 1000, 100)).toBeCloseTo(0.003 * premium, 10);
       expect(calculateAnthropicCost(model, {}, 1000, 100, 2000, 400)).toBeCloseTo(
-        0.0066 * premium,
+        0.0044 * premium,
         10,
       );
       // Explicit rates are final and suppress the regional premium.
@@ -622,58 +688,16 @@ describe('Anthropic utilities', () => {
 
   describe('outputFromMessage', () => {
     it('should return an empty string for empty content array', () => {
-      const message: AnthropicTestMessage = {
-        content: [],
-        id: '',
-        model: '',
-        role: 'assistant',
-        stop_details: null,
-        stop_reason: null,
-        stop_sequence: null,
-        type: 'message',
-        container: null,
-        diagnostics: null,
-        usage: {
-          input_tokens: 0,
-          output_tokens: 0,
-          cache_creation: null,
-          cache_creation_input_tokens: 0,
-          cache_read_input_tokens: 0,
-          server_tool_use: null,
-          service_tier: null,
-          inference_geo: null,
-          output_tokens_details: null,
-        },
-      };
+      const message: AnthropicTestMessage = createMockMessage([]);
 
       const result = outputFromMessage(message, false);
       expect(result).toBe('');
     });
 
     it('should return text from a single text block', () => {
-      const message: AnthropicTestMessage = {
-        content: [{ type: 'text', text: 'Hello', citations: [] }],
-        id: '',
-        model: '',
-        role: 'assistant',
-        stop_details: null,
-        stop_reason: null,
-        stop_sequence: null,
-        type: 'message',
-        container: null,
-        diagnostics: null,
-        usage: {
-          input_tokens: 0,
-          output_tokens: 0,
-          cache_creation: null,
-          cache_creation_input_tokens: 0,
-          cache_read_input_tokens: 0,
-          server_tool_use: null,
-          service_tier: null,
-          inference_geo: null,
-          output_tokens_details: null,
-        },
-      };
+      const message: AnthropicTestMessage = createMockMessage([
+        { type: 'text', text: 'Hello', citations: [] },
+      ]);
 
       const result = outputFromMessage(message, false);
       expect(result).toBe('Hello');
@@ -712,44 +736,16 @@ describe('Anthropic utilities', () => {
     });
 
     it('should handle content with tool_use blocks', () => {
-      const message: AnthropicTestMessage = {
-        content: [
-          {
-            type: 'tool_use',
-            caller: { type: 'direct' },
-            id: 'tool1',
-            name: 'get_weather',
-            input: { location: 'San Francisco, CA' },
-          },
-          {
-            type: 'tool_use',
-            caller: { type: 'direct' },
-            id: 'tool2',
-            name: 'get_time',
-            input: { location: 'New York, NY' },
-          },
-        ],
-        id: '',
-        model: '',
-        role: 'assistant',
-        stop_details: null,
-        stop_reason: null,
-        stop_sequence: null,
-        type: 'message',
-        container: null,
-        diagnostics: null,
-        usage: {
-          input_tokens: 0,
-          output_tokens: 0,
-          cache_creation: null,
-          cache_creation_input_tokens: 0,
-          cache_read_input_tokens: 0,
-          server_tool_use: null,
-          service_tier: null,
-          inference_geo: null,
-          output_tokens_details: null,
+      const message: AnthropicTestMessage = createMockMessage([
+        createDirectWeatherToolUse(),
+        {
+          type: 'tool_use',
+          caller: { type: 'direct' },
+          id: 'tool2',
+          name: 'get_time',
+          input: { location: 'New York, NY' },
         },
-      };
+      ]);
 
       const result = outputFromMessage(message, false);
       expect(result).toBe(
@@ -758,39 +754,11 @@ describe('Anthropic utilities', () => {
     });
 
     it('should concatenate text and tool_use blocks as JSON strings', () => {
-      const message: AnthropicTestMessage = {
-        content: [
-          { type: 'text', text: 'Hello', citations: [] },
-          {
-            type: 'tool_use',
-            caller: { type: 'direct' },
-            id: 'tool1',
-            name: 'get_weather',
-            input: { location: 'San Francisco, CA' },
-          },
-          { type: 'text', text: 'World', citations: [] },
-        ],
-        id: '',
-        model: '',
-        role: 'assistant',
-        stop_details: null,
-        stop_reason: null,
-        stop_sequence: null,
-        type: 'message',
-        container: null,
-        diagnostics: null,
-        usage: {
-          input_tokens: 0,
-          output_tokens: 0,
-          cache_creation: null,
-          cache_creation_input_tokens: 0,
-          cache_read_input_tokens: 0,
-          server_tool_use: null,
-          service_tier: null,
-          inference_geo: null,
-          output_tokens_details: null,
-        },
-      };
+      const message: AnthropicTestMessage = createMockMessage([
+        { type: 'text', text: 'Hello', citations: [] },
+        createDirectWeatherToolUse(),
+        { type: 'text', text: 'World', citations: [] },
+      ]);
 
       const result = outputFromMessage(message, false);
       expect(result).toBe(
@@ -799,82 +767,34 @@ describe('Anthropic utilities', () => {
     });
 
     it('should handle text blocks with citations', () => {
-      const message: AnthropicTestMessage = {
-        content: [
-          {
-            type: 'text',
-            text: 'The sky is blue',
-            citations: [
-              {
-                type: 'char_location',
-                cited_text: 'The sky is blue.',
-                document_index: 0,
-                document_title: 'Nature Facts',
-                file_id: null,
-                start_char_index: 0,
-                end_char_index: 15,
-              },
-            ],
-          },
-        ],
-        id: '',
-        model: '',
-        role: 'assistant',
-        stop_details: null,
-        stop_reason: null,
-        stop_sequence: null,
-        type: 'message',
-        container: null,
-        diagnostics: null,
-        usage: {
-          input_tokens: 0,
-          output_tokens: 0,
-          cache_creation: null,
-          cache_creation_input_tokens: 0,
-          cache_read_input_tokens: 0,
-          server_tool_use: null,
-          service_tier: null,
-          inference_geo: null,
-          output_tokens_details: null,
+      const message: AnthropicTestMessage = createMockMessage([
+        {
+          type: 'text',
+          text: 'The sky is blue',
+          citations: [
+            {
+              type: 'char_location',
+              cited_text: 'The sky is blue.',
+              document_index: 0,
+              document_title: 'Nature Facts',
+              file_id: null,
+              start_char_index: 0,
+              end_char_index: 15,
+            },
+          ],
         },
-      };
+      ]);
 
       const result = outputFromMessage(message, false);
       expect(result).toBe('The sky is blue');
     });
 
     it('should include thinking blocks when showThinking is true', () => {
-      const message: AnthropicTestMessage = {
-        content: [
-          { type: 'text', text: 'Hello', citations: [] },
-          {
-            type: 'thinking',
-            thinking: 'I need to consider the weather',
-            signature: 'abc123',
-          },
-          { type: 'text', text: 'World', citations: [] },
-        ],
-        id: '',
-        model: '',
-        role: 'assistant',
-        stop_details: null,
-        stop_reason: null,
-        stop_sequence: null,
-        type: 'message',
-        container: null,
-        diagnostics: null,
-        usage: {
-          input_tokens: 0,
-          output_tokens: 0,
-          cache_creation: null,
-          cache_creation_input_tokens: 0,
-          cache_read_input_tokens: 0,
-          server_tool_use: null,
-          service_tier: null,
-          inference_geo: null,
-          output_tokens_details: null,
-        },
-      };
+      const message: AnthropicTestMessage = createMockMessage([
+        { type: 'text', text: 'Hello', citations: [] },
+        createThinkingBlock(),
+        { type: 'text', text: 'World', citations: [] },
+      ]);
 
       const result = outputFromMessage(message, true);
       expect(result).toBe(
@@ -1087,109 +1007,33 @@ describe('Anthropic utilities', () => {
     });
 
     it('should exclude thinking blocks when showThinking is false', () => {
-      const message: AnthropicTestMessage = {
-        content: [
-          { type: 'text', text: 'Hello', citations: [] },
-          {
-            type: 'thinking',
-            thinking: 'I need to consider the weather',
-            signature: 'abc123',
-          },
-          { type: 'text', text: 'World', citations: [] },
-        ],
-        id: '',
-        model: '',
-        role: 'assistant',
-        stop_details: null,
-        stop_reason: null,
-        stop_sequence: null,
-        type: 'message',
-        container: null,
-        diagnostics: null,
-        usage: {
-          input_tokens: 0,
-          output_tokens: 0,
-          cache_creation: null,
-          cache_creation_input_tokens: 0,
-          cache_read_input_tokens: 0,
-          server_tool_use: null,
-          service_tier: null,
-          inference_geo: null,
-          output_tokens_details: null,
-        },
-      };
+      const message: AnthropicTestMessage = createMockMessage([
+        { type: 'text', text: 'Hello', citations: [] },
+        createThinkingBlock(),
+        { type: 'text', text: 'World', citations: [] },
+      ]);
 
       const result = outputFromMessage(message, false);
       expect(result).toBe('Hello\n\nWorld');
     });
 
     it('should include redacted_thinking blocks when showThinking is true', () => {
-      const message: AnthropicTestMessage = {
-        content: [
-          { type: 'text', text: 'Hello', citations: [] },
-          {
-            type: 'redacted_thinking',
-            data: 'Some redacted thinking data',
-          },
-          { type: 'text', text: 'World', citations: [] },
-        ],
-        id: '',
-        model: '',
-        role: 'assistant',
-        stop_details: null,
-        stop_reason: null,
-        stop_sequence: null,
-        type: 'message',
-        container: null,
-        diagnostics: null,
-        usage: {
-          input_tokens: 0,
-          output_tokens: 0,
-          cache_creation: null,
-          cache_creation_input_tokens: 0,
-          cache_read_input_tokens: 0,
-          server_tool_use: null,
-          service_tier: null,
-          inference_geo: null,
-          output_tokens_details: null,
-        },
-      };
+      const message: AnthropicTestMessage = createMockMessage([
+        { type: 'text', text: 'Hello', citations: [] },
+        createRedactedThinkingBlock(),
+        { type: 'text', text: 'World', citations: [] },
+      ]);
 
       const result = outputFromMessage(message, true);
       expect(result).toBe('Hello\n\nRedacted Thinking: Some redacted thinking data\n\nWorld');
     });
 
     it('should exclude redacted_thinking blocks when showThinking is false', () => {
-      const message: AnthropicTestMessage = {
-        content: [
-          { type: 'text', text: 'Hello', citations: [] },
-          {
-            type: 'redacted_thinking',
-            data: 'Some redacted thinking data',
-          },
-          { type: 'text', text: 'World', citations: [] },
-        ],
-        id: '',
-        model: '',
-        role: 'assistant',
-        stop_details: null,
-        stop_reason: null,
-        stop_sequence: null,
-        type: 'message',
-        container: null,
-        diagnostics: null,
-        usage: {
-          input_tokens: 0,
-          output_tokens: 0,
-          cache_creation: null,
-          cache_creation_input_tokens: 0,
-          cache_read_input_tokens: 0,
-          server_tool_use: null,
-          service_tier: null,
-          inference_geo: null,
-          output_tokens_details: null,
-        },
-      };
+      const message: AnthropicTestMessage = createMockMessage([
+        { type: 'text', text: 'Hello', citations: [] },
+        createRedactedThinkingBlock(),
+        { type: 'text', text: 'World', citations: [] },
+      ]);
 
       const result = outputFromMessage(message, false);
       expect(result).toBe('Hello\n\nWorld');
@@ -1683,10 +1527,7 @@ describe('Anthropic utilities', () => {
     });
 
     it('should handle web_fetch tool with minimal configuration', () => {
-      const webFetchTool: WebFetchToolConfig = {
-        type: 'web_fetch_20250910',
-        name: 'web_fetch',
-      };
+      const webFetchTool: WebFetchToolConfig = createWebFetchTool();
 
       const { processedTools, requiredBetaFeatures } = processAnthropicTools([webFetchTool]);
 
@@ -1725,14 +1566,7 @@ describe('Anthropic utilities', () => {
         name: 'get_weather',
         description: 'Get weather information',
         strict: true,
-        input_schema: {
-          type: 'object',
-          properties: {
-            location: { type: 'string' },
-          },
-          required: ['location'],
-          additionalProperties: false,
-        },
+        input_schema: createLocationToolSchema(),
       };
 
       const { processedTools, requiredBetaFeatures } = processAnthropicTools([strictTool]);
@@ -1748,9 +1582,7 @@ describe('Anthropic utilities', () => {
         description: 'Get weather information',
         input_schema: {
           type: 'object',
-          properties: {
-            location: { type: 'string' },
-          },
+          properties: createLocationProperties(),
           required: ['location'],
         },
       };
@@ -1769,9 +1601,7 @@ describe('Anthropic utilities', () => {
         strict: false,
         input_schema: {
           type: 'object',
-          properties: {
-            location: { type: 'string' },
-          },
+          properties: createLocationProperties(),
         },
       };
 
@@ -1786,12 +1616,7 @@ describe('Anthropic utilities', () => {
         name: 'get_weather',
         description: 'Get weather',
         strict: true,
-        input_schema: {
-          type: 'object',
-          properties: { location: { type: 'string' } },
-          required: ['location'],
-          additionalProperties: false,
-        },
+        input_schema: createLocationToolSchema(),
       };
 
       const strictTool2: Anthropic.Tool & { strict: boolean } = {
@@ -2064,10 +1889,7 @@ describe('Anthropic utilities', () => {
     });
 
     it('should handle mix of v1 and v2 web fetch tools', () => {
-      const v1Tool: WebFetchToolConfig = {
-        type: 'web_fetch_20250910',
-        name: 'web_fetch',
-      };
+      const v1Tool: WebFetchToolConfig = createWebFetchTool();
       const v2Tool: WebFetchToolConfigV2 = {
         type: 'web_fetch_20260309',
         name: 'web_fetch',
@@ -2090,13 +1912,7 @@ describe('Anthropic utilities', () => {
     });
 
     it('should preserve Anthropic thinking token usage', () => {
-      const data = {
-        usage: {
-          input_tokens: 100,
-          output_tokens: 50,
-          output_tokens_details: { thinking_tokens: 20 },
-        },
-      };
+      const data = createThinkingTokenUsage();
       const result = getTokenUsage(data, false);
       expect(result).toEqual({
         total: 150,
@@ -2160,13 +1976,7 @@ describe('Anthropic utilities', () => {
     });
 
     it('should not report thinking tokens for cached responses', () => {
-      const data = {
-        usage: {
-          input_tokens: 100,
-          output_tokens: 50,
-          output_tokens_details: { thinking_tokens: 20 },
-        },
-      };
+      const data = createThinkingTokenUsage();
       const result = getTokenUsage(data, true);
       expect(result).toEqual({ cached: 150, total: 150 });
     });
@@ -2346,6 +2156,76 @@ describe('Anthropic utilities', () => {
       // cache creation: 100 * 25/1e6 * 1.25 = 0.003125
       // output: 500 * 125/1e6 = 0.0625
       expect(cost).toBeCloseTo(0.025 + 0.0005 + 0.003125 + 0.0625, 6);
+    });
+  });
+
+  describe.each(['claude-fable-5-2', 'claude-mythos-5-2'])('Claude 5.2 model %s', (model) => {
+    const ids = [
+      model,
+      `anthropic:messages:${model}`,
+      `anthropic.${model}`,
+      `us.anthropic.${model}`,
+      `global.anthropic.${model}`,
+    ];
+
+    it('is registered at $8/$40 with 0.025x cache reads', () => {
+      expect(ANTHROPIC_MODELS.find((entry) => entry.id === model)?.cost).toEqual({
+        input: 8 / 1e6,
+        output: 40 / 1e6,
+      });
+      // 1000 * 8e-6 + 500 * 40e-6 = 0.028
+      expect(calculateAnthropicCost(model, {}, 1000, 500)).toBeCloseTo(0.028, 10);
+      // + 200 cache reads * 0.2e-6 + 100 five-minute writes * 10e-6 = 0.00004 + 0.001
+      expect(calculateAnthropicCost(model, {}, 1000, 500, 200, 100)).toBeCloseTo(0.02904, 10);
+      // One-hour cache writes bill at 2x input ($16 / MTok).
+      expect(calculateAnthropicCost(model, {}, 0, 0, 0, 100, 100)).toBeCloseTo(0.0016, 10);
+      // The full 1M context bills at the flat rate.
+      expect(calculateAnthropicCost(model, {}, 900_000, 10_000)).toBeCloseTo(7.6, 8);
+    });
+
+    it('applies the regional and US inference-geo premiums only where they bill', () => {
+      expect(calculateAnthropicCost(`us.anthropic.${model}`, {}, 1000, 500)).toBeCloseTo(
+        0.0308,
+        10,
+      );
+      expect(calculateAnthropicCost(`global.anthropic.${model}`, {}, 1000, 500)).toBeCloseTo(
+        0.028,
+        10,
+      );
+      expect(
+        calculateAnthropicCost(model, { extra_body: { inference_geo: 'us' } }, 1000, 500),
+      ).toBeCloseTo(0.0308, 10);
+    });
+
+    it('keeps the Fable 5.1 request rules (verified live)', () => {
+      for (const id of ids) {
+        expect(isSamplingParamsDeprecatedClaudeModel(id, { allowGenerationFallback: false })).toBe(
+          true,
+        );
+        expect(isAlwaysOnAdaptiveThinkingClaudeModel(id)).toBe(true);
+        expect(isForcedToolChoiceUnsupportedClaudeModel(id)).toBe(true);
+        expect(isClaudeRegionalPremiumModel(id)).toBe(true);
+        expect(claudeThinkingConsumesTokens(id, undefined)).toBe(true);
+        expect(getClaudeModelWarningName(id)).toBe('Claude Fable 5.2 and Claude Mythos 5.2');
+      }
+      for (const effort of [undefined, 'low', 'high', 'max'] as const) {
+        expect(normalizeClaudeThinkingConfig(model, { type: 'disabled' }, effort)).toBeUndefined();
+      }
+      expect(
+        normalizeClaudeThinkingConfig(
+          model,
+          { type: 'enabled', budget_tokens: 4096 } as any,
+          'high',
+        ),
+      ).toEqual({ type: 'adaptive' });
+    });
+
+    it('does not let neighboring IDs inherit 5.2 pricing or warnings', () => {
+      expect(getClaudeModelWarningName(`${model}0`)).toBe('Claude Fable 5 and Claude Mythos 5');
+      expect(getClaudeModelWarningName(model.replace('5-2', '5-1'))).toBe(
+        'Claude Fable 5.1 and Claude Mythos 5.1',
+      );
+      expect(calculateAnthropicCost(`${model}-latest`, {}, 1000, 500)).toBeUndefined();
     });
   });
 
@@ -3026,12 +2906,12 @@ describe('Anthropic utilities', () => {
       ).toEqual({ type: 'adaptive' });
     });
 
-    it('bills $2/$10 with 0.1x cache reads and a flat 1M context', () => {
+    it('bills $2/$10 with 0.05x cache reads and a flat 1M context', () => {
       // 1000 * 2e-6 + 500 * 10e-6 = 0.007
       expect(calculateAnthropicCost('claude-sonnet-5-5', {}, 1000, 500)).toBeCloseTo(0.007, 10);
-      // + 200 cache reads * 0.2e-6 + 100 cache writes * 2.5e-6 = 0.00004 + 0.00025
+      // + 200 cache reads * 0.1e-6 + 100 cache writes * 2.5e-6 = 0.00002 + 0.00025
       expect(calculateAnthropicCost('claude-sonnet-5-5', {}, 1000, 500, 200, 100)).toBeCloseTo(
-        0.00729,
+        0.00727,
         10,
       );
       // No >200K surcharge: 300,000 * 2e-6 + 20,000 * 10e-6 = 0.8
@@ -3047,6 +2927,51 @@ describe('Anthropic utilities', () => {
       expect(
         calculateAnthropicCost('global.anthropic.claude-sonnet-5-5', {}, 1000, 500),
       ).toBeCloseTo(0.007, 10);
+    });
+  });
+
+  describe('Claude Haiku 5.5', () => {
+    const HAIKU_55_IDS = [
+      'claude-haiku-5-5',
+      'anthropic:messages:claude-haiku-5-5',
+      'anthropic.claude-haiku-5-5',
+      'us.anthropic.claude-haiku-5-5',
+      'eu.anthropic.claude-haiku-5-5',
+      'jp.anthropic.claude-haiku-5-5',
+      'au.anthropic.claude-haiku-5-5',
+      'global.anthropic.claude-haiku-5-5',
+      'claude-haiku-5-5-20261015',
+    ];
+
+    it('detects Haiku 5.5 across provider naming schemes', () => {
+      for (const id of HAIKU_55_IDS) {
+        expect(isClaudeHaiku55Model(id)).toBe(true);
+        // Capability row (not only the Claude 5+ generation fallback) must mark sampling
+        // deprecated — grading and gateway paths may disable the fallback.
+        expect(isSamplingParamsDeprecatedClaudeModel(id, { allowGenerationFallback: false })).toBe(
+          true,
+        );
+        expect(isThinkingOnByDefaultClaudeModel(id)).toBe(true);
+        expect(isAlwaysOnAdaptiveThinkingClaudeModel(id)).toBe(false);
+        expect(isForcedToolChoiceUnsupportedClaudeModel(id)).toBe(false);
+        expect(isClaudeRegionalPremiumModel(id)).toBe(true);
+      }
+      expect(isClaudeHaiku55Model('claude-haiku-4-5')).toBe(false);
+      expect(isClaudeHaiku55Model('claude-haiku-5-50')).toBe(false);
+      expect(getClaudeModelWarningName('claude-haiku-5-5')).toBe('Claude Haiku 5.5');
+    });
+
+    it('omits temperature via resolveClaudeSamplingParams when deprecated', () => {
+      // Mirrors the llm-rubric grader path: default temperature 0 must not be sent.
+      const { sampling } = resolveClaudeSamplingParams(
+        { temperature: 0 },
+        {
+          thinkingEnabled: false,
+          samplingParamsDeprecated: isSamplingParamsDeprecatedClaudeModel('claude-haiku-5-5'),
+          defaultTemperature: 0,
+        },
+      );
+      expect(sampling).toEqual({});
     });
   });
 });

@@ -1,10 +1,11 @@
+const { createLoggerModule } = await vi.hoisted(async () => import('../../factories/logger'));
+
 import * as fs from 'fs';
 import path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   GoogleVideoProvider,
-  generateVideoCacheKey,
   validateAspectRatio,
   validateDuration,
   validateResolution,
@@ -52,14 +53,7 @@ vi.mock('../../../src/util/fetch/index', () => ({
   fetchWithTimeout: (...args: unknown[]) => mockFetchWithTimeout(...args),
 }));
 
-vi.mock('../../../src/logger', () => ({
-  default: {
-    debug: vi.fn(),
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-  },
-}));
+vi.mock('../../../src/logger', () => createLoggerModule());
 
 const durationConstrainedConfigs = [
   ['reference images', { referenceImages: ['file://reference.png'] }],
@@ -406,7 +400,10 @@ describe('GoogleVideoProvider', () => {
       });
 
       expect((provider as any).loadImageData(fileRef)).toEqual({
-        data: Buffer.from('media-data').toString('base64'),
+        image: {
+          bytesBase64Encoded: Buffer.from('media-data').toString('base64'),
+          mimeType: 'image/png',
+        },
       });
       expect(fs.existsSync).toHaveBeenCalledWith(expectedPath);
     });
@@ -774,49 +771,6 @@ describe('GoogleVideoProvider', () => {
         ).toEqual({ valid: true });
       },
     );
-  });
-
-  describe('generateVideoCacheKey', () => {
-    it('should generate deterministic key', () => {
-      const key1 = generateVideoCacheKey('prompt', 'veo-3.1', '16:9', '720p', 8);
-      const key2 = generateVideoCacheKey('prompt', 'veo-3.1', '16:9', '720p', 8);
-      expect(key1).toBe(key2);
-    });
-
-    it('should generate different keys for different prompts', () => {
-      const key1 = generateVideoCacheKey('prompt1', 'veo-3.1', '16:9', '720p', 8);
-      const key2 = generateVideoCacheKey('prompt2', 'veo-3.1', '16:9', '720p', 8);
-      expect(key1).not.toBe(key2);
-    });
-
-    it('should generate different keys for different models', () => {
-      const key1 = generateVideoCacheKey('prompt', 'veo-3.1', '16:9', '720p', 8);
-      const key2 = generateVideoCacheKey('prompt', 'veo-2', '16:9', '720p', 8);
-      expect(key1).not.toBe(key2);
-    });
-
-    it('should generate different keys for different durations', () => {
-      const key1 = generateVideoCacheKey('prompt', 'veo-3.1', '16:9', '720p', 4);
-      const key2 = generateVideoCacheKey('prompt', 'veo-3.1', '16:9', '720p', 8);
-      expect(key1).not.toBe(key2);
-    });
-
-    it('should include image data in cache key', () => {
-      const key1 = generateVideoCacheKey('prompt', 'veo-3.1', '16:9', '720p', 8, 'imageBase64');
-      const key2 = generateVideoCacheKey('prompt', 'veo-3.1', '16:9', '720p', 8);
-      expect(key1).not.toBe(key2);
-    });
-
-    it('should include negative prompt in cache key', () => {
-      const key1 = generateVideoCacheKey('prompt', 'veo-3.1', '16:9', '720p', 8, undefined, 'blur');
-      const key2 = generateVideoCacheKey('prompt', 'veo-3.1', '16:9', '720p', 8);
-      expect(key1).not.toBe(key2);
-    });
-
-    it('should return UUID-like format', () => {
-      const key = generateVideoCacheKey('prompt', 'veo-3.1', '16:9', '720p', 8);
-      expect(key).toMatch(/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/);
-    });
   });
 
   describe('callApi', () => {
@@ -2422,7 +2376,7 @@ describe('GoogleVideoProvider', () => {
     it.each([true, false])(
       'encodes first, last, and reference images for vertexai=%s',
       async (vertexai) => {
-        const imageData = Buffer.from('image data').toString('base64');
+        const imageData = Buffer.from([0xff, 0xd8, 0xff, 0xe0]).toString('base64');
         const operationName = 'models/veo-3.1-generate-preview/operations/image';
         const operation = {
           name: operationName,
@@ -2447,7 +2401,7 @@ describe('GoogleVideoProvider', () => {
         const body = JSON.parse(
           vertexai ? mockRequest.mock.calls[0][0].body : mockFetchWithTimeout.mock.calls[0][1].body,
         );
-        const image = { bytesBase64Encoded: imageData, mimeType: 'image/png' };
+        const image = { bytesBase64Encoded: imageData, mimeType: 'image/jpeg' };
 
         expect(result.error).toBeUndefined();
         expect(body.instances).toEqual([

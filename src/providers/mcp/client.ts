@@ -62,7 +62,12 @@ function createOAuthFetch(
         : (requestSignal ?? init?.signal);
     const send = async (rejectedToken?: string) => {
       signal?.throwIfAborted();
-      const { accessToken } = await getOAuthTokenWithExpiry(auth, serverUrl, rejectedToken);
+      const { accessToken } = await getOAuthTokenWithExpiry(
+        auth,
+        serverUrl,
+        rejectedToken,
+        signal ?? undefined,
+      );
       signal?.throwIfAborted();
       const headers = new Headers(init?.headers);
       headers.set('Authorization', `Bearer ${accessToken}`);
@@ -143,6 +148,8 @@ export class MCPClient {
   > = new Map();
 
   private cleanupPromise: Promise<void> | null = null;
+  private startupController = new AbortController();
+  private readonly pendingConnections = new Set<() => Promise<void>>();
 
   get hasInitialized(): boolean {
     return this.clients.size > 0;
@@ -171,10 +178,17 @@ export class MCPClient {
   }
 
   async initialize(): Promise<void> {
+    if (this.cleanupPromise) {
+      await this.cleanupPromise;
+    }
     if (!this.config.enabled) {
       return;
     }
 
+    if (this.startupController.signal.aborted) {
+      this.startupController = new AbortController();
+    }
+    const signal = this.startupController.signal;
     // Initialize servers
     const servers = this.config.servers || (this.config.server ? [this.config.server] : []);
     const usedKeys = new Set(this.clients.keys());
@@ -186,12 +200,18 @@ export class MCPClient {
       }
       usedKeys.add(serverKey);
       logger.info(`connecting to server ${serverKey}`);
-      await this.connectToServer(server, serverKey);
+      await this.connectToServer(server, serverKey, signal);
     }
   }
 
-  private async connectToServer(server: MCPServerConfig, serverKey: string): Promise<void> {
+  private async connectToServer(
+    server: MCPServerConfig,
+    serverKey: string,
+    signal: AbortSignal,
+  ): Promise<void> {
+    signal.throwIfAborted();
     const { Client } = await loadMcpClientSdk();
+    signal.throwIfAborted();
     const client = new Client({
       name: 'promptfoo-MCP',
       version: '1.0.0',
@@ -203,11 +223,22 @@ export class MCPClient {
       | SSEClientTransport
       | StreamableHTTPClientTransport
       | undefined;
+    let closingTransport: typeof transport;
+    let closePromise: Promise<void> | undefined;
+    const close = () => {
+      if (!closePromise || closingTransport !== transport) {
+        closingTransport = transport;
+        closePromise = this.closeConnection(client, transport);
+      }
+      return closePromise;
+    };
+    this.pendingConnections.add(close);
     try {
-      const requestOptions = getEffectiveRequestOptions(this.config);
+      const requestOptions = { ...getEffectiveRequestOptions(this.config), signal };
 
       if (server.command) {
         const { StdioClientTransport } = await import('@modelcontextprotocol/sdk/client/stdio.js');
+        signal.throwIfAborted();
         // NPM package or other command execution
         transport = new StdioClientTransport({
           command: server.command,
@@ -233,6 +264,7 @@ export class MCPClient {
           : server.path;
 
         const { StdioClientTransport } = await import('@modelcontextprotocol/sdk/client/stdio.js');
+        signal.throwIfAborted();
         transport = new StdioClientTransport({
           command,
           args: [serverPath],
@@ -254,7 +286,8 @@ export class MCPClient {
             | MCPOAuthClientCredentialsAuth
             | MCPOAuthPasswordAuth;
           logger.debug('[MCP] Fetching OAuth token');
-          await getOAuthTokenWithExpiry(oauthAuth, server.url);
+          await getOAuthTokenWithExpiry(oauthAuth, server.url, undefined, signal);
+          signal.throwIfAborted();
           oauthFetch = createOAuthFetch(oauthAuth, server.url);
         } else {
           authHeaders = getAuthHeaders(renderedServer);
@@ -276,6 +309,7 @@ export class MCPClient {
           const { StreamableHTTPClientTransport } = await import(
             '@modelcontextprotocol/sdk/client/streamableHttp.js'
           );
+          signal.throwIfAborted();
           transport = new StreamableHTTPClientTransport(
             new URL(serverUrl),
             hasOptions ? transportOptions : undefined,
@@ -292,7 +326,9 @@ export class MCPClient {
             await transport.close().catch(() => undefined);
             transport = undefined;
           }
+          signal.throwIfAborted();
           const { SSEClientTransport } = await import('@modelcontextprotocol/sdk/client/sse.js');
+          signal.throwIfAborted();
           transport = new SSEClientTransport(
             new URL(serverUrl),
             hasOptions ? transportOptions : undefined,
@@ -304,6 +340,7 @@ export class MCPClient {
         throw new Error('Either command or path or url must be specified for MCP server');
       }
 
+      signal.throwIfAborted();
       // Ping server to verify connection if configured
       if (this.config.pingOnConnect) {
         try {
@@ -339,6 +376,7 @@ export class MCPClient {
         );
       }
 
+      signal.throwIfAborted();
       this.transports.set(serverKey, transport);
       this.clients.set(serverKey, client);
       this.tools.set(serverKey, filteredTools);
@@ -357,12 +395,14 @@ export class MCPClient {
         this.transports.delete(serverKey);
         this.tools.delete(serverKey);
       }
-      await this.closeConnection(client, transport);
+      await close();
       const errorMessage = error instanceof Error ? error.message : String(error);
       if (this.isDebugEnabled) {
         logger.error(`Failed to connect to MCP server ${serverKey}: ${errorMessage}`);
       }
       throw new Error(`Failed to connect to MCP server ${serverKey}: ${errorMessage}`);
+    } finally {
+      this.pendingConnections.delete(close);
     }
   }
 
@@ -505,6 +545,8 @@ export class MCPClient {
   }
 
   private async cleanupInternal(): Promise<void> {
+    this.startupController.abort();
+    await Promise.all([...this.pendingConnections].map((close) => close()));
     const connections = [...this.clients].map(([serverKey, client]) => ({
       client,
       transport: this.transports.get(serverKey),
