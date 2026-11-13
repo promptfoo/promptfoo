@@ -171,6 +171,16 @@ describe('shouldRetry', () => {
       expect(shouldRetry(0, error, false, DEFAULT_RETRY_POLICY)).toBe(true);
     });
 
+    it.each(['ENOTFOUND', 'DEPTH_ZERO_SELF_SIGNED_CERT', 'ERR_TLS_CERT_ALTNAME_INVALID'])(
+      'does not retry native fetch with a permanent %s cause',
+      (code) => {
+        const cause = Object.assign(new Error('Connection failed'), { code });
+        const error = new TypeError('fetch failed', { cause });
+
+        expect(shouldRetry(0, error, false, DEFAULT_RETRY_POLICY)).toBe(false);
+      },
+    );
+
     it('should not retry when cause represents a non-transient user error', () => {
       const cause = new Error('Invalid JSON format');
       const error = new Error('Request validation failed', { cause });

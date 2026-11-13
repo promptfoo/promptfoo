@@ -4,6 +4,14 @@ import {
   type SystemError,
 } from '../util/fetch/errors';
 
+const TRANSIENT_NETWORK_CODES = new Set([
+  'ETIMEDOUT',
+  'ECONNREFUSED',
+  'EAI_AGAIN',
+  'UND_ERR_CONNECT_TIMEOUT',
+  'UND_ERR_SOCKET',
+]);
+
 export interface RetryPolicy {
   maxRetries: number;
   baseDelayMs: number;
@@ -77,31 +85,21 @@ export function shouldRetry(
   // across the error and nested cause.
   if (error) {
     const cause = (error as SystemError).cause as SystemError | undefined;
-    const causeCode = cause?.code ?? '';
-    const causeMessage = (cause as Error | undefined)?.message ?? '';
-    const message = `${error.message ?? ''} ${causeMessage}`.toLowerCase();
-    const code = (error as SystemError).code ?? '';
+    const message = (error.message ?? '').toLowerCase();
+    const causeMessage = (cause?.message ?? '').toLowerCase();
 
     return (
       isTransientConnectionError(error) ||
-      code === 'ETIMEDOUT' ||
-      code === 'ECONNREFUSED' ||
-      code === 'EAI_AGAIN' ||
-      code === 'UND_ERR_CONNECT_TIMEOUT' ||
-      code === 'UND_ERR_SOCKET' ||
-      causeCode === 'ETIMEDOUT' ||
-      causeCode === 'ECONNREFUSED' ||
-      causeCode === 'EAI_AGAIN' ||
-      causeCode === 'UND_ERR_CONNECT_TIMEOUT' ||
-      causeCode === 'UND_ERR_SOCKET' ||
+      TRANSIENT_NETWORK_CODES.has((error as SystemError).code ?? '') ||
+      TRANSIENT_NETWORK_CODES.has(cause?.code ?? '') ||
+      causeMessage.includes('econnrefused') ||
       message.includes('timeout') ||
       message.startsWith('websocket request timed out after ') ||
       message.includes('econnrefused') ||
       message.includes('network') ||
       message.includes('503') ||
       message.includes('502') ||
-      message.includes('504') ||
-      message.includes('fetch failed')
+      message.includes('504')
     );
   }
 
