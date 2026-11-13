@@ -50,7 +50,10 @@ describe('Configuration Loader', () => {
       });
     });
 
-    it('should accept all valid severity levels', () => {
+    it.each([
+      ['minimumSeverity', 'config'],
+      ['minSeverity', 'config-min'],
+    ])('should accept all valid severity levels with %s', (field, prefix) => {
       const testCases: Array<[CodeScanSeverity, string]> = [
         [CodeScanSeverity.LOW, 'low'],
         [CodeScanSeverity.MEDIUM, 'medium'],
@@ -59,8 +62,8 @@ describe('Configuration Loader', () => {
       ];
 
       for (const [expectedLevel, levelString] of testCases) {
-        const configPath = path.join(tempDir, `config-${levelString}.yaml`);
-        fs.writeFileSync(configPath, `minimumSeverity: ${levelString}\ndiffsOnly: true`);
+        const configPath = path.join(tempDir, `${prefix}-${levelString}.yaml`);
+        fs.writeFileSync(configPath, `${field}: ${levelString}\ndiffsOnly: true`);
 
         const config = loadConfig(configPath);
 
@@ -92,25 +95,6 @@ describe('Configuration Loader', () => {
       expect(() => loadConfig(configPath)).toThrow('Invalid configuration');
     });
 
-    it('should handle boolean diffsOnly values', () => {
-      const configPath = path.join(tempDir, 'config.yaml');
-      fs.writeFileSync(configPath, 'minimumSeverity: medium\ndiffsOnly: true');
-
-      const config = loadConfig(configPath);
-
-      expect(config.diffsOnly).toBe(true);
-    });
-
-    it('should accept minSeverity as an alias for minimumSeverity', () => {
-      const configPath = path.join(tempDir, 'config.yaml');
-      fs.writeFileSync(configPath, 'minSeverity: critical\ndiffsOnly: true');
-
-      const config = loadConfig(configPath);
-
-      expect(config.minimumSeverity).toBe(CodeScanSeverity.CRITICAL);
-      expect(config.diffsOnly).toBe(true);
-    });
-
     it('should prefer minSeverity over minimumSeverity when both provided', () => {
       const configPath = path.join(tempDir, 'config.yaml');
       fs.writeFileSync(configPath, 'minSeverity: low\nminimumSeverity: high\ndiffsOnly: false');
@@ -119,25 +103,6 @@ describe('Configuration Loader', () => {
 
       expect(config.minimumSeverity).toBe(CodeScanSeverity.LOW);
       expect(config.diffsOnly).toBe(false);
-    });
-
-    it('should accept all valid severity levels with minSeverity alias', () => {
-      const testCases: Array<[CodeScanSeverity, string]> = [
-        [CodeScanSeverity.LOW, 'low'],
-        [CodeScanSeverity.MEDIUM, 'medium'],
-        [CodeScanSeverity.HIGH, 'high'],
-        [CodeScanSeverity.CRITICAL, 'critical'],
-      ];
-
-      for (const [expectedLevel, levelString] of testCases) {
-        const configPath = path.join(tempDir, `config-min-${levelString}.yaml`);
-        fs.writeFileSync(configPath, `minSeverity: ${levelString}\ndiffsOnly: true`);
-
-        const config = loadConfig(configPath);
-
-        expect(config.minimumSeverity).toBe(expectedLevel);
-        expect(config.diffsOnly).toBe(true);
-      }
     });
 
     it('should accept inline guidance text', () => {
@@ -188,8 +153,11 @@ describe('Configuration Loader', () => {
   });
 
   describe('loadConfigOrDefault', () => {
-    it('should return default config when no path provided', () => {
-      const config = loadConfigOrDefault();
+    it.each([
+      ['no path', () => loadConfigOrDefault()],
+      ['empty string', () => loadConfigOrDefault('')],
+    ])('should return default config with %s', (_, load) => {
+      const config = load();
 
       expect(config).toEqual({
         minimumSeverity: CodeScanSeverity.MEDIUM,
@@ -206,15 +174,6 @@ describe('Configuration Loader', () => {
       expect(config).toEqual({
         minimumSeverity: CodeScanSeverity.CRITICAL,
         diffsOnly: true,
-      });
-    });
-
-    it('should return default config when empty string provided', () => {
-      const config = loadConfigOrDefault('');
-
-      expect(config).toEqual({
-        minimumSeverity: CodeScanSeverity.MEDIUM,
-        diffsOnly: false,
       });
     });
   });

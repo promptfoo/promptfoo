@@ -18,8 +18,8 @@ import { useTableStore } from './store';
 
 interface CustomMetricsProps {
   lookup: Record<string, number>;
+  counts?: Record<string, number>;
   metricTotals?: Record<string, number>;
-  totalMetricNames?: readonly string[];
   /**
    * How many metrics to display before truncating and rendering a "Show more" button.
    */
@@ -34,34 +34,46 @@ interface CustomMetricsProps {
 interface MetricValueProps {
   metric: string;
   score: number;
+  counts?: Record<string, number>;
   metricTotals?: Record<string, number>;
 }
 
-const MetricValue = ({ metric, score, metricTotals }: MetricValueProps) => {
+const MetricValue = ({ metric, score, counts, metricTotals }: MetricValueProps) => {
   if (!Number.isFinite(score)) {
     return <span data-testid={`metric-value-${metric}`}>—</span>;
   }
-  if (metricTotals && Object.prototype.hasOwnProperty.call(metricTotals, metric)) {
-    const total = metricTotals[metric];
-    const percentage = (score / total) * 100;
-    if (Number.isFinite(total) && total !== 0 && Number.isFinite(percentage)) {
-      return (
-        <span data-testid={`metric-value-${metric}`}>
-          {percentage.toFixed(2)}% ({score.toFixed(2)}/{total.toFixed(2)})
-        </span>
-      );
-    }
+  const total =
+    metricTotals && Object.hasOwn(metricTotals, metric) ? metricTotals[metric] : undefined;
+  if (total !== undefined && total !== 0 && Number.isFinite((score / total) * 100)) {
+    return (
+      <span data-testid={`metric-value-${metric}`}>
+        {((score / total) * 100).toFixed(2)}% ({score.toFixed(2)}/{total.toFixed(2)})
+      </span>
+    );
+  }
+  const count = counts && Object.hasOwn(counts, metric) ? counts[metric] : undefined;
+  if (count !== undefined && count !== 0 && Number.isFinite(score / count)) {
+    return (
+      <span data-testid={`metric-value-${metric}`}>
+        {(score / count).toFixed(2)} ({score.toFixed(2)}/{count.toFixed(2)})
+      </span>
+    );
   }
   return <span data-testid={`metric-value-${metric}`}>{score.toFixed(2)}</span>;
 };
 
-const MetricList = ({
+const CustomMetrics = ({
   lookup,
+  counts,
   metricTotals,
-  totalMetricNames = [],
   truncationCount = 10,
   onShowMore,
 }: CustomMetricsProps) => {
+  // Validate props BEFORE hooks to comply with Rules of Hooks
+  if (!lookup || !Object.keys(lookup).length) {
+    return null;
+  }
+
   const applyFilterFromMetric = useApplyFilterFromMetric();
   const { data: cloudConfig } = useCloudConfig();
   const { config } = useTableStore();
@@ -81,7 +93,6 @@ const MetricList = ({
         let displayLabel: string = metric;
         let tooltipContent: React.ReactNode | null = null;
         const policyMetric = isPolicyMetric(metric);
-        const totalMetric = totalMetricNames.includes(metric);
         const filterTargetLabel = policyMetric ? 'policy' : 'metric';
         // Display a tooltip for policy metrics.
         if (policyMetric) {
@@ -110,9 +121,6 @@ const MetricList = ({
             );
           }
         }
-        if (totalMetric) {
-          displayLabel = `${displayLabel} (total)`;
-        }
 
         return metric && typeof score !== 'undefined' ? (
           <div
@@ -132,16 +140,18 @@ const MetricList = ({
                     {displayLabel}
                   </span>
                   <span className="metric-value">
-                    <MetricValue metric={metric} score={score} metricTotals={metricTotals} />
+                    <MetricValue
+                      metric={metric}
+                      score={score}
+                      counts={counts}
+                      metricTotals={metricTotals}
+                    />
                   </span>
                 </button>
               </TooltipTrigger>
               <TooltipContent side="top">
                 <div className="space-y-2 max-w-[400px]">
                   {tooltipContent}
-                  {totalMetric ? (
-                    <p className="text-sm">Metric from the unfiltered evaluation.</p>
-                  ) : null}
                   <p className="text-sm font-medium">Click to filter by this {filterTargetLabel}</p>
                 </div>
               </TooltipContent>
@@ -164,6 +174,4 @@ const MetricList = ({
   );
 };
 
-export default function CustomMetrics(props: CustomMetricsProps) {
-  return props.lookup && Object.keys(props.lookup).length > 0 ? <MetricList {...props} /> : null;
-}
+export default CustomMetrics;

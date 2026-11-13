@@ -189,7 +189,7 @@ describe('gateway provider config handling', () => {
       const configured = await loadApiProvider('envoy:my-model', {
         options: { ...options, config: { apiBaseUrl: 'https://config.example.com/v1/' } },
       });
-      expect(configured).toHaveProperty('config.apiBaseUrl', 'https://config.example.com/v1');
+      expect(configured).toHaveProperty('config.apiBaseUrl', 'https://config.example.com/v1/');
     });
 
     it('still accepts the process environment', async () => {

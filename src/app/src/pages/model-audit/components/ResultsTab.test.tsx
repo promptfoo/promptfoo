@@ -76,6 +76,35 @@ describe('ResultsTab', () => {
     expect(screen.getByText('Informational')).toBeInTheDocument();
   });
 
+  it.each([
+    ['critical', 'critical'],
+    ['critical', 'error'],
+  ] as const)('includes %s and %s findings in the critical filter', async (first, second) => {
+    const user = userEvent.setup();
+    const scanResults: ScanResult = {
+      path: '/path/to/scan',
+      success: true,
+      rawOutput: '',
+      issues: [
+        { severity: first, message: 'First critical finding' },
+        { severity: second, message: 'Second critical finding' },
+        { severity: 'warning', message: 'Warning finding' },
+        { severity: 'info', message: 'Informational finding' },
+      ],
+    };
+    render(<ResultsTab scanResults={scanResults} onShowFilesDialog={vi.fn()} />);
+    expect(screen.getByRole('heading', { name: /Findings.*\(4\)/ })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('combobox'));
+    await user.click(screen.getByRole('option', { name: 'Critical only' }));
+
+    expect(screen.getByRole('heading', { name: /Findings.*\(2\)/ })).toBeInTheDocument();
+    expect(screen.getByText('First critical finding')).toBeInTheDocument();
+    expect(screen.getByText('Second critical finding')).toBeInTheDocument();
+    expect(screen.queryByText('Warning finding')).not.toBeInTheDocument();
+    expect(screen.queryByText('Informational finding')).not.toBeInTheDocument();
+  });
+
   it('should show raw output dialog when Raw button is clicked', async () => {
     const mockScanResults: ScanResult = {
       path: '/path/to/scan',

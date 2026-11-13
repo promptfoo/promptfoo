@@ -3,7 +3,7 @@ import { hydrateRoot } from 'react-dom/client';
 import { renderToString } from 'react-dom/server';
 
 import { fireEvent, render } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import Home from './index';
 
 /**
@@ -40,6 +40,7 @@ function activeTabInHtml(html: string): string {
 }
 
 const mounted: HTMLElement[] = [];
+const hydratedRoots: ReturnType<typeof hydrateRoot>[] = [];
 
 function mountServerMarkup(html: string): HTMLElement {
   const container = document.createElement('div');
@@ -50,6 +51,10 @@ function mountServerMarkup(html: string): HTMLElement {
 }
 
 afterEach(() => {
+  act(() => {
+    hydratedRoots.splice(0).forEach((root) => root.unmount());
+  });
+  vi.restoreAllMocks();
   while (mounted.length > 0) {
     mounted.pop()?.remove();
   }
@@ -90,9 +95,11 @@ describe('homepage walkthrough deep links', () => {
         // React reports a hydration mismatch as a *recoverable* error, which vitest can
         // surface as a file-level unhandled error rather than through console.error.
         // Capturing it here is what makes this assertion actually fail on a regression.
-        hydrateRoot(container, <Home />, {
-          onRecoverableError: (error) => errors.push(error),
-        });
+        hydratedRoots.push(
+          hydrateRoot(container, <Home />, {
+            onRecoverableError: (error) => errors.push(error),
+          }),
+        );
       });
     } finally {
       console.error = originalError;
@@ -155,14 +162,12 @@ describe('homepage walkthrough deep links', () => {
   });
 
   it('detaches the hashchange listener on unmount', () => {
-    setHash('#evals');
+    const addListener = vi.spyOn(window, 'addEventListener');
+    const removeListener = vi.spyOn(window, 'removeEventListener');
     const { unmount } = render(<Home />);
+    const registration = addListener.mock.calls.find(([event]) => event === 'hashchange');
+    expect(registration).toBeDefined();
     unmount();
-
-    // A leaked listener would call setState on an unmounted tree.
-    expect(() => {
-      setHash('#guardrails');
-      fireEvent(window, new HashChangeEvent('hashchange'));
-    }).not.toThrow();
+    expect(removeListener).toHaveBeenCalledWith('hashchange', registration![1]);
   });
 });

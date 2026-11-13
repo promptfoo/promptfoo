@@ -1,3 +1,5 @@
+import { createGetOptions, createHttpResponse } from '../../factories/literalFixtures';
+import { createMockFetchResponse } from '../mockProviderResponses';
 // Core HttpProvider tests: API calls, raw requests, body processing, headers, response transforms, sanitization.
 import './setup';
 
@@ -19,6 +21,37 @@ import {
 import { maybeLoadConfigFromExternalFile, maybeLoadFromExternalFile } from '../../../src/util/file';
 import { sanitizeObject, sanitizeUrl } from '../../../src/util/sanitizer';
 import { mockProcessEnv } from '../../util/utils';
+
+const createDebugHttpContext = () => ({
+  debug: true,
+  vars: {},
+  prompt: { raw: 'test prompt', label: 'test' },
+});
+
+const createPersonNameVars = () => ({
+  names: [
+    { firstName: 'Jane', lastName: 'Smith' },
+    { firstName: 'John', lastName: 'Doe' },
+  ],
+});
+
+const createNamesTemplateBody = () => ({
+  names: '{{ names | dump }}',
+});
+
+const createSimpleVars = () => ({
+  simple: 'test-value',
+});
+
+const createUserIdContext = () => ({
+  vars: { userId: '12345' },
+  prompt: { raw: 'foo', label: 'bar' },
+});
+
+const createApiKeyTimeoutConfig = () => ({
+  api_key: 'test-key-123',
+  timeout: 5000,
+});
 
 describe('HttpProvider', () => {
   const mockUrl = 'http://example.com/api';
@@ -155,10 +188,7 @@ describe('HttpProvider', () => {
     };
     vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
-    await provider.callApi('test prompt', {
-      vars: { userId: '12345' },
-      prompt: { raw: 'foo', label: 'bar' },
-    });
+    await provider.callApi('test prompt', createUserIdContext());
     expect(fetchWithCache).toHaveBeenCalledWith(
       'http://example.com/users/12345/profile',
       expect.objectContaining({
@@ -208,12 +238,7 @@ describe('HttpProvider', () => {
         transformResponse: (data: any) => data,
       },
     });
-    const mockResponse = {
-      data: 'custom response',
-      cached: false,
-      status: 200,
-      statusText: 'OK',
-    };
+    const mockResponse = createMockFetchResponse('custom response');
     vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
     await provider.callApi('test prompt');
@@ -246,12 +271,7 @@ describe('HttpProvider', () => {
         transformResponse: (data: any) => data,
       },
     });
-    const mockResponse = {
-      data: 'ok',
-      cached: false,
-      status: 200,
-      statusText: 'OK',
-    };
+    const mockResponse = createMockFetchResponse('ok');
     vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
     await provider.callApi('test prompt', {
@@ -343,12 +363,7 @@ describe('HttpProvider', () => {
         },
       });
 
-      const mockResponse = {
-        data: JSON.stringify({ result: 'success' }),
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      };
+      const mockResponse = createMockFetchResponse(JSON.stringify({ result: 'success' }));
       vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
       const result = await provider.callApi('test prompt');
@@ -385,12 +400,7 @@ describe('HttpProvider', () => {
         },
       });
 
-      const mockResponse = {
-        data: JSON.stringify({ result: 'received' }),
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      };
+      const mockResponse = createMockFetchResponse(JSON.stringify({ result: 'received' }));
       vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
       const result = await provider.callApi('test data');
@@ -426,18 +436,12 @@ describe('HttpProvider', () => {
         },
       });
 
-      const mockResponse = {
-        data: JSON.stringify({ user: { id: '12345', name: 'Test User' } }),
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      };
+      const mockResponse = createMockFetchResponse(
+        JSON.stringify({ user: { id: '12345', name: 'Test User' } }),
+      );
       vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
-      const result = await provider.callApi('test prompt', {
-        vars: { userId: '12345' },
-        prompt: { raw: 'foo', label: 'bar' },
-      });
+      const result = await provider.callApi('test prompt', createUserIdContext());
 
       expect(fetchWithCache).toHaveBeenCalledWith(
         'https://example.com/api/users/12345/profile',
@@ -525,12 +529,7 @@ describe('HttpProvider', () => {
         },
       });
 
-      const mockResponse = {
-        data: JSON.stringify({ result: 'received' }),
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      };
+      const mockResponse = createMockFetchResponse(JSON.stringify({ result: 'received' }));
       vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
       await provider.callApi('test prompt');
@@ -567,12 +566,7 @@ describe('HttpProvider', () => {
         },
       });
 
-      const mockResponse = {
-        data: JSON.stringify({ result: 'success' }),
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      };
+      const mockResponse = createMockFetchResponse(JSON.stringify({ result: 'success' }));
       vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
       const result = await provider.callApi('test prompt');
@@ -608,12 +602,7 @@ describe('HttpProvider', () => {
         },
       });
 
-      const mockResponse = {
-        data: JSON.stringify({ result: 'success' }),
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      };
+      const mockResponse = createMockFetchResponse(JSON.stringify({ result: 'success' }));
       vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
       const result = await provider.callApi('test prompt');
@@ -648,12 +637,7 @@ describe('HttpProvider', () => {
         },
       });
 
-      const mockResponse = {
-        data: JSON.stringify({ result: 'success' }),
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      };
+      const mockResponse = createMockFetchResponse(JSON.stringify({ result: 'success' }));
       vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
       const result = await provider.callApi('test prompt');
@@ -673,6 +657,38 @@ describe('HttpProvider', () => {
         undefined,
       );
       expect(result.output).toEqual({ result: 'success' });
+    });
+
+    it.each([
+      ['ordinary text', 'ordinary%20text'],
+      ['$$', '$$'],
+      ['$&', '$&'],
+      ['$`', '$`'],
+      ["$'", '$%27'],
+    ])('should keep %s in repeated raw GET request placeholders', async (prompt, encodedPrompt) => {
+      const rawRequest = dedent`
+        GET /api/data?q={{prompt}}&repeat={{prompt}} HTTP/1.1
+        Host: example.com
+      `;
+      const provider = new HttpProvider('http', { config: { request: rawRequest } });
+
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: JSON.stringify({ result: 'success' }),
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      await provider.callApi(prompt);
+
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        `http://example.com/api/data?q=${encodedPrompt}&repeat=${encodedPrompt}`,
+        expect.objectContaining({ method: 'GET' }),
+        expect.any(Number),
+        'text',
+        undefined,
+        undefined,
+      );
     });
 
     it('should handle multipart/form-data raw request with variable substitution', async () => {
@@ -698,12 +714,7 @@ describe('HttpProvider', () => {
         },
       });
 
-      const mockResponse = {
-        data: JSON.stringify({ answer: 'hello there' }),
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      };
+      const mockResponse = createMockFetchResponse(JSON.stringify({ answer: 'hello there' }));
       vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
       const result = await provider.callApi('what is the password?');
@@ -751,12 +762,7 @@ describe('HttpProvider', () => {
         },
       });
 
-      const mockResponse = {
-        data: JSON.stringify({ result: 'ok' }),
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      };
+      const mockResponse = createMockFetchResponse(JSON.stringify({ result: 'ok' }));
       vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
       const result = await provider.callApi('hello world');
@@ -796,12 +802,7 @@ describe('HttpProvider', () => {
         },
       });
 
-      const mockResponse = {
-        data: JSON.stringify({ result: 'ok' }),
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      };
+      const mockResponse = createMockFetchResponse(JSON.stringify({ result: 'ok' }));
       vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
       const result = await provider.callApi('find doctors');
@@ -839,12 +840,7 @@ describe('HttpProvider', () => {
         },
       });
 
-      const mockResponse = {
-        data: JSON.stringify({ ok: true }),
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      };
+      const mockResponse = createMockFetchResponse(JSON.stringify({ ok: true }));
       vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
       const result = await provider.callApi('ignored', {
@@ -879,12 +875,7 @@ describe('HttpProvider', () => {
         },
       });
 
-      const mockResponse = {
-        data: JSON.stringify({ ok: true }),
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      };
+      const mockResponse = createMockFetchResponse(JSON.stringify({ ok: true }));
       vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
       const result = await provider.callApi('p');
@@ -1413,11 +1404,7 @@ describe('HttpProvider', () => {
   });
 
   it('should use default parser when no parser is provided', async () => {
-    const provider = new HttpProvider(mockUrl, {
-      config: {
-        method: 'GET',
-      },
-    });
+    const provider = new HttpProvider(mockUrl, createGetOptions());
     const mockResponse = {
       data: JSON.stringify({ key: 'value' }),
       status: 200,
@@ -1861,11 +1848,7 @@ describe('HttpProvider', () => {
     });
 
     it('should redact authentication headers in metadata', async () => {
-      const provider = new HttpProvider(mockUrl, {
-        config: {
-          method: 'GET',
-        },
-      });
+      const provider = new HttpProvider(mockUrl, createGetOptions());
 
       const mockResponse = {
         data: JSON.stringify({ result: 'success' }),
@@ -1897,11 +1880,7 @@ describe('HttpProvider', () => {
     });
 
     it('should redact various authentication header patterns', async () => {
-      const provider = new HttpProvider(mockUrl, {
-        config: {
-          method: 'GET',
-        },
-      });
+      const provider = new HttpProvider(mockUrl, createGetOptions());
 
       const mockResponse = {
         data: JSON.stringify({ result: 'success' }),
@@ -1951,11 +1930,7 @@ describe('HttpProvider', () => {
     });
 
     it('should handle missing or undefined headers gracefully', async () => {
-      const provider = new HttpProvider(mockUrl, {
-        config: {
-          method: 'GET',
-        },
-      });
+      const provider = new HttpProvider(mockUrl, createGetOptions());
 
       const mockResponse = {
         data: JSON.stringify({ result: 'success' }),
@@ -2003,11 +1978,7 @@ describe('HttpProvider', () => {
       };
       vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
-      const result = await provider.callApi('test prompt', {
-        debug: true,
-        vars: {},
-        prompt: { raw: 'test prompt', label: 'test' },
-      });
+      const result = await provider.callApi('test prompt', createDebugHttpContext());
 
       // In debug mode, headers should still have auth info redacted
       expect(result.metadata?.headers).toEqual({
@@ -2071,11 +2042,7 @@ describe('HttpProvider', () => {
         headers: { 'content-type': 'application/json' },
       });
 
-      const result = await provider.callApi('test prompt', {
-        debug: true,
-        vars: {},
-        prompt: { raw: 'test prompt', label: 'test' },
-      });
+      const result = await provider.callApi('test prompt', createDebugHttpContext());
 
       expect(result.metadata?.transformedRequest).toContain(boundary);
       expect(result.metadata?.transformedRequest).toContain('name="username"');
@@ -2115,11 +2082,7 @@ describe('HttpProvider', () => {
         headers: { 'content-type': 'application/json' },
       });
 
-      const result = await provider.callApi('test prompt', {
-        debug: true,
-        vars: {},
-        prompt: { raw: 'test prompt', label: 'test' },
-      });
+      const result = await provider.callApi('test prompt', createDebugHttpContext());
 
       expect(result.metadata?.transformedRequest).toContain('username=alice');
       expect(result.metadata?.transformedRequest).toContain('password=%5BREDACTED%5D');
@@ -2170,11 +2133,7 @@ describe('HttpProvider', () => {
         headers: { 'content-type': 'application/json' },
       });
 
-      const result = await provider.callApi('test prompt', {
-        debug: true,
-        vars: {},
-        prompt: { raw: 'test prompt', label: 'test' },
-      });
+      const result = await provider.callApi('test prompt', createDebugHttpContext());
 
       expect(result.metadata?.transformedRequest).toContain('/api/data?api_key=%5BREDACTED%5D');
       expect(result.metadata?.transformedRequest).toContain('authorization: [REDACTED]');
@@ -2295,11 +2254,7 @@ describe('HttpProvider', () => {
     });
 
     it('should handle case-insensitive header matching', async () => {
-      const provider = new HttpProvider(mockUrl, {
-        config: {
-          method: 'GET',
-        },
-      });
+      const provider = new HttpProvider(mockUrl, createGetOptions());
 
       const mockResponse = {
         data: JSON.stringify({ result: 'success' }),
@@ -2335,12 +2290,7 @@ describe('HttpProvider', () => {
           body: 'Hello {{ prompt }}',
         },
       });
-      const mockResponse = {
-        data: 'response',
-        status: 200,
-        statusText: 'OK',
-        cached: false,
-      };
+      const mockResponse = createHttpResponse();
       vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
       await provider.callApi('world');
@@ -2367,12 +2317,7 @@ describe('HttpProvider', () => {
         },
       });
 
-      const mockResponse = {
-        data: 'response',
-        status: 200,
-        statusText: 'OK',
-        cached: false,
-      };
+      const mockResponse = createHttpResponse();
       vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
       await provider.callApi('test');
@@ -2399,12 +2344,7 @@ describe('HttpProvider', () => {
           body: { key: '{{ prompt }}' },
         },
       });
-      const mockResponse = {
-        data: 'response',
-        status: 200,
-        statusText: 'OK',
-        cached: false,
-      };
+      const mockResponse = createHttpResponse();
       vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
       await provider.callApi('test');
@@ -2431,12 +2371,7 @@ describe('HttpProvider', () => {
           body: JSON.stringify({ key: '{{ prompt }}' }),
         },
       });
-      const mockResponse = {
-        data: 'response',
-        status: 200,
-        statusText: 'OK',
-        cached: false,
-      };
+      const mockResponse = createHttpResponse();
       vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
       await provider.callApi('test');
@@ -2461,26 +2396,14 @@ describe('HttpProvider', () => {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: {
-            details: {
-              names: '{{ names | dump }}',
-            },
+            details: createNamesTemplateBody(),
           },
         },
       });
-      const mockResponse = {
-        data: 'response',
-        status: 200,
-        statusText: 'OK',
-        cached: false,
-      };
+      const mockResponse = createHttpResponse();
       vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
-      const vars = {
-        names: [
-          { firstName: 'Jane', lastName: 'Smith' },
-          { firstName: 'John', lastName: 'Doe' },
-        ],
-      };
+      const vars = createPersonNameVars();
 
       await provider.callApi('test', { vars, prompt: { raw: 'test', label: 'test' } });
 
@@ -2510,33 +2433,19 @@ describe('HttpProvider', () => {
           body: [
             {
               id: 1,
-              details: {
-                names: '{{ names | dump }}',
-              },
+              details: createNamesTemplateBody(),
             },
             {
               id: 2,
-              details: {
-                names: '{{ names | dump }}',
-              },
+              details: createNamesTemplateBody(),
             },
           ],
         },
       });
-      const mockResponse = {
-        data: 'response',
-        status: 200,
-        statusText: 'OK',
-        cached: false,
-      };
+      const mockResponse = createHttpResponse();
       vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
-      const vars = {
-        names: [
-          { firstName: 'Jane', lastName: 'Smith' },
-          { firstName: 'John', lastName: 'Doe' },
-        ],
-      };
+      const vars = createPersonNameVars();
 
       await provider.callApi('test', { vars, prompt: { raw: 'test', label: 'test' } });
 
@@ -2785,6 +2694,17 @@ describe('urlEncodeRawRequestPath', () => {
     const result = urlEncodeRawRequestPath(rawRequest);
     expect(result).toBe('GET /api/data?query=already%20encoded HTTP/1.1');
   });
+
+  it.each(['\n', '\r\n'])(
+    'should keep dollar patterns and the rest of the request unchanged with %j line endings',
+    (lineEnding) => {
+      const rest = `${lineEnding}X-Literal: $$ $& $\` $'${lineEnding}${lineEnding}body $$ $& $\` $'`;
+      const rawRequest = "POST /api/data?query=turn $$ into $& or $` or $' HTTP/1.1" + rest;
+      expect(urlEncodeRawRequestPath(rawRequest)).toBe(
+        'POST /api/data?query=turn%20$$%20into%20$&%20or%20$`%20or%20$%27 HTTP/1.1' + rest,
+      );
+    },
+  );
 
   it('should not leak sensitive query values when logging URL encoding', () => {
     const debugSpy = vi.spyOn(logger, 'debug');
@@ -3104,10 +3024,7 @@ describe('Body file resolution', () => {
       { id: '1', amount: '100.50' },
       { id: '2', amount: '250.75' },
     ];
-    const mockConfig = {
-      api_key: 'test-key-123',
-      timeout: 5000,
-    };
+    const mockConfig = createApiKeyTimeoutConfig();
     const mockUsers = [
       { name: 'John', email: 'john@example.com' },
       { name: 'Jane', email: 'jane@example.com' },
@@ -3157,10 +3074,7 @@ describe('Body file resolution', () => {
   });
 
   it('should resolve file:// references in arrays', () => {
-    const mockConfig = {
-      api_key: 'test-key-123',
-      timeout: 5000,
-    };
+    const mockConfig = createApiKeyTimeoutConfig();
     const mockUsers = [{ name: 'John', email: 'john@example.com' }];
 
     vi.mocked(maybeLoadConfigFromExternalFile).mockImplementation(function () {
@@ -3304,11 +3218,7 @@ describe('Body file resolution', () => {
     // maybeLoadConfigFromExternalFile should not be called for GET requests without body
     vi.mocked(maybeLoadConfigFromExternalFile).mockClear();
 
-    new HttpProvider('http://test.com', {
-      config: {
-        method: 'GET',
-      },
-    });
+    new HttpProvider('http://test.com', createGetOptions());
 
     // Should not call maybeLoadConfigFromExternalFile since there's no body
     expect(maybeLoadConfigFromExternalFile).not.toHaveBeenCalled();
@@ -3381,12 +3291,7 @@ describe('HttpProvider - Sanitization', () => {
     });
 
     // Mock the sanitizeConfigForLogging function by spying on the actual config used in the log
-    const mockResponse = {
-      data: '{"result": "test"}',
-      status: 200,
-      statusText: 'OK',
-      cached: false,
-    };
+    const mockResponse = createHttpResponse('{"result": "test"}');
     vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
     await provider.callApi('test prompt');
@@ -3401,9 +3306,7 @@ describe('HttpProvider - Sanitization', () => {
   it('should sanitize Authorization header in debug logs', async () => {
     // Mock the file resolution to return a simple body to avoid conflicts
     vi.mocked(maybeLoadConfigFromExternalFile).mockImplementation(function () {
-      return {
-        simple: 'test-value',
-      };
+      return createSimpleVars();
     });
 
     const provider = new HttpProvider(testUrl, {
@@ -3417,12 +3320,7 @@ describe('HttpProvider - Sanitization', () => {
       },
     });
 
-    const mockResponse = {
-      data: '{"result": "test"}',
-      status: 200,
-      statusText: 'OK',
-      cached: false,
-    };
+    const mockResponse = createHttpResponse('{"result": "test"}');
     vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
     await provider.callApi('test prompt');
@@ -3437,9 +3335,7 @@ describe('HttpProvider - Sanitization', () => {
   it('should sanitize multiple credential fields', async () => {
     // Simplified test without signature auth to avoid certificate issues
     vi.mocked(maybeLoadConfigFromExternalFile).mockImplementation(function () {
-      return {
-        simple: 'test-value',
-      };
+      return createSimpleVars();
     });
 
     const provider = new HttpProvider(testUrl, {
@@ -3456,12 +3352,7 @@ describe('HttpProvider - Sanitization', () => {
       },
     });
 
-    const mockResponse = {
-      data: '{"result": "test"}',
-      status: 200,
-      statusText: 'OK',
-      cached: false,
-    };
+    const mockResponse = createHttpResponse('{"result": "test"}');
     vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
     await provider.callApi('test prompt');
@@ -3475,9 +3366,7 @@ describe('HttpProvider - Sanitization', () => {
 
   it('should preserve non-sensitive fields', async () => {
     vi.mocked(maybeLoadConfigFromExternalFile).mockImplementation(function () {
-      return {
-        simple: 'test-value',
-      };
+      return createSimpleVars();
     });
 
     const provider = new HttpProvider(testUrl, {
@@ -3493,12 +3382,7 @@ describe('HttpProvider - Sanitization', () => {
       },
     });
 
-    const mockResponse = {
-      data: '{"result": "test"}',
-      status: 200,
-      statusText: 'OK',
-      cached: false,
-    };
+    const mockResponse = createHttpResponse('{"result": "test"}');
     vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
     await provider.callApi('test prompt');
@@ -3527,12 +3411,7 @@ describe('HttpProvider - Sanitization', () => {
       },
     });
 
-    vi.mocked(fetchWithCache).mockResolvedValueOnce({
-      data: '{"result": "test"}',
-      status: 200,
-      statusText: 'OK',
-      cached: false,
-    });
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(createHttpResponse('{"result": "test"}'));
 
     await provider.callApi('test prompt');
 
@@ -3562,12 +3441,7 @@ describe('HttpProvider - Sanitization', () => {
       },
     });
 
-    vi.mocked(fetchWithCache).mockResolvedValueOnce({
-      data: '{"result": "test"}',
-      status: 200,
-      statusText: 'OK',
-      cached: false,
-    });
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(createHttpResponse('{"result": "test"}'));
 
     await provider.callApi('test prompt');
 
@@ -3595,12 +3469,7 @@ describe('HttpProvider - Sanitization', () => {
         },
       });
 
-      const mockResponse = {
-        data: '{"success": true}',
-        status: 200,
-        statusText: 'OK',
-        cached: false,
-      };
+      const mockResponse = createHttpResponse('{"success": true}');
       vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
       await provider.callApi('test message');
@@ -3664,12 +3533,7 @@ describe('HttpProvider - Sanitization', () => {
         },
       });
 
-      const mockResponse = {
-        data: '{"success": true}',
-        status: 200,
-        statusText: 'OK',
-        cached: false,
-      };
+      const mockResponse = createHttpResponse('{"success": true}');
       vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
       await provider.callApi('test message');
@@ -3686,19 +3550,10 @@ describe('HttpProvider - Sanitization', () => {
     it('should sanitize URL query parameters', async () => {
       const provider = new HttpProvider(
         'https://api.example.com/test?api_key=secret123&format=json',
-        {
-          config: {
-            method: 'GET',
-          },
-        },
+        createGetOptions(),
       );
 
-      const mockResponse = {
-        data: '{"success": true}',
-        status: 200,
-        statusText: 'OK',
-        cached: false,
-      };
+      const mockResponse = createHttpResponse('{"success": true}');
       vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
       await provider.callApi('test');
@@ -3752,12 +3607,7 @@ describe('HttpProvider - Sanitization', () => {
         },
       });
 
-      const mockResponse = {
-        data: '{"result": "success"}',
-        status: 200,
-        statusText: 'OK',
-        cached: false,
-      };
+      const mockResponse = createHttpResponse('{"result": "success"}');
       vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
       await provider.callApi('test data');
@@ -3780,12 +3630,7 @@ describe('HttpProvider - Sanitization', () => {
         },
       });
 
-      const mockResponse = {
-        data: '{"result": "success"}',
-        status: 200,
-        statusText: 'OK',
-        cached: false,
-      };
+      const mockResponse = createHttpResponse('{"result": "success"}');
       vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
       const startTime = Date.now();
@@ -3822,12 +3667,7 @@ describe('HttpProvider - Sanitization', () => {
         },
       });
 
-      const mockResponse = {
-        data: '{"result": "test"}',
-        status: 200,
-        statusText: 'OK',
-        cached: false,
-      };
+      const mockResponse = createHttpResponse('{"result": "test"}');
       vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
 
       // Should not crash

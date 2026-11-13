@@ -120,19 +120,8 @@ function formatNamedScoreValue(value: number | undefined): string {
   return typeof value === 'number' && !Number.isNaN(value) ? value.toFixed(2) : '';
 }
 
-/**
- * Build a per-prompt list of `Metric: <name>` column names, deduplicated and
- * sorted with `localeCompare`. Shared shell for both the row-scanning helper
- * (WebUI path) and the aggregate-reading helper (streaming CLI path); see the
- * two call sites below.
- */
-function collectMetricNamesByPrompt<T>(
-  items: T[],
-  namesFor: (item: T, index: number) => Iterable<string>,
-): string[][] {
-  return items.map((item, index) =>
-    [...new Set(namesFor(item, index))].sort((a, b) => a.localeCompare(b)),
-  );
+function compareMetricNames(a: string, b: string): number {
+  return a.localeCompare(b);
 }
 
 /**
@@ -147,8 +136,8 @@ function collectNamedScoreNamesByPrompt(table: {
   head: { prompts: Prompt[]; vars: string[] };
   body: EvaluateTableRow[];
 }): string[][] {
-  return collectMetricNamesByPrompt(table.head.prompts, (_, promptIndex) => {
-    const names: string[] = [];
+  return table.head.prompts.map((_, promptIndex) => {
+    const names = new Set<string>();
     for (const row of table.body) {
       const namedScores = row.outputs[promptIndex]?.namedScores;
       if (!namedScores) {
@@ -156,11 +145,11 @@ function collectNamedScoreNamesByPrompt(table: {
       }
       for (const [name, value] of Object.entries(namedScores)) {
         if (typeof value === 'number' && !Number.isNaN(value)) {
-          names.push(name);
+          names.add(name);
         }
       }
     }
-    return names;
+    return [...names].sort(compareMetricNames);
   });
 }
 
@@ -174,32 +163,34 @@ function collectNamedScoreNamesByPrompt(table: {
  * `updateDerivedMetrics`), so this keeps the streaming column set aligned
  * with what `collectNamedScoreNamesByPrompt` would produce from row outputs.
  *
- * Count maps may omit metrics whose assertion counts cannot be recovered.
- * Use `promptNeedsDiscoveryFallback` to detect incomplete aggregates and
- * discover their actual per-row metric names in the row-scan pre-pass.
+ * Returns an empty list both for prompts with no per-row contributions
+ * (`namedScoresCount: {}` — modern eval with no named metrics configured)
+ * and for prompts whose count map is missing entirely (legacy/imported
+ * evals). Use `promptNeedsDiscoveryFallback` to distinguish the two: only
+ * the latter requires a row-scan pre-pass.
  */
 function collectNamedScoreNamesByPromptFromAggregate(prompts: Prompt[]): string[][] {
-  return collectMetricNamesByPrompt(prompts, (prompt) => {
+  return prompts.map((prompt) => {
     const counts = (prompt as CompletedPrompt).metrics?.namedScoresCount;
     if (!counts) {
       return [];
     }
-    return Object.keys(counts).filter((name) => (counts[name] ?? 0) > 0);
+    return Object.keys(counts)
+      .filter((name) => (counts[name] ?? 0) > 0)
+      .sort(compareMetricNames);
   });
 }
 
 /**
- * True when aggregate counts cannot identify all possible per-row metrics.
- * Missing counts can mean an unknown denominator, even when the count map
- * exists. Scan rows to distinguish these metrics from aggregate-only derived
- * scores without adding empty CSV columns for the latter.
+ * True when a prompt's aggregate `metrics.namedScoresCount` is missing/absent,
+ * not merely empty. Legacy evals persisted before count tracking shipped, and
+ * external imports via `POST /api/eval` that don't backfill the count, both
+ * land here. Modern evals always have an object (possibly empty) and skip the
+ * discovery pass.
  */
 function promptNeedsDiscoveryFallback(prompt: Prompt): boolean {
   const metrics = (prompt as CompletedPrompt).metrics;
-  const counts = metrics?.namedScoresCount;
-  return (
-    !counts || Object.keys(metrics?.namedScores ?? {}).some((name) => !((counts[name] ?? 0) > 0))
-  );
+  return !metrics || !metrics.namedScoresCount;
 }
 
 /**
@@ -218,8 +209,8 @@ type DiscoveryAccumulator = {
 /**
  * Scan one batch of `EvalResult` rows for the metric names that will need
  * dedicated `Metric: <name>` columns. Only inspects the prompts in
- * `fallbackPromptIndices` (those whose aggregate counts may omit metric names),
- * and only touches `namedScores` + `testCase.description` —
+ * `fallbackPromptIndices` (those whose aggregate `namedScoresCount` is
+ * missing/empty), and only touches `namedScores` + `testCase.description` —
  * not the full row shape — so the discovery pass stays allocation-light even
  * for very large legacy evals.
  *
@@ -260,7 +251,6 @@ function scanBatchForDiscovery(
 }
 
 type StreamRow = {
-  testIdx: number;
   vars: string[];
   outputs: Array<{
     text: string;
@@ -301,7 +291,6 @@ function batchToStreamRows(
     let row = rowsByTestIdx.get(result.testIdx);
     if (!row) {
       row = {
-        testIdx: result.testIdx,
         vars: varNames.map((varName) => {
           const value = result.testCase?.vars?.[varName];
           return value === undefined ? '' : String(value);
@@ -536,18 +525,9 @@ export function evalTableToCsv(
   const hasDescriptions = table.body.some((row) => row.test.description);
 
   const namedScoreNamesByPrompt = collectNamedScoreNamesByPrompt(table);
-  const headers = buildCsvHeaders(table.head.vars, table.head.prompts, {
-    hasDescriptions,
-    isRedteam,
-    namedScoreNamesByPrompt,
-  });
-
-  const csvRows = [
-    headers,
-    ...table.body.map((row) =>
-      tableRowToCsvValues(row, { hasDescriptions, isRedteam, namedScoreNamesByPrompt }),
-    ),
-  ];
+  const columnOptions = { hasDescriptions, isRedteam, namedScoreNamesByPrompt };
+  const headers = buildCsvHeaders(table.head.vars, table.head.prompts, columnOptions);
+  const csvRows = [headers, ...table.body.map((row) => tableRowToCsvValues(row, columnOptions))];
 
   return csvStringify(escapeCsvRowsForFormulaInjection(csvRows, env));
 }
@@ -775,8 +755,8 @@ export async function streamEvalCsv(eval_: Eval, options: StreamCsvOptions): Pro
   // dedicated columns. The pass only inspects `namedScores` keys and
   // `testCase.description`, never the full row, so memory stays
   // O(prompts × distinct metric names). Metric discovery remains limited to
-  // prompts whose aggregate counts may omit per-row metric names, including
-  // metrics whose counts are unknown after rebuilding legacy results.
+  // prompts whose aggregate `namedScoresCount` is missing; a present-but-empty
+  // count is authoritative and means "no metric columns."
   //
   // Note: in the rare case of concurrent writes between the two passes (e.g. a
   // CLI export run while results are still being persisted), a metric that
@@ -798,9 +778,7 @@ export async function streamEvalCsv(eval_: Eval, options: StreamCsvOptions): Pro
   const hasDescriptions = accumulator.hasDescriptions;
   for (const promptIndex of fallbackPromptIndices) {
     const names = accumulator.metricNamesByPrompt.get(promptIndex);
-    namedScoreNamesByPrompt[promptIndex] = names
-      ? [...names].sort((a, b) => a.localeCompare(b))
-      : [];
+    namedScoreNamesByPrompt[promptIndex] = names ? [...names].sort(compareMetricNames) : [];
   }
 
   const headers = buildCsvHeaders(varNames, prompts, {

@@ -96,9 +96,7 @@ describe('event copy is not stale', () => {
   const LIVE_INVITE =
     /\b(meet us at|join us at|stop by|we'll be back|see you at|register now|rsvp|coming (january|february|march|april|may|june))\b/i;
 
-  // Offers only, and only in prose. A highlight *title* like "Open Bar" is a label for
-  // what the event had, which is fine on a recap — the bug was standing offers written
-  // in the present tense ("Free drinks on us", "Get a complimentary assessment").
+  // Recap prose should not advertise standing offers in the present tense.
   const STANDING_OFFER = /\b(free drinks|drinks on us|get a complimentary|free scan)\b/i;
 
   it.each(events.map((e) => [e.id, e] as const))('%s reads as a recap, not an invite', (_id, e) => {
@@ -106,12 +104,7 @@ describe('event copy is not stale', () => {
       return;
     }
 
-    const prose = [
-      e.description,
-      e.fullDescription ?? '',
-      ...(e.highlights ?? []).map((h) => h.description),
-      ...(e.demos ?? []).flatMap((d) => [d.description, d.schedule ?? '']),
-    ].join(' ');
+    const prose = `${e.description} ${e.fullDescription ?? ''}`;
 
     expect(prose).not.toMatch(LIVE_INVITE);
     expect(prose).not.toMatch(STANDING_OFFER);

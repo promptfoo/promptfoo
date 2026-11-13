@@ -5,7 +5,7 @@ description: Configure Fireworks AI's serverless chat and embedding models throu
 
 # Fireworks AI
 
-[Fireworks AI](https://fireworks.ai) serves a broad catalogue of open models — Llama, Qwen, DeepSeek, Kimi, GLM, GPT-OSS, and more — through an API that is fully compatible with the OpenAI interface.
+[Fireworks AI](https://fireworks.ai) serves a broad catalogue of open models — Llama, Qwen, DeepSeek, Kimi, GLM, GPT-OSS, and more — through OpenAI-compatible chat and embedding endpoints.
 
 The Fireworks AI provider supports all options available in the [OpenAI provider](/docs/providers/openai/).
 

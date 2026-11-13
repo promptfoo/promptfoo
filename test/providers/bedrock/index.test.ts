@@ -25,6 +25,7 @@ import {
   LlamaVersion,
   parseValue,
 } from '../../../src/providers/bedrock/index';
+import { createChatMessage, createChatUsage } from '../../factories/literalFixtures';
 import { mockProcessEnv } from '../../util/utils';
 
 import type {
@@ -36,14 +37,108 @@ import type {
   TextGenerationOptions,
 } from '../../../src/providers/bedrock/index';
 
+const createMistralUsageCheck = (modelHandler: IBedrockModel) => async () => {
+  const mockResponse = createMistralChatResponse();
+
+  const result = modelHandler.tokenUsage!(mockResponse, 'Test prompt');
+  expect(result).toEqual({
+    prompt: 30,
+    completion: 45,
+    total: 75,
+    numRequests: 1,
+  });
+};
+
+const createMistralChatResponse = () => ({
+  id: 'b8f7363d-4aed-42cf-879a-7a8db4f37be3',
+  object: 'chat.completion',
+  created: 1743034280,
+  model: 'mistral-large-2407',
+  choices: [
+    {
+      index: 0,
+      message: createChatMessage('assistant', 'Test response'),
+      finish_reason: 'stop',
+    },
+  ],
+  prompt_tokens: 30,
+  completion_tokens: 45,
+});
+
+const createSampledRegionConfig = () => ({
+  region: 'us-east-1',
+  temperature: 0.5,
+});
+
+const createWeatherToolDefinition = () => ({
+  name: 'get_current_weather',
+  description: 'Get the current weather in a given location',
+  input_schema: {
+    type: 'object' as const,
+    properties: {
+      location: { type: 'string' as const },
+      unit: { type: 'string' as const, enum: ['celsius', 'fahrenheit'] },
+    },
+    required: ['location'],
+  },
+});
+
+const createRegionConfig = () => ({
+  region: 'us-east-1',
+});
+
+const createChatResponse = (
+  content: string = '<reasoning>Think think</reasoning>The answer is 42.',
+) => ({
+  choices: [
+    {
+      message: {
+        content,
+      },
+    },
+  ],
+});
+
+const createImagePromptMessage = () => ({
+  role: 'user',
+  content: [
+    { type: 'image' as const, source: { bytes: 'testImageData' } },
+    { type: 'text' as const, text: 'What is in this image?' },
+  ],
+});
+
+const createCompletionUsage = () => ({
+  usage: createChatUsage(25, 50, 75),
+});
+
+const createThinkTaggedCompletionResponse = () => ({
+  choices: [
+    {
+      text: '<think>Let me think about this problem...</think>\nThe answer is 42.',
+    },
+  ],
+});
+
+const createApiKeyRegionOptions = () => ({
+  config: {
+    region: 'us-east-1',
+    apiKey: 'test-api-key',
+  },
+});
+
+const createThinkingRegionConfig = () => ({
+  region: 'us-east-1',
+  thinking: { type: 'enabled' as const, budget_tokens: 5000 },
+});
+
 const RETIRED_BEDROCK_MODEL_IDS = [
+  'anthropic.claude-sonnet-4-20250514-v1:0',
   'amazon.titan-text-express-v1',
   'amazon.titan-text-lite-v1',
   'amazon.titan-text-premier-v1:0',
   'anthropic.claude-3-opus-20240229-v1:0',
-  'us.anthropic.claude-3-opus-20240229-v1:0',
   'anthropic.claude-opus-4-20250514-v1:0',
-  'us.anthropic.claude-opus-4-20250514-v1:0',
+  'anthropic.claude-3-5-haiku-20241022-v1:0',
   'anthropic.claude-instant-v1',
   'anthropic.claude-v1',
   'anthropic.claude-v2',
@@ -273,12 +368,7 @@ describe('AwsBedrockGenericProvider', () => {
 
     const provider = new (class extends AwsBedrockGenericProvider {
       constructor() {
-        super('test-model', {
-          config: {
-            region: 'us-east-1',
-            apiKey: 'test-api-key',
-          },
-        });
+        super('test-model', createApiKeyRegionOptions());
       }
     })();
 
@@ -334,12 +424,7 @@ describe('AwsBedrockGenericProvider', () => {
 
     const provider = new (class extends AwsBedrockGenericProvider {
       constructor() {
-        super('test-model', {
-          config: {
-            region: 'us-east-1',
-            apiKey: 'test-api-key',
-          },
-        });
+        super('test-model', createApiKeyRegionOptions());
       }
     })();
 
@@ -492,20 +577,7 @@ describe('AwsBedrockGenericProvider', () => {
     it('should include tools and tool_choice in params when provided', async () => {
       const config: BedrockClaudeMessagesCompletionOptions = {
         region: 'us-east-1',
-        tools: [
-          {
-            name: 'get_current_weather',
-            description: 'Get the current weather in a given location',
-            input_schema: {
-              type: 'object',
-              properties: {
-                location: { type: 'string' },
-                unit: { type: 'string', enum: ['celsius', 'fahrenheit'] },
-              },
-              required: ['location'],
-            },
-          },
-        ],
+        tools: [createWeatherToolDefinition()],
         tool_choice: {
           type: 'auto',
         },
@@ -521,9 +593,7 @@ describe('AwsBedrockGenericProvider', () => {
     });
 
     it('should not include tools and tool_choice in params when not provided', async () => {
-      const config: BedrockClaudeMessagesCompletionOptions = {
-        region: 'us-east-1',
-      };
+      const config: BedrockClaudeMessagesCompletionOptions = createRegionConfig();
 
       const params = await modelHandler.params(config, 'Test prompt');
 
@@ -534,20 +604,7 @@ describe('AwsBedrockGenericProvider', () => {
     it('should include specific tool_choice when provided', async () => {
       const config: BedrockClaudeMessagesCompletionOptions = {
         region: 'us-east-1',
-        tools: [
-          {
-            name: 'get_current_weather',
-            description: 'Get the current weather in a given location',
-            input_schema: {
-              type: 'object',
-              properties: {
-                location: { type: 'string' },
-                unit: { type: 'string', enum: ['celsius', 'fahrenheit'] },
-              },
-              required: ['location'],
-            },
-          },
-        ],
+        tools: [createWeatherToolDefinition()],
         tool_choice: {
           type: 'tool',
           name: 'get_current_weather',
@@ -561,9 +618,7 @@ describe('AwsBedrockGenericProvider', () => {
     });
 
     it('should handle JSON message array with image content', async () => {
-      const config: BedrockClaudeMessagesCompletionOptions = {
-        region: 'us-east-1',
-      };
+      const config: BedrockClaudeMessagesCompletionOptions = createRegionConfig();
 
       const prompt = JSON.stringify([
         {
@@ -603,9 +658,7 @@ describe('AwsBedrockGenericProvider', () => {
     });
 
     it('should handle JSON message array with system message and image content', async () => {
-      const config: BedrockClaudeMessagesCompletionOptions = {
-        region: 'us-east-1',
-      };
+      const config: BedrockClaudeMessagesCompletionOptions = createRegionConfig();
 
       const prompt = JSON.stringify([
         { role: 'system', content: 'You are a helpful assistant.' },
@@ -647,10 +700,7 @@ describe('AwsBedrockGenericProvider', () => {
     });
 
     it('omits temperature for Claude Opus 4.7 on Bedrock invokeModel path', async () => {
-      const config: BedrockClaudeMessagesCompletionOptions = {
-        region: 'us-east-1',
-        temperature: 0.5,
-      };
+      const config: BedrockClaudeMessagesCompletionOptions = createSampledRegionConfig();
       // Regional inference profile ID — matches `us.`, `eu.`, `jp.`, `global.` via .includes()
       const params = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(
         config,
@@ -662,10 +712,7 @@ describe('AwsBedrockGenericProvider', () => {
     });
 
     it('omits temperature for Claude Opus 4.8 on Bedrock invokeModel path', async () => {
-      const config: BedrockClaudeMessagesCompletionOptions = {
-        region: 'us-east-1',
-        temperature: 0.5,
-      };
+      const config: BedrockClaudeMessagesCompletionOptions = createSampledRegionConfig();
       // Regional inference profile ID — matches `us.`, `eu.`, `jp.`, `global.` via .includes()
       const params = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(
         config,
@@ -708,9 +755,22 @@ describe('AwsBedrockGenericProvider', () => {
       'arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/claude-prod-25',
       'arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/claude-team-blue-12',
       'arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/claude-prod-20260811',
+      'arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/claude-haiku-5-5',
+      'arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/claude-opus-5-5',
+      'arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/claude-sonnet-5-5',
     ])(
       'preserves sampling and manual thinking for Claude inference profile %s',
       async (modelName) => {
+        // The profile hides the model, so its name must neither drop sampling
+        // nor convert manual thinking to adaptive.
+        const sampled = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(
+          { region: 'us-east-1', temperature: 0.5 },
+          'hi',
+          undefined,
+          modelName,
+        );
+        expect(sampled.temperature).toBe(0.5);
+
         const thinking = { type: 'enabled', budget_tokens: 8192 } as const;
         const params = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(
           { region: 'us-east-1', temperature: 0.5, thinking },
@@ -718,11 +778,50 @@ describe('AwsBedrockGenericProvider', () => {
           undefined,
           modelName,
         );
-
-        expect(params.temperature).toBe(0.5);
         expect(params.thinking).toEqual(thinking);
+        expect(params.max_tokens).toBe(9216);
+        // Every Claude model rejects a non-default temperature with extended thinking.
+        expect(params.temperature).toBeUndefined();
+
+        const disabled = { type: 'disabled' } as const;
+        const toolChoice = { type: 'any' } as const;
+        const explicit = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(
+          { thinking: disabled, tool_choice: toolChoice, effort: 'max', temperature: 0.5 },
+          'hi',
+          undefined,
+          modelName,
+        );
+        expect(explicit).toMatchObject({
+          thinking: disabled,
+          tool_choice: toolChoice,
+          output_config: { effort: 'max' },
+          temperature: 0.5,
+          max_tokens: 1024,
+        });
       },
     );
+
+    // Extended thinking only accepts the default temperature, so the handler's own 0
+    // default must not be sent either (verified live: a ValidationException before).
+    it('does not send the default temperature with extended thinking', async () => {
+      const thinking = { type: 'enabled', budget_tokens: 1024 } as const;
+      const params = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(
+        { region: 'us-east-1', max_tokens: 2048, thinking },
+        'hi',
+        undefined,
+        'us.anthropic.claude-haiku-4-5-20251001-v1:0',
+      );
+      expect(params.thinking).toEqual(thinking);
+      expect(params).not.toHaveProperty('temperature');
+
+      const plain = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(
+        { region: 'us-east-1' },
+        'hi',
+        undefined,
+        'us.anthropic.claude-haiku-4-5-20251001-v1:0',
+      );
+      expect(plain.temperature).toBe(0);
+    });
 
     it('gives Claude Opus 5 thinking headroom in the default max_tokens', async () => {
       // Opus 5 spends part of max_tokens on its default adaptive thinking even with no
@@ -746,20 +845,72 @@ describe('AwsBedrockGenericProvider', () => {
       expect(params.max_tokens).toBe(1024);
     });
 
-    it.each(['global.anthropic.claude-opus-5-5', 'global.anthropic.claude-fable-5-1'])(
-      'keeps thinking headroom for always-on %s even when thinking is disabled',
-      async (model) => {
-        // The rejected `disabled` block is dropped, so the model still thinks against max_tokens.
+    it.each([
+      [{ type: 'disabled' }, { type: 'between_tools' }],
+      [{ type: 'between_tools' }, { type: 'between_tools' }],
+    ] as const)(
+      'sends thinking %j as %j for Claude Sonnet 5.5, with no thinking headroom',
+      async (thinking, expected) => {
         const params = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(
-          { region: 'us-east-1', thinking: { type: 'disabled' } },
+          { region: 'us-east-1', thinking },
           'hi',
           undefined,
-          model,
+          'global.anthropic.claude-sonnet-5-5',
         );
-        expect(params).not.toHaveProperty('thinking');
-        expect(params.max_tokens).toBe(2048);
+        expect(params.thinking).toEqual(expected);
+        expect(params.max_tokens).toBe(1024);
+        expect(params).not.toHaveProperty('temperature');
       },
     );
+
+    it('keeps thinking headroom for Claude Sonnet 5.5 when thinking is left to the API', async () => {
+      const params = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(
+        { region: 'us-east-1' },
+        'hi',
+        undefined,
+        'anthropic.claude-sonnet-5-5',
+      );
+      expect(params).not.toHaveProperty('thinking');
+      expect(params.max_tokens).toBe(2048);
+    });
+
+    it.each([
+      { type: 'any' as const },
+      { type: 'tool' as const, name: 'get_weather' },
+      { type: 'auto' as const },
+    ])('omits only forced tool_choice for Claude Sonnet 5.5: %j', async (tool_choice) => {
+      const params = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(
+        {
+          region: 'us-east-1',
+          tools: [{ name: 'get_weather', description: 'Weather', input_schema: {} }],
+          tool_choice,
+        },
+        'hi',
+        undefined,
+        'global.anthropic.claude-sonnet-5-5',
+      );
+      if (tool_choice.type === 'auto') {
+        expect(params.tool_choice).toEqual(tool_choice);
+      } else {
+        expect(params).not.toHaveProperty('tool_choice');
+      }
+    });
+
+    it.each([
+      'global.anthropic.claude-opus-5-5',
+      'global.anthropic.claude-fable-5-1',
+      'global.anthropic.claude-fable-5-2',
+    ])('keeps thinking headroom for always-on %s even when thinking is disabled', async (model) => {
+      // The rejected `disabled` block is dropped, so the model still thinks against max_tokens.
+      const params = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(
+        { region: 'us-east-1', thinking: { type: 'disabled' } },
+        'hi',
+        undefined,
+        model,
+      );
+      expect(params).not.toHaveProperty('thinking');
+      expect(params.max_tokens).toBe(2048);
+    });
 
     it('keeps the 1024 default for models that do not think by default', async () => {
       const params = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(
@@ -797,10 +948,7 @@ describe('AwsBedrockGenericProvider', () => {
     });
 
     it('converts manual thinking to adaptive for Claude Opus 4.8 on Bedrock invokeModel', async () => {
-      const config: BedrockClaudeMessagesCompletionOptions = {
-        region: 'us-east-1',
-        thinking: { type: 'enabled', budget_tokens: 5000 },
-      };
+      const config: BedrockClaudeMessagesCompletionOptions = createThinkingRegionConfig();
       const params = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(
         config,
         'hi',
@@ -833,6 +981,18 @@ describe('AwsBedrockGenericProvider', () => {
       expect(disabledParams.thinking).toBeUndefined();
     });
 
+    it('preserves disabled thinking and the non-thinking cap for Claude Sonnet 5', async () => {
+      const params = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(
+        { region: 'us-east-1', thinking: { type: 'disabled' } },
+        'hi',
+        undefined,
+        'us.anthropic.claude-sonnet-5',
+      );
+
+      expect(params.thinking).toEqual({ type: 'disabled' });
+      expect(params.max_tokens).toBe(1024);
+    });
+
     it.each([{ type: 'any' as const }, { type: 'tool' as const, name: 'get_weather' }])(
       'omits forced tool choice for Claude Fable 5: %j',
       async (tool_choice) => {
@@ -859,10 +1019,7 @@ describe('AwsBedrockGenericProvider', () => {
     );
 
     it('keeps manual thinking enabled for non-deprecated Claude Opus 4.6 on Bedrock invokeModel', async () => {
-      const config: BedrockClaudeMessagesCompletionOptions = {
-        region: 'us-east-1',
-        thinking: { type: 'enabled', budget_tokens: 5000 },
-      };
+      const config: BedrockClaudeMessagesCompletionOptions = createThinkingRegionConfig();
       const params = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(
         config,
         'hi',
@@ -906,10 +1063,7 @@ describe('AwsBedrockGenericProvider', () => {
       // Messages provider surfaces the one-time heads-up instead. This guards
       // against re-introducing the per-request log spam that was flagged in review.
       const warnSpy = vi.spyOn(logger, 'warn');
-      const config: BedrockClaudeMessagesCompletionOptions = {
-        region: 'us-east-1',
-        temperature: 0.5,
-      };
+      const config: BedrockClaudeMessagesCompletionOptions = createSampledRegionConfig();
       const params = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(
         config,
         'hi',
@@ -938,9 +1092,7 @@ describe('AwsBedrockGenericProvider', () => {
     });
 
     it('should convert lone system message to user message', async () => {
-      const config: BedrockClaudeMessagesCompletionOptions = {
-        region: 'us-east-1',
-      };
+      const config: BedrockClaudeMessagesCompletionOptions = createRegionConfig();
 
       // Test with string content
       const promptWithStringContent = JSON.stringify([
@@ -1129,13 +1281,19 @@ describe('AwsBedrockGenericProvider', () => {
       expect(credentials).toBeUndefined();
     });
 
-    it('should return undefined for API key authentication when apiKey is provided in config', async () => {
+    const verifyBedrockApiKeyAuth = async () => {
       const provider = new TestBedrockProvider({
+        // No accessKeyId/secretAccessKey provided
         apiKey: 'test-api-key',
       });
       const credentials = await provider.getCredentials();
-      expect(credentials).toBeUndefined();
-    });
+      expect(credentials).toBeUndefined(); // API key auth returns undefined for credentials
+    };
+
+    it(
+      'should return undefined for API key authentication when apiKey is provided in config',
+      verifyBedrockApiKeyAuth,
+    );
 
     it('should return undefined for API key authentication when AWS_BEARER_TOKEN_BEDROCK env var is set', async () => {
       mockProcessEnv({ AWS_BEARER_TOKEN_BEDROCK: 'test-env-api-key' });
@@ -1169,14 +1327,7 @@ describe('AwsBedrockGenericProvider', () => {
       }); // Explicit credentials take priority
     });
 
-    it('should use API key when no explicit credentials are provided', async () => {
-      const provider = new TestBedrockProvider({
-        apiKey: 'test-api-key',
-        // No accessKeyId/secretAccessKey provided
-      });
-      const credentials = await provider.getCredentials();
-      expect(credentials).toBeUndefined(); // API key auth returns undefined for credentials
-    });
+    it('should use API key when no explicit credentials are provided', verifyBedrockApiKeyAuth);
   });
 });
 
@@ -1304,6 +1455,20 @@ describe('parseValue', () => {
 
 describe('llama', () => {
   describe('getLlamaModelHandler', () => {
+    const createLlamaPromptCheck =
+      (handler: ReturnType<typeof getLlamaModelHandler>) => async () => {
+        const config = { temperature: 0.5, top_p: 0.9, max_gen_len: 512 };
+        const prompt = 'Describe the purpose of a "hello world" program in one sentence.';
+        await expect(handler.params(config, prompt)).resolves.toEqual({
+          prompt: dedent`<|begin_of_text|><|start_header_id|>user<|end_header_id|>
+
+          Describe the purpose of a "hello world" program in one sentence.<|eot_id|><|start_header_id|>assistant<|end_header_id|>`,
+          temperature: 0.5,
+          top_p: 0.9,
+          max_gen_len: 512,
+        });
+      };
+
     describe('LLAMA2', () => {
       const handler = getLlamaModelHandler(LlamaVersion.V2);
 
@@ -1412,35 +1577,19 @@ describe('llama', () => {
     describe('LLAMA3_1', () => {
       const handler = getLlamaModelHandler(LlamaVersion.V3_1);
 
-      it('should generate correct prompt for a single user message', async () => {
-        const config = { temperature: 0.5, top_p: 0.9, max_gen_len: 512 };
-        const prompt = 'Describe the purpose of a "hello world" program in one sentence.';
-        await expect(handler.params(config, prompt)).resolves.toEqual({
-          prompt: dedent`<|begin_of_text|><|start_header_id|>user<|end_header_id|>
-
-          Describe the purpose of a "hello world" program in one sentence.<|eot_id|><|start_header_id|>assistant<|end_header_id|>`,
-          temperature: 0.5,
-          top_p: 0.9,
-          max_gen_len: 512,
-        });
-      });
+      it(
+        'should generate correct prompt for a single user message',
+        createLlamaPromptCheck(handler),
+      );
     });
 
     describe('LLAMA3_2', () => {
       const handler = getLlamaModelHandler(LlamaVersion.V3_2);
 
-      it('should generate correct prompt for a single user message', async () => {
-        const config = { temperature: 0.5, top_p: 0.9, max_gen_len: 512 };
-        const prompt = 'Describe the purpose of a "hello world" program in one sentence.';
-        await expect(handler.params(config, prompt)).resolves.toEqual({
-          prompt: dedent`<|begin_of_text|><|start_header_id|>user<|end_header_id|>
-
-          Describe the purpose of a "hello world" program in one sentence.<|eot_id|><|start_header_id|>assistant<|end_header_id|>`,
-          temperature: 0.5,
-          top_p: 0.9,
-          max_gen_len: 512,
-        });
-      });
+      it(
+        'should generate correct prompt for a single user message',
+        createLlamaPromptCheck(handler),
+      );
 
       it('should use max_gen_len parameter', async () => {
         const config = { max_gen_len: 1000 };
@@ -1453,18 +1602,10 @@ describe('llama', () => {
     describe('LLAMA3_3', () => {
       const handler = getLlamaModelHandler(LlamaVersion.V3_3);
 
-      it('should generate correct prompt for a single user message', async () => {
-        const config = { temperature: 0.5, top_p: 0.9, max_gen_len: 512 };
-        const prompt = 'Describe the purpose of a "hello world" program in one sentence.';
-        await expect(handler.params(config, prompt)).resolves.toEqual({
-          prompt: dedent`<|begin_of_text|><|start_header_id|>user<|end_header_id|>
-
-          Describe the purpose of a "hello world" program in one sentence.<|eot_id|><|start_header_id|>assistant<|end_header_id|>`,
-          temperature: 0.5,
-          top_p: 0.9,
-          max_gen_len: 512,
-        });
-      });
+      it(
+        'should generate correct prompt for a single user message',
+        createLlamaPromptCheck(handler),
+      );
 
       it('should use max_gen_len parameter', async () => {
         const config = { max_gen_len: 1000 };
@@ -1898,15 +2039,7 @@ Hello<|eot|><|header_start|>assistant<|header_end|>`;
   describe('getLlamaModelHandler LLAMA3_2 with images', () => {
     it('should include images array in params when multimodal content provided (11B)', async () => {
       const handler = getLlamaModelHandler(LlamaVersion.V3_2);
-      const prompt = JSON.stringify([
-        {
-          role: 'user',
-          content: [
-            { type: 'image', source: { bytes: 'testImageData' } },
-            { type: 'text', text: 'What is in this image?' },
-          ],
-        },
-      ]);
+      const prompt = JSON.stringify([createImagePromptMessage()]);
       const params = await handler.params(
         {},
         prompt,
@@ -1969,15 +2102,7 @@ Hello<|eot|><|header_start|>assistant<|header_end|>`;
 
     it('should throw error when images are provided to 1B/3B text-only models', async () => {
       const handler = getLlamaModelHandler(LlamaVersion.V3_2);
-      const prompt = JSON.stringify([
-        {
-          role: 'user',
-          content: [
-            { type: 'image', source: { bytes: 'testImageData' } },
-            { type: 'text', text: 'What is in this image?' },
-          ],
-        },
-      ]);
+      const prompt = JSON.stringify([createImagePromptMessage()]);
       await expect(
         handler.params({}, prompt, undefined, 'us.meta.llama3-2-3b-instruct-v1:0'),
       ).rejects.toThrow(/Multimodal content \(images\) detected/);
@@ -2015,6 +2140,33 @@ Hello<|eot|><|header_start|>assistant<|header_end|>`;
 
 describe('BEDROCK_MODEL AMAZON_NOVA', () => {
   const modelHandler = BEDROCK_MODEL.AMAZON_NOVA;
+
+  it.each([
+    ['canonical config', { maxTokens: 256 }, '512', 256],
+    ['legacy config', { max_new_tokens: 128 }, '512', 128],
+    ['canonical and legacy config', { maxTokens: 256, max_new_tokens: 128 }, '512', 256],
+    ['environment default', {}, '512', 512],
+    ['no token limit', {}, undefined, undefined],
+  ] as const)(
+    'normalizes the token limit from %s',
+    async (_name, interfaceConfig, env, expected) => {
+      const restoreEnv = mockProcessEnv(
+        { AWS_BEDROCK_MAX_TOKENS: env },
+        { clearPrefixes: ['AWS_BEDROCK_'] },
+      );
+      try {
+        const params = await modelHandler.params({ interfaceConfig }, 'Hello');
+        expect(params.inferenceConfig).not.toHaveProperty('max_new_tokens');
+        if (expected === undefined) {
+          expect(params.inferenceConfig).not.toHaveProperty('maxTokens');
+        } else {
+          expect(params.inferenceConfig.maxTokens).toBe(expected);
+        }
+      } finally {
+        restoreEnv();
+      }
+    },
+  );
 
   it('should format system message correctly when using JSON array input', async () => {
     const config = {};
@@ -2198,13 +2350,7 @@ describe('BEDROCK_MODEL MISTRAL', () => {
 
   describe('tokenUsage', () => {
     it('should use explicit token usage when available', async () => {
-      const mockResponse = {
-        usage: {
-          prompt_tokens: 25,
-          completion_tokens: 50,
-          total_tokens: 75,
-        },
-      };
+      const mockResponse = createCompletionUsage();
 
       const result = modelHandler.tokenUsage!(mockResponse, 'Some input text');
 
@@ -2398,9 +2544,7 @@ describe('BEDROCK_MODEL OPENAI', () => {
       // An eval framework must not hide application-visible content by default. The raw
       // <reasoning>...</reasoning> block the API returned stays in `output` unless the user
       // explicitly opts into a transformation via showThinking.
-      const mockResponse = {
-        choices: [{ message: { content: '<reasoning>Think think</reasoning>The answer is 42.' } }],
-      };
+      const mockResponse = createChatResponse();
 
       expect(modelHandler.output({}, mockResponse)).toBe(
         '<reasoning>Think think</reasoning>The answer is 42.',
@@ -2408,17 +2552,13 @@ describe('BEDROCK_MODEL OPENAI', () => {
     });
 
     it('should strip the <reasoning> block when showThinking is false (parity with the openai: providers)', async () => {
-      const mockResponse = {
-        choices: [{ message: { content: '<reasoning>Think think</reasoning>The answer is 42.' } }],
-      };
+      const mockResponse = createChatResponse();
 
       expect(modelHandler.output({ showThinking: false }, mockResponse)).toBe('The answer is 42.');
     });
 
     it('should surface reasoning as Thinking: when showThinking is true', async () => {
-      const mockResponse = {
-        choices: [{ message: { content: '<reasoning>Think think</reasoning>The answer is 42.' } }],
-      };
+      const mockResponse = createChatResponse();
 
       expect(modelHandler.output({ showThinking: true }, mockResponse)).toBe(
         'Thinking: Think think\n\nThe answer is 42.',
@@ -2767,45 +2907,13 @@ describe('BEDROCK_MODEL MISTRAL_LARGE_2407', () => {
   });
 
   describe('tokenUsage', () => {
-    it('should extract token usage from chat completion format', async () => {
-      const mockResponse = {
-        id: 'b8f7363d-4aed-42cf-879a-7a8db4f37be3',
-        object: 'chat.completion',
-        created: 1743034280,
-        model: 'mistral-large-2407',
-        choices: [
-          {
-            index: 0,
-            message: {
-              role: 'assistant',
-              content: 'Test response',
-            },
-            finish_reason: 'stop',
-          },
-        ],
-        prompt_tokens: 30,
-        completion_tokens: 45,
-      };
-
-      const result = modelHandler.tokenUsage!(mockResponse, 'Test prompt');
-      expect(result).toEqual({
-        prompt: 30,
-        completion: 45,
-        total: 75,
-        numRequests: 1,
-      });
-    });
+    it(
+      'should extract token usage from chat completion format',
+      createMistralUsageCheck(modelHandler),
+    );
 
     it('should return undefined token counts when not provided by the API', async () => {
-      const mockResponse = {
-        choices: [
-          {
-            message: {
-              content: 'This is a test response',
-            },
-          },
-        ],
-      };
+      const mockResponse = createChatResponse('This is a test response');
 
       const result = modelHandler.tokenUsage!(mockResponse, 'Test prompt');
       expect(result).toHaveProperty('prompt', undefined);
@@ -2899,13 +3007,7 @@ describe('BEDROCK_MODEL DEEPSEEK', () => {
 
   describe('output', () => {
     it('should extract text from DeepSeek response with thinking', async () => {
-      const mockResponse = {
-        choices: [
-          {
-            text: '<think>Let me think about this problem...</think>\nThe answer is 42.',
-          },
-        ],
-      };
+      const mockResponse = createThinkTaggedCompletionResponse();
       const config = { showThinking: true };
 
       const result = modelHandler.output(config, mockResponse);
@@ -2914,13 +3016,7 @@ describe('BEDROCK_MODEL DEEPSEEK', () => {
     });
 
     it('should hide thinking when showThinking is false', async () => {
-      const mockResponse = {
-        choices: [
-          {
-            text: '<think>Let me think about this problem...</think>\nThe answer is 42.',
-          },
-        ],
-      };
+      const mockResponse = createThinkTaggedCompletionResponse();
       const config = { showThinking: false };
 
       const result = modelHandler.output(config, mockResponse);
@@ -3086,13 +3182,7 @@ describe('BEDROCK_MODEL token counting functionality', () => {
     const modelHandler = BEDROCK_MODEL.MISTRAL;
 
     it('should extract token usage from API response when available', async () => {
-      const mockResponse = {
-        usage: {
-          prompt_tokens: 25,
-          completion_tokens: 50,
-          total_tokens: 75,
-        },
-      };
+      const mockResponse = createCompletionUsage();
 
       const result = modelHandler.tokenUsage!(mockResponse, 'Test prompt');
       expect(result).toEqual({
@@ -3155,34 +3245,10 @@ describe('BEDROCK_MODEL token counting functionality', () => {
   describe('MISTRAL_LARGE_2407 model handler', () => {
     const modelHandler = BEDROCK_MODEL.MISTRAL_LARGE_2407;
 
-    it('should extract token usage from chat completion format', async () => {
-      const mockResponse = {
-        id: 'b8f7363d-4aed-42cf-879a-7a8db4f37be3',
-        object: 'chat.completion',
-        created: 1743034280,
-        model: 'mistral-large-2407',
-        choices: [
-          {
-            index: 0,
-            message: {
-              role: 'assistant',
-              content: 'Test response',
-            },
-            finish_reason: 'stop',
-          },
-        ],
-        prompt_tokens: 30,
-        completion_tokens: 45,
-      };
-
-      const result = modelHandler.tokenUsage!(mockResponse, 'Test prompt');
-      expect(result).toEqual({
-        prompt: 30,
-        completion: 45,
-        total: 75,
-        numRequests: 1,
-      });
-    });
+    it(
+      'should extract token usage from chat completion format',
+      createMistralUsageCheck(modelHandler),
+    );
 
     it('should handle string token counts', async () => {
       const mockResponse = {
@@ -3218,15 +3284,7 @@ describe('BEDROCK_MODEL token counting functionality', () => {
     });
 
     it('should return undefined token counts when not provided by the API', async () => {
-      const mockResponse = {
-        choices: [
-          {
-            message: {
-              content: 'This is a test response',
-            },
-          },
-        ],
-      };
+      const mockResponse = createChatResponse('This is a test response');
 
       const result = modelHandler.tokenUsage!(mockResponse, 'Test prompt');
       expect(result).toHaveProperty('prompt', undefined);
@@ -3480,20 +3538,57 @@ describe('BEDROCK_MODEL token counting functionality', () => {
   });
 });
 
-describe('AWS_BEDROCK_MODELS mapping', () => {
-  it.each(['fable', 'mythos'])('maps %s 5.1 base, US, and global Runtime IDs', (family) => {
-    for (const prefix of ['', 'us.', 'global.']) {
-      const model = `${prefix}anthropic.claude-${family}-5-1`;
-      expect(AWS_BEDROCK_MODELS[model]).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
-      expect(getHandlerForModel(model)).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
-    }
-    expect(AWS_BEDROCK_MODELS[`eu.anthropic.claude-${family}-5-1`]).toBeUndefined();
+it.each([
+  'AMAZON_NOVA',
+  'AMAZON_NOVA_2',
+  'COHERE_COMMAND',
+  'COHERE_COMMAND_R',
+  'CLAUDE_COMPLETION',
+  'CLAUDE_MESSAGES',
+  'DEEPSEEK',
+  'OPENAI',
+  'MISTRAL_CHAT',
+  'LLAMA2',
+] as const)('keeps missing usage fresh and explicit for %s', (model) => {
+  const handler = BEDROCK_MODEL[model].tokenUsage!;
+  const result = handler({}, 'prompt');
+  expect(Reflect.ownKeys(result)).toEqual(['prompt', 'completion', 'total', 'numRequests']);
+  expect(result).toEqual({
+    prompt: undefined,
+    completion: undefined,
+    total: undefined,
+    numRequests: 1,
   });
+  expect(handler({}, 'prompt')).not.toBe(result);
+});
+
+it('keeps independently replaceable Bedrock token callbacks', () => {
+  expect(BEDROCK_MODEL.AMAZON_NOVA.tokenUsage).not.toBe(BEDROCK_MODEL.AMAZON_NOVA_2.tokenUsage);
+  expect(BEDROCK_MODEL.COHERE_COMMAND.tokenUsage).not.toBe(
+    BEDROCK_MODEL.COHERE_COMMAND_R.tokenUsage,
+  );
+});
+
+describe('AWS_BEDROCK_MODELS mapping', () => {
+  it.each(['fable-5-1', 'mythos-5-1', 'fable-5-2', 'mythos-5-2'])(
+    'maps %s US and global profiles and rejects the bare ID',
+    (model) => {
+      for (const prefix of ['us.', 'global.']) {
+        const id = `${prefix}anthropic.claude-${model}`;
+        expect(AWS_BEDROCK_MODELS[id]).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
+        expect(getHandlerForModel(id)).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
+      }
+      expect(() => getHandlerForModel(`anthropic.claude-${model}`)).toThrow(
+        'requires a cross-region inference profile',
+      );
+      expect(AWS_BEDROCK_MODELS[`eu.anthropic.claude-${model}`]).toBeUndefined();
+    },
+  );
 
   it('maps Fable to Runtime and keeps Messages-only Mythos out of the registry', () => {
     expect(AWS_BEDROCK_MODELS['anthropic.claude-fable-5']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
     expect(AWS_BEDROCK_MODELS['us.anthropic.claude-fable-5']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
-    expect(AWS_BEDROCK_MODELS['eu.anthropic.claude-fable-5']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
+    expect(AWS_BEDROCK_MODELS['eu.anthropic.claude-fable-5']).toBeUndefined();
     expect(AWS_BEDROCK_MODELS['global.anthropic.claude-fable-5']).toBe(
       BEDROCK_MODEL.CLAUDE_MESSAGES,
     );
@@ -3512,16 +3607,16 @@ describe('AWS_BEDROCK_MODELS mapping', () => {
     );
   });
 
-  it('maps Claude Opus 5 across the base and regional inference profiles', () => {
-    // Verified via `aws bedrock list-inference-profiles`: Opus 5 exposes base +
-    // us./eu./global. only — unlike Opus 4.7/4.8 there is no `jp.` profile.
+  it('maps Claude Opus 5 across its Runtime inference profiles', () => {
     expect(AWS_BEDROCK_MODELS['anthropic.claude-opus-5']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
     expect(AWS_BEDROCK_MODELS['us.anthropic.claude-opus-5']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
     expect(AWS_BEDROCK_MODELS['eu.anthropic.claude-opus-5']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
+    expect(AWS_BEDROCK_MODELS['au.anthropic.claude-opus-5']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
     expect(AWS_BEDROCK_MODELS['global.anthropic.claude-opus-5']).toBe(
       BEDROCK_MODEL.CLAUDE_MESSAGES,
     );
     expect(AWS_BEDROCK_MODELS['jp.anthropic.claude-opus-5']).toBeUndefined();
+    expect(getHandlerForModel('anthropic.claude-opus-5')).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
     expect(getHandlerForModel('us.anthropic.claude-opus-5')).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
   });
 
@@ -3541,11 +3636,22 @@ describe('AWS_BEDROCK_MODELS mapping', () => {
     }
   });
 
+  it('maps Claude Sonnet 5.5 across the base and global inference profiles', () => {
+    for (const id of ['anthropic.claude-sonnet-5-5', 'global.anthropic.claude-sonnet-5-5']) {
+      expect(AWS_BEDROCK_MODELS[id]).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
+      expect(getHandlerForModel(id)).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
+    }
+    expect(getHandlerForModel('us.anthropic.claude-sonnet-5-5')).toBe(
+      BEDROCK_MODEL.CLAUDE_MESSAGES,
+    );
+  });
+
   it('maps Claude Sonnet 5 across the base and regional inference profiles', () => {
-    // Sonnet 5 mirrors the Claude 5-generation profile set: base + us./eu./global.
+    // Sonnet 5 exposes base + us./eu./au./global.
     expect(AWS_BEDROCK_MODELS['anthropic.claude-sonnet-5']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
     expect(AWS_BEDROCK_MODELS['us.anthropic.claude-sonnet-5']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
     expect(AWS_BEDROCK_MODELS['eu.anthropic.claude-sonnet-5']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
+    expect(AWS_BEDROCK_MODELS['au.anthropic.claude-sonnet-5']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
     expect(AWS_BEDROCK_MODELS['global.anthropic.claude-sonnet-5']).toBe(
       BEDROCK_MODEL.CLAUDE_MESSAGES,
     );
@@ -3685,11 +3791,21 @@ describe('AWS_BEDROCK_MODELS mapping', () => {
     });
   });
 
+  it('lists the Canada Nova Lite inference profile and omits unlisted Nova profiles', () => {
+    expect(AWS_BEDROCK_MODELS['ca.amazon.nova-lite-v1:0']).toBe(BEDROCK_MODEL.AMAZON_NOVA);
+    for (const id of [
+      'apac.amazon.nova-micro-v1:0',
+      'apac.amazon.nova-2-lite-v1:0',
+      'apac.amazon.nova-premier-v1:0',
+      'eu.amazon.nova-premier-v1:0',
+    ]) {
+      expect(AWS_BEDROCK_MODELS[id]).toBeUndefined();
+    }
+  });
+
   it('should map APAC regional models correctly', async () => {
     expect(AWS_BEDROCK_MODELS['apac.amazon.nova-lite-v1:0']).toBe(BEDROCK_MODEL.AMAZON_NOVA);
-    expect(AWS_BEDROCK_MODELS['apac.amazon.nova-micro-v1:0']).toBe(BEDROCK_MODEL.AMAZON_NOVA);
     expect(AWS_BEDROCK_MODELS['apac.amazon.nova-pro-v1:0']).toBe(BEDROCK_MODEL.AMAZON_NOVA);
-    expect(AWS_BEDROCK_MODELS['apac.amazon.nova-premier-v1:0']).toBe(BEDROCK_MODEL.AMAZON_NOVA);
     expect(AWS_BEDROCK_MODELS['apac.anthropic.claude-3-5-sonnet-20240620-v1:0']).toBe(
       BEDROCK_MODEL.CLAUDE_MESSAGES,
     );
@@ -3697,9 +3813,6 @@ describe('AWS_BEDROCK_MODELS mapping', () => {
       BEDROCK_MODEL.CLAUDE_MESSAGES,
     );
     expect(AWS_BEDROCK_MODELS['apac.anthropic.claude-opus-4-1-20250805-v1:0']).toBe(
-      BEDROCK_MODEL.CLAUDE_MESSAGES,
-    );
-    expect(AWS_BEDROCK_MODELS['apac.anthropic.claude-sonnet-4-20250514-v1:0']).toBe(
       BEDROCK_MODEL.CLAUDE_MESSAGES,
     );
     expect(AWS_BEDROCK_MODELS['apac.meta.llama4-scout-17b-instruct-v1:0']).toBe(
@@ -3714,7 +3827,6 @@ describe('AWS_BEDROCK_MODELS mapping', () => {
     expect(AWS_BEDROCK_MODELS['eu.amazon.nova-lite-v1:0']).toBe(BEDROCK_MODEL.AMAZON_NOVA);
     expect(AWS_BEDROCK_MODELS['eu.amazon.nova-micro-v1:0']).toBe(BEDROCK_MODEL.AMAZON_NOVA);
     expect(AWS_BEDROCK_MODELS['eu.amazon.nova-pro-v1:0']).toBe(BEDROCK_MODEL.AMAZON_NOVA);
-    expect(AWS_BEDROCK_MODELS['eu.amazon.nova-premier-v1:0']).toBe(BEDROCK_MODEL.AMAZON_NOVA);
     expect(AWS_BEDROCK_MODELS['eu.anthropic.claude-3-5-sonnet-20240620-v1:0']).toBe(
       BEDROCK_MODEL.CLAUDE_MESSAGES,
     );
@@ -3725,9 +3837,6 @@ describe('AWS_BEDROCK_MODELS mapping', () => {
       BEDROCK_MODEL.CLAUDE_MESSAGES,
     );
     expect(AWS_BEDROCK_MODELS['eu.anthropic.claude-opus-4-1-20250805-v1:0']).toBe(
-      BEDROCK_MODEL.CLAUDE_MESSAGES,
-    );
-    expect(AWS_BEDROCK_MODELS['eu.anthropic.claude-sonnet-4-20250514-v1:0']).toBe(
       BEDROCK_MODEL.CLAUDE_MESSAGES,
     );
     expect(AWS_BEDROCK_MODELS['eu.meta.llama3-2-1b-instruct-v1:0']).toBe(BEDROCK_MODEL.LLAMA3_2);
@@ -3759,9 +3868,6 @@ describe('AWS_BEDROCK_MODELS mapping', () => {
       BEDROCK_MODEL.CLAUDE_MESSAGES,
     );
     expect(AWS_BEDROCK_MODELS['us.anthropic.claude-opus-4-1-20250805-v1:0']).toBe(
-      BEDROCK_MODEL.CLAUDE_MESSAGES,
-    );
-    expect(AWS_BEDROCK_MODELS['us.anthropic.claude-sonnet-4-20250514-v1:0']).toBe(
       BEDROCK_MODEL.CLAUDE_MESSAGES,
     );
     expect(AWS_BEDROCK_MODELS['us.deepseek.r1-v1:0']).toBe(BEDROCK_MODEL.DEEPSEEK);
@@ -3803,6 +3909,45 @@ describe('AWS_BEDROCK_MODELS mapping', () => {
     );
   });
 
+  it.each([
+    'arn:aws:bedrock:us-east-2:123456789012:inference-profile/eu.anthropic.claude-3-5-haiku-20241022-v1:0',
+    'arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-3-opus-20240229-v1:0',
+    'arn:aws-us-gov:bedrock:us-gov-west-1:123456789012:inference-profile/us-gov.anthropic.claude-3-5-haiku-20241022-v1:0',
+  ])('rejects a retired model named by its ARN (%s)', (modelName) => {
+    expect(() => getHandlerForModel(modelName, { inferenceModelType: 'claude' })).toThrow(
+      `Unknown Amazon Bedrock model: ${modelName}`,
+    );
+  });
+
+  it('allows application inference profiles without inferring their underlying model', () => {
+    const modelArn =
+      'arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/abc123xyz789';
+    expect(getHandlerForModel(modelArn, { inferenceModelType: 'claude' })).toBe(
+      BEDROCK_MODEL.CLAUDE_MESSAGES,
+    );
+  });
+
+  it.each(RETIRED_BEDROCK_MODEL_IDS)(
+    'rejects retired model id %s under every inference profile prefix',
+    (modelName) => {
+      for (const prefix of [
+        'us.',
+        'us-gov.',
+        'eu.',
+        'apac.',
+        'global.',
+        'jp.',
+        'au.',
+        'ca.',
+        'in.',
+      ]) {
+        expect(() => getHandlerForModel(`${prefix}${modelName}`)).toThrow(
+          `Unknown Amazon Bedrock model: ${prefix}${modelName}`,
+        );
+      }
+    },
+  );
+
   it('keeps Claude 3.5/3.7 Sonnet (still offered in APAC regions)', () => {
     expect(AWS_BEDROCK_MODELS['anthropic.claude-3-5-sonnet-20240620-v1:0']).toBe(
       BEDROCK_MODEL.CLAUDE_MESSAGES,
@@ -3816,14 +3961,15 @@ describe('AWS_BEDROCK_MODELS mapping', () => {
   });
 
   it('should map Claude Opus 4.7 models correctly', async () => {
-    // Base model ID (no -v1 suffix for 4.7+ — verified via `aws bedrock list-foundation-models`)
+    // Base model ID (no -v1 suffix for 4.7+).
     expect(AWS_BEDROCK_MODELS['anthropic.claude-opus-4-7']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
 
-    // Cross-region inference profiles (verified via `aws bedrock list-inference-profiles`).
-    // Opus 4.7 uses the newer `jp.`/`global.` scheme instead of the older `apac.` prefix.
+    // Cross-region inference profiles (verified via the AWS model card).
+    // Opus 4.7 uses `jp.`/`au.`/`global.` instead of the older `apac.` prefix.
     expect(AWS_BEDROCK_MODELS['us.anthropic.claude-opus-4-7']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
     expect(AWS_BEDROCK_MODELS['eu.anthropic.claude-opus-4-7']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
     expect(AWS_BEDROCK_MODELS['jp.anthropic.claude-opus-4-7']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
+    expect(AWS_BEDROCK_MODELS['au.anthropic.claude-opus-4-7']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
     expect(AWS_BEDROCK_MODELS['global.anthropic.claude-opus-4-7']).toBe(
       BEDROCK_MODEL.CLAUDE_MESSAGES,
     );
@@ -3837,11 +3983,12 @@ describe('AWS_BEDROCK_MODELS mapping', () => {
     // Base model ID (no -v1 suffix, mirroring Opus 4.7).
     expect(AWS_BEDROCK_MODELS['anthropic.claude-opus-4-8']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
 
-    // Cross-region inference profiles mirror the Opus 4.7 set (`us.`/`eu.`/`jp.`/`global.`,
-    // no older `apac.` prefix).
+    // Cross-region inference profiles mirror the Opus 4.7 set
+    // (`us.`/`eu.`/`jp.`/`au.`/`global.`, with no older `apac.` prefix).
     expect(AWS_BEDROCK_MODELS['us.anthropic.claude-opus-4-8']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
     expect(AWS_BEDROCK_MODELS['eu.anthropic.claude-opus-4-8']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
     expect(AWS_BEDROCK_MODELS['jp.anthropic.claude-opus-4-8']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
+    expect(AWS_BEDROCK_MODELS['au.anthropic.claude-opus-4-8']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
     expect(AWS_BEDROCK_MODELS['global.anthropic.claude-opus-4-8']).toBe(
       BEDROCK_MODEL.CLAUDE_MESSAGES,
     );
@@ -3857,13 +4004,15 @@ describe('AWS_BEDROCK_MODELS mapping', () => {
     // Regional model IDs
     expect(AWS_BEDROCK_MODELS['us.amazon.nova-2-lite-v1:0']).toBe(BEDROCK_MODEL.AMAZON_NOVA_2);
     expect(AWS_BEDROCK_MODELS['eu.amazon.nova-2-lite-v1:0']).toBe(BEDROCK_MODEL.AMAZON_NOVA_2);
-    expect(AWS_BEDROCK_MODELS['apac.amazon.nova-2-lite-v1:0']).toBe(BEDROCK_MODEL.AMAZON_NOVA_2);
+    expect(AWS_BEDROCK_MODELS['jp.amazon.nova-2-lite-v1:0']).toBe(BEDROCK_MODEL.AMAZON_NOVA_2);
 
     // Global cross-region inference
     expect(AWS_BEDROCK_MODELS['global.amazon.nova-2-lite-v1:0']).toBe(BEDROCK_MODEL.AMAZON_NOVA_2);
 
-    // Note: Nova 2 Sonic uses bidirectional streaming API like Nova Sonic v1,
-    // so it's handled separately via NovaSonicProvider in registry.ts
+    // Nova 2 Sonic supports only InvokeModelWithBidirectionalStream. It must not appear in the
+    // ordinary InvokeModel mapping, and AWS publishes no geo inference profile for it.
+    expect(AWS_BEDROCK_MODELS['amazon.nova-2-sonic-v1:0']).toBeUndefined();
+    expect(AWS_BEDROCK_MODELS['us.amazon.nova-2-sonic-v1:0']).toBeUndefined();
   });
 });
 
@@ -3891,9 +4040,7 @@ describe('AwsBedrockCompletionProvider', () => {
     };
 
     vi.mocked(getCache).mockResolvedValue(mockCache as any);
-    vi.mocked(isCacheEnabled).mockImplementation(function () {
-      return false;
-    });
+    vi.mocked(isCacheEnabled).mockReturnValue(false);
 
     originalModelHandler = AWS_BEDROCK_MODELS['us.anthropic.claude-3-7-sonnet-20250219-v1:0'];
 
@@ -3918,6 +4065,201 @@ describe('AwsBedrockCompletionProvider', () => {
     AWS_BEDROCK_MODELS['us.anthropic.claude-3-7-sonnet-20250219-v1:0'] = originalModelHandler;
   });
 
+  it.each(
+    ['arn:aws:bedrock:us-east-1', 'arn:aws-us-gov:bedrock:us-gov-west-1'].flatMap((arnPrefix) =>
+      ['haiku-prod', 'claude-haiku-5-5', 'claude-opus-5-5'].flatMap((profileName) =>
+        [undefined, 0, 0.5].map((temperature) => ({ arnPrefix, profileName, temperature })),
+      ),
+    ),
+  )(
+    'uses only an explicit temperature for an opaque Claude profile ($arnPrefix, $profileName, $temperature)',
+    async ({ arnPrefix, profileName, temperature }) => {
+      const modelName = `${arnPrefix}:123456789012:application-inference-profile/${profileName}`;
+      const responseJson = JSON.stringify({
+        content: [{ type: 'text', text: 'READY' }],
+        usage: { input_tokens: 10, output_tokens: 1 },
+      });
+      const body = Object.assign(new TextEncoder().encode(responseJson), {
+        transformToString: () => responseJson,
+      });
+      mockInvokeModel.mockResolvedValueOnce({ body });
+      const config = { inferenceModelType: 'claude', region: 'us-east-1', temperature };
+      const provider = new AwsBedrockCompletionProvider(modelName, { config });
+
+      const response = await provider.callApi('Return READY');
+
+      expect(response.output).toBe('READY');
+      const request = mockInvokeModel.mock.calls.at(-1)?.[0];
+      expect(request.modelId).toBe(modelName);
+      const requestBody = JSON.parse(request.body);
+      expect(requestBody.max_tokens).toBe(1024);
+      if (temperature === undefined) {
+        expect(requestBody).not.toHaveProperty('temperature');
+      } else {
+        expect(requestBody.temperature).toBe(temperature);
+      }
+    },
+  );
+
+  it.each([
+    ['us.xai.grok-4.7', 2.2, 6.6, 0.55],
+    ['global.xai.grok-4.7', 2, 6, 0.5],
+    ['us.xai.grok-4.6', 2.2, 6.6, 0.55],
+    ['global.xai.grok-4.6', 2, 6, 0.5],
+  ])('prices %s InvokeModel cached input once', async (modelId, input, output, cacheRead) => {
+    const responseJson = JSON.stringify({
+      choices: [{ message: { content: 'ok' } }],
+      usage: {
+        prompt_tokens: 1000,
+        completion_tokens: 500,
+        total_tokens: 1500,
+        prompt_tokens_details: { cached_tokens: 200 },
+      },
+    });
+    const body = Object.assign(new TextEncoder().encode(responseJson), {
+      transformToString: () => responseJson,
+    });
+    mockInvokeModel.mockResolvedValueOnce({ body });
+    const provider = new AwsBedrockCompletionProvider(modelId, { config: { region: 'us-east-1' } });
+    const response = await provider.callApi('hello');
+    expect(response.output).toBe('ok');
+    expect(response.tokenUsage?.prompt).toBe(1000);
+    expect(response.cost).toBeCloseTo((800 * input + 200 * cacheRead + 500 * output) / 1e6, 12);
+  });
+
+  it.each([
+    ['priority', 'flex', 0.5],
+    ['flex', 'priority', 1.75],
+    ['priority', undefined, 1.75],
+  ] as const)(
+    'sends Grok 4.7 InvokeModel tier %s and bills the returned tier %s',
+    async (requested, served, multiplier) => {
+      const config = { region: 'us-gov-west-1', service_tier: requested };
+      const provider = new AwsBedrockCompletionProvider('us.xai.grok-4.7', { config });
+      const responseJson = JSON.stringify({
+        choices: [{ message: { content: 'ok' } }],
+        service_tier: served,
+        usage: {
+          prompt_tokens: 1000,
+          completion_tokens: 500,
+          prompt_tokens_details: { cached_tokens: 200 },
+        },
+      });
+      mockInvokeModel.mockResolvedValueOnce({
+        body: Object.assign(new TextEncoder().encode(responseJson), {
+          transformToString: () => responseJson,
+        }),
+      });
+      const response = await provider.callApi('hello');
+      const request = mockInvokeModel.mock.calls[0][0];
+      expect(request.modelId).toBe('us.xai.grok-4.7');
+      expect(JSON.parse(request.body)).toMatchObject({
+        service_tier: requested,
+        messages: [{ role: 'user', content: 'hello' }],
+      });
+      expect(response.output).toBe('ok');
+      expect(response.cost).toBeCloseTo(
+        ((800 * 2.64 + 200 * 0.66 + 500 * 7.92) / 1e6) * multiplier,
+        12,
+      );
+    },
+  );
+
+  it('rejects an unsupported Grok 4.7 InvokeModel tier before sending the request', async () => {
+    const config = { region: 'us-gov-east-1', service_tier: 'reserved' };
+    const provider = new AwsBedrockCompletionProvider('us.xai.grok-4.7', { config });
+    await expect(provider.callApi('hello')).rejects.toThrow(
+      'Grok 4.7 InvokeModel supports default, priority, and flex',
+    );
+    expect(mockInvokeModel).not.toHaveBeenCalled();
+  });
+
+  it('rejects Reserved on Kimi K3 before invoking Bedrock', async () => {
+    const config = { region: 'ap-south-1', service_tier: 'reserved' };
+    const provider = new AwsBedrockCompletionProvider('in.moonshotai.kimi-k3', { config });
+    await expect(provider.callApi('hello')).rejects.toThrow(
+      new Error('Kimi K3 supports default, priority, and flex service_tier values.'),
+    );
+    expect(mockInvokeModel).not.toHaveBeenCalled();
+  });
+
+  it.each(['default', 'priority', 'flex'])(
+    'sends the %s tier in the Kimi K3 InvokeModel body',
+    async (service_tier) => {
+      const config = { region: 'us-east-1', service_tier };
+      const provider = new AwsBedrockCompletionProvider('us.moonshotai.kimi-k3', { config });
+      const json = JSON.stringify({
+        choices: [{ message: { content: 'ok' } }],
+        usage: { prompt_tokens: 2, completion_tokens: 1 },
+      });
+      mockInvokeModel.mockResolvedValueOnce({
+        body: Object.assign(new TextEncoder().encode(json), { transformToString: () => json }),
+      });
+      const result = await provider.callApi('hello');
+      const request = mockInvokeModel.mock.calls[0][0];
+      expect(request.modelId).toBe('us.moonshotai.kimi-k3');
+      expect(JSON.parse(request.body).service_tier).toBe(service_tier);
+      expect(result.output).toBe('ok');
+      expect(result.cost).toBeUndefined();
+    },
+  );
+
+  it.each(['us.xai.grok-4.7', 'global.zai.glm-5.3', 'us.moonshotai.kimi-k3'])(
+    'preserves reported cache and reasoning usage for %s',
+    async (modelId) => {
+      const json = JSON.stringify({
+        choices: [{ message: { content: 'READY' } }],
+        usage: {
+          prompt_tokens: 1000,
+          completion_tokens: 250,
+          total_tokens: 1250,
+          prompt_tokens_details: { cached_tokens: 800, cache_write_tokens: 100 },
+          completion_tokens_details: { reasoning_tokens: 150 },
+        },
+      });
+      mockInvokeModel.mockResolvedValueOnce({
+        body: Object.assign(new TextEncoder().encode(json), { transformToString: () => json }),
+      });
+      const provider = new AwsBedrockCompletionProvider(modelId, {
+        config: { region: 'us-east-1' },
+      });
+      const response = await provider.callApi('hello');
+      expect(response.output).toBe('READY');
+      expect(response.tokenUsage).toEqual({
+        prompt: 1000,
+        completion: 250,
+        total: 1250,
+        numRequests: 1,
+        completionDetails: {
+          reasoning: 150,
+          cacheReadInputTokens: 800,
+          cacheCreationInputTokens: 100,
+        },
+      });
+      expect(response.cost).toBeUndefined();
+    },
+  );
+
+  it('leaves Grok 4.7 Invoke cost unknown when AWS reports unpriced cache writes', async () => {
+    const json = JSON.stringify({
+      choices: [{ message: { content: 'ok' } }],
+      usage: {
+        prompt_tokens: 1000,
+        completion_tokens: 50,
+        prompt_tokens_details: { cached_tokens: 200, cache_write_tokens: 100 },
+      },
+    });
+    mockInvokeModel.mockResolvedValueOnce({
+      body: Object.assign(new TextEncoder().encode(json), { transformToString: () => json }),
+    });
+    const provider = new AwsBedrockCompletionProvider('us.xai.grok-4.7', {
+      config: { region: 'us-east-1' },
+    });
+    const response = await provider.callApi('hello');
+    expect(response.output).toBe('ok');
+    expect(response.cost).toBeUndefined();
+  });
+
   it('calculates regional pricing for Claude Fable 5 Runtime responses', async () => {
     const responseJson = JSON.stringify({
       content: [{ type: 'text', text: 'ok' }],
@@ -3939,9 +4281,39 @@ describe('AwsBedrockCompletionProvider', () => {
     expect(result.cost).toBeCloseTo(0.00385, 6);
   });
 
+  it('bills one-hour cache writes from Claude Runtime responses at 2x input', async () => {
+    const responseJson = JSON.stringify({
+      content: [{ type: 'text', text: 'ok' }],
+      usage: {
+        input_tokens: 100,
+        output_tokens: 50,
+        cache_read_input_tokens: 500,
+        cache_creation_input_tokens: 100,
+        cache_creation: {
+          ephemeral_5m_input_tokens: 60,
+          ephemeral_1h_input_tokens: 40,
+        },
+      },
+    });
+    const body = Object.assign(new TextEncoder().encode(responseJson), {
+      transformToString: () => responseJson,
+    });
+    mockInvokeModel.mockResolvedValueOnce({ body });
+    const provider = new AwsBedrockCompletionProvider('global.anthropic.claude-fable-5', {
+      config: { region: 'us-east-1' },
+    });
+
+    const result = await provider.callApi('hello');
+
+    expect(result.output).toBe('ok');
+    expect(result.cost).toBeCloseTo(0.00555, 8);
+  });
   it.each([
+    ['global.anthropic.claude-fable-5-2', 1000, 0.02904],
+    ['global.anthropic.claude-mythos-5-2', 0, 0.02104],
     ['global.anthropic.claude-fable-5-1', 1000, 0.0363],
     ['global.anthropic.claude-opus-5-5', 1000, 0.01454],
+    ['global.anthropic.claude-sonnet-5-5', 1000, 0.00727],
     ['global.anthropic.claude-mythos-5-1', 0, 0.0263],
     ['global.anthropic.claude-fable-5', 0, 0.02645],
   ] as const)(
@@ -4086,10 +4458,7 @@ describe('AwsBedrockCompletionProvider', () => {
     const provider = new (class extends AwsBedrockCompletionProvider {
       constructor() {
         super('us.anthropic.claude-3-7-sonnet-20250219-v1:0', {
-          config: {
-            region: 'us-east-1',
-            temperature: 0.5,
-          } as BedrockClaudeMessagesCompletionOptions,
+          config: createSampledRegionConfig() as BedrockClaudeMessagesCompletionOptions,
         });
       }
     })();
@@ -4114,10 +4483,7 @@ describe('AwsBedrockCompletionProvider', () => {
     const provider = new (class extends AwsBedrockCompletionProvider {
       constructor() {
         super('us.anthropic.claude-3-7-sonnet-20250219-v1:0', {
-          config: {
-            region: 'us-east-1',
-            temperature: 0.5,
-          } as BedrockClaudeMessagesCompletionOptions,
+          config: createSampledRegionConfig() as BedrockClaudeMessagesCompletionOptions,
         });
       }
     })();
@@ -4261,16 +4627,12 @@ describe('AwsBedrockCompletionProvider', () => {
     const mockCachedResponseData = { completion: 'cached response' };
 
     mockCache.get = vi.fn().mockResolvedValue(JSON.stringify(mockCachedResponseData));
-    vi.mocked(isCacheEnabled).mockImplementation(function () {
-      return true;
-    });
+    vi.mocked(isCacheEnabled).mockReturnValue(true);
 
     const provider = new (class extends AwsBedrockCompletionProvider {
       constructor() {
         super('us.anthropic.claude-3-7-sonnet-20250219-v1:0', {
-          config: {
-            region: 'us-east-1',
-          } as BedrockClaudeMessagesCompletionOptions,
+          config: createRegionConfig() as BedrockClaudeMessagesCompletionOptions,
         });
       }
     })();
@@ -4703,15 +5065,9 @@ describe('BEDROCK_MODEL.QWEN', () => {
 
     it('should handle thinking mode response', async () => {
       const config = { showThinking: true };
-      const responseJson = {
-        choices: [
-          {
-            message: {
-              content: '<think>Let me think about this step by step...</think>The answer is 42',
-            },
-          },
-        ],
-      };
+      const responseJson = createChatResponse(
+        '<think>Let me think about this step by step...</think>The answer is 42',
+      );
 
       const result = qwenHandler.output(config, responseJson);
 
@@ -4720,15 +5076,9 @@ describe('BEDROCK_MODEL.QWEN', () => {
 
     it('should hide thinking when showThinking is false', async () => {
       const config = { showThinking: false };
-      const responseJson = {
-        choices: [
-          {
-            message: {
-              content: '<think>Let me think about this step by step...</think>The answer is 42',
-            },
-          },
-        ],
-      };
+      const responseJson = createChatResponse(
+        '<think>Let me think about this step by step...</think>The answer is 42',
+      );
 
       const result = qwenHandler.output(config, responseJson);
 
@@ -4918,6 +5268,77 @@ describe('BEDROCK_MODEL OPENAI_COMPAT', () => {
       );
     });
 
+    it.each([undefined, true, false])(
+      'renders separate reasoning with showThinking=%s',
+      (showThinking) => {
+        const response = {
+          choices: [{ message: { content: 'answer', reasoning_content: 'steps' } }],
+        };
+        expect(modelHandler.output({ showThinking }, response)).toBe(
+          showThinking === false ? 'answer' : 'Thinking: steps\n\nanswer',
+        );
+      },
+    );
+
+    it.each([null, undefined, ''])(
+      'preserves separate reasoning without an answer (%s)',
+      (content) => {
+        const response = { choices: [{ message: { content, reasoning_content: 'steps' } }] };
+        expect(modelHandler.output({}, response)).toBe('Thinking: steps');
+        expect(modelHandler.output({ showThinking: true }, response)).toBe('Thinking: steps');
+        expect(modelHandler.output({ showThinking: false }, response)).toBe(content);
+      },
+    );
+
+    it.each([undefined, true, false])(
+      'preserves tool-only and mixed output with separate reasoning and showThinking=%s',
+      (showThinking) => {
+        for (const content of [null, 'Let me check.']) {
+          const response = {
+            choices: [
+              {
+                message: {
+                  content,
+                  reasoning_content: 'steps',
+                  tool_calls: [{ function: { name: 'calc', arguments: '{"x":1}' } }],
+                },
+              },
+            ],
+          };
+          const parts = [
+            ...(showThinking === false ? [] : ['Thinking: steps']),
+            ...(content ? [content] : []),
+            'Called function calc with arguments: {"x":1}',
+          ];
+          expect(modelHandler.output({ showThinking }, response)).toBe(parts.join('\n\n'));
+        }
+      },
+    );
+
+    it.each([undefined, null, '', 42, {}, []])(
+      'leaves content unchanged for empty or non-string reasoning (%s)',
+      (reasoning_content) => {
+        expect(
+          modelHandler.output(
+            {},
+            { choices: [{ message: { content: 'answer', reasoning_content } }] },
+          ),
+        ).toBe('answer');
+      },
+    );
+
+    it('preserves inline reasoning when a separate reasoning field is also supplied', () => {
+      const response = {
+        choices: [
+          { message: { content: '<think>inline steps</think>answer', reasoning_content: 'steps' } },
+        ],
+      };
+      expect(modelHandler.output({}, response)).toBe(
+        'Thinking: steps\n\n<think>inline steps</think>answer',
+      );
+      expect(modelHandler.output({ showThinking: false }, response)).toBe('answer');
+    });
+
     it('returns reasoning verbatim by default and strips it when showThinking is false', () => {
       const withThink = { choices: [{ message: { content: '<think>steps</think>answer' } }] };
       const withReasoning = {
@@ -4962,7 +5383,12 @@ describe('BEDROCK_MODEL OPENAI_COMPAT', () => {
 
     it('returns non-string content (e.g. multimodal blocks) unchanged', () => {
       const blocks = [{ type: 'text', text: 'hi' }];
-      expect(modelHandler.output({}, { choices: [{ message: { content: blocks } }] })).toBe(blocks);
+      expect(
+        modelHandler.output(
+          {},
+          { choices: [{ message: { content: blocks, reasoning_content: 'steps' } }] },
+        ),
+      ).toBe(blocks);
     });
 
     it('returns undefined when the response has no choices', () => {
@@ -5098,6 +5524,13 @@ const OPENAI_COMPAT_MODEL_IDS = [
 ] as const;
 
 describe('getHandlerForModel routing for OpenAI-compatible families', () => {
+  it.each(['anthropic.claude-opus-4-7', 'anthropic.claude-opus-4-8', 'anthropic.claude-opus-5'])(
+    'keeps IAM-native bare model %s on InvokeModel routes',
+    (modelName) => {
+      expect(getHandlerForModel(modelName)).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
+    },
+  );
+
   it.each([
     'us.zai.glm-5',
     'global.zai.glm-5',

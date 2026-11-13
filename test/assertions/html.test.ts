@@ -24,6 +24,9 @@ const defaultParams = {
   test: {} as AtomicTestCase,
 };
 
+// Exactly 10 Mi UTF-16 code units; multibyte text distinguishes a byte limit.
+const maxSizeHtml = `<div>${'😀'.repeat(5 * 1024 * 1024 - 6)}x</div>`;
+
 describe('handleContainsHtml', () => {
   it('should pass when output contains HTML tags', () => {
     const params: AssertionParams = {
@@ -75,6 +78,12 @@ describe('handleContainsHtml', () => {
       '<p>Multiple &nbsp; HTML &lt; entities &gt;</p>',
       '<custom-element attr="value">Web component</custom-element>',
       '<div data-id="123" class="test">Modern HTML</div>',
+      '<!DOCTYPE html>',
+      '<body',
+      '<x></y>',
+      '<custom />',
+      '&amp;<!-- comment -->',
+      maxSizeHtml,
     ];
 
     htmlExamples.forEach((html) => {
@@ -102,6 +111,13 @@ describe('handleContainsHtml', () => {
       'if (a<b) { return c>d; }', // Code with comparison operators
       'The price is <$50',
       'Email me at <john@example.com>',
+      '<custom/>',
+      '</custom>',
+      ' class="value"',
+      '&amp;&amp;',
+      '<!-- a --><!-- b -->',
+      maxSizeHtml + 'x',
+      ' ' + maxSizeHtml,
     ];
 
     nonHtmlExamples.forEach((text) => {
@@ -216,6 +232,18 @@ describe('handleContainsHtml', () => {
 });
 
 describe('handleIsHtml', () => {
+  const verifyValidHtml = (html: string) => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      assertion: { type: 'is-html' },
+      outputString: html,
+      inverse: false,
+    };
+
+    const result = handleIsHtml(params);
+    expect(result.pass).toBe(true);
+  };
+
   it('should pass when output is valid HTML', () => {
     const validHtmlExamples = [
       '<div>Hello World</div>',
@@ -321,17 +349,7 @@ describe('handleIsHtml', () => {
       '<form><input type="text" /><button>Submit</button></form>',
     ];
 
-    fragments.forEach((html) => {
-      const params: AssertionParams = {
-        ...defaultParams,
-        assertion: { type: 'is-html' },
-        outputString: html,
-        inverse: false,
-      };
-
-      const result = handleIsHtml(params);
-      expect(result.pass).toBe(true);
-    });
+    fragments.forEach(verifyValidHtml);
   });
 
   it('should reject mixed content', () => {
@@ -363,33 +381,13 @@ describe('handleIsHtml', () => {
       '<title>Page</title>',
     ];
 
-    headOnlyExamples.forEach((html) => {
-      const params: AssertionParams = {
-        ...defaultParams,
-        assertion: { type: 'is-html' },
-        outputString: html,
-        inverse: false,
-      };
-
-      const result = handleIsHtml(params);
-      expect(result.pass).toBe(true);
-    });
+    headOnlyExamples.forEach(verifyValidHtml);
   });
 
   it('should accept SVG and template wrappers', () => {
     const fragments = ['<svg><circle /></svg>', '<template><div>x</div></template>'];
 
-    fragments.forEach((html) => {
-      const params: AssertionParams = {
-        ...defaultParams,
-        assertion: { type: 'is-html' },
-        outputString: html,
-        inverse: false,
-      };
-
-      const result = handleIsHtml(params);
-      expect(result.pass).toBe(true);
-    });
+    fragments.forEach(verifyValidHtml);
   });
 
   it('should accept custom elements', () => {
@@ -398,17 +396,7 @@ describe('handleIsHtml', () => {
       '<CUSTOM-ELEMENT>Uppercase custom element</CUSTOM-ELEMENT>',
     ];
 
-    fragments.forEach((html) => {
-      const params: AssertionParams = {
-        ...defaultParams,
-        assertion: { type: 'is-html' },
-        outputString: html,
-        inverse: false,
-      };
-
-      const result = handleIsHtml(params);
-      expect(result.pass).toBe(true);
-    });
+    fragments.forEach(verifyValidHtml);
   });
 
   it('should reject doctype-only input', () => {

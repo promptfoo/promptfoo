@@ -58,6 +58,57 @@ describe('prompt file configuration', () => {
     expect(new Set(prompts.map(generateIdFromPrompt)).size).toBe(count);
   });
 
+  it('preserves an explicit label for each globbed file', async () => {
+    const prompts = await readPrompts([{ id: 'file://*.md', label: 'Named prompt' }], directory);
+
+    expect(prompts).toHaveLength(2);
+    expect(prompts.map((prompt) => prompt.label).sort()).toEqual([
+      'Named prompt: one.md',
+      'Named prompt: two.md',
+    ]);
+    expect(new Set(prompts.map(generateIdFromPrompt)).size).toBe(2);
+  });
+
+  it('preserves derived IDs through Markdown glob processing', async () => {
+    const prompts = await readPrompts([{ id: 'file://*.md', label: 'Group' }], directory);
+    expect(prompts.map((prompt) => prompt.id).sort()).toEqual([
+      'file://*.md:one.md',
+      'file://*.md:two.md',
+    ]);
+  });
+
+  it('gives each text chunk in a glob a distinct stable ID', async () => {
+    const prompts = await readPrompts([{ id: 'file://*.txt', label: 'Group' }], directory);
+    expect(prompts.map((prompt) => prompt.id).sort()).toEqual([
+      'file://*.txt:chunks.txt:1',
+      'file://*.txt:chunks.txt:2',
+      'file://*.txt:single.txt',
+    ]);
+  });
+
+  it('gives each file and row in a CSV glob a distinct identity', async () => {
+    await Promise.all([
+      writeFile(path.join(directory, 'glob-one.csv'), 'prompt\nFirst row\nSecond row\n'),
+      writeFile(path.join(directory, 'glob-two.csv'), 'prompt\nFirst row\nSecond row\n'),
+    ]);
+
+    const prompts = await readPrompts(
+      [{ id: 'file://glob-*.csv', label: 'CSV prompt', config }],
+      directory,
+    );
+
+    expect(prompts).toHaveLength(4);
+    expect(prompts.map((prompt) => prompt.id).sort()).toEqual([
+      'file://glob-*.csv:glob-one.csv:1',
+      'file://glob-*.csv:glob-one.csv:2',
+      'file://glob-*.csv:glob-two.csv:1',
+      'file://glob-*.csv:glob-two.csv:2',
+    ]);
+    expect(new Set(prompts.map(generateIdFromPrompt)).size).toBe(4);
+    expect(prompts.every((prompt) => prompt.config === config)).toBe(true);
+    expect(prompts.every((prompt) => !prompt.label.includes(directory))).toBe(true);
+  });
+
   it('preserves metadata on an unmatched glob fallback without reading the pattern', async () => {
     const descriptor = {
       id: `file://${path.join(directory, 'missing-*.md')}`,

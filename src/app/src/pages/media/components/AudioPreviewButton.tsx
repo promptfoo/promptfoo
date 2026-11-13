@@ -142,16 +142,7 @@ export function AudioPreviewButton({
       <audio ref={audioRef} src={audioUrl} preload="none" onEnded={handleAudioEnded} />
 
       {/* Waveform visualization */}
-      <AudioWaveform
-        hash={hash}
-        isPlaying={isPlaying}
-        barCount={7}
-        barWidth={4}
-        minBarHeight={8}
-        maxBarHeight={24}
-        showIcon
-        iconSize="h-10 w-10"
-      />
+      <AudioWaveform hash={hash} isPlaying={isPlaying} size="compact" />
 
       {/* Play/Pause button overlay */}
       <button

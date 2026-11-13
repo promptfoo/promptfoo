@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { EVAL_TABLE_MAX_PAGE_SIZE } from '../evalConstants';
 import { EvalResultsFilterMode, EvaluateOptionsSchema, TestSuiteConfigSchema } from '../index';
 import { EmailSchema, MessageResponseSchema } from './common';
 
@@ -82,8 +83,8 @@ export type CopyEvalResponse = z.infer<typeof CopyEvalResponseSchema>;
 
 // GET /api/evals/:id/table
 
-/** Upper bound on `limit` for non-export page requests; must stay >= the UI's largest page-size option. */
-export const EVAL_TABLE_MAX_PAGE_SIZE = 1000;
+// Compatibility export for existing API schema consumers.
+export { EVAL_TABLE_MAX_PAGE_SIZE } from '../evalConstants';
 
 /** Query parameters for eval table endpoint. */
 export const EvalTableQuerySchema = z
@@ -124,7 +125,6 @@ export const EvalTableResponseSchema = z
     totalCount: z.number(),
     filteredCount: z.number(),
     filteredMetrics: z.array(z.unknown()).nullable(),
-    derivedMetricNamesByPrompt: z.array(z.array(z.string())).optional(),
     config: z.record(z.string(), z.unknown()),
     author: z.string().nullable(),
     version: z.number(),

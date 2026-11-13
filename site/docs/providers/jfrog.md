@@ -29,7 +29,7 @@ export QWAK_TOKEN="your-token-here"
 
 Here's a basic example of how to use the JFrog ML provider:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: jfrog:llama_3_8b_instruct
     config:
@@ -39,7 +39,7 @@ providers:
 
 You can also use the legacy `qwak:` prefix:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: qwak:llama_3_8b_instruct
 ```
@@ -58,7 +58,7 @@ from a different environment variable.
 
 Example with full configuration:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: jfrog:llama_3_8b_instruct
     config:
@@ -99,6 +99,7 @@ Example chat conversation:
 ```
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - file://prompts.yaml
 

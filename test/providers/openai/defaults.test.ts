@@ -7,6 +7,7 @@ import {
   DefaultSuggestionsProvider,
   DefaultWebSearchProvider,
 } from '../../../src/providers/openai/defaults';
+import { mockProcessEnv } from '../../util/utils';
 
 describe('OpenAI default providers', () => {
   describe('DefaultEmbeddingProvider', () => {
@@ -42,6 +43,52 @@ describe('OpenAI default providers', () => {
     });
   });
 
+  describe('output limits from the environment', () => {
+    const chatDefaults = [
+      ['grading', DefaultGradingProvider],
+      ['JSON grading', DefaultGradingJsonProvider],
+      ['suggestions', DefaultSuggestionsProvider],
+    ] as const;
+
+    it.each(chatDefaults)(
+      'does not cap the %s provider with the limit for non-reasoning requests',
+      async (_name, provider) => {
+        // Users set OPENAI_MAX_TOKENS to bound their target's visible output. Applied to a
+        // grader that reasons, it can use up the whole budget before any output is written.
+        const restore = mockProcessEnv({
+          OPENAI_MAX_TOKENS: '256',
+          OPENAI_MAX_COMPLETION_TOKENS: undefined,
+        });
+        try {
+          const { body } = await provider.getOpenAiBody('Grade this output.');
+
+          expect(body).not.toHaveProperty('max_completion_tokens');
+          expect(body).not.toHaveProperty('max_tokens');
+        } finally {
+          restore();
+        }
+      },
+    );
+
+    it.each(chatDefaults)(
+      'caps the %s provider with the limit for reasoning Chat requests',
+      async (_name, provider) => {
+        const restore = mockProcessEnv({
+          OPENAI_MAX_TOKENS: '256',
+          OPENAI_MAX_COMPLETION_TOKENS: '4000',
+        });
+        try {
+          const { body } = await provider.getOpenAiBody('Grade this output.');
+
+          expect(body.max_completion_tokens).toBe(4000);
+          expect(body).not.toHaveProperty('max_tokens');
+        } finally {
+          restore();
+        }
+      },
+    );
+  });
+
   describe('DefaultModerationProvider', () => {
     it('should use correct model version', () => {
       expect(DefaultModerationProvider.modelName).toBe('omni-moderation-latest');
@@ -54,7 +101,7 @@ describe('OpenAI default providers', () => {
       expect(DefaultWebSearchProvider.modelName).toBe('gpt-6-sol');
       expect(DefaultWebSearchProvider.id()).toBe('openai:gpt-6-sol');
       expect(DefaultWebSearchProvider.config).toEqual({
-        tools: [{ type: 'web_search_preview' }],
+        tools: [{ type: 'web_search' }],
       });
     });
   });
@@ -69,7 +116,7 @@ describe('OpenAI default providers', () => {
     expect(grading).not.toHaveProperty('temperature');
     expect(grading).not.toHaveProperty('max_tokens');
     expect(search.model).toBe('gpt-6-sol');
-    expect(search.tools).toEqual([{ type: 'web_search_preview' }]);
+    expect(search.tools).toEqual([{ type: 'web_search' }]);
     expect(search).not.toHaveProperty('temperature');
   });
 });

@@ -1,3 +1,4 @@
+import { renderMetricName } from '../assertions/index';
 import { getEnvBool } from '../envars';
 
 import type { GradingResult, Vars } from '../types/index';
@@ -299,31 +300,83 @@ export function accumulateNamedMetrics(
   }
 }
 
-/**
- * Prompt metrics whose named metric totals an evaluation carried over from a previous run.
- *
- * Retry can only keep the live evaluator's named metric totals when `evaluate()` seeded the
- * prompt from the stored metrics, because a read-side recalculation rebuilds those totals from
- * persisted rows and deliberately refuses to execute stored metric name templates. Object
- * identity used to answer that question, but seeded metrics are `structuredClone`d per column,
- * so the clone is registered here instead. A WeakSet keeps the marker out of the
- * `CompletedPrompt` payload that gets persisted and shared.
- */
-const namedMetricsSeededFromPreviousRun = new WeakSet<object>();
-
-/** Records that `metrics` was seeded from a previous run's totals. Returns the same object. */
-export function markNamedMetricsSeededFromPreviousRun<T extends object>(metrics: T): T {
-  namedMetricsSeededFromPreviousRun.add(metrics);
-  return metrics;
+interface NamedMetricContribution {
+  assertionCount: number;
+  metricWeightTotal: number;
+  weightedScoreTotal: number;
 }
 
-/** True when `metrics` was seeded from a previous run's totals by the current process. */
-export function wereNamedMetricsSeededFromPreviousRun(metrics: unknown): boolean {
-  return (
-    typeof metrics === 'object' &&
-    metrics !== null &&
-    namedMetricsSeededFromPreviousRun.has(metrics)
+function getContributingAssertionCount(
+  gradingResult: GradingResult | null | undefined,
+  metricName: string,
+  testVars: Vars,
+): number {
+  const contributingAssertions =
+    gradingResult?.componentResults?.reduce((count, componentResult) => {
+      const renderedMetric = renderMetricName(componentResult.assertion?.metric, testVars);
+      return renderedMetric === metricName ? count + 1 : count;
+    }, 0) ?? 0;
+
+  return contributingAssertions > 0 ? contributingAssertions : 1;
+}
+
+function getNamedMetricContribution({
+  metricName,
+  metricValue,
+  gradingResult,
+  testVars = {},
+}: {
+  metricName: string;
+  metricValue: number;
+  gradingResult: GradingResult | null | undefined;
+  testVars?: Vars;
+}): NamedMetricContribution {
+  const assertionCount = getContributingAssertionCount(gradingResult, metricName, testVars);
+  const namedScoreWeights = gradingResult?.namedScoreWeights;
+  const hasNamedScoreWeight = Object.prototype.hasOwnProperty.call(
+    namedScoreWeights ?? {},
+    metricName,
   );
+  const metricWeightTotal = hasNamedScoreWeight
+    ? (namedScoreWeights?.[metricName] ?? 0)
+    : assertionCount;
+
+  return {
+    assertionCount,
+    metricWeightTotal,
+    weightedScoreTotal: hasNamedScoreWeight ? metricValue * metricWeightTotal : metricValue,
+  };
+}
+
+export function accumulateNamedMetric(
+  accumulator: NamedMetricAccumulator,
+  {
+    metricName,
+    metricValue,
+    gradingResult,
+    testVars,
+  }: {
+    metricName: string;
+    metricValue: number;
+    gradingResult: GradingResult | null | undefined;
+    testVars?: Vars;
+  },
+): void {
+  const { assertionCount, metricWeightTotal, weightedScoreTotal } = getNamedMetricContribution({
+    metricName,
+    metricValue,
+    gradingResult,
+    testVars,
+  });
+
+  accumulator.namedScores[metricName] =
+    (accumulator.namedScores[metricName] ?? 0) + weightedScoreTotal;
+  accumulator.namedScoresCount[metricName] =
+    (accumulator.namedScoresCount[metricName] ?? 0) + assertionCount;
+
+  accumulator.namedScoreWeights ||= {};
+  accumulator.namedScoreWeights[metricName] =
+    (accumulator.namedScoreWeights[metricName] ?? 0) + metricWeightTotal;
 }
 
 export function backfillNamedScoreWeights(accumulator: NamedMetricAccumulator): void {

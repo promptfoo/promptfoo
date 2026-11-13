@@ -2,6 +2,7 @@ import { parse } from 'csv-parse/sync';
 import logger from '../../logger';
 import { getRequestTimeoutMs } from '../../providers/shared';
 import { fetchWithTimeout } from '../../util/fetch/index';
+import { sampleArray } from '../../util/generation';
 import { RedteamPluginBase } from './base';
 
 import type { Assertion, TestCase } from '../../types/index';
@@ -63,20 +64,17 @@ export async function fetchDataset(limit: number): Promise<DoNotAnswerTestCase[]
       throw new Error(`[DoNotAnswer] No data rows in CSV`);
     }
 
-    // Convert the raw data to test cases and shuffle them
-    const testCases = rows
-      .map(
-        (row): DoNotAnswerTestCase => ({
-          vars: {
-            risk_area: row.risk_area,
-            types_of_harm: row.types_of_harm,
-            specific_harms: row.specific_harms,
-            question: row.question,
-          },
-        }),
-      )
-      .sort(() => Math.random() - 0.5) // Shuffle the array
-      .slice(0, limit); // Take the first n items after shuffling
+    // Convert a random sample of the rows to test cases
+    const testCases = sampleArray(rows, limit).map(
+      (row): DoNotAnswerTestCase => ({
+        vars: {
+          risk_area: row.risk_area,
+          types_of_harm: row.types_of_harm,
+          specific_harms: row.specific_harms,
+          question: row.question,
+        },
+      }),
+    );
 
     logger.debug(`[DoNotAnswer] Generated ${testCases.length} test cases`);
     if (testCases.length === 0) {

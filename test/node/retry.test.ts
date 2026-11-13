@@ -2,11 +2,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
 import { getEnvBool } from '../../src/envars';
 import { evaluate } from '../../src/evaluator';
+import {
+  type InMemoryEvaluation,
+  InMemoryEvaluationStore,
+} from '../../src/evaluator/inMemoryStore';
 import logger from '../../src/logger';
 import Eval from '../../src/models/eval';
 import { notifyEvaluationChanged } from '../../src/models/evalMutation';
+import { generateIdFromPrompt } from '../../src/models/prompt';
 import {
-  createNamedMetricsPreservationGuard,
   deleteErrorResults,
   getErrorResultIds,
   recalculatePromptMetrics,
@@ -15,7 +19,6 @@ import {
 import { createShareableUrl, isSharingEnabled } from '../../src/share';
 import { ResultFailureReason } from '../../src/types/index';
 import { resolveConfigs } from '../../src/util/config/load';
-import { markNamedMetricsSeededFromPreviousRun } from '../../src/util/namedMetrics';
 import { writeMultipleOutputs } from '../../src/util/output';
 import { shouldShareResults } from '../../src/util/sharing';
 
@@ -23,14 +26,11 @@ import type { EnvOverrides, TestSuite, UnifiedConfig } from '../../src/types/ind
 
 const dbMocks = vi.hoisted(() => {
   const errorRows: Array<{ id: string }> = [];
-  const affectedEvalRows: Array<{
-    evalId: string;
-    hasNamedScores?: number;
-  }> = [];
+  const affectedEvalRows: Array<{ evalId: string }> = [];
   const errorRowsAll = vi.fn(async () => errorRows);
-  const deleteReturning = vi.fn(async () => affectedEvalRows);
+  const affectedEvalRowsAll = vi.fn(async () => affectedEvalRows);
+  const deleteRun = vi.fn(async () => undefined);
   const db = {
-    all: vi.fn(async () => []),
     select: vi.fn(() => ({
       from: vi.fn(() => ({
         where: vi.fn(() => ({
@@ -38,9 +38,16 @@ const dbMocks = vi.hoisted(() => {
         })),
       })),
     })),
+    selectDistinct: vi.fn(() => ({
+      from: vi.fn(() => ({
+        where: vi.fn(() => ({
+          all: affectedEvalRowsAll,
+        })),
+      })),
+    })),
     delete: vi.fn(() => ({
       where: vi.fn(() => ({
-        returning: deleteReturning,
+        run: deleteRun,
       })),
     })),
   };
@@ -48,7 +55,7 @@ const dbMocks = vi.hoisted(() => {
   return {
     affectedEvalRows,
     db,
-    deleteReturning,
+    deleteRun,
     errorRows,
   };
 });
@@ -86,7 +93,6 @@ function createEval(overrides: Partial<Eval> = {}): Eval {
     config: {},
     persisted: false,
     prompts: [],
-    results: [],
     addPrompts: vi.fn().mockResolvedValue(undefined),
     fetchResultsBatched: vi.fn(async function* () {}),
     ...overrides,
@@ -160,127 +166,17 @@ describe('retryCommand', () => {
       'error-result-1',
       'error-result-2',
     ]);
-    await expect(deleteErrorResults(['error-result-1', 'error-result-2'])).resolves.toBeUndefined();
+    await deleteErrorResults(['error-result-1', 'error-result-2']);
 
-    expect(dbMocks.deleteReturning).toHaveBeenCalledTimes(1);
+    expect(dbMocks.deleteRun).toHaveBeenCalledTimes(1);
     expect(notifyEvaluationChanged).toHaveBeenCalledWith('eval-123');
     expect(notifyEvaluationChanged).toHaveBeenCalledWith('eval-456');
-  });
-
-  it('reports whether deleted ERROR rows contained named scores', async () => {
-    dbMocks.affectedEvalRows.push({ evalId: 'eval-123', hasNamedScores: 1 });
-
-    await expect(
-      deleteErrorResults(['error-result-1'], { reportNamedScores: true }),
-    ).resolves.toEqual({ allRequestedDeleted: true, hadNamedScores: true });
-    expect(notifyEvaluationChanged).toHaveBeenCalledWith('eval-123');
-  });
-
-  it('does not authorize preservation when a requested ERROR row was not deleted', async () => {
-    await expect(
-      deleteErrorResults(['missing-result'], { reportNamedScores: true }),
-    ).resolves.toEqual({ allRequestedDeleted: false, hadNamedScores: false });
-  });
-
-  it('preserves named metrics only for complete reused prompt metrics without derived metrics', async () => {
-    const metrics = {
-      namedScores: { quality: 3 },
-      namedScoresCount: { quality: 2 },
-      namedScoreWeights: { quality: 4 },
-      testPassCount: 0,
-      testFailCount: 0,
-      testErrorCount: 0,
-    } as any;
-    // `evaluate()` clones the stored metrics into each column and marks the clone, so the
-    // guard must accept a marked copy and reject an unmarked one -- never object identity,
-    // which no longer survives the clone.
-    const seededMetrics = markNamedMetricsSeededFromPreviousRun({ ...metrics });
-    const originalEval = createEval({ prompts: [{ metrics }] as any[] });
-    const canPreserve = await createNamedMetricsPreservationGuard(originalEval);
-
-    expect(
-      canPreserve(createEval({ prompts: [{ metrics: seededMetrics }] as any[] }), undefined),
-    ).toBe(true);
-    expect(canPreserve(createEval({ prompts: [{ metrics }] as any[] }), undefined)).toBe(false);
-    expect(
-      canPreserve(createEval({ prompts: [{ metrics: { ...metrics } }] as any[] }), undefined),
-    ).toBe(false);
-    expect(
-      canPreserve(createEval({ prompts: [{ metrics: seededMetrics }] as any[] }), [
-        { name: 'average', value: 'quality / __count' },
-      ]),
-    ).toBe(false);
-
-    const derivedEval = createEval({
-      config: { derivedMetrics: [{ name: 'average', value: 'quality / __count' }] },
-      prompts: [{ metrics }] as any[],
-    });
-    expect(
-      (await createNamedMetricsPreservationGuard(derivedEval))(
-        createEval({ prompts: [{ metrics: seededMetrics }] as any[] }),
-        undefined,
-      ),
-    ).toBe(false);
-
-    const incompleteMetrics = { namedScores: {}, namedScoresCount: {} } as any;
-    const incompleteEval = createEval({ prompts: [{ metrics: incompleteMetrics }] as any[] });
-    const incompleteGuard = await createNamedMetricsPreservationGuard(incompleteEval);
-    incompleteMetrics.namedScoreWeights = {};
-    markNamedMetricsSeededFromPreviousRun(incompleteMetrics);
-    expect(incompleteGuard(incompleteEval, undefined)).toBe(false);
-
-    const mismatchedMetrics = markNamedMetricsSeededFromPreviousRun({
-      namedScores: { quality: 3 },
-      namedScoresCount: {},
-      namedScoreWeights: {},
-    }) as any;
-    const mismatchedEval = createEval({ prompts: [{ metrics: mismatchedMetrics }] as any[] });
-    expect(
-      (await createNamedMetricsPreservationGuard(mismatchedEval))(mismatchedEval, undefined),
-    ).toBe(false);
-
-    const orphanCountMetrics = markNamedMetricsSeededFromPreviousRun({
-      namedScores: {},
-      namedScoresCount: { quality: 2 },
-      namedScoreWeights: { quality: 4 },
-    }) as any;
-    const orphanCountEval = createEval({ prompts: [{ metrics: orphanCountMetrics }] as any[] });
-    expect(
-      (await createNamedMetricsPreservationGuard(orphanCountEval))(orphanCountEval, undefined),
-    ).toBe(false);
-  });
-
-  it('rebuilds named metrics when seeded columns have duplicate identities or change order', async () => {
-    const makePrompt = (provider: string, id: string, score: number) => ({
-      provider,
-      id,
-      metrics: markNamedMetricsSeededFromPreviousRun({
-        testPassCount: 0,
-        testFailCount: 0,
-        testErrorCount: 0,
-        namedScores: { quality: score },
-        namedScoresCount: { quality: 2 },
-        namedScoreWeights: { quality: 2 },
-      }),
-    });
-    const first = makePrompt('echo', 'prompt', 1);
-    const duplicate = makePrompt('echo', 'prompt', 2);
-    const original = createEval({ prompts: [first, duplicate] as any });
-    const wronglySeeded = createEval({ prompts: [duplicate, duplicate] as any });
-    expect((await createNamedMetricsPreservationGuard(original))(wronglySeeded, undefined)).toBe(
-      false,
-    );
-
-    const second = makePrompt('other', 'prompt', 2);
-    const unique = createEval({ prompts: [first, second] as any });
-    const canPreserve = await createNamedMetricsPreservationGuard(unique);
-    expect(canPreserve(unique, undefined)).toBe(true);
-    expect(canPreserve(createEval({ prompts: [second, first] as any }), undefined)).toBe(false);
   });
 
   it('skips database work when there are no error result ids to delete', async () => {
     await deleteErrorResults([]);
 
+    expect(dbMocks.db.selectDistinct).not.toHaveBeenCalled();
     expect(dbMocks.db.delete).not.toHaveBeenCalled();
   });
 
@@ -460,6 +356,7 @@ describe('retryCommand', () => {
       expect(prompts[0].metrics).toMatchObject({
         cost: expectedLogicalCost,
         incurredCost: expectedIncurredCost,
+        testCacheHitCount: costs.filter(({ cached }) => cached).length,
       });
       expect(evalRecord.addPrompts).toHaveBeenCalledWith(prompts);
     },
@@ -576,6 +473,9 @@ describe('retryCommand', () => {
     await recalculatePromptMetrics(evalRecord);
 
     expect(prompts[0].metrics.tokenUsage).toMatchObject(scenario.expected);
+    expect(prompts[0].metrics.testCacheHitCount).toBe(
+      'cached' in scenario.response && scenario.response.cached ? 1 : 0,
+    );
   });
 
   it('logs and rethrows metric recalculation and persistence failures', async () => {
@@ -609,50 +509,6 @@ describe('retryCommand', () => {
     );
   });
 
-  it('preserves live rendered named metrics while rebuilding other prompt metrics', async () => {
-    const prompts = [
-      {
-        metrics: {
-          namedScores: { 'quality:ALPHA': 3 },
-          namedScoresCount: { 'quality:ALPHA': 2 },
-          namedScoreWeights: { 'quality:ALPHA': 4 },
-        },
-      },
-    ] as any[];
-    const evalRecord = createEval({
-      prompts,
-      fetchResultsBatched: vi.fn(async function* () {
-        yield [
-          {
-            id: 'retried-result',
-            promptIdx: 0,
-            success: true,
-            failureReason: ResultFailureReason.NONE,
-            score: 0.75,
-            namedScores: { 'quality:ALPHA': 0.75 },
-            testCase: { vars: { category: { name: 'alpha' } } },
-            gradingResult: {
-              componentResults: [
-                { assertion: { metric: 'quality:{{ category.name | upper }}' } },
-                { assertion: { metric: 'quality:{{ category.name | upper }}' } },
-              ],
-            },
-          },
-        ] as any[];
-      }),
-    });
-
-    await recalculatePromptMetrics(evalRecord, { preserveNamedMetrics: true });
-
-    expect(prompts[0].metrics).toMatchObject({
-      score: 0.75,
-      testPassCount: 1,
-      namedScores: { 'quality:ALPHA': 3 },
-      namedScoresCount: { 'quality:ALPHA': 2 },
-      namedScoreWeights: { 'quality:ALPHA': 4 },
-    });
-  });
-
   it('retries from the saved config, cleans up old errors, and shares the result', async () => {
     const originalEval = createEval({
       config: { sharing: false } as UnifiedConfig,
@@ -676,6 +532,7 @@ describe('retryCommand', () => {
         delay: 0,
         eventSource: 'cli',
         maxConcurrency: 4,
+        restorePromptColumns: true,
         showProgressBar: true,
       });
       return retriedEval;
@@ -690,7 +547,7 @@ describe('retryCommand', () => {
       { filterProviders: 'selected-target' },
       originalEval.config,
     );
-    expect(dbMocks.deleteReturning).toHaveBeenCalledTimes(1);
+    expect(dbMocks.deleteRun).toHaveBeenCalledTimes(1);
     expect(notifyEvaluationChanged).toHaveBeenCalledWith(originalEval.id);
     expect(shouldShareResults).toHaveBeenCalledWith({
       cliShare: undefined,
@@ -719,6 +576,7 @@ describe('retryCommand', () => {
         delay: 25,
         eventSource: 'cli',
         maxConcurrency: 1,
+        restorePromptColumns: false,
         showProgressBar: false,
       });
       return retriedEval;
@@ -742,6 +600,78 @@ describe('retryCommand', () => {
     );
   });
 
+  it.each(['test', 'defaultTest', 'scenario'] as const)(
+    'retries an authored-ID selection from %s through the real evaluator',
+    async (selectorSource) => {
+      const authored = [
+        { id: 'other-id', raw: 'other text', label: 'Other' },
+        { id: 'selected-id', raw: 'selected text', label: 'Selected' },
+      ];
+      const provider = {
+        id: () => 'echo',
+        callApi: vi.fn(async (prompt: string) => ({ output: prompt })),
+      };
+      const selection = { prompts: ['selected-id'] };
+      const suite: TestSuite = {
+        providers: [provider],
+        prompts: authored,
+        ...(selectorSource === 'scenario'
+          ? { scenarios: [{ config: [selection], tests: [{}] }] }
+          : {
+              tests: [selectorSource === 'test' ? selection : {}],
+              ...(selectorSource === 'defaultTest' ? { defaultTest: selection } : {}),
+            }),
+      };
+      const originalEval = createEval({
+        config: { prompts: authored, providers: ['echo'] },
+        prompts: authored.map((prompt) => ({
+          ...prompt,
+          id: generateIdFromPrompt(prompt),
+          provider: provider.id(),
+        })),
+      });
+      vi.mocked(Eval.findById).mockResolvedValue(originalEval);
+      dbMocks.errorRows.push({ id: 'mocked-retry-row' });
+      vi.mocked(resolveConfigs).mockResolvedValue({
+        basePath: '',
+        config: originalEval.config as UnifiedConfig,
+        testSuite: suite,
+      });
+      const actual =
+        await vi.importActual<typeof import('../../src/evaluator')>('../../src/evaluator');
+      vi.mocked(evaluate).mockImplementationOnce(async (receivedSuite, receivedEval, options) => {
+        // Exercise real routing with in-memory results; the command's persistence,
+        // error-row cleanup and sharing remain mocked by this test module.
+        const memory: InMemoryEvaluation = {
+          id: originalEval.id,
+          config: originalEval.config,
+          persisted: true,
+          prompts: structuredClone(originalEval.prompts),
+          results: [],
+          vars: [],
+          resultPersistenceFailed: false,
+          finalResults: [],
+          failedResults: [],
+        };
+        await actual.evaluate(receivedSuite, memory, options, {
+          createEvaluationStore: () => new InMemoryEvaluationStore(memory),
+          createResultWriters: () => [],
+        });
+        expect(memory.results).toMatchObject([
+          { promptIdx: 1, testIdx: 0, success: true, response: { output: 'selected text' } },
+        ]);
+        expect(memory.prompts).toMatchObject(originalEval.prompts);
+        return receivedEval as Eval;
+      });
+
+      await expect(retryCommand(originalEval.id, { verbose: true })).resolves.toBe(originalEval);
+
+      expect(evaluate).toHaveBeenCalledOnce();
+      expect(provider.callApi.mock.calls.map(([prompt]) => prompt)).toEqual(['selected text']);
+      expect(createShareableUrl).not.toHaveBeenCalled();
+    },
+  );
+
   it('preserves error results when an explicit config no longer matches the stored filter', async () => {
     const originalEval = createEval({
       runtimeOptions: { providerFilter: 'selected-target' },
@@ -755,7 +685,7 @@ describe('retryCommand', () => {
     );
 
     expect(evaluate).not.toHaveBeenCalled();
-    expect(dbMocks.deleteReturning).not.toHaveBeenCalled();
+    expect(dbMocks.deleteRun).not.toHaveBeenCalled();
   });
 
   it('preserves error results when the stored filter cannot be applied to the config', async () => {
@@ -772,7 +702,7 @@ describe('retryCommand', () => {
     // The pattern is validated before any config resolution happens.
     expect(resolveConfigs).not.toHaveBeenCalled();
     expect(evaluate).not.toHaveBeenCalled();
-    expect(dbMocks.deleteReturning).not.toHaveBeenCalled();
+    expect(dbMocks.deleteRun).not.toHaveBeenCalled();
     expect(cliState.resume).toBe(false);
     expect(cliState.retryMode).toBe(false);
   });
@@ -790,7 +720,7 @@ describe('retryCommand', () => {
 
     expect(resolveConfigs).not.toHaveBeenCalled();
     expect(evaluate).not.toHaveBeenCalled();
-    expect(dbMocks.deleteReturning).not.toHaveBeenCalled();
+    expect(dbMocks.deleteRun).not.toHaveBeenCalled();
   });
 
   it('preserves error results and clears retry state when evaluation fails', async () => {
@@ -802,25 +732,7 @@ describe('retryCommand', () => {
 
     await expect(retryCommand(originalEval.id, {})).rejects.toThrow('provider unavailable');
 
-    expect(dbMocks.deleteReturning).not.toHaveBeenCalled();
-    expect(cliState.resume).toBe(false);
-    expect(cliState.retryMode).toBe(false);
-    expect(cliState.maxConcurrency).toBeUndefined();
-  });
-
-  it('preserves error results and clears retry state when checkpoint verification fails', async () => {
-    const originalEval = createEval({ persisted: true });
-    vi.mocked(Eval.findById).mockResolvedValue(originalEval);
-    dbMocks.errorRows.push({ id: 'error-result-1' });
-    mockResolvedConfig();
-    dbMocks.db.all.mockRejectedValueOnce(new Error('checkpoint query failed'));
-
-    await expect(retryCommand(originalEval.id, { maxConcurrency: 3 })).rejects.toThrow(
-      'checkpoint query failed',
-    );
-
-    expect(evaluate).not.toHaveBeenCalled();
-    expect(dbMocks.deleteReturning).not.toHaveBeenCalled();
+    expect(dbMocks.deleteRun).not.toHaveBeenCalled();
     expect(cliState.resume).toBe(false);
     expect(cliState.retryMode).toBe(false);
     expect(cliState.maxConcurrency).toBeUndefined();
@@ -842,7 +754,7 @@ describe('retryCommand', () => {
 
     expect(writeMultipleOutputs).toHaveBeenCalledWith(['results.jsonl'], retriedEval, null);
     expect(retriedEval.resultPersistenceFailed).toBe(true);
-    expect(dbMocks.deleteReturning).not.toHaveBeenCalled();
+    expect(dbMocks.deleteRun).not.toHaveBeenCalled();
   });
 
   it.each([false, true])(
@@ -920,7 +832,7 @@ describe('retryCommand', () => {
     dbMocks.errorRows.push({ id: 'error-result-1' });
     mockResolvedConfig();
     vi.mocked(evaluate).mockResolvedValue(retriedEval);
-    dbMocks.deleteReturning.mockRejectedValueOnce(new Error('database unavailable'));
+    dbMocks.deleteRun.mockRejectedValueOnce(new Error('database unavailable'));
 
     await expect(retryCommand(originalEval.id, {})).resolves.toBe(retriedEval);
 

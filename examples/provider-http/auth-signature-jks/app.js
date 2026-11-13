@@ -1,4 +1,5 @@
 const express = require('express');
+const defaultErrorHandler = require('./defaultErrorHandler.cjs');
 const crypto = require('crypto');
 const fs = require('fs');
 const jks = require('jks-js');
@@ -104,6 +105,8 @@ app.post('/chat', chatRateLimiter, validateSignature, async (req, res) => {
 });
 
 const PORT = process.env.PORT || 2346;
+app.use(defaultErrorHandler);
+
 app.listen(PORT, (error) => {
   if (error) {
     console.error(`Failed to start server: ${error.message}`);

@@ -10,7 +10,7 @@ import {
 } from '@promptfoo/redteam/plugins/policy/utils';
 import { CheckCircle, ChevronDown, ChevronUp, XCircle } from 'lucide-react';
 import { useTableStore } from './store';
-import { getNamedMetricTotal, mergeFilteredNamedMetrics } from './utils';
+import { getNamedMetricTotal } from './utils';
 
 const DEFAULT_VISIBLE_COUNT = 8;
 
@@ -19,8 +19,7 @@ const DEFAULT_VISIBLE_COUNT = 8;
  * Shows in the filters section below table actions for red team evaluations.
  */
 export function FilterChips() {
-  const { filters, addFilter, removeFilter, config, table, derivedMetricNamesByPrompt } =
-    useTableStore();
+  const { filters, addFilter, removeFilter, config, table } = useTableStore();
   const policiesById = useCustomPoliciesMap(config?.redteam?.plugins ?? []);
   const [isExpanded, setIsExpanded] = useState(false);
 
@@ -29,28 +28,23 @@ export function FilterChips() {
     if (!table?.head?.prompts) {
       return [];
     }
-    const metricMap = new Map<string, { score: number; denominator: number | undefined }>();
-    const derivedMetricNames = config?.derivedMetrics?.map((metric) => metric.name) ?? [];
+    const metricMap = new Map<string, { passCount: number; testCount: number | undefined }>();
 
-    table.head.prompts.forEach((prompt, idx) => {
-      const metrics = mergeFilteredNamedMetrics(
-        prompt.metrics,
-        null,
-        derivedMetricNamesByPrompt?.[idx] ?? derivedMetricNames,
-      );
-      if (metrics?.namedScores) {
-        Object.entries(metrics.namedScores).forEach(([metric, score]) => {
+    table.head.prompts.forEach((prompt) => {
+      if (prompt.metrics?.namedScores) {
+        Object.keys(prompt.metrics.namedScores).forEach((metric) => {
+          const existing = metricMap.get(metric) || { passCount: 0, testCount: 0 };
+          const score = prompt.metrics?.namedScores?.[metric] ?? 0;
           if (!Number.isFinite(score)) {
             return;
           }
-          const existing = metricMap.get(metric) ?? { score: 0, denominator: 0 };
-          const denominator = getNamedMetricTotal(metrics, metric);
+          const count = getNamedMetricTotal(prompt.metrics, metric);
           metricMap.set(metric, {
-            score: existing.score + score,
-            denominator:
-              existing.denominator === undefined || denominator === undefined
+            passCount: existing.passCount + score,
+            testCount:
+              existing.testCount === undefined || count === undefined
                 ? undefined
-                : existing.denominator + denominator,
+                : existing.testCount + count,
           });
         });
       }
@@ -58,29 +52,20 @@ export function FilterChips() {
 
     return (
       Array.from(metricMap.entries())
-        .map(([metric, { score, denominator }]) => ({
-          metric,
-          score,
-          denominator,
-          percentage:
-            denominator !== undefined &&
-            Number.isFinite(denominator) &&
-            denominator !== 0 &&
-            Number.isFinite((score / denominator) * 100)
-              ? (score / denominator) * 100
-              : undefined,
-        }))
+        .map(([metric, counts]) => ({ metric, ...counts }))
         // Sort by pass rate (lowest first) so most concerning metrics appear first when collapsed
         .sort((a, b) => {
-          const rateA = a.percentage ?? Number.POSITIVE_INFINITY;
-          const rateB = b.percentage ?? Number.POSITIVE_INFINITY;
+          const rateA =
+            a.testCount !== undefined && a.testCount > 0 ? a.passCount / a.testCount : 1;
+          const rateB =
+            b.testCount !== undefined && b.testCount > 0 ? b.passCount / b.testCount : 1;
           if (rateA !== rateB) {
             return rateA - rateB;
           }
           return a.metric.localeCompare(b.metric);
         })
     );
-  }, [config?.derivedMetrics, derivedMetricNamesByPrompt, table]);
+  }, [table]);
 
   // Get display name for a metric (handles policy metrics)
   const getDisplayName = (metric: string): string => {
@@ -112,6 +97,10 @@ export function FilterChips() {
       return 'bg-blue-50 border-blue-300 text-blue-700 dark:bg-blue-950/40 dark:border-blue-700 dark:text-blue-300';
     }
     return 'bg-background text-muted-foreground border-border hover:bg-muted hover:text-foreground';
+  };
+
+  const hasFailures = (passCount: number, testCount: number): boolean => {
+    return testCount > 0 && passCount < testCount;
   };
 
   // Only show for red team evals
@@ -150,8 +139,10 @@ export function FilterChips() {
   return (
     <div className="flex flex-wrap items-center gap-1.5">
       <span className="text-xs font-medium text-muted-foreground">Filter by metric:</span>
-      {visibleMetrics.map(({ metric, score, denominator, percentage }) => {
+      {visibleMetrics.map(({ metric, passCount, testCount }) => {
         const isActive = getActiveFilterId(metric) !== null;
+        const hasDenominator = testCount !== undefined && testCount > 0;
+        const passRate = hasDenominator ? Math.round((passCount / testCount) * 100) : undefined;
         return (
           <Tooltip key={`metric-${metric}`}>
             <TooltipTrigger asChild>
@@ -163,24 +154,26 @@ export function FilterChips() {
                   getChipStyles(isActive),
                 )}
               >
-                {percentage !== undefined &&
-                  (percentage < 100 ? (
+                {hasDenominator &&
+                  (hasFailures(passCount, testCount) ? (
                     <XCircle className="size-3 text-red-500 dark:text-red-400" />
                   ) : (
                     <CheckCircle className="size-3 text-emerald-500 dark:text-emerald-400" />
                   ))}
                 {getDisplayName(metric)}
-                <span className="opacity-70">
-                  ({score}/{denominator ?? '—'})
-                </span>
+                {testCount !== undefined && (
+                  <span className="opacity-70">
+                    ({passCount}/{testCount})
+                  </span>
+                )}
               </button>
             </TooltipTrigger>
             <TooltipContent>
               {isActive
                 ? 'Click to remove filter'
-                : percentage === undefined
-                  ? 'Percentage unavailable — Click to filter'
-                  : `${Math.round(percentage)}% pass rate — Click to filter`}
+                : passRate === undefined
+                  ? 'Pass rate unavailable — Click to filter'
+                  : `${passRate}% pass rate — Click to filter`}
             </TooltipContent>
           </Tooltip>
         );

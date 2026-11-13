@@ -1,4 +1,5 @@
 import confirm from '@inquirer/confirm';
+import { AbortPromptError, ExitPromptError } from '@inquirer/core';
 import chalk from 'chalk';
 import dedent from 'dedent';
 import { cloudConfig } from '../globalConfig/cloud';
@@ -188,9 +189,15 @@ export function shareCommand(program: Command) {
                   Re-share (will overwrite existing data)?
                 `,
               });
-            } catch {
-              // User pressed Ctrl+C or cancelled
-              process.exitCode = 0;
+            } catch (error) {
+              if (error instanceof AbortPromptError || error instanceof ExitPromptError) {
+                process.exitCode = 0;
+              } else {
+                logger.error(
+                  `Failed to confirm re-sharing: ${error instanceof Error ? error.message : String(error)}`,
+                );
+                process.exitCode = 1;
+              }
               return;
             }
 

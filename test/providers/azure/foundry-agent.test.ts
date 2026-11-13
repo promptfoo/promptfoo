@@ -1,10 +1,19 @@
 import { SpanStatusCode, trace } from '@opentelemetry/api';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+const { createEsLoggerModule } = await vi.hoisted(() => import('../../factories/logger'));
+
 import { getCache, isCacheEnabled } from '../../../src/cache';
 import logger from '../../../src/logger';
 import { AzureFoundryAgentProvider } from '../../../src/providers/azure/foundry-agent';
 import { AzureGenericProvider } from '../../../src/providers/azure/generic';
+import { createResponseMessage } from '../../factories/literalFixtures';
 import { mockProcessEnv } from '../../util/utils';
+
+const createCachedAgentResponse = () => ({
+  output: 'cached response',
+  __promptfooFoundryAgent: { id: 'agent_123', name: 'weather-agent' },
+});
 
 vi.mock('../../../src/cache', async (importOriginal) => {
   return {
@@ -14,15 +23,7 @@ vi.mock('../../../src/cache', async (importOriginal) => {
   };
 });
 
-vi.mock('../../../src/logger', () => ({
-  __esModule: true,
-  default: {
-    debug: vi.fn(),
-    error: vi.fn(),
-    info: vi.fn(),
-    warn: vi.fn(),
-  },
-}));
+vi.mock('../../../src/logger', () => createEsLoggerModule(true));
 
 const projectUrl = 'https://test.services.ai.azure.com/api/projects/test-project';
 const mockAgent = {
@@ -49,13 +50,7 @@ function createMessageResponse(text: string) {
     id: 'resp_123',
     model: 'gpt-4.1',
     error: null,
-    output: [
-      {
-        type: 'message',
-        role: 'assistant',
-        content: [{ type: 'output_text', text }],
-      },
-    ],
+    output: [createResponseMessage(text)],
     usage: {
       input_tokens: 10,
       output_tokens: 5,
@@ -165,10 +160,8 @@ describe('AzureFoundryAgentProvider', () => {
     mockGetAgent = vi.fn();
     mockListAgents = vi.fn().mockReturnValue(createAsyncIterable([]));
     mockClient = {
-      agents: {
-        get: mockGetAgent,
-        list: mockListAgents,
-      },
+      getAgent: mockGetAgent,
+      listAgents: mockListAgents,
       getOpenAIClient: vi.fn(() => ({
         responses: {
           create: mockResponsesCreate,
@@ -269,22 +262,17 @@ describe('AzureFoundryAgentProvider', () => {
           ],
           temperature: 0.2,
           top_p: 0.8,
+          agent_reference: { name: 'weather-agent', type: 'agent_reference' },
         }),
         expect.objectContaining({
-          body: {
-            agent_reference: {
-              name: 'weather-agent',
-              type: 'agent_reference',
-            },
-          },
           maxRetries: 0,
           signal: expect.any(AbortSignal),
         }),
       );
       // Guard against regressing to the deprecated `agent` key, which the
       // Foundry Responses API now rejects with a 400.
-      const responseOptions = mockResponsesCreate.mock.calls[0][1];
-      expect(responseOptions.body).not.toHaveProperty('agent');
+      const requestBody = mockResponsesCreate.mock.calls[0][0];
+      expect(requestBody).not.toHaveProperty('agent');
       expect(result.output).toBe('Test response');
     });
 
@@ -368,15 +356,10 @@ describe('AzureFoundryAgentProvider', () => {
       expect(mockGetAgent).toHaveBeenCalledWith('asst_legacy');
       expect(mockListAgents).toHaveBeenCalledTimes(1);
       expect(mockResponsesCreate).toHaveBeenCalledWith(
-        expect.any(Object),
         expect.objectContaining({
-          body: {
-            agent_reference: {
-              name: 'weather-agent',
-              type: 'agent_reference',
-            },
-          },
+          agent_reference: { name: 'weather-agent', type: 'agent_reference' },
         }),
+        expect.any(Object),
       );
       expect(result.output).toBe('Listed response');
     });
@@ -617,16 +600,11 @@ describe('AzureFoundryAgentProvider', () => {
             },
           ],
           previous_response_id: 'resp_tool',
+          agent_reference: { name: 'weather-agent', type: 'agent_reference' },
         },
         {
           maxRetries: 0,
           signal: expect.any(AbortSignal),
-          body: {
-            agent_reference: {
-              name: 'weather-agent',
-              type: 'agent_reference',
-            },
-          },
         },
       );
       expect(result.output).toBe('Tool finished');
@@ -809,10 +787,7 @@ describe('AzureFoundryAgentProvider', () => {
     it('emits an agent invocation span but no gen_ai.turn spans on a cache hit', async () => {
       const spans = installSpanRecorder();
       const mockCache = {
-        get: vi.fn().mockResolvedValue({
-          output: 'cached response',
-          __promptfooFoundryAgent: { id: 'agent_123', name: 'weather-agent' },
-        }),
+        get: vi.fn().mockResolvedValue(createCachedAgentResponse()),
         set: vi.fn().mockResolvedValue(undefined),
       };
       vi.mocked(isCacheEnabled).mockReturnValue(true);
@@ -843,10 +818,7 @@ describe('AzureFoundryAgentProvider', () => {
     it('restores the resolved agent identity from cache for a new legacy-ID provider', async () => {
       const spans = installSpanRecorder();
       const mockCache = {
-        get: vi.fn().mockResolvedValue({
-          output: 'cached response',
-          __promptfooFoundryAgent: { id: 'agent_123', name: 'weather-agent' },
-        }),
+        get: vi.fn().mockResolvedValue(createCachedAgentResponse()),
         set: vi.fn().mockResolvedValue(undefined),
       };
       vi.mocked(isCacheEnabled).mockReturnValue(true);
@@ -950,6 +922,24 @@ describe('AzureFoundryAgentProvider', () => {
           __promptfooFoundryAgent: { id: 'agent_123', name: 'weather-agent' },
         }),
       );
+    });
+
+    it.each([
+      ['rate_limit_exceeded', 'rate_limit'],
+      ['insufficient_quota', 'quota'],
+      ['invalid_prompt', undefined],
+    ])('retains the retry classification of an in-band %s error', async (code, kind) => {
+      mockGetAgent.mockResolvedValue(mockAgent);
+      mockResponsesCreate.mockResolvedValueOnce({
+        ...createMessageResponse(''),
+        status: 'failed',
+        error: { code, message: '429 tokens' },
+      });
+      const provider = new AzureFoundryAgentProvider('weather-agent', { config: { projectUrl } });
+      const result = await provider.callApi('test prompt');
+
+      expect(result.error).toBe('429 tokens');
+      expect(result.metadata?.rateLimitKind).toBe(kind);
     });
 
     it('marks a resolved-but-failed Responses turn as errored', async () => {
@@ -1212,9 +1202,9 @@ describe('AzureFoundryAgentProvider', () => {
 
       expect(result.output).toBe('finished');
       expect(mockResponsesCreate).toHaveBeenCalledTimes(2);
-      for (const [, options] of mockResponsesCreate.mock.calls) {
+      for (const [body, options] of mockResponsesCreate.mock.calls) {
+        expect(body.agent_reference).toEqual({ name: 'weather-agent', type: 'agent_reference' });
         expect(options).toEqual({
-          body: { agent_reference: { name: 'weather-agent', type: 'agent_reference' } },
           timeout: 250,
           maxRetries: 0,
           signal: expect.any(AbortSignal),
@@ -1581,6 +1571,26 @@ describe('AzureFoundryAgentProvider', () => {
       expect(mockCache.set).toHaveBeenCalledWith(cacheKey, expect.any(Object));
     });
 
+    it('does not authorize an explicit principal using a shared cached response', async () => {
+      vi.mocked(isCacheEnabled).mockReturnValue(true);
+      vi.mocked(getCache).mockResolvedValue({
+        get: vi.fn().mockResolvedValue(createCachedAgentResponse()),
+        set: vi.fn(),
+      } as any);
+      mockGetAgent.mockResolvedValue(mockAgent);
+      mockResponsesCreate.mockResolvedValue(createMessageResponse('fresh response'));
+      const scoped = new AzureFoundryAgentProvider('weather-agent', {
+        config: {
+          projectUrl,
+          azureTenantId: 'fixture-tenant',
+          azureClientId: 'fixture-client',
+          azureClientSecret: 'fixture-secret',
+        },
+      });
+      expect(await scoped.callApi('same prompt')).toMatchObject({ output: 'fresh response' });
+      expect(getCache).not.toHaveBeenCalled();
+    });
+
     it('should scope cache keys by project URL', async () => {
       mockGetAgent.mockResolvedValue(mockAgent);
       mockResponsesCreate.mockResolvedValue(createMessageResponse('Test response'));
@@ -1801,7 +1811,7 @@ describe('AzureFoundryAgentProvider', () => {
 
       it('reads Retry-After from an Azure HttpHeaders on the SDK response', async () => {
         // `@azure/core-rest-pipeline`'s HttpHeadersImpl, which is what an
-        // `@azure/ai-projects` RestError carries. Measured against the real
+        // Azure REST client error carries. Measured against the real
         // class: `entries` is undefined, `Object.entries()` yields exactly
         // `[['_headersMap', Map]]`, and only get/toJSON/[Symbol.iterator]
         // reach the headers. Built here rather than imported because

@@ -21,8 +21,7 @@ export DASHSCOPE_API_KEY=your_api_key_here
 
 The provider uses [OpenAI provider options](/docs/providers/openai); support varies by model. Example:
 
-```yaml title="promptfooconfig.yaml"
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+```yaml
 providers:
   - alibaba:qwen3.8-max # Simple usage
   - id: alibaba:qwen3.7-plus # Aliases: alicloud:, aliyun:, dashscope:
@@ -33,6 +32,8 @@ providers:
 ```
 
 :::note
+
+The equivalent provider prefixes are `alicloud:`, `aliyun:`, and `dashscope:`. For new configurations, Alibaba recommends `qwen3.7-plus` for balanced use, `qwen3.8-flash` for lower cost, or `qwen3.8-max` for stronger reasoning. Check the [model catalog for your region](https://www.alibabacloud.com/help/en/model-studio/text-generation-model); model availability differs by region.
 
 If you're using the Alibaba Cloud Beijing region console, switch the base URL to `https://dashscope.aliyuncs.com/compatible-mode/v1` instead of the international endpoint.
 
@@ -146,7 +147,7 @@ All support 131K context (129,024 in, 8,192 out)
 
 ### Qwen 3 Open-source Models
 
-Latest open-source Qwen3 models with thinking mode support:
+Open-source Qwen3 models with thinking mode support:
 
 - `qwen3-next-80b-a3b-thinking` / `qwen3-next-80b-a3b-instruct` - Next-gen 80B (September 2025)
 - `qwen3-235b-a22b-thinking-2507` / `qwen3-235b-a22b-instruct-2507` - 235B July 2025 versions

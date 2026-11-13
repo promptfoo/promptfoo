@@ -88,46 +88,32 @@ function jsonUsageCached(column: SQL, usagePath: string, cachedResponsePath?: st
 
 type TokenUsageField = 'total' | 'prompt' | 'completion' | 'cached' | 'numRequests';
 
-interface FilteredBasicMetricsRow {
+type TokenUsagePrefix =
+  | ''
+  | 'attacker_'
+  | 'grading_'
+  | 'incurred_'
+  | 'incurred_attacker_'
+  | 'incurred_grading_';
+
+type FilteredBasicMetricsRow = {
   prompt_idx: number;
   pass_count: number;
   fail_count: number;
   error_count: number;
+  cache_hit_count: number;
   total_score: number;
   total_latency: number;
   total_cost: number;
-  total_tokens: number | null;
-  prompt_tokens: number | null;
-  completion_tokens: number | null;
-  cached_tokens: number | null;
+  incurred_cost: number;
+  has_incurred_cost: number;
   num_requests_with_tokens: number;
-  attacker_total_tokens: number | null;
-  attacker_prompt_tokens: number | null;
-  attacker_completion_tokens: number | null;
-  attacker_cached_tokens: number | null;
-  attacker_num_requests: number | null;
-  grading_total_tokens: number | null;
-  grading_prompt_tokens: number | null;
-  grading_completion_tokens: number | null;
-  grading_cached_tokens: number | null;
-  grading_num_requests: number | null;
   has_incurred_usage: number;
-  incurred_total_tokens: number | null;
-  incurred_prompt_tokens: number | null;
-  incurred_completion_tokens: number | null;
-  incurred_cached_tokens: number | null;
-  incurred_num_requests: number | null;
-  incurred_attacker_total_tokens: number | null;
-  incurred_attacker_prompt_tokens: number | null;
-  incurred_attacker_completion_tokens: number | null;
-  incurred_attacker_cached_tokens: number | null;
-  incurred_attacker_num_requests: number | null;
-  incurred_grading_total_tokens: number | null;
-  incurred_grading_prompt_tokens: number | null;
-  incurred_grading_completion_tokens: number | null;
-  incurred_grading_cached_tokens: number | null;
-  incurred_grading_num_requests: number | null;
-}
+} & Record<
+  | `${TokenUsagePrefix}${'total_tokens' | 'prompt_tokens' | 'completion_tokens' | 'cached_tokens'}`
+  | `${Exclude<TokenUsagePrefix, ''>}num_requests`,
+  number | null
+>;
 
 function jsonUsageField(
   column: SQL,
@@ -170,55 +156,27 @@ function jsonIncurredUsageField(
   END`;
 }
 
-function getIncurredTokenUsage(
-  row: FilteredBasicMetricsRow,
-): NonNullable<PromptMetrics['tokenUsage']['incurredTokenUsage']> {
+function getTokenUsageCounts(row: FilteredBasicMetricsRow, prefix: TokenUsagePrefix) {
   return {
-    total: row.incurred_total_tokens || 0,
-    prompt: row.incurred_prompt_tokens || 0,
-    completion: row.incurred_completion_tokens || 0,
-    cached: row.incurred_cached_tokens || 0,
-    numRequests: row.incurred_num_requests || 0,
-    attacker: {
-      total: row.incurred_attacker_total_tokens || 0,
-      prompt: row.incurred_attacker_prompt_tokens || 0,
-      completion: row.incurred_attacker_completion_tokens || 0,
-      cached: row.incurred_attacker_cached_tokens || 0,
-      numRequests: row.incurred_attacker_num_requests || 0,
-    },
-    assertions: {
-      total: row.incurred_grading_total_tokens || 0,
-      prompt: row.incurred_grading_prompt_tokens || 0,
-      completion: row.incurred_grading_completion_tokens || 0,
-      cached: row.incurred_grading_cached_tokens || 0,
-      numRequests: row.incurred_grading_num_requests || 0,
-    },
+    total: row[`${prefix}total_tokens`] || 0,
+    prompt: row[`${prefix}prompt_tokens`] || 0,
+    completion: row[`${prefix}completion_tokens`] || 0,
+    cached: row[`${prefix}cached_tokens`] || 0,
+    numRequests: (prefix ? row[`${prefix}num_requests`] : row.num_requests_with_tokens) || 0,
   };
 }
 
 function getFilteredTokenUsage(row: FilteredBasicMetricsRow): PromptMetrics['tokenUsage'] {
   return {
-    total: row.total_tokens || 0,
-    prompt: row.prompt_tokens || 0,
-    completion: row.completion_tokens || 0,
-    cached: row.cached_tokens || 0,
-    numRequests: row.num_requests_with_tokens || 0,
-    attacker: {
-      total: row.attacker_total_tokens || 0,
-      prompt: row.attacker_prompt_tokens || 0,
-      completion: row.attacker_completion_tokens || 0,
-      cached: row.attacker_cached_tokens || 0,
-      numRequests: row.attacker_num_requests || 0,
-    },
-    assertions: {
-      total: row.grading_total_tokens || 0,
-      prompt: row.grading_prompt_tokens || 0,
-      completion: row.grading_completion_tokens || 0,
-      cached: row.grading_cached_tokens || 0,
-      numRequests: row.grading_num_requests || 0,
-    },
+    ...getTokenUsageCounts(row, ''),
+    attacker: getTokenUsageCounts(row, 'attacker_'),
+    assertions: getTokenUsageCounts(row, 'grading_'),
     ...(row.has_incurred_usage > 0 && {
-      incurredTokenUsage: getIncurredTokenUsage(row),
+      incurredTokenUsage: {
+        ...getTokenUsageCounts(row, 'incurred_'),
+        attacker: getTokenUsageCounts(row, 'incurred_attacker_'),
+        assertions: getTokenUsageCounts(row, 'incurred_grading_'),
+      },
     }),
   };
 }
@@ -279,11 +237,15 @@ async function calculateWithOptimizedQuery(
       prompt_idx,
       SUM(CASE WHEN success = 1 THEN 1 ELSE 0 END) as pass_count,
       SUM(CASE WHEN success = 0 AND failure_reason != ${ResultFailureReason.ERROR} THEN 1 ELSE 0 END) as fail_count,
-      SUM(CASE WHEN success = 0 AND failure_reason = ${ResultFailureReason.ERROR} THEN 1 ELSE 0 END) as error_count,
+      SUM(CASE WHEN failure_reason = ${ResultFailureReason.ERROR} THEN 1 ELSE 0 END) as error_count,
+      SUM(CASE WHEN json_extract(${response}, ${responseCachePath}) = 1 THEN 1 ELSE 0 END) as cache_hit_count,
       SUM(score) as total_score,
       SUM(latency_ms) as total_latency,
       SUM(cost) as total_cost,
-      -- Token usage aggregation (token usage is inside response JSON)
+      SUM(CASE WHEN json_extract(response, '$.incurredCost') IS NOT NULL
+        OR json_extract(response, '$.cached') = 1 THEN 1 ELSE 0 END) as has_incurred_cost,
+      SUM(COALESCE(json_extract(response, '$.incurredCost'),
+        CASE WHEN json_extract(response, '$.cached') = 1 THEN 0 ELSE cost END, 0)) as incurred_cost,
       -- Token usage aggregation (token usage is inside response JSON)
       SUM(${jsonUsageTotal(response, targetPath)}) as total_tokens,
       SUM(${jsonUsageNumber(response, targetPath, 'prompt')}) as prompt_tokens,
@@ -351,7 +313,7 @@ async function calculateWithOptimizedQuery(
         ${incurredInternalGradingUsage('numRequests')} + ${incurredGradingUsage('numRequests')}
       ) as incurred_grading_num_requests
     FROM eval_results
-    WHERE ${whereSql}
+    WHERE (${whereSql})
     GROUP BY prompt_idx
     ORDER BY prompt_idx
   `;
@@ -370,8 +332,10 @@ async function calculateWithOptimizedQuery(
       testPassCount: finiteOrZero(row.pass_count),
       testFailCount: finiteOrZero(row.fail_count),
       testErrorCount: finiteOrZero(row.error_count),
+      testCacheHitCount: finiteOrZero(row.cache_hit_count),
       totalLatencyMs: finiteOrZero(row.total_latency),
       cost: finiteOrZero(row.total_cost),
+      ...(row.has_incurred_cost ? { incurredCost: finiteOrZero(row.incurred_cost) } : {}),
       tokenUsage: getFilteredTokenUsage(row),
       namedScores: {},
       namedScoresCount: {},
@@ -381,7 +345,8 @@ async function calculateWithOptimizedQuery(
     };
   }
 
-  await aggregateResultDetails(metrics, whereSql, db);
+  await aggregateNamedScores(metrics, whereSql, db);
+  await aggregateAssertions(metrics, whereSql, db);
 
   logger.debug('Filtered metrics calculated', {
     numPrompts,
@@ -400,7 +365,7 @@ async function getBoundedResultCount(
     FROM (
       SELECT 1
       FROM eval_results
-      WHERE ${whereSql}
+      WHERE (${whereSql})
       LIMIT ${MAX_RESULTS_FOR_METRICS + 1}
     )
   `)) as Array<{ count: number }>;
@@ -446,26 +411,6 @@ function getTestVars(testCase: Record<string, unknown> | undefined): Vars {
   return isRecord(testCase?.vars) ? (testCase.vars as Vars) : {};
 }
 
-function accumulateAssertionCounts(
-  metrics: PromptMetrics,
-  gradingResult: Record<string, unknown> | undefined,
-): void {
-  const componentResults = Array.isArray(gradingResult?.componentResults)
-    ? gradingResult.componentResults
-    : [];
-
-  for (const componentResult of componentResults) {
-    if (!isRecord(componentResult)) {
-      continue;
-    }
-    if (componentResult.pass === true) {
-      metrics.assertPassCount++;
-    } else if (componentResult.pass === false) {
-      metrics.assertFailCount++;
-    }
-  }
-}
-
 function accumulateResultDetails(metrics: PromptMetrics[], row: ResultDetailsRow): void {
   const idx = row.prompt_idx;
   if (idx < 0 || idx >= metrics.length || !metrics[idx]) {
@@ -479,15 +424,13 @@ function accumulateResultDetails(metrics: PromptMetrics[], row: ResultDetailsRow
   if (namedScores) {
     accumulateNamedMetrics(metrics[idx], { namedScores, gradingResult, testVars });
   }
-
-  accumulateAssertionCounts(metrics[idx], gradingResult);
 }
 
 /**
  * Process row-level JSON in bounded pages. JSON.parse intentionally supplies
  * JavaScript's canonical last-key-wins behavior for imported duplicate keys.
  */
-async function aggregateResultDetails(
+async function aggregateNamedScores(
   metrics: PromptMetrics[],
   whereSql: SQL<unknown>,
   db: ReadOnlyDatabase,
@@ -507,14 +450,11 @@ async function aggregateResultDetails(
         eval_results.rowid AS row_cursor,
         COALESCE(LENGTH(CAST(named_scores AS BLOB)), 0) +
           COALESCE(LENGTH(CAST(grading_result AS BLOB)), 0) +
-          CASE
-            WHEN ${hasNamedScoreEntriesSql} THEN LENGTH(CAST(test_case AS BLOB))
-            ELSE 0
-          END AS detail_bytes
+          COALESCE(LENGTH(CAST(test_case AS BLOB)), 0) AS detail_bytes
       FROM eval_results
-      WHERE ${whereSql}
+      WHERE (${whereSql})
         ${cursorSql}
-        AND (${hasNamedScoreEntriesSql} OR grading_result IS NOT NULL)
+        AND ${hasNamedScoreEntriesSql}
       ORDER BY eval_results.rowid
       LIMIT ${RESULT_DETAILS_BATCH_SIZE}
     `)) as ResultDetailsPageRow[];
@@ -551,12 +491,12 @@ async function aggregateResultDetails(
         prompt_idx,
         named_scores,
         grading_result,
-        CASE WHEN ${hasNamedScoreEntriesSql} THEN test_case ELSE NULL END AS test_case
+        test_case
       FROM eval_results
-      WHERE ${whereSql}
+      WHERE (${whereSql})
         ${cursorSql}
         AND eval_results.rowid <= ${pageLastRowCursor}
-        AND (${hasNamedScoreEntriesSql} OR grading_result IS NOT NULL)
+        AND ${hasNamedScoreEntriesSql}
       ORDER BY eval_results.rowid
     `)) as ResultDetailsRow[];
     if (rows.length !== pageRowCount) {
@@ -574,12 +514,67 @@ async function aggregateResultDetails(
   }
 }
 
+async function aggregateAssertions(
+  metrics: PromptMetrics[],
+  whereSql: SQL<unknown>,
+  db: ReadOnlyDatabase,
+): Promise<void> {
+  // SQLite query to count assertions from nested JSON
+  // This is complex but avoids fetching all results into memory
+  const query = sql`
+    SELECT
+      prompt_idx,
+      SUM(
+        CASE
+          WHEN json_valid(grading_result) AND json_type(json_extract(grading_result, '$.componentResults')) = 'array' THEN
+            (
+              SELECT COUNT(*)
+              FROM json_each(json_extract(grading_result, '$.componentResults'))
+              WHERE CAST(json_extract(json_each.value, '$.pass') AS INTEGER) = 1
+            )
+          ELSE 0
+        END
+      ) as assert_pass_count,
+      SUM(
+        CASE
+          WHEN json_valid(grading_result) AND json_type(json_extract(grading_result, '$.componentResults')) = 'array' THEN
+            (
+              SELECT COUNT(*)
+              FROM json_each(json_extract(grading_result, '$.componentResults'))
+              WHERE CAST(json_extract(json_each.value, '$.pass') AS INTEGER) = 0
+            )
+          ELSE 0
+        END
+      ) as assert_fail_count
+    FROM eval_results
+    WHERE (${whereSql})
+      AND grading_result IS NOT NULL
+    GROUP BY prompt_idx
+  `;
+
+  const results = (await db.all(query)) as Array<{
+    prompt_idx: number;
+    assert_pass_count: number;
+    assert_fail_count: number;
+  }>;
+
+  // Populate assertion counts
+  for (const row of results) {
+    const idx = row.prompt_idx;
+    if (idx >= 0 && idx < metrics.length && metrics[idx]) {
+      metrics[idx].assertPassCount = row.assert_pass_count || 0;
+      metrics[idx].assertFailCount = row.assert_fail_count || 0;
+    }
+  }
+}
+
 function createEmptyMetricsArray(numPrompts: number): PromptMetrics[] {
   return Array.from({ length: numPrompts }, () => ({
     score: 0,
     testPassCount: 0,
     testFailCount: 0,
     testErrorCount: 0,
+    testCacheHitCount: 0,
     assertPassCount: 0,
     assertFailCount: 0,
     totalLatencyMs: 0,

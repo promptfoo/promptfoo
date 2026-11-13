@@ -5,10 +5,8 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   accumulateNamedMetrics,
   backfillNamedScoreWeights,
-  markNamedMetricsSeededFromPreviousRun,
   type NamedMetricAccumulator,
   renderPersistedMetricName,
-  wereNamedMetricsSeededFromPreviousRun,
 } from '../../src/util/namedMetrics';
 import { mockProcessEnv } from './utils';
 
@@ -720,43 +718,5 @@ describe('backfillNamedScoreWeights', () => {
 
     expect(Object.prototype.hasOwnProperty.call(metrics.namedScoreWeights, '__proto__')).toBe(true);
     expect(metrics.namedScoreWeights?.__proto__).toBe(2);
-  });
-});
-
-describe('namedMetricsSeededFromPreviousRun', () => {
-  it('marks the exact object it is given and returns it', () => {
-    const metrics = { namedScores: {}, namedScoresCount: {}, namedScoreWeights: {} };
-
-    expect(markNamedMetricsSeededFromPreviousRun(metrics)).toBe(metrics);
-    expect(wereNamedMetricsSeededFromPreviousRun(metrics)).toBe(true);
-  });
-
-  it('does not treat copies or unrelated values as seeded', () => {
-    const metrics = markNamedMetricsSeededFromPreviousRun({
-      namedScores: { quality: 3 },
-      namedScoresCount: { quality: 2 },
-      namedScoreWeights: { quality: 4 },
-    });
-
-    expect(wereNamedMetricsSeededFromPreviousRun({ ...metrics })).toBe(false);
-    expect(wereNamedMetricsSeededFromPreviousRun(structuredClone(metrics))).toBe(false);
-    expect(wereNamedMetricsSeededFromPreviousRun(undefined)).toBe(false);
-    expect(wereNamedMetricsSeededFromPreviousRun(null)).toBe(false);
-    expect(wereNamedMetricsSeededFromPreviousRun('metrics')).toBe(false);
-  });
-
-  it('keeps the marker off the serialized payload', () => {
-    const metrics = markNamedMetricsSeededFromPreviousRun({
-      namedScores: { quality: 3 },
-      namedScoresCount: { quality: 2 },
-      namedScoreWeights: { quality: 4 },
-    });
-
-    expect(Object.keys(metrics)).toEqual(['namedScores', 'namedScoresCount', 'namedScoreWeights']);
-    expect(JSON.parse(JSON.stringify(metrics))).toEqual({
-      namedScores: { quality: 3 },
-      namedScoresCount: { quality: 2 },
-      namedScoreWeights: { quality: 4 },
-    });
   });
 });
