@@ -316,9 +316,36 @@ function isFollowedByTableBody(element: HtmlElement): boolean {
   );
 }
 
+// parse5's adoption-agency recovery moves a paragraph out of its source
+// link and inserts a reconstructed link inside it, with no source location.
+function hasUnclosedParagraphInLink(element: HtmlElement, previous: HtmlNode | undefined): boolean {
+  const start = element.sourceCodeLocation?.startTag;
+  const link =
+    previous && isElementNode(previous) && previous.tagName === 'a'
+      ? previous.sourceCodeLocation
+      : undefined;
+  return Boolean(
+    start &&
+      link?.startTag &&
+      link.endTag &&
+      link.startTag.endOffset <= start.startOffset &&
+      link.endTag.startOffset >= start.endOffset &&
+      element.childNodes.some(
+        (child) => isElementNode(child) && child.tagName === 'a' && !hasSourceCodeLocation(child),
+      ),
+  );
+}
+
 function canOmitEndTag(element: HtmlElement, tagName: string): boolean {
   if (tagName === 'thead') {
     return isFollowedByTableBody(element);
+  }
+  if (tagName === 'p' && element.parentNode) {
+    const parent = element.parentNode;
+    const previous = parent.childNodes[getSiblingIndex(parent, element) - 1];
+    if (hasUnclosedParagraphInLink(element, previous)) {
+      return false;
+    }
   }
   return OPTIONAL_END_TAG_ELEMENTS.has(tagName);
 }

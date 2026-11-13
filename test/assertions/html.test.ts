@@ -375,6 +375,8 @@ describe('handleIsHtml', () => {
   it('should reject HTML with unclosed elements', () => {
     const unclosedExamples = [
       { input: '<div>Unclosed div', tag: 'div' },
+      { input: '<div><a href="/"><p>x</a></div>', tag: 'p' },
+      { input: '<div><svg><circle r=1/></svg></div>', tag: 'circle' },
       { input: '<!DOCTYPE html><html><body><main><h1>Title</h1><p>Truncated', tag: 'main' },
       { input: '<div><span>Missing span end tag</div>', tag: 'span' },
       { input: '<div />', tag: 'div' },
@@ -404,6 +406,10 @@ describe('handleIsHtml', () => {
   it('should accept elements whose end tags HTML allows omitting', () => {
     const fragments = [
       '<p>First paragraph<p>Second paragraph',
+      '<div><a href="/"><p>x</p></a></div>',
+      '<div><p>x<a href="/">y</a></div>',
+      '<div><a href="/"><p>x<div>y</div></a></div>',
+      '<div><svg><circle r="1"/></svg></div>',
       '<ul><li>One<li>Two</ul>',
       '<table><tr><td>1<td>2</table>',
       '<table><thead><tr><th>Head<tbody><tr><td>Body</table>',
