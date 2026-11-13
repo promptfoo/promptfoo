@@ -1032,7 +1032,7 @@ export async function isMathEquivalent(
     const ce = await getEngine();
     const diff = ce.box(['Subtract', expr1, expr2]).simplify();
     // The engine is created with tolerance: 0, so this numeric fallback remains exact.
-    const pass = Boolean(diff.is(0));
+    const pass = diff.is(0);
     return {
       pass,
       score: pass ? 1 : 0,
