@@ -1,0 +1,18 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Gemini 3.8 speech generation
+
+prompts:
+  - '[{"role":"user","parts":[{"text":"{{script}}","speechMetadata":{"style":"warm and friendly"}}]}]'
+
+providers:
+  - google:gemini-3.8-flash-tts
+  - google:gemini-3.8-flash-lite-tts
+
+defaultTest:
+  assert:
+    - type: javascript
+      value: Boolean(context.providerResponse.audio?.data) && context.providerResponse.audio.format === 'wav'
+
+tests:
+  - vars:
+      script: Welcome to the neighborhood. We are glad you are here!
