@@ -36,6 +36,8 @@ describe('portable Gemini configuration', () => {
       // generationConfig is sent verbatim, so Gemini fields without a typed entry stay open.
       { generationConfig: { responseMimeType: 'application/json', seed: 7, candidate_count: 1 } },
       { generationConfig: { thinking_config: { thinking_budget: 0, include_thoughts: true } } },
+      { generationConfig: { thinkingConfig: { thinking_budget: 0 } } },
+      { generationConfig: { thinking_config: { thinkingLevel: 'low' } } },
     ].map((config): [unknown, boolean] => [{ id: 'google:gemini-2.5-flash', config }, true]),
     ...[
       { thinkingConfig: { thinkingLevel: 'XHIGH', includeThoughts: true } },
@@ -191,5 +193,13 @@ describe('portable Gemini configuration', () => {
     >().toEqualTypeOf<
       Pick<CompletionOptions, 'temperature' | 'maxOutputTokens' | 'topP' | 'topK' | 'stopSequences'>
     >();
+  });
+  it('accepts explicit undefined for typed generationConfig keys', () => {
+    expectTypeOf<{
+      generationConfig: {
+        temperature: number | undefined;
+        thinkingConfig: { thinkingLevel: 'XHIGH' } | undefined;
+      };
+    }>().toExtend<GoogleAiStudioConfigInput>();
   });
 });

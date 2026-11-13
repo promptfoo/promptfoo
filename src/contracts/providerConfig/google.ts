@@ -40,6 +40,15 @@ const ThinkingLevel = z.enum([
   'high',
   'xhigh',
 ]);
+// The runtime and the Gemini API accept either spelling in either container.
+const ThinkingConfig = z.strictObject({
+  thinkingBudget: z.number().optional(),
+  thinking_budget: z.number().optional(),
+  thinkingLevel: ThinkingLevel.optional(),
+  thinking_level: ThinkingLevel.optional(),
+  includeThoughts: z.boolean().optional(),
+  include_thoughts: z.boolean().optional(),
+});
 const CallingMode = z.enum([
   'MODE_UNSPECIFIED',
   'AUTO',
@@ -131,22 +140,11 @@ export const GeminiSharedConfigInputSchema = Sampling.extend({
     response_modalities: z.array(z.string()).optional(),
     responseModalities: z.array(z.string()).optional(),
     speechConfig: Speech.optional(),
-    thinkingConfig: z
-      .strictObject({
-        thinkingBudget: z.number().optional(),
-        thinkingLevel: ThinkingLevel.optional(),
-        includeThoughts: z.boolean().optional(),
-      })
-      .optional(),
-    thinking_config: z
-      .strictObject({
-        thinking_budget: z.number().optional(),
-        thinking_level: ThinkingLevel.optional(),
-        include_thoughts: z.boolean().optional(),
-      })
-      .optional(),
+    thinkingConfig: ThinkingConfig.optional(),
+    thinking_config: ThinkingConfig.optional(),
   })
-    .catchall(z.json())
+    // Optional so typed keys still accept an explicit undefined in TypeScript.
+    .catchall(z.json().optional())
     .optional(),
   responseSchema: ResponseSchema.optional(),
   toolConfig: z
