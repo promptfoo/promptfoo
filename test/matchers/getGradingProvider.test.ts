@@ -405,7 +405,12 @@ describe('getGradingProvider', () => {
       await freshGetGradingProvider('text', undefined, null);
 
       expect(warnSpy).toHaveBeenCalledTimes(1);
-      expect(warnSpy.mock.calls[0][0]).toContain('openai:chat:gpt-4');
+      expect(warnSpy.mock.calls[0][0]).toContain('Using defaultTest.provider as the grader');
+      expect(warnSpy.mock.calls[0][0]).not.toContain('openai:chat:gpt-4');
+
+      freshCliState.config = { defaultTest: { provider: 'openai:chat:gpt-4' } };
+      await freshGetGradingProvider('text', undefined, null);
+      expect(warnSpy).toHaveBeenCalledTimes(2);
     });
 
     it('stays silent when grading comes from defaultTest.options.provider', async () => {
