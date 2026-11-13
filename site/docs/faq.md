@@ -59,6 +59,16 @@ By default, eval results are stored locally. Inputs and outputs may leave your m
 
 We do not collect PII through product analytics. The email or user identifier associated with your local Promptfoo environment may be sent to the relevant Promptfoo-operated endpoint when you sign in to Promptfoo Cloud, share evals, or invoke a Cloud-backed feature. See the [security policy](https://github.com/promptfoo/promptfoo/blob/main/SECURITY.md) for the full list of Cloud-backed features and the data each one sends.
 
+### How do I disable telemetry in the Web UI?
+
+When building from source, set `PROMPTFOO_DISABLE_TELEMETRY=true` during the build to disable browser analytics and session replay.
+
+```sh
+PROMPTFOO_DISABLE_TELEMETRY=true npm run build
+```
+
+The build embeds the setting in the Web UI. Changing the environment at runtime leaves previously built browser assets unchanged. Use the exact value `true` for the Web UI.
+
 ### How do I configure Promptfoo for corporate networks or proxies?
 
 Promptfoo proxy settings are configured through environment variables:
