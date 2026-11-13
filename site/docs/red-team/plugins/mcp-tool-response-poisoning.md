@@ -58,7 +58,9 @@ redteam:
   purpose: |
     Description of your MCP server's intended use.
   plugins:
-    - mcp:tool-response-poisoning
+    - id: mcp:tool-response-poisoning
+      config:
+        allowedTools: [search_docs, get_status]
   numTests: 10
 ```
 
@@ -85,7 +87,7 @@ Point this plugin at a staging server, or restrict the tool set.
 
 :::
 
-Restrict the tools this plugin may invoke with `allowedTools` or `excludedTools`:
+List the tools this plugin may invoke with `allowedTools`. Add `excludedTools` to block named tools even if they are also on the allowlist.
 
 ```yaml title="promptfooconfig.yaml"
 redteam:
@@ -102,6 +104,7 @@ redteam:
   plugins:
     - id: mcp:tool-response-poisoning
       config:
+        requireToolAllowlist: false
         excludedTools:
           - send_email
           - delete_ticket
@@ -111,7 +114,7 @@ If a tool appears in both lists, exclusion wins.
 
 ### Default protection from tool annotations
 
-When you configure no `allowedTools`, the plugin does not simply call
+When you opt into catalog discovery with `requireToolAllowlist: false`, the plugin does not simply call
 everything. MCP lets a server annotate each tool with `readOnlyHint` and
 `destructiveHint`, and any tool the server declares as mutating
 (`readOnlyHint: false` or `destructiveHint: true`) is **skipped by default**,
@@ -128,27 +131,19 @@ Conversely, a server can keep a tool out of a default scan by declaring it
 mutating, so for a server you do not trust, name every tool you want covered in
 `allowedTools`.
 
-### Failing closed
+### Catalog discovery on disposable servers
 
-To require an explicit allowlist — useful in CI, where an unreviewed catalog
-change should not silently widen what a scan invokes — set
-`requireToolAllowlist`:
+The plugin requires `allowedTools` by default. Use `requireToolAllowlist: false` only to opt into discovery on a disposable test server:
 
 ```yaml title="promptfooconfig.yaml"
 redteam:
   plugins:
     - id: mcp:tool-response-poisoning
       config:
-        requireToolAllowlist: true
-        allowedTools:
-          - search_docs
-          - get_status
+        requireToolAllowlist: false
 ```
 
-Without `allowedTools`, that config fails with an error listing the advertised
-catalog. It also fails when no catalog can be read from the purpose at all, so a
-missing or malformed catalog cannot silently widen the scan. `excludedTools` alone does not satisfy it: a denylist cannot bound a
-catalog you have not enumerated.
+Without that discovery flag, generation requires an explicit `allowedTools` list and reports any advertised tool names. The requirement also applies when the server omits its catalog or provides malformed catalog data.
 
 Like any plugin configuration error, this stops test generation for the plugin
 but only produces a warning for the overall run. In CI, run with `--strict`

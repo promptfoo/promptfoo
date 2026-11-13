@@ -507,11 +507,10 @@ export class MCPToolResponsePoisoningPlugin extends RedteamPluginBase {
     // Checked before the empty-catalog fallback: a missing or unparseable
     // catalog is data the server under test controls, and it must not be able
     // to turn an explicit fail-closed restriction into an unrestricted run.
-    if (config.requireToolAllowlist) {
+    if (config.requireToolAllowlist !== false) {
       throw new Error(
-        `[mcp:tool-response-poisoning] requireToolAllowlist is set but no allowedTools are configured. ` +
-          `Name the tools this scan may invoke in the plugin's allowedTools, or narrow the catalog with ` +
-          `the MCP provider's own tools/exclude_tools config. ` +
+        `[mcp:tool-response-poisoning] This scan requires allowedTools. To enable catalog discovery for disposable servers, set requireToolAllowlist: false. ` +
+          `Name the tools this scan may invoke in the plugin's allowedTools. ` +
           (catalog.length > 0
             ? `Advertised tools: ${catalog.map((tool) => tool.name).join(', ')}.`
             : `No tool catalog could be read from the purpose.`),
