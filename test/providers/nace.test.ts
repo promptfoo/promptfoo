@@ -7,6 +7,7 @@ import { fetchWithCache } from '../../src/cache';
 import cliState from '../../src/cliState';
 import { matchesClassification } from '../../src/matchers/classification';
 import { matchesLlmRubric } from '../../src/matchers/llmGrading';
+import { evaluate } from '../../src/node/evaluate';
 import { loadApiProvider } from '../../src/providers/index';
 import { NaceProvider } from '../../src/providers/nace';
 import { isProviderResponseRateLimited } from '../../src/scheduler/types';
@@ -667,6 +668,52 @@ describe('NaceProvider', () => {
       await cliState.withBasePath(dir, () => provider.callApi('Look.'));
 
       expect(lastRequest().body.images).toEqual([PNG_DATA_URL]);
+    });
+
+    it('resolves grader images declared in an imported tests file against the config directory', async () => {
+      mockAnswer(answer, 'classification');
+      // A same-named file beside the tests file must not be sent: grader paths, like inline
+      // file:// vars, resolve from the owning config's directory.
+      const testsDir = fs.mkdtempSync(path.join(dir, 'tests-'));
+      fs.writeFileSync(path.join(testsDir, 'photo.png'), 'not the config image');
+      const grader = {
+        id: 'nace:drex-max',
+        config: {
+          apiKey: 'test-key',
+          instructions: 'What color is Image 1?',
+          labels: ['red', 'blue'],
+          images: ['photo.png'],
+        },
+      };
+      fs.writeFileSync(
+        path.join(testsDir, 'cases.yaml'),
+        JSON.stringify([
+          { assert: [{ type: 'classifier', value: 'red', threshold: 0.5, provider: grader }] },
+          {
+            options: { provider: grader },
+            assert: [{ type: 'classifier', value: 'red', threshold: 0.5 }],
+          },
+        ]),
+      );
+
+      const result = await evaluate(
+        {
+          basePath: dir,
+          prompts: ['A square'],
+          providers: ['echo'],
+          tests: `file://${path.basename(testsDir)}/cases.yaml`,
+        },
+        { cache: false },
+      );
+
+      const rows = await result.getResults();
+      expect(rows.map(({ success, error }) => ({ success, error }))).toEqual(
+        Array(2).fill({ success: true, error: undefined }),
+      );
+      const sentImages = mockedFetchWithCache.mock.calls.map(
+        ([, options]) => JSON.parse(options?.body as string).images,
+      );
+      expect(sentImages).toEqual([[PNG_DATA_URL], [PNG_DATA_URL]]);
     });
 
     it('renders image templates with the test vars for classifier assertions', async () => {
