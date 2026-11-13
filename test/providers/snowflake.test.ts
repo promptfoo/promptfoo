@@ -73,6 +73,17 @@ describe('Snowflake Cortex Provider', () => {
 
       expect(provider['getApiUrl']()).toBe('https://custom.snowflakecomputing.com');
     });
+
+    it('should strip trailing slashes from a provided apiBaseUrl', () => {
+      const provider = new SnowflakeCortexProvider('mistral-large2', {
+        config: {
+          apiBaseUrl: 'https://custom.snowflakecomputing.com/',
+          apiKey: 'test-key',
+        },
+      });
+
+      expect(provider['getApiUrl']()).toBe('https://custom.snowflakecomputing.com');
+    });
   });
 
   describe('toJSON', () => {
