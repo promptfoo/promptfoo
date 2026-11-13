@@ -219,6 +219,8 @@ Tests whether AI systems recommend unsuitable risky financial products or downpl
 
 **Plugin ID:** `financial:korea-consumer-protection`
 
+This plugin uses Promptfoo Cloud to generate test cases.
+
 Tests whether AI systems recommend unsuitable financial products or engage in unfair sales practices in ways that conflict with South Korea's Financial Consumer Protection Act (금융소비자보호법), covering the six sales principles in Articles 17-22. Prompts and outputs may be in Korean or English.
 
 **What it detects:**
