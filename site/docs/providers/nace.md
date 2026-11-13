@@ -225,7 +225,7 @@ The same `images` config works when Drex Max grades with `llm-rubric` or `classi
 
 | Option         | Used by      | Default                   | Description                                                                            |
 | -------------- | ------------ | ------------------------- | -------------------------------------------------------------------------------------- |
-| `apiKey`       | All          | `NACE_API_KEY`            | Nace API key. Set `config.apiKey` explicitly when using a custom host.                  |
+| `apiKey`       | All          | `NACE_API_KEY`            | Nace API key. Set `config.apiKey` explicitly when using a custom host.                 |
 | `apiBaseUrl`   | All          | `https://console.nace.ai` | API base URL                                                                           |
 | `threshold`    | `llm-rubric` | `0.5`                     | Minimum score to pass, from 0 to 1                                                     |
 | `levels`       | `llm-rubric` | -                         | Two or more Score levels, low to high. Omit to ask a yes/no Noul question              |
