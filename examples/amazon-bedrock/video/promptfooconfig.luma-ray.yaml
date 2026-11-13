@@ -7,8 +7,9 @@ description: 'Luma Ray 2 Video Generation on AWS Bedrock'
 # Prerequisites:
 #   1. Enable Luma Ray 2 model access in AWS Bedrock console
 #   2. Create an S3 bucket for video output
-#   3. Configure IAM permissions for bedrock:StartAsyncInvoke,
-#      bedrock:GetAsyncInvoke, s3:PutObject, s3:GetObject
+#   3. Grant bedrock:InvokeModel on the model and async-invoke/* resources,
+#      bedrock:GetAsyncInvoke on async-invoke/*, and s3:PutObject/s3:GetObject
+#      on the output objects. See README.md for the complete policy.
 #
 # Update s3OutputUri below to point to your S3 bucket.
 
