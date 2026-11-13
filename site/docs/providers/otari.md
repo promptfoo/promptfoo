@@ -15,10 +15,12 @@ providers:
     config:
       apiBaseUrl: '{{ env.OTARI_BASE_URL | default("https://api.otari.ai/api/v1") }}'
       apiKeyEnvar: OTARI_API_KEY
+      headers:
+        OpenAI-Organization: ''
       omitDefaults: true
 ```
 
-This uses the hosted gateway at `https://api.otari.ai/api/v1` unless `OTARI_BASE_URL` is set. `omitDefaults: true` stops Promptfoo from adding its default `temperature` and output limit, which models such as GPT-6.1 Sol reject; Promptfoo cannot recognize the model behind an Otari ID like `openai:gpt-6.1-sol`. For a self-hosted gateway, set `OTARI_BASE_URL` to `https://<your-host>/api/v1`. The key in `OTARI_API_KEY` is sent as `Authorization: Bearer <key>`.
+This uses the hosted gateway at `https://api.otari.ai/api/v1` unless `OTARI_BASE_URL` is set. `omitDefaults: true` stops Promptfoo from adding its default `temperature` and output limit, which models such as GPT-6.1 Sol reject; Promptfoo cannot recognize the model behind an Otari ID like `openai:gpt-6.1-sol`. For a self-hosted gateway, set `OTARI_BASE_URL` to `https://<your-host>/api/v1`. The key in `OTARI_API_KEY` is sent as `Authorization: Bearer <key>`. The empty `OpenAI-Organization` header overrides any inherited `OPENAI_ORGANIZATION` value.
 
 Everything after `openai:chat:` is passed to Otari unchanged as the model ID:
 
