@@ -513,10 +513,11 @@ jobs:
     permissions:
       contents: read
     steps:
-      - name: Install shfmt
+      - name: Install shfmt 3.12.0
         run: |
           curl --fail --location --retry 3 --connect-timeout 15 --max-time 60 \
-            https://github.com/mvdan/sh/releases/download/v3.12.0/shfmt_v3.12.0_linux_amd64 \
+            --header 'Accept: application/octet-stream' \
+            https://api.github.com/repos/mvdan/sh/releases/assets/270490140 \
             --output "$RUNNER_TEMP/shfmt"
           printf '%s  %s\n' 'd9fbb2a9c33d13f47e7618cf362a914d029d02a6df124064fff04fd688a745ea' "$RUNNER_TEMP/shfmt" | sha256sum --check
           chmod +x "$RUNNER_TEMP/shfmt"
@@ -811,6 +812,10 @@ jobs:
       # Browser binaries are opt-in; install the version from the locked SDK.
       - name: Install Chromium
         run: node node_modules/playwright/cli.js install --with-deps chromium
+
+      - name: Run Site Browser Tests
+        working-directory: site
+        run: npm run test:browser
 
       - name: Run App Browser Tests
         run: npm run test:app:browser
