@@ -522,6 +522,15 @@ describe('calculateAzureCost', () => {
     expect(calculateAzureCost('claude-fable-5', {}, 1000, 500)).toBeCloseTo(0.035, 6);
   });
 
+  it.each(['claude-fable-5-2', 'claude-mythos-5-2'])(
+    'prices %s at $8/$40 with a $0.20 cache read',
+    (model) => {
+      expect(calculateAzureCost(model, {}, 1000, 500)).toBeCloseTo(0.028, 10);
+      // 500 uncached * 8 + 500 cached * 0.2 + 500 output * 40 = 24,100 per 1e6
+      expect(calculateAzureCost(model, {}, 1000, 500, 500)).toBeCloseTo(0.0241, 10);
+    },
+  );
+
   it.each(['claude-fable-5-1', 'claude-mythos-5-1'])(
     'calculates cached input cost for %s',
     (model) => {
