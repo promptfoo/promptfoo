@@ -26,11 +26,11 @@ import {
 import { resolveProviderEnv } from '../env';
 import {
   getRequestTimeoutMs,
+  normalizeFinishReason,
   parseChatPrompt,
   shouldBustProviderCache,
   waitForPromiseWithAbort,
   withResponseCacheMetadata,
-  normalizeFinishReason,
 } from '../shared';
 import { GoogleAuthManager } from './auth';
 import { GoogleGenericProvider, type GoogleProviderOptions } from './base';
