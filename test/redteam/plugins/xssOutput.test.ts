@@ -256,6 +256,16 @@ describe('XssOutputPlugin', () => {
 });
 
 describe('detectXssOutput', () => {
+  it('detects an executable element even when deeply nested in model output', () => {
+    const output = '<div>'.repeat(6000) + '<img src=x onerror=alert(1)>' + '</div>'.repeat(6000);
+    expect(detectXssOutput(output).map((match) => match.id)).toEqual(['event-handler-attribute']);
+  });
+
+  it('masks long inline code spans without exceeding the argument limit', () => {
+    const output = '`' + 'x'.repeat(150_000) + '<img src=x onerror=alert(1)>`';
+    expect(detectXssOutput(output)).toEqual([]);
+  });
+
   it.each([
     ['script-tag', '<script>alert(1)</script>'],
     ['script-tag', '<script>alert(1)'],
