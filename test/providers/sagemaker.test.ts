@@ -5,6 +5,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import logger from '../../src/logger';
 
 // Use vi.hoisted to create mock functions that can be used in vi.mock factories
+const createCustomModelOptions = () => ({
+  config: {
+    region: 'us-east-1',
+    modelType: 'custom' as const,
+  },
+});
+
+const createOpenAiModelOptions = () => ({
+  config: { region: 'us-east-1', modelType: 'openai' as const },
+});
+
 const { mockSend, mockCacheGet, mockCacheSet, mockIsCacheEnabled } = vi.hoisted(() => ({
   mockSend: vi.fn(),
   mockCacheGet: vi.fn(),
@@ -39,14 +50,16 @@ import {
   SageMakerEmbeddingProvider,
 } from '../../src/providers/sagemaker';
 
+const createDisabledCacheReset = () => () => {
+  vi.clearAllMocks();
+  mockIsCacheEnabled.mockReturnValue(false);
+  mockCacheGet.mockReset();
+  mockCacheSet.mockReset();
+  mockSend.mockReset();
+};
+
 describe('SageMakerCompletionProvider', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    mockIsCacheEnabled.mockReturnValue(false);
-    mockCacheGet.mockReset();
-    mockCacheSet.mockReset();
-    mockSend.mockReset();
-  });
+  beforeEach(createDisabledCacheReset());
 
   afterEach(() => {
     vi.clearAllMocks();
@@ -64,12 +77,7 @@ describe('SageMakerCompletionProvider', () => {
       mockCacheGet.mockResolvedValue(JSON.stringify(mockCachedResponse));
       mockIsCacheEnabled.mockReturnValue(true);
 
-      const provider = new SageMakerCompletionProvider('test-endpoint', {
-        config: {
-          region: 'us-east-1',
-          modelType: 'custom',
-        },
-      });
+      const provider = new SageMakerCompletionProvider('test-endpoint', createCustomModelOptions());
 
       const result = await provider.callApi('test prompt');
 
@@ -95,12 +103,7 @@ describe('SageMakerCompletionProvider', () => {
       mockCacheGet.mockResolvedValue(JSON.stringify(mockCachedResponse));
       mockIsCacheEnabled.mockReturnValue(true);
 
-      const provider = new SageMakerCompletionProvider('test-endpoint', {
-        config: {
-          region: 'us-east-1',
-          modelType: 'custom',
-        },
-      });
+      const provider = new SageMakerCompletionProvider('test-endpoint', createCustomModelOptions());
 
       const result = await provider.callApi('test prompt');
 
@@ -172,9 +175,7 @@ describe('SageMakerCompletionProvider', () => {
           JSON.stringify({ choices: [{ text: String(JSON.parse(Body)[field]) }] }),
         ),
       }));
-      const provider = new SageMakerCompletionProvider('test-endpoint', {
-        config: { region: 'us-east-1', modelType: 'openai' },
-      });
+      const provider = new SageMakerCompletionProvider('test-endpoint', createOpenAiModelOptions());
 
       for (const value of [first, second]) {
         vi.stubEnv(env, value);
@@ -232,9 +233,10 @@ describe('SageMakerCompletionProvider', () => {
             Body: new TextEncoder().encode(JSON.stringify({ choices: [{ text: output }] })),
           };
         });
-        const provider = new SageMakerCompletionProvider('test-endpoint', {
-          config: { region: 'us-east-1', modelType: 'openai' },
-        });
+        const provider = new SageMakerCompletionProvider(
+          'test-endpoint',
+          createOpenAiModelOptions(),
+        );
 
         expect(await provider.callApi('A quiet garden')).toMatchObject({ output: '128' });
         expect(await provider.callApi('A quiet garden')).toMatchObject({ output: '256' });
@@ -334,9 +336,10 @@ describe('SageMakerCompletionProvider', () => {
     it.each(['cache lookup', 'credential loading'])(
       'keeps the runtime region bound to its request during %s',
       async (stage) => {
-        const provider = new SageMakerCompletionProvider('test-endpoint', {
-          config: { region: 'us-east-1', modelType: 'custom' },
-        });
+        const provider = new SageMakerCompletionProvider(
+          'test-endpoint',
+          createCustomModelOptions(),
+        );
         const getCached = mockCacheGet.getMockImplementation()!;
         mockCacheGet.mockImplementation(async (key: string) => {
           const cached = await getCached(key);
@@ -374,9 +377,7 @@ describe('SageMakerCompletionProvider', () => {
     );
 
     it('keeps concurrent requests on their captured runtime regions', async () => {
-      const provider = new SageMakerCompletionProvider('test-endpoint', {
-        config: { region: 'us-east-1', modelType: 'custom' },
-      });
+      const provider = new SageMakerCompletionProvider('test-endpoint', createCustomModelOptions());
       let release!: () => void;
       let started!: () => void;
       const waiting = new Promise<void>((resolve) => {
@@ -416,9 +417,7 @@ describe('SageMakerCompletionProvider', () => {
     });
 
     it('preserves an injected runtime without loading credentials', async () => {
-      const provider = new SageMakerCompletionProvider('test-endpoint', {
-        config: { region: 'us-east-1', modelType: 'custom' },
-      });
+      const provider = new SageMakerCompletionProvider('test-endpoint', createCustomModelOptions());
       const send = vi
         .fn()
         .mockResolvedValue({ Body: new TextEncoder().encode('{"output":"injected"}') });
@@ -439,9 +438,7 @@ describe('SageMakerCompletionProvider', () => {
     ])('does not hash unused cache keys for %j', async ({ cacheEnabled, bustCache }) => {
       mockIsCacheEnabled.mockReturnValue(cacheEnabled);
       mockSend.mockResolvedValue({ Body: new TextEncoder().encode('{"output":"A garden"}') });
-      const provider = new SageMakerCompletionProvider('test-endpoint', {
-        config: { region: 'us-east-1', modelType: 'custom' },
-      });
+      const provider = new SageMakerCompletionProvider('test-endpoint', createCustomModelOptions());
       const createHash = vi.spyOn(crypto, 'createHash');
 
       expect(
@@ -666,13 +663,7 @@ describe('SageMakerCompletionProvider', () => {
 });
 
 describe('SageMakerEmbeddingProvider', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    mockIsCacheEnabled.mockReturnValue(false);
-    mockCacheGet.mockReset();
-    mockCacheSet.mockReset();
-    mockSend.mockReset();
-  });
+  beforeEach(createDisabledCacheReset());
 
   afterEach(() => {
     vi.clearAllMocks();
@@ -688,12 +679,10 @@ describe('SageMakerEmbeddingProvider', () => {
       mockCacheGet.mockResolvedValue(JSON.stringify(mockCachedResponse));
       mockIsCacheEnabled.mockReturnValue(true);
 
-      const provider = new SageMakerEmbeddingProvider('test-embedding-endpoint', {
-        config: {
-          region: 'us-east-1',
-          modelType: 'openai',
-        },
-      });
+      const provider = new SageMakerEmbeddingProvider(
+        'test-embedding-endpoint',
+        createOpenAiModelOptions(),
+      );
 
       const result = await provider.callEmbeddingApi('test input');
 
@@ -717,12 +706,10 @@ describe('SageMakerEmbeddingProvider', () => {
       mockCacheGet.mockResolvedValue(JSON.stringify(mockCachedResponse));
       mockIsCacheEnabled.mockReturnValue(true);
 
-      const provider = new SageMakerEmbeddingProvider('test-embedding-endpoint', {
-        config: {
-          region: 'us-east-1',
-          modelType: 'openai',
-        },
-      });
+      const provider = new SageMakerEmbeddingProvider(
+        'test-embedding-endpoint',
+        createOpenAiModelOptions(),
+      );
 
       const result = await provider.callEmbeddingApi('test input');
 

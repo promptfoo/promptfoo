@@ -1,5 +1,5 @@
 import { fetchWithCache } from '../cache';
-import { getEnvString } from '../envars';
+import { getEnvString, getProviderEnvString } from '../envars';
 import logger from '../logger';
 import { fetchWithProxy } from '../util/fetch/index';
 import { getRequestTimeoutMs } from './shared';
@@ -113,7 +113,11 @@ export class QuiverAiProvider implements ApiProvider {
     const { config, id, env, mode = 'generation' } = options;
     this.modelName = modelName;
     this.mode = mode;
-    this.apiKey = config?.apiKey || env?.QUIVERAI_API_KEY || getEnvString('QUIVERAI_API_KEY') || '';
+    this.apiKey =
+      config?.apiKey ||
+      getProviderEnvString(env, 'QUIVERAI_API_KEY') ||
+      getEnvString('QUIVERAI_API_KEY') ||
+      '';
     this.apiBaseUrl = config?.apiBaseUrl || QUIVERAI_API_BASE_URL;
     if (id) {
       this.id = () => id;

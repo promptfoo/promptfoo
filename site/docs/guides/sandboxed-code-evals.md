@@ -20,11 +20,23 @@ In this tutorial, we'll use promptfoo to set up an automated pipeline for genera
 Make sure you have the following installed:
 
 - Node.js and npm
-- Python 3.9+
+- Python 3.10+
 - Docker
 - promptfoo (`npm install -g promptfoo`)
-- epicbox (`pip install epicbox`)
-- urllib3 < 2 (`pip install 'urllib3<2'`)
+
+On Windows, run this tutorial in WSL 2 with Docker Desktop’s WSL integration enabled. Install Node.js and Python inside WSL; native Windows Python is not supported by Epicbox.
+
+Create a virtual environment in your project directory and install the [example's Python requirements](https://github.com/promptfoo/promptfoo/blob/main/examples/integration-docker/code-generation-sandbox/requirements.txt).
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r https://raw.githubusercontent.com/promptfoo/promptfoo/main/examples/integration-docker/code-generation-sandbox/requirements.txt
+```
+
+Keep the virtual environment active in the same shell when running the evaluation.
+
+These use the official Epicbox 1.1.1 GitHub release, verified by a SHA-256 hash, and retain transport security minimums. Epicbox 1.1.0 on PyPI is incompatible with urllib3 2.
 
 Pull the Docker image you want to use so it is available locally. In this tutorial, we'll use a generic Python image, but you can use a custom one if you want:
 

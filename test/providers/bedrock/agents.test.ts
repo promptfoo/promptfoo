@@ -2,6 +2,14 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import { AwsBedrockAgentsProvider } from '../../../src/providers/bedrock/agents';
 import { sha256 } from '../../../src/util/createHash';
 
+const { createNodeHttpHandlerFactory, createBedrockCacheFactory } = await vi.hoisted(
+  () => import('../../factories/moduleMocks'),
+);
+
+const createAgentConfig = () => ({
+  config: { agentId: 'agent-123', agentAliasId: 'alias-456', region: 'us-east-1' },
+});
+
 const mockSend = vi.fn();
 const mockBedrockClient = {
   send: mockSend,
@@ -21,19 +29,7 @@ vi.mock('@aws-sdk/client-bedrock-agent-runtime', async (importOriginal) => {
 
 let BedrockAgentRuntimeClient: typeof import('@aws-sdk/client-bedrock-agent-runtime').BedrockAgentRuntimeClient;
 
-vi.mock('@smithy/node-http-handler', () => ({
-  __esModule: true,
-  NodeHttpHandler: vi.fn().mockImplementation(function () {
-    return {
-      handle: vi.fn(),
-    };
-  }),
-  default: vi.fn().mockImplementation(function () {
-    return {
-      handle: vi.fn(),
-    };
-  }),
-}));
+vi.mock('@smithy/node-http-handler', createNodeHttpHandlerFactory());
 
 vi.mock('proxy-agent', () => ({
   __esModule: true,
@@ -45,18 +41,10 @@ const mockGet = vi.hoisted(() => vi.fn());
 const mockSet = vi.hoisted(() => vi.fn());
 const mockIsCacheEnabled = vi.fn().mockReturnValue(false);
 
-vi.mock('../../../src/cache', async (importOriginal) => {
-  return {
-    ...(await importOriginal()),
-    getCache: vi.fn().mockImplementation(function () {
-      return {
-        get: mockGet,
-        set: mockSet,
-      };
-    }),
-    isCacheEnabled: () => mockIsCacheEnabled(),
-  };
-});
+vi.mock(
+  '../../../src/cache',
+  createBedrockCacheFactory(mockGet, mockSet, () => mockIsCacheEnabled),
+);
 
 function buildAgentCacheKey({
   agentId,
@@ -91,7 +79,7 @@ function buildAgentCacheKey({
   sessionId?: string;
   sessionState?: Record<string, unknown>;
 }) {
-  return `bedrock-agent:v2:${agentId}:${agentAliasId}:${region}:${sha256(
+  return `bedrock-agent:v3:${agentId}:${agentAliasId}:${region}:${sha256(
     JSON.stringify({
       prompt,
       actionGroups,
@@ -246,16 +234,14 @@ describe('AwsBedrockAgentsProvider', () => {
   it('does not replay legacy cached guardrail claims', async () => {
     mockIsCacheEnabled.mockReturnValue(true);
     mockGet.mockImplementation(async (key: string) =>
-      key.startsWith('bedrock-agent:v2:')
+      key.startsWith('bedrock-agent:v3:')
         ? null
         : JSON.stringify({
             output: 'legacy response',
             metadata: { guardrails: { applied: true } },
           }),
     );
-    const provider = new AwsBedrockAgentsProvider('agent-123', {
-      config: { agentId: 'agent-123', agentAliasId: 'alias-456', region: 'us-east-1' },
-    });
+    const provider = new AwsBedrockAgentsProvider('agent-123', createAgentConfig());
     mockSend.mockResolvedValueOnce(makeCompletionResponse('fresh response'));
 
     const result = await provider.callApi('Describe a quiet garden');
@@ -264,6 +250,45 @@ describe('AwsBedrockAgentsProvider', () => {
     expect(result.metadata).not.toHaveProperty('guardrails');
     expect(result.cached).not.toBe(true);
     expect(mockSend).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps explicitly credentialed agents out of the shared cache', async () => {
+    mockIsCacheEnabled.mockReturnValue(true);
+    mockGet.mockResolvedValue(JSON.stringify({ output: 'other account' }));
+    for (const owner of ['first', 'second']) {
+      const provider = new AwsBedrockAgentsProvider('agent-123', {
+        config: {
+          ...createAgentConfig().config,
+          accessKeyId: `fixture-id-${owner}`,
+          secretAccessKey: `fixture-secret-${owner}`,
+        },
+      });
+      mockSend.mockResolvedValueOnce(makeCompletionResponse(owner));
+      expect((await provider.callApi('same prompt')).output).toBe(owner);
+    }
+    expect(mockGet).not.toHaveBeenCalled();
+    expect(mockSet).not.toHaveBeenCalled();
+  });
+
+  it('keeps credentials selected during asynchronous client construction out of cache', async () => {
+    mockIsCacheEnabled.mockReturnValue(true);
+    const provider = new AwsBedrockAgentsProvider('agent-123', createAgentConfig());
+    const initializing = provider.getAgentRuntimeClient();
+    provider.config.accessKeyId = 'fixture-id';
+    provider.config.secretAccessKey = 'fixture-secret';
+    await initializing;
+    expect(BedrockAgentRuntimeClient).toHaveBeenCalledWith(
+      expect.objectContaining({
+        credentials: expect.objectContaining({ accessKeyId: 'fixture-id' }),
+      }),
+    );
+    delete provider.config.accessKeyId;
+    delete provider.config.secretAccessKey;
+    mockSend.mockResolvedValueOnce(makeCompletionResponse('fresh'));
+
+    expect((await provider.callApi('same prompt')).output).toBe('fresh');
+    expect(mockGet).not.toHaveBeenCalled();
+    expect(mockSet).not.toHaveBeenCalled();
   });
 
   it('should hash prompt and config values while reusing the same cache key', async () => {
@@ -402,13 +427,7 @@ describe('AwsBedrockAgentsProvider', () => {
   });
 
   it('should create the agent runtime client with the expected region', async () => {
-    const provider = new AwsBedrockAgentsProvider('agent-123', {
-      config: {
-        agentId: 'agent-123',
-        agentAliasId: 'alias-456',
-        region: 'us-east-1',
-      },
-    });
+    const provider = new AwsBedrockAgentsProvider('agent-123', createAgentConfig());
 
     await provider.getAgentRuntimeClient();
 

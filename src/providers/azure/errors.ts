@@ -1,12 +1,3 @@
-/**
- * Shared error-classification helpers for Azure OpenAI providers.
- *
- * Both the Azure Assistants and Foundry Agents providers run their own
- * polling/retry surface and need to recognize provider-supplied error strings
- * for content-filter, rate-limit, and transient-service categories. These
- * helpers used to be duplicated as private methods on each class; consolidating
- * them here keeps the substring matchers in one place.
- */
 import type { ProviderResponse } from '../../types/index';
 
 const CONTENT_FILTER_FALLBACK_MESSAGE =
@@ -22,16 +13,6 @@ export function isContentFilterError(errorMessage: string): boolean {
     lower.includes('inappropriate content') ||
     lower.includes('safety guidelines') ||
     lower.includes('guardrail')
-  );
-}
-
-export function isRateLimitError(errorMessage: string): boolean {
-  const lower = errorMessage.toLowerCase();
-  return (
-    lower.includes('rate limit') ||
-    lower.includes('quota exceeded') ||
-    lower.includes('too many requests') ||
-    errorMessage.includes('429')
   );
 }
 

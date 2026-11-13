@@ -13,21 +13,6 @@
   padding-top: 1rem;
 }
 
-.toggleButton {
-  background: var(--ifm-color-primary);
-  color: white;
-  border: none;
-  padding: 0.5rem 1rem;
-  border-radius: 20px;
-  cursor: pointer;
-  font-size: 0.9rem;
-  transition: background-color 0.2s ease;
-}
-
-.toggleButton:hover {
-  background: var(--ifm-color-primary-darker);
-}
-
 .visualizer {
   display: flex;
   align-items: flex-start;
@@ -245,12 +230,6 @@
   top: -120px;
 }
 
-.flowMessage.left {
-  left: 70%;
-  bottom: -120px;
-  top: auto;
-}
-
 .flowMessage::before {
   content: '';
   position: absolute;
@@ -265,11 +244,6 @@
 .flowMessage.right::before {
   bottom: -30px;
   top: auto;
-}
-
-.flowMessage.left::before {
-  top: -30px;
-  bottom: auto;
 }
 
 .flowMessage code {
@@ -321,23 +295,6 @@
     display: none;
   }
 
-  .messageArea {
-    min-height: 40px;
-    border-left: 2px dashed var(--ifm-color-emphasis-300);
-    margin-left: calc(50% - 1px);
-    height: 30px;
-    flex-grow: 0;
-    width: 0;
-    margin: -0.75rem 0;
-  }
-
-  .message {
-    left: 50%;
-    top: 50%;
-    transform: translate(-50%, -50%);
-    max-width: 70%;
-  }
-
   .icon {
     font-size: 1.8rem;
   }
@@ -345,40 +302,4 @@
   .cardHeader h3 {
     font-size: 1.1rem;
   }
-
-  .exampleButton {
-    font-size: 0.8rem;
-    padding: 0.25rem 0.6rem;
-  }
-}
-
-.hostMessageContainer {
-  position: absolute;
-  top: 0;
-  left: 2rem;
-  width: calc((100% - 4rem - 4rem) / 3);
-  display: flex;
-  justify-content: center;
-  z-index: 1;
-}
-
-.hostMessageContainer .flowMessage {
-  position: relative;
-  transform: none;
-  left: auto;
-  top: auto;
-  min-width: 240px;
-  border-color: var(--ifm-color-emphasis-400);
-}
-
-.hostMessageContainer .flowMessage::before {
-  content: '';
-  position: absolute;
-  width: 2px;
-  height: 40px;
-  background: var(--ifm-color-emphasis-400);
-  opacity: 0.5;
-  left: 50%;
-  transform: translateX(-50%);
-  bottom: -40px;
 }

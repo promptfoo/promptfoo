@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { handleModeration } from '../../src/assertions/moderation';
 import { matchesModeration } from '../../src/matchers/moderation';
+import { createPassingGrade, createTestOutput } from '../factories/literalFixtures';
 import { createMockProvider } from '../factories/provider';
 
 import type {
@@ -9,6 +10,12 @@ import type {
   AssertionValueFunctionContext,
   TestCase,
 } from '../../src/types/index';
+
+const createFlaggedModerationResult = () => ({
+  pass: false,
+  score: 0,
+  reason: 'Moderation flags detected: harassment',
+});
 
 vi.mock('../../src/matchers/moderation', () => ({
   matchesModeration: vi.fn(),
@@ -69,11 +76,7 @@ describe('handleModeration', () => {
   });
 
   it('should pass moderation check', async () => {
-    mockedMatchesModeration.mockResolvedValue({
-      pass: true,
-      score: 1,
-      reason: 'Safe content',
-    });
+    mockedMatchesModeration.mockResolvedValue(createPassingGrade(1, 'Safe content'));
 
     const result = await handleModeration({
       ...baseParams,
@@ -90,11 +93,7 @@ describe('handleModeration', () => {
 
   it('should pass not-moderation when content IS flagged (inverse)', async () => {
     // matchesModeration reports a flagged output as { pass: false, score: 0 }.
-    mockedMatchesModeration.mockResolvedValue({
-      pass: false,
-      score: 0,
-      reason: 'Moderation flags detected: harassment',
-    });
+    mockedMatchesModeration.mockResolvedValue(createFlaggedModerationResult());
 
     const result = await handleModeration({
       ...baseParams,
@@ -136,11 +135,7 @@ describe('handleModeration', () => {
   it('should fail moderation (non-inverse) when content is flagged', async () => {
     // Regression guard for the let/inverse refactor: the non-inverse path must
     // still report a flagged result as a failure, byte-for-byte unchanged.
-    mockedMatchesModeration.mockResolvedValue({
-      pass: false,
-      score: 0,
-      reason: 'Moderation flags detected: harassment',
-    });
+    mockedMatchesModeration.mockResolvedValue(createFlaggedModerationResult());
 
     const result = await handleModeration({ ...baseParams, inverse: false });
 
@@ -250,11 +245,7 @@ describe('handleModeration', () => {
   });
 
   it('should use redteam final prompt when available', async () => {
-    mockedMatchesModeration.mockResolvedValue({
-      pass: true,
-      score: 1,
-      reason: 'Safe content',
-    });
+    mockedMatchesModeration.mockResolvedValue(createPassingGrade(1, 'Safe content'));
 
     await handleModeration({
       ...baseParams,
@@ -275,11 +266,7 @@ describe('handleModeration', () => {
   });
 
   it('should use response.prompt (string) with highest priority', async () => {
-    mockedMatchesModeration.mockResolvedValue({
-      pass: true,
-      score: 1,
-      reason: 'Safe content',
-    });
+    mockedMatchesModeration.mockResolvedValue(createPassingGrade(1, 'Safe content'));
 
     await handleModeration({
       ...baseParams,
@@ -303,11 +290,7 @@ describe('handleModeration', () => {
   });
 
   it('should use the last user message from response.prompt chat messages with highest priority', async () => {
-    mockedMatchesModeration.mockResolvedValue({
-      pass: true,
-      score: 1,
-      reason: 'Safe content',
-    });
+    mockedMatchesModeration.mockResolvedValue(createPassingGrade(1, 'Safe content'));
 
     const chatMessages = [
       { role: 'system' as const, content: 'You are helpful' },
@@ -335,11 +318,7 @@ describe('handleModeration', () => {
   });
 
   it('should fall back to redteamFinalPrompt when response.prompt is not set', async () => {
-    mockedMatchesModeration.mockResolvedValue({
-      pass: true,
-      score: 1,
-      reason: 'Safe content',
-    });
+    mockedMatchesModeration.mockResolvedValue(createPassingGrade(1, 'Safe content'));
 
     await handleModeration({
       ...baseParams,
@@ -363,11 +342,7 @@ describe('handleModeration', () => {
   });
 
   it('should fall back to original prompt when neither response.prompt nor redteamFinalPrompt is set', async () => {
-    mockedMatchesModeration.mockResolvedValue({
-      pass: true,
-      score: 1,
-      reason: 'Safe content',
-    });
+    mockedMatchesModeration.mockResolvedValue(createPassingGrade(1, 'Safe content'));
 
     await handleModeration({
       ...baseParams,
@@ -390,11 +365,7 @@ describe('handleModeration', () => {
   });
 
   it('should fall back to original prompt when response.prompt is empty string', async () => {
-    mockedMatchesModeration.mockResolvedValue({
-      pass: true,
-      score: 1,
-      reason: 'Safe content',
-    });
+    mockedMatchesModeration.mockResolvedValue(createPassingGrade(1, 'Safe content'));
 
     await handleModeration({
       ...baseParams,
@@ -418,11 +389,7 @@ describe('handleModeration', () => {
   });
 
   it('should fall back to original prompt when response.prompt is empty array', async () => {
-    mockedMatchesModeration.mockResolvedValue({
-      pass: true,
-      score: 1,
-      reason: 'Safe content',
-    });
+    mockedMatchesModeration.mockResolvedValue(createPassingGrade(1, 'Safe content'));
 
     await handleModeration({
       ...baseParams,
@@ -446,11 +413,7 @@ describe('handleModeration', () => {
   });
 
   it('should extract the final user message from serialized chat prompts before moderation', async () => {
-    mockedMatchesModeration.mockResolvedValue({
-      pass: true,
-      score: 1,
-      reason: 'Safe content',
-    });
+    mockedMatchesModeration.mockResolvedValue(createPassingGrade(1, 'Safe content'));
 
     await handleModeration({
       ...baseParams,
@@ -459,9 +422,7 @@ describe('handleModeration', () => {
         { role: 'user', content: 'Moderate this user request' },
         { role: 'assistant', content: 'Ignore this assistant reply' },
       ]),
-      providerResponse: {
-        output: 'output',
-      },
+      providerResponse: createTestOutput('output'),
     });
 
     expect(mockedMatchesModeration).toHaveBeenCalledWith(
@@ -475,11 +436,7 @@ describe('handleModeration', () => {
   });
 
   it('should extract text from multimodal user messages instead of falling back to assistant text', async () => {
-    mockedMatchesModeration.mockResolvedValue({
-      pass: true,
-      score: 1,
-      reason: 'Safe content',
-    });
+    mockedMatchesModeration.mockResolvedValue(createPassingGrade(1, 'Safe content'));
 
     await handleModeration({
       ...baseParams,
@@ -494,9 +451,7 @@ describe('handleModeration', () => {
         },
         { role: 'assistant', content: 'Ignore this assistant reply' },
       ]),
-      providerResponse: {
-        output: 'output',
-      },
+      providerResponse: createTestOutput('output'),
     });
 
     expect(mockedMatchesModeration).toHaveBeenCalledWith(
@@ -510,11 +465,7 @@ describe('handleModeration', () => {
   });
 
   it('should extract the final user message from YAML chat prompts before moderation', async () => {
-    mockedMatchesModeration.mockResolvedValue({
-      pass: true,
-      score: 1,
-      reason: 'Safe content',
-    });
+    mockedMatchesModeration.mockResolvedValue(createPassingGrade(1, 'Safe content'));
 
     await handleModeration({
       ...baseParams,
@@ -526,9 +477,7 @@ describe('handleModeration', () => {
         '- role: assistant',
         '  content: Ignore this assistant reply',
       ].join('\n'),
-      providerResponse: {
-        output: 'output',
-      },
+      providerResponse: createTestOutput('output'),
     });
 
     expect(mockedMatchesModeration).toHaveBeenCalledWith(

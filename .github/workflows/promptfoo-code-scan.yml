@@ -33,31 +33,21 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           fetch-depth: 0
+          persist-credentials: false
 
-      # Pin to 24.15.0 (not .nvmrc): Node 24.16.0 adds ~10s to every HTTPS
-      # request on Linux runners, dragging the scanner's uncached
-      # `npm install -g promptfoo` (~860 packages) into a 14-minute crawl that
-      # trips the job timeout. 24.17.0 still has the regression (PR #9859
-      # re-bumped it and every scan started timing out), so renovate.json
-      # disables Node updates for this file. Revisit — and re-enable that
-      # rule — when a newer Node resolves it.
+      # Retain the existing PATH Node pin for the action's npm fallback.
+      # The action installs and runs the scanner with its own Node 24 runtime.
       - name: Use Node
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: '24.15.0'
 
+      # This release installs its pinned CLI before minting the short-lived OIDC token.
       - name: Run Promptfoo Code Scan
-        uses: promptfoo/code-scan-action@c4839dcb8623ca031ee6d271c7850dc71d994dd3 # v0
-        env:
-          # Keep the global CLI install on the first promptfoo release that retries
-          # transient repository MCP timeouts, while avoiding future dependency drift.
-          NPM_CONFIG_BEFORE: '2026-04-11T00:40:00.000Z'
-          # Avoid combining the workflow's before pin with this repo's project .npmrc
-          # min-release-age setting without changing nested npx package layout.
-          NPM_CONFIG_USERCONFIG: '/dev/null'
+        uses: promptfoo/code-scan-action@11b7322013b2ba70a311b596c90dad5bcbea8634 # v0.2.2
         with:
           min-severity: medium
           config-path: .github/promptfoo-code-scan.yaml

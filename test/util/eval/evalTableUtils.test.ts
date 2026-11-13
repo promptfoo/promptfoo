@@ -224,6 +224,8 @@ describe('evalTableUtils', () => {
                   namedScores: {
                     clarity: 0.9,
                     accuracy: 0.8,
+                    é: 1,
+                    invalid: NaN,
                   },
                 } as unknown as EvaluateTableOutput,
               ],
@@ -237,6 +239,7 @@ describe('evalTableUtils', () => {
                   score: 0.75,
                   namedScores: {
                     clarity: 0.7,
+                    'e\u0301': 0.5,
                   },
                 } as unknown as EvaluateTableOutput,
               ],
@@ -247,8 +250,12 @@ describe('evalTableUtils', () => {
         const csv = evalTableToCsv(tableWithNamedScores);
         const lines = csv.split('\n');
 
-        expect(lines[0]).toContain('Metric: accuracy');
-        expect(lines[0]).toContain('Metric: clarity');
+        expect(parseCsvRow(lines[0]).filter((cell) => cell.startsWith('Metric: '))).toEqual([
+          'Metric: accuracy',
+          'Metric: clarity',
+          'Metric: é',
+          'Metric: e\u0301',
+        ]);
         expect(lines[1]).toContain('0.80,0.90');
         expect(lines[2]).toContain(',0.70');
       });
@@ -858,6 +865,27 @@ describe('evalTableUtils', () => {
     });
 
     describe('Edge cases and special characters', () => {
+      it('quotes lone carriage returns in headers and data without creating extra rows', () => {
+        mockTable.head.vars[0] = 'var\rname';
+        mockTable.body = [mockTable.body[0]];
+        mockTable.body[0].test.description = 'First\rsecond';
+        mockTable.body[0].vars[0] = 'left\rright';
+        mockTable.body[0].outputs[0].text = 'response\rcontinued';
+
+        const csv = evalTableToCsv(mockTable);
+
+        for (const field of ['var\rname', 'First\rsecond', 'left\rright', 'response\rcontinued']) {
+          expect(csv).toContain(`"${field}"`);
+        }
+        const rows = parseCsv(csv, { record_delimiter: ['\r\n', '\n', '\r'] }) as string[][];
+        expect(rows).toHaveLength(2);
+        expect(rows[0]).toContain('var\rname');
+        expect(rows[1]).toEqual(
+          expect.arrayContaining(['First\rsecond', 'left\rright', 'response\rcontinued']),
+        );
+        expect(rows[1]).toHaveLength(rows[0].length);
+      });
+
       it('should handle special characters in text fields', () => {
         const tableWithSpecialChars = {
           ...mockTable,
@@ -1329,6 +1357,34 @@ describe('evalTableUtils', () => {
       expect(lines[0]).toContain('Metric: relevance');
       expect(lines[1]).toContain('0.70,0.90');
       expect(lines[2]).toContain(',0.50');
+    });
+
+    it('quotes lone carriage returns when streaming CSV', async () => {
+      const csv = await runStreamEvalCsv({
+        vars: ['var\rname'],
+        prompts: [createCompletedPrompt('Prompt 1', {})],
+        results: [
+          {
+            testIdx: 0,
+            promptIdx: 0,
+            testCase: { vars: { 'var\rname': 'left\rright' }, description: 'First\rsecond' },
+            response: { output: 'response\rcontinued' },
+            success: true,
+            score: 1,
+          },
+        ],
+      });
+
+      for (const field of ['var\rname', 'First\rsecond', 'left\rright', 'response\rcontinued']) {
+        expect(csv).toContain(`"${field}"`);
+      }
+      const rows = parseCsv(csv, { record_delimiter: ['\r\n', '\n', '\r'] }) as string[][];
+      expect(rows).toHaveLength(2);
+      expect(rows[0]).toContain('var\rname');
+      expect(rows[1]).toEqual(
+        expect.arrayContaining(['First\rsecond', 'left\rright', 'response\rcontinued']),
+      );
+      expect(rows[1]).toHaveLength(rows[0].length);
     });
 
     it('escapes formula-injection payloads when streaming CSV', async () => {

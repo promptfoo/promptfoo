@@ -17,12 +17,20 @@ import { usePageMeta } from '@app/hooks/usePageMeta';
 import { cn } from '@app/lib/utils';
 import { useUserStore } from '@app/stores/userStore';
 import { callApi } from '@app/utils/api';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router';
 
 interface LoginState {
   success: boolean;
   error?: string;
   email?: string;
+}
+
+function decodeRedirect(value: string): string | null {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return null;
+  }
 }
 
 async function loginAction(_prevState: LoginState, formData: FormData): Promise<LoginState> {
@@ -85,7 +93,7 @@ export default function LoginPage() {
     let redirect = null;
 
     if (redirectMatch) {
-      redirect = decodeURIComponent(redirectMatch[1]);
+      redirect = decodeRedirect(redirectMatch[1]);
     } else {
       const params = new URLSearchParams(searchStr);
       redirect = params.get('redirect');

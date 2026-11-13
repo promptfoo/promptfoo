@@ -29,8 +29,21 @@ export function DataTableToolbar<TData>({
   toolbarActions,
 }: DataTableToolbarProps<TData>) {
   return (
-    <div className="flex flex-col gap-2 border-b border-border p-2 sm:flex-row sm:items-center sm:justify-between">
-      <div className="flex flex-wrap items-center gap-2">
+    <div className="flex flex-col gap-3 border-b border-border p-3 sm:flex-row sm:items-center sm:justify-between">
+      {showGlobalFilter && (
+        <div className="relative w-full sm:max-w-sm sm:min-w-48 sm:flex-1">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+          <Input
+            type="search"
+            aria-label={globalFilterLabel}
+            placeholder={globalFilterLabel || 'Search...'}
+            value={globalFilter ?? ''}
+            onChange={(e) => setGlobalFilter(e.target.value)}
+            className="pl-8 rounded-lg"
+          />
+        </div>
+      )}
+      <div className="flex shrink-0 flex-wrap items-center gap-2">
         {showColumnToggle && (
           <DataTableColumnToggle
             table={table}
@@ -60,20 +73,6 @@ export function DataTableToolbar<TData>({
 
         {toolbarActions}
       </div>
-
-      {showGlobalFilter && (
-        <div className="relative w-full sm:max-w-sm">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-          <Input
-            type="search"
-            aria-label={globalFilterLabel}
-            placeholder="Search..."
-            value={globalFilter ?? ''}
-            onChange={(e) => setGlobalFilter(e.target.value)}
-            className="pl-8 rounded-lg"
-          />
-        </div>
-      )}
     </div>
   );
 }

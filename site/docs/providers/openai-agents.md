@@ -26,9 +26,23 @@ If you are using the Python `openai-agents` SDK, use the [OpenAI Agents Python S
 
 ## Prerequisites
 
-- Install the optional JavaScript SDK in the project that defines or runs the agent: `npm install @openai/agents`
+- Install Promptfoo and the supported JavaScript SDK together: `npm install promptfoo @openai/agents@^0.21.0`
 - Set `OPENAI_API_KEY` environment variable
 - Agent definition (inline or in a TypeScript/JavaScript file)
+
+Promptfoo supports SDK versions `^0.21.0` and `^0.14.1` as optional peers. Use the project-local `npx promptfoo` command for file-exported agents so Promptfoo and the agent share the same SDK installation. An incompatible SDK in your project does not prevent ordinary Promptfoo evals; selecting `openai:agents:*` checks compatibility.
+
+For inline agents, a global installation is also supported:
+
+```bash
+npm install -g promptfoo @openai/agents@^0.21.0
+```
+
+For a one-off inline-agent eval, run this from an empty directory outside an existing npm project, using an absolute config path:
+
+```bash
+npx --yes --package=promptfoo --package=@openai/agents@^0.21.0 promptfoo eval -c /absolute/path/config.yaml --no-cache
+```
 
 ## Basic Usage
 
@@ -38,12 +52,14 @@ providers:
     config:
       agent:
         name: Customer Support Agent
-        model: gpt-5.6-luna
+        model: gpt-6-luna
         instructions: You are a helpful customer support agent.
       maxTurns: 10
 ```
 
-For repeatable eval baselines, set a model explicitly on the exported SDK agent or with `config.model`. In `@openai/agents` v0.10+, agents without a model use the SDK default model, currently `gpt-5.4-mini`, and that upstream default can change over time.
+For repeatable eval baselines, set a model explicitly on the exported SDK agent or with
+`config.model`. The SDK's fallback model can change between releases, so do not treat an
+implicit default as a stable eval input.
 
 ## Configuration Options
 
@@ -64,6 +80,13 @@ For repeatable eval baselines, set a model explicitly on the exported SDK agent 
 | `toolMocks`        | Mocked tool outputs keyed by tool name, used when `executeTools` is `mock` or false | -                     |
 | `tracing`          | Enable Promptfoo OTLP export for SDK spans                                          | false                 |
 | `otlpEndpoint`     | Custom OTLP endpoint URL for Promptfoo tracing                                      | http://localhost:4318 |
+
+`config.model` and `config.modelSettings` are execution overrides. When present, each option
+replaces the corresponding field on the initial agent and every handoff agent, including agents
+loaded from a file. Omit either option to preserve that field from each agent definition.
+
+Agents invoked independently by guardrails, tool callbacks, or `Agent.asTool()` keep their own
+model and settings. Configure those agents directly when comparing models across a nested workflow.
 
 ## File-Based Configuration
 
@@ -128,7 +151,7 @@ import { Agent } from '@openai/agents';
 
 export default new Agent({
   name: 'Support Agent',
-  model: 'gpt-5.6-luna',
+  model: 'gpt-6-luna',
   instructions: 'You are a helpful customer support agent.',
 });
 ```
@@ -163,12 +186,12 @@ providers:
     config:
       agent:
         name: Triage Agent
-        model: gpt-5.6-luna
+        model: gpt-6-luna
         instructions: Route questions to the appropriate specialist.
       handoffs:
         - agent:
             name: Technical Support
-            model: gpt-5.6-luna
+            model: gpt-6-luna
             instructions: Handle technical troubleshooting.
           description: Transfer for technical issues
 ```
@@ -337,6 +360,8 @@ providers:
 
 Use `type: unix-local` for the SDK's local sandbox client or `type: docker` for the Docker client. You can also pass a full SDK `SandboxRunConfig`, a file export, or a factory if you need custom sessions, snapshots, manifests, or clients.
 
+With SDK 0.21, `unix-local` also requires a trusted Python 3 interpreter on the host with descriptor-relative filesystem support for protected file operations. If the SDK cannot discover it, set `OPENAI_AGENTS_PYTHON` to the interpreter's absolute path. The SDK fails closed when this prerequisite is missing; disabling file protection is unsupported. Docker sandbox images need `/bin/sh` and standard GNU filesystem utilities, including `realpath`.
+
 Inline agent definitions can opt into the sandbox runtime with `type: sandbox`, but file-exported SDK agents are the better fit once you need custom capability objects such as `skills()` or non-default manifests.
 
 ## Skills and Shell Tools
@@ -396,7 +421,7 @@ You can also compose them with `any` or `all`. If you are configuring Promptfoo 
 
 ## Mock Tool Execution
 
-Use mocked tool outputs when you want deterministic evals without calling external systems:
+Use mocked tool outputs for deterministic evals without executing function tools:
 
 ```yaml
 providers:
@@ -414,7 +439,9 @@ providers:
 Mock mode supports function tools and direct `Agent` handoffs only. It fails closed for explicit
 `Handoff` objects (their callbacks can have side effects), MCP servers, hosted tools, `SandboxAgent`
 capabilities, reusable prompt templates, and model `providerData` that overrides the request's tools
-or prompt. Use direct agents for side-effect-free mock handoffs.
+or prompt. Use direct agents for handoffs with mocked tools. Lifecycle hooks can observe the
+run, but cannot change the mocked tools or handoff configuration. Hooks and agent definitions
+still run as trusted local code; mock mode does not isolate them.
 
 ## Tracing
 
@@ -474,14 +501,16 @@ tests:
 
       - type: trajectory:goal-success
         value: 'Determine whether order 123 shipped and tell the user the correct status'
-        provider: openai:gpt-5.6-luna
+        provider: openai:gpt-6-luna
 ```
 
 See [Tracing](/docs/tracing/) for the eval-level OTLP setup required when you want Promptfoo to ingest and evaluate these traces directly.
 
 ## Example: D&D Dungeon Master
 
-Full working example with D&D mechanics, dice rolling, and character management:
+The complete example, including its agent and tool files, is available in
+[examples/openai-agents-basic](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-agents-basic).
+Its config uses the following file references:
 
 ```yaml
 description: D&D Adventure with AI Dungeon Master
@@ -526,6 +555,7 @@ For sessions, tracing assertions, sandbox agents, and skills, see the runnable [
 ```bash
 npx promptfoo@latest init --example openai-agents-advanced
 cd openai-agents-advanced
+npm install
 npx promptfoo eval -c promptfooconfig.yaml --no-cache -j 1
 npx promptfoo eval -c promptfooconfig.sandbox.yaml --no-cache
 ```

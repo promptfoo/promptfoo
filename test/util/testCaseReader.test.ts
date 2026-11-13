@@ -39,12 +39,9 @@ vi.mock('../../src/util/fetch/index', () => ({
 vi.mock('proxy-agent', () => ({
   ProxyAgent: vi.fn().mockImplementation(() => ({})),
 }));
-vi.mock('glob', () => ({
+vi.mock('glob', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('glob')>()),
   globSync: vi.fn(),
-  hasMagic: vi.fn((pattern: string | string[]) => {
-    const p = Array.isArray(pattern) ? pattern.join('') : pattern;
-    return p.includes('*') || p.includes('?') || p.includes('[') || p.includes('{');
-  }),
 }));
 vi.mock('../../src/providers', () => ({
   loadApiProvider: vi.fn(),
@@ -182,6 +179,7 @@ const clearAllMocks = () => {
   vi.clearAllMocks();
   vi.mocked(globSync).mockReset();
   vi.mocked(fs.readFileSync).mockReset();
+  vi.mocked(fs.existsSync).mockReset();
   vi.mocked(getEnvBool).mockReset();
   vi.mocked(getEnvString).mockReset();
   vi.mocked(fetchCsvFromGoogleSheet).mockReset();
@@ -413,7 +411,7 @@ not valid json`,
     expect(mockFetchCsvFromGoogleSheet).toHaveBeenCalledWith(
       'https://docs.google.com/spreadsheets/d/example',
     );
-    expect(result).toEqual([
+    expect(result).toMatchObject([
       {
         assert: [{ metric: undefined, type: 'equals', value: 'expected1' }],
         description: 'Row #1',
@@ -439,7 +437,7 @@ not valid json`,
     const result = await readStandaloneTestsFile(blobUri);
 
     expect(readAzureBlobText).toHaveBeenCalledWith(blobUri);
-    expect(result).toEqual([
+    expect(result).toMatchObject([
       {
         description: 'Row #1',
         vars: { review_id: 'review-001' },
@@ -456,7 +454,7 @@ not valid json`,
     const result = await readStandaloneTestsFile(blobUri);
 
     expect(readAzureBlobText).toHaveBeenCalledWith(blobUri);
-    expect(result).toEqual([
+    expect(result).toMatchObject([
       {
         description: 'Row #1',
         vars: { review_id: 'review-002' },
@@ -494,7 +492,7 @@ not valid json`,
 
     const result = await readStandaloneTestsFile(blobUri);
 
-    expect(result).toEqual([
+    expect(result).toMatchObject([
       {
         assert: [{ metric: undefined, type: 'equals', value: 'ready' }],
         description: 'Row #1',
@@ -512,7 +510,7 @@ not valid json`,
 
     const result = await readStandaloneTestsFile(blobUri);
 
-    expect(result).toEqual([
+    expect(result).toMatchObject([
       {
         description: 'Row #1',
         vars: { review_id: 'review-005' },
@@ -537,7 +535,7 @@ not valid json`,
 
     const result = await readStandaloneTestsFile(blobUri);
 
-    expect(result).toEqual([
+    expect(result).toMatchObject([
       {
         assert: [{ type: 'equals', value: 'ready' }],
         description: 'Azure YML case',
@@ -560,7 +558,7 @@ not valid json`,
 
       expect(fetchCsvFromSharepoint).toHaveBeenCalledWith(sharepointUrl);
       expect(fs.readFileSync).not.toHaveBeenCalled();
-      expect(result).toEqual([
+      expect(result).toMatchObject([
         {
           assert: [{ metric: undefined, type: 'equals', value: 'expected1' }],
           description: 'Row #1',
@@ -583,6 +581,18 @@ not valid json`,
 
     expect(importModule).toHaveBeenCalledWith(expect.stringContaining('test.js'), undefined);
     expect(result).toEqual(mockTestCases);
+  });
+
+  it('warns that generated functions cannot be saved for replay while retaining the live function', async () => {
+    const scoring = () => ({ pass: true, score: 0.25, reason: 'custom score' });
+    vi.mocked(importModule).mockResolvedValue(() => [{ assertScoringFunction: scoring }]);
+
+    const result = await readStandaloneTestsFile('generated.cjs');
+
+    expect(result[0].assertScoringFunction).toBe(scoring);
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining('function values that cannot be saved for resume/retry'),
+    );
   });
 
   it('should pass config to JS test generator function', async () => {
@@ -868,7 +878,7 @@ describe('readTest', () => {
     clearAllMocks();
   });
 
-  it('readTest with string input (path to test config)', async () => {
+  const verifyFileTestConfig = async () => {
     const testPath = 'test1.yaml';
     const testContent = {
       description: 'Test 1',
@@ -881,7 +891,9 @@ describe('readTest', () => {
 
     expect(fs.readFileSync).toHaveBeenCalledTimes(1);
     expect(result).toEqual(testContent);
-  });
+  };
+
+  it('readTest with string input (path to test config)', verifyFileTestConfig);
 
   it('readTest with TestCase input', async () => {
     const input: TestCase = {
@@ -899,7 +911,7 @@ describe('readTest', () => {
     const input: any = 123;
 
     await expect(readTest(input)).rejects.toThrow(
-      'Test case must contain one of the following properties: assert, vars, options, metadata, provider, providerOutput, threshold.\n\nInstead got:\n{}',
+      'Test case must contain assert, vars, options, metadata, provider, providerOutput, threshold, or only a description.\n\nInstead got:\n{}',
     );
   });
 
@@ -1060,25 +1072,10 @@ describe('readTest', () => {
       someInvalidProperty: 'invalid',
     } as any; // Cast to any to bypass type checking for invalid input
 
-    await expect(readTest(invalidTestInput, '', false)).rejects.toThrow(
-      'Test case must contain one of the following properties',
-    );
+    await expect(readTest(invalidTestInput, '', false)).rejects.toThrow('Test case must contain');
   });
 
-  it('should read test from file', async () => {
-    const testPath = 'test1.yaml';
-    const testContent = {
-      description: 'Test 1',
-      vars: { var1: 'value1', var2: 'value2' },
-      assert: [{ type: 'equals', value: 'value1' }],
-    };
-    vi.mocked(fs.readFileSync).mockReturnValueOnce(yaml.dump(testContent));
-
-    const result = await readTest(testPath);
-
-    expect(fs.readFileSync).toHaveBeenCalledTimes(1);
-    expect(result).toEqual(testContent);
-  });
+  it('should read test from file', verifyFileTestConfig);
 });
 
 describe('readTests', () => {
@@ -1155,7 +1152,7 @@ describe('readTests', () => {
     const result = await readTests(blobUri);
 
     expect(readAzureBlobText).toHaveBeenCalledWith(blobUri);
-    expect(result).toEqual([
+    expect(result).toMatchObject([
       {
         description: 'Row #1',
         vars: { review_id: 'review-001' },
@@ -1177,7 +1174,7 @@ describe('readTests', () => {
     const result = await readTests(blobUri);
 
     expect(readAzureBlobText).toHaveBeenCalledWith(blobUri);
-    expect(result).toEqual([
+    expect(result).toMatchObject([
       {
         assert: [{ type: 'equals', value: 'ready' }],
         description: 'Azure YAML case',
@@ -1192,6 +1189,10 @@ describe('readTests', () => {
       - description: Azure YAML remote data case
         vars: vars1.yaml
         provider: file://providers/local.js
+        metadata:
+          source: dataset-column
+          __promptfoo:
+            retained: internal-value
         assert:
           - type: equals
             value: ready
@@ -1205,11 +1206,27 @@ describe('readTests', () => {
         description: 'Azure YAML remote data case',
         provider: 'file://providers/local.js',
         vars: 'vars1.yaml',
+        metadata: {
+          source: 'dataset-column',
+          __promptfoo: { retained: 'internal-value', remote: true },
+        },
       },
     ]);
     expect(globSync).not.toHaveBeenCalled();
     expect(loadApiProvider).not.toHaveBeenCalled();
   });
+
+  it.each(['C:\\configs\\tests.yaml', 'file://C:\\configs\\tests.yaml'])(
+    'reads structured YAML tests from a Windows path (%s)',
+    async (file) => {
+      vi.mocked(globSync).mockReturnValue(['C:\\configs\\tests.yaml']);
+      vi.mocked(fs.readFileSync).mockReturnValue('- vars:\n    source: windows\n');
+
+      const tests = await readTests([file]);
+
+      expect(tests).toEqual([{ vars: { source: 'windows' } }]);
+    },
+  );
 
   it('readTests with multiple __expected in CSV', async () => {
     vi.mocked(fs.readFileSync).mockReturnValue(
@@ -1425,7 +1442,7 @@ describe('readTests', () => {
     const result = await loadTestsFromGlob('huggingface://datasets/example/dataset');
 
     expect(fetchHuggingFaceDataset).toHaveBeenCalledWith('huggingface://datasets/example/dataset');
-    expect(result).toEqual(mockDataset);
+    expect(result).toMatchObject(mockDataset);
   });
 
   it('should handle JSONL files', async () => {
@@ -1568,10 +1585,7 @@ describe('readTests', () => {
     const result = await readTests(['file://products.yaml']);
 
     expect(result).toEqual(yamlTests);
-    expect(globSync).toHaveBeenCalledWith(
-      expect.stringContaining('products.yaml'),
-      expect.any(Object),
-    );
+    expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('products.yaml'), 'utf-8');
   });
 
   it('should warn when assert is found in vars', async () => {
@@ -1715,6 +1729,100 @@ describe('readTests', () => {
     expect(result).toHaveLength(1);
     expect(result[0].vars).toEqual({ input: 'hello', expected: 'world' });
   });
+
+  describe('string glob input', () => {
+    const files: Record<string, string> = {
+      [path.resolve('tests/a.csv')]: 'q\nfrom-a-csv',
+      [path.resolve('tests/b.csv')]: 'q\nfrom-b-csv',
+      [path.resolve('tests/a.json')]: '[{"vars": {"q": "from-a-json"}}]',
+      [path.resolve('tests/cases.yaml')]: '- vars: {q: from-yaml}',
+      [path.resolve('cases[draft].json')]: '[{"vars": {"q": "literal"}}]',
+    };
+
+    beforeEach(() => {
+      vi.mocked(fs.readFileSync).mockImplementation((filePath) => {
+        if (!(String(filePath) in files)) {
+          throw new Error(`ENOENT: ${filePath}`);
+        }
+        return files[String(filePath)];
+      });
+      // Match `<dir>/*` and `<dir>/*<ext>` patterns without depending on path separators.
+      vi.mocked(globSync).mockImplementation((pattern) =>
+        Object.keys(files).filter(
+          (file) =>
+            path.dirname(file) === path.dirname(String(pattern)) &&
+            file.endsWith(path.extname(String(pattern))),
+        ),
+      );
+    });
+
+    it('expands a bare * glob like the one-element array form', async () => {
+      const result = await readTests('file://tests/*');
+
+      expect(result.map((test) => test.vars?.q).sort()).toEqual([
+        'from-a-csv',
+        'from-a-json',
+        'from-b-csv',
+        'from-yaml',
+      ]);
+      expect(result).toEqual(await readTests(['file://tests/*']));
+    });
+
+    it('expands a *.csv glob instead of reading it as a literal path', async () => {
+      const result = await readTests('file://tests/*.csv');
+
+      expect(result.map((test) => test.vars?.q).sort()).toEqual(['from-a-csv', 'from-b-csv']);
+    });
+
+    it('resolves nested env templates like the one-element array form', async () => {
+      const source = 'file://{{ env.GLOB_SOURCE }}/*.csv';
+      const env = {
+        GLOB_SOURCE: '{{ env.GLOB_DIRECTORY }}',
+        GLOB_DIRECTORY: '{{ env.GLOB_LITERAL }}',
+        GLOB_LITERAL: 'nomatch',
+      };
+      vi.mocked(globSync).mockImplementation((pattern) =>
+        String(pattern) === path.resolve('{{ env.GLOB_LITERAL }}/*.csv')
+          ? [path.resolve('tests/a.csv')]
+          : [],
+      );
+
+      const arrayResult = await readTests([source], '', env);
+      const stringResult = await readTests(source, '', env);
+
+      expect(arrayResult).toMatchObject([{ vars: { q: 'from-a-csv' } }]);
+      expect(stringResult).toEqual(arrayResult);
+    });
+
+    it('warns and adds no rows when the glob matches nothing', async () => {
+      await expect(readTests('file://nomatch/*.csv')).resolves.toEqual([]);
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('No test files found for path'),
+      );
+    });
+
+    it('keeps an existing file with glob characters on the standalone loader', async () => {
+      vi.mocked(fs.existsSync).mockImplementation(
+        (filePath) => filePath === path.resolve('cases[draft].json'),
+      );
+
+      const result = await readTests('file://cases[draft].json');
+
+      expect(result).toEqual([{ description: 'Row #1', vars: { q: 'literal' } }]);
+      expect(globSync).not.toHaveBeenCalled();
+    });
+
+    it('still reads a remote URL containing ? as a standalone source', async () => {
+      const url = 'https://docs.google.com/spreadsheets/d/example/edit?gid=0';
+      vi.mocked(fetchCsvFromGoogleSheet).mockResolvedValue([{ q: 'from-sheet' }]);
+
+      const result = await readTests(url);
+
+      expect(fetchCsvFromGoogleSheet).toHaveBeenCalledWith(url);
+      expect(result).toMatchObject([{ description: 'Row #1', vars: { q: 'from-sheet' } }]);
+      expect(globSync).not.toHaveBeenCalled();
+    });
+  });
 });
 
 describe('testCaseFromCsvRow', () => {
@@ -1815,6 +1923,58 @@ describe('loadTestsFromGlob', () => {
     clearAllMocks();
   });
 
+  it('includes the resolved source path when no test files match', async () => {
+    vi.mocked(fs.existsSync).mockReturnValue(false);
+    vi.mocked(globSync).mockReturnValue([]);
+    const basePath = path.resolve('fixture-config');
+    await expect(loadTestsFromGlob('missing.yaml', basePath)).rejects.toThrow(
+      path.resolve(basePath, 'missing.yaml'),
+    );
+    await expect(loadTestsFromGlob('missing-*.yaml', basePath)).resolves.toEqual([]);
+    expect(logger.warn).toHaveBeenCalledWith(
+      `No test files found for path: ${path.resolve(basePath, 'missing-*.yaml')}`,
+    );
+  });
+
+  it.each(['missing].yaml', 'fixtures/{case}.yaml'])(
+    'rejects a missing literal path containing non-glob punctuation: %s',
+    async (source) => {
+      vi.mocked(fs.existsSync).mockReturnValue(false);
+      vi.mocked(globSync).mockReturnValue([]);
+      await expect(loadTestsFromGlob(source)).rejects.toThrow('No test files found');
+    },
+  );
+
+  it('allows an empty brace expansion', async () => {
+    vi.mocked(fs.existsSync).mockReturnValue(false);
+    vi.mocked(globSync).mockReturnValue([]);
+    await expect(loadTestsFromGlob('fixtures/{first,second}.yaml')).resolves.toEqual([]);
+    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('No test files found'));
+  });
+
+  it("loads a row's vars files and Python provider from its tests file directory", async () => {
+    const configDir = path.resolve('fixture-config');
+    const testsFile = path.join(configDir, 'tests', 'cases.yaml');
+    const varsFile = path.join(configDir, 'vars', 'extra.yaml');
+    vi.mocked(fs.existsSync).mockImplementation((file) => file === testsFile);
+    vi.mocked(globSync).mockImplementation((pattern) =>
+      pattern === path.join(configDir, 'vars', '*.yaml') ? [varsFile] : [],
+    );
+    vi.mocked(fs.readFileSync).mockImplementation((file) =>
+      file === varsFile
+        ? 'topic: nested'
+        : '- vars: ../vars/*.yaml\n  provider: python:provider.py\n',
+    );
+
+    const [test] = await loadTestsFromGlob('tests/cases.yaml', configDir);
+
+    expect(test.vars).toEqual({ topic: 'nested' });
+    expect(loadApiProvider).toHaveBeenCalledWith(
+      'python:provider.py',
+      expect.objectContaining({ basePath: path.dirname(testsFile) }),
+    );
+  });
+
   it('should handle Hugging Face dataset URLs', async () => {
     const mockDataset: TestCase[] = [
       {
@@ -1835,7 +1995,7 @@ describe('loadTestsFromGlob', () => {
     const result = await loadTestsFromGlob('huggingface://datasets/example/dataset');
 
     expect(fetchHuggingFaceDataset).toHaveBeenCalledWith('huggingface://datasets/example/dataset');
-    expect(result).toEqual(mockDataset);
+    expect(result).toMatchObject(mockDataset);
   });
 
   it('should recursively resolve file:// references in YAML test files', async () => {

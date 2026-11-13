@@ -4,6 +4,7 @@ import { RedteamGraderBase } from '../base';
 export class MentalHealthCrisisResponsePluginGrader extends RedteamGraderBase {
   readonly id = 'promptfoo:redteam:mental-health:crisis-response';
   rubric = '';
+  protected override readonly allowBasicRefusalShortcut = false;
 
   renderRubric(vars: { purpose: string; prompt: string }): string {
     return dedent`

@@ -39,6 +39,197 @@ describe('getStrategyId', () => {
 });
 
 describe('getEstimatedProbes', () => {
+  it.each([
+    { plugins: [{ id: 'toxicity', numTests: 2 }], numTests: 5, expected: 12 },
+    { plugins: [{ id: 'bola', numTests: -2 }], numTests: 5, expected: 5 },
+    { plugins: [{ id: 'bola', numTests: 1.5 }], numTests: 5, expected: 5 },
+    { plugins: [{ id: 'bola', numTests: 500 }], numTests: 5, expected: 500 },
+    { plugins: [{ id: 'bola', numTests: 2 }], numTests: 50, expected: 2 },
+    { plugins: [{ id: 'bola', numTests: 0 }], numTests: 5, expected: 5 },
+    { plugins: [{ id: 'bola', numTests: 0 }], numTests: undefined, expected: 5 },
+    {
+      plugins: ['bola', { id: 'bfla' }, { id: 'ssrf', numTests: 17 }],
+      numTests: 5,
+      expected: 27,
+    },
+    {
+      plugins: ['bola', { id: 'bfla' }, { id: 'ssrf', numTests: 17 }],
+      numTests: undefined,
+      expected: 27,
+    },
+    {
+      plugins: [
+        { id: 'bola', numTests: 2 },
+        { id: 'bfla', numTests: 17 },
+      ],
+      numTests: 5,
+      expected: 19,
+    },
+    { plugins: [], numTests: 5, expected: 0 },
+  ])('uses effective plugin counts for $plugins', ({ plugins, numTests, expected }) => {
+    const config = { ...baseConfig, plugins, numTests, strategies: [] } as Config;
+    expect(getEstimatedProbes(config)).toBe(expected);
+  });
+
+  it.each([
+    { intent: ['first', 'second'], expected: 2 },
+    { intent: 'one intent', expected: 1 },
+    { intent: [['first step', 'second step']], expected: 1 },
+    { intent: ['single', ['step one', 'step two']], expected: 2 },
+    { intent: 'file://external-intents.yaml', expected: 1 },
+    { intent: [], expected: 0 },
+    { intent: ['', 'real intent'], expected: 2 },
+    { intent: ['  ', [' ', '\t'], ['real step', '']], expected: 3 },
+    { intent: '', expected: 0 },
+    { intent: '  ', expected: 1 },
+  ])('counts intent entries before overrides: $intent', ({ intent, expected }) => {
+    const config = {
+      ...baseConfig,
+      numTests: 2,
+      plugins: [{ id: 'intent', numTests: 100, config: { intent } }],
+      strategies: [],
+    } as Config;
+    expect(getEstimatedProbes(config)).toBe(expected);
+  });
+
+  it('combines intents with ordinary overrides before strategy and language factors', () => {
+    const config = {
+      ...baseConfig,
+      numTests: 2,
+      plugins: [
+        { id: 'intent', numTests: 100, config: { intent: ['first', 'second'] } },
+        { id: 'bola', numTests: 3 },
+        { id: 'intent', config: { intent: [['step one', 'step two']] } },
+      ],
+      strategies: ['basic', 'jailbreak'],
+      language: ['en', 'es'],
+    } as Config;
+    expect(getEstimatedProbes(config)).toBe(132); // (2 + 3 + 1) * (1 + 10) * 2
+  });
+
+  it('preserves imported blank intents in the multiplied workload estimate', () => {
+    const config = {
+      ...baseConfig,
+      plugins: [{ id: 'intent', config: { intent: ['', 'real intent'] } }],
+      strategies: ['basic', 'jailbreak'],
+      language: ['en', 'es'],
+    } as Config;
+    expect(getEstimatedProbes(config)).toBe(44);
+  });
+
+  it('applies strategy and language factors to each plugin override', () => {
+    const config = {
+      ...baseConfig,
+      numTests: 5,
+      plugins: ['bola', { id: 'bfla', numTests: 17 }],
+      strategies: ['basic', { id: 'jailbreak' }],
+      language: ['en', 'es'],
+    } as Config;
+    expect(getEstimatedProbes(config)).toBe(484); // (5 + 17) * (1 + 10) * 2
+  });
+
+  it.each(['basic', { id: 'basic' }])('counts basic cases once for %j', (strategy) => {
+    const config = {
+      ...baseConfig,
+      plugins: [{ id: 'bola', numTests: 2 }],
+      strategies: [strategy],
+    } as Config;
+    expect(getEstimatedProbes(config)).toBe(2);
+  });
+
+  it('omits base cases when the basic strategy is disabled', () => {
+    const config = {
+      ...baseConfig,
+      plugins: [{ id: 'bola', numTests: 2 }],
+      strategies: [{ id: 'basic', config: { enabled: false } }, 'base64'],
+    } as Config;
+    expect(getEstimatedProbes(config)).toBe(2);
+    expect(getEstimatedProbes({ ...config, strategies: [config.strategies[0]] })).toBe(0);
+  });
+
+  it.each([
+    { strategies: [{ id: 'basic', config: { enabled: false } }, 'retry'], expected: 0 },
+    {
+      strategies: [{ id: 'basic', config: { enabled: false } }, 'retry', 'base64'],
+      expected: 2,
+    },
+    {
+      strategies: [
+        { id: 'basic', config: { enabled: false } },
+        { id: 'retry', config: { numTests: 7 } },
+        'base64',
+      ],
+      expected: 9,
+    },
+    { strategies: ['basic', { id: 'retry', config: { numTests: 7 } }], expected: 9 },
+    { strategies: ['basic', 'retry'], expected: 4 },
+  ])('applies retry to the enabled base workload: $strategies', ({ strategies, expected }) => {
+    expect(
+      getEstimatedProbes({
+        ...baseConfig,
+        plugins: [{ id: 'bola', numTests: 2 }],
+        strategies,
+      } as Config),
+    ).toBe(expected);
+  });
+
+  it('deduplicates empty and omitted plugin configs just as export does', () => {
+    expect(
+      getEstimatedProbes({
+        ...baseConfig,
+        plugins: [
+          { id: 'bola', numTests: 2, config: {} },
+          { id: 'bola', numTests: 7 },
+        ],
+        strategies: [],
+      } as Config),
+    ).toBe(7);
+  });
+
+  it('counts duplicate plugin configurations once using the last override', () => {
+    const config = {
+      ...baseConfig,
+      plugins: [
+        { id: 'contracts', numTests: 500, config: { key: 'value' } },
+        { id: 'contracts', numTests: 7, config: { key: 'value' } },
+        { id: 'contracts', numTests: 3, config: { key: 'different' } },
+        { id: 'contracts', numTests: 2, config: { key: 'value' }, severity: 'high' },
+      ],
+      strategies: [],
+    } as Config;
+    expect(getEstimatedProbes(config)).toBe(12);
+  });
+
+  it('applies each plugin language override before summing', () => {
+    const config = {
+      ...baseConfig,
+      numTests: 5,
+      language: ['en', 'es'],
+      plugins: [
+        { id: 'contracts', numTests: 10, config: { language: 'fr' } },
+        { id: 'policy', numTests: 3, config: { language: ['de', 'it', 'pt'] } },
+        { id: 'overreliance', numTests: 2 },
+      ],
+      strategies: [],
+    } as Config;
+    expect(getEstimatedProbes(config)).toBe(23);
+  });
+
+  it('deduplicates intent entries before applying their language override', () => {
+    const plugin = {
+      id: 'intent',
+      numTests: 100,
+      config: { intent: ['first', 'second'], language: 'fr' },
+    };
+    const config = {
+      ...baseConfig,
+      language: ['en', 'es'],
+      plugins: [plugin, plugin],
+      strategies: [],
+    } as Config;
+    expect(getEstimatedProbes(config)).toBe(2);
+  });
+
   it('should calculate basic probes without strategies', () => {
     const config = {
       ...baseConfig,
@@ -54,9 +245,9 @@ describe('getEstimatedProbes', () => {
       ...baseConfig,
       numTests: 5,
       plugins: ['plugin1'],
-      strategies: ['basic', 'jailbreak'], // multipliers 1 and 10
+      strategies: ['basic', 'jailbreak'], // Base cases plus a multiplier of 10
     } as Config;
-    expect(getEstimatedProbes(config)).toBe(60); // (5*1) + (5*1*(1+10))
+    expect(getEstimatedProbes(config)).toBe(55); // 5 base cases + 5*10 jailbreak probes
   });
 
   it('should handle global language configuration with multiple languages', () => {
@@ -89,7 +280,7 @@ describe('getEstimatedProbes', () => {
       strategies: ['basic', 'jailbreak'],
       language: ['en', 'es'],
     } as Config;
-    expect(getEstimatedProbes(config)).toBe(240); // ((10) + (10*11)) * 2 languages
+    expect(getEstimatedProbes(config)).toBe(220); // (10 + 10*10) * 2 languages
   });
 
   it('should use default numTests when not specified', () => {
@@ -98,7 +289,7 @@ describe('getEstimatedProbes', () => {
       plugins: ['plugin1'],
       strategies: ['basic'],
     } as Config;
-    expect(getEstimatedProbes(config)).toBe(10); // (5*1) + (5*1*1)
+    expect(getEstimatedProbes(config)).toBe(5); // The basic strategy uses the existing base cases
   });
 });
 
@@ -235,6 +426,18 @@ describe('isStrategyConfigured', () => {
 });
 
 describe('getEstimatedDuration', () => {
+  it('uses the overridden probe workload while preserving the duration heuristic', () => {
+    const config = {
+      ...baseConfig,
+      numTests: 5,
+      plugins: [{ id: 'bola', numTests: 500 }],
+      strategies: ['basic'],
+      maxConcurrency: 10,
+    } as Config;
+    expect(getEstimatedDuration(config)).toBe('~3m'); // 8s generation + 150s probes
+    expect(getEstimatedDuration({ ...config, plugins: [{ id: 'bola', numTests: 2 }] })).toBe('~9s');
+  });
+
   it('should return duration in seconds for very short runs', () => {
     const config = {
       ...baseConfig,
@@ -318,7 +521,7 @@ describe('getEstimatedDuration', () => {
       ...baseConfig,
       numTests: 5,
       plugins: ['plugin1'],
-      strategies: ['basic'], // multiplier 1
+      strategies: ['basic'], // Base cases only
       maxConcurrency: 5,
     } as Config;
     const configJailbreakTree = {

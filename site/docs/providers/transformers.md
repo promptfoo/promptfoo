@@ -5,15 +5,19 @@ description: Run local LLM inference with Transformers.js for embeddings and tex
 
 # Transformers.js
 
-The Transformers.js provider enables fully local inference using [Transformers.js v4](https://huggingface.co/docs/transformers.js), running ONNX-optimized models directly in Node.js without external APIs or GPU setup. v4 features a new WebGPU backend, broader model support (8B+ parameter models), and improved performance.
+The Transformers.js provider runs ONNX models locally in Node.js using [Transformers.js v4](https://huggingface.co/docs/transformers.js). It supports CPU inference and a WebGPU backend; no external inference API is required.
 
 ## Installation
 
-Transformers.js is an optional dependency (~200MB for ONNX runtime):
+Transformers.js and its ONNX runtimes are not included in the default install. Install the runtime alongside Promptfoo in your project:
 
 ```bash
-npm install @huggingface/transformers
+npm install promptfoo @huggingface/transformers@^4.0.0
 ```
+
+For a global installation, use `npm install -g promptfoo @huggingface/transformers@^4.0.0`.
+
+For a one-off eval, run `npx --package=promptfoo --package=@huggingface/transformers@^4.0.0 promptfoo eval -c /absolute/path/to/promptfooconfig.yaml` from an empty directory outside an existing npm project, with neither package installed locally. If either package is already installed in your project, use the project installation command above. Model files are downloaded separately on first use.
 
 ## Quick Start
 
@@ -45,13 +49,14 @@ Text generation runs on CPU and is best for testing. For production, consider [O
 
 These options apply to both embedding and text generation providers:
 
-| Option           | Description                                                                                | Default        |
-| ---------------- | ------------------------------------------------------------------------------------------ | -------------- |
-| `device`         | `'auto'`, `'cpu'`, `'gpu'`, `'wasm'`, `'webgpu'`, `'cuda'`, `'dml'`, `'coreml'`, `'webnn'` | `'auto'`       |
-| `dtype`          | Quantization: `'fp32'`, `'fp16'`, `'q8'`, `'q4'`, `'q4f16'`                                | `'auto'`       |
-| `cacheDir`       | Override model cache directory                                                             | System default |
-| `localFilesOnly` | Skip downloads, use cached models only                                                     | `false`        |
-| `revision`       | Model version/branch                                                                       | `'main'`       |
+| Option           | Description                                                                                                                             | Default        |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------- | -------------- |
+| `device`         | `'auto'`, `'cpu'`, `'gpu'`, `'wasm'`, `'webgpu'`, `'cuda'`, `'dml'`, `'coreml'`, `'webnn'`, `'webnn-npu'`, `'webnn-gpu'`, `'webnn-cpu'` | `'auto'`       |
+| `dtype`          | Quantization: `'fp32'`, `'fp16'`, `'q8'`, `'int8'`, `'uint8'`, `'q4'`, `'bnb4'`, `'q4f16'`                                              | `'auto'`       |
+| `cacheDir`       | Override model cache directory                                                                                                          | System default |
+| `localFilesOnly` | Skip downloads, use cached models only                                                                                                  | `false`        |
+| `revision`       | Model version/branch                                                                                                                    | `'main'`       |
+| `sessionOptions` | ONNX runtime session options, passed through as `session_options`                                                                       | -              |
 
 ### Embedding Options
 
@@ -128,14 +133,14 @@ assert:
 
 - **Caching:** Pipelines are cached after first load. Initial model download may take time, but subsequent runs are fast.
 - **Quantization:** Use `dtype: q4` or `dtype: q8` for faster inference and lower memory. Use `dtype: q4f16` for WebGPU-optimized quantization.
-- **WebGPU:** v4 includes a new WebGPU runtime written in C++ with significantly improved performance. Use `device: webgpu` on supported systems.
+- **WebGPU:** v4 includes a WebGPU runtime written in C++ with improved performance. Use `device: webgpu` on supported systems.
 - **Concurrency:** For limited RAM, use `promptfoo eval -j 1` to run serially.
 
 ## Troubleshooting
 
 | Problem                  | Solution                                                                                                                                                |
 | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Dependency not installed | Run `npm install @huggingface/transformers`                                                                                                             |
+| Dependency not installed | Follow the [installation instructions](#installation) to install the runtime alongside Promptfoo.                                                       |
 | Model not found          | Verify model exists at [HuggingFace](https://huggingface.co/models?library=transformers.js) with ONNX weights. Try `Xenova` or `onnx-community` models. |
 | Out of memory            | Use `dtype: q4`, run with `-j 1`, or try smaller models                                                                                                 |
 | Slow first run           | Models download on first use. Pre-download with `await pipeline('feature-extraction', 'model-name')`                                                    |

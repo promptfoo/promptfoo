@@ -5,9 +5,11 @@ prompts:
   - file://input.json
 
 providers:
-  - id: xai:voice:grok-voice-think-fast-1.0
+  - id: xai:voice:grok-voice-think-fast-2.0
     config:
-      voice: 'Ara' # Options: Ara, Rex, Sal, Eve, Leo
+      voice: 'ara' # Built-in lowercase voice ID or custom voice ID
+      reasoning:
+        effort: high # high (default) or none
       instructions: |
         You are a helpful voice assistant. Keep your responses concise and informative.
         When the user asks about weather, use the get_weather function.

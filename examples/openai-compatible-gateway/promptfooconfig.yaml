@@ -1,0 +1,22 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+
+description: OpenAI-compatible multi-model gateway via openai:chat + apiBaseUrl
+
+prompts:
+  - 'Answer in one short sentence: {{question}}'
+
+providers:
+  - id: openai:chat:your-model-id
+    config:
+      # Any OpenAI-compatible endpoint: vLLM, llamafile, LiteLLM, a hosted gateway, ...
+      apiBaseUrl: https://gateway.example.com/v1
+      # Prefer a dedicated env var so a real OPENAI_API_KEY is not sent to the gateway.
+      apiKeyEnvar: GATEWAY_API_KEY
+      temperature: 0.2
+
+tests:
+  - vars:
+      question: What is the capital of France?
+    assert:
+      - type: contains
+        value: Paris
