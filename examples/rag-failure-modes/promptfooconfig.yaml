@@ -158,6 +158,7 @@ tests:
           const refusalPatterns = [
             /\bi\s+(?:do not|don't|cannot|can't)\s+(?:know|(?:provide\s+)?(?:an?\s+)?answer)\b/i,
             /\b(?:not enough|insufficient)\s+information\b/i,
+            /\bi\s+(?:refuse|decline)\s+to\s+answer\b/i,
             /\b(?:unable to|cannot|can't)\s+(?:provide\s+)?(?:an?\s+)?(?:answer|determine)\b/i,
           ];
           return refusalPatterns.every((pattern) => !pattern.test(output));
