@@ -314,6 +314,32 @@ function serializeToolAttribute(value: unknown): string | undefined {
   }
 }
 
+export function recordSpanError(span: Span, error: unknown): void {
+  span.setStatus({
+    code: SpanStatusCode.ERROR,
+    message: error instanceof Error ? error.message : String(error),
+  });
+
+  if (error instanceof Error) {
+    span.recordException(error);
+  }
+}
+
+// Extract provider token usage for response attributes on the span.
+export function extractGenAIResponse(
+  response: ProviderResponse,
+  includeFinishReason = false,
+): GenAISpanResult {
+  const result: GenAISpanResult = {};
+  if (response.tokenUsage) {
+    result.tokenUsage = { ...response.tokenUsage };
+  }
+  if (includeFinishReason && response.finishReason) {
+    result.finishReasons = [response.finishReason];
+  }
+  return result;
+}
+
 /**
  * Execute a function within a GenAI span.
  *
@@ -416,14 +442,7 @@ export async function withGenAISpan<T>(
       return value;
     } catch (error) {
       span.setAttribute('error.type', error instanceof Error ? error.name : '_OTHER');
-      span.setStatus({
-        code: SpanStatusCode.ERROR,
-        message: error instanceof Error ? error.message : String(error),
-      });
-
-      if (error instanceof Error) {
-        span.recordException(error);
-      }
+      recordSpanError(span, error);
 
       throw error;
     } finally {
@@ -495,25 +514,25 @@ function buildRequestAttributes(
   }
 
   // Optional request parameters
-  if (ctx.maxTokens !== undefined) {
+  if (ctx.maxTokens != null) {
     attrs[GenAIAttributes.REQUEST_MAX_TOKENS] = ctx.maxTokens;
   }
-  if (ctx.temperature !== undefined) {
+  if (ctx.temperature != null) {
     attrs[GenAIAttributes.REQUEST_TEMPERATURE] = ctx.temperature;
   }
-  if (ctx.topP !== undefined) {
+  if (ctx.topP != null) {
     attrs[GenAIAttributes.REQUEST_TOP_P] = ctx.topP;
   }
-  if (ctx.topK !== undefined) {
+  if (ctx.topK != null) {
     attrs[GenAIAttributes.REQUEST_TOP_K] = ctx.topK;
   }
   if (ctx.stopSequences && ctx.stopSequences.length > 0) {
     attrs[GenAIAttributes.REQUEST_STOP_SEQUENCES] = ctx.stopSequences;
   }
-  if (ctx.frequencyPenalty !== undefined) {
+  if (ctx.frequencyPenalty != null) {
     attrs[GenAIAttributes.REQUEST_FREQUENCY_PENALTY] = ctx.frequencyPenalty;
   }
-  if (ctx.presencePenalty !== undefined) {
+  if (ctx.presencePenalty != null) {
     attrs[GenAIAttributes.REQUEST_PRESENCE_PENALTY] = ctx.presencePenalty;
   }
 
@@ -521,7 +540,7 @@ function buildRequestAttributes(
   if (ctx.evalId) {
     attrs[PromptfooAttributes.EVAL_ID] = ctx.evalId;
   }
-  if (ctx.testIndex !== undefined) {
+  if (ctx.testIndex != null) {
     attrs[PromptfooAttributes.TEST_INDEX] = ctx.testIndex;
   }
   if (ctx.promptLabel) {
@@ -587,50 +606,50 @@ export function setGenAIResponseAttributes(
   if (result.tokenUsage) {
     const usage = result.tokenUsage;
 
-    if (usage.prompt !== undefined) {
+    if (usage.prompt != null) {
       span.setAttribute(GenAIAttributes.USAGE_INPUT_TOKENS, usage.prompt);
     }
-    if (usage.completion !== undefined) {
+    if (usage.completion != null) {
       span.setAttribute(GenAIAttributes.USAGE_OUTPUT_TOKENS, usage.completion);
     }
-    if (usage.total !== undefined) {
+    if (usage.total != null) {
       span.setAttribute(PromptfooAttributes.USAGE_TOTAL_TOKENS, usage.total);
     }
-    if (usage.cached !== undefined) {
+    if (usage.cached != null) {
       if (result.cacheHit === true) {
         span.setAttribute(PromptfooAttributes.USAGE_CACHED_RESPONSE_TOKENS, usage.cached);
-      } else if (usage.completionDetails?.cacheReadInputTokens === undefined) {
+      } else if (usage.completionDetails?.cacheReadInputTokens == null) {
         span.setAttribute(GenAIAttributes.USAGE_CACHE_READ_INPUT_TOKENS, usage.cached);
       }
     }
 
     // Completion details (reasoning tokens, etc.)
     if (usage.completionDetails) {
-      if (usage.completionDetails.reasoning !== undefined) {
+      if (usage.completionDetails.reasoning != null) {
         span.setAttribute(
           GenAIAttributes.USAGE_REASONING_OUTPUT_TOKENS,
           usage.completionDetails.reasoning,
         );
       }
-      if (usage.completionDetails.acceptedPrediction !== undefined) {
+      if (usage.completionDetails.acceptedPrediction != null) {
         span.setAttribute(
           PromptfooAttributes.USAGE_ACCEPTED_PREDICTION_TOKENS,
           usage.completionDetails.acceptedPrediction,
         );
       }
-      if (usage.completionDetails.rejectedPrediction !== undefined) {
+      if (usage.completionDetails.rejectedPrediction != null) {
         span.setAttribute(
           PromptfooAttributes.USAGE_REJECTED_PREDICTION_TOKENS,
           usage.completionDetails.rejectedPrediction,
         );
       }
-      if (usage.completionDetails.cacheReadInputTokens !== undefined) {
+      if (usage.completionDetails.cacheReadInputTokens != null) {
         span.setAttribute(
           GenAIAttributes.USAGE_CACHE_READ_INPUT_TOKENS,
           usage.completionDetails.cacheReadInputTokens,
         );
       }
-      if (usage.completionDetails.cacheCreationInputTokens !== undefined) {
+      if (usage.completionDetails.cacheCreationInputTokens != null) {
         span.setAttribute(
           GenAIAttributes.USAGE_CACHE_CREATION_INPUT_TOKENS,
           usage.completionDetails.cacheCreationInputTokens,
@@ -651,7 +670,7 @@ export function setGenAIResponseAttributes(
   }
 
   // Promptfoo-specific response attributes
-  if (result.cacheHit !== undefined) {
+  if (result.cacheHit != null) {
     span.setAttribute(PromptfooAttributes.CACHE_HIT, result.cacheHit);
   }
   if (result.responseBody) {
@@ -693,24 +712,6 @@ export function getTraceparent(): string | undefined {
   // W3C Trace Context format: version-traceId-spanId-traceFlags
   const traceFlags = ctx.traceFlags.toString(16).padStart(2, '0');
   return `00-${ctx.traceId}-${ctx.spanId}-${traceFlags}`;
-}
-
-/**
- * Get the current trace ID from the active span.
- * Returns undefined if there is no active span.
- */
-export function getCurrentTraceId(): string | undefined {
-  const activeSpan = trace.getActiveSpan();
-  return activeSpan?.spanContext().traceId;
-}
-
-/**
- * Get the current span ID from the active span.
- * Returns undefined if there is no active span.
- */
-export function getCurrentSpanId(): string | undefined {
-  const activeSpan = trace.getActiveSpan();
-  return activeSpan?.spanContext().spanId;
 }
 
 /**

@@ -1,12 +1,30 @@
-import { getEnvString } from '../envars';
+import { resolveProviderCreatorInput } from './creator';
+import { resolveProviderApiKey } from './credentials';
 import { createNscaleImageProvider } from './nscale/image';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { OpenAiCompletionProvider } from './openai/completion';
 import { OpenAiEmbeddingProvider } from './openai/embedding';
 import { splitLocalOptions } from './openai/localOptions';
 
-import type { EnvOverrides } from '../types/env';
-import type { ApiProvider, ProviderOptions } from '../types/index';
+import type { ApiProvider } from '../types/index';
+import type { ProviderCreatorOptions } from './creator';
+import type { OpenAiSharedOptions } from './openai/types';
+
+function withNscaleCredentials(
+  provider: OpenAiChatCompletionProvider | OpenAiCompletionProvider | OpenAiEmbeddingProvider,
+): ApiProvider {
+  return Object.assign(provider, {
+    getApiKey(config: OpenAiSharedOptions = provider.config): string | undefined {
+      return resolveProviderApiKey(config, provider.env, [
+        'NSCALE_SERVICE_TOKEN',
+        'NSCALE_API_KEY',
+      ]);
+    },
+    getMissingApiKeyErrorMessage(config: OpenAiSharedOptions = provider.config): string {
+      return `API key is not set. Set the ${config.apiKeyEnvar || 'NSCALE_SERVICE_TOKEN'} environment variable or add \`apiKey\` to the provider config.`;
+    },
+  });
+}
 
 /**
  * Creates an Nscale provider using OpenAI-compatible endpoints
@@ -18,35 +36,18 @@ import type { ApiProvider, ProviderOptions } from '../types/index';
  */
 export function createNscaleProvider(
   providerPath: string,
-  options: {
-    config?: ProviderOptions;
-    id?: string;
-    env?: EnvOverrides;
-  } = {},
+  options: ProviderCreatorOptions = {},
 ): ApiProvider {
+  const providerOptions = resolveProviderCreatorInput(options);
   const splits = providerPath.split(':');
 
-  const config = options.config?.config || {};
+  const config = providerOptions.config || {};
   const { localOptions, modelParameters } = splitLocalOptions(config);
 
-  const getApiKeyEnvar = () => {
-    if (config.apiKeyEnvar) {
-      return config.apiKeyEnvar;
-    }
-    // Select a native namespace without copying its credential into config.
-    for (const envar of ['NSCALE_SERVICE_TOKEN', 'NSCALE_API_KEY']) {
-      if (options.env?.[envar] || getEnvString(envar)) {
-        return envar;
-      }
-    }
-    return 'NSCALE_SERVICE_TOKEN';
-  };
-
   const nscaleConfig = {
-    ...options,
+    ...providerOptions,
     config: {
       ...localOptions,
-      apiKeyEnvar: getApiKeyEnvar(),
       // Honor an explicit apiBaseUrl (private/regional Nscale endpoints) instead
       // of silently ignoring it while still shipping it in the request body.
       apiBaseUrl: localOptions.apiBaseUrl || 'https://inference.api.nscale.com/v1',
@@ -56,22 +57,22 @@ export function createNscaleProvider(
 
   if (splits[1] === 'chat') {
     const modelName = splits.slice(2).join(':');
-    return new OpenAiChatCompletionProvider(modelName, nscaleConfig);
+    return withNscaleCredentials(new OpenAiChatCompletionProvider(modelName, nscaleConfig));
   } else if (splits[1] === 'completion') {
     const modelName = splits.slice(2).join(':');
-    return new OpenAiCompletionProvider(modelName, nscaleConfig);
+    return withNscaleCredentials(new OpenAiCompletionProvider(modelName, nscaleConfig));
   } else if (splits[1] === 'embedding' || splits[1] === 'embeddings') {
     const modelName = splits.slice(2).join(':');
-    return new OpenAiEmbeddingProvider(modelName, nscaleConfig);
+    return withNscaleCredentials(new OpenAiEmbeddingProvider(modelName, nscaleConfig));
   } else if (splits[1] === 'image') {
     return createNscaleImageProvider(providerPath, {
       config,
-      id: options.id,
-      env: options.env,
+      id: providerOptions.id,
+      env: providerOptions.env,
     });
   } else {
     // If no specific type is provided, default to chat
     const modelName = splits.slice(1).join(':');
-    return new OpenAiChatCompletionProvider(modelName, nscaleConfig);
+    return withNscaleCredentials(new OpenAiChatCompletionProvider(modelName, nscaleConfig));
   }
 }

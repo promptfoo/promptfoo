@@ -1,10 +1,11 @@
 ---
 title: xAI (Grok) Provider
-description: Use xAI Grok models for text, image, video, voice, and Responses API tool workflows, including Grok 4.6, Grok 4.5, Grok 4.3, regional endpoints, and pricing.
+description: Use xAI Grok models for text, image, video, voice, and Responses API tool workflows, including Grok 4.7 reasoning, regional endpoints, and token pricing.
 keywords:
   [
     xai,
     grok,
+    grok-4.7,
     grok-4.6,
     grok-4.5,
     grok-4.3,
@@ -30,11 +31,11 @@ To use xAI's API, set the `XAI_API_KEY` environment variable or specify via `api
 export XAI_API_KEY=your_api_key_here
 ```
 
-When xAI is the selected fallback provider family, Promptfoo can use xAI defaults for grading, suggestions, synthesis, and web search. These automatic defaults currently use `grok-4.3` so they work for both US and EU accounts; select `grok-4.6` or `grok-4.5` explicitly where they are available. xAI does not currently expose a public embeddings or moderation API, so those defaults fall back to OpenAI when xAI is selected. Explicit provider IDs in your config still take precedence.
+When xAI is the selected fallback provider family, Promptfoo can use xAI defaults for grading, suggestions, synthesis, and web search. These automatic defaults currently use `grok-4.3` on the global endpoint; select `grok-4.7`, `grok-4.6`, or `grok-4.5` explicitly where they are available. xAI does not currently expose a public embeddings or moderation API, so those defaults fall back to OpenAI when xAI is selected. Explicit provider IDs in your config still take precedence.
 
 ## Supported Models
 
-The xAI provider includes support for the following model formats. [xAI's public model catalog](https://docs.x.ai/developers/models) currently recommends `grok-4.6` for chat, coding, and agentic workloads; consult the catalog when choosing a new default for a long-lived integration.
+The xAI provider includes support for the following model formats. [xAI recommends `grok-4.7`](https://docs.x.ai/developers/grok-4-7) for coding, agentic tasks, and knowledge work; consult the [public model catalog](https://docs.x.ai/developers/models) for current availability.
 
 :::caution Legacy xAI model aliases
 
@@ -42,15 +43,22 @@ The xAI provider includes support for the following model formats. [xAI's public
 
 :::
 
-:::caution Grok 4.5 and 4.6 availability
+:::caution Regional model availability
 
-[xAI's Grok 4.5 model page](https://docs.x.ai/developers/grok-4-5) currently says the model is not available to EU API Console users, and xAI has not published EU availability for Grok 4.6. Until xAI removes that restriction, use `grok-4.3` for configs that must work in the EU.
+xAI documents Grok 4.7 on its global and [US regional endpoints](https://docs.x.ai/developers/grok-4-7#where-it-runs), and [announced Grok 4.5 availability in the EU API Console](https://docs.x.ai/developers/release-notes). Check your account before depending on Grok 4.7 in another region; `grok-4.3` remains Promptfoo's automatic fallback.
 
 :::
 
+### Grok 4.7 Models
+
+- `xai:grok-4.7` - Chat Completions; 500K context, text and image input, text output
+- `xai:responses:grok-4.7` - Responses API, including server-side tools and encrypted reasoning
+
+Use the exact `grok-4.7` model ID. [Grok 4.7 Fast](https://docs.x.ai/developers/grok-4-7#fast-variant) is available in Cursor and Grok Build, but not on the public xAI API.
+
 ### Grok 4.6 Models
 
-- `xai:grok-4.6` - Latest flagship reasoning model for coding, agentic tasks, and knowledge work (500K context, text and image input)
+- `xai:grok-4.6` - Previous flagship reasoning model for coding, agentic tasks, and knowledge work (500K context, text and image input)
 
 xAI does not publish any aliases for this model, so target the exact `grok-4.6` id. There is no `grok-4.6-latest`.
 
@@ -58,7 +66,7 @@ xAI does not publish any aliases for this model, so target the exact `grok-4.6` 
 
 - `xai:grok-4.5` - Flagship reasoning model for coding, agentic tasks, and knowledge work (500K context, text and image input)
 - `xai:grok-4.5-latest` - Alias for the Grok 4.5 family
-- `xai:grok-build-latest` - Alias for the Grok 4.5 family (default model in Grok Build)
+- `xai:grok-build-latest` - Alias for the Grok 4.5 family
 
 ### Grok 4.3 Models
 
@@ -116,23 +124,32 @@ Promptfoo recognizes older `grok-2`, `grok-beta`, and vision IDs for existing co
 
 The provider uses [OpenAI-compatible configuration options](/docs/providers/openai) plus Grok-specific options, subject to the model restrictions below. Example usage:
 
-When xAI returns [`usage.cost_in_usd_ticks`](https://docs.x.ai/developers/cost-tracking), Promptfoo uses that exact billed amount, including cache discounts and request-level pricing adjustments. If ticks are unavailable, Promptfoo falls back to the model's catalog rates. Custom pricing can be set with `cost`, `inputCost`, `outputCost`, and `cacheReadCost` (all per-token rates); explicit overrides take precedence over reported ticks.
+When xAI returns [`usage.cost_in_usd_ticks`](https://docs.x.ai/developers/cost-tracking), Promptfoo uses that exact billed amount, including cache discounts and request-level pricing adjustments. If ticks are unavailable, Promptfoo falls back to the model's catalog rates and applies the documented 2x premium when the response confirms `service_tier: priority`. Custom pricing can be set with `cost`, `inputCost`, `outputCost`, and `cacheReadCost` (all per-token rates); explicit overrides take precedence over reported ticks and are used as final rates without an additional priority multiplier.
 
-```yaml title="promptfooconfig.yaml"
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+```yaml
 providers:
-  - id: xai:grok-4.5
+  - id: xai:grok-4.7
     config:
       temperature: 0.7
-      reasoning_effort: 'high' # low, medium, or high (grok-4.3 also accepts none)
+      reasoning_effort: 'xhigh' # low, medium, high (default), or xhigh
       apiKey: your_api_key_here # Alternative to XAI_API_KEY
 ```
+
+Both `xai:<model>` Chat Completions and `xai:responses:<model>` support xAI
+[Priority Processing](https://docs.x.ai/developers/advanced-api-usage/priority-processing).
+Set `service_tier` to `priority` for higher scheduling priority or `default` for standard
+processing; omitting it also uses the default tier. Other OpenAI-compatible tier names are not
+valid on xAI.
 
 ### Reasoning Support
 
 Multiple Grok models support reasoning capabilities:
 
-**Grok 4.5**: Flagship reasoning model recommended by xAI's public model catalog. Chat requests can set `reasoning_effort` to `low`, `medium`, or `high` (defaults to `high`); Promptfoo rejects other values locally because xAI cannot disable reasoning for this model. Responses API requests use `reasoning.effort` with the same values.
+**Grok 4.7 and 4.6**: Chat requests can set `reasoning_effort` to `low`, `medium`, `high` (the default), or `xhigh`. Responses API requests use `reasoning.effort`. Reasoning cannot be disabled; Promptfoo rejects `none` locally.
+
+For Grok 4.7, cap output with `max_completion_tokens` for Chat Completions or `max_output_tokens` for Responses. Chat also accepts `max_tokens` as an alias; use one spelling throughout an eval, including defaults and test cases. Within test options, set a request option directly or under `passthrough`, not both. Reasoning effort accepts a direct eval variable such as `{{ effort }}`; see the optional Grok 4.7 providers in the [xAI chat example](https://github.com/promptfoo/promptfoo/blob/main/examples/xai/chat/promptfooconfig.yaml).
+
+**Grok 4.5**: Chat requests can set `reasoning_effort` to `low`, `medium`, or `high` (the default); Promptfoo rejects other values locally. Responses API requests use `reasoning.effort` with the same values.
 
 **Grok 4.3**: General-purpose reasoning model. Chat requests can set `reasoning_effort` to `none`, `low`, `medium`, or `high`; Responses API requests use `reasoning.effort`.
 
@@ -142,19 +159,24 @@ Multiple Grok models support reasoning capabilities:
 - Web search via `search_parameters`
 - Fast inference with built-in reasoning
 
+### Grok 4.7 Specific Behavior
+
+The [xAI release notes](https://docs.x.ai/developers/release-notes) list $2/M input, $0.50/M cached input, and $6/M output. At 200K or more input tokens, the rates are $4/M, $1/M, and $12/M respectively. When the API does not return a billed cost, Promptfoo uses these rates, including the 10% premium on xAI's US endpoint; explicit custom rates still take precedence. As with other Grok 4 reasoning models, Promptfoo strips `presence_penalty`, `frequency_penalty`, and `stop`.
+
+The Responses API returns encrypted reasoning even when `include` is omitted. Promptfoo keeps it in `response.raw.output`; pass these items back unchanged when managing conversation history yourself.
+
 ### Grok 4.5 Specific Behavior
 
-Grok 4.5 is xAI's flagship model for coding, agentic tasks, and knowledge work:
+Grok 4.5 is an earlier model for coding, agentic tasks, and knowledge work:
 
 - **500K context window** with text and image input
 - **Configurable reasoning**: `reasoning_effort` accepts `low`, `medium`, or `high` (defaults to `high`); `none` is rejected
-- **Long-context pricing**: requests with at least 200K input tokens use the higher catalog rate ($4/M input, $1/M cached input, and $12/M output instead of $2/M, $0.50/M, and $6/M); Promptfoo uses the exact billed ticks when xAI returns them
+- **Long-context pricing**: requests with at least 200K input tokens use the higher catalog rate ($4/M input, $0.60/M cached input, and $12/M output instead of $2/M, $0.30/M, and $6/M); Promptfoo uses the exact billed ticks when xAI returns them
 - **Unsupported parameters**: `presence_penalty`, `frequency_penalty`, and `stop` are rejected, and Promptfoo strips them automatically
 - **Ignored parameters**: xAI silently ignores `logprobs` and `top_logprobs` on Grok 4.20 and newer models
 - **Server-side tools**: use `xai:responses:grok-4.5` for web search, X search, code execution, and MCP
 
 ```yaml
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - id: xai:grok-4.5
     config:
@@ -172,7 +194,6 @@ Grok 4.3 is a general-purpose alternative for text workflows:
 - **Unsupported parameters**: Same restrictions as other Grok 4-family reasoning models (`presence_penalty`, `frequency_penalty`, and `stop`)
 
 ```yaml
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - id: xai:grok-4.3
     config:
@@ -180,14 +201,13 @@ providers:
       max_completion_tokens: 4096
 ```
 
-**Grok-3 Models**: Promptfoo retains the legacy Grok 3 Mini reasoning-effort contract for backward compatibility. Use Grok 4.3 or Grok 4.5 for new configurations.
+**Grok-3 Models**: Promptfoo retains the legacy Grok 3 Mini reasoning-effort contract for backward compatibility. Use Grok 4.3 or Grok 4.7 for new configurations.
 
 ### Grok 4.1 Fast Specific Behavior
 
 These retired IDs redirect to Grok 4.3 but retain their legacy request contract. Promptfoo strips `reasoning_effort`, `presence_penalty`, `frequency_penalty`, and `stop` from these requests. Target Grok 4.3 directly when you need to control reasoning effort.
 
-```yaml title="promptfooconfig.yaml"
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+```yaml
 providers:
   - id: xai:grok-4.3
     config:
@@ -200,8 +220,7 @@ providers:
 
 These retired reasoning and non-reasoning IDs redirect to Grok 4.3 but retain their legacy request contract. Use Grok 4.3 directly for new configurations.
 
-```yaml title="promptfooconfig.yaml"
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+```yaml
 providers:
   - id: xai:grok-4.3
     config:
@@ -214,8 +233,7 @@ providers:
 
 The retired Grok 4 IDs redirect to Grok 4.3 with low reasoning effort while retaining their legacy request contract. Promptfoo strips unsupported sampling and reasoning-effort parameters; use Grok 4.3 directly for new configurations.
 
-```yaml title="promptfooconfig.yaml"
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+```yaml
 providers:
   - id: xai:grok-4.3
     config:
@@ -226,21 +244,15 @@ providers:
 
 ### Grok Code Fast Specific Behavior
 
-The Grok Code Fast IDs are aliases of `grok-build-0.1`, xAI's model for agentic coding workflows:
+Grok Code Fast is retired. For `grok-code-fast-1`, xAI recommends `grok-build-0.1` for code
+workloads; use `xai:grok-build-0.1` in Promptfoo configs instead of relying on the retired slug.
 
-- **Built for Speed**: Designed to be highly responsive for agentic coding tools where multiple tool calls are common
-- **Pricing**: $1/1M input tokens, $0.20/1M cached input tokens, and $2/1M output tokens, with higher rates at the long-context tier
-- **Reasoning Capabilities**: Built-in reasoning for code analysis, debugging, and problem-solving
-- **Tool Integration**: Excellent support for function calling, tool usage, and web search
-- **Coding Expertise**: Particularly adept at TypeScript, Python, Java, Rust, C++, and Go
-
-```yaml title="promptfooconfig.yaml"
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+```yaml
 providers:
   - id: xai:grok-build-0.1
     config:
       temperature: 0.1 # Lower temperature often preferred for coding tasks
-      max_completion_tokens: 4096
+      max_tokens: 4096
 ```
 
 ### Region Support
@@ -256,13 +268,13 @@ providers:
 
 This is equivalent to setting `base_url="https://eu-west-1.api.x.ai/v1"` in the Python client. The same `region` option is also accepted by the xAI image, video, Responses, and realtime voice providers.
 
-xAI's global endpoint automatically routes requests to models available to your team. Regional endpoints are useful for data-residency requirements, but model availability varies by region and account. In particular, xAI currently excludes Grok 4.5 from the EU API Console. Check the xAI Console or the model's xAI documentation before selecting a regional endpoint.
+xAI's global endpoint automatically routes requests to models available to your team. Regional endpoints are useful for data-residency requirements, but model availability varies by region and account. The [US endpoint](https://docs.x.ai/developers/advanced-api-usage/regions) (`region: us`) currently serves only Grok 4.7 and 4.6, at a 10% token-price premium; `grok-4.3` and image, video, and voice APIs are unavailable there. Check the xAI Console or the model's documentation before selecting a regional endpoint.
 
 ### Live Search (Beta)
 
 :::warning
 
-xAI's current documentation recommends the Responses API for server-side tools. Promptfoo still passes legacy `search_parameters` through for older configs, but new search configs should use the [Agent Tools API](#agent-tools-api-responses-api).
+xAI's documentation recommends the Responses API for server-side tools. Promptfoo still passes legacy `search_parameters` through for older configs, but new search configs should use the [Agent Tools API](#agent-tools-api-responses-api).
 
 :::
 
@@ -274,7 +286,7 @@ Legacy configs can still pass a `search_parameters` object. The `mode` field con
 
 Additional fields like `sources`, `from_date`, `to_date`, and `return_citations` may also be provided.
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: xai:grok-3-beta
     config:
@@ -291,7 +303,7 @@ For a full list of options see the [xAI documentation](https://docs.x.ai/docs).
 
 Use the `xai:responses:<model>` provider to access xAI's Agent Tools API, which enables autonomous server-side tool execution for web search, X search, code execution, collections search, and remote MCP tools.
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: xai:responses:grok-4.3
     config:
@@ -351,7 +363,7 @@ tools:
 
 #### Complete Example
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: xai:responses:grok-4.3
     config:
@@ -391,8 +403,9 @@ tests:
 | `instructions`         | string  | System-level instructions                                             |
 | `previous_response_id` | string  | For multi-turn conversations                                          |
 | `store`                | boolean | Store response for later retrieval                                    |
+| `service_tier`         | string  | Processing tier: `default` or `priority`                              |
 | `include`              | array   | Additional response data to return                                    |
-| `reasoning`            | object  | Reasoning configuration for Grok 4.5, Grok 4.3, or multi-agent models |
+| `reasoning`            | object  | Reasoning configuration; Grok 4.7 and 4.6 additionally accept `xhigh` |
 | `response_format`      | object  | JSON schema for structured output                                     |
 | `cost`                 | number  | Per-token input and output cost override                              |
 | `inputCost`            | number  | Per-token input cost override                                         |
@@ -403,7 +416,8 @@ tests:
 
 The Responses API works with current canonical Grok models, including:
 
-- `grok-4.6` (recommended)
+- `grok-4.7` (recommended)
+- `grok-4.6`
 - `grok-4.5`
 - `grok-4.3`
 - `grok-4.20-0309-reasoning`
@@ -453,7 +467,7 @@ xAI offers [Deferred Chat Completions](https://docs.x.ai/docs/guides/deferred-ch
 
 xAI supports standard OpenAI-compatible function calling for client-side tool execution:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: xai:grok-4.3
     config:
@@ -476,7 +490,7 @@ providers:
 
 xAI supports structured outputs via JSON schema:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - id: xai:grok-4.3
     config:
@@ -524,13 +538,12 @@ For models with vision capabilities, you can include images in your prompts usin
 
 Then reference it in your promptfoo config:
 
-```yaml title="promptfooconfig.yaml"
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+```yaml
 prompts:
   - file://prompt.yaml
 
 providers:
-  - id: xai:grok-2-vision-latest
+  - id: xai:grok-4.3
 
 tests:
   - vars:
@@ -614,43 +627,54 @@ Promptfoo uses the exact `usage.cost_in_usd_ticks` value returned by xAI when av
 
 ### Video Generation
 
-xAI supports video generation through the Grok Imagine API. Two video models are available:
+xAI supports the following Grok Imagine video IDs:
 
-- `xai:video:grok-imagine-video` - base model, $0.050/sec
-- `xai:video:grok-imagine-video-1.5` - latest model, $0.080/sec (aliases: `grok-imagine-video-1.5-preview`, `grok-imagine-video-1.5-2026-05-30`)
+| Model ID                            | Supported input modes                                    | Resolutions       |
+| ----------------------------------- | -------------------------------------------------------- | ----------------- |
+| `grok-imagine-video-1.5`            | Text, image, and reference images or preset voices       | 480p, 720p, 1080p |
+| `grok-imagine-video-1.5-preview`    | Alias for Grok Imagine Video 1.5                         | 480p, 720p, 1080p |
+| `grok-imagine-video-1.5-2026-05-30` | Dated alias for Grok Imagine Video 1.5                   | 480p, 720p, 1080p |
+| `grok-imagine-video`                | Text, image, video editing, and reference-to-video input | 480p, 720p        |
 
-Example using the base model:
+[Grok Imagine Video 1.5](https://docs.x.ai/developers/models/grok-imagine-video-1.5) supports
+text-to-video, image-to-video, and
+[reference-to-video](https://docs.x.ai/developers/model-capabilities/video/reference-to-video).
+Use the legacy `grok-imagine-video` model for video editing.
 
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
-  - 'Generate a video of: {{scene}}'
+  - 'Generate this scene: {{scene}}'
 
 providers:
-  - id: xai:video:grok-imagine-video
+  - id: xai:video:grok-imagine-video-1.5
     config:
       duration: 5 # 1-15 seconds
       aspect_ratio: '16:9'
-      resolution: '720p'
+      resolution: '1080p'
 
 tests:
   - vars:
-      scene: a cat playing with yarn
+      scene: a red panda playing with yarn
     assert:
       - type: cost
-        threshold: 1.0
+        threshold: 1.5
 ```
 
 #### Configuration Options
 
-| Option             | Type   | Default | Description                                       |
-| ------------------ | ------ | ------- | ------------------------------------------------- |
-| `duration`         | number | 8       | Video length in seconds (1-15)                    |
-| `aspect_ratio`     | string | 16:9    | Aspect ratio: 16:9, 4:3, 1:1, 9:16, 3:4, 3:2, 2:3 |
-| `resolution`       | string | 720p    | Output resolution: 720p, 480p                     |
-| `reference_images` | array  | -       | Reference images for reference-to-video mode      |
-| `poll_interval_ms` | number | 10000   | Polling interval in milliseconds                  |
-| `max_poll_time_ms` | number | 600000  | Maximum wait time (10 minutes)                    |
+| Option             | Type   | Default | Description                                                                 |
+| ------------------ | ------ | ------- | --------------------------------------------------------------------------- |
+| `duration`         | number | 8       | Video length in seconds (1-15)                                              |
+| `aspect_ratio`     | string | 16:9    | Aspect ratio: 16:9, 4:3, 1:1, 9:16, 3:4, 3:2, 2:3                           |
+| `resolution`       | string | 720p    | 480p or 720p; Grok Imagine Video 1.5 also supports 1080p                    |
+| `reference_images` | array  | -       | Up to 7 images for reference-to-video generation                            |
+| `reference_audios` | array  | -       | Up to 3 preset `voice_id` values (Video 1.5 only)                           |
+| `poll_interval_ms` | number | 10000   | Polling interval in milliseconds                                            |
+| `max_poll_time_ms` | number | 600000  | Maximum wait time (10 minutes)                                              |
+| `cacheNamespace`   | string | -       | Nonsecret account or tenant label that enables persistent video cache reuse |
+
+Set `cacheNamespace` in the provider config to a label unique to the account or tenant, and change it when switching accounts. Cache entries are also scoped to the API endpoint. Never use API keys, tokens, or credential hashes as the namespace. Without a namespace, or with credential-bearing endpoint or input URLs, Promptfoo generates videos without reusing persistent cache entries.
 
 #### Image-to-Video
 
@@ -658,7 +682,7 @@ Animate a static image by providing an image URL:
 
 ```yaml
 providers:
-  - id: xai:video:grok-imagine-video
+  - id: xai:video:grok-imagine-video-1.5
     config:
       image:
         url: 'https://example.com/image.jpg'
@@ -686,23 +710,42 @@ Video editing skips duration, aspect ratio, and resolution validation since thes
 
 #### Reference-to-Video
 
-Guide generation with up to seven reference images:
+Guide generation with up to seven reference images and, on Grok Imagine Video 1.5, up to three
+preset voices:
 
 ```yaml
 providers:
-  - id: xai:video:grok-imagine-video
+  - id: xai:video:grok-imagine-video-1.5
     config:
       reference_images:
         - url: 'https://example.com/person.jpg'
         - url: 'https://example.com/shirt.jpg'
-      duration: 10
+      reference_audios:
+        - voice_id: 'eve'
+      duration: 15
+      resolution: '720p'
 ```
 
-Reference-to-video requires a non-empty prompt, cannot be combined with `image` or `video`, and is limited to 10 seconds.
+Video 1.5 can combine a starting `image` with `reference_images`, preset `reference_audios`, or both.
+The prompt is optional when an `image` or `reference_images` is supplied; text-only and voice-only
+requests require a non-empty prompt. Reference-to-video cannot be combined with video editing,
+and its resolution is capped at 720p. The Video 1.5 family supports durations up to 15 seconds.
+The legacy `grok-imagine-video` model is limited to 10 seconds for reference-to-video, rejects
+starting-image/reference-image combinations, and does not support `reference_audios`. Preset voice IDs are case-insensitive and generally available. Uploaded audio references are
+restricted to trusted partners in the United States.
 
 #### Pricing
 
-Promptfoo uses the exact `usage.cost_in_usd_ticks` value returned by xAI when available. When the API omits usage, Promptfoo falls back to the video provider's local duration-based estimate.
+Promptfoo uses the exact `usage.cost_in_usd_ticks` value returned by xAI when available. For generation requests where the output resolution is known, Promptfoo falls back to the video provider's local duration-based estimate when the API omits usage.
+
+| Model                    | Media input                         | 480p output | 720p output | 1080p output  |
+| ------------------------ | ----------------------------------- | ----------- | ----------- | ------------- |
+| `grok-imagine-video-1.5` | $0.01 per image; preset voices free | $0.08/sec   | $0.14/sec   | $0.25/sec     |
+| `grok-imagine-video`     | $0.002/image or $0.01/video second  | $0.05/sec   | $0.07/sec   | Not supported |
+
+The local fallback includes image-input and output-video charges. For a video edit without API
+usage data, Promptfoo leaves cost undefined because the edit endpoint ignores the configured
+resolution and the completed response does not report the actual output resolution.
 
 ### Voice Agent API
 
@@ -710,17 +753,16 @@ The xAI Voice Agent API enables real-time voice conversations with Grok models v
 
 ```yaml
 providers:
-  - xai:voice:grok-voice-think-fast-1.0
+  - xai:voice:grok-voice-think-fast-2.0
 ```
 
 #### Configuration
 
-```yaml title="promptfooconfig.yaml"
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+```yaml
 providers:
-  - id: xai:voice:grok-voice-think-fast-1.0
+  - id: xai:voice:grok-voice-think-fast-2.0
     config:
-      voice: 'Ara' # Ara, Rex, Sal, Eve, or Leo
+      voice: 'eve' # ara, rex, sal, eve, or leo
       instructions: 'You are a helpful voice assistant.'
       modalities: ['text', 'audio']
       turn_detection:
@@ -736,13 +778,21 @@ providers:
 
 #### Available Voices
 
+Use any lowercase [built-in voice ID or custom voice ID](https://docs.x.ai/developers/model-capabilities/audio/speech-to-speech#available-voices). Legacy names such as `Ara` are converted to lowercase. Set `config.reasoning.effort` to `high` (default) or `none`.
+
 | Voice | Description  |
 | ----- | ------------ |
-| Ara   | Female voice |
-| Rex   | Male voice   |
-| Sal   | Male voice   |
-| Eve   | Female voice |
-| Leo   | Male voice   |
+| ara   | Female voice |
+| rex   | Male voice   |
+| sal   | Male voice   |
+| eve   | Female voice |
+| leo   | Male voice   |
+
+Use `grok-voice-think-fast-2.0` for the current flagship model, or
+`grok-voice-latest` to follow xAI's recommended alias. xAI's July 29 release
+notes say the alias moves from 1.0 to 2.0 on August 5, 2026. Version 2.0 costs
+$0.08 per audio minute; the previous-generation `grok-voice-think-fast-1.0` costs
+$0.05 per audio minute. Both also charge per text input; see [Pricing](#voice-pricing).
 
 #### Turn Detection
 
@@ -782,9 +832,9 @@ tools:
 
 You can define custom function tools inline or load them from external files:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
-  - id: xai:voice:grok-voice-think-fast-1.0
+  - id: xai:voice:grok-voice-think-fast-2.0
     config:
       # Inline tool definition
       tools:
@@ -860,7 +910,7 @@ You can configure a custom WebSocket endpoint for the Voice API, useful for prox
 
 ```yaml
 providers:
-  - id: xai:voice:grok-voice-think-fast-1.0
+  - id: xai:voice:grok-voice-think-fast-2.0
     config:
       # Option 1: Full base URL (transforms https:// to wss://)
       apiBaseUrl: 'https://my-proxy.example.com/v1'
@@ -883,7 +933,7 @@ For advanced use cases like local testing, custom proxies, or endpoints requirin
 
 ```yaml
 providers:
-  - id: xai:voice:grok-voice-think-fast-1.0
+  - id: xai:voice:grok-voice-think-fast-2.0
     config:
       # Use this URL exactly as-is (no transformation applied)
       websocketUrl: 'wss://custom-endpoint.example.com/path?token=xyz&session=abc'
@@ -924,9 +974,9 @@ prompts:
   - file://input.json
 
 providers:
-  - id: xai:voice:grok-voice-think-fast-1.0
+  - id: xai:voice:grok-voice-think-fast-2.0
     config:
-      voice: 'Ara'
+      voice: 'eve'
       instructions: 'You are a helpful voice assistant.'
       modalities: ['text', 'audio']
       tools:
@@ -940,11 +990,20 @@ tests:
         value: Provides information about recent AI news
 ```
 
-#### Pricing
+#### Voice Pricing
 
-The Voice Agent API is billed at **$0.05 per minute** of connection time.
+<a id="pricing-2"></a>
 
-For more information on the available models and API usage, refer to the [xAI documentation](https://docs.x.ai/docs).
+[Grok Voice 2.0 pricing](https://docs.x.ai/developers/models/speech-to-speech) is
+$0.08 per minute plus $0.004 per text input. The default `server_vad` mode bills
+session duration; push-to-talk mode bills input and output audio. Tool results
+have no text-input charge.
+
+Promptfoo keeps elapsed connection time in `metadata.durationMs`, but it does not
+have the complete billing duration. Response `cost` remains unavailable.
+
+For more information on the available models and API usage, refer to the
+[xAI Speech to Speech documentation](https://docs.x.ai/developers/model-capabilities/audio/speech-to-speech).
 
 ## Examples
 
