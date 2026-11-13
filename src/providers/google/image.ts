@@ -233,7 +233,8 @@ export class GoogleImageProvider implements ApiProvider {
     }
 
     const modelPath = this.getModelPath();
-    const apiHost = this.config.apiHost || 'generativelanguage.googleapis.com';
+    // Strip trailing slashes so `apiHost: proxy.example/` does not produce `//v1beta`.
+    const apiHost = (this.config.apiHost || 'generativelanguage.googleapis.com').replace(/\/+$/, '');
     const endpoint = `https://${apiHost}/v1beta/models/${modelPath}:predict`;
 
     logger.debug(`Google AI Studio Image API endpoint: ${endpoint}`);
