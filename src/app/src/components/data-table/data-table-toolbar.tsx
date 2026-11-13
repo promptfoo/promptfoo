@@ -29,7 +29,7 @@ export function DataTableToolbar<TData>({
   toolbarActions,
 }: DataTableToolbarProps<TData>) {
   return (
-    <div className="flex flex-col gap-3 border-b border-border p-3 sm:flex-row sm:items-center sm:justify-between">
+    <div className="flex flex-col gap-3 border-b border-border p-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
       {showGlobalFilter && (
         <div className="relative w-full sm:max-w-sm sm:min-w-48 sm:flex-1">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
@@ -43,7 +43,7 @@ export function DataTableToolbar<TData>({
           />
         </div>
       )}
-      <div className="flex shrink-0 flex-wrap items-center gap-2">
+      <div className="flex min-w-0 flex-wrap items-center gap-2">
         {showColumnToggle && (
           <DataTableColumnToggle
             table={table}
