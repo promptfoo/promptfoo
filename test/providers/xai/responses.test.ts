@@ -224,6 +224,18 @@ describe('XAIResponsesProvider', () => {
     expect(provider.getResolvedApiUrl()).toBe('https://eu-west-1.api.x.ai/v1');
   });
 
+  it('strips trailing slashes from configured and env base URLs', () => {
+    const fromConfig = new TestableXAIResponsesProvider('grok-4.3', {
+      config: { apiBaseUrl: 'https://custom.api.x.ai/v1/' },
+    });
+    expect(fromConfig.getResolvedApiUrl()).toBe('https://custom.api.x.ai/v1');
+
+    const fromEnv = new TestableXAIResponsesProvider('grok-4.3', {
+      env: { XAI_API_BASE_URL: 'https://env.api.x.ai/v1/' },
+    });
+    expect(fromEnv.getResolvedApiUrl()).toBe('https://env.api.x.ai/v1');
+  });
+
   it.each(['low', 'medium', 'high', 'xhigh'] as const)(
     'accepts Grok 4.6 reasoning effort %s',
     async (effort) => {
