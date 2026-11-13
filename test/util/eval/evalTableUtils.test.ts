@@ -224,6 +224,8 @@ describe('evalTableUtils', () => {
                   namedScores: {
                     clarity: 0.9,
                     accuracy: 0.8,
+                    é: 1,
+                    invalid: NaN,
                   },
                 } as unknown as EvaluateTableOutput,
               ],
@@ -237,6 +239,7 @@ describe('evalTableUtils', () => {
                   score: 0.75,
                   namedScores: {
                     clarity: 0.7,
+                    'e\u0301': 0.5,
                   },
                 } as unknown as EvaluateTableOutput,
               ],
@@ -247,8 +250,12 @@ describe('evalTableUtils', () => {
         const csv = evalTableToCsv(tableWithNamedScores);
         const lines = csv.split('\n');
 
-        expect(lines[0]).toContain('Metric: accuracy');
-        expect(lines[0]).toContain('Metric: clarity');
+        expect(parseCsvRow(lines[0]).filter((cell) => cell.startsWith('Metric: '))).toEqual([
+          'Metric: accuracy',
+          'Metric: clarity',
+          'Metric: é',
+          'Metric: e\u0301',
+        ]);
         expect(lines[1]).toContain('0.80,0.90');
         expect(lines[2]).toContain(',0.70');
       });

@@ -36,3 +36,10 @@ export interface FunctionCallResult {
   output: string | any;
   isError: boolean;
 }
+
+/** A callback result before conversion to a provider's tool-result wire format. */
+export type CallbackExecutionRecord = {
+  name: string;
+  arguments: string;
+  callId?: string;
+} & ({ output: unknown; isError: false } | { output?: undefined; isError: true; error: unknown });
