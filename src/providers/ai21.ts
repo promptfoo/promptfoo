@@ -102,11 +102,13 @@ export class AI21ChatCompletionProvider implements ApiProvider {
   }
 
   getApiUrl(): string {
-    return (
+    const apiUrl =
       this.config.apiBaseUrl ||
       resolveProviderEnv(this.env, ['AI21_API_BASE_URL'])?.value ||
-      this.getApiUrlDefault()
-    );
+      this.getApiUrlDefault();
+    // Strip trailing slashes so a configured base URL like `https://host/v1/`
+    // does not produce double-slash request paths.
+    return apiUrl.replace(/\/+$/, '');
   }
 
   requiresApiKey(): boolean {
