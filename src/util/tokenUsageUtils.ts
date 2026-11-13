@@ -1,3 +1,4 @@
+import { addCompletionDetails } from '../contracts/completionDetails';
 import {
   BaseTokenUsageSchema,
   type CompletionTokenDetails,
@@ -9,12 +10,18 @@ import {
  * Safely extract token usage carried by a thrown value.
  */
 export function getErrorTokenUsage(error: unknown): TokenUsage | undefined {
-  if (!error || typeof error !== 'object' || !('tokenUsage' in error)) {
+  try {
+    if (!error || typeof error !== 'object' || !('tokenUsage' in error)) {
+      return undefined;
+    }
+
+    const parsedTokenUsage = BaseTokenUsageSchema.safeParse(error.tokenUsage);
+    return parsedTokenUsage.success && Object.keys(parsedTokenUsage.data).length > 0
+      ? parsedTokenUsage.data
+      : undefined;
+  } catch {
     return undefined;
   }
-
-  const parsedTokenUsage = BaseTokenUsageSchema.safeParse(error.tokenUsage);
-  return parsedTokenUsage.success ? parsedTokenUsage.data : undefined;
 }
 
 /**
@@ -118,9 +125,6 @@ function getAccumulatedTokenTotal(usage: Partial<TokenUsage>): number {
   return componentTotal;
 }
 
-/**
- * Helper to accumulate completion details
- */
 function accumulateCompletionDetails(
   target: CompletionTokenDetails | undefined,
   update: CompletionTokenDetails | undefined,
@@ -129,16 +133,7 @@ function accumulateCompletionDetails(
     return target;
   }
 
-  return {
-    reasoning: addNumbers(target?.reasoning, update.reasoning),
-    acceptedPrediction: addNumbers(target?.acceptedPrediction, update.acceptedPrediction),
-    rejectedPrediction: addNumbers(target?.rejectedPrediction, update.rejectedPrediction),
-    cacheReadInputTokens: addNumbers(target?.cacheReadInputTokens, update.cacheReadInputTokens),
-    cacheCreationInputTokens: addNumbers(
-      target?.cacheCreationInputTokens,
-      update.cacheCreationInputTokens,
-    ),
-  };
+  return addCompletionDetails(target, update);
 }
 
 /**
@@ -530,7 +525,9 @@ export function accumulateGenerationTokenUsage(target: TokenUsage, update: unkno
   } = parsed.data;
   const hasUsage =
     Object.values(generationUsage).some((value) => typeof value === 'number' && value !== 0) ||
-    Object.values(generationUsage.completionDetails ?? {}).some((value) => value !== 0);
+    Object.values(generationUsage.completionDetails ?? {}).some(
+      (value) => typeof value === 'number' && value !== 0,
+    );
   if (!hasUsage) {
     return false;
   }

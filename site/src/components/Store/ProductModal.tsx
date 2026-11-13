@@ -160,7 +160,7 @@ function SingleProductModal() {
       await addToCart(selectedVariantId, 1);
       closeProductModal();
     } catch {
-      // Error is handled by the cart context
+      // Keep the product modal open when adding fails.
     } finally {
       setIsAdding(false);
     }
@@ -217,10 +217,10 @@ function SingleProductModal() {
       slotProps={{
         paper: {
           sx: {
-            width: { xs: '100vw', sm: '90vw' },
+            width: { xs: '100%', sm: '90vw' },
             maxWidth: { xs: '100vw', sm: '1000px' },
-            height: { xs: '100vh', sm: '85vh' },
-            maxHeight: { xs: '100vh', sm: '800px' },
+            height: { xs: '100%', sm: '85vh' },
+            maxHeight: { xs: '100dvh', sm: '800px' },
             m: 0,
             borderRadius: { xs: 0, sm: '8px' },
             overflow: 'hidden',
@@ -239,6 +239,8 @@ function SingleProductModal() {
           justifyContent: 'space-between',
           px: { xs: 1.5, sm: 2 },
           py: 1.5,
+          pt: { xs: 'max(12px, env(safe-area-inset-top))', sm: 1.5 },
+          pr: { xs: 'max(12px, env(safe-area-inset-right))', sm: 2 },
           backgroundColor: 'var(--ifm-color-primary-darker)',
           color: 'var(--ifm-button-color, #fff)',
           flexShrink: 0,
@@ -265,6 +267,8 @@ function SingleProductModal() {
           onClick={closeProductModal}
           size="small"
           sx={{
+            minWidth: { xs: 44, sm: 0 },
+            minHeight: { xs: 44, sm: 0 },
             color: 'var(--ifm-button-color, #fff)',
             '&:hover': {
               backgroundColor: 'rgba(255, 255, 255, 0.15)',
@@ -282,7 +286,7 @@ function SingleProductModal() {
           display: 'flex',
           flexDirection: { xs: 'column', md: 'row' },
           flex: 1,
-          overflow: 'hidden',
+          overflowY: { xs: 'auto', md: 'hidden' },
           backgroundColor: 'var(--ifm-background-color, #ffffff)',
         }}
       >
@@ -300,6 +304,7 @@ function SingleProductModal() {
             justifyContent: 'center',
             minHeight: { xs: '250px', sm: '300px', md: 'auto' },
             maxHeight: { xs: '40vh', md: 'none' },
+            overflow: 'hidden',
             // Improve touch scrolling
             touchAction: 'pan-y pinch-zoom',
             cursor: hasMultipleImages ? 'grab' : 'default',
@@ -384,11 +389,11 @@ function SingleProductModal() {
         {/* Product details */}
         <Box
           sx={{
-            flex: { xs: '1 1 auto', md: '1 1 40%' },
+            flex: { xs: '0 0 auto', md: '1 1 40%' },
             p: { xs: 2, sm: 3 },
             display: 'flex',
             flexDirection: 'column',
-            overflow: 'auto',
+            overflow: { xs: 'visible', md: 'auto' },
             WebkitOverflowScrolling: 'touch',
           }}
         >
