@@ -31,8 +31,8 @@ tests:
   - vars:
       question: What is the chemical symbol for gold?
     assert:
-      - type: icontains
-        value: Au
+      - type: regex
+        value: '\bAu\b'
   - vars:
       question: Why does ice float on liquid water?
     assert:
