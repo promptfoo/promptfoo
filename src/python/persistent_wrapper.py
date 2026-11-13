@@ -212,6 +212,9 @@ def _traced_call(method_callable, args, function_name):
     if not traceparent:
         return call_method(method_callable, args)
 
+    provider_error = None
+    call_completed = False
+    result = None
     try:
         from opentelemetry.propagate import extract
         from opentelemetry.trace import SpanKind, Status, StatusCode
@@ -254,7 +257,14 @@ def _traced_call(method_callable, args, function_name):
 
             try:
                 # Execute the user's function
-                result = call_method(method_callable, args)
+                try:
+                    result = call_method(method_callable, args)
+                except BaseException as error:
+                    # Keep the original failure even if recording it or closing
+                    # the span also fails. Tracing must not retry provider work.
+                    provider_error = error
+                    raise
+                call_completed = True
 
                 # Set response attributes
                 if isinstance(result, dict):
@@ -312,12 +322,18 @@ def _traced_call(method_callable, args, function_name):
                 raise
 
     except Exception as tracing_error:
-        # If tracing itself fails, log and fall back to untraced call
+        if provider_error is not None:
+            raise provider_error
+
+        # Only fall back before the provider runs. A telemetry failure after
+        # completion must preserve the result without repeating side effects.
         print(
             f"[PythonProvider] Tracing error (continuing without trace): {tracing_error}",
             file=sys.stderr,
             flush=True,
         )
+        if call_completed:
+            return result
         return call_method(method_callable, args)
 
 
