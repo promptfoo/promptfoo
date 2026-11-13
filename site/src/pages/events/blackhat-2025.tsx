@@ -1,42 +1,20 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 
-import Cal, { getCalApi } from '@calcom/embed-react';
 import Head from '@docusaurus/Head';
 import Link from '@docusaurus/Link';
 import AssessmentIcon from '@mui/icons-material/Assessment';
 import BugReportIcon from '@mui/icons-material/BugReport';
 import SecurityIcon from '@mui/icons-material/Security';
 import SpeedIcon from '@mui/icons-material/Speed';
+import { CalendarIcon, LocationIcon } from '@site/src/components/Events/EventIcons';
 import { useForcedTheme } from '@site/src/hooks/useForcedTheme';
 import Layout from '@theme/Layout';
 import { SITE_CONSTANTS } from '../../constants';
+import { scrollToEventSection as handleSmoothScroll } from '../../utils/eventScroll';
 import styles from './blackhat-2025.module.css';
 
 export default function BlackHat2025(): React.ReactElement {
   useForcedTheme('dark');
-
-  useEffect(() => {
-    // Cal.com setup
-    (async function () {
-      const cal = await getCalApi({ namespace: 'promptfoo-at-blackhat' });
-      cal('ui', { hideEventTypeDetails: false, layout: 'month_view' });
-    })();
-  }, []);
-
-  const handleSmoothScroll = (e: React.MouseEvent<HTMLAnchorElement>, targetId: string) => {
-    e.preventDefault();
-    const element = document.querySelector(targetId);
-    if (element) {
-      const offset = 80; // Offset for fixed header
-      const elementPosition = element.getBoundingClientRect().top;
-      const offsetPosition = elementPosition + window.pageYOffset - offset;
-
-      window.scrollTo({
-        top: offsetPosition,
-        behavior: 'smooth',
-      });
-    }
-  };
 
   return (
     <Layout
@@ -112,41 +90,11 @@ export default function BlackHat2025(): React.ReactElement {
               </div>
               <div className={styles.eventDetails}>
                 <div className={styles.detail}>
-                  <svg
-                    className={styles.icon}
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
-                    />
-                  </svg>
+                  <CalendarIcon className={styles.icon} />
                   <span>August 5-7, 2025</span>
                 </div>
                 <div className={styles.detail}>
-                  <svg
-                    className={styles.icon}
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
-                    />
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
-                    />
-                  </svg>
+                  <LocationIcon className={styles.icon} />
                   <span>Mandalay Bay, Las Vegas</span>
                 </div>
                 <div className={styles.detail}>
@@ -306,23 +254,16 @@ export default function BlackHat2025(): React.ReactElement {
           </div>
         </section>
 
-        {/* Calendar Section */}
         <section className={styles.calendarSection} id="schedule-demo">
           <div className={styles.container}>
-            {/* Heading text is unchanged on purpose: site/AGENTS.md notes headings are often
-                externally linked, so the past-tense framing goes in the copy below it. */}
             <h2 className={styles.sectionTitle}>Meet us at Black Hat</h2>
             <p className={styles.calendarSubtitle}>
-              Black Hat USA 2025 is over, but the demo still stands. Book a 30-minute slot to see
-              Promptfoo in action and how to find and fix vulnerabilities in your LLM applications.
+              Black Hat USA 2025 has ended. Contact us for a demo of Promptfoo’s LLM testing tools.
             </p>
             <div className={styles.calendarWrapper}>
-              <Cal
-                namespace="promptfoo-at-blackhat"
-                calLink="team/promptfoo/promptfoo-at-blackhat"
-                style={{ width: '100%', height: '100%', overflow: 'scroll' }}
-                config={{ layout: 'month_view' }}
-              />
+              <Link to="/contact" className={styles.primaryButton}>
+                Book a demo
+              </Link>
             </div>
           </div>
         </section>
@@ -365,7 +306,7 @@ export default function BlackHat2025(): React.ReactElement {
                 className={styles.primaryButton}
                 onClick={(e) => handleSmoothScroll(e, '#schedule-demo')}
               >
-                Book Your Demo Slot
+                Book a demo
               </a>
               <Link to="/security" className={styles.secondaryButton}>
                 Explore Our Security Platform

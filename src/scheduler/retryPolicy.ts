@@ -76,6 +76,7 @@ export function shouldRetry(
     return (
       isTransientConnectionError(error) ||
       message.includes('timeout') ||
+      message.startsWith('websocket request timed out after ') ||
       message.includes('econnrefused') ||
       message.includes('network') ||
       message.includes('503') ||

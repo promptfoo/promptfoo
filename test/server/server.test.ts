@@ -168,6 +168,7 @@ describe('server', () => {
 
     afterEach(() => {
       http.createServer = originalCreateServer;
+      vi.useRealTimers();
       vi.restoreAllMocks();
     });
 
@@ -716,13 +717,65 @@ describe('server', () => {
       expect(logger.info).toHaveBeenCalledWith('Server closed');
     });
 
-    // Note: Testing the case where socket.io already closed the HTTP server would require
-    // mocking socket.io at the module level. The fix (checking httpServer.listening) handles
-    // this case in production where io.close() closes the underlying server.
-    //
-    // Note: Testing the 5-second force shutdown timeout requires mocking socket.io
-    // at the module level, which is complex. The timeout exists as a safety measure
-    // and the core shutdown logic is tested by the other tests.
+    it('should reject after HTTP cleanup when Socket.IO close rejects', async () => {
+      const closeError = new Error('Socket.IO close failed');
+      vi.spyOn(SocketIOServer.prototype, 'close').mockRejectedValueOnce(closeError);
+      const removeListener = vi.spyOn(process, 'removeListener');
+      const mockWatcher = { close: vi.fn(), on: vi.fn() };
+      vi.mocked(setupSignalWatcher).mockReturnValueOnce(mockWatcher as never);
+      const closed = vi.fn();
+      const failed = vi.fn();
+      mockHttpServer.close.mockImplementation(() => mockHttpServer);
+
+      const serverPromise = startServer(0).then(closed, failed);
+      await new Promise((resolve) => setImmediate(resolve));
+      triggerSignal('SIGINT');
+      await new Promise((resolve) => setImmediate(resolve));
+
+      expect(mockWatcher.close).toHaveBeenCalledOnce();
+      for (const signal of ['SIGINT', 'SIGTERM']) {
+        expect(removeListener).toHaveBeenCalledWith(signal, signalHandlers.get(signal)![0]);
+      }
+      expect(logger.warn).toHaveBeenCalledWith('Error closing Socket.IO server', {
+        error: closeError,
+      });
+      expect(mockHttpServer.close).toHaveBeenCalledOnce();
+      expect(closed).not.toHaveBeenCalled();
+      expect(failed).not.toHaveBeenCalled();
+
+      mockHttpServer.listening = false;
+      mockHttpServer.close.mock.calls[0][0]();
+      await serverPromise;
+      expect(closed).not.toHaveBeenCalled();
+      expect(failed).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({
+          name: 'ServerError',
+          code: 'ESHUTDOWN',
+          phase: 'runtime',
+        }),
+      );
+    });
+
+    it('should retain the shutdown timeout when Socket.IO rejects and HTTP close hangs', async () => {
+      vi.spyOn(SocketIOServer.prototype, 'close').mockRejectedValueOnce(new Error('Close failed'));
+      mockHttpServer.close.mockImplementation(() => mockHttpServer);
+      const serverPromise = startServer(0);
+      await new Promise((resolve) => setImmediate(resolve));
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+
+      const rejection = expect(serverPromise).rejects.toMatchObject({
+        name: 'ServerError',
+        code: 'ESHUTDOWN',
+        phase: 'runtime',
+      });
+      triggerSignal('SIGTERM');
+      await vi.advanceTimersByTimeAsync(5000);
+      await rejection;
+
+      expect(mockHttpServer.close).toHaveBeenCalledOnce();
+      expect(logger.warn).toHaveBeenCalledWith('Server close timeout - forcing shutdown');
+      expect(vi.getTimerCount()).toBe(0);
+    });
 
     it('should handle SIGTERM the same as SIGINT', async () => {
       const serverPromise = startServer(0);

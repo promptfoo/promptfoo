@@ -12,8 +12,8 @@ interface Tool {
 }
 
 describe('formatToolsAsJSDocs', () => {
-  it('should return a formatted JSDoc string for each Tool in the array when given an array of valid Tool objects with arguments', () => {
-    const tools: Tool[] = [
+  function createTools(): [Tool, Tool] {
+    return [
       {
         name: 'getWeather',
         description: 'Fetches the current weather for a given location.',
@@ -47,8 +47,9 @@ describe('formatToolsAsJSDocs', () => {
         ],
       },
     ];
+  }
 
-    const expectedJSDoc = `/**
+  const expectedToolsJSDoc = `/**
  * Fetches the current weather for a given location.
  * @param {string} location - The city and state, e.g. San Francisco, CA
  * @param {string} unit - The temperature unit, "celsius" or "fahrenheit"
@@ -62,9 +63,12 @@ getWeather(location: string, unit: string)
  */
 sendEmail(recipient: string, subject: string)`;
 
+  it('should return a formatted JSDoc string for each Tool in the array when given an array of valid Tool objects with arguments', () => {
+    const tools = createTools();
+
     const result = formatToolsAsJSDocs(tools);
 
-    expect(result).toBe(expectedJSDoc);
+    expect(result).toBe(expectedToolsJSDoc);
   });
 
   it('should return a JSDoc string with only the description and a parameterless function signature when a Tool has no arguments', () => {
@@ -86,60 +90,12 @@ getCurrentTime()`;
   });
 
   it('should ignore null values in the input array and only generate JSDoc comments for valid Tool objects', () => {
-    const tools: (Tool | null)[] = [
-      {
-        name: 'getWeather',
-        description: 'Fetches the current weather for a given location.',
-        arguments: [
-          {
-            name: 'location',
-            description: 'The city and state, e.g. San Francisco, CA',
-            type: 'string',
-          },
-          {
-            name: 'unit',
-            description: 'The temperature unit, "celsius" or "fahrenheit"',
-            type: 'string',
-          },
-        ],
-      },
-      null,
-      {
-        name: 'sendEmail',
-        description: 'Sends an email to a recipient.',
-        arguments: [
-          {
-            name: 'recipient',
-            description: 'The email address of the recipient.',
-            type: 'string',
-          },
-          {
-            name: 'subject',
-            description: 'The subject of the email.',
-            type: 'string',
-          },
-        ],
-      },
-      null,
-    ];
-
-    const expectedJSDoc = `/**
- * Fetches the current weather for a given location.
- * @param {string} location - The city and state, e.g. San Francisco, CA
- * @param {string} unit - The temperature unit, "celsius" or "fahrenheit"
- */
-getWeather(location: string, unit: string)
-
-/**
- * Sends an email to a recipient.
- * @param {string} recipient - The email address of the recipient.
- * @param {string} subject - The subject of the email.
- */
-sendEmail(recipient: string, subject: string)`;
+    const [weather, email] = createTools();
+    const tools: (Tool | null)[] = [weather, null, email, null];
 
     const result = formatToolsAsJSDocs(tools);
 
-    expect(result).toBe(expectedJSDoc);
+    expect(result).toBe(expectedToolsJSDoc);
   });
 
   it('should handle malformed Tool objects (missing name or description) without throwing an error', () => {

@@ -1,7 +1,5 @@
 from typing import Any, Dict, Optional
 
-import pandas as pd
-
 
 def generate_simple_tests(config: Optional[Dict[str, Any]] = None):
     """Generate a simple set of test cases with optional configuration."""
@@ -42,14 +40,25 @@ def generate_from_csv(config: Optional[Dict[str, Any]] = None):
     if config and "data" in config:
         data = config["data"]
 
-    df = pd.DataFrame(data)
+    columns = ("source_text", "target_language", "expected_translation")
+    if not isinstance(data, dict) or any(column not in data for column in columns):
+        raise ValueError(f"data must contain {', '.join(columns)}")
+    values = [data[column] for column in columns]
+    if any(not isinstance(column, (list, tuple)) for column in values):
+        raise ValueError("data columns must be lists or tuples")
+    if len({len(column) for column in values}) != 1:
+        raise ValueError("data columns must have equal lengths")
+    rows = [dict(zip(columns, row)) for row in zip(*values)]
 
-    # Limit rows if specified in config
+    # Slicing preserves head(0) and negative head(n) behavior too.
     if config and "max_rows" in config:
-        df = df.head(config["max_rows"])
+        max_rows = config["max_rows"]
+        if not isinstance(max_rows, int) or isinstance(max_rows, bool):
+            raise ValueError("max_rows must be an integer")
+        rows = rows[:max_rows]
 
     test_cases = []
-    for _, row in df.iterrows():
+    for row in rows:
         test_case = {
             "vars": {
                 "text": row["source_text"],

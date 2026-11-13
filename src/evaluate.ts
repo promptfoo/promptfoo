@@ -1,3 +1,5 @@
+import * as path from 'path';
+
 import * as cache from './cache';
 import cliState from './cliState';
 import { evaluate as doEvaluate } from './evaluator';
@@ -5,9 +7,10 @@ import { getAuthor } from './globalConfig/accounts';
 import logger from './logger';
 import { runDbMigrations } from './migrate';
 import Eval from './models/eval';
-import { sanitizeProvider } from './models/evalResult';
-import { processPrompts, readProviderPromptMap } from './prompts/index';
+import { toSerializableProviderRef } from './models/evalResult';
+import { processPrompts } from './prompts/index';
 import { loadApiProviders, resolveProvider } from './providers/index';
+import { providerRegistry } from './providers/providerRegistry';
 import { createShareableUrl, isSharingEnabled } from './share';
 import { isApiProvider } from './types/providers';
 import { isTransformFunction } from './types/transform';
@@ -58,27 +61,17 @@ function cloneTestForResolve<T extends Pick<TestCase, 'options' | 'assert'>>(tes
   return cloned;
 }
 
-function toSerializableProviderRef(provider: unknown): unknown {
-  if (isApiProvider(provider)) {
-    return sanitizeProvider(provider);
-  }
-  if (Array.isArray(provider)) {
-    return provider.map(toSerializableProviderRef);
-  }
-  return provider;
-}
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === 'object' && !Array.isArray(value));
 }
 
 function withSerializableProvider<T extends Record<string, unknown>>(record: T): T {
-  if (!isApiProvider(record.provider)) {
+  if (!isApiProvider(record.provider) && !isProviderTypeMap(record.provider)) {
     return record;
   }
   return {
     ...record,
-    provider: sanitizeProvider(record.provider),
+    provider: toSerializableProviderRef(record.provider),
   };
 }
 
@@ -163,13 +156,18 @@ function toSerializableScenario(scenario: unknown, droppedRef: { value: boolean 
     return scenario;
   }
 
-  if (!Array.isArray(scenario.tests)) {
+  if (!Array.isArray(scenario.tests) && !Array.isArray(scenario.config)) {
     return scenario;
   }
 
   return {
     ...scenario,
-    tests: scenario.tests.map((t) => toSerializableTestCase(t, droppedRef)),
+    ...(Array.isArray(scenario.config) && {
+      config: scenario.config.map((t) => toSerializableTestCase(t, droppedRef)),
+    }),
+    ...(Array.isArray(scenario.tests) && {
+      tests: scenario.tests.map((t) => toSerializableTestCase(t, droppedRef)),
+    }),
   };
 }
 
@@ -180,6 +178,7 @@ function createSerializableUnifiedConfig(
   const droppedRef = { value: false };
   const config = {
     ...testSuite,
+    basePath: cliState.basePath,
     providers: toSerializableProviderRef(testSuite.providers),
     defaultTest: toSerializableTestCase(testSuite.defaultTest, droppedRef),
     tests: Array.isArray(testSuite.tests)
@@ -212,7 +211,7 @@ async function resolveGradingProvider(
   // A typed map can carry alternatives for assertion types that never run.
   // Reuse configured provider instances, but leave all other entries for
   // getGradingProvider() to instantiate only when its type is selected.
-  return resolveConfiguredProviderReference(provider, providerMap, context.env);
+  return resolveConfiguredProviderReference(provider, providerMap);
 }
 
 async function createRuntimeTestSuite(
@@ -230,9 +229,12 @@ async function createRuntimeTestSuite(
     defaultTest: defaultTest as TestSuite['defaultTest'],
     scenarios: testSuiteConfig.scenarios as Scenario[],
     providers: loadedProviders,
-    tests: await readTests(testSuiteConfig.tests),
-    nunjucksFilters: await readFilters(testSuiteConfig.nunjucksFilters || {}),
-    prompts: await processPrompts(testSuiteConfig.prompts),
+    tests: await readTests(testSuiteConfig.tests, testSuiteConfig.basePath, testSuiteConfig.env),
+    nunjucksFilters: await readFilters(
+      testSuiteConfig.nunjucksFilters || {},
+      testSuiteConfig.basePath,
+    ),
+    prompts: await processPrompts(testSuiteConfig.prompts, testSuiteConfig.basePath),
   };
 }
 
@@ -318,6 +320,17 @@ export async function evaluateWithSource(
   testSuite: EvaluateTestSuite,
   options: InternalEvaluateOptions = {},
 ) {
+  const { prompts: _prompts, providers: _providers, ...config } = testSuite;
+  return cliState.withConfig(config, () =>
+    cliState.withBasePath(path.resolve(testSuite.basePath ?? ''), () =>
+      cliState.withEnv(testSuite.env ?? {}, () =>
+        providerRegistry.withEvaluation(() => evaluateWithEnv(testSuite, options)),
+      ),
+    ),
+  );
+}
+
+async function evaluateWithEnv(testSuite: EvaluateTestSuite, options: InternalEvaluateOptions) {
   const { author: suiteAuthor, ...testSuiteConfig } = testSuite;
 
   if (testSuiteConfig.writeLatestResults) {
@@ -327,14 +340,11 @@ export async function evaluateWithSource(
   const loadedProviders = await loadApiProviders(testSuiteConfig.providers, {
     env: testSuiteConfig.env,
   });
+  options.abortSignal?.throwIfAborted();
   const providerMap = buildConfiguredProviderMap(loadedProviders);
   const constructedTestSuite = await createRuntimeTestSuite(testSuiteConfig, loadedProviders);
   await resolveNestedProviders(testSuiteConfig, constructedTestSuite, providerMap);
 
-  const parsedProviderPromptMap = readProviderPromptMap(
-    testSuiteConfig,
-    constructedTestSuite.prompts,
-  );
   const unifiedConfig = createSerializableUnifiedConfig(
     testSuiteConfig,
     constructedTestSuite.prompts,
@@ -345,17 +355,10 @@ export async function evaluateWithSource(
     : new Eval(unifiedConfig, { author });
 
   const ret = await cache.withCacheEnabled(options.cache === false ? false : undefined, () =>
-    doEvaluate(
-      {
-        ...constructedTestSuite,
-        providerPromptMap: parsedProviderPromptMap,
-      },
-      evalRecord,
-      {
-        isRedteam: Boolean(testSuiteConfig.redteam),
-        ...options,
-      },
-    ),
+    doEvaluate(constructedTestSuite, evalRecord, {
+      isRedteam: Boolean(testSuiteConfig.redteam),
+      ...options,
+    }),
   );
 
   await maybeShareEval(testSuiteConfig, ret);

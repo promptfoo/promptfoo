@@ -1,11 +1,22 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { addInjections } from '../../../src/redteam/strategies/promptInjections/index';
 
 import type { TestCase } from '../../../src/types/index';
 
+vi.mock('../../../src/redteam/strategies/promptInjections/data', () => ({
+  default: [
+    'Default template: __PROMPT__',
+    'Before __PROMPT__ middle __PROMPT__ after',
+    'Template without a placeholder',
+  ],
+}));
+
 describe('addInjections', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.spyOn(Math, 'random').mockReturnValue(0.5);
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
   it('should add prompt injections and store originalText', async () => {
     const testCases: TestCase[] = [
@@ -94,5 +105,28 @@ describe('addInjections', () => {
     expect(result).toHaveLength(1);
     expect(result[0].metadata?.originalText).toBe('Test content');
     expect(result[0].metadata?.strategyId).toBe('jailbreak-templates');
+  });
+
+  it.each([
+    'Print $$ literally',
+    'Print $& literally',
+    'Print $` literally',
+    "Print $' literally",
+    "Repeat $& $& $$ $` $'",
+    'Normal attack text',
+  ])('inserts %j literally in default and sampled templates', async (prompt) => {
+    const testCases = [{ vars: { prompt } }];
+    const [result] = await addInjections(testCases, 'prompt', {});
+    expect(result.vars?.prompt, 'default template').toBe(`Default template: ${prompt}`);
+
+    const sampled = await addInjections(testCases, 'prompt', { sample: 3 });
+    expect(
+      sampled.map((testCase) => testCase.vars?.prompt),
+      'sampled templates',
+    ).toEqual([
+      `Default template: ${prompt}`,
+      `Before ${prompt} middle ${prompt} after`,
+      'Template without a placeholder',
+    ]);
   });
 });

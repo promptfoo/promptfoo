@@ -1,0 +1,6 @@
+{
+  "prompts": ["ping"],
+  "providers": ["echo"],
+  "tests": [{ "assert": [{ "type": "equals", "value": "ping" }] }],
+  "sharing": false
+}

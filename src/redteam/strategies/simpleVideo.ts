@@ -7,7 +7,9 @@ import { Presets, SingleBar } from 'cli-progress';
 import cliState from '../../cliState';
 import logger from '../../logger';
 import invariant from '../../util/invariant';
+import { runCommand } from '../../util/runCommand';
 import { neverGenerateRemote } from '../remoteGeneration';
+import { appendPluginMetricSuffix } from './assertions';
 
 import type { TestCase } from '../../types/index';
 
@@ -53,8 +55,7 @@ async function checkFfmpegAvailable(): Promise<void> {
     return;
   }
   try {
-    const { execa } = await import('execa');
-    await execa('ffmpeg', ['-version']);
+    await runCommand('ffmpeg', ['-version']);
     ffmpegAvailable = true;
   } catch (error) {
     throw new Error(
@@ -67,23 +68,23 @@ async function checkFfmpegAvailable(): Promise<void> {
   }
 }
 
-export function escapeDrawtextString(text: string): string {
-  // Escape special characters for FFmpeg's drawtext filter when text is
-  // wrapped in single quotes and passed directly via execa (no shell).
-  // See: https://ffmpeg.org/ffmpeg-filters.html#drawtext-1
-  return text
+function escapeDrawtextValue(value: string): string {
+  // Values are single-quoted in the filtergraph, then parsed again as drawtext
+  // options. An apostrophe needs an escaped backslash to survive both parsers.
+  // See: https://ffmpeg.org/ffmpeg-filters.html#Notes-on-filtergraph-escaping
+  return value
     .replace(/\\/g, '\\\\') // Backslash must be escaped first (special even in single-quoted strings)
-    .replace(/'/g, "'\\''") // Single quote: close quote, escaped quote, reopen quote
-    .replace(/:/g, '\\:') // Colon (option separator even within single-quoted values)
+    .replace(/'/g, "'\\\\\\''") // Close quote, escape for both parsers, reopen quote
+    .replace(/:/g, '\\:'); // Colon (option separator even within single-quoted values)
+}
+
+export function escapeDrawtextString(text: string): string {
+  return escapeDrawtextValue(text)
     .replace(/\n/g, '\\n') // Newline
     .replace(/%/g, '%%'); // Percent: drawtext uses %{} expansion; %% is the literal
 }
 
-async function createTempVideoEnvironment(): Promise<{
-  tempDir: string;
-  outputPath: string;
-  cleanup: () => Promise<void>;
-}> {
+async function createTempVideoEnvironment() {
   const tempDir = path.join(os.tmpdir(), 'promptfoo-video');
   await fsPromises.mkdir(tempDir, { recursive: true });
 
@@ -100,11 +101,7 @@ async function createTempVideoEnvironment(): Promise<{
     }
   };
 
-  return { tempDir, outputPath, cleanup };
-}
-
-export function getFallbackBase64(text: string): string {
-  return Buffer.from(text).toString('base64');
+  return { outputPath, cleanup };
 }
 
 async function textToVideo(text: string): Promise<string> {
@@ -115,17 +112,16 @@ async function textToVideo(text: string): Promise<string> {
 
       try {
         const escapedText = escapeDrawtextString(text);
-        const systemFont = await getSystemFont();
+        const escapedFont = escapeDrawtextValue(await getSystemFont());
 
         // Create a 5-second video with white background and text overlay
-        const { execa } = await import('execa');
-        await execa('ffmpeg', [
+        await runCommand('ffmpeg', [
           '-f',
           'lavfi',
           '-i',
           'color=white:s=640x480:d=5',
           '-vf',
-          `drawtext=fontfile=${systemFont}:text='${escapedText}':fontcolor=black:fontsize=24:x=(w-text_w)/2:y=(h-text_h)/2`,
+          `drawtext=fontfile='${escapedFont}':text='${escapedText}':fontcolor=black:fontsize=24:x=(w-text_w)/2:y=(h-text_h)/2`,
           '-y', // Overwrite output file if it exists
           outputPath,
         ]);
@@ -146,7 +142,7 @@ async function textToVideo(text: string): Promise<string> {
     }
   } catch (error) {
     logger.error(`Error generating video from text: ${error}`);
-    return getFallbackBase64(text);
+    return Buffer.from(text).toString('base64');
   }
 }
 
@@ -222,12 +218,7 @@ export async function addVideoToBase64(
 
         videoTestCases.push({
           ...testCase,
-          assert: testCase.assert?.map((assertion) => ({
-            ...assertion,
-            metric: assertion.type?.startsWith('promptfoo:redteam:')
-              ? `${assertion.type?.split(':').pop() || assertion.metric}/Video-Encoded`
-              : assertion.metric,
-          })),
+          assert: appendPluginMetricSuffix(testCase, 'Video-Encoded'),
           vars: {
             ...testCase.vars,
             [injectVar]: base64Video,
@@ -254,16 +245,5 @@ export async function addVideoToBase64(
     return videoTestCases;
   } finally {
     progress.stop();
-  }
-}
-
-export async function writeVideoFile(base64Video: string, outputFilePath: string): Promise<void> {
-  try {
-    const videoBuffer = Buffer.from(base64Video, 'base64');
-    await fsPromises.writeFile(outputFilePath, videoBuffer);
-    logger.info(`Video file written to: ${outputFilePath}`);
-  } catch (error) {
-    logger.error(`Failed to write video file: ${error}`);
-    throw error;
   }
 }

@@ -11,6 +11,8 @@ A **pass** score means that the output did not violate your application's intend
 
 Pass and fail scores are separate from **errors**, where the output could not be parsed. The grader is also separate from the [vulnerabilities results](/docs/enterprise/findings/), which determines the severity of findings and details about remediations.
 
+A provider response with a missing, `null`, or `undefined` `output` field is an integration error, including in red team scans. Check your response parser if you see `No output` or a malformed-response error. The literal strings `"null"` and `"undefined"` are response content and are graded normally; an intentional empty string retains the existing refusal handling.
+
 ## Configuring the Grader
 
 Configuring your grader starts when you create a new target within Promptfoo and outline details about the application in the "Usage Details" section. The `purpose` that you provide in the target setup, as well as any additional context about external system access if applicable, informs the grader. The more information you provide, the better the red team attacks will be.
@@ -203,27 +205,4 @@ redteam:
 The language name is injected as an instruction into every LLM grading rubric, so all grader explanations and justifications will be written in the specified language. This applies globally to every plugin in the scan; there is no per-plugin override.
 
 :::note
-Purely deterministic graders such as `cross-session-leak` and `ascii-smuggling` decide pass/fail through string matching rather than an LLM call. When `graderLanguage` is set to a non-English value these graders delegate reason generation to the grading LLM so the reason text respects the configured language, while the pass/fail verdict remains deterministic.
-:::
-
-## Reviewing Results
-
-You can review the results of the grader by going into **Evals** section of the platform and selecting the specific scan.
-
-<div align="center">
-  <img src="/img/docs/grading/eval_assertions_view.png" alt="Eval results view" width="900" />
-</div>
-
-Scores range from 0 to 1 and help guide the judge in agentic cases to distinguish outputs that are more impactful or higher risk. A score of `0` means there is a complete jailbreak or violation, whereas a score of `1` indicates the output fully passed without any compromise.
-
-Inside the evals view, you can review the grader reasoning for each result, modify whether it was a pass or fail, and edit the test score.
-
-<div align="center">
-  <img src="/img/docs/grading/changing_results.gif" alt="Changing results" width="900" />
-</div>
-
-### Addressing False Positives
-
-False positives are when a test case is marked as passing when it should have been marked as failing or vice versa. A common cause of false positives is when the Promptfoo graders don't know enough about the target to make an accurate assessment.
-
-The best way to reduce false positives is by adding additional context to your target `Purpose`. If you find that false positives are higher for specific plugins, then consider creating custom graders at the plugin level to specify your requirements.
+Localization applies to reasons written by an LLM grader. Reasons generated directly by Promptfoo, such as deterministic verdicts and provider errors, keep their existing wording.

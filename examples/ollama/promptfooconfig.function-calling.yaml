@@ -29,3 +29,9 @@ tests:
 
   - vars:
       city: Tokyo
+    assert:
+      - type: is-valid-openai-tools-call
+      - type: javascript
+        value: output[0].function.name === 'get_current_weather'
+      - type: javascript
+        value: JSON.parse(output[0].function.arguments).location.includes('Tokyo')

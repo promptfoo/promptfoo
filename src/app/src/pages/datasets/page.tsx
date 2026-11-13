@@ -3,13 +3,10 @@ import { useEffect, useState } from 'react';
 import { usePageMeta } from '@app/hooks/usePageMeta';
 import { callApi } from '@app/utils/api';
 import ErrorBoundary from '../../components/ErrorBoundary';
-import Datasets from './Datasets';
-import type { TestCasesWithMetadata } from '@promptfoo/types';
+import Datasets, { type DatasetRow } from './Datasets';
 
 function DatasetsPageContent() {
-  const [testCases, setTestCases] = useState<
-    (TestCasesWithMetadata & { recentEvalDate: string })[]
-  >([]);
+  const [testCases, setTestCases] = useState<DatasetRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 

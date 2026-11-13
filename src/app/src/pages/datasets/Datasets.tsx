@@ -6,18 +6,18 @@ import { PageHeader } from '@app/components/layout/PageHeader';
 import { Card } from '@app/components/ui/card';
 import { EVAL_ROUTES } from '@app/constants/routes';
 import { formatDataGridDate } from '@app/utils/date';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router';
 import DatasetDialog from './DatasetDialog';
 import type { TestCase, TestCasesWithMetadata } from '@promptfoo/types';
 import type { ColumnDef } from '@tanstack/react-table';
 
+export type DatasetRow = Omit<TestCasesWithMetadata, 'recentEvalDate'> & { recentEvalDate: string };
+
 interface DatasetsProps {
-  data: (TestCasesWithMetadata & { recentEvalDate: string })[];
+  data: DatasetRow[];
   isLoading: boolean;
   error: string | null;
 }
-
-type DatasetRow = TestCasesWithMetadata & { recentEvalDate: string };
 
 const getVariables = (testCases: DatasetRow['testCases']) => {
   if (!Array.isArray(testCases) || typeof testCases[0] === 'string') {
@@ -32,21 +32,10 @@ const getVariables = (testCases: DatasetRow['testCases']) => {
 
 export default function Datasets({ data, isLoading, error }: DatasetsProps) {
   const [searchParams] = useSearchParams();
-  const [dialogState, setDialogState] = useState<{ open: boolean; selectedIndex: number }>({
-    open: false,
-    selectedIndex: 0,
-  });
+  const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
+  const selectedDataset = selectedIndex === null ? undefined : data[selectedIndex];
   const hasShownPopup = useRef(false);
 
-  const handleClickOpen = (index: number) => {
-    setDialogState({ open: true, selectedIndex: index });
-  };
-
-  const handleClose = () => {
-    setDialogState((prev) => ({ ...prev, open: false }));
-  };
-
-  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {
     if (hasShownPopup.current) {
       return;
@@ -56,7 +45,7 @@ export default function Datasets({ data, isLoading, error }: DatasetsProps) {
     if (testCaseId) {
       const index = data.findIndex((testCase) => testCase.id.startsWith(testCaseId));
       if (index !== -1) {
-        handleClickOpen(index);
+        setSelectedIndex(index);
         hasShownPopup.current = true;
       }
     }
@@ -148,7 +137,7 @@ export default function Datasets({ data, isLoading, error }: DatasetsProps) {
   const handleRowClick = (dataset: DatasetRow) => {
     const index = data.findIndex((d) => d.id === dataset.id);
     if (index !== -1) {
-      handleClickOpen(index);
+      setSelectedIndex(index);
     }
   };
 
@@ -178,15 +167,13 @@ export default function Datasets({ data, isLoading, error }: DatasetsProps) {
           </Card>
         </div>
       </div>
-      {dialogState.open &&
-        dialogState.selectedIndex < data.length &&
-        data[dialogState.selectedIndex] && (
-          <DatasetDialog
-            openDialog={dialogState.open}
-            handleClose={handleClose}
-            testCase={data[dialogState.selectedIndex]}
-          />
-        )}
+      {selectedDataset && (
+        <DatasetDialog
+          openDialog
+          handleClose={() => setSelectedIndex(null)}
+          testCase={selectedDataset}
+        />
+      )}
     </PageContainer>
   );
 }

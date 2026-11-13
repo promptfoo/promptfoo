@@ -9,5 +9,5 @@ def hello(name: str) -> str:
 
 
 if __name__ == "__main__":
-    # Start an HTTP server on port 8000
+    # Start the optional local HTTP server on port 8080
     mcp.run(transport="http", host="127.0.0.1", port=8080)

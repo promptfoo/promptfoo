@@ -1,6 +1,7 @@
 import dedent from 'dedent';
 import { afterEach, beforeEach, describe, expect, it, Mock, MockInstance, vi } from 'vitest';
 import cliState from '../../../src/cliState';
+import * as esm from '../../../src/esm';
 import { matchesLlmRubric } from '../../../src/matchers/llmGrading';
 import { MULTI_INPUT_VAR } from '../../../src/redteam/constants';
 import { RedteamGraderBase, RedteamPluginBase } from '../../../src/redteam/plugins/base';
@@ -10,6 +11,7 @@ import {
 } from '../../../src/redteam/plugins/multiInputFormat';
 import { RealEstateAccessibilityDiscriminationPluginGrader } from '../../../src/redteam/plugins/realestate/accessibilityDiscrimination';
 import { maybeLoadFromExternalFile, maybeLoadToolsFromExternalFile } from '../../../src/util/file';
+import * as packageVersion from '../../../src/util/packageVersion';
 import { createMockProvider, createProviderResponse } from '../../factories/provider';
 
 import type { Assertion, AtomicTestCase, GradingResult } from '../../../src/types/index';
@@ -1981,13 +1983,14 @@ describe('RedteamGraderBase', () => {
         undefined,
       );
 
-      expect(result.rubric).toContain('Write the "reason" field in Japanese');
+      expect(result.rubric).toContain('in Japanese');
+      expect(result.rubric).toContain('required machine-readable markers exactly');
       expect(result.rubric).toContain(
         'All explanations and justifications in the reason field must be in Japanese',
       );
     });
 
-    it('should default to English when redteamGraderLanguage is not set', async () => {
+    it('leaves the rubric unchanged when redteamGraderLanguage is unset', async () => {
       const mockResult: GradingResult = {
         pass: true,
         score: 1,
@@ -2003,7 +2006,7 @@ describe('RedteamGraderBase', () => {
         undefined,
       );
 
-      expect(result.rubric).toContain('Write the "reason" field in English');
+      expect(result.rubric).not.toContain('Write the human-readable explanation');
     });
 
     it('should place language instruction before timestamp', async () => {
@@ -2029,7 +2032,7 @@ describe('RedteamGraderBase', () => {
         undefined,
       );
 
-      const langIndex = result.rubric.indexOf('Write the "reason" field in French');
+      const langIndex = result.rubric.indexOf('in French');
       const timestampIndex = result.rubric.indexOf('Current timestamp:');
       expect(langIndex).toBeGreaterThan(-1);
       expect(timestampIndex).toBeGreaterThan(-1);
@@ -2116,6 +2119,33 @@ describe('RedteamGraderBase', () => {
         expect.any(Object),
       );
     });
+
+    it.each(['missing', 'incompatible'])(
+      'explains a %s Agents SDK before loading redteam tools',
+      async (status) => {
+        const agentsProvider = createMockProvider({
+          id: 'openai:agents:support-agent',
+          config: { tools: 'file://./tools/support-tools.ts' },
+        });
+        const spy =
+          status === 'missing'
+            ? vi.spyOn(esm, 'getDirectory').mockImplementation(() => {
+                throw Object.assign(new Error("Cannot find package '@openai/agents'"), {
+                  code: 'MODULE_NOT_FOUND',
+                });
+              })
+            : vi.spyOn(packageVersion, 'getPackageVersion').mockReturnValue('0.18.0');
+        mockLoadTools.mockClear();
+        try {
+          await expect(
+            new ToolGrader().getResult('test prompt', 'test output', mockTest, agentsProvider),
+          ).rejects.toThrow('npm install promptfoo @openai/agents@^0.21.0');
+          expect(mockLoadTools).not.toHaveBeenCalled();
+        } finally {
+          spy.mockRestore();
+        }
+      },
+    );
 
     it('should handle when no tools are provided', async () => {
       const mockResult: GradingResult = {
@@ -2316,6 +2346,33 @@ describe('RedteamGraderBase', () => {
         expect(matchesLlmRubric).not.toHaveBeenCalled();
       }
     });
+
+    it.each(['null', 'undefined', '  UNDEFINED  '])(
+      'grades literal response text %j without assuming an adapter failure',
+      async (output) => {
+        const grade: GradingResult = {
+          pass: false,
+          score: 0,
+          reason: 'The response violates the rubric',
+        };
+        vi.mocked(matchesLlmRubric).mockResolvedValue(grade);
+
+        const result = await grader.getResult(
+          'test prompt',
+          output,
+          mockTest,
+          undefined,
+          undefined,
+        );
+
+        expect(result.grade).toEqual(grade);
+        expect(matchesLlmRubric).toHaveBeenCalledWith(
+          expect.any(String),
+          output,
+          expect.any(Object),
+        );
+      },
+    );
 
     it('should not auto-pass valid responses', async () => {
       const mockResult: GradingResult = {
