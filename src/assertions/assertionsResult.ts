@@ -265,6 +265,7 @@ export class AssertionsResult {
   private componentResults: GradingResult[] = [];
   private namedScores: Record<string, number> = Object.create(null);
   private namedScoreWeights: Record<string, number> = Object.create(null);
+  private readonly metricOnlyTotals = new Map<string, { sum: number; weight: number }>();
   private result: GradingResult | null = null;
   private failedContentSafetyChecks: boolean = false;
 
@@ -283,18 +284,37 @@ export class AssertionsResult {
     return this._parentAssertionSet;
   }
 
+  private addNamedScore(
+    name: string,
+    sum: number,
+    weight: number,
+    unscaledSum = 0,
+    unscaledWeight = 0,
+  ) {
+    this.namedScores[name] = (this.namedScores[name] ?? 0) + sum;
+    this.namedScoreWeights[name] = (this.namedScoreWeights[name] ?? 0) + weight;
+    if (unscaledWeight > 0) {
+      const total = this.metricOnlyTotals.get(name) ?? { sum: 0, weight: 0 };
+      total.sum += unscaledSum;
+      total.weight += unscaledWeight;
+      this.metricOnlyTotals.set(name, total);
+    }
+  }
+
   addResult({
     index,
     result,
     metric,
     weight = 1,
     metricOnly = false,
+    childAssertionSet,
   }: {
     index: number;
     result: GradingResult;
     metric?: string;
     weight?: number;
     metricOnly?: boolean;
+    childAssertionSet?: AssertionsResult;
   }) {
     // Metric-only assertions emit named scores but are excluded from the
     // test's pass/fail determination and its weighted score.
@@ -314,8 +334,8 @@ export class AssertionsResult {
     // Metric-only and zero-weight assertions record measurements at unit weight.
     const metricWeight = metricOnly || weight === 0 ? 1 : weight;
     if (metric) {
-      this.namedScores[metric] = (this.namedScores[metric] ?? 0) + result.score * metricWeight;
-      this.namedScoreWeights[metric] = (this.namedScoreWeights[metric] ?? 0) + metricWeight;
+      const sum = result.score * metricWeight;
+      this.addNamedScore(metric, sum, metricWeight, metricOnly ? sum : 0, metricOnly ? metricWeight : 0);
     }
 
     if (result.namedScores) {
@@ -326,11 +346,18 @@ export class AssertionsResult {
             Object.prototype.hasOwnProperty.call(result.namedScoreWeights, metricName)
               ? (result.namedScoreWeights[metricName] ?? 1)
               : 1;
-          const weightedIncomingWeight = incomingWeight * metricWeight;
-          this.namedScores[metricName] =
-            (this.namedScores[metricName] ?? 0) + score * weightedIncomingWeight;
-          this.namedScoreWeights[metricName] =
-            (this.namedScoreWeights[metricName] ?? 0) + weightedIncomingWeight;
+          const incomingSum = score * incomingWeight;
+          const unscaled = childAssertionSet?.metricOnlyTotals.get(metricName);
+          const unscaledSum = metricOnly ? incomingSum : (unscaled?.sum ?? 0);
+          const unscaledWeight = metricOnly ? incomingWeight : (unscaled?.weight ?? 0);
+          // Only the scoring contributions inherit a containing set's weight.
+          this.addNamedScore(
+            metricName,
+            (incomingSum - unscaledSum) * metricWeight + unscaledSum,
+            (incomingWeight - unscaledWeight) * metricWeight + unscaledWeight,
+            unscaledSum,
+            unscaledWeight,
+          );
         }
       });
     }

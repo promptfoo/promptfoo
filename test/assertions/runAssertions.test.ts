@@ -278,6 +278,31 @@ describe('runAssertions', () => {
   });
 
   describe('metricOnly assertions', () => {
+    it('scales scoring contributions without scaling a metric-only child with the same name', async () => {
+      const result = await runAssertions({
+        prompt,
+        provider,
+        test: {
+          assert: [
+            {
+              type: 'assert-set',
+              weight: 2,
+              assert: [
+                { type: 'equals', value: 'ok', metric: 'measurement' },
+                { type: 'equals', value: 'wrong', metric: 'measurement', metricOnly: true },
+              ],
+            },
+          ],
+        },
+        providerResponse: { output: 'ok' },
+      });
+
+      expect(result.pass).toBe(true);
+      expect(result.score).toBe(1);
+      expect(result.namedScores?.measurement).toBeCloseTo(2 / 3);
+      expect(result.namedScoreWeights?.measurement).toBe(3);
+    });
+
     it('records thresholdless metric-only cost without hiding a quality failure', async () => {
       const result = await runAssertions({
         test: {

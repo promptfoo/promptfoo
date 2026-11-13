@@ -940,6 +940,7 @@ export async function runAssertions({
       metric: renderMetricName(metric, vars || test.vars || {}),
       weight,
       metricOnly,
+      childAssertionSet: subAssertResult,
     });
   });
 
