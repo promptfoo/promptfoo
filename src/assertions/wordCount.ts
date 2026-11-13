@@ -3,16 +3,6 @@ import invariant from '../util/invariant';
 import type { AssertionParams, GradingResult } from '../types/index';
 
 /**
- * Counts words in a string by splitting on whitespace and filtering empty strings
- */
-function countWords(text: string): number {
-  return text
-    .trim()
-    .split(/\s+/)
-    .filter((word) => word.length > 0).length;
-}
-
-/**
  * Handles word-count assertion
  *
  * Supports the following formats:
@@ -32,10 +22,13 @@ export const handleWordCount = ({
 
   invariant(value != null, '"word-count" assertion must have a value');
 
-  const wordCount = countWords(outputString);
+  /**
+   * Counts whitespace-delimited words, excluding empty strings.
+   */
+  const wordCount = outputString.trim().match(/\S+/g)?.length ?? 0;
 
   let pass: boolean;
-  let reason: string;
+  let reason = 'Assertion passed';
 
   // Handle object format: { min: X, max: Y }
   if (typeof value === 'object' && !Array.isArray(value)) {
@@ -54,34 +47,28 @@ export const handleWordCount = ({
       // Range check
       const basePass = wordCount >= min && wordCount <= max;
       pass = inverse ? !basePass : basePass;
-      if (pass) {
-        reason = 'Assertion passed';
-      } else if (inverse) {
-        reason = `Expected word count to not be between ${min} and ${max}, but got ${wordCount}`;
-      } else {
-        reason = `Word count ${wordCount} is not between ${min} and ${max}`;
+      if (!pass) {
+        reason = inverse
+          ? `Expected word count to not be between ${min} and ${max}, but got ${wordCount}`
+          : `Word count ${wordCount} is not between ${min} and ${max}`;
       }
     } else if (min === undefined) {
       // Max only
       const basePass = wordCount <= max!;
       pass = inverse ? !basePass : basePass;
-      if (pass) {
-        reason = 'Assertion passed';
-      } else if (inverse) {
-        reason = `Expected word count to be greater than ${max}, but got ${wordCount}`;
-      } else {
-        reason = `Word count ${wordCount} is greater than maximum ${max}`;
+      if (!pass) {
+        reason = inverse
+          ? `Expected word count to be greater than ${max}, but got ${wordCount}`
+          : `Word count ${wordCount} is greater than maximum ${max}`;
       }
     } else {
       // Min only
       const basePass = wordCount >= min;
       pass = inverse ? !basePass : basePass;
-      if (pass) {
-        reason = 'Assertion passed';
-      } else if (inverse) {
-        reason = `Expected word count to be less than ${min}, but got ${wordCount}`;
-      } else {
-        reason = `Word count ${wordCount} is less than minimum ${min}`;
+      if (!pass) {
+        reason = inverse
+          ? `Expected word count to be less than ${min}, but got ${wordCount}`
+          : `Word count ${wordCount} is less than minimum ${min}`;
       }
     }
   } else {
@@ -94,12 +81,10 @@ export const handleWordCount = ({
     const expectedCount = typeof value === 'number' ? value : Number(value);
     const basePass = wordCount === expectedCount;
     pass = inverse ? !basePass : basePass;
-    if (pass) {
-      reason = 'Assertion passed';
-    } else if (inverse) {
-      reason = `Expected word count to not equal ${expectedCount}, but got ${wordCount}`;
-    } else {
-      reason = `Word count ${wordCount} does not equal expected ${expectedCount}`;
+    if (!pass) {
+      reason = inverse
+        ? `Expected word count to not equal ${expectedCount}, but got ${wordCount}`
+        : `Word count ${wordCount} does not equal expected ${expectedCount}`;
     }
   }
 
