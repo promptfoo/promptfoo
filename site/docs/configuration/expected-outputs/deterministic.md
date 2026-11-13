@@ -1085,11 +1085,11 @@ With this assertion, `$416.2 billion`, `416,161 million`, `$416.16B` and `416161
 
 **Which number is graded.** When the output has a `Final answer` line (`Final answer: 42`, `Final answer - 42` or `Final answer -42`), only the last such line is searched. That lets a prompt ask for a final line, so a figure mentioned in passing is not graded by mistake. Within that text, `config.mode` selects the number:
 
-| `mode`              | Number graded                                                         |
-| ------------------- | --------------------------------------------------------------------- |
-| `closest`           | The number closest to the expected value                              |
-| `first` (default)   | The first number, skipping SEC form names, bare years and percentages |
-| `last`              | The last number, skipping SEC form names, bare years and percentages  |
+| `mode`            | Number graded                                                         |
+| ----------------- | --------------------------------------------------------------------- |
+| `closest`         | The number closest to the expected value                              |
+| `first` (default) | The first number, skipping SEC form names, bare years and percentages |
+| `last`            | The last number, skipping SEC form names, bare years and percentages  |
 
 In `first` and `last` modes, SEC form names (`10-K`, `10-Q`, `8-K`, `20-F`), filing item references such as `Item 8`, bare four-digit years (`2025`) and percentages (`6%`) are skipped, so `In fiscal 2025, net sales grew 6% to $416.2 billion.` grades `$416.2 billion`. If only skipped numbers remain, they are used. `closest` is lenient when an output lists several figures; use `first` or `last` with a `Final answer` line to grade the stated answer strictly.
 
