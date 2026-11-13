@@ -524,13 +524,13 @@ The EU AI Act imposes significant fines for violations:
 
 ## Timeline and Applicability
 
-The EU AI Act applies in phases under Article 113, as amended by [Regulation (EU) 2026/1744](https://eur-lex.europa.eu/eli/reg/2026/1744/oj):
+The EU AI Act applies in phases under [Article 113 as amended by Regulation (EU) 2026/1744](https://ai-act-service-desk.ec.europa.eu/en/ai-act/article-113?full=1):
 
-- **2 February 2025**: Prohibited practices (Article 5), except the prohibitions added by Regulation (EU) 2026/1744 (Article 5(1)(ba) and (bb), 5(1a) and 5(1b)), which apply from 2 December 2026
-- **2 August 2025**: General-purpose AI model rules, governance and penalties
+- **2 February 2025**: Chapters I and II, including AI literacy and the original prohibited practices. The new prohibitions in Article 5(1)(ba) and (bb), 5(1a) and 5(1b) apply from 2 December 2026.
+- **2 August 2025**: General-purpose AI model rules, governance and most penalty provisions. Article 101 follows the general application date.
 - **2 August 2026**: General date of application
-- **2 December 2027**: High-risk system requirements for Annex III systems (Article 6(2))
-- **2 August 2028**: High-risk system requirements for Annex I products (Article 6(1))
+- **2 December 2027**: Chapter III, Sections 1–3 apply to high-risk AI systems under Article 6(2) and Annex III. Article 6(5) follows the general application date.
+- **2 August 2028**: The same sections apply to high-risk AI systems under Article 6(1) and Annex I.
 
 ## Integration with Other Frameworks
 
