@@ -113,10 +113,7 @@ function decodeNewFilePath(rawHeader: string): string | null {
       return null;
     }
     const body = header.slice(1, -1);
-    const parts = [...body.matchAll(/\\([0-3][0-7]{2}|.)|([^\\]+)/gs)];
-    if (parts.map((part) => part[0]).join('') !== body) {
-      return null;
-    }
+    const parts = [...body.matchAll(/\\([0-3][0-7]{2})|\\(.)|([^"\\]+)/gs)];
     const escapes: Record<string, string> = {
       a: '\x07',
       b: '\b',
@@ -128,21 +125,15 @@ function decodeNewFilePath(rawHeader: string): string | null {
       '"': '"',
       '\\': '\\',
     };
-    const bytes: Buffer[] = [];
-    for (const [, escaped, text] of parts) {
-      if (text !== undefined) {
-        if (text.includes('"')) {
-          return null;
-        }
-        bytes.push(Buffer.from(text));
-      } else if (/^[0-7]{3}$/.test(escaped)) {
-        bytes.push(Buffer.from([Number.parseInt(escaped, 8)]));
-      } else if (escapes[escaped] === undefined) {
-        return null;
-      } else {
-        bytes.push(Buffer.from(escapes[escaped]));
-      }
+    if (
+      parts.map((part) => part[0]).join('') !== body ||
+      parts.some(([, , escaped]) => escaped !== undefined && escapes[escaped] === undefined)
+    ) {
+      return null;
     }
+    const bytes = parts.map(([, octal, escaped, text]) =>
+      octal ? Buffer.from([Number.parseInt(octal, 8)]) : Buffer.from(text ?? escapes[escaped]),
+    );
     // Git quotes UTF-8 bytes as octal, which JSON string decoding cannot handle.
     filePath = Buffer.concat(bytes).toString('utf8');
   }
@@ -265,23 +256,13 @@ export function clampCommentLines(
 
   // Clamp the start line
   const clampedStartLine = clampToValidLine(filepath, startLine, ranges);
-  if (clampedStartLine === null) {
-    return {
-      startLine: null,
-      line: clampedEndLine,
-    };
-  }
-
-  // Ensure start <= end (if start > end after clamping, make it single-line)
-  if (clampedStartLine > clampedEndLine) {
-    return {
-      startLine: null,
-      line: clampedEndLine,
-    };
-  }
-
-  // If start and end are the same, make it single-line
-  if (clampedStartLine === clampedEndLine) {
+  // Missing or equal start lines make a single-line comment. Also ensure start <= end:
+  // if start > end after clamping, make it single-line.
+  if (
+    clampedStartLine === null ||
+    clampedStartLine > clampedEndLine ||
+    clampedStartLine === clampedEndLine
+  ) {
     return {
       startLine: null,
       line: clampedEndLine,

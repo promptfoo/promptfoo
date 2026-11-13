@@ -7,11 +7,9 @@
  */
 
 import { writeFile } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { join } from 'node:path';
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const OUTPUT_PATH = join(__dirname, '..', 'src', '.generated-stats.json');
+const OUTPUT_PATH = join(import.meta.dirname, '..', 'src', '.generated-stats.json');
 const TIMEOUT_MS = 10_000;
 const REPO = 'promptfoo/promptfoo';
 const NPM_PACKAGE = 'promptfoo';
@@ -24,33 +22,19 @@ function formatCompact(num) {
   return String(num);
 }
 
-function formatWithCommas(num) {
-  return num.toLocaleString('en-US');
-}
-
-function roundToNearest(num, nearest) {
-  return Math.round(num / nearest) * nearest;
-}
-
-async function fetchWithTimeout(url, options = {}) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
-  try {
-    const headers = { 'User-Agent': 'promptfoo-site-build', ...options.headers };
-    if (process.env.GITHUB_TOKEN) {
-      const { hostname } = new URL(url);
-      if (hostname === 'api.github.com' || hostname === 'github.com') {
-        headers.Authorization = `Bearer ${process.env.GITHUB_TOKEN}`;
-      }
+async function fetchWithTimeout(url) {
+  const headers = { 'User-Agent': 'promptfoo-site-build' };
+  if (process.env.GITHUB_TOKEN) {
+    const { hostname } = new URL(url);
+    if (hostname === 'api.github.com' || hostname === 'github.com') {
+      headers.Authorization = `Bearer ${process.env.GITHUB_TOKEN}`;
     }
-    const res = await fetch(url, { ...options, headers, signal: controller.signal });
-    if (!res.ok) {
-      throw new Error(`HTTP ${res.status} ${res.statusText}`);
-    }
-    return res;
-  } finally {
-    clearTimeout(timer);
   }
+  const res = await fetch(url, { headers, signal: AbortSignal.timeout(TIMEOUT_MS) });
+  if (!res.ok) {
+    throw new Error(`HTTP ${res.status} ${res.statusText}`);
+  }
+  return res;
 }
 
 async function fetchGitHubStars() {
@@ -81,8 +65,9 @@ async function fetchNpmDownloads() {
     `https://api.npmjs.org/downloads/point/last-week/${NPM_PACKAGE}`,
   );
   const data = await res.json();
-  const rounded = roundToNearest(data.downloads, 1000);
-  return { WEEKLY_DOWNLOADS_DISPLAY: formatWithCommas(rounded) };
+  const downloads = data.downloads;
+  const rounded = Math.round(downloads / 1000) * 1000;
+  return { WEEKLY_DOWNLOADS_DISPLAY: rounded.toLocaleString('en-US') };
 }
 
 async function main() {
