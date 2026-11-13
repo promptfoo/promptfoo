@@ -302,11 +302,19 @@ export async function doEval(
   defaultConfig: Partial<UnifiedConfig>,
   defaultConfigPath: string | undefined,
   evaluateOptions: InternalEvaluateOptions,
+  useEnvironmentDelay = false,
 ): Promise<Eval> {
   const envFileOverrides = isCliEventSource(evaluateOptions) ? undefined : {};
   setupEnv(cmdObj.envPath, { processEnv: envFileOverrides });
   return cliState.withEnvFileOverrides(envFileOverrides, () =>
-    doEvalWithEnv(cmdObj, defaultConfig, defaultConfigPath, evaluateOptions, envFileOverrides),
+    doEvalWithEnv(
+      cmdObj,
+      defaultConfig,
+      defaultConfigPath,
+      evaluateOptions,
+      envFileOverrides,
+      useEnvironmentDelay,
+    ),
   );
 }
 
@@ -316,6 +324,7 @@ async function doEvalWithEnv(
   defaultConfigPath: string | undefined,
   evaluateOptions: InternalEvaluateOptions,
   envFileOverrides: EnvOverrides | undefined,
+  useEnvironmentDelay: boolean,
 ): Promise<Eval> {
   const isCliInvocation = isCliEventSource(evaluateOptions);
   const inputCommand = cmdObj;
@@ -645,7 +654,12 @@ async function doEvalWithEnv(
         commandLineOptions?.maxConcurrency ??
         evaluateOptions.maxConcurrency ??
         DEFAULT_MAX_CONCURRENCY;
-      delay = cmdObj.delay ?? commandLineOptions?.delay ?? evaluateOptions.delay ?? 0;
+      // Read the CLI default after the selected config and env files are in scope.
+      delay =
+        cmdObj.delay ??
+        commandLineOptions?.delay ??
+        evaluateOptions.delay ??
+        (useEnvironmentDelay ? getEnvInt('PROMPTFOO_DELAY_MS', 0) : 0);
     }
 
     if (cache === false) {
