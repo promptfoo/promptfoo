@@ -1,31 +1,20 @@
-/**
- * Phase 5: Comprehensive provider instrumentation validation tests.
- *
- * These tests verify that OTEL tracing is correctly implemented across
- * all instrumented providers, covering:
- * - GenAI semantic conventions compliance
- * - Token usage capture
- * - Trace context propagation
- * - Error handling
- * - Concurrent calls
- * - Provider inheritance
- */
-
 import { context, SpanKind, SpanStatusCode, trace } from '@opentelemetry/api';
 import { suppressTracing } from '@opentelemetry/core';
-import { InMemorySpanExporter, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-base';
-import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
+import {
+  InMemorySpanExporter,
+  SimpleSpanProcessor,
+  TracerProvider,
+} from '@opentelemetry/sdk-trace';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   extractProviderResponseAttributes,
   GenAIAttributes,
-  getCurrentTraceId,
   getTraceparent,
   PromptfooAttributes,
-  setGenAIRequestAttributes,
   withGenAISpan,
 } from '../../src/tracing/genaiTracer';
 import { withTargetSpan } from '../../src/tracing/targetTracer';
+import { registerTracerProvider } from '../../src/tracing/tracerProvider';
 
 import type { GenAISpanContext, GenAISpanResult } from '../../src/tracing/genaiTracer';
 
@@ -45,16 +34,16 @@ vi.mock('../../src/logger', () => ({
   },
 }));
 
-describe('Phase 5: Provider Instrumentation Validation', () => {
-  let tracerProvider: NodeTracerProvider;
+describe('GenAI span export and provider instrumentation', () => {
+  let tracerProvider: TracerProvider;
   let memoryExporter: InMemorySpanExporter;
 
   beforeAll(() => {
     memoryExporter = new InMemorySpanExporter();
-    tracerProvider = new NodeTracerProvider({
-      spanProcessors: [new SimpleSpanProcessor(memoryExporter)],
+    tracerProvider = new TracerProvider({
+      spanProcessors: [new SimpleSpanProcessor({ exporter: memoryExporter })],
     });
-    tracerProvider.register();
+    registerTracerProvider(tracerProvider);
   });
 
   afterAll(async () => {
@@ -306,7 +295,7 @@ describe('Phase 5: Provider Instrumentation Validation', () => {
       await withGenAISpan(
         { system: 'openai', operationName: 'chat', model: 'gpt-4', providerId: 'openai:gpt-4' },
         async () => {
-          capturedTraceId = getCurrentTraceId();
+          capturedTraceId = trace.getActiveSpan()?.spanContext().traceId;
           return { output: 'test' };
         },
       );
@@ -494,9 +483,9 @@ describe('Phase 5: Provider Instrumentation Validation', () => {
     });
   });
 
-  describe('Provider Systems Coverage', () => {
-    // Test all Category A providers (directly instrumented)
-    const categoryAProviders = [
+  describe('Wrapper provider-name normalization', () => {
+    // This table covers wrapper normalization, not provider callApi instrumentation.
+    const providerNames = [
       { system: 'alibaba', model: 'qwen-max', providerName: 'alibaba_cloud' },
       { system: 'openai', model: 'gpt-4', providerName: 'openai' },
       { system: 'anthropic', model: 'claude-3-opus', providerName: 'anthropic' },
@@ -518,8 +507,8 @@ describe('Phase 5: Provider Instrumentation Validation', () => {
       { system: 'openrouter', model: 'openai/gpt-4', providerName: 'openrouter' },
     ];
 
-    it.each(categoryAProviders)(
-      'should correctly instrument $system provider',
+    it.each(providerNames)(
+      'normalizes the supplied $system system',
       async ({ system, model, providerName }) => {
         await withGenAISpan(
           { system, operationName: 'chat', model, providerId: `${system}:${model}` },
@@ -537,42 +526,59 @@ describe('Phase 5: Provider Instrumentation Validation', () => {
         memoryExporter.reset();
       },
     );
+  });
 
-    // Test Category B providers (inherit from OpenAI)
-    const categoryBProviders = [
-      'groq',
-      'together',
-      'cerebras',
-      'fireworks',
-      'deepinfra',
-      'xai',
-      'sambanova',
-      'perplexity',
-    ];
-
-    it.each(categoryBProviders)(
-      'should support inherited instrumentation for %s (via OpenAI base)',
-      async (system) => {
-        // Category B providers inherit from OpenAI and should work with the same pattern
-        await withGenAISpan(
-          {
-            system,
-            operationName: 'chat',
-            model: 'model-name',
-            providerId: `${system}:model-name`,
-          },
-          async () => ({ output: 'test' }),
-        );
-
-        const span = memoryExporter.getFinishedSpans()[0];
-        expect(span.attributes[GenAIAttributes.PROVIDER_NAME]).toBe(
-          system === 'xai' ? 'x_ai' : system,
-        );
-        expect(span.status.code).toBe(SpanStatusCode.OK);
-
-        memoryExporter.reset();
+  it('traces an inherited xAI callApi with backend identity and target parentage', async () => {
+    const { createXAIProvider } = await import('../../src/providers/xai/chat');
+    const { fetchWithCache } = await import('../../src/cache');
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      data: {
+        id: 'chatcmpl-fixture',
+        model: 'grok-fixture',
+        choices: [
+          { message: { role: 'assistant', content: 'traced response' }, finish_reason: 'stop' },
+        ],
+        usage: { prompt_tokens: 7, completion_tokens: 3, total_tokens: 10 },
       },
+      cached: false,
+      status: 200,
+      statusText: 'OK',
+      headers: {},
+    });
+    const provider = createXAIProvider('xai:grok-fixture', {
+      config: { config: { apiKey: 'test-key' } },
+    });
+    const traceId = '0123456789abcdef0123456789abcdef';
+    const response = await withTargetSpan(
+      {
+        targetType: 'provider',
+        providerId: provider.id(),
+        traceparent: `00-${traceId}-0123456789abcdef-01`,
+      },
+      async () =>
+        provider.callApi('test prompt', {
+          vars: {},
+          prompt: { raw: 'test prompt', label: 'fixture' },
+          traceparent: getTraceparent(),
+        }),
     );
+
+    expect(response.output).toBe('traced response');
+    expect(fetchWithCache).toHaveBeenCalledOnce();
+    const spans = memoryExporter.getFinishedSpans();
+    expect(spans).toHaveLength(2);
+    const targetSpan = spans.find((span) => span.name === 'xai:grok-fixture')!;
+    const modelSpan = spans.find((span) => span.name === 'chat grok-fixture')!;
+    expect(modelSpan.spanContext().traceId).toBe(traceId);
+    expect(modelSpan.parentSpanContext?.spanId).toBe(targetSpan.spanContext().spanId);
+    expect(modelSpan.attributes).toMatchObject({
+      [GenAIAttributes.PROVIDER_NAME]: 'x_ai',
+      [GenAIAttributes.REQUEST_MODEL]: 'grok-fixture',
+      [PromptfooAttributes.PROVIDER_ID]: 'xai:grok-fixture',
+      [GenAIAttributes.USAGE_INPUT_TOKENS]: 7,
+      [GenAIAttributes.USAGE_OUTPUT_TOKENS]: 3,
+    });
+    expect(modelSpan.status.code).toBe(SpanStatusCode.OK);
   });
 
   describe('Promptfoo Context Attributes', () => {
@@ -716,22 +722,6 @@ describe('Phase 5: Provider Instrumentation Validation', () => {
       expect(memoryExporter.getFinishedSpans()).toHaveLength(0);
     });
 
-    it('should still hand the callback a usable non-recording span', async () => {
-      let observed: ReturnType<typeof trace.getActiveSpan>;
-      await context.with(suppressTracing(context.active()), () =>
-        withGenAISpan(spanContext, async (span) => {
-          observed = span;
-          // Providers stamp effective request attributes on this span; that must not
-          // throw just because the span is non-recording.
-          setGenAIRequestAttributes(span, { model: 'gpt-4', operationName: 'chat' });
-          return { output: 'test' };
-        }),
-      );
-
-      expect(observed!.isRecording()).toBe(false);
-      expect(observed!.spanContext().traceId).toBe('00000000000000000000000000000000');
-    });
-
     it('should emit a span again once suppression falls out of scope', async () => {
       await context.with(suppressTracing(context.active()), () =>
         withGenAISpan(spanContext, async () => ({ output: 'suppressed' })),
@@ -741,56 +731,6 @@ describe('Phase 5: Provider Instrumentation Validation', () => {
       const spans = memoryExporter.getFinishedSpans();
       expect(spans).toHaveLength(1);
       expect(spans[0].name).toBe('chat gpt-4');
-    });
-  });
-
-  describe('Effective request attributes', () => {
-    it('should overwrite the request model and span name with the model actually sent', async () => {
-      await withGenAISpan(
-        {
-          system: 'openai',
-          operationName: 'chat',
-          model: 'gpt-4o-mini',
-          providerId: 'openai:gpt-4o-mini',
-        },
-        async (span) => {
-          setGenAIRequestAttributes(span, {
-            model: 'gpt-4o',
-            operationName: 'chat',
-            maxTokens: 1024,
-            temperature: 0,
-            stopSequences: ['STOP'],
-          });
-          return { output: 'test' };
-        },
-      );
-
-      const span = memoryExporter.getFinishedSpans()[0];
-      expect(span.name).toBe('chat gpt-4o');
-      expect(span.attributes[GenAIAttributes.REQUEST_MODEL]).toBe('gpt-4o');
-      expect(span.attributes[GenAIAttributes.REQUEST_MAX_TOKENS]).toBe(1024);
-      expect(span.attributes[GenAIAttributes.REQUEST_TEMPERATURE]).toBe(0);
-      expect(span.attributes[GenAIAttributes.REQUEST_STOP_SEQUENCES]).toEqual(['STOP']);
-    });
-
-    it('should leave the span name alone when no effective model is known', async () => {
-      await withGenAISpan(
-        {
-          system: 'openai',
-          operationName: 'chat',
-          model: 'gpt-4o-mini',
-          providerId: 'openai:gpt-4o-mini',
-        },
-        async (span) => {
-          setGenAIRequestAttributes(span, { operationName: 'chat', topP: 0.5 });
-          return { output: 'test' };
-        },
-      );
-
-      const span = memoryExporter.getFinishedSpans()[0];
-      expect(span.name).toBe('chat gpt-4o-mini');
-      expect(span.attributes[GenAIAttributes.REQUEST_MODEL]).toBe('gpt-4o-mini');
-      expect(span.attributes[GenAIAttributes.REQUEST_TOP_P]).toBe(0.5);
     });
   });
 

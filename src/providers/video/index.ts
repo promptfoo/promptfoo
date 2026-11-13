@@ -13,9 +13,10 @@ export {
   generateVideoCacheKey,
   // Cache utilities
   getCacheMappingPath,
-  readCacheMapping,
+  isVideoCacheReferenceUrlSafe,
   // Output formatting
   sanitizePromptForOutput,
+  sanitizeVideoCacheReferenceUrl,
   storeCacheMapping,
   // Storage utilities
   storeVideoContent,
