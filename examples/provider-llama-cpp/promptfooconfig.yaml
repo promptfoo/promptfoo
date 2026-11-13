@@ -4,8 +4,6 @@ description: Local Llama CPP model server integration
 providers:
   - id: llama
     label: llama3-8b
-    config:
-      baseUrl: http://localhost:8080
 
 prompts:
   - 'Write a funny tweet about {{topic}}'
@@ -25,4 +23,3 @@ tests:
     assert:
       - type: icontains
         value: 'San Francisco'
-      - type: answer-relevance

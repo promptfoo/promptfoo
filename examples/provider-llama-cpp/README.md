@@ -9,7 +9,7 @@ cd provider-llama-cpp
 
 ## Install llama.cpp
 
-To begin, install `llama.cpp` by following the [instructions on their GitHub page](https://github.com/ggerganov/llama.cpp).
+To begin, install `llama.cpp` by following the [instructions on their GitHub page](https://github.com/ggml-org/llama.cpp).
 
 ## Starting the Server
 
@@ -20,6 +20,8 @@ To start the server, use the following command:
 ```
 
 You can check if it's running by visiting [http://localhost:9931](http://localhost:9931).
+With an older llama.cpp release, pass `--port 9931` explicitly or set
+`LLAMA_BASE_URL=http://localhost:8080` before running the evaluation.
 
 ## Configuring Promptfoo
 
