@@ -10,6 +10,7 @@ import {
   isCloudProvider,
   validateLinkedTargetId,
 } from '../util/cloud';
+import { getUiCatalogProvider, UI_CATALOG_PROVIDER_PREFIX } from '../util/config/uiProviders';
 import invariant from '../util/invariant';
 import { safeJsonStringify } from '../util/json';
 import {
@@ -25,7 +26,9 @@ import { getProviderFactories, mergeProviderEnv } from './registry';
 import type { EnvOverrides } from '../types/env';
 import type { LoadApiProviderContext, TestSuiteConfig } from '../types/index';
 import type {
+  ApiModerationProvider,
   ApiProvider,
+  ApiSimilarityProvider,
   ProviderConfig,
   ProviderFunction,
   ProviderOptions,
@@ -105,12 +108,97 @@ export async function loadApiProvider(
   );
 }
 
+async function createUiCatalogProvider(
+  reference: string,
+  promptSelectors?: string[],
+): Promise<ApiProvider> {
+  const selected = getUiCatalogProvider(reference);
+  if (!selected?.id) {
+    throw new Error('Unknown configured provider. Select it again from the provider catalog.');
+  }
+  // The selected configuration, including its environment and endpoint, belongs to the server.
+  const provider = await loadApiProvider(selected.id, {
+    options: selected,
+    basePath: process.cwd(),
+    env: {},
+  }).catch(() => {
+    throw new Error('Could not initialize the selected provider catalog entry.');
+  });
+  const hiddenError = 'The configured catalog provider could not complete the request.';
+  async function callWithCatalogEnv<T extends { error?: string }>(
+    invoke: () => Promise<T>,
+    signal?: AbortSignal,
+  ): Promise<T | { error: string }> {
+    try {
+      const result = await cliState.withEnv(selected?.env ?? {}, invoke);
+      return result.error ? { error: hiddenError } : result;
+    } catch {
+      signal?.throwIfAborted();
+      return { error: hiddenError };
+    }
+  }
+
+  const embed = provider.callEmbeddingApi?.bind(provider);
+  const classify = provider.callClassificationApi?.bind(provider);
+  const similarity = (provider as Partial<ApiSimilarityProvider>).callSimilarityApi?.bind(provider);
+  const moderate = (provider as Partial<ApiModerationProvider>).callModerationApi?.bind(provider);
+  return {
+    id: () => reference,
+    label: selected.label,
+    prompts: promptSelectors ?? provider.prompts,
+    transform: provider.transform,
+    delay: provider.delay,
+    handlesOwnDelay: provider.handlesOwnDelay,
+    handlesOwnRetries: provider.handlesOwnRetries,
+    requiresSerialExecution:
+      provider.id() === 'browser-provider' && provider.config?.persistSession === true,
+    supportsEmbeddingCancellation: provider.supportsEmbeddingCancellation,
+    ...(embed && {
+      callEmbeddingApi: (...args: Parameters<typeof embed>) =>
+        callWithCatalogEnv(() => embed(...args)),
+    }),
+    ...(classify && {
+      callClassificationApi: (...args: Parameters<typeof classify>) =>
+        callWithCatalogEnv(() => classify(...args), args[1]?.abortSignal),
+    }),
+    ...(similarity && {
+      callSimilarityApi: (...args: Parameters<typeof similarity>) =>
+        callWithCatalogEnv(() => similarity(...args)),
+    }),
+    ...(moderate && {
+      callModerationApi: (...args: Parameters<typeof moderate>) =>
+        callWithCatalogEnv(() => moderate(...args), args[3]?.abortSignal),
+    }),
+    inputs: provider.inputs,
+    getSessionId: provider.getSessionId?.bind(provider),
+    getAudioInputFormat: provider.getAudioInputFormat?.bind(provider),
+    cleanup: provider.cleanup?.bind(provider),
+    cleanupAfterEvaluation: provider.cleanupAfterEvaluation?.bind(provider),
+    callApi(prompt, ctx, options) {
+      const callContext = ctx && {
+        ...ctx,
+        debug: false,
+        prompt: { ...ctx.prompt, config: undefined },
+      };
+      return callWithCatalogEnv(
+        () =>
+          provider.callApi(prompt, callContext, { ...options, protectCatalogCredentials: true }),
+        options?.abortSignal,
+      );
+    },
+  };
+}
+
 async function createApiProvider(
   providerPath: string,
   context: LoadApiProviderContext,
   completeTemplateEnv?: EnvOverrides,
   callerEnv?: EnvOverrides,
 ): Promise<ApiProvider> {
+  if (providerPath.startsWith(UI_CATALOG_PROVIDER_PREFIX)) {
+    return createUiCatalogProvider(providerPath, context.options?.prompts);
+  }
+
   const { options = {}, basePath, env } = context;
 
   // Merge environment overrides: context.env (test suite level) is base,

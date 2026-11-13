@@ -29,7 +29,7 @@ describe('getAvailableProviders configured provider catalog', () => {
 
   async function loadWith(config: unknown) {
     mocks.loadYaml.mockReturnValue(config);
-    const mod = await import('../../../src/server/config/serverConfig');
+    const mod = await import('../../../src/util/config/uiProviders');
     return mod.getAvailableProviders();
   }
 
@@ -37,7 +37,7 @@ describe('getAvailableProviders configured provider catalog', () => {
     'keeps empty or invalid existing catalogs restricted: %j',
     async (config) => {
       expect(await loadWith(config)).toEqual([]);
-      const mod = await import('../../../src/server/config/serverConfig');
+      const mod = await import('../../../src/util/config/uiProviders');
       expect(mod.hasCustomProviderConfig()).toBe(true);
     },
   );
@@ -46,7 +46,7 @@ describe('getAvailableProviders configured provider catalog', () => {
     mocks.loadYaml.mockImplementation(() => {
       throw new Error('Invalid YAML');
     });
-    const mod = await import('../../../src/server/config/serverConfig');
+    const mod = await import('../../../src/util/config/uiProviders');
     expect(mod.getAvailableProviders()).toEqual([]);
     expect(mod.hasCustomProviderConfig()).toBe(true);
   });
@@ -54,7 +54,7 @@ describe('getAvailableProviders configured provider catalog', () => {
   it('caches catalog contents and presence together until restart', async () => {
     const approved = { id: 'echo', label: 'Approved' };
     expect(await loadWith({ providers: [approved] })).toEqual([approved]);
-    const mod = await import('../../../src/server/config/serverConfig');
+    const mod = await import('../../../src/util/config/uiProviders');
     expect(mod.hasCustomProviderConfig()).toBe(true);
 
     mocks.loadYaml.mockReturnValue({ providers: [{ id: 'echo', label: 'Changed' }] });
@@ -65,7 +65,7 @@ describe('getAvailableProviders configured provider catalog', () => {
     expect(mocks.readFileSync).toHaveBeenCalledTimes(1);
 
     vi.resetModules();
-    const restarted = await import('../../../src/server/config/serverConfig');
+    const restarted = await import('../../../src/util/config/uiProviders');
     expect(restarted.getAvailableProviders()).toEqual([]);
     expect(restarted.hasCustomProviderConfig()).toBe(false);
 
@@ -73,7 +73,7 @@ describe('getAvailableProviders configured provider catalog', () => {
     expect(restarted.getAvailableProviders()).toEqual([]);
     expect(restarted.hasCustomProviderConfig()).toBe(false);
     vi.resetModules();
-    const reloaded = await import('../../../src/server/config/serverConfig');
+    const reloaded = await import('../../../src/util/config/uiProviders');
     expect(reloaded.getAvailableProviders()).toEqual([{ id: 'echo', label: 'Changed' }]);
     expect(reloaded.hasCustomProviderConfig()).toBe(true);
   });
@@ -92,6 +92,47 @@ describe('getAvailableProviders configured provider catalog', () => {
       env: { TEAM_KEY: 'fixture' },
     };
     expect(await loadWith({ providers: [provider] })).toEqual([provider]);
+  });
+
+  it('projects only references and public labels while retaining distinct server settings', async () => {
+    const primary = {
+      id: 'http',
+      label: 'Catalog gateway',
+      config: { headers: { 'X-Opaque': 'fixture-hidden-value' } },
+      env: { ARBITRARY_FIELD: 'fixture-hidden-env' },
+      anotherField: 'fixture-hidden-option',
+    };
+    const secondary = { ...primary, label: 'Other gateway' };
+    await loadWith({ providers: [primary, secondary] });
+    const catalog = await import('../../../src/util/config/uiProviders');
+    const entries = catalog.getPublicProviderCatalog();
+
+    expect(entries).toEqual([
+      { id: expect.stringMatching(/^ui-catalog:/), label: primary.label },
+      { id: expect.stringMatching(/^ui-catalog:/), label: secondary.label },
+    ]);
+    expect(entries[0].id).not.toBe(entries[1].id);
+    expect(catalog.getUiCatalogProvider(entries[0].id)).toEqual(primary);
+    expect(catalog.getUiCatalogProvider('ui-catalog:unknown')).toBeUndefined();
+    expect(catalog.getPublicProviderCatalog()).toEqual(entries);
+  });
+
+  it('omits URL credentials from default labels for both absolute and shorthand IDs', async () => {
+    await loadWith({
+      providers: [
+        { id: 'https://fixture-user:fixture-password@normal.test/path?other=fixture-token' },
+        { id: 'https:shorthand.test/path?other=fixture-shorthand' },
+        { id: 'https://normal.test/different-path' },
+      ],
+    });
+    const catalog = await import('../../../src/util/config/uiProviders');
+    const entries = catalog.getPublicProviderCatalog();
+    expect(entries.map(({ label }) => label)).toEqual([
+      'https://normal.test',
+      'https://shorthand.test',
+      'https://normal.test',
+    ]);
+    expect(new Set(entries.map(({ id }) => id)).size).toBe(3);
   });
 
   it('skips entries with labels the UI cannot render', async () => {

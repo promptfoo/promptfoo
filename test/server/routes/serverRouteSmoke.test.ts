@@ -223,8 +223,9 @@ vi.mock('../../../src/node/testProvider', () => ({
   testProviderSession: mocks.testProviderSession,
 }));
 
-vi.mock('../../../src/server/config/serverConfig', () => ({
+vi.mock('../../../src/util/config/uiProviders', () => ({
   getAvailableProviders: mocks.getAvailableProviders,
+  getPublicProviderCatalog: () => [],
   hasCustomProviderConfig: () => false,
 }));
 

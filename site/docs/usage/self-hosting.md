@@ -482,7 +482,8 @@ spec:
 When `ui-providers.yaml` exists:
 
 - Only configured providers shown in the eval creator (replaces the built-in provider list)
-- Adding or editing a provider picks from the configured catalog; provider settings from the file are preserved as-is
+- Adding or editing a provider picks from the configured catalog. The browser receives only display labels and references, and the server loads the selected provider settings at runtime. Use distinct labels when multiple entries share the same provider ID.
+- Saved configurations use catalog references. To rerun them, keep the matching catalog available to the Promptfoo process. Renaming the provider ID or label requires selecting the provider again.
 - Configuration is cached - restart required after changes: `docker restart promptfoo_container`
 
 :::

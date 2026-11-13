@@ -1844,7 +1844,9 @@ function adjustConcurrencyForSerialFeatures({
 
   const usesStoreOutputAs = tests.some((t) => t.options?.storeOutputAs);
   const usesPersistentBrowserSession = providers.some(
-    (provider) => provider.id() === 'browser-provider' && provider.config?.persistSession === true,
+    (provider) =>
+      provider.requiresSerialExecution ||
+      (provider.id() === 'browser-provider' && provider.config?.persistSession === true),
   );
   if (usesConversationVar) {
     logger.info(

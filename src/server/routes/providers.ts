@@ -12,8 +12,12 @@ import {
 } from '../../redteam/commands/discover';
 import { neverGenerateRemote } from '../../redteam/remoteGeneration';
 import { ProviderSchemas } from '../../types/api/providers';
+import {
+  getAvailableProviders,
+  getPublicProviderCatalog,
+  hasCustomProviderConfig,
+} from '../../util/config/uiProviders';
 import { fetchWithProxy } from '../../util/fetch/index';
-import { getAvailableProviders, hasCustomProviderConfig } from '../config/serverConfig';
 import { sendError } from '../utils/errors';
 import type { Request, Response } from 'express';
 
@@ -53,7 +57,7 @@ providersRouter.get('/', (_req: Request, res: Response): void => {
       ProviderSchemas.Catalog.Response.parse({
         success: true,
         data: {
-          providers: getAvailableProviders(),
+          providers: getPublicProviderCatalog(),
           hasCustomConfig: hasCustomProviderConfig(),
         },
       }),

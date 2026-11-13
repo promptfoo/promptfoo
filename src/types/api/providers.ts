@@ -109,7 +109,7 @@ export const CatalogResponseSchema = z.union([
   z.object({
     success: z.literal(true),
     data: z.object({
-      providers: z.array(JsonProviderOptionsWithIdSchema),
+      providers: z.array(z.object({ id: z.string(), label: z.string() }).strict()),
       hasCustomConfig: z.boolean(),
     }),
   }),

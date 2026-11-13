@@ -15,7 +15,7 @@ const createGeneratedChatConfig = () => ({
 // Mock dependencies
 vi.mock('../../../src/providers/index');
 vi.mock('../../../src/node/testProvider');
-vi.mock('../../../src/server/config/serverConfig');
+vi.mock('../../../src/util/config/uiProviders');
 vi.mock('../../../src/redteam/commands/discover');
 vi.mock('../../../src/redteam/remoteGeneration');
 vi.mock('../../../src/util/fetch/index');
@@ -35,8 +35,9 @@ import { doTargetPurposeDiscovery } from '../../../src/redteam/commands/discover
 import { neverGenerateRemote } from '../../../src/redteam/remoteGeneration';
 import {
   getAvailableProviders,
+  getPublicProviderCatalog,
   hasCustomProviderConfig,
-} from '../../../src/server/config/serverConfig';
+} from '../../../src/util/config/uiProviders';
 import { fetchWithProxy } from '../../../src/util/fetch/index';
 
 const mockedLoadApiProvider = vi.mocked(loadApiProvider);
@@ -53,6 +54,7 @@ describe('Providers Routes', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     vi.mocked(hasCustomProviderConfig).mockReturnValue(false);
+    vi.mocked(getPublicProviderCatalog).mockReturnValue([]);
     // Default to the non-cloud path so host-dependent assertions are deterministic
     // regardless of the machine's cloud-login state.
     vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
@@ -120,33 +122,17 @@ describe('Providers Routes', () => {
       });
     });
 
-    it('should return configured providers with id, label, and config preserved', async () => {
+    it('returns public references and labels', async () => {
       vi.mocked(hasCustomProviderConfig).mockReturnValue(true);
-      mockedGetAvailableProviders.mockReturnValue([
-        { id: 'openai:gpt-4o-mini' },
-        {
-          id: 'http://llm-gateway.internal/v1',
-          label: 'Internal Gateway',
-          config: { method: 'POST', headers: { Authorization: 'Bearer x' } },
-        },
-      ]);
+      const providers = [{ id: 'ui-catalog:entry', label: 'Internal Gateway' }];
+      vi.mocked(getPublicProviderCatalog).mockReturnValue(providers);
 
       const response = await api.get('/api/providers');
 
       expect(response.status).toBe(200);
       expect(response.body).toEqual({
         success: true,
-        data: {
-          providers: [
-            { id: 'openai:gpt-4o-mini' },
-            {
-              id: 'http://llm-gateway.internal/v1',
-              label: 'Internal Gateway',
-              config: { method: 'POST', headers: { Authorization: 'Bearer x' } },
-            },
-          ],
-          hasCustomConfig: true,
-        },
+        data: { providers, hasCustomConfig: true },
       });
     });
 
@@ -159,7 +145,7 @@ describe('Providers Routes', () => {
     });
 
     it('should return standardized 500 errors when catalog loading fails', async () => {
-      mockedGetAvailableProviders.mockImplementation(() => {
+      vi.mocked(getPublicProviderCatalog).mockImplementation(() => {
         throw new Error('catalog unavailable');
       });
 

@@ -35,6 +35,9 @@ function getProviderLabel(provider: ProviderOptions): string {
 function getProviderType(provider: ProviderOptions): string {
   const id = typeof provider.id === 'string' ? provider.id : '';
 
+  if (id.startsWith('ui-catalog:')) {
+    return 'Server Catalog';
+  }
   if (id === 'openai:codex-security' || id.startsWith('openai:codex-security:')) {
     return 'Codex Security SDK';
   }
@@ -136,9 +139,11 @@ export function ProvidersListSection({
                         {type}
                       </Badge>
                     </div>
-                    <p className="text-sm text-muted-foreground font-mono truncate">
-                      {typeof provider.id === 'string' ? provider.id : 'custom provider'}
-                    </p>
+                    {type !== 'Server Catalog' && (
+                      <p className="text-sm text-muted-foreground font-mono truncate">
+                        {typeof provider.id === 'string' ? provider.id : 'custom provider'}
+                      </p>
+                    )}
                   </div>
                 </div>
 
