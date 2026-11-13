@@ -9,7 +9,7 @@ const OUTPUT_TOKENS = 5_000;
 const costAtRates = (input: number, output: number) =>
   (INPUT_TOKENS / 1e6) * input + (OUTPUT_TOKENS / 1e6) * output;
 
-describe('Bedrock Converse GPT-6 Luna and GPT-6.1 Sol pricing', () => {
+describe('Bedrock Converse GPT-6 profile pricing', () => {
   it.each([
     ['us.openai.gpt-6-luna', 0.11, 0.011, 0.1375, 0.55],
     ['global.openai.gpt-6-luna', 0.1, 0.01, 0.125, 0.5],
@@ -20,6 +20,18 @@ describe('Bedrock Converse GPT-6 Luna and GPT-6.1 Sol pricing', () => {
       0.1,
       2.5,
       10,
+    ],
+    ['us.openai.gpt-6.1-terra', 1.1, 0.055, 1.375, 5.5],
+    ['global.openai.gpt-6.1-terra', 1, 0.05, 1.25, 5],
+    ['us.openai.gpt-6-sol', 2.2, 0.22, 2.75, 11],
+    ['global.openai.gpt-6-sol', 2, 0.2, 2.5, 10],
+    ['us.openai.gpt-6-astra', 11, 1.1, 13.75, 55],
+    [
+      'arn:aws:bedrock:us-east-1:123456789012:inference-profile/global.openai.gpt-6-astra',
+      10,
+      1,
+      12.5,
+      50,
     ],
   ] as const)(
     'prices every token in %s at the published context tier',
@@ -40,6 +52,8 @@ describe('Bedrock Converse GPT-6 Luna and GPT-6.1 Sol pricing', () => {
     'openai.gpt-6-luna',
     'eu.openai.gpt-6-luna',
     'us.openai.gpt-6.1-sol-future',
+    'us.openai.gpt-6.99-fakemodel',
+    'eu.openai.gpt-6.1-terra',
     'arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/us.openai.gpt-6-luna',
   ])('leaves unsupported profile %s unpriced', (model) => {
     expect(calculateBedrockCost(model, 1000, 100, 0, 0, 'us-east-1')).toBeUndefined();
@@ -78,7 +92,15 @@ describe('Bedrock Converse GPT-6 Luna and GPT-6.1 Sol pricing', () => {
   });
 
   it.each(['priority', 'flex', 'reserved'] as const)('does not guess %s pricing', (type) => {
-    expect(calculateBedrockCost(usLuna, 1000, 100, 0, 0, 'us-east-1', { type })).toBeUndefined();
+    // AWS publishes only Standard meters for these profiles.
+    for (const model of [
+      usLuna,
+      'us.openai.gpt-6.1-terra',
+      'global.openai.gpt-6-sol',
+      'us.openai.gpt-6-astra',
+    ]) {
+      expect(calculateBedrockCost(model, 1000, 100, 0, 0, 'us-east-1', { type })).toBeUndefined();
+    }
   });
 
   it('does not price unpublished one-hour cache writes', () => {
