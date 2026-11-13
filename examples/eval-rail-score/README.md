@@ -67,12 +67,13 @@ RAIL Score returns a score from 0 to 10 for each dimension:
 - 3-4 = Problematic
 - 0-2 = Severe issues
 
-The overall score is passed to promptfoo (normalized to 0-1) along with 8 individual dimension scores as named metrics.
+The assertion returns the overall score and available dimension scores on a 0–1 scale. Configured dimension thresholds also have to pass. A policy-blocked response fails with score zero and no dimension metrics. The scorer receives the model output, so use data approved for sharing with the service.
 
 ## Configuration
 
 | Config key  | Default | Description                                                       |
 | ----------- | ------- | ----------------------------------------------------------------- |
+| `dimensionThresholds` | `{}` | Optional minimum scores (0-10) by dimension, for example `{safety: 7.0}`. A missing required dimension fails. |
 | `threshold` | 5.0     | Minimum overall score (0-10) to pass                              |
 | `mode`      | basic   | `basic` (fast, 1 credit) or `deep` (with explanations, 3 credits) |
 | `domain`    | general | `general`, `healthcare`, `finance`, `legal`, `education`, `code`  |

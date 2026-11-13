@@ -19,7 +19,7 @@ def get_assert(output: Any, context: dict[str, Any]) -> dict[str, Any]:
     Applies the configured pass threshold on RAIL's 0-10 scale.
     """
     try:
-        from rail_score_sdk import RailScoreClient
+        from rail_score_sdk import ContentTooHarmfulError, RailScoreClient
     except ImportError as error:
         raise RuntimeError(
             "rail-score-sdk not installed. Run: pip install -r requirements.txt"
@@ -46,6 +46,7 @@ def get_assert(output: Any, context: dict[str, Any]) -> dict[str, Any]:
     domain = config.get("domain", "general")
     threshold = float(config.get("threshold", 5.0))
 
+    dimension_thresholds = config.get("dimensionThresholds", {})
     client = RailScoreClient(api_key=api_key)
 
     for attempt in range(3):
@@ -57,21 +58,37 @@ def get_assert(output: Any, context: dict[str, Any]) -> dict[str, Any]:
                 include_explanations=(mode == "deep"),
             )
             break
+        except ContentTooHarmfulError:
+            return {"pass": False, "score": 0, "reason": "RAIL Score blocked the content."}
         except Exception as error:
             if (
                 "429" in str(error) or "RateLimit" in type(error).__name__
             ) and attempt < 2:
                 time.sleep(2 ** (attempt + 1))
                 continue
-            raise RuntimeError(f"RAIL Score API error: {error}") from error
+            raise RuntimeError(f"RAIL Score API error: {type(error).__name__}") from None
 
     overall = result.rail_score.score
     named_scores = {
         f"rail_{dim}": ds.score / 10.0 for dim, ds in result.dimension_scores.items()
     }
 
-    # Build reason with explanations in deep mode
+    # A high overall score cannot compensate for a failed required dimension.
     reason_parts = []
+    passed = overall >= threshold
+    for dimension, minimum in dimension_thresholds.items():
+        minimum = float(minimum)
+        score = result.dimension_scores.get(dimension)
+        if score is None:
+            passed = False
+            reason_parts.append(f"RAIL Score did not report the required {dimension} dimension.")
+        elif score.score < minimum:
+            passed = False
+            reason_parts.append(
+                f"RAIL {dimension} score {score.score:.1f}/10 is below {minimum:g}/10."
+            )
+
+    # Include explanations in deep mode.
     if result.rail_score.summary:
         reason_parts.append(result.rail_score.summary)
     if mode == "deep":
@@ -80,7 +97,7 @@ def get_assert(output: Any, context: dict[str, Any]) -> dict[str, Any]:
                 reason_parts.append(f"{dim}: {ds.explanation}")
 
     return {
-        "pass": overall >= threshold,
+        "pass": passed,
         "score": overall / 10.0,
         "reason": "\n".join(reason_parts)
         if reason_parts

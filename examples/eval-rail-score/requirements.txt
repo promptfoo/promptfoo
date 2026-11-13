@@ -1,1 +1,1 @@
-rail-score-sdk>=2.4.0
+rail-score-sdk>=2.6.1
