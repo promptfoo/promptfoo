@@ -1,4 +1,4 @@
-import { PageContainer } from '@app/components/layout/PageContainer';
+import { FIXED_PAGE_CONTAINER_TOP, PageContainer } from '@app/components/layout/PageContainer';
 import { PageHeader } from '@app/components/layout/PageHeader';
 import { Button } from '@app/components/ui/button';
 import { EVAL_ROUTES, ROUTES } from '@app/constants/routes';
@@ -13,7 +13,10 @@ export default function EvalsIndexPage() {
   usePageMeta({ title: 'Evals', description: 'Browse evaluation runs' });
 
   return (
-    <PageContainer className="fixed top-[calc(var(--nav-height)+var(--update-banner-height,0px))] left-0 right-0 bottom-0 flex flex-col overflow-hidden min-h-0">
+    <PageContainer
+      className="fixed left-0 right-0 bottom-0 flex flex-col overflow-hidden min-h-0"
+      style={{ top: FIXED_PAGE_CONTAINER_TOP }}
+    >
       <PageHeader>
         <div className="mx-auto flex w-full max-w-screen-2xl flex-wrap items-center justify-between gap-4 px-4 py-6 sm:px-8">
           <div>

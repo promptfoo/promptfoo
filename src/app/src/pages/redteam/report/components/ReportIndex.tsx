@@ -1,4 +1,4 @@
-import { PageContainer } from '@app/components/layout/PageContainer';
+import { FIXED_PAGE_CONTAINER_TOP, PageContainer } from '@app/components/layout/PageContainer';
 import { PageHeader } from '@app/components/layout/PageHeader';
 import { Button } from '@app/components/ui/button';
 import { REDTEAM_ROUTES } from '@app/constants/routes';
@@ -10,7 +10,10 @@ export default function ReportIndex() {
   const navigate = useNavigate();
 
   return (
-    <PageContainer className="fixed top-[calc(var(--nav-height)_+_var(--update-banner-height,0px))] left-0 right-0 bottom-0 overflow-y-auto">
+    <PageContainer
+      className="fixed left-0 right-0 bottom-0 overflow-y-auto"
+      style={{ top: FIXED_PAGE_CONTAINER_TOP }}
+    >
       <PageHeader>
         <div className="mx-auto flex w-full max-w-screen-2xl flex-wrap items-center justify-between gap-4 px-4 py-6 sm:px-8">
           <div>
