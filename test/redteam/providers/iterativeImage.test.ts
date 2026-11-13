@@ -22,7 +22,6 @@ vi.mock('../../../src/logger', async (importOriginal) => ({
 
 vi.mock('../../../src/envars', async (importOriginal) => ({
   ...(await importOriginal()),
-  getEnvInt: vi.fn().mockReturnValue(2), // 2 iterations for tests
   getEnvBool: vi.fn().mockReturnValue(false),
 }));
 
@@ -59,6 +58,7 @@ describe('RedteamIterativeImageProvider', () => {
   let redteamProviderManager: typeof import('../../../src/redteam/providers/shared').redteamProviderManager;
 
   beforeEach(async () => {
+    vi.stubEnv('PROMPTFOO_NUM_JAILBREAK_ITERATIONS', '2');
     vi.clearAllMocks();
 
     // Import mocked modules
@@ -83,6 +83,7 @@ describe('RedteamIterativeImageProvider', () => {
   });
 
   afterEach(() => {
+    vi.unstubAllEnvs();
     vi.clearAllMocks();
   });
 
@@ -171,9 +172,7 @@ describe('RedteamIterativeImageProvider', () => {
     const shared = await vi.importActual<typeof import('../../../src/redteam/providers/shared')>(
       '../../../src/redteam/providers/shared',
     );
-    const { getEnvInt } = await import('../../../src/envars');
-    const previousGetEnvInt = vi.mocked(getEnvInt).getMockImplementation();
-    vi.mocked(getEnvInt).mockReturnValue(1);
+    vi.stubEnv('PROMPTFOO_NUM_JAILBREAK_ITERATIONS', '1');
     vi.mocked(getTargetResponse).mockReset().mockImplementation(shared.getTargetResponse);
     mockRedteamProvider.callApi.mockResolvedValueOnce({
       output: JSON.stringify({ improvement: 'Use a greeting', prompt: 'Say hello' }),
@@ -217,10 +216,6 @@ describe('RedteamIterativeImageProvider', () => {
       });
     } finally {
       vi.mocked(getTargetResponse).mockReset();
-      vi.mocked(getEnvInt).mockReset();
-      if (previousGetEnvInt) {
-        vi.mocked(getEnvInt).mockImplementation(previousGetEnvInt);
-      }
     }
   });
 
@@ -249,9 +244,6 @@ describe('RedteamIterativeImageProvider', () => {
       const shared = await vi.importActual<typeof import('../../../src/redteam/providers/shared')>(
         '../../../src/redteam/providers/shared',
       );
-      const { getEnvInt } = await import('../../../src/envars');
-      const previousGetEnvInt = vi.mocked(getEnvInt).getMockImplementation();
-      vi.mocked(getEnvInt).mockReturnValue(2);
       vi.mocked(getTargetResponse).mockReset().mockImplementation(shared.getTargetResponse);
       mockRedteamProvider.callApi.mockResolvedValue({
         output: JSON.stringify({ improvement: 'Use a greeting', prompt: 'Say hello' }),
@@ -310,10 +302,6 @@ describe('RedteamIterativeImageProvider', () => {
         });
       } finally {
         vi.mocked(getTargetResponse).mockReset();
-        vi.mocked(getEnvInt).mockReset();
-        if (previousGetEnvInt) {
-          vi.mocked(getEnvInt).mockImplementation(previousGetEnvInt);
-        }
       }
     },
   );
@@ -331,8 +319,7 @@ describe('RedteamIterativeImageProvider', () => {
 
   it('should accumulate token usage from all provider calls', async () => {
     // Only 1 iteration for this test to keep it simple
-    const { getEnvInt } = await import('../../../src/envars');
-    vi.mocked(getEnvInt).mockReturnValue(1);
+    vi.stubEnv('PROMPTFOO_NUM_JAILBREAK_ITERATIONS', '1');
 
     // Setup redteam provider to return improvement + prompt, then vision, then judge
     vi.mocked(mockRedteamProvider.callApi)
@@ -434,8 +421,7 @@ describe('RedteamIterativeImageProvider', () => {
     });
 
     // Only 1 iteration for this test
-    const { getEnvInt } = await import('../../../src/envars');
-    vi.mocked(getEnvInt).mockReturnValue(1);
+    vi.stubEnv('PROMPTFOO_NUM_JAILBREAK_ITERATIONS', '1');
 
     const provider = new RedteamIterativeProvider({});
 
@@ -474,8 +460,7 @@ describe('RedteamIterativeImageProvider', () => {
       tokenUsage: { prompt: 50, completion: 25, total: 75, numRequests: 1 },
     });
 
-    const { getEnvInt } = await import('../../../src/envars');
-    vi.mocked(getEnvInt).mockReturnValue(1);
+    vi.stubEnv('PROMPTFOO_NUM_JAILBREAK_ITERATIONS', '1');
 
     const provider = new RedteamIterativeProvider({});
 
@@ -508,8 +493,7 @@ describe('RedteamIterativeImageProvider', () => {
       tokenUsage: { prompt: 5, completion: 0, total: 5, numRequests: 1 },
     });
 
-    const { getEnvInt } = await import('../../../src/envars');
-    vi.mocked(getEnvInt).mockReturnValue(1);
+    vi.stubEnv('PROMPTFOO_NUM_JAILBREAK_ITERATIONS', '1');
 
     const provider = new RedteamIterativeProvider({});
 
@@ -564,8 +548,7 @@ describe('RedteamIterativeImageProvider', () => {
       tokenUsage: { prompt: 50, completion: 25, total: 75, numRequests: 1 },
     });
 
-    const { getEnvInt } = await import('../../../src/envars');
-    vi.mocked(getEnvInt).mockReturnValue(1);
+    vi.stubEnv('PROMPTFOO_NUM_JAILBREAK_ITERATIONS', '1');
 
     const provider = new RedteamIterativeProvider({});
 
@@ -623,8 +606,7 @@ describe('RedteamIterativeImageProvider', () => {
       tokenUsage: { prompt: 50, completion: 25, total: 75, numRequests: 1 },
     });
 
-    const { getEnvInt } = await import('../../../src/envars');
-    vi.mocked(getEnvInt).mockReturnValue(1);
+    vi.stubEnv('PROMPTFOO_NUM_JAILBREAK_ITERATIONS', '1');
     const { renderPrompt } = await import('../../../src/evaluatorHelpers');
 
     const provider = new RedteamIterativeProvider({
