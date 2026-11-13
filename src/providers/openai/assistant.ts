@@ -11,7 +11,7 @@ import {
   withGenAIToolSpan,
 } from '../tracing';
 import { hasHeaderOverride, OPENAI_ORGANIZATION_HEADER, OpenAiGenericProvider } from '.';
-import { assertOpenAiApiModel, failApiCall, getTokenUsage } from './util';
+import { failApiCall, getTokenUsage, isOpenAiFirstPartyApiUrl } from './util';
 import type { Metadata } from 'openai/resources/shared';
 
 import type { EnvOverrides } from '../../types/env';
@@ -58,7 +58,12 @@ export class OpenAiAssistantProvider extends OpenAiGenericProvider {
     super(assistantId, options);
     this.assistantConfig = options.config || {};
     this.assistantId = assistantId;
-    assertOpenAiApiModel(this.assistantConfig.modelName, this.getApiUrl());
+    if (isOpenAiFirstPartyApiUrl(this.getApiUrl())) {
+      throw new Error(
+        'OpenAI retired the Assistants API on August 26, 2026. Migrate to openai:responses:<model>. ' +
+          'See https://developers.openai.com/api/docs/assistants/migration.',
+      );
+    }
 
     // Preload function callbacks if available
     if (this.assistantConfig.functionToolCallbacks) {
