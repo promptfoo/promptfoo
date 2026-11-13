@@ -72,7 +72,7 @@ cache:
 
 ## Add a quality gate
 
-If you want a custom pass-rate threshold instead of failing on any test failure, write the JSON output and check the stats in a second command:
+Set `PROMPTFOO_PASS_RATE_THRESHOLD` to apply a custom pass-rate threshold while writing the JSON report:
 
 ```yaml
 phases:
@@ -83,14 +83,7 @@ phases:
       - npm install -g promptfoo
   build:
     commands:
-      - promptfoo eval -c promptfooconfig.yaml --share -o promptfoo-results.json
-      - |
-        PASS_RATE=$(jq '.results.stats.successes / (.results.stats.successes + .results.stats.failures) * 100' promptfoo-results.json)
-        echo "Pass rate: ${PASS_RATE}%"
-        if (( $(echo "${PASS_RATE} < 95" | bc -l) )); then
-          echo "Quality gate failed: ${PASS_RATE}% < 95%"
-          exit 1
-        fi
+      - PROMPTFOO_PASS_RATE_THRESHOLD=95 promptfoo eval -c promptfooconfig.yaml --share -o promptfoo-results.json
 ```
 
 ## Run promptfoo code scans on CodeCommit pull requests
