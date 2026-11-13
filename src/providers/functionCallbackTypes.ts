@@ -2,7 +2,14 @@
  * Type definitions for function callbacks across providers
  */
 
-import type { McpToolCallEntry } from '../types/providers';
+/** Structured record from an MCP tool resolved by a provider callback handler. */
+export interface McpToolCallEntry {
+  name: string;
+  arguments?: unknown;
+  result?: unknown;
+  isError?: boolean;
+  source: 'mcp';
+}
 
 /**
  * Base structure for a function call
@@ -45,3 +52,10 @@ export interface FunctionCallResult {
    */
   toolCall?: McpToolCallEntry;
 }
+
+/** A callback result before conversion to a provider's tool-result wire format. */
+export type CallbackExecutionRecord = {
+  name: string;
+  arguments: string;
+  callId?: string;
+} & ({ output: unknown; isError: false } | { output?: undefined; isError: true; error: unknown });
