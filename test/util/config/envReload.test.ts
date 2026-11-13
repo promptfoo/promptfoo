@@ -122,6 +122,12 @@ describe('suite environment loading', () => {
     return configPath;
   }
 
+  it('combines prompt lists larger than the JavaScript function argument limit', async () => {
+    const prompts = Array.from({ length: 140_000 }, (_, index) => `prompt ${index}`);
+    const file = writeConfig('many-prompts', { prompts });
+    expect((await combineConfigs([file])).prompts).toEqual(prompts);
+  });
+
   it('accepts numeric and boolean env values from config files', async () => {
     const configPath = writeConfig('env-value-types', {
       env: {
@@ -1499,7 +1505,7 @@ describe('suite environment loading', () => {
         `- vars: { source: ${name} }\n`,
       );
       const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-      config.prompts = ['file://prompt.txt'];
+      config.prompts = ['file://prompt.txt', 'prompt.txt'];
       fs.writeFileSync(configPath, JSON.stringify(config));
       fs.writeFileSync(path.join(path.dirname(configPath), 'prompt.txt'), name);
     }
@@ -1514,7 +1520,8 @@ describe('suite environment loading', () => {
     const testNames = (config.tests as TestCase[]).map((test) => test.vars?.source);
     expect([...testNames].sort()).toEqual(names);
     expect(testNames.at(-1)).toBe('literal');
-    const { testSources } = await resolveConfigs({ config: [pattern, literal] }, {});
+    const { testSources, testSuite } = await resolveConfigs({ config: [pattern, literal] }, {});
+    expect(testSuite.prompts.map((prompt) => prompt.raw)).toEqual([testNames[0], ...testNames]);
     expect(testSources?.map((source) => source.basePath).sort()).toEqual(
       names.map((name) => path.join(tempDir, name)),
     );
