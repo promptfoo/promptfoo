@@ -89,8 +89,7 @@ export const GEMINI_4_MODELS = [
   { id: 'gemini-4-hydrogen', name: 'Gemini 4 Hydrogen' },
 ] as const;
 
-// Gemini models offered by `promptfoo init` and `promptfoo redteam init`. All use the global
-// Vertex endpoint.
+// Gemini models offered by `promptfoo redteam init`. All use the global Vertex endpoint.
 export const GEMINI_TARGET_MODELS = [...GEMINI_4_MODELS, ...GEMINI_FLASH_MODELS] as const;
 
 export function getVertexApiHostForRegion(region: string): string {
