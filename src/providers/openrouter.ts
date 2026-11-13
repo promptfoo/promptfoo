@@ -12,6 +12,7 @@ import {
   getOpenAiRateLimitResponse,
   OpenAiChatCompletionProvider,
 } from './openai/chat';
+import { isOpenAiJsonSchemaFormat } from './openai/prepare';
 import {
   appendOpenAiApiPath,
   formatOpenAiError,
@@ -35,7 +36,7 @@ import type {
   ProviderResponse,
 } from '../types/providers';
 import type { OpenAiChatCompletionCostData } from './openai/chat';
-import type { OpenAiCompletionOptions } from './openai/types';
+import type { OpenAiBillingConfig } from './openai/config';
 
 // OpenRouter's canonical error_type vocabulary (see
 // https://openrouter.ai/docs/api_reference/errors-and-debugging). The
@@ -161,7 +162,7 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
 
   protected override calculateResponseCost(
     data: OpenAiChatCompletionCostData,
-    config: OpenAiCompletionOptions,
+    config: OpenAiBillingConfig,
   ): number | undefined {
     return calculateOpenRouterResponseCost(data, config);
   }
@@ -290,7 +291,7 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
               ? policy.message
               : getOpenAiPartialOutput(
                   policy.partialOutput,
-                  config.response_format?.type === 'json_schema',
+                  isOpenAiJsonSchemaFormat(body.response_format),
                 ),
           ...(data.usage ? { tokenUsage: getTokenUsageWithRequestCount(data, cached) } : {}),
           cached,
@@ -446,7 +447,7 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
           : message.content
             ? getOpenAiPartialOutput(
                 message.content,
-                config.response_format?.type === 'json_schema',
+                isOpenAiJsonSchemaFormat(body.response_format),
               )
             : message.refusal || 'Content filtered by the model provider.',
         tokenUsage: getTokenUsageWithRequestCount(data, cached),
@@ -500,7 +501,7 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
       output = message.reasoning;
     }
     // Handle structured output
-    if (config.response_format?.type === 'json_schema') {
+    if (isOpenAiJsonSchemaFormat(body.response_format)) {
       // Prefer parsing the raw content to avoid the "Thinking:" prefix breaking JSON
       const jsonCandidate =
         typeof message?.content === 'string'
