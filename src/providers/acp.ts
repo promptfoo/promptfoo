@@ -112,6 +112,7 @@ function parseAcpConfig(config: AcpProviderConfig | undefined): AcpProviderConfi
 export class AcpProvider implements ApiProvider {
   public config: AcpProviderConfig;
   private providerId: string;
+  private readonly activeCalls = new Set<AbortController>();
 
   constructor(options: { id?: string; config?: AcpProviderConfig; env?: EnvOverrides }) {
     this.config = parseAcpConfig(options.config);
@@ -124,11 +125,13 @@ export class AcpProvider implements ApiProvider {
   }
 
   async cleanup(): Promise<void> {
-    // Resources are cleaned up per-call (finally block kills subprocess).
-    // No persistent state to tear down.
+    for (const call of this.activeCalls) {
+      call.abort();
+    }
   }
 
   async shutdown(): Promise<void> {
+    await this.cleanup();
     providerRegistry.unregister(this);
   }
 
@@ -137,8 +140,24 @@ export class AcpProvider implements ApiProvider {
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
-    // Check abort signal early
-    if (options?.abortSignal?.aborted) {
+    const lifecycle = new AbortController();
+    const signal = options?.abortSignal
+      ? AbortSignal.any([options.abortSignal, lifecycle.signal])
+      : lifecycle.signal;
+    this.activeCalls.add(lifecycle);
+    try {
+      return await this.callWithSignal(prompt, context, signal);
+    } finally {
+      this.activeCalls.delete(lifecycle);
+    }
+  }
+
+  private async callWithSignal(
+    prompt: string,
+    context: CallApiContextParams | undefined,
+    signal: AbortSignal,
+  ): Promise<ProviderResponse> {
+    if (signal.aborted) {
       return { output: '', error: 'ACP call aborted' };
     }
     // Resolve working directory
@@ -151,6 +170,9 @@ export class AcpProvider implements ApiProvider {
       workingDir,
       shouldBustProviderCache(context),
     );
+    if (signal.aborted) {
+      return { output: '', error: 'ACP call aborted' };
+    }
     if (cached) {
       return cached;
     }
@@ -171,7 +193,7 @@ export class AcpProvider implements ApiProvider {
 
         let result: ProviderResponse;
         try {
-          result = await this.executeAcp(prompt, workingDir, options?.abortSignal);
+          result = await this.executeAcp(prompt, workingDir, signal);
         } catch (err: unknown) {
           const error = err instanceof Error ? err.message : String(err);
           result = {
