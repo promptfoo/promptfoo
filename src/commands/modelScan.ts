@@ -562,9 +562,7 @@ async function saveAuditRecord(
     matchedAudit.updatedAt = Date.now();
     if (revisionInfo.modelId) {
       matchedAudit.modelId = revisionInfo.modelId;
-    }
-    if (revisionInfo.revisionSha) {
-      matchedAudit.revisionSha = revisionInfo.revisionSha;
+      matchedAudit.revisionSha = revisionInfo.revisionSha ?? null;
     }
     if (revisionInfo.contentHash) {
       matchedAudit.contentHash = revisionInfo.contentHash;

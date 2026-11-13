@@ -540,10 +540,16 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
 
       toolUses.forEach((toolUse, index) => {
         const resultBlock = toolResultBlocks[index];
+        let input: unknown = toolUse.input;
+        try {
+          input = coerceMcpToolInput(toolUse.input);
+        } catch {
+          // Keep malformed input as evidence; the tool result already reports the parse error.
+        }
         toolCalls.push({
           id: toolUse.id,
           name: toolUse.name,
-          input: coerceMcpToolInput(toolUse.input),
+          input,
           output: resultBlock.content,
           is_error: resultBlock.is_error ?? false,
         });

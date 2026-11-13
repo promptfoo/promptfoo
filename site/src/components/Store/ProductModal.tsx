@@ -192,6 +192,7 @@ function SingleProductModal() {
 
     if (matchingVariant) {
       setSelectedVariantId(matchingVariant.id);
+      setCurrentImageIndex(0);
     } else {
       // Fallback: find any variant with the selected attribute name
       const fallbackVariant = selectedProduct.variants.find(
@@ -200,6 +201,7 @@ function SingleProductModal() {
       );
       if (fallbackVariant) {
         setSelectedVariantId(fallbackVariant.id);
+        setCurrentImageIndex(0);
       }
     }
   };

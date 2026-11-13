@@ -891,6 +891,81 @@ describe('Re-scan on version change behavior', () => {
     expect((ModelAudit.create as Mock).mock.calls[0][0]).not.toHaveProperty('revisionSha');
   });
 
+  it.each([undefined, 'same-content'])(
+    'clears a reused audit revision when the alias changes with content hash %s',
+    async (contentHash) => {
+      vi.mocked(isHuggingFaceModel).mockReturnValue(true);
+      vi.mocked(parseHuggingFaceModel).mockReturnValue({ owner: 'test-owner', repo: 'test-model' });
+      const metadata = {
+        modelId: 'test-owner/test-model',
+        lastModified: '2026-04-27T00:00:00.000Z',
+        author: 'test-owner',
+      };
+      vi.mocked(getHuggingFaceMetadata)
+        .mockResolvedValueOnce({ ...metadata, sha: 'before-scan' })
+        .mockResolvedValueOnce({ ...metadata, sha: 'after-scan' });
+      const existingAudit = {
+        id: 'existing-scan-id',
+        revisionSha: 'before-scan',
+        contentHash,
+        save: vi.fn().mockResolvedValue(undefined),
+      };
+      vi.mocked(ModelAudit.findByRevision).mockResolvedValue(existingAudit as any);
+      const results = {
+        ...JSON.parse(VALID_SCAN_OUTPUT),
+        ...(contentHash ? { content_hash: contentHash } : {}),
+      };
+      vi.mocked(spawn).mockReturnValue(
+        asMockChildProcess(createMockChildProcess({ stdoutData: JSON.stringify(results) })),
+      );
+
+      modelScanCommand(program);
+      await program.commands[0].parseAsync(['node', 'scan-model', 'hf://test-owner/test-model']);
+
+      expect(existingAudit.save).toHaveBeenCalledTimes(1);
+      expect(existingAudit).toMatchObject({ revisionSha: null, contentHash, results });
+      expect(ModelAudit.create).not.toHaveBeenCalled();
+      expect(process.exitCode).toBe(0);
+    },
+  );
+
+  it.each(['unchanged', 'unavailable'])(
+    'retains a reused audit revision when post-scan metadata is %s',
+    async (postScanState) => {
+      vi.mocked(isHuggingFaceModel).mockReturnValue(true);
+      vi.mocked(parseHuggingFaceModel).mockReturnValue({ owner: 'test-owner', repo: 'test-model' });
+      const metadata = {
+        modelId: 'test-owner/test-model',
+        sha: 'before-scan',
+        lastModified: '2026-04-27T00:00:00.000Z',
+        author: 'test-owner',
+      };
+      vi.mocked(getHuggingFaceMetadata).mockResolvedValueOnce(metadata);
+      if (postScanState === 'unchanged') {
+        vi.mocked(getHuggingFaceMetadata).mockResolvedValueOnce(metadata);
+      } else {
+        vi.mocked(getHuggingFaceMetadata).mockRejectedValueOnce(new Error('metadata unavailable'));
+      }
+      const existingAudit = {
+        id: 'existing-scan-id',
+        revisionSha: 'before-scan',
+        save: vi.fn().mockResolvedValue(undefined),
+      };
+      vi.mocked(ModelAudit.findByRevision).mockResolvedValue(existingAudit as any);
+      vi.mocked(spawn).mockReturnValue(
+        asMockChildProcess(createMockChildProcess({ stdoutData: VALID_SCAN_OUTPUT })),
+      );
+
+      modelScanCommand(program);
+      await program.commands[0].parseAsync(['node', 'scan-model', 'hf://test-owner/test-model']);
+
+      expect(existingAudit.save).toHaveBeenCalledTimes(1);
+      expect(existingAudit.revisionSha).toBe('before-scan');
+      expect(ModelAudit.create).not.toHaveBeenCalled();
+      expect(process.exitCode).toBe(0);
+    },
+  );
+
   it('should create a new mutable HuggingFace alias scan when content changed', async () => {
     (isHuggingFaceModel as Mock).mockReturnValue(true);
     (parseHuggingFaceModel as Mock).mockReturnValue({
