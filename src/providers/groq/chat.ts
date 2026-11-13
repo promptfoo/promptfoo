@@ -9,7 +9,6 @@ import {
 } from './util';
 
 import type { CallApiContextParams, CallApiOptionsParams } from '../../types/index';
-import type { OpenAiCompletionOptions } from '../openai/types';
 import type { GroqCompletionOptions, GroqProviderOptions } from './types';
 
 /**
@@ -65,7 +64,10 @@ export class GroqProvider extends OpenAiChatCompletionProvider {
     callApiOptions?: CallApiOptionsParams,
   ) {
     const { body, config } = await super.getOpenAiBody(prompt, context, callApiOptions);
-    if (typeof body.model === 'string' && this.resolveReasoningModel(config, this.isReasoningModel(body.model))) {
+    if (
+      typeof body.model === 'string' &&
+      this.resolveReasoningModel(config, this.isReasoningModel(body.model))
+    ) {
       const maxCompletionTokens =
         config.passthrough?.max_completion_tokens ??
         config.max_completion_tokens ??

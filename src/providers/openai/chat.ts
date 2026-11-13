@@ -488,12 +488,10 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       capabilityModelName.includes('/o4');
     const isGPT6Model = isGpt6Model(capabilityModelName);
     const isOpenRouterGpt6 = isGPT6Model && this.usesOpenRouter();
-    const isReasoningModel = isGPT6Model || this.resolveReasoningModel(
-      config,
-      usesConfiguredCapabilities
-        ? this.isReasoningModel()
-        : this.isReasoningCapabilityModel(capabilityModelName),
-    );
+    const detectedReasoning = usesConfiguredCapabilities
+      ? this.isReasoningModel()
+      : this.isReasoningCapabilityModel(capabilityModelName);
+    const isReasoningModel = this.resolveReasoningModel(config, detectedReasoning) || isGPT6Model;
     const maxCompletionTokens = isReasoningModel
       ? (config.max_completion_tokens ?? getEnvInt('OPENAI_MAX_COMPLETION_TOKENS'))
       : undefined;
@@ -509,16 +507,13 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         ? undefined
         : getEnvFloat('OPENAI_TEMPERATURE')
       : getEnvFloat('OPENAI_TEMPERATURE', 0);
+    const detectedTemperatureSupport = usesConfiguredCapabilities
+      ? this.supportsTemperature()
+      : this.supportsTemperatureForCapabilityModel(capabilityModelName);
     const supportsTemperature =
       isGPT6Model ||
-      (config.isReasoningModel !== undefined
-        ? !config.isReasoningModel || (usesConfiguredCapabilities
-          ? this.supportsTemperature() && this.isReasoningModel()
-          : this.supportsTemperatureForCapabilityModel(capabilityModelName) &&
-            this.isReasoningCapabilityModel(capabilityModelName))
-        : usesConfiguredCapabilities
-          ? this.supportsTemperature()
-          : this.supportsTemperatureForCapabilityModel(capabilityModelName));
+      config.isReasoningModel === false ||
+      (detectedTemperatureSupport && (config.isReasoningModel === undefined || detectedReasoning));
     const temperature = supportsTemperature
       ? (config.temperature ?? temperatureDefault)
       : undefined;
@@ -611,7 +606,8 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     if (
       !isGPT6Model &&
       config.reasoning_effort &&
-      (isReasoningModel || (config.isReasoningModel !== false && capabilityModelName.includes('gpt-oss')))
+      (isReasoningModel ||
+        (config.isReasoningModel !== false && capabilityModelName.includes('gpt-oss')))
     ) {
       body.reasoning_effort = renderVarsInObject(config.reasoning_effort, context?.vars ?? {});
     }

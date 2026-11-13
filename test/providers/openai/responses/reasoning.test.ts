@@ -260,6 +260,7 @@ describe('OpenAiResponsesProvider reasoning models', () => {
     const provider = new OpenAiResponsesProvider('o3-mini', {
       config: {
         apiKey: 'test-key',
+        apiBaseUrl: 'https://example.com/v1',
         isReasoningModel: true,
         reasoning: { effort: 'high' },
       },
