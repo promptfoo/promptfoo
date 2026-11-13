@@ -2,7 +2,7 @@
 title: Tuning Engines Gateway
 sidebar_label: Tuning Engines
 sidebar_position: 48
-description: 'Use Tuning Engines as an OpenAI-compatible gateway for governed model routing, access control, and usage-aware evaluations.'
+description: 'Use Tuning Engines as an OpenAI-compatible gateway for tenant-scoped inference and compare enabled models in Promptfoo with an inference API key and evals.'
 ---
 
 # Tuning Engines
@@ -30,6 +30,8 @@ providers:
     config:
       apiBaseUrl: https://api.tuningengines.com/v1
       apiKeyEnvar: TUNING_ENGINES_API_KEY
+      headers:
+        OpenAI-Organization: ''
       temperature: 0.2
       max_tokens: 500
 
@@ -49,6 +51,8 @@ npx promptfoo@latest eval -c promptfooconfig.yaml --no-cache
 
 If your role does not allow `llama-3.3-70b-fp8`, replace it with a model enabled for your tenant.
 
+The empty `OpenAI-Organization` header overrides any inherited `OPENAI_ORGANIZATION` value.
+
 ## Compare enabled models
 
 You can evaluate multiple enabled Tuning Engines models side by side, including models backed by different providers or routing policies. Replace the provider IDs below with names enabled for your tenant.
@@ -60,12 +64,16 @@ providers:
     config:
       apiBaseUrl: https://api.tuningengines.com/v1
       apiKeyEnvar: TUNING_ENGINES_API_KEY
+      headers:
+        OpenAI-Organization: ''
 
   - id: openai:chat:your-quality-model
     label: tuning-engines-quality
     config:
       apiBaseUrl: https://api.tuningengines.com/v1
       apiKeyEnvar: TUNING_ENGINES_API_KEY
+      headers:
+        OpenAI-Organization: ''
 ```
 
 ## Notes
