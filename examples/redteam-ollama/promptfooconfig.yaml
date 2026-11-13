@@ -5,11 +5,11 @@ prompts:
   - file://system_message.txt
 
 targets:
-  - id: ollama:chat:llama4
-    label: llama4-redteam
+  - id: ollama:chat:llama3.2
+    label: llama3.2-redteam
     config:
       temperature: 0.7
-      max_tokens: 150
+      num_predict: 150
 
 redteam:
   numTests: 5
