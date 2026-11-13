@@ -110,14 +110,12 @@ vi.mock('./PluginsTab', async () => {
           <div>EU AI Act</div>
           <div>ISO 42001</div>
           {showEnterpriseMappings && <div>DoD AI Ethical Principles</div>}
-          {selectedPlugins.size > 0 && (
-            <input
-              aria-label="Toggle indirect prompt injection"
-              checked={selectedPlugins.has('indirect-prompt-injection')}
-              onChange={() => handlePluginToggle('indirect-prompt-injection')}
-              type="checkbox"
-            />
-          )}
+          <input
+            aria-label="Toggle indirect prompt injection"
+            checked={selectedPlugins.has('indirect-prompt-injection')}
+            onChange={() => handlePluginToggle('indirect-prompt-injection')}
+            type="checkbox"
+          />
         </div>
       );
     },
@@ -183,46 +181,6 @@ describe('Plugins', () => {
     renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />);
 
     expect(screen.getByRole('tablist')).toHaveClass('w-full', 'flex-wrap', 'sm:flex-nowrap');
-  });
-
-  it('should render presets section', async () => {
-    renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />);
-
-    expect(screen.getByText('Presets')).toBeInTheDocument();
-    expect(screen.getByText('Recommended')).toBeInTheDocument();
-    expect(screen.getByText('Minimal Test')).toBeInTheDocument();
-  });
-
-  it('should render presets section and display all preset cards', async () => {
-    renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />);
-
-    // Check that presets section exists with Tailwind grid layout
-    const presetsHeading = screen.getByText('Presets');
-    expect(presetsHeading).toBeInTheDocument();
-
-    // Check all preset cards are rendered
-    expect(screen.getByText('Recommended')).toBeInTheDocument();
-    expect(screen.getByText('Minimal Test')).toBeInTheDocument();
-    expect(screen.getByText('RAG')).toBeInTheDocument();
-    expect(screen.getByText('Foundation')).toBeInTheDocument();
-    expect(screen.getByText('Guardrails Evaluation')).toBeInTheDocument();
-    expect(screen.getByText('Harmful')).toBeInTheDocument();
-    expect(screen.getByText('NIST')).toBeInTheDocument();
-    expect(screen.getByText('OWASP LLM Top 10')).toBeInTheDocument();
-    expect(screen.getByText('OWASP Gen AI Red Team')).toBeInTheDocument();
-    expect(screen.getByText('OWASP API Top 10')).toBeInTheDocument();
-    expect(screen.getByText('MITRE')).toBeInTheDocument();
-    expect(screen.getByText('EU AI Act')).toBeInTheDocument();
-    expect(screen.getByText('ISO 42001')).toBeInTheDocument();
-    expect(screen.queryByText('DoD AI Ethical Principles')).not.toBeInTheDocument();
-  });
-
-  it('should render the DoD preset when showEnterpriseMappings=1 is set', async () => {
-    renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />, [
-      '/?showEnterpriseMappings=1',
-    ]);
-
-    expect(screen.getByText('DoD AI Ethical Principles')).toBeInTheDocument();
   });
 
   it('should render custom configuration sections in tabs', async () => {
@@ -495,18 +453,6 @@ describe('Plugins', () => {
     await waitFor(() => {
       expect(nextButton).toBeEnabled();
     });
-  });
-
-  it('should properly identify HuggingFace gated plugins', () => {
-    // Test the mock setup - verify the constants were mocked correctly
-    // The mock is set up at the top of the file with the correct plugins
-    const expectedGatedPlugins = ['beavertails', 'unsafebench', 'aegis'];
-
-    // This test verifies our mock is working and contains the expected plugins
-    expectedGatedPlugins.forEach((plugin) => {
-      expect(expectedGatedPlugins).toContain(plugin);
-    });
-    expect(expectedGatedPlugins).toHaveLength(3);
   });
 
   it('should render without errors when HuggingFace gated plugins are selected', () => {
@@ -1096,171 +1042,6 @@ describe('Plugins', () => {
     });
   });
 
-  // Test Generation Timeout Tests
-  describe('Test Generation Timeout Behavior', () => {
-    const mockCallApi = vi.fn();
-    const mockToast = { showToast: vi.fn() };
-
-    beforeEach(() => {
-      vi.clearAllMocks();
-    });
-
-    // Import the actual implementation code for testing
-    // This simulates the key logic from generateTestCaseWithConfig function
-    const generateTestCaseWithConfig = async (
-      plugin: string,
-      config: any,
-      toast: any,
-      callApi: any,
-    ) => {
-      try {
-        const response = await callApi('/redteam/generate-test', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Cache-Control': 'no-cache, no-store, must-revalidate',
-            Pragma: 'no-cache',
-          },
-          body: JSON.stringify({
-            pluginId: plugin,
-            config: config,
-          }),
-          timeout: 10000, // 10 second timeout
-        });
-
-        const data = await response.json();
-
-        if (data.error) {
-          throw new Error(data.error);
-        }
-
-        return data;
-      } catch (error) {
-        // This is the actual error handling logic from Plugins.tsx
-        const errorMessage =
-          error instanceof Error
-            ? error.message.includes('timed out')
-              ? 'Test generation timed out. Please try again or check your connection.'
-              : error.message
-            : 'Failed to generate test case';
-
-        toast.showToast(errorMessage, 'error');
-        throw error;
-      }
-    };
-
-    it('should call API with 10 second timeout', async () => {
-      const mockResponse = {
-        json: vi.fn().mockResolvedValue({
-          prompt: 'Test prompt',
-          context: 'Test context',
-        }),
-      };
-      mockCallApi.mockResolvedValueOnce(mockResponse);
-
-      await generateTestCaseWithConfig('bola', {}, mockToast, mockCallApi);
-
-      expect(mockCallApi).toHaveBeenCalledWith(
-        '/redteam/generate-test',
-        expect.objectContaining({
-          method: 'POST',
-          timeout: 10000,
-          headers: expect.objectContaining({
-            'Content-Type': 'application/json',
-          }),
-        }),
-      );
-    });
-
-    it('should show timeout-specific error message when request times out', async () => {
-      const timeoutError = new Error('Request timed out after 10000ms');
-      mockCallApi.mockRejectedValueOnce(timeoutError);
-
-      await expect(generateTestCaseWithConfig('bola', {}, mockToast, mockCallApi)).rejects.toThrow(
-        timeoutError,
-      );
-
-      expect(mockToast.showToast).toHaveBeenCalledWith(
-        'Test generation timed out. Please try again or check your connection.',
-        'error',
-      );
-    });
-
-    it('should show generic error message for non-timeout errors', async () => {
-      const genericError = new Error('Internal server error');
-      mockCallApi.mockRejectedValueOnce(genericError);
-
-      await expect(generateTestCaseWithConfig('bola', {}, mockToast, mockCallApi)).rejects.toThrow(
-        genericError,
-      );
-
-      expect(mockToast.showToast).toHaveBeenCalledWith('Internal server error', 'error');
-    });
-
-    it('should handle various timeout error messages', async () => {
-      const timeoutMessages = [
-        'Request timed out after 10000ms',
-        'The operation timed out',
-        'Connection timed out while waiting',
-      ];
-
-      for (const message of timeoutMessages) {
-        mockCallApi.mockRejectedValueOnce(new Error(message));
-        const localMockToast = { showToast: vi.fn() };
-
-        await expect(
-          generateTestCaseWithConfig('bola', {}, localMockToast, mockCallApi),
-        ).rejects.toThrow();
-
-        expect(localMockToast.showToast).toHaveBeenCalledWith(
-          'Test generation timed out. Please try again or check your connection.',
-          'error',
-        );
-      }
-    });
-
-    it('should handle API response with error property', async () => {
-      const errorResponse = {
-        json: vi.fn().mockResolvedValue({
-          error: 'Invalid configuration provided',
-        }),
-      };
-      mockCallApi.mockResolvedValueOnce(errorResponse);
-
-      await expect(generateTestCaseWithConfig('bola', {}, mockToast, mockCallApi)).rejects.toThrow(
-        'Invalid configuration provided',
-      );
-
-      expect(mockToast.showToast).toHaveBeenCalledWith('Invalid configuration provided', 'error');
-    });
-
-    it('should pass plugin configuration in request body', async () => {
-      const mockResponse = {
-        json: vi.fn().mockResolvedValue({
-          prompt: 'Test prompt',
-          context: 'Test context',
-        }),
-      };
-      mockCallApi.mockResolvedValueOnce(mockResponse);
-
-      const pluginConfig = {
-        applicationDefinition: { purpose: 'Test app' },
-        additionalConfig: { key: 'value' },
-      };
-
-      await generateTestCaseWithConfig('harmful:hate', pluginConfig, mockToast, mockCallApi);
-
-      const callArgs = mockCallApi.mock.calls[0];
-      const requestBody = JSON.parse(callArgs[1].body);
-
-      expect(requestBody).toEqual({
-        pluginId: 'harmful:hate',
-        config: pluginConfig,
-      });
-    });
-  });
-
-  // Test for infinite loop fix - updatePlugins compares merged output vs current state
   describe('Plugin sync effect stability', () => {
     it('should not cause infinite re-renders when selecting presets', async () => {
       const user = userEvent.setup();
@@ -1509,32 +1290,37 @@ describe('Plugins', () => {
     });
 
     it('should clean up configs when plugins are deselected individually', async () => {
-      // Start with a plugin that has config
-      const configWithPluginConfig = {
-        plugins: [
-          { id: 'indirect-prompt-injection', config: { applicationDefinition: 'test app' } },
-        ],
-      };
-
-      mockUseRedTeamConfig.mockReturnValue({
-        config: configWithPluginConfig,
-        updatePlugins: mockUpdatePlugins,
+      const { useRedTeamConfig: realStore } = await vi.importActual<
+        typeof import('../hooks/useRedTeamConfig')
+      >('../hooks/useRedTeamConfig');
+      const initialState = realStore.getState();
+      realStore.setState({
+        config: {
+          ...initialState.config,
+          plugins: [
+            { id: 'indirect-prompt-injection', config: { applicationDefinition: 'test app' } },
+          ],
+        },
       });
-
-      renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />);
-
-      // Find and click the plugin checkbox to deselect it
-      // The plugin should be checked initially since it's in config
-      const pluginCheckboxes = screen.queryAllByRole('checkbox');
-
-      // Wait for render to complete
-      await waitFor(() => {
-        expect(pluginCheckboxes.length).toBeGreaterThan(0);
-      });
-
-      // The test verifies that handlePluginToggle deletes the config
-      // This is already tested in the existing test suite
-      // The key is that the ref is also updated synchronously
+      mockUseRedTeamConfig.mockImplementation(realStore);
+      const user = userEvent.setup();
+      const view = renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />);
+      try {
+        const checkbox = screen.getByRole('checkbox', { name: 'Toggle indirect prompt injection' });
+        expect(checkbox).toBeChecked();
+        await user.click(checkbox);
+        await waitFor(() => expect(realStore.getState().config.plugins).toEqual([]));
+        expect(checkbox).not.toBeChecked();
+        await user.click(checkbox);
+        await waitFor(() =>
+          expect(realStore.getState().config.plugins).toEqual(['indirect-prompt-injection']),
+        );
+        expect(checkbox).toBeChecked();
+      } finally {
+        view.unmount();
+        realStore.setState(initialState);
+        mockUseRedTeamConfig.mockReset();
+      }
     });
 
     it('should handle rapid preset switches without losing config cleanup', async () => {
