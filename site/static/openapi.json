@@ -2543,7 +2543,14 @@
                       "properties": {
                         "key": { "type": "string" },
                         "exists": { "type": "boolean", "enum": [true] },
-                        "url": { "type": ["string", "null"] }
+                        "url": {
+                          "type": ["string", "null"],
+                          "description": "Provider URL; local file URLs are replaced with the media API URL"
+                        },
+                        "apiUrl": {
+                          "type": "string",
+                          "description": "Server-relative API path for fetching the media bytes; prepend any configured deployment base path"
+                        }
                       },
                       "required": ["key", "exists", "url"]
                     }
