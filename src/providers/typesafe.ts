@@ -355,7 +355,7 @@ export class TypeSafeProvider implements ApiProvider {
     }
 
     // Scale to 0–1. Rounding keeps float error from the division out of the threshold comparison.
-    const { score } = gradeDecisionScore(raw, top, threshold, 6);
+    const { pass, score } = gradeDecisionScore(raw, top, threshold, 6);
     // Report evidence without a verdict so the matcher can apply a stricter assertion threshold.
     const reason = levels
       ? `${model} Score ${raw} on levels 0–${top} (${score} normalized); nearest level: ${ellipsize(JSON.stringify(levels[Math.round(raw)]) ?? '', 200)}`
