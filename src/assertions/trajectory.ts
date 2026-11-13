@@ -111,19 +111,15 @@ function resolveToolMatchers(
   }
 
   if (value && typeof value === 'object' && !Array.isArray(value)) {
-    const matcher = normalizeTrajectoryMatcher(value as TrajectoryStepMatcher, 'tool');
+    const { min: rawMin, max: rawMax } = value as TrajectoryCountValue;
+    const max = typeof rawMax === 'number' ? rawMax : undefined;
+    const maxOnly = max !== undefined && (rawMin === undefined || rawMin === null);
     return {
       kind: 'count',
       matcher: {
-        ...matcher,
-        max:
-          typeof (value as TrajectoryCountValue).max === 'number'
-            ? (value as TrajectoryCountValue).max
-            : undefined,
-        min:
-          typeof (value as TrajectoryCountValue).min === 'number'
-            ? (value as TrajectoryCountValue).min
-            : undefined,
+        ...normalizeTrajectoryMatcher(value as TrajectoryStepMatcher, 'tool'),
+        max,
+        min: typeof rawMin === 'number' ? rawMin : maxOnly ? 0 : undefined,
       },
     };
   }
@@ -180,8 +176,7 @@ export const handleTrajectoryToolUsed = (params: AssertionParams): GradingResult
   }
 
   const matcher = expected.matcher;
-  const hasExplicitMax = matcher.max !== undefined;
-  const min = matcher.min ?? (hasExplicitMax ? 0 : 1);
+  const min = matcher.min ?? 1;
   const max = matcher.max;
   if (!matcher.pattern && !matcher.name) {
     throw new Error(

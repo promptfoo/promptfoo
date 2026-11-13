@@ -834,6 +834,22 @@ describe('trajectory assertions', () => {
       });
     });
 
+    it('does not treat a malformed minimum as a max-only budget', () => {
+      const value = { name: 'missing_tool', min: 'invalid', max: 0 };
+      const result = handleTrajectoryToolUsed({
+        ...defaultParams,
+        baseType: 'trajectory:tool-used',
+        assertion: { type: 'trajectory:tool-used', value },
+        renderedValue: value,
+      });
+
+      expect(result).toMatchObject({
+        pass: false,
+        score: 0,
+        reason: 'Matched tool "missing_tool" 0 time(s) (expected 1-0)',
+      });
+    });
+
     it('fails maximum-only count matching when tool calls exceed max', () => {
       const params: AssertionParams = {
         ...defaultParams,
