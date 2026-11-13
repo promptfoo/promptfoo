@@ -717,7 +717,7 @@ describe('AcpProvider', () => {
   // -------------------------------------------------------------------------
 
   describe('model config failure', () => {
-    it('should continue gracefully when setConfigOption fails', async () => {
+    it('should fail the evaluation when the agent rejects the configured model', async () => {
       mockCtx.request.mockImplementation(async (method: any) => {
         if (method === mockAcpSdk.methods.agent.session.setConfigOption) {
           throw new Error('Agent does not support model switching');
@@ -738,9 +738,9 @@ describe('AcpProvider', () => {
       sessionNextUpdateResults = [{ kind: 'stop', response: { stopReason: 'end_turn' } }];
 
       const result = await provider.callApi('Hello');
-      // Should succeed despite model config failure
-      expect(result.error).toBeUndefined();
-      expect(result.output).toBe('Done anyway.');
+      expect(result.error).toContain('The ACP agent rejected the configured model');
+      expect(result.output).toBe('');
+      expect(mockSession.prompt).not.toHaveBeenCalled();
     });
   });
 

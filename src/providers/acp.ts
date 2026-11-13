@@ -247,11 +247,11 @@ export class AcpProvider implements ApiProvider {
     const agentEnv = this.buildEnv();
 
     // Collect results
-    const allToolCalls: AcpToolCallEntry[] = [];
+    const textChunks: string[] = [];
+    const toolMap = new Map<string, AcpToolCallEntry>();
 
     let sessionId = '';
     let stopReason = '';
-    let finalOutput = '';
 
     // Declare outside try so finally can kill it
     let agentProcess: ReturnType<typeof spawn> | undefined;
@@ -272,10 +272,6 @@ export class AcpProvider implements ApiProvider {
       const input = Writable.toWeb(agentProcess.stdin!);
       const output = Readable.toWeb(agentProcess.stdout!);
       const stream = acpSdk.ndJsonStream(input, output);
-
-      // Per-turn collectors
-      const textChunks: string[] = [];
-      const toolMap = new Map<string, AcpToolCallEntry>();
 
       // Build the client with handlers and connect
       const clientBuilder = acpSdk.client({ name: 'promptfoo-acp' });
@@ -371,9 +367,6 @@ export class AcpProvider implements ApiProvider {
               }
             }
 
-            finalOutput = textChunks.join('').trim();
-            allToolCalls.push(...Array.from(toolMap.values()));
-
             return { stopReason };
           });
         }),
@@ -413,14 +406,14 @@ export class AcpProvider implements ApiProvider {
             ? 'aborted'
             : 'error';
       return {
-        output: finalOutput,
+        output: textChunks.join('').trim(),
         error: isOurs ? error : `ACP execution failed: ${error}`,
         sessionId: sessionId || undefined,
         metadata: {
           sessionId,
           stopReason: catchStopReason,
           durationMs: Date.now() - startTime,
-          toolCalls: allToolCalls,
+          toolCalls: [...toolMap.values()],
         },
       };
     } finally {
@@ -437,13 +430,13 @@ export class AcpProvider implements ApiProvider {
     }
 
     return {
-      output: finalOutput,
+      output: textChunks.join('').trim(),
       sessionId: sessionId || undefined,
       metadata: {
         sessionId,
         stopReason,
         durationMs: Date.now() - startTime,
-        toolCalls: allToolCalls,
+        toolCalls: [...toolMap.values()],
       },
     };
   }
