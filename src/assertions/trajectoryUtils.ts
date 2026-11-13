@@ -10,6 +10,8 @@ import { matchesPattern } from './traceUtils';
 
 import type { TraceData, TraceSpan } from '../types/tracing';
 
+export { TRAJECTORY_STEP_TYPES };
+
 export type TrajectoryStepType = (typeof TRAJECTORY_STEP_TYPES)[number];
 
 export interface TrajectoryStepMatcher {
