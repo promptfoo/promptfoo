@@ -600,7 +600,7 @@ describe('Redteam Routes', () => {
 
         expect(response.status).toBe(400);
         expect(response.body.error).toContain(
-          'Unicode normalization form must be one of: NFC, NFD, NFKC, NFKD',
+          'Unicode normalization strategy form must be one of: NFC, NFD, NFKC, NFKD',
         );
         expect(mockedRedteamProviderManager.getProvider).not.toHaveBeenCalled();
       });
@@ -628,7 +628,7 @@ describe('Redteam Routes', () => {
 
         expect(response.status).toBe(400);
         expect(response.body.error).toContain(
-          'Unicode normalization form must be one of: NFC, NFD, NFKC, NFKD',
+          'Unicode normalization strategy form must be one of: NFC, NFD, NFKC, NFKD',
         );
         expect(response.body.error).toContain('strategy.config.steps[0].config.form');
         expect(mockedRedteamProviderManager.getProvider).not.toHaveBeenCalled();
