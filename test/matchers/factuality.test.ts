@@ -488,6 +488,14 @@ Choose: (A) subset, (B) superset, (C) same, (D) disagree, (E) differ but factual
         'The submission gives the wrong year (see above), so it disagrees with the expert answer: (D)',
       ],
       [
+        'a snake_case label before the verdict',
+        'I considered (option_a), but the submission disagrees with the expert: (D)',
+      ],
+      [
+        'a decomposed Unicode word before the verdict',
+        'The citation (e\u0301a) supports the reference, so the verdict is (D)',
+      ],
+      [
         'a parenthesised name before the verdict',
         'The submission contradicts the reference (Wikipedia) on the year.\n(D) There is a disagreement.',
       ],

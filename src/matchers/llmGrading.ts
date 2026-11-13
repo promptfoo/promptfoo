@@ -115,7 +115,7 @@ function parseFactualityJsonResponse(
 
 // The option is a standalone "(A)" or "A)". A letter that ends a word, as in "(see above)" or
 // "(Wikipedia)", is not an option.
-const LEGACY_FACTUALITY_OPTION = /(?<![\p{L}\p{N}])\(?([a-eA-E])\)/u;
+const LEGACY_FACTUALITY_OPTION = /(?<![\p{L}\p{M}\p{N}\p{Pc}])\(?([a-eA-E])\)/u;
 // The documented single-letter reply, e.g. "A".
 const SINGLE_LETTER_FACTUALITY_OPTION = /^\s*([a-eA-E])\s*$/;
 
