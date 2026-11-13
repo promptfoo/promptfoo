@@ -229,7 +229,7 @@ describe('Eden AI HTTP contract', () => {
         });
         const repeated = await provider.callApi('fixture prompt');
         expect(repeated.cached).toBe(true);
-        expect(repeated.cost).toBeUndefined();
+        expect(repeated.cost).toBe(0);
       });
       expect((await provider.callApi('invalid fixture')).error).toContain('fixture rejected input');
       expect(requests).toHaveLength(2);
