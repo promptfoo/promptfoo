@@ -1,4 +1,6 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+# Jamba 1.5 is Legacy in us-east-1. Check lifecycle dates before running.
+# https://docs.aws.amazon.com/bedrock/latest/userguide/model-lifecycle-legacy.html
 description: 'Bedrock A21 Eval'
 
 prompts:
