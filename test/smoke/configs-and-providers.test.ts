@@ -6,39 +6,18 @@
  *
  * @see docs/plans/smoke-tests.md for the full checklist
  */
-import { spawn, spawnSync } from 'child_process';
+
+import { setTimeout as delay } from 'node:timers/promises';
+import { spawn } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { getOpenAiMissingApiKeyMessage } from '../providers/openai/shared';
+import { CLI_PATH, runCli } from './runCli';
 
-// Path to the built CLI binary
-const CLI_PATH = path.resolve(__dirname, '../../dist/src/main.js');
-const ROOT_DIR = path.resolve(__dirname, '../..');
 const FIXTURES_DIR = path.resolve(__dirname, 'fixtures');
 const OUTPUT_DIR = path.resolve(__dirname, '.temp-output-configs');
-
-/**
- * Helper to run the CLI and capture output
- */
-function runCli(
-  args: string[],
-  options: { cwd?: string; env?: NodeJS.ProcessEnv } = {},
-): { stdout: string; stderr: string; exitCode: number } {
-  const result = spawnSync('node', [CLI_PATH, ...args], {
-    cwd: options.cwd || ROOT_DIR,
-    encoding: 'utf-8',
-    env: { ...process.env, ...options.env, NO_COLOR: '1' },
-    timeout: 60000,
-  });
-
-  return {
-    stdout: result.stdout || '',
-    stderr: result.stderr || '',
-    exitCode: result.status ?? 1,
-  };
-}
 
 describe('Config Format Smoke Tests', () => {
   beforeAll(() => {
@@ -87,14 +66,14 @@ describe('Config Format Smoke Tests', () => {
     },
   );
 
-  it('reloads a CommonJS .js default configuration after a watch edit', async () => {
+  it.each(['native', 'polling'])('reloads a CJS config after a %s editor save', async (backend) => {
     const directory = fs.mkdtempSync(path.join(OUTPUT_DIR, 'watch-cjs-'));
     const configPath = path.join(directory, 'promptfooconfig.js');
     const outputPath = path.join(directory, 'output.json');
     fs.writeFileSync(path.join(directory, 'package.json'), '{"type":"module"}');
-    const writeConfig = (value: string) =>
+    const writeConfig = (value: string, target = configPath) =>
       fs.writeFileSync(
-        configPath,
+        target,
         `require('node:fs'); module.exports = ${JSON.stringify({
           prompts: [value],
           providers: ['echo'],
@@ -111,6 +90,8 @@ describe('Config Format Smoke Tests', () => {
         env: {
           ...process.env,
           NODE_OPTIONS: '',
+          CHOKIDAR_USEPOLLING: backend === 'polling' ? '1' : '0',
+          CHOKIDAR_INTERVAL: '10',
           PROMPTFOO_CONFIG_DIR: path.join(directory, 'state'),
           PROMPTFOO_DISABLE_UPDATE: 'true',
           PROMPTFOO_DISABLE_TELEMETRY: 'true',
@@ -132,7 +113,16 @@ describe('Config Format Smoke Tests', () => {
       });
       const initial = JSON.parse(fs.readFileSync(outputPath, 'utf-8'));
       expect(initial.results.results[0].response.output).toBe('before watch edit');
-      writeConfig('after watch edit');
+      if (backend === 'polling') {
+        const replacement = path.join(directory, 'replacement.tmp');
+        writeConfig('after watch edit', replacement);
+        fs.renameSync(configPath, path.join(directory, 'previous.js'));
+        // Let the child poll the missing path during Chokidar's 100 ms atomic-save window.
+        await delay(40);
+        fs.renameSync(replacement, configPath);
+      } else {
+        writeConfig('after watch edit');
+      }
       await vi.waitFor(
         () => {
           const exported = JSON.parse(fs.readFileSync(outputPath, 'utf-8'));
