@@ -39,12 +39,20 @@ interface MetricValueProps {
 }
 
 const MetricValue = ({ metric, score, counts, metricTotals }: MetricValueProps) => {
+  if (score === null) {
+    return <span data-testid={`metric-value-${metric}`}>0</span>;
+  }
   if (!Number.isFinite(score)) {
     return <span data-testid={`metric-value-${metric}`}>—</span>;
   }
   const total =
     metricTotals && Object.hasOwn(metricTotals, metric) ? metricTotals[metric] : undefined;
-  if (total !== undefined && total !== 0 && Number.isFinite((score / total) * 100)) {
+  if (
+    total !== undefined &&
+    total !== 0 &&
+    Number.isFinite(total) &&
+    Number.isFinite((score / total) * 100)
+  ) {
     return (
       <span data-testid={`metric-value-${metric}`}>
         {((score / total) * 100).toFixed(2)}% ({score.toFixed(2)}/{total.toFixed(2)})
@@ -52,7 +60,12 @@ const MetricValue = ({ metric, score, counts, metricTotals }: MetricValueProps) 
     );
   }
   const count = counts && Object.hasOwn(counts, metric) ? counts[metric] : undefined;
-  if (count !== undefined && count !== 0 && Number.isFinite(score / count)) {
+  if (
+    count !== undefined &&
+    count !== 0 &&
+    Number.isFinite(count) &&
+    Number.isFinite(score / count)
+  ) {
     return (
       <span data-testid={`metric-value-${metric}`}>
         {(score / count).toFixed(2)} ({score.toFixed(2)}/{count.toFixed(2)})
