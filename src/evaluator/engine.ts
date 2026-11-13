@@ -1149,11 +1149,13 @@ async function buildRunEvalOptions({
 }): Promise<RunEvalOptions[]> {
   const runEvalOptions: RunEvalOptions[] = [];
   const configuredProviderMap = buildConfiguredProviderMap(testSuite.providers);
+  // Share default-provider instances across rows in this evaluation only.
+  const defaultTestProviderCache = new WeakMap<object, ApiProvider>();
 
   let testIdx = 0;
   for (let index = 0; index < tests.length; index++) {
     const testCase = tests[index];
-    await prepareTestCaseForEval(testSuite, testCase, index);
+    await prepareTestCaseForEval(testSuite, testCase, index, defaultTestProviderCache);
     resolveRuntimeGradingProviderReferences(testCase, configuredProviderMap);
     testIdx = appendRunEvalOptionsForTestCase({
       concurrency,
@@ -1179,6 +1181,7 @@ async function prepareTestCaseForEval(
   testSuite: TestSuite,
   testCase: AtomicTestCase,
   index: number,
+  defaultTestProviderCache: WeakMap<object, ApiProvider>,
 ) {
   const defaultTest = getDefaultTest(testSuite);
   invariant(
@@ -1205,7 +1208,7 @@ async function prepareTestCaseForEval(
     ...testCase.metadata,
   };
   testCase.prompts = testCase.prompts ?? defaultTest?.prompts;
-  testCase.provider = await resolveDefaultTestProvider(defaultTest, testCase);
+  testCase.provider = await resolveDefaultTestProvider(defaultTest, testCase, defaultTestProviderCache);
   testCase.assertScoringFunction =
     testCase.assertScoringFunction || defaultTest?.assertScoringFunction;
   testCase.providers = testCase.providers ?? defaultTest?.providers;
@@ -1219,14 +1222,10 @@ async function prepareTestCaseForEval(
   }
 }
 
-// Cache resolved defaultTest providers so every test row shares one instance
-// (matching top-level provider semantics) instead of re-loading — and
-// re-allocating resources such as Python workers — per row.
-const defaultTestProviderCache = new WeakMap<object, Promise<ApiProvider>>();
-
 async function resolveDefaultTestProvider(
   defaultTest: ReturnType<typeof getDefaultTest>,
   testCase: AtomicTestCase,
+  defaultTestProviderCache: WeakMap<object, ApiProvider>,
 ) {
   if (testCase.provider || !defaultTest?.provider) {
     return testCase.provider;
@@ -1239,22 +1238,17 @@ async function resolveDefaultTestProvider(
   if (typeof defaultProvider === 'object' && defaultProvider.id) {
     const providerId =
       typeof defaultProvider.id === 'function' ? defaultProvider.id() : defaultProvider.id;
-    let providerPromise = defaultTestProviderCache.get(defaultProvider);
-    if (!providerPromise) {
-      providerPromise = (async () => {
-        const { loadApiProvider } = await import('../providers');
-        return loadApiProvider(providerId, {
-          options: defaultProvider as ProviderOptions,
-          // Resolve relative file:// references against the config directory,
-          // like top-level provider loading does.
-          basePath: cliState.basePath,
-        });
-      })();
-      defaultTestProviderCache.set(defaultProvider, providerPromise);
-      // Don't memoize transient load failures; let a later row retry.
-      providerPromise.catch(() => defaultTestProviderCache.delete(defaultProvider));
+    let provider = defaultTestProviderCache.get(defaultProvider);
+    if (!provider) {
+      const { loadApiProvider } = await import('../providers');
+      provider = await loadApiProvider(providerId, {
+        options: defaultProvider as ProviderOptions,
+        // Resolve relative file:// references against the config directory.
+        basePath: cliState.basePath,
+      });
+      defaultTestProviderCache.set(defaultProvider, provider);
     }
-    return providerPromise;
+    return provider;
   }
   return defaultProvider;
 }

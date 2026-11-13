@@ -188,6 +188,24 @@ describe('evaluator defaultTest merging', () => {
     );
     expect(echoLoads).toHaveLength(1);
   });
+  it('resolves a reused default provider config against each evaluation base path', async () => {
+    const provider = { id: 'echo' };
+    const basePaths = ['fixtures/eval-a', 'fixtures/eval-b'];
+    for (const basePath of basePaths) {
+      cliState.basePath = basePath;
+      const testSuite: TestSuite = {
+        prompts: [toPrompt('Test prompt {{text}}')],
+        providers: [mockApiProvider],
+        defaultTest: { provider },
+        tests: [{ vars: { text: 'one' } }],
+      };
+      const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+      await evaluate(testSuite, evalRecord, {});
+    }
+    const echoLoads = mockLoadApiProvider.mock.calls.filter(([providerId]) => providerId === 'echo');
+    expect(echoLoads.map(([, options]) => options.basePath)).toEqual(basePaths);
+  });
+
 });
 
 describe('Evaluator with external defaultTest', () => {

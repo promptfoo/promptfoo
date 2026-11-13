@@ -52,12 +52,12 @@ For each turn:
 
 ## Configuration Options
 
-| Option            | Type                | Description                                                                                                                                                               |
-| ----------------- | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `instructions`    | string              | Template for user instructions. Supports Nunjucks templating with access to test variables.                                                                               |
-| `maxTurns`        | number              | Maximum number of conversation turns. Defaults to 10.                                                                                                                     |
-| `initialMessages` | Message[] or string | Optional. Pre-defined conversation history to start from. Can be an array of messages or a `file://` path (JSON/YAML formats).                                            |
-| `stateful`        | boolean             | When true, sends only the latest user message once a session exists, letting the target maintain history. Defaults to false, which resends the full transcript each turn. |
+| Option            | Type                      | Description                                                                                                                                                                           |
+| ----------------- | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `instructions`    | string                    | Template for user instructions. Supports Nunjucks templating with access to test variables.                                                                                           |
+| `maxTurns`        | number                    | Maximum number of conversation turns. Defaults to 10.                                                                                                                                 |
+| `initialMessages` | Message[] or string       | Optional. Pre-defined conversation history to start from. Can be an array of messages or a `file://` path (JSON/YAML formats).                                                        |
+| `stateful`        | boolean                   | When true, sends only the latest user message once a session exists, letting the target maintain history. Defaults to false, which resends the full transcript each turn.             |
 | `userProvider`    | string or ProviderOptions | Optional. Provider used to generate simulated user messages instead of Promptfoo's hosted conversation models. See [Custom Simulated User Provider](#custom-simulated-user-provider). |
 
 ## Initial Messages
