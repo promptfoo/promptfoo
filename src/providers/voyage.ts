@@ -60,11 +60,13 @@ export class VoyageEmbeddingProvider implements ApiEmbeddingProvider {
   }
 
   getApiUrl(): string {
-    return (
+    const apiUrl =
       this.config.apiBaseUrl ||
       resolveProviderEnv(this.env, ['VOYAGE_API_BASE_URL'])?.value ||
-      'https://api.voyageai.com/v1'
-    );
+      'https://api.voyageai.com/v1';
+    // Strip trailing slashes so a configured base URL like `https://host/v1/`
+    // does not produce double-slash request paths.
+    return apiUrl.replace(/\/+$/, '');
   }
 
   async callApi(): Promise<ProviderResponse> {
