@@ -3,16 +3,8 @@ import * as fs from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
 
-import { beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { diagnosePrivateKeyMaterial, generateSignature } from '../../src/providers/http';
-
-/**
- * OpenSSL 3 reports empty, whitespace-only, malformed, truncated, and
- * public-key-instead-of-private material as the same opaque
- * `error:1E08010C:DECODER routines::unsupported`, so these cases are indistinguishable
- * to an operator once the key reaches crypto. Assert the classification that happens
- * before that point, and that a valid key is still left alone.
- */
 
 let rsaPrivate: string;
 let rsaPublic: string;
@@ -49,11 +41,17 @@ beforeAll(async () => {
   dir = await fs.mkdtemp(path.join(os.tmpdir(), 'sig-key-diag-'));
 });
 
+afterAll(async () => {
+  await fs.rm(dir, { recursive: true, force: true });
+});
+
 const baseAuth = {
   type: 'pem',
   signatureDataTemplate: '{{signatureTimestamp}}',
   signatureAlgorithm: 'SHA256',
 };
+
+const cert = '-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----\n';
 
 describe('diagnosePrivateKeyMaterial', () => {
   it('reports empty material', () => {
@@ -73,8 +71,20 @@ describe('diagnosePrivateKeyMaterial', () => {
   });
 
   it('distinguishes a certificate', () => {
-    const cert = '-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----\n';
     expect(diagnosePrivateKeyMaterial(cert)).toBe('it is a certificate, not a private key');
+  });
+
+  it.each([
+    ['key first', () => rsaPrivate + cert],
+    ['certificate first', () => cert + rsaPrivate],
+  ])('accepts a key+certificate bundle (%s)', (_label, get) => {
+    expect(diagnosePrivateKeyMaterial(get())).toBeUndefined();
+  });
+
+  it('still flags an encrypted key bundled with its certificate', () => {
+    expect(diagnosePrivateKeyMaterial(encryptedPrivate + cert)).toBe(
+      'it is passphrase-protected; decrypt it first or supply an unencrypted key',
+    );
   });
 
   it.each([
@@ -103,15 +113,44 @@ describe('diagnosePrivateKeyMaterial', () => {
   });
 
   it.each([
+    ['key first', () => rsaPrivate.slice(0, 120) + '\n' + cert],
+    ['certificate first', () => cert + rsaPrivate.slice(0, 120)],
+  ])('reports a truncated key in a certificate bundle (%s)', (_label, get) => {
+    expect(diagnosePrivateKeyMaterial(get())).toBe(
+      'it is truncated (no "-----END ... PRIVATE KEY-----" line)',
+    );
+  });
+
+  it.each(['RSA PRIVATE KEY', 'CERTIFICATE'])(
+    'rejects a private key with a mismatched %s footer',
+    (label) => {
+      const mismatched = rsaPrivate.replace('-----END PRIVATE KEY-----', `-----END ${label}-----`);
+      expect(diagnosePrivateKeyMaterial(mismatched + cert)).toBe(
+        'it is truncated (no "-----END ... PRIVATE KEY-----" line)',
+      );
+    },
+  );
+
+  it('requires a private-key header, not only its footer', () => {
+    expect(diagnosePrivateKeyMaterial('-----END PRIVATE KEY-----')).toBe(
+      'it is not PEM-encoded (no "-----BEGIN ... PRIVATE KEY-----" header)',
+    );
+  });
+
+  it.each([
     ['RSA', () => rsaPrivate],
     ['EC', () => ecPrivate],
+    [
+      'RSA PKCS1',
+      () => crypto.createPrivateKey(rsaPrivate).export({ type: 'pkcs1', format: 'pem' }),
+    ],
+    ['EC SEC1', () => crypto.createPrivateKey(ecPrivate).export({ type: 'sec1', format: 'pem' })],
+    ['CRLF', () => rsaPrivate.replaceAll('\n', '\r\n')],
   ])('passes a valid %s key through untouched', (_label, get) => {
     expect(diagnosePrivateKeyMaterial(get())).toBeUndefined();
   });
 
-  it('does not over-claim: structurally sound but undecodable material is left to crypto', () => {
-    // Correct BEGIN/END markers, corrupt body. The classifier must stay quiet so the real
-    // crypto diagnostic survives instead of being replaced by a guess.
+  it('leaves an undecodable body with matching markers to crypto', () => {
     const corrupt = rsaPrivate.replace(/\n.{16}/, '\n@@@@@@@@@@@@@@@@');
     expect(diagnosePrivateKeyMaterial(corrupt)).toBeUndefined();
   });
@@ -147,21 +186,24 @@ describe('generateSignature key diagnostics', () => {
     );
   });
 
-  it('still signs successfully with a valid key', async () => {
-    const signature = await generateSignature({ ...baseAuth, privateKey: rsaPrivate }, 1);
-    expect(signature).toEqual(expect.any(String));
-    expect(Buffer.from(signature, 'base64').byteLength).toBeGreaterThan(0);
+  it.each([
+    ['a valid key', () => rsaPrivate],
+    ['a key+certificate bundle', () => rsaPrivate + cert],
+    ['a certificate+key bundle', () => cert + rsaPrivate],
+    ['a public-key+private-key bundle', () => rsaPublic + rsaPrivate],
+  ])('still signs successfully with %s', async (_label, get) => {
+    const signature = await generateSignature({ ...baseAuth, privateKey: get() }, 1);
+    expect(
+      crypto.verify('SHA256', Buffer.from('1'), rsaPublic, Buffer.from(signature, 'base64')),
+    ).toBe(true);
   });
 
   it('does not double-prefix the wrapped message, and keeps the original as cause', async () => {
-    // `.catch(e => e)` widens to `string | Error` (the resolved type leaks in), so narrow
-    // on the rejection handler instead.
     const error = await generateSignature({ ...baseAuth, privateKey: 'not a key' }, 1).then(
       () => undefined,
       (e: unknown) => (e instanceof Error ? e : new Error(String(e))),
     );
     expect(error).toBeInstanceOf(Error);
-    // Reads "Failed to generate signature: <reason>", not "...: Error: <reason>".
     expect(error?.message).not.toContain('Error: Error:');
     expect(error?.message).toBe(
       'Failed to generate signature: Private key from the configured privateKey cannot be used: it is not PEM-encoded (no "-----BEGIN ... PRIVATE KEY-----" header)',
@@ -170,8 +212,6 @@ describe('generateSignature key diagnostics', () => {
   });
 
   it('leaves the pre-existing missing-key guidance intact when nothing is configured', async () => {
-    // The switch already answers this precisely per auth type; the diagnostics must not
-    // shadow it with a vaguer message.
     await expect(generateSignature({ ...baseAuth }, 1)).rejects.toThrow(
       /PEM private key is required/,
     );
