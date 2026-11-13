@@ -279,7 +279,9 @@ export async function importModule(
 
     if (functionName) {
       logger.debug(`Returning named export: ${functionName}`);
-      return getNamedExport(mod, functionName, bindToModule);
+      // ESM namespace functions have always been standalone. A default-exported
+      // object or CommonJS exports object can own a grader method.
+      return getNamedExport(mod, functionName, bindToModule && mod !== importedModule);
     }
     return bindDefaultExport(mod, importedModule?.default, bindToModule);
   } catch (err) {

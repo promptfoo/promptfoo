@@ -60,13 +60,6 @@ describe('JavaScript file graders with the real module loader', () => {
       functionName: undefined,
     },
     {
-      name: 'ESM named export with sibling state',
-      filename: 'grader.mjs',
-      source: `export const expected = 'hello';
-        export function grade(output) { return output === this.expected; }`,
-      functionName: 'grade',
-    },
-    {
       name: 'CommonJS fallback inside an ESM package',
       filename: 'grader.js',
       source: `module.exports = {
@@ -113,6 +106,20 @@ describe('JavaScript file graders with the real module loader', () => {
     fs.writeFileSync(filePath, source);
 
     const grade = await resolveJavaScriptFileFunction(filePath, undefined);
+
+    expect(await grade('hello', {})).toBe(true);
+  });
+
+  it('keeps standalone named ESM exports unbound', async () => {
+    const filePath = path.join(directory, 'grader.mjs');
+    fs.writeFileSync(
+      filePath,
+      `export function grade(output) {
+        return this === undefined && output === 'hello';
+      }`,
+    );
+
+    const grade = await resolveJavaScriptFileFunction(filePath, 'grade');
 
     expect(await grade('hello', {})).toBe(true);
   });
