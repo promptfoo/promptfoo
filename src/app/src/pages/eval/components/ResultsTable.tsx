@@ -1972,7 +1972,6 @@ function ResultsTable({
 
   const columnHelper = React.useMemo(() => createColumnHelper<EvaluateTableRow>(), []);
 
-
   const variableColumns = React.useMemo(() => {
     if (head.vars.length > 0) {
       return [
