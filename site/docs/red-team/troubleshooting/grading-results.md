@@ -11,6 +11,8 @@ A **pass** score means that the output did not violate your application's intend
 
 Pass and fail scores are separate from **errors**, where the output could not be parsed. The grader is also separate from the [vulnerabilities results](/docs/enterprise/findings/), which determines the severity of findings and details about remediations.
 
+A provider response with a missing, `null`, or `undefined` `output` field is an integration error, including in red team scans. Check your response parser if you see `No output` or a malformed-response error. The literal strings `"null"` and `"undefined"` are response content and are graded normally; an intentional empty string retains the existing refusal handling.
+
 ## Configuring the Grader
 
 Configuring your grader starts when you create a new target within Promptfoo and outline details about the application in the "Usage Details" section. The `purpose` that you provide in the target setup, as well as any additional context about external system access if applicable, informs the grader. The more information you provide, the better the red team attacks will be.

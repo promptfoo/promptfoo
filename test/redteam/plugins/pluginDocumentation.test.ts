@@ -93,6 +93,8 @@ describe('Plugin Documentation', () => {
     'base.ts',
     'dataExfil.ts', // Grader class, not a user-facing plugin
     'dataStructureInjectionCases.ts', // Deterministic corpus data, not a plugin
+    'graderContext.ts', // Shared rubric rendering helper
+    'graderPrefixes.ts', // Shared rubric text
     'imageDatasetPluginBase.ts',
     'imageDatasetUtils.ts',
     'multiInputFormat.ts',
