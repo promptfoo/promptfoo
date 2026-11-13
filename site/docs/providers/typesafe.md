@@ -203,7 +203,7 @@ When Jev is the provider under test, Promptfoo reports cost for `jev-1.13.0` at 
 - As a grader, Jev supports only `llm-rubric` and `classifier`. Other model-graded assertions, such as `factuality`, `g-eval`, and the RAG metrics, send a text-generation prompt that Jev can't answer.
 - `llm-rubric` reads the rubric and output directly and ignores `rubricPrompt`.
 - Each assertion is a separate request. To ask several questions in one request, use [`questions`](#test-your-own-questions).
-- Jev accepts text only: strings, JSON objects, and arrays. A request can hold 64k tokens, with 32k for the state plus the longest question.
+- Jev accepts text only: strings, JSON objects, and arrays. Image and audio attachments in `llm-rubric` grading return an unsupported-media error. A request can hold 64k tokens, with 32k for the state plus the longest question.
 - Jev 1.13 is unreliable at arithmetic, counting, and date comparisons, and its Score values aren't calibrated for interpolating between levels. See TypeSafe's [known limitations](https://docs.typesafe.ai/model-jaggedness/jev-1.13), and check grading quality on representative outputs before relying on a threshold.
 - Output text that claims to satisfy the rubric can raise the score. Don't use Jev as the only grader for red team or other adversarial outputs.
 

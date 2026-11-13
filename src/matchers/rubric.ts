@@ -921,7 +921,10 @@ export async function runJsonGradingPrompt({
     providerPrompt,
     label,
     vars,
-    providerCallContext,
+    {
+      ...providerCallContext,
+      gradingMedia: { hasImages: imageCount > 0, hasAudio: Boolean(audio?.data || audio?.blobRef) },
+    },
     providerPromptConfig,
   );
   if (resp.error || !resp.output) {
