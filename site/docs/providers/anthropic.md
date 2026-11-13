@@ -8,6 +8,8 @@ description: 'Configure Anthropic Claude models in Promptfoo: authentication, to
 
 This provider supports the [Anthropic Claude](https://www.anthropic.com/claude) series of models.
 
+For TypeScript or API authoring, `promptfoo/contracts` exports `AnthropicProviderOptionsInputSchema` and `AnthropicProviderOptionsInput` for explicit `anthropic:messages:<model>` and legacy `anthropic:completion:<model>` routes. Each config schema also exports a matching `*InputJsonSchema`. These portable contracts check serializable input without resolving credentials, connecting to MCP servers, loading files, or applying execution defaults; runtime and YAML editor validation remain unchanged. Shorthand model IDs and Agent SDK providers use their existing runtime configuration paths.
+
 > **Note:** Anthropic models can also be accessed through [Azure AI Foundry](/docs/providers/azure/#using-claude-models), [AWS Bedrock](/docs/providers/aws-bedrock/), and [Google Vertex](/docs/providers/vertex/).
 
 :::tip Agentic Evals
@@ -58,10 +60,13 @@ These models currently resolve on the Anthropic Messages API:
 
 | Model ID                                                            | Description       |
 | ------------------------------------------------------------------- | ----------------- |
+| `anthropic:messages:claude-fable-5-2`                               | Claude Fable 5.2  |
+| `anthropic:messages:claude-mythos-5-2`                              | Claude Mythos 5.2 |
 | `anthropic:messages:claude-fable-5-1`                               | Claude Fable 5.1  |
 | `anthropic:messages:claude-mythos-5-1`                              | Claude Mythos 5.1 |
 | `anthropic:messages:claude-fable-5`                                 | Claude Fable 5    |
 | `anthropic:messages:claude-mythos-5`                                | Claude Mythos 5   |
+| `anthropic:messages:claude-haiku-5-5`                               | Claude Haiku 5.5  |
 | `anthropic:messages:claude-opus-5-5`                                | Claude Opus 5.5   |
 | `anthropic:messages:claude-sonnet-5-5`                              | Claude Sonnet 5.5 |
 | `anthropic:messages:claude-opus-5`                                  | Claude Opus 5     |
@@ -120,8 +125,10 @@ Claude models are available across multiple platforms. Here's how the model name
 
 | Model             | Anthropic API                                  | Azure AI Foundry ([docs](/docs/providers/azure/#using-claude-models)) | AWS Bedrock ([docs](/docs/providers/aws-bedrock)) | GCP Vertex AI ([docs](/docs/providers/vertex)) |
 | ----------------- | ---------------------------------------------- | --------------------------------------------------------------------- | ------------------------------------------------- | ---------------------------------------------- |
-| Claude Fable 5.1  | claude-fable-5-1                               | claude-fable-5-1                                                      | anthropic.claude-fable-5-1                        | claude-fable-5-1                               |
-| Claude Mythos 5.1 | claude-mythos-5-1                              | claude-mythos-5-1 (limited)                                           | anthropic.claude-mythos-5-1 (limited)             | claude-mythos-5-1 (limited)                    |
+| Claude Fable 5.2  | claude-fable-5-2                               | claude-fable-5-2                                                      | global.anthropic.claude-fable-5-2                 | claude-fable-5-2                               |
+| Claude Mythos 5.2 | claude-mythos-5-2                              | claude-mythos-5-2 (limited)                                           | global.anthropic.claude-mythos-5-2 (limited)      | claude-mythos-5-2 (limited)                    |
+| Claude Fable 5.1  | claude-fable-5-1                               | claude-fable-5-1                                                      | global.anthropic.claude-fable-5-1                 | claude-fable-5-1                               |
+| Claude Mythos 5.1 | claude-mythos-5-1                              | claude-mythos-5-1 (limited)                                           | global.anthropic.claude-mythos-5-1 (limited)      | claude-mythos-5-1 (limited)                    |
 | Claude Fable 5    | claude-fable-5                                 | claude-fable-5                                                        | anthropic.claude-fable-5                          | claude-fable-5                                 |
 | Claude Mythos 5   | claude-mythos-5                                | Not available                                                         | anthropic.claude-mythos-5 (limited)               | Limited availability; ID not public            |
 | Claude Opus 5.5   | claude-opus-5-5                                | claude-opus-5-5                                                       | anthropic.claude-opus-5-5                         | claude-opus-5-5                                |
@@ -595,34 +602,54 @@ tests:
       pdf_base64: file://document.pdf
 ```
 
-### Claude Fable 5.1 and Mythos 5.1
+### Claude Fable 5.2 and Mythos 5.2
 
-Use the pinned model IDs below. Mythos 5.1 requires Project Glasswing access and
-provider approval.
+Fable 5.2 is built for demanding reasoning and long-horizon agentic work. Mythos 5.2 has the same
+capabilities and is available only to organizations verified through an Anthropic verification
+program, such as the Cyber Verification Program. Both IDs are pinned.
 
 ```yaml
 providers:
-  - id: anthropic:messages:claude-fable-5-1
+  - id: anthropic:messages:claude-fable-5-2
     config:
-      max_tokens: 4096
+      max_tokens: 16000
       effort: high
-  - id: anthropic:messages:claude-mythos-5-1
+  - id: anthropic:messages:claude-mythos-5-2
     config:
-      max_tokens: 4096
+      max_tokens: 16000
       effort: high
 ```
 
-Both models have a 1M-token context window and support up to 128K output tokens.
-Input and output cost $10 and $50 per million tokens, respectively. Cache reads cost
-**$0.25 per million tokens**, down from $1 on Fable 5 and Mythos 5; promptfoo includes
-this discount in its cost estimates. See [Anthropic's pricing](https://platform.claude.com/docs/en/about-claude/pricing).
+Both models have a 1M-token context window, support up to 128K output tokens, and cost
+**$8 per million input tokens and $40 per million output tokens**. Cache reads cost $0.20 per
+million tokens, and promptfoo's cost estimates include cache pricing. Fast mode
+(`extra_body: { speed: fast }`) bills at $16 / $80; set `inputCost: 0.000016` and
+`outputCost: 0.00008` to track it.
 
-Thinking is always on, and the sampling and thinking normalization described below
-also applies to 5.1. Unlike Fable 5, 5.1 rejects forced tool use: promptfoo omits
-`tool_choice` with type `any` or `tool` and warns. Use `auto` or `none` instead.
-When replaying Fable 5.1 thinking blocks, keep earlier messages, system prompts,
-and tools unchanged; edited prefixes can cause API errors. See
-[Anthropic's migration notes](https://platform.claude.com/docs/en/models/fable-5-1/whats-new-fable-5-1).
+Promptfoo adjusts requests to these rules and logs a warning:
+
+- **Thinking is always on.** Promptfoo omits `thinking: { type: 'disabled' }` and converts
+  `thinking: { type: 'enabled', budget_tokens: N }` to adaptive thinking. Use `effort`
+  (default `high`) to control how much the model thinks.
+- **Sampling controls and forced tool use are rejected.** Promptfoo omits `temperature`,
+  `top_p`, `top_k`, and `tool_choice` values of type `any` or `tool`. Use `auto` or `none`.
+
+Your config must follow these rules itself, because promptfoo sends the request unchanged:
+
+- When a multi-turn conversation replays thinking blocks, keep earlier messages, the system
+  prompt, and tools unchanged. An edit returns a 400.
+- Use `computer_toolset_20260801` for computer use. The `computer_20251124` tool returns a 400
+  everywhere except Amazon Bedrock.
+- The organization needs 30-day data retention. Zero-data-retention organizations get a 400.
+
+See [What's new in Claude Fable 5.2](https://platform.claude.com/docs/en/models/fable-5-2/whats-new-fable-5-2).
+
+### Claude Fable 5.1 and Mythos 5.1
+
+`claude-fable-5-1` and `claude-mythos-5-1` follow the same rules as Fable 5.2, with two
+exceptions: they also accept the `computer_20251124` tool, and on Fable 5.1 the thinking-replay
+rule applies only to accounts created on or after August 31, 2026. They cost $10 / $50 per million input / output tokens,
+with cache reads at $0.25. Mythos 5.1 requires Project Glasswing access and provider approval.
 
 ### Claude Fable 5 and Mythos 5 notes
 
@@ -641,7 +668,7 @@ access is limited through Project Glasswing and may require provider approval. B
 ### Claude Opus 5.5 notes
 
 Opus 5.5 is priced below Opus 5 and has the same context window, maximum output, and tokenizer.
-Its request rules match Fable 5.1's, and promptfoo adjusts requests to follow them:
+Its request rules match Fable 5.2's, and promptfoo adjusts requests to follow them:
 
 - **Thinking is always on.** Opus 5.5 rejects `thinking: { type: 'disabled' }` at every effort
   level, so promptfoo removes it and logs a warning once. Manual
@@ -653,8 +680,8 @@ Its request rules match Fable 5.1's, and promptfoo adjusts requests to follow th
 
 Opus 5.5 costs a flat **$4 per million input tokens and $20 per million output tokens** across
 its 1M-token context window. Cache reads cost **$0.20 per million tokens**, and promptfoo's cost
-estimates include that rate. To track Anthropic's fast mode, set `inputCost: 8 / 1e6` and
-`outputCost: 40 / 1e6`.
+estimates include that rate. To track Anthropic's fast mode, set `inputCost: 0.000008` and
+`outputCost: 0.00004`.
 
 ```yaml title="promptfooconfig.yaml"
 providers:
@@ -692,7 +719,7 @@ Opus 5 uses a 1M-token context window (both the default and the maximum) billed 
 **$5 per million input / $25 per million output** — the same list rates as Opus 4.8, with no
 long-context surcharge above 200K tokens. Anthropic's fast mode ($10 / $50, Claude API only)
 is a separate research-preview rate that promptfoo does not encode. To track it, set
-`inputCost: 10 / 1e6` and `outputCost: 50 / 1e6` — a single `cost` cannot express asymmetric
+`inputCost: 0.00001` and `outputCost: 0.00005` — a single `cost` cannot express asymmetric
 rates, because it is applied as both the input and the output per-token price.
 
 ```yaml title="promptfooconfig.yaml"
@@ -701,6 +728,27 @@ providers:
     config:
       effort: xhigh
       max_tokens: 8192
+```
+
+### Claude Haiku 5.5 notes
+
+[Haiku 5.5](https://platform.claude.com/docs/en/models/haiku-5-5/overview) uses adaptive
+thinking by default. Promptfoo omits sampling parameters and converts manual thinking
+budgets to adaptive thinking. Set `thinking: { type: disabled }` with `effort: high`
+or lower to disable thinking; at `xhigh` or `max`, promptfoo omits that setting.
+
+Pricing depends on total input, including cache reads and writes: up to **100,000**
+input tokens costs **$0.10/$0.50 per million input/output tokens**; above that threshold,
+the entire request uses **$0.50/$2.50**. Cache reads cost 0.1 times the applicable input
+rate, and 5-minute/1-hour cache writes cost 1.25/2 times that rate. Promptfoo selects
+the tier from usage counters; explicit pricing overrides still take precedence.
+
+```yaml
+providers:
+  - id: anthropic:messages:claude-haiku-5-5
+    config:
+      effort: medium
+      max_tokens: 4096
 ```
 
 ### Claude Sonnet 5.5 notes
@@ -725,7 +773,7 @@ to its API requirements:
   or use `between_tools` to keep that text in the output.
 
 Sonnet 5.5 costs **$2 per million input tokens and $10 per million output tokens** across its
-1M-token context window, with cache reads at $0.20 per million tokens.
+1M-token context window, with cache reads at $0.10 per million tokens.
 
 ```yaml title="promptfooconfig.yaml"
 providers:
@@ -831,7 +879,7 @@ thinking:
   type: 'disabled'
 ```
 
-Not accepted on Opus 5.5 or Fable 5 / Mythos 5 / Fable 5.1 / Mythos 5.1, where thinking is always on,
+Not accepted on Opus 5.5 or Fable/Mythos 5, 5.1, and 5.2, where thinking is always on,
 nor on Opus 5 above `effort: high`. Promptfoo omits it in both cases and warns.
 On Sonnet 5.5, it becomes `between_tools` at `high` effort or below and is omitted at higher effort.
 
@@ -851,10 +899,10 @@ or `budget_tokens`. At `xhigh` or `max`, Promptfoo omits it so the model uses ad
 `display` controls the reasoning text returned by the API. Omitting that text does
 not disable thinking or remove its token cost:
 
-| Value          | Behavior                                                                                                                                                                             |
-| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `'omitted'`    | **Default** on Fable 5/5.1, Mythos 5/5.1, Opus 5.5, Opus 5, Opus 4.7/4.8, and Sonnet 5. The `thinking` block is returned with empty text plus a signature for multi-turn continuity. |
-| `'summarized'` | Returns a readable summary of the reasoning. Default on Claude 4.6 and earlier.                                                                                                      |
+| Value          | Behavior                                                                                                                                                                                     |
+| -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `'omitted'`    | **Default** on Fable 5/5.1/5.2, Mythos 5/5.1/5.2, Opus 5.5, Opus 5, Opus 4.7/4.8, and Sonnet 5. The `thinking` block is returned with empty text plus a signature for multi-turn continuity. |
+| `'summarized'` | Returns a readable summary of the reasoning. Default on Claude 4.6 and earlier.                                                                                                              |
 
 Set `display: summarized` to request a readable summary:
 
@@ -872,7 +920,7 @@ Promptfoo omits `temperature` and `top_k` when thinking is enabled, and clamps
 controls, all three parameters are omitted.
 
 Forced tool use (`tool_choice` type `any` or `tool`) is incompatible with manual
-thinking and with Opus 5.5, Sonnet 5.5, Fable 5.1, and Mythos 5.1. Promptfoo omits it with a
+thinking and with Opus 5.5, Sonnet 5.5, and Fable/Mythos 5.1 and 5.2. Promptfoo omits it with a
 warning in those cases; use `auto` or `none`. Other adaptive models accept forced
 tool use.
 
@@ -947,7 +995,7 @@ providers:
       effort: high
 ```
 
-Fable 5/5.1, Opus 5.5, Opus 5, Opus 4.6–4.8, Sonnet 5, and Sonnet 4.6 all support up to **128K** output
+Fable 5/5.1/5.2, Opus 5.5, Opus 5, Opus 4.6–4.8, Sonnet 5, and Sonnet 4.6 all support up to **128K** output
 tokens; the 4.5 generation caps at 64K. The `output-128k-2025-02-19` beta feature is specific to
 Claude 3.7 Sonnet and is not needed on any current model.
 
@@ -974,12 +1022,12 @@ providers:
 
 Support varies by model — sending an unsupported level returns a 400:
 
-| Model                                                            | Supported levels                            |
-| ---------------------------------------------------------------- | ------------------------------------------- |
-| Fable/Mythos 5 and 5.1, Opus 5.5, Opus 5, Sonnet 5, Opus 4.7/4.8 | `low`, `medium`, `high`, `xhigh`, `max`     |
-| Opus 4.6, Sonnet 4.6                                             | `low`, `medium`, `high`, `max` (no `xhigh`) |
-| Opus 4.5                                                         | `low`, `medium`, `high`                     |
-| Sonnet 4.5, Haiku 4.5                                            | Not supported — omit `effort`               |
+| Model                                                                  | Supported levels                            |
+| ---------------------------------------------------------------------- | ------------------------------------------- |
+| Fable/Mythos 5, 5.1, and 5.2, Opus 5.5, Opus 5, Sonnet 5, Opus 4.7/4.8 | `low`, `medium`, `high`, `xhigh`, `max`     |
+| Opus 4.6, Sonnet 4.6                                                   | `low`, `medium`, `high`, `max` (no `xhigh`) |
+| Opus 4.5                                                               | `low`, `medium`, `high`                     |
+| Sonnet 4.5, Haiku 4.5                                                  | Not supported — omit `effort`               |
 
 The API defaults to `medium` on Opus 5.5 and `high` on the other models that support
 effort. Set it explicitly when comparing models. See Anthropic's
