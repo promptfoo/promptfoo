@@ -1,6 +1,7 @@
-import { getEnvString } from '../../envars';
+import { resolveProviderEnv } from '../env';
 import { GoogleAuthManager } from './auth';
 import { GoogleLiveProvider } from './live';
+import { getVertexApiHostForRegion, getVertexModelDefaultRegion } from './shared';
 
 import type { CompletionOptions } from './types';
 
@@ -18,13 +19,12 @@ export class VertexLiveProvider extends GoogleLiveProvider {
   protected override async getConnection(config: CompletionOptions) {
     const region =
       config.region ||
-      this.env?.VERTEX_REGION ||
-      this.env?.GOOGLE_CLOUD_LOCATION ||
-      getEnvString('VERTEX_REGION') ||
-      getEnvString('GOOGLE_CLOUD_LOCATION') ||
+      resolveProviderEnv(this.env, ['VERTEX_REGION', 'GOOGLE_CLOUD_LOCATION'])?.value ||
+      getVertexModelDefaultRegion(this.modelName) ||
       'us-central1';
     // Live uses the Cloud API versions, not Gemini API v1alpha/v1beta.
-    const apiVersion = config.apiVersion || 'v1';
+    const apiVersion =
+      config.apiVersion || resolveProviderEnv(this.env, ['VERTEX_API_VERSION'])?.value || 'v1';
     if (!['v1', 'v1beta1'].includes(apiVersion)) {
       throw new Error('Vertex Live apiVersion must be v1 or v1beta1.');
     }
@@ -48,20 +48,18 @@ export class VertexLiveProvider extends GoogleLiveProvider {
     }
     const projectId =
       config.projectId ||
-      this.env?.VERTEX_PROJECT_ID ||
-      this.env?.GOOGLE_PROJECT_ID ||
-      this.env?.GOOGLE_CLOUD_PROJECT ||
-      getEnvString('VERTEX_PROJECT_ID') ||
-      getEnvString('GOOGLE_PROJECT_ID') ||
-      getEnvString('GOOGLE_CLOUD_PROJECT') ||
+      resolveProviderEnv(this.env, [
+        'VERTEX_PROJECT_ID',
+        'GOOGLE_PROJECT_ID',
+        'GOOGLE_CLOUD_PROJECT',
+      ])?.value ||
       authProjectId;
     if (!projectId) {
       throw new Error(
         'Vertex Live requires a project ID. Set GOOGLE_CLOUD_PROJECT or config.projectId.',
       );
     }
-    const host =
-      region === 'global' ? 'aiplatform.googleapis.com' : `${region}-aiplatform.googleapis.com`;
+    const host = getVertexApiHostForRegion(region);
     const url = `wss://${host}/ws/google.cloud.aiplatform.${apiVersion}.LlmBidiService/BidiGenerateContent`;
     let headers: Record<string, string>;
     try {

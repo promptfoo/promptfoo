@@ -1,11 +1,9 @@
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { gatherFeedback, sendFeedback } from '../src/feedback';
 import logger from '../src/logger';
 import { fetchWithProxy } from '../src/util/fetch/index';
 import * as readlineUtils from '../src/util/readline';
-import { createMockResponse, mockConsole } from './util/utils';
-
-let actualFeedback: typeof import('../src/feedback');
+import { createMockResponse } from './util/utils';
 
 vi.mock('../src/util/fetch/index', () => ({
   fetchWithProxy: vi.fn(),
@@ -29,34 +27,12 @@ vi.mock('../src/util/readline', () => ({
   createReadlineInterface: vi.fn(),
 }));
 
-vi.mock('../src/feedback', () => {
-  return {
-    sendFeedback: vi.fn(),
-    gatherFeedback: vi.fn(),
-  };
-});
-
 describe('Feedback Module', () => {
-  let consoleLogSpy: ReturnType<typeof mockConsole>;
-
-  beforeAll(async () => {
-    actualFeedback = await vi.importActual('../src/feedback');
-  });
-
   beforeEach(() => {
     vi.clearAllMocks();
-    consoleLogSpy = mockConsole('log');
-  });
-
-  afterEach(() => {
-    consoleLogSpy.mockRestore();
   });
 
   describe('sendFeedback', () => {
-    beforeEach(() => {
-      vi.mocked(sendFeedback).mockImplementation(actualFeedback.sendFeedback);
-    });
-
     it('should send feedback successfully', async () => {
       const mockResponse = createMockResponse({ ok: true });
       vi.mocked(fetchWithProxy).mockResolvedValueOnce(mockResponse);
@@ -102,35 +78,29 @@ describe('Feedback Module', () => {
 
   describe('gatherFeedback', () => {
     it('should send feedback directly if a message is provided', async () => {
-      vi.mocked(gatherFeedback).mockImplementation(async (message) => {
-        if (message) {
-          await sendFeedback(message);
-        }
-      });
-
-      vi.mocked(sendFeedback).mockReset();
+      vi.mocked(fetchWithProxy).mockResolvedValueOnce(createMockResponse({ ok: true }));
 
       await gatherFeedback('Direct feedback');
 
-      expect(sendFeedback).toHaveBeenCalledWith('Direct feedback');
+      expect(fetchWithProxy).toHaveBeenCalledWith(
+        'https://api.promptfoo.dev/api/feedback',
+        expect.objectContaining({ body: JSON.stringify({ message: 'Direct feedback' }) }),
+      );
+      expect(readlineUtils.promptUser).not.toHaveBeenCalled();
     });
 
     it('should handle empty feedback input', async () => {
       // Mock promptUser to return empty string
       vi.mocked(readlineUtils.promptUser).mockResolvedValueOnce('   ');
 
-      vi.mocked(gatherFeedback).mockImplementation(actualFeedback.gatherFeedback);
-
       await gatherFeedback();
 
-      expect(sendFeedback).not.toHaveBeenCalled();
+      expect(fetchWithProxy).not.toHaveBeenCalled();
     });
 
     it('should handle errors during feedback gathering', async () => {
       // Mock promptUser to throw an error
       vi.mocked(readlineUtils.promptUser).mockRejectedValueOnce(new Error('Test error'));
-
-      vi.mocked(gatherFeedback).mockImplementation(actualFeedback.gatherFeedback);
 
       await gatherFeedback();
 
