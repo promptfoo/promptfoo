@@ -66,6 +66,13 @@ describe('AI21ChatCompletionProvider', () => {
     expect(provider.getApiUrl()).toBe('https://custom-api.ai21.com');
   });
 
+  it('should strip trailing slashes from a configured API base URL', () => {
+    const provider = new AI21ChatCompletionProvider('jamba-mini', {
+      config: { apiBaseUrl: 'https://custom-api.ai21.com/' },
+    });
+    expect(provider.getApiUrl()).toBe('https://custom-api.ai21.com');
+  });
+
   it('should get default API URL when not configured', () => {
     const provider = new AI21ChatCompletionProvider('jamba-mini');
     expect(provider.getApiUrl()).toBe('https://api.ai21.com/studio/v1');
