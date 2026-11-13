@@ -38,10 +38,12 @@ providers:
   - id: google:gemini-2.5-flash
     config:
       apiBaseUrl: https://api.tokenlab.sh
+      apiHost: api.tokenlab.sh
+      vertexai: false
       apiKey: '{{env.TOKENLAB_API_KEY}}'
 ```
 
-Set `apiKey` explicitly on each provider: these providers only read their own vendor credentials (`ANTHROPIC_API_KEY` for Anthropic, `GOOGLE_API_KEY` / `GEMINI_API_KEY` for Google), so pointing them at TokenLab without `apiKey` sends an unauthenticated request even when `TOKENLAB_API_KEY` is exported.
+Set `apiKey` explicitly on each provider: these providers only read their own vendor credentials (`ANTHROPIC_API_KEY` for Anthropic, `GOOGLE_API_KEY` / `GEMINI_API_KEY` for Google), so pointing them at TokenLab without `apiKey` sends an unauthenticated request even when `TOKENLAB_API_KEY` is exported. The Gemini config selects the Gemini API and pins the host so existing Vertex or Google host settings do not change the route.
 
 Both providers append their own path: the Anthropic SDK requests `/v1/messages`, and the Google provider requests `/v1beta/models/<model>:generateContent`. Reach for the [`http` provider](https://www.promptfoo.dev/docs/providers/http/) only when you need a request or response shape those providers don't cover.
 

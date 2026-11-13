@@ -29,5 +29,5 @@ tests:
   - vars:
       question: Why is model discovery useful for AI applications?
     assert:
-      - type: javascript
-        value: output.length > 80
+      - type: icontains-any
+        value: [available models, supported models, model capabilities]
