@@ -103,6 +103,7 @@ function run(
       encoding: 'utf8',
       env: {
         ...process.env,
+        NODE_PATH: '',
         npm_config_audit: 'false',
         npm_config_fund: 'false',
         ...envOverrides,
@@ -145,6 +146,7 @@ async function runAsync(
         encoding: 'utf8',
         env: {
           ...process.env,
+          NODE_PATH: '',
           npm_config_audit: 'false',
           npm_config_fund: 'false',
           ...envOverrides,
@@ -1571,7 +1573,6 @@ async function main(): Promise<void> {
     // Consumer files live outside the repository so neither workspaces nor devDependencies
     // can satisfy undeclared package imports. Keep all user state local to this fixture.
     const consumerEnv = {
-      NODE_PATH: '',
       PROMPTFOO_CONFIG_DIR: configDir,
       PROMPTFOO_CACHE_PATH: path.join(tempDir, 'cache'),
       PROMPTFOO_DISABLE_TELEMETRY: '1',
