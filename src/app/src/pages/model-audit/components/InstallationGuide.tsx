@@ -90,8 +90,8 @@ export default function InstallationGuide({
         </div>
 
         <p className="text-sm text-muted-foreground mb-6">
-          Make sure you have Python 3.8+ installed. After installation, run the command in your
-          terminal.
+          Make sure you have Python 3.10 to 3.13 installed. After installation, run the command in
+          your terminal.
         </p>
 
         <div className="flex flex-wrap gap-3 mb-6">

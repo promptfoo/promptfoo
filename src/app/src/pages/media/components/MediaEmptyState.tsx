@@ -39,16 +39,14 @@ export function MediaEmptyState({
         </div>
         <h3 className="text-lg font-semibold mb-1">Blob storage is not enabled</h3>
         <p className="text-sm text-muted-foreground text-center max-w-md">
-          Media files from evaluations are stored using blob storage. Enable it by setting the{' '}
+          To enable blob storage, unset{' '}
           <code className="px-1.5 py-0.5 rounded bg-muted text-xs font-mono">
-            PROMPTFOO_ENABLE_BLOB_STORAGE
+            PROMPTFOO_INLINE_MEDIA
           </code>{' '}
-          environment variable to{' '}
-          <code className="px-1.5 py-0.5 rounded bg-muted text-xs font-mono">true</code>, then
-          re-run your evaluations.
+          or set it to false, then restart the server and re-run your evaluations.
         </p>
         <a
-          href="https://www.promptfoo.dev/docs/configuration/parameters/#blob-storage"
+          href="https://www.promptfoo.dev/docs/usage/self-hosting/#eval-storage-path"
           target="_blank"
           rel="noopener noreferrer"
           className="mt-4 text-sm text-primary hover:underline"
