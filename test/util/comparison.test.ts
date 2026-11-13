@@ -565,6 +565,23 @@ describe('getTestCaseDeduplicationKey', () => {
 });
 
 describe('deduplicateTestCases', () => {
+  it('supports caller-specific identity without changing the default or first-occurrence order', () => {
+    const tests: TestCase[] = [
+      { vars: { prompt: 'same', _query: 'input' }, metadata: { pluginId: 'pii' } },
+      { vars: { prompt: 'same', _query: 'input' }, metadata: { pluginId: 'bias:age' } },
+      { vars: { prompt: 'same', _query: 'input' }, metadata: { pluginId: 'pii' } },
+    ];
+
+    expect(deduplicateTestCases(tests)).toEqual([tests[0]]);
+    const result = deduplicateTestCases(tests, (test) =>
+      JSON.stringify([test.metadata?.pluginId, test.vars]),
+    );
+    expect(result).toEqual([tests[0], tests[1]]);
+    expect(result[0]).toBe(tests[0]);
+    expect(result[1]).toBe(tests[1]);
+    expect(tests).toHaveLength(3);
+  });
+
   it('should remove duplicate tests with same vars and strategyId', () => {
     const tests: TestCase[] = [
       { vars: { prompt: 'hello' }, metadata: { strategyId: 'basic' } },
