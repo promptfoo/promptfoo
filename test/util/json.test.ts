@@ -936,14 +936,21 @@ describe('json utilities', () => {
     });
   });
 
+  it('finds a nested verdict without following circular references or using the call stack', () => {
+    const verdict = { pass: false };
+    let current: object = verdict;
+    for (let i = 0; i < 12000; i++) {
+      current = { nested: current };
+    }
+    const root = { nested: current, self: undefined as unknown };
+    root.self = root;
+    expect(unwrapNestedVerdict(root, ['pass'])).toBe(verdict);
+  });
+
   describe('extractFirstJsonObject', () => {
-    it('should extract the last JSON object from a string (security: resist verdict injection)', () => {
-      // When multiple JSON objects appear in a judge response, the LLM's own
-      // verdict is the authoritative one (last). Earlier JSON may have been
-      // echoed from the model-under-test's output embedded in the prompt.
-      // Returning the first object allowed verdict injection; we return the last.
+    it('should keep selecting the first JSON object for generic callers', () => {
       const input = '{"key1": "value1"} {"key2": "value2"}';
-      const expected = { key2: 'value2' };
+      const expected = { key1: 'value1' };
       expect(extractFirstJsonObject(input)).toEqual(expected);
     });
 

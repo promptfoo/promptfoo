@@ -447,8 +447,35 @@ function isVerdictShaped(value: unknown, verdictKeys: string[]): value is Record
     typeof value === 'object' &&
     value !== null &&
     !Array.isArray(value) &&
-    verdictKeys.some((key) => key in value)
+    verdictKeys.some((key) => Object.hasOwn(value, key))
   );
+}
+
+function* walkVerdictObjects(root: object, verdictKeys: string[]) {
+  const pending: { value: unknown; depth: number }[] = [{ value: root, depth: 0 }];
+  const seen = new WeakSet<object>();
+  while (pending.length > 0) {
+    const { value, depth } = pending.pop()!;
+    if (typeof value !== 'object' || value === null || seen.has(value)) {
+      continue;
+    }
+    seen.add(value);
+    if (Array.isArray(value)) {
+      // Multiple verdicts in a rubric breakdown are ambiguous.
+      const verdicts = value.filter((entry) => isVerdictShaped(entry, verdictKeys));
+      if (verdicts.length === 1) {
+        pending.push({ value: verdicts[0], depth: depth + 1 });
+      }
+      continue;
+    }
+    if (isVerdictShaped(value, verdictKeys)) {
+      yield { value, depth };
+    }
+    const children = Object.values(value);
+    for (let i = children.length - 1; i >= 0; i--) {
+      pending.push({ value: children[i], depth: depth + 1 });
+    }
+  }
 }
 
 /**
@@ -472,46 +499,11 @@ function isVerdictShaped(value: unknown, verdictKeys: string[]): value is Record
  * rubric breakdowns) and are never descended into.
  */
 export function unwrapNestedVerdict<T extends object>(obj: T, verdictKeys: string[]): T {
-  const candidates: { depth: number; order: number; value: Record<string, unknown> }[] = [];
-  let order = 0;
-
-  const visit = (node: unknown, depth: number): void => {
-    if (Array.isArray(node)) {
-      // A verdict nested as the single verdict-shaped element of an array is
-      // unambiguous; multiple verdict-shaped elements are ambiguous (e.g.
-      // per-criterion breakdowns) and are never descended into.
-      const verdicts = node.filter((el) => isVerdictShaped(el, verdictKeys));
-      if (verdicts.length === 1) {
-        visit(verdicts[0], depth + 1);
-      }
-      return;
-    }
-    if (typeof node !== 'object' || node === null) {
-      return;
-    }
-    const record = node as Record<string, unknown>;
-    if (isVerdictShaped(record, verdictKeys)) {
-      candidates.push({ depth, order: order++, value: record });
-    }
-    for (const value of Object.values(record)) {
-      visit(value, depth + 1);
-    }
-  };
-
-  visit(obj, 0);
-  if (candidates.length === 0) {
-    return obj;
+  let best: object = obj;
+  for (const { value } of walkVerdictObjects(obj, verdictKeys)) {
+    best = value;
   }
-  let best = candidates[0];
-  for (const candidate of candidates) {
-    if (
-      candidate.order > best.order ||
-      (candidate.order === best.order && candidate.depth > best.depth)
-    ) {
-      best = candidate;
-    }
-  }
-  return best.value as T;
+  return best as T;
 }
 
 /**
@@ -575,41 +567,12 @@ function containsConflictingNestedVerdict(
   obj: Record<string, unknown>,
   verdictKeys: string[],
 ): boolean {
-  let conflict = false;
-
-  const visit = (node: unknown, isRoot: boolean): void => {
-    if (conflict) {
-      return;
+  for (const { value, depth } of walkVerdictObjects(obj, verdictKeys)) {
+    if (depth > 0 && verdictsConflict(obj, value, verdictKeys)) {
+      return true;
     }
-    if (Array.isArray(node)) {
-      // Arrays: mirror unwrapNestedVerdict's ambiguity rule. A single
-      // verdict-shaped element is descended into; multiple are ambiguous and
-      // left alone (conflict detection stays conservative).
-      const verdicts = node.filter((el) => isVerdictShaped(el, verdictKeys));
-      if (verdicts.length === 1) {
-        visit(verdicts[0], false);
-      }
-      return;
-    }
-    if (typeof node !== 'object' || node === null) {
-      return;
-    }
-    const record = node as Record<string, unknown>;
-    if (
-      !isRoot &&
-      isVerdictShaped(record, verdictKeys) &&
-      verdictsConflict(obj, record, verdictKeys)
-    ) {
-      conflict = true;
-      return;
-    }
-    for (const value of Object.values(record)) {
-      visit(value, false);
-    }
-  };
-
-  visit(obj, true);
-  return conflict;
+  }
+  return false;
 }
 
 /**
