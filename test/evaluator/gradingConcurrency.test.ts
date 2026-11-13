@@ -132,15 +132,21 @@ describeEvaluator('evaluator grading concurrency', () => {
             { type: 'llm-rubric', value: 'Judge beta two', provider: judgeTwo },
           ],
         },
+        {
+          vars: { topic: 'gamma' },
+          assert: [{ type: 'llm-rubric', value: 'Judge gamma', provider: judgeOne }],
+        },
       ],
     };
 
     const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    const saved = vi.spyOn(evalRecord, 'addResult');
     await evaluate(testSuite, evalRecord, { maxConcurrency: 1 });
     const summary = await evalRecord.toEvaluateSummary();
 
-    expect(summary.stats.successes).toBe(2);
-    expect(callOrder).toEqual(['judge-one', 'judge-one', 'judge-two', 'judge-two']);
+    expect(summary.stats.successes).toBe(3);
+    expect(callOrder).toEqual(['judge-one', 'judge-one', 'judge-one', 'judge-two', 'judge-two']);
+    expect(saved.mock.calls.map(([row]) => row.testIdx)).toEqual([0, 1, 2]);
   });
 
   it('keeps model-graded assertions row-first when prompts use _conversation', async () => {

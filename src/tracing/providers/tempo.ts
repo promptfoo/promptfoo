@@ -1,7 +1,6 @@
 import logger from '../../logger';
 import {
   fetchWithProxy,
-  MAX_TRACE_RESPONSE_BYTES,
   readLimitedResponse,
   releaseResponse,
   validateTraceProviderEndpoint,
@@ -322,19 +321,6 @@ export class TempoProvider implements TraceProvider {
     if (response.status === 404) {
       await releaseResponse(response, 'Tempo');
       return null;
-    }
-    if (!response.ok) {
-      await releaseResponse(response, 'Tempo');
-      throw new TraceProviderError(`Tempo returned HTTP ${response.status}`, {
-        statusCode: response.status,
-        retryable: response.status === 408 || response.status === 429 || response.status >= 500,
-      });
-    }
-
-    const contentLength = Number(response.headers.get('content-length'));
-    if (contentLength > MAX_TRACE_RESPONSE_BYTES) {
-      await releaseResponse(response, 'Tempo');
-      throw new TraceProviderError('Tempo trace exceeds the maximum response size');
     }
     const body = await readLimitedResponse(response, 'Tempo');
     const data = JSON.parse(body) as TempoTraceResponse;

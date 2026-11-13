@@ -48,7 +48,6 @@ function safeLocalStorageSet(key: string, value: string): void {
 
 export function useVersionCheck(): UseVersionCheckResult {
   const [versionInfo, setVersionInfo] = useState<VersionInfo | null>(null);
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
   const [dismissed, setDismissed] = useState(false);
 
@@ -81,10 +80,6 @@ export function useVersionCheck(): UseVersionCheckResult {
           retryTimer = undefined;
           void checkVersion();
         }, RETRY_DELAY_MS);
-      } finally {
-        if (active) {
-          setLoading(false);
-        }
       }
     };
 
@@ -108,7 +103,7 @@ export function useVersionCheck(): UseVersionCheckResult {
 
   return {
     versionInfo,
-    loading,
+    loading: versionInfo === null && error === null,
     error,
     dismissed,
     dismiss,

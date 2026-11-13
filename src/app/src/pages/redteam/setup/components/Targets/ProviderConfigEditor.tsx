@@ -44,15 +44,6 @@ export interface ProviderConfigEditorProps {
   mode?: 'eval' | 'redteam';
 }
 
-const shouldRemoveMcpConfig = (
-  previousTargetId: string,
-  nextTargetId: string,
-  currentProviderType?: string,
-): boolean =>
-  currentProviderType === 'bedrock' &&
-  previousTargetId.startsWith('bedrock:converse:') &&
-  !nextTargetId.startsWith('bedrock:converse:');
-
 const containsNunjucksTemplate = (value: string): boolean =>
   /{{[\s\S]*}}|{%[\s\S]*%}|{#[\s\S]*#}/.test(value);
 
@@ -238,9 +229,6 @@ function ProviderConfigEditor({
       updatedTarget.id = value as string;
       if (providerType === 'codex-security') {
         delete updatedTarget.config.model;
-      }
-      if (shouldRemoveMcpConfig(currentProvider.id, updatedTarget.id, providerType)) {
-        delete updatedTarget.config.mcp;
       }
     } else if (field === 'url') {
       updatedTarget.config.url = value as string;

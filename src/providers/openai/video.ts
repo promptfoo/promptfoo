@@ -14,7 +14,6 @@ import {
   formatVideoOutput,
   generateVideoCacheKey,
   isVideoCacheReferenceUrlSafe,
-  readCacheMapping,
   storeCacheMapping,
 } from '../video';
 import { OpenAiGenericProvider } from '.';
@@ -464,7 +463,8 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
 
       if (!response.ok) {
         return {
-          error: `Failed to download ${variant}: ${response.status} ${response.statusText}`,
+          error:
+            `Failed to download ${variant}: HTTP ${response.status} ${response.statusText}`.trimEnd(),
         };
       }
 
@@ -602,22 +602,19 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
     });
 
     // Check for cached video (skip for remix operations)
-    const cachedVideoKey =
+    const mapping =
       config.remix_video_id || !canCacheVideo
         ? null
         : await checkVideoCache(cacheKey, PROVIDER_NAME);
-    if (cachedVideoKey) {
+    if (mapping) {
       logger.info(`[${PROVIDER_NAME}] Cache hit for video: ${cacheKey}`);
 
       const storage = getMediaStorage();
 
-      // Read the cache mapping from filesystem to get thumbnail/spritesheet keys
-      const mapping = await readCacheMapping(cacheKey);
-      const thumbnailKey = mapping?.thumbnailKey;
-      const spritesheetKey = mapping?.spritesheetKey;
+      const { videoKey, thumbnailKey, spritesheetKey } = mapping;
 
       // Build storage ref URL for video using the actual stored key
-      const videoUrl = buildStorageRefUrl(cachedVideoKey);
+      const videoUrl = buildStorageRefUrl(videoKey);
 
       // Check for optional assets using actual stored keys
       const hasThumbnail = thumbnailKey && (await storage.exists(thumbnailKey));
@@ -632,7 +629,7 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
         cost: 0,
         video: {
           id: undefined, // No Sora ID for cached results
-          storageRef: { key: cachedVideoKey }, // Structured storage reference (preferred)
+          storageRef: { key: videoKey }, // Structured storage reference (preferred)
           url: videoUrl, // Legacy URL format for backwards compatibility
           format: 'mp4',
           size,

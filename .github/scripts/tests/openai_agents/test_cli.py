@@ -122,9 +122,6 @@ class OpenAIAgentsCliTest(unittest.TestCase):
         fixture = ResponsesFixture(failure)
         errors = []
         exports = []
-        with socket.socket() as available:
-            available.bind(("127.0.0.1", 0))
-            trace_port = available.getsockname()[1]
 
         class Handler(BaseHTTPRequestHandler):
             def read_payload(self):
@@ -214,6 +211,10 @@ class OpenAIAgentsCliTest(unittest.TestCase):
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         try:
+            # Bind the fixture first so it cannot take the receiver's released port.
+            with socket.socket() as available:
+                available.bind(("127.0.0.1", 0))
+                trace_port = available.getsockname()[1]
             with tempfile.TemporaryDirectory(
                 prefix="promptfoo-agents-cli-"
             ) as temporary:
@@ -471,6 +472,33 @@ class OpenAIAgentsCliTest(unittest.TestCase):
 
     def test_wrong_arguments(self):
         self.run_config("wrong-tool-args")
+
+
+class FixturePortTests(unittest.TestCase):
+    def test_fixture_holds_its_port_when_the_receiver_port_is_chosen(self):
+        bind = socket.socket.bind
+        fixture = None
+
+        class PortsChecked(Exception):
+            pass
+
+        def check_bind(connection, address):
+            nonlocal fixture
+            bind(connection, address)
+            if address != ("127.0.0.1", 0):
+                return
+            if fixture is None:
+                fixture = connection
+                return
+            self.assertGreaterEqual(fixture.fileno(), 0, "fixture socket was released")
+            self.assertNotEqual(connection.getsockname()[1], fixture.getsockname()[1])
+            raise PortsChecked
+
+        with (
+            patch.object(socket.socket, "bind", check_bind),
+            self.assertRaises(PortsChecked),
+        ):
+            OpenAIAgentsCliTest().run_config()
 
 
 if __name__ == "__main__":

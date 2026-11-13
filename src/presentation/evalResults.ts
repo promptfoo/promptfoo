@@ -24,9 +24,8 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
   // Dedup via Set construction. Persisted vars should already be unique
   // (Eval.setVars and the evaluator's Set guarantee this), but a corrupt
   // payload would otherwise render duplicate header columns and row cells.
-  const persistedVarSet = new Set<string>(Array.isArray(rawPersistedVars) ? rawPersistedVars : []);
-  const persistedVars = Array.from(persistedVarSet);
-  const varsForHeader = new Set<string>(persistedVars);
+  const varsForHeader = new Set<string>(Array.isArray(rawPersistedVars) ? rawPersistedVars : []);
+  const persistedVars = Array.from(varsForHeader);
   const varValuesForRow = new Map<number, Record<string, string>>();
 
   const rowMap: Record<number, EvaluateTableRow> = {};
@@ -128,9 +127,9 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
   }
 
   const rows = Object.values(rowMap);
-  // Preserve the configured prefix and deterministically append runtime/display-only columns.
+  // Set insertion order keeps the persisted prefix before runtime/display-only columns.
   // Legacy result payloads do not have a persisted prefix, so all columns are sorted.
-  const additionalVars = [...varsForHeader].filter((name) => !persistedVarSet.has(name)).sort();
+  const additionalVars = [...varsForHeader].slice(persistedVars.length).sort();
   const orderedVars =
     persistedVars.length > 0 ? [...persistedVars, ...additionalVars] : additionalVars;
   for (const row of rows) {

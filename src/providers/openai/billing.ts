@@ -809,14 +809,14 @@ function getBedrockGeoRates(
   return undefined;
 }
 
-function getBedrockGpt6Rates(
-  model: 'gpt-6-astra' | 'gpt-6.1-sol',
+function getBedrockGptRates(
+  model: string,
   inputTokens: number,
   tier: OpenAIProcessingTier,
   route: BedrockPriceRoute,
 ): OpenAITextRates | null {
   const astra = model === 'gpt-6-astra';
-  const ultrafast = astra && tier === 'ultrafast';
+  const ultrafast = (astra || model === 'gpt-6.1-sol') && tier === 'ultrafast';
   if (
     (!route.standardTier && !ultrafast) ||
     route.unpricedCacheWrite ||
@@ -864,7 +864,8 @@ function getBedrockTextRates(
     return undefined;
   }
   const region = endpoint?.region ?? options.region ?? config.region;
-  const runtime = endpoint?.service === 'runtime';
+  // A system profile also identifies Runtime when its adapter uses a customer proxy.
+  const runtime = endpoint ? endpoint.service === 'runtime' : options.bedrockProfile !== undefined;
   const standardTier = [undefined, null, 'default', 'standard'].includes(options.serviceTier);
   const unpricedCacheWrite =
     usage.cacheWrite12hInputTokens > 0 &&
@@ -882,8 +883,22 @@ function getBedrockTextRates(
   if (geoRates !== undefined) {
     return geoRates;
   }
-  if (billingModelName === 'gpt-6-astra' || billingModelName === 'gpt-6.1-sol') {
-    return getBedrockGpt6Rates(billingModelName, usage.totalInputTokens, tier, route);
+  const runtimeGptProfile = runtime && options.bedrockProfile && /^gpt-\d/.test(billingModelName);
+  if (
+    runtimeGptProfile &&
+    !/^gpt-(?:5\.6-(?:sol|terra|luna)|6-(?:astra|sol|luna)|6\.1-(?:sol|terra))$/.test(
+      billingModelName,
+    )
+  ) {
+    // GPT-5.4 and GPT-5.5 publish Runtime profile IDs but only Mantle In-Region rates.
+    return null;
+  }
+  if (
+    runtimeGptProfile ||
+    billingModelName === 'gpt-6-astra' ||
+    billingModelName === 'gpt-6.1-sol'
+  ) {
+    return getBedrockGptRates(billingModelName, usage.totalInputTokens, tier, route);
   }
   if (billingModelName === 'gpt-daybreak-blue-5.6-sol') {
     if (runtime || region !== 'us-east-2' || !standardTier || unpricedCacheWrite) {

@@ -9,6 +9,107 @@ const OUTPUT_TOKENS = 5_000;
 const costAtRates = (input: number, output: number) =>
   (INPUT_TOKENS / 1e6) * input + (OUTPUT_TOKENS / 1e6) * output;
 
+describe('Bedrock Converse GPT-6 profile pricing', () => {
+  it.each([
+    ['us.openai.gpt-6-luna', 0.11, 0.011, 0.1375, 0.55],
+    ['global.openai.gpt-6-luna', 0.1, 0.01, 0.125, 0.5],
+    ['us.openai.gpt-6.1-sol', 2.2, 0.11, 2.75, 11],
+    [
+      'arn:aws:bedrock:us-east-1:123456789012:inference-profile/global.openai.gpt-6.1-sol',
+      2,
+      0.1,
+      2.5,
+      10,
+    ],
+    ['us.openai.gpt-6.1-terra', 1.1, 0.055, 1.375, 5.5],
+    ['global.openai.gpt-6.1-terra', 1, 0.05, 1.25, 5],
+    ['us.openai.gpt-6-sol', 2.2, 0.22, 2.75, 11],
+    ['global.openai.gpt-6-sol', 2, 0.2, 2.5, 10],
+    ['us.openai.gpt-6-astra', 11, 1.1, 13.75, 55],
+    [
+      'arn:aws:bedrock:us-east-1:123456789012:inference-profile/global.openai.gpt-6-astra',
+      10,
+      1,
+      12.5,
+      50,
+    ],
+  ] as const)(
+    'prices every token in %s at the published context tier',
+    (model, input, read, write, output) => {
+      const shortInputCost = (271_500 * input + 200 * read + 300 * write) / 1e6;
+      expect(calculateBedrockCost(model, 271_500, 100, 200, 300, 'us-east-1')).toBeCloseTo(
+        shortInputCost + (100 * output) / 1e6,
+        12,
+      );
+      expect(calculateBedrockCost(model, 271_501, 100, 200, 300, 'us-east-1')).toBeCloseTo(
+        2 * (shortInputCost + input / 1e6) + (100 * 1.5 * output) / 1e6,
+        12,
+      );
+    },
+  );
+
+  it.each([
+    'openai.gpt-6-luna',
+    'eu.openai.gpt-6-luna',
+    'us.openai.gpt-6.1-sol-future',
+    'us.openai.gpt-6.99-fakemodel',
+    'eu.openai.gpt-6.1-terra',
+    'arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/us.openai.gpt-6-luna',
+  ])('leaves unsupported profile %s unpriced', (model) => {
+    expect(calculateBedrockCost(model, 1000, 100, 0, 0, 'us-east-1')).toBeUndefined();
+  });
+
+  const usLuna = 'us.openai.gpt-6-luna';
+  const globalLuna = 'global.openai.gpt-6-luna';
+  const profileArn = `arn:aws:bedrock:us-east-1:123456789012:inference-profile/${usLuna}`;
+
+  it.each([
+    [usLuna, undefined],
+    [usLuna, 'eu-west-1'],
+    [profileArn, 'us-west-2'],
+    [globalLuna, 'cn-north-1'],
+    [globalLuna, 'us-gov-east-1'],
+    [globalLuna, 'invalid-region'],
+  ] as const)('leaves an incompatible billing route unpriced: %s / %s', (model, region) => {
+    expect(calculateBedrockCost(model, 1000, 100, 0, 0, region)).toBeUndefined();
+  });
+
+  it('can use the ARN region or a commercial global source region', () => {
+    expect(calculateBedrockCost(profileArn, 1000, 100)).toBeCloseTo(0.000165, 12);
+    expect(calculateBedrockCost(globalLuna, 1000, 100, 0, 0, 'eu-west-1')).toBeCloseTo(0.00015, 12);
+  });
+
+  it.each([
+    [undefined, 100, 0, 0],
+    [1000, undefined, 0, 0],
+    [-1, 100, 0, 0],
+    [1000, NaN, 0, 0],
+    [1000, 100, -1, 0],
+    [1000, 100, 0, 0.5],
+    [Number.MAX_SAFE_INTEGER, 100, 1, 0],
+  ])('leaves invalid or missing usage unpriced: %s, %s, %s, %s', (input, output, read, write) => {
+    expect(calculateBedrockCost(usLuna, input, output, read, write, 'us-east-1')).toBeUndefined();
+  });
+
+  it.each(['priority', 'flex', 'reserved'] as const)('does not guess %s pricing', (type) => {
+    // AWS publishes only Standard meters for these profiles.
+    for (const model of [
+      usLuna,
+      'us.openai.gpt-6.1-terra',
+      'global.openai.gpt-6-sol',
+      'us.openai.gpt-6-astra',
+    ]) {
+      expect(calculateBedrockCost(model, 1000, 100, 0, 0, 'us-east-1', { type })).toBeUndefined();
+    }
+  });
+
+  it('does not price unpublished one-hour cache writes', () => {
+    expect(
+      calculateBedrockCost(usLuna, 1000, 100, 0, 100, 'us-east-1', undefined, 100),
+    ).toBeUndefined();
+  });
+});
+
 describe('Bedrock GovCloud OpenAI inference profiles', () => {
   it.each([
     ['us-gov.openai.gpt-5.6-terra', 2.7, 16.2],
@@ -321,15 +422,29 @@ describe('calculateBedrockCost', () => {
   it.each(['global.anthropic.claude-sonnet-5-5', 'anthropic.claude-sonnet-5-5'])(
     'prices Sonnet 5.5 at $2/$10 for %s, with the regional premium off global',
     (model) => {
-      // AWS price list (us-east-1, 2026-09-29): global $2 in / $10 out / $0.20 cache read /
+      // AWS price list (us-east-1, 2026-10-08): global $2 in / $10 out / $0.10 cache read /
       // $2.50 cache write; regional 1.1x. Also guards the first-match `includes()` lookup:
       // Sonnet 5's row must not win for `anthropic.claude-sonnet-5-5`.
-      // 1000*2 + 200*0.2 + 100*2.5 + 500*10 = 7,290 per 1e6
-      const expected = 0.00729 * (model.startsWith('global.') ? 1 : 1.1);
+      // 1000*2 + 200*0.1 + 100*2.5 + 500*10 = 7,270 per 1e6
+      const expected = 0.00727 * (model.startsWith('global.') ? 1 : 1.1);
       expect(calculateBedrockCost(model, 1000, 500, 200, 100)).toBeCloseTo(expected, 8);
       expect(calculateBedrockInvokeModelCost(model, 1000, 500, 200, 100)).toBeCloseTo(expected, 8);
     },
   );
+
+  it.each([
+    'anthropic.claude-fable-5-2',
+    'global.anthropic.claude-fable-5-2',
+    'us.anthropic.claude-fable-5-2',
+    'global.anthropic.claude-mythos-5-2',
+    'us.anthropic.claude-mythos-5-2',
+  ])('prices 5.2 at $8/$40 with 0.025x cache reads for %s', (model) => {
+    // Fable 5's `anthropic.claude-fable-5` row must not win for the 5.2 point release.
+    // 1000*8 + 200*0.2 + 100*10 + 500*40 = 29,040 per 1e6
+    const expected = 0.02904 * (model.startsWith('global.') ? 1 : 1.1);
+    expect(calculateBedrockCost(model, 1000, 500, 200, 100)).toBeCloseTo(expected, 8);
+    expect(calculateBedrockInvokeModelCost(model, 1000, 500, 200, 100)).toBeCloseTo(expected, 8);
+  });
 
   it.each([
     'global.anthropic.claude-fable-5-1',
@@ -342,17 +457,17 @@ describe('calculateBedrockCost', () => {
     expect(calculateBedrockInvokeModelCost(model, 1000, 500, 200, 100)).toBeCloseTo(expected, 8);
   });
 
-  it('prices Claude Sonnet 5 at $3/$15 on the global endpoint (base rate)', () => {
+  it('prices Claude Sonnet 5 at $2/$10 on the global endpoint (base rate)', () => {
     // The global endpoint bills at the base rate; regional profiles add a premium (below).
     expect(calculateBedrockCost('global.anthropic.claude-sonnet-5', 100_000, 1_000)).toBeCloseTo(
-      (100_000 / 1e6) * 3 + (1_000 / 1e6) * 15,
+      (100_000 / 1e6) * 2 + (1_000 / 1e6) * 10,
       6,
     );
   });
 
   it('bills one-hour Claude cache writes at 2x the input rate', () => {
     const expectedCost =
-      (100 / 1e6) * 3 + (500 / 1e6) * 0.3 + (60 / 1e6) * 3.75 + (40 / 1e6) * 6 + (50 / 1e6) * 15;
+      (100 / 1e6) * 2 + (500 / 1e6) * 0.2 + (60 / 1e6) * 2.5 + (40 / 1e6) * 4 + (50 / 1e6) * 10;
 
     expect(
       calculateBedrockCost(
@@ -383,7 +498,7 @@ describe('calculateBedrockCost', () => {
     // Sonnet 5 bills its full 1M context at the same rate. Use the global endpoint to
     // isolate this from the regional premium.
     expect(calculateBedrockCost('global.anthropic.claude-sonnet-5', 300_000, 20_000)).toBeCloseTo(
-      (300_000 / 1e6) * 3 + (20_000 / 1e6) * 15,
+      (300_000 / 1e6) * 2 + (20_000 / 1e6) * 10,
       6,
     );
   });
@@ -391,7 +506,7 @@ describe('calculateBedrockCost', () => {
   it('applies the 10% regional premium to non-global Claude 4.5+ profiles (Sonnet 5, Opus 4.8, Sonnet 4.6)', () => {
     // Per Anthropic pricing, Claude 4.5+ models carry a 10% premium on regional/geo endpoints;
     // only the `global.` endpoint bills at the base rate.
-    const sonnet5Base = (100_000 / 1e6) * 3 + (1_000 / 1e6) * 15;
+    const sonnet5Base = (100_000 / 1e6) * 2 + (1_000 / 1e6) * 10;
     expect(calculateBedrockCost('us.anthropic.claude-sonnet-5', 100_000, 1_000)).toBeCloseTo(
       sonnet5Base * 1.1,
       6,
@@ -463,7 +578,7 @@ describe('calculateBedrockCost', () => {
     // because the allowlist only covered Fable/Mythos. Sonnet 5 is a Claude 5 model with a
     // verified rate, so it reports cost — the global endpoint at base and regional/geo profiles
     // with the 10% premium. Sonnet 4.6 (legacy Claude 4.x) stays fail-closed.
-    const base = (100 / 1e6) * 3 + (200 / 1e6) * 15;
+    const base = (100 / 1e6) * 2 + (200 / 1e6) * 10;
     expect(
       calculateBedrockInvokeModelCost(
         'global.anthropic.claude-sonnet-5',

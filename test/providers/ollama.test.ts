@@ -1,5 +1,5 @@
 import { trace } from '@opentelemetry/api';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../src/cache';
 import logger from '../../src/logger';
 import {
@@ -7,6 +7,7 @@ import {
   OllamaCompletionProvider,
   OllamaEmbeddingProvider,
 } from '../../src/providers/ollama';
+import { mockProcessEnv } from '../util/utils';
 import { createAttributeRecordingSpan } from './openai/tracing';
 
 import type { CallApiContextParams } from '../../src/types/index';
@@ -63,6 +64,44 @@ const createCustomProviderOptions = () => ({
 });
 
 vi.mock('../../src/cache');
+
+describe.each([
+  { baseUrl: undefined, expectedBase: 'http://localhost:11434' },
+  { baseUrl: 'https://ollama.example', expectedBase: 'https://ollama.example' },
+  { baseUrl: 'https://ollama.example/', expectedBase: 'https://ollama.example' },
+  { baseUrl: 'https://ollama.example/proxy', expectedBase: 'https://ollama.example/proxy' },
+  { baseUrl: 'https://ollama.example/proxy/', expectedBase: 'https://ollama.example/proxy' },
+  { baseUrl: 'https://ollama.example/proxy///', expectedBase: 'https://ollama.example/proxy' },
+])('Ollama base URL $baseUrl', ({ baseUrl, expectedBase }) => {
+  let restoreEnv: () => void;
+  beforeEach(() => {
+    restoreEnv = mockProcessEnv({ OLLAMA_BASE_URL: undefined });
+  });
+  afterEach(() => {
+    restoreEnv();
+    vi.resetAllMocks();
+  });
+
+  it.each([
+    {
+      Provider: OllamaCompletionProvider,
+      endpoint: 'generate',
+      response: createStreamResponse('{"response":"hi","done":true}'),
+    },
+    { Provider: OllamaChatProvider, endpoint: 'chat', response: createStreamResponse() },
+    { Provider: OllamaEmbeddingProvider, endpoint: 'embed', response: createEmbeddingResponse() },
+  ])('joins a trailing slash before api/$endpoint', async ({ Provider, endpoint, response }) => {
+    vi.mocked(fetchWithCache).mockResolvedValue(response);
+    const provider = new Provider('test', { env: { OLLAMA_BASE_URL: baseUrl } });
+    const result =
+      provider instanceof OllamaEmbeddingProvider
+        ? await provider.callEmbeddingApi('hello')
+        : await provider.callApi('hello');
+
+    expect(result.error).toBeUndefined();
+    expect(vi.mocked(fetchWithCache).mock.calls[0][0]).toBe(`${expectedBase}/api/${endpoint}`);
+  });
+});
 
 describe('OllamaCompletionProvider', () => {
   beforeEach(() => {

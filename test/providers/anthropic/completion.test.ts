@@ -77,6 +77,7 @@ describe('AnthropicCompletionProvider', () => {
 
         expect(create).toHaveBeenCalledExactlyOnceWith('/v1/complete', {
           body: expect.objectContaining({ temperature: expected }),
+          headers: undefined,
         });
         expect(result).toMatchObject({
           output: 'Test output',
@@ -521,6 +522,7 @@ describe('AnthropicCompletionProvider', () => {
 
         expect(provider.anthropic.post).toHaveBeenCalledWith('/v1/complete', {
           body: expect.objectContaining({ max_tokens_to_sample: 0 }),
+          headers: undefined,
         });
       } finally {
         restoreEnv();

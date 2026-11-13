@@ -38,6 +38,7 @@ describe('VertexLiveProvider', () => {
       GOOGLE_CLOUD_PROJECT: '',
       VERTEX_REGION: '',
       GOOGLE_CLOUD_LOCATION: '',
+      VERTEX_API_VERSION: '',
     });
     vi.resetAllMocks();
     vi.useFakeTimers();
@@ -161,6 +162,28 @@ describe('VertexLiveProvider', () => {
   });
 
   it.each([
+    [{ env: { VERTEX_API_VERSION: 'v1beta1' } }, 'v1', 'v1beta1'],
+    [{}, 'v1beta1', 'v1beta1'],
+    [{ config: { apiVersion: 'v1' }, env: { VERTEX_API_VERSION: 'v1beta1' } }, 'v1beta1', 'v1'],
+    [{ env: { VERTEX_API_VERSION: '' } }, 'v1beta1', 'v1'],
+  ] as const)(
+    'resolves the API version from %j with process version %s',
+    async (options, processVersion, apiVersion) => {
+      const restoreVersion = mockProcessEnv({ VERTEX_API_VERSION: processVersion });
+      try {
+        const { result } = await start(new VertexLiveProvider(model, options as ProviderOptions));
+        expect(vi.mocked(WebSocket).mock.calls[0][0]).toBe(
+          `wss://us-central1-aiplatform.googleapis.com/ws/google.cloud.aiplatform.${apiVersion}.LlmBidiService/BidiGenerateContent`,
+        );
+        await complete();
+        expect((await result).error).toBeUndefined();
+      } finally {
+        restoreVersion();
+      }
+    },
+  );
+
+  it.each([
     [{ config: { projectId: 'explicit', region: 'europe-west4' } }, 'explicit', 'europe-west4'],
     [
       { env: { VERTEX_PROJECT_ID: 'vertex-env', VERTEX_REGION: 'us-east4' } },
@@ -258,6 +281,152 @@ describe('VertexLiveProvider', () => {
     });
   });
 
+  describe.each(['google', 'vertex'])('%s Live transcription', (prefix) => {
+    const startTranscription = (prompt = recording) =>
+      start(
+        prefix === 'vertex'
+          ? new VertexLiveProvider(liveTranscribe, {})
+          : new GoogleLiveProvider(liveTranscribe, { config: { apiKey: 'test-key' } }),
+        prompt,
+      );
+    const twoRecordings = JSON.stringify([...JSON.parse(recording), ...JSON.parse(recording)]);
+    const turnComplete = { serverContent: { turnComplete: true, interactionStatus: 'IDLE' } };
+    const interim = { serverContent: { interimInputTranscription: { text: 'draft' } } };
+    const transcript = (text: string) => ({ serverContent: { inputTranscription: { text } } });
+
+    it.each([0, 1, 2])(
+      'retains all speech when turnComplete follows %i segments',
+      async (after) => {
+        const { result } = await startTranscription();
+        const frames: object[] = [transcript('First segment.'), transcript('Second segment.')];
+        frames.splice(after, 0, turnComplete);
+        for (const frame of frames) {
+          await emit(frame);
+        }
+        await vi.advanceTimersByTimeAsync(4_000);
+        await expect(result).resolves.toMatchObject({
+          output: { text: 'First segment.\nSecond segment.' },
+        });
+        expect(ws.close).toHaveBeenCalledTimes(1);
+      },
+    );
+
+    it.each(['silence', 'trailing speech'])(
+      'waits for %s before sending the next recording',
+      async (first) => {
+        const { result } = await startTranscription(twoRecordings);
+        await emit(turnComplete);
+        expect(sent()).toHaveLength(3);
+        if (first === 'trailing speech') {
+          await emit(transcript('First recording.'));
+        }
+        await vi.advanceTimersByTimeAsync(4_000);
+        expect(sent().slice(3)).toEqual([
+          { realtimeInput: { audio: { mimeType: 'audio/pcm;rate=16000', data: 'AAAAAA==' } } },
+          { realtimeInput: { audioStreamEnd: true } },
+        ]);
+        await emit(turnComplete);
+        await emit(transcript('Second recording.'));
+        await vi.advanceTimersByTimeAsync(4_000);
+        const text =
+          first === 'silence' ? 'Second recording.' : 'First recording.\nSecond recording.';
+        await expect(result).resolves.toMatchObject({ output: { text } });
+        expect(sent()).toHaveLength(5);
+        expect(ws.close).toHaveBeenCalledTimes(1);
+      },
+    );
+
+    it.each([
+      { frames: [interim, turnComplete], final: 'Final speech.' },
+      { frames: [turnComplete, interim], final: 'Final speech.' },
+      { frames: [interim, turnComplete], final: '' },
+    ])("waits for final transcript '$final' after $frames", async ({ frames, final }) => {
+      const { result } = await startTranscription();
+      for (const frame of frames) {
+        await emit(frame);
+      }
+      await vi.advanceTimersByTimeAsync(4_000);
+      expect(ws.close).not.toHaveBeenCalled();
+      await emit(turnComplete);
+      await vi.advanceTimersByTimeAsync(4_000);
+      expect(ws.close).not.toHaveBeenCalled();
+      await emit(transcript(final));
+      await vi.advanceTimersByTimeAsync(4_000);
+      await expect(result).resolves.toMatchObject({ output: { text: final } });
+    });
+
+    it('extends the completion grace for trailing finalized speech', async () => {
+      const { result } = await startTranscription();
+      await emit(turnComplete);
+      await vi.advanceTimersByTimeAsync(3_000);
+      await emit(transcript('Final speech.'));
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(ws.close).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(3_000);
+      await expect(result).resolves.toMatchObject({ output: { text: 'Final speech.' } });
+    });
+
+    it.each([
+      { scenario: 'speech', frames: [transcript('Hello'), turnComplete], expected: 'Hello' },
+      {
+        scenario: 'trailing speech',
+        frames: [turnComplete, transcript('Hello')],
+        expected: 'Hello',
+      },
+      { scenario: 'silence', frames: [turnComplete], expected: '' },
+    ])(
+      'finishes $scenario when the peer closes normally during the grace period',
+      async ({ frames, expected }) => {
+        const { result } = await startTranscription();
+        // A socket may deliver several frames and close before their async handlers run.
+        for (const frame of frames) {
+          void emit(frame);
+        }
+        Object.assign(ws, { readyState: WebSocket.CLOSED });
+        ws.onclose?.({ code: 1000, wasClean: true } as WebSocket.CloseEvent);
+        await expect(result).resolves.toMatchObject({ output: { text: expected } });
+        expect(ws.close).not.toHaveBeenCalled();
+      },
+    );
+
+    it('requires a completion marker for the last recording on a normal close', async () => {
+      const { result } = await startTranscription(twoRecordings);
+      await emit(turnComplete);
+      await vi.advanceTimersByTimeAsync(4_000);
+      await emit(transcript('Second recording.'));
+      ws.onclose?.({ code: 1000, wasClean: true } as WebSocket.CloseEvent);
+      await expect(result).resolves.toMatchObject({
+        error: expect.stringContaining('closed unexpectedly'),
+      });
+    });
+
+    it.each([
+      {
+        scenario: 'missing completion',
+        frames: [transcript('Hello')],
+        code: 1000,
+        prompt: recording,
+      },
+      {
+        scenario: 'unfinished speech',
+        frames: [turnComplete, interim],
+        code: 1000,
+        prompt: recording,
+      },
+      { scenario: 'unsent recording', frames: [turnComplete], code: 1000, prompt: twoRecordings },
+      { scenario: 'server error', frames: [turnComplete], code: 1011, prompt: recording },
+    ])('reports a peer close with $scenario', async ({ frames, code, prompt }) => {
+      const { result } = await startTranscription(prompt);
+      for (const frame of frames) {
+        await emit(frame);
+      }
+      ws.onclose?.({ code, wasClean: true } as WebSocket.CloseEvent);
+      await expect(result).resolves.toMatchObject({
+        error: expect.stringContaining('closed unexpectedly'),
+      });
+    });
+  });
+
   it.each([
     [
       {},
@@ -327,7 +496,11 @@ describe('VertexLiveProvider', () => {
     'preserves Google Cloud aliases through parsed %s config and provider loading',
     async (source) => {
       const id = `vertex:live:${model}`;
-      const env = { GOOGLE_CLOUD_PROJECT: 'parsed-project', GOOGLE_CLOUD_LOCATION: 'europe-west4' };
+      const env = {
+        GOOGLE_CLOUD_PROJECT: 'parsed-project',
+        GOOGLE_CLOUD_LOCATION: 'europe-west4',
+        VERTEX_API_VERSION: 'v1beta1',
+      };
       const options =
         source === 'provider'
           ? ProviderOptionsSchema.parse({ id, env })
@@ -350,6 +523,7 @@ describe('VertexLiveProvider', () => {
       expect(vi.mocked(WebSocket).mock.calls[0][0]).toContain(
         'wss://europe-west4-aiplatform.googleapis.com/',
       );
+      expect(vi.mocked(WebSocket).mock.calls[0][0]).toContain('aiplatform.v1beta1.');
     },
   );
 
@@ -381,14 +555,29 @@ describe('VertexLiveProvider', () => {
     expect(WebSocket).not.toHaveBeenCalled();
   });
 
-  it.each([{ apiVersion: 'v1alpha' }, { apiVersion: 'v1beta' }, { region: 'example.com/path' }])(
-    'rejects invalid endpoint config %j before requesting credentials',
-    async (config) => {
-      await expect(new VertexLiveProvider(model, { config }).callApi('Hello')).rejects.toThrow(
-        'Vertex Live',
-      );
-      expect(mockAuth).not.toHaveBeenCalled();
-      expect(WebSocket).not.toHaveBeenCalled();
+  const invalidApiVersion = 'Vertex Live apiVersion must be v1 or v1beta1.';
+  it.each([
+    [{ config: { apiVersion: 'v1alpha' } }, '', invalidApiVersion],
+    [{ config: { apiVersion: 'v1beta' } }, '', invalidApiVersion],
+    [
+      { config: { region: 'example.com/path' } },
+      '',
+      'Vertex Live region must be a Google Cloud location ID.',
+    ],
+    [{ env: { VERTEX_API_VERSION: 'v1alpha' } }, '', invalidApiVersion],
+    [{}, 'v1beta', invalidApiVersion],
+  ] as const)(
+    'rejects invalid endpoint options %j with process version %s before requesting credentials',
+    async (options, processVersion, message) => {
+      const restoreVersion = mockProcessEnv({ VERTEX_API_VERSION: processVersion });
+      try {
+        const provider = new VertexLiveProvider(model, options);
+        await expect(provider.callApi('Hello')).rejects.toThrow(message);
+        expect(mockAuth).not.toHaveBeenCalled();
+        expect(WebSocket).not.toHaveBeenCalled();
+      } finally {
+        restoreVersion();
+      }
     },
   );
 

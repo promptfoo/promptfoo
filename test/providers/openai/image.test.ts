@@ -337,18 +337,17 @@ describe('OpenAiImageProvider', () => {
       expect(result.error).toContain('Internal Server Error');
     });
 
-    it('should handle deleteFromCache when response parsing fails', async () => {
+    it('returns the image error even if cache eviction fails', async () => {
       const provider = new OpenAiImageProvider('gpt-image-2.5-flare', createApiKeyOptions());
 
-      const mockDeleteFn = vi.fn();
-      vi.mocked(fetchWithCache).mockResolvedValueOnce(
-        createMockFetchResponse({
-          // Invalid data structure that will cause parsing to fail
-          deleteFromCache: mockDeleteFn,
-        }),
-      );
+      const mockDeleteFn = vi.fn().mockRejectedValue(new Error('Cache unavailable'));
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        ...createMockFetchResponse({}),
+        deleteFromCache: mockDeleteFn,
+      });
 
-      await provider.callApi('test prompt');
+      const result = await provider.callApi('test prompt');
+      expect(result.error).toContain('No base64 image data found');
       expect(mockDeleteFn).toHaveBeenCalledTimes(1);
     });
   });

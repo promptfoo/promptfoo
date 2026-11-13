@@ -6,40 +6,16 @@
  *
  * @see docs/plans/smoke-tests.md for the full checklist
  */
-import { spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { CLI_PATH, runCli } from './runCli';
 
-// Path to the built CLI binary
-const CLI_PATH = path.resolve(__dirname, '../../dist/src/main.js');
-const ROOT_DIR = path.resolve(__dirname, '../..');
 const FIXTURES_DIR = path.resolve(__dirname, 'fixtures');
 const CONFIGS_DIR = path.resolve(FIXTURES_DIR, 'configs');
 const FRONTEND_TS_PROJECT_DIR = path.resolve(FIXTURES_DIR, 'frontend-ts-provider');
 const OUTPUT_DIR = path.resolve(__dirname, '.temp-output-jsts');
-
-/**
- * Helper to run the CLI and capture output
- */
-function runCli(
-  args: string[],
-  options: { cwd?: string; env?: NodeJS.ProcessEnv } = {},
-): { stdout: string; stderr: string; exitCode: number } {
-  const result = spawnSync('node', [CLI_PATH, ...args], {
-    cwd: options.cwd || ROOT_DIR,
-    encoding: 'utf-8',
-    env: { ...process.env, ...options.env, NO_COLOR: '1' },
-    timeout: 60000,
-  });
-
-  return {
-    stdout: result.stdout || '',
-    stderr: result.stderr || '',
-    exitCode: result.status ?? 1,
-  };
-}
 
 describe('JavaScript/TypeScript Config Smoke Tests', () => {
   beforeAll(() => {

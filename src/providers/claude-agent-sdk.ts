@@ -4,6 +4,7 @@ import path from 'node:path';
 import type { Stats } from 'node:fs';
 
 import { trace as otelTrace, SpanStatusCode } from '@opentelemetry/api';
+import { parseTraceParent } from '@opentelemetry/core';
 import dedent from 'dedent';
 import semverSatisfies from 'semver/functions/satisfies.js';
 import cliState from '../cliState';
@@ -112,6 +113,8 @@ const MODEL_USAGE_COUNTERS = [
   'thinkingTokens',
   'cacheReadInputTokens',
   'cacheCreationInputTokens',
+  'cacheCreationEphemeral5mInputTokens',
+  'cacheCreationEphemeral1hInputTokens',
   'webSearchRequests',
   'costUSD',
 ] as const;
@@ -2036,33 +2039,25 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
           requestBody: prompt,
         },
         async () => {
-          // Propagate trace context to the SDK subprocess so its OTEL spans attach
-          // under our span. Prefer the active span's traceparent; fall back to the
-          // evaluator-supplied one. `getTraceparent()` can return an all-zero trace
-          // id when no OTEL SDK is registered (NonRecordingSpan / INVALID_TRACEID),
-          // which would poison propagation — skip it in that case.
-          const ZERO_TRACE_ID = '00000000000000000000000000000000';
-          const active = getTraceparent();
-          const activeValid = active && !active.includes(ZERO_TRACE_ID) ? active : undefined;
-          const traceparent = activeValid ?? context?.traceparent;
-          // Runtime environment is intentionally excluded from persistent key material and
-          // replaced by the provider-instance scope, so trace propagation cannot affect the key.
-          if (traceparent && !env.TRACEPARENT) {
-            env.TRACEPARENT = traceparent;
+          // Prefer the active span; fall back to the evaluator's parent if the active
+          // context is missing or invalid (including a non-recording span's zero IDs).
+          let traceparent = getTraceparent();
+          let traceContext = traceparent ? parseTraceParent(traceparent) : null;
+          if (!traceContext && context?.traceparent) {
+            traceparent = context.traceparent;
+            traceContext = parseTraceParent(traceparent);
           }
-          // Some SDK telemetry signals (logs in particular) do not inherit
-          // TRACEPARENT into their OTEL context. Encode the trace + parent span
-          // IDs as resource attributes too — promptfoo's OTLP /v1/logs receiver
-          // reads these to link log-derived spans to the evaluation trace.
-          // traceparent format: "version-traceId-spanId-flags".
-          const [, tpTraceId, tpSpanId] = traceparent ? traceparent.split('-') : [];
-          if (tpTraceId && tpSpanId) {
+          if (traceContext && traceparent) {
+            env.TRACEPARENT ||= traceparent;
+            // The OTLP logs receiver uses these attributes for signals that do not
+            // inherit TRACEPARENT in the subprocess.
             env.OTEL_RESOURCE_ATTRIBUTES = appendPromptfooResourceAttrs(
               env.OTEL_RESOURCE_ATTRIBUTES,
-              tpTraceId,
-              tpSpanId,
+              traceContext.traceId,
+              traceContext.spanId,
             );
           }
+          const nativeTraceContext = sdkExportsNativeSpans ? traceContext : null;
 
           // Dynamically import the ESM module once and cache it
           const { sdk, version } = (this.loadedSdk ??= await loadClaudeCodeSDK());
@@ -2102,7 +2097,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
           const toolTurnIndex = new Map<string, number>();
           const deferredSyntheticSpans: Array<() => void> = [];
           const emitOrDeferSyntheticSpan = (emit: () => void): void => {
-            if (sdkExportsNativeSpans) {
+            if (nativeTraceContext) {
               deferredSyntheticSpans.push(emit);
             } else {
               emit();
@@ -2281,16 +2276,12 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
           // the main agent's result never arrived).
           const finalMsg = lastMainResultMsg ?? lastResultMsg;
 
-          if (!finalMsg) {
-            return { error: "Claude Agent SDK call didn't return a result" };
-          }
-
-          if (sdkExportsNativeSpans && tpTraceId && tpSpanId) {
+          if (nativeTraceContext) {
             let nativeSpansArrived = false;
             try {
               nativeSpansArrived = await waitForNativeTraceExport(
-                tpTraceId,
-                tpSpanId,
+                nativeTraceContext.traceId,
+                nativeTraceContext.spanId,
                 env,
                 callOptions?.abortSignal,
               );
@@ -2308,6 +2299,10 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
                 emit();
               }
             }
+          }
+
+          if (!finalMsg) {
+            return { error: "Claude Agent SDK call didn't return a result" };
           }
 
           // Truncation guard. With SDK >= 0.2.126 the `origin` field gives a

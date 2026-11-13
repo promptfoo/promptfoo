@@ -1,5 +1,5 @@
 import { asc, eq, sql } from 'drizzle-orm';
-import { getDb } from '../database/index';
+import { getDb, getDbIfExists } from '../database/index';
 import { spansTable, tracesTable } from '../database/tables';
 import logger from '../logger';
 import { sanitizeTraceAttributes } from './sanitizeAttributes';
@@ -200,7 +200,10 @@ export class TraceStore {
 
     try {
       logger.debug(`[TraceStore] Fetching traces for evaluation ${evaluationId}`);
-      const db = await this.getDatabase();
+      const db = (this.db ??= await getDbIfExists());
+      if (!db) {
+        return [];
+      }
 
       // Get all traces for the evaluation
       const traces = await db

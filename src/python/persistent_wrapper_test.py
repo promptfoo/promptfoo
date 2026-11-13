@@ -514,25 +514,20 @@ class TestHandleCall(unittest.TestCase):
 
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
-    def test_new_format_success(self) -> None:
-        """Tests successful CALL with new 4-part format."""
-        with open(self.request_file, "w") as f:
-            json.dump([2, 3], f)
-
-        stdout_capture = io.StringIO()
-        with patch("sys.stdout", stdout_capture):
-            persistent_wrapper.handle_call(
-                f"CALL|test_func|{self.request_file}|{self.response_file}",
-                self.mock_module,
-                "default_func",
-            )
-
-        self.assertIn("DONE", stdout_capture.getvalue())
-
-        with open(self.response_file) as f:
-            response = json.load(f)
-        self.assertEqual(response["type"], "result")
-        self.assertEqual(response["data"], 5)
+    def test_call_formats(self) -> None:
+        paths = f"{self.request_file}|{self.response_file}"
+        for command, default, args, expected in [
+            (f"CALL|test_func|{paths}", "default_func", [2, 3], 5),
+            (f"CALL|{paths}", "test_func", [10, 20], 30),
+        ]:
+            with self.subTest(command=command):
+                with open(self.request_file, "w") as f:
+                    json.dump(args, f)
+                with patch("sys.stdout", new_callable=io.StringIO) as stdout:
+                    persistent_wrapper.handle_call(command, self.mock_module, default)
+                self.assertEqual(stdout.getvalue(), f"\nDONE|{self.response_file}\n")
+                with open(self.response_file) as f:
+                    self.assertEqual(json.load(f), {"type": "result", "data": expected})
 
     def test_done_marker_starts_own_line_after_partial_stdout(self) -> None:
         """Regression (#10097): user code that leaves stdout mid-line must not
@@ -561,25 +556,27 @@ class TestHandleCall(unittest.TestCase):
         ]
         self.assertEqual(done_lines, [f"DONE|{self.response_file}"])
 
-    def test_legacy_format_success(self) -> None:
-        """Tests successful CALL with legacy 3-part format."""
+    def test_serialization_error_replaces_partial_response(self) -> None:
+        self.mock_module.test_func = MagicMock(return_value={1})
         with open(self.request_file, "w") as f:
-            json.dump([10, 20], f)
-
-        stdout_capture = io.StringIO()
-        with patch("sys.stdout", stdout_capture):
+            json.dump([], f)
+        with (
+            patch("sys.stdout", new_callable=io.StringIO) as stdout,
+            patch("sys.stderr", new_callable=io.StringIO) as stderr,
+        ):
             persistent_wrapper.handle_call(
                 f"CALL|{self.request_file}|{self.response_file}",
                 self.mock_module,
-                "test_func",  # Uses default function
+                "test_func",
             )
-
-        self.assertIn("DONE", stdout_capture.getvalue())
-
+        self.mock_module.test_func.assert_called_once_with()
+        self.assertEqual(stdout.getvalue(), f"\nDONE|{self.response_file}\n")
         with open(self.response_file) as f:
             response = json.load(f)
-        self.assertEqual(response["type"], "result")
-        self.assertEqual(response["data"], 30)
+        self.assertEqual(response["type"], "error")
+        self.assertIn("not JSON serializable", response["error"])
+        self.assertIn(response["error"], response["traceback"])
+        self.assertIn(response["error"], stderr.getvalue())
 
     def test_invalid_format_writes_error(self) -> None:
         """Tests that invalid command format reports the error without emitting a bogus DONE marker."""
@@ -656,8 +653,10 @@ class TestHandleCall(unittest.TestCase):
             )
 
         with open(self.response_file, encoding="utf-8") as f:
-            response = json.load(f)
+            raw_response = f.read()
 
+        self.assertIn("🎉", raw_response)
+        response = json.loads(raw_response)
         self.assertEqual(response["data"]["emoji"], "🎉")
         self.assertEqual(response["data"]["chinese"], "中文")
 

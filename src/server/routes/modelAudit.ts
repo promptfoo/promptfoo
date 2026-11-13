@@ -10,7 +10,7 @@ import logger from '../../logger';
 import ModelAudit from '../../models/modelAudit';
 import telemetry from '../../telemetry';
 import { ModelAuditSchemas } from '../../types/api/modelAudit';
-import { parseModelAuditArgs } from '../../util/modelAuditCliParser';
+import { getModelAuditDelegationEnv, parseModelAuditArgs } from '../../util/modelAuditCliParser';
 import { checkModelAuditInstalled } from '../../util/modelAuditInstall';
 import { parseCompleteModelAuditResults } from '../../util/modelAuditResults';
 import { replyValidationError, sendError } from '../utils/errors';
@@ -24,13 +24,6 @@ const LIST_SCANNERS_ARGS = parseModelAuditArgs([], {
   listScanners: true,
   format: 'json',
 });
-
-function getModelAuditDelegationEnv(): NodeJS.ProcessEnv {
-  return {
-    ...process.env,
-    PROMPTFOO_DELEGATED: 'true',
-  };
-}
 
 function spawnModelAuditCapture(
   args: string[],

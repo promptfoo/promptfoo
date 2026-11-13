@@ -11,8 +11,8 @@ import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { AnthropicGenericProvider, hashAnthropicCacheValue } from './generic';
 import { formatLegacyCompletionPrompt } from './util';
 
-import type { EnvOverrides } from '../../types/env';
 import type { ProviderResponse } from '../../types/index';
+import type { ProviderOptions } from '../../types/providers';
 import type { AnthropicCompletionOptions } from './types';
 
 interface CompletionRequest {
@@ -69,12 +69,10 @@ export class AnthropicCompletionProvider extends AnthropicGenericProvider {
 
   constructor(
     modelName: string,
-    options: {
-      config?: AnthropicCompletionOptions;
-      id?: string;
-      label?: string;
-      env?: EnvOverrides;
-    } = {},
+    options: Pick<
+      ProviderOptions<AnthropicCompletionOptions>,
+      'config' | 'id' | 'label' | 'env'
+    > = {},
   ) {
     super(modelName, options);
   }
@@ -137,7 +135,10 @@ export class AnthropicCompletionProvider extends AnthropicGenericProvider {
 
     let response;
     try {
-      response = await this.anthropic.post<CompletionResponse>('/v1/complete', { body: params });
+      response = await this.anthropic.post<CompletionResponse>('/v1/complete', {
+        body: params,
+        headers: this.config.headers,
+      });
     } catch (err) {
       return {
         error: `API call error: ${String(err)}`,

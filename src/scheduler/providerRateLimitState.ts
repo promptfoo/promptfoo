@@ -15,8 +15,7 @@ import { sleepWithAbort, throwIfAborted } from './cancellation';
 import { parseRateLimitHeaders } from './headerParser';
 import { DEFAULT_RETRY_POLICY, getRetryDelay, type RetryPolicy, shouldRetry } from './retryPolicy';
 import { SlotQueue } from './slotQueue';
-
-import type { RateLimitExecuteOptions } from './types';
+import { isRateLimitError, type RateLimitExecuteOptions } from './types';
 
 export class RateLimitExhaustedError extends Error {
   constructor(
@@ -275,7 +274,7 @@ export class ProviderRateLimitState extends EventEmitter {
           retryError = error as Error;
           isRateLimited =
             options.canRetry?.() !== false &&
-            (options.isRateLimited?.(undefined, retryError) ?? this.isRateLimitError(retryError));
+            (options.isRateLimited?.(undefined, retryError) ?? isRateLimitError(retryError));
           retryAfterMs = options.getRetryAfter?.(undefined, retryError);
           if (isRateLimited) {
             this.handleRateLimit(retryAfterMs);
@@ -450,18 +449,6 @@ export class ProviderRateLimitState extends EventEmitter {
         ...change,
       });
     }
-  }
-
-  /**
-   * Check if error is a rate limit error.
-   */
-  private isRateLimitError(error: Error): boolean {
-    const message = (error.message ?? '').toLowerCase();
-    return (
-      message.includes('429') ||
-      message.includes('rate limit') ||
-      message.includes('too many requests')
-    );
   }
 
   /**

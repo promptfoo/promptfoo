@@ -104,6 +104,36 @@ describe('Bedrock Anthropic Messages provider', () => {
     },
   );
 
+  it('requires a complete price override for Haiku 4.5 on GovCloud Mantle', async () => {
+    const model = 'anthropic.claude-haiku-4-5';
+    const provider = createBedrockAnthropicMessagesProvider(model, {
+      config: { region: 'us-gov-west-1', apiKey: 'fixture-key' },
+    });
+    vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
+      id: 'fixture',
+      model,
+      role: 'assistant',
+      type: 'message',
+      stop_reason: 'end_turn',
+      stop_sequence: null,
+      content: [{ type: 'text', text: 'ready' }],
+      usage: { input_tokens: 100, output_tokens: 10 },
+    } as Anthropic.Messages.Message);
+    for (const [pricing, expected] of [
+      [{}, undefined],
+      [{ inputCost: 0.01 }, undefined],
+      [{ cost: 0 }, 0],
+      [{ inputCost: 0.01, outputCost: 0.02 }, 1.2],
+    ] as const) {
+      const response = await provider.callApi('rate', {
+        vars: {},
+        prompt: { raw: 'rate', label: 'rate', config: pricing },
+      });
+      expect(response.error).toBeUndefined();
+      expect(response.cost).toBe(expected);
+    }
+  });
+
   let restoreEnv: (() => void) | undefined;
 
   afterEach(async () => {
