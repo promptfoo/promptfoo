@@ -280,8 +280,6 @@ describe('runAssertions', () => {
   describe('metricOnly assertions', () => {
     it('scales scoring contributions without scaling a metric-only child with the same name', async () => {
       const result = await runAssertions({
-        prompt,
-        provider,
         test: {
           assert: [
             {
