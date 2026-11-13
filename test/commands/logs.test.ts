@@ -1,3 +1,5 @@
+import { EventEmitter } from 'node:events';
+import fsSync from 'fs';
 import fs from 'fs/promises';
 
 import { Command } from 'commander';
@@ -66,6 +68,91 @@ describe('logs command', () => {
   afterEach(() => {
     vi.resetAllMocks();
     process.exitCode = 0;
+  });
+
+  describe('following logs', () => {
+    let stop: (() => void) | undefined;
+
+    beforeEach(() => {
+      vi.useFakeTimers();
+      stop = undefined;
+    });
+
+    afterEach(() => {
+      stop?.();
+      vi.restoreAllMocks();
+      vi.useRealTimers();
+    });
+
+    async function startFollowing() {
+      const watcher = Object.assign(new EventEmitter(), { close: vi.fn() });
+      vi.mocked(fsSync.watch).mockReturnValue(watcher as unknown as fsSync.FSWatcher);
+      mockLogsUtil.findLogFile.mockReturnValue('/fixture.log');
+      mockFs.stat.mockResolvedValue({ size: 0, mtime: new Date() } as fsSync.Stats);
+      const previous = new Set(process.listeners('SIGINT'));
+      const following = program.parseAsync([
+        'node',
+        'test',
+        'logs',
+        'fixture.log',
+        '--follow',
+        '--no-color',
+      ]);
+      await vi.waitFor(() => expect(fsSync.watch).toHaveBeenCalledOnce());
+      stop = process.listeners('SIGINT').find((listener) => !previous.has(listener)) as
+        | (() => void)
+        | undefined;
+      expect(stop).toBeDefined();
+      return { watcher, following };
+    }
+
+    it('coalesces file events and prints appended content once', async () => {
+      const { watcher, following } = await startFollowing();
+      const output = vi.spyOn(process.stdout, 'write').mockReturnValue(true);
+      const close = vi.fn().mockResolvedValue(undefined);
+      mockFs.stat.mockResolvedValue({ size: 6 } as fsSync.Stats);
+      mockFs.open.mockResolvedValue({
+        read: vi.fn(async (buffer: Buffer) => {
+          buffer.write('entry\n');
+          return { bytesRead: 6, buffer };
+        }),
+        close,
+      } as unknown as Awaited<ReturnType<typeof fs.open>>);
+      watcher.emit('change');
+      await vi.advanceTimersByTimeAsync(50);
+      watcher.emit('change');
+      await vi.advanceTimersByTimeAsync(100);
+      expect(output).toHaveBeenCalledExactlyOnceWith('entry\n');
+      expect(mockFs.open).toHaveBeenCalledOnce();
+      expect(close).toHaveBeenCalledOnce();
+      stop?.();
+      await vi.advanceTimersByTimeAsync(100);
+      await following;
+    });
+
+    it('cancels pending file reads when interrupted', async () => {
+      const { watcher, following } = await startFollowing();
+      const reads = mockFs.stat.mock.calls.length;
+      watcher.emit('change');
+      stop?.();
+      await vi.advanceTimersByTimeAsync(100);
+      await following;
+      expect(watcher.close).toHaveBeenCalledOnce();
+      expect(mockFs.stat).toHaveBeenCalledTimes(reads);
+      expect(mockFs.open).not.toHaveBeenCalled();
+      expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it('handles asynchronous read errors during a follow', async () => {
+      const { watcher, following } = await startFollowing();
+      mockFs.stat.mockRejectedValueOnce(new Error('File removed'));
+      watcher.emit('change');
+      await vi.advanceTimersByTimeAsync(100);
+      expect(logger.debug).toHaveBeenCalledWith('Error reading log file: File removed');
+      stop?.();
+      await vi.advanceTimersByTimeAsync(100);
+      await following;
+    });
   });
 
   describe('command registration', () => {

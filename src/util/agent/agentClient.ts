@@ -25,8 +25,7 @@ import type { SocketAuthCredentials } from '../../types/codeScan';
 // Import cloud config for default host resolution
 let cloudConfig: { getApiHost(): string } | undefined;
 try {
-  const cloudModule = await import('../../globalConfig/cloud');
-  cloudConfig = cloudModule.cloudConfig;
+  cloudConfig = (await import('../../globalConfig/cloud')).cloudConfig;
 } catch (error: unknown) {
   // Only swallow MODULE_NOT_FOUND — other errors indicate real problems
   if (error instanceof Error && 'code' in error && (error as any).code === 'MODULE_NOT_FOUND') {
@@ -140,7 +139,7 @@ export async function createAgentClient<
       settled = true;
       clearTimeout(timeoutId);
 
-      const client: AgentClient<TStartSchema, TCompleteSchema> = {
+      resolve({
         sessionId,
 
         start(payload: InferSchema<TStartSchema>): void {
@@ -176,9 +175,7 @@ export async function createAgentClient<
         },
 
         socket,
-      };
-
-      resolve(client);
+      });
     });
 
     socket.on('connect_error', (error) => {

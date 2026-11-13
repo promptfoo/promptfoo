@@ -291,6 +291,10 @@ describe('validateTestPromptReferences', () => {
         validateTestPromptReferences(tests, prompts, undefined, {
           promptReferenceSources: [
             {
+              path: 'earlier.yaml',
+              content: 'tests:\n  - description: Earlier duplicate\n    prompts: [Missing Prompt]',
+            },
+            {
               path: 'promptfooconfig.yaml',
               content: [
                 'prompts:',

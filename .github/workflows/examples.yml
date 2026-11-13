@@ -1,0 +1,100 @@
+name: Examples
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  select:
+    name: Select examples
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      matrix: ${{ steps.select.outputs.matrix }}
+      any: ${{ steps.select.outputs.any }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.14'
+      - name: Test selection and aggregate gate
+        run: python -m unittest discover -s .github/scripts -p 'test_examples.py' -v
+      - name: Select affected examples, or all examples on main/manual runs
+        id: select
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if [ "$EVENT_NAME" = pull_request ]; then
+            python .github/scripts/examples.py plan --base "$BASE_SHA" --head "$HEAD_SHA"
+          else
+            python .github/scripts/examples.py plan
+          fi
+
+  test:
+    name: ${{ matrix.example }} (Python ${{ matrix.python }})
+    needs: select
+    if: needs.select.outputs.any == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix: ${{ fromJSON(needs.select.outputs.matrix) }}
+    env:
+      PROMPTFOO_DISABLE_SHARING: 'true'
+      PROMPTFOO_DISABLE_TELEMETRY: 'true'
+      PROMPTFOO_DISABLE_UPDATE: 'true'
+      PROMPTFOO_DISABLE_REMOTE_GENERATION: 'true'
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with: &no-persisted-credentials
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: ${{ matrix.python }}
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        if: matrix.node
+        with:
+          node-version-file: '.nvmrc'
+          cache: npm
+      - name: Install and build the local CLI
+        if: matrix.node
+        run: |
+          npm install -g npm@11.19.0 --registry=https://registry.npmjs.org/
+          npm ci --registry=https://registry.npmjs.org/
+          npx tsdown
+          npm run postbuild
+      - name: Run example in an isolated Python environment
+        env:
+          EXAMPLE: ${{ matrix.example }}
+        run: python .github/scripts/examples.py run "$EXAMPLE"
+
+  result:
+    name: Examples
+    needs: [select, test]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with: *no-persisted-credentials
+      - name: Require successful selection and every selected test
+        env:
+          SELECTION_RESULT: ${{ needs.select.result }}
+          ANY_SELECTED: ${{ needs.select.outputs.any }}
+          TEST_RESULT: ${{ needs.test.result }}
+        run: python3 .github/scripts/examples.py gate
