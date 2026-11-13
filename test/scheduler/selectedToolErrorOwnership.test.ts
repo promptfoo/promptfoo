@@ -2,7 +2,7 @@ import { getEventListeners } from 'node:events';
 import { setImmediate } from 'node:timers/promises';
 
 import { context, propagation, SpanStatusCode, trace } from '@opentelemetry/api';
-import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
+import { TracerProvider } from '@opentelemetry/sdk-trace';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { withCacheEnabled, withCacheNamespace } from '../../src/cache';
 import { loadApiProvider } from '../../src/providers';
@@ -12,8 +12,9 @@ import { wrapProviderWithRateLimiting } from '../../src/scheduler/providerWrappe
 import { getRateLimitKey } from '../../src/scheduler/rateLimitKey';
 import { RateLimitRegistry } from '../../src/scheduler/rateLimitRegistry';
 import { SlotQueue } from '../../src/scheduler/slotQueue';
+import { registerTracerProvider } from '../../src/tracing/tracerProvider';
 import { createDeferred, mockProcessEnv } from '../util/utils';
-import type { ReadableSpan, SpanProcessor } from '@opentelemetry/sdk-trace-node';
+import type { ReadableSpan, SpanProcessor } from '@opentelemetry/sdk-trace';
 
 import type { ApiProvider, ProviderResponse } from '../../src/types/providers';
 
@@ -25,7 +26,7 @@ describe('selected tool error through the actual iterative scheduler boundary', 
   const pending: Promise<unknown>[] = [];
   const drains: (() => void)[] = [];
   let registry: RateLimitRegistry;
-  let tracerProvider: NodeTracerProvider;
+  let tracerProvider: TracerProvider;
   let restoreEnvironment: () => void;
 
   beforeEach(() => {
@@ -103,8 +104,8 @@ describe('selected tool error through the actual iterative scheduler boundary', 
         async forceFlush() {},
         async shutdown() {},
       };
-      tracerProvider = new NodeTracerProvider({ spanProcessors: [processor] });
-      tracerProvider.register();
+      tracerProvider = new TracerProvider({ spanProcessors: [processor] });
+      registerTracerProvider(tracerProvider);
       const policy = toolCompleted.promise.then(() => {
         events.push('caller abort');
         firstController.abort(reason);
@@ -368,8 +369,8 @@ describe('selected tool error through the actual iterative scheduler boundary', 
         async forceFlush() {},
         async shutdown() {},
       };
-      tracerProvider = new NodeTracerProvider({ spanProcessors: [processor] });
-      tracerProvider.register();
+      tracerProvider = new TracerProvider({ spanProcessors: [processor] });
+      registerTracerProvider(tracerProvider);
       const callback = vi.fn(async () => {
         if (fail) {
           events.push('callback failed');
