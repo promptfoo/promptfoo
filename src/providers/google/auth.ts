@@ -21,7 +21,7 @@ import type { GoogleAuthOptions } from 'google-auth-library';
 import type { EnvOverrides } from '../../types/env';
 import type { CompletionOptions } from './types';
 
-// gcp-metadata (8.x) emits a `MetadataLookupWarning` of the form
+// gcp-metadata emits a `MetadataLookupWarning` of the form
 // `received unexpected error = ${err.message} code = ${code}` when the optional ADC probe cannot
 // reach the metadata host. Match the stable prefix (scoped by the warning type) rather than the
 // fully-interpolated string: the err.message/code suffix varies by failure mode (the codeless
