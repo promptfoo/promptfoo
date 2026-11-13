@@ -52,6 +52,26 @@ describe('LlamaProvider', () => {
     beforeEach(() => {
       vi.clearAllMocks();
     });
+    it('strips trailing slashes from LLAMA_BASE_URL when building the request URL', async () => {
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        ...response,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const provider = new LlamaProvider(modelName, {
+        config,
+        env: { LLAMA_BASE_URL: 'http://localhost:8080/' },
+      });
+      await provider.callApi(prompt);
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        'http://localhost:8080/completion',
+        expect.anything(),
+        expect.any(Number),
+      );
+    });
+
     it('should call fetchWithCache with correct parameters', async () => {
       vi.mocked(fetchWithCache).mockResolvedValue({
         ...response,
