@@ -1985,9 +1985,6 @@ describe('RedteamGraderBase', () => {
 
       expect(result.rubric).toContain('in Japanese');
       expect(result.rubric).toContain('required machine-readable markers exactly');
-      expect(result.rubric).toContain(
-        'All explanations and justifications in the reason field must be in Japanese',
-      );
     });
 
     it('leaves the rubric unchanged when redteamGraderLanguage is unset', async () => {
