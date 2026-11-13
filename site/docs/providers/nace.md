@@ -189,7 +189,7 @@ providers:
 
 ## Images
 
-Drex Max reads up to 8 PNG, JPEG, or WebP images per request. List them in the provider's `images`. Each entry is an image file path (relative to the config file), a data URL, or base64. Entries are templates rendered with the test vars, so a `file://` image var works. Refer to the images as "Image 1", "Image 2", and so on in the state or the instructions; those words stay plain text, and Drex matches them to the images by list order.
+Drex Max reads up to 8 PNG, JPEG, or WebP images per request. List them in the provider's `images`. Each entry is an image file path, a data URL, or base64. Relative paths resolve from the config file's directory, as inline `file://` vars do, even when the provider is declared in an imported tests file. Entries are templates rendered with the test vars, so a `file://` image var works. Refer to the images as "Image 1", "Image 2", and so on in the state or the instructions; those words stay plain text, and Drex matches them to the images by list order.
 
 ```yaml title="promptfooconfig.yaml"
 prompts:
