@@ -1528,7 +1528,7 @@ describe('JavaScript file references', () => {
     expect(result.reason).toContain('finite scores and weights. Got type object.');
     expect(result.reason).not.toContain('diagnostic-placeholder');
     expect(result.reason).not.toContain('requestHeaders');
-    expect(result.metadata).toBeUndefined();
+    expect(result.metadata).toEqual({ scriptError: true });
   });
 
   it.each([
