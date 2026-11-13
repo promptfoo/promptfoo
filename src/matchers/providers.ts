@@ -10,7 +10,6 @@ import {
   runProviderCallWithAbort,
 } from '../scheduler/providerCallExecutionContext';
 import { createProviderRateLimitOptions, isRateLimitWrapped } from '../scheduler/providerWrapper';
-import { sanitizeProviderIdForLog } from '../util/provider';
 
 import type {
   ApiProvider,
@@ -186,6 +185,8 @@ function isSimulatedUserProviderConfig(provider: GradingConfig['provider']): boo
   );
 }
 
+const warnedImplicitGraders = new WeakSet<object>();
+
 export async function getGradingProvider(
   type: ProviderType,
   provider: GradingConfig['provider'],
@@ -270,23 +271,18 @@ export async function getGradingProvider(
     if (cfg) {
       // Recursively call getGradingProvider to handle all provider types (string, object, etc.)
       finalProvider = await getGradingProvider(type, cfg, defaultProvider);
-      if (finalProvider) {
-        const logContext = {
-          providerId: sanitizeProviderIdForLog(finalProvider.id()),
-        };
-        if (type === 'text' && fallback.source === 'defaultTest.provider') {
-          const scope = cliState.envScope ?? defaultTestObj!;
-          const warned = warnedImplicitGraders.get(scope) ?? new Set<string>();
-          if (!warned.has(logContext.providerId)) {
-            warned.add(logContext.providerId);
-            warnedImplicitGraders.set(scope, warned);
-            logger.warn(
-              '[Grading] defaultTest.provider is being used as the grader because no explicit grader is configured',
-              logContext,
-            );
-          }        } else {
-          logger.debug('[Grading] Using provider from defaultTest fallback', logContext);
-        }
+      const scope = cliState.envScope ?? defaultTestObj;
+      if (
+        finalProvider &&
+        scope &&
+        type === 'text' &&
+        fallback.source === 'defaultTest.provider' &&
+        !warnedImplicitGraders.has(scope)
+      ) {
+        warnedImplicitGraders.add(scope);
+        logger.warn(
+          '[Grading] defaultTest.provider is being used as the grader because no explicit grader is configured. Set --grader, defaultTest.options.provider, or an assertion-level provider to choose a separate grader.',
+        );
       }
     } else {
       finalProvider = defaultProvider;

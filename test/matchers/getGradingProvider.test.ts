@@ -174,10 +174,8 @@ describe('getGradingProvider', () => {
 
       expect(result).toBe(targetProvider);
       expect(logger.warn).toHaveBeenCalledWith(
-        '[Grading] defaultTest.provider is being used as the grader because no explicit grader is configured',
-        {
-          providerId: 'openai:gpt-4.1',
-        },
+        expect.stringContaining('defaultTest.provider is being used as the grader'),
+
       );
     });
 
@@ -190,7 +188,7 @@ describe('getGradingProvider', () => {
       expect(logger.warn).not.toHaveBeenCalled();
     });
 
-    it('redacts URL credentials from the implicit-grader warning', async () => {
+    it('omits the provider identifier from the implicit-grader warning', async () => {
       const id = 'https://fixture-user:fixture-password@example.test/judge?api_key=fixture-secret';
       cliState.config = { defaultTest: { provider: id } };
       vi.mocked(loadApiProvider).mockResolvedValue(createMockProvider({ id }));
@@ -199,7 +197,7 @@ describe('getGradingProvider', () => {
 
       const logged = JSON.stringify(vi.mocked(logger.warn).mock.calls);
       expect(logger.warn).toHaveBeenCalledOnce();
-      expect(logged).toContain('example.test/judge');
+      expect(logged).not.toContain('example.test/judge');
       expect(logged).not.toContain('fixture-user');
       expect(logged).not.toContain('fixture-password');
       expect(logged).not.toContain('fixture-secret');
