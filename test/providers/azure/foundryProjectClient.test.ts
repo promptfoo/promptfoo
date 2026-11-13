@@ -78,6 +78,45 @@ describe('Foundry project agent discovery', () => {
   });
 
   it.each([
+    [null, []],
+    [{}, ['data']],
+    [{ data: null }, ['data']],
+    [{ data: {} }, ['data']],
+    [{ data: 'not an array' }, ['data']],
+    [{ data: [], has_more: 'false' }, ['has_more']],
+    [{ data: [], has_more: true }, ['last_id']],
+    [{ data: [{ id: 'agent-id', name: 'agent-name' }], has_more: true }, ['last_id']],
+    [{ data: [], has_more: true, last_id: null }, ['last_id']],
+    [{ data: [], has_more: true, last_id: '' }, ['last_id']],
+    [{ data: [], has_more: true, last_id: ' \t' }, ['last_id']],
+    [{ data: [], has_more: true, last_id: 42 }, ['last_id']],
+  ])('rejects malformed pagination envelope %j', async (body, issuePath) => {
+    reply(200, body);
+    const client = new FoundryProjectClient('https://fixture.example/api/projects/project', {
+      getToken: async () => ({ token: 'fixture', expiresOnTimestamp: Date.now() + 3600000 }),
+    });
+
+    await expect(client.listAgents().next()).rejects.toMatchObject({
+      name: 'ZodError',
+      issues: expect.arrayContaining([expect.objectContaining({ path: issuePath })]),
+    });
+    expect(sendRequest).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([{ data: [] }, { data: [], has_more: false, last_id: '' }])(
+    'accepts an empty final page without a cursor %j',
+    async (body) => {
+      reply(200, body);
+      const client = new FoundryProjectClient('https://fixture.example/api/projects/project', {
+        getToken: async () => ({ token: 'fixture', expiresOnTimestamp: Date.now() + 3600000 }),
+      });
+
+      await expect(client.listAgents().next()).resolves.toEqual({ done: true, value: undefined });
+      expect(sendRequest).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it.each([
     [401, 'Unauthorized', 'Invalid access token'],
     [503, 'ServiceUnavailable', 'Project temporarily unavailable'],
   ] as const)('preserves HTTP %i discovery errors', async (status, code, message) => {
@@ -134,6 +173,24 @@ describe('Foundry project agent discovery', () => {
         '/api/projects/project/agents/legacy-id',
         '/api/projects/project/agents',
       ]);
+    });
+
+    it('reports a malformed cursor and retries discovery instead of caching a missing agent', async () => {
+      reply(404, { error: { code: 'NotFound', message: 'Unknown agent name' } });
+      reply(200, { data: [], has_more: true });
+
+      const result = await provider.callApi('first');
+      expect(result.error).toContain('last_id');
+      expect(result.error).not.toContain('was not found');
+      expect(globalThis.fetch).not.toHaveBeenCalled();
+
+      reply(404, { error: { code: 'NotFound', message: 'Unknown agent name' } });
+      reply(200, { data: [], has_more: true, last_id: 'next-page' });
+      reply(200, { data: [agent], has_more: false });
+      await expect(provider.callApi('recover')).resolves.toMatchObject({ output: 'Hello' });
+      await expect(provider.callApi('again')).resolves.toMatchObject({ output: 'Hello' });
+      expect(sendRequest).toHaveBeenCalledTimes(5);
+      expect(new URL(sendRequest.mock.calls[4][0].url).searchParams.get('after')).toBe('next-page');
     });
 
     it.each([

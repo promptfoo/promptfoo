@@ -265,6 +265,42 @@ const legacyModuleScopePersistentMockFiles = new Set<string>([
   'util/testCaseReader.test.ts',
   'util/transform.test.ts',
   'node/testProvider.test.ts',
+  // Existing setups exposed by requiring beforeEach reset coverage in every
+  // test scope. These mix afterEach cleanup, per-mock resets, and sibling
+  // suites that do not use the defaults. Preserve their behavior during this
+  // scanner migration; the stale-entry check below prevents unused exemptions.
+  'assertions/contextPropagation.test.ts',
+  'assertions/javascript.test.ts',
+  'blobs/extractor.test.ts',
+  'commands/eval.test.ts',
+  'commands/logs.test.ts',
+  'commands/mcp/tools/logs.test.ts',
+  'commands/modelScan.test.ts',
+  'fetch.test.ts',
+  'globalConfig/accounts.test.ts',
+  'integrations/huggingfaceDatasets.test.ts',
+  'matchers/llm-rubric.test.ts',
+  'providers/bedrock/requestAuthentication.test.ts',
+  'providers/defaults.test.ts',
+  'providers/elevenlabs/agents/index.test.ts',
+  'providers/fal.test.ts',
+  'providers/modelslab.test.ts',
+  'providers/quiverai.test.ts',
+  'providers/xai/chat.test.ts',
+  'redteam/index.test.ts',
+  'redteam/providers/custom/index.test.ts',
+  'redteam/providers/iterativeMeta.test.ts',
+  'redteam/remoteGeneration.test.ts',
+  'redteam/strategies/retry.test.ts',
+  'redteam/strategies/simpleImage.test.ts',
+  'share.test.ts',
+  'tracing/otelSdk.test.ts',
+  'util/file.test.ts',
+  'util/logs.test.ts',
+  'util/output.test.ts',
+  'util/redteamProbeLimit.test.ts',
+  'util/runtime.test.ts',
+  'util/sharing.test.ts',
 ]);
 
 const hoistedMockPattern = /\bvi\.hoisted\s*\(/;
@@ -279,14 +315,6 @@ const persistentMockImplementationPattern = new RegExp(
   `\\.(?:${persistentMockMethods.join('|')})\\s*\\(`,
 );
 const mockImplementationResetPattern = /(?:\.mockReset\s*\(|\bvi\.resetAllMocks\s*\()/;
-// Only `vi.resetAllMocks()` is trusted as a file-level signal that every
-// `vi.fn()`-style mock has its persistent implementation reset between tests.
-// Per-mock helpers (.mockReset()/.mockRestore()) only reset the specific mock
-// they are called on, and `vi.restoreAllMocks()` is documented as targeting
-// `vi.spyOn` mocks specifically — relying on it to reset module-scope
-// `vi.fn().mockReturnValue(...)` defaults is fragile, so it does not count.
-// See https://vitest.dev/api/vi#vi-restoreallmocks.
-const globalMockResetPattern = /\bvi\.resetAllMocks\s*\(/;
 const processEnvSnapshotIdentifierPattern = /^original[A-Za-z0-9_]*$/i;
 
 function forEachChild(node: Node, callback: (child: Node) => void): void {
@@ -485,8 +513,132 @@ function findModuleScopePersistentSetter(
   return undefined;
 }
 
+// A reset must execute before each test, not merely appear in a comment,
+// deferred callback, conditional branch, or afterEach hook. Only direct calls
+// count; per-mock resets and restoreAllMocks do not reset every vi.fn().
+function hasEarlyExit(node: Node): boolean {
+  if (isFunctionLikeNode(node)) {
+    return false;
+  }
+  if (node.type === 'ReturnStatement' || node.type === 'ThrowStatement') {
+    return true;
+  }
+  let found = false;
+  forEachChild(node, (child) => {
+    found ||= hasEarlyExit(child);
+  });
+  return found;
+}
+
+function callbackResetsAllMocks(callback: Node): boolean {
+  if (
+    (callback.type !== 'ArrowFunctionExpression' && callback.type !== 'FunctionExpression') ||
+    !callback.body
+  ) {
+    return false;
+  }
+  const statements = callback.body.type === 'BlockStatement' ? callback.body.body : [callback.body];
+  for (const statement of statements) {
+    const expression =
+      statement.type === 'ExpressionStatement'
+        ? statement.expression
+        : statement.type === 'ReturnStatement'
+          ? statement.argument
+          : statement;
+    const call = expression?.type === 'AwaitExpression' ? expression.argument : expression;
+    if (call?.type === 'CallExpression' && isViCall(call, 'resetAllMocks')) {
+      return true;
+    }
+    // A return in a branch can bypass a later direct reset.
+    if (hasEarlyExit(statement)) {
+      break;
+    }
+  }
+  return false;
+}
+
+type MockResetScope = {
+  hasReset: boolean;
+  hasTests: boolean;
+  children: MockResetScope[];
+};
+
+function hasBeforeEachMockReset(program: Node): boolean {
+  const root: MockResetScope = { hasReset: false, hasTests: false, children: [] };
+  let foundReset = false;
+
+  function visitCall(
+    node: CallExpression,
+    scope: MockResetScope,
+    registersUnconditionally: boolean,
+  ) {
+    const testCallee =
+      node.callee.type === 'TaggedTemplateExpression' ? node.callee.tag : node.callee;
+    if (node.callee.type === 'Identifier' && node.callee.name === 'beforeEach') {
+      const callback = node.arguments[0];
+      if (registersUnconditionally && callback && callbackResetsAllMocks(callback)) {
+        scope.hasReset = true;
+        foundReset = true;
+      }
+    }
+    if (hasTestApiBase(testCallee, collectionApiNames)) {
+      const callback = node.arguments.at(-1);
+      if (
+        (callback?.type === 'ArrowFunctionExpression' || callback?.type === 'FunctionExpression') &&
+        callback.body
+      ) {
+        const child: MockResetScope = { hasReset: false, hasTests: false, children: [] };
+        scope.children.push(child);
+        visit(callback.body, child);
+      } else if (node.arguments.length >= 2) {
+        // A named/deferred suite callback may register tests we cannot inspect.
+        scope.hasTests = true;
+      }
+    } else if (hasTestApiBase(testCallee)) {
+      scope.hasTests = true;
+    }
+  }
+
+  function visit(node: Node, scope: MockResetScope, registersUnconditionally = true) {
+    if (isFunctionLikeNode(node)) {
+      return;
+    }
+    if (node.type === 'Program' || node.type === 'BlockStatement') {
+      let unconditional = registersUnconditionally;
+      for (const statement of node.body) {
+        visit(statement, scope, unconditional);
+        if (statement.type === 'ReturnStatement' || statement.type === 'ThrowStatement') {
+          break;
+        }
+        if (hasEarlyExit(statement)) {
+          unconditional = false;
+        }
+      }
+      return;
+    }
+    if (node.type === 'CallExpression') {
+      visitCall(node, scope, registersUnconditionally);
+    }
+    const childrenRegisterUnconditionally =
+      registersUnconditionally &&
+      (node.type === 'ExpressionStatement' || node.type === 'CallExpression');
+    forEachChild(node, (child) => visit(child, scope, childrenRegisterUnconditionally));
+  }
+
+  function allTestScopesReset(scope: MockResetScope, inheritedReset = false): boolean {
+    const hasReset = inheritedReset || scope.hasReset;
+    return (
+      (!scope.hasTests || hasReset) &&
+      scope.children.every((child) => allTestScopesReset(child, hasReset))
+    );
+  }
+
+  visit(program, root);
+  return foundReset && allTestScopesReset(root);
+}
+
 function findModuleScopePersistentMockWithoutReset(file: HygieneFile): Node | undefined {
-  if (globalMockResetPattern.test(file.source)) {
+  if (hasBeforeEachMockReset(file.sourceFile)) {
     return undefined;
   }
 
@@ -1474,6 +1626,71 @@ describe('root test hygiene', () => {
       '  vi.restoreAllMocks();',
       '});',
     ].join('\n');
+    expect(hasModuleScopePersistentMockWithoutReset(source)).toBe(true);
+  });
+
+  it.each([
+    '// vi.resetAllMocks();',
+    'const example = "vi.resetAllMocks()";',
+    'vi.resetAllMocks();',
+    'it("case", () => vi.resetAllMocks());',
+    'afterEach(() => vi.resetAllMocks());',
+    'beforeAll(() => vi.resetAllMocks());',
+    'beforeEach(() => { const deferred = () => vi.resetAllMocks(); });',
+    'beforeEach(() => { if (enabled) { vi.resetAllMocks(); } });',
+    'beforeEach(() => enabled && vi.resetAllMocks());',
+    'beforeEach(() => { return; vi.resetAllMocks(); });',
+    'beforeEach(() => { return configure(); vi.resetAllMocks(); });',
+    'beforeEach(() => { return enabled && vi.resetAllMocks(); });',
+    'it("case", () => { beforeEach(() => vi.resetAllMocks()); });',
+    'if (enabled) { beforeEach(() => vi.resetAllMocks()); }',
+    'enabled && beforeEach(() => vi.resetAllMocks());',
+    'describe("suite", () => { it("case", () => {}); return; beforeEach(() => vi.resetAllMocks()); });',
+    'describe("suite", () => { it("case", () => {}); switch (value) { default: return; } beforeEach(() => vi.resetAllMocks()); });',
+  ])('requires an unconditional beforeEach reset instead of %s', (reset) => {
+    const source = `const mock = vi.fn().mockReturnValue("default");\n${reset}`;
+
+    expect(hasModuleScopePersistentMockWithoutReset(source)).toBe(true);
+  });
+
+  it.each([
+    'beforeEach(() => vi.resetAllMocks());',
+    'beforeEach(async () => { await vi.resetAllMocks(); });',
+    'beforeEach(() => { return vi.resetAllMocks(); });',
+    'beforeEach(async () => { return await vi.resetAllMocks(); });',
+    'beforeEach(function () { vi.resetAllMocks(); });',
+    'if (enabled) { configure(); } beforeEach(() => vi.resetAllMocks());',
+    'beforeEach(() => { if (enabled) { configure(); } vi.resetAllMocks(); });',
+    'describe("suite", () => { beforeEach(() => vi.resetAllMocks()); it("case", () => {}); });',
+    'beforeEach(() => vi.resetAllMocks()); describe("suite", () => { it("case", () => {}); });',
+    'describe.each`value\n${1}`("suite", () => { beforeEach(() => vi.resetAllMocks()); it("case", () => {}); });',
+  ])('recognizes beforeEach resets for the collected tests in %s', (reset) => {
+    const source = `const mock = vi.fn().mockReturnValue("default");\n${reset}`;
+
+    expect(hasModuleScopePersistentMockWithoutReset(source)).toBe(false);
+  });
+
+  it('does not let a sibling suite reset suppress an uncovered test', () => {
+    const source = [
+      'const mock = vi.fn().mockReturnValue("default");',
+      'describe("covered", () => {',
+      '  beforeEach(() => vi.resetAllMocks());',
+      '  it("case", () => {});',
+      '});',
+      'describe("uncovered", () => { it("case", () => {}); });',
+    ].join('\n');
+
+    expect(hasModuleScopePersistentMockWithoutReset(source)).toBe(true);
+  });
+
+  it('does not assume named suite callbacks have reset coverage', () => {
+    const source = [
+      'const mock = vi.fn().mockReturnValue("default");',
+      'function uncovered() { it("case", () => {}); }',
+      'describe("covered", () => { beforeEach(() => vi.resetAllMocks()); it("case", () => {}); });',
+      'describe("uncovered", uncovered);',
+    ].join('\n');
+
     expect(hasModuleScopePersistentMockWithoutReset(source)).toBe(true);
   });
 
