@@ -311,6 +311,8 @@ Run each stage as a separate eval and pass the saved results to the next stage:
 2. Use `elevenlabs:stt` with `prompts: ['{{audioFile}}']` and `vars.audioFile: audio/cleaned.mp3`. Save the transcription text from the output.
 3. Use `elevenlabs:alignment` with the cleaned audio path in `vars.audioFile` and the transcription in `vars.transcript` to generate time-aligned output.
 
+Set `vars.format` to `srt` or `vtt` for subtitles. Each cue spans from its first word's start to its last word's end.
+
 ## Advanced Features
 
 ### Pronunciation Dictionaries
