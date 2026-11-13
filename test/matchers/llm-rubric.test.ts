@@ -2867,22 +2867,25 @@ describe('matchesLlmRubric missing-verdict fail-closed semantics', () => {
     expect(result.metadata?.graderError).toBeUndefined();
   });
 
-  it.each([0, '0'])('keeps numeric pass %j as a failing verdict', async (pass) => {
-    vi.spyOn(Grader, 'callApi').mockResolvedValue({
-      output: JSON.stringify({ pass, score: 0, reason: 'The reply misses the rubric.' }),
-      tokenUsage: { total: 10, prompt: 5, completion: 5 },
-    });
+  it.each([{ pass: 0 }, { pass: '0' }, { pass: [1] }])(
+    'keeps $pass as a failing verdict',
+    async ({ pass }) => {
+      vi.spyOn(Grader, 'callApi').mockResolvedValue({
+        output: JSON.stringify({ pass, score: 0, reason: 'The reply misses the rubric.' }),
+        tokenUsage: { total: 10, prompt: 5, completion: 5 },
+      });
 
-    const result = await matchesLlmRubric('Expected output', 'Sample output', {
-      rubricPrompt: 'Grading prompt',
-      provider: Grader,
-    });
+      const result = await matchesLlmRubric('Expected output', 'Sample output', {
+        rubricPrompt: 'Grading prompt',
+        provider: Grader,
+      });
 
-    expect(result.pass).toBe(false);
-    expect(result.score).toBe(0);
-    expect(result.reason).toBe('The reply misses the rubric.');
-    expect(result.metadata?.graderError).toBeUndefined();
-  });
+      expect(result.pass).toBe(false);
+      expect(result.score).toBe(0);
+      expect(result.reason).toBe('The reply misses the rubric.');
+      expect(result.metadata?.graderError).toBeUndefined();
+    },
+  );
 
   it('fails numeric pass 1 when the score is below the threshold', async () => {
     const assertion: Assertion = {
