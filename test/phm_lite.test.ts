@@ -61,6 +61,7 @@ describe('PHM-Lite physics-consistency assertion', () => {
       'Shareholder returns were Fund A 60% and Fund B 70%.',
     ],
     ['one share observed twice', 'Traffic share increased from 60% to 70%.'],
+    ['one share in scientific notation', 'Traffic share changed from 6e1% to 7e1%.'],
     ['ordinary speeds', 'The car travels at 25 m/s. Water freezes at 0 degC.'],
     ['rounded light speed (1% tolerance)', 'Light travels at 3e8 m/s in vacuum.'],
     ['range separator (temperature)', 'The sensor operates over a range 0-300 °C.'],

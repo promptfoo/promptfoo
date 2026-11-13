@@ -250,6 +250,7 @@ function checkQuantityRules(
 }
 
 const num = '-?(?:\\d[\\d,]*(?:\\.\\d+)?|\\.\\d+)(?:\\s*[eE][+-]?\\d+)?';
+const PERCENTAGE_CHANGE = new RegExp(`\\bfrom\\s+${num}\\s*%\\s+to\\s+${num}\\s*%`, 'gi');
 // Speed units reject a following per-second exponent in every common form:
 // "/s", "^2", superscripts, the plain-ASCII "m/s2" without a caret, and
 // repeated denominators ("meters per second per second" = acceleration).
@@ -328,7 +329,6 @@ function phmLiteCheck(output) {
   // "Market share was 60% while recall was 70%" is not summed, while
   // "Traffic shares: A took 60% and B took 70%" is.
   const SHARE_CTX = /\b(?:shares?|allocations?|splits?|portions?|breakdowns?|divided)\b/i;
-  const PERCENTAGE_CHANGE = /\bfrom\s+[\d.,]+\s*%\s+to\s+[\d.,]+\s*%/gi;
   const METRIC_CTX = /recall|precision|accuracy|margin|error rate|f1/i;
   for (const sentence of normalized.split(/[.!?]\s|\n/)) {
     const breakdown = sentence.replace(PERCENTAGE_CHANGE, '');
