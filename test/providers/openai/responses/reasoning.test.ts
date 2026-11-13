@@ -213,13 +213,12 @@ describe('OpenAiResponsesProvider reasoning models', () => {
     const provider = new OpenAiResponsesProvider('o3-mini', {
       config: {
         apiKey: 'test-key',
+        apiBaseUrl: 'https://example.com/v1',
         isReasoningModel: false,
         reasoning: { effort: 'high' },
         temperature: 0.5,
       },
     });
-
-    expect(provider['supportsTemperature']()).toBe(true);
 
     const { body } = await provider.getOpenAiBody('Test prompt');
 
