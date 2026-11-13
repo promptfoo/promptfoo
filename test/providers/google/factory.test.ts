@@ -5,6 +5,7 @@ import { AIStudioChatProvider } from '../../../src/providers/google/ai.studio';
 import { GoogleAuthManager } from '../../../src/providers/google/auth';
 import * as googleUtil from '../../../src/providers/google/util';
 import { VertexChatProvider } from '../../../src/providers/google/vertex';
+import { isProviderResponseRateLimited } from '../../../src/scheduler/types';
 import * as fetchUtil from '../../../src/util/fetch/index';
 import { createMockFetchResponse } from '../mockProviderResponses';
 
@@ -433,6 +434,18 @@ describe('Google provider factories', () => {
     expect(fetchUtil.fetchWithProxy).not.toHaveBeenCalled();
   });
 
+  it('preserves a Vertex Express HTTP 429 with no error body for the scheduler', async () => {
+    vi.mocked(fetchUtil.fetchWithProxy).mockResolvedValue(
+      new Response(null, { status: 429, statusText: 'Resource Exhausted' }),
+    );
+    const provider = await loadApiProvider('vertex:gemini-2.5-flash', {
+      options: { config: { apiKey: 'test-key' } },
+    });
+
+    const result = await provider.callApi('hello');
+    expect(isProviderResponseRateLimited(result, undefined)).toBe(true);
+  });
+
   it('returns Vertex Express API errors', async () => {
     vi.mocked(fetchUtil.fetchWithProxy).mockResolvedValue(
       Response.json(
@@ -446,6 +459,7 @@ describe('Google provider factories', () => {
 
     expect(await provider.callApi('hello')).toEqual({
       error: 'API call error: 400 Bad Request: {"error":{"message":"invalid request"}}',
+      metadata: { http: { status: 400, statusText: 'Bad Request' } },
     });
   });
 });
