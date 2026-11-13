@@ -4146,6 +4146,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         processingContext,
         progressBarManager,
         prompts,
+        startTime,
       });
     }
 
