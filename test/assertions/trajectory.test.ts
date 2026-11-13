@@ -768,7 +768,8 @@ describe('trajectory:step-status', () => {
     'matches HTTP status from %s when the span status is unset',
     (key) => {
       const params = statusParams(0);
-      params.assertionValueContext.trace!.spans[1].attributes[key] = 503;
+      const span = params.assertionValueContext.trace!.spans[1];
+      span.attributes = { ...span.attributes, [key]: 503 };
       expect(handleTrajectoryStepStatus(params).pass).toBe(true);
       params.assertion.value = { name: 'search_orders', status: 503 };
       expect(handleTrajectoryStepStatus(params).pass).toBe(true);
