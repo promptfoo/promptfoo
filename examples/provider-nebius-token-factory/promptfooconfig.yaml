@@ -10,7 +10,7 @@ providers:
     config:
       apiBaseUrl: https://api.tokenfactory.nebius.com/v1
       headers:
-        OpenAI-Organization: ""
+        OpenAI-Organization: ''
       apiKeyEnvar: NEBIUS_API_KEY
       max_tokens: 512
       temperature: 0
