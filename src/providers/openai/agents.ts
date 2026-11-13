@@ -25,7 +25,7 @@ import {
 import { resolveModelSettings } from './agents-model-settings';
 import { OTLPTracingExporter } from './agents-tracing';
 import { OpenAiGenericProvider } from './index';
-import type { AgentInputItem, Handoff, ModelSettings, Session } from '@openai/agents';
+import type { AgentInputItem, Handoff, ModelSettings, RunItem, Session } from '@openai/agents';
 
 import type { EnvOverrides } from '../../types/env';
 import type {
@@ -549,47 +549,21 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
 type AgentToolCall = { callId: string; name: string; arguments: unknown };
 
 /** Return only function-call inputs; tool outputs may contain large or sensitive data. */
-export function extractToolCalls(newItems: unknown): AgentToolCall[] {
-  if (!Array.isArray(newItems)) {
-    return [];
-  }
-
+export function extractToolCalls(items: RunItem[]): AgentToolCall[] {
   const calls: AgentToolCall[] = [];
-  for (const item of newItems) {
-    if (!item || typeof item !== 'object') {
-      continue;
-    }
-    const rawItem = (item as { rawItem?: unknown }).rawItem;
-    const raw = rawItem && typeof rawItem === 'object' ? rawItem : item;
-    const record = raw as {
-      arguments?: unknown;
-      call_id?: unknown;
-      id?: unknown;
-      name?: unknown;
-      type?: unknown;
-    };
-    if (record.type !== 'function_call' || typeof record.name !== 'string') {
-      continue;
-    }
-    const callId =
-      typeof record.call_id === 'string'
-        ? record.call_id
-        : typeof record.id === 'string'
-          ? record.id
-          : undefined;
-    if (!callId || record.arguments === undefined) {
+  for (const item of items) {
+    if (item.type !== 'tool_call_item' || item.rawItem.type !== 'function_call') {
       continue;
     }
 
-    let args = record.arguments;
-    if (typeof args === 'string') {
-      try {
-        args = JSON.parse(args);
-      } catch {
-        // Keep malformed SDK arguments inspectable as the original string.
-      }
+    const { callId, name, arguments: rawArguments } = item.rawItem;
+    let args: unknown = rawArguments;
+    try {
+      args = JSON.parse(rawArguments);
+    } catch {
+      // Keep malformed SDK arguments inspectable as the original string.
     }
-    calls.push({ callId, name: record.name, arguments: args });
+    calls.push({ callId, name, arguments: args });
   }
   return calls;
 }

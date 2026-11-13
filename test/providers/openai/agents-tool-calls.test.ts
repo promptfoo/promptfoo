@@ -1,33 +1,33 @@
+import { Agent, RunToolCallItem, RunToolCallOutputItem } from '@openai/agents';
 import { describe, expect, it } from 'vitest';
 import { extractToolCalls } from '../../../src/providers/openai/agents';
 
+const agent = new Agent({ name: 'inventory' });
+
+function toolCall(callId: string, args: string) {
+  return new RunToolCallItem(
+    { type: 'function_call', callId, name: 'check_inventory', arguments: args },
+    agent,
+  );
+}
+
 describe('extractToolCalls', () => {
-  it('projects function calls by call ID and excludes tool results', () => {
+  it('projects SDK function calls by call ID and excludes tool results', () => {
     expect(
       extractToolCalls([
-        {
-          type: 'tool_call_item',
-          rawItem: {
-            type: 'function_call',
-            call_id: 'call_inventory_1',
+        toolCall('call_inventory_1', '{"playerId":"player1"}'),
+        toolCall('call_inventory_2', '{"playerId":"player2"}'),
+        new RunToolCallOutputItem(
+          {
+            type: 'function_call_result',
+            callId: 'call_inventory_1',
             name: 'check_inventory',
-            arguments: '{"playerId":"player1"}',
+            output: { type: 'text', text: 'secret' },
+            status: 'completed',
           },
-        },
-        {
-          type: 'tool_call_item',
-          rawItem: {
-            type: 'function_call',
-            call_id: 'call_inventory_2',
-            name: 'check_inventory',
-            arguments: '{"playerId":"player2"}',
-          },
-        },
-        {
-          type: 'tool_call_output_item',
-          rawItem: { type: 'function_call_output', call_id: 'call_inventory_1', output: 'secret' },
-        },
-        { type: 'message_output_item', rawItem: { type: 'message', content: 'Done' } },
+          agent,
+          'secret',
+        ),
       ]),
     ).toEqual([
       {
@@ -43,21 +43,9 @@ describe('extractToolCalls', () => {
     ]);
   });
 
-  it('ignores malformed items and preserves unparseable arguments as strings', () => {
-    expect(
-      extractToolCalls([
-        null,
-        { type: 'tool_call_item', rawItem: { type: 'function_call', name: 'missing-id' } },
-        {
-          type: 'tool_call_item',
-          rawItem: {
-            type: 'function_call',
-            call_id: 'call_1',
-            name: 'lookup',
-            arguments: '{invalid',
-          },
-        },
-      ]),
-    ).toEqual([{ callId: 'call_1', name: 'lookup', arguments: '{invalid' }]);
+  it('preserves unparseable arguments as strings', () => {
+    expect(extractToolCalls([toolCall('call_1', '{invalid')])).toEqual([
+      { callId: 'call_1', name: 'check_inventory', arguments: '{invalid' },
+    ]);
   });
 });
