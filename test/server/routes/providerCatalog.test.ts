@@ -14,6 +14,12 @@ describe('UI provider catalog credentials', () => {
   const requests: { path: string | undefined; auth: string | undefined; tenant: unknown }[] = [];
   let directory: string;
   let target: string;
+  let redirectedHost: string;
+  const redirectedRequests: (string | undefined)[] = [];
+  const redirectSink = createServer((req, res) => {
+    redirectedRequests.push(req.url);
+    res.end('Unexpected fixture destination');
+  });
   const upstream = createServer((req, res) => {
     requests.push({
       path: req.url,
@@ -31,6 +37,12 @@ describe('UI provider catalog credentials', () => {
       throw new Error('Synthetic provider failed to start');
     }
     target = `http://127.0.0.1:${address.port}`;
+    await new Promise<void>((resolve) => redirectSink.listen(0, '127.0.0.1', resolve));
+    const sinkAddress = redirectSink.address();
+    if (!sinkAddress || typeof sinkAddress === 'string') {
+      throw new Error('Synthetic redirect sink failed to start');
+    }
+    redirectedHost = `127.0.0.1:${sinkAddress.port}`;
     directory = await mkdtemp(path.join(tmpdir(), 'provider-catalog-'));
     setConfigDirectoryPath(directory);
     // JSON syntax is also valid YAML.
@@ -55,6 +67,19 @@ describe('UI provider catalog credentials', () => {
             },
             env: { EXTERNAL_TENANT: tenantHeader },
           },
+          {
+            id: 'http',
+            label: 'Raw Catalog Fixture',
+            config: {
+              request: [
+                'GET /{{ resource }} HTTP/1.1',
+                `Host: ${new URL(target).host}`,
+                `Authorization: ${authorization}`,
+                '',
+                '',
+              ].join('\r\n'),
+            },
+          },
         ],
       }),
     );
@@ -64,6 +89,9 @@ describe('UI provider catalog credentials', () => {
     setConfigDirectoryPath(undefined);
     await new Promise<void>((resolve, reject) =>
       upstream.close((error) => (error ? reject(error) : resolve())),
+    );
+    await new Promise<void>((resolve, reject) =>
+      redirectSink.close((error) => (error ? reject(error) : resolve())),
     );
     await rm(directory, { recursive: true, force: true });
   });
@@ -88,7 +116,10 @@ describe('UI provider catalog credentials', () => {
     const [reference] = catalog.body.data.providers;
     expect(catalog.body.data).toEqual({
       hasCustomConfig: true,
-      providers: [{ id: expect.stringMatching(/^ui-catalog:/), label: 'Catalog Fixture' }],
+      providers: [
+        { id: expect.stringMatching(/^ui-catalog:/), label: 'Catalog Fixture' },
+        { id: expect.stringMatching(/^ui-catalog:/), label: 'Raw Catalog Fixture' },
+      ],
     });
     expect(catalog.text).not.toContain(authorization);
     expect(catalog.text).not.toContain(tenantHeader);
@@ -154,5 +185,33 @@ describe('UI provider catalog credentials', () => {
       'The configured catalog provider could not complete the request.',
     );
     expect(rejected.text).not.toContain('synthetic-header-prefix');
+  }, 35_000);
+
+  it('keeps raw HTTP catalog credentials at the configured origin', async () => {
+    const catalog = await api.get('/api/providers').expect(200);
+    const reference = catalog.body.data.providers[1];
+    const job = await api
+      .post('/api/eval/job')
+      .send({
+        prompts: ['Hello'],
+        providers: [reference],
+        tests: [
+          { vars: { resource: 'same-host' } },
+          { vars: { resource: `/placeholder//${redirectedHost}/blocked` } },
+        ],
+        sharing: false,
+      })
+      .expect(200);
+    const result = await vi.waitFor(async () => {
+      const response = await api.get(`/api/eval/job/${job.body.id}`).expect(200);
+      expect(response.body.status).toBe('complete');
+      return response;
+    });
+    expect(requests).toContainEqual({ path: '/same-host', auth: authorization, tenant: undefined });
+    expect(redirectedRequests).toEqual([]);
+    expect(result.text).toContain(
+      'The configured catalog provider could not complete the request.',
+    );
+    expect(result.text).not.toContain(authorization);
   }, 35_000);
 });
