@@ -3262,7 +3262,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
 
       // Reasoning model name, but forced to non-reasoning by config
       const provider = new OpenAiChatCompletionProvider('o3-mini', {
-        config: { isReasoningModel: false, temperature: 0.7 },
+        config: { apiBaseUrl: 'https://example.com/v1', isReasoningModel: false, temperature: 0.7 },
       });
 
       // Verify the request body reflects non-reasoning behavior
