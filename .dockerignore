@@ -1,16 +1,25 @@
-node_modules
-npm-debug.log
-Dockerfile
-.dockerignore
+# Git and Docker metadata
 .git
 .gitignore
-*.sw[op]
-*.log
-.DS_Store
-.aider*
-.env*
+Dockerfile
+.dockerignore
+
+# Installed and built inside the image. Test fixtures keep their vendored packages.
+**/node_modules
+!test/**/node_modules
 dist
+
+# Local files that must not reach a build layer
+**/.env*
+**/*.log
+**/.DS_Store
+**/*.sw[op]
+.aider*
+.worktrees
 scratch
+venv
 *.sqlite
 
-venv
+# Not read by the image build
+examples
+site

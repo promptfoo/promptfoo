@@ -32,18 +32,18 @@ ENV VITE_IS_HOSTED=1 \
     VITE_PUBLIC_BASENAME=${VITE_PUBLIC_BASENAME} \
     PROMPTFOO_REMOTE_API_BASE_URL=${PROMPTFOO_REMOTE_API_BASE_URL}
 
-# Install dependencies (deterministic + cached). Copy workspace package manifests
-# before npm ci so the root lockfile can install all workspaces reproducibly.
+# Install dependencies (deterministic + cached). Copy the app workspace manifest
+# before npm ci so the root lockfile can install it reproducibly. The docs site
+# workspace is not part of the image, so its dependencies are left out.
 COPY package.json package-lock.json ./
 COPY src/app/package.json ./src/app/package.json
-COPY site/package.json ./site/package.json
 # Block dependency lifecycle scripts during install, then rebuild only the esbuild
 # package the build needs. The specs must be exact directories: `npm rebuild esbuild`
 # matches every folder of that name anywhere in the tree, so a nested dependency aliased
 # to `esbuild` would get its install script run and defeat --ignore-scripts.
 # Leverage BuildKit cache
 RUN --mount=type=cache,target=/root/.npm \
-    npm ci --install-links --include=peer --ignore-scripts && \
+    npm ci --workspace=src/app --include-workspace-root --install-links --include=peer --ignore-scripts && \
     npm rebuild ./node_modules/esbuild
 
 # Copy the rest of the application code
