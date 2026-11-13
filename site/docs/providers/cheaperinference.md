@@ -26,7 +26,7 @@ providers:
     config:
       apiBaseUrl: https://api.cheaperinference.com/v1
       headers:
-        OpenAI-Organization: ""
+        OpenAI-Organization: ''
       apiKeyEnvar: CHEAPERINFERENCE_API_KEY
       max_tokens: 500
 
