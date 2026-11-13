@@ -161,6 +161,17 @@ describe('reportProviderAPIKeyWarnings', () => {
   });
 });
 
+const GOOGLE_ONBOARDING_MODELS = [
+  { id: 'vertex:gemini-4-argon', config: { region: 'global' } },
+  { id: 'vertex:gemini-4-hydrogen', config: { region: 'global' } },
+  { id: 'vertex:gemini-3.8-flash', config: { region: 'global' } },
+  { id: 'vertex:gemini-3.7-flash', config: { region: 'global' } },
+  { id: 'vertex:gemini-3.6-flash', config: { region: 'global' } },
+  { id: 'vertex:gemini-3.5-flash-lite', config: { region: 'global' } },
+  'vertex:gemini-3.1-pro-preview',
+  'vertex:gemini-2.5-pro',
+];
+
 describe('createDummyFiles', () => {
   let tempDir: string;
 
@@ -297,14 +308,7 @@ describe('createDummyFiles', () => {
     expect(
       providerPrompt.choices.find((choice: { name: string }) => choice.name.startsWith('[Google]'))
         .value,
-    ).toEqual([
-      { id: 'vertex:gemini-3.8-flash', config: { region: 'global' } },
-      { id: 'vertex:gemini-3.7-flash', config: { region: 'global' } },
-      { id: 'vertex:gemini-3.6-flash', config: { region: 'global' } },
-      { id: 'vertex:gemini-3.5-flash-lite', config: { region: 'global' } },
-      'vertex:gemini-3.1-pro-preview',
-      'vertex:gemini-2.5-pro',
-    ]);
+    ).toEqual(GOOGLE_ONBOARDING_MODELS);
   });
 
   it('should offer current Cohere direct API models', async () => {
@@ -325,28 +329,20 @@ describe('createDummyFiles', () => {
   });
 
   it('writes the advertised Gemini models and reports their Vertex prefixes', async () => {
-    const googleModels = [
-      { id: 'vertex:gemini-3.8-flash', config: { region: 'global' } },
-      { id: 'vertex:gemini-3.7-flash', config: { region: 'global' } },
-      { id: 'vertex:gemini-3.6-flash', config: { region: 'global' } },
-      { id: 'vertex:gemini-3.5-flash-lite', config: { region: 'global' } },
-      'vertex:gemini-3.1-pro-preview',
-      'vertex:gemini-2.5-pro',
-    ];
     mockSelect.mockResolvedValueOnce('compare').mockImplementationOnce(({ choices }) => {
       return choices.find((choice: { name: string }) => choice.name.startsWith('[Google]')).value;
     });
 
     const result = await createDummyFiles(tempDir, true);
-    expect(result.providerPrefixes).toEqual(googleModels.map(() => 'vertex'));
+    expect(result.providerPrefixes).toEqual(GOOGLE_ONBOARDING_MODELS.map(() => 'vertex'));
 
     expect(mockSelect).toHaveBeenNthCalledWith(
       2,
       expect.objectContaining({
         choices: expect.arrayContaining([
           expect.objectContaining({
-            name: '[Google] Gemini 3.8 Flash, 3.7 Flash, 3.6 Flash, 3.5 Flash-Lite, ...',
-            value: googleModels,
+            name: '[Google] Gemini 4 Argon, 4 Hydrogen, 3.8 Flash, 3.7 Flash, 3.6 Flash, 3.5 Flash-Lite, ...',
+            value: GOOGLE_ONBOARDING_MODELS,
           }),
         ]),
       }),
@@ -355,9 +351,11 @@ describe('createDummyFiles', () => {
     const configCall = mockFs.writeFileSync.mock.calls.find((call: any[]) =>
       call[0].toString().endsWith('promptfooconfig.yaml'),
     );
-    const config = yaml.load(configCall?.[1] as string) as { providers: typeof googleModels };
+    const config = yaml.load(configCall?.[1] as string) as {
+      providers: typeof GOOGLE_ONBOARDING_MODELS;
+    };
 
-    expect(config.providers).toEqual(googleModels);
+    expect(config.providers).toEqual(GOOGLE_ONBOARDING_MODELS);
   });
 
   it('offers supported Anthropic models instead of retired Opus 4.1', async () => {
