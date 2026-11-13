@@ -62,7 +62,7 @@ describe('OpenAI Provider', () => {
     }
 
     it('should reject a Codex-only completion passthrough model override before dispatch', async () => {
-      const provider = new OpenAiCompletionProvider('gpt-3.5-turbo-instruct', {
+      const provider = new OpenAiCompletionProvider('ft:babbage-002:company::model', {
         config: { apiKey: 'test-key', passthrough: { model: 'gpt-5.3-codex-spark' } },
       });
 
@@ -75,7 +75,7 @@ describe('OpenAI Provider', () => {
     it('should call API successfully with text completion', async () => {
       mockFetchWithCache.mockResolvedValue(mockResponse);
 
-      const provider = new OpenAiCompletionProvider('text-davinci-003');
+      const provider = new OpenAiCompletionProvider('ft:babbage-002:company::model');
       const result = await provider.callApi('Test prompt');
 
       expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
@@ -85,7 +85,7 @@ describe('OpenAI Provider', () => {
 
     it('requests numeric logprobs when includeLogProbs is enabled', async () => {
       mockFetchWithCache.mockResolvedValue(mockResponse);
-      const provider = new OpenAiCompletionProvider('text-davinci-003');
+      const provider = new OpenAiCompletionProvider('ft:babbage-002:company::model');
 
       await provider.callApi('Test prompt', undefined, { includeLogProbs: true });
 
@@ -97,7 +97,7 @@ describe('OpenAI Provider', () => {
       'omits logprobs when includeLogProbs is %s',
       async (includeLogProbs) => {
         mockFetchWithCache.mockResolvedValue(mockResponse);
-        const provider = new OpenAiCompletionProvider('text-davinci-003');
+        const provider = new OpenAiCompletionProvider('ft:babbage-002:company::model');
 
         await provider.callApi('Test prompt', undefined, { includeLogProbs });
 
@@ -120,7 +120,7 @@ describe('OpenAI Provider', () => {
             ],
           },
         });
-        const provider = new OpenAiCompletionProvider('text-davinci-003');
+        const provider = new OpenAiCompletionProvider('ft:babbage-002:company::model');
 
         const result = await provider.callApi('Test prompt');
 
@@ -140,7 +140,7 @@ describe('OpenAI Provider', () => {
             choices: [{ text: 'Test output', logprobs }],
           },
         });
-        const provider = new OpenAiCompletionProvider('text-davinci-003');
+        const provider = new OpenAiCompletionProvider('ft:babbage-002:company::model');
 
         const result = await provider.callApi('Test prompt');
 
@@ -160,7 +160,7 @@ describe('OpenAI Provider', () => {
           ],
         },
       });
-      const provider = new OpenAiCompletionProvider('text-davinci-003', {
+      const provider = new OpenAiCompletionProvider('ft:babbage-002:company::model', {
         config: { passthrough: { echo: true, logprobs: 0 } },
       });
 
@@ -174,17 +174,17 @@ describe('OpenAI Provider', () => {
       const { attributes, restore } = recordSpanAttributes();
 
       try {
-        await new OpenAiCompletionProvider('text-davinci-003').callApi('Test prompt', {
+        await new OpenAiCompletionProvider('ft:babbage-002:company::model').callApi('Test prompt', {
           prompt: { raw: 'Test prompt', label: 'completion prompt' },
           testIdx: 7,
           vars: {},
         });
 
         expect(attributes).toMatchObject({
-          spanName: 'text_completion text-davinci-003',
+          spanName: 'text_completion ft:babbage-002:company::model',
           'gen_ai.operation.name': 'text_completion',
           'gen_ai.provider.name': 'openai',
-          'gen_ai.request.model': 'text-davinci-003',
+          'gen_ai.request.model': 'ft:babbage-002:company::model',
           'gen_ai.request.max_tokens': 1024,
           'gen_ai.request.temperature': 0,
           'gen_ai.request.top_p': 1,
@@ -206,7 +206,7 @@ describe('OpenAI Provider', () => {
       const { attributes, restore } = recordSpanAttributes();
 
       try {
-        const provider = new OpenAiCompletionProvider('text-davinci-003', {
+        const provider = new OpenAiCompletionProvider('ft:babbage-002:company::model', {
           config: {
             max_tokens: 50,
             temperature: 0.2,
@@ -258,7 +258,7 @@ describe('OpenAI Provider', () => {
       const { attributes, restore } = recordSpanAttributes();
 
       try {
-        await new OpenAiCompletionProvider('text-davinci-003', {
+        await new OpenAiCompletionProvider('ft:babbage-002:company::model', {
           config: { stop: ['configured-stop'] },
         }).callApi('Test prompt');
 
@@ -284,7 +284,7 @@ describe('OpenAI Provider', () => {
       const { attributes, restore } = recordSpanAttributes();
 
       try {
-        await new OpenAiCompletionProvider('text-davinci-003', {
+        await new OpenAiCompletionProvider('ft:babbage-002:company::model', {
           config: { passthrough: { stop: 'passthrough-stop' } },
         }).callApi('Test prompt');
 
@@ -303,7 +303,7 @@ describe('OpenAI Provider', () => {
       const { attributes, restore } = recordSpanAttributes();
 
       try {
-        await new OpenAiCompletionProvider('text-davinci-003', {
+        await new OpenAiCompletionProvider('ft:babbage-002:company::model', {
           config: { passthrough: { stop: ['valid-stop', 123] } },
         }).callApi('Test prompt');
 
@@ -321,7 +321,7 @@ describe('OpenAI Provider', () => {
       ['ft:babbage-002:company::model', 1.6, 1.6],
       ['ft:davinci-002:company::model', 12, 12],
     ])(
-      'should call and price supported Completions model %s',
+      'should call and price legacy Completions model %s on a custom gateway',
       async (model, inputRate, outputRate) => {
         mockFetchWithCache.mockResolvedValueOnce({
           ...mockResponse,
@@ -331,7 +331,9 @@ describe('OpenAI Provider', () => {
           },
         });
 
-        const result = await new OpenAiCompletionProvider(model).callApi('Test prompt');
+        const result = await new OpenAiCompletionProvider(model, {
+          config: { apiBaseUrl: 'https://gateway.example/v1' },
+        }).callApi('Test prompt');
         const request = mockFetchWithCache.mock.calls[0] as [string, { body: string }];
 
         expect(request[0]).toContain('/completions');
@@ -502,7 +504,7 @@ describe('OpenAI Provider', () => {
       'should omit service tiers from first-party legacy Completion requests at %s',
       async (apiBaseUrl) => {
         mockFetchWithCache.mockResolvedValueOnce(mockResponse);
-        const provider = new OpenAiCompletionProvider('babbage-002', {
+        const provider = new OpenAiCompletionProvider('ft:babbage-002:company::model', {
           config: {
             apiBaseUrl,
             service_tier: 'default',
@@ -516,7 +518,7 @@ describe('OpenAI Provider', () => {
         const body = JSON.parse(mockFetchWithCache.mock.calls[0]![1]!.body as string);
 
         expect(body).not.toHaveProperty('service_tier');
-        expect(result.cost).toBeCloseTo((5 * 0.4 + 5 * 0.4) / 1e6, 10);
+        expect(result.cost).toBeCloseTo((5 * 1.6 + 5 * 1.6) / 1e6, 10);
       },
     );
 
@@ -533,7 +535,7 @@ describe('OpenAI Provider', () => {
         statusText: 'Bad Request',
       });
 
-      const provider = new OpenAiCompletionProvider('text-davinci-003');
+      const provider = new OpenAiCompletionProvider('ft:babbage-002:company::model');
       const result = await provider.callApi('Test prompt');
 
       expect(result.error).toBeDefined();
@@ -543,7 +545,7 @@ describe('OpenAI Provider', () => {
     it('should handle fetch errors', async () => {
       mockFetchWithCache.mockRejectedValue(new Error('Network error'));
 
-      const provider = new OpenAiCompletionProvider('text-davinci-003');
+      const provider = new OpenAiCompletionProvider('ft:babbage-002:company::model');
       const result = await provider.callApi('Test prompt');
 
       expect(result.error).toBeDefined();
@@ -560,7 +562,7 @@ describe('OpenAI Provider', () => {
           statusText: 'OK',
         });
 
-        const provider = new OpenAiCompletionProvider('text-davinci-003');
+        const provider = new OpenAiCompletionProvider('ft:babbage-002:company::model');
         const result = await provider.callApi('Test prompt');
 
         expect(result.error).toContain('Malformed response data');
@@ -574,7 +576,7 @@ describe('OpenAI Provider', () => {
       mockProcessEnv({ OPENAI_API_KEY: undefined });
 
       try {
-        const provider = new OpenAiCompletionProvider('text-davinci-003', {
+        const provider = new OpenAiCompletionProvider('ft:babbage-002:company::model', {
           config: {
             apiKeyRequired: true,
           },
@@ -598,7 +600,7 @@ describe('OpenAI Provider', () => {
       mockProcessEnv({ CUSTOM_OPENAI_KEY: undefined });
 
       try {
-        const provider = new OpenAiCompletionProvider('text-davinci-003', {
+        const provider = new OpenAiCompletionProvider('ft:babbage-002:company::model', {
           config: {
             apiKeyEnvar: 'CUSTOM_OPENAI_KEY',
           },
@@ -634,7 +636,7 @@ describe('OpenAI Provider', () => {
         cached: true,
       });
 
-      const provider = new OpenAiCompletionProvider('text-davinci-003');
+      const provider = new OpenAiCompletionProvider('ft:babbage-002:company::model');
       const result = await provider.callApi('Test prompt');
 
       expect(result.cached).toBe(true);
@@ -648,7 +650,7 @@ describe('OpenAI Provider', () => {
         }),
       );
 
-      const provider = new OpenAiCompletionProvider('text-davinci-003');
+      const provider = new OpenAiCompletionProvider('ft:babbage-002:company::model');
       const result = await provider.callApi('Test prompt');
 
       expect(result.output).toBe('Test output');
@@ -658,7 +660,7 @@ describe('OpenAI Provider', () => {
     it('should handle fetchWithCache returning undefined response', async () => {
       mockFetchWithCache.mockResolvedValue(undefined as any);
 
-      const provider = new OpenAiCompletionProvider('text-davinci-003');
+      const provider = new OpenAiCompletionProvider('ft:babbage-002:company::model');
       const result = await provider.callApi('Test prompt');
 
       expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
@@ -672,7 +674,7 @@ describe('OpenAI Provider', () => {
         'X-Test-Header': 'test-value',
       };
 
-      const provider = new OpenAiCompletionProvider('text-davinci-003', {
+      const provider = new OpenAiCompletionProvider('ft:babbage-002:company::model', {
         config: {
           headers: customHeaders,
         },
@@ -699,7 +701,7 @@ describe('OpenAI Provider', () => {
     it('should pass passthrough config fields in body', async () => {
       mockFetchWithCache.mockResolvedValue(mockResponse);
 
-      const provider = new OpenAiCompletionProvider('text-davinci-003', {
+      const provider = new OpenAiCompletionProvider('ft:babbage-002:company::model', {
         config: {
           passthrough: { logprobs: 3 },
         },
@@ -720,7 +722,7 @@ describe('OpenAI Provider', () => {
         statusText: 'OK',
       });
 
-      const provider = new OpenAiCompletionProvider('text-davinci-003');
+      const provider = new OpenAiCompletionProvider('ft:babbage-002:company::model');
       const result = await provider.callApi('Test prompt');
 
       expect(result.error).toContain('Malformed response data');
@@ -729,7 +731,7 @@ describe('OpenAI Provider', () => {
     it('should handle invalid OPENAI_STOP env var', async () => {
       mockProcessEnv({ OPENAI_STOP: '{invalid json}' });
 
-      const provider = new OpenAiCompletionProvider('text-davinci-003', {
+      const provider = new OpenAiCompletionProvider('ft:babbage-002:company::model', {
         config: {
           apiKey: 'test-api-key',
         },
