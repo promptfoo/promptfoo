@@ -764,6 +764,7 @@ const INTERACTION_SERVER_TOOLS: Record<string, string> = {
   googleSearch: 'google_search',
   codeExecution: 'code_execution',
   urlContext: 'url_context',
+  url_context: 'url_context',
 };
 
 function isEmptyObject(value: unknown): boolean {
@@ -835,10 +836,13 @@ function getInteractionToolChoice(config: CompletionOptions, includeAuto: boolea
 
 type InteractionFunctionCall = { id?: string; name: string; arguments?: unknown };
 
-/** Steps produced after the most recent user turn. */
+/** Steps the model produced after the latest user input or function result. */
 function getLatestTurnSteps(data: InteractionResponse): InteractionStep[] {
   const steps = data.steps || [];
-  return steps.slice(steps.map((step) => step.type).lastIndexOf('user_input') + 1);
+  const latestInput = steps
+    .map((step) => step.type === 'user_input' || step.type === 'function_result')
+    .lastIndexOf(true);
+  return steps.slice(latestInput + 1);
 }
 
 function getFunctionCalls(steps: InteractionStep[]): InteractionFunctionCall[] {
@@ -1288,7 +1292,13 @@ export class GoogleInteractionsProvider implements ApiProvider {
         ...config.headers,
       };
     }
-    const providerToolChoice = getInteractionToolChoice(this.config, false);
+    const promptSetsToolPolicy =
+      promptConfig?.tool_choice !== undefined ||
+      promptConfig?.toolConfig !== undefined ||
+      promptConfig?.tool_config !== undefined;
+    const providerToolChoice = promptSetsToolPolicy
+      ? undefined
+      : getInteractionToolChoice(this.config, false);
     const providerGenerationConfigValue = {
       ...(this.config.maxOutputTokens === undefined
         ? {}
@@ -1547,7 +1557,8 @@ export class GoogleInteractionsProvider implements ApiProvider {
     const callbacks = toolsDisabled ? undefined : config.functionToolCallbacks;
     const rounds: Array<{ data: InteractionResponse; cached: boolean }> = [];
     const toolCalls: Array<{ name: string; args: unknown; result: string }> = [];
-    const answeredCallIds = new Set<string>();
+    const callbackBasePath =
+      promptConfig?.functionToolCallbacks === undefined ? this.config.basePath : promptBasePath;
     const priceRound = (round: { data: InteractionResponse; cached: boolean }) => {
       const usage = round.data.usage;
       const tokens = getInteractionTokenCounts(usage);
@@ -1623,9 +1634,7 @@ export class GoogleInteractionsProvider implements ApiProvider {
       rounds.push(result);
       data = result.data;
       turnSteps = getLatestTurnSteps(data);
-      pendingCalls = getFunctionCalls(turnSteps).filter(
-        (call) => call.id === undefined || !answeredCallIds.has(call.id),
-      );
+      pendingCalls = getFunctionCalls(turnSteps);
       // Run callbacks only when every pending call has one; otherwise return the calls.
       if (
         !callbacks ||
@@ -1653,6 +1662,7 @@ export class GoogleInteractionsProvider implements ApiProvider {
             cache: this.loadedFunctionCallbacks,
             logPrefix: '[Google Interactions]',
             abortSignal: options?.abortSignal,
+            basePath: callbackBasePath,
           });
         } catch (err) {
           throwIfAborted(options?.abortSignal);
@@ -1664,9 +1674,6 @@ export class GoogleInteractionsProvider implements ApiProvider {
             ...toolCallMetadata(),
           };
         }
-        if (call.id !== undefined) {
-          answeredCallIds.add(call.id);
-        }
         toolCalls.push({ name: call.name, args: call.arguments ?? {}, result: output });
         functionResults.push({
           type: 'function_result',
@@ -1676,12 +1683,13 @@ export class GoogleInteractionsProvider implements ApiProvider {
         });
       }
       // A stored interaction carries the history; otherwise resend it with this turn's steps.
-      roundBody = data.id
-        ? { ...body, previous_interaction_id: data.id, input: functionResults }
-        : {
-            ...roundBody,
-            input: [...toInteractionSteps(roundBody.input), ...turnSteps, ...functionResults],
-          };
+      roundBody =
+        data.id && body.store !== false
+          ? { ...body, previous_interaction_id: data.id, input: functionResults }
+          : {
+              ...roundBody,
+              input: [...toInteractionSteps(roundBody.input), ...turnSteps, ...functionResults],
+            };
     }
 
     const cached = rounds.every((round) => round.cached);

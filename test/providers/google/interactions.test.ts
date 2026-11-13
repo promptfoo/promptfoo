@@ -4917,6 +4917,158 @@ describe('GoogleInteractionsProvider', () => {
       ]);
     });
 
+    it('does not repeat echoed history across three unstored requests', async () => {
+      const userInput = { type: 'user_input', content: [{ type: 'text', text: 'Plan a trip.' }] };
+      const call1 = { type: 'function_call', id: 'call-1', name: 'get_weather', arguments: {} };
+      const result1 = {
+        type: 'function_result',
+        call_id: 'call-1',
+        name: 'get_weather',
+        result: [{ type: 'text', text: 'r1' }],
+      };
+      const call2 = { type: 'function_call', id: 'call-2', name: 'get_weather', arguments: {} };
+      mockFetchWithCache
+        .mockResolvedValueOnce({
+          data: { status: 'requires_action', steps: [call1] },
+          cached: false,
+        } as any)
+        // Responses that echo their input must not be appended twice.
+        .mockResolvedValueOnce({
+          data: { status: 'requires_action', steps: [userInput, call1, result1, call2] },
+          cached: false,
+        } as any)
+        .mockResolvedValueOnce(textResponse('Done.') as any);
+      const getWeather = vi.fn().mockResolvedValueOnce('r1').mockResolvedValueOnce('r2');
+      const provider = new GoogleInteractionsProvider('gemini-3.8-flash', {
+        config: {
+          apiKey: 'test-key',
+          store: false,
+          tools: [weatherTool],
+          functionToolCallbacks: { get_weather: getWeather },
+        },
+      });
+
+      const result = await provider.callApi('Plan a trip.');
+
+      expect(getWeather).toHaveBeenCalledTimes(2);
+      expect(requestBody(2).input.map((step: { type: string; id?: string }) => step.type)).toEqual([
+        'user_input',
+        'function_call',
+        'function_result',
+        'function_call',
+        'function_result',
+      ]);
+      expect(result).toMatchObject({ output: 'Done.', tokenUsage: { numRequests: 3 } });
+    });
+
+    it('resends history instead of chaining when an unstored response has an ID', async () => {
+      mockFetchWithCache
+        .mockResolvedValueOnce(functionCallResponse('ephemeral-1') as any)
+        .mockResolvedValueOnce(textResponse('Cloudy.') as any);
+      const provider = new GoogleInteractionsProvider('gemini-3.8-flash', {
+        config: {
+          apiKey: 'test-key',
+          store: false,
+          tools: [weatherTool],
+          functionToolCallbacks: { get_weather: async () => 'cloudy' },
+        },
+      });
+
+      await provider.callApi('Weather in Paris?');
+
+      expect(requestBody(1)).not.toHaveProperty('previous_interaction_id');
+      expect(requestBody(1).input).toHaveLength(4);
+    });
+
+    it('does not run callbacks when a prompt disables tools', async () => {
+      mockFetchWithCache.mockResolvedValue(functionCallResponse('interaction-1') as any);
+      const getWeather = vi.fn();
+      const provider = new GoogleInteractionsProvider('gemini-3.8-flash', {
+        config: {
+          apiKey: 'test-key',
+          tools: [weatherTool],
+          functionToolCallbacks: { get_weather: getWeather },
+        },
+      });
+
+      await provider.callApi('Weather in Paris?', {
+        prompt: { config: { tool_choice: 'none' } },
+      } as any);
+
+      expect(getWeather).not.toHaveBeenCalled();
+      expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
+      expect(requestBody(0)).not.toHaveProperty('tools');
+      expect(requestBody(0).generation_config.tool_choice).toBe('none');
+    });
+
+    it('lets a prompt tool policy replace the provider tool_choice', async () => {
+      mockFetchWithCache.mockResolvedValue(functionCallResponse() as any);
+      const provider = new GoogleInteractionsProvider('gemini-3.8-flash', {
+        config: { apiKey: 'test-key', tools: [weatherTool], tool_choice: 'required' },
+      });
+
+      await provider.callApi('Weather in Paris?', {
+        prompt: { config: { toolConfig: { retrievalConfig: { languageCode: 'en' } } } },
+      } as any);
+
+      expect(requestBody(0).generation_config?.tool_choice).toBeUndefined();
+    });
+
+    it('keeps usage and executed calls when a later request fails', async () => {
+      mockFetchWithCache
+        .mockResolvedValueOnce(functionCallResponse('interaction-1') as any)
+        .mockResolvedValueOnce({
+          data: { error: { message: 'quota exceeded' } },
+          cached: false,
+          status: 429,
+          statusText: 'Too Many Requests',
+        } as any);
+      const provider = new GoogleInteractionsProvider('gemini-3.8-flash', {
+        config: {
+          apiKey: 'test-key',
+          tools: [weatherTool],
+          functionToolCallbacks: { get_weather: async () => 'rain' },
+        },
+      });
+
+      const result = await provider.callApi('Weather in Paris?');
+
+      expect(result).toMatchObject({
+        error: expect.stringContaining('quota exceeded'),
+        tokenUsage: { prompt: 50, numRequests: 1 },
+        metadata: { toolCalls: [{ name: 'get_weather', result: 'rain' }] },
+      });
+    });
+
+    it('resolves file callbacks against the provider base path', async () => {
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pf-interactions-callback-'));
+      try {
+        fs.writeFileSync(
+          path.join(dir, 'weather.cjs'),
+          'module.exports.getWeather = (args) => `sunny:${JSON.parse(args).city}`;',
+        );
+        mockFetchWithCache
+          .mockResolvedValueOnce(functionCallResponse('interaction-1') as any)
+          .mockResolvedValueOnce(textResponse('Sunny.') as any);
+        const provider = new GoogleInteractionsProvider('gemini-3.8-flash', {
+          config: {
+            apiKey: 'test-key',
+            basePath: dir,
+            tools: [weatherTool],
+            functionToolCallbacks: { get_weather: 'file://weather.cjs:getWeather' },
+          },
+        });
+
+        const result = await provider.callApi('Weather in Paris?');
+
+        expect(result.metadata?.toolCalls).toEqual([
+          { name: 'get_weather', args: { city: 'Paris' }, result: 'sunny:Paris' },
+        ]);
+      } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
     it('reports a failed callback with usage from completed requests', async () => {
       mockFetchWithCache.mockResolvedValue(functionCallResponse('interaction-1') as any);
       const provider = new GoogleInteractionsProvider('gemini-3.8-flash', {

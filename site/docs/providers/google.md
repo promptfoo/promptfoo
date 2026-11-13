@@ -312,7 +312,7 @@ This route supports text and chat-message prompts, media input, system instructi
 
 A function call without a matching `functionToolCallbacks` entry is returned as `functionCall` parts, so `is-valid-function-call` can check it. When every call in a response has a callback, Promptfoo runs the callbacks, sends their results back, and returns the model's next answer, for up to eight rounds. Token usage and cost include every request, and `metadata.toolCalls` lists the executed calls. If a callback fails, the eval reports an error. Stored interactions continue with `previous_interaction_id`; with `store: false`, Promptfoo resends the conversation.
 
-The Interactions API stores interactions unless you set `store: false`. Sampling controls (`temperature`, `topP`, `topK`) are not sent, and streaming, background execution, MCP, and computer-use tools are not supported on this route. `config.interactions` applies only to `google:` providers.
+The Interactions API stores interactions unless you set `store: false`. Sampling controls (`temperature`, `topP`, `topK`) are not sent, and streaming, background execution, MCP, and computer-use tools are not supported on this route. `config.interactions` applies only to `google:` chat providers.
 
 ## Available Models
 
