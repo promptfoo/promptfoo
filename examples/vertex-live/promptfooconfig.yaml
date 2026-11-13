@@ -5,9 +5,7 @@ prompts:
   - 'Answer briefly: {{question}}'
 
 providers:
-  - id: vertex:live:gemini-live-2.5-flash-native-audio
-    config:
-      region: us-central1
+  - vertex:live:gemini-3.8-live
 
 defaultTest:
   assert:

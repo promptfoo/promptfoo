@@ -19,7 +19,7 @@ function createProviders(env?: EnvOverrides) {
     moderationProvider: new OpenAiModerationProvider('omni-moderation-latest', { env }),
     webSearchProvider: new OpenAiResponsesProvider(DEFAULT_OPENAI_MODEL, {
       env,
-      config: { tools: [{ type: 'web_search_preview' }] },
+      config: { tools: [{ type: 'web_search' }] },
     }),
   };
 }

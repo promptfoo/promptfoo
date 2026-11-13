@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 // Shared regex for SHA-256 blob hashes
-const BLOB_HASH_REGEX = /^[a-f0-9]{64}$/i;
+const BLOB_HASH_REGEX = /^[A-Fa-f0-9]{64}$/;
 
 // GET /api/blobs/:hash
 

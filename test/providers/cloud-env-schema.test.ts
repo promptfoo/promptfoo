@@ -79,7 +79,7 @@ describe('saved cloud provider environment parsing', () => {
         usage: { input_tokens: 1, output_tokens: 1 },
       } as Awaited<ReturnType<typeof provider.anthropic.messages.create>>);
       await provider.callApi('fixture');
-      expect(create.mock.calls[0][0].temperature).toBe(expected);
+      expect(create.mock.calls[0][0]).toHaveProperty('temperature', expected);
     });
   });
 });

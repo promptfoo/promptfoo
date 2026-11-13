@@ -287,7 +287,7 @@ const ASSERTION_HANDLERS: Record<
           pass: false,
           score: 0,
           reason:
-            'METEOR assertion requires the natural package. Please install it using: npm install natural@^8.1.0',
+            'METEOR assertion requires the natural package. Please install it using: npm install natural@^8.2.6',
           assertion: params.assertion,
         };
       }
@@ -374,6 +374,11 @@ export function isAssertionInverse(assertion: Assertion): boolean {
 export function getAssertionBaseType(assertion: Assertion): AssertionType {
   const inverse = isAssertionInverse(assertion);
   return inverse ? (assertion.type.slice(4) as AssertionType) : (assertion.type as AssertionType);
+}
+
+// Zero-weight assertions record their scores without failing the test.
+function applyAssertionWeight(result: GradingResult, weight: number | undefined): GradingResult {
+  return weight === 0 ? { ...result, pass: true } : result;
 }
 
 /**
@@ -487,9 +492,8 @@ async function runAssertionInternal({
   type ValueFromScriptType = string | boolean | number | GradingResult | object | undefined;
   let renderedValue = assertion.value;
   let valueFromScript: ValueFromScriptType;
-  // A JavaScript file or package function that throws becomes a failed result. It still goes
-  // through the common post-processing below, so overrides such as weight: 0 apply.
-  let scriptFailure: GradingResult | undefined;
+  const scriptFailure = (reason: string): GradingResult =>
+    applyAssertionWeight({ pass: false, score: 0, reason, assertion }, assertion.weight);
   if (typeof renderedValue === 'string') {
     if (renderedValue.startsWith('file://')) {
       const basePath = cliState.basePath || '';
@@ -511,48 +515,24 @@ async function runAssertionInternal({
         try {
           valueFromScript = await assertionFunction(output, context);
         } catch (error) {
-          scriptFailure = {
-            pass: false,
-            score: 0,
-            reason: `Custom function threw error: ${(error as Error)?.message ?? String(error)}`,
-            assertion,
-          };
+          return scriptFailure(
+            `Custom function threw error: ${(error as Error)?.message ?? String(error)}`,
+          );
         }
         logger.debug(`Javascript script ${filePath} output: ${valueFromScript}`);
-      } else if (filePath.endsWith('.py')) {
+      } else if (filePath.endsWith('.py') || filePath.endsWith('.rb')) {
         try {
-          const pythonScriptOutput = await runPython<ValueFromScriptType>(
+          const runScript = filePath.endsWith('.py')
+            ? runPython
+            : (await import('../ruby/rubyUtils.js')).runRuby;
+          valueFromScript = await runScript<ValueFromScriptType>(
             filePath,
             functionName || 'get_assert',
             [output, context],
           );
-          valueFromScript = pythonScriptOutput;
-          logger.debug(`Python script ${filePath} output: ${valueFromScript}`);
+          logger.debug(`Script ${filePath} output: ${valueFromScript}`);
         } catch (error) {
-          return {
-            pass: false,
-            score: 0,
-            reason: (error as Error).message,
-            assertion,
-          };
-        }
-      } else if (filePath.endsWith('.rb')) {
-        try {
-          const { runRuby } = await import('../ruby/rubyUtils.js');
-          const rubyScriptOutput = await runRuby<ValueFromScriptType>(
-            filePath,
-            functionName || 'get_assert',
-            [output, context],
-          );
-          valueFromScript = rubyScriptOutput;
-          logger.debug(`Ruby script ${filePath} output: ${valueFromScript}`);
-        } catch (error) {
-          return {
-            pass: false,
-            score: 0,
-            reason: (error as Error).message,
-            assertion,
-          };
+          return scriptFailure((error as Error).message);
         }
       } else {
         renderedValue = processFileReference(renderedValue);
@@ -569,12 +549,9 @@ async function runAssertionInternal({
       try {
         valueFromScript = await Promise.resolve(requiredModule(output, context));
       } catch (error) {
-        scriptFailure = {
-          pass: false,
-          score: 0,
-          reason: `Custom function threw error: ${(error as Error)?.message ?? String(error)}`,
-          assertion,
-        };
+        return scriptFailure(
+          `Custom function threw error: ${(error as Error)?.message ?? String(error)}`,
+        );
       }
     } else {
       // It's a normal string value
@@ -680,13 +657,13 @@ async function runAssertionInternal({
   };
 
   // Check for redteam assertions first
-  if (!scriptFailure && assertionParams.baseType.startsWith('promptfoo:redteam:')) {
+  if (assertionParams.baseType.startsWith('promptfoo:redteam:')) {
     return handleRedteam(assertionParams, claimStoredGradingUsage);
   }
 
   const handler = ASSERTION_HANDLERS[assertionParams.baseType as keyof typeof ASSERTION_HANDLERS];
-  if (scriptFailure || handler) {
-    const result = scriptFailure ?? (await handler(assertionParams));
+  if (handler) {
+    const result = await handler(assertionParams);
 
     // Store rendered assertion value in metadata if it differs from the original template
     // This allows the UI to display substituted variable values instead of raw templates
@@ -699,15 +676,7 @@ async function runAssertionInternal({
       result.metadata.renderedAssertionValue = renderedValue;
     }
 
-    // If weight is 0, treat this as a metric-only assertion that can't fail
-    if (assertion.weight === 0) {
-      return {
-        ...result,
-        pass: true, // Force pass for weight=0 assertions
-      };
-    }
-
-    return result;
+    return applyAssertionWeight(result, assertion.weight);
   }
 
   throw new Error(`Unknown assertion type: ${assertion.type}`);

@@ -3,10 +3,7 @@ import { Duplex } from 'node:stream';
 
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { globalLogCallback, setLogCallback } from '../../../src/logger';
-import {
-  createServerOpenApiDocument,
-  SERVER_OPENAPI_ROUTE_COUNT,
-} from '../../../src/openapi/server';
+import { createServerOpenApiDocument } from '../../../src/openapi/server';
 import { createApp } from '../../../src/server/server';
 import { promptCacheService } from '../../../src/server/services/promptCacheService';
 import type { Express } from 'express';
@@ -364,6 +361,12 @@ const validUuid = '00000000-0000-4000-8000-000000000000';
 const validMediaFilename = 'abcdef123456.mp3';
 
 const smokeCases: SmokeCase[] = [
+  {
+    method: 'get',
+    openApiPath: '/api/openapi.json',
+    path: '/api/openapi.json',
+    expectedStatus: 200,
+  },
   { method: 'get', openApiPath: '/health', path: '/health', expectedStatus: 200 },
   {
     method: 'get',
@@ -852,12 +855,18 @@ describe('server route end-to-end smoke coverage', { concurrent: false }, () => 
     vi.resetAllMocks();
   });
 
+  it('serves the published routes with the installed version and request origin', async () => {
+    const endpoint = smokeCases.find((entry) => entry.path === '/api/openapi.json')!;
+    const response = await sendRequest(createApp(), endpoint);
+    expect(response.status).toBe(200);
+    const expected = createServerOpenApiDocument();
+    expect(JSON.parse(response.text)).toEqual({ ...expected, servers: [{ url: '/' }] });
+  });
+
   it('has one smoke case for every generated OpenAPI route', () => {
     const smokeKeys = smokeCases.map(routeKey).sort();
     const documentedKeys = documentedRouteKeys().sort();
 
-    expect(smokeCases).toHaveLength(SERVER_OPENAPI_ROUTE_COUNT);
-    expect(new Set(smokeKeys).size).toBe(SERVER_OPENAPI_ROUTE_COUNT);
     expect(smokeKeys).toEqual(documentedKeys);
   });
 

@@ -144,13 +144,13 @@ jobs:
         # CI. Real test/assertion failures still fail; see vitest.config.ts.
         env:
           PROMPTFOO_IGNORE_UNHANDLED_TEST_ERRORS: 'true'
-        run: npm run test${{ matrix.shard && format(' -- --shard={0}/3', matrix.shard) || '' }}${{ matrix.os == 'ubuntu-latest' && matrix.node == '22.22' && !matrix.shard && ' -- --coverage' || '' }}${{ startsWith(matrix.os, 'windows-') && ' --exclude=test/release-artifact.test.ts --exclude=test/examples/integrationCrewai.test.ts --exclude=test/python/python-subprocess-cancellation.test.ts --exclude=test/python/worker.lifecycle.test.ts' || '' }}
+        run: npm run test${{ matrix.shard && format(' -- --shard={0}/3', matrix.shard) || '' }}${{ matrix.os == 'ubuntu-latest' && matrix.node == '22.22' && !matrix.shard && ' -- --coverage' || '' }}${{ startsWith(matrix.os, 'windows-') && ' --exclude=test/release-artifact.test.ts --exclude=test/examples/integrationCrewai.test.ts --exclude=test/examples/integrationInspectOsworldProvider.test.ts --exclude=test/python/python-subprocess-cancellation.test.ts --exclude=test/python/worker.lifecycle.test.ts' || '' }}
 
       - name: Test process fixtures without parallel workers
         # Cold npm and Python processes can miss deadlines when competing
         # with test forks. Run these unchanged suites once per Windows Node version.
         if: startsWith(matrix.os, 'windows-') && matrix.shard == 1
-        run: npm run test -- test/release-artifact.test.ts test/examples/integrationCrewai.test.ts test/python/python-subprocess-cancellation.test.ts test/python/worker.lifecycle.test.ts --maxWorkers=1
+        run: npm run test -- test/release-artifact.test.ts test/examples/integrationCrewai.test.ts test/examples/integrationInspectOsworldProvider.test.ts test/python/python-subprocess-cancellation.test.ts test/python/worker.lifecycle.test.ts --maxWorkers=1
 
       - name: Run built agent skill examples
         if: matrix.os != 'ubuntu-latest' && (!matrix.shard || matrix.shard == '1')
@@ -513,10 +513,11 @@ jobs:
     permissions:
       contents: read
     steps:
-      - name: Install shfmt
+      - name: Install shfmt 3.12.0
         run: |
           curl --fail --location --retry 3 --connect-timeout 15 --max-time 60 \
-            https://github.com/mvdan/sh/releases/download/v3.12.0/shfmt_v3.12.0_linux_amd64 \
+            --header 'Accept: application/octet-stream' \
+            https://api.github.com/repos/mvdan/sh/releases/assets/270490140 \
             --output "$RUNNER_TEMP/shfmt"
           printf '%s  %s\n' 'd9fbb2a9c33d13f47e7618cf362a914d029d02a6df124064fff04fd688a745ea' "$RUNNER_TEMP/shfmt" | sha256sum --check
           chmod +x "$RUNNER_TEMP/shfmt"
@@ -550,11 +551,7 @@ jobs:
 
       - *use-node
 
-      - name: Use Python
-        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
-        with:
-          # The pinned ModelAudit schema generator requires Python <3.14.
-          python-version: '3.13'
+      - *use-python-3-14
 
       # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669).
       # Pinned exact (not @latest): npm 12.0.0 blocks postinstall scripts not covered by
@@ -571,6 +568,9 @@ jobs:
         run: |
           npm run jsonSchema:generate
           npm run modelAuditSchema:generate
+
+      - name: Check local server OpenAPI spec
+        run: npm run openapi:check
 
       - name: Check for changes
         run: |
@@ -793,7 +793,8 @@ jobs:
 
   webui:
     name: webui tests
-    timeout-minutes: 10
+    # Allow slow browser system dependency downloads before browser and coverage tests.
+    timeout-minutes: 20
     runs-on: ubuntu-latest
     permissions: *test-reporting-permissions # Required for OIDC authentication with Codecov
     steps:
@@ -811,6 +812,10 @@ jobs:
       # Browser binaries are opt-in; install the version from the locked SDK.
       - name: Install Chromium
         run: node node_modules/playwright/cli.js install --with-deps chromium
+
+      - name: Run Site Browser Tests
+        working-directory: site
+        run: npm run test:browser
 
       - name: Run App Browser Tests
         run: npm run test:app:browser
