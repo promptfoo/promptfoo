@@ -12,10 +12,11 @@ import type { EvaluateResult } from '../../src/types/index';
 const repoRoot = path.resolve(__dirname, '../..');
 
 describe('OpenAI model CLI smoke tests', () => {
-  it('routes GPT-6.1 Sol and bills the returned Ultrafast service tier', async () => {
+  it('routes GPT-6.1 models and bills the returned service tier', async () => {
     const cases = [
       { label: 'sol-responses', id: 'openai:gpt-6.1-sol', cost: 0.000324 },
       { label: 'sol-chat', id: 'openai:chat:gpt-6.1-sol', cost: 0.000324 },
+      { label: 'terra-responses', id: 'openai:gpt-6.1-terra', cost: 0.000162 },
       { label: 'astra-ultrafast', id: 'openai:gpt-6-astra', cost: 0.00984 },
       { label: 'astra-fallback', id: 'openai:gpt-6-astra', cost: 0.00164 },
     ];
@@ -122,16 +123,20 @@ describe('OpenAI model CLI smoke tests', () => {
       );
 
       const exported = JSON.parse(fs.readFileSync(outputPath, 'utf8'));
-      expect(exported.results.stats).toMatchObject({ successes: 4, failures: 0, errors: 0 });
+      expect(exported.results.stats).toMatchObject({
+        successes: cases.length,
+        failures: 0,
+        errors: 0,
+      });
       expect(exported.shareableUrl).toBeNull();
       expect(exported.results.results).toHaveLength(cases.length);
       expect(requests).toHaveLength(cases.length);
-      for (const { label, cost } of cases) {
+      for (const { id, label, cost } of cases) {
         const request = requests.find((entry) => entry.label === label)!;
         const chat = label === 'sol-chat';
         expect(request.url).toBe(chat ? '/v1/chat/completions' : '/v1/responses');
         expect(request.body).toMatchObject({
-          model: label.startsWith('sol-') ? 'gpt-6.1-sol' : 'gpt-6-astra',
+          model: id.split(':').at(-1),
           ...(chat
             ? { reasoning_effort: 'high', max_completion_tokens: 128 }
             : { reasoning: { effort: 'high' }, max_output_tokens: 128 }),
