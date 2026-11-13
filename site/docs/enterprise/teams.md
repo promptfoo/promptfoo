@@ -20,10 +20,10 @@ You can add users to a team by editing the team and clicking the "Add team membe
 
 ![Add Team Members](/img/enterprise-docs/add-team-members.png)
 
-You can also create service accounts at the team level, which will allow you to create API keys for programmatic access to Promptfoo Enterprise. These are useful for CI/CD pipelines and automated testing.
+Create [service accounts](./service-accounts.md) in Organization Settings, then assign them to the teams and roles their CI/CD pipelines or automation need.
 
 :::note
-Only system admins can create service accounts.
+Only organization administrators can create service accounts and assign them to teams.
 :::
 
 ## CLI Team Context
@@ -75,8 +75,11 @@ Promptfoo Enterprise supports the following permissions:
 - **Run Scans**: Run scans and view results
 - **Manage Configurations**: Create, edit, and delete configurations and plugin collections
 - **Manage Targets**: Create, edit, and delete targets
-- **View Results**: View issues and evaluations
-- **Manage Results**: Edit and delete evaluations and issues
+- **View Evaluations**: View saved evals and their results
+- **Create Evaluations**: Create or upload evals; includes viewing evals and targets
+- **Manage Evaluations**: Create, view, update, and delete evals
+- **View Issues**: View vulnerabilities
+- **Manage Issues**: Create, view, update, and delete vulnerabilities
 
 ## See Also
 
