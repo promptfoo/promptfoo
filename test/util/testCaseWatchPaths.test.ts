@@ -3,7 +3,7 @@ import * as os from 'os';
 import * as path from 'path';
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { resolveTestsWatchPaths } from '../../src/util/testCaseReader';
+import { readTests, resolveTestsWatchPaths } from '../../src/util/testCaseReader';
 
 import type { TestSuiteConfig } from '../../src/types/index';
 
@@ -18,6 +18,7 @@ describe('resolveTestsWatchPaths', () => {
   beforeAll(() => {
     base = fs.mkdtempSync(path.join(os.tmpdir(), 'pf-watch-'));
     fs.mkdirSync(path.join(base, 'tests'));
+    fs.mkdirSync(path.join(base, 'nested'));
     fs.mkdirSync(path.join(base, 'fixtures'));
     for (const rel of [
       'cases.yaml',
@@ -45,13 +46,47 @@ describe('resolveTestsWatchPaths', () => {
     ]);
   });
 
-  it('expands a glob, because chokidar v5 does not', () => {
+  it('reads and watches the same workbook when its directory and filename contain a hash', async () => {
+    const directory = path.join(base, 'C# fixtures');
+    fs.mkdirSync(directory);
+    const workbook = path.join(directory, 'cases#2.XLSX');
+    fs.copyFileSync(path.join(__dirname, '../fixtures/xlsx-xml-entities.xlsx'), workbook);
+
+    const reference = 'file://C# fixtures/cases#2.XLSX#Sheet1';
+    expect(await readTests([reference], base)).toMatchObject([
+      { vars: { 'q&a': 'Does AT&T <b> work?' } },
+    ]);
+    expect(resolve(reference)).toEqual([workbook]);
+    await expect(readTests([reference + '#missing'], base)).rejects.toThrow(
+      'Sheet "Sheet1#missing" not found',
+    );
+  });
+
+  it('expands a glob, because chokidar does not', () => {
     // Exactly the matches, and nothing else: glob order is not guaranteed.
     const watched = resolve('file://tests/*.yaml' as TestSuiteConfig['tests']);
     expect([...watched].sort()).toEqual([
       path.join(base, 'tests/a.yaml'),
       path.join(base, 'tests/b.yaml'),
     ]);
+  });
+
+  it('watches the files matched by POSIX punctuation and printable classes', () => {
+    const symbol = path.join(base, 'fixtures/case-€.yaml');
+    const letter = path.join(base, 'fixtures/case-a.yaml');
+    fs.writeFileSync(symbol, '[]');
+    fs.writeFileSync(letter, '[]');
+
+    expect(resolve('file://fixtures/case-[[:punct:]].yaml')).toEqual([symbol]);
+    expect(resolve('file://fixtures/case-[[:print:]].yaml').sort()).toEqual([letter, symbol]);
+  });
+
+  it('expands test globs beneath a directory containing brackets', () => {
+    const root = path.join(base, 'suite[blue]');
+    fs.mkdirSync(root);
+    const testsPath = path.join(root, 'cases.yaml');
+    fs.writeFileSync(testsPath, '- description: case');
+    expect(resolveTestsWatchPaths('file://*.yaml', root)).toEqual([testsPath]);
   });
 
   it("never watches a glob's parent directory", () => {
@@ -139,18 +174,84 @@ describe('resolveTestsWatchPaths', () => {
   it('watches file references nested inside a tests file', () => {
     // cases.yaml holds a case whose vars point at another file; the loader reads it,
     // so editing it changes the evaluation and has to trigger a rerun.
-    fs.writeFileSync(path.join(base, 'nested.yaml'), '- vars:\n    data: file://vars.csv\n');
-    const watched = resolve('file://nested.yaml' as TestSuiteConfig['tests']);
-    expect(watched).toContain(path.join(base, 'nested.yaml'));
+    fs.writeFileSync(path.join(base, 'nested/cases.yaml'), '- vars:\n    data: file://vars.csv\n');
+    const watched = resolve('file://nested/cases.yaml' as TestSuiteConfig['tests']);
+    expect(watched).toContain(path.join(base, 'nested/cases.yaml'));
     expect(watched).toContain(path.join(base, 'vars.csv'));
   });
 
   it('watches file references nested inside a .jsonl tests file', () => {
-    fs.writeFileSync(path.join(base, 'nested.jsonl'), '{"vars":{"data":"file://vars.csv"}}\n');
-    const watched = resolve('file://nested.jsonl' as TestSuiteConfig['tests']);
-    expect(watched).toContain(path.join(base, 'nested.jsonl'));
+    fs.writeFileSync(
+      path.join(base, 'nested/cases.jsonl'),
+      '{"vars":{"data":"file://vars.csv"}}\n',
+    );
+    const watched = resolve('file://nested/cases.jsonl' as TestSuiteConfig['tests']);
+    expect(watched).toContain(path.join(base, 'nested/cases.jsonl'));
     expect(watched).toContain(path.join(base, 'vars.csv'));
   });
+
+  it.each(['yaml', 'json', 'jsonl'])(
+    'watches bare vars files from nested %s rows using the loader base',
+    (extension) => {
+      const file = path.join(base, `nested/vars-cases.${extension}`);
+      const row = { vars: ['one.yaml', 'two.yaml'], provider: 'file://provider.yaml' };
+      fs.writeFileSync(
+        file,
+        extension === 'yaml'
+          ? '- vars: [one.yaml, two.yaml]\n  provider: file://provider.yaml\n'
+          : JSON.stringify(extension === 'json' ? [row] : row),
+      );
+      const source = `nested/vars-cases.${extension}`;
+      const arrayPaths = resolve([source]);
+      expect(arrayPaths).toEqual(
+        expect.arrayContaining([
+          file,
+          path.join(base, 'nested/one.yaml'),
+          path.join(base, 'nested/two.yaml'),
+          path.join(base, 'provider.yaml'),
+        ]),
+      );
+      expect(arrayPaths).not.toContain(path.join(base, 'nested/provider.yaml'));
+      const scalarBase = extension === 'yaml' ? path.join(base, 'nested') : base;
+      expect(resolve(source)).toContain(path.join(scalarBase, 'one.yaml'));
+      expect(resolve(`nested/vars-cases*.${extension}`)).toContain(
+        path.join(base, 'nested/one.yaml'),
+      );
+    },
+  );
+
+  it.each(['yaml', 'json', 'jsonl'])(
+    'watches row-provider scripts beside %s tests without moving vars or provider config files',
+    (extension) => {
+      const file = path.join(base, `nested/provider-cases.${extension}`);
+      const rows = [
+        { vars: { doc: 'file://provider.py:call_api' }, provider: 'file://provider.py:call_api' },
+        { vars: {}, provider: { id: 'file://other.py:call_api' } },
+        { vars: {}, provider: 'file://provider.yaml' },
+      ];
+      fs.writeFileSync(
+        file,
+        extension === 'jsonl'
+          ? rows.map((row) => JSON.stringify(row)).join('\n')
+          : JSON.stringify(rows),
+      );
+      const source = `nested/provider-cases.${extension}`;
+      const watched = resolve([source]);
+      expect(watched).toEqual(
+        expect.arrayContaining([
+          file,
+          path.join(base, 'provider.py'),
+          path.join(base, 'nested/provider.py'),
+          path.join(base, 'nested/other.py'),
+          path.join(base, 'provider.yaml'),
+        ]),
+      );
+      expect(watched).not.toContain(path.join(base, 'other.py'));
+      expect(watched).not.toContain(path.join(base, 'nested/provider.yaml'));
+      const scalarBase = extension === 'yaml' ? path.join(base, 'nested') : base;
+      expect(resolve(source)).toContain(path.join(scalarBase, 'other.py'));
+    },
+  );
 
   it('tolerates a self-referential generator config', () => {
     // A YAML anchor produces a cyclic object, which naive recursion would follow until
