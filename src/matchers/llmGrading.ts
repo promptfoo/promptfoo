@@ -27,7 +27,7 @@ import {
   renderLlmRubricPrompt,
   runJsonGradingPrompt,
 } from './rubric';
-import { fail, graderFail, normalizeMatcherTokenUsage, tryParse } from './shared';
+import { graderFail, normalizeMatcherTokenUsage, tryParse } from './shared';
 
 import type {
   Assertion,
@@ -375,7 +375,7 @@ export async function matchesFactuality(
     providerCallContext,
   );
   if (resp.error || !resp.output) {
-    return fail(resp.error || 'No output', resp.tokenUsage);
+    return graderFail(resp.error || 'No output', resp.tokenUsage);
   }
 
   invariant(typeof resp.output === 'string', 'factuality produced malformed response');
@@ -386,7 +386,7 @@ export async function matchesFactuality(
       return buildFactualityResult(parsedJson.option, parsedJson.reason, grading, resp);
     }
   } catch (err) {
-    return fail((err as Error).message, resp.tokenUsage);
+    return graderFail((err as Error).message, resp.tokenUsage);
   }
 
   // Fallback to old pattern matching format
@@ -395,7 +395,7 @@ export async function matchesFactuality(
     const parsedLegacy = parseLegacyFactualityResponse(resp.output);
     return buildFactualityResult(parsedLegacy.option, parsedLegacy.reason, grading, resp);
   } catch (err) {
-    return fail((err as Error).message, resp.tokenUsage);
+    return graderFail((err as Error).message, resp.tokenUsage);
   }
 }
 
@@ -433,7 +433,7 @@ export async function matchesClosedQa(
     providerCallContext,
   );
   if (resp.error || !resp.output) {
-    return fail(resp.error || 'No output', resp.tokenUsage);
+    return graderFail(resp.error || 'No output', resp.tokenUsage);
   }
 
   invariant(typeof resp.output === 'string', 'model-graded-closedqa produced malformed response');
@@ -445,7 +445,10 @@ export async function matchesClosedQa(
     } else if (resp.output.trimEnd().endsWith('N')) {
       reason = `The submission does not meet the criterion:\n${resp.output}`;
     } else {
-      reason = `Model grader produced a malformed response:\n${resp.output}`;
+      return graderFail(
+        `Model grader produced a malformed response:\n${resp.output}`,
+        resp.tokenUsage,
+      );
     }
     return {
       pass,
@@ -454,7 +457,7 @@ export async function matchesClosedQa(
       tokensUsed: normalizeMatcherTokenUsage(resp.tokenUsage),
     };
   } catch (err) {
-    return fail(`Error parsing output: ${(err as Error).message}`, resp.tokenUsage);
+    return graderFail(`Error parsing output: ${(err as Error).message}`, resp.tokenUsage);
   }
 }
 

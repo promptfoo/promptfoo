@@ -24,7 +24,7 @@ import { displayNameOverrides } from '@promptfoo/redteam/constants/metadata';
 import { formatPolicyIdentifierAsMetric } from '@promptfoo/redteam/plugins/policy/utils';
 import invariant from '@promptfoo/util/invariant';
 import { BarChart, Copy, Edit, Eye, Play, Settings, Share, Trash2, X } from 'lucide-react';
-import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { useLocation, useNavigate, useSearchParams } from 'react-router';
 import { useDebouncedCallback } from 'use-debounce';
 import { ColumnSelector } from './ColumnSelector';
 import CompareEvalMenuItem from './CompareEvalMenuItem';
@@ -46,7 +46,7 @@ import SettingsModal from './TableSettings/TableSettingsModal';
 import { buildEvalUrlWithSearchParams, hashVarSchema, setEvalDetailsHash } from './utils';
 import type { EvalResultsFilterMode, ResultLightweightWithLabel } from '@promptfoo/types';
 import type { CopyEvalResponse } from '@promptfoo/types/api/eval';
-import type { VisibilityState } from '@tanstack/table-core';
+import type { VisibilityState } from '@tanstack/react-table';
 
 import type { ActiveView } from './EvalHeader';
 import type { ResultsFilter } from './store';
@@ -813,7 +813,7 @@ export default function ResultsView({
   return (
     <>
       <div
-        className="flex flex-col bg-zinc-50 dark:bg-zinc-950 print:bg-white"
+        className="flex flex-col bg-background text-foreground print:bg-white"
         style={{
           isolation: 'isolate',
           minHeight: 'calc(100vh - var(--nav-height) - var(--update-banner-height, 0px))',
@@ -848,8 +848,8 @@ export default function ResultsView({
                         debouncedUpdate(value);
                       }}
                       onClear={handleClearSearch}
-                      containerClassName="w-[200px]"
-                      className="h-8 text-xs"
+                      containerClassName="w-full sm:w-72"
+                      className="h-9 text-sm"
                     />
                     <FiltersForm />
                     <div className="flex-1" />
@@ -874,7 +874,7 @@ export default function ResultsView({
                     {chartsToggleButton}
                   </div>
                   <div className="flex flex-wrap gap-2 items-center">
-                    <span className="text-xs font-medium text-muted-foreground">Display:</span>
+                    <span className="sr-only">Display:</span>
                     <FilterModeSelector
                       filterMode={filterMode}
                       onChange={handleFilterModeChange}
