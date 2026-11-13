@@ -76,12 +76,12 @@ async function fetchScaffold(url, key, prompt, mode, timeoutMs) {
     }
 
     const response = await fetch(url, fetchOptions);
-    const data = await response.json();
     if (!response.ok) {
       return {
-        error: `Ejentum API ${response.status}: ${JSON.stringify(data)}`,
+        error: `Ejentum API returned HTTP ${response.status}`,
       };
     }
+    const data = await response.json();
     const scaffold =
       Array.isArray(data) && typeof data[0]?.[mode] === 'string' ? data[0][mode].trim() : '';
     return scaffold

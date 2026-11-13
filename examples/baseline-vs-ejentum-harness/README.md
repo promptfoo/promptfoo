@@ -14,7 +14,7 @@ This example provides a controlled comparison between an unaugmented baseline mo
 - **baseline-gpt-5.4-mini**: plain OpenAI chat completion via Promptfoo's native OpenAI provider.
 - **ejentum-reasoning-gpt-5.4-mini**: pre-fetches a cognitive scaffold from Ejentum and delegates completion execution directly to Promptfoo's maintained OpenAI provider.
 
-Both arms reuse Promptfoo's maintained OpenAI request path with identical configuration (`reasoning_effort: none`, `verbosity: low`, identical decoding parameters). This ensures strict parameter parity so that differences in evaluation scores are solely attributable to the cognitive scaffolding.
+Both arms reuse Promptfoo's maintained OpenAI request path with identical configuration (`reasoning_effort: none`, `verbosity: low`, identical decoding parameters). Keep the model settings equal between arms. Repeat the eval to measure variability before interpreting differences in scores.
 
 ### Controlled Benchmark Design
 
@@ -43,7 +43,7 @@ export EJENTUM_API_KEY="your-ejentum-key"
 promptfoo eval --no-cache
 ```
 
-Get an Ejentum key at <https://ejentum.com/dashboard>.
+The augmented arm sends each rendered prompt to Ejentum. Use inputs approved for both services. Get an Ejentum key at <https://ejentum.com/dashboard>.
 
 ### Pointing to Custom Endpoints
 
@@ -62,7 +62,7 @@ Because `provider.mjs` delegates execution to Promptfoo's native OpenAI provider
 
 ## How the Custom Provider Works
 
-`provider.mjs` is a lightweight adapter (~80 lines):
+`provider.mjs` is an adapter:
 
 1. Calls the Ejentum Logic API (`POST https://api.ejentum.com/logicv1/`) with the test prompt and mode (default: `reasoning`).
 2. Splices the returned scaffold into the prompt as a system message.

@@ -98,7 +98,8 @@ describe('baseline-vs-ejentum-harness provider', () => {
   });
 
   it('returns an error when Ejentum API returns non-OK status', async () => {
-    fetchMock.mockResolvedValueOnce(mockResponse({ message: 'Unauthorized' }, false, 401));
+    const response = mockResponse({ message: 'Unauthorized', request: 'private fixture' }, false, 401);
+    fetchMock.mockResolvedValueOnce(response);
     const mockUnderlying = { callApi: vi.fn() };
     const provider = new EjentumAugmentedProvider({
       config: { mode: 'reasoning' },
@@ -106,7 +107,7 @@ describe('baseline-vs-ejentum-harness provider', () => {
     });
     const result = await provider.callApi('solve this');
     expect(result).toEqual({
-      error: 'Ejentum API 401: {"message":"Unauthorized"}',
+      error: 'Ejentum API returned HTTP 401',
     });
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(mockUnderlying.callApi).not.toHaveBeenCalled();
