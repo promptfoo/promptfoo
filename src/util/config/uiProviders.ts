@@ -5,6 +5,7 @@ import { join } from 'path';
 import * as yaml from 'js-yaml';
 import logger from '../../logger';
 import { JsonProviderOptionsWithIdSchema } from '../../types/api/providers';
+import { UI_CATALOG_PROVIDER_PREFIX } from '../../types/providers';
 import { loadYaml } from '../yamlLoad';
 import { getConfigDirectoryPath } from './manage';
 
@@ -17,8 +18,6 @@ interface ServerConfig {
 // Undefined is not loaded; null means no catalog existed when configuration was loaded.
 let cachedConfig: ServerConfig | null | undefined;
 let cachedCatalog: Map<string, ProviderOptions> | undefined;
-
-export const UI_CATALOG_PROVIDER_PREFIX = 'ui-catalog:';
 
 /**
  * Get the path to the UI providers config file

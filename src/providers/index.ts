@@ -3,14 +3,13 @@ import dedent from 'dedent';
 import cliState from '../cliState';
 import { getExplicitProviderEnv, setExplicitProviderEnv } from '../envOverrides';
 import logger from '../logger';
-import { isApiProvider } from '../types/providers';
+import { isApiProvider, UI_CATALOG_PROVIDER_PREFIX } from '../types/providers';
 import {
   getCloudDatabaseId,
   getProviderFromCloud,
   isCloudProvider,
   validateLinkedTargetId,
 } from '../util/cloud';
-import { getUiCatalogProvider, UI_CATALOG_PROVIDER_PREFIX } from '../util/config/uiProviders';
 import invariant from '../util/invariant';
 import { safeJsonStringify } from '../util/json';
 import {
@@ -112,6 +111,7 @@ async function createUiCatalogProvider(
   reference: string,
   promptSelectors?: string[],
 ): Promise<ApiProvider> {
+  const { getUiCatalogProvider } = await import('../util/config/uiProviders');
   const selected = getUiCatalogProvider(reference);
   if (!selected?.id) {
     throw new Error('Unknown configured provider. Select it again from the provider catalog.');
