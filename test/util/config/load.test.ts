@@ -1760,7 +1760,7 @@ describe('resolveConfigs', () => {
     expect(selectedPositions?.[1]).not.toEqual(selectedPositions?.[2]);
   });
 
-  it('should not mutate reused default config scenarios when sampling', async () => {
+  it('keeps runtime scenarios separate from reused default config scenarios', async () => {
     const originalPositions = ['0', '1', '2', '3'];
     const scenarios: Scenario[] = [
       {
@@ -1793,6 +1793,13 @@ describe('resolveConfigs', () => {
     const second = await resolveConfigs({ filterSample: 4, filterSampleSeed: 1 }, defaultConfig);
     expect([...(selectedPositions(second) ?? [])].sort()).toEqual(originalPositions);
     expect(defaultPositions()).toEqual(originalPositions);
+
+    const authoredEmpty: Scenario[] = [];
+    const empty = await resolveConfigs({}, { ...defaultConfig, scenarios: authoredEmpty });
+    expect(empty.testSuite.scenarios).toEqual([]);
+    empty.testSuite.scenarios!.push(scenarios[0]);
+    expect(authoredEmpty).toEqual([]);
+    expect(empty.config.scenarios).toEqual([]);
   });
 
   it('should throw without logging when no config file, no prompts, no providers, and not in CI', async () => {
