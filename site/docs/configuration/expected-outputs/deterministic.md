@@ -1010,8 +1010,9 @@ The `trajectory:step-status` assertion checks whether a normalized trajectory st
 matching a name or glob pattern completed with the expected execution status. Use
 `success` for an OpenTelemetry OK status (`1`) or a 2xx/3xx status, `error` for an
 OpenTelemetry ERROR status (`2`) or a 4xx/5xx status, or an exact numeric status
-code. A missing status never matches. Status code `0` is unset: it does not match
-either semantic status, but can be matched explicitly with `status: 0`.
+code. For HTTP spans, an exact number can match the response status attribute.
+When the span status is missing or unset (`0`), that HTTP status determines
+`success` or `error`. An explicitly recorded `0` matches `status: 0`.
 
 ```yaml
 tests:
