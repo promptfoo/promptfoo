@@ -50,16 +50,24 @@ describe('event index live status', () => {
       screen.getByRole('heading', { level: 2, name: 'Promptfoo at Black Hat USA 2026' }),
     ).toBeInTheDocument();
 
+    fireEvent.click(screen.getByRole('button', { name: '2025' }));
+    const cards = screen.getAllByRole('heading', { level: 3 }).length;
+    expect(screen.getByRole('button', { name: `All ${cards}` })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: `Past ${cards}` })).toBeInTheDocument();
+    fireEvent.click(getUpcomingFilterButton());
+    expect(screen.getByText('No events found matching your filters.')).toBeInTheDocument();
+
     act(() => {
       vi.advanceTimersByTime(1001);
     });
 
-    expect(getUpcomingCount()).toBe(initialUpcomingCount - 1);
+    expect(getUpcomingCount()).toBe(0);
     expect(
       screen.getByRole('heading', { level: 2, name: 'Promptfoo at DEF CON 34' }),
     ).toBeInTheDocument();
 
-    fireEvent.click(getUpcomingFilterButton());
+    fireEvent.click(screen.getByRole('button', { name: 'All Years' }));
+    expect(getUpcomingCount()).toBe(initialUpcomingCount - 1);
 
     expect(screen.queryByRole('heading', { name: 'Black Hat 2026' })).not.toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'DEF CON 34' })).toBeInTheDocument();

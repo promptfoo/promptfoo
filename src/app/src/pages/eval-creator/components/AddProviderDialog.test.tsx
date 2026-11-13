@@ -195,6 +195,17 @@ describe('getProviderTypeFromId', () => {
   });
 });
 
+describe('saved provider catalog defaults', () => {
+  it.each([
+    ['bedrock:agents:agent-id', 'bedrock-agent'],
+    ['file:///path/to/langchain_agent.py', 'langchain'],
+    ['file:///path/to/openai_agents.py', 'openai-agents-sdk'],
+    ['file:///path/to/claude_agent.py', 'claude-agent-sdk'],
+  ])('reopens %s in its matching editor', (id, type) => {
+    expect(getProviderTypeFromId(id)).toBe(type);
+  });
+});
+
 describe('AddProviderDialog layout', () => {
   it('keeps the dialog footer visible while the body scrolls', () => {
     render(<AddProviderDialog open onClose={vi.fn()} onSave={vi.fn()} />);

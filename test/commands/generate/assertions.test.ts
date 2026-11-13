@@ -11,32 +11,18 @@ import { loadYaml } from '../../../src/util/yamlLoad';
 
 import type { Assertion, TestSuite } from '../../../src/types/index';
 
+const { createFsModuleFactory, createChildLoggerFactory, createGeneratorFsPromisesFactory } =
+  await vi.hoisted(() => import('../../factories/moduleMocks'));
+
 const fsMocks = vi.hoisted(() => ({
   readFileSync: vi.fn(),
   writeFileSync: vi.fn(),
   existsSync: vi.fn(),
 }));
 
-vi.mock('fs', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('fs')>();
-  return {
-    ...actual,
-    default: {
-      ...actual,
-      ...fsMocks,
-    },
-    ...fsMocks,
-  };
-});
+vi.mock('fs', createFsModuleFactory(fsMocks));
 
-vi.mock('fs/promises', () => ({
-  default: {
-    readFile: fsMocks.readFileSync,
-    writeFile: fsMocks.writeFileSync,
-  },
-  readFile: fsMocks.readFileSync,
-  writeFile: fsMocks.writeFileSync,
-}));
+vi.mock('fs/promises', createGeneratorFsPromisesFactory(fsMocks));
 vi.mock('js-yaml');
 vi.mock('../../../src/util/yamlLoad');
 vi.mock('../../../src/assertions/synthesis');
@@ -46,15 +32,7 @@ vi.mock('../../../src/util/config/load', () => ({
 vi.mock('../../../src/cache', () => ({
   disableCache: vi.fn(),
 }));
-vi.mock('../../../src/logger', () => ({
-  default: {
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    debug: vi.fn(),
-    child: vi.fn().mockReturnValue({}),
-  },
-}));
+vi.mock('../../../src/logger', createChildLoggerFactory());
 vi.mock('../../../src/telemetry', () => ({
   default: {
     record: vi.fn(),

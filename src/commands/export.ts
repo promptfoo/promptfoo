@@ -1,6 +1,7 @@
 import fs from 'fs';
 import fsPromises from 'fs/promises';
 import path from 'path';
+import { finished, pipeline } from 'stream/promises';
 import zlib from 'zlib';
 
 import logger from '../logger';
@@ -14,28 +15,13 @@ import type { Command } from 'commander';
  * Creates a compressed tar.gz file containing log files
  */
 async function createLogArchive(logFiles: string[], outputPath: string): Promise<void> {
-  return new Promise((resolve, reject) => {
+  const gzip = zlib.createGzip({ level: 9 });
+  try {
     const output = fs.createWriteStream(outputPath);
-    const gzip = zlib.createGzip({ level: 9 });
-
-    output.on('close', () => {
-      fsPromises
-        .stat(outputPath)
-        .then((stats) => {
-          logger.info(`Created log archive: ${outputPath} (${stats.size} bytes)`);
-          resolve();
-        })
-        .catch(reject);
-    });
-
-    output.on('error', reject);
-    gzip.on('error', reject);
-
-    gzip.pipe(output);
-
-    void (async () => {
-      try {
+    const transfer = pipeline(
+      async function* ({ signal } = {}) {
         for (const logFile of logFiles) {
+          signal?.throwIfAborted();
           let fileContent: Buffer;
           let fileStats: Awaited<ReturnType<typeof fsPromises.stat>>;
 
@@ -84,36 +70,35 @@ async function createLogArchive(logFiles: string[], outputPath: string): Promise
           header[156] = 0x30; // '0'
 
           // Calculate checksum
-          let checksum = 0;
-          for (let i = 0; i < 512; i++) {
-            checksum += header[i];
-          }
+          const checksum = header.reduce((sum, byte) => sum + byte, 0);
           const checksumOctal = checksum.toString(8).padStart(6, '0') + '\0 ';
           Buffer.from(checksumOctal).copy(header, 148);
 
-          // Write header
-          gzip.write(header);
-
-          // Write file content
-          gzip.write(fileContent);
+          yield header;
+          yield fileContent;
 
           // Pad to 512-byte boundary
           const padding = 512 - (fileContent.length % 512);
           if (padding < 512) {
-            gzip.write(Buffer.alloc(padding));
+            yield Buffer.alloc(padding);
           }
         }
 
         // Write two empty 512-byte blocks to end the tar
-        gzip.write(Buffer.alloc(1024));
-        gzip.end();
-      } catch (error) {
-        gzip.destroy(error as Error);
-        output.destroy(error as Error);
-        reject(error);
-      }
-    })();
-  });
+        yield Buffer.alloc(1024);
+      },
+      gzip,
+      output,
+    );
+    // A failed destination must surface even while a named-pipe log is waiting for a writer.
+    await Promise.all([transfer, finished(output, { cleanup: true })]);
+  } finally {
+    // An invalid destination can throw before pipeline takes ownership of the compressor.
+    gzip.destroy();
+  }
+
+  const stats = await fsPromises.stat(outputPath);
+  logger.info(`Created log archive: ${outputPath} (${stats.size} bytes)`);
 }
 
 export function exportCommand(program: Command) {
@@ -210,11 +195,7 @@ export function exportCommand(program: Command) {
         // Determine output path
         let outputPath = cmdObj.output;
         if (!outputPath) {
-          const timestamp = new Date()
-            .toISOString()
-            .replace(/[:.]/g, '-')
-            .replace('T', '_')
-            .split('.')[0];
+          const timestamp = new Date().toISOString().replace(/[:.]/g, '-').replace('T', '_');
           outputPath = `promptfoo-logs-${timestamp}.gz`;
         }
 

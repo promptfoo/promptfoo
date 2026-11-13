@@ -1,6 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AzureChatCompletionProvider } from '../../../src/providers/azure/chat';
 
+const createListResourcesCall = () => ({
+  name: 'list_resources',
+  arguments: '{}',
+});
+
 const mcpMocks = vi.hoisted(() => {
   const mockInitialize = vi.fn().mockResolvedValue(undefined);
   const mockCleanup = vi.fn().mockResolvedValue(undefined);
@@ -83,7 +88,7 @@ describe('AzureChatCompletionProvider MCP Integration', () => {
 
   it('should integrate MCP tools with FunctionCallbackHandler', async () => {
     // Wait for MCP initialization
-    await (provider as any).initializationPromise;
+    await provider.ensureInitialized();
 
     // Verify MCP client was initialized
     expect(mcpMocks.mockInitialize).toHaveBeenCalled();
@@ -96,15 +101,12 @@ describe('AzureChatCompletionProvider MCP Integration', () => {
 
   it('should execute MCP tool through FunctionCallbackHandler', async () => {
     // Wait for MCP initialization
-    await (provider as any).initializationPromise;
+    await provider.ensureInitialized();
 
     const handler = (provider as any).functionCallbackHandler;
 
     // Simulate a tool call that matches an MCP tool
-    const toolCall = {
-      name: 'list_resources',
-      arguments: '{}',
-    };
+    const toolCall = createListResourcesCall();
 
     const result = await handler.processCall(toolCall, {});
 
@@ -124,7 +126,7 @@ describe('AzureChatCompletionProvider MCP Integration', () => {
 
   it('should handle MCP tool errors gracefully', async () => {
     // Wait for MCP initialization
-    await (provider as any).initializationPromise;
+    await provider.ensureInitialized();
 
     // Configure mock to return an error
     mcpMocks.mockCallTool.mockResolvedValue({
@@ -133,10 +135,7 @@ describe('AzureChatCompletionProvider MCP Integration', () => {
     });
 
     const handler = (provider as any).functionCallbackHandler;
-    const toolCall = {
-      name: 'list_resources',
-      arguments: '{}',
-    };
+    const toolCall = createListResourcesCall();
 
     const result = await handler.processCall(toolCall, {});
 
@@ -167,7 +166,7 @@ describe('AzureChatCompletionProvider MCP Integration', () => {
 
   it('should prioritize MCP tools over function callbacks', async () => {
     // Wait for MCP initialization
-    await (provider as any).initializationPromise;
+    await provider.ensureInitialized();
 
     const handler = (provider as any).functionCallbackHandler;
 
@@ -176,10 +175,7 @@ describe('AzureChatCompletionProvider MCP Integration', () => {
       list_resources: vi.fn().mockResolvedValue('Function callback result'),
     };
 
-    const toolCall = {
-      name: 'list_resources',
-      arguments: '{}',
-    };
+    const toolCall = createListResourcesCall();
 
     const result = await handler.processCall(toolCall, functionCallbacks);
 

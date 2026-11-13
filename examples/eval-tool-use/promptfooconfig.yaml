@@ -5,7 +5,7 @@ prompts:
   - Tell me about the weather in {{city}} in the default unit for the location.
 
 providers:
-  - id: anthropic:messages:claude-sonnet-4-6
+  - id: anthropic:messages:claude-sonnet-5
     config:
       tools:
         - name: get_weather
@@ -23,7 +23,7 @@ providers:
                   - fahrenheit
             required:
               - location
-  - id: anthropic:messages:claude-sonnet-4-6
+  - id: anthropic:messages:claude-sonnet-5
     label: With Strict Mode
     config:
       tools:

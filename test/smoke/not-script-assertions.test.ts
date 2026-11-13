@@ -1,28 +1,11 @@
-import { spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { CLI_PATH, runCli } from './runCli';
 
-const CLI_PATH = path.resolve(__dirname, '../../dist/src/main.js');
-const ROOT_DIR = path.resolve(__dirname, '../..');
 const CONFIG_PATH = path.resolve(__dirname, 'fixtures/configs/not-script-assertions.yaml');
 const OUTPUT_DIR = path.resolve(__dirname, '.temp-output-not-script-assertions');
-
-function runCli(args: string[]): { stdout: string; stderr: string; exitCode: number } {
-  const result = spawnSync('node', [CLI_PATH, ...args], {
-    cwd: ROOT_DIR,
-    encoding: 'utf-8',
-    env: { ...process.env, NO_COLOR: '1' },
-    timeout: 60000,
-  });
-
-  return {
-    stdout: result.stdout || '',
-    stderr: result.stderr || '',
-    exitCode: result.status ?? 1,
-  };
-}
 
 function expectComponentResult(
   result: {

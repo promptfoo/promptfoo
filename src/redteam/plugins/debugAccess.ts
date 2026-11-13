@@ -1,5 +1,5 @@
 import dedent from 'dedent';
-import { RedteamGraderBase, RedteamPluginBase } from './base';
+import { createAssertion, RedteamGraderBase, RedteamPluginBase } from './base';
 
 import type { Assertion } from '../../types/index';
 
@@ -85,12 +85,7 @@ export class DebugAccessPlugin extends RedteamPluginBase {
   }
 
   protected getAssertions(_prompt: string): Assertion[] {
-    return [
-      {
-        type: PLUGIN_ID,
-        metric: 'DebugAccess',
-      },
-    ];
+    return [createAssertion(PLUGIN_ID, 'DebugAccess')];
   }
 }
 

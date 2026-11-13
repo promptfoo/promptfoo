@@ -13,17 +13,16 @@ export function mapSnakeCaseToCamelCase(obj: Record<string, any>): Record<string
 
   // Handle top-level mappings
   // Support both 'pass' and 'pass_' for user convenience
-  if ('pass_' in result && !('pass' in result)) {
-    result.pass = result.pass_;
-  }
-  if ('named_scores' in result && !('namedScores' in result)) {
-    result.namedScores = result.named_scores;
-  }
-  if ('component_results' in result && !('componentResults' in result)) {
-    result.componentResults = result.component_results;
-  }
-  if ('tokens_used' in result && !('tokensUsed' in result)) {
-    result.tokensUsed = result.tokens_used;
+  for (const [snake, camel] of [
+    ['pass_', 'pass'],
+    ['named_scores', 'namedScores'],
+    ['named_score_weights', 'namedScoreWeights'],
+    ['component_results', 'componentResults'],
+    ['tokens_used', 'tokensUsed'],
+  ]) {
+    if (snake in result && !(camel in result)) {
+      result[camel] = result[snake];
+    }
   }
 
   // Recursively handle nested component results
