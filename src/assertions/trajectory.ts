@@ -180,7 +180,8 @@ export const handleTrajectoryToolUsed = (params: AssertionParams): GradingResult
   }
 
   const matcher = expected.matcher;
-  const min = matcher.min ?? 1;
+  const hasExplicitMax = matcher.max !== undefined;
+  const min = matcher.min ?? (hasExplicitMax ? 0 : 1);
   const max = matcher.max;
   if (!matcher.pattern && !matcher.name) {
     throw new Error(
