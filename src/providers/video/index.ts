@@ -14,7 +14,6 @@ export {
   // Cache utilities
   getCacheMappingPath,
   isVideoCacheReferenceUrlSafe,
-  readCacheMapping,
   // Output formatting
   sanitizePromptForOutput,
   sanitizeVideoCacheReferenceUrl,

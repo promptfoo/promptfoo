@@ -48,8 +48,9 @@ import { tracesRouter } from './routes/traces';
 import { userRouter } from './routes/user';
 import versionRouter from './routes/version';
 import { promptCacheService } from './services/promptCacheService';
+import { defaultErrorHandler } from './utils/defaultErrorHandler';
 import { replyValidationError, sendError } from './utils/errors';
-import type { NextFunction, Request, Response } from 'express';
+import type { Request, Response } from 'express';
 
 import type { Prompt, TestCase, TestSuite } from '../types/index';
 
@@ -152,19 +153,13 @@ export function createApp() {
   const requestSizeLimit = getRequestSizeLimit();
   app.use(express.json({ limit: requestSizeLimit }));
   app.use(express.urlencoded({ limit: requestSizeLimit, extended: true }));
-  // body-parser forwards oversize bodies as `entity.too.large`; answer with the
-  // JSON error envelope instead of Express's default HTML error page.
-  app.use((err: unknown, _req: Request, res: Response, next: NextFunction): void => {
-    if (
-      typeof err === 'object' &&
-      err !== null &&
-      (err as { type?: unknown }).type === 'entity.too.large'
-    ) {
-      sendError(res, 413, 'Request body exceeds the configured size limit');
-      return;
-    }
-    next(err);
+  app.get('/api/openapi.json', async (_req, res) => {
+    const { default: spec } = await import('../../site/static/openapi.json', {
+      with: { type: 'json' },
+    });
+    res.json({ ...spec, info: { ...spec.info, version: VERSION }, servers: [{ url: '/' }] });
   });
+
   app.get('/health', (_req, res) => {
     // Health probes must never 500 from a self-imposed schema check.
     res.status(200).json({ status: 'OK', version: VERSION });
@@ -402,6 +397,7 @@ export function createApp() {
   app.get('/*splat', (_req: Request, res: Response): void => {
     res.sendFile('index.html', { root: staticDir, dotfiles: 'allow' });
   });
+  app.use(defaultErrorHandler);
   return app;
 }
 
