@@ -113,6 +113,8 @@ const MODEL_USAGE_COUNTERS = [
   'thinkingTokens',
   'cacheReadInputTokens',
   'cacheCreationInputTokens',
+  'cacheCreationEphemeral5mInputTokens',
+  'cacheCreationEphemeral1hInputTokens',
   'webSearchRequests',
   'costUSD',
 ] as const;
