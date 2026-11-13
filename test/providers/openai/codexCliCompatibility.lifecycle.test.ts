@@ -9,6 +9,13 @@ import { pathToFileURL } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { checkCodexCliCompatibility } from '../../../src/providers/openai/codexCliCompatibility';
 
+// Bound the native diagnostic sample; every attempt retains the ordinary timeout
+// and must prove successful cleanup of only its own fixture processes.
+const cleanupAttempts = Array.from(
+  { length: process.platform === 'win32' ? 5 : 1 },
+  (_, i) => i + 1,
+);
+
 const childScript = `
   import fs from 'node:fs';
   import path from 'node:path';
@@ -41,7 +48,7 @@ import { spawn } from 'node:child_process';
 const directory = process.env.CODEX_PREFLIGHT_TEST_DIR;
 const mode = process.env.CODEX_PREFLIGHT_TEST_MODE;
 const child = spawn(process.execPath, ['--input-type=module', '-e', ${JSON.stringify(childScript)}],
-  { env: { ...process.env, NODE_OPTIONS: '' }, stdio: 'inherit' });
+  { env: { ...process.env, NODE_OPTIONS: process.env.CODEX_PREFLIGHT_TEST_NODE_OPTIONS || '' }, stdio: 'inherit' });
 fs.writeFileSync(path.join(directory, 'pids.json'), JSON.stringify({ wrapper: process.pid, child: child.pid, supervisor: process.ppid }));
 process.on('SIGTERM', () => child.kill('SIGTERM'));
 child.on('exit', (code) => process.exit(code ?? 1));
@@ -154,7 +161,13 @@ describe('Codex compatibility probe process ownership', () => {
       Object.entries({
         PATH: process.env.PATH,
         SystemRoot: process.env.SystemRoot,
-        NODE_OPTIONS: `--import=${pathToFileURL(mode.startsWith('direct-') ? directPreloadPath : preloadPath).href}`,
+        NODE_OPTIONS: [
+          process.env.NODE_OPTIONS,
+          `--import=${pathToFileURL(mode.startsWith('direct-') ? directPreloadPath : preloadPath).href}`,
+        ]
+          .filter(Boolean)
+          .join(' '),
+        CODEX_PREFLIGHT_TEST_NODE_OPTIONS: process.env.NODE_OPTIONS ?? '',
         CODEX_PREFLIGHT_TEST_DIR: caseDirectory,
         CODEX_PREFLIGHT_TEST_MODE: mode,
       }).filter((entry): entry is [string, string] => typeof entry[1] === 'string'),
@@ -244,7 +257,9 @@ describe('Codex compatibility probe process ownership', () => {
       ready(survivor.caseDirectory),
     ]);
     controller.abort();
-    expect(await aborted.result).toMatchObject({
+    const abortedResult = await aborted.result;
+    expect(abortedResult).not.toHaveProperty('error.cause.cleanup');
+    expect(abortedResult).toMatchObject({
       error: expect.objectContaining({ name: 'AbortError' }),
     });
     expect(isPresent(abortedPids.wrapper)).toBe(false);
@@ -265,18 +280,19 @@ describe('Codex compatibility probe process ownership', () => {
     expect(isPresent(owned.wrapper)).toBe(false);
   });
 
-  it.each(['stdout', 'stderr'] as const)(
-    'reaps a direct CLI before the %s limit error settles',
-    async (stream) => {
-      const probe = start(`direct-overflow-${stream}`, `direct-overflow-${stream}`);
-      const owned = await ready(probe.caseDirectory);
-      fs.writeFileSync(path.join(probe.caseDirectory, 'release'), 'overflow');
-      expect(await probe.result).toMatchObject({
-        error: expect.objectContaining({ message: expect.stringContaining(`${stream} exceeded`) }),
-      });
-      expect(isPresent(owned.wrapper)).toBe(false);
-    },
-  );
+  it.each(
+    cleanupAttempts.flatMap((attempt) => ['stdout', 'stderr'].map((stream) => [stream, attempt])),
+  )('reaps a direct CLI before the %s limit error settles (attempt %i)', async (stream) => {
+    const probe = start(`direct-overflow-${stream}`, `direct-overflow-${stream}`);
+    const owned = await ready(probe.caseDirectory);
+    fs.writeFileSync(path.join(probe.caseDirectory, 'release'), 'overflow');
+    const result = await probe.result;
+    expect(result).not.toHaveProperty('error.cause.cleanup');
+    expect(result).toMatchObject({
+      error: expect.objectContaining({ message: expect.stringContaining(`${stream} exceeded`) }),
+    });
+    expect(isPresent(owned.wrapper)).toBe(false);
+  });
 
   it('accepts a successful owned wrapper and descendant', async () => {
     const probe = start('successful');
@@ -340,7 +356,11 @@ describe('Codex compatibility probe process ownership', () => {
     const owner = spawn(process.execPath, ['--input-type=module', '-e', ownerScript], {
       detached: process.platform !== 'win32',
       stdio: ['ignore', 'pipe', 'pipe'],
-      env: { PATH: process.env.PATH, SystemRoot: process.env.SystemRoot },
+      env: {
+        PATH: process.env.PATH,
+        SystemRoot: process.env.SystemRoot,
+        NODE_OPTIONS: process.env.NODE_OPTIONS,
+      },
     });
     owners.push(owner);
     owner.stdout?.resume();
@@ -385,7 +405,9 @@ describe('Codex compatibility probe process ownership', () => {
       settled = true;
     });
     await waitUntil(() => settled);
-    expect(await aborted.result).toMatchObject({
+    const abortedResult = await aborted.result;
+    expect(abortedResult).not.toHaveProperty('error.cause.cleanup');
+    expect(abortedResult).toMatchObject({
       error: expect.objectContaining({ name: 'AbortError' }),
     });
     await waitUntil(() => !isPresent(abortedPids.wrapper) && !isPresent(abortedPids.child));
@@ -396,12 +418,17 @@ describe('Codex compatibility probe process ownership', () => {
     await waitUntil(() => !isPresent(successfulPids.wrapper) && !isPresent(successfulPids.child));
   });
 
-  it('terminates the owned tree when captured output exceeds the limit', async () => {
-    const probe = start('overflow', 'overflow');
-    const owned = await ready(probe.caseDirectory);
-    expect(await probe.result).toMatchObject({
-      error: expect.objectContaining({ message: expect.stringContaining('stdout exceeded') }),
-    });
-    await waitUntil(() => !isPresent(owned.wrapper) && !isPresent(owned.child));
-  });
+  it.each(cleanupAttempts)(
+    'terminates the owned tree on output overflow (attempt %i)',
+    async () => {
+      const probe = start('overflow', 'overflow');
+      const owned = await ready(probe.caseDirectory);
+      const result = await probe.result;
+      expect(result).not.toHaveProperty('error.cause.cleanup');
+      expect(result).toMatchObject({
+        error: expect.objectContaining({ message: expect.stringContaining('stdout exceeded') }),
+      });
+      await waitUntil(() => !isPresent(owned.wrapper) && !isPresent(owned.child));
+    },
+  );
 });
