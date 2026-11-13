@@ -95,7 +95,9 @@ describe('OpenAI Provider', () => {
         },
       });
 
-      const provider = new OpenAiCompletionProvider('gpt-3.5-turbo-instruct');
+      const provider = new OpenAiCompletionProvider('gpt-3.5-turbo-instruct', {
+        config: { apiBaseUrl: 'https://openai-compatible.example/v1' },
+      });
       const result = await provider.callApi('Test prompt');
 
       expect(result.finishReason).toBe(expected);
@@ -104,7 +106,9 @@ describe('OpenAI Provider', () => {
     it('should omit the finish reason when the API does not return one', async () => {
       mockFetchWithCache.mockResolvedValue(mockResponse);
 
-      const provider = new OpenAiCompletionProvider('gpt-3.5-turbo-instruct');
+      const provider = new OpenAiCompletionProvider('gpt-3.5-turbo-instruct', {
+        config: { apiBaseUrl: 'https://openai-compatible.example/v1' },
+      });
       const result = await provider.callApi('Test prompt');
 
       expect(result).not.toHaveProperty('finishReason');
