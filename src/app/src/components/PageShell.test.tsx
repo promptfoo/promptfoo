@@ -1,6 +1,6 @@
 import { TooltipProvider } from '@app/components/ui/tooltip';
 import { render, screen, waitFor } from '@testing-library/react';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { MemoryRouter, Route, Routes } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import PageShell from './PageShell';
 
@@ -48,23 +48,11 @@ describe('PageShell', () => {
     vi.clearAllMocks();
   });
 
-  it('should render navigation component', async () => {
+  it('renders navigation, update banner, and analytics tracker', async () => {
     renderPageShell();
     await waitFor(() => {
       expect(screen.getByTestId('navigation-mock')).toBeInTheDocument();
-    });
-  });
-
-  it('should render update banner', async () => {
-    renderPageShell();
-    await waitFor(() => {
       expect(screen.getByTestId('update-banner-mock')).toBeInTheDocument();
-    });
-  });
-
-  it('should render PostHog tracker', async () => {
-    renderPageShell();
-    await waitFor(() => {
       expect(screen.getByTestId('posthog-tracker-mock')).toBeInTheDocument();
     });
   });

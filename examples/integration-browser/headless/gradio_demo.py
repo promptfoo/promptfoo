@@ -43,9 +43,7 @@ def create_demo():
             """
         )
 
-        chatbot = gr.Chatbot(
-            label="Chat History", elem_id="chat-history", type="messages"
-        )
+        chatbot = gr.Chatbot(label="Chat History", elem_id="chat-history")
 
         msg = gr.Textbox(
             label="Your Message",
