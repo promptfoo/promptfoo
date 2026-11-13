@@ -827,9 +827,9 @@ export function parseMessages(messages: string): {
           tool_use_id: msg.tool_call_id,
           content: Array.isArray(msg.content)
             ? processAnthropicImageContent(msg.content)
-            : typeof msg.content === 'string'
-              ? msg.content
-              : JSON.stringify(msg.content ?? ''),
+            : typeof msg.content === 'string' || msg.content == null
+              ? (msg.content ?? '')
+              : JSON.stringify(msg.content),
         };
         const previous = extractedMessages[extractedMessages.length - 1];
         if (

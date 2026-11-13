@@ -189,6 +189,27 @@ describe('OpenAI tool history in provider requests', () => {
     ).toThrow('matching function name');
   });
 
+  it('accepts empty argument strings for calls without arguments', () => {
+    const messages = [{ role: 'assistant', content: null, tool_calls: [call('one', 'ping', '')] }];
+    expect(maybeCoerceToGeminiFormat(messages).contents[0].parts[0].functionCall?.args).toEqual({});
+    expect(anthropic(messages).extractedMessages[0].content).toEqual([
+      { type: 'tool_use', id: 'one', name: 'ping', input: {} },
+    ]);
+    expect(() => anthropic([{ ...messages[0], tool_calls: [call('one', 'ping', '{')] }])).toThrow(
+      'Tool call arguments must be a JSON object',
+    );
+  });
+
+  it('sends an empty Anthropic tool result for null content', () => {
+    const messages = [
+      ...history().slice(0, 2),
+      { role: 'tool', tool_call_id: 'call_1', content: null },
+    ];
+    expect(anthropic(messages).extractedMessages[2].content).toEqual([
+      { type: 'tool_result', tool_use_id: 'call_1', content: '' },
+    ]);
+  });
+
   it('treats a null tool_call_id on an ordinary turn as absent', () => {
     const messages = [{ role: 'user', content: 'hello', tool_call_id: null }];
     expect(maybeCoerceToGeminiFormat(messages).contents).toEqual([
