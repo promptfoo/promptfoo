@@ -224,6 +224,30 @@ export class HttpRateLimitError extends Error {
   }
 }
 
+/** Recognize an HTTP status in provider diagnostics without treating token counts or IDs as statuses. */
+export function hasHttp429Status(message = ''): boolean {
+  return (
+    /\b(?:HTTP(?:\/[\d.]+)?|status(?:\s+code)?)\b[\s:(=]+429\b/i.test(message) ||
+    /^API call error: Status \w+, Code 429, Message:/i.test(message) ||
+    /^(?:[\w-]+ )*(?:error|failed|returned) (?:429|\(429\)):/i.test(message) ||
+    /"(?:code|status(?:Code)?)"\s*:\s*(?:429|"429")\s*[,}]/i.test(message) ||
+    /\berror(?:\s*\(429\)|:\s*429(?:[.!]?\s*$|\s*[:({\[]))/i.test(message) ||
+    /^\s*(?:429|\(429\))\s*$/.test(message) ||
+    /\b429\s+too many requests\b|\breturned\s+429[.!]?\s*$/i.test(message) ||
+    /\b429 status code \(no body\)$/i.test(message)
+  );
+}
+
+export function isRateLimitOrQuotaMessage(errorMessage: string): boolean {
+  const lower = errorMessage.toLowerCase();
+  return (
+    lower.includes('rate limit') ||
+    lower.includes('quota exceeded') ||
+    lower.includes('too many requests') ||
+    hasHttp429Status(errorMessage)
+  );
+}
+
 export function isHardQuotaCode(code: string | undefined): boolean {
   return code !== undefined && HARD_QUOTA_ERROR_CODES.has(code);
 }

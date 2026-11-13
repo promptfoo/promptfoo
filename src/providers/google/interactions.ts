@@ -4,13 +4,13 @@ import logger from '../../logger';
 import { fetchWithTimeout } from '../../util/fetch/index';
 import { getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
-import { resolveProviderApiKey } from '../credentials';
 import { resolveProviderEnv } from '../env';
 import { getRequestTimeoutMs } from '../shared';
 import { GoogleAuthManager } from './auth';
-import { GOOGLE_MODELS } from './shared';
+import { GOOGLE_MODELS, getVertexApiHostForRegion } from './shared';
 import {
   calculateGoogleCost,
+  getNativeGeminiApiKey,
   mergeGoogleCompletionOptions,
   parseConfigResponseSchema,
   parseConfigSystemInstruction,
@@ -277,6 +277,7 @@ function hasSemanticInteractionInput(value: unknown): boolean {
 function getLiveOnlyModelRouteError(modelName: string): string | undefined {
   if (
     modelName === 'gemini-3.5-live-translate-preview' ||
+    modelName === 'gemini-3.5-transcribe-live' ||
     modelName.startsWith('gemini-robotics-er-2-streaming-')
   ) {
     return `Model "${modelName}" requires the Gemini Live API. Use google:live:${modelName}.`;
@@ -465,7 +466,7 @@ function normalizeInteractionServiceTier(
 
 type InteractionStructuredOutputLayer = {
   generationConfigs: unknown[];
-  responseSchema?: string;
+  responseSchema?: CompletionOptions['responseSchema'];
 };
 
 function resolveInteractionStructuredOutput(layers: InteractionStructuredOutputLayer[]): {
@@ -756,7 +757,7 @@ function getVertexInteractionsEndpoint(
     config.apiBaseUrl ||
     config.apiHost ||
     resolveProviderEnv(env, ['VERTEX_API_HOST'])?.value ||
-    (region === 'global' ? 'aiplatform.googleapis.com' : `${region}-aiplatform.googleapis.com`);
+    getVertexApiHostForRegion(region);
   const host = /^https?:\/\//i.test(configuredHost) ? configuredHost : `https://${configuredHost}`;
   return `${host.replace(/\/$/, '')}/v1beta1/projects/${encodeURIComponent(projectId)}/locations/${encodeURIComponent(region)}/interactions`;
 }
@@ -897,14 +898,20 @@ export class GoogleInteractionsProvider implements ApiProvider {
     };
     const passthroughModel = promptPassthrough.model ?? providerPassthrough.model;
     const effectiveModel = typeof passthroughModel === 'string' ? passthroughModel : this.modelName;
-    const routeError = getLiveOnlyModelRouteError(effectiveModel);
+    // REST model resource names and short SDK names refer to the same catalog entry.
+    const catalogModelName = effectiveModel.replace(/^models\//, '');
+    const routeError = getLiveOnlyModelRouteError(catalogModelName);
     if (routeError) {
       return { error: routeError };
     }
     // Known model overrides select their own capabilities. Gateway deployment aliases
     // retain the capabilities of the provider's selected model.
-    const hasCatalogModel = GOOGLE_MODELS.some((model) => model.id === effectiveModel);
-    const capabilityModel = hasCatalogModel ? effectiveModel : this.modelName;
+    const hasCatalogModel = GOOGLE_MODELS.some((model) => model.id === catalogModelName);
+    const capabilityModel = hasCatalogModel ? catalogModelName : this.modelName;
+    const isTranscriptionModel = capabilityModel === 'gemini-3.5-transcribe';
+    if (config.vertexai && isTranscriptionModel) {
+      return { error: 'For file transcription on Vertex AI, use vertex:gemini-3.5-transcribe.' };
+    }
     const isVideoModel = [
       'gemini-omni-flash-preview',
       'gemini-omni-1.1-flash',
@@ -968,6 +975,9 @@ export class GoogleInteractionsProvider implements ApiProvider {
         error:
           'Gemini Omni on Vertex AI does not support previousInteractionId. Use the Google AI Studio route for conversational video editing.',
       };
+    }
+    if (isTranscriptionModel && (hasConfigTools || hasPassthroughTools || hasMcpTools)) {
+      return { error: 'Gemini Transcribe does not support tools.' };
     }
     if (isVideoModel && (hasConfigTools || hasPassthroughTools || hasMcpTools)) {
       return {
@@ -1062,13 +1072,7 @@ export class GoogleInteractionsProvider implements ApiProvider {
         };
       }
     } else {
-      const rawApiKey = resolveProviderApiKey({ apiKey: config.apiKey }, this.env, [
-        'GOOGLE_API_KEY',
-        'GEMINI_API_KEY',
-        'PALM_API_KEY',
-        'GOOGLE_GENERATIVE_AI_API_KEY',
-      ]);
-      apiKey = rawApiKey ? getNunjucksEngine().renderString(rawApiKey, {}) : undefined;
+      apiKey = getNativeGeminiApiKey({ apiKey: config.apiKey }, this.env);
       if (!apiKey) {
         return {
           error:
@@ -1117,7 +1121,9 @@ export class GoogleInteractionsProvider implements ApiProvider {
       ...(promptConfig?.seed === undefined ? {} : { seed: promptConfig.seed }),
       // An explicit prompt AUTO policy replaces inherited native tool choices.
       // Native options on this prompt retain their normal layer precedence.
-      ...(!isVideoModel && promptToolMode === 'AUTO' ? { tool_choice: 'auto' } : {}),
+      ...(!isVideoModel && !isTranscriptionModel && promptToolMode === 'AUTO'
+        ? { tool_choice: 'auto' }
+        : {}),
       ...(promptConfig?.generationConfig || {}),
     };
     const normalizedGenerationConfig = normalizeInteractionGenerationLayers(
@@ -1140,7 +1146,7 @@ export class GoogleInteractionsProvider implements ApiProvider {
     }
     const generationConfig = {
       ...normalizedGenerationConfig.config,
-      ...(!isVideoModel && toolsDisabled ? { tool_choice: 'none' } : {}),
+      ...(!isVideoModel && !isTranscriptionModel && toolsDisabled ? { tool_choice: 'none' } : {}),
     };
     const providerServiceTier =
       providerPassthrough.service_tier ??
@@ -1154,6 +1160,9 @@ export class GoogleInteractionsProvider implements ApiProvider {
       return {
         error: 'Gemini Interactions service_tier must be one of flex, standard, or priority.',
       };
+    }
+    if (isTranscriptionModel && serviceTier && serviceTier !== 'standard') {
+      return { error: 'Gemini Transcribe supports only the Standard service tier.' };
     }
     const billingConfig = {
       ...config,
@@ -1298,7 +1307,8 @@ export class GoogleInteractionsProvider implements ApiProvider {
         : undefined);
     const safetySettings = promptSafetySettings ?? providerSafetySettings;
     const body = {
-      model: effectiveModel,
+      model:
+        effectiveModel === 'gemini-3.5-transcribe' ? `models/${effectiveModel}` : effectiveModel,
       input: requestInput,
       ...(isVideoModel
         ? { response_format: videoResponseFormat }
@@ -1478,11 +1488,15 @@ export class GoogleInteractionsProvider implements ApiProvider {
     };
     // Opaque gateway aliases retain the provider's request capabilities, but their
     // prices must come from explicit configuration rather than an assumed model mapping.
-    const cost = cached
+    const missingTranscriptionUsage =
+      isTranscriptionModel &&
+      (usage?.total_input_tokens == null || usage?.total_output_tokens == null);
+    const skipCost = cached || missingTranscriptionUsage;
+    const cost = skipCost
       ? undefined
       : hasCatalogModel
         ? calculateGoogleCost(
-            effectiveModel,
+            catalogModelName,
             billingConfig,
             promptTokens,
             outputTokens + thoughtTokens,

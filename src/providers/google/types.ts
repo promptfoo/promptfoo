@@ -78,6 +78,7 @@ export interface Part {
   functionCall?: FunctionCall | StreamedFunctionCall;
   functionResponse?: FunctionResponse;
   thoughtSignature?: string;
+  audioTranscription?: { text?: string; speakerLabel?: string; words?: unknown[] };
   speechMetadata?: { speaker?: string; style?: string };
   fileData?: FileData;
 }
@@ -300,6 +301,13 @@ export interface CompletionOptions {
     speechConfig?: GoogleSpeechConfig;
 
     // Transcription configuration
+    audioTranscriptionConfig?: {
+      languageCodes?: string[];
+      wordTimestamp?: boolean;
+      diarization?: boolean;
+      customVocabulary?: string[];
+      mode?: 'VERBATIM' | 'SMART';
+    };
     outputAudioTranscription?: Record<string, any>;
     inputAudioTranscription?: Record<string, any>;
 
@@ -320,9 +328,10 @@ export interface CompletionOptions {
     // Thinking configuration for Gemini 2.5+ models
     // Gemini 3 Flash supports: MINIMAL, LOW, MEDIUM, HIGH
     // Gemini 3 Pro supports: LOW, HIGH
+    // Gemini 4 Hydrogen supports: LOW, MEDIUM, HIGH, XHIGH
     thinkingConfig?: {
       thinkingBudget?: number;
-      thinkingLevel?: 'MINIMAL' | 'LOW' | 'MEDIUM' | 'HIGH';
+      thinkingLevel?: 'MINIMAL' | 'LOW' | 'MEDIUM' | 'HIGH' | 'XHIGH';
     };
 
     // Image configuration for Gemini image models; the top-level
@@ -333,7 +342,7 @@ export interface CompletionOptions {
     };
   };
 
-  responseSchema?: string;
+  responseSchema?: string | Record<string, unknown>;
 
   toolConfig?: {
     functionCallingConfig?: {

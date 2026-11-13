@@ -18,14 +18,14 @@ describe('ConfirmEvalNameDialog', () => {
   };
 
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
     // Note: Do NOT use vi.useFakeTimers() here - it breaks userEvent interactions
     // Default mockOnConfirm to return a resolved promise so async flows complete
     mockOnConfirm.mockResolvedValue(undefined);
   });
 
   afterEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
   });
 
   describe('Rendering', () => {
@@ -541,15 +541,18 @@ describe('ConfirmEvalNameDialog', () => {
     expect(input.value).toBe('New Name');
   });
 
-  it('clears error state when currentName prop changes while open', () => {
+  it('clears a rejected confirmation error when currentName changes', async () => {
+    const user = userEvent.setup();
+    mockOnConfirm.mockRejectedValue(new Error('Rename failed'));
     const { rerender } = render(<ConfirmEvalNameDialog {...defaultProps} />);
-    const _input = screen.getByLabelText('Name') as HTMLInputElement;
-    const helperText = 'Enter a name for this evaluation';
-
-    rerender(<ConfirmEvalNameDialog {...defaultProps} helperText="Error Message" />);
-
+    await user.clear(screen.getByLabelText('Name'));
+    await user.type(screen.getByLabelText('Name'), 'Renamed eval');
+    await user.click(screen.getByRole('button', { name: 'Confirm' }));
+    expect(await screen.findByText('Rename failed')).toBeInTheDocument();
     rerender(<ConfirmEvalNameDialog {...defaultProps} currentName="New Name" />);
-    expect(screen.getByText(helperText)).toBeInTheDocument();
+    expect(screen.queryByText('Rename failed')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Name')).toHaveValue('New Name');
+    expect(screen.getByText('Enter a name for this evaluation')).toBeInTheDocument();
   });
 
   describe('State Reset on Rapid Open/Close', () => {

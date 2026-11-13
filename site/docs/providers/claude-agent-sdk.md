@@ -842,7 +842,9 @@ providers:
       settings: /path/to/settings.json
 ```
 
-For embedders that derive lockdown configuration from an enterprise policy, use `managed_settings` to load policy-tier settings above user/project layers (so user/project settings cannot widen restrictions set here):
+Use `managed_settings` to pass restrictions from an embedding application to the SDK. If the machine already has an administrator policy, that policy controls whether the SDK merges restrictions from the application.
+
+Setting `disableAllHooks`, `disableSkillShellExecution`, `allowedHttpHookUrls`, or `httpHookAllowedEnvVars` in `managed_settings` requires SDK 0.3.309 or later in the 0.3.x series. With `disableAllHooks: true`, the SDK allows only administrator-managed hooks. The SDK accepts empty `allowedHttpHookUrls` and `httpHookAllowedEnvVars` lists, but they only restrict HTTP hooks when other settings sources have no entries for the same list.
 
 ```yaml
 providers:
@@ -1166,6 +1168,8 @@ providers:
 ## Token Usage
 
 With SDK 0.3.257 and newer, reported thinking tokens appear in `tokenUsage.completionDetails.reasoning`. They are already included in completion and total token counts. Sessions resumed from older SDK versions may report only a partial thinking-token count.
+
+With SDK 0.3.311 and newer, each model in `metadata.modelUsage` can report cache writes by lifetime in `cacheCreationEphemeral5mInputTokens` and `cacheCreationEphemeral1hInputTokens`. Both counts are included in `cacheCreationInputTokens`. Writes with an unknown lifetime appear only in the total.
 
 For resumed, continued, or forked sessions, `cost`, `tokenUsage`, and `metadata.modelUsage` cover only the current call, including subagents. Cumulative SDK totals remain in `raw`, `metadata.sessionCost`, and `metadata.sessionModelUsage`. Promptfoo captures a pre-prompt baseline using the SDK's experimental usage API. If that API is unavailable, times out, or a local command bypasses the prompt hook, the output is preserved but per-call accounting is omitted with a warning and `metadata.usageAccounting: 'unavailable'`; cost assertions then fail rather than treating unknown cost as zero.
 

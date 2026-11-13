@@ -76,7 +76,7 @@ export class GroqProvider extends OpenAiChatCompletionProvider {
       }
       delete body.max_tokens;
     }
-    const groqConfig = this.config as GroqCompletionOptions;
+    const groqConfig = config as GroqCompletionOptions;
 
     // Add Groq-specific reasoning parameters
     if (groqConfig.reasoning_format !== undefined) {

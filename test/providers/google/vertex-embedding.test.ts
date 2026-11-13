@@ -156,14 +156,16 @@ describe('Vertex embeddings request contracts', () => {
     },
   );
 
-  it.each([{}, { embedding: { values: [] } }])(
-    'rejects missing or empty vectors: %j',
-    async (data) => {
-      const provider = new VertexEmbeddingProvider('gemini-embedding-2');
-      mockRequest(provider, data);
-      await expect(provider.callEmbeddingApi('text')).rejects.toThrow('No valid embeddings');
-    },
-  );
+  it.each([
+    {},
+    { embedding: { values: [] } },
+    { embedding: { values: [null] } },
+    { embedding: { values: 'bad' } },
+  ])('rejects missing or invalid vectors: %j', async (data) => {
+    const provider = new VertexEmbeddingProvider('gemini-embedding-2');
+    mockRequest(provider, data);
+    await expect(provider.callEmbeddingApi('text')).rejects.toThrow('No valid embeddings');
+  });
 
   it('preserves API failures and cancellation', async () => {
     const provider = new VertexEmbeddingProvider('gemini-embedding-2');

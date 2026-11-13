@@ -61,12 +61,17 @@ export async function resolveJavaScriptFileFunction(
   // biome-ignore lint/suspicious/noExplicitAny: I think this is hotloading JS
 ): Promise<(...args: any[]) => any> {
   const requiredModule = await importModule(filePath, functionName);
-  if (functionName && typeof requiredModule[functionName] === 'function') {
-    return requiredModule[functionName];
+  if (functionName && typeof requiredModule?.[functionName] === 'function') {
+    return requiredModule[functionName].bind(requiredModule);
   } else if (typeof requiredModule === 'function') {
     return requiredModule;
-  } else if (requiredModule.default && typeof requiredModule.default === 'function') {
-    return requiredModule.default;
+  } else if (typeof requiredModule?.default === 'function') {
+    return requiredModule.default.bind(requiredModule);
+  }
+  if (functionName) {
+    throw new Error(
+      `Assertion malformed: ${filePath} must export a function named "${functionName}"`,
+    );
   }
   throw new Error(
     `Assertion malformed: ${filePath} must export a function or have a default export as a function`,

@@ -13,6 +13,7 @@ import {
   validateAzureVideoDuration,
 } from '../../../src/providers/azure/video';
 import { generateVideoCacheKey } from '../../../src/providers/video';
+import { isProviderResponseRateLimited } from '../../../src/scheduler/types';
 import { createVideoRequest } from '../../factories/literalFixtures';
 
 const { createFsPromiseOverlayFactory, createRequestLoggerFactory } = await vi.hoisted(
@@ -404,7 +405,7 @@ describe('AzureVideoProvider', () => {
       expect(result.error).toContain('Content policy violation');
     });
 
-    it('should handle video download failure', async () => {
+    it.each([404, 429])('reports HTTP %i during video download', async (status) => {
       const provider = new AzureVideoProvider('sora', createAzureVideoOptions());
 
       mockFetchWithProxy
@@ -418,13 +419,14 @@ describe('AzureVideoProvider', () => {
         })
         .mockResolvedValueOnce({
           ok: false,
-          status: 404,
-          statusText: 'Not Found',
+          status,
+          statusText: '',
         });
 
       const result = await provider.callApi('Test');
 
-      expect(result.error).toContain('Failed to download video');
+      expect(isProviderResponseRateLimited(result, undefined)).toBe(status === 429);
+      expect(result.error).toContain(`Failed to download video: HTTP ${status}`);
     });
 
     it('should handle empty generations array', async () => {

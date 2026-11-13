@@ -1,7 +1,7 @@
 import { mockBrowserProperty, mockMatchMedia, restoreBrowserMocks } from '@app/tests/browserMocks';
 import { type TestTimers, useTestTimers } from '@app/tests/timers';
 import { act, renderHook } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { useHoverIntent } from './useHoverIntent';
 
 describe('useHoverIntent', () => {
@@ -16,7 +16,6 @@ describe('useHoverIntent', () => {
   it('should return initial state', () => {
     const { result } = renderHook(() => useHoverIntent());
 
-    expect(result.current.isHovering).toBe(false);
     expect(result.current.isIntentional).toBe(false);
     expect(result.current.hoverProps).toHaveProperty('onMouseEnter');
     expect(result.current.hoverProps).toHaveProperty('onMouseLeave');
@@ -24,19 +23,8 @@ describe('useHoverIntent', () => {
     expect(result.current.hoverProps).toHaveProperty('onBlur');
   });
 
-  it('should set isHovering immediately on mouse enter', () => {
-    const { result } = renderHook(() => useHoverIntent());
-
-    act(() => {
-      result.current.hoverProps.onMouseEnter();
-    });
-
-    expect(result.current.isHovering).toBe(true);
-    expect(result.current.isIntentional).toBe(false);
-  });
-
   it('should set isIntentional after delay', () => {
-    const { result } = renderHook(() => useHoverIntent({ delay: 300 }));
+    const { result } = renderHook(() => useHoverIntent());
 
     act(() => {
       result.current.hoverProps.onMouseEnter();
@@ -52,26 +40,24 @@ describe('useHoverIntent', () => {
   });
 
   it('should reset state on mouse leave', () => {
-    const { result } = renderHook(() => useHoverIntent({ delay: 300 }));
+    const { result } = renderHook(() => useHoverIntent());
 
     act(() => {
       result.current.hoverProps.onMouseEnter();
       timers.advanceBy(300);
     });
 
-    expect(result.current.isHovering).toBe(true);
     expect(result.current.isIntentional).toBe(true);
 
     act(() => {
       result.current.hoverProps.onMouseLeave();
     });
 
-    expect(result.current.isHovering).toBe(false);
     expect(result.current.isIntentional).toBe(false);
   });
 
   it('should cancel timer on early mouse leave', () => {
-    const { result } = renderHook(() => useHoverIntent({ delay: 300 }));
+    const { result } = renderHook(() => useHoverIntent());
 
     act(() => {
       result.current.hoverProps.onMouseEnter();
@@ -89,36 +75,9 @@ describe('useHoverIntent', () => {
     expect(result.current.isIntentional).toBe(false);
   });
 
-  it('should support custom delay', () => {
-    const { result } = renderHook(() => useHoverIntent({ delay: 500 }));
-
-    act(() => {
-      result.current.hoverProps.onMouseEnter();
-      timers.advanceBy(300);
-    });
-
-    expect(result.current.isIntentional).toBe(false);
-
-    act(() => {
-      timers.advanceBy(200);
-    });
-
-    expect(result.current.isIntentional).toBe(true);
-  });
-
   describe('keyboard focus support', () => {
-    it('should set isHovering on focus', () => {
-      const { result } = renderHook(() => useHoverIntent());
-
-      act(() => {
-        result.current.hoverProps.onFocus();
-      });
-
-      expect(result.current.isHovering).toBe(true);
-    });
-
     it('should set isIntentional after half delay for keyboard users', () => {
-      const { result } = renderHook(() => useHoverIntent({ delay: 300 }));
+      const { result } = renderHook(() => useHoverIntent());
 
       act(() => {
         result.current.hoverProps.onFocus();
@@ -129,7 +88,7 @@ describe('useHoverIntent', () => {
     });
 
     it('should reset state on blur', () => {
-      const { result } = renderHook(() => useHoverIntent({ delay: 300 }));
+      const { result } = renderHook(() => useHoverIntent());
 
       act(() => {
         result.current.hoverProps.onFocus();
@@ -142,33 +101,18 @@ describe('useHoverIntent', () => {
         result.current.hoverProps.onBlur();
       });
 
-      expect(result.current.isHovering).toBe(false);
-      expect(result.current.isIntentional).toBe(false);
-    });
-  });
-
-  describe('enabled option', () => {
-    it('should not activate when enabled is false', () => {
-      const { result } = renderHook(() => useHoverIntent({ enabled: false }));
-
-      act(() => {
-        result.current.hoverProps.onMouseEnter();
-        timers.advanceBy(500);
-      });
-
-      expect(result.current.isHovering).toBe(false);
       expect(result.current.isIntentional).toBe(false);
     });
   });
 
   describe('prefers-reduced-motion', () => {
-    it('should not activate when user prefers reduced motion and respectReducedMotion is true', () => {
+    it('should not activate when the user prefers reduced motion', () => {
       mockMatchMedia({
         matches: (query) =>
           query === '(prefers-reduced-motion: reduce)' || query === '(hover: hover)',
       });
 
-      const { result } = renderHook(() => useHoverIntent({ respectReducedMotion: true }));
+      const { result } = renderHook(() => useHoverIntent());
 
       act(() => {
         result.current.hoverProps.onMouseEnter();
@@ -176,22 +120,6 @@ describe('useHoverIntent', () => {
       });
 
       expect(result.current.isIntentional).toBe(false);
-    });
-
-    it('should activate when respectReducedMotion is false even with reduced motion preference', () => {
-      mockMatchMedia({
-        matches: (query) =>
-          query === '(prefers-reduced-motion: reduce)' || query === '(hover: hover)',
-      });
-
-      const { result } = renderHook(() => useHoverIntent({ respectReducedMotion: false }));
-
-      act(() => {
-        result.current.hoverProps.onMouseEnter();
-        timers.advanceBy(500);
-      });
-
-      expect(result.current.isIntentional).toBe(true);
     });
   });
 
@@ -210,21 +138,57 @@ describe('useHoverIntent', () => {
     });
   });
 
-  it('should cleanup timeout on unmount', () => {
-    const clearTimeoutSpy = vi.spyOn(global, 'clearTimeout');
-    const { result, unmount } = renderHook(() => useHoverIntent());
+  it.each([
+    ['onMouseEnter', 'onFocus', 200, 100],
+    ['onMouseEnter', 'onFocus', 50, 150],
+    ['onFocus', 'onMouseEnter', 50, 100],
+  ] as const)(
+    'honors the earliest deadline when %s precedes %s by %i ms',
+    (first, second, gap, remaining) => {
+      const { result } = renderHook(() => useHoverIntent());
+
+      act(() => {
+        result.current.hoverProps[first]();
+        timers.advanceBy(gap);
+        result.current.hoverProps[second]();
+        timers.advanceBy(remaining - 1);
+      });
+      expect(result.current.isIntentional).toBe(false);
+      act(() => {
+        timers.advanceBy(1);
+      });
+      expect(result.current.isIntentional).toBe(true);
+    },
+  );
+
+  it.each(['onMouseLeave', 'onBlur'] as const)('cancels pending hover and focus on %s', (exit) => {
+    const { result } = renderHook(() => useHoverIntent());
 
     act(() => {
       result.current.hoverProps.onMouseEnter();
+      result.current.hoverProps.onFocus();
+      result.current.hoverProps[exit]();
+      timers.advanceBy(300);
     });
 
+    expect(result.current.isIntentional).toBe(false);
+  });
+
+  it('cancels overlapping hover and focus on unmount', () => {
+    const { result, unmount } = renderHook(() => useHoverIntent());
+    const idleTimers = timers.getTimerCount();
+
+    act(() => {
+      result.current.hoverProps.onMouseEnter();
+      result.current.hoverProps.onFocus();
+    });
     unmount();
 
-    expect(clearTimeoutSpy).toHaveBeenCalled();
+    expect(timers.getTimerCount()).toBe(idleTimers);
   });
 
   it('should ignore delayed hover work after the browser window tears down', () => {
-    const { result } = renderHook(() => useHoverIntent({ delay: 300 }));
+    const { result } = renderHook(() => useHoverIntent());
 
     act(() => {
       result.current.hoverProps.onMouseEnter();

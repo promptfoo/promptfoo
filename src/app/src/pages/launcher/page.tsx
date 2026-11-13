@@ -17,14 +17,13 @@ import ThemeSelector from '../../components/ThemeSelector';
 const DEFAULT_LOCAL_API_URL = 'http://localhost:15500';
 
 export default function LauncherPage() {
-  const [isConnecting, setIsConnecting] = useState(true);
-  const [hasBeenConnected, setHasBeenConnected] = useState(false);
-  const [isInitialConnection, setIsInitialConnection] = useState(true);
+  const [redirected, setRedirected] = useState(false);
   const navigate = useNavigate();
   const {
     data: { status: healthStatus },
     refetch: checkHealth,
   } = useApiHealth();
+  const isConnecting = healthStatus !== 'connected';
   const { apiBaseUrl, setApiBaseUrl, enablePersistApiBaseUrl } = useApiConfig();
   usePageMeta({ title: 'Launcher', description: 'Connect to your API server' });
 
@@ -40,42 +39,32 @@ export default function LauncherPage() {
     let interval: NodeJS.Timeout | undefined;
     const timeout = setTimeout(() => {
       checkHealth();
-      interval = setInterval(() => {
-        checkHealth();
-      }, 2000);
+      interval = setInterval(checkHealth, 2000);
     }, 3000);
 
     return () => {
       clearTimeout(timeout);
-      if (interval) {
-        clearInterval(interval);
-      }
+      clearInterval(interval);
     };
   }, [checkHealth]);
 
   useEffect(() => {
-    if (healthStatus === 'connected') {
-      setIsConnecting(false);
-      setHasBeenConnected(true);
-      // Only auto-navigate if this is the initial connection
-      if (isInitialConnection) {
-        setTimeout(() => {
-          setIsInitialConnection(false);
-          navigate(EVAL_ROUTES.ROOT);
-        }, 1000);
-      }
-    } else if (healthStatus === 'blocked' || healthStatus === 'disabled') {
-      setIsConnecting(true);
+    if (!isConnecting && !redirected) {
+      const timer = setTimeout(() => {
+        setRedirected(true);
+        navigate(EVAL_ROUTES.ROOT);
+      }, 1000);
+      return () => clearTimeout(timer);
     }
-  }, [healthStatus, navigate, isInitialConnection]);
+  }, [isConnecting, navigate, redirected]);
 
-  const showConnectionWarning =
-    hasBeenConnected && !isInitialConnection && healthStatus === 'blocked';
+  const showConnectionWarning = redirected && healthStatus === 'blocked';
 
   return (
     <div className="relative flex min-h-screen flex-col items-center justify-center bg-background px-4 py-8 text-foreground sm:px-6 sm:py-10">
       {/* Connection lost warning */}
       <div
+        inert={!showConnectionWarning}
         className={cn(
           'fixed left-1/2 top-4 z-50 w-auto max-w-[90vw] -translate-x-1/2 transition-all duration-300',
           showConnectionWarning

@@ -2,7 +2,15 @@ const REASONING_EFFORTS = new Set(['low', 'medium', 'high', 'xhigh', 'max']);
 const UNKNOWN_PERSISTED_EFFORT = Symbol('unknown persisted effort');
 const COMPACTED_EFFORT = Symbol('effort before compaction');
 
-type Gpt6Variant = 'astra' | 'sol' | 'luna' | '6.1-sol';
+const MODEL_LABELS = {
+  astra: 'GPT-6 Astra',
+  sol: 'GPT-6 Sol',
+  luna: 'GPT-6 Luna',
+  '6.1-sol': 'GPT-6.1 Sol',
+  '6.1-terra': 'GPT-6.1 Terra',
+} as const;
+
+type Gpt6Variant = keyof typeof MODEL_LABELS;
 type Gpt6Reasoning = { effort?: unknown; enabled?: unknown; mode?: unknown } | null | undefined;
 
 function getGpt6BaseModelName(modelName: string): string {
@@ -16,8 +24,9 @@ export function getGpt6Variant(modelName: unknown): Gpt6Variant | undefined {
     return undefined;
   }
   const baseModel = getGpt6BaseModelName(modelName);
-  if (/(?:^|[.-])gpt-6\.1-sol(?:[-:]|$)/.test(baseModel)) {
-    return '6.1-sol';
+  const versioned = /(?:^|[.-])gpt-6\.1-(sol|terra)(?:[-:]|$)/.exec(baseModel);
+  if (versioned) {
+    return versioned[1] === 'sol' ? '6.1-sol' : '6.1-terra';
   }
   return /(?:^|[.-])gpt-6-(astra|sol|luna)(?:[-:]|$)/.exec(baseModel)?.[1] as
     | Gpt6Variant
@@ -270,9 +279,10 @@ function validateChatTools(
     return;
   }
 
-  if (variant === 'astra' || variant === '6.1-sol') {
+  if (variant === 'astra' || variant === '6.1-sol' || variant === '6.1-terra') {
+    const model = variant === 'astra' ? 'gpt-6-astra' : `gpt-${variant}`;
     throw new Error(
-      `${modelLabel} tool calling requires the Responses API. Use openai:responses:${variant === '6.1-sol' ? 'gpt-6.1-sol' : 'gpt-6-astra'} or azure:responses:<deployment>.`,
+      `${modelLabel} tool calling requires the Responses API. Use openai:responses:${model} or azure:responses:<deployment>.`,
     );
   }
   for (const [selector, definitions] of [
@@ -342,8 +352,7 @@ export function applyGpt6RequestRules(
   if (!variant) {
     return;
   }
-  const modelLabel =
-    variant === '6.1-sol' ? 'GPT-6.1 Sol' : `GPT-6 ${variant[0].toUpperCase()}${variant.slice(1)}`;
+  const modelLabel = MODEL_LABELS[variant];
 
   const reasoning = normalizeReasoning(body);
   if (api === 'responses' && body.reasoning_effort !== undefined) {
