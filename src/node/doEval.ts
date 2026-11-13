@@ -28,7 +28,7 @@ import { neverGenerateRemote } from '../redteam/remoteGeneration';
 import { createShareableUrl, isSharingEnabled } from '../share';
 import { generateTable } from '../table';
 import telemetry from '../telemetry';
-import { flushOtel, shutdownOtel } from '../tracing/otelSdk';
+import { deferOtelSigintShutdown, flushOtel, shutdownOtel } from '../tracing/otelSdk';
 import { EMAIL_OK_STATUS } from '../types/email';
 import { isCliEventSource } from '../types/eventSource';
 import { CommandLineOptionsSchema, MAX_SUGGESTIONS_COUNT, TestSuiteSchema } from '../types/index';
@@ -215,35 +215,37 @@ function watchUntilTerminated(watcher: FSWatcher): Promise<void> {
   });
 }
 
-/** How long a CLI eval waits for provider and tracing cleanup after SIGTERM before it ends. */
+/** How long a CLI eval waits for provider and tracing cleanup before re-raising a signal. */
 export const SIGTERM_CLEANUP_TIMEOUT_MS = 3_000;
 
-async function cleanupOnSigterm(): Promise<void> {
+async function drainOnSignal(signal: 'SIGINT' | 'SIGTERM'): Promise<void> {
   // Flush buffered spans first, then keep tracing open for calls that settle during the drain.
   await flushOtel();
   try {
     await providerRegistry.shutdownForProcess();
   } catch (error) {
-    logger.debug('Provider cleanup failed during SIGTERM', { error });
+    logger.debug(`Provider cleanup failed during ${signal}`, { error });
   }
   await shutdownOtel();
 }
 
-/** CLI evals own process termination. Library hosts keep their own SIGTERM policy. */
+/** Restore normal signal termination after CLI-owned cleanup. */
+async function terminateAfterCleanup(signal: 'SIGINT' | 'SIGTERM'): Promise<void> {
+  let timer: NodeJS.Timeout | undefined;
+  const timeout = new Promise<void>((resolve) => {
+    timer = setTimeout(resolve, SIGTERM_CLEANUP_TIMEOUT_MS);
+  });
+  try {
+    await Promise.race([drainOnSignal(signal), timeout]);
+  } finally {
+    clearTimeout(timer);
+    process.removeAllListeners(signal);
+    process.kill(process.pid, signal);
+  }
+}
+
 export function terminateOnSigterm(): () => void {
-  const onSigterm = async () => {
-    let timer: NodeJS.Timeout | undefined;
-    const timeout = new Promise<void>((resolve) => {
-      timer = setTimeout(resolve, SIGTERM_CLEANUP_TIMEOUT_MS);
-    });
-    try {
-      await Promise.race([cleanupOnSigterm(), timeout]);
-    } finally {
-      clearTimeout(timer);
-      process.removeAllListeners('SIGTERM');
-      process.kill(process.pid, 'SIGTERM');
-    }
-  };
+  const onSigterm = () => terminateAfterCleanup('SIGTERM');
   process.once('SIGTERM', onSigterm);
   return () => process.removeListener('SIGTERM', onSigterm);
 }
@@ -358,6 +360,10 @@ async function doEvalWithEnv(
   // Set once watch mode starts watching; awaited before doEval returns so the CLI does
   // not shut down underneath the watcher.
   let watchTermination: Promise<void> | undefined;
+  let interruptCleanup: Promise<void> | undefined;
+  const interruptUnsavedRun = () => {
+    interruptCleanup ??= terminateAfterCleanup('SIGINT');
+  };
 
   const runEvaluationWithEnv = async (
     runEnv: EnvOverrides,
@@ -1314,6 +1320,12 @@ async function doEvalWithEnv(
     // Ending the process on SIGTERM is CLI policy too; library hosts keep control of their own.
     // Keep it until the whole run settles, including sharing and output files after evaluate().
     const removeSigtermHandler = isCliInvocation ? terminateOnSigterm() : undefined;
+    // Saved runs own resumable pause; an idle watcher owns its own Ctrl-C.
+    const interruptUnsaved = isCliInvocation && runCommand.write === false;
+    const restoreOtelSigint = interruptUnsaved ? deferOtelSigintShutdown() : undefined;
+    if (interruptUnsaved) {
+      process.once('SIGINT', interruptUnsavedRun);
+    }
     try {
       return await cliState.withSafeMode(
         Boolean(runCommand.safeMode || runDefaults.commandLineOptions?.safeMode),
@@ -1339,12 +1351,24 @@ async function doEvalWithEnv(
       );
     } finally {
       removeSigtermHandler?.();
+      if (interruptUnsaved) {
+        process.removeListener('SIGINT', interruptUnsavedRun);
+        restoreOtelSigint?.();
+      }
     }
   };
 
-  const result = await runEvaluation(true /* initialization */);
-  if (watchTermination) {
-    await watchTermination;
+  try {
+    const result = await runEvaluation(true /* initialization */);
+    if (watchTermination) {
+      await watchTermination;
+    }
+    return result;
+  } finally {
+    // Closing the watcher can finish the command before an interrupted rerun settles.
+    // Keep main's normal shutdown from overtaking the Ctrl-C cleanup and exit status.
+    if (interruptCleanup) {
+      await interruptCleanup;
+    }
   }
-  return result;
 }
