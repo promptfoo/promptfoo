@@ -10,20 +10,18 @@
  *
  * Environment variables:
  * - IMAGE_TO_VIDEO_AI_API_KEY: Optional API key for live provider integration
- * - IMAGE_TO_VIDEO_AI_BASE_URL: Custom API base URL (default: https://api.example.com/v1)
+ * - IMAGE_TO_VIDEO_AI_BASE_URL: Explicit base URL for live integration
  *
  * By default runs as an explicitly generic local simulation without external network calls.
  */
-
-const DEFAULT_BASE_URL = 'https://api.example.com/v1';
 
 class ImageToVideoAiProvider {
   constructor(options = {}) {
     this.providerId = options.id || 'provider-image-to-video-ai';
     this.config = options.config || {};
     this.apiKey = this.config.apiKey || process.env.IMAGE_TO_VIDEO_AI_API_KEY;
-    this.baseUrl =
-      this.config.baseUrl || process.env.IMAGE_TO_VIDEO_AI_BASE_URL || DEFAULT_BASE_URL;
+    const baseUrl = this.config.baseUrl || process.env.IMAGE_TO_VIDEO_AI_BASE_URL;
+    this.baseUrl = baseUrl?.replace(/\/+$/, '');
     this.pollIntervalMs = Number(this.config.pollIntervalMs) || 500;
     this.maxPollAttempts = Number(this.config.maxPollAttempts) || 30;
     this.timeoutMs = Number(this.config.timeoutMs) || 60000;
@@ -66,6 +64,7 @@ class ImageToVideoAiProvider {
   async submitJob(body, signal) {
     const res = await fetch(`${this.baseUrl}/generate`, {
       method: 'POST',
+      redirect: 'error',
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${this.apiKey}`,
@@ -74,8 +73,7 @@ class ImageToVideoAiProvider {
       signal,
     });
     if (!res.ok) {
-      const errorText = await res.text();
-      return { error: `Image to Video API submission failed (HTTP ${res.status}): ${errorText}` };
+      return { error: `Image to Video API submission failed (HTTP ${res.status}).` };
     }
     const data = await res.json();
     const jobId = data.task_id || data.id || data.job_id;
@@ -93,6 +91,7 @@ class ImageToVideoAiProvider {
 
       const res = await fetch(`${this.baseUrl}/tasks/${encodeURIComponent(jobId)}`, {
         method: 'GET',
+        redirect: 'error',
         headers: {
           Authorization: `Bearer ${this.apiKey}`,
         },
@@ -100,8 +99,7 @@ class ImageToVideoAiProvider {
       });
 
       if (!res.ok) {
-        const pollError = await res.text();
-        return { error: `Task status polling failed (HTTP ${res.status}): ${pollError}` };
+        return { error: `Task status polling failed (HTTP ${res.status}).` };
       }
 
       const data = await res.json();
@@ -123,7 +121,7 @@ class ImageToVideoAiProvider {
 
       if (status === 'failed' || status === 'error') {
         return {
-          error: `Video generation task ${jobId} failed: ${data.error || 'Unknown provider error'}`,
+          error: 'Video generation task failed.',
           metadata: { jobId, status, attempts },
         };
       }
@@ -172,7 +170,11 @@ class ImageToVideoAiProvider {
       this.config.mock === true ||
       process.env.MOCK_IMAGE_TO_VIDEO === 'true'
     ) {
-      return this.simulateGeneration(requested, options);
+      return this.simulateGeneration(requested);
+    }
+
+    if (!this.baseUrl) {
+      return { error: 'Set IMAGE_TO_VIDEO_AI_BASE_URL to enable live image-to-video generation.' };
     }
 
     const timeoutMs = Number(options?.timeoutMs) || this.timeoutMs;
@@ -247,20 +249,15 @@ class ImageToVideoAiProvider {
   /**
    * Deterministic generic simulation for local verification, CI, and keyless demonstration.
    */
-  async simulateGeneration(requested, options = {}) {
-    if (options?.abortSignal?.aborted) {
-      return { error: 'Request aborted' };
-    }
-    await this.sleep(20, options?.abortSignal);
-
+  simulateGeneration(requested) {
     const { prompt, imageUrl, motion, duration, fps, resolution } = requested;
     const slug =
       prompt
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, '-')
         .slice(0, 30) || 'clip';
-    const jobId = `job-sim-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
-    const videoUrl = `https://example.com/simulated-renders/${slug}-${jobId}.mp4`;
+    const jobId = `job-sim-${slug}`;
+    const videoUrl = `https://example.com/simulated-renders/${jobId}.mp4`;
 
     return {
       output: `[Video Result](${videoUrl})\nStatus: completed\nDuration: ${duration}s`,

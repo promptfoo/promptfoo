@@ -13,12 +13,13 @@ describe('ImageToVideoAiProvider', () => {
   afterEach(() => {
     vi.unstubAllEnvs();
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
   });
 
   it('initializes with default values', () => {
     const provider = new ImageToVideoAiProvider();
     expect(provider.id()).toBe('provider-image-to-video-ai');
-    expect(provider.baseUrl).toBe('https://api.example.com/v1');
+    expect(provider.baseUrl).toBeUndefined();
     expect(provider.pollIntervalMs).toBe(500);
     expect(provider.maxPollAttempts).toBe(30);
     expect(provider.timeoutMs).toBe(60000);
@@ -119,6 +120,17 @@ describe('ImageToVideoAiProvider', () => {
   });
 
   describe('Live API mode (with mocked fetch)', () => {
+    it('does not send a supplied key without a configured endpoint', async () => {
+      const mockFetch = vi.fn();
+      vi.stubGlobal('fetch', mockFetch);
+      const provider = new ImageToVideoAiProvider({ config: { apiKey: 'test-key' } });
+
+      const result = await provider.callApi('Misty mountains');
+
+      expect(result.error).toContain('Set IMAGE_TO_VIDEO_AI_BASE_URL');
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
     it('submits job and polls until completion', async () => {
       const mockFetch = vi.fn();
 
@@ -231,7 +243,7 @@ describe('ImageToVideoAiProvider', () => {
       vi.stubGlobal('fetch', mockFetch);
 
       const provider = new ImageToVideoAiProvider({
-        config: { apiKey: 'test-key', pollIntervalMs: 1 },
+        config: { apiKey: 'test-key', baseUrl: 'https://api.example.com/v1', pollIntervalMs: 1 },
       });
 
       const result = await provider.callApi('High res video request', {
@@ -258,7 +270,7 @@ describe('ImageToVideoAiProvider', () => {
       vi.stubGlobal('fetch', mockFetch);
 
       const provider = new ImageToVideoAiProvider({
-        config: { apiKey: 'test-key' },
+        config: { apiKey: 'test-key', baseUrl: 'https://api.example.com/v1' },
       });
 
       const result = await provider.callApi(
@@ -288,7 +300,12 @@ describe('ImageToVideoAiProvider', () => {
       vi.stubGlobal('fetch', mockFetch);
 
       const provider = new ImageToVideoAiProvider({
-        config: { apiKey: 'test-key', pollIntervalMs: 50, maxPollAttempts: 10 },
+        config: {
+          apiKey: 'test-key',
+          baseUrl: 'https://api.example.com/v1',
+          pollIntervalMs: 50,
+          maxPollAttempts: 10,
+        },
       });
 
       const callPromise = provider.callApi(
@@ -320,7 +337,12 @@ describe('ImageToVideoAiProvider', () => {
       vi.stubGlobal('fetch', mockFetch);
 
       const provider = new ImageToVideoAiProvider({
-        config: { apiKey: 'test-key', pollIntervalMs: 30, timeoutMs: 40 },
+        config: {
+          apiKey: 'test-key',
+          baseUrl: 'https://api.example.com/v1',
+          pollIntervalMs: 30,
+          timeoutMs: 40,
+        },
       });
 
       const result = await provider.callApi('Deadline timeout');
@@ -337,13 +359,11 @@ describe('ImageToVideoAiProvider', () => {
       vi.stubGlobal('fetch', mockFetch);
 
       const provider = new ImageToVideoAiProvider({
-        config: { apiKey: 'test-key' },
+        config: { apiKey: 'test-key', baseUrl: 'https://api.example.com/v1' },
       });
 
       const result = await provider.callApi('Invalid prompt');
-      expect(result.error).toContain(
-        'Image to Video API submission failed (HTTP 400): Invalid image format',
-      );
+      expect(result.error).toContain('Image to Video API submission failed (HTTP 400).');
       expect(result.output).toBeUndefined();
     });
 
@@ -363,11 +383,11 @@ describe('ImageToVideoAiProvider', () => {
       vi.stubGlobal('fetch', mockFetch);
 
       const provider = new ImageToVideoAiProvider({
-        config: { apiKey: 'test-key', pollIntervalMs: 1 },
+        config: { apiKey: 'test-key', baseUrl: 'https://api.example.com/v1', pollIntervalMs: 1 },
       });
 
       const result = await provider.callApi('Some prompt');
-      expect(result.error).toContain('Task status polling failed (HTTP 502): Bad Gateway');
+      expect(result.error).toContain('Task status polling failed (HTTP 502).');
     });
 
     it('returns structured error when task status becomes failed', async () => {
@@ -389,13 +409,11 @@ describe('ImageToVideoAiProvider', () => {
       vi.stubGlobal('fetch', mockFetch);
 
       const provider = new ImageToVideoAiProvider({
-        config: { apiKey: 'test-key', pollIntervalMs: 1 },
+        config: { apiKey: 'test-key', baseUrl: 'https://api.example.com/v1', pollIntervalMs: 1 },
       });
 
       const result = await provider.callApi('Disallowed prompt');
-      expect(result.error).toContain(
-        'Video generation task task-fail failed: Content policy violation',
-      );
+      expect(result.error).toContain('Video generation task failed.');
       expect(result.metadata).toMatchObject({
         jobId: 'task-fail',
         status: 'failed',
@@ -413,6 +431,7 @@ describe('ImageToVideoAiProvider', () => {
       const provider = new ImageToVideoAiProvider({
         config: {
           apiKey: 'test-key',
+          baseUrl: 'https://api.example.com/v1',
           pollIntervalMs: 1,
           maxPollAttempts: 2,
         },
@@ -432,7 +451,7 @@ describe('ImageToVideoAiProvider', () => {
       vi.stubGlobal('fetch', mockFetch);
 
       const provider = new ImageToVideoAiProvider({
-        config: { apiKey: 'test-key' },
+        config: { apiKey: 'test-key', baseUrl: 'https://api.example.com/v1' },
       });
 
       const result = await provider.callApi('Test network failure');

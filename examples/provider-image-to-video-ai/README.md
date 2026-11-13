@@ -28,7 +28,7 @@ By default, the provider runs in **generic local simulation mode**, generating s
 
 ### Optional: Live API Integration
 
-To connect this template to a real asynchronous video API service, provide your endpoint's base URL and API key:
+The example uses a generic API contract. Set both a base URL and an API key to enable live requests. The configured service must accept a JSON `POST /generate` with a bearer token, return a task identifier, and expose `GET /tasks/{id}` with task status and result metadata. Adapt `provider.js` to your service's published API before sending real requests.
 
 ```bash
 export IMAGE_TO_VIDEO_AI_API_KEY="your-api-key"
