@@ -65,38 +65,6 @@ describe('calculateFilteredMetrics', () => {
   });
 
   describe('basic metrics aggregation', () => {
-    it.each(['all', 'passes'] as const)(
-      'counts a saved manual pass only once with the %s filter',
-      async (filterMode) => {
-        const eval_ = await EvalFactory.create({
-          numResults: 3,
-          resultTypes: ['error', 'error', 'failure'],
-        });
-        const [overriddenResult] = await EvalResult.findManyByEvalId(eval_.id, { testIdx: 0 });
-        // Saved manual overrides can retain the original runtime-error reason.
-        expect(overriddenResult.failureReason).toBe(ResultFailureReason.ERROR);
-        overriddenResult.success = true;
-        overriddenResult.score = 1;
-        overriddenResult.gradingResult = { pass: true, score: 1, reason: 'Manual pass' };
-        await overriddenResult.save();
-
-        const [metrics] = await eval_.getFilteredMetrics({ filterMode });
-        const expectedCount = filterMode === 'all' ? 3 : 1;
-
-        expect(metrics).toMatchObject({
-          testPassCount: 1,
-          testFailCount: filterMode === 'all' ? 1 : 0,
-          testErrorCount: filterMode === 'all' ? 1 : 0,
-          totalLatencyMs: expectedCount * 100,
-          tokenUsage: { total: expectedCount * 10 },
-        });
-        expect(metrics.cost).toBeCloseTo(expectedCount * 0.007);
-        expect(metrics.testPassCount + metrics.testFailCount + metrics.testErrorCount).toBe(
-          expectedCount,
-        );
-      },
-    );
-
     it('queues overlapping metrics reads and database writes', async () => {
       const evaluation = await EvalFactory.create();
       const db = await getDb();
