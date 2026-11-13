@@ -79,6 +79,7 @@ prompts:
 providers:
   # Use the echo provider only to see rendered prompts without LLM calls
   - echo
+  # Sonnet 4.6 supports the sampling controls varied by these prompt functions.
   # - id: anthropic:claude-sonnet-4-6
   #   label: Claude Sonnet 4.6
   # - id: openai:gpt-4.1-mini

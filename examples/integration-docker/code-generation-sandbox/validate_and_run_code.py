@@ -1,3 +1,4 @@
+import os
 import re
 
 import epicbox
@@ -15,7 +16,10 @@ def get_assert(output, context):
     function_code = function_match.group(1)
 
     # Configure epicbox
-    epicbox.configure(profiles=[epicbox.Profile("python", DOCKER_IMAGE)])
+    epicbox.configure(
+        profiles=[epicbox.Profile("python", DOCKER_IMAGE)],
+        docker_url=os.environ.get("DOCKER_HOST"),
+    )
 
     # Get the function name, test input, and expected output from the context
     function_name = context["vars"]["function_name"]

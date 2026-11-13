@@ -1,15 +1,11 @@
 ---
 sidebar_label: Simulated User
-description: 'Simulate realistic user interactions and behaviors for comprehensive testing of conversational AI systems and chatbots'
+description: 'Simulate realistic user interactions and behaviors for testing of conversational AI systems and chatbots'
 ---
 
 # Simulated User
 
-The Simulated User Provider enables testing of multi-turn conversations between an AI agent and a simulated user. This is particularly useful for testing chatbots, virtual assistants, and other conversational AI applications in realistic scenarios.
-
-It works with both simple text-based agents and advanced function-calling agents, making it ideal for testing modern AI systems that use structured APIs.
-
-It is inspired by [Tau-bench](https://github.com/sierra-research/tau-bench), a benchmark for evaluating tool-assisted agents.
+The Simulated User Provider tests conversations between your agent and a simulated user. It works with text and function-calling agents and is inspired by [Tau-bench](https://github.com/sierra-research/tau-bench), a benchmark for tool-assisted agents.
 
 ## Configuration
 
@@ -40,7 +36,7 @@ tests:
 
 ## How it works
 
-The Simulated User Provider facilitates a back-and-forth conversation between:
+The conversation has two participants:
 
 1. A simulated user (controlled by promptfoo)
 2. Your AI agent (the provider being tested)
@@ -52,15 +48,16 @@ For each turn:
 3. The simulated user generates the next message based on their instructions
 4. This continues until either:
    - The maximum number of turns is reached
-   - The agent determines that the conversation has reached a natural conclusion
+   - The simulated user emits `###STOP###`
 
 ## Configuration Options
 
-| Option            | Type                      | Description                                                                                                                                                                           |
-| ----------------- | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `instructions`    | string                    | Template for user instructions. Supports Nunjucks templating with access to test variables.                                                                                           |
-| `maxTurns`        | number                    | Maximum number of conversation turns. Defaults to 10.                                                                                                                                 |
-| `initialMessages` | Message[] or string       | Optional. Pre-defined conversation history to start from. Can be an array of messages or a `file://` path (JSON/YAML formats).                                                        |
+| Option            | Type                | Description                                                                                                                                                               |
+| ----------------- | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `instructions`    | string              | Template for user instructions. Supports Nunjucks templating with access to test variables.                                                                               |
+| `maxTurns`        | number              | Maximum number of conversation turns. Defaults to 10.                                                                                                                     |
+| `initialMessages` | Message[] or string | Optional. Pre-defined conversation history to start from. Can be an array of messages or a `file://` path (JSON/YAML formats).                                            |
+| `stateful`        | boolean             | When true, sends only the latest user message once a session exists, letting the target maintain history. Defaults to false, which resends the full transcript each turn. |
 | `userProvider`    | string or ProviderOptions | Optional. Provider used to generate simulated user messages instead of Promptfoo's hosted conversation models. See [Custom Simulated User Provider](#custom-simulated-user-provider). |
 
 ## Initial Messages
@@ -135,6 +132,7 @@ This allows you to control how much new interaction happens while testing from a
 Here's a simple example testing a customer service agent:
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - You are a helpful customer service agent. Answer questions politely and try to resolve issues.
 
@@ -203,11 +201,11 @@ tests:
 
 This enables automatic evaluation of whether your agent successfully handles different customer types and scenarios.
 
-For a complete working example with 31 customer personas and comprehensive assertions, see the [Simulated User example](https://github.com/promptfoo/promptfoo/tree/main/examples/integration-tau).
+For a complete working example with 31 customer personas and assertions, see the [Simulated User example](https://github.com/promptfoo/promptfoo/tree/main/examples/integration-tau).
 
 ### Using with Custom Providers
 
-The Simulated User Provider works seamlessly with custom providers (Python, JavaScript, etc.). All test-level `vars` are automatically passed to your custom provider's context, allowing you to access dynamic values like user IDs, session data, or routing information during conversations.
+The Simulated User Provider works with custom providers (Python, JavaScript, etc.). All test-level `vars` are automatically passed to your custom provider's context, allowing you to access dynamic values like user IDs, session data, or routing information during conversations.
 
 ```yaml
 providers:
@@ -242,29 +240,27 @@ def call_api(prompt, options, context):
     return {"output": response}
 ```
 
-This enables sophisticated testing scenarios where your custom provider can:
-
-- Route requests based on context variables
-- Maintain conversation state using session IDs
-- Access user-specific data for personalized responses
-- Implement complex business logic while testing multi-turn conversations
+Your custom provider can use these variables for routing or to maintain a conversation by session ID.
 
 ## Using as a Library
 
 When using promptfoo as a Node library, provide the equivalent configuration:
 
 ```js
-{
-  providers: [
-    {
+const config = {
+  providers: ['openai:gpt-6-luna'],
+  prompts: ['You are a customer support assistant.'],
+  defaultTest: {
+    provider: {
       id: 'promptfoo:simulated-user',
       config: {
         instructions: 'You are a customer with the following problem: {{problem}}',
         maxTurns: 5,
       },
     },
-  ];
-}
+  },
+  tests: [{ vars: { problem: 'My order has not arrived.' } }],
+};
 ```
 
 ## Stop Conditions
@@ -275,7 +271,7 @@ The conversation will automatically stop when:
 - The simulated user includes `###STOP###` anywhere in its message
 - An error occurs during the conversation
 
-The simulated user acts as a judge of whether the conversation goal has been reached: when it determines the conversation is complete (e.g., task completed, user satisfied), it emits `###STOP###` and the conversation ends. The message containing the stop marker is not included in the final transcript.
+Promptfoo checks for `###STOP###` before sending the simulated user's message to the target. You can include instructions such as "say `###STOP###` once the booking is confirmed." The marker has no effect in the target's own response.
 
 ## Custom Simulated User Provider
 

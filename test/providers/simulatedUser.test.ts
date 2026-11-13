@@ -10,6 +10,11 @@ import {
 
 import type { ApiProvider, CallApiContextParams } from '../../src/types/index';
 
+const createAgentResponse = () => ({
+  output: 'agent response',
+  tokenUsage: { numRequests: 1 },
+});
+
 vi.mock('../../src/util/time', async (importOriginal) => {
   return {
     ...(await importOriginal()),
@@ -55,10 +60,7 @@ describe('SimulatedUser', () => {
     originalProvider = createMockProvider({
       id: 'test-agent',
       callApi: vi.fn<ApiProvider['callApi']>().mockImplementation(async function () {
-        return {
-          output: 'agent response',
-          tokenUsage: { numRequests: 1 },
-        };
+        return createAgentResponse();
       }),
     });
 
@@ -975,10 +977,7 @@ describe('SimulatedUser', () => {
         id: 'mutating-provider',
         callApi: vi.fn<ApiProvider['callApi']>().mockImplementation(async (_prompt, context) => {
           delete context?.originalProvider;
-          return {
-            output: 'agent response',
-            tokenUsage: { numRequests: 1 },
-          };
+          return createAgentResponse();
         }),
       });
 
