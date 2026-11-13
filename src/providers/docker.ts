@@ -1,5 +1,5 @@
 import { fetchWithCache } from '../cache';
-import { getEnvString } from '../envars';
+import { getEnvString, getProviderEnvString } from '../envars';
 import logger from '../logger';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { OpenAiCompletionProvider } from './openai/completion';
@@ -28,6 +28,7 @@ type ModelsReply = {
 };
 
 export async function fetchLocalModels(apiBaseUrl: string, signal?: AbortSignal): Promise<Model[]> {
+  signal?.throwIfAborted();
   try {
     const { data } = await fetchWithCache<ModelsReply>(
       `${apiBaseUrl}/models`,
@@ -38,10 +39,10 @@ export async function fetchLocalModels(apiBaseUrl: string, signal?: AbortSignal)
       0,
     );
     return data?.data ?? [];
-  } catch (e: any) {
+  } catch (error) {
     signal?.throwIfAborted();
     throw new Error(
-      `Failed to connect to Docker Model Runner. Is it enabled? Are the API endpoints enabled? For details, see https://docs.docker.com/ai/model-runner. \n${e.message}`,
+      `Failed to connect to Docker Model Runner. Is it enabled? Are the API endpoints enabled? For details, see https://docs.docker.com/ai/model-runner. \n${error instanceof Error ? error.message : String(error)}`,
     );
   }
 }
@@ -94,13 +95,13 @@ export function createDockerProvider(
   options: { config?: ProviderOptions; id?: string; env?: EnvOverrides } = {},
 ) {
   const apiUrl =
-    options?.env?.DOCKER_MODEL_RUNNER_BASE_URL ??
+    getProviderEnvString(options?.env, 'DOCKER_MODEL_RUNNER_BASE_URL') ??
     getEnvString('DOCKER_MODEL_RUNNER_BASE_URL') ??
     'http://localhost:12434';
   const apiBaseUrl = apiUrl + '/engines/v1';
 
   const apiKey =
-    options?.env?.DOCKER_MODEL_RUNNER_API_KEY ??
+    getProviderEnvString(options?.env, 'DOCKER_MODEL_RUNNER_API_KEY') ??
     getEnvString('DOCKER_MODEL_RUNNER_API_KEY') ??
     'dmr';
 

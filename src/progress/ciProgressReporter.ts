@@ -2,19 +2,17 @@ import logger from '../logger';
 
 export class CIProgressReporter {
   private startTime: number;
-  private lastUpdateTime: number;
   private totalTests: number;
   private completedTests: number = 0;
   private updateIntervalMs: number;
   private intervalId: NodeJS.Timeout | null = null;
-  private milestonesSeen = new Set<number>();
+  private remainingMilestones = new Set([25, 50, 75]);
   private highestPercentageSeen: number = 0;
   private lastErrorTime: number = 0;
   private readonly ERROR_THROTTLE_MS = 5000; // 5 seconds
 
   constructor(totalTests: number, updateIntervalMs: number = 30000) {
     this.startTime = Date.now();
-    this.lastUpdateTime = this.startTime;
     this.totalTests = Math.max(totalTests, 1); // Ensure at least 1 to prevent division by zero
     this.updateIntervalMs = updateIntervalMs;
   }
@@ -36,16 +34,13 @@ export class CIProgressReporter {
   update(completed: number): void {
     this.completedTests = completed;
 
-    // Log milestone updates at 25%, 50%, 75%
     const percentage = Math.floor((completed / this.totalTests) * 100);
-    const milestones = [25, 50, 75];
 
     // Only log milestones if we're progressing forward
     if (percentage > this.highestPercentageSeen) {
       this.highestPercentageSeen = percentage;
 
-      if (milestones.includes(percentage) && !this.milestonesSeen.has(percentage)) {
-        this.milestonesSeen.add(percentage);
+      if (this.remainingMilestones.delete(percentage)) {
         this.logMilestone(percentage);
       }
     }

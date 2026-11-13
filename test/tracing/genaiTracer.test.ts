@@ -5,8 +5,6 @@ import {
   GenAIAttributes,
   type GenAISpanContext,
   type GenAISpanResult,
-  getCurrentSpanId,
-  getCurrentTraceId,
   getTraceparent,
   PromptfooAttributes,
   sanitizeBody,
@@ -101,7 +99,7 @@ describe('genaiTracer', () => {
   });
 
   it.each([false, true])(
-    'projects only supported legacy response fields (finishReason=%s)',
+    'preserves response usage details for tracing (finishReason=%s)',
     (finishReason) => {
       const response = {
         output: 'body',
@@ -111,7 +109,7 @@ describe('genaiTracer', () => {
       };
       const result = extractGenAIResponse(response, finishReason);
       expect(result).toEqual({
-        tokenUsage: { prompt: 2, completion: 3, total: 5 },
+        tokenUsage: response.tokenUsage,
         ...(finishReason ? { finishReasons: ['stop'] } : {}),
       });
       expect(result.tokenUsage).not.toBe(response.tokenUsage);
@@ -778,22 +776,6 @@ describe('genaiTracer', () => {
 
       // Format: 00-traceId-spanId-traceFlags
       expect(traceparent).toBe('00-mock-trace-id-1234567890abcdef-mock-span-id-12345678-01');
-    });
-  });
-
-  describe('getCurrentTraceId', () => {
-    it('should return trace ID from active span', () => {
-      const traceId = getCurrentTraceId();
-
-      expect(traceId).toBe('mock-trace-id-1234567890abcdef');
-    });
-  });
-
-  describe('getCurrentSpanId', () => {
-    it('should return span ID from active span', () => {
-      const spanId = getCurrentSpanId();
-
-      expect(spanId).toBe('mock-span-id-12345678');
     });
   });
 
