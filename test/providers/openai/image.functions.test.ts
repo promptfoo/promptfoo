@@ -595,5 +595,22 @@ describe('OpenAI Image Provider Functions', () => {
         }),
       ).toEqual([{ data: 'https://example.com/generated-image' }]);
     });
+
+    it('ignores non-string and empty image fields', () => {
+      expect(
+        buildStructuredImageOutputs({
+          data: [
+            { b64_json: 'base64data' },
+            { b64_json: 123 },
+            { url: 123 },
+            { url: '' },
+            { url: 'https://example.com/image.png' },
+          ],
+        }),
+      ).toEqual([
+        { data: 'data:image/png;base64,base64data', mimeType: 'image/png' },
+        { data: 'https://example.com/image.png', mimeType: 'image/png' },
+      ]);
+    });
   });
 });

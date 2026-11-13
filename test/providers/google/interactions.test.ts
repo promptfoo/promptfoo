@@ -2537,6 +2537,32 @@ describe('GoogleInteractionsProvider', () => {
     expect(result.cost).toBeUndefined();
   });
 
+  it('marks an interaction as cached when the completed polling response is cached', async () => {
+    mockFetchWithCache
+      .mockResolvedValueOnce({
+        data: { id: 'interaction-cached-poll', status: 'in_progress' },
+        cached: false,
+      } as any)
+      .mockResolvedValueOnce({
+        data: {
+          id: 'interaction-cached-poll',
+          status: 'completed',
+          steps: [{ type: 'model_output', content: [{ type: 'text', text: 'cached answer' }] }],
+          usage: { total_input_tokens: 10, total_output_tokens: 20 },
+        },
+        cached: true,
+      } as any);
+    const provider = new GoogleInteractionsProvider('gemini-omni-flash-preview', {
+      config: { apiKey: 'test-key', timeoutMs: 1_000, cost: 0.01 },
+    });
+
+    const result = await provider.callApi('A city at dusk');
+
+    expect(result.error).toBeUndefined();
+    expect(result.cached).toBe(true);
+    expect(result.cost).toBeUndefined();
+  });
+
   it('uses a Robotics passthrough model for tools, text output, and billing', async () => {
     mockFetchWithCache.mockResolvedValue({
       data: {
@@ -3085,6 +3111,29 @@ describe('GoogleInteractionsProvider', () => {
 
     expect(result.error).toBe('Gemini Interactions API error: video generation failed');
     expect(mockStoreBlob).not.toHaveBeenCalled();
+  });
+
+  it('ignores model-output errors before the latest managed tool step', async () => {
+    mockFetchWithCache.mockResolvedValue({
+      data: {
+        status: 'completed',
+        steps: [
+          { type: 'model_output', error: { message: 'stale model output error' } },
+          { type: 'tool_call' },
+          { type: 'tool_result' },
+          { type: 'model_output', content: [{ type: 'text', text: 'successful response' }] },
+        ],
+      },
+      cached: false,
+    } as any);
+    const provider = new GoogleInteractionsProvider('gemini-omni-flash-preview', {
+      config: { apiKey: 'test-key' },
+    });
+
+    const result = await provider.callApi('make it rainy');
+
+    expect(result.error).toBeUndefined();
+    expect(result.output).toBe('successful response');
   });
 
   it('returns only the trailing text accompanying the latest Omni video output', async () => {

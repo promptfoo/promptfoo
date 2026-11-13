@@ -460,7 +460,8 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
     let latencyMs: number | undefined;
 
     try {
-      const url = config.dataSources
+      const hasDataSources = Boolean(config.dataSources || config.data_sources);
+      const url = hasDataSources
         ? `${this.getApiBaseUrl()}/openai/deployments/${
             this.deploymentName
           }/extensions/chat/completions?api-version=${config.apiVersion || DEFAULT_AZURE_API_VERSION}`
