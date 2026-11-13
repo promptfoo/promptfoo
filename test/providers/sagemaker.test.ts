@@ -3,7 +3,6 @@ import crypto from 'crypto';
 import { SageMakerRuntimeClient } from '@aws-sdk/client-sagemaker-runtime';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import logger from '../../src/logger';
-import { sanitizeObject } from '../../src/util/sanitizer';
 
 // Use vi.hoisted to create mock functions that can be used in vi.mock factories
 const createCustomModelOptions = () => ({
@@ -69,7 +68,7 @@ describe('SageMakerCompletionProvider', () => {
   });
 
   describe('config validation warning', () => {
-    it('should not interpolate AWS credentials into the warning message', () => {
+    it('logs the validation problem without attaching the rejected config', () => {
       const secretAccessKey = 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY';
       const sessionToken = 'FwoGZXIvYXdzEXAMPLESESSIONTOKEN1234567890';
       const warnSpy = vi.spyOn(logger, 'warn');
@@ -81,8 +80,8 @@ describe('SageMakerCompletionProvider', () => {
           accessKeyId: 'AKIAIOSFODNN7EXAMPLE',
           secretAccessKey,
           sessionToken,
-          // Unknown key fails the strict schema and triggers the warning.
-          max_new_tokens: 256,
+          // The strict schema rejects unknown fields, which can hold arbitrary secrets.
+          unknownOption: 'invalid-config-value-sentinel',
         } as any,
       });
 
@@ -90,15 +89,13 @@ describe('SageMakerCompletionProvider', () => {
         String(message).startsWith('Error validating SageMaker config'),
       );
       expect(warningCall).toBeDefined();
-      const [message, context] = warningCall!;
-      expect(message).toContain('max_new_tokens');
+      expect(warningCall).toHaveLength(1);
+      const [message] = warningCall!;
+      expect(message).toContain('unknownOption');
+      expect(message).not.toContain('invalid-config-value-sentinel');
       expect(message).not.toContain(secretAccessKey);
       expect(message).not.toContain(sessionToken);
       expect(message).not.toContain('AKIAIOSFODNN7EXAMPLE');
-      // Config is passed as a log context, which the logger sanitizes before writing.
-      const sanitized = JSON.stringify(sanitizeObject(context));
-      expect(sanitized).not.toContain(secretAccessKey);
-      expect(sanitized).not.toContain(sessionToken);
     });
   });
 
