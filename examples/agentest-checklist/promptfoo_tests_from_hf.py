@@ -18,7 +18,7 @@ import urllib.request
 
 URL = (
     "https://huggingface.co/datasets/srinivaspadmanabhuni/agentic-ai-test-checklist-110"
-    "/resolve/main/examples/examples-v1.3.0.csv"
+    "/resolve/f1e49d3da081c6b8411390efd738e41ca355517a/examples/examples-v1.3.0.csv"
 )
 
 

@@ -13,13 +13,13 @@ cd agentest-checklist
 
 ## Dataset
 
-Examples come from the Hugging Face dataset [`srinivaspadmanabhuni/agentic-ai-test-checklist-110`](https://huggingface.co/datasets/srinivaspadmanabhuni/agentic-ai-test-checklist-110) (CC BY 4.0). This folder loads the examples CSV. The same dataset also publishes labelled traces.
+Examples come from the Hugging Face dataset [`srinivaspadmanabhuni/agentic-ai-test-checklist-110`](https://huggingface.co/datasets/srinivaspadmanabhuni/agentic-ai-test-checklist-110) (CC BY 4.0). The generator pins the v1.3.0 examples CSV to a dataset commit so reruns use the same source. The same dataset also publishes labelled traces.
 
 Contact: srinivas AT testAIng.com
 
 ## Full eval
 
-`promptfoo_tests_from_hf.py` uses only the Python standard library. A starter `tests.json` is committed (offline-safe `contains` asserts for the echo provider). Re-run the script with no limit to regenerate all 110 cases with `llm-rubric` assertions.
+`promptfoo_tests_from_hf.py` uses only the Python standard library. A starter `tests.json` is committed (offline-safe `contains` asserts for the echo provider). Re-run the script with no limit to regenerate all 404 examples across the 110 checklist entries with `llm-rubric` assertions.
 
 ```bash
 python promptfoo_tests_from_hf.py
