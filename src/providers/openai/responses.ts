@@ -15,11 +15,7 @@ import {
   isAbortError,
 } from '../../util/fetch/errors';
 import { fetchWithRetries } from '../../util/fetch/index';
-import {
-  maybeLoadResponseFormatFromExternalFile,
-  maybeLoadToolsFromExternalFile,
-  renderVarsInObject,
-} from '../../util/index';
+import { renderVarsInObject } from '../../util/index';
 import { isSecretField, sanitizeUrl } from '../../util/sanitizer';
 import { sleep } from '../../util/time';
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
@@ -31,13 +27,18 @@ import {
 import { ResponsesProcessor } from '../responses/index';
 import { normalizeResponsesInput } from '../responses/input';
 import { getResponsesTokenUsage } from '../responses/processor';
-import { getResponsesOutputText, readResponsesStream } from '../responses/stream';
+import {
+  getResponsesOutputText,
+  IncompleteResponsesStreamError,
+  readResponsesStream,
+} from '../responses/stream';
 import { getRequestTimeoutMs, LONG_RUNNING_MODEL_TIMEOUT_MS } from '../shared';
 import { buildChatSpanContext, extractProviderResponseAttributes, withGenAISpan } from '../tracing';
 import { OpenAiGenericProvider } from '.';
 import {
   calculateObservableOpenAIToolCost,
   calculateOpenAIUsageCost,
+  getBedrockBillingEndpoint,
   usesAzureOpenAiBilling,
 } from './billing';
 import {
@@ -46,6 +47,12 @@ import {
   getGpt6Variant,
   isGpt6Model,
 } from './gpt6';
+import {
+  type PreparedOpenAiResponseFormat,
+  prepareOpenAiReasoning,
+  prepareOpenAiResponseFormat,
+  prepareOpenAiTools,
+} from './prepare';
 import {
   appendOpenAiApiPath,
   assertOpenAiApiModel,
@@ -63,17 +70,19 @@ import {
   normalizeOpenAiBillingModelName,
   normalizeOpenAiServiceTierForWire,
   OPENAI_BILLING_MODELS,
+  omitDeprecatedClaudeSamplingParams,
   RETIRED_OPENAI_MODEL_IDS,
 } from './util';
 
-import type { EnvOverrides } from '../../types/env';
 import type {
   CallApiContextParams,
   CallApiOptionsParams,
   ProviderResponse,
 } from '../../types/index';
+import type { ProviderOptions } from '../../types/providers';
 import type { FetchOptions } from '../../util/fetch/types';
-import type { OpenAiCompletionOptions, ReasoningEffort } from './types';
+import type { OpenAiBillingConfig, OpenAiRequestBody, OpenAiResponsesConfig } from './config';
+import type { ReasoningEffort } from './types';
 
 // OpenAI SDK has APIError class for exceptions, but not a type for error responses
 // in the JSON body. This interface represents the structure when the API returns
@@ -763,7 +772,9 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     'gpt-6-sol',
     'gpt-6-luna',
     'gpt-6.1-sol',
+    'gpt-6.1-terra',
     // GPT-5.6 models
+    'gpt-5.6-cyber',
     'gpt-5.6',
     'gpt-5.6-sol',
     'gpt-5.6-terra',
@@ -782,8 +793,6 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     'gpt-5.4-nano-2026-03-17',
     'gpt-5.4-pro',
     'gpt-5.4-pro-2026-03-05',
-    // NOTE: gpt-image-1, gpt-image-1-mini, and gpt-image-1.5 are NOT supported with the Responses API.
-    // Use openai:image:gpt-image-1, openai:image:gpt-image-1-mini, or openai:image:gpt-image-1.5 instead (which uses /images/generations endpoint)
     // Reasoning models
     'o1',
     'o1-2024-12-17',
@@ -800,11 +809,11 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     'gpt-5-codex-mini',
   ].filter((model) => !RETIRED_OPENAI_MODEL_IDS.has(model));
 
-  config: OpenAiCompletionOptions;
+  config: OpenAiResponsesConfig;
 
   constructor(
     modelName: string,
-    options: { config?: OpenAiCompletionOptions; id?: string; env?: EnvOverrides } = {},
+    options: Pick<ProviderOptions<OpenAiResponsesConfig>, 'config' | 'id' | 'env'> = {},
   ) {
     super(modelName, options);
     this.config = options.config ? { ...options.config } : {};
@@ -838,14 +847,20 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       : !this.isReasoningCapabilityModel(modelName);
   }
 
-  private getEffectiveModelName(config: OpenAiCompletionOptions): string {
+  protected getConfiguredTopP(config: Pick<OpenAiResponsesConfig, 'top_p'>): number | undefined {
+    return config.top_p !== undefined || getEnvString('OPENAI_TOP_P')
+      ? (config.top_p ?? getEnvFloat('OPENAI_TOP_P', 1))
+      : undefined;
+  }
+
+  private getEffectiveModelName(config: OpenAiBillingConfig): string {
     const passthroughModel = (config.passthrough as { model?: unknown } | undefined)?.model;
     return typeof passthroughModel === 'string'
       ? this.normalizeCapabilityModelName(passthroughModel)
       : this.getCapabilityModelName();
   }
 
-  protected getBillingModelName(config: OpenAiCompletionOptions): string {
+  protected getBillingModelName(config: OpenAiBillingConfig): string {
     return this.getEffectiveModelName(config);
   }
 
@@ -853,7 +868,11 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     return this.getGenAISystem() === 'openai' && isCustomOpenAiEndpoint(this.getApiUrl());
   }
 
-  protected getBillingUsage(data: any, _config: OpenAiCompletionOptions): any {
+  protected requiresResponsesStreamTerminalEvent(): boolean {
+    return false;
+  }
+
+  protected getBillingUsage(data: any, _config: OpenAiBillingConfig): any {
     return data.usage;
   }
 
@@ -864,7 +883,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
   protected applyBilling(
     result: ProviderResponse,
     data: any,
-    config: OpenAiCompletionOptions,
+    config: OpenAiBillingConfig,
     cached: boolean,
   ): ProviderResponse {
     if (this.getGenAISystem() === 'openai' && isOpenRouterEndpoint(this.getApiUrl())) {
@@ -885,7 +904,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     const isBedrock = this.getGenAISystem() === 'bedrock' || bedrockEndpoint !== undefined;
     const runtimeProfile =
       bedrockEndpoint === 'runtime'
-        ? /^(global|us)\.openai\.(.+)$/.exec(unprefixedModelName)
+        ? /^(global|us|us-gov|in)\.openai\.(.+)$/.exec(unprefixedModelName)
         : null;
     const billingModelName =
       runtimeProfile?.[2] ??
@@ -906,13 +925,15 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
         cachedResponse: cached,
         provider: isBedrock ? 'bedrock' : this.getGenAISystem(),
         region: this.getBillingRegion(),
+        bedrockProfile: runtimeProfile?.[1],
         regionalProcessing,
         serviceTier,
       },
     );
     const variant = getGpt6Variant(billingModelName);
     if (
-      (variant === 'sol' || variant === 'luna' || variant === '6.1-sol') &&
+      variant !== undefined &&
+      variant !== 'astra' &&
       usesAzureOpenAiBilling(config, this.getApiUrl(), this.getGenAISystem())
     ) {
       const { cost: _existingCost, ...unbilled } = result;
@@ -931,18 +952,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
   }
 
   private getBedrockEndpoint(): 'mantle' | 'runtime' | undefined {
-    try {
-      const hostname = new URL(this.getApiUrl()).hostname;
-      if (/^bedrock-mantle\.[a-z0-9-]+\.api\.aws$/.test(hostname)) {
-        return 'mantle';
-      }
-      if (/^bedrock-runtime(?:-fips)?\.[a-z0-9-]+\.(?:amazonaws\.com|api\.aws)$/.test(hostname)) {
-        return 'runtime';
-      }
-    } catch {
-      // Invalid custom URLs are reported when the request is made.
-    }
-    return undefined;
+    return getBedrockBillingEndpoint(URL.parse(this.getApiUrl())?.hostname)?.service;
   }
 
   private supportsPersistedGpt6EffortUpdates(): boolean {
@@ -951,7 +961,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
 
   private getPolicyResponse(
     data: OpenAIResponsesResponse,
-    config: OpenAiCompletionOptions,
+    config: OpenAiBillingConfig & { response_format?: PreparedOpenAiResponseFormat },
     cached: boolean,
     status: number,
     statusText: string,
@@ -992,7 +1002,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     );
   }
 
-  private getDeploymentCapabilities(config: OpenAiCompletionOptions) {
+  private getDeploymentCapabilities(config: OpenAiResponsesConfig) {
     const effectiveModelName = this.getEffectiveModelName(config);
     const capabilityModelName = effectiveModelName.replace(/(^|\/)ft:/, '$1');
     const isEffectiveGpt5Model =
@@ -1040,13 +1050,14 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
   async getOpenAiBody(
     prompt: string,
     context?: CallApiContextParams,
-    _callApiOptions?: CallApiOptionsParams,
+    callApiOptions?: CallApiOptionsParams,
   ) {
     const promptConfig = context?.prompt?.config;
-    const config = {
-      ...this.config,
-      ...promptConfig,
-    };
+    const mergedConfig: OpenAiResponsesConfig = { ...this.config, ...promptConfig };
+    const passthrough: Record<string, unknown> | undefined = mergedConfig.passthrough
+      ? { ...mergedConfig.passthrough }
+      : undefined;
+    const config = { ...mergedConfig, passthrough };
     const effectiveServiceTier = getOpenAiEffectiveServiceTier(this.config, promptConfig);
 
     // Chat-format content parts are translated to their Responses equivalents so multimodal
@@ -1084,15 +1095,15 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
 
     const gpt6Reasoning = isGPT6Model
       ? getGpt6ResponsesReasoning(this.config, context?.prompt?.config, (value) =>
-          renderVarsInObject(value, context?.vars),
+          renderVarsInObject(value, context?.vars ?? {}),
         )
       : undefined;
     const renderedReasoning = isGPT6Model
-      ? (gpt6Reasoning as typeof config.reasoning)
-      : (renderVarsInObject(config.reasoning, context?.vars) as typeof config.reasoning);
+      ? gpt6Reasoning
+      : prepareOpenAiReasoning(config.reasoning, context?.vars);
     const renderedReasoningEffort =
       isReasoningModel && !isGPT6Model
-        ? (renderVarsInObject(config.reasoning_effort, context?.vars) as ReasoningEffort)
+        ? (renderVarsInObject(config.reasoning_effort, context?.vars ?? {}) as ReasoningEffort)
         : undefined;
     const effectiveReasoningEffort = renderedReasoning?.effort ?? renderedReasoningEffort;
     const hasAzureReasoningEffort =
@@ -1111,14 +1122,12 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
         ? (config.temperature ?? temperatureDefault)
         : undefined;
     const reasoningEffort = isReasoningModel ? effectiveReasoningEffort : undefined;
+    const topP = this.getConfiguredTopP(config);
 
     const instructions = config.instructions;
 
     // Load response_format from external file if needed (handles nested schema loading)
-    const responseFormat = maybeLoadResponseFormatFromExternalFile(
-      config.response_format,
-      context?.vars,
-    );
+    const responseFormat = prepareOpenAiResponseFormat(config.response_format, context?.vars);
 
     let textFormat;
     if (responseFormat) {
@@ -1158,30 +1167,26 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
 
     // Load tools from external file if needed
     // Store in variable so we can include in both body and returned config
-    const loadedTools = config.tools
-      ? await maybeLoadToolsFromExternalFile(config.tools, context?.vars)
-      : undefined;
+    const loadedTools = await prepareOpenAiTools(
+      config.tools,
+      context?.vars,
+      callApiOptions?.abortSignal,
+    );
     const responsesTools = Array.isArray(loadedTools)
       ? loadedTools.map(flattenResponseTool)
       : loadedTools;
-    const toolChoice =
-      config.tool_choice &&
-      typeof config.tool_choice === 'object' &&
-      config.tool_choice.type === 'function' &&
-      config.tool_choice.function?.name
-        ? { type: 'function', name: config.tool_choice.function.name }
-        : config.tool_choice;
+    const toolChoice = flattenResponseTool(config.tool_choice);
 
-    const body = {
+    const bodyFields = {
       model: this.modelName,
       input,
+      ...(config.access_programs === undefined ? {} : { access_programs: config.access_programs }),
       ...(maxOutputTokens === undefined ? {} : { max_output_tokens: maxOutputTokens }),
       ...(reasoningEffort ? { reasoning: { effort: reasoningEffort } } : {}),
       ...(temperature === undefined ? {} : { temperature }),
       ...(instructions ? { instructions } : {}),
-      ...((isGPT6Model || !reasoningEffort || reasoningEffort === 'none') &&
-      (config.top_p !== undefined || getEnvString('OPENAI_TOP_P'))
-        ? { top_p: config.top_p ?? getEnvFloat('OPENAI_TOP_P', 1) }
+      ...((isGPT6Model || !reasoningEffort || reasoningEffort === 'none') && topP !== undefined
+        ? { top_p: topP }
         : {}),
       ...(responsesTools ? { tools: responsesTools } : {}),
       ...(toolChoice ? { tool_choice: toolChoice } : {}),
@@ -1219,6 +1224,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
             service_tier: normalizeOpenAiServiceTierForWire(effectiveServiceTier, this.getApiUrl()),
           }),
     };
+    const body: OpenAiRequestBody<typeof bodyFields> = bodyFields;
     // A nullable prompt tier clears an inherited provider tier. Preserve an
     // explicitly nullable passthrough field, but never leave a stale string on
     // the wire while the effective billing tier is null.
@@ -1256,6 +1262,8 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
         supportsPersistedEffortUpdates: this.supportsPersistedGpt6EffortUpdates(),
       },
     );
+
+    omitDeprecatedClaudeSamplingParams(body);
 
     return {
       body,
@@ -1374,8 +1382,8 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     }
 
     let data: OpenAIResponsesResponse;
-    let status: number;
-    let statusText: string;
+    let status = 0;
+    let statusText = 'Error';
     let cached = false;
     let deleteFromCache: (() => Promise<void>) | undefined;
     let updateCache:
@@ -1503,6 +1511,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
                 },
                 {
                   preserveFailedOutput: this.usesGatewayErrorFormat(),
+                  requireTerminalEvent: this.requiresResponsesStreamTerminalEvent(),
                   classifyError: classifyOpenAiGatewayStreamError,
                 },
               );
@@ -1566,6 +1575,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
               undefined,
               {
                 preserveFailedOutput: this.usesGatewayErrorFormat(),
+                requireTerminalEvent: this.requiresResponsesStreamTerminalEvent(),
                 classifyError: classifyOpenAiGatewayStreamError,
               },
             );
@@ -1757,21 +1767,32 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       if (!pollingBackground) {
         await deleteFromCache?.();
       }
-      return {
+      // A failed background poll must not reuse the creation response's status.
+      const foregroundStream = body.stream && !body.background;
+      const result = {
         error: `API call error: ${String(err)}`,
         metadata: {
           http: {
-            status: 0,
-            statusText: 'Error',
+            status: foregroundStream ? status : 0,
+            statusText: foregroundStream ? statusText : 'Error',
             headers: responseHeaders ?? {},
           },
         },
       };
+      if (err instanceof IncompleteResponsesStreamError && err.response?.usage) {
+        return this.applyBilling(
+          { ...result, tokenUsage: getResponsesTokenUsage(err.response, false), cached: false },
+          err.response,
+          config,
+          false,
+        );
+      }
+      return result;
     }
 
     if (data.error?.message) {
       await deleteFromCache?.();
-      return {
+      const result = {
         error: formatOpenAiError(data as OpenAIErrorResponse),
         metadata: {
           http: {
@@ -1781,6 +1802,14 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
           },
         },
       };
+      return data.usage
+        ? this.applyBilling(
+            { ...result, tokenUsage: getResponsesTokenUsage(data, cached), cached },
+            data,
+            config,
+            cached,
+          )
+        : result;
     }
 
     // Use shared processor for consistent behavior with Azure

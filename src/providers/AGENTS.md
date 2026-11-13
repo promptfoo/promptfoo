@@ -155,6 +155,10 @@ ls examples/myprovider/promptfooconfig.yaml
 
 **Reference existing providers** - 50+ implementations to learn from.
 
+## Tool callbacks
+
+Use `resolveCallback` for reference-aware callback loading and caching. Direct providers and Google trace the resolved callback's raw result. Direct providers format the result after the span closes. `FunctionCallbackHandler` uses `executeCallback` to include loading and output conversion inside its tool span. Keep each adapter's file-export policy and cancellation behavior.
+
 ## Creator inputs
 
 The loader normalizes configuration and environment once. Factories receive those `ProviderOptions`; existing public creators accept them as `providerOptions`. `creator.ts` adapts the older nested `config` input at those public boundaries.

@@ -105,6 +105,82 @@ describe('TokenUsageTracker', () => {
     );
   });
 
+  it('protects tracked usage and future aggregation from edits to a provider snapshot', () => {
+    const usage: TokenUsage = {
+      total: 100,
+      completionDetails: { reasoning: 20 },
+      assertions: { total: 30, completionDetails: { reasoning: 5 } },
+      attacker: { total: 40, completionDetails: { reasoning: 6 } },
+      generation: { total: 50, completionDetails: { reasoning: 7 } },
+      incurredTokenUsage: {
+        total: 60,
+        completionDetails: { reasoning: 8 },
+        assertions: { total: 10, completionDetails: { reasoning: 2 } },
+        attacker: { total: 15, completionDetails: { reasoning: 3 } },
+        generation: { total: 20, completionDetails: { reasoning: 4 } },
+      },
+    };
+    tracker.trackUsage('test-provider', usage);
+
+    const snapshot = tracker.getProviderUsage('test-provider')!;
+    snapshot.total = 999;
+    snapshot.completionDetails!.reasoning = 999;
+    for (const breakdown of [snapshot.assertions, snapshot.attacker, snapshot.generation]) {
+      breakdown!.total = 999;
+      breakdown!.completionDetails!.reasoning = 999;
+    }
+    snapshot.incurredTokenUsage!.total = 999;
+    snapshot.incurredTokenUsage!.completionDetails!.reasoning = 999;
+    for (const breakdown of [
+      snapshot.incurredTokenUsage!.assertions,
+      snapshot.incurredTokenUsage!.attacker,
+      snapshot.incurredTokenUsage!.generation,
+    ]) {
+      breakdown!.total = 999;
+      breakdown!.completionDetails!.reasoning = 999;
+    }
+
+    expect(tracker.getProviderUsage('test-provider')).toMatchObject(usage);
+    expect(tracker.getTotalUsage()).toMatchObject(usage);
+
+    tracker.trackUsage('test-provider', usage);
+    const expected: TokenUsage = {
+      total: 200,
+      completionDetails: { reasoning: 40 },
+      assertions: { total: 60, completionDetails: { reasoning: 10 } },
+      attacker: { total: 80, completionDetails: { reasoning: 12 } },
+      generation: { total: 100, completionDetails: { reasoning: 14 } },
+      incurredTokenUsage: {
+        total: 120,
+        completionDetails: { reasoning: 16 },
+        assertions: { total: 20, completionDetails: { reasoning: 4 } },
+        attacker: { total: 30, completionDetails: { reasoning: 6 } },
+        generation: { total: 40, completionDetails: { reasoning: 8 } },
+      },
+    };
+    expect(tracker.getProviderUsage('test-provider')).toMatchObject(expected);
+    expect(tracker.getTotalUsage()).toMatchObject(expected);
+  });
+
+  it('keeps a provider snapshot unchanged after tracking more usage', () => {
+    const usage: TokenUsage = {
+      total: 10,
+      assertions: { total: 5, completionDetails: { reasoning: 2 } },
+      incurredTokenUsage: { total: 10, assertions: { total: 5 } },
+    };
+    tracker.trackUsage('test-provider', usage);
+    const snapshot = tracker.getProviderUsage('test-provider');
+
+    tracker.trackUsage('test-provider', usage);
+
+    expect(snapshot).toMatchObject(usage);
+    expect(tracker.getProviderUsage('test-provider')).toMatchObject({
+      total: 20,
+      assertions: { total: 10, completionDetails: { reasoning: 4 } },
+      incurredTokenUsage: { total: 20, assertions: { total: 10 } },
+    });
+  });
+
   it('should infer one request from a response that omits numRequests', () => {
     tracker.trackResponseUsage('test-provider', {
       tokenUsage: {
