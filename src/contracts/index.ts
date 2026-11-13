@@ -25,7 +25,6 @@ export {
   type McpAuthParsed,
   McpAuthSchema,
 } from './providerConfig/auth.js';
-export * from './providerConfig/google.js';
 export {
   type AzureChatConfigInput,
   AzureChatConfigInputJsonSchema,
@@ -46,6 +45,7 @@ export {
   AzureSharedConfigInputJsonSchema,
   AzureSharedConfigInputSchema,
 } from './providerConfig/azure.js';
+export * from './providerConfig/google.js';
 export {
   type HttpProviderConfigInput,
   HttpProviderConfigInputJsonSchema,
