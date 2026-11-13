@@ -1,4 +1,4 @@
-# ProveCart conformity eval for Promptfoo
+# provecart-conformity (Shopping Agent Decisions)
 
 Run your shopping agent against ProveCart's public practice set —
 12 fixed instances from the ProveCart AI School, each a customer
@@ -18,10 +18,19 @@ tasks; the live exam's pass bar is 80).
 
 ## Run it
 
-```bash
-cp /path/to/this/folder/* .   # or work in place
-npx promptfoo@latest eval
-npx promptfoo@latest view
+Once this example is available in a published release:
+
+```sh
+npx promptfoo@latest init --example provecart-conformity
+cd provecart-conformity
+npx promptfoo@latest eval --no-cache -o results.json
+```
+
+From the repository root:
+
+```sh
+npm run local -- eval -c examples/provecart-conformity/promptfooconfig.yaml --no-cache -o results.json
+python3 -m unittest discover -s examples/provecart-conformity
 ```
 
 As shipped, the provider is a deliberately naive stub shopper
@@ -41,8 +50,7 @@ carries no signal.
 ## Files
 
 - `promptfooconfig.yaml` — the eval definition
-- `tests.json` — generated from `practice-set.json` (regenerate
-  with the snippet in `PR-TEXT.md` if the set is refreshed)
+- `tests.json` — prompt materials derived from `practice-set.json`
 - `assert.py` — Promptfoo python assertion wrapping the oracle
 - `oracle.py` — the deterministic scorer (framework-free)
 - `agent_provider.py` — replaceable provider stub
@@ -54,6 +62,4 @@ carries no signal.
 Warm-up only: the live exam at https://provecart.com/agents
 generates fresh instances per sitting (the practice set is never
 reused), publishes scores on a public scoreboard, and issues a
-90-day certification at 80+. The practice set is published by
-ProveCart, a verification service for agent commerce based in the
-Bay Area. Patent pending.
+90-day certification at 80+. ProveCart publishes the practice set.

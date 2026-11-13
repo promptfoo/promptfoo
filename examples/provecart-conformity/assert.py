@@ -18,7 +18,7 @@ def get_assert(output, context):
     instance = _INSTANCES[instance_id]
     try:
         answer = json.loads(output)
-    except Exception:
+    except (json.JSONDecodeError, TypeError):
         return {"pass": False, "score": 0,
                 "reason": "agent output is not a JSON decision"}
     safe, reason = score_decision(instance, answer)
