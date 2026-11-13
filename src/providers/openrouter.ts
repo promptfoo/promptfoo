@@ -1,4 +1,4 @@
-import { fetchWithCache } from '../cache';
+import { type FetchWithCacheResult, fetchWithCache } from '../cache';
 import logger from '../logger';
 import { extractGenAIResponse, type GenAISpanContext, withGenAISpan } from '../tracing/genaiTracer';
 import { isCallerAbortError } from '../util/fetch/requestSignal';
@@ -117,6 +117,13 @@ function getChoiceErrorKind(
   return undefined;
 }
 
+type OpenRouterChatCompletionResponse = OpenAI.ChatCompletion & {
+  error?: {
+    code?: string;
+    message?: string;
+  };
+};
+
 /**
  * OpenRouter provider extends OpenAI chat completion provider with special handling
  * for models like Gemini that include thinking/reasoning tokens.
@@ -207,12 +214,85 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
     );
   }
 
+  private getRefusalResponse(
+    {
+      data,
+      cached,
+      status,
+      statusText,
+      headers,
+    }: FetchWithCacheResult<OpenRouterChatCompletionResponse>,
+    config: OpenAiBillingConfig,
+    jsonSchemaFormat: boolean,
+  ): ProviderResponse | undefined {
+    const policy = getOpenAiPolicyRefusal(data, true);
+    if (policy) {
+      return {
+        output:
+          policy.partialOutput === undefined
+            ? policy.message
+            : getOpenAiPartialOutput(policy.partialOutput, jsonSchemaFormat),
+        ...(data.usage ? { tokenUsage: getTokenUsageWithRequestCount(data, cached) } : {}),
+        cached,
+        cost: this.calculateResponseCost(data, config),
+        isRefusal: true,
+        guardrails: {
+          flagged: true,
+          ...(policy.flaggedInput ? { flaggedInput: true } : {}),
+          reason: policy.message,
+        },
+        raw: data,
+        metadata: {
+          ...getOpenRouterBillingMetadata(data),
+          ...(policy.code ? { providerPolicy: { code: policy.code } } : {}),
+          http: { status, statusText, headers: headers ?? {} },
+        },
+      };
+    }
+    const choice = data?.choices?.[0];
+    const finishReason = normalizeFinishReason(choice?.finish_reason);
+    if (
+      status < 200 ||
+      status >= 300 ||
+      data?.error ||
+      getOpenAiChatChoiceError(data) ||
+      finishReason === 'error' ||
+      (!choice?.message?.refusal && finishReason !== FINISH_REASON_MAP.content_filter)
+    ) {
+      return undefined;
+    }
+    const message = validateChatCompletionMessage(choice?.message, {
+      allowAudio: true,
+      allowStructuredContent: true,
+      finishReason,
+    });
+    if (!message || (!message.refusal && finishReason !== FINISH_REASON_MAP.content_filter)) {
+      return undefined;
+    }
+    return {
+      output: message.structuredContent?.length
+        ? message.structuredContent
+        : message.content
+          ? getOpenAiPartialOutput(message.content, jsonSchemaFormat)
+          : message.refusal || 'Content filtered by the model provider.',
+      tokenUsage: getTokenUsageWithRequestCount(data, cached),
+      cached,
+      cost: this.calculateResponseCost(data, config),
+      isRefusal: true,
+      guardrails: { flagged: true },
+      raw: data,
+      metadata: getOpenRouterBillingMetadata(data),
+      ...(finishReason && { finishReason }),
+    };
+  }
+
   private async executeOpenRouterCall(
     prepared: Awaited<ReturnType<OpenAiChatCompletionProvider['getOpenAiBody']>>,
     context?: CallApiContextParams,
     callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     const { body, config } = prepared;
+    const jsonSchemaFormat = isOpenAiJsonSchemaFormat(body.response_format);
     throwIfAborted(callApiOptions?.abortSignal);
 
     // Make the API call directly
@@ -229,19 +309,13 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
       };
     }
 
-    type OpenRouterChatCompletionResponse = OpenAI.ChatCompletion & {
-      error?: {
-        code?: string;
-        message?: string;
-      };
-    };
-
     let data: OpenRouterChatCompletionResponse;
     let status: number;
     let statusText: string;
     let cached = false;
     let deleteFromCache: (() => Promise<void>) | undefined;
     let responseHeaders: Record<string, string> | undefined;
+    let completedRefusal: ProviderResponse | undefined;
 
     try {
       ({
@@ -269,13 +343,11 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
         context?.bustCache ?? context?.debug,
         undefined,
         (response) => {
-          if (
-            response.status >= 200 &&
-            response.status < 300 &&
-            response.headers &&
-            getOpenAiGatewayRateLimitKind(response.data) !== 'quota'
-          ) {
-            callApiOptions?.onResponseHeaders?.(response.headers);
+          if (response.status >= 200 && response.status < 300) {
+            if (response.headers && getOpenAiGatewayRateLimitKind(response.data) !== 'quota') {
+              callApiOptions?.onResponseHeaders?.(response.headers);
+            }
+            completedRefusal = this.getRefusalResponse(response, config, jsonSchemaFormat);
           }
         },
         callApiOptions?.onResponseHeaders
@@ -283,32 +355,13 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
           : undefined,
       ));
 
-      const policy = getOpenAiPolicyRefusal(data, true);
-      if (policy) {
-        return {
-          output:
-            policy.partialOutput === undefined
-              ? policy.message
-              : getOpenAiPartialOutput(
-                  policy.partialOutput,
-                  isOpenAiJsonSchemaFormat(body.response_format),
-                ),
-          ...(data.usage ? { tokenUsage: getTokenUsageWithRequestCount(data, cached) } : {}),
-          cached,
-          cost: this.calculateResponseCost(data, config),
-          isRefusal: true,
-          guardrails: {
-            flagged: true,
-            ...(policy.flaggedInput ? { flaggedInput: true } : {}),
-            reason: policy.message,
-          },
-          raw: data,
-          metadata: {
-            ...getOpenRouterBillingMetadata(data),
-            ...(policy.code ? { providerPolicy: { code: policy.code } } : {}),
-            http: { status, statusText, headers: responseHeaders ?? {} },
-          },
-        };
+      const refusal = this.getRefusalResponse(
+        { data, cached, status, statusText, headers: responseHeaders },
+        config,
+        jsonSchemaFormat,
+      );
+      if (refusal) {
+        return refusal;
       }
       const choiceError = data?.error ? undefined : getOpenAiChatChoiceError(data);
       if (choiceError) {
@@ -360,6 +413,11 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
         !isResponseHeadersObserverError(callApiOptions?.onResponseHeaders, err) &&
         isCallerAbortError(err, callApiOptions?.abortSignal)
       ) {
+        // A completed refusal still belongs to this call while its cache write
+        // settles independently. Ordinary output remains cancellable.
+        if (completedRefusal) {
+          return completedRefusal;
+        }
         throwIfAborted(callApiOptions?.abortSignal);
       }
       logger.error(`API call error: ${String(err)}`);
@@ -434,28 +492,6 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
         tokenUsage: getTokenUsageWithRequestCount(data, cached),
         cached,
         cost: this.calculateResponseCost(data, config),
-        metadata: getOpenRouterBillingMetadata(data),
-        ...(finishReason && { finishReason }),
-      };
-    }
-    if (message.refusal || finishReason === FINISH_REASON_MAP.content_filter) {
-      return {
-        // A filtered or refused choice can still carry usable partial output;
-        // keep structured parts intact the same way the normal path does.
-        output: message.structuredContent?.length
-          ? message.structuredContent
-          : message.content
-            ? getOpenAiPartialOutput(
-                message.content,
-                isOpenAiJsonSchemaFormat(body.response_format),
-              )
-            : message.refusal || 'Content filtered by the model provider.',
-        tokenUsage: getTokenUsageWithRequestCount(data, cached),
-        cached,
-        cost: this.calculateResponseCost(data, config),
-        isRefusal: true,
-        guardrails: { flagged: true },
-        raw: data,
         metadata: getOpenRouterBillingMetadata(data),
         ...(finishReason && { finishReason }),
       };
