@@ -1,9 +1,14 @@
+import chalk from 'chalk';
 import { Command } from 'commander';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { handleDataset, handleEval, handlePrompt, showCommand } from '../../src/commands/show';
 import logger from '../../src/logger';
 import Eval from '../../src/models/eval';
-import { getDatasetFromHash, getEvalFromId, getPromptFromHash } from '../../src/util/database';
+import {
+  getDatasetFromHash,
+  getPromptFromHash,
+  hasRecentEvalWithIdPrefix,
+} from '../../src/util/database';
 
 import type { Prompt } from '../../src/types/prompts';
 
@@ -20,41 +25,35 @@ describe('show command', () => {
     process.exitCode = undefined;
   });
 
-  describe('show [id]', () => {
-    it('should show latest eval if no id provided', async () => {
-      const mockLatestEval = {
-        id: 'latest123',
-        createdAt: new Date(),
-        config: {},
-        results: [],
-        prompts: [],
-        vars: [],
-        testResults: [],
-        metrics: {},
-        getTable: vi.fn().mockResolvedValue({
-          head: { prompts: [], vars: [] },
-          body: [],
-        }),
-      };
-      vi.mocked(Eval.latest).mockResolvedValue(mockLatestEval as any);
-      vi.mocked(Eval.findById).mockResolvedValue(mockLatestEval as any);
+  describe.each([
+    { command: 'show', args: ['show'] },
+    { command: 'show eval', args: ['show', 'eval'] },
+  ])('$command without an id', ({ args }) => {
+    it('renders the eval selected by latest', async () => {
+      const getTable = vi.fn().mockResolvedValue({ head: { prompts: [], vars: [] }, body: [] });
+      vi.mocked(Eval.latest).mockResolvedValue({ id: 'latest123', getTable } as unknown as Eval);
 
       await showCommand(program);
-      await program.parseAsync(['node', 'test', 'show']);
+      await program.parseAsync(['node', 'test', ...args]);
 
-      expect(Eval.latest).toHaveBeenCalledWith();
+      expect(Eval.latest).toHaveBeenCalledOnce();
+      expect(Eval.findById).not.toHaveBeenCalled();
+      expect(getTable).toHaveBeenCalledOnce();
+      expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Eval latest123'));
     });
 
-    it('should show error if no eval found and no id provided', async () => {
+    it('reports when there is no eval to show', async () => {
       vi.mocked(Eval.latest).mockResolvedValue(undefined);
 
       await showCommand(program);
-      await program.parseAsync(['node', 'test', 'show']);
+      await program.parseAsync(['node', 'test', ...args]);
 
       expect(logger.error).toHaveBeenCalledWith('No eval found');
       expect(process.exitCode).toBe(1);
     });
+  });
 
+  describe('show [id]', () => {
     it('should show eval if id matches eval', async () => {
       const evalId = 'eval123';
       const mockEval = {
@@ -67,13 +66,14 @@ describe('show command', () => {
           body: [],
         }),
       };
-      vi.mocked(getEvalFromId).mockResolvedValue(mockEval as any);
+      vi.mocked(hasRecentEvalWithIdPrefix).mockResolvedValue(true);
       vi.mocked(Eval.findById).mockResolvedValue(mockEval as any);
 
       await showCommand(program);
       await program.parseAsync(['node', 'test', 'show', evalId]);
 
-      expect(getEvalFromId).toHaveBeenCalledWith(evalId);
+      expect(hasRecentEvalWithIdPrefix).toHaveBeenCalledWith(evalId);
+      expect(Eval.findById).toHaveBeenCalledWith(evalId);
     });
 
     it('should show prompt if id matches prompt', async () => {
@@ -82,8 +82,8 @@ describe('show command', () => {
         raw: 'test',
         label: 'Test Prompt',
       };
-      vi.mocked(getPromptFromHash).mockResolvedValue({
-        id: promptId,
+      vi.mocked(getPromptFromHash).mockResolvedValueOnce({
+        id: `${promptId}-full-hash`,
         prompt: mockPrompt,
         evals: [],
       } as any);
@@ -91,13 +91,15 @@ describe('show command', () => {
       await showCommand(program);
       await program.parseAsync(['node', 'test', 'show', promptId]);
 
-      expect(getPromptFromHash).toHaveBeenCalledWith(promptId);
+      expect(getPromptFromHash).toHaveBeenCalledExactlyOnceWith(promptId);
+      expect(getDatasetFromHash).not.toHaveBeenCalled();
+      expect(logger.info).toHaveBeenCalledWith(chalk.bold(`Prompt ${promptId}`));
     });
 
     it('should show dataset if id matches dataset', async () => {
       const datasetId = 'dataset123';
-      vi.mocked(getDatasetFromHash).mockResolvedValue({
-        id: datasetId,
+      vi.mocked(getDatasetFromHash).mockResolvedValueOnce({
+        id: `${datasetId}-full-hash`,
         prompts: [],
         recentEvalDate: new Date(),
         recentEvalId: 'eval123',
@@ -108,12 +110,14 @@ describe('show command', () => {
       await showCommand(program);
       await program.parseAsync(['node', 'test', 'show', datasetId]);
 
-      expect(getDatasetFromHash).toHaveBeenCalledWith(datasetId);
+      expect(getPromptFromHash).toHaveBeenCalledBefore(vi.mocked(getDatasetFromHash));
+      expect(getDatasetFromHash).toHaveBeenCalledExactlyOnceWith(datasetId);
+      expect(logger.info).toHaveBeenCalledWith(chalk.bold(`Dataset ${datasetId}`));
     });
 
     it('should show error if no resource found with id', async () => {
       const invalidId = 'invalid123';
-      vi.mocked(getEvalFromId).mockResolvedValue(undefined);
+      vi.mocked(hasRecentEvalWithIdPrefix).mockResolvedValue(false);
       vi.mocked(getPromptFromHash).mockResolvedValue(undefined);
       vi.mocked(getDatasetFromHash).mockResolvedValue(undefined);
 
@@ -125,40 +129,6 @@ describe('show command', () => {
   });
 
   describe('show eval [id]', () => {
-    it('should show latest eval if no id provided', async () => {
-      const mockLatestEval = {
-        id: 'latest123',
-        createdAt: new Date(),
-        config: {},
-        results: [],
-        prompts: [],
-        vars: [],
-        testResults: [],
-        metrics: {},
-        getTable: vi.fn().mockResolvedValue({
-          head: { prompts: [], vars: [] },
-          body: [],
-        }),
-      };
-      vi.mocked(Eval.latest).mockResolvedValue(mockLatestEval as any);
-      vi.mocked(Eval.findById).mockResolvedValue(mockLatestEval as any);
-
-      await showCommand(program);
-      await program.parseAsync(['node', 'test', 'show', 'eval']);
-
-      expect(Eval.latest).toHaveBeenCalledWith();
-    });
-
-    it('should show error if no eval found and no id provided', async () => {
-      vi.mocked(Eval.latest).mockResolvedValue(undefined);
-
-      await showCommand(program);
-      await program.parseAsync(['node', 'test', 'show', 'eval']);
-
-      expect(logger.error).toHaveBeenCalledWith('No eval found');
-      expect(process.exitCode).toBe(1);
-    });
-
     it('should show eval details for provided id', async () => {
       const evalId = 'eval123';
       vi.mocked(Eval.findById).mockResolvedValue({
