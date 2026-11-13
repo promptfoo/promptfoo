@@ -495,10 +495,9 @@ async function runAssertionInternal({
   const scriptFailure = (reason: string): GradingResult =>
     applyAssertionWeight({ pass: false, score: 0, reason, assertion }, assertion.weight);
   if (typeof renderedValue === 'string') {
-    const interpolatedValue = nunjucks.renderString(renderedValue, resolvedVars);
-    if (interpolatedValue.startsWith('file://')) {
+    if (renderedValue.startsWith('file://')) {
       const basePath = cliState.basePath || '';
-      const fileRef = interpolatedValue.slice('file://'.length);
+      const fileRef = renderedValue.slice('file://'.length);
       let filePath = fileRef;
       let functionName: string | undefined;
 
@@ -536,7 +535,7 @@ async function runAssertionInternal({
           return scriptFailure((error as Error).message);
         }
       } else {
-        renderedValue = processFileReference(interpolatedValue);
+        renderedValue = processFileReference(nunjucks.renderString(renderedValue, resolvedVars));
         if (typeof renderedValue === 'string') {
           renderedValue = nunjucks.renderString(renderedValue, resolvedVars);
         }
@@ -559,14 +558,14 @@ async function runAssertionInternal({
       }
     } else {
       // It's a normal string value
-      renderedValue = interpolatedValue;
+      renderedValue = nunjucks.renderString(renderedValue, resolvedVars);
     }
   } else if (renderedValue && Array.isArray(renderedValue)) {
     // Process each element in the array
     renderedValue = renderedValue.map((v) => {
       if (typeof v === 'string') {
         const interpolated = nunjucks.renderString(v, resolvedVars);
-        if (interpolated.startsWith('file://')) {
+        if (v.startsWith('file://')) {
           const processed = processFileReference(interpolated);
           if (typeof processed === 'string') {
             return nunjucks.renderString(processed, resolvedVars);

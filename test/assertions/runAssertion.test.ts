@@ -3651,6 +3651,26 @@ describe('runAssertion', () => {
       );
     });
 
+    it('keeps file URI text rendered from ordinary values literal', async () => {
+      const literal = 'file://not-a-reference.txt';
+      const test = { vars: { scheme: 'file' } } as AtomicTestCase;
+
+      for (const assertion of [
+        { type: 'equals', value: '{{ scheme }}://not-a-reference.txt' },
+        { type: 'contains-all', value: ['{{ scheme }}://not-a-reference.txt'] },
+      ] as const) {
+        const grading = await runAssertion({
+          assertion: {
+            ...assertion,
+            value: typeof assertion.value === 'string' ? assertion.value : [...assertion.value],
+          },
+          test,
+          providerResponse: { output: literal },
+        });
+        expect(grading.pass).toBe(true);
+      }
+    });
+
     it('should interpolate variables in file reference content', async () => {
       const assertion: Assertion = {
         type: 'equals',
