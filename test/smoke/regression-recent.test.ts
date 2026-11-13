@@ -10,38 +10,14 @@
  *
  * @see docs/plans/smoke-tests.md for the full bug documentation
  */
-import { spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { CLI_PATH, ROOT_DIR, runCli } from './runCli';
 
-// Path to the built CLI binary
-const CLI_PATH = path.resolve(__dirname, '../../dist/src/main.js');
-const ROOT_DIR = path.resolve(__dirname, '../..');
 const FIXTURES_DIR = path.resolve(__dirname, 'fixtures');
 const OUTPUT_DIR = path.resolve(__dirname, '.temp-output-recent');
-
-/**
- * Helper to run the CLI and capture output
- */
-function runCli(
-  args: string[],
-  options: { cwd?: string; expectError?: boolean; env?: NodeJS.ProcessEnv; timeout?: number } = {},
-): { stdout: string; stderr: string; exitCode: number } {
-  const result = spawnSync('node', [CLI_PATH, ...args], {
-    cwd: options.cwd || ROOT_DIR,
-    encoding: 'utf-8',
-    env: { ...process.env, ...options.env, NO_COLOR: '1' },
-    timeout: options.timeout || 60000,
-  });
-
-  return {
-    stdout: result.stdout || '',
-    stderr: result.stderr || '',
-    exitCode: result.status ?? 1,
-  };
-}
 
 describe('Recent Bug Regression Tests', () => {
   beforeAll(() => {
@@ -263,23 +239,30 @@ describe('Recent Bug Regression Tests', () => {
     });
   });
 
-  describe('Config Extends Feature', () => {
-    describe('Config inheritance', () => {
-      it('extends base config with additional settings', () => {
-        // Test that config extends feature works
-        const configPath = path.join(FIXTURES_DIR, 'configs/basic.yaml');
-        const outputPath = path.join(OUTPUT_DIR, 'config-extends-output.json');
-
-        const { exitCode } = runCli(['eval', '-c', configPath, '-o', outputPath, '--no-cache']);
-
-        expect(exitCode).toBe(0);
-
-        const content = fs.readFileSync(outputPath, 'utf-8');
-        const parsed = JSON.parse(content);
-
-        expect(parsed.results.results[0].success).toBe(true);
-      });
-    });
+  it('combines test cases across two configs sharing a prompt and provider', () => {
+    const base = path.join(FIXTURES_DIR, 'configs/basic.yaml');
+    const extra = path.join(OUTPUT_DIR, 'extra-tests.yaml');
+    const output = path.join(OUTPUT_DIR, 'combined.json');
+    fs.writeFileSync(
+      extra,
+      "providers: [echo]\nprompts: ['Hello {{name}}']\ntests: [{vars: {name: Moon}, assert: [{type: equals, value: Hello Moon}]}]",
+    );
+    const result = runCli(['eval', '-c', base, '-c', extra, '-o', output, '--no-cache']);
+    expect(result.exitCode, result.stdout + result.stderr).toBe(0);
+    const { results } = JSON.parse(fs.readFileSync(output, 'utf8'));
+    expect(results.results).toHaveLength(2);
+    expect(results.results).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          success: true,
+          response: expect.objectContaining({ output: 'Hello World' }),
+        }),
+        expect.objectContaining({
+          success: true,
+          response: expect.objectContaining({ output: 'Hello Moon' }),
+        }),
+      ]),
+    );
   });
 
   describe('Assertion Edge Cases', () => {
@@ -287,26 +270,6 @@ describe('Recent Bug Regression Tests', () => {
       it('handles multiple different assertion types in single test', () => {
         const configPath = path.join(FIXTURES_DIR, 'configs/multi-assertion.yaml');
         const outputPath = path.join(OUTPUT_DIR, 'multi-assertion-output.json');
-
-        // Create a temporary config with multiple assertion types
-        const tempConfig = `
-description: 'Test multiple assertion types'
-providers:
-  - echo
-prompts:
-  - 'Hello World 123'
-tests:
-  - assert:
-      - type: contains
-        value: Hello
-      - type: contains
-        value: World
-      - type: regex
-        value: '\\d+'
-      - type: javascript
-        value: output.length > 5
-`;
-        fs.writeFileSync(configPath, tempConfig);
 
         const { exitCode } = runCli(['eval', '-c', configPath, '-o', outputPath, '--no-cache']);
 
@@ -326,21 +289,6 @@ tests:
         const configPath = path.join(FIXTURES_DIR, 'configs/empty-vars.yaml');
         const outputPath = path.join(OUTPUT_DIR, 'empty-vars-output.json');
 
-        // Create a temporary config with empty vars
-        const tempConfig = `
-description: 'Test empty vars handling'
-providers:
-  - echo
-prompts:
-  - 'Static prompt'
-tests:
-  - vars: {}
-    assert:
-      - type: contains
-        value: Static
-`;
-        fs.writeFileSync(configPath, tempConfig);
-
         const { exitCode } = runCli(['eval', '-c', configPath, '-o', outputPath, '--no-cache']);
 
         expect(exitCode).toBe(0);
@@ -358,21 +306,6 @@ tests:
       it('extracts nested JSON values with transform', () => {
         const configPath = path.join(FIXTURES_DIR, 'configs/transform-json-path.yaml');
         const outputPath = path.join(OUTPUT_DIR, 'transform-json-path-output.json');
-
-        // Create config that tests JSON path extraction
-        const tempConfig = `
-description: 'Test JSON path transform'
-providers:
-  - id: echo
-    transform: 'JSON.parse(output).value'
-prompts:
-  - '{"value": "extracted", "other": "ignored"}'
-tests:
-  - assert:
-      - type: equals
-        value: extracted
-`;
-        fs.writeFileSync(configPath, tempConfig);
 
         const { exitCode } = runCli(['eval', '-c', configPath, '-o', outputPath, '--no-cache']);
 
@@ -392,22 +325,6 @@ tests:
         const configPath = path.join(FIXTURES_DIR, 'configs/nunjucks-filters.yaml');
         const outputPath = path.join(OUTPUT_DIR, 'nunjucks-filters-output.json');
 
-        // Create config that tests Nunjucks filters
-        const tempConfig = `
-description: 'Test Nunjucks filters'
-providers:
-  - echo
-prompts:
-  - 'Hello {{ name | upper }}'
-tests:
-  - vars:
-      name: world
-    assert:
-      - type: contains
-        value: WORLD
-`;
-        fs.writeFileSync(configPath, tempConfig);
-
         const { exitCode } = runCli(['eval', '-c', configPath, '-o', outputPath, '--no-cache']);
 
         expect(exitCode).toBe(0);
@@ -424,27 +341,6 @@ tests:
       it('supports Nunjucks if/else in prompts', () => {
         const configPath = path.join(FIXTURES_DIR, 'configs/nunjucks-conditionals.yaml');
         const outputPath = path.join(OUTPUT_DIR, 'nunjucks-conditionals-output.json');
-
-        // Create config that tests Nunjucks conditionals
-        const tempConfig = `
-description: 'Test Nunjucks conditionals'
-providers:
-  - echo
-prompts:
-  - '{% if premium %}Premium user{% else %}Free user{% endif %}'
-tests:
-  - vars:
-      premium: true
-    assert:
-      - type: contains
-        value: Premium
-  - vars:
-      premium: false
-    assert:
-      - type: contains
-        value: Free
-`;
-        fs.writeFileSync(configPath, tempConfig);
 
         const { exitCode } = runCli(['eval', '-c', configPath, '-o', outputPath, '--no-cache']);
 
@@ -561,7 +457,15 @@ tests:
         const configPath = path.join(FIXTURES_DIR, 'configs/redteam-class-provider-7353.yaml');
 
         const { exitCode, stderr, stdout } = runCli(
-          ['redteam', 'generate', '-c', configPath, '--no-cache'],
+          [
+            'redteam',
+            'generate',
+            '-c',
+            configPath,
+            '-o',
+            path.join(OUTPUT_DIR, 'redteam.yaml'),
+            '--no-cache',
+          ],
           {
             cwd: path.join(FIXTURES_DIR, 'configs'),
             env: { PROMPTFOO_DISABLE_REMOTE_GENERATION: 'true' },
