@@ -256,10 +256,7 @@ function getFilterKey(filters?: NunjucksFilterMap): string {
   return `f${cached.id}`;
 }
 
-/**
- * Drops compiled templates. Called at the start of each evaluation so a rerun in the same
- * process (e.g. `--watch`) picks up changed `{% include %}` / `{% import %}` files.
- */
+/** Drops the compiled interpolation templates. */
 export function clearPromptTemplateCache(): void {
   promptTemplateCache.clear();
 }
@@ -275,6 +272,11 @@ function renderTemplateString(
   }
   if (!templateStr.includes('{')) {
     return templateStr;
+  }
+  // Statement tags can load templates whose contents change independently of the prompt.
+  // Preserve the loader's normal per-render behavior for these prompts.
+  if (templateStr.includes('{%')) {
+    return getEngine().renderString(templateStr, context);
   }
   const filterKey = getFilterKey(nunjucksFilters);
   // Always prefix, so a filterless template whose text starts with `f1:` can't share a key with a filtered one.

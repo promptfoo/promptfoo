@@ -573,6 +573,18 @@ describe('evaluatorHelpers', () => {
       }
     });
 
+    it('does not reuse the loader environment for statement templates', async () => {
+      const renderString = vi.spyOn(nunjucks.Environment.prototype, 'renderString');
+      try {
+        const prompt = toPrompt('{% if name %}Hello {{ name }}{% endif %}');
+        expect(await renderPrompt(prompt, { name: 'Alice' })).toBe('Hello Alice');
+        expect(await renderPrompt(prompt, { name: 'Bob' })).toBe('Hello Bob');
+        expect(renderString).toHaveBeenCalledTimes(2);
+      } finally {
+        renderString.mockRestore();
+      }
+    });
+
     it('should differentiate template cache by custom nunjucks filters', async () => {
       clearPromptTemplateCache();
       const compileSpy = vi.spyOn(nunjucks.Template.prototype as any, '_compile');
