@@ -20,8 +20,6 @@
  * - mischievous-user: Different implementation pattern
  */
 
-import { MULTI_TURN_STRATEGIES } from '../constants/strategies';
-
 /**
  * Attack providers that support per-turn/per-iteration layer transforms.
  *
@@ -125,20 +123,4 @@ export function getAttackProviderFullId(id: string): string {
   }
 
   return `promptfoo:redteam:${id}`;
-}
-
-/**
- * Check if a strategy is a multi-turn strategy (broader than attack providers).
- * This includes all strategies from MULTI_TURN_STRATEGIES constant.
- *
- * Note: Not all multi-turn strategies support per-turn layer transforms.
- * Use isAttackProvider() to check for that capability.
- */
-export function isMultiTurnStrategy(id: string): boolean {
-  const normalizedId = id.replace('promptfoo:redteam:', '').replace('jailbreak:', '');
-
-  return MULTI_TURN_STRATEGIES.some((strategy) => {
-    const normalizedStrategy = strategy.replace('jailbreak:', '');
-    return normalizedId === normalizedStrategy;
-  });
 }

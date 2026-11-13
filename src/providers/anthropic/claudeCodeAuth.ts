@@ -55,11 +55,12 @@ export const CLAUDE_CODE_OAUTH_BETA_FEATURES = Object.freeze([
  * Messages requests. Anthropic's API gates OAuth tokens to the Claude Code
  * app identity, so requests that use a different user-agent fail with 401.
  *
- * The `1.0.0` suffix is cosmetic — Anthropic gates on the `claude-cli`
- * product identifier, not the semver. Revisit if OAuth requests start
- * returning 401 after SDK or CLI updates.
+ * The semver is load-bearing too: newer models reject OAuth requests whose
+ * `claude-cli` version predates the model's minimum client with 400
+ * `invalid_request_error` (e.g. claude-opus-5-5 requires 2.1.280 or newer).
+ * Keep this at a current CLI release and bump it alongside CLI updates.
  */
-export const CLAUDE_CODE_USER_AGENT = 'claude-cli/1.0.0 (external, promptfoo)';
+export const CLAUDE_CODE_USER_AGENT = 'claude-cli/2.1.285 (external, promptfoo)';
 
 /**
  * The `x-app` header value Claude Code CLI sends. Paired with
