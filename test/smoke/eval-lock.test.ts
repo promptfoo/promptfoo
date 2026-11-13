@@ -212,9 +212,7 @@ tests:
     fs.linkSync(lockPath, aliasedOutputPath);
     const aliased = runEval(['--verify', lockPath, '--output', aliasedOutputPath]);
     expect(aliased.status, aliased.stderr || aliased.stdout).toBe(1);
-    expect(aliased.stdout + aliased.stderr).toContain(
-      'cannot also be used as an eval output path',
-    );
+    expect(aliased.stdout + aliased.stderr).toContain('cannot also be used as an eval output path');
     expect(fs.readFileSync(lockPath, 'utf8')).toBe(lockedContents);
 
     // The lock's 75% threshold is authoritative even if the current environment says 100%.
