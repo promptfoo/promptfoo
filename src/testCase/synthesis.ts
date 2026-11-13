@@ -238,21 +238,22 @@ export async function synthesize({
 
   const batchSize = 20;
   const totalTestCases = numPersonas * numTestCasesPerPersona;
+  const casesPerPersona = numTestCasesPerPersona;
 
   const generateTestCasesForPersona = async (
     currentTestCases: VarMapping[],
   ): Promise<VarMapping[]> => {
     const remainingCount = totalTestCases - currentTestCases.length;
-    const currentBatchSize = Math.min(remainingCount, batchSize);
+    const remainingForPersona = casesPerPersona - (currentTestCases.length % casesPerPersona);
+    const currentBatchSize = Math.min(remainingCount, remainingForPersona, batchSize);
 
-    const persona = personas[currentTestCases.length % personas.length];
+    const personaIndex = Math.floor(currentTestCases.length / casesPerPersona) % personas.length;
+    const persona = personas[personaIndex];
     logger.debug(
-      `Generating ${currentBatchSize} test cases for persona ${
-        (currentTestCases.length % personas.length) + 1
-      } of ${personas.length}...`,
+      `Generating ${currentBatchSize} test cases for persona ${personaIndex + 1} of ${personas.length}...`,
     );
 
-    const personaPrompt = testCasesPrompt(
+    let personaPrompt = testCasesPrompt(
       prompts,
       persona,
       tests,
@@ -260,6 +261,9 @@ export async function synthesize({
       variables,
       instructions,
     );
+    if (currentTestCases.length > 0) {
+      personaPrompt += `\n\n${currentTestCases.length} unique test cases have already been generated. Generate ${currentBatchSize} additional distinct cases.`;
+    }
     logger.debug(`Generated persona prompt:\n${personaPrompt}`);
 
     const personaResponse = await providerModel.callApi(personaPrompt);
@@ -288,7 +292,19 @@ export async function synthesize({
     if (progressBar) {
       progressBar.increment(vars.length);
     }
-    return vars;
+    // Deduplicate before limiting this persona's contribution to its remaining quota.
+    const seen = new Set(currentTestCases.map((item) => JSON.stringify(item)));
+    const uniqueVars = vars.filter((item) => {
+      const key = JSON.stringify(item);
+      if (seen.has(key)) {
+        return false;
+      }
+      seen.add(key);
+      return true;
+    });
+    return uniqueVars.length > remainingForPersona
+      ? sampleArray(uniqueVars, remainingForPersona)
+      : uniqueVars;
   };
 
   let testCaseVars = await retryWithDeduplication(generateTestCasesForPersona, totalTestCases);
