@@ -59,6 +59,17 @@ describe('testCaseFromCsvRow', () => {
     vi.resetAllMocks();
   });
 
+  it('keeps adjacent numbered columns distinct beyond the safe integer range', () => {
+    const result = testCaseFromCsvRow({
+      __expected9007199254740992: 'levenshtein:one',
+      __expected9007199254740993: 'levenshtein:two',
+      '__config:__expected9007199254740992:threshold': '1',
+      '__config:__expected9007199254740993:threshold': '2',
+    });
+
+    expect(result.assert?.map(({ threshold }) => threshold)).toEqual([1, 2]);
+  });
+
   it('should create a TestCase with assertions and options from a CSV row', () => {
     const row: CsvRow = {
       __expected1: 'equals:Expected output',
