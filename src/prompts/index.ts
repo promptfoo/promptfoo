@@ -3,7 +3,6 @@ import path from 'path';
 
 import { globSync } from 'glob';
 import logger from '../logger';
-import { isApiProvider } from '../types/providers';
 import { isJavascriptFile } from '../util/fileExtensions';
 import { parsePathOrGlob } from '../util/index';
 import invariant from '../util/invariant';
@@ -11,92 +10,18 @@ import { PromptSchema } from '../validators/prompts';
 import { processCsvPrompts } from './processors/csv';
 import { processExecutableFile } from './processors/executable';
 import { processJsFile } from './processors/javascript';
-import { processJinjaFile } from './processors/jinja';
 import { processJsonFile } from './processors/json';
 import { processJsonlFile } from './processors/jsonl';
-import { processMarkdownFile } from './processors/markdown';
 import { processPythonFile } from './processors/python';
 import { processString } from './processors/string';
-import { processTxtFile } from './processors/text';
+import { processTemplateFile, processTxtFile } from './processors/text';
 import { processYamlFile } from './processors/yaml';
 import { maybeFilePath, normalizeInput } from './utils';
 
-import type {
-  EvaluateTestSuite,
-  Prompt,
-  PromptFunction,
-  ProviderOptions,
-  ProviderOptionsMap,
-  TestSuite,
-} from '../types/index';
+import type { EvaluateTestSuite, Prompt, PromptFunction, TestSuite } from '../types/index';
 
 export * from './grading';
 export { DEFAULT_WEB_SEARCH_PROMPT } from './grading';
-
-/**
- * Reads and maps provider prompts based on the configuration and parsed prompts.
- * @param config - The configuration object.
- * @param parsedPrompts - Array of parsed prompts.
- * @returns A map of provider IDs to their respective prompts.
- */
-export function readProviderPromptMap(
-  config: Pick<Partial<EvaluateTestSuite>, 'providers'>,
-  parsedPrompts: Prompt[],
-): TestSuite['providerPromptMap'] {
-  const ret: Record<string, string[]> = {};
-
-  if (!config.providers) {
-    return ret;
-  }
-
-  const allPrompts = parsedPrompts.map((prompt) => prompt.label);
-  const addProviderPrompts = (id: string, label?: string, prompts = allPrompts) => {
-    ret[id] = prompts;
-    if (label) {
-      ret[label] = prompts;
-    }
-  };
-
-  if (typeof config.providers === 'string') {
-    return { [config.providers]: allPrompts };
-  }
-
-  if (typeof config.providers === 'function') {
-    return { 'Custom function': allPrompts };
-  }
-
-  if (isApiProvider(config.providers)) {
-    addProviderPrompts(config.providers.id());
-    return ret;
-  }
-
-  for (const provider of config.providers) {
-    if (isApiProvider(provider)) {
-      addProviderPrompts(provider.id(), provider.label);
-      continue;
-    }
-
-    if (typeof provider === 'object') {
-      // It's either a ProviderOptionsMap or a ProviderOptions
-      if (provider.id) {
-        const rawProvider = provider as ProviderOptions;
-        invariant(
-          rawProvider.id,
-          'You must specify an `id` on the Provider when you override options.prompts',
-        );
-        addProviderPrompts(rawProvider.id, rawProvider.label, rawProvider.prompts || allPrompts);
-      } else {
-        const rawProvider = provider as ProviderOptionsMap;
-        const originalId = Object.keys(rawProvider)[0];
-        const providerObject = rawProvider[originalId];
-        const id = providerObject.id || originalId;
-        ret[id] = rawProvider[originalId].prompts || allPrompts;
-      }
-    }
-  }
-
-  return ret;
-}
 
 /** Reads the prompts in one file, choosing the processor by its extension. */
 async function processPromptFile(
@@ -110,7 +35,7 @@ async function processPromptFile(
     return processCsvPrompts(filePath, prompt);
   }
   if (extension === '.j2') {
-    return processJinjaFile(filePath, prompt, labelPath);
+    return processTemplateFile(filePath, prompt, labelPath);
   }
   if (extension === '.json') {
     return processJsonFile(filePath, prompt, labelPath);
@@ -122,7 +47,7 @@ async function processPromptFile(
     return processJsFile(filePath, prompt, functionName, labelPath);
   }
   if (extension === '.md') {
-    return processMarkdownFile(filePath, prompt, labelPath);
+    return processTemplateFile(filePath, prompt, labelPath);
   }
   if (extension === '.py') {
     return processPythonFile(filePath, prompt, functionName, labelPath);
@@ -235,23 +160,20 @@ async function processPrompt(
         labelBasePath,
       );
       const expandedId = prompt.id && `${prompt.id}:${relativePath}`;
-      prompts.push(
-        ...processedPrompts.map((processedPrompt, index) => ({
+      processedPrompts.forEach((processedPrompt, index) => {
+        prompts.push({
           ...processedPrompt,
           ...(expandedId && !processedPrompt.id
             ? { id: processedPrompts.length > 1 ? `${expandedId}:${index + 1}` : expandedId }
             : {}),
-        })),
-      );
+        });
+      });
     }
-    if (prompts.length === 0) {
-      // There was nothing at this filepath, so treat it as a prompt string.
-      logger.debug(
-        `Attempted to load file at "${prompt.raw}", but no file found. Using raw string.`,
-      );
-      prompts.push(...processString(prompt));
+    if (prompts.length > 0) {
+      return prompts;
     }
-    return prompts;
+    logger.debug(`Attempted to load file at "${prompt.raw}", but no file found. Using raw string.`);
+    return processString(prompt);
   }
 
   return processPromptFile(filePath, prompt, extension, functionName, getLabelPath(filePath));
@@ -274,9 +196,8 @@ export async function readPrompts(
   sourceBasePaths?: readonly string[],
 ): Promise<Prompt[]> {
   logger.debug(`Reading prompts from ${JSON.stringify(promptPathOrGlobs)}`);
-  const promptPartials: Partial<Prompt>[] = normalizeInput(promptPathOrGlobs);
   const prompts: Prompt[] = [];
-  for (const [index, prompt] of promptPartials.entries()) {
+  for (const [index, prompt] of normalizeInput(promptPathOrGlobs).entries()) {
     const sourceBasePath = sourceBasePaths?.[index];
     const promptBatch = await processPrompt(
       prompt,
@@ -287,7 +208,9 @@ export async function readPrompts(
     if (promptBatch.length === 0) {
       throw new Error(`There are no prompts in ${JSON.stringify(prompt.raw)}`);
     }
-    prompts.push(...promptBatch);
+    for (const result of promptBatch) {
+      prompts.push(result);
+    }
   }
   return prompts;
 }
