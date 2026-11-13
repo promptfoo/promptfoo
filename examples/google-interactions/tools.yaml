@@ -1,0 +1,11 @@
+- functionDeclarations:
+    - name: get_weather
+      description: Get the current weather for a location
+      parameters:
+        type: OBJECT
+        properties:
+          location:
+            type: STRING
+            description: City name, e.g. "Boston"
+        required:
+          - location

@@ -120,6 +120,8 @@ export interface FunctionDeclaration {
   /** Live API function execution mode. Extended Thinking requires NON_BLOCKING. */
   behavior?: 'BLOCKING' | 'NON_BLOCKING';
   parameters?: Schema;
+  parametersJsonSchema?: unknown;
+  parameters_json_schema?: unknown;
   response?: Schema;
 }
 
@@ -210,9 +212,11 @@ export interface CompletionOptions {
   region?: string;
   publisher?: string;
   apiVersion?: string; // Live API: Gemini 'v1alpha'/'v1beta'; Vertex 'v1'/'v1beta1'
-  /** Previous Gemini Interactions API ID for conversational video editing. */
+  /** Route a `google:<model>` chat provider through the Interactions API, keeping its ID. */
+  interactions?: boolean;
+  /** Previous Gemini Interactions API ID to continue from. */
   previousInteractionId?: string;
-  /** Keep a Gemini interaction available for subsequent editing turns. */
+  /** Whether Gemini retains the interaction. Omitted uses the API default. */
   store?: boolean;
   anthropicVersion?: string;
   anthropic_version?: string; // Alternative format

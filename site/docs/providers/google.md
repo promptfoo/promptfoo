@@ -288,7 +288,7 @@ A model ID selects a provider route; it does not enable every operation offered 
 | `generateContent`                                             | Chat, multimodal input, structured output, thinking, tools, and [speech output](https://ai.google.dev/gemini-api/docs/generate-content/speech-generation) |
 | `embedContent`                                                | Text strings through `google:embedding:`; multimodal embedding inputs are not exposed                                                                     |
 | Live WebSocket API                                            | Finite text/audio eval sessions, transcripts, and function callbacks through `google:live:`                                                               |
-| Interactions API                                              | File transcription, Gemini 4 Argon and Hydrogen, Gemini Omni video, and Gemini Robotics ER                                                                |
+| Interactions API                                              | Opt-in chat with function calling, file transcription, Gemini Omni video, and Gemini Robotics ER                                                          |
 | Video generation                                              | Gemini Omni uses Interactions (`google:gemini-omni-1.1-flash`). For Veo, use the Vertex long-running prediction API (`vertex:video:`).                    |
 | Native Gemini images                                          | Model-specific image provider; the legacy `google:image:` prefix instead selects Imagen's prediction format                                               |
 | Cached content                                                | Reference an existing cache with `passthrough.cachedContent`; cache creation and deletion are not provided                                                |
@@ -296,6 +296,23 @@ A model ID selects a provider route; it does not enable every operation offered 
 | Lyria music                                                   | No dedicated adapters                                                                                                                                     |
 
 Use a [custom provider](/docs/providers/custom-api) when you need an operation or response format outside these routes. `passthrough` adds request fields to an existing route; it does not change the API protocol. Consult the [Gemini API reference](https://ai.google.dev/api) for upstream capabilities.
+
+### Interactions API for chat
+
+`google:<model>` chat providers use `generateContent`. To send a Gemini chat model through the [Interactions API](https://ai.google.dev/gemini-api/docs/interactions-overview) instead, use `google:interactions:<model>`, or set `interactions: true` to keep the provider ID:
+
+```yaml
+providers:
+  - id: google:gemini-3.8-flash
+    config:
+      interactions: true
+```
+
+This route supports text and chat-message prompts, media input, system instructions, `responseSchema`, `thinkingLevel`, service tiers, safety settings, `store`, and `previousInteractionId`. Function declarations in `config.tools` are sent as Interactions function tools, and `googleSearch`, `codeExecution`, and `urlContext` entries without options become the matching managed tools. Use `config.passthrough.tools` for other Interactions-native tools. `tool_choice` and `toolConfig.functionCallingConfig`, including `allowedFunctionNames`, map to the Interactions `tool_choice` field.
+
+A function call without a matching `functionToolCallbacks` entry is returned as `functionCall` parts, so `is-valid-function-call` can check it. When every call in a response has a callback, Promptfoo runs the callbacks, sends their results back, and returns the model's next answer, for up to eight rounds. Token usage and cost include every request, and `metadata.toolCalls` lists the executed calls. If a callback fails, the eval reports an error. Stored interactions continue with `previous_interaction_id`; with `store: false`, Promptfoo resends the conversation.
+
+The Interactions API stores interactions unless you set `store: false`. Sampling controls (`temperature`, `topP`, `topK`) are not sent, and streaming, background execution, MCP, and computer-use tools are not supported on this route. `config.interactions` applies only to `google:` chat providers.
 
 ## Available Models
 
@@ -541,10 +558,8 @@ prompts:
   - 'Locate the requested objects and return normalized [y, x] coordinates.'
 ```
 
-Promptfoo does not currently execute custom function or computer-use tools for the Interactions
-route because those calls require a follow-up `requires_action` exchange. Tools with `type: function`
-or `type: computer_use` are rejected instead of returning an incomplete result; managed tools such
-as `google_search` remain supported.
+Custom `type: function` tools follow the [Interactions function-calling rules](#interactions-api-for-chat).
+Tools with `type: computer_use` are rejected because Promptfoo does not run a computer-use loop.
 
 The standard endpoint costs $2/1M input tokens and $10/1M output tokens, including thinking. Cached
 input is $0.20/1M; batch processing is $1/1M input, $5/1M output, and $0.10/1M cached input. The

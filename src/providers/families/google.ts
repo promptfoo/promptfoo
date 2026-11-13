@@ -8,9 +8,6 @@ const NATIVE_INTERACTIONS_MODELS = new Set([
   GEMINI_ROBOTICS_STANDARD_MODEL,
 ]);
 
-// Chat models that also accept google:interactions: but default to generateContent.
-const INTERACTIONS_OPT_IN_MODELS = new Set(['gemini-4-argon', 'gemini-4-hydrogen']);
-
 function isLiveOnlyModel(modelName: string): boolean {
   return (
     modelName === 'gemini-3.5-live-translate-preview' ||
@@ -141,6 +138,14 @@ export const googleProviderFactories: ProviderFactory[] = [
           },
         });
       }
+      if (
+        providerOptions.config?.interactions === true &&
+        (explicitServiceType === undefined || explicitServiceType === 'chat')
+      ) {
+        throw new Error(
+          'config.interactions applies only to google: providers. Vertex AI chat uses generateContent.',
+        );
+      }
       const { VertexChatProvider, VertexEmbeddingProvider } = await import('../google/vertex');
       if (firstPart === 'chat') {
         return new VertexChatProvider(splits.slice(2).join(':'), providerOptions);
@@ -173,14 +178,12 @@ export const googleProviderFactories: ProviderFactory[] = [
         validateGoogleModelRoute(modelName, serviceType, true);
 
         if (serviceType === 'interactions') {
-          if (
-            !NATIVE_INTERACTIONS_MODELS.has(modelName) &&
-            !INTERACTIONS_OPT_IN_MODELS.has(modelName)
-          ) {
+          if (!modelName) {
             throw new Error(
-              `The Gemini Interactions provider does not support model "${modelName}".`,
+              `Missing model name for ${providerPath}. Use e.g. ${splits[0]}:interactions:gemini-3.8-flash.`,
             );
           }
+          // Native Interactions models and any Gemini chat model the user opts in.
           const { GoogleInteractionsProvider } = await import('../google/interactions');
           return new GoogleInteractionsProvider(modelName, {
             ...providerOptions,
@@ -243,6 +246,19 @@ export const googleProviderFactories: ProviderFactory[] = [
       if (modelName.includes('-image') || modelName === 'gemini-nano-banana-2.1') {
         const { GeminiImageProvider } = await import('../google/gemini-image');
         return new GeminiImageProvider(modelName, providerOptions);
+      }
+
+      if (providerOptions.config?.interactions === true) {
+        const { GoogleInteractionsProvider } = await import('../google/interactions');
+        return new GoogleInteractionsProvider(modelName, {
+          ...providerOptions,
+          id: providerOptions.id ?? providerPath,
+          env: providerOptions.env ?? context.env,
+          config: {
+            ...(context.basePath && { basePath: context.basePath }),
+            ...providerOptions.config,
+          },
+        });
       }
 
       const { AIStudioChatProvider } = await import('../google/ai.studio');

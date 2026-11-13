@@ -3113,6 +3113,8 @@ describe('Provider Registry', () => {
     it.each([
       ['google:interactions:gemini-4-argon', true],
       ['google:interactions:gemini-4-hydrogen', true],
+      ['google:interactions:gemini-3.8-flash', true],
+      ['palm:interactions:gemini-3.8-flash', true],
       ['google:interactions:gemini-omni-flash-preview', true],
       ['palm:interactions:gemini-omni-flash-preview', true],
       ['google:interactions:gemini-omni-1.1-flash', false],
@@ -3175,8 +3177,8 @@ describe('Provider Registry', () => {
     );
 
     it.each([
-      'google:interactions:gemini-3.5-flash',
-      'palm:interactions:gemini-3.5-flash',
+      'google:interactions:',
+      'vertex:interactions:gemini-3.8-flash',
       'vertex:interactions:gemini-4-argon',
       'vertex:interactions:gemini-4-hydrogen',
       'vertex:interactions:gemini-robotics-er-2-preview',
@@ -3188,8 +3190,55 @@ describe('Provider Registry', () => {
           f.test(providerPath),
         );
         await expect(factory!.create(providerPath, bareOptions, bareContext)).rejects.toThrow(
-          'Interactions',
+          /Interactions|interactions:/,
         );
+      },
+    );
+
+    it.each(['google:gemini-3.8-flash', 'palm:gemini-3.8-flash'])(
+      'routes %s to Interactions with config.interactions and keeps its ID',
+      async (providerPath) => {
+        const factory = (await getProviderFactories(providerPath)).find((f) =>
+          f.test(providerPath),
+        );
+        const provider = await factory!.create(
+          providerPath,
+          { config: { interactions: true, apiKey: 'test-key' } },
+          bareContext,
+        );
+        const { GoogleInteractionsProvider } = await import(
+          '../../src/providers/google/interactions'
+        );
+        expect(provider).toBeInstanceOf(GoogleInteractionsProvider);
+        expect(provider).toHaveProperty('modelName', 'gemini-3.8-flash');
+        expect(provider).toHaveProperty('config.basePath', '/test');
+        expect(provider.id()).toBe(providerPath);
+      },
+    );
+
+    it.each([
+      ['google:gemini-3.8-flash', { interactions: false }],
+      ['google:gemini-3.8-flash', {}],
+    ])('keeps %s on generateContent without the opt-in', async (providerPath, config) => {
+      const factory = (await getProviderFactories(providerPath)).find((f) => f.test(providerPath));
+      const provider = await factory!.create(
+        providerPath,
+        { config: { ...config, apiKey: 'test-key' } },
+        bareContext,
+      );
+      const { AIStudioChatProvider } = await import('../../src/providers/google/ai.studio');
+      expect(provider).toBeInstanceOf(AIStudioChatProvider);
+    });
+
+    it.each(['vertex:gemini-3.8-flash', 'vertex:chat:gemini-3.8-flash'])(
+      'rejects config.interactions on %s instead of silently using generateContent',
+      async (providerPath) => {
+        const factory = (await getProviderFactories(providerPath)).find((f) =>
+          f.test(providerPath),
+        );
+        await expect(
+          factory!.create(providerPath, { config: { interactions: true } }, bareContext),
+        ).rejects.toThrow('config.interactions applies only to google: providers');
       },
     );
 
