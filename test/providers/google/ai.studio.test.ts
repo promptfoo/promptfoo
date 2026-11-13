@@ -1678,20 +1678,28 @@ describe('AIStudioChatProvider', () => {
         expect(response.output).toBe('Thinking: Let me calculate.\n\n42');
       });
 
-      it('keeps thoughts out of function-call output', async () => {
-        provider = new AIStudioChatProvider('gemini-3.6-flash', {
-          config: { apiKey: 'test-key', streaming: true },
-        });
-        const call = { functionCall: createBostonWeatherCall(), thoughtSignature: 'sig' };
-        vi.mocked(cache.fetchWithCache).mockResolvedValue({
-          data: [chunk([{ text: 'I should look it up.', thought: true }]), chunk([call], 'STOP')],
-          cached: false,
-        } as any);
+      it.each([
+        [undefined, true],
+        [false, false],
+      ])(
+        'returns streamed thoughts as thought parts of function-call output with showThinking %s',
+        async (showThinking, keepsThought) => {
+          provider = new AIStudioChatProvider('gemini-3.6-flash', {
+            config: { apiKey: 'test-key', streaming: true, showThinking },
+          });
+          const thought = { text: 'I should look it up.', thought: true };
+          const call = { functionCall: createBostonWeatherCall(), thoughtSignature: 'sig' };
+          vi.mocked(cache.fetchWithCache).mockResolvedValue({
+            data: [chunk([thought]), chunk([call], 'STOP')],
+            cached: false,
+          } as any);
 
-        const response = await provider.callGemini('What is the weather in Boston?');
+          const response = await provider.callGemini('What is the weather in Boston?');
 
-        expect(response.output).toEqual([call]);
-      });
+          // Matches the non-streamed response, which holds both parts in one candidate.
+          expect(response.output).toEqual(keepsThought ? [thought, call] : [call]);
+        },
+      );
 
       it('returns thoughts of a reply cut off while thinking unless showThinking is false', async () => {
         const data = chunk([{ text: 'Still thinking', thought: true }], 'MAX_TOKENS');

@@ -1492,6 +1492,8 @@ export function formatCandidateContents(candidate: Candidate) {
 export interface GeminiAnswer {
   output: Part[] | string | undefined;
   thoughts: string;
+  /** Parts of chunks that held only thoughts; a part-array output gets them back. */
+  thoughtParts?: Part[];
 }
 
 /**
@@ -1500,14 +1502,13 @@ export interface GeminiAnswer {
  */
 export function mergeCandidateContents(answer: GeminiAnswer, candidate: Candidate): GeminiAnswer {
   const content = formatCandidateContents(candidate);
-  const thoughts = (candidate.content?.parts ?? [])
-    .map((part) => (isThoughtTextPart(part) ? part.text : ''))
-    .join('');
-  return {
-    // A chunk holding only thoughts adds nothing to the output.
-    output: thoughts && content === '' ? answer.output : mergeParts(answer.output, content),
-    thoughts: answer.thoughts + thoughts,
-  };
+  const thoughtParts = (candidate.content?.parts ?? []).filter(isThoughtTextPart);
+  const thoughts = answer.thoughts + thoughtParts.map((part) => part.text).join('');
+  if (thoughtParts.length > 0 && content === '') {
+    // A chunk holding only thoughts adds nothing to a text answer.
+    return { ...answer, thoughts, thoughtParts: [...(answer.thoughtParts ?? []), ...thoughtParts] };
+  }
+  return { ...answer, output: mergeParts(answer.output, content), thoughts };
 }
 
 /**
@@ -1516,11 +1517,14 @@ export function mergeCandidateContents(answer: GeminiAnswer, candidate: Candidat
  * With `showThinking: false`, thought summaries are left out of both.
  */
 export function formatGeminiThinking(
-  { output, thoughts }: GeminiAnswer,
+  { output, thoughts, thoughtParts = [] }: GeminiAnswer,
   showThinking: boolean | undefined,
 ) {
   if (Array.isArray(output)) {
-    return showThinking === false ? output.filter((part) => !isThoughtTextPart(part)) : output;
+    // Gemini sends thoughts before the answer, so streamed thought-only chunks go first.
+    return showThinking === false
+      ? output.filter((part) => !isThoughtTextPart(part))
+      : [...thoughtParts, ...output];
   }
   // Gemini ends each summary with blank lines; trim them so one blank line precedes the answer.
   const summary = thoughts.trim();

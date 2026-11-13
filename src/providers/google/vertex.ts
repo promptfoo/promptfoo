@@ -800,12 +800,9 @@ export class VertexChatProvider extends GoogleGenericProvider {
         : undefined;
     // Cached responses hold formatted output. Requests for thought summaries get their own keys,
     // so entries saved with the summary glued to the answer are not served; other keys are unchanged.
-    const thinkingCacheKey =
-      config.showThinking === false
-        ? ':showThinking=false'
-        : requestsThoughtSummaries(body.generationConfig)
-          ? ':showThinking=true'
-          : '';
+    const thinkingCacheKey = requestsThoughtSummaries(body.generationConfig)
+      ? `:showThinking=${config.showThinking !== false}`
+      : '';
     const cacheKey = cache
       ? getVertexBodyCacheKey(`vertex:${this.modelName}${thinkingCacheKey}`, cacheBody, apiHost)
       : undefined;

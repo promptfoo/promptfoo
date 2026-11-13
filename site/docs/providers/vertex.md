@@ -1195,7 +1195,7 @@ providers:
           includeThoughts: true
 ```
 
-Function-call and other multipart outputs are returned as Gemini parts, where thought summaries are parts marked `thought: true`. `showThinking: false` removes those parts too.
+Function-call and other multipart outputs are returned as Gemini parts, where thought summaries are text parts marked `thought: true`. `showThinking: false` removes those parts too.
 
 ### Search Grounding
 

@@ -1641,6 +1641,34 @@ describe('VertexChatProvider.callGeminiApi', () => {
     },
   );
 
+  it.each([
+    [undefined, 'Thinking: **Plan**\n\nMultiply.\n\n\n**Check**\n\nDone.\n\n42'],
+    [false, '42'],
+  ])(
+    'labels streamed thoughts once, up to a MAX_TOKENS finish, with showThinking %s',
+    async (showThinking, expected) => {
+      const chunk = (parts: object[], finishReason?: string) => ({
+        candidates: [{ content: { role: 'model', parts }, ...(finishReason && { finishReason }) }],
+      });
+      mockVertexRequest([
+        chunk([{ text: '**Plan**\n\nMultiply.\n\n\n', thought: true }]),
+        chunk([{ text: '**Check**\n\nDone.\n\n\n', thought: true }]),
+        chunk([{ text: '4' }]),
+        {
+          ...chunk([{ text: '2' }], 'MAX_TOKENS'),
+          usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 2, totalTokenCount: 40 },
+        },
+      ]);
+
+      const response = await new VertexChatProvider('gemini-3.6-flash', {
+        config: { region: 'global', streaming: true, showThinking },
+      }).callGeminiApi('What is 6 * 7?');
+
+      expect(response.error).toBeUndefined();
+      expect(response.output).toBe(expected);
+    },
+  );
+
   it('keys cached responses by how thought summaries are shown', async () => {
     mockVertexRequest([
       {
@@ -1651,6 +1679,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
     const cases: Array<[Partial<GoogleProviderConfig>, RegExp]> = [
       // Requests without thought summaries keep the keys used before thoughts were formatted.
       [{}, /^vertex:gemini-3\.6-flash:[a-f0-9]{64}$/],
+      [{ showThinking: false }, /^vertex:gemini-3\.6-flash:[a-f0-9]{64}$/],
       // Entries saved for these requests before then hold the summary glued to the answer.
       [
         { generationConfig: { thinkingConfig: { includeThoughts: true } } },
