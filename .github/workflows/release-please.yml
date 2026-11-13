@@ -42,7 +42,7 @@ jobs:
       # PR #8796 landed green, then main broke on the next release-please run).
       # If we want to narrow here, first widen the App installation permissions
       # in the GitHub App settings, then re-add the `permission-*` inputs.
-      - uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3
         id: app-token
         with:
           app-id: ${{ vars.PROMPTFOOBOT_APP_ID }}
@@ -121,7 +121,7 @@ jobs:
       - &upload-npm-package
         name: Upload npm package
         id: upload
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: promptfoo-npm-package
           path: ${{ steps.package-artifact.outputs.tarball }}
@@ -149,7 +149,7 @@ jobs:
           node-version: '24.22.2'
           registry-url: 'https://registry.npmjs.org'
       - name: Download verified npm package
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with: &npm-package-download
           artifact-ids: ${{ needs.build-npm.outputs.artifact-id || needs.build-npm-backfill.outputs.artifact-id }}
           path: ${{ runner.temp }}/promptfoo-package
@@ -256,7 +256,7 @@ jobs:
       - run: npm install -g npm@11.11.0 --registry=https://registry.npmjs.org/
       - run: npm ci --registry=https://registry.npmjs.org/
       - name: Download npm package
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with: *npm-package-download
       - name: Validate npm package
         env:
@@ -460,7 +460,7 @@ jobs:
       # publication jobs. The hidden source manifest is required by the mirror
       # repository's reproducible-build validation.
       - name: Upload release payload for attestation
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: code-scan-action-release-payload
           if-no-files-found: error
@@ -488,7 +488,7 @@ jobs:
       attestations: write
     steps:
       - name: Download release payload
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: code-scan-action-release-payload
           path: ${{ runner.temp }}/code-scan-action-attest
@@ -514,7 +514,7 @@ jobs:
         CHANGELOG.md
     steps:
       - name: Download attested release payload
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: code-scan-action-release-payload
           path: ${{ runner.temp }}/code-scan-action-export
@@ -522,7 +522,7 @@ jobs:
       # Mint the foreign-repository write token only after all dependency
       # installation, build, and payload preparation steps have completed.
       - name: Create app token for code-scan-action mirror
-        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3
         id: mirror-token
         with:
           app-id: ${{ vars.PROMPTFOOBOT_APP_ID }}

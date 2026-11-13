@@ -1,8 +1,6 @@
-# amazon-bedrock/agents (AWS Bedrock Agents Example)
+# amazon-bedrock/agents (AWS Bedrock Agents Classic)
 
-This example demonstrates how to use AWS Bedrock Agents with promptfoo to test and evaluate deployed AI agents, including both single-agent and multi-agent scenarios.
-
-You can run this example with:
+Evaluate existing Bedrock Agents Classic deployments with promptfoo. AWS has [closed Agents Classic to new customers](https://docs.aws.amazon.com/bedrock/latest/userguide/agents-classic-maintenance-mode.html); existing customers can continue using it. The `bedrock-agent:` provider calls `InvokeAgent`, not AgentCore Runtime.
 
 ```bash
 npx promptfoo@latest init --example amazon-bedrock/agents
@@ -11,205 +9,45 @@ cd amazon-bedrock/agents
 
 ## Prerequisites
 
-1. An AWS account with Bedrock Agents access
-2. One or more deployed Bedrock agents (get agent IDs from the AWS Console)
-3. AWS credentials configured (via environment variables, AWS CLI, or IAM role)
-4. Install the required AWS SDK:
+- An existing Agents Classic deployment and its agent and alias IDs.
+- AWS credentials with `bedrock:InvokeAgent` permission on that alias.
+- If your promptfoo install omits optional dependencies, install `@aws-sdk/client-bedrock-agent-runtime` alongside promptfoo.
 
-   ```bash
-   npm install @aws-sdk/client-bedrock-agent-runtime
-   ```
-
-## Setup
-
-1. **Get your Agent ID(s)**:
-   - Go to the AWS Bedrock Console
-   - Navigate to Agents
-   - Copy your agent ID(s) (format: `ABCDEFGHIJ`)
-
-2. **Configure AWS Credentials** (choose one method):
-
-   Via environment variables:
-
-   ```bash
-   export AWS_ACCESS_KEY_ID=your_access_key
-   export AWS_SECRET_ACCESS_KEY=your_secret_key
-   export AWS_REGION=us-east-1
-   ```
-
-   Via AWS CLI profile:
-
-   ```bash
-   aws configure --profile my-bedrock-profile
-   ```
-
-   Via IAM role (if running on EC2/Lambda)
-
-3. **Choose your configuration**:
-   - `promptfooconfig.yaml`: Basic single-agent configuration
-   - `promptfooconfig.multi-agent.yaml`: Advanced multi-agent system configuration
-
-## Running the Examples
-
-### Single Agent Example
+Use an IAM role, standard AWS credential environment variables, or a shared profile:
 
 ```bash
-# Run basic agent evaluation
-npx promptfoo eval -c promptfooconfig.yaml
-
-# View results in the web UI
-npx promptfoo view
+export AWS_PROFILE=my-bedrock-profile
 ```
 
-### Multi-Agent Example
+With `AWS_PROFILE`, omit `config.profile`. The native provider's `config.profile` option uses the SSO-specific credential loader.
+
+## Single Agent Example
+
+Replace `YOUR_AGENT_ID` and `YOUR_ALIAS_ID` in `promptfooconfig.yaml`. The command below sets the required `BEDROCK_SESSION_ID` to a new UUID for this run. The four turns run in order with caching disabled. The final turn checks whether the agent remembers the color from the previous turn.
 
 ```bash
-# Run multi-agent system evaluation
-npx promptfoo eval -c promptfooconfig.multi-agent.yaml
-
-# View results in the web UI
-npx promptfoo view
+BEDROCK_SESSION_ID="$(node -p 'crypto.randomUUID()')" \
+  npx promptfoo@latest eval -c promptfooconfig.yaml -o results.json
 ```
 
-## Configuration Options
+Inspect the exported `success`, `score`, `error`, and provider output fields. These assertions evaluate the deployed agent's behavior; a model can fail them even when the integration works.
 
-### Basic Usage
+## Multiple Agent Example
 
-```yaml
-providers:
-  - bedrock-agent:YOUR_AGENT_ID
+Replace the four agent IDs and alias IDs in `promptfooconfig.multi-agent.yaml` with your deployments:
+
+```bash
+npx promptfoo@latest eval -c promptfooconfig.multi-agent.yaml --no-cache -o results.json
 ```
 
-### Advanced Single Agent Configuration
+Each test selects provider **labels**, and each response is graded separately. The complex support question is sent independently to the technical and billing agents. Listing multiple providers does not connect them or create a supervisor. Configure any supervisor/collaborator relationships in AWS before evaluating the supervisor agent.
 
-```yaml
-providers:
-  - id: bedrock-agent:my-agent
-    config:
-      agentId: YOUR_AGENT_ID
-      agentAliasId: PROD_ALIAS # Optional: specific version/alias
-      region: us-east-1 # AWS region
-      sessionId: session-123 # Maintain conversation state
-      enableTrace: true # Get detailed execution traces
-      memoryId: SHORT_TERM_MEMORY # or LONG_TERM_MEMORY
-```
+These tests use separate sessions by default. Sharing a fixed session across unrelated or concurrent tests can mix their conversation histories.
 
-### Multi-Agent System Configuration
+## Sessions, Memory, and Traces
 
-```yaml
-providers:
-  # Technical Support Agent
-  - id: tech-agent
-    provider: bedrock-agent:TECH_AGENT_ID
-    config:
-      agentId: TECH_AGENT_ID
-      agentAliasId: TECH_ALIAS_ID
-      region: us-east-1
-      enableTrace: true
-      memoryId: LONG_TERM_MEMORY
+The single-agent example uses one session to test conversation history. To test memory across sessions, [enable memory on the agent](https://docs.aws.amazon.com/bedrock/latest/userguide/agents-memory.html), set a stable `memoryId` for the user, and allow time for the previous session to be summarized.
 
-  # Billing Agent
-  - id: billing-agent
-    provider: bedrock-agent:BILLING_AGENT_ID
-    config:
-      agentId: BILLING_AGENT_ID
-      agentAliasId: BILLING_ALIAS_ID
-      region: us-east-1
-      enableTrace: true
-```
+To inspect tool or knowledge-base use, set `enableTrace: true` and examine `response.metadata.trace`. Configure action groups, guardrails, and inference parameters on the deployed agent.
 
-## Features
-
-### Session Management
-
-The provider supports maintaining conversation state across multiple interactions:
-
-```yaml
-config:
-  sessionId: my-session-123 # Use the same session ID for related queries
-```
-
-### Memory Integration
-
-Enable agent memory for context-aware responses:
-
-```yaml
-config:
-  memoryId: LONG_TERM_MEMORY # or SHORT_TERM_MEMORY
-```
-
-### Trace Information
-
-Get detailed execution traces including tool calls and reasoning:
-
-```yaml
-config:
-  enableTrace: true # Response will include trace metadata
-```
-
-## Testing Scenarios
-
-### Single Agent Tests
-
-The basic config includes tests for:
-
-- Basic agent responses
-- Tool/function calling (e.g., calculator)
-- Memory retention
-- Multi-turn conversations
-
-### Multi-Agent System Tests
-
-The multi-agent config includes tests for:
-
-- Specialized agent capabilities (technical, billing, product)
-- Cross-functional issue handling
-- Agent collaboration and coordination
-- Escalation management
-- Performance and latency validation
-
-## Multi-Agent System Architecture
-
-The multi-agent example demonstrates a customer support system with specialized agents:
-
-```text
-Customer Query
-     ↓
-[Supervisor Agent] ← Monitors & Routes
-     ↓
-┌─────────────────┬─────────────────┬──────────────────┐
-│  Tech Agent     │  Billing Agent  │  Product Agent   │
-│  (Technical)    │  (Payments)     │  (Recommendations)│
-└─────────────────┴─────────────────┴──────────────────┘
-```
-
-## Troubleshooting
-
-1. **Authentication Error**: Ensure AWS credentials are properly configured
-2. **Agent Not Found**: Verify the agent ID and region
-3. **Permissions Error**: Check IAM permissions for `bedrock:InvokeAgent`
-4. **Timeout**: Large agent responses may take time; adjust timeout if needed
-5. **Multi-Agent Issues**: Ensure all agent IDs and aliases are correct in the config
-
-## IAM Permissions
-
-Your AWS credentials need the following permissions:
-
-```json
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Effect": "Allow",
-      "Action": ["bedrock:InvokeAgent"],
-      "Resource": "arn:aws:bedrock:*:*:agent/*"
-    }
-  ]
-}
-```
-
-## Learn More
-
-- [AWS Bedrock Agents Documentation](https://docs.aws.amazon.com/bedrock/latest/userguide/agents.html)
-- [Promptfoo Documentation](https://promptfoo.dev/docs/providers/bedrock/)
-- [Bedrock Agents Samples](https://github.com/awslabs/amazon-bedrock-agents-samples)
+See the [Bedrock Agents provider guide](https://promptfoo.dev/docs/providers/bedrock-agents/) for the IAM policy, configuration options, and troubleshooting.

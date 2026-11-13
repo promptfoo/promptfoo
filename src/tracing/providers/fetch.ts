@@ -42,6 +42,19 @@ export async function readLimitedResponse(
   providerName: string,
   maxResponseBytes = MAX_TRACE_RESPONSE_BYTES,
 ): Promise<string> {
+  if (!response.ok) {
+    await releaseResponse(response, providerName);
+    throw new TraceProviderError(`${providerName} returned HTTP ${response.status}`, {
+      statusCode: response.status,
+      retryable: response.status === 408 || response.status === 429 || response.status >= 500,
+    });
+  }
+
+  if (Number(response.headers.get('content-length')) > maxResponseBytes) {
+    await releaseResponse(response, providerName);
+    throw new TraceProviderError(`${providerName} trace exceeds the maximum response size`);
+  }
+
   const reader = response.body?.getReader();
   if (!reader) {
     return '';

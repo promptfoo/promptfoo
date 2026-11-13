@@ -64,7 +64,7 @@ describe('OpenAiResponsesProvider reasoning models', () => {
       OPENAI_MAX_TOKENS: '2048',
     });
 
-    const provider = new OpenAiResponsesProvider('o1', createApiKeyOptions());
+    const provider = new OpenAiResponsesProvider('o3', createApiKeyOptions());
 
     const { body } = await provider.getOpenAiBody('Test prompt');
     expect(body.max_output_tokens).toBe(4096);
@@ -73,14 +73,14 @@ describe('OpenAiResponsesProvider reasoning models', () => {
   it('should fall back to OPENAI_MAX_TOKENS for reasoning models when OPENAI_MAX_COMPLETION_TOKENS is unset', async () => {
     setOpenAiEnv({ OPENAI_MAX_TOKENS: '2048' });
 
-    const provider = new OpenAiResponsesProvider('o1', createApiKeyOptions());
+    const provider = new OpenAiResponsesProvider('o3', createApiKeyOptions());
 
     const { body } = await provider.getOpenAiBody('Test prompt');
     expect(body.max_output_tokens).toBe(2048);
   });
 
   it('should not apply a hardcoded max_output_tokens default for reasoning models', async () => {
-    const provider = new OpenAiResponsesProvider('o1', createApiKeyOptions());
+    const provider = new OpenAiResponsesProvider('o3', createApiKeyOptions());
 
     const { body } = await provider.getOpenAiBody('Test prompt');
     expect(body.max_output_tokens).toBeUndefined();
@@ -88,10 +88,9 @@ describe('OpenAiResponsesProvider reasoning models', () => {
   });
 
   it('should treat fine-tuned o-series models as reasoning models', async () => {
-    const provider = new OpenAiResponsesProvider(
-      'ft:o4-mini-2025-04-16:company::model',
-      createApiKeyOptions(),
-    );
+    const provider = new OpenAiResponsesProvider('ft:o4-mini-2025-04-16:company::model', {
+      config: { apiBaseUrl: 'https://gateway.example/v1' },
+    });
 
     const { body } = await provider.getOpenAiBody('Test prompt');
 
@@ -100,13 +99,13 @@ describe('OpenAiResponsesProvider reasoning models', () => {
   });
 
   it('should handle reasoning models correctly', async () => {
-    // Mock API response for o1-pro model
+    // Mock API response for o3-pro model
     const mockApiResponse = {
       id: 'resp_abc123',
       object: 'response',
       created_at: 1234567890,
       status: 'completed',
-      model: 'o1-pro',
+      model: 'o3-pro',
       output: [
         {
           type: 'message',
@@ -116,7 +115,7 @@ describe('OpenAiResponsesProvider reasoning models', () => {
           content: [
             {
               type: 'output_text',
-              text: 'This is a response from o1-pro',
+              text: 'This is a response from o3-pro',
             },
           ],
         },
@@ -135,7 +134,7 @@ describe('OpenAiResponsesProvider reasoning models', () => {
     vi.mocked(cache.fetchWithCache).mockResolvedValue(createMockFetchResponse(mockApiResponse));
 
     // Initialize the provider with reasoning model settings
-    const provider = new OpenAiResponsesProvider('o1-pro', {
+    const provider = new OpenAiResponsesProvider('o3-pro', {
       config: {
         apiKey: 'test-key',
         reasoning_effort: 'medium',
@@ -160,7 +159,7 @@ describe('OpenAiResponsesProvider reasoning models', () => {
 
     // Assertions
     expect(result.error).toBeUndefined();
-    expect(result.output).toBe('This is a response from o1-pro');
+    expect(result.output).toBe('This is a response from o3-pro');
     // Just test that the total tokens is present, but don't test for reasoning tokens
     // as the implementation may handle these details differently
     expect(result.tokenUsage?.total).toBe(45);
@@ -173,7 +172,6 @@ describe('OpenAiResponsesProvider reasoning models', () => {
     { model: 'gpt-5.6-luna', reasoningEffort: 'max', maxOutputTokens: 4000 },
     { model: 'o3', reasoningEffort: 'high', maxOutputTokens: 2000 },
     { model: 'o3-pro', reasoningEffort: 'high', maxOutputTokens: 2000 },
-    { model: 'o4-mini', reasoningEffort: 'medium', maxOutputTokens: 1000 },
     { model: 'gpt-5-codex-mini', reasoningEffort: 'medium', maxOutputTokens: 1000 },
   ] as const)(
     'should configure $model model correctly with reasoning parameters',

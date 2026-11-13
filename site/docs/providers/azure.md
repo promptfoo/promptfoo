@@ -9,6 +9,8 @@ keywords: [azure, openai, gpt-4, vision, reasoning models, assistants, azure ai 
 
 The `azure` provider enables you to use Azure OpenAI Service models with Promptfoo. It shares configuration settings with the [OpenAI provider](/docs/providers/openai).
 
+For TypeScript or API authoring, `promptfoo/contracts` exports `AzureProviderOptionsInputSchema` and `AzureProviderOptionsInput` for explicit Chat Completions, Responses, Completions, and embedding routes under both `azure:` and `azureopenai:`. Each config schema also exports a matching `*InputJsonSchema`. These portable contracts check serializable input without resolving credentials, loading files, or applying execution defaults; runtime and YAML editor validation remain unchanged. Chat and Completions require deployment names in the provider ID. Responses accepts an explicit deployment or uses the runtime default when omitted (`azure:responses` or `azureopenai:responses`, with or without a trailing colon); embedding routes also retain their legacy default deployment.
+
 ## Setup
 
 There are three ways to authenticate with Azure OpenAI:
@@ -1063,8 +1065,8 @@ providers:
 ```
 
 For Claude 5 and Opus 4.7/4.8 deployments with recognizable model names, promptfoo
-omits unsupported `temperature`, `top_p`, and `top_k` values. Fable/Mythos 5.1 and
-Opus 5.5 and Sonnet 5.5 also omit forced `tool_choice` values; use `auto` or `none` instead.
+omits unsupported `temperature`, `top_p`, and `top_k` values. Fable/Mythos 5.1 and 5.2,
+Opus 5.5, and Sonnet 5.5 also omit forced `tool_choice` values; use `auto` or `none` instead.
 
 If your Azure deployment uses a custom alias, set `modelName` to the underlying Claude model ID. Promptfoo uses it for request compatibility and cost estimates while continuing to send the deployment name to Azure:
 
@@ -1074,7 +1076,7 @@ providers:
     config:
       apiHost: 'your-deployment.services.ai.azure.com'
       apiVersion: '2025-04-01-preview'
-      modelName: claude-fable-5-1
+      modelName: claude-fable-5-2
       max_tokens: 4096
 ```
 
@@ -1086,6 +1088,8 @@ Available Claude deployments on Azure AI Foundry:
 
 | Model                        | Description                                    |
 | ---------------------------- | ---------------------------------------------- |
+| `claude-fable-5-2`           | Claude Fable 5.2 (hosted on Anthropic)         |
+| `claude-mythos-5-2`          | Claude Mythos 5.2 (provider approval required) |
 | `claude-fable-5-1`           | Claude Fable 5.1                               |
 | `claude-mythos-5-1`          | Claude Mythos 5.1 (provider approval required) |
 | `claude-fable-5`             | Claude Fable 5                                 |
@@ -1391,12 +1395,12 @@ Use `azure:foundry-agent:<agent-name>` to eval an existing Foundry agent through
 
 ### Setup
 
-Install the Azure SDK packages and sign in:
+Standard npm installs include the Azure packages for your Promptfoo version. If you omitted optional dependencies, check which client package the error names and install it alongside `@azure/identity` in the project that contains Promptfoo. Add `-g` for a global npm installation.
 
-```bash
-npm install @azure/ai-projects @azure/identity
-az login
-```
+- If discovery loads `@azure/ai-projects`, as in Promptfoo 0.125.1, run `npm install @azure/ai-projects @azure/identity`.
+- If discovery loads `@azure-rest/core-client`, run `npm install @azure-rest/core-client @azure/identity`.
+
+For local development with Azure CLI credentials, sign in with `az login`.
 
 The provider uses `DefaultAzureCredential`, which also supports service principals, workload identity, and managed identity. Azure OpenAI API keys do not authenticate Foundry agents.
 

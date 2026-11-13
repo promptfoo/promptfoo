@@ -8,9 +8,7 @@ const transformSchemaKeys: Set<string> = new Set(TRANSFORM_KEYS);
 
 /**
  * Strips every key from `target` and reassigns it to `{ type: 'string', description? }`,
- * preserving an optional description so generated docs stay useful. Used by both the
- * `override` hook (for inline `StringOrFunctionSchema` nodes) and the post-pass walker
- * (for nodes Zod rewrites after `override` runs).
+ * preserving an optional description so generated docs stay useful.
  */
 function rewriteNodeToStringSchema(target: Record<string, unknown>): void {
   const description = target.description;
@@ -23,26 +21,14 @@ function rewriteNodeToStringSchema(target: Record<string, unknown>): void {
   target.type = 'string';
 }
 
-function forceStringTransformSchemas(node: unknown): void {
-  if (!node || typeof node !== 'object') {
-    return;
+// Zod can emit references for transform fields after the override runs. Apply their
+// string-only representation as JSON.stringify visits the finished schema.
+// Zod deep-clones the output. Keep added transform nodes distinct from other fields.
+function serializeTransformField(key: string, value: unknown): unknown {
+  if (transformSchemaKeys.has(key) && value && typeof value === 'object' && !Array.isArray(value)) {
+    rewriteNodeToStringSchema(value as Record<string, unknown>);
   }
-
-  for (const [key, value] of Object.entries(node)) {
-    if (
-      transformSchemaKeys.has(key) &&
-      value &&
-      typeof value === 'object' &&
-      !Array.isArray(value)
-    ) {
-      rewriteNodeToStringSchema(value as Record<string, unknown>);
-      // Recursing into the just-rewritten `{type, description}` stub is pointless
-      // and could accidentally re-match if a future rewrite leaves nested junk.
-      continue;
-    }
-
-    forceStringTransformSchemas(value);
-  }
+  return value;
 }
 
 // Convert the entire input in one pass so defaults stay optional and recursive references
@@ -84,8 +70,4 @@ const jsonSchema = {
   },
 };
 
-// Zod may rewrite reused StringOrFunctionSchema nodes after `override` runs. Do a final pass to keep
-// transform-like fields string-only in JSON Schema while runtime Zod still accepts functions.
-forceStringTransformSchemas(jsonSchema);
-
-console.log(JSON.stringify(jsonSchema, null, 2));
+console.log(JSON.stringify(jsonSchema, serializeTransformField, 2));

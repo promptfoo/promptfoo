@@ -1,10 +1,10 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 
-import { evaluate } from 'mathjs';
 import { describe, expect, it } from 'vitest';
 import yaml from 'yaml';
 import { runAssertions } from '../../src/assertions';
+import { compileDerivedMetricFormula } from '../../src/evaluator/derivedMetricFormula';
 
 import type { ApiProvider, AtomicTestCase, TestSuite } from '../../src/types';
 
@@ -28,7 +28,7 @@ async function grade(predicted: string, expected: string) {
 function derive(namedScores: Record<string, number>) {
   const scores = { ...namedScores };
   for (const metric of config.derivedMetrics) {
-    scores[metric.name] = evaluate(metric.value as string, scores);
+    scores[metric.name] = compileDerivedMetricFormula(metric.name, metric.value as string)(scores);
   }
   return scores;
 }

@@ -60,7 +60,7 @@ const HistoryResponseSchema = z.object({
 });
 
 const PromptHashParamsSchema = z.object({
-  sha256hash: z.string().regex(/^[a-f0-9]{64}$/i, 'Invalid SHA-256 hash'),
+  sha256hash: z.string().regex(/^[A-Fa-f0-9]{64}$/, 'Invalid SHA-256 hash'),
 });
 
 const PromptResponseSchema = z.object({
