@@ -42,7 +42,10 @@ export default class TrajectoryStatusProvider {
       ? { code: statusCode, message: statusMessage }
       : { code: statusCode };
 
-    const traceId = randomBytes(16).toString('hex');
+    const [, traceId, parentSpanId] = context?.traceparent?.split('-') ?? [];
+    if (!traceId || !parentSpanId || !port) {
+      return { error: 'The smoke fixture requires an active evaluation trace and OTLP receiver' };
+    }
     const spanId = randomBytes(8).toString('hex');
     const nowNs = String(Date.now() * 1_000_000);
 
@@ -61,6 +64,7 @@ export default class TrajectoryStatusProvider {
                 {
                   traceId,
                   spanId,
+                  parentSpanId,
                   name: 'search_orders',
                   kind: 1, // INTERNAL
                   startTimeUnixNano: nowNs,
@@ -81,18 +85,13 @@ export default class TrajectoryStatusProvider {
       ],
     };
 
-    if (port) {
-      try {
-        await fetch(`http://127.0.0.1:${port}/v1/traces`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(otlpRequest),
-        });
-      } catch (error) {
-        // Don't let OTLP delivery failures fail the provider call — the
-        // eval harness reports its own errors separately.
-        console.error('[trajectory-status-smoke] OTLP POST failed:', error?.message ?? error);
-      }
+    const response = await fetch(`http://127.0.0.1:${port}/v1/traces`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(otlpRequest),
+    });
+    if (!response.ok) {
+      return { error: `Smoke fixture OTLP delivery failed with HTTP ${response.status}` };
     }
 
     const statusLabel =

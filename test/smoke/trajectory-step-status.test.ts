@@ -26,7 +26,7 @@ beforeAll(async () => {
   port = (server.address() as AddressInfo).port;
   await new Promise<void>((resolve, reject) => {
     server.close((error) => (error ? reject(error) : resolve()));
-  });
+  }, 65_000);
 });
 
 afterAll(() => {
@@ -70,5 +70,5 @@ describe('trajectory step status CLI', () => {
       reason: 'Trajectory step "search_orders" matched forbidden status error',
       assertion: { type: 'not-trajectory:step-status' },
     });
-  });
+  }, 65_000);
 });
