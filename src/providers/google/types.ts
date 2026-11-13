@@ -212,11 +212,11 @@ export interface CompletionOptions {
   region?: string;
   publisher?: string;
   apiVersion?: string; // Live API: Gemini 'v1alpha'/'v1beta'; Vertex 'v1'/'v1beta1'
-  /** Opt in to the Interactions chat API while keeping the provider ID. */
+  /** Route a `google:<model>` chat provider through the Interactions API, keeping its ID. */
   interactions?: boolean;
-  /** Previous Interactions API ID for server-side history. */
+  /** Previous Gemini Interactions API ID to continue from. */
   previousInteractionId?: string;
-  /** Store an interaction server-side. Chat defaults to false on AI Studio, true on Vertex. */
+  /** Whether Gemini retains the interaction. Omitted uses the API default. */
   store?: boolean;
   anthropicVersion?: string;
   anthropic_version?: string; // Alternative format

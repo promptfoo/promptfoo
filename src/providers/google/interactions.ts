@@ -6,20 +6,35 @@ import { getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
 import { resolveProviderApiKey } from '../credentials';
 import { resolveProviderEnv } from '../env';
-import { getRequestTimeoutMs } from '../shared';
+import { executeProviderFunctionCallback } from '../functionCallbackUtils';
+import { getRequestTimeoutMs, throwIfAborted } from '../shared';
 import { GoogleAuthManager } from './auth';
 import { GOOGLE_MODELS, getVertexApiHostForRegion } from './shared';
 import {
   calculateGoogleCost,
+  loadFile,
+  loadGoogleTools,
   mergeGoogleCompletionOptions,
   parseConfigResponseSchema,
   parseConfigSystemInstruction,
   resolveGoogleToolConfig,
+  validateFunctionCall,
 } from './util';
 
 import type { EnvOverrides } from '../../types/env';
-import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../../types/index';
-import type { CompletionOptions, GoogleProviderConfig } from './types';
+import type {
+  ApiProvider,
+  CallApiContextParams,
+  CallApiOptionsParams,
+  ProviderResponse,
+} from '../../types/index';
+import type {
+  CompletionOptions,
+  FunctionDeclaration,
+  GoogleProviderConfig,
+  Schema,
+  Tool,
+} from './types';
 
 type InteractionContent = {
   type?: string;
@@ -571,6 +586,36 @@ function getInteractionModalityTokenCount(
     .reduce((total, detail) => total + Math.max(detail.tokens ?? 0, 0), 0);
 }
 
+const IMAGE_RATE_MODALITIES = ['image', 'document', 'video'];
+
+function getInteractionTokenCounts(usage: InteractionResponse['usage']) {
+  const prompt = (usage?.total_input_tokens ?? 0) + (usage?.total_tool_use_tokens ?? 0);
+  const completion = usage?.total_output_tokens ?? 0;
+  const reasoning = usage?.total_reasoning_tokens ?? usage?.total_thought_tokens ?? 0;
+  return {
+    prompt,
+    completion,
+    reasoning,
+    total: usage?.total_tokens ?? prompt + completion + reasoning,
+    cached: usage?.total_cached_tokens ?? 0,
+    audioInput:
+      getInteractionModalityTokenCount(usage?.input_tokens_by_modality, ['audio']) +
+      getInteractionModalityTokenCount(usage?.tool_use_tokens_by_modality, ['audio']),
+    // Video *input* (e.g. a prior video being edited) is billed at the image rate,
+    // matching the standard Gemini path's IMAGE/VIDEO/DOCUMENT input grouping.
+    imageInput:
+      getInteractionModalityTokenCount(usage?.input_tokens_by_modality, IMAGE_RATE_MODALITIES) +
+      getInteractionModalityTokenCount(usage?.tool_use_tokens_by_modality, IMAGE_RATE_MODALITIES),
+    cachedAudio: getInteractionModalityTokenCount(usage?.cached_tokens_by_modality, ['audio']),
+    cachedImage: getInteractionModalityTokenCount(
+      usage?.cached_tokens_by_modality,
+      IMAGE_RATE_MODALITIES,
+    ),
+    audioOutput: getInteractionModalityTokenCount(usage?.output_tokens_by_modality, ['audio']),
+    videoOutput: getInteractionModalityTokenCount(usage?.output_tokens_by_modality, ['video']),
+  };
+}
+
 function getModelOutputContent(data: InteractionResponse): InteractionContent[] {
   const steps = data.steps || [];
   const latestUserInput = steps.map((step) => step.type).lastIndexOf('user_input');
@@ -710,6 +755,124 @@ function getInteractionGroundingMetadata(
     ...(interactionToolCalls.length > 0 ? { interactionToolCalls } : {}),
     ...(interactionToolResults.length > 0 ? { interactionToolResults } : {}),
   };
+}
+
+/** Callback rounds one call may run before pending function calls are returned. */
+const MAX_INTERACTION_TOOL_ROUNDS = 8;
+
+const INTERACTION_SERVER_TOOLS: Record<string, string> = {
+  googleSearch: 'google_search',
+  codeExecution: 'code_execution',
+  urlContext: 'url_context',
+};
+
+function isEmptyObject(value: unknown): boolean {
+  return (
+    Boolean(value) &&
+    typeof value === 'object' &&
+    !Array.isArray(value) &&
+    Object.keys(value as object).length === 0
+  );
+}
+
+/** Translate generateContent-style tools into Interactions tool entries. */
+function toInteractionTools(tools: Tool[]): Record<string, unknown>[] {
+  return tools.flatMap((tool) => {
+    if (typeof (tool as { type?: unknown }).type === 'string') {
+      // Already an Interactions-native tool.
+      return [tool as Record<string, unknown>];
+    }
+    const { functionDeclarations, ...serverTools } = tool;
+    const converted: Record<string, unknown>[] = (functionDeclarations ?? []).map((declaration) => {
+      if (declaration.response !== undefined || 'responseJsonSchema' in declaration) {
+        throw new Error(
+          `Gemini Interactions does not support function response schemas (${declaration.name}).`,
+        );
+      }
+      const parameters =
+        declaration.parametersJsonSchema ??
+        declaration.parameters_json_schema ??
+        declaration.parameters;
+      return {
+        type: 'function',
+        name: declaration.name,
+        ...(declaration.description ? { description: declaration.description } : {}),
+        ...(parameters === undefined ? {} : { parameters }),
+      };
+    });
+    for (const [field, value] of Object.entries(serverTools)) {
+      const type = INTERACTION_SERVER_TOOLS[field];
+      if (!type || !isEmptyObject(value)) {
+        throw new Error(
+          `Gemini Interactions cannot translate the generateContent tool "${field}"${type ? ' with options' : ''}. Use an Interactions-native tool in config.passthrough.tools.`,
+        );
+      }
+      converted.push({ type });
+    }
+    return converted;
+  });
+}
+
+/** Map a Gemini function-calling policy onto Interactions `tool_choice`. NONE is handled separately. */
+function getInteractionToolChoice(config: CompletionOptions, includeAuto: boolean): unknown {
+  const { mode, allowedFunctionNames } =
+    resolveGoogleToolConfig(config).toolConfig?.functionCallingConfig ?? {};
+  if (mode === 'NONE') {
+    return undefined;
+  }
+  const choice =
+    mode === 'ANY'
+      ? 'any'
+      : mode === 'VALIDATED'
+        ? 'validated'
+        : mode === 'AUTO' && includeAuto
+          ? 'auto'
+          : undefined;
+  return allowedFunctionNames?.length
+    ? { allowed_tools: { mode: choice ?? 'auto', tools: allowedFunctionNames } }
+    : choice;
+}
+
+type InteractionFunctionCall = { id?: string; name: string; arguments?: unknown };
+
+/** Steps produced after the most recent user turn. */
+function getLatestTurnSteps(data: InteractionResponse): InteractionStep[] {
+  const steps = data.steps || [];
+  return steps.slice(steps.map((step) => step.type).lastIndexOf('user_input') + 1);
+}
+
+function getFunctionCalls(steps: InteractionStep[]): InteractionFunctionCall[] {
+  return steps.flatMap((step) =>
+    step.type === 'function_call' && typeof step.name === 'string'
+      ? [
+          {
+            ...(typeof step.id === 'string' ? { id: step.id } : {}),
+            name: step.name,
+            arguments: step.arguments,
+          },
+        ]
+      : [],
+  );
+}
+
+/** Express request input as Interactions steps so a stateless follow-up can append to it. */
+function toInteractionSteps(input: unknown): unknown[] {
+  const isStep = (item: unknown) => {
+    const type = (item as { type?: unknown } | null)?.type;
+    return (
+      typeof type === 'string' &&
+      (type === 'user_input' ||
+        type === 'model_output' ||
+        type === 'thought' ||
+        type.endsWith('_call') ||
+        type.endsWith('_result'))
+    );
+  };
+  if (typeof input === 'string') {
+    return [{ type: 'user_input', content: [{ type: 'text', text: input }] }];
+  }
+  const items = Array.isArray(input) ? input : [input];
+  return items.every(isStep) ? items : [{ type: 'user_input', content: items }];
 }
 
 function getInteractionsEndpoint(config: CompletionOptions, env?: EnvOverrides): string {
@@ -862,6 +1025,7 @@ export class GoogleInteractionsProvider implements ApiProvider {
   config: GoogleProviderConfig;
   env?: EnvOverrides;
   private providerId?: string;
+  private loadedFunctionCallbacks: Record<string, Function> = {};
 
   constructor(
     modelName: string,
@@ -882,7 +1046,33 @@ export class GoogleInteractionsProvider implements ApiProvider {
     return `[Google Interactions Provider ${this.modelName}]`;
   }
 
-  async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+  /** Validate function calls against `config.tools` and native `passthrough.tools` functions. */
+  validateFunctionToolCall(output: string | object, vars?: CallApiContextParams['vars']): void {
+    const configured = loadFile(this.config.tools, vars) as Tool[] | undefined;
+    const passthroughTools: unknown = this.config.passthrough?.tools;
+    const declarations = [
+      ...(Array.isArray(configured) ? configured : []).flatMap(
+        (tool) => tool.functionDeclarations ?? [],
+      ),
+      ...(Array.isArray(passthroughTools) ? passthroughTools : [passthroughTools]).filter(
+        (tool): tool is FunctionDeclaration =>
+          tool?.type === 'function' && typeof tool.name === 'string',
+      ),
+    ].map(({ name, parameters, parametersJsonSchema, parameters_json_schema }) => ({
+      name,
+      // Interactions takes JSON Schema as-is, so prefer it when a declaration provides one.
+      parameters: (parametersJsonSchema ?? parameters_json_schema ?? parameters) as
+        | Schema
+        | undefined,
+    }));
+    validateFunctionCall(output, [{ functionDeclarations: declarations }], vars);
+  }
+
+  async callApi(
+    prompt: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
     const promptConfig = context?.prompt?.config as Partial<GoogleProviderConfig> | undefined;
     const config = mergeGoogleInteractionsRequestConfig(this.config, promptConfig);
     if (this.modelName === 'gemini-omni-1.1-flash') {
@@ -960,15 +1150,6 @@ export class GoogleInteractionsProvider implements ApiProvider {
     const hasPassthroughTools = Array.isArray(interactionTools)
       ? interactionTools.length > 0
       : Boolean(interactionTools);
-    const hasClientExecutedTools = Array.isArray(interactionTools)
-      ? interactionTools.some(
-          (tool) =>
-            tool !== null &&
-            typeof tool === 'object' &&
-            !Array.isArray(tool) &&
-            ['function', 'computer_use'].includes(String((tool as { type?: unknown }).type)),
-        )
-      : false;
     const hasMcpTools = !toolsDisabled && config.mcp?.enabled === true;
     if (config.vertexai && isVideoModel && previousInteractionId) {
       return {
@@ -985,16 +1166,30 @@ export class GoogleInteractionsProvider implements ApiProvider {
           'Gemini Omni Flash does not support tools, including grounding, code execution, or function calling.',
       };
     }
-    if (!isVideoModel && (hasConfigTools || hasMcpTools)) {
-      return {
-        error:
-          'Gemini Interactions models require Interactions-native tool declarations in config.passthrough.tools; generateContent-style config.tools and MCP tools are not supported on this route.',
-      };
+    if (!isVideoModel && hasMcpTools) {
+      return { error: 'MCP tools are not supported on the Gemini Interactions route.' };
     }
-    if (!isVideoModel && hasClientExecutedTools) {
+    let requestTools: unknown[] = [];
+    if (!isVideoModel && !isTranscriptionModel && !toolsDisabled) {
+      try {
+        requestTools = [
+          ...(hasConfigTools
+            ? toInteractionTools(await loadGoogleTools(interactionConfigTools, context?.vars))
+            : []),
+          ...(interactionTools === undefined
+            ? []
+            : Array.isArray(interactionTools)
+              ? interactionTools
+              : [interactionTools]),
+        ];
+      } catch (err) {
+        return { error: err instanceof Error ? err.message : String(err) };
+      }
+    }
+    if (requestTools.some((tool) => (tool as { type?: unknown } | null)?.type === 'computer_use')) {
       return {
         error:
-          'Gemini Interactions custom function and computer-use tools are not supported because Promptfoo does not yet handle requires_action responses. Use managed built-in tools in config.passthrough.tools.',
+          'Gemini Interactions computer-use tools are not supported because Promptfoo does not run a computer-use loop. Use function tools or managed built-in tools.',
       };
     }
     let apiKey: string | undefined;
@@ -1093,6 +1288,7 @@ export class GoogleInteractionsProvider implements ApiProvider {
         ...config.headers,
       };
     }
+    const providerToolChoice = getInteractionToolChoice(this.config, false);
     const providerGenerationConfigValue = {
       ...(this.config.maxOutputTokens === undefined
         ? {}
@@ -1107,10 +1303,10 @@ export class GoogleInteractionsProvider implements ApiProvider {
         ? {}
         : { stop_sequences: this.config.stopSequences }),
       ...(this.config.seed === undefined ? {} : { seed: this.config.seed }),
+      ...(isVideoModel || isTranscriptionModel ? {} : { tool_choice: providerToolChoice }),
       ...(this.config.generationConfig || {}),
     };
-    const promptToolMode = resolveGoogleToolConfig(promptConfig || {}).toolConfig
-      ?.functionCallingConfig?.mode;
+    const promptToolChoice = getInteractionToolChoice(promptConfig || {}, true);
     const promptGenerationConfigValue = {
       ...(promptConfig?.maxOutputTokens === undefined
         ? {}
@@ -1125,10 +1321,10 @@ export class GoogleInteractionsProvider implements ApiProvider {
         ? {}
         : { stop_sequences: promptConfig.stopSequences }),
       ...(promptConfig?.seed === undefined ? {} : { seed: promptConfig.seed }),
-      // An explicit prompt AUTO policy replaces inherited native tool choices.
+      // An explicit prompt policy replaces inherited native tool choices.
       // Native options on this prompt retain their normal layer precedence.
-      ...(!isVideoModel && !isTranscriptionModel && promptToolMode === 'AUTO'
-        ? { tool_choice: 'auto' }
+      ...(!isVideoModel && !isTranscriptionModel && promptToolChoice !== undefined
+        ? { tool_choice: promptToolChoice }
         : {}),
       ...(promptConfig?.generationConfig || {}),
     };
@@ -1197,7 +1393,7 @@ export class GoogleInteractionsProvider implements ApiProvider {
             field !== 'input' &&
             field !== 'store' &&
             field !== 'safety_settings' &&
-            (!toolsDisabled || field !== 'tools') &&
+            field !== 'tools' &&
             !INTERACTION_TOP_LEVEL_GENERATION_FIELDS.has(field),
         ),
       ),
@@ -1341,102 +1537,155 @@ export class GoogleInteractionsProvider implements ApiProvider {
       ...(systemInstruction ? { system_instruction: systemInstruction } : {}),
       ...(Object.keys(generationConfig).length > 0 ? { generation_config: generationConfig } : {}),
       ...(serviceTier ? { service_tier: serviceTier } : {}),
+      ...(requestTools.length > 0 ? { tools: requestTools } : {}),
       ...passthrough,
       background: false,
       stream: false,
     };
 
-    let data: InteractionResponse;
-    let cached: boolean;
-    let httpStatus: number;
-    let httpStatusText: string;
-    try {
-      ({
-        data,
-        cached,
-        status: httpStatus,
-        statusText: httpStatusText,
-      } = (await fetchWithCache(
-        endpoint,
-        {
-          method: 'POST',
-          headers,
-          body: JSON.stringify(body),
-        } as RequestInit,
-        getRequestTimeoutMs(),
-        'json',
-        // Interactions API credentials must not be persisted, even as a stable cache fingerprint.
-        true,
-      )) as { data: InteractionResponse; cached: boolean; status: number; statusText: string });
-    } catch (err) {
-      return { error: `Gemini Interactions API error: ${String(err)}` };
-    }
-
-    if (data.error?.message) {
-      return { error: `Gemini Interactions API error: ${data.error.message}` };
-    }
-    if (httpStatus && (httpStatus < 200 || httpStatus >= 300)) {
-      // Gateways and proxies can fail without a Google-shaped `error.message` body.
-      return {
-        error: `Gemini Interactions API error: HTTP ${httpStatus} ${httpStatusText}`.trim(),
-        raw: data,
-      };
-    }
-
     const pollTimeoutMs = config.timeoutMs ?? getRequestTimeoutMs();
-    const pollStartedAt = Date.now();
-    let pollCount = 0;
-    while (data.status === 'in_progress' && data.id) {
-      const elapsed = Date.now() - pollStartedAt;
-      if (elapsed >= pollTimeoutMs) {
-        return {
-          error: `Gemini interaction timed out after ${pollTimeoutMs}ms (status: ${data.status})`,
-          raw: data,
-        };
+    const callbacks = toolsDisabled ? undefined : config.functionToolCallbacks;
+    const rounds: Array<{ data: InteractionResponse; cached: boolean }> = [];
+    const toolCalls: Array<{ name: string; args: unknown; result: string }> = [];
+    const answeredCallIds = new Set<string>();
+    const priceRound = (round: { data: InteractionResponse; cached: boolean }) => {
+      const usage = round.data.usage;
+      const tokens = getInteractionTokenCounts(usage);
+      // Opaque gateway aliases retain the provider's request capabilities, but their
+      // prices must come from explicit configuration rather than an assumed model mapping.
+      const missingTranscriptionUsage =
+        isTranscriptionModel &&
+        (usage?.total_input_tokens == null || usage?.total_output_tokens == null);
+      if (round.cached || missingTranscriptionUsage) {
+        return undefined;
       }
-      if (pollCount > 0) {
-        await sleep(Math.min(1_000, pollTimeoutMs - elapsed));
+      return hasCatalogModel
+        ? calculateGoogleCost(
+            catalogModelName,
+            billingConfig,
+            tokens.prompt,
+            tokens.completion + tokens.reasoning,
+            config.vertexai,
+            tokens.audioInput,
+            tokens.audioOutput,
+            tokens.videoOutput,
+            tokens.imageInput,
+            usage?.total_cached_tokens,
+            tokens.cachedAudio,
+            tokens.cachedImage,
+            undefined,
+            config.vertexai ? getVertexInteractionsRegion(config, this.env) : undefined,
+          )
+        : calculateExplicitInteractionCost(
+            billingConfig,
+            tokens.prompt,
+            tokens.completion + tokens.reasoning,
+            tokens.audioInput,
+            tokens.audioOutput,
+            tokens.videoOutput,
+            tokens.imageInput,
+          );
+    };
+    // Usage and cost cover every request in a callback exchange.
+    const summarizeRounds = () => {
+      const counts = rounds.map((round) => getInteractionTokenCounts(round.data.usage));
+      const sum = (field: 'prompt' | 'completion' | 'reasoning' | 'total' | 'cached') =>
+        counts.reduce((total, count) => total + count[field], 0);
+      const reasoning = sum('reasoning');
+      const costs = rounds.map(priceRound);
+      return {
+        tokenUsage: {
+          prompt: sum('prompt'),
+          completion: sum('completion'),
+          total: sum('total'),
+          cached: sum('cached'),
+          numRequests: rounds.length,
+          ...(reasoning > 0 ? { completionDetails: { reasoning } } : {}),
+        },
+        cost: costs.some((cost) => cost === undefined)
+          ? undefined
+          : costs.reduce<number>((total, cost) => total + (cost as number), 0),
+      };
+    };
+    const toolCallMetadata = () => (toolCalls.length > 0 ? { metadata: { toolCalls } } : {});
+
+    let roundBody: Record<string, unknown> = body;
+    let data: InteractionResponse;
+    let turnSteps: InteractionStep[];
+    let pendingCalls: InteractionFunctionCall[];
+    while (true) {
+      const result = await this.sendInteraction(endpoint, headers, roundBody, pollTimeoutMs);
+      if ('error' in result) {
+        return rounds.length > 0
+          ? { ...result, ...summarizeRounds(), ...toolCallMetadata() }
+          : result;
       }
-      try {
-        ({
-          data,
-          status: httpStatus,
-          statusText: httpStatusText,
-        } = (await fetchWithCache(
-          `${endpoint}/${encodeURIComponent(data.id)}`,
-          { method: 'GET', headers } as RequestInit,
-          Math.max(pollTimeoutMs - (Date.now() - pollStartedAt), 1),
-          'json',
-          true,
-        )) as { data: InteractionResponse; cached: boolean; status: number; statusText: string });
-      } catch (err) {
-        return { error: `Gemini Interactions API polling error: ${String(err)}` };
+      rounds.push(result);
+      data = result.data;
+      turnSteps = getLatestTurnSteps(data);
+      pendingCalls = getFunctionCalls(turnSteps).filter(
+        (call) => call.id === undefined || !answeredCallIds.has(call.id),
+      );
+      // Run callbacks only when every pending call has one; otherwise return the calls.
+      if (
+        !callbacks ||
+        pendingCalls.length === 0 ||
+        !pendingCalls.every((call) => Object.prototype.hasOwnProperty.call(callbacks, call.name))
+      ) {
+        break;
       }
-      pollCount++;
-      if (data.error?.message) {
-        return { error: `Gemini Interactions API error: ${data.error.message}`, raw: data };
+      if (rounds.length > MAX_INTERACTION_TOOL_ROUNDS) {
+        logger.warn(
+          `[Google Interactions] Returning pending function calls after ${MAX_INTERACTION_TOOL_ROUNDS} callback rounds.`,
+        );
+        break;
       }
-      if (httpStatus && (httpStatus < 200 || httpStatus >= 300)) {
-        return {
-          error:
-            `Gemini Interactions API polling error: HTTP ${httpStatus} ${httpStatusText}`.trim(),
-          raw: data,
-        };
+      throwIfAborted(options?.abortSignal);
+      const functionResults: Record<string, unknown>[] = [];
+      for (const call of pendingCalls) {
+        let output: string;
+        try {
+          output = await executeProviderFunctionCallback({
+            functionName: call.name,
+            args: JSON.stringify(call.arguments ?? {}),
+            callId: call.id,
+            callbacks,
+            cache: this.loadedFunctionCallbacks,
+            logPrefix: '[Google Interactions]',
+            abortSignal: options?.abortSignal,
+          });
+        } catch (err) {
+          throwIfAborted(options?.abortSignal);
+          return {
+            error:
+              `Function callback '${call.name}' failed after ${toolCalls.length} completed callback(s). ` +
+              `Check for side effects before retrying: ${String(err)}`,
+            ...summarizeRounds(),
+            ...toolCallMetadata(),
+          };
+        }
+        if (call.id !== undefined) {
+          answeredCallIds.add(call.id);
+        }
+        toolCalls.push({ name: call.name, args: call.arguments ?? {}, result: output });
+        functionResults.push({
+          type: 'function_result',
+          ...(call.id === undefined ? {} : { call_id: call.id }),
+          name: call.name,
+          result: [{ type: 'text', text: output }],
+        });
       }
-    }
-    if (data.status && data.status !== 'completed') {
-      return { error: `Gemini interaction did not complete (status: ${data.status})`, raw: data };
+      // A stored interaction carries the history; otherwise resend it with this turn's steps.
+      roundBody = data.id
+        ? { ...body, previous_interaction_id: data.id, input: functionResults }
+        : {
+            ...roundBody,
+            input: [...toInteractionSteps(roundBody.input), ...turnSteps, ...functionResults],
+          };
     }
 
-    const latestUserInput = (data.steps || []).map((step) => step.type).lastIndexOf('user_input');
-    const latestOutputError = (data.steps || [])
-      .slice(latestUserInput + 1)
-      .filter((step) => step.type === 'model_output')
-      .find((step) => step.error?.message)?.error?.message;
-    if (latestOutputError) {
-      return { error: `Gemini Interactions API error: ${latestOutputError}`, raw: data };
-    }
-
+    const cached = rounds.every((round) => round.cached);
+    const { tokenUsage, cost } = summarizeRounds();
     const outputContent = getModelOutputContent(data);
     const groundingMetadata = getInteractionGroundingMetadata(data, outputContent);
     const lastTextIndex = outputContent.map((part) => part.type === 'text').lastIndexOf(true);
@@ -1450,94 +1699,38 @@ export class GoogleInteractionsProvider implements ApiProvider {
       .map((part) => part.text)
       .join('');
 
-    const usage = data.usage;
-    const promptTokens = (usage?.total_input_tokens ?? 0) + (usage?.total_tool_use_tokens ?? 0);
-    const outputTokens = usage?.total_output_tokens ?? 0;
-    const thoughtTokens = usage?.total_reasoning_tokens ?? usage?.total_thought_tokens ?? 0;
-    const audioInputTokens =
-      getInteractionModalityTokenCount(usage?.input_tokens_by_modality, ['audio']) +
-      getInteractionModalityTokenCount(usage?.tool_use_tokens_by_modality, ['audio']);
-    // Video *input* (e.g. a prior video being edited) is billed at the image rate,
-    // matching the standard Gemini path's IMAGE/VIDEO/DOCUMENT input grouping.
-    const imageInputTokens =
-      getInteractionModalityTokenCount(usage?.input_tokens_by_modality, [
-        'image',
-        'document',
-        'video',
-      ]) +
-      getInteractionModalityTokenCount(usage?.tool_use_tokens_by_modality, [
-        'image',
-        'document',
-        'video',
-      ]);
-    const cachedAudioTokens = getInteractionModalityTokenCount(usage?.cached_tokens_by_modality, [
-      'audio',
-    ]);
-    const cachedImageTokens = getInteractionModalityTokenCount(usage?.cached_tokens_by_modality, [
-      'image',
-      'document',
-      'video',
-    ]);
-    const audioOutputTokens = getInteractionModalityTokenCount(usage?.output_tokens_by_modality, [
-      'audio',
-    ]);
-    const videoTokens = getInteractionModalityTokenCount(usage?.output_tokens_by_modality, [
-      'video',
-    ]);
-    const tokenUsage = {
-      prompt: promptTokens,
-      completion: outputTokens,
-      total: usage?.total_tokens ?? promptTokens + outputTokens + thoughtTokens,
-      cached: usage?.total_cached_tokens ?? 0,
-      numRequests: 1,
-      ...(thoughtTokens > 0 ? { completionDetails: { reasoning: thoughtTokens } } : {}),
-    };
-    // Opaque gateway aliases retain the provider's request capabilities, but their
-    // prices must come from explicit configuration rather than an assumed model mapping.
-    const missingTranscriptionUsage =
-      isTranscriptionModel &&
-      (usage?.total_input_tokens == null || usage?.total_output_tokens == null);
-    const skipCost = cached || missingTranscriptionUsage;
-    const cost = skipCost
-      ? undefined
-      : hasCatalogModel
-        ? calculateGoogleCost(
-            catalogModelName,
-            billingConfig,
-            promptTokens,
-            outputTokens + thoughtTokens,
-            config.vertexai,
-            audioInputTokens,
-            audioOutputTokens,
-            videoTokens,
-            imageInputTokens,
-            usage?.total_cached_tokens,
-            cachedAudioTokens,
-            cachedImageTokens,
-            undefined,
-            config.vertexai ? getVertexInteractionsRegion(config, this.env) : undefined,
-          )
-        : calculateExplicitInteractionCost(
-            billingConfig,
-            promptTokens,
-            outputTokens + thoughtTokens,
-            audioInputTokens,
-            audioOutputTokens,
-            videoTokens,
-            imageInputTokens,
-          );
-
     if (!isVideoModel) {
+      const metadata = {
+        interactionId: data.id,
+        status: data.status,
+        ...groundingMetadata,
+        ...(toolCalls.length > 0 ? { toolCalls } : {}),
+      };
+      if (pendingCalls.length > 0) {
+        // Match the generateContent parts shape so function-call assertions work unchanged.
+        const callText = turnSteps
+          .filter((step) => step.type === 'model_output')
+          .flatMap((step) => step.content || [])
+          .filter((part) => part.type === 'text' && part.text)
+          .map((part) => part.text)
+          .join('');
+        return {
+          output: JSON.stringify([
+            ...(callText ? [{ text: callText }] : []),
+            ...pendingCalls.map(({ id, name, arguments: args }) => ({
+              functionCall: { name, args: args ?? {}, ...(id === undefined ? {} : { id }) },
+            })),
+          ]),
+          cached,
+          tokenUsage,
+          cost,
+          metadata,
+        };
+      }
       if (!text) {
         return { error: 'Gemini interaction did not return text output', raw: data };
       }
-      return {
-        output: text,
-        cached,
-        tokenUsage,
-        cost,
-        metadata: { interactionId: data.id, status: data.status, ...groundingMetadata },
-      };
+      return { output: text, cached, tokenUsage, cost, metadata };
     }
 
     const video = [...outputContent].reverse().find((part) => part.type === 'video');
@@ -1666,5 +1859,105 @@ export class GoogleInteractionsProvider implements ApiProvider {
       },
       metadata: { interactionId: data.id, status: data.status, ...groundingMetadata },
     };
+  }
+
+  /** POST one interaction and poll until it leaves `in_progress`. */
+  private async sendInteraction(
+    endpoint: string,
+    headers: Record<string, string>,
+    body: Record<string, unknown>,
+    pollTimeoutMs: number,
+  ): Promise<{ data: InteractionResponse; cached: boolean } | { error: string; raw?: unknown }> {
+    let data: InteractionResponse;
+    let cached: boolean;
+    let httpStatus: number;
+    let httpStatusText: string;
+    try {
+      ({
+        data,
+        cached,
+        status: httpStatus,
+        statusText: httpStatusText,
+      } = (await fetchWithCache(
+        endpoint,
+        {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(body),
+        } as RequestInit,
+        getRequestTimeoutMs(),
+        'json',
+        // Interactions API credentials must not be persisted, even as a stable cache fingerprint.
+        true,
+      )) as { data: InteractionResponse; cached: boolean; status: number; statusText: string });
+    } catch (err) {
+      return { error: `Gemini Interactions API error: ${String(err)}` };
+    }
+
+    if (data.error?.message) {
+      return { error: `Gemini Interactions API error: ${data.error.message}` };
+    }
+    if (httpStatus && (httpStatus < 200 || httpStatus >= 300)) {
+      // Gateways and proxies can fail without a Google-shaped `error.message` body.
+      return {
+        error: `Gemini Interactions API error: HTTP ${httpStatus} ${httpStatusText}`.trim(),
+        raw: data,
+      };
+    }
+
+    const pollStartedAt = Date.now();
+    let pollCount = 0;
+    while (data.status === 'in_progress' && data.id) {
+      const elapsed = Date.now() - pollStartedAt;
+      if (elapsed >= pollTimeoutMs) {
+        return {
+          error: `Gemini interaction timed out after ${pollTimeoutMs}ms (status: ${data.status})`,
+          raw: data,
+        };
+      }
+      if (pollCount > 0) {
+        await sleep(Math.min(1_000, pollTimeoutMs - elapsed));
+      }
+      try {
+        ({
+          data,
+          status: httpStatus,
+          statusText: httpStatusText,
+        } = (await fetchWithCache(
+          `${endpoint}/${encodeURIComponent(data.id)}`,
+          { method: 'GET', headers } as RequestInit,
+          Math.max(pollTimeoutMs - (Date.now() - pollStartedAt), 1),
+          'json',
+          true,
+        )) as { data: InteractionResponse; cached: boolean; status: number; statusText: string });
+      } catch (err) {
+        return { error: `Gemini Interactions API polling error: ${String(err)}` };
+      }
+      pollCount++;
+      if (data.error?.message) {
+        return { error: `Gemini Interactions API error: ${data.error.message}`, raw: data };
+      }
+      if (httpStatus && (httpStatus < 200 || httpStatus >= 300)) {
+        return {
+          error:
+            `Gemini Interactions API polling error: HTTP ${httpStatus} ${httpStatusText}`.trim(),
+          raw: data,
+        };
+      }
+    }
+    if (data.status && data.status !== 'completed' && data.status !== 'requires_action') {
+      return { error: `Gemini interaction did not complete (status: ${data.status})`, raw: data };
+    }
+
+    const latestUserInput = (data.steps || []).map((step) => step.type).lastIndexOf('user_input');
+    const latestOutputError = (data.steps || [])
+      .slice(latestUserInput + 1)
+      .filter((step) => step.type === 'model_output')
+      .find((step) => step.error?.message)?.error?.message;
+    if (latestOutputError) {
+      return { error: `Gemini Interactions API error: ${latestOutputError}`, raw: data };
+    }
+
+    return { data, cached };
   }
 }
