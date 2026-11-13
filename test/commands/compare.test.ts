@@ -81,6 +81,19 @@ describe('compareResults', () => {
     });
   });
 
+  it('counts provider labels that match object prototype properties', () => {
+    const comparison = compareResults(
+      side('a', [result('test', '__proto__', 'pass'), result('test', 'constructor', 'pass')]),
+      side('b', [result('test', '__proto__', 'fail'), result('test', 'constructor', 'pass')]),
+    );
+
+    expect(Object.entries(comparison.a.byProvider)).toEqual([
+      ['__proto__', { graded: 1, pass: 1 }],
+      ['constructor', { graded: 1, pass: 1 }],
+    ]);
+    expect(Object.prototype).not.toHaveProperty('graded');
+  });
+
   it('matches by test and provider rather than position', () => {
     const comparison = compareResults(
       side('a', [

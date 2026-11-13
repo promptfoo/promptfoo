@@ -68,6 +68,7 @@ function testNameOf(result: EvaluateResult): string {
 function rowsByKey(results: EvaluateResult[]): Map<string, Row> {
   const sorted = [...results].sort((x, y) => x.testIdx - y.testIdx || x.promptIdx - y.promptIdx);
   const rows = new Map<string, Row>();
+  const occurrences = new Map<string, number>();
   for (const result of sorted) {
     const row: Row = {
       test: testNameOf(result),
@@ -78,10 +79,8 @@ function rowsByKey(results: EvaluateResult[]): Map<string, Row> {
       latencyMs: Number.isFinite(result.latencyMs) ? result.latencyMs : undefined,
     };
     const base = JSON.stringify([row.test, row.promptIdx, row.provider]);
-    let occurrence = 0;
-    while (rows.has(`${base}#${occurrence}`)) {
-      occurrence++;
-    }
+    const occurrence = occurrences.get(base) ?? 0;
+    occurrences.set(base, occurrence + 1);
     rows.set(`${base}#${occurrence}`, row);
   }
   return rows;
@@ -103,13 +102,14 @@ function summarize(
   both: string[],
 ): CompareSide {
   const graded = both.map((key) => rows.get(key)!);
-  const byProvider: CompareSide['byProvider'] = {};
+  const providers = new Map<string, { graded: number; pass: number }>();
   for (const row of graded) {
-    byProvider[row.provider] ??= { graded: 0, pass: 0 };
-    byProvider[row.provider].graded++;
+    const counts = providers.get(row.provider) ?? { graded: 0, pass: 0 };
+    counts.graded++;
     if (row.outcome === 'pass') {
-      byProvider[row.provider].pass++;
+      counts.pass++;
     }
+    providers.set(row.provider, counts);
   }
   const pass = graded.filter((row) => row.outcome === 'pass').length;
   return {
@@ -122,7 +122,7 @@ function summarize(
     meanScore:
       graded.length === 0 ? null : graded.reduce((sum, row) => sum + row.score, 0) / graded.length,
     medianLatencyMs: median(graded.flatMap((row) => row.latencyMs ?? [])),
-    byProvider,
+    byProvider: Object.fromEntries(providers),
   };
 }
 
