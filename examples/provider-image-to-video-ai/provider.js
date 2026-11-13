@@ -106,11 +106,16 @@ class ImageToVideoAiProvider {
       const status = (data.status || '').toLowerCase();
 
       if (status === 'completed' || status === 'succeeded') {
+        const videoUrl = URL.parse(data.video_url || data.result_url || data.url);
+        if (!videoUrl || !['http:', 'https:'].includes(videoUrl.protocol)) {
+          return { error: 'Video generation completed without a valid video URL.' };
+        }
+
         // shortcut: parses media fields from response payload without probing remote file; upgrade if provider omits metadata
         const media = data.metadata || data.output || data.media || {};
         return {
           status,
-          videoUrl: data.video_url || data.result_url || data.url,
+          videoUrl: videoUrl.href,
           observedDuration: data.duration ?? media.duration ?? null,
           observedFps: data.fps ?? media.fps ?? null,
           observedResolution: data.resolution ?? media.resolution ?? null,
@@ -238,9 +243,7 @@ class ImageToVideoAiProvider {
       if (timeoutController.signal.aborted) {
         return { error: `Video generation timed out after ${timeoutMs}ms.` };
       }
-      return {
-        error: `Unexpected error during image-to-video generation: ${err.message}`,
-      };
+      return { error: 'Unexpected error during image-to-video generation.' };
     } finally {
       clearTimeout(timeoutId);
     }

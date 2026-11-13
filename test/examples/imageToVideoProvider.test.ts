@@ -446,6 +446,25 @@ describe('ImageToVideoAiProvider', () => {
       });
     });
 
+    it('requires a web URL when the job completes', async () => {
+      const mockFetch = vi
+        .fn()
+        .mockResolvedValueOnce({ ok: true, json: async () => ({ task_id: 'test-job' }) })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ status: 'completed', video_url: 'file:///tmp/clip.mp4' }),
+        });
+      vi.stubGlobal('fetch', mockFetch);
+      const provider = new ImageToVideoAiProvider({
+        config: { apiKey: 'test-key', baseUrl: 'https://api.example.com/v1', pollIntervalMs: 1 },
+      });
+
+      const result = await provider.callApi('Test invalid URL');
+
+      expect(result.error).toBe('Video generation completed without a valid video URL.');
+      expect(result.output).toBeUndefined();
+    });
+
     it('handles unexpected fetch exceptions gracefully', async () => {
       const mockFetch = vi.fn().mockRejectedValueOnce(new Error('DNS resolution failed'));
       vi.stubGlobal('fetch', mockFetch);
@@ -455,9 +474,7 @@ describe('ImageToVideoAiProvider', () => {
       });
 
       const result = await provider.callApi('Test network failure');
-      expect(result.error).toContain(
-        'Unexpected error during image-to-video generation: DNS resolution failed',
-      );
+      expect(result.error).toBe('Unexpected error during image-to-video generation.');
     });
   });
 });
