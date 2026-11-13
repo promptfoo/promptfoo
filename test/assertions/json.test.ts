@@ -270,6 +270,26 @@ describe('handleContainsJson', () => {
     expect(result.pass).toBe(true);
   });
 
+  it('accepts a mixed-case JSON fence with leading and trailing whitespace', () => {
+    const result = handleContainsJson(
+      makeParams({
+        assertion: { type: 'contains-json' },
+        outputString: '  ```JsOn\n\t[1, 2, 3]\n```  ',
+      }),
+    );
+    expect(result.pass).toBe(true);
+  });
+
+  it('rejects an unterminated fence with a long whitespace run', () => {
+    const result = handleContainsJson(
+      makeParams({
+        assertion: { type: 'contains-json' },
+        outputString: '```' + '\t'.repeat(50_000) + '[1, 2, 3]',
+      }),
+    );
+    expect(result.pass).toBe(false);
+  });
+
   it('validates a JSON array against an array schema', () => {
     const arraySchema = {
       type: 'array',

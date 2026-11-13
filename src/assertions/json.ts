@@ -63,27 +63,23 @@ export function handleIsJson({
 }
 
 function extractJsonArrayCandidate(outputString: string): unknown[] | null {
-  const trimmed = outputString.trim();
+  let candidate = outputString.trim();
+  if (candidate.length >= 6 && candidate.startsWith('```') && candidate.endsWith('```')) {
+    candidate = candidate.slice(3, -3);
+    if (candidate.slice(0, 4).toLowerCase() === 'json') {
+      candidate = candidate.slice(4);
+    }
+    candidate = candidate.trim();
+  }
+  if (!candidate.startsWith('[')) {
+    return null;
+  }
   try {
-    const parsed = JSON.parse(trimmed);
-    if (Array.isArray(parsed)) {
-      return parsed;
-    }
+    const parsed: unknown = JSON.parse(candidate);
+    return Array.isArray(parsed) ? parsed : null;
   } catch {
-    // Fall through to fenced code block check below.
+    return null;
   }
-  const fenceMatch = trimmed.match(/^```(?:json)?\s*([\s\S]*)```\s*$/i);
-  if (fenceMatch) {
-    try {
-      const parsed = JSON.parse(fenceMatch[1].trim());
-      if (Array.isArray(parsed)) {
-        return parsed;
-      }
-    } catch {
-      return null;
-    }
-  }
-  return null;
 }
 
 export function handleContainsJson({
