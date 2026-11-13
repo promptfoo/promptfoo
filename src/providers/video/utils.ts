@@ -275,7 +275,7 @@ export interface VideoCacheMapping {
   videoKey: string;
   thumbnailKey?: string;
   spritesheetKey?: string;
-  createdAt: string;
+  createdAt?: string;
 }
 
 /**
@@ -284,12 +284,12 @@ export interface VideoCacheMapping {
  *
  * @param cacheKey - The cache key to look up
  * @param providerName - Provider name for logging (e.g., 'OpenAI Video', 'Azure Video')
- * @returns The video storage key if cached and exists, null otherwise
+ * @returns The mapping if its video exists, null otherwise
  */
 export async function checkVideoCache(
   cacheKey: string,
   providerName: string = 'Video',
-): Promise<string | null> {
+): Promise<VideoCacheMapping | null> {
   const mappingPath = getCacheMappingPath(cacheKey);
 
   try {
@@ -299,7 +299,7 @@ export async function checkVideoCache(
     if (mapping.videoKey) {
       const storage = getMediaStorage();
       if (await storage.exists(mapping.videoKey)) {
-        return mapping.videoKey;
+        return mapping;
       }
     }
   } catch (err: unknown) {
@@ -311,23 +311,6 @@ export async function checkVideoCache(
   }
 
   return null;
-}
-
-/**
- * Read the full cache mapping from filesystem.
- *
- * @param cacheKey - The cache key to look up
- * @returns The cache mapping if it exists, null otherwise
- */
-export async function readCacheMapping(cacheKey: string): Promise<VideoCacheMapping | null> {
-  const mappingPath = getCacheMappingPath(cacheKey);
-
-  try {
-    const mappingData = await fsPromises.readFile(mappingPath, 'utf8');
-    return JSON.parse(mappingData) as VideoCacheMapping;
-  } catch {
-    return null;
-  }
 }
 
 /**

@@ -26,22 +26,24 @@ describe('test timers', () => {
     expect(callback).toHaveBeenCalledTimes(1);
   });
 
-  it('preserves errors thrown while flushing pending timers', () => {
-    const timers = useTestTimers();
+  it.each(['pending timer failure', 'callback expected vi.useFakeTimers'])(
+    'preserves the callback error "%s" and restores real timers',
+    (message) => {
+      const timers = useTestTimers();
+      setTimeout(() => {
+        throw new Error(message);
+      }, 10_000);
 
-    setTimeout(() => {
-      throw new Error('pending timer failure');
-    }, 10_000);
-
-    expect(() => timers.restore({ runPending: true })).toThrow('pending timer failure');
-    expect(() => restoreTestTimers()).not.toThrow();
-  });
+      expect(() => timers.restore({ runPending: true })).toThrow(message);
+      expect(vi.isFakeTimers()).toBe(false);
+    },
+  );
 
   it('can be restored even when a test already switched back to real timers', () => {
     const timers = useTestTimers();
 
     timers.useRealTimers();
 
-    expect(() => restoreTestTimers()).not.toThrow();
+    expect(() => restoreTestTimers({ runPending: true })).not.toThrow();
   });
 });
