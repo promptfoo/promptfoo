@@ -292,7 +292,7 @@ const ASSERTION_HANDLERS: Record<
           pass: false,
           score: 0,
           reason:
-            'METEOR assertion requires the natural package. Please install it using: npm install natural@^8.2.3',
+            'METEOR assertion requires the natural package. Please install it using: npm install natural@^8.2.6',
           assertion: params.assertion,
         };
       }
