@@ -15,7 +15,7 @@ cd provider-cheaperinference
 npx promptfoo eval -c promptfooconfig.yaml
 ```
 
-Each provider uses `openai:chat:<model>` with `apiBaseUrl: https://api.cheaperinference.com/v1` and `apiKeyEnvar: CHEAPERINFERENCE_API_KEY`. Keep those settings on each provider when adding models. The example checks basic knowledge and a short technical explanation using deterministic assertions.
+Each provider uses `openai:chat:<model>` with `apiBaseUrl: https://api.cheaperinference.com/v1` and `apiKeyEnvar: CHEAPERINFERENCE_API_KEY`. Keep those settings on each provider when adding models. The empty organization header suppresses any ambient OpenAI organization setting. The example checks basic knowledge and a short technical explanation using deterministic assertions.
 
 To route requests through your own proxy, change `apiBaseUrl`. To read the token from another environment variable, change `apiKeyEnvar`.
 

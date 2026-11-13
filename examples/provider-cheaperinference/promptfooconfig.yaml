@@ -12,12 +12,16 @@ providers:
     label: 'Claude Sonnet 5 via Cheaper Inference'
     config:
       apiBaseUrl: https://api.cheaperinference.com/v1
+      headers:
+        OpenAI-Organization: ""
       apiKeyEnvar: CHEAPERINFERENCE_API_KEY
       max_tokens: 500
   - id: openai:chat:gemini-3.7-flash
     label: 'Gemini 3.7 Flash via Cheaper Inference'
     config:
       apiBaseUrl: https://api.cheaperinference.com/v1
+      headers:
+        OpenAI-Organization: ""
       apiKeyEnvar: CHEAPERINFERENCE_API_KEY
       max_tokens: 500
 

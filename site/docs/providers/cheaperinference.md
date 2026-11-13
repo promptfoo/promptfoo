@@ -25,6 +25,8 @@ providers:
   - id: openai:chat:claude-sonnet-5
     config:
       apiBaseUrl: https://api.cheaperinference.com/v1
+      headers:
+        OpenAI-Organization: ""
       apiKeyEnvar: CHEAPERINFERENCE_API_KEY
       max_tokens: 500
 
