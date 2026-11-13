@@ -13,6 +13,8 @@ import { fetchWithProxy } from '../../../src/util/fetch';
 import { mockProcessEnv } from '../../util/utils';
 import type { JSONClient } from 'google-auth-library/build/src/auth/googleauth';
 
+import type { GoogleProviderConfig } from '../../../src/providers/google/types';
+
 // Hoisted mocks for cache
 const mockCacheGet = vi.hoisted(() => vi.fn());
 const mockCacheSet = vi.hoisted(() => vi.fn());
@@ -1639,27 +1641,112 @@ describe('VertexChatProvider.callGeminiApi', () => {
     },
   );
 
-  it('keeps showThinking false responses apart in the cache', async () => {
-    mockIsCacheEnabled.mockReturnValue(true);
-    mockCacheGet.mockReset().mockResolvedValue(null);
-    mockCacheSet.mockReset();
+  it('keys cached responses by how thought summaries are shown', async () => {
     mockVertexRequest([
       {
         candidates: [{ content: { parts: [{ text: '42' }] }, finishReason: 'STOP' }],
         usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 1, totalTokenCount: 11 },
       },
     ]);
+    const cases: Array<[Partial<GoogleProviderConfig>, RegExp]> = [
+      // Requests without thought summaries keep the keys used before thoughts were formatted.
+      [{}, /^vertex:gemini-3\.6-flash:[a-f0-9]{64}$/],
+      // Entries saved for these requests before then hold the summary glued to the answer.
+      [
+        { generationConfig: { thinkingConfig: { includeThoughts: true } } },
+        /^vertex:gemini-3\.6-flash:showThinking=true:[a-f0-9]{64}$/,
+      ],
+      [
+        { generationConfig: { thinking_config: { include_thoughts: true } } as any },
+        /^vertex:gemini-3\.6-flash:showThinking=true:[a-f0-9]{64}$/,
+      ],
+      [
+        { showThinking: false, generationConfig: { thinkingConfig: { includeThoughts: true } } },
+        /^vertex:gemini-3\.6-flash:showThinking=false:[a-f0-9]{64}$/,
+      ],
+    ];
 
-    for (const showThinking of [undefined, false]) {
+    for (const [config] of cases) {
       await new VertexChatProvider('gemini-3.6-flash', {
-        config: { region: 'global', showThinking },
+        config: { region: 'global', ...config },
       }).callGeminiApi('What is 6 * 7?');
     }
 
-    const [defaultKey, hiddenKey] = mockCacheGet.mock.calls.map(([key]) => key as string);
-    expect(defaultKey).toMatch(/^vertex:gemini-3\.6-flash:[a-f0-9]{64}$/);
-    expect(hiddenKey).not.toBe(defaultKey);
+    const keys = mockCacheGet.mock.calls.map(([key]) => key as string);
+    expect(keys).toHaveLength(cases.length);
+    cases.forEach(([, pattern], index) => expect(keys[index]).toMatch(pattern));
   });
+
+  it('serves a cached response saved under the matching showThinking key', async () => {
+    const store = new Map<string, string>();
+    mockCacheGet.mockImplementation(async (key: string) => store.get(key) ?? null);
+    mockCacheSet.mockImplementation(async (key: string, value: string) => {
+      store.set(key, value);
+    });
+    const mockRequest = mockVertexRequest([
+      {
+        candidates: [
+          {
+            content: {
+              parts: [{ text: 'Let me calculate 6 * 7.\n\n\n', thought: true }, { text: '42' }],
+            },
+            finishReason: 'STOP',
+          },
+        ],
+        usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 1, totalTokenCount: 19 },
+      },
+    ]);
+    const call = (showThinking?: boolean) =>
+      new VertexChatProvider('gemini-3.6-flash', {
+        config: {
+          region: 'global',
+          showThinking,
+          generationConfig: { thinkingConfig: { includeThoughts: true } },
+        },
+      }).callGeminiApi('What is 6 * 7?');
+
+    const outputs = [];
+    for (const showThinking of [undefined, false, undefined, false]) {
+      const response = await call(showThinking);
+      outputs.push([response.output, response.cached]);
+    }
+
+    expect(outputs).toEqual([
+      ['Thinking: Let me calculate 6 * 7.\n\n42', false],
+      ['42', false],
+      ['Thinking: Let me calculate 6 * 7.\n\n42', true],
+      ['42', true],
+    ]);
+    expect(mockRequest).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([
+    [undefined, true],
+    [false, false],
+  ])(
+    'keeps thought parts in function-call output unless showThinking is %s',
+    async (showThinking, keepsThought) => {
+      // Gemini returns the summary and the call in one candidate when it is not streaming.
+      const thought = { text: 'I should look up the weather.', thought: true };
+      const call = {
+        functionCall: { name: 'get_weather', args: { location: 'Boston' } },
+        thoughtSignature: 'sig',
+      };
+      mockVertexRequest([
+        {
+          candidates: [{ content: { parts: [thought, call] }, finishReason: 'STOP' }],
+          usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 5, totalTokenCount: 30 },
+        },
+      ]);
+
+      const response = await new VertexChatProvider('gemini-3.6-flash', {
+        config: { region: 'global', showThinking },
+      }).callGeminiApi('What is the weather in Boston?');
+
+      expect(response.output).toEqual(keepsThought ? [thought, call] : [call]);
+      expect(response.metadata?.thoughtSignatures).toEqual(['sig']);
+    },
+  );
 
   it.each(['gemini-3.6-flash', 'gemini-3.5-flash-lite'])(
     'should assemble streamed function-call arguments for %s before executing a callback',

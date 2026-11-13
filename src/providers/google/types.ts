@@ -332,6 +332,7 @@ export interface CompletionOptions {
     thinkingConfig?: {
       thinkingBudget?: number;
       thinkingLevel?: 'MINIMAL' | 'LOW' | 'MEDIUM' | 'HIGH' | 'XHIGH';
+      includeThoughts?: boolean; // Return thought summaries; see showThinking
     };
 
     // Image configuration for Gemini image models; the top-level

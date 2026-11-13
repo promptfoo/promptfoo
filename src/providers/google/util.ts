@@ -1426,6 +1426,11 @@ export function collectGroundingMetadata(data: GeminiResponseData[]): CollectedG
   };
 }
 
+/** A thought summary part, sent when `thinkingConfig.includeThoughts` is set. */
+function isThoughtTextPart(part: Part): part is Part & { text: string } {
+  return part.thought === true && typeof part.text === 'string';
+}
+
 export function formatCandidateContents(candidate: Candidate) {
   // Check if the candidate was blocked or stopped for safety reasons
   if (
@@ -1463,7 +1468,7 @@ export function formatCandidateContents(candidate: Candidate) {
     let output = '';
     let is_text = true;
     for (const part of candidate.content.parts) {
-      if (part.thought && 'text' in part) {
+      if (isThoughtTextPart(part)) {
         // Thought summaries are not part of the answer; see formatGeminiThinking.
         continue;
       }
@@ -1490,14 +1495,13 @@ export interface GeminiAnswer {
 }
 
 /**
- * Adds a candidate to the answer. Thought summaries (parts with `thought: true`, sent
- * when `thinkingConfig.includeThoughts` is set) are kept apart from the output, so
+ * Adds a candidate to the answer. Thought summaries are kept apart from the output, so
  * thoughts streamed across chunks can be labelled once.
  */
 export function mergeCandidateContents(answer: GeminiAnswer, candidate: Candidate): GeminiAnswer {
   const content = formatCandidateContents(candidate);
   const thoughts = (candidate.content?.parts ?? [])
-    .map((part) => (part.thought && typeof part.text === 'string' ? part.text : ''))
+    .map((part) => (isThoughtTextPart(part) ? part.text : ''))
     .join('');
   return {
     // A chunk holding only thoughts adds nothing to the output.
@@ -1508,16 +1512,22 @@ export function mergeCandidateContents(answer: GeminiAnswer, candidate: Candidat
 
 /**
  * Prepends thought summaries to a text answer in the `Thinking: ...` form used by other
- * reasoning providers, unless `showThinking` is false. Part arrays are returned unchanged.
+ * reasoning providers. Part arrays (function calls, images) keep their thought parts.
+ * With `showThinking: false`, thought summaries are left out of both.
  */
 export function formatGeminiThinking(
   { output, thoughts }: GeminiAnswer,
   showThinking: boolean | undefined,
 ) {
-  if (!thoughts || showThinking === false || Array.isArray(output)) {
+  if (Array.isArray(output)) {
+    return showThinking === false ? output.filter((part) => !isThoughtTextPart(part)) : output;
+  }
+  // Gemini ends each summary with blank lines; trim them so one blank line precedes the answer.
+  const summary = thoughts.trim();
+  if (!summary || showThinking === false) {
     return output;
   }
-  return output ? `Thinking: ${thoughts}\n\n${output}` : `Thinking: ${thoughts}`;
+  return output ? `Thinking: ${summary}\n\n${output}` : `Thinking: ${summary}`;
 }
 
 export function mergeParts(parts1: Part[] | string | undefined, parts2: Part[] | string) {

@@ -245,6 +245,14 @@ function getVertexBodyCacheKey(prefix: string, body: unknown, apiHost: string): 
     .digest('hex')}`;
 }
 
+/** Whether a Gemini request sets `thinkingConfig.includeThoughts`, in camel or snake case. */
+function requestsThoughtSummaries(generationConfig: unknown): boolean {
+  const config = (generationConfig ?? {}) as Record<string, any>;
+  return [config.thinkingConfig, config.thinking_config].some(
+    (thinking) => thinking?.includeThoughts === true || thinking?.include_thoughts === true,
+  );
+}
+
 function getVertexClientOptions(provider: { config: GoogleProviderConfig }) {
   const credentials = loadCredentials(provider.config.credentials);
 
@@ -790,13 +798,16 @@ export class VertexChatProvider extends GoogleGenericProvider {
       )
         ? await getCache()
         : undefined;
-    // Cached responses hold formatted output; keep default keys unchanged.
+    // Cached responses hold formatted output. Requests for thought summaries get their own keys,
+    // so entries saved with the summary glued to the answer are not served; other keys are unchanged.
+    const thinkingCacheKey =
+      config.showThinking === false
+        ? ':showThinking=false'
+        : requestsThoughtSummaries(body.generationConfig)
+          ? ':showThinking=true'
+          : '';
     const cacheKey = cache
-      ? getVertexBodyCacheKey(
-          `vertex:${this.modelName}${config.showThinking === false ? ':showThinking=false' : ''}`,
-          cacheBody,
-          apiHost,
-        )
+      ? getVertexBodyCacheKey(`vertex:${this.modelName}${thinkingCacheKey}`, cacheBody, apiHost)
       : undefined;
 
     let response;

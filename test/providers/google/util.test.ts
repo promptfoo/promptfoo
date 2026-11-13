@@ -34,6 +34,8 @@ import {
   collectGroundingMetadata,
   collectThoughtSignatures,
   formatCandidateContents,
+  formatGeminiThinking,
+  type GeminiAnswer,
   geminiFormatAndSystemInstructions,
   getGoogleResponseServiceTier,
   loadFile,
@@ -5602,6 +5604,34 @@ describe('util', () => {
           { content: { parts: [{ functionCall: { name: 'f', args: {} } }] } } as any,
         ).output,
       ).toEqual([thoughtImage, { functionCall: { name: 'f', args: {} } }]);
+    });
+
+    it('labels thought summaries once, with one blank line before the answer', () => {
+      // Gemini ends each streamed summary with blank lines.
+      let answer: GeminiAnswer = { output: undefined, thoughts: '' };
+      for (const parts of [
+        [{ text: '**Plan**\n\nAdd.\n\n\n', thought: true }],
+        [{ text: '**Check**\n\nDone.\n\n\n', thought: true }],
+        [{ text: '42' }],
+      ]) {
+        answer = mergeCandidateContents(answer, { content: { parts } } as any);
+      }
+
+      expect(formatGeminiThinking(answer, undefined)).toBe(
+        'Thinking: **Plan**\n\nAdd.\n\n\n**Check**\n\nDone.\n\n42',
+      );
+      expect(formatGeminiThinking(answer, false)).toBe('42');
+      expect(formatGeminiThinking({ output: '42', thoughts: '\n\n' }, undefined)).toBe('42');
+    });
+
+    it('drops thought text from part arrays only when showThinking is false', () => {
+      const thought = { text: 'Look it up.', thought: true };
+      const thoughtImage = { thought: true, inlineData: { mimeType: 'image/png', data: 'AA==' } };
+      const call = { functionCall: { name: 'f', args: {} }, thoughtSignature: 'sig' };
+      const answer: GeminiAnswer = { output: [thought, thoughtImage, call], thoughts: '' };
+
+      expect(formatGeminiThinking(answer, undefined)).toEqual([thought, thoughtImage, call]);
+      expect(formatGeminiThinking(answer, false)).toEqual([thoughtImage, call]);
     });
 
     it('collects thought signatures across streamed candidate parts', () => {
