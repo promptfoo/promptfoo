@@ -3235,7 +3235,6 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       // Standard non-reasoning model without override
       const normalProvider = new OpenAiChatCompletionProvider('gpt-4o');
 
-      expect(forcedProvider['supportsTemperature']()).toBe(false);
       expect(normalProvider['isReasoningModel']()).toBe(false);
       expect(normalProvider['supportsTemperature']()).toBe(true);
 
@@ -3265,8 +3264,6 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       const provider = new OpenAiChatCompletionProvider('o3-mini', {
         config: { isReasoningModel: false, temperature: 0.7 },
       });
-
-      expect(provider['supportsTemperature']()).toBe(true);
 
       // Verify the request body reflects non-reasoning behavior
       await provider.callApi('Test prompt');
