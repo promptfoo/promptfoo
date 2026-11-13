@@ -23,6 +23,19 @@ import {
 import { fetchWithProxy } from '../../src/util/fetch';
 import { createMockProvider } from '../factories/provider';
 
+const createLongContextModel = () => ({
+  id: 'model1',
+  cost: {
+    input: 0.001,
+    output: 0.002,
+    longContext: {
+      threshold: 1_000,
+      input: 0.003,
+      output: 0.004,
+    },
+  },
+});
+
 vi.mock('../../src/envars');
 vi.mock('../../src/util/fetch', () => ({ fetchWithProxy: vi.fn() }));
 
@@ -30,9 +43,7 @@ describe('Shared Provider Functions', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.resetAllMocks();
-    vi.mocked(getEnvBool).mockImplementation(function () {
-      return false;
-    });
+    vi.mocked(getEnvBool).mockReturnValue(false);
     vi.mocked(getEnvInt).mockImplementation(function (_key, defaultValue) {
       return defaultValue ?? 0;
     });
@@ -118,9 +129,7 @@ describe('Shared Provider Functions', () => {
 
     it('should throw error for invalid JSON when PROMPTFOO_REQUIRE_JSON_PROMPTS is true', () => {
       vi.mocked(getEnvBool).mockClear();
-      vi.mocked(getEnvBool).mockImplementation(function () {
-        return true;
-      });
+      vi.mocked(getEnvBool).mockReturnValue(true);
 
       const invalidJson = '"role": "user", "content": "Hello" }';
       expect(() => parseChatPrompt(invalidJson, [])).toThrow(
@@ -130,9 +139,7 @@ describe('Shared Provider Functions', () => {
 
     it('should throw error for invalid JSON when prompt looks like JSON object', () => {
       vi.mocked(getEnvBool).mockClear();
-      vi.mocked(getEnvBool).mockImplementation(function () {
-        return false;
-      });
+      vi.mocked(getEnvBool).mockReturnValue(false);
 
       const invalidJson = '{ "invalid: "json" }';
       expect(() => parseChatPrompt(invalidJson, [])).toThrow(
@@ -142,9 +149,7 @@ describe('Shared Provider Functions', () => {
 
     it('should throw error for invalid JSON when prompt looks like JSON array', () => {
       vi.mocked(getEnvBool).mockClear();
-      vi.mocked(getEnvBool).mockImplementation(function () {
-        return false;
-      });
+      vi.mocked(getEnvBool).mockReturnValue(false);
 
       const invalidJson = '[{ "invalid": }]';
       expect(() => parseChatPrompt(invalidJson, [])).toThrow(
@@ -154,9 +159,7 @@ describe('Shared Provider Functions', () => {
 
     it('should return default value for plain text that starts/ends with brackets', () => {
       vi.mocked(getEnvBool).mockClear();
-      vi.mocked(getEnvBool).mockImplementation(function () {
-        return false;
-      });
+      vi.mocked(getEnvBool).mockReturnValue(false);
 
       const defaultValue = [{ role: 'user', content: 'Default' }];
       // This is a common pattern in LLM prompts (e.g., Llama chat format)
@@ -231,55 +234,18 @@ describe('Shared Provider Functions', () => {
     });
 
     it('should use long-context rates when prompt tokens exceed the model threshold', () => {
-      const cost = calculateCost('model1', {}, 1_001, 500, [
-        {
-          id: 'model1',
-          cost: {
-            input: 0.001,
-            output: 0.002,
-            longContext: {
-              threshold: 1_000,
-              input: 0.003,
-              output: 0.004,
-            },
-          },
-        },
-      ]);
+      const cost = calculateCost('model1', {}, 1_001, 500, [createLongContextModel()]);
       expect(cost).toBeCloseTo(5.003);
     });
 
     it('should prefer config cost over model long-context rates', () => {
-      const cost = calculateCost('model1', { cost: 0.005 }, 1_001, 500, [
-        {
-          id: 'model1',
-          cost: {
-            input: 0.001,
-            output: 0.002,
-            longContext: {
-              threshold: 1_000,
-              input: 0.003,
-              output: 0.004,
-            },
-          },
-        },
-      ]);
+      const cost = calculateCost('model1', { cost: 0.005 }, 1_001, 500, [createLongContextModel()]);
       expect(cost).toBeCloseTo(7.505);
     });
 
     it('should prefer separate config costs over model long-context rates', () => {
       const cost = calculateCost('model1', { inputCost: 0.005, outputCost: 0.006 }, 1_001, 500, [
-        {
-          id: 'model1',
-          cost: {
-            input: 0.001,
-            output: 0.002,
-            longContext: {
-              threshold: 1_000,
-              input: 0.003,
-              output: 0.004,
-            },
-          },
-        },
+        createLongContextModel(),
       ]);
       expect(cost).toBeCloseTo(8.005);
     });

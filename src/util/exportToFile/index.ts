@@ -1,29 +1,10 @@
+import { getTableCellMedia, getTableCellText } from '../../presentation/evalTableCells';
+
 import type EvalResult from '../../models/evalResult';
 import type { EvaluateTableOutput, EvaluateTableRow } from '../../types/index';
 
 export function convertEvalResultToTableCell(result: EvalResult): EvaluateTableOutput {
-  let resultText: string | undefined;
-  const rawOutput = result.response?.output;
-  let outputTextDisplay: string;
-  if (rawOutput !== null && typeof rawOutput === 'object') {
-    outputTextDisplay = JSON.stringify(rawOutput);
-  } else if (rawOutput == null || rawOutput === '') {
-    outputTextDisplay = result.error || '';
-  } else {
-    outputTextDisplay = String(rawOutput);
-  }
-  if (result.testCase.assert) {
-    if (result.success) {
-      resultText = `${outputTextDisplay || result.error || ''}`;
-    } else {
-      resultText = `${outputTextDisplay}`;
-    }
-  } else if (result.error) {
-    resultText = `${result.error}`;
-  } else {
-    resultText = outputTextDisplay;
-  }
-
+  const resultText = getTableCellText(result);
   return {
     ...result,
     id: result.id || `${result.testIdx}-${result.promptIdx}`,
@@ -32,40 +13,7 @@ export function convertEvalResultToTableCell(result: EvalResult): EvaluateTableO
     provider: result.provider?.label || result.provider?.id || 'unknown provider',
     pass: result.success,
     cost: result.cost || 0,
-    audio: result.response?.audio
-      ? {
-          id: result.response.audio.id,
-          expiresAt: result.response.audio.expiresAt,
-          data: result.response.audio.data,
-          blobRef: result.response.audio.blobRef,
-          transcript: result.response.audio.transcript,
-          format: result.response.audio.format,
-          sampleRate: result.response.audio.sampleRate,
-          channels: result.response.audio.channels,
-          duration: result.response.audio.duration,
-        }
-      : undefined,
-    video: result.response?.video
-      ? {
-          id: result.response.video.id,
-          blobRef: result.response.video.blobRef,
-          storageRef: result.response.video.storageRef,
-          url: result.response.video.url,
-          format: result.response.video.format,
-          size: result.response.video.size,
-          duration: result.response.video.duration,
-          thumbnail: result.response.video.thumbnail,
-          spritesheet: result.response.video.spritesheet,
-          model: result.response.video.model,
-          aspectRatio: result.response.video.aspectRatio,
-          resolution: result.response.video.resolution,
-        }
-      : undefined,
-    images: result.response?.images?.map((img) => ({
-      data: img.data,
-      blobRef: img.blobRef,
-      mimeType: img.mimeType,
-    })),
+    ...getTableCellMedia(result),
   };
 }
 
@@ -76,42 +24,40 @@ export function convertTestResultsToTableRow(
   const row = {
     description: results[0].description || undefined,
     outputs: [] as EvaluateTableRow['outputs'],
-    vars: Object.values(varsForHeader)
-      .map((varName) => {
-        // For sessionId, check metadata first if not in testCase.vars
-        // Multi-turn strategies (IterativeMeta, Crescendo, etc.) store multiple sessionIds in metadata.sessionIds array
-        // Single-turn strategies store a single sessionId in metadata.sessionId
-        if (varName === 'sessionId') {
-          const sessionIdFromVars = results[0].testCase.vars?.sessionId;
-          if (sessionIdFromVars != null && sessionIdFromVars !== '') {
-            return typeof sessionIdFromVars === 'string'
-              ? sessionIdFromVars
-              : JSON.stringify(sessionIdFromVars);
-          }
-          // Check metadata.sessionIds array first (multi-turn strategies)
-          const metadataSessionIds = results[0].metadata?.sessionIds;
-          if (Array.isArray(metadataSessionIds) && metadataSessionIds.length > 0) {
-            return metadataSessionIds
-              .filter((id) => id != null && id !== '')
-              .map(String)
-              .join('\n');
-          }
-          // Fall back to metadata.sessionId (single-turn strategies)
-          const metadataSessionId = results[0].metadata?.sessionId;
-          if (metadataSessionId != null) {
-            return typeof metadataSessionId === 'string'
-              ? metadataSessionId
-              : JSON.stringify(metadataSessionId);
-          }
-          return '';
+    vars: Object.values(varsForHeader).map((varName) => {
+      // For sessionId, check metadata first if not in testCase.vars
+      // Multi-turn strategies (IterativeMeta, Crescendo, etc.) store multiple sessionIds in metadata.sessionIds array
+      // Single-turn strategies store a single sessionId in metadata.sessionId
+      if (varName === 'sessionId') {
+        const sessionIdFromVars = results[0].testCase.vars?.sessionId;
+        if (sessionIdFromVars != null && sessionIdFromVars !== '') {
+          return typeof sessionIdFromVars === 'string'
+            ? sessionIdFromVars
+            : JSON.stringify(sessionIdFromVars);
         }
-        const varValue = results[0].testCase.vars?.[varName] ?? '';
-        if (typeof varValue === 'string') {
-          return varValue;
+        // Check metadata.sessionIds array first (multi-turn strategies)
+        const metadataSessionIds = results[0].metadata?.sessionIds;
+        if (Array.isArray(metadataSessionIds) && metadataSessionIds.length > 0) {
+          return metadataSessionIds
+            .filter((id) => id != null && id !== '')
+            .map(String)
+            .join('\n');
         }
-        return JSON.stringify(varValue);
-      })
-      .flat(),
+        // Fall back to metadata.sessionId (single-turn strategies)
+        const metadataSessionId = results[0].metadata?.sessionId;
+        if (metadataSessionId != null) {
+          return typeof metadataSessionId === 'string'
+            ? metadataSessionId
+            : JSON.stringify(metadataSessionId);
+        }
+        return '';
+      }
+      const varValue = results[0].testCase.vars?.[varName] ?? '';
+      if (typeof varValue === 'string') {
+        return varValue;
+      }
+      return JSON.stringify(varValue);
+    }),
     test: results[0].testCase,
     testIdx: results[0].testIdx,
   };

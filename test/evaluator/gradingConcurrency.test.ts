@@ -132,15 +132,21 @@ describeEvaluator('evaluator grading concurrency', () => {
             { type: 'llm-rubric', value: 'Judge beta two', provider: judgeTwo },
           ],
         },
+        {
+          vars: { topic: 'gamma' },
+          assert: [{ type: 'llm-rubric', value: 'Judge gamma', provider: judgeOne }],
+        },
       ],
     };
 
     const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    const saved = vi.spyOn(evalRecord, 'addResult');
     await evaluate(testSuite, evalRecord, { maxConcurrency: 1 });
     const summary = await evalRecord.toEvaluateSummary();
 
-    expect(summary.stats.successes).toBe(2);
-    expect(callOrder).toEqual(['judge-one', 'judge-one', 'judge-two', 'judge-two']);
+    expect(summary.stats.successes).toBe(3);
+    expect(callOrder).toEqual(['judge-one', 'judge-one', 'judge-one', 'judge-two', 'judge-two']);
+    expect(saved.mock.calls.map(([row]) => row.testIdx)).toEqual([0, 1, 2]);
   });
 
   it('keeps model-graded assertions row-first when prompts use _conversation', async () => {
@@ -251,7 +257,7 @@ describeEvaluator('evaluator grading concurrency', () => {
             statusText: 'Forbidden',
           },
         },
-        tokenUsage: createEmptyTokenUsage(),
+        tokenUsage: { ...createEmptyTokenUsage(), prompt: 7, total: 7, numRequests: 1 },
       })),
     };
     const judge: ApiProvider = {
@@ -284,6 +290,9 @@ describeEvaluator('evaluator grading concurrency', () => {
     expect(judge.callApi).toHaveBeenCalledTimes(1);
     expect(summary.results).toHaveLength(1);
     expect(summary.results[0].vars.topic).toBe('alpha');
+    expect(evalRecord.prompts[0].metrics?.testPassCount).toBe(1);
+    expect(evalRecord.prompts[0].metrics?.tokenUsage?.prompt).toBe(7);
+    expect(evalRecord.prompts[0].metrics?.tokenUsage?.numRequests).toBe(1);
   });
 
   it('groups model-graded assert-set children by provider id when maxConcurrency is 1', async () => {

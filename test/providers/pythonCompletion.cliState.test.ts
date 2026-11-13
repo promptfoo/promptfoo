@@ -1,3 +1,5 @@
+const { createLoggerModule } = await vi.hoisted(async () => import('../factories/logger'));
+
 /**
  * Tests for cliState.maxConcurrency propagation to Python worker pool.
  * This is a focused test file to avoid the complex mocking issues in pythonCompletion.test.ts.
@@ -16,14 +18,7 @@ vi.mock('../../src/cache', () => ({
   isCacheEnabled: vi.fn().mockReturnValue(false),
 }));
 
-vi.mock('../../src/logger', () => ({
-  default: {
-    debug: vi.fn(),
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-  },
-}));
+vi.mock('../../src/logger', () => createLoggerModule());
 
 vi.mock('../../src/util/createHash', () => ({
   sha256: vi.fn().mockReturnValue('mockhash'),

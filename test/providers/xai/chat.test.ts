@@ -66,6 +66,8 @@ describe('xAI Chat Provider', () => {
         'json',
         undefined,
         undefined,
+        expect.any(Function),
+        undefined,
       );
     });
 
@@ -126,6 +128,27 @@ describe('xAI Chat Provider', () => {
   });
 
   describe('supported models', () => {
+    it('keeps mutable costs and long-context tiers independent across models', () => {
+      const costs = XAI_CHAT_MODELS.map((model) => model.cost);
+      expect(new Set(costs).size).toBe(costs.length);
+
+      const sharedRateModelIds = [
+        'grok-4.3',
+        'grok-4.20-0309-reasoning',
+        'grok-4.20-0309-non-reasoning',
+        'grok-4.20-multi-agent-0309',
+      ];
+      const longContextCosts = sharedRateModelIds.map((id) => {
+        const model = XAI_CHAT_MODELS.find((candidate) => candidate.id === id);
+        expect(model?.cost.longContext).toBeDefined();
+        return model!.cost.longContext!;
+      });
+      expect(new Set(longContextCosts).size).toBe(sharedRateModelIds.length);
+      for (const cost of longContextCosts) {
+        expect(cost).toEqual(longContextCosts[0]);
+      }
+    });
+
     it('includes Grok 4.5, 4.3, and 4.20 in the reasoning and Grok-4 parameter-restriction lists', () => {
       expect(XAI_CHAT_MODELS).toEqual(
         expect.arrayContaining([
