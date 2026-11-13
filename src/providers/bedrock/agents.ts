@@ -220,6 +220,7 @@ export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implemen
    * Get or create the Bedrock Agent Runtime client
    */
   async getAgentRuntimeClient(): Promise<BedrockAgentRuntimeClient> {
+    this.checkAgentRuntimeCacheIdentity();
     if (!this.agentRuntimeClient) {
       // client-bedrock-agent-runtime already defaults to HTTP/1.1, so we only
       // need a custom handler for proxy support.
@@ -228,6 +229,9 @@ export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implemen
       try {
         const { BedrockAgentRuntimeClient } = await import('@aws-sdk/client-bedrock-agent-runtime');
         const credentials = await this.getCredentials();
+        if (credentials) {
+          this.allowSharedAgentRuntimeCache = false;
+        }
 
         this.agentRuntimeClient = new BedrockAgentRuntimeClient({
           region: this.getRegion(),
@@ -498,9 +502,9 @@ export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implemen
     logger.debug(`Invoking Bedrock agent ${this.config.agentId} with session ${sessionId}`);
 
     // Cache key based on agent ID and prompt (excluding volatile fields)
-    const cache = await getCache();
-    // Earlier cached results omitted KB overrides and could claim an unapplied guardrail.
-    const cacheKey = `bedrock-agent:v2:${this.config.agentId}:${this.config.agentAliasId}:${this.getRegion()}:${sha256(
+    const cache = this.allowSharedAgentRuntimeCache ? await getCache() : undefined;
+    // Older entries may contain responses from explicitly credentialed clients.
+    const cacheKey = `bedrock-agent:v3:${this.config.agentId}:${this.config.agentAliasId}:${this.getRegion()}:${sha256(
       JSON.stringify({
         prompt,
         actionGroups: this.config.actionGroups,
@@ -518,7 +522,7 @@ export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implemen
     )}`;
 
     // Check cache
-    if (isCacheEnabled()) {
+    if (cache && isCacheEnabled()) {
       const cached = await cache.get(cacheKey);
       if (cached) {
         logger.debug('Returning cached Bedrock Agents response');
@@ -556,7 +560,7 @@ export class AwsBedrockAgentsProvider extends AwsBedrockGenericProvider implemen
       };
 
       // Cache the successful response
-      if (isCacheEnabled()) {
+      if (cache && isCacheEnabled()) {
         try {
           await cache.set(cacheKey, JSON.stringify(result));
         } catch (err) {
