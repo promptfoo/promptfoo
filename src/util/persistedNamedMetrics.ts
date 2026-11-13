@@ -3,11 +3,11 @@ import { getEnvBool } from '../envars';
 import type { GradingResult, Vars } from '../types/index';
 import type { NamedMetricAccumulator } from './namedMetrics';
 
-export type NamedMetricGradingResult =
+type NamedMetricGradingResult =
   | Pick<GradingResult, 'componentResults' | 'namedScoreWeights'>
   | Record<string, unknown>;
 
-export type MetricNameRenderer = (
+type MetricNameRenderer = (
   metric: string | undefined,
   vars: Record<string, unknown>,
 ) => string | undefined;
@@ -213,7 +213,7 @@ function setOwnMetricValue(
   });
 }
 
-export function isValidNamedScoreWeight(value: unknown): value is number {
+function isValidNamedScoreWeight(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value);
 }
 
