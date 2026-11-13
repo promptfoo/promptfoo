@@ -58,7 +58,11 @@ must also pass `pip check`.
 Docker tests use real containers and the example's original three CLI cases with
 deterministic generated-code fixtures. Incorrect generated code must also fail the
 real assertions. No model credentials are needed. Use WSL 2 rather than native
-Windows Python for the Docker example.
+Windows Python for the Docker example. Image pulls retry registry throttling with
+bounded backoff. If a public ECR pull encounters throttling and cannot complete,
+even if its final attempt times out, the runner pulls the same digest from Docker
+Hub and tags the successful image for the example. Pull failures without observed
+throttling, exhausted mirrors, and example failures still fail the job.
 
 The Python-provider profiles preserve both upgrade-from-old-dependencies testing
 on Python 3.10 and a fresh install at declared minimum versions on Python 3.14.
@@ -184,6 +188,17 @@ The smoke itself continues to use `npm run local`, with bounded process cleanup 
 isolated environment/cache preparation. It can also be run directly with
 `python examples/eval-rag-full/tests/smoke_cli.py`. These profiles replace the
 standalone RAG workflow without changing its Python runtime split or assertions.
+
+## Image classification
+
+The `image-classification` profile installs Pillow and runs the offline
+Fashion MNIST generator tests on Python 3.11 and 3.14. It checks CSV/JPEG output,
+sampling, and IDX validation without Node or model credentials:
+
+```bash
+python3.11 .github/scripts/examples.py run image-classification
+python3.14 .github/scripts/examples.py run image-classification
+```
 
 ## E2B
 
