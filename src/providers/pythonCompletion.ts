@@ -3,8 +3,9 @@ import path from 'path';
 
 import { getCache, isCacheEnabled } from '../cache';
 import cliState from '../cliState';
+import { getEnvInt } from '../envars';
 import logger from '../logger';
-import { getConfiguredPythonPath, getEnvInt } from '../python/pythonUtils';
+import { getConfiguredPythonPath } from '../python/pythonUtils';
 import { PythonWorkerPool } from '../python/workerPool';
 import { sha256 } from '../util/createHash';
 import { processConfigFileReferences } from '../util/fileReference';
@@ -62,6 +63,7 @@ export class PythonProvider implements ApiProvider {
   private functionName: string | null;
   private isInitialized: boolean = false;
   private initializationPromise: Promise<void> | null = null;
+  private initializationGeneration = 0;
   public label: string | undefined;
   private pool: PythonWorkerPool | null = null;
 
@@ -100,13 +102,18 @@ export class PythonProvider implements ApiProvider {
       return this.initializationPromise;
     }
 
-    // Start initialization and store the promise
+    const generation = ++this.initializationGeneration;
     this.initializationPromise = (async () => {
+      let pool: PythonWorkerPool | undefined;
       try {
-        this.config = await processConfigFileReferences(
+        const config = await processConfigFileReferences(
           this.config,
           this.options?.config.basePath || '',
         );
+        if (generation !== this.initializationGeneration) {
+          throw new Error('Python provider initialization interrupted by cleanup');
+        }
+        this.config = config;
 
         // Initialize worker pool
         const workerCount = this.getWorkerCount();
@@ -114,24 +121,41 @@ export class PythonProvider implements ApiProvider {
           path.join(this.options?.config.basePath || '', this.scriptPath),
         );
 
-        this.pool = new PythonWorkerPool(
+        pool = new PythonWorkerPool(
           absPath,
           this.functionName || 'call_api',
           workerCount,
-          getConfiguredPythonPath(this.config.pythonExecutable),
+          getConfiguredPythonPath(
+            this.config.pythonExecutable,
+            this.options?.env?.PROMPTFOO_PYTHON,
+          ),
           this.config.timeout,
         );
-
-        await this.pool.initialize();
-
-        // Register for cleanup
+        this.pool = pool;
         providerRegistry.register(this);
+
+        await pool.initialize();
+        if (generation !== this.initializationGeneration) {
+          throw new Error('Python provider initialization interrupted by cleanup');
+        }
 
         this.isInitialized = true;
         logger.debug(`Initialized Python provider ${this.id()} with ${workerCount} workers`);
       } catch (error) {
-        // Reset the initialization promise so future calls can retry
-        this.initializationPromise = null;
+        if (generation === this.initializationGeneration) {
+          this.initializationPromise = null;
+          if (pool && this.pool === pool) {
+            this.pool = null;
+            providerRegistry.unregister(this);
+            try {
+              await pool.shutdown();
+            } catch (shutdownError) {
+              logger.warn('Failed to shut down a Python provider after initialization failed', {
+                error: shutdownError,
+              });
+            }
+          }
+        }
         throw error;
       }
     })();
@@ -159,8 +183,12 @@ export class PythonProvider implements ApiProvider {
     }
 
     // 2. Environment variable (explicit Python-specific setting)
-    const envWorkers = getEnvInt('PROMPTFOO_PYTHON_WORKERS');
-    if (envWorkers !== undefined) {
+    const providerWorkers = this.options?.env?.PROMPTFOO_PYTHON_WORKERS;
+    const envWorkers =
+      providerWorkers === undefined
+        ? getEnvInt('PROMPTFOO_PYTHON_WORKERS')
+        : Number.parseInt(providerWorkers, 10);
+    if (envWorkers !== undefined && !Number.isNaN(envWorkers)) {
       if (envWorkers < 1) {
         logger.warn(
           `Invalid worker count ${envWorkers} in PROMPTFOO_PYTHON_WORKERS, using minimum of 1`,
@@ -298,12 +326,18 @@ export class PythonProvider implements ApiProvider {
     return this.executePythonScript(prompt, undefined, 'call_classification_api');
   }
 
+  async cleanup(): Promise<void> {
+    await this.shutdown();
+  }
+
   async shutdown(): Promise<void> {
-    if (this.pool) {
-      await this.pool.shutdown();
-      this.pool = null;
-    }
-    providerRegistry.unregister(this);
+    this.initializationGeneration++;
+    const initialization = this.initializationPromise;
+    this.initializationPromise = null;
     this.isInitialized = false;
+    const pool = this.pool;
+    this.pool = null;
+    providerRegistry.unregister(this);
+    await Promise.all([pool?.shutdown(), initialization?.catch(() => {})]);
   }
 }

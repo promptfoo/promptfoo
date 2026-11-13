@@ -56,7 +56,6 @@ export interface SanitizedLogContext {
 }
 
 // Lazy source map support - only loaded when debug is enabled
-export let sourceMapSupportInitialized = false;
 let sourceMapSupportInitializationPromise: Promise<void> | null = null;
 
 // Shutdown state tracking - prevents writes once logger closure begins
@@ -72,24 +71,18 @@ export function getLoggerShuttingDown(): boolean {
   return isLoggerShuttingDown;
 }
 
-export async function initializeSourceMapSupport(): Promise<void> {
-  if (sourceMapSupportInitialized) {
-    return;
-  }
-
+export function initializeSourceMapSupport(): Promise<void> {
   sourceMapSupportInitializationPromise ??= (async () => {
     try {
       const sourceMapSupport = await import('source-map-support');
       sourceMapSupport.install();
-      sourceMapSupportInitialized = true;
     } catch {
-      // Ignore errors. This happens in the production build, because source-map-support is a dev dependency.
-    } finally {
+      // The optional dev dependency can be unavailable. Allow the next call to retry.
       sourceMapSupportInitializationPromise = null;
     }
   })();
 
-  await sourceMapSupportInitializationPromise;
+  return sourceMapSupportInitializationPromise;
 }
 
 /**
@@ -387,7 +380,7 @@ function sanitizeContext(context: SanitizedLogContext): Record<string, unknown> 
  * If context is provided, it will be sanitized and formatted.
  *
  * When structured logging is enabled (via setStructuredLogging(true)):
- * - Passes { message, ...context } object to the logger
+ * - Passes { ...context, message } object to the logger
  * - Ideal for cloud logging integrations that expect structured data
  *
  * When structured logging is disabled (default):
@@ -412,7 +405,7 @@ function createLogMethodWithContext(
 
     if (useStructuredLogging) {
       // Structured mode: pass object with message field for cloud logging systems
-      internalLogger[level]({ message, ...sanitized });
+      internalLogger[level]({ ...sanitized, message });
     } else {
       // Default mode: format as string for CLI/console output
       const contextStr = safeJsonStringify(sanitized, true);

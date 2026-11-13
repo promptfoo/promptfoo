@@ -7,7 +7,7 @@ You can run this example with:
 
 ```bash
 npx promptfoo@latest init --example anthropic/sonnet-5-5
-cd sonnet-5-5
+cd anthropic/sonnet-5-5
 ```
 
 ## Thinking settings

@@ -256,7 +256,7 @@ Variables are automatically mapped from column headers.
 
 ### Excel (XLSX/XLS) Support
 
-Excel files (.xlsx and .xls) are supported as an optional feature. To use Excel files:
+Use an Excel Open XML workbook (`.xlsx`) for test cases. If you have an Excel 97–2003 workbook (`.xls`), open it in Excel or LibreOffice and save it as `.xlsx` before importing it.
 
 1. Install the `read-excel-file` package as a peer dependency:
 
@@ -273,6 +273,8 @@ Excel files (.xlsx and .xls) are supported as an optional feature. To use Excel 
 
 - `file://test_cases.xlsx#Sheet2` - Select sheet by name
 - `file://test_cases.xlsx#2` - Select sheet by 1-based index (2 = second sheet)
+
+The `#` after the workbook extension starts the sheet selector. For example, `file://cases#2.xlsx#Data#2026` selects the worksheet `Data#2026` in `cases#2.xlsx`.
 
 ```yaml title="promptfooconfig.yaml"
 # Use a specific sheet by name
@@ -397,7 +399,19 @@ promptfoo eval --filter-metadata category=math --filter-metadata difficulty=easy
 promptfoo eval --filter-metadata category=math,science
 ```
 
-Each value uses case-sensitive substring matching, including for array metadata. Repeated flags use AND even for the same key. Whitespace is significant; commas always separate alternatives, and leading, trailing, or consecutive commas are invalid.
+Each value uses case-sensitive substring matching, including for array metadata. Repeated flags use AND even for the same key. Whitespace is significant. Commas separate alternatives, and leading, trailing, or consecutive commas are invalid. To match a value that contains a comma, escape it as `\,`:
+
+```bash
+promptfoo eval --filter-metadata 'title=Hello\, world'
+```
+
+Other backslashes are literal, so a value such as `C:\data` needs no escaping. Only when a value ends with a backslash and another alternative follows, double that backslash. This matches `C:\data\` or `D:\data`:
+
+```bash
+promptfoo eval --filter-metadata 'path=C:\data\\,D:\data'
+```
+
+Quote the argument, as in these examples, so that the shell passes the backslashes on.
 
 ### JSON in CSV
 

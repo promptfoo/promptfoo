@@ -4,10 +4,12 @@ import path from 'node:path';
 import type { Stats } from 'node:fs';
 
 import { trace as otelTrace, SpanStatusCode } from '@opentelemetry/api';
+import { parseTraceParent } from '@opentelemetry/core';
 import dedent from 'dedent';
+import semverSatisfies from 'semver/functions/satisfies.js';
 import cliState from '../cliState';
 import { getEnvString, getProcessEnv } from '../envars';
-import { importModule, resolvePackageEntryPoint } from '../esm';
+import { getDirectory, importModule, resolvePackageEntryPoint } from '../esm';
 import logger from '../logger';
 import {
   addActiveSpanRoleAttribute,
@@ -20,6 +22,7 @@ import {
   sanitizeBody,
   withGenAISpan,
 } from '../tracing/genaiTracer';
+import { getPackageVersion } from '../util/packageVersion';
 import { safeResolve } from '../util/pathUtils';
 import {
   cacheResponse,
@@ -110,6 +113,8 @@ const MODEL_USAGE_COUNTERS = [
   'thinkingTokens',
   'cacheReadInputTokens',
   'cacheCreationInputTokens',
+  'cacheCreationEphemeral5mInputTokens',
+  'cacheCreationEphemeral1hInputTokens',
   'webSearchRequests',
   'costUSD',
 ] as const;
@@ -336,7 +341,7 @@ function deriveSkillCalls(toolCalls: ToolCallEntry[]): SkillCallEntry[] {
  * Claude Agent SDK Provider
  *
  * This provider requires the @anthropic-ai/claude-agent-sdk package to be installed separately:
- *   npm install @anthropic-ai/claude-agent-sdk
+ *   npm install promptfoo @anthropic-ai/claude-agent-sdk@^0.3.273
  *
  * Two default configurations:
  * - No working_dir: Runs in temp directory with no tools - behaves like plain chat API
@@ -368,22 +373,37 @@ export const CLAUDE_CODE_MODEL_ALIASES = [
   'opusplan[1m]',
 ];
 
+// Accept compatible 0.3.x updates without requiring a Promptfoo release for each SDK patch.
+const CLAUDE_AGENT_SDK_RANGE = '^0.3.273';
+
 /**
  * Helper to load the Claude Agent SDK ESM module
  * Uses resolvePackageEntryPoint to handle ESM-only packages with restrictive exports
  */
-async function loadClaudeCodeSDK(): Promise<typeof import('@anthropic-ai/claude-agent-sdk')> {
+async function loadClaudeCodeSDK() {
   const basePath =
     cliState.basePath && path.isAbsolute(cliState.basePath) ? cliState.basePath : process.cwd();
 
-  const claudeCodePath = resolvePackageEntryPoint('@anthropic-ai/claude-agent-sdk', basePath);
+  const basePaths = new Set([
+    basePath,
+    process.cwd(),
+    path.resolve(getDirectory(), '..'),
+    path.resolve(getDirectory(), '../..'),
+  ]);
+  let claudeCodePath: string | null = null;
+  for (const candidate of basePaths) {
+    claudeCodePath = resolvePackageEntryPoint('@anthropic-ai/claude-agent-sdk', candidate);
+    if (claudeCodePath) {
+      break;
+    }
+  }
 
   if (!claudeCodePath) {
     throw new Error(
       dedent`The @anthropic-ai/claude-agent-sdk package could not be resolved from ${basePath}.
 
       To use the Claude Agent SDK provider, install it with:
-        npm install @anthropic-ai/claude-agent-sdk
+        npm install promptfoo @anthropic-ai/claude-agent-sdk@${CLAUDE_AGENT_SDK_RANGE}
 
       If the package is already installed elsewhere, run promptfoo from the
       project root (or point the config at that root) so node_modules is on
@@ -393,8 +413,16 @@ async function loadClaudeCodeSDK(): Promise<typeof import('@anthropic-ai/claude-
     );
   }
 
+  const version = getPackageVersion('@anthropic-ai/claude-agent-sdk', claudeCodePath);
+  if (!version || !semverSatisfies(version, CLAUDE_AGENT_SDK_RANGE)) {
+    throw new Error(
+      `The Claude Agent SDK provider requires @anthropic-ai/claude-agent-sdk@${CLAUDE_AGENT_SDK_RANGE} (found ${version ?? 'unknown'}). Install it with: npm install promptfoo @anthropic-ai/claude-agent-sdk@${CLAUDE_AGENT_SDK_RANGE}`,
+    );
+  }
+
   try {
-    return await importModule(claudeCodePath);
+    const sdk: typeof import('@anthropic-ai/claude-agent-sdk') = await importModule(claudeCodePath);
+    return { sdk, version };
   } catch (err) {
     logger.error(`Failed to load Claude Agent SDK: ${err}`);
     if ((err as any).stack) {
@@ -408,7 +436,7 @@ async function loadClaudeCodeSDK(): Promise<typeof import('@anthropic-ai/claude-
       - Corrupted installation
 
       Try reinstalling:
-        npm install @anthropic-ai/claude-agent-sdk
+        npm install promptfoo @anthropic-ai/claude-agent-sdk@${CLAUDE_AGENT_SDK_RANGE}
 
       For more information, see: https://www.promptfoo.dev/docs/providers/claude-agent-sdk/`,
     );
@@ -1386,7 +1414,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
   // Only SDK and Anthropic are supported for now
   // Could later potentially support Claude Agent SDK via external CLI calls, as well as Bedrock/Vertex providers
   private providerId = 'anthropic:claude-agent-sdk';
-  private claudeCodeModule?: typeof import('@anthropic-ai/claude-agent-sdk');
+  private loadedSdk?: Awaited<ReturnType<typeof loadClaudeCodeSDK>>;
   private readonly credentialCacheScope = crypto.randomUUID();
 
   constructor(
@@ -1679,7 +1707,9 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       model: config.model,
       fallbackModel: config.fallback_model,
       strictMcpConfig: config.strict_mcp_config ?? true, // only allow MCP servers that are explicitly configured - true by default
-      permissionMode: config.permission_mode === 'manual' ? 'default' : config.permission_mode,
+      // SDK 0.3.286 can select auto mode when omitted. Preserve manual approvals by default.
+      permissionMode:
+        config.permission_mode === 'manual' ? 'default' : (config.permission_mode ?? 'default'),
       planModeInstructions: config.plan_mode_instructions,
       systemPrompt:
         config.custom_system_prompt == null
@@ -1813,7 +1843,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       promptCredentialOverrideBypassesCache ||
       statefulSessionBypassesCache ||
       externalCredentialProviderBypassesCache
-        ? { shouldCache: false, shouldReadCache: false, shouldWriteCache: false }
+        ? { shouldReadCache: false, shouldWriteCache: false }
         : await initializeAgenticCache(
             {
               cacheKeyPrefix: 'anthropic:claude-agent-sdk',
@@ -2009,40 +2039,45 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
           requestBody: prompt,
         },
         async () => {
-          // Propagate trace context to the SDK subprocess so its OTEL spans attach
-          // under our span. Prefer the active span's traceparent; fall back to the
-          // evaluator-supplied one. `getTraceparent()` can return an all-zero trace
-          // id when no OTEL SDK is registered (NonRecordingSpan / INVALID_TRACEID),
-          // which would poison propagation — skip it in that case.
-          const ZERO_TRACE_ID = '00000000000000000000000000000000';
-          const active = getTraceparent();
-          const activeValid = active && !active.includes(ZERO_TRACE_ID) ? active : undefined;
-          const traceparent = activeValid ?? context?.traceparent;
-          // Runtime environment is intentionally excluded from persistent key material and
-          // replaced by the provider-instance scope, so trace propagation cannot affect the key.
-          if (traceparent && !env.TRACEPARENT) {
-            env.TRACEPARENT = traceparent;
+          // Prefer the active span; fall back to the evaluator's parent if the active
+          // context is missing or invalid (including a non-recording span's zero IDs).
+          let traceparent = getTraceparent();
+          let traceContext = traceparent ? parseTraceParent(traceparent) : null;
+          if (!traceContext && context?.traceparent) {
+            traceparent = context.traceparent;
+            traceContext = parseTraceParent(traceparent);
           }
-          // Some SDK telemetry signals (logs in particular) do not inherit
-          // TRACEPARENT into their OTEL context. Encode the trace + parent span
-          // IDs as resource attributes too — promptfoo's OTLP /v1/logs receiver
-          // reads these to link log-derived spans to the evaluation trace.
-          // traceparent format: "version-traceId-spanId-flags".
-          const [, tpTraceId, tpSpanId] = traceparent ? traceparent.split('-') : [];
-          if (tpTraceId && tpSpanId) {
+          if (traceContext && traceparent) {
+            env.TRACEPARENT ||= traceparent;
+            // The OTLP logs receiver uses these attributes for signals that do not
+            // inherit TRACEPARENT in the subprocess.
             env.OTEL_RESOURCE_ATTRIBUTES = appendPromptfooResourceAttrs(
               env.OTEL_RESOURCE_ATTRIBUTES,
-              tpTraceId,
-              tpSpanId,
+              traceContext.traceId,
+              traceContext.spanId,
+            );
+          }
+          const nativeTraceContext = sdkExportsNativeSpans ? traceContext : null;
+
+          // Dynamically import the ESM module once and cache it
+          const { sdk, version } = (this.loadedSdk ??= await loadClaudeCodeSDK());
+          const managedSettings = config.managed_settings;
+          if (
+            managedSettings &&
+            [
+              'disableAllHooks',
+              'disableSkillShellExecution',
+              'allowedHttpHookUrls',
+              'httpHookAllowedEnvVars',
+            ].some((key) => Object.prototype.hasOwnProperty.call(managedSettings, key)) &&
+            !semverSatisfies(version, '^0.3.309')
+          ) {
+            throw new Error(
+              `Managed hook settings require @anthropic-ai/claude-agent-sdk@^0.3.309 (found ${version}). Install it with: npm install @anthropic-ai/claude-agent-sdk@^0.3.309`,
             );
           }
 
-          // Dynamically import the ESM module once and cache it
-          if (!this.claudeCodeModule) {
-            this.claudeCodeModule = await loadClaudeCodeSDK();
-          }
-
-          const res = await this.claudeCodeModule.query(queryParams);
+          const res = await sdk.query(queryParams);
           query = res;
 
           // Collect tool calls and results from intermediate messages
@@ -2062,7 +2097,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
           const toolTurnIndex = new Map<string, number>();
           const deferredSyntheticSpans: Array<() => void> = [];
           const emitOrDeferSyntheticSpan = (emit: () => void): void => {
-            if (sdkExportsNativeSpans) {
+            if (nativeTraceContext) {
               deferredSyntheticSpans.push(emit);
             } else {
               emit();
@@ -2241,16 +2276,12 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
           // the main agent's result never arrived).
           const finalMsg = lastMainResultMsg ?? lastResultMsg;
 
-          if (!finalMsg) {
-            return { error: "Claude Agent SDK call didn't return a result" };
-          }
-
-          if (sdkExportsNativeSpans && tpTraceId && tpSpanId) {
+          if (nativeTraceContext) {
             let nativeSpansArrived = false;
             try {
               nativeSpansArrived = await waitForNativeTraceExport(
-                tpTraceId,
-                tpSpanId,
+                nativeTraceContext.traceId,
+                nativeTraceContext.spanId,
                 env,
                 callOptions?.abortSignal,
               );
@@ -2268,6 +2299,10 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
                 emit();
               }
             }
+          }
+
+          if (!finalMsg) {
+            return { error: "Claude Agent SDK call didn't return a result" };
           }
 
           // Truncation guard. With SDK >= 0.2.126 the `origin` field gives a
@@ -2429,7 +2464,9 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
           const apiErrorStatus =
             'api_error_status' in finalMsg ? finalMsg.api_error_status : undefined;
 
-          if (finalMsg.subtype === 'success') {
+          // The SDK keeps the success subtype when a refusal discards structured output.
+          const refused = finalMsg.is_error && finalMsg.stop_reason === 'refusal';
+          if (finalMsg.subtype === 'success' && !refused) {
             logger.debug(`Claude Agent SDK response: ${raw}`);
             // When structured output is enabled and available, use it as the output
             // Otherwise fall back to the text result
@@ -2478,9 +2515,10 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
             assistantErrors.length > 0
               ? assistantErrors[assistantErrors.length - 1].error
               : undefined;
+          const reason = finalMsg.subtype === 'success' ? 'refusal' : finalMsg.subtype;
           const errorMessage = lastAssistantError
-            ? `Claude Agent SDK call failed: ${finalMsg.subtype} (${lastAssistantError})`
-            : `Claude Agent SDK call failed: ${finalMsg.subtype}`;
+            ? `Claude Agent SDK call failed: ${reason} (${lastAssistantError})`
+            : `Claude Agent SDK call failed: ${reason}`;
           return {
             error: errorMessage,
             tokenUsage,

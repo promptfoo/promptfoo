@@ -14,6 +14,16 @@ import {
 
 import type { AssertionSet, GradingResult, ScoringFunction } from '../../src/types/index';
 
+const createComponentGrade = () => ({
+  index: 0,
+  result: {
+    pass: true,
+    score: 1,
+    reason: 'Component grading result',
+    tokensUsed: { total: 50, prompt: 30, completion: 20, numRequests: 1 },
+  },
+});
+
 vi.mock('../../src/envars');
 
 describe('AssertionsResult', () => {
@@ -794,6 +804,25 @@ describe('AssertionsResult', () => {
       );
     });
 
+    it('records the named score shapes earlier releases accepted from scoring functions', async () => {
+      const assertionsResult = new AssertionsResult({});
+      const scoringFunction = vi.fn().mockResolvedValue({
+        pass: true,
+        score: 0.9,
+        reason: 'Custom scoring',
+        namedScores: { exact_match: true, skipped: null },
+      });
+
+      const result = await assertionsResult.testResult(scoringFunction);
+
+      expect(result).toMatchObject({
+        pass: true,
+        score: 0.9,
+        reason: 'Custom scoring',
+        namedScores: { exact_match: 1, skipped: 0 },
+      });
+    });
+
     it('exposes completion details to typed scoring functions', async () => {
       const assertionsResult = new AssertionsResult({});
       assertionsResult.addResult({
@@ -933,15 +962,7 @@ describe('AssertionsResult', () => {
 
     it('does not double-count component usage returned unchanged by custom scoring', async () => {
       const assertionsResult = new AssertionsResult({});
-      assertionsResult.addResult({
-        index: 0,
-        result: {
-          pass: true,
-          score: 1,
-          reason: 'Component grading result',
-          tokensUsed: { total: 50, prompt: 30, completion: 20, numRequests: 1 },
-        },
-      });
+      assertionsResult.addResult(createComponentGrade());
       const scoringFunction: ScoringFunction = (_scores, context) => ({
         pass: true,
         score: 0.8,
@@ -1002,15 +1023,7 @@ describe('AssertionsResult', () => {
 
     it('counts independently graded scoring usage even when token counts match components', async () => {
       const assertionsResult = new AssertionsResult({});
-      assertionsResult.addResult({
-        index: 0,
-        result: {
-          pass: true,
-          score: 1,
-          reason: 'Component grading result',
-          tokensUsed: { total: 50, prompt: 30, completion: 20, numRequests: 1 },
-        },
-      });
+      assertionsResult.addResult(createComponentGrade());
       const scoringFunction: ScoringFunction = (_scores, context) => ({
         pass: true,
         score: 0.8,
@@ -1383,11 +1396,33 @@ describe('AssertionsResult', () => {
 
       const result = await assertionsResult.testResult();
 
-      // weight 0: (0.8 * 0) / 0 → 0 (division guarded)
-      expect(result.namedScores!['safety']).toBe(0);
+      // A measurement is retained even when it does not contribute to the aggregate score.
+      expect(result.score).toBe(0);
+      expect(result.namedScores!['safety']).toBe(0.8);
       expect(result.namedScoreWeights).toEqual({
-        safety: 0,
+        safety: 1,
       });
+    });
+
+    it('combines a measurement with weighted assertions sharing its metric', async () => {
+      const assertionsResult = new AssertionsResult();
+      assertionsResult.addResult({
+        index: 0,
+        result: { pass: true, score: 0.2, reason: 'measurement' },
+        metric: 'quality',
+        weight: 0,
+      });
+      assertionsResult.addResult({
+        index: 1,
+        result: { pass: true, score: 0.8, reason: 'weighted score' },
+        metric: 'quality',
+        weight: 3,
+      });
+
+      const result = await assertionsResult.testResult();
+      expect(result.score).toBeCloseTo(0.8);
+      expect(result.namedScores?.quality).toBeCloseTo(0.65);
+      expect(result.namedScoreWeights).toEqual({ quality: 4 });
     });
 
     it('should preserve nested namedScoreWeights when merging child named scores', async () => {

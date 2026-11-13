@@ -38,6 +38,7 @@ describe('structured logging through Winston transports', () => {
     'preserves sanitized context and caller location in %s transport output',
     (level) => {
       const context = {
+        message: 'Context message',
         providerId: 'fixture-provider',
         headers: { Authorization: 'fixture-credential' },
         details: { success: true },
@@ -56,6 +57,7 @@ describe('structured logging through Winston transports', () => {
         location: expect.stringMatching(/^\[.+:\d+\]$/),
       });
       expect(output[0]).not.toContain('fixture-credential');
+      expect(context.message).toBe('Context message');
       expect(context.headers.Authorization).toBe('fixture-credential');
     },
   );
