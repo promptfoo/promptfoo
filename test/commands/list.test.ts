@@ -106,6 +106,7 @@ describe('list command', () => {
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     vi.resetAllMocks();
   });
 
@@ -141,9 +142,10 @@ describe('list command', () => {
       evalModel.getMany.mockResolvedValue([newerEval, olderEval]);
       evalQueries.getVarsFromEvals.mockResolvedValue({ 'eval-newer-full-id': ['topic'] });
 
+      const stdout = vi.spyOn(process.stdout, 'write').mockReturnValue(true);
       await getListSubcommand('evals')?.parseAsync(['node', 'test', '--json']);
 
-      expect(JSON.parse(String(vi.mocked(logger.info).mock.calls[0][0]))).toEqual([
+      expect(JSON.parse(String(stdout.mock.calls[0][0]))).toEqual([
         {
           id: 'eval-older-full-id',
           description: 'Older eval',
@@ -239,9 +241,10 @@ describe('list command', () => {
       ];
       vi.mocked(getPrompts).mockResolvedValue(prompts);
 
+      const stdout = vi.spyOn(process.stdout, 'write').mockReturnValue(true);
       await getListSubcommand('prompts')?.parseAsync(['node', 'test', '--json']);
 
-      expect(JSON.parse(String(vi.mocked(logger.info).mock.calls[0][0]))).toEqual([
+      expect(JSON.parse(String(stdout.mock.calls[0][0]))).toEqual([
         {
           id: 'full-prompt-id-123456',
           raw,
@@ -343,9 +346,10 @@ describe('list command', () => {
       ];
       vi.mocked(getTestCases).mockResolvedValue(datasets);
 
+      const stdout = vi.spyOn(process.stdout, 'write').mockReturnValue(true);
       await getListSubcommand('datasets')?.parseAsync(['node', 'test', '--json']);
 
-      expect(JSON.parse(String(vi.mocked(logger.info).mock.calls[0][0]))).toEqual([
+      expect(JSON.parse(String(stdout.mock.calls[0][0]))).toEqual([
         {
           id: 'dataset-full-id',
           bestPromptId: 'prompt-full-id',

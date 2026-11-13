@@ -1,3 +1,4 @@
+import { type Command, Option } from 'commander';
 import logger from '../logger';
 import Eval, { EvalQueries } from '../models/eval';
 import { wrapTable } from '../table';
@@ -5,7 +6,6 @@ import { sha256 } from '../util/createHash';
 import { getPrompts, getTestCases } from '../util/database';
 import { printBorder, setupEnv } from '../util/index';
 import { printResourceHint } from './show';
-import { type Command, Option } from 'commander';
 
 type ListOptions = {
   envPath?: string;
@@ -13,6 +13,10 @@ type ListOptions = {
   idsOnly?: boolean;
   json?: boolean;
 };
+
+function writeJson(records: unknown[]): void {
+  process.stdout.write(`${JSON.stringify(records, null, 2)}\n`);
+}
 
 export function listCommand(program: Command) {
   const listCommand = program.command('list').description('List various resources');
@@ -38,19 +42,15 @@ export function listCommand(program: Command) {
       const vars = await EvalQueries.getVarsFromEvals(evals);
 
       if (cmdObj.json) {
-        logger.info(
-          JSON.stringify(
-            evals
-              .sort((a, b) => a.createdAt - b.createdAt)
-              .map((evl) => ({
-                id: evl.id,
-                description: evl.config.description || '',
-                promptIds: evl.getPrompts().map((prompt) => sha256(prompt.raw)),
-                vars: vars[evl.id] || [],
-              })),
-            null,
-            2,
-          ),
+        writeJson(
+          evals
+            .sort((a, b) => a.createdAt - b.createdAt)
+            .map((evl) => ({
+              id: evl.id,
+              description: evl.config.description || '',
+              promptIds: evl.getPrompts().map((prompt) => sha256(prompt.raw)),
+              vars: vars[evl.id] || [],
+            })),
         );
         return;
       }
@@ -97,17 +97,13 @@ export function listCommand(program: Command) {
       );
 
       if (cmdObj.json) {
-        logger.info(
-          JSON.stringify(
-            prompts.map((prompt) => ({
-              id: prompt.id,
-              raw: prompt.prompt.raw,
-              evalCount: prompt.count,
-              recentEvalId: prompt.recentEvalId,
-            })),
-            null,
-            2,
-          ),
+        writeJson(
+          prompts.map((prompt) => ({
+            id: prompt.id,
+            raw: prompt.prompt.raw,
+            evalCount: prompt.count,
+            recentEvalId: prompt.recentEvalId,
+          })),
         );
         return;
       }
@@ -152,21 +148,17 @@ export function listCommand(program: Command) {
       );
 
       if (cmdObj.json) {
-        logger.info(
-          JSON.stringify(
-            datasets.map((dataset) => ({
-              id: dataset.id,
-              bestPromptId:
-                [...dataset.prompts].sort(
-                  (a, b) => (b.prompt.metrics?.score || 0) - (a.prompt.metrics?.score || 0),
-                )[0]?.id ?? null,
-              evalCount: dataset.count,
-              promptIds: dataset.prompts.map((prompt) => prompt.id),
-              recentEvalId: dataset.recentEvalId,
-            })),
-            null,
-            2,
-          ),
+        writeJson(
+          datasets.map((dataset) => ({
+            id: dataset.id,
+            bestPromptId:
+              [...dataset.prompts].sort(
+                (a, b) => (b.prompt.metrics?.score || 0) - (a.prompt.metrics?.score || 0),
+              )[0]?.id ?? null,
+            evalCount: dataset.count,
+            promptIds: dataset.prompts.map((prompt) => prompt.id),
+            recentEvalId: dataset.recentEvalId,
+          })),
         );
         return;
       }
