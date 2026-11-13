@@ -1,4 +1,4 @@
-import { getEnvString } from '../../envars';
+import { type EnvVarKey, getEnvString, getProviderEnvString } from '../../envars';
 import logger from '../../logger';
 import { generateIdFromPrompt } from '../../models/prompt';
 import { OpenAiRealtimeProvider } from '../openai/realtime';
@@ -6,8 +6,6 @@ import { providerRegistry } from '../providerRegistry';
 import { AzureGenericProvider } from './generic';
 import { calculateAzureCost, throwConfigurationError } from './util';
 
-import type { EnvVarKey } from '../../envars';
-import type { EnvOverrides } from '../../types/env';
 import type {
   CallApiContextParams,
   CallApiOptionsParams,
@@ -69,8 +67,8 @@ export class AzureRealtimeProvider extends AzureGenericProvider {
     const promptApiKey =
       promptConfig?.apiKey ??
       (promptConfig?.apiKeyEnvar
-        ? (getEnvString(promptConfig.apiKeyEnvar as EnvVarKey) ??
-          this.env?.[promptConfig.apiKeyEnvar as keyof EnvOverrides])
+        ? (getProviderEnvString(this.env, promptConfig.apiKeyEnvar) ??
+          getEnvString(promptConfig.apiKeyEnvar as EnvVarKey))
         : undefined);
     const effectiveApiKey = promptApiKey ?? this.getApiKey();
 
