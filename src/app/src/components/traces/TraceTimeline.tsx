@@ -76,7 +76,7 @@ export default function TraceTimeline({ trace }: TraceTimelineProps) {
 
   const processedSpans = useMemo(() => {
     if (!trace.spans || trace.spans.length === 0) {
-      return { spans: [], minTime: 0, maxTime: 0, totalDuration: 0 };
+      return { spans: [], totalDuration: 0 };
     }
 
     // Sort spans by start time
@@ -118,31 +118,16 @@ export default function TraceTimeline({ trace }: TraceTimelineProps) {
       }
     });
 
-    // Calculate depths
-    const calculateDepth = (span: ProcessedSpan, depth: number) => {
+    // Render each parent before its children, indenting by depth.
+    const spans: ProcessedSpan[] = [];
+    const visit = (span: ProcessedSpan, depth: number) => {
       span.depth = depth;
-      span.children.forEach((child) => calculateDepth(child, depth + 1));
+      spans.push(span);
+      span.children.forEach((child) => visit(child, depth + 1));
     };
+    rootSpans.forEach((span) => visit(span, 0));
 
-    rootSpans.forEach((span) => calculateDepth(span, 0));
-
-    // Flatten spans for rendering
-    const flattenSpans = (spans: ProcessedSpan[]): ProcessedSpan[] => {
-      const result: ProcessedSpan[] = [];
-      const addSpan = (span: ProcessedSpan) => {
-        result.push(span);
-        span.children.forEach(addSpan);
-      };
-      spans.forEach(addSpan);
-      return result;
-    };
-
-    return {
-      spans: flattenSpans(rootSpans),
-      minTime,
-      maxTime,
-      totalDuration,
-    };
+    return { spans, totalDuration };
   }, [trace]);
 
   if (!trace.spans || trace.spans.length === 0) {

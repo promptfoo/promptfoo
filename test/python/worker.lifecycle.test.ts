@@ -107,19 +107,22 @@ it.each(['timeout', 'shutdown'] as const)(
       script,
       `import json
 import os
+from pathlib import Path
 import subprocess
 import sys
 import time
 
 
-def call_api(mode, marker):
-    if mode != "recover":
-        # Inherit stdout/stderr so close cannot fire merely because the wrapper exits.
-        descendant = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
-        with open(marker, "w", encoding="utf-8") as handle:
-            json.dump({"worker": os.getpid(), "descendant": descendant.pid}, handle)
-        if mode == "timeout":
-            time.sleep(60)
+# Import runs before READY. Only the original worker should create a descendant.
+marker = Path(__file__).with_name("pids.json")
+if not marker.exists():
+    descendant = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
+    marker.write_text(json.dumps({"worker": os.getpid(), "descendant": descendant.pid}))
+
+
+def call_api(mode):
+    if mode == "timeout":
+        time.sleep(60)
     return os.getpid()
 `,
     );
@@ -128,12 +131,10 @@ def call_api(mode, marker):
     let operation: Promise<unknown> | undefined;
     try {
       await pool.initialize();
-      if (mode === 'shutdown') {
-        await pool.execute('call_api', [mode, marker]);
-        operation = pool.shutdown();
-      } else {
-        operation = pool.execute('call_api', [mode, marker]).catch((error) => error);
-      }
+      operation =
+        mode === 'shutdown'
+          ? pool.shutdown()
+          : pool.execute('call_api', ['timeout']).catch((error) => error);
       // Bound cleanup even when the descendant retains the worker's output pipes.
       const outcome = await Promise.race([
         operation,
@@ -151,7 +152,7 @@ def call_api(mode, marker):
         expect(() => process.kill(pids.descendant, 0)).not.toThrow();
       }
       if (mode === 'timeout') {
-        const replacement = await pool.execute('call_api', ['recover', marker]);
+        const replacement = await pool.execute('call_api', ['recover']);
         expect(replacement).toBeTypeOf('number');
         expect(replacement).not.toBe(pids.worker);
       }
