@@ -155,21 +155,30 @@ describe('RubyProvider', () => {
       expect(result).toEqual({ output: 'test output', cached: false });
     });
 
-    it('should keep the provider config out of the debug message text', async () => {
+    it('should keep the provider config out of every log message', async () => {
       const secret = 'fake-api-key-for-this-test';
-      const debugSpy = vi.spyOn(logger, 'debug');
+      const spies = (['debug', 'info', 'warn', 'error'] as const).map((level) =>
+        vi.spyOn(logger, level),
+      );
       const provider = new RubyProvider('script.rb', { config: { apiKey: secret } });
+      // with the cache on, so the cache key and caching messages are logged too
+      mockIsCacheEnabled.mockReturnValue(true);
+      mockGetCache.mockResolvedValue({
+        get: vi.fn().mockResolvedValue(null),
+        set: vi.fn(),
+      } as never);
       mockRunRuby.mockResolvedValue({ output: 'test output' });
 
       await provider.callApi('test prompt');
 
-      const call = debugSpy.mock.calls.find(([message]) =>
-        String(message).startsWith('Running ruby script'),
+      const calls = spies.flatMap((spy) => spy.mock.calls);
+      spies.forEach((spy) => spy.mockRestore());
+      expect(calls.map(([message]) => String(message)).filter((m) => m.includes(secret))).toEqual(
+        [],
       );
-      debugSpy.mockRestore();
+      const call = calls.find(([message]) => String(message).startsWith('Running ruby script'));
       expect(call).toBeDefined();
-      const [message, context] = call!;
-      expect(message).not.toContain(secret);
+      const [, context] = call!;
       // the args go in the context argument, which the logger sanitizes before writing
       expect(JSON.stringify(context)).toContain(secret);
       expect(JSON.stringify(sanitizeObject(context))).not.toContain(secret);

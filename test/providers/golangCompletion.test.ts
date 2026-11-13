@@ -302,18 +302,19 @@ describe('GolangProvider', () => {
     }
   });
 
-  it('keeps the provider config out of the debug message text', async () => {
+  it('keeps the provider config out of every log message', async () => {
     const secret = 'fake-api-key-for-this-test';
     const provider = new GolangProvider('script.go', { config: { apiKey: secret } });
 
     await provider.callApi('hello');
 
-    const call = vi
-      .mocked(logger.debug)
-      .mock.calls.find(([message]) => String(message).startsWith('Running Golang script'));
+    const calls = (['debug', 'info', 'warn', 'error'] as const).flatMap(
+      (level) => vi.mocked(logger[level]).mock.calls,
+    );
+    expect(calls.map(([message]) => String(message)).filter((m) => m.includes(secret))).toEqual([]);
+    const call = calls.find(([message]) => String(message).startsWith('Running Golang script'));
     expect(call).toBeDefined();
-    const [message, context] = call!;
-    expect(message).not.toContain(secret);
+    const [, context] = call!;
     // the args go in the context argument, which the logger sanitizes before writing
     expect(JSON.stringify(context)).toContain(secret);
     expect(JSON.stringify(sanitizeObject(context))).not.toContain(secret);
