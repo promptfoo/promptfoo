@@ -1,5 +1,5 @@
 import { render, screen } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter } from 'react-router';
 import { describe, expect, it, vi } from 'vitest';
 import ModelAuditHistoryPage from './page';
 
@@ -13,12 +13,9 @@ vi.mock('../model-audit/stores', () => ({
     historyError: null,
     totalCount: 0,
     pageSize: 10,
-    currentPage: 0,
     sortModel: [{ field: 'createdAt', sort: 'desc' }],
     fetchHistoricalScans: vi.fn(),
     deleteHistoricalScan: vi.fn(),
-    setPageSize: vi.fn(),
-    setCurrentPage: vi.fn(),
     setSortModel: vi.fn(),
   }),
 }));

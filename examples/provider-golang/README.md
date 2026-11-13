@@ -40,11 +40,11 @@ The structure demonstrates how to:
 
 ## Prerequisites
 
-1. Go installed (1.16 or later)
+1. Go installed (1.23.6 or later)
 2. OpenAI Go client library:
 
    ```sh
-   go get github.com/sashabaranov/go-openai@v1.37.0
+   go get github.com/sashabaranov/go-openai@v1.42.1
    ```
 
 3. Set your API key:
