@@ -207,6 +207,16 @@ tests:
     expect(locked.status, locked.stderr || locked.stdout).toBe(0);
     expect(fs.existsSync(lockPath)).toBe(true);
 
+    const lockedContents = fs.readFileSync(lockPath, 'utf8');
+    const aliasedOutputPath = path.join(tempDir, 'alias-output.json');
+    fs.linkSync(lockPath, aliasedOutputPath);
+    const aliased = runEval(['--verify', lockPath, '--output', aliasedOutputPath]);
+    expect(aliased.status, aliased.stderr || aliased.stdout).toBe(1);
+    expect(aliased.stdout + aliased.stderr).toContain(
+      'cannot also be used as an eval output path',
+    );
+    expect(fs.readFileSync(lockPath, 'utf8')).toBe(lockedContents);
+
     // The lock's 75% threshold is authoritative even if the current environment says 100%.
     const verified = runEval(['--verify', lockPath], '100');
     expect(verified.status, verified.stderr || verified.stdout).toBe(0);

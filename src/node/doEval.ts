@@ -967,6 +967,30 @@ async function doEvalWithEnv(
           );
         }
       }
+      if (configuredOutputPaths.length > 0) {
+        try {
+          const lockFile = await fs.stat(activeLockPath, { bigint: true });
+          for (const outputPath of configuredOutputPaths) {
+            const outputFile = await fs.stat(outputPath, { bigint: true }).catch((error) => {
+              if (error.code === 'ENOENT' || error.code === 'ENOTDIR') {
+                return undefined;
+              }
+              throw error;
+            });
+            if (outputFile?.dev === lockFile.dev && outputFile.ino === lockFile.ino) {
+              return failEvalRun(
+                `Evaluation lock path ${activeLockPath} cannot also be used as an eval output path`,
+                isCliInvocation,
+              );
+            }
+          }
+        } catch (error) {
+          return failEvalRun(
+            `Could not check evaluation lock output paths: ${error}`,
+            isCliInvocation,
+          );
+        }
+      }
     }
 
     const runtimeOptions: EvalRuntimeOptions = {
