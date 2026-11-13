@@ -351,6 +351,11 @@ const sidebars = {
       id: 'installation',
     },
     {
+      type: 'link',
+      label: 'Local Server API',
+      href: '/docs/local-server-api-reference/',
+    },
+    {
       type: 'category',
       label: 'Evals',
       collapsible: true,
@@ -540,6 +545,7 @@ const sidebars = {
       items: [
         { type: 'doc', id: 'enterprise/index' },
         { type: 'doc', id: 'enterprise/authentication' },
+        { type: 'doc', id: 'enterprise/sso' },
         { type: 'doc', id: 'enterprise/service-accounts' },
         { type: 'doc', id: 'enterprise/teams' },
         { type: 'doc', id: 'enterprise/red-teams' },

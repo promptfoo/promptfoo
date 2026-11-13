@@ -5,7 +5,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   getCacheMappingPath,
   isVideoCacheReferenceUrlSafe,
-  readCacheMapping,
   sanitizeVideoSourceUri,
   storeCacheMapping,
 } from '../../../src/providers/video/utils';
@@ -18,11 +17,9 @@ vi.mock('fs/promises', async (importOriginal) => {
     default: {
       ...actual,
       mkdir: vi.fn(),
-      readFile: vi.fn(),
       writeFile: vi.fn(),
     },
     mkdir: vi.fn(),
-    readFile: vi.fn(),
     writeFile: vi.fn(),
   };
 });
@@ -50,7 +47,6 @@ describe('video cache utilities', () => {
   beforeEach(() => {
     vi.mocked(getConfigDirectoryPath).mockReset();
     vi.mocked(fsPromises.mkdir).mockReset();
-    vi.mocked(fsPromises.readFile).mockReset();
     vi.mocked(fsPromises.writeFile).mockReset();
 
     vi.mocked(getConfigDirectoryPath).mockReturnValue('/tmp/test-config');
@@ -60,31 +56,6 @@ describe('video cache utilities', () => {
 
   afterEach(() => {
     vi.resetAllMocks();
-  });
-
-  it('reads cache mappings with fs/promises', async () => {
-    vi.mocked(fsPromises.readFile).mockResolvedValue(
-      JSON.stringify({
-        videoKey: 'video/abc.mp4',
-        thumbnailKey: 'video/abc.webp',
-        createdAt: '2026-04-28T00:00:00.000Z',
-      }),
-    );
-
-    await expect(readCacheMapping('cache-key')).resolves.toEqual({
-      videoKey: 'video/abc.mp4',
-      thumbnailKey: 'video/abc.webp',
-      createdAt: '2026-04-28T00:00:00.000Z',
-    });
-    expect(fsPromises.readFile).toHaveBeenCalledWith(expectedMappingPath, 'utf8');
-  });
-
-  it('returns null when a cache mapping does not exist', async () => {
-    vi.mocked(fsPromises.readFile).mockRejectedValue(
-      Object.assign(new Error('ENOENT'), { code: 'ENOENT' }),
-    );
-
-    await expect(readCacheMapping('missing-key')).resolves.toBeNull();
   });
 
   it('creates the cache directory before writing mappings', async () => {
