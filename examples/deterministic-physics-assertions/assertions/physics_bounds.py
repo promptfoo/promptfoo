@@ -1,4 +1,3 @@
-
 import math
 
 # Fixed, versioned rules. Changes require an intentional version update.
@@ -13,9 +12,15 @@ NON_NEGATIVE_FIELDS = {
 }
 
 NON_FINITE_STRINGS = {
-    "nan", "+nan", "-nan",
-    "inf", "+inf", "-inf",
-    "infinity", "+infinity", "-infinity",
+    "nan",
+    "+nan",
+    "-nan",
+    "inf",
+    "+inf",
+    "-inf",
+    "infinity",
+    "+infinity",
+    "-infinity",
 }
 
 
