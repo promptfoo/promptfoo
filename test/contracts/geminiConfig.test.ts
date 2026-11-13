@@ -1,0 +1,205 @@
+import Ajv from 'ajv';
+import { describe, expect, expectTypeOf, it } from 'vitest';
+import {
+  GeminiProviderOptionsInputJsonSchema,
+  GeminiProviderOptionsInputSchema,
+  GoogleAiStudioConfigInputSchema,
+  VertexGeminiConfigInputSchema,
+} from '../../src/contracts';
+
+import type { GoogleAiStudioConfigInput } from '../../src/contracts';
+import type { CompletionOptions } from '../../src/providers/google/types';
+
+const validate = new Ajv({ strict: false }).compile(GeminiProviderOptionsInputJsonSchema);
+
+describe('portable Gemini configuration', () => {
+  const cases: [unknown, boolean][] = [
+    [{ id: 'google:gemini-omni-1.1-flash-preview' }, true],
+    [{ id: 'vertex:gemini-omni-1.1-flash' }, true],
+    [{ id: 'vertex:chat:gemini-omni-1.1-flash' }, true],
+    ...[
+      { tools: { googleSearch: {} } },
+      {
+        tools: [
+          {
+            google_search: {},
+            code_execution: {},
+            google_search_retrieval: { dynamicRetrievalConfig: {} },
+          },
+        ],
+      },
+      {
+        tools: [{ type: 'function', function: { name: 'lookup', parameters: { type: 'object' } } }],
+      },
+      { tools: ['file://one.json', 'file://two.yaml'] },
+      { generationConfig: { response_schema: { type: 'object' } } },
+      // generationConfig is sent verbatim, so Gemini fields without a typed entry stay open.
+      { generationConfig: { responseMimeType: 'application/json', seed: 7, candidate_count: 1 } },
+      { generationConfig: { thinking_config: { thinking_budget: 0, include_thoughts: true } } },
+      { generationConfig: { thinkingConfig: { thinking_budget: 0 } } },
+      { generationConfig: { thinking_config: { thinkingLevel: 'low' } } },
+    ].map((config): [unknown, boolean] => [{ id: 'google:gemini-2.5-flash', config }, true]),
+    ...[
+      { thinkingConfig: { thinkingLevel: 'XHIGH', includeThoughts: true } },
+      { thinkingConfig: { thinkingLevel: 'xhigh' } },
+      { thinking_config: { thinking_level: 'XHIGH' } },
+    ].flatMap((generationConfig): [unknown, boolean][] => [
+      [{ id: 'google:gemini-4-hydrogen', config: { generationConfig } }, true],
+      [{ id: 'vertex:gemini-4-hydrogen', config: { generationConfig } }, true],
+    ]),
+    [
+      {
+        id: 'vertex:gemini-3.5-transcribe',
+        config: { generationConfig: { audioTranscriptionConfig: { languageCodes: ['en-US'] } } },
+      },
+      true,
+    ],
+    [{ id: 'google:gemini-2.5-flash', inputs: { question: '{{query}}' } }, true],
+    [
+      {
+        id: 'google:gemini-2.5-flash',
+        config: { mcp: { enabled: true, server: { command: 'fixture' } } },
+      },
+      true,
+    ],
+    [
+      {
+        id: 'google:gemini-2.5-flash',
+        config: { mcp: { server: { command: 'fixture' }, defaultArgs: { session: 'ignored' } } },
+      },
+      false,
+    ],
+    [
+      {
+        id: 'google:gemini-2.5-flash',
+        config: { mcp: { server: { command: 'fixture' }, transform: 'output' } },
+      },
+      false,
+    ],
+    [{ id: 'google:gemini-2.5-flash' }, true],
+    [
+      {
+        id: 'palm:gemini-2.5-pro',
+        config: { apiKey: '{{ env.KEY }}', temperature: 0, streaming: false },
+      },
+      true,
+    ],
+    [
+      {
+        id: 'vertex:chat:gemini-2.5-pro',
+        config: {
+          credentials: 'file://key.json',
+          projectId: '{{ project }}',
+          expressMode: false,
+          strictMutualExclusivity: true,
+          scopes: ['scope'],
+          modelArmor: { promptTemplate: 'template' },
+        },
+      },
+      true,
+    ],
+    [
+      {
+        id: 'vertex:gemini-2.5-flash',
+        config: { googleAuthOptions: { credentials: { client_email: 'test@example.com' } } },
+      },
+      true,
+    ],
+    [
+      {
+        id: 'google:gemini-2.5-flash',
+        config: {
+          responseSchema: { type: 'object', properties: { answer: { type: 'string' } } },
+          generationConfig: { thinkingConfig: { thinkingBudget: -1 } },
+          passthrough: { cachedContent: 'cache-id' },
+        },
+      },
+      true,
+    ],
+    [
+      {
+        id: 'google:gemini-2.5-flash',
+        config: {
+          responseSchema: 'file://schema.json',
+          functionToolCallbacks: { lookup: 'file://lookup.js:run' },
+          tools: [{ functionDeclarations: [{ name: 'lookup', parameters: { type: 'OBJECT' } }] }],
+        },
+      },
+      true,
+    ],
+    ...[
+      'google:live:gemini-2.5-flash',
+      'google:chat:gemini-2.5-flash',
+      'google:gemini-2.5-flash-image',
+      'google:gemini-omni-flash-preview',
+      'vertex:gemini-omni-1.1-flash-preview',
+      'vertex:chat:gemini-omni-1.1-flash-preview',
+      'google:gemini-omni-1.1-flash',
+      'palm:gemini-omni-1.1-flash',
+      'vertex:gemini-robotics-er-2-preview',
+      'google:gemini-3.5-live-translate-preview',
+      'google:gemini-robotics-er-2-streaming-preview',
+      'google:gemini-3.5-transcribe',
+      'vertex:gemini-3.5-transcribe-live',
+      'google:interactions:gemini-4-hydrogen',
+      'google:embedding:gemini-embedding-001',
+      'vertex:video:veo',
+      'vertex:claude-sonnet',
+      'google:gemini-',
+      'Google:gemini-2.5-flash',
+    ].map((id): [unknown, boolean] => [{ id }, false]),
+    ...[
+      { generationConfig: { response_schema: 'file://schema.json' } },
+      { generationConfig: { response_schema: '{"type":"object"}' } },
+      {
+        tools: [
+          { google_search_retrieval: { dynamicRetrievalConfig: { dynamicThreshold: 'bad' } } },
+        ],
+      },
+      { tools: [{ type: 'function', function: { name: 'lookup' } }, { googleSearch: {} }] },
+      { temperature: 'hot' },
+      { maxOutputToken: 10 },
+      { projectId: 'wrong-service' },
+      { generationConfig: { thinkingConfig: { thinkingLevel: 'invalid' } } },
+      { generationConfig: { thinking_config: { thinking_level: 'invalid' } } },
+      { generationConfig: { thinkingConfig: { includeThoughts: 'yes' } } },
+      { tools: [{ functionDeclarations: [{ name: 4 }] }] },
+    ].map((config): [unknown, boolean] => [{ id: 'google:gemini-2.5-flash', config }, false]),
+    [{ id: 'vertex:gemini-2.5-flash', config: { apiBaseUrl: 'unsupported' } }, false],
+  ];
+  it.each(cases)('preserves Zod/Ajv parity for %j', (input, accepted) => {
+    expect(GeminiProviderOptionsInputSchema.safeParse(input).success).toBe(accepted);
+    expect(validate(input)).toBe(accepted);
+  });
+  it('applies no defaults or stripping and rejects executable values', () => {
+    expect(GoogleAiStudioConfigInputSchema.parse({})).toEqual({});
+    expect(VertexGeminiConfigInputSchema.parse({})).toEqual({});
+    expect(
+      GoogleAiStudioConfigInputSchema.safeParse({
+        functionToolCallbacks: { lookup: () => 'answer' },
+      }).success,
+    ).toBe(false);
+    expect(
+      GoogleAiStudioConfigInputSchema.safeParse({ passthrough: { callback: () => 'answer' } })
+        .success,
+    ).toBe(false);
+  });
+  it('shares runtime sampling types', () => {
+    expectTypeOf<
+      Pick<
+        GoogleAiStudioConfigInput,
+        'temperature' | 'maxOutputTokens' | 'topP' | 'topK' | 'stopSequences'
+      >
+    >().toEqualTypeOf<
+      Pick<CompletionOptions, 'temperature' | 'maxOutputTokens' | 'topP' | 'topK' | 'stopSequences'>
+    >();
+  });
+  it('accepts explicit undefined for typed generationConfig keys', () => {
+    expectTypeOf<{
+      generationConfig: {
+        temperature: number | undefined;
+        thinkingConfig: { thinkingLevel: 'XHIGH' } | undefined;
+      };
+    }>().toExtend<GoogleAiStudioConfigInput>();
+  });
+});
