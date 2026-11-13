@@ -49,7 +49,9 @@ function mergeMetadata(
   };
 }
 
-function normalizeAssertionTokenUsage(result: GradingResult) {
+export function normalizeAssertionTokenUsage(
+  result: Pick<GradingResult, 'tokensUsed' | 'metadata'>,
+) {
   const tokensUsed = result.tokensUsed;
   if (!tokensUsed) {
     return undefined;
@@ -77,7 +79,7 @@ function normalizeAssertionTokenUsage(result: GradingResult) {
   };
 }
 
-function accumulateNormalizedAssertionTokenUsage(
+export function accumulateNormalizedAssertionTokenUsage(
   target: NonNullable<GradingResult['tokensUsed']>,
   update: NonNullable<GradingResult['tokensUsed']>,
 ): void {
