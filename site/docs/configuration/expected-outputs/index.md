@@ -139,8 +139,8 @@ These metrics are programmatic tests that are run on LLM output. [See all detail
 | [is-xml](/docs/configuration/expected-outputs/deterministic/#is-xml)                                               | output is a supported well-formed XML document containing any required elements |
 | [contains-xml](/docs/configuration/expected-outputs/deterministic/#contains-xml)                                   | output contains valid xml fragment(s)                                           |
 | [is-refusal](/docs/configuration/expected-outputs/deterministic/#is-refusal)                                       | the provider reports a refusal or the output indicates one                      |
-| [finish-reason](/docs/configuration/expected-outputs/deterministic/#finish-reason)                                 | model stopped generating for the expected reason                          |
-| [word-count](/docs/configuration/expected-outputs/deterministic/#word-count)                                       | output word count matches an exact number or falls within a range         |
+| [finish-reason](/docs/configuration/expected-outputs/deterministic/#finish-reason)                                 | model stopped generating for the expected reason                                |
+| [word-count](/docs/configuration/expected-outputs/deterministic/#word-count)                                       | output word count matches an exact number or falls within a range               |
 | [javascript](/docs/configuration/expected-outputs/javascript)                                                      | provided Javascript function validates the output                               |
 | [python](/docs/configuration/expected-outputs/python)                                                              | provided Python function validates the output                                   |
 | [ruby](/docs/configuration/expected-outputs/ruby)                                                                  | provided Ruby function validates the output                                     |
