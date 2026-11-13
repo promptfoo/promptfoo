@@ -1363,7 +1363,7 @@ describe('OpenRouter', () => {
 
           // The difference when the response is cached
           cached: true,
-          tokenUsage: { total: 10, cached: 10 },
+          tokenUsage: { total: 10, cached: 10, numRequests: 0 },
         });
       } finally {
         restoreEnv();
