@@ -412,7 +412,8 @@ async function executeAssertionScript({
       isJavascriptFile(filePath),
       'javascript assertion script must reference a JavaScript file',
     );
-    return loadFromJavaScriptFile(filePath, functionName, [output, context]);
+    const assertionFunction = await resolveJavaScriptFileFunction(filePath, functionName);
+    return assertionFunction(output, context);
   }
   if (baseType === 'python') {
     invariant(filePath.endsWith('.py'), 'python assertion script must reference a .py file');
