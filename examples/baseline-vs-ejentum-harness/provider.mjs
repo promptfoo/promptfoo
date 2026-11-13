@@ -180,7 +180,7 @@ class EjentumAugmentedProvider {
     const ejentumKey = getEjentumKey(config, this.env);
     if (!ejentumKey) {
       return {
-        error: 'EJENTUM_API_KEY is not set. Get a key at https://ejentum.com/dashboard',
+        error: 'EJENTUM_API_KEY is not set. Get a key at https://ejentum.com/account',
       };
     }
 

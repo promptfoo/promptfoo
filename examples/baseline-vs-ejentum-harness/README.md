@@ -43,7 +43,7 @@ export EJENTUM_API_KEY="your-ejentum-key"
 promptfoo eval --no-cache
 ```
 
-The augmented arm sends each rendered prompt to Ejentum. Use inputs approved for both services. Get an Ejentum key at <https://ejentum.com/dashboard>.
+The augmented arm sends each rendered prompt to Ejentum. Use inputs approved for both services. Get an Ejentum key at <https://ejentum.com/account>.
 
 ### Pointing to Custom Endpoints
 
