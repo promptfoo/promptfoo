@@ -124,7 +124,7 @@ describe('EchoProvider', () => {
       await vi.runAllTimersAsync();
       await responsePromise;
 
-      expect(Date.now() - startTime).toBeGreaterThanOrEqual(100);
+      expect(Date.now() - startTime).toBe(100);
     });
 
     it('should handle empty input', async () => {

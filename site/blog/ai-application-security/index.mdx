@@ -235,7 +235,12 @@ Promptfoo categorizes its findings against security frameworks such as OWASP Top
 
 Let's look at a simple example of how you can use Promptfoo's red-teaming capabilities to exploit security issues in your RAG application. The same technique applies to other types of AI applications as well.
 
-We will run red-team adversarial attacks against a RAG-based chatbot used by a fictional IT company to retrieve HR policies. Developing the RAG chatbot is beyond the scope of this article, but its source is available in the `RAG_APP_PF` directory of this external [GitHub repository](https://github.com/usmanmalik57/promptfoo-articles). The sample app requires an `OPENAI_API_KEY` in a locally created `.env` file. Install its dependencies, start its FastAPI server, and upload a non-sensitive test PDF before running the scan. Because it uses OpenAI for embeddings and chat responses, running the example incurs API usage.
+We will run red-team adversarial attacks against a RAG-based chatbot used by a fictional IT company to retrieve HR policies. Developing the RAG chatbot is beyond the scope of this article, but its source is available in the [`RAG_APP_PF` directory](https://github.com/usmanmalik57/promptfoo-articles/tree/main/RAG_APP_PF) of the external demo repository. The sample app requires an `OPENAI_API_KEY` in a locally created `.env` file. From `RAG_APP_PF`, install the dependencies and start the FastAPI server. Upload a non-sensitive test PDF before running the scan. Because it uses OpenAI for embeddings and chat responses, running the example incurs API usage.
+
+```bash
+python -m pip install -r requirements.txt
+python -m uvicorn main:app --host 127.0.0.1 --port 8000
+```
 
 You can test the application first using the FastAPI Swagger interface. The interface allows you to add documents to a vector database via the upload route and query the RAG application using the query route. Here is an example call and the response from the RAG application.
 
