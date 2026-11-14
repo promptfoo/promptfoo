@@ -1447,7 +1447,6 @@ function ResultsTable({
     setLightboxOpen(!lightboxOpen);
   };
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   const handleRating = React.useCallback(
     async (
       rowIndex: number,
@@ -1517,11 +1516,19 @@ function ResultsTable({
             throw new Error('Network response was not ok');
           }
         } catch (error) {
+          // Do not roll back a newer rating or a table loaded after this request.
+          if (useTableStore.getState().table === newTable) {
+            setTable(table);
+          }
+          showToast(
+            'Could not save this rating. Refresh the evaluation to see its current results.',
+            'error',
+          );
           console.error('Failed to update table:', error);
         }
       }
     },
-    [body, head, setTable, evalId, inComparisonMode, showToast],
+    [body, head, table, setTable, evalId, version, inComparisonMode, showToast],
   );
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: row positions should stay paired with the loaded body until the next page payload arrives.

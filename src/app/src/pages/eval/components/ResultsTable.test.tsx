@@ -1,10 +1,12 @@
 import { act, type ComponentProps, StrictMode } from 'react';
 
+import { useToast } from '@app/hooks/useToast';
 import useApiConfig from '@app/stores/apiConfig';
 import { restoreTestTimers, type TestTimers, useTestTimers } from '@app/tests/timers';
 import { renderWithProviders } from '@app/utils/testutils';
 import { FILE_METADATA_KEY } from '@promptfoo/providers/constants';
 import { EVAL_TABLE_MAX_PAGE_SIZE } from '@promptfoo/types/evalConstants';
+import { ResultFailureReason } from '@promptfoo/types/results';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -12,6 +14,7 @@ import EvalOutputCell from './EvalOutputCell';
 import * as ProviderDisplayModule from './ProviderDisplay';
 import ResultsTable from './ResultsTable';
 import { useResultsViewSettingsStore, useTableStore } from './store';
+import type { SubmitRatingRequest } from '@promptfoo/types/api/eval';
 
 type GradingResult = NonNullable<ComponentProps<typeof EvalOutputCell>['output']['gradingResult']>;
 
@@ -176,21 +179,24 @@ function createNextPageExpectation(mockFetchEvalData: unknown, checkPageSize = f
 
 vi.mock('./store', async (importOriginal) => ({
   ...(await importOriginal<typeof import('./store')>()),
-  useTableStore: vi.fn(() => ({
-    config: {},
-    evalId: '123',
-    setTable: vi.fn(),
-    table: null,
-    version: 4,
-    fetchEvalData: vi.fn(),
-    filters: {
-      values: {},
-      appliedCount: 0,
-      options: {
-        metric: [],
+  useTableStore: Object.assign(
+    vi.fn(() => ({
+      config: {},
+      evalId: '123',
+      setTable: vi.fn(),
+      table: null,
+      version: 4,
+      fetchEvalData: vi.fn(),
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: {
+          metric: [],
+        },
       },
-    },
-  })),
+    })),
+    { getState: vi.fn() },
+  ),
   useResultsViewSettingsStore: vi.fn(() => ({
     inComparisonMode: false,
     renderMarkdown: true,
@@ -1781,6 +1787,22 @@ describe('ResultsTable rating actions', () => {
     reason: 'Manual result (overrides all other grading results)',
     assertion: { type: 'human' as const },
   };
+  const originalResult = {
+    pass: false,
+    score: 0.2,
+    reason: 'Existing reason',
+    error: null,
+    failureReason: ResultFailureReason.ASSERT,
+  };
+  const storedMetadata = {
+    originalResult: {
+      ...originalResult,
+      score: 0.35,
+      reason: 'Earlier grader outage',
+      error: 'Earlier grader outage',
+      failureReason: ResultFailureReason.ERROR,
+    },
+  };
   let setTable: ReturnType<typeof vi.fn>;
   let callApi: ReturnType<typeof vi.mocked<typeof import('@app/utils/api').callApi>>;
 
@@ -1799,6 +1821,7 @@ describe('ResultsTable rating actions', () => {
             {
               id: 'test-output-1',
               pass: initialPass,
+              failureReason: initialPass ? ResultFailureReason.NONE : ResultFailureReason.ASSERT,
               score: 0.2,
               text: 'test output',
               gradingResult,
@@ -1815,9 +1838,10 @@ describe('ResultsTable rating actions', () => {
       createTableStore({ setTable, table, inComparisonMode: false, isFetching: false }),
     );
     renderWithProviders(<ResultsTable {...createDefaultProps()} />);
+    return table;
   }
 
-  async function savedRating() {
+  async function savedRating(expectedAction: NonNullable<SubmitRatingRequest['action']>) {
     await waitFor(() => {
       expect(callApi).toHaveBeenCalledWith(
         '/eval/123/results/test-output-1/rating',
@@ -1829,7 +1853,10 @@ describe('ResultsTable rating actions', () => {
     const request = callApi.mock.calls.find(
       ([url]) => url === '/eval/123/results/test-output-1/rating',
     )![1];
-    const payload = JSON.parse(request!.body as string) as GradingResult;
+    const { action, ...payload } = JSON.parse(request!.body as string) as GradingResult &
+      SubmitRatingRequest;
+    expect(action).toBe(expectedAction);
+    expect(updatedOutput.gradingResult).not.toHaveProperty('action');
     expect(payload).toEqual(updatedOutput.gradingResult);
     return { payload, output: updatedOutput };
   }
@@ -1851,7 +1878,7 @@ describe('ResultsTable rating actions', () => {
     await act(async () => {
       await cell.onRating(undefined, undefined, '!highlight New comment');
     });
-    const { payload, output } = await savedRating();
+    const { payload, output } = await savedRating('annotate');
     expect(payload).toMatchObject({
       pass: false,
       score: 0.2,
@@ -1870,12 +1897,53 @@ describe('ResultsTable rating actions', () => {
     }
   });
 
+  it.each([
+    { newer: false, outcome: 'restores the optimistic table' },
+    { newer: true, outcome: 'leaves the newly loaded table intact' },
+  ])('reports a rejected rating and $outcome', async ({ newer }) => {
+    const showToast = vi.fn();
+    vi.mocked(useToast).mockReturnValue({ showToast });
+    const original = renderRatingTable();
+    let respond!: (response: Response) => void;
+    const pending = new Promise<Response>((resolve) => {
+      respond = resolve;
+    });
+    callApi.mockReturnValueOnce(pending);
+
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Rate' }));
+    expect(setTable).toHaveBeenCalledOnce();
+    const optimistic = setTable.mock.calls[0][0];
+    expect(optimistic.body[0].outputs[0].pass).toBe(true);
+    expect(callApi).toHaveBeenCalledWith(
+      '/eval/123/results/test-output-1/rating',
+      expect.objectContaining({ method: 'POST' }),
+    );
+    vi.mocked(useTableStore.getState).mockReturnValueOnce({
+      ...useTableStore(),
+      table: newer ? structuredClone(optimistic) : optimistic,
+    });
+
+    await act(async () => {
+      respond(new Response(null, { status: 404 }));
+    });
+    expect(showToast).toHaveBeenCalledWith(
+      'Could not save this rating. Refresh the evaluation to see its current results.',
+      'error',
+    );
+    if (newer) {
+      expect(setTable).toHaveBeenCalledOnce();
+    } else {
+      expect(setTable).toHaveBeenCalledTimes(2);
+      expect(setTable.mock.calls[1][0]).toBe(original);
+    }
+  });
+
   it('persists a human rating when the existing grade has no component results', async () => {
     renderRatingTable({ pass: false, score: 0.2, reason: 'Existing reason' });
 
     await userEvent.setup().click(screen.getByRole('button', { name: 'Rate' }));
 
-    const { payload, output } = await savedRating();
+    const { payload, output } = await savedRating('rate');
     const expectedGrade = {
       pass: true,
       score: 0.75,
@@ -1888,6 +1956,7 @@ describe('ResultsTable rating actions', () => {
           reason: 'Manual result (overrides all other grading results)',
           comment: 'test comment',
           assertion: { type: 'human' },
+          metadata: { originalResult },
         },
       ],
     };
@@ -1898,15 +1967,18 @@ describe('ResultsTable rating actions', () => {
       pass: true,
       score: 0.75,
       gradingResult: expectedGrade,
+      failureReason: ResultFailureReason.NONE,
+      error: null,
     });
   });
 
   it.each([
-    ['new', [automated]],
-    ['existing', [human, automated]],
+    ['new', [automated], { originalResult }],
+    ['existing legacy', [human, automated], undefined],
+    ['existing with snapshot', [{ ...human, metadata: storedMetadata }, automated], storedMetadata],
   ] as const)(
     'persists a %s human rating and preserves automated assertions',
-    async (_label, components) => {
+    async (_label, components, expectedMetadata) => {
       renderRatingTable({
         pass: false,
         score: 0.2,
@@ -1914,7 +1986,7 @@ describe('ResultsTable rating actions', () => {
         componentResults: [...components],
       });
       await userEvent.setup().click(screen.getByRole('button', { name: 'Rate' }));
-      const { payload, output } = await savedRating();
+      const { payload, output } = await savedRating('rate');
       expect(payload).toMatchObject({
         pass: true,
         score: 0.75,
@@ -1930,6 +2002,7 @@ describe('ResultsTable rating actions', () => {
         reason: 'Manual result (overrides all other grading results)',
         comment: 'test comment',
         assertion: { type: 'human' },
+        ...(expectedMetadata && { metadata: expectedMetadata }),
       });
     },
   );
@@ -2001,7 +2074,7 @@ describe('ResultsTable rating actions', () => {
         initialPass,
       );
       await userEvent.setup().click(screen.getByRole('button', { name: 'Clear rating' }));
-      const { payload, output } = await savedRating();
+      const { payload, output } = await savedRating('clear');
       expect(payload.pass).toBe(expectedPass);
       expect(payload.score).toBeCloseTo(expectedScore);
       expect(payload.reason).toBe(expectedReason);

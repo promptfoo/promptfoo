@@ -1,7 +1,9 @@
 import { HUMAN_ASSERTION_TYPE } from '../providers/constants';
-import { ResultFailureReason } from '../types/results';
+import { isResultFailureReason, ResultFailureReason } from '../types/results';
 
 import type { GradingResult, PromptMetrics } from '../types/index';
+
+const MANUAL_REASON = 'Manual result (overrides all other grading results)';
 
 interface RatingState {
   pass: boolean;
@@ -19,23 +21,117 @@ interface ManualRating {
 }
 
 function getHumanRating(gradingResult?: GradingResult | null): GradingResult | undefined {
+  const components = gradingResult?.componentResults;
+  const human = Array.isArray(components)
+    ? components.find((result) => result?.assertion?.type === HUMAN_ASSERTION_TYPE)
+    : undefined;
   return (
-    gradingResult?.componentResults?.find(
-      (result) => result?.assertion?.type === HUMAN_ASSERTION_TYPE,
-    ) ?? (gradingResult?.assertion?.type === HUMAN_ASSERTION_TYPE ? gradingResult : undefined)
+    human ?? (gradingResult?.assertion?.type === HUMAN_ASSERTION_TYPE ? gradingResult : undefined)
   );
+}
+
+interface OriginalVerdict extends Omit<RatingState, 'gradingResult'> {
+  reason: string;
+}
+
+function getOriginalVerdict(human: GradingResult | undefined): OriginalVerdict | undefined {
+  // Legacy clients can supply arbitrary custom metadata on a human assertion.
+  const original = human?.metadata?.originalResult;
+  return typeof original?.pass === 'boolean' &&
+    Number.isFinite(original.score) &&
+    isResultFailureReason(original.failureReason) &&
+    typeof original.reason === 'string' &&
+    (original.error == null || typeof original.error === 'string')
+    ? original
+    : undefined;
+}
+
+// Legacy viewers and SDKs post the entire grade, including for comment-only updates.
+export function applySubmittedGrade(
+  state: RatingState,
+  gradingResult: GradingResult,
+): RatingState & { gradingResult: GradingResult } {
+  const { pass, score } = gradingResult;
+  const next = {
+    pass,
+    score,
+    gradingResult,
+    failureReason: pass ? ResultFailureReason.NONE : ResultFailureReason.ASSERT,
+    error: null,
+  };
+  if (pass || getHumanRating(gradingResult)) {
+    return next;
+  }
+  if (gradingResult.metadata?.graderError === true) {
+    return { ...next, failureReason: ResultFailureReason.ERROR, error: gradingResult.reason };
+  }
+  const snapshot = getOriginalVerdict(getHumanRating(state.gradingResult));
+  const original = snapshot ?? state;
+  const reason = snapshot?.reason ?? state.gradingResult?.reason ?? 'Manual result';
+  if (
+    !original.pass &&
+    original.score === score &&
+    (!gradingResult.reason || gradingResult.reason === reason)
+  ) {
+    // A highlight or a legacy clear can retain a provider error without a grader-error marker.
+    return { ...next, failureReason: original.failureReason, error: original.error };
+  }
+  return { ...next, error: gradingResult.reason ?? null };
+}
+
+// Historic human overrides have no snapshot. Recover from the automated components
+// when available, otherwise keep the row's stored verdict and score.
+function getLegacyVerdict(state: RatingState, grade: GradingResult, components: GradingResult[]) {
+  const graderError = components.find(
+    (result) =>
+      !result.pass &&
+      result.metadata?.graderError === true &&
+      result.assertion?.weight !== 0 &&
+      result.metadata.assertionSet?.weight !== 0,
+  );
+  const pass = components.length ? components.every((result) => result.pass) : state.pass;
+  const scores = components
+    .map((result) => result.score)
+    .filter((score) => typeof score === 'number');
+  const score = scores.length
+    ? scores.reduce((sum, value) => sum + value, 0) / scores.length
+    : state.score;
+  const failureReason = pass
+    ? ResultFailureReason.NONE
+    : graderError || state.failureReason === ResultFailureReason.ERROR
+      ? ResultFailureReason.ERROR
+      : ResultFailureReason.ASSERT;
+  const reason =
+    graderError?.reason ??
+    (grade.reason === MANUAL_REASON
+      ? components[0]?.reason || 'Manual rating cleared'
+      : grade.reason);
+  return {
+    pass,
+    score,
+    failureReason,
+    reason,
+    error: failureReason === ResultFailureReason.ERROR ? reason : null,
+  };
 }
 
 export function applyManualRating(
   state: RatingState,
   rating: ManualRating,
 ): RatingState & { gradingResult: GradingResult } {
-  const grade = {
-    ...(state.gradingResult ?? { pass: state.pass, score: state.score, reason: '' }),
+  const previous = state.gradingResult;
+  const grade: GradingResult = {
+    ...previous,
+    pass: previous?.pass ?? state.pass,
+    score: previous?.score ?? state.score,
+    reason: previous?.reason ?? 'Manual result',
     comment: rating.comment,
   };
   const rated = { ...state, gradingResult: grade };
   if (rating.action === 'annotate') {
+    if (!grade.componentResults?.length) {
+      delete grade.componentResults;
+    }
     return rated;
   }
 
@@ -43,36 +139,17 @@ export function applyManualRating(
   const components = (grade.componentResults ?? []).filter(
     (result) => result && result.assertion?.type !== HUMAN_ASSERTION_TYPE,
   );
-  // Averaging components cannot restore thresholds or custom scores.
-  const original = human
-    ? human.metadata?.originalResult
-    : {
-        pass: state.pass,
-        score: state.score,
-        failureReason: state.failureReason,
-        error: state.error ?? null,
-        reason: grade.reason,
-      };
-
   if (rating.action === 'clear') {
-    const graderError = components.find((result) => !result.pass && result.metadata?.graderError);
-    rated.pass = original?.pass ?? components.every((result) => result.pass);
-    rated.score =
-      original?.score ??
-      (components.length
-        ? components.reduce((sum, result) => sum + result.score, 0) / components.length
-        : 1);
-    rated.failureReason =
-      original?.failureReason ??
-      (rated.pass
-        ? ResultFailureReason.NONE
-        : graderError || state.failureReason === ResultFailureReason.ERROR
-          ? ResultFailureReason.ERROR
-          : ResultFailureReason.ASSERT);
-    grade.reason =
-      original?.reason ?? graderError?.reason ?? components[0]?.reason ?? 'No assertions';
-    rated.error =
-      original?.error ?? (rated.failureReason === ResultFailureReason.ERROR ? grade.reason : null);
+    if (!human) {
+      return rated;
+    }
+    // Snapshots preserve thresholds and custom scores that averaging cannot restore.
+    const original = getOriginalVerdict(human) ?? getLegacyVerdict(state, grade, components);
+    rated.pass = original.pass;
+    rated.score = original.score;
+    rated.failureReason = original.failureReason;
+    rated.error = original.error ?? null;
+    grade.reason = original.reason;
     if (grade.assertion?.type === HUMAN_ASSERTION_TYPE) {
       delete grade.assertion;
     }
@@ -81,14 +158,24 @@ export function applyManualRating(
     rated.score = rating.score ?? (rating.pass === undefined ? state.score : Number(rating.pass));
     rated.failureReason = rated.pass ? ResultFailureReason.NONE : ResultFailureReason.ASSERT;
     rated.error = null;
-    grade.reason = 'Manual result (overrides all other grading results)';
+    grade.reason = MANUAL_REASON;
     components.push({
       pass: rated.pass,
       score: rated.score,
       reason: grade.reason,
       comment: rating.comment,
       assertion: { type: HUMAN_ASSERTION_TYPE },
-      metadata: { originalResult: original },
+      metadata: human
+        ? human.metadata
+        : {
+            originalResult: {
+              pass: state.pass,
+              score: state.score,
+              failureReason: state.failureReason,
+              error: state.error ?? null,
+              reason: previous?.reason ?? 'Manual result',
+            },
+          },
     });
   }
   grade.pass = rated.pass;

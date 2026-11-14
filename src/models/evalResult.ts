@@ -192,8 +192,11 @@ export default class EvalResult {
     return returnResults;
   }
 
-  static async findById(id: string) {
-    const db = await getDb();
+  static async findById(
+    id: string,
+    transaction?: Pick<Awaited<ReturnType<typeof getDb>>, 'select'>,
+  ) {
+    const db = transaction ?? (await getDb());
     const result = await db.select().from(evalResultsTable).where(eq(evalResultsTable.id, id));
     return result.length > 0 ? new EvalResult({ ...result[0], persisted: true }) : null;
   }

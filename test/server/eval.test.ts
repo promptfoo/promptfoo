@@ -164,7 +164,7 @@ describe('eval routes', () => {
 
       expect(res.status).toBe(500);
       expect(res.body).toEqual({ error: 'Failed to submit rating' });
-      expect(findByIdSpy).toHaveBeenCalledWith('result-1');
+      expect(findByIdSpy).toHaveBeenCalledWith('result-1', expect.anything());
     });
 
     it('returns the persisted result row so SDK clients see refreshed metrics', async () => {
@@ -220,6 +220,79 @@ describe('eval routes', () => {
       );
     });
 
+    it('preserves an old viewer highlight on an error without creating a human rating', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+      const result = (await eval_.getResults())[1];
+      invariant(result instanceof EvalResult, 'Result is required');
+      result.failureReason = ResultFailureReason.ERROR;
+      result.error = 'Provider unavailable';
+      result.gradingResult = null;
+      await result.save();
+      const metrics = eval_.prompts[result.promptIdx].metrics!;
+      metrics.testErrorCount = 1;
+      metrics.testFailCount = 0;
+      await eval_.save();
+
+      // Old viewers posted a whole grade, even for a comment on an ungraded row.
+      const grade = {
+        pass: false,
+        score: 0,
+        reason: 'Manual result',
+        comment: '!highlight outage',
+      };
+      const response = await api
+        .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
+        .send(grade);
+      expect(response.status).toBe(200);
+      const stored = await EvalResult.findById(result.id);
+      expect(response.body.gradingResult).toStrictEqual(grade);
+      expect(stored?.gradingResult).toStrictEqual(grade);
+      expect(stored).toMatchObject({
+        success: false,
+        failureReason: ResultFailureReason.ERROR,
+        error: 'Provider unavailable',
+      });
+      expect((await Eval.findById(eval_.id))?.prompts[result.promptIdx].metrics).toEqual(metrics);
+    });
+
+    it('preserves a full custom grade from a client without an action', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+      const result = (await eval_.getResults())[1];
+      invariant(result.id, 'Result ID is required');
+      const grade = {
+        pass: true,
+        score: 0.625,
+        reason: 'Accepted by custom threshold',
+        assertion: { type: 'javascript', value: 'output.length > 0' },
+        metadata: { source: 'client', thresholds: [0.6, 0.8] },
+        componentResults: [{ pass: false, score: 0.2, reason: 'Partial credit' }],
+        comment: 'Reviewed',
+        clientExtension: { revision: 2 },
+      };
+      const response = await api
+        .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
+        .send(grade);
+      expect(response.status).toBe(200);
+      const stored = await EvalResult.findById(result.id);
+      expect(response.body.gradingResult).toStrictEqual(grade);
+      expect(stored?.gradingResult).toStrictEqual(grade);
+      expect(stored).toMatchObject({
+        success: true,
+        score: 0.625,
+        failureReason: ResultFailureReason.NONE,
+        error: null,
+      });
+      expect((await Eval.findById(eval_.id))?.prompts[result.promptIdx].metrics).toMatchObject({
+        testPassCount: 2,
+        testFailCount: 0,
+        assertPassCount: 1,
+        assertFailCount: 1,
+        score: 1.625,
+      });
+    });
+
     it('restores grader errors and exact scores after manual pass, fail, and clear', async () => {
       const eval_ = await EvalFactory.create();
       testEvalIds.add(eval_.id);
@@ -257,6 +330,8 @@ describe('eval routes', () => {
         failureReason: ResultFailureReason.ERROR,
         gradingResult: { comment: 'Retry the judge', metadata: { graderError: true } },
       });
+      expect(annotated.body.gradingResult).not.toHaveProperty('action');
+      expect((await EvalResult.findById(result.id))?.gradingResult).not.toHaveProperty('action');
       const before = await api.get(`/api/eval/${eval_.id}/table`).query({ filterMode: 'errors' });
       expect(before.body.filteredCount).toBe(1);
       const approved = await rate('rate', true, 1);

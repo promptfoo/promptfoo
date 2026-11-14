@@ -7,7 +7,11 @@ import Eval, { EvalQueries } from '../../models/eval';
 import { notifyEvaluationChanged } from '../../models/evalMutation';
 import EvalResult from '../../models/evalResult';
 import { evaluateWithSource } from '../../node';
-import { applyManualRating, updateManualRatingMetrics } from '../../presentation/manualRating';
+import {
+  applyManualRating,
+  applySubmittedGrade,
+  updateManualRatingMetrics,
+} from '../../presentation/manualRating';
 import { EvalSchemas } from '../../types/api/eval';
 import { deleteEval, deleteEvals, updateResult, writeResultsToDatabase } from '../../util/database';
 import {
@@ -727,54 +731,59 @@ evalRouter.post(
       const { evalId, id } = paramsResult.data;
       // Double-cast needed: Zod's .passthrough() adds index signature that doesn't overlap with GradingResult
       const gradingResult = bodyResult.data as unknown as GradingResult;
-      const result = await EvalResult.findById(id);
-      if (!result || result.evalId !== evalId) {
-        res.status(404).json({ error: 'Result not found' });
-        return;
-      }
-
-      const eval_ = await Eval.findById(evalId);
-      if (!eval_) {
-        res.status(404).json({ error: 'Eval not found' });
-        return;
-      }
-
-      const previous = {
-        pass: result.success,
-        score: result.score,
-        failureReason: result.failureReason,
-        error: result.error,
-        gradingResult: result.gradingResult,
-      };
-      const rated = applyManualRating(previous, {
-        action: bodyResult.data.action ?? 'rate',
-        pass: gradingResult.pass,
-        score: gradingResult.score,
-        comment: gradingResult.comment,
-      });
-
-      const prompt = eval_.prompts[result.promptIdx];
-      invariant(prompt, 'Prompt not found');
-      if (!prompt.metrics) {
-        res.status(400).json({ error: 'Prompt metrics not found' });
-        return;
-      }
-
-      result.gradingResult = rated.gradingResult;
-      result.success = rated.pass;
-      result.score = rated.score;
-      result.failureReason = rated.failureReason;
-      result.error = rated.error ?? null;
-      prompt.metrics = updateManualRatingMetrics(prompt.metrics, previous, rated);
-
       const db = await getDb();
-      await db.transaction(async (tx) => {
+      const updated = await db.transaction(async (tx) => {
+        // A retry may replace this row. Read it and its prompt metrics in the same transaction.
+        const result = await EvalResult.findById(id, tx);
+        if (!result || result.evalId !== evalId) {
+          return { status: 404, message: 'Result not found' };
+        }
+
+        const eval_ = await Eval.findById(evalId, tx);
+        if (!eval_) {
+          return { status: 404, message: 'Eval not found' };
+        }
+
+        const previous = {
+          pass: result.success,
+          score: result.score,
+          failureReason: result.failureReason,
+          error: result.error,
+          gradingResult: result.gradingResult,
+        };
+        const action = bodyResult.data.action;
+        const rated = action
+          ? applyManualRating(previous, {
+              action,
+              pass: gradingResult.pass,
+              score: gradingResult.score,
+              comment: gradingResult.comment,
+            })
+          : applySubmittedGrade(previous, gradingResult);
+
+        const prompt = eval_.prompts[result.promptIdx];
+        invariant(prompt, 'Prompt not found');
+        if (!prompt.metrics) {
+          return { status: 400, message: 'Prompt metrics not found' };
+        }
+
+        result.gradingResult = rated.gradingResult;
+        result.success = rated.pass;
+        result.score = rated.score;
+        result.failureReason = rated.failureReason;
+        result.error = rated.error ?? null;
+        prompt.metrics = updateManualRatingMetrics(prompt.metrics, previous, rated);
+
         await result.save(tx);
         await eval_.save(tx);
+        return result;
       });
+      if ('status' in updated) {
+        res.status(updated.status).json({ error: updated.message });
+        return;
+      }
       notifyEvaluationChanged(evalId);
-
-      res.json(EvalSchemas.SubmitRating.Response.parse(result));
+      res.json(EvalSchemas.SubmitRating.Response.parse(updated));
     } catch (error) {
       sendError(res, 500, 'Failed to submit rating', error);
     }
