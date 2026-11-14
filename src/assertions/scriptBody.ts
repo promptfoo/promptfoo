@@ -15,7 +15,7 @@ export function buildScriptBody(renderedValue: string, defaultIndent: string): s
   if (!isMultiline) {
     // Single-expression bodies implicitly return. An explicit leading `return`
     // stays as-is so we never emit `return return`.
-    if (/^\s*return(?=\s|$)/.test(trimmed)) {
+    if (/^\s*return(?=\s|\(|$)/.test(trimmed)) {
       return `${defaultIndent}${trimmed.trimStart()}`;
     }
     return `${defaultIndent}return ${trimmed}`;

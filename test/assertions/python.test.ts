@@ -861,6 +861,10 @@ describe('Python file references', { timeout: 15000 }, () => {
   });
 
   describe('buildScriptBody YAML block scalars', () => {
+    it('preserves a parenthesized explicit return', () => {
+      expect(buildScriptBody('return(True)\n', '  ')).toBe('  return(True)');
+    });
+
     it('should prepend return for a one-line block scalar with trailing newline', () => {
       expect(buildScriptBody('len(output) > 10\n', '    ')).toBe('    return len(output) > 10');
     });

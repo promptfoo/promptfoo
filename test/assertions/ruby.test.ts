@@ -352,6 +352,10 @@ describe('Ruby assertions', () => {
   });
 
   describe('buildScriptBody YAML block scalars', () => {
+    it('preserves a parenthesized explicit return', () => {
+      expect(buildScriptBody('return(true)\n', '  ')).toBe('  return(true)');
+    });
+
     it('should prepend return for a one-line block scalar with trailing newline', () => {
       expect(buildScriptBody('output.length > 10\n', '  ')).toBe('  return output.length > 10');
     });
