@@ -11,6 +11,7 @@ export interface SlotQueueOptions {
   minConcurrency: number;
   queueTimeoutMs?: number; // Optional timeout for queued requests
   onSlotAcquired?: (queueDepth: number) => void;
+  onQuotaUpdated?: () => void;
   onSlotReleased?: (queueDepth: number) => void;
 }
 
@@ -43,6 +44,7 @@ export class SlotQueue {
   private tokenLimit: number | null = null;
 
   private onSlotAcquired?: (queueDepth: number) => void;
+  private readonly onQuotaUpdated?: () => void;
   private onSlotReleased?: (queueDepth: number) => void;
 
   constructor(options: SlotQueueOptions) {
@@ -51,6 +53,7 @@ export class SlotQueue {
     this.queueTimeoutMs = options.queueTimeoutMs ?? DEFAULT_QUEUE_TIMEOUT_MS;
     this.onSlotAcquired = options.onSlotAcquired;
     this.onSlotReleased = options.onSlotReleased;
+    this.onQuotaUpdated = options.onQuotaUpdated;
   }
 
   /**
@@ -149,10 +152,24 @@ export class SlotQueue {
     }
     if (parsed.resetAtRequests !== undefined) {
       this.resetAtRequests = parsed.resetAtRequests;
+    } else if (
+      parsed.remainingRequests !== undefined &&
+      parsed.resetAt !== undefined &&
+      parsed.resetAtTokens === undefined
+    ) {
+      // The latest request quota uses a generic deadline. Retire its earlier specific clock.
+      this.resetAtRequests = null;
     }
     if (parsed.resetAtTokens !== undefined) {
       this.resetAtTokens = parsed.resetAtTokens;
+    } else if (
+      parsed.remainingTokens !== undefined &&
+      parsed.resetAt !== undefined &&
+      parsed.resetAtRequests === undefined
+    ) {
+      this.resetAtTokens = null;
     }
+    this.onQuotaUpdated?.();
     if (isRateLimited) {
       // The caller applies the response-wide backoff after updating its headers.
       this.scheduleResetProcessing();
@@ -200,9 +217,11 @@ export class SlotQueue {
    * Adjust max concurrency (called by adaptive algorithm).
    */
   setMaxConcurrency(value: number): void {
+    const previous = this.maxConcurrency;
     this.maxConcurrency = Math.max(this.minConcurrency, value);
-    // If we now have capacity, process queue
-    this.processQueue();
+    if (this.maxConcurrency > previous) {
+      this.processQueue();
+    }
   }
 
   getMaxConcurrency(): number {

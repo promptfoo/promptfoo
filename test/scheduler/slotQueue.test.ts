@@ -681,6 +681,28 @@ describe('SlotQueue', () => {
       },
     );
 
+    it('uses a fresh generic request reset instead of its old specific reset', () => {
+      const now = Date.now();
+      queue.updateRateLimitState({ remainingRequests: 20, resetAtRequests: now + 60000 });
+      queue.updateRateLimitState({ remainingRequests: 0, resetAt: now + 1000 }, true);
+      queue.markRateLimited();
+      trackAcquire(queue.acquire('generic-reset'));
+      expect(queue.getResetAt()).toBe(now + 1000);
+      vi.advanceTimersByTime(1000);
+      expect(queue.getActiveCount()).toBe(1);
+    });
+
+    it('uses a fresh generic deadline when a token quota replaces its specific clock', () => {
+      const now = Date.now();
+      queue.updateRateLimitState({ remainingTokens: 20, resetAtTokens: now + 60000 });
+      queue.updateRateLimitState({ remainingTokens: 0, resetAt: now + 1000 }, true);
+      queue.markRateLimited();
+      trackAcquire(queue.acquire('generic-token-reset'));
+      expect(queue.getResetAt()).toBe(now + 1000);
+      vi.advanceTimersByTime(1000);
+      expect(queue.getActiveCount()).toBe(1);
+    });
+
     it('retains a request-wide backoff when successful headers restore quota', () => {
       queue.updateRateLimitState({ remainingRequests: 0, resetAtRequests: Date.now() + 60000 });
       queue.markRateLimited(5000);

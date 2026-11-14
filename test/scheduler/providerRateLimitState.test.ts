@@ -833,6 +833,35 @@ describe('ProviderRateLimitState', () => {
   });
 
   describe('Proactive throttling', () => {
+    it('lowers the cap before restoring quota to waiting callers', async () => {
+      const started = Promise.withResolvers<void>();
+      const restore = Promise.withResolvers<void>();
+      const finish = Promise.withResolvers<void>();
+      const active = state.executeWithRetry(
+        'active',
+        async (observe) => {
+          observe({ 'x-ratelimit-remaining-requests': '0', 'x-ratelimit-reset-requests': '60s' });
+          started.resolve();
+          await restore.promise;
+          observe({ 'x-ratelimit-remaining-requests': '1', 'x-ratelimit-limit-requests': '100' });
+          expect(state.getMetrics()).toMatchObject({
+            maxConcurrency: 1,
+            activeRequests: 1,
+            queueDepth: 4,
+          });
+          await finish.promise;
+        },
+        {},
+      );
+      await started.promise;
+      const queued = Array.from({ length: 4 }, (_, i) =>
+        state.executeWithRetry(String(i), async () => 'done', {}),
+      );
+      restore.resolve();
+      finish.resolve();
+      await Promise.all([active, ...queued]);
+    });
+
     it('should emit warning when approaching limit', async () => {
       const events: any[] = [];
       state.on('ratelimit:warning', (data) => events.push(data));

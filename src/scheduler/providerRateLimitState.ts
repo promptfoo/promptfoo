@@ -108,6 +108,7 @@ export class ProviderRateLimitState extends EventEmitter {
       onSlotAcquired: (queueDepth) => {
         this.emit('slot:acquired', { rateLimitKey: this.rateLimitKey, queueDepth });
       },
+      onQuotaUpdated: () => this.applyProactiveThrottling(),
       onSlotReleased: (queueDepth) => {
         this.emit('slot:released', { rateLimitKey: this.rateLimitKey, queueDepth });
       },
@@ -434,7 +435,10 @@ export class ProviderRateLimitState extends EventEmitter {
       this.slotQueue.markRateLimited(parsed.retryAfterMs);
     }
 
-    // Check for proactive throttling
+    return isRateLimited ? observedResetAt : undefined;
+  }
+
+  private applyProactiveThrottling(): void {
     const ratios = this.slotQueue.getRemainingRatio();
     const minRatio = Math.min(ratios.requests ?? 1, ratios.tokens ?? 1);
 
@@ -448,7 +452,6 @@ export class ProviderRateLimitState extends EventEmitter {
       // Proactive concurrency reduction
       this.applyConcurrencyChange(this.adaptiveConcurrency.recordApproachingLimit(minRatio));
     }
-    return isRateLimited ? observedResetAt : undefined;
   }
 
   /**
