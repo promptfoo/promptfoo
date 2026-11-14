@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ProviderRateLimitState } from '../../src/scheduler/providerRateLimitState';
 import { isProviderResponseRateLimited } from '../../src/scheduler/types';
+import { createDeferred } from '../util/utils';
 
 // Fast retry policy for tests - minimal delays
 const FAST_RETRY_POLICY = {
@@ -52,6 +53,58 @@ describe('ProviderRateLimitState', () => {
       customState.dispose();
     });
   });
+
+  it.each(['requests', 'tokens', 'generic'] as const)(
+    'honors freshly received elapsed %s reset headers without adding a minute',
+    async (dimension) => {
+      const headers =
+        dimension === 'generic'
+          ? { 'x-ratelimit-reset': String(Math.floor(Date.now() / 1000) - 1) }
+          : {
+              [`x-ratelimit-reset-${dimension}`]: '0s',
+              [`x-ratelimit-remaining-${dimension}`]: '0',
+            };
+      const limited = state
+        .executeWithRetry('elapsed', async () => ({ error: 'HTTP 429' }), {
+          getHeaders: () => headers,
+          isRateLimited: () => true,
+          maxRetriesOverride: 0,
+        })
+        .catch(() => undefined);
+      await vi.advanceTimersByTimeAsync(0);
+      await limited;
+      const call = vi.fn(async () => 'ready');
+      const next = state.executeWithRetry('next', call, {}).catch((error) => error);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(call).toHaveBeenCalledOnce();
+      await expect(next).resolves.toBe('ready');
+    },
+  );
+
+  it.each([NaN, Infinity, -Infinity, -1])(
+    'ignores invalid custom retry delay %s while preserving the response reset',
+    async (retryAfterMs) => {
+      await state
+        .executeWithRetry('invalid-delay', async () => ({ error: 'HTTP 429' }), {
+          getHeaders: () => ({
+            'x-ratelimit-remaining-requests': '0',
+            'x-ratelimit-reset-requests': '5s',
+          }),
+          getRetryAfter: () => retryAfterMs,
+          isRateLimited: () => true,
+          maxRetriesOverride: 0,
+        })
+        .catch(() => undefined);
+      const call = vi.fn(async () => 'recovered');
+      const next = state.executeWithRetry('next', call, {}).catch(() => undefined);
+      await vi.advanceTimersByTimeAsync(4999);
+      expect(call).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(1);
+      expect(call).toHaveBeenCalledOnce();
+      await expect(next).resolves.toBe('recovered');
+      expect(state.getMetrics()).toMatchObject({ activeRequests: 0, queueDepth: 0 });
+    },
+  );
 
   it('returns a call that completes after cancellation instead of discarding it', async () => {
     const controller = new AbortController();
@@ -781,6 +834,35 @@ describe('ProviderRateLimitState', () => {
   });
 
   describe('Proactive throttling', () => {
+    it('lowers the cap before restoring quota to waiting callers', async () => {
+      const started = createDeferred<void>();
+      const restore = createDeferred<void>();
+      const finish = createDeferred<void>();
+      const active = state.executeWithRetry(
+        'active',
+        async (observe) => {
+          observe?.({ 'x-ratelimit-remaining-requests': '0', 'x-ratelimit-reset-requests': '60s' });
+          started.resolve();
+          await restore.promise;
+          observe?.({ 'x-ratelimit-remaining-requests': '1', 'x-ratelimit-limit-requests': '100' });
+          expect(state.getMetrics()).toMatchObject({
+            maxConcurrency: 1,
+            activeRequests: 1,
+            queueDepth: 4,
+          });
+          await finish.promise;
+        },
+        {},
+      );
+      await started.promise;
+      const queued = Array.from({ length: 4 }, (_, i) =>
+        state.executeWithRetry(String(i), async () => 'done', {}),
+      );
+      restore.resolve();
+      finish.resolve();
+      await Promise.all([active, ...queued]);
+    });
+
     it('should emit warning when approaching limit', async () => {
       const events: any[] = [];
       state.on('ratelimit:warning', (data) => events.push(data));
