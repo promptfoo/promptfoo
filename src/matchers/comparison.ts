@@ -68,10 +68,14 @@ export async function matchesSelectBest(
     return failureResults(resp.error || 'No output');
   }
 
-  invariant(typeof resp.output === 'string', 'select-best produced malformed response');
+  if (typeof resp.output !== 'string') {
+    return failureResults('select-best produced malformed response');
+  }
 
-  const firstIntegerMatch = resp.output.trim().match(/\d+/);
-  const verdict = firstIntegerMatch ? Number.parseInt(firstIntegerMatch[0], 10) : Number.NaN;
+  // Custom rubric responses can include prose. Read the full number-like token so
+  // "-1", "1.5" or "1e2" cannot silently select index 1.
+  const token = resp.output.match(/[+−-]?\.?\d\w*(?:[.,/-]\d\w*)*/)?.[0];
+  const verdict = token && /^\+?\d+$/.test(token) ? Number(token) : Number.NaN;
 
   if (Number.isNaN(verdict) || verdict < 0 || verdict >= outputs.length) {
     return failureResults(`Invalid select-best verdict: ${verdict}`);
