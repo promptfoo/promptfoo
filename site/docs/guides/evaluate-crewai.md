@@ -110,13 +110,13 @@ In your project folder, use a virtual environment and run:
 ```bash
 python3 -m venv venv
 source venv/bin/activate
-python -m pip install "crewai>=1.15.22,<2"
+python -m pip install "crewai>=1.15.28,<2"
 npm install -g promptfoo
 ```
 
 Here’s what’s happening:
 
-- **`python -m pip install "crewai>=1.15.22,<2"`** →
+- **`python -m pip install "crewai>=1.15.28,<2"`** →
   This installs CrewAI for creating and managing multi-agent workflows.
   CrewAI installs the OpenAI SDK, Pydantic, and its other runtime dependencies.
 - **`npm install -g promptfoo`** →

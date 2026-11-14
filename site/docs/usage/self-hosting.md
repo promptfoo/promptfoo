@@ -281,6 +281,13 @@ first advance the checkout to the desired release, then rebuild and redeploy. Us
 tagged parent image must be refreshed. An unchanged build context produces the same Promptfoo
 version.
 
+To refresh Alpine packages even when the parent image is unchanged, change the
+`OS_PACKAGE_REFRESH` build argument on each rebuild:
+
+```sh
+docker build --pull --build-arg OS_PACKAGE_REFRESH="$(date +%s)" -t promptfoo:custom .
+```
+
 Custom Dockerfiles that bake Promptfoo into another base image should identify themselves so update
 notices do not suggest a host-level `npm` or `npx` command:
 
@@ -373,6 +380,8 @@ When configured correctly, your self-hosted server handles requests like:
 By default, promptfoo stores its SQLite database (`promptfoo.db`) in `/home/promptfoo/.promptfoo` _inside the container_. Ensure this directory is mapped to persistent storage using volumes (as shown in the Docker and Docker Compose examples) to save your evals across container restarts.
 
 By default, promptfoo externalizes large binary outputs (for example, images/audio) to the local filesystem under `/home/promptfoo/.promptfoo/blobs` and replaces inline base64 with lightweight references. To keep media inline (legacy behavior), set `PROMPTFOO_INLINE_MEDIA=true`. Make sure your volume mapping includes `/home/promptfoo/.promptfoo/blobs` so media persists across restarts.
+
+`PROMPTFOO_MEDIA_PATH` applies only to legacy `storageRef` media, which defaults to `/home/promptfoo/.promptfoo/media`; it does not move the `blobs` directory. Set it before media storage is first used: that location stays fixed for the process.
 
 ### Custom Config Directory
 

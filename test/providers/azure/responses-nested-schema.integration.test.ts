@@ -13,6 +13,7 @@ import * as path from 'path';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AzureResponsesProvider } from '../../../src/providers/azure/responses';
 import { mockProcessEnv } from '../../util/utils';
+import { createMockFetchResponse } from '../mockProviderResponses';
 
 // Only mock the network layer, not file operations
 vi.mock('../../../src/cache');
@@ -68,6 +69,16 @@ describe('Azure Responses - Nested Schema Loading Integration', () => {
       },
     };
     fs.writeFileSync(path.join(tempDir, 'flat-format.json'), JSON.stringify(flatFormat, null, 2));
+    fs.writeFileSync(path.join(tempDir, 'invalid-format.json'), '{invalid json');
+
+    fs.writeFileSync(
+      path.join(tempDir, 'templated-format.json'),
+      JSON.stringify({
+        type: 'json_schema',
+        name: 'templated_schema',
+        schema: `file://${path.join(tempDir, '{{ schema_name }}.json')}`,
+      }),
+    );
   });
 
   afterAll(() => {
@@ -97,8 +108,8 @@ describe('Azure Responses - Nested Schema Loading Integration', () => {
       .mockReturnValue('https://test.openai.azure.com');
 
     // Mock successful API response
-    mockFetchWithCache.mockResolvedValue({
-      data: {
+    mockFetchWithCache.mockResolvedValue(
+      createMockFetchResponse({
         output: [
           {
             type: 'message',
@@ -112,11 +123,8 @@ describe('Azure Responses - Nested Schema Loading Integration', () => {
           },
         ],
         usage: { input_tokens: 10, output_tokens: 20 },
-      },
-      cached: false,
-      status: 200,
-      statusText: 'OK',
-    });
+      }),
+    );
   });
 
   afterEach(() => {
@@ -126,7 +134,7 @@ describe('Azure Responses - Nested Schema Loading Integration', () => {
   it('should load nested schema from file reference (regression test for Azure bug)', async () => {
     const provider = new AzureResponsesProvider('gpt-4.1-test', {
       config: {
-        response_format: `file://${path.join(tempDir, 'nested-format.json')}` as any,
+        response_format: `file://${path.join(tempDir, 'nested-format.json')}`,
       },
     });
 
@@ -159,10 +167,89 @@ describe('Azure Responses - Nested Schema Loading Integration', () => {
     expect(typeof requestBody.text.format.schema).not.toBe('string');
   });
 
+  it('resolves context variables in outer and nested response-format paths', async () => {
+    const provider = new AzureResponsesProvider('gpt-4.1-test', {
+      config: {
+        response_format: `file://${path.join(tempDir, '{{ format_name }}.json')}`,
+      },
+    });
+
+    const result = await provider.callApi('Extract event info', {
+      vars: { format_name: 'templated-format', schema_name: 'event-schema' },
+      prompt: { raw: 'Extract event info', label: 'test' },
+    });
+
+    expect(result.error).toBeUndefined();
+    expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
+    const requestBody = JSON.parse(mockFetchWithCache.mock.calls[0]![1]!.body as string);
+    expect(requestBody.text.format).toMatchObject({
+      type: 'json_schema',
+      name: 'templated_schema',
+      schema: { required: ['event_name', 'date', 'location'] },
+    });
+  });
+
+  it('only loads the effective prompt-level response format', async () => {
+    const provider = new AzureResponsesProvider('gpt-4.1-test', {
+      config: { response_format: `file://${path.join(tempDir, 'missing-provider.json')}` },
+    });
+
+    const result = await provider.callApi('Extract event info', {
+      vars: { format_name: 'flat-format' },
+      prompt: {
+        raw: 'Extract event info',
+        label: 'test',
+        config: { response_format: `file://${path.join(tempDir, '{{ format_name }}.json')}` },
+      },
+    });
+
+    expect(result.error).toBeUndefined();
+    const requestBody = JSON.parse(mockFetchWithCache.mock.calls[0]![1]!.body as string);
+    expect(requestBody.text.format.name).toBe('flat_schema');
+  });
+
+  it.each(['missing-format', 'invalid-format'])(
+    'reports loading errors for the effective prompt response format: %s',
+    async (formatName) => {
+      const provider = new AzureResponsesProvider('gpt-4.1-test', {
+        config: { response_format: { type: 'json_object' } },
+      });
+      const responseFormat = `file://${path.join(tempDir, '{{ format_name }}.json')}`;
+
+      await expect(
+        provider.callApi('Extract event info', {
+          vars: { format_name: formatName },
+          prompt: {
+            raw: 'Extract event info',
+            label: 'test',
+            config: { response_format: responseFormat },
+          },
+        }),
+      ).rejects.toThrow(`Failed to load response_format file: ${responseFormat}`);
+      expect(mockFetchWithCache).not.toHaveBeenCalled();
+    },
+  );
+
+  it('reports a missing nested schema before making a request', async () => {
+    const provider = new AzureResponsesProvider('gpt-4.1-test', {
+      config: {
+        response_format: `file://${path.join(tempDir, 'templated-format.json')}`,
+      },
+    });
+
+    await expect(
+      provider.callApi('Extract event info', {
+        vars: { schema_name: 'missing-schema' },
+        prompt: { raw: 'Extract event info', label: 'test' },
+      }),
+    ).rejects.toThrow('missing-schema.json');
+    expect(mockFetchWithCache).not.toHaveBeenCalled();
+  });
+
   it('should handle flat response_format file without nested references', async () => {
     const provider = new AzureResponsesProvider('gpt-4.1-test', {
       config: {
-        response_format: `file://${path.join(tempDir, 'flat-format.json')}` as any,
+        response_format: `file://${path.join(tempDir, 'flat-format.json')}`,
       },
     });
 
@@ -195,7 +282,7 @@ describe('Azure Responses - Nested Schema Loading Integration', () => {
             properties: { result: { type: 'string' } },
             additionalProperties: false,
           },
-        } as any,
+        },
       },
     });
 
@@ -211,6 +298,34 @@ describe('Azure Responses - Nested Schema Loading Integration', () => {
       type: 'object',
       properties: { result: { type: 'string' } },
       additionalProperties: false,
+    });
+  });
+
+  it('loads a nested schema file in an inline Chat-style format', async () => {
+    const provider = new AzureResponsesProvider('gpt-4.1-test', {
+      config: {
+        response_format: {
+          type: 'json_schema',
+          json_schema: {
+            name: 'event_schema',
+            strict: true,
+            schema: `file://${path.join(tempDir, '{{ schema_name }}.json')}`,
+          },
+        },
+      },
+    });
+
+    const result = await provider.callApi('Extract event info', {
+      vars: { schema_name: 'event-schema' },
+      prompt: { raw: 'Extract event info', label: 'test' },
+    });
+
+    expect(result.error).toBeUndefined();
+    const requestBody = JSON.parse(mockFetchWithCache.mock.calls[0]![1]!.body as string);
+    expect(requestBody.text.format).toMatchObject({
+      type: 'json_schema',
+      name: 'event_schema',
+      schema: { required: ['event_name', 'date', 'location'] },
     });
   });
 });

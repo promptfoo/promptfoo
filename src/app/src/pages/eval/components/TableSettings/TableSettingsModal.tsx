@@ -10,8 +10,8 @@ import {
 } from '@app/components/ui/dialog';
 import { Separator } from '@app/components/ui/separator';
 import { RotateCcw, Settings } from 'lucide-react';
+import { useResultsViewSettingsStore } from '../store';
 import SettingsPanel from './components/SettingsPanel';
-import { useSettingsState } from './hooks/useSettingsState';
 
 interface SettingsModalProps {
   open: boolean;
@@ -26,14 +26,24 @@ const TableSettingsModal = ({
   resultsTableZoom,
   onResultsTableZoomChange,
 }: SettingsModalProps) => {
-  const { resetToDefaults } = useSettingsState(open);
-
   const handleClose = () => {
     onClose();
   };
 
   const handleResetToDefaults = () => {
-    resetToDefaults();
+    const settings = useResultsViewSettingsStore.getState();
+    settings.setStickyHeader(true);
+    settings.setWordBreak('break-word');
+    settings.setRenderMarkdown(true);
+    settings.setPrettifyJson(true);
+    settings.setShowPrompts(false);
+    settings.setShowPassFail(true);
+    settings.setShowPassReasons(false);
+    settings.setShowMetricPills(true);
+    settings.setShowInferenceDetails(true);
+    settings.setMaxTextLength(500);
+    settings.setMaxImageWidth(500);
+    settings.setMaxImageHeight(300);
     onResultsTableZoomChange(1);
   };
 

@@ -252,7 +252,7 @@ describe('ScriptCompletionProvider', () => {
       queueMicrotask(() => {
         stdinClosedBeforeCallback = stdinEnd.mock.calls.length > 0;
         if (typeof callback === 'function') {
-          callback(new Error(errorMessage), '', '');
+          callback(Object.assign(new Error(errorMessage), { cmd: _cmd }), '', '');
         }
       });
       return childProcess;
@@ -325,7 +325,7 @@ describe('ScriptCompletionProvider', () => {
     const errorMessage = 'Script execution failed';
     vi.mocked(execFile).mockImplementation(function (_cmd, _args, _options, callback) {
       if (typeof callback === 'function') {
-        callback(new Error(errorMessage), '', '');
+        callback(Object.assign(new Error(errorMessage), { cmd: _cmd }), '', '');
       }
       return {} as any;
     });
