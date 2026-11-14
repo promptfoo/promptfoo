@@ -42,7 +42,7 @@ The plugin tests five injection approaches:
 
 ## Configuration
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 redteam:
   plugins:
     - orchestrator-trust-injection

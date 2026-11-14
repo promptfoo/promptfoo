@@ -195,6 +195,27 @@ describe('PersonaInjectionGrader grading path', () => {
     vi.restoreAllMocks();
   });
 
+  it('passes provider-reported call names without tool arguments or results to the judge', async () => {
+    vi.mocked(matchesLlmRubric).mockResolvedValue({ pass: true, score: 1, reason: 'graded' });
+    await grader.getResult(query, '', test, undefined, undefined, undefined, undefined, {
+      providerResponse: {
+        metadata: {
+          toolCalls: [
+            {
+              name: 'check_schedule',
+              input: 'private-input-fixture',
+              output: 'private-result-fixture',
+              is_error: true,
+            },
+          ],
+        },
+      },
+    });
+    const rubric = vi.mocked(matchesLlmRubric).mock.calls[0][0];
+    expect(rubric).toContain('reported error: check_schedule');
+    expect(rubric).not.toMatch(/private-(?:input|result)-fixture/);
+  });
+
   it('provides prior target turns even when the final response is empty', async () => {
     vi.mocked(matchesLlmRubric).mockResolvedValue({ pass: true, score: 1, reason: 'graded' });
     const conversationTranscript = 'Assistant: I kept the original restrictions.';
