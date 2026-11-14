@@ -1,6 +1,6 @@
 import { fetchWithCache } from '../cache';
 import { resolveProviderEnv } from './env';
-import { getRequestTimeoutMs } from './shared';
+import { appendApiPath, getRequestTimeoutMs } from './shared';
 
 import type { EnvOverrides } from '../contracts/env';
 import type { ApiProvider, ProviderResponse } from '../types/index';
@@ -71,11 +71,7 @@ export class LlamaProvider implements ApiProvider {
       logit_bias: this.config?.logit_bias,
     };
 
-    // Strip trailing slashes so a configured base URL like `http://host:8080/`
-    // does not produce double-slash request paths.
-    const url = (
-      resolveProviderEnv(this.env, ['LLAMA_BASE_URL'])?.value || 'http://localhost:8080'
-    ).replace(/\/+$/, '');
+    const url = resolveProviderEnv(this.env, ['LLAMA_BASE_URL'])?.value || 'http://localhost:8080';
 
     interface LlamaCompletionResponse {
       content: string;
@@ -86,7 +82,7 @@ export class LlamaProvider implements ApiProvider {
     let latencyMs: number | undefined;
     try {
       ({ data, cached, latencyMs } = await fetchWithCache<LlamaCompletionResponse>(
-        `${url}/completion`,
+        appendApiPath(url, 'completion'),
         {
           method: 'POST',
           headers: {

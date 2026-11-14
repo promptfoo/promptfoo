@@ -59,18 +59,15 @@ describe('AI21ChatCompletionProvider', () => {
     }
   });
 
-  it('should get API URL from config', () => {
+  it('sends chat requests under the configured base URL', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue(createMockChatResponse('test response'));
     const provider = new AI21ChatCompletionProvider('jamba-mini', {
-      config: { apiBaseUrl: 'https://custom-api.ai21.com' },
+      config: { apiKey: 'test-key', apiBaseUrl: 'https://custom-api.ai21.com/studio/v1/' },
     });
-    expect(provider.getApiUrl()).toBe('https://custom-api.ai21.com');
-  });
-
-  it('should strip trailing slashes from a configured API base URL', () => {
-    const provider = new AI21ChatCompletionProvider('jamba-mini', {
-      config: { apiBaseUrl: 'https://custom-api.ai21.com/' },
-    });
-    expect(provider.getApiUrl()).toBe('https://custom-api.ai21.com');
+    await provider.callApi('test prompt');
+    expect(vi.mocked(fetchWithCache).mock.calls[0][0]).toBe(
+      'https://custom-api.ai21.com/studio/v1/chat/completions',
+    );
   });
 
   it('should get default API URL when not configured', () => {
@@ -144,6 +141,17 @@ describe('AI21ChatCompletionProvider', () => {
     const result = await provider.callApi('test prompt');
     expect(result.error).toContain('Malformed response data');
     expect(result.output).toBeUndefined();
+  });
+
+  it('returns a provider error for an invalid API base URL', async () => {
+    const provider = new AI21ChatCompletionProvider('jamba-mini', {
+      config: { apiKey: 'test-key', apiBaseUrl: '///' },
+    });
+
+    expect((await provider.callApi('test prompt')).error).toContain(
+      'Invalid provider API base URL',
+    );
+    expect(fetchWithCache).not.toHaveBeenCalled();
   });
 
   it('should handle network errors', async () => {

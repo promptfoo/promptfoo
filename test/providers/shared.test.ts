@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getEnvBool, getEnvInt } from '../../src/envars';
 import {
+  appendApiPath,
   calculateCost,
   clampCachedTokens,
   getRequestTimeoutMs,
@@ -45,6 +46,13 @@ describe('Shared Provider Functions', () => {
       return defaultValue ?? 0;
     });
   });
+
+  it.each(['https://', 'https://?tenant=one', 'https://#fragment'])(
+    'rejects a hostless base %s before the endpoint can become the hostname',
+    (base) => {
+      expect(() => appendApiPath(base, 'responses')).toThrow('Invalid provider API base URL');
+    },
+  );
 
   describe('modelNameFromProviderPath', () => {
     it('keeps colons that belong to the model id', () => {

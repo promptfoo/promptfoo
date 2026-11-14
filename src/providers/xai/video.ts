@@ -16,6 +16,7 @@ import { isSecretField, looksLikeSecret } from '../../util/sanitizer';
 import { sleep } from '../../util/time';
 import { resolveProviderApiKey } from '../credentials';
 import { resolveProviderEnv } from '../env';
+import { appendApiPath } from '../shared';
 import {
   buildStorageRefUrl,
   checkVideoCache,
@@ -344,13 +345,11 @@ export class XAIVideoProvider implements ApiProvider {
    */
   getApiUrl(): string {
     if (this.config.apiBaseUrl) {
-      // Strip trailing slashes so a configured base URL like `https://host/v1/`
-      // does not produce double-slash request paths.
-      return this.config.apiBaseUrl.replace(/\/+$/, '');
+      return this.config.apiBaseUrl;
     }
     const envApiBaseUrl = resolveProviderEnv(this.env, ['XAI_API_BASE_URL'])?.value;
     if (envApiBaseUrl) {
-      return envApiBaseUrl.replace(/\/+$/, '');
+      return envApiBaseUrl;
     }
     if (this.config.region) {
       return `https://${this.config.region}.api.x.ai/v1`;
@@ -415,8 +414,6 @@ export class XAIVideoProvider implements ApiProvider {
     config: XaiVideoOptions,
   ): Promise<{ requestId?: string; error?: string }> {
     const isEdit = !!config.video?.url;
-    const endpoint = isEdit ? '/videos/edits' : '/videos/generations';
-    const url = `${this.getApiUrl()}${endpoint}`;
 
     const body: Record<string, unknown> = {
       model: this.modelName,
@@ -459,6 +456,8 @@ export class XAIVideoProvider implements ApiProvider {
     }
 
     try {
+      const endpoint = isEdit ? 'videos/edits' : 'videos/generations';
+      const url = appendApiPath(this.getApiUrl(), endpoint);
       logger.debug(`[${PROVIDER_NAME}] Creating video job`, { url, model: this.modelName, isEdit });
 
       const response = await fetchWithProxy(url, {
@@ -599,10 +598,9 @@ export class XAIVideoProvider implements ApiProvider {
     maxPollTimeMs: number,
   ): Promise<{ videoUrl?: string; videoDuration?: number; reportedCost?: number; error?: string }> {
     const startTime = Date.now();
-    const url = `${this.getApiUrl()}/videos/${requestId}`;
-
-    while (Date.now() - startTime < maxPollTimeMs) {
-      try {
+    try {
+      const url = appendApiPath(this.getApiUrl(), `videos/${encodeURIComponent(requestId)}`);
+      while (Date.now() - startTime < maxPollTimeMs) {
         const response = await fetchWithProxy(url, {
           method: 'GET',
           headers: this.getAuthHeaders(),
@@ -640,9 +638,9 @@ export class XAIVideoProvider implements ApiProvider {
 
         // Wait before next poll
         await sleep(pollIntervalMs);
-      } catch (err: unknown) {
-        return { error: `Polling error: ${String(err)}` };
       }
+    } catch (err: unknown) {
+      return { error: `Polling error: ${String(err)}` };
     }
 
     return { error: `Video generation timed out after ${maxPollTimeMs / 1000} seconds` };

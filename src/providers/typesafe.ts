@@ -24,7 +24,7 @@ import {
   makeNoulOrScoreQuestion,
   resolveDecisionThreshold,
 } from './decisionGrading';
-import { getRequestTimeoutMs } from './shared';
+import { appendApiPath, getRequestTimeoutMs } from './shared';
 
 import type { EnvOverrides } from '../contracts/env';
 import type {
@@ -323,7 +323,7 @@ export class TypeSafeProvider implements ApiProvider {
     try {
       // Read text so an error page or empty body still reports its HTTP status.
       fetched = await fetchWithCache<string>(
-        `${(this.config.apiBaseUrl || DEFAULT_API_BASE_URL).replace(/\/+$/, '')}/v1/systemone`,
+        appendApiPath(this.config.apiBaseUrl || DEFAULT_API_BASE_URL, 'v1/systemone'),
         {
           method: 'POST',
           headers: {

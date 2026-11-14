@@ -27,10 +27,6 @@ const createMockResponseData = (model: string = DEFAULT_TEST_MODEL) => ({
 });
 
 class TestableXAIResponsesProvider extends XAIResponsesProvider {
-  public getResolvedApiKey(): string | undefined {
-    return this.getApiKey();
-  }
-
   public getResolvedApiUrl(): string {
     return this.getApiUrl();
   }
@@ -222,18 +218,6 @@ describe('XAIResponsesProvider', () => {
     });
 
     expect(provider.getResolvedApiUrl()).toBe('https://eu-west-1.api.x.ai/v1');
-  });
-
-  it('strips trailing slashes from configured and env base URLs', () => {
-    const fromConfig = new TestableXAIResponsesProvider('grok-4.3', {
-      config: { apiBaseUrl: 'https://custom.api.x.ai/v1/' },
-    });
-    expect(fromConfig.getResolvedApiUrl()).toBe('https://custom.api.x.ai/v1');
-
-    const fromEnv = new TestableXAIResponsesProvider('grok-4.3', {
-      env: { XAI_API_BASE_URL: 'https://env.api.x.ai/v1/' },
-    });
-    expect(fromEnv.getResolvedApiUrl()).toBe('https://env.api.x.ai/v1');
   });
 
   it.each(['low', 'medium', 'high', 'xhigh'] as const)(
@@ -561,16 +545,26 @@ describe('XAIResponsesProvider', () => {
     expect((await multiAgent.getRequestBody('hello')).body.reasoning).toEqual({ effort: 'xhigh' });
   });
 
-  it('honors env overrides for authentication and base URL', () => {
-    const provider = new TestableXAIResponsesProvider('grok-4.3', {
+  it('honors env overrides for authentication and base URL', async () => {
+    const provider = new XAIResponsesProvider('grok-4.3', {
       env: {
         XAI_API_KEY: 'env-key',
-        XAI_API_BASE_URL: 'https://env.api.x.ai/v1',
+        XAI_API_BASE_URL: 'https://env.api.x.ai/v1///?tenant=one',
       },
     });
 
-    expect(provider.getResolvedApiKey()).toBe('env-key');
-    expect(provider.getResolvedApiUrl()).toBe('https://env.api.x.ai/v1');
+    await provider.callApi('hello');
+    const [url, request] = mockFetchWithCache.mock.calls[0];
+    expect(url).toBe('https://env.api.x.ai/v1/responses?tenant=one');
+    expect(request.headers.Authorization).toBe('Bearer env-key');
+  });
+
+  it('returns an error before sending credentials to a hostless base URL', async () => {
+    const provider = new XAIResponsesProvider('grok-4.3', {
+      config: { apiKey: 'test-key', apiBaseUrl: 'https://?tenant=one' },
+    });
+    expect((await provider.callApi('hello')).error).toContain('Invalid provider API base URL');
+    expect(mockFetchWithCache).not.toHaveBeenCalled();
   });
 
   it('uses the exact billed xAI cost when the API returns cost ticks', async () => {
@@ -1091,14 +1085,14 @@ describe('XAIResponsesProvider', () => {
     });
 
     const provider = new XAIResponsesProvider('grok-4.3', {
-      config: { apiKey: 'test-key', stream: true },
+      config: { apiKey: 'test-key', stream: true, apiBaseUrl: 'https://gateway.example/v1/' },
     });
 
     const result = await provider.callApi('hello');
 
     expect(mockFetchWithCache).not.toHaveBeenCalled();
     expect(mockFetchWithProxy).toHaveBeenCalledWith(
-      'https://api.x.ai/v1/responses',
+      'https://gateway.example/v1/responses',
       expect.objectContaining({
         body: expect.stringContaining('"stream":true'),
       }),

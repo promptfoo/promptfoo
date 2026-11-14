@@ -30,31 +30,12 @@ describe('VoyageEmbeddingProvider', () => {
     vi.resetAllMocks();
   });
 
-  it('strips trailing slashes from a configured API base URL when building the request URL', async () => {
-    mockedFetchWithCache.mockResolvedValue({
-      data: { data: [{ embedding: [0.1, 0.2] }], usage: { total_tokens: 2 } },
-      cached: false,
-      status: 200,
-      statusText: 'OK',
-    });
-    const provider = new VoyageEmbeddingProvider('voyage-3', {
-      apiKey: 'config-key',
-      apiBaseUrl: 'https://config.example/v1/',
-    });
-    await provider.callEmbeddingApi!('loaded fixture');
-    expect(mockedFetchWithCache).toHaveBeenCalledWith(
-      'https://config.example/v1/embeddings',
-      expect.anything(),
-      expect.any(Number),
-    );
-  });
-
   it.each([
     {
       name: 'explicit provider config',
       config: {
         apiKey: 'config-key',
-        apiBaseUrl: 'https://config.example/v1',
+        apiBaseUrl: 'https://config.example/v1/',
         headers: { 'X-Request-Namespace': 'voyage-fixture' },
       },
       providerEnv: {
@@ -70,7 +51,7 @@ describe('VoyageEmbeddingProvider', () => {
       config: {},
       providerEnv: {
         VOYAGE_API_KEY: 'provider-key',
-        VOYAGE_API_BASE_URL: 'https://provider.example/v1',
+        VOYAGE_API_BASE_URL: 'https://provider.example/v1///',
       },
       suiteEnv: { VOYAGE_API_KEY: 'suite-key', VOYAGE_API_BASE_URL: 'https://suite.example/v1' },
       expectedKey: 'provider-key',
