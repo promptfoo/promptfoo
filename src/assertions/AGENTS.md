@@ -15,6 +15,8 @@ Promptfoo pass/fail scores.
   it. If mutation is required, keep it narrow and covered by tests.
 - Trace-aware assertions must tolerate missing, delayed, or partial trace data. Bound
   polling/retry behavior and keep failures explainable in the assertion reason.
+- For `trajectory:tool-used` count matchers, document and test the max-only case: when
+  `max` is provided without `min`, the minimum count defaults to `0`.
 - JavaScript, Python, Ruby, webhook, and file/package assertion values can execute or
   load user-controlled code. Keep sandboxing, path resolution, and error messages
   explicit.
