@@ -175,6 +175,7 @@ describe('RubyProvider', () => {
       const calls = spies.flatMap((spy) => spy.mock.calls);
       spies.forEach((spy) => spy.mockRestore());
       expect(JSON.stringify(calls)).not.toContain(secret);
+      expect(JSON.stringify(calls)).not.toMatch(/cache key \(sha256\)/i);
     });
 
     it('should not mutate the caller context when sanitizing', async () => {

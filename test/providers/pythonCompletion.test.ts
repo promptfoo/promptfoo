@@ -230,6 +230,7 @@ describe('PythonProvider', () => {
         (level) => vi.mocked(logger[level]).mock.calls,
       );
       expect(JSON.stringify(calls)).not.toContain(secret);
+      expect(JSON.stringify(calls)).not.toMatch(/cache key \(sha256\)/i);
     });
 
     describe('error handling', () => {

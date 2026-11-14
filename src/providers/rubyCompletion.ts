@@ -142,9 +142,6 @@ export class RubyProvider implements ApiProvider {
     const cacheKey = `ruby:${this.scriptPath}:${this.functionName || 'default'}:${apiType}:${fileHash}:${prompt}:${safeJsonStringify(
       this.options,
     )}:${safeJsonStringify(context?.vars)}`;
-    // the key holds the provider config (API keys included): log its hash, which still tells keys apart
-    const cacheKeyHash = sha256(cacheKey);
-    logger.debug(`RubyProvider cache key (sha256): ${cacheKeyHash}`);
 
     const cache = await getCache();
     let cachedResult;
@@ -196,7 +193,7 @@ export class RubyProvider implements ApiProvider {
       const hasError = hasScriptResultError(result);
 
       if (isCacheEnabled() && !hasError) {
-        logger.debug(`RubyProvider caching result for cache key (sha256): ${cacheKeyHash}`);
+        logger.debug('RubyProvider caching result');
         await cache.set(cacheKey, JSON.stringify(result));
       } else {
         logger.debug(
