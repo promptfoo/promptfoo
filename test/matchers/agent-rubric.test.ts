@@ -43,9 +43,9 @@ vi.mock('../../src/providers/defaults', () => ({
   getDefaultProviders: mocks.getDefaultProviders,
 }));
 
-vi.mock('../../src/providers/index', () => ({
+vi.mock('../../src/providers/index', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/providers/index')>()),
   loadApiProvider: mocks.loadApiProvider,
-  getProviderLoadPath: () => undefined,
 }));
 
 describe('matchesAgentRubric', () => {

@@ -21,10 +21,9 @@ import {
   isProviderTypeMap,
   resolveConfiguredProviderReference,
 } from './util/gradingProvider';
-import { hasProviderConfigTemplates } from './util/gradingProviderConfig';
 import { readFilters, warnOnDegradedJsonlRecovery, writeMultipleOutputs } from './util/index';
 import { isProviderConfigFileReference, normalizeProviderRef } from './util/providerRef';
-import { renderEnvOnlyInObject } from './util/render';
+import { hasProviderConfigTemplates, renderEnvOnlyInObject } from './util/render';
 import { readTests } from './util/testCaseReader';
 import { INLINE_FUNCTION_LABEL, TRANSFORM_KEYS } from './util/transform';
 

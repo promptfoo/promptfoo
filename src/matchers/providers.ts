@@ -1,6 +1,10 @@
 import cliState from '../cliState';
 import logger from '../logger';
-import { loadApiProvider } from '../providers/index';
+import {
+  createGradingConfigTransform,
+  loadApiProvider,
+  loadMappedGradingProvider,
+} from '../providers/index';
 import { providerRegistry } from '../providers/providerRegistry';
 import { shouldGenerateRemote } from '../redteam/remoteGeneration';
 import { getCloudTargetIdFromProviders } from '../redteam/remoteGenerationContextFromProviders';
@@ -10,7 +14,6 @@ import {
   runProviderCallWithAbort,
 } from '../scheduler/providerCallExecutionContext';
 import { createProviderRateLimitOptions, isRateLimitWrapped } from '../scheduler/providerWrapper';
-import { normalizeProviderRef } from '../util/providerRef';
 
 import type {
   ApiProvider,
@@ -203,7 +206,10 @@ export async function getGradingProvider(
   let finalProvider: ApiProvider | null;
   if (typeof provider === 'string') {
     // Defined as a string
-    finalProvider = await loadApiProvider(provider, { basePath: cliState.basePath, ...transformContext });
+    finalProvider = await loadApiProvider(provider, {
+      basePath: cliState.basePath,
+      ...transformContext,
+    });
   } else if (
     provider != null &&
     typeof provider === 'object' &&
@@ -239,17 +245,18 @@ export async function getGradingProvider(
         ...transformContext,
       });
     } else {
-      const providerRef = configTransform ? normalizeProviderRef(provider) : undefined;
-      if (providerRef?.kind !== 'map') {
+      const mappedProvider = configTransform
+        ? await loadMappedGradingProvider(provider, {
+            basePath: cliState.basePath,
+            ...transformContext,
+          })
+        : undefined;
+      if (!mappedProvider) {
         throw new Error(
           `Invalid provider definition for output type '${type}'. Set a provider id or configure the '${type}' entry in the grading provider map.`,
         );
       }
-      finalProvider = await loadApiProvider(providerRef.loadProviderPath, {
-        options: providerRef.loadOptions,
-        basePath: cliState.basePath,
-        ...transformContext,
-      });
+      finalProvider = mappedProvider;
     }
   } else {
     // No provider specified - check defaultTest providers as fallback
@@ -287,6 +294,13 @@ export async function getGradingProvider(
     }
   }
   return finalProvider;
+}
+
+export function getAgentRubricGradingProvider(
+  provider: GradingConfig['provider'],
+  ...template: Parameters<typeof createGradingConfigTransform>
+): Promise<ApiProvider | null> {
+  return getGradingProvider('text', provider, null, createGradingConfigTransform(...template));
 }
 
 export async function getAndCheckProvider(

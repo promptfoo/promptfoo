@@ -5,10 +5,7 @@ import {
   isProviderTypeMap,
   resolveConfiguredProviderReference,
 } from '../../src/util/gradingProvider';
-import {
-  hasProviderConfigTemplates,
-  renderGradingProviderConfig,
-} from '../../src/util/gradingProviderConfig';
+import { hasProviderConfigTemplates, renderGradingProviderConfig } from '../../src/util/render';
 
 import type { ApiProvider } from '../../src/types/providers';
 

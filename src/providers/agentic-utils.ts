@@ -17,6 +17,16 @@ import { safeResolve } from '../util/pathUtils';
 
 import type { ApiProvider, ProviderResponse } from '../types/index';
 
+const providerLoadPaths = new WeakMap<ApiProvider, string>();
+
+export function recordProviderLoadPath(provider: ApiProvider, path: string): void {
+  providerLoadPaths.set(provider, path);
+}
+
+export function getProviderLoadPath(provider: ApiProvider): string | undefined {
+  return providerLoadPaths.get(provider);
+}
+
 /**
  * Whether a provider runs a coding-agent runtime rather than a plain model API.
  *

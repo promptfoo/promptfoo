@@ -18,8 +18,9 @@ import {
   normalizeProviderRef,
   readProviderConfigFile,
 } from '../util/providerRef';
-import { renderEnvOnlyInObject } from '../util/render';
+import { renderEnvOnlyInObject, renderGradingProviderConfig } from '../util/render';
 import { sanitizeObject } from '../util/sanitizer';
+import { recordProviderLoadPath } from './agentic-utils';
 import { getProviderFactories, mergeProviderEnv } from './registry';
 
 import type { EnvOverrides } from '../types/env';
@@ -83,11 +84,21 @@ function describeInvalidProvider(provider: unknown): string {
   }
 }
 
-const providerLoadPaths = new WeakMap<ApiProvider, string>();
+export function createGradingConfigTransform(
+  vars: Parameters<typeof renderGradingProviderConfig>[1],
+  filters: Parameters<typeof renderGradingProviderConfig>[3],
+): NonNullable<LoadApiProviderContext['configTransform']> {
+  return (config, env) => renderGradingProviderConfig(config, vars, env, filters);
+}
 
-/** Factory identity stays distinct from an optional display/custom provider ID. */
-export function getProviderLoadPath(provider: ApiProvider): string | undefined {
-  return providerLoadPaths.get(provider);
+export async function loadMappedGradingProvider(
+  provider: unknown,
+  context: LoadApiProviderContext,
+): Promise<ApiProvider | undefined> {
+  const ref = normalizeProviderRef(provider);
+  if (ref.kind === 'map') {
+    return loadApiProvider(ref.loadProviderPath, { ...context, options: ref.loadOptions });
+  }
 }
 
 // NOTE: loadApiProvider only accepts string paths. Callers use normalizeProviderRef
@@ -306,7 +317,7 @@ async function createApiProvider(
       const ret = await cliState.withEnv(mergedEnv, () =>
         factory.create(renderedProviderPath, providerOptions, { ...context, env: mergedEnv }),
       );
-      providerLoadPaths.set(ret, renderedProviderPath);
+      recordProviderLoadPath(ret, renderedProviderPath);
       ret.transform = options.transform;
       ret.delay = options.delay;
       ret.inputs = options.inputs;

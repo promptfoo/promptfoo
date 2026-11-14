@@ -19,7 +19,7 @@ import { ScriptCompletionProvider } from '../src/providers/scriptCompletion';
 import { WebSocketProvider } from '../src/providers/websocket';
 import { getCloudDatabaseId, getProviderFromCloud, isCloudProvider } from '../src/util/cloud';
 import * as fileUtil from '../src/util/file';
-import { renderGradingProviderConfig } from '../src/util/gradingProviderConfig';
+import { renderGradingProviderConfig } from '../src/util/render';
 import { loadYaml } from '../src/util/yamlLoad';
 import { mockProcessEnv } from './util/utils';
 
