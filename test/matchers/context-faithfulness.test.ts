@@ -525,6 +525,8 @@ describe('matchesContextFaithfulness', () => {
       ['conjunction words in prose', 2, `${marker} No and yes are both acceptable`, 0, 0.5],
       ['stuffed conjunction list', 2, `${marker} Yes and Yes and Yes`, 0, 0.5],
       ['incomplete conjunction list', 3, `${marker} Yes, and No`, 0, 0.5],
+      ['conjunction split across sentences', 3, `${marker} Yes and No. Yes.`, 2 / 3, 0.5],
+      ['conjunction split across lines', 3, `${marker} Yes, No,\nand Yes`, 2 / 3, 0.5],
       ['excess conjunction list', 3, `${marker} Yes, No, and Yes, No`, 0, 0.5],
       [
         'No explanation containing yes',
@@ -674,6 +676,13 @@ describe('matchesContextFaithfulness', () => {
         0.5,
       ],
       ['bold final-answer marker', 1, `**${marker}** Yes.`, 1, 0.5],
+      [
+        'unknown with a because-clause followed by excess verdicts',
+        2,
+        `${marker} Maybe because evidence is incomplete. Yes. Yes.`,
+        0,
+        0.9,
+      ],
       ['smart-quoted verdicts', 2, `${marker} “Yes”. “No”.`, 0.5, 0.5],
       ['statement-labelled verdicts', 2, `${marker} Statement 1: Yes. Statement 2: Yes.`, 1, 0.75],
       [

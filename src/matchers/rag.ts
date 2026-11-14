@@ -438,7 +438,7 @@ function parseFaithfulnessVerdict(
     );
   const unknownSuffix = unknownMatch ? unwrapped.slice(unknownMatch[0].length).trim() : '';
   const isKnownUnknown = Boolean(
-    unknownMatch && /^(?:$|[,:(\[\-\u2013\u2014])/u.test(unknownSuffix),
+    unknownMatch && /^(?:$|because\b|[,:(\[\-\u2013\u2014])/u.test(unknownSuffix),
   );
   if (requireExplicitEntry) {
     return hasEntryPrefix || isKnownUnknown ? 'unknown' : undefined;
@@ -526,8 +526,8 @@ function* getFaithfulnessVerdictChunks(value: string): Generator<string> {
 function parseCommaSeparatedFaithfulnessVerdicts(
   chunk: string,
   expectedCount: number,
-): ParsedFaithfulnessVerdict[] | null | undefined {
-  if (!chunk.includes(',') && !chunk.includes(' and ')) {
+): { entries: ParsedFaithfulnessVerdict[]; hasConjunction: boolean } | null | undefined {
+  if (!chunk.includes(',') && !chunk.includes(' and ') && !chunk.trimStart().startsWith('and ')) {
     return undefined;
   }
 
@@ -555,10 +555,9 @@ function parseCommaSeparatedFaithfulnessVerdicts(
       }
     }
   }
-  if (hasConjunction && parsedVerdicts.length !== expectedCount) {
-    return null;
-  }
-  return parsedVerdicts.length > 1 ? parsedVerdicts : undefined;
+  return parsedVerdicts.length > 1 || hasConjunction
+    ? { entries: parsedVerdicts, hasConjunction }
+    : undefined;
 }
 
 function parseFinalFaithfulnessVerdicts(
@@ -580,6 +579,7 @@ function parseFinalFaithfulnessVerdicts(
   const parsedVerdicts: FaithfulnessVerdict[] = [];
   const seenOrdinals = new Set<number>();
   let pendingOrdinal: string | undefined;
+  let hasConjunction = false;
   const addOrdinal = (explicitOrdinal: number | undefined): boolean => {
     if (explicitOrdinal === undefined) {
       return true;
@@ -612,7 +612,8 @@ function parseFinalFaithfulnessVerdicts(
       return undefined;
     }
     if (commaVerdicts) {
-      for (const { ordinal: explicitOrdinal, verdict } of commaVerdicts) {
+      hasConjunction ||= commaVerdicts.hasConjunction;
+      for (const { ordinal: explicitOrdinal, verdict } of commaVerdicts.entries) {
         if (!addOrdinal(explicitOrdinal)) {
           return undefined;
         }
@@ -631,7 +632,7 @@ function parseFinalFaithfulnessVerdicts(
       return undefined;
     }
   }
-  return parsedVerdicts;
+  return hasConjunction && parsedVerdicts.length !== expectedCount ? undefined : parsedVerdicts;
 }
 
 export async function matchesContextFaithfulness(
