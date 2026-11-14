@@ -123,7 +123,7 @@ tests:
         // highlight-end
 ```
 
-The default grading prompt includes the selected target conversation for GOAT and Crescendo runs. If the grader reports that its token limit truncated the verdict, the assertion reports a grading failure, including for `not-llama-guard`.
+The default grading prompt includes the selected target conversation for GOAT and Crescendo runs. If the grader provider reports a refusal, a content filter, or an incomplete verdict (such as a token limit or pending tool call), both `llama-guard` and `not-llama-guard` report a grading error.
 
 ## Metadata
 
