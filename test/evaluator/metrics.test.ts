@@ -1,145 +1,30 @@
+import { createTokenOutput } from '../factories/literalFixtures';
+
 import './setup';
 
 import { randomUUID } from 'crypto';
 
-import { sql } from 'drizzle-orm';
 import { expect, it, vi } from 'vitest';
 import { evaluate } from '../../src/evaluator';
 import { runExtensionHook } from '../../src/evaluatorHelpers';
 import Eval from '../../src/models/eval';
 import { type ApiProvider, ResultFailureReason, type TestSuite } from '../../src/types/index';
-import { calculateFilteredMetrics } from '../../src/util/calculateFilteredMetrics';
 import { createDeferred } from '../util/utils';
 import { mockApiProvider, toPrompt } from './helpers';
 import { describeEvaluator } from './lifecycle';
 
-describeEvaluator('evaluator metrics and scoring', () => {
-  it.each([
-    { nested: false, threshold: undefined, passCount: 1, failCount: 1 },
-    { nested: false, threshold: 0.5, passCount: 1, failCount: 1 },
-    { nested: true, threshold: undefined, passCount: 1, failCount: 2 },
-    { nested: true, threshold: 0.5, passCount: 2, failCount: 1 },
-    { nested: false, threshold: undefined, passCount: 1, failCount: 1, inverse: true },
-  ])(
-    'counts rubric dimensions without their aggregate (nested=$nested, threshold=$threshold)',
-    async ({ nested, threshold, passCount, failCount, inverse = false }) => {
-      const grader: ApiProvider = {
-        id: () => 'local-component-grader',
-        callApi: vi.fn().mockResolvedValue({
-          output: JSON.stringify({
-            components: [
-              { metric: 'accuracy', pass: true, score: 1, reason: 'Correct' },
-              { metric: 'style', pass: false, score: 0, reason: 'Verbose' },
-            ],
-          }),
-          tokenUsage: { prompt: 12, completion: 8, numRequests: 1 },
-        }),
-      };
-      const batch = {
-        type: inverse ? ('not-llm-rubric' as const) : ('llm-rubric' as const),
-        rubricComponents: true,
-        provider: grader,
-        threshold,
-        value: {
-          components: [
-            { metric: 'accuracy', value: 'Answers correctly' },
-            { metric: 'style', value: 'Uses plain language' },
-          ],
-        },
-      };
-      const testSuite: TestSuite = {
-        providers: [mockApiProvider],
-        prompts: [toPrompt('Test prompt')],
-        tests: [{ assert: [nested ? { type: 'assert-set', assert: [batch] } : batch] }],
-      };
-      const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
-      await evaluate(testSuite, evalRecord, {});
-      const summary = await evalRecord.toEvaluateSummary();
-      const expectedCounts = { assertPassCount: passCount, assertFailCount: failCount };
-
-      expect(evalRecord.prompts[0].metrics).toMatchObject(expectedCounts);
-      const filtered = await calculateFilteredMetrics({
-        evalId: evalRecord.id,
-        numPrompts: 1,
-        whereSql: sql`eval_id = ${evalRecord.id}`,
-      });
-      expect(filtered[0]).toMatchObject(expectedCounts);
-      expect(summary.results[0]).toMatchObject({
-        success: (threshold === 0.5) !== inverse,
-        score: 0.5,
-      });
-      expect(summary.results[0].gradingResult?.tokensUsed).toMatchObject({ numRequests: 1 });
-      expect(summary.results[0].gradingResult?.componentResults).toContainEqual(
-        expect.objectContaining({
-          assertion: expect.objectContaining({ type: batch.type, value: batch.value }),
-          componentResults: expect.arrayContaining([
-            expect.objectContaining({ assertion: expect.objectContaining({ metric: 'style' }) }),
-          ]),
-          metadata: expect.objectContaining({ renderedGradingPrompt: expect.any(String) }),
-        }),
-      );
-      expect(grader.callApi).toHaveBeenCalledTimes(1);
+const createErrorMetricTest = (errorValue: number) => ({
+  vars: { errorValue },
+  assert: [
+    {
+      type: 'javascript' as const,
+      value: 'context.vars.errorValue',
+      metric: 'APE',
     },
-  );
+  ],
+});
 
-  it('preserves script rubric references while counting resolved components', async () => {
-    const { importModule } = await import('../../src/esm');
-    const actualEsm = await vi.importActual<typeof import('../../src/esm')>('../../src/esm');
-    vi.mocked(importModule).mockImplementationOnce(actualEsm.importModule);
-    const { isJavascriptFile } = await import('../../src/util/fileExtensions');
-    const actualExtensions = await vi.importActual<typeof import('../../src/util/fileExtensions')>(
-      '../../src/util/fileExtensions',
-    );
-    vi.mocked(isJavascriptFile).mockImplementationOnce(actualExtensions.isJavascriptFile);
-    const value = 'file://test/fixtures/file-script-assertions/rubric-generator.cjs:getPattern';
-    const grader: ApiProvider = {
-      id: () => 'script-component-grader',
-      callApi: vi.fn().mockResolvedValue({
-        output: {
-          components: [
-            { metric: 'accuracy', pass: true, score: 1, reason: 'Correct' },
-            { metric: 'style', pass: false, score: 0, reason: 'Verbose' },
-          ],
-        },
-      }),
-    };
-    const testSuite: TestSuite = {
-      providers: [mockApiProvider],
-      prompts: [toPrompt('Test prompt')],
-      tests: [
-        {
-          vars: {
-            pattern: {
-              components: [
-                { metric: 'accuracy', value: 'Answers correctly' },
-                { metric: 'style', value: 'Uses plain language' },
-              ],
-            },
-          },
-          assert: [{ type: 'llm-rubric', rubricComponents: true, value, provider: grader }],
-        },
-      ],
-    };
-    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
-    await evaluate(testSuite, evalRecord, {});
-    const summary = await evalRecord.toEvaluateSummary();
-    expect(grader.callApi).toHaveBeenCalledTimes(1);
-    expect(evalRecord.prompts[0].metrics).toMatchObject({ assertPassCount: 1, assertFailCount: 1 });
-    const filtered = await calculateFilteredMetrics({
-      evalId: evalRecord.id,
-      numPrompts: 1,
-      whereSql: sql`eval_id = ${evalRecord.id}`,
-    });
-    expect(filtered[0]).toMatchObject({ assertPassCount: 1, assertFailCount: 1 });
-    expect(summary.results[0].gradingResult?.componentResults?.[0]).toMatchObject({
-      assertion: { value, rubricComponents: true },
-      metadata: { rubricComponents: true },
-      componentResults: expect.arrayContaining([
-        expect.objectContaining({ assertion: expect.objectContaining({ metric: 'accuracy' }) }),
-      ]),
-    });
-  });
-
+describeEvaluator('evaluator metrics and scoring', () => {
   it('evaluator should count named score assertions per metric', async () => {
     const testSuite: TestSuite = {
       providers: [mockApiProvider],
@@ -323,38 +208,7 @@ describeEvaluator('evaluator metrics and scoring', () => {
     const testSuite: TestSuite = {
       providers: [mockApiProvider],
       prompts: [toPrompt('Test prompt for derived metrics')],
-      tests: [
-        {
-          vars: { errorValue: 0.1 },
-          assert: [
-            {
-              type: 'javascript',
-              value: 'context.vars.errorValue',
-              metric: 'APE',
-            },
-          ],
-        },
-        {
-          vars: { errorValue: 0.2 },
-          assert: [
-            {
-              type: 'javascript',
-              value: 'context.vars.errorValue',
-              metric: 'APE',
-            },
-          ],
-        },
-        {
-          vars: { errorValue: 0.3 },
-          assert: [
-            {
-              type: 'javascript',
-              value: 'context.vars.errorValue',
-              metric: 'APE',
-            },
-          ],
-        },
-      ],
+      tests: [createErrorMetricTest(0.1), createErrorMetricTest(0.2), createErrorMetricTest(0.3)],
       derivedMetrics: [
         {
           name: 'APE_sum',
@@ -423,20 +277,7 @@ describeEvaluator('evaluator metrics and scoring', () => {
     const testSuite: TestSuite = {
       providers: [mockApiProvider],
       prompts: [toPrompt('First prompt'), toPrompt('Second prompt')],
-      tests: [
-        {
-          vars: { errorValue: 0.1 },
-          assert: [{ type: 'javascript', value: 'context.vars.errorValue', metric: 'APE' }],
-        },
-        {
-          vars: { errorValue: 0.2 },
-          assert: [{ type: 'javascript', value: 'context.vars.errorValue', metric: 'APE' }],
-        },
-        {
-          vars: { errorValue: 0.3 },
-          assert: [{ type: 'javascript', value: 'context.vars.errorValue', metric: 'APE' }],
-        },
-      ],
+      tests: [createErrorMetricTest(0.1), createErrorMetricTest(0.2), createErrorMetricTest(0.3)],
       derivedMetrics: [
         {
           name: 'MAPE',
@@ -472,16 +313,7 @@ describeEvaluator('evaluator metrics and scoring', () => {
     const testSuite: TestSuite = {
       providers: [mockProvider1, mockProvider2],
       prompts: [toPrompt('Test prompt')],
-      tests: [
-        {
-          vars: { errorValue: 0.1 },
-          assert: [{ type: 'javascript', value: 'context.vars.errorValue', metric: 'APE' }],
-        },
-        {
-          vars: { errorValue: 0.2 },
-          assert: [{ type: 'javascript', value: 'context.vars.errorValue', metric: 'APE' }],
-        },
-      ],
+      tests: [createErrorMetricTest(0.1), createErrorMetricTest(0.2)],
       derivedMetrics: [
         {
           name: 'MAPE',
@@ -508,10 +340,22 @@ describeEvaluator('evaluator metrics and scoring', () => {
     expect(metrics1!.namedScores.MAPE).toBeCloseTo(0.15, 10);
   });
 
-  it('should keep derived scores and __count consistent across concurrent rows', async () => {
-    // The race also occurs when the dynamic import is already cached.
-    await import('mathjs');
+  it('rejects an unsupported formula before calling the provider, even in an unused branch', async () => {
+    const provider = { id: () => 'echo', callApi: vi.fn(async () => ({ output: 'ok' })) };
+    const suite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('test')],
+      tests: [{}],
+      derivedMetrics: [{ name: 'score', value: '1 ? 42 : sqrt(9)' }],
+    };
+    const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
+    await expect(evaluate(suite, record, {})).rejects.toThrow(
+      'Invalid formula for derived metric "score"',
+    );
+    expect(provider.callApi).not.toHaveBeenCalled();
+  });
 
+  it('should keep derived scores and __count consistent across concurrent rows', async () => {
     const provider: ApiProvider = {
       id: () => 'concurrent-metrics-provider',
       callApi: async () => ({ output: 'ok' }),
@@ -613,10 +457,7 @@ describeEvaluator('evaluator metrics and scoring', () => {
   it('should apply max-score to overall pass/fail and stats', async () => {
     const maxScoreProvider: ApiProvider = {
       id: vi.fn().mockReturnValue('max-score-provider'),
-      callApi: vi.fn().mockResolvedValue({
-        output: 'hello world',
-        tokenUsage: { total: 1, prompt: 1, completion: 0, cached: 0, numRequests: 1 },
-      }),
+      callApi: vi.fn().mockResolvedValue(createTokenOutput('hello world', 1, 1, 0)),
     };
 
     const testSuite: TestSuite = {
@@ -656,10 +497,7 @@ describeEvaluator('evaluator metrics and scoring', () => {
     try {
       const selectBestProvider: ApiProvider = {
         id: vi.fn().mockReturnValue('select-best-provider'),
-        callApi: vi.fn().mockResolvedValue({
-          output: 'hello world',
-          tokenUsage: { total: 1, prompt: 1, completion: 0, cached: 0, numRequests: 1 },
-        }),
+        callApi: vi.fn().mockResolvedValue(createTokenOutput('hello world', 1, 1, 0)),
       };
 
       const testSuite: TestSuite = {

@@ -1,17 +1,17 @@
 import { SELECT_BEST_PROMPT } from '../prompts/index';
 import { getDefaultProviders } from '../providers/defaults';
-import {
-  type Assertion,
-  type CallApiContextParams,
-  type GradingConfig,
-  type GradingResult,
-  isRubricBatchAggregate,
-  type VarValue,
-} from '../types/index';
 import invariant from '../util/invariant';
 import { callProviderWithContext, getAndCheckProvider } from './providers';
 import { loadRubricPrompt, renderLlmRubricPrompt } from './rubric';
 import { fail, normalizeMatcherTokenUsage, tryParse } from './shared';
+
+import type {
+  Assertion,
+  CallApiContextParams,
+  GradingConfig,
+  GradingResult,
+  VarValue,
+} from '../types/index';
 
 export async function matchesSelectBest(
   criteria: string,
@@ -59,11 +59,13 @@ export async function matchesSelectBest(
       : resp.tokenUsage,
   );
   const cacheMetadata = resp.cached ? { metadata: { cachedResponse: true } } : {};
-  if (resp.error || !resp.output) {
-    return Array.from({ length: outputs.length }, () => ({
-      ...fail(resp.error || 'No output', tokensUsed),
+  const failureResults = (reason: () => string) =>
+    Array.from({ length: outputs.length }, () => ({
+      ...fail(reason(), tokensUsed),
       ...cacheMetadata,
     }));
+  if (resp.error || !resp.output) {
+    return failureResults(() => resp.error || 'No output');
   }
 
   invariant(typeof resp.output === 'string', 'select-best produced malformed response');
@@ -72,37 +74,29 @@ export async function matchesSelectBest(
   const verdict = firstIntegerMatch ? Number.parseInt(firstIntegerMatch[0], 10) : Number.NaN;
 
   if (Number.isNaN(verdict) || verdict < 0 || verdict >= outputs.length) {
-    return Array.from({ length: outputs.length }, () => ({
-      ...fail(`Invalid select-best verdict: ${verdict}`, tokensUsed),
-      ...cacheMetadata,
-    }));
+    return failureResults(() => `Invalid select-best verdict: ${verdict}`);
   }
 
   return outputs.map((_output, index) => {
-    if (index === verdict) {
-      return {
-        pass: true,
-        score: 1,
-        reason: `Output selected as the best: ${criteria}`,
-        tokensUsed,
-        ...cacheMetadata,
-      };
-    } else {
-      return {
-        pass: false,
-        score: 0,
-        reason: `Output not selected: ${criteria}`,
-        tokensUsed,
-        ...cacheMetadata,
-      };
-    }
+    const selected = index === verdict;
+    return {
+      pass: selected,
+      score: selected ? 1 : 0,
+      reason: selected
+        ? `Output selected as the best: ${criteria}`
+        : `Output not selected: ${criteria}`,
+      tokensUsed,
+      ...cacheMetadata,
+    };
   });
 }
 
 export async function selectMaxScore(
   outputs: string[],
   resultsWithGradingResults: Array<{
-    gradingResult?: { componentResults?: GradingResult[] } | null;
+    gradingResult?: Pick<GradingResult, 'componentResults'> | null;
+    /** Exclude a target failure from winner selection while preserving its output position. */
+    unavailable?: boolean;
   }>,
   assertion: Assertion,
 ): Promise<Omit<GradingResult, 'assertion'>[]> {
@@ -127,26 +121,17 @@ export async function selectMaxScore(
 
   // Calculate aggregate score for each output
   const scores = resultsWithGradingResults.map((result, index) => {
+    if (result.unavailable) {
+      return { index, score: 0, componentCount: 0, totalWeight: 0, unavailable: true };
+    }
     // Get component results from gradingResult if available
     const componentResults = result.gradingResult?.componentResults || [];
 
-    // AssertionsResult places each batch's dimension copies immediately after its
-    // parent. Keep the parent's configured weights and inversion, without scoring
-    // those diagnostic copies again. Legacy assert-set handling is unchanged.
-    const relevantResults: GradingResult[] = [];
-    for (let componentIndex = 0; componentIndex < componentResults.length; componentIndex++) {
-      const componentResult = componentResults[componentIndex];
-      if (
-        componentResult.assertion &&
-        componentResult.assertion.type !== 'max-score' &&
-        componentResult.assertion.type !== 'select-best'
-      ) {
-        relevantResults.push(componentResult);
-        if (isRubricBatchAggregate(componentResult)) {
-          componentIndex += componentResult.componentResults!.length;
-        }
-      }
-    }
+    // Filter out max-score and select-best assertions
+    const relevantResults = componentResults.filter(
+      (r: GradingResult) =>
+        r.assertion && r.assertion.type !== 'max-score' && r.assertion.type !== 'select-best',
+    );
 
     if (relevantResults.length === 0) {
       throw new Error(
@@ -190,7 +175,7 @@ export async function selectMaxScore(
   let winnerIndex = 0;
 
   for (let i = 0; i < scores.length; i++) {
-    if (scores[i].score > maxScore) {
+    if (!scores[i].unavailable && scores[i].score > maxScore) {
       maxScore = scores[i].score;
       winnerIndex = i;
     }
@@ -200,7 +185,10 @@ export async function selectMaxScore(
   const meetsThreshold = options.threshold === undefined || maxScore >= options.threshold;
 
   // Return results for each output
-  return scores.map(({ index, score, componentCount, totalWeight }) => {
+  return scores.map(({ index, score, componentCount, totalWeight, unavailable }) => {
+    if (unavailable) {
+      return { pass: false, score: 0, reason: 'Target response unavailable for comparison' };
+    }
     const isWinner = index === winnerIndex && meetsThreshold;
 
     return {

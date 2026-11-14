@@ -1,18 +1,13 @@
 import { mockClipboard } from '@app/tests/browserMocks';
 import { restoreTestTimers, type TestTimers, useTestTimers } from '@app/tests/timers';
 import { renderWithProviders as baseRender } from '@app/utils/testutils';
-import {
-  type AssertionType,
-  type EvaluateTableOutput,
-  type GradingResult,
-  ResultFailureReason,
-} from '@promptfoo/types';
+import { type AssertionType, type EvaluateTableOutput } from '@promptfoo/types';
+import { ResultFailureReason } from '@promptfoo/types/results';
 import { act, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ShiftKeyProvider } from '../../../contexts/ShiftKeyContext';
 import EvalOutputCell, { isImageProvider, isVideoProvider } from './EvalOutputCell';
-import { EvaluationPanel } from './EvaluationPanel';
 
 import type { EvalOutputCellProps } from './EvalOutputCell';
 
@@ -371,71 +366,6 @@ describe('EvalOutputCell', () => {
     const statusElement = container.querySelector('.status.pass');
     expect(statusElement).toBeInTheDocument();
   });
-
-  it.each([false, true])(
-    'counts rubric dimensions and keeps the shared prompt visible (aggregate passes=%s)',
-    async (aggregatePasses) => {
-      const user = userEvent.setup();
-      const children: GradingResult[] = [
-        {
-          pass: true,
-          score: 1,
-          reason: 'Correct',
-          assertion: { type: 'llm-rubric', metric: 'accuracy', value: 'Answers correctly' },
-        },
-        {
-          pass: false,
-          score: 0,
-          reason: 'Verbose',
-          assertion: { type: 'llm-rubric', metric: 'style', value: 'Uses plain language' },
-        },
-      ];
-      const batch: GradingResult = {
-        pass: aggregatePasses,
-        score: 0.5,
-        reason: 'Weighted rubric summary',
-        assertion: {
-          type: 'llm-rubric',
-          provider: 'local-grader',
-          rubricComponents: true,
-          ...(aggregatePasses && { threshold: 0.5 }),
-          value: {
-            components: [
-              { metric: 'accuracy', value: 'Answers correctly' },
-              { metric: 'style', value: 'Uses plain language' },
-            ],
-          },
-        },
-        componentResults: children,
-        metadata: {
-          rubricComponents: true,
-          renderedGradingPrompt: 'Shared prompt for both rubric dimensions',
-        },
-      };
-      renderWithProviders(
-        <EvalOutputCell
-          {...defaultProps}
-          output={{
-            ...defaultProps.output,
-            pass: batch.pass,
-            score: batch.score,
-            gradingResult: { ...batch, componentResults: [batch, ...children] },
-          }}
-        />,
-      );
-      expect(screen.getByText('1 FAIL 1 PASS')).toBeInTheDocument();
-      await user.click(screen.getByRole('button', { name: /view output and test details/i }));
-      const dialogResults: GradingResult[] = JSON.parse(
-        screen.getByTestId('dialog-component').getAttribute('data-grading-results') || '[]',
-      );
-      expect(dialogResults).toHaveLength(3);
-      expect(dialogResults[0]).toEqual(batch);
-
-      renderWithProviders(<EvaluationPanel gradingResults={dialogResults} />);
-      await user.click(screen.getByText('llm-rubric - Full Grading Prompt'));
-      expect(screen.getByText('Shared prompt for both rubric dimensions')).toBeInTheDocument();
-    },
-  );
 
   it('combines assertion contexts in comment dialog', async () => {
     const user = userEvent.setup();
@@ -983,7 +913,7 @@ describe('EvalOutputCell', () => {
     expect(written).toContain('rowId=1');
   });
 
-  it('shows checkmark after copying link', async () => {
+  it('resets the link and output copy indicators independently', async () => {
     timers = useTestTimers();
     const clipboard = mockClipboardWriteText();
 
@@ -1000,11 +930,20 @@ describe('EvalOutputCell', () => {
     expect(clipboard.writeText).toHaveBeenCalled();
     expect(shareButton.querySelector('.lucide-check')).toBeInTheDocument();
 
-    act(() => {
-      timers?.advanceBy(3000);
+    act(() => timers?.advanceBy(1000));
+    const copyButton = screen.getByRole('button', { name: /Copy output to clipboard/i });
+    await act(async () => {
+      dispatchClick(copyButton);
+      await clipboard.writeText.mock.results[1]?.value;
     });
+    expect(shareButton.querySelector('.lucide-check')).toBeInTheDocument();
+    expect(copyButton.querySelector('.lucide-check')).toBeInTheDocument();
 
+    act(() => timers?.advanceBy(2000));
     expect(shareButton.querySelector('.lucide-link')).toBeInTheDocument();
+    expect(copyButton.querySelector('.lucide-check')).toBeInTheDocument();
+    act(() => timers?.advanceBy(1000));
+    expect(copyButton.querySelector('.lucide-check')).not.toBeInTheDocument();
   });
 
   it('clears the link feedback timer on unmount after copying link', async () => {
@@ -1018,10 +957,18 @@ describe('EvalOutputCell', () => {
       await clipboard.writeText.mock.results[0]?.value;
     });
 
+    // Flush query notifications without advancing the three-second link feedback timer.
+    await act(async () => {
+      await timers?.advanceByAsync(0);
+    });
     expect(timers.getTimerCount()).toBe(1);
 
     unmount();
 
+    // The shared cloud query removes unused entries on its zero-delay GC timer.
+    await act(async () => {
+      await timers?.advanceByAsync(0);
+    });
     expect(timers.getTimerCount()).toBe(0);
   });
 
@@ -1051,6 +998,10 @@ describe('EvalOutputCell', () => {
       await writeTextPromise;
     });
 
+    // The shared cloud query removes unused entries on its zero-delay GC timer.
+    await act(async () => {
+      await timers?.advanceByAsync(0);
+    });
     expect(timers.getTimerCount()).toBe(0);
   });
 
@@ -2421,6 +2372,26 @@ describe('EvalOutputCell extra actions hover behavior', () => {
       'View output and test details',
     ]);
   });
+  it.each(['google:gemini-nano-banana-2.1', 'custom-image-target'])(
+    'keeps structured images visible after long text from %s',
+    (provider) => {
+      const explanation = 'A detailed explanation of the generated image. '.repeat(10);
+      const { container } = renderWithProviders(
+        <EvalOutputCell
+          {...defaultProps}
+          maxTextLength={250}
+          output={{
+            ...defaultProps.output,
+            provider,
+            text: explanation,
+            images: [{ data: 'data:image/png;base64,aW1hZ2U=', mimeType: 'image/png' }],
+          }}
+        />,
+      );
+      expect(container.querySelectorAll('img')).toHaveLength(1);
+      expect(container.textContent).toContain(explanation.trim());
+    },
+  );
 });
 
 describe('isImageProvider helper function', () => {
@@ -2480,6 +2451,10 @@ describe('isVideoProvider helper function', () => {
 
   it('should return true for Google Veo 3.1 provider', () => {
     expect(isVideoProvider('google:video:veo-3.1-generate-preview')).toBe(true);
+  });
+
+  it('should return true for Google Veo on Vertex AI', () => {
+    expect(isVideoProvider('vertex:video:veo-3.1-generate-001')).toBe(true);
   });
 
   it('should return true for Google Veo 3.1 Fast provider', () => {

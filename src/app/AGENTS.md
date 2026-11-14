@@ -23,7 +23,10 @@ This handles API base URL differences between dev and production.
 - Lucide React for icons
 - **Vitest** for testing
 - Zustand for state management
-- React Router v7
+- React Router v8 (Data Mode; routes are defined in `src/routes.tsx`)
+
+React Router v8 requires React/React DOM >=19.2.7 and ESM imports, including in test mocks.
+The Docusaurus site still uses Router v5; preserve the root `react-router-config` override.
 
 ## Modern React 19 Patterns
 
@@ -117,7 +120,11 @@ import { EVAL_ROUTES, ROUTES } from '@app/constants/routes';
 
 ## UI Guidelines
 
-See `UI_GUIDELINES.md` for the 9 rules on writing React components:
+Read the full [UI guidelines](./UI_GUIDELINES.md) before writing React components:
+
+@UI_GUIDELINES.md
+
+The guidelines cover:
 
 1. Typography with semantic HTML
 2. Small, composable components

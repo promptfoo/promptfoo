@@ -1,8 +1,10 @@
-import type { AssistantCreationOptions, FunctionDefinition } from '@azure/openai-assistants';
-
+import type {
+  AzureChatConfigInput,
+  AzureResponsesConfigInput,
+} from '../../contracts/providerConfig/azure';
 import type { EnvOverrides } from '../../types/env';
 import type { MCPConfig } from '../mcp/types';
-import type { AssistantFunctionCallback, GPT5ReasoningEffort } from '../openai/types';
+import type { AssistantFunctionCallback } from '../openai/types';
 
 /**
  * Options for configuring retry behavior
@@ -20,6 +22,16 @@ interface RetryOptions {
   retryableErrorMessages?: string[];
 }
 
+type AzureResponseFormatSchema =
+  | `file://${string}`
+  | {
+      type: 'object';
+      properties: Record<string, any>;
+      required?: string[];
+      additionalProperties: false;
+      $defs?: Record<string, any>;
+    };
+
 export interface AzureCompletionOptions {
   // Azure identity params
   azureClientId?: string;
@@ -30,7 +42,10 @@ export interface AzureCompletionOptions {
   /** @deprecated Use isReasoningModel instead. Indicates if the model should be treated as a reasoning model */
   o1?: boolean;
   isReasoningModel?: boolean; // Indicates if the model should be treated as a reasoning model (o1, o3-mini, etc.)
-  /** Treat a custom-named deployment as Claude Opus 4.7 or 4.8 for sampling compatibility. */
+  /**
+   * Treat a custom-named deployment as Claude Opus 4.7 or later for sampling compatibility
+   * (Opus 4.7/4.8/5, Sonnet 5, and Fable/Mythos 5 all reject temperature/top_p/top_k).
+   */
   isClaudeOpus47OrLater?: boolean;
   max_completion_tokens?: number; // Maximum number of tokens to generate for reasoning models
 
@@ -58,45 +73,48 @@ export interface AzureCompletionOptions {
   frequency_penalty?: number;
   presence_penalty?: number;
   best_of?: number;
-  functions?: {
-    name: string;
-    description?: string;
-    parameters: any;
-  }[];
+  functions?:
+    | AzureChatConfigInput['functions']
+    | {
+        name: string;
+        description?: string;
+        parameters: any;
+      }[];
   function_call?: 'none' | 'auto' | { name: string };
-  tools?: {
-    type: string;
-    function: {
-      name: string;
-      description?: string;
-      parameters: any;
-    };
-  }[];
+  tools?:
+    | AzureChatConfigInput['tools']
+    | AzureResponsesConfigInput['tools']
+    | {
+        type: string;
+        function: {
+          name: string;
+          description?: string;
+          parameters: any;
+        };
+      }[];
   tool_choice?:
+    | AzureChatConfigInput['tool_choice']
+    | AzureResponsesConfigInput['tool_choice']
     | 'none'
     | 'auto'
     | 'required'
     | { type: 'function'; function?: { name: string } }
     | { type: 'function'; name: string };
   response_format?:
+    | AzureChatConfigInput['response_format']
+    | `file://${string}`
     | { type: 'json_object' }
     | {
         type: 'json_schema';
         json_schema: {
           name: string;
           strict: boolean;
-          schema: {
-            type: 'object';
-            properties: Record<string, any>;
-            required?: string[];
-            additionalProperties: false;
-            $defs?: Record<string, any>;
-          };
+          schema: AzureResponseFormatSchema;
         };
       };
-  stop?: string[];
+  stop?: AzureChatConfigInput['stop'];
   seed?: number;
-  reasoning_effort?: GPT5ReasoningEffort;
+  reasoning_effort?: AzureChatConfigInput['reasoning_effort'];
   /**
    * Controls the verbosity of the model's responses. Only used for reasoning models (GPT-5, o1, o3, etc.).
    */
@@ -118,11 +136,33 @@ export interface AzureCompletionOptions {
 export interface AzureChatResponsesOptions extends AzureCompletionOptions {
   /** Underlying model ID for request compatibility and cost estimates when the deployment is aliased. */
   modelName?: string;
+  /** Responses only: continue a previously stored response. */
+  previous_response_id?: string;
   /**
    * When true, omit hardcoded defaults for temperature, max_tokens, top_p, etc.
    * Only values explicitly set via config or environment variables will be sent.
    */
   omitDefaults?: boolean;
+}
+
+/**
+ * Options specific to the Azure Responses provider.
+ */
+export interface AzureResponsesOptions extends Omit<AzureChatResponsesOptions, 'response_format'> {
+  reasoning?: AzureResponsesConfigInput['reasoning'];
+  response_format?:
+    | AzureResponsesConfigInput['response_format']
+    | AzureCompletionOptions['response_format']
+    | {
+        /** Flattened schema format accepted by Azure Responses. */
+        type: 'json_schema';
+        name?: string;
+        schema: AzureResponseFormatSchema;
+      };
+  /**
+   * Specifies the latency tier used to process the request.
+   */
+  service_tier?: 'auto' | 'default' | 'flex' | 'priority' | null;
 }
 
 export interface AzureModelCost {
@@ -147,41 +187,61 @@ export interface AzureModelCost {
   };
 }
 
-export type AzureAssistantOptions = AzureCompletionOptions &
-  Partial<AssistantCreationOptions> & {
-    /**
-     * If set, automatically call these functions when the assistant activates
-     * these function tools.
-     */
-    functionToolCallbacks?: Record<FunctionDefinition['name'], AssistantFunctionCallback | string>;
-    /**
-     * Model to use for the assistant.
-     */
-    modelName?: string;
-    /**
-     * Tool resources configuration, including vector store IDs.
-     */
-    tool_resources?: {
-      file_search?: {
-        vector_store_ids?: string[];
-      };
+export type AzureAssistantOptions = AzureCompletionOptions & {
+  // Preserve the legacy Azure assistant options independently of the retired SDK.
+  model?: string;
+  name?: string | null;
+  description?: string | null;
+  instructions?: string | null;
+  tools?: (
+    | { type: 'code_interpreter' }
+    | { type: 'retrieval' }
+    | {
+        type: 'function';
+        function: {
+          name: string;
+          description: string;
+          parameters: unknown;
+        };
+      }
+  )[];
+  fileIds?: string[];
+  metadata?: Record<string, string> | null;
+  /**
+   * If set, automatically call these functions when the assistant activates
+   * these function tools.
+   */
+  functionToolCallbacks?: Record<string, AssistantFunctionCallback | string>;
+  /**
+   * Model to use for the assistant.
+   */
+  modelName?: string;
+  /**
+   * Tool resources configuration, including vector store IDs.
+   */
+  tool_resources?: {
+    file_search?: {
+      vector_store_ids?: string[];
     };
-    /**
-     * Maximum timeout in milliseconds for API client requests
-     */
-    timeoutMs?: number;
-    /**
-     * Maximum time in milliseconds to poll for a run to complete before timing out
-     */
-    maxPollTimeMs?: number;
-    /**
-     * Configuration for network request retry behavior
-     */
-    retryOptions?: RetryOptions;
   };
+  /**
+   * Maximum timeout in milliseconds for API client requests
+   */
+  timeoutMs?: number;
+  /**
+   * Maximum time in milliseconds to poll for a run to complete before timing out
+   */
+  maxPollTimeMs?: number;
+  /** Foundry: maximum callback batches; defaults to 8 (valid range 1–64). */
+  maxToolIterations?: number;
+  /**
+   * Configuration for network request retry behavior
+   */
+  retryOptions?: RetryOptions;
+};
 
 export interface AzureProviderOptions<
-  TConfig extends AzureCompletionOptions = AzureCompletionOptions,
+  TConfig extends AzureCompletionOptions | AzureResponsesOptions = AzureCompletionOptions,
 > {
   config?: TConfig;
   id?: string;

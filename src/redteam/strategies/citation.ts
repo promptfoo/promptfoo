@@ -9,6 +9,7 @@ import {
 } from '../remoteGeneration';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import { postRemoteGenerationTask } from '../remoteGenerationTask';
+import { appendMetricSuffix } from './assertions';
 
 import type { TestCase } from '../../types/index';
 import type { StrategyRuntimeContext } from './types';
@@ -103,10 +104,7 @@ async function generateCitations(
           1. ${data.result.citation.content}
         `,
         },
-        assert: testCase.assert?.map((assertion) => ({
-          ...assertion,
-          metric: assertion.metric ? `${assertion.metric}/Citation` : assertion.metric,
-        })),
+        assert: appendMetricSuffix(testCase, 'Citation'),
         metadata: {
           ...testCase.metadata,
           citation: data.result.citation,

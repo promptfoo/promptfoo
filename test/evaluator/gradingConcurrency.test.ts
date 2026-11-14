@@ -5,7 +5,9 @@ import { randomUUID } from 'crypto';
 import { expect, it, vi } from 'vitest';
 import { clearCache, getCache } from '../../src/cache';
 import { evaluate, runEval } from '../../src/evaluator';
+import { runExtensionHook } from '../../src/evaluatorHelpers';
 import Eval from '../../src/models/eval';
+import telemetry from '../../src/telemetry';
 import {
   type ApiProvider,
   type RateLimitRegistryRef,
@@ -130,15 +132,21 @@ describeEvaluator('evaluator grading concurrency', () => {
             { type: 'llm-rubric', value: 'Judge beta two', provider: judgeTwo },
           ],
         },
+        {
+          vars: { topic: 'gamma' },
+          assert: [{ type: 'llm-rubric', value: 'Judge gamma', provider: judgeOne }],
+        },
       ],
     };
 
     const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    const saved = vi.spyOn(evalRecord, 'addResult');
     await evaluate(testSuite, evalRecord, { maxConcurrency: 1 });
     const summary = await evalRecord.toEvaluateSummary();
 
-    expect(summary.stats.successes).toBe(2);
-    expect(callOrder).toEqual(['judge-one', 'judge-one', 'judge-two', 'judge-two']);
+    expect(summary.stats.successes).toBe(3);
+    expect(callOrder).toEqual(['judge-one', 'judge-one', 'judge-one', 'judge-two', 'judge-two']);
+    expect(saved.mock.calls.map(([row]) => row.testIdx)).toEqual([0, 1, 2]);
   });
 
   it('keeps model-graded assertions row-first when prompts use _conversation', async () => {
@@ -249,7 +257,7 @@ describeEvaluator('evaluator grading concurrency', () => {
             statusText: 'Forbidden',
           },
         },
-        tokenUsage: createEmptyTokenUsage(),
+        tokenUsage: { ...createEmptyTokenUsage(), prompt: 7, total: 7, numRequests: 1 },
       })),
     };
     const judge: ApiProvider = {
@@ -282,6 +290,9 @@ describeEvaluator('evaluator grading concurrency', () => {
     expect(judge.callApi).toHaveBeenCalledTimes(1);
     expect(summary.results).toHaveLength(1);
     expect(summary.results[0].vars.topic).toBe('alpha');
+    expect(evalRecord.prompts[0].metrics?.testPassCount).toBe(1);
+    expect(evalRecord.prompts[0].metrics?.tokenUsage?.prompt).toBe(7);
+    expect(evalRecord.prompts[0].metrics?.tokenUsage?.numRequests).toBe(1);
   });
 
   it('groups model-graded assert-set children by provider id when maxConcurrency is 1', async () => {
@@ -567,246 +578,219 @@ describeEvaluator('evaluator grading concurrency', () => {
     ]);
   });
 
-  it.each([false, true])(
-    'records thrown grading failures as retryable errors (components=%s)',
-    async (components) => {
+  it('does not log error-level message when deferred grading is aborted', async () => {
+    const { default: logger } = await import('../../src/logger');
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => logger);
+
+    const abortController = new AbortController();
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('target-provider'),
+      callApi: vi.fn(async (prompt: string) => ({
+        output: `Target output for ${prompt}`,
+        tokenUsage: createEmptyTokenUsage(),
+      })),
+    };
+    const judge: ApiProvider = {
+      id: vi.fn().mockReturnValue('judge'),
+      callApi: vi.fn(async () => {
+        abortController.abort();
+        const abortError = new Error('Aborted');
+        abortError.name = 'AbortError';
+        throw abortError;
+      }),
+    };
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('Test prompt {{topic}}')],
+      tests: [
+        {
+          vars: { topic: 'alpha' },
+          assert: [{ type: 'llm-rubric', value: 'Judge alpha', provider: judge }],
+        },
+      ],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {
+      maxConcurrency: 1,
+      abortSignal: abortController.signal,
+    });
+
+    const gradingErrorLogs = errorSpy.mock.calls.filter(
+      ([message]) => typeof message === 'string' && message.includes('Assertion grading failed'),
+    );
+    expect(gradingErrorLogs).toHaveLength(0);
+
+    const failedResult = (await evalRecord.toEvaluateSummary()).results.find(
+      (result) => result.vars.topic === 'alpha',
+    );
+    expect(failedResult?.error).toMatch(/^Aborted: /);
+
+    errorSpy.mockRestore();
+  });
+
+  it.each(['grouped', 'serial', 'concurrent'] as const)(
+    'preserves interruption when the last %s row is cancelled during embedding grading',
+    async (mode) => {
       const { default: logger } = await import('../../src/logger');
       const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => logger);
-      const provider: ApiProvider = {
+      const controller = new AbortController();
+      const reason = new Error('custom embedding shutdown');
+      const target: ApiProvider = {
         id: () => 'target-provider',
-        callApi: vi.fn().mockResolvedValue({ output: 'candidate' }),
+        callApi: async () => ({ output: 'Target output', tokenUsage: createEmptyTokenUsage() }),
       };
-      const judge: ApiProvider = {
-        id: () => 'throwing-grader',
-        callApi: vi.fn().mockRejectedValue(new Error('PRIVATE_PROVIDER_CREDENTIAL')),
+      const embedding: ApiProvider = {
+        id: () => 'embedding-judge',
+        callApi: async () => ({ output: '' }),
+        supportsEmbeddingCancellation: true,
+        callEmbeddingApi: async (
+          _input: string,
+          _context?: unknown,
+          options?: { abortSignal?: AbortSignal },
+        ) => {
+          controller.abort(reason);
+          options?.abortSignal?.throwIfAborted();
+          throw new Error('Expected grading signal');
+        },
       };
-      const testSuite: TestSuite = {
-        providers: [provider],
+      const suite: TestSuite = {
+        providers: [target],
         prompts: [toPrompt('Test prompt')],
+        extensions: ['file://unused-extension.js'],
         tests: [
           {
-            assert: [
-              {
-                type: 'llm-rubric',
-                rubricComponents: components,
-                value: components
-                  ? { components: [{ metric: 'quality', value: 'Good answer' }] }
-                  : 'Good answer',
-                provider: judge,
-              },
-            ],
+            vars: { topic: 'alpha' },
+            options: { runSerially: mode === 'serial' },
+            assert: [{ type: 'similar', value: 'Expected', provider: embedding }],
           },
         ],
       };
+      const evalRecord = await Eval.create({}, suite.prompts, { id: randomUUID() });
+      const recordEvent = vi.spyOn(telemetry, 'record');
+      const save = vi.spyOn(evalRecord, 'save');
       try {
-        const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
-        await evaluate(testSuite, evalRecord, { maxConcurrency: 1 });
-        const summary = await evalRecord.toEvaluateSummary();
-        expect(summary.stats.errors).toBe(1);
-        expect(summary.results[0].failureReason).toBe(ResultFailureReason.ERROR);
-        expect(summary.results[0].success).toBe(false);
-        if (components) {
-          expect(summary.results[0].error).not.toContain('PRIVATE_PROVIDER_CREDENTIAL');
-        }
-        expect(judge.callApi).toHaveBeenCalledTimes(1);
+        await evaluate(suite, evalRecord, {
+          maxConcurrency: mode === 'grouped' ? 1 : 2,
+          abortSignal: controller.signal,
+        });
+        const result = (await evalRecord.toEvaluateSummary()).results.find(
+          (row) => row.vars.topic === 'alpha',
+        );
+        expect(result?.error).toBe('Aborted: custom embedding shutdown');
+        expect(result?.response?.output).toBe('Target output');
+        expect(vi.mocked(runExtensionHook).mock.calls.map((call) => call[1])).not.toContain(
+          'afterAll',
+        );
+        expect(recordEvent.mock.calls.some(([event]) => event === 'eval_ran')).toBe(false);
+        expect(save).not.toHaveBeenCalled();
+        expect(
+          errorSpy.mock.calls.some(([message]) =>
+            String(message).includes('Assertion grading failed'),
+          ),
+        ).toBe(false);
       } finally {
         errorSpy.mockRestore();
+        recordEvent.mockRestore();
+        save.mockRestore();
       }
     },
   );
 
-  it.each([false, true])(
-    'does not log error-level message when deferred grading is aborted (components=%s)',
-    async (components) => {
-      const { default: logger } = await import('../../src/logger');
-      const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => logger);
+  it('suppresses the error log when deferred grading throws AbortException under abort', async () => {
+    const { default: logger } = await import('../../src/logger');
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => logger);
 
-      const abortController = new AbortController();
-      const provider: ApiProvider = {
-        id: vi.fn().mockReturnValue('target-provider'),
-        callApi: vi.fn(async (prompt: string) => ({
-          output: `Target output for ${prompt}`,
-          tokenUsage: createEmptyTokenUsage(),
-        })),
-      };
-      const judge: ApiProvider = {
-        id: vi.fn().mockReturnValue('judge'),
-        callApi: vi.fn(async () => {
-          abortController.abort();
-          const abortError = new Error('Aborted');
-          abortError.name = 'AbortError';
-          throw abortError;
-        }),
-      };
-      const testSuite: TestSuite = {
-        providers: [provider],
-        prompts: [toPrompt('Test prompt {{topic}}')],
-        tests: [
-          {
-            vars: { topic: 'alpha' },
-            assert: [
-              {
-                type: 'llm-rubric',
-                rubricComponents: components,
-                value: components
-                  ? { components: [{ metric: 'quality', value: 'Judge alpha' }] }
-                  : 'Judge alpha',
-                provider: judge,
-              },
-            ],
-          },
-        ],
-      };
+    const abortController = new AbortController();
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('target-provider'),
+      callApi: vi.fn(async (prompt: string) => ({
+        output: `Target output for ${prompt}`,
+        tokenUsage: createEmptyTokenUsage(),
+      })),
+    };
+    const judge: ApiProvider = {
+      id: vi.fn().mockReturnValue('judge'),
+      callApi: vi.fn(async () => {
+        abortController.abort();
+        const abortException = new Error('Python provider cancelled');
+        abortException.name = 'AbortException';
+        throw abortException;
+      }),
+    };
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('Test prompt {{topic}}')],
+      tests: [
+        {
+          vars: { topic: 'alpha' },
+          assert: [{ type: 'llm-rubric', value: 'Judge alpha', provider: judge }],
+        },
+      ],
+    };
 
-      const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
-      await evaluate(testSuite, evalRecord, {
-        maxConcurrency: 1,
-        abortSignal: abortController.signal,
-      });
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {
+      maxConcurrency: 1,
+      abortSignal: abortController.signal,
+    });
 
-      const gradingErrorLogs = errorSpy.mock.calls.filter(
-        ([message]) => typeof message === 'string' && message.includes('Assertion grading failed'),
-      );
-      expect(gradingErrorLogs).toHaveLength(0);
-      expect(judge.callApi).toHaveBeenCalledWith(expect.any(String), expect.anything(), {
-        abortSignal: abortController.signal,
-      });
+    const gradingErrorLogs = errorSpy.mock.calls.filter(
+      ([message]) => typeof message === 'string' && message.includes('Assertion grading failed'),
+    );
+    expect(gradingErrorLogs).toHaveLength(0);
 
-      const failedResult = (await evalRecord.toEvaluateSummary()).results.find(
-        (result) => result.vars.topic === 'alpha',
-      );
-      expect(failedResult?.error).toMatch(/^Aborted: /);
+    errorSpy.mockRestore();
+  });
 
-      errorSpy.mockRestore();
-    },
-  );
+  it('still logs error-level when abort-shaped error fires WITHOUT an aborted signal', async () => {
+    // Regression guard: third-party SDKs sometimes surface unrelated cancellation
+    // as AbortError. If the evaluator's abort signal is NOT tripped, these are
+    // real bugs and must still surface at error level.
+    const { default: logger } = await import('../../src/logger');
+    const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => logger);
 
-  it.each([false, true])(
-    'suppresses the error log when deferred grading throws AbortException under abort (components=%s)',
-    async (components) => {
-      const { default: logger } = await import('../../src/logger');
-      const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => logger);
+    const provider: ApiProvider = {
+      id: vi.fn().mockReturnValue('target-provider'),
+      callApi: vi.fn(async (prompt: string) => ({
+        output: `Target output for ${prompt}`,
+        tokenUsage: createEmptyTokenUsage(),
+      })),
+    };
+    const judge: ApiProvider = {
+      id: vi.fn().mockReturnValue('judge'),
+      callApi: vi.fn(async () => {
+        const sdkAbortLookalike = new Error('fetch aborted by keepalive');
+        sdkAbortLookalike.name = 'AbortError';
+        throw sdkAbortLookalike;
+      }),
+    };
+    const testSuite: TestSuite = {
+      providers: [provider],
+      prompts: [toPrompt('Test prompt {{topic}}')],
+      tests: [
+        {
+          vars: { topic: 'alpha' },
+          assert: [{ type: 'llm-rubric', value: 'Judge alpha', provider: judge }],
+        },
+      ],
+    };
 
-      const abortController = new AbortController();
-      const provider: ApiProvider = {
-        id: vi.fn().mockReturnValue('target-provider'),
-        callApi: vi.fn(async (prompt: string) => ({
-          output: `Target output for ${prompt}`,
-          tokenUsage: createEmptyTokenUsage(),
-        })),
-      };
-      const judge: ApiProvider = {
-        id: vi.fn().mockReturnValue('judge'),
-        callApi: vi.fn(async () => {
-          abortController.abort();
-          const abortException = new Error('Python provider cancelled');
-          abortException.name = 'AbortException';
-          throw abortException;
-        }),
-      };
-      const testSuite: TestSuite = {
-        providers: [provider],
-        prompts: [toPrompt('Test prompt {{topic}}')],
-        tests: [
-          {
-            vars: { topic: 'alpha' },
-            assert: [
-              {
-                type: 'llm-rubric',
-                rubricComponents: components,
-                value: components
-                  ? { components: [{ metric: 'quality', value: 'Judge alpha' }] }
-                  : 'Judge alpha',
-                provider: judge,
-              },
-            ],
-          },
-        ],
-      };
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, { maxConcurrency: 1 });
 
-      const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
-      await evaluate(testSuite, evalRecord, {
-        maxConcurrency: 1,
-        abortSignal: abortController.signal,
-      });
+    const gradingErrorLogs = errorSpy.mock.calls.filter(
+      ([message]) => typeof message === 'string' && message.includes('Assertion grading failed'),
+    );
+    expect(gradingErrorLogs.length).toBeGreaterThanOrEqual(1);
 
-      const gradingErrorLogs = errorSpy.mock.calls.filter(
-        ([message]) => typeof message === 'string' && message.includes('Assertion grading failed'),
-      );
-      expect(gradingErrorLogs).toHaveLength(0);
-      expect(judge.callApi).toHaveBeenCalledWith(expect.any(String), expect.anything(), {
-        abortSignal: abortController.signal,
-      });
+    const summary = await evalRecord.toEvaluateSummary();
+    expect(summary.stats.errors).toBe(1);
+    expect(summary.results[0].failureReason).toBe(ResultFailureReason.ERROR);
+    expect(summary.results[0].error).not.toMatch(/^Aborted: /);
 
-      const failedResult = (await evalRecord.toEvaluateSummary()).results.find(
-        (result) => result.vars.topic === 'alpha',
-      );
-      expect(failedResult?.error).toMatch(/^Aborted: /);
-
-      errorSpy.mockRestore();
-    },
-  );
-
-  it.each([false, true])(
-    'still logs error-level when abort-shaped error fires WITHOUT an aborted signal (components=%s)',
-    async (components) => {
-      // Regression guard: third-party SDKs sometimes surface unrelated cancellation
-      // as AbortError. If the evaluator's abort signal is NOT tripped, these are
-      // real bugs and must still surface at error level.
-      const { default: logger } = await import('../../src/logger');
-      const errorSpy = vi.spyOn(logger, 'error').mockImplementation(() => logger);
-
-      const provider: ApiProvider = {
-        id: vi.fn().mockReturnValue('target-provider'),
-        callApi: vi.fn(async (prompt: string) => ({
-          output: `Target output for ${prompt}`,
-          tokenUsage: createEmptyTokenUsage(),
-        })),
-      };
-      const judge: ApiProvider = {
-        id: vi.fn().mockReturnValue('judge'),
-        callApi: vi.fn(async () => {
-          const sdkAbortLookalike = new Error('fetch aborted by keepalive');
-          sdkAbortLookalike.name = 'AbortError';
-          throw sdkAbortLookalike;
-        }),
-      };
-      const testSuite: TestSuite = {
-        providers: [provider],
-        prompts: [toPrompt('Test prompt {{topic}}')],
-        tests: [
-          {
-            vars: { topic: 'alpha' },
-            assert: [
-              {
-                type: 'llm-rubric',
-                rubricComponents: components,
-                value: components
-                  ? { components: [{ metric: 'quality', value: 'Judge alpha' }] }
-                  : 'Judge alpha',
-                provider: judge,
-              },
-            ],
-          },
-        ],
-      };
-
-      const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
-      await evaluate(testSuite, evalRecord, { maxConcurrency: 1 });
-
-      const gradingErrorLogs = errorSpy.mock.calls.filter(
-        ([message]) => typeof message === 'string' && message.includes('Assertion grading failed'),
-      );
-      expect(gradingErrorLogs.length).toBeGreaterThanOrEqual(1);
-
-      const summary = await evalRecord.toEvaluateSummary();
-      expect(summary.stats.errors).toBe(1);
-      expect(summary.results[0].failureReason).toBe(ResultFailureReason.ERROR);
-      expect(summary.results[0].error).not.toMatch(/^Aborted: /);
-
-      errorSpy.mockRestore();
-    },
-  );
+    errorSpy.mockRestore();
+  });
 
   it('still logs error when a non-abort-shaped error fires during an unrelated abort', async () => {
     // Regression guard: if abort is in flight but the caught error is a real
@@ -978,7 +962,7 @@ describeEvaluator('evaluator grading concurrency', () => {
   });
 
   it('keeps parallel assertion dispatch when the grouping queue is NOT active', async () => {
-    // Regression guard for the `? 1 : ASSERTIONS_MAX_CONCURRENCY` ternary in
+    // Regression guard for the `? 1 : PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY` ternary in
     // runAssertions. Without the queue present (non-deferred concurrent eval),
     // per-test assertions must still fan out so we don't silently 3x-throttle
     // normal eval users.

@@ -1,12 +1,12 @@
 import path from 'path';
 
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { loadFromJavaScriptFile } from '../../src/assertions/utils';
 import cliState from '../../src/cliState';
 import { importModule } from '../../src/esm';
 import { matchesLlmRubric } from '../../src/matchers/llmGrading';
 import { renderLlmRubricPrompt } from '../../src/matchers/rubric';
-import * as defaultProviders from '../../src/providers/defaults';
+import { tryParse } from '../../src/matchers/shared';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { DefaultGradingProvider } from '../../src/providers/openai/defaults';
 import * as remoteGrading from '../../src/remoteGrading';
@@ -19,10 +19,34 @@ import { mockProcessEnv, TestGrader } from '../util/utils';
 
 import type { Assertion, GradingConfig } from '../../src/types/index';
 
+const createImageRubricContext = (data: string, mimeType: string) => ({
+  providerResponse: {
+    output: 'Generated image',
+    images: [{ data, mimeType }],
+  },
+});
+
+const createPassingGrade = (reason: string = 'Remote grading passed') => ({
+  pass: true,
+  score: 1,
+  reason,
+});
+
+const createNullOutputResponse = () => ({
+  response: {
+    output: null,
+    tokenUsage: { total: 10, prompt: 5, completion: 5 },
+  },
+});
+
+const createUploadTraceMetadata = () => ({
+  uploadId: 'upload-123',
+  trace: { id: 'trace-456' },
+});
+
 vi.mock('../../src/esm', () => ({
   importModule: vi.fn(),
 }));
-vi.mock('../../src/cliState');
 vi.mock('../../src/remoteGrading', () => ({
   doRemoteGrading: vi.fn(),
 }));
@@ -82,11 +106,7 @@ describe('matchesLlmRubric', () => {
     cliState.selectedProviderConfigs = undefined;
 
     vi.mocked(remoteGrading.doRemoteGrading).mockReset();
-    vi.mocked(remoteGrading.doRemoteGrading).mockResolvedValue({
-      pass: true,
-      score: 1,
-      reason: 'Remote grading passed',
-    });
+    vi.mocked(remoteGrading.doRemoteGrading).mockResolvedValue(createPassingGrade());
 
     vi.spyOn(DefaultGradingProvider, 'callApi').mockReset();
     vi.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValue({
@@ -97,357 +117,6 @@ describe('matchesLlmRubric', () => {
 
   afterEach(() => {
     cliState.selectedProviderConfigs = undefined;
-  });
-
-  it.each([undefined, false])(
-    'preserves legacy object rubrics with a components key (opt-in=%s)',
-    async (rubricComponents) => {
-      for (const value of [
-        { question: 'Legacy question', components: 'Required answer sections' },
-        { components: [{ metric: 'quality', value: 'Legacy rubric' }] },
-      ]) {
-        const provider = createMockProvider({
-          response: {
-            output: { pass: true, score: 0.75, reason: 'Legacy scalar' },
-            metadata: { rubricComponents: true },
-          },
-        });
-        const result = await matchesLlmRubric(
-          value,
-          'candidate',
-          { provider, rubricPrompt: 'Legacy {{ rubric }}' },
-          {},
-          { type: 'llm-rubric', rubricComponents, value },
-        );
-        expect(result).toMatchObject({ pass: true, score: 0.75, reason: 'Legacy scalar' });
-        expect(result.componentResults).toBeUndefined();
-        expect(result.metadata?.rubricComponents).toBeUndefined();
-        expect(provider.callApi).toHaveBeenCalledTimes(1);
-        expect(provider.callApi.mock.calls[0][0]).toContain('Legacy');
-      }
-    },
-  );
-
-  describe('batched components', () => {
-    const matchesComponentRubric = (...args: Parameters<typeof matchesLlmRubric>) =>
-      matchesLlmRubric(
-        args[0],
-        args[1],
-        args[2],
-        args[3],
-        {
-          type: 'llm-rubric',
-          ...args[4],
-          rubricComponents: true,
-        },
-        args[5],
-        args[6],
-      );
-
-    const value = {
-      components: [
-        { metric: 'accuracy', value: 'Correctly answers {{ topic }}', weight: 2 },
-        { metric: 'style', value: 'Uses plain language' },
-      ],
-    };
-    const results = [
-      { metric: 'style', pass: false, score: 0.5, reason: 'Some jargon' },
-      { metric: 'accuracy', pass: true, score: 1, reason: 'Correct' },
-    ];
-
-    it('grades every component in one call, renders trusted rubrics once, and applies the parent threshold', async () => {
-      const candidate = 'CANDIDATE {{ env.SECRET }} {% if true %}literal{% endif %}';
-      const provider = createMockProvider({
-        response: {
-          output: JSON.stringify({ components: results }),
-          tokenUsage: { prompt: 12, completion: 8, numRequests: 1 },
-        },
-      });
-      const result = await matchesComponentRubric(
-        value,
-        candidate,
-        { provider },
-        { topic: 'planets {{ env.SECRET }}' },
-        {
-          type: 'llm-rubric',
-          value,
-          threshold: 0.8,
-        },
-      );
-      expect(provider.callApi).toHaveBeenCalledTimes(1);
-      const prompt = provider.callApi.mock.calls[0][0];
-      expect(prompt.split('CANDIDATE')).toHaveLength(2);
-      expect(prompt).toContain('Correctly answers planets {{ env.SECRET }}');
-      expect(prompt).toContain('{% if true %}literal{% endif %}');
-      expect(result).toMatchObject({
-        pass: true,
-        namedScores: { accuracy: 1, style: 0.5 },
-        namedScoreWeights: { accuracy: 2, style: 1 },
-        tokensUsed: { total: 20, numRequests: 1 },
-        componentResults: [
-          {
-            pass: true,
-            assertion: {
-              metric: 'accuracy',
-              value: 'Correctly answers planets {{ env.SECRET }}',
-              weight: 2,
-            },
-          },
-          { pass: false, assertion: { metric: 'style', weight: 1 } },
-        ],
-      });
-      expect(result.score).toBeCloseTo(5 / 6);
-      expect(
-        result.componentResults?.every((component) => component.tokensUsed === undefined),
-      ).toBe(true);
-    });
-
-    it('requires every child to pass without a parent threshold', async () => {
-      const provider = createMockProvider({ response: { output: { components: results } } });
-      const result = await matchesComponentRubric(value, 'candidate', { provider });
-      expect(result.pass).toBe(false);
-      expect(result.score).toBeCloseTo(5 / 6);
-      expect(result.reason).toContain('1/2 rubric components passed');
-    });
-
-    it.each([0, 1])('honors the boundary parent threshold %s', async (threshold) => {
-      const provider = createMockProvider({ response: { output: { components: results } } });
-      const result = await matchesComponentRubric(
-        value,
-        'candidate',
-        { provider },
-        {},
-        { type: 'llm-rubric', threshold },
-      );
-      expect(result.pass).toBe(threshold === 0);
-    });
-
-    it.each<[string, unknown]>([
-      ['missing', { components: results.slice(0, 1) }],
-      ['duplicate', { components: [results[0], results[0]] }],
-      ['unknown', { components: [results[0], { ...results[1], metric: 'PRIVATE_METRIC' }] }],
-      ['scalar', { pass: true, score: 1, reason: 'PRIVATE_PAYLOAD' }],
-      ['array', ['PRIVATE_PAYLOAD']],
-      ['malformed', '{"components": PRIVATE_PAYLOAD}'],
-      ['truncated', JSON.stringify({ components: results }).slice(0, -1)],
-      ['multiple objects', `${JSON.stringify({ components: results })} {"PRIVATE_PAYLOAD":true}`],
-      ...[NaN, Infinity, -1, 1.1, '1', null].map<[string, unknown]>((score) => [
-        `invalid score ${score}`,
-        { components: [results[0], { ...results[1], score, reason: 'PRIVATE_PAYLOAD' }] },
-      ]),
-      ['coerced pass', { components: [results[0], { ...results[1], pass: 'true' }] }],
-      [
-        'missing reason',
-        { components: [results[0], { metric: 'accuracy', pass: true, score: 1 }] },
-      ],
-    ])('fails closed for %s without exposing the raw response', async (_label, output) => {
-      const provider = createMockProvider({
-        response: { output, tokenUsage: { prompt: 3, completion: 2, numRequests: 1 } },
-      });
-      const result = await matchesComponentRubric(value, 'PRIVATE_CANDIDATE', { provider });
-      expect(result).toMatchObject({
-        pass: false,
-        score: 0,
-        metadata: { graderError: true },
-        tokensUsed: { total: 5, numRequests: 1 },
-      });
-      expect(result.reason).not.toMatch(/PRIVATE_/);
-      expect(result.componentResults).toBeUndefined();
-    });
-
-    it('preserves cached usage on validation failures', async () => {
-      const provider = createMockProvider({
-        response: {
-          output: { components: [] },
-          cached: true,
-          tokenUsage: { cached: 10, numRequests: 0 },
-        },
-      });
-      const result = await matchesComponentRubric(value, 'candidate', { provider });
-      expect(result).toMatchObject({
-        pass: false,
-        metadata: { graderError: true, cachedResponse: true },
-        tokensUsed: { cached: 10, numRequests: 0 },
-      });
-    });
-
-    it('uses the unconstrained Codex default for component grading', async () => {
-      const { getCodexDefaultProviders, clearCodexDefaultProvidersForTesting } = await import(
-        '../../src/providers/openai/codexDefaults'
-      );
-      const defaults = await defaultProviders.getDefaultProviders();
-      const codex = getCodexDefaultProviders();
-      expect(codex.gradingJsonProvider).toHaveProperty(
-        'config.output_schema.additionalProperties',
-        false,
-      );
-      expect(codex.gradingProvider).not.toHaveProperty('config.output_schema');
-      const textSpy = vi
-        .spyOn(codex.gradingProvider, 'callApi')
-        .mockResolvedValue({ output: { components: results } });
-      const scalarSpy = vi
-        .spyOn(codex.gradingJsonProvider, 'callApi')
-        .mockResolvedValue({ output: { pass: true, score: 1, reason: 'scalar' } });
-      const defaultsSpy = vi
-        .spyOn(defaultProviders, 'getDefaultProviders')
-        .mockResolvedValue({ ...defaults, ...codex });
-      try {
-        const result = await matchesComponentRubric(value, 'candidate', {});
-        expect(result.score).toBeCloseTo(5 / 6);
-        expect(textSpy).toHaveBeenCalledTimes(1);
-        expect(scalarSpy).not.toHaveBeenCalled();
-      } finally {
-        defaultsSpy.mockRestore();
-        textSpy.mockRestore();
-        scalarSpy.mockRestore();
-        clearCodexDefaultProvidersForTesting();
-      }
-    });
-
-    it('rejects unsupported hosted grading while honoring an explicit provider', async () => {
-      const remoteGeneration = await import('../../src/redteam/remoteGeneration');
-      vi.mocked(remoteGeneration.shouldGenerateRemote).mockReturnValue(true);
-      cliState.config = { redteam: {} };
-      const remoteResult = await matchesComponentRubric(value, 'candidate', {});
-      expect(remoteResult).toMatchObject({ pass: false, metadata: { graderError: true } });
-      expect(remoteResult.reason).toContain('explicit grading provider');
-      expect(remoteGrading.doRemoteGrading).not.toHaveBeenCalled();
-      const provider = createMockProvider({ response: { output: { components: results } } });
-      const result = await matchesComponentRubric(value, 'candidate', { provider });
-      expect(result.score).toBeCloseTo(5 / 6);
-      expect(provider.callApi).toHaveBeenCalledTimes(1);
-    });
-
-    it('retains all default-prompt criteria when object property access is enabled', async () => {
-      const restoreEnv = mockProcessEnv({ PROMPTFOO_DISABLE_OBJECT_STRINGIFY: 'true' });
-      try {
-        const provider = createMockProvider({ response: { output: { components: results } } });
-        await matchesComponentRubric(
-          value,
-          '{"answer":"candidate"}',
-          { provider },
-          { topic: 'planets' },
-        );
-        const prompt = provider.callApi.mock.calls[0][0];
-        expect(prompt).toContain('Correctly answers planets');
-        expect(prompt).toContain('Uses plain language');
-        expect(JSON.parse(prompt)[1].content).toContain('{"answer":"candidate"}');
-        expect(prompt).not.toContain('[object Object]');
-      } finally {
-        restoreEnv();
-      }
-    });
-
-    it('counts one failed provider call without exposing its raw error', async () => {
-      const provider = createMockProvider({
-        response: { error: 'PRIVATE_PROVIDER_ERROR', tokenUsage: { prompt: 3, completion: 2 } },
-      });
-      const result = await matchesComponentRubric(value, 'candidate', { provider });
-      expect(result).toMatchObject({
-        pass: false,
-        metadata: { graderError: true },
-        tokensUsed: { total: 5, numRequests: 1 },
-      });
-      expect(result.reason).not.toContain('PRIVATE_PROVIDER_ERROR');
-    });
-
-    it.each([
-      { components: [] },
-      { components: [value.components[0], value.components[0]] },
-      ...['__proto__', 'constructor', 'prototype', 'toString', 'hasOwnProperty', '__count'].map(
-        (metric) => ({
-          components: [{ metric, value: 'rubric' }],
-        }),
-      ),
-      ...[0, -1, Infinity, NaN].map((weight) => ({
-        components: [{ metric: 'a', value: 'rubric', weight }],
-      })),
-      ...['provider', 'rubricPrompt', 'transform', 'threshold'].map((key) => ({
-        components: [{ metric: 'a', value: 'rubric', [key]: 'PRIVATE_CONFIG' }],
-      })),
-      {
-        components: [
-          { metric: 'a', value: 'rubric', weight: 1e308 },
-          { metric: 'b', value: 'rubric', weight: 1e308 },
-        ],
-      },
-    ])(
-      'rejects invalid component configuration before calling the provider: %j',
-      async (invalidValue) => {
-        const provider = createMockProvider();
-        const result = await matchesComponentRubric(invalidValue, 'candidate', { provider });
-        expect(result).toMatchObject({ pass: false, metadata: { graderError: true } });
-        expect(result.reason).not.toContain('PRIVATE_CONFIG');
-        expect(provider.callApi).not.toHaveBeenCalled();
-        expect(Object.prototype).not.toHaveProperty('polluted');
-      },
-    );
-
-    it('rejects a parent metric collision and invalid parent threshold before grading', async () => {
-      const provider = createMockProvider();
-      for (const assertion of [
-        { type: 'llm-rubric' as const, metric: 'accuracy' },
-        { type: 'llm-rubric' as const, metric: '{{ metricName }}' },
-        { type: 'llm-rubric' as const, metric: '__count' },
-        { type: 'llm-rubric' as const, threshold: NaN },
-      ]) {
-        expect(
-          await matchesComponentRubric(value, 'candidate', { provider }, {}, assertion),
-        ).toMatchObject({ pass: false, metadata: { graderError: true } });
-      }
-      expect(provider.callApi).not.toHaveBeenCalled();
-    });
-
-    it('passes a threshold of 1 when every equally weighted component has a perfect score', async () => {
-      const components = Array.from({ length: 6 }, (_, i) => ({
-        metric: `metric-${i}`,
-        value: 'rubric',
-      }));
-      const provider = createMockProvider({
-        response: {
-          output: `\`\`\`json\n${JSON.stringify({ components: components.map(({ metric }) => ({ metric, pass: true, score: 1, reason: 'ok' })) })}\n\`\`\``,
-        },
-      });
-      const result = await matchesComponentRubric(
-        { components },
-        'candidate',
-        { provider },
-        {},
-        { type: 'llm-rubric', threshold: 1 },
-      );
-      expect(result).toMatchObject({ pass: true, score: 1 });
-    });
-
-    it('keeps literal punctuation and Unicode metric names as ordinary own properties', async () => {
-      const metrics = ['gen_ai.score', 'a[b]', '质量'];
-      const components = metrics.map((metric) => ({ metric, value: 'rubric' }));
-      const provider = createMockProvider({
-        response: {
-          output: {
-            components: metrics.map((metric) => ({ metric, pass: true, score: 1, reason: 'ok' })),
-          },
-        },
-      });
-      const result = await matchesComponentRubric({ components }, 'candidate', { provider });
-      expect(Object.keys(result.namedScores!)).toEqual(metrics);
-      expect(result.pass).toBe(true);
-    });
-
-    it('retains a custom shared rubric prompt and multimodal candidate images', async () => {
-      const provider = createMockProvider({ response: { output: { components: results } } });
-      const result = await matchesComponentRubric(
-        value,
-        'caption',
-        { provider, rubricPrompt: 'CUSTOM {{ output }} {{ rubric }}' },
-        {},
-        undefined,
-        { providerResponse: { images: [{ data: 'aGVsbG8=', mimeType: 'image/png' }] } },
-      );
-      expect(provider.callApi).toHaveBeenCalledTimes(1);
-      expect(provider.callApi.mock.calls[0][0]).toContain('CUSTOM caption');
-      expect(provider.callApi.mock.calls[0][0]).toContain('data:image/png;base64,aGVsbG8=');
-      expect(result.metadata?.renderedGradingPromptImages).toBe(1);
-    });
   });
 
   it('should pass when the grading provider returns a passing result', async () => {
@@ -593,10 +262,7 @@ describe('matchesLlmRubric', () => {
       provider: createMockProvider({
         response: {
           output: JSON.stringify({ pass: true, score: 1, reason: 'ok' }),
-          metadata: {
-            uploadId: 'upload-123',
-            trace: { id: 'trace-456' },
-          },
+          metadata: createUploadTraceMetadata(),
           tokenUsage: { total: 10, prompt: 5, completion: 5 },
         },
       }),
@@ -707,10 +373,7 @@ describe('matchesLlmRubric', () => {
   });
 
   it('should sanitize circular provider metadata before attaching it to the grading result', async () => {
-    const responseMetadata: Record<string, any> = {
-      uploadId: 'upload-123',
-      trace: { id: 'trace-456' },
-    };
+    const responseMetadata: Record<string, any> = createUploadTraceMetadata();
     responseMetadata.self = responseMetadata;
 
     const result = await matchesLlmRubric('Expected output', 'Sample output', {
@@ -748,12 +411,7 @@ describe('matchesLlmRubric', () => {
       },
       {},
       undefined,
-      {
-        providerResponse: {
-          output: 'Generated image',
-          images: [{ data: 'data:image/png;base64,abc123', mimeType: 'image/png' }],
-        },
-      },
+      createImageRubricContext('data:image/png;base64,abc123', 'image/png'),
     );
 
     const prompt = provider.callApi.mock.calls[0][0] as string;
@@ -842,12 +500,7 @@ describe('matchesLlmRubric', () => {
       },
       {},
       undefined,
-      {
-        providerResponse: {
-          output: 'Generated image',
-          images: [{ data: 'abc123', mimeType: 'image/webp' }],
-        },
-      },
+      createImageRubricContext('abc123', 'image/webp'),
     );
 
     const prompt = provider.callApi.mock.calls[0][0] as string;
@@ -888,12 +541,7 @@ describe('matchesLlmRubric', () => {
       },
       {},
       undefined,
-      {
-        providerResponse: {
-          output: 'Generated image',
-          images: [{ data: 'abc123', mimeType: 'image/webp' }],
-        },
-      },
+      createImageRubricContext('abc123', 'image/webp'),
     );
 
     const prompt = provider.callApi.mock.calls[0][0] as string;
@@ -930,12 +578,7 @@ describe('matchesLlmRubric', () => {
       },
       {},
       undefined,
-      {
-        providerResponse: {
-          output: 'Generated image',
-          images: [{ data: 'data:image/png;base64,abc123', mimeType: 'image/png' }],
-        },
-      },
+      createImageRubricContext('data:image/png;base64,abc123', 'image/png'),
     );
 
     const prompt = provider.callApi.mock.calls[0][0] as string;
@@ -972,12 +615,7 @@ describe('matchesLlmRubric', () => {
       },
       {},
       undefined,
-      {
-        providerResponse: {
-          output: 'Generated image',
-          images: [{ data: 'data:image/png;base64,abc123', mimeType: 'image/png' }],
-        },
-      },
+      createImageRubricContext('data:image/png;base64,abc123', 'image/png'),
     );
 
     const prompt = provider.callApi.mock.calls[0][0] as string;
@@ -1010,12 +648,7 @@ describe('matchesLlmRubric', () => {
         },
         {},
         undefined,
-        {
-          providerResponse: {
-            output: 'Generated image',
-            images: [{ data: 'data:image/png;base64,abc123', mimeType: 'image/png' }],
-          },
-        },
+        createImageRubricContext('data:image/png;base64,abc123', 'image/png'),
       );
 
       const prompt = provider.callApi.mock.calls[0][0] as string;
@@ -1061,12 +694,7 @@ describe('matchesLlmRubric', () => {
       },
       {},
       undefined,
-      {
-        providerResponse: {
-          output: 'Generated image',
-          images: [{ data: 'abc123', mimeType: 'image/png' }],
-        },
-      },
+      createImageRubricContext('abc123', 'image/png'),
     );
 
     const prompt = provider.callApi.mock.calls[0][0] as string;
@@ -1126,12 +754,7 @@ describe('matchesLlmRubric', () => {
       },
       {},
       undefined,
-      {
-        providerResponse: {
-          output: 'Generated image',
-          images: [{ data: 'abc123', mimeType: 'image/png' }],
-        },
-      },
+      createImageRubricContext('abc123', 'image/png'),
     );
 
     const prompt = provider.callApi.mock.calls[0][0] as string;
@@ -1178,12 +801,7 @@ describe('matchesLlmRubric', () => {
       },
       {},
       undefined,
-      {
-        providerResponse: {
-          output: 'Generated image',
-          images: [{ data: 'data:image/png;base64,abc123', mimeType: 'image/png' }],
-        },
-      },
+      createImageRubricContext('data:image/png;base64,abc123', 'image/png'),
     );
 
     const prompt = provider.callApi.mock.calls[0][0] as string;
@@ -1228,12 +846,7 @@ describe('matchesLlmRubric', () => {
         },
         {},
         undefined,
-        {
-          providerResponse: {
-            output: 'Generated image',
-            images: [{ data: 'data:image/png;base64,abc123', mimeType: 'image/png' }],
-          },
-        },
+        createImageRubricContext('data:image/png;base64,abc123', 'image/png'),
       );
 
       const prompt = provider.callApi.mock.calls[0][0] as string;
@@ -1264,12 +877,7 @@ describe('matchesLlmRubric', () => {
       },
       {},
       undefined,
-      {
-        providerResponse: {
-          output: 'Generated image',
-          images: [{ data: 'data:image/png;base64,abc123', mimeType: 'image/png' }],
-        },
-      },
+      createImageRubricContext('data:image/png;base64,abc123', 'image/png'),
     );
 
     const prompt = provider.callApi.mock.calls[0][0] as string;
@@ -1305,12 +913,7 @@ describe('matchesLlmRubric', () => {
       },
       {},
       undefined,
-      {
-        providerResponse: {
-          output: 'Generated image',
-          images: [{ data: 'abc123', mimeType: 'image/png' }],
-        },
-      },
+      createImageRubricContext('abc123', 'image/png'),
     );
 
     const prompt = provider.callApi.mock.calls[0][0] as string;
@@ -1347,12 +950,7 @@ describe('matchesLlmRubric', () => {
       },
       {},
       undefined,
-      {
-        providerResponse: {
-          output: 'Generated image',
-          images: [{ data: 'data:image/png;base64,abc123', mimeType: 'image/png' }],
-        },
-      },
+      createImageRubricContext('data:image/png;base64,abc123', 'image/png'),
     );
 
     const prompt = provider.callApi.mock.calls[0][0] as string;
@@ -1744,12 +1342,7 @@ describe('matchesLlmRubric', () => {
     const output = 'Sample output';
     const options: GradingConfig = {
       rubricPrompt: 'Grading prompt',
-      provider: createMockProvider({
-        response: {
-          output: null,
-          tokenUsage: { total: 10, prompt: 5, completion: 5 },
-        },
-      }),
+      provider: createMockProvider(createNullOutputResponse()),
     };
 
     await expect(matchesLlmRubric(expected, output, options)).resolves.toEqual({
@@ -2081,12 +1674,7 @@ describe('matchesLlmRubric', () => {
     const llmOutput = 'Test output';
     const grading: GradingConfig = {
       rubricPrompt: 'Grading prompt',
-      provider: createMockProvider({
-        response: {
-          output: null,
-          tokenUsage: { total: 10, prompt: 5, completion: 5 },
-        },
-      }),
+      provider: createMockProvider(createNullOutputResponse()),
     };
 
     // With throwOnError: true - should throw
@@ -2773,11 +2361,7 @@ Evaluate the response
 
     const remoteGeneration = await import('../../src/redteam/remoteGeneration');
     vi.mocked(remoteGeneration.shouldGenerateRemote).mockReturnValue(true);
-    vi.mocked(remoteGrading.doRemoteGrading).mockResolvedValue({
-      pass: true,
-      score: 1,
-      reason: 'Remote grading passed',
-    });
+    vi.mocked(remoteGrading.doRemoteGrading).mockResolvedValue(createPassingGrade());
     (cliState as any).config = { redteam: {} };
 
     const result = await matchesLlmRubric(rubric, llmOutput, grading, undefined, undefined, {
@@ -2845,11 +2429,9 @@ Evaluate the response
 
     const remoteGeneration = await import('../../src/redteam/remoteGeneration');
     vi.mocked(remoteGeneration.shouldGenerateRemote).mockReturnValue(true);
-    vi.mocked(remoteGrading.doRemoteGrading).mockResolvedValue({
-      pass: true,
-      score: 1,
-      reason: 'Remote multimodal grading passed',
-    });
+    vi.mocked(remoteGrading.doRemoteGrading).mockResolvedValue(
+      createPassingGrade('Remote multimodal grading passed'),
+    );
     (cliState as any).config = { redteam: {} };
 
     const result = await matchesLlmRubric(rubric, llmOutput, grading, vars, undefined, {
@@ -2877,11 +2459,9 @@ Evaluate the response
 
     const remoteGeneration = await import('../../src/redteam/remoteGeneration');
     vi.mocked(remoteGeneration.shouldGenerateRemote).mockReturnValue(true);
-    vi.mocked(remoteGrading.doRemoteGrading).mockResolvedValue({
-      pass: true,
-      score: 1,
-      reason: 'Remote multimodal grading passed',
-    });
+    vi.mocked(remoteGrading.doRemoteGrading).mockResolvedValue(
+      createPassingGrade('Remote multimodal grading passed'),
+    );
     (cliState as any).config = { redteam: {} };
 
     await matchesLlmRubric(rubric, llmOutput, grading, {}, undefined, {
@@ -2950,11 +2530,7 @@ Evaluate the response
 
     // Clear and set up specific mock behavior for this test
     vi.mocked(remoteGrading.doRemoteGrading).mockClear();
-    vi.mocked(remoteGrading.doRemoteGrading).mockResolvedValue({
-      pass: true,
-      score: 1,
-      reason: 'Remote grading passed',
-    });
+    vi.mocked(remoteGrading.doRemoteGrading).mockResolvedValue(createPassingGrade());
 
     // Import and set up shouldGenerateRemote mock properly
     const remoteGeneration = await import('../../src/redteam/remoteGeneration');
@@ -3012,11 +2588,7 @@ Evaluate the response
 
     // Clear and set up specific mock behavior for this test
     vi.mocked(remoteGrading.doRemoteGrading).mockClear();
-    vi.mocked(remoteGrading.doRemoteGrading).mockResolvedValue({
-      pass: true,
-      score: 1,
-      reason: 'Remote grading passed',
-    });
+    vi.mocked(remoteGrading.doRemoteGrading).mockResolvedValue(createPassingGrade());
 
     // Import and set up shouldGenerateRemote mock properly
     const remoteGeneration2 = await import('../../src/redteam/remoteGeneration');
@@ -3038,29 +2610,6 @@ Evaluate the response
 });
 
 describe('tryParse and renderLlmRubricPrompt', () => {
-  let tryParse: (content: string | null | undefined) => any;
-
-  beforeAll(async () => {
-    const context: { capturedFn: null | Function } = { capturedFn: null };
-
-    await renderLlmRubricPrompt('{"test":"value"}', {
-      __capture(fn: Function) {
-        context.capturedFn = fn;
-        return 'captured';
-      },
-    });
-
-    tryParse = function (content: string | null | undefined) {
-      try {
-        if (content === null || content === undefined) {
-          return content;
-        }
-        return JSON.parse(content);
-      } catch {}
-      return content;
-    };
-  });
-
   it('should parse valid JSON', () => {
     const input = '{"key": "value"}';
     expect(tryParse(input)).toEqual({ key: 'value' });
@@ -3077,8 +2626,8 @@ describe('tryParse and renderLlmRubricPrompt', () => {
   });
 
   it('should handle null and undefined', () => {
-    expect(tryParse(null)).toBeNull();
-    expect(tryParse(undefined)).toBeUndefined();
+    expect(tryParse(null as unknown as string)).toBeNull();
+    expect(tryParse(undefined as unknown as string)).toBeUndefined();
   });
 
   it('should render strings inside JSON objects', async () => {
@@ -3254,5 +2803,120 @@ describe('tryParse and renderLlmRubricPrompt', () => {
     expect(result).toContain('[{"a":1},{"b":2}]');
     expect(result).toContain('"tags":["electronics","gadget"]');
     expect(result).toContain('string item');
+  });
+});
+
+describe('matchesLlmRubric missing-verdict fail-closed semantics', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it.each([true, false, '', ' ', [], [1], {}, 'invalid', 'Infinity', '1e309', NaN, Infinity])(
+    'rejects an invalid score-only verdict: %j',
+    async (score) => {
+      const provider = createMockProvider({
+        response: createProviderResponse({
+          output: { score },
+          tokenUsage: { total: 10, prompt: 5, completion: 5 },
+        }),
+      });
+
+      const result = await matchesLlmRubric('Expected output', 'Sample output', {
+        rubricPrompt: 'Grading prompt',
+        provider,
+      });
+
+      expect(result).toMatchObject({
+        pass: false,
+        score: 0,
+        metadata: { graderError: true },
+        tokensUsed: { total: 10, prompt: 5, completion: 5 },
+      });
+    },
+  );
+
+  it('fails when the grader response omits both pass and score', async () => {
+    vi.spyOn(Grader, 'callApi').mockResolvedValue({
+      output: JSON.stringify({ reason: 'Looked fine to me' }),
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
+
+    const result = await matchesLlmRubric('Expected output', 'Sample output', {
+      rubricPrompt: 'Grading prompt',
+      provider: Grader,
+    });
+
+    expect(result.pass).toBe(false);
+    expect(result.reason).toContain('neither a pass verdict nor a finite numeric score');
+  });
+
+  it('derives pass from a positive score when pass is omitted', async () => {
+    vi.spyOn(Grader, 'callApi').mockResolvedValue({
+      output: JSON.stringify({ score: 1, reason: 'Strong match' }),
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
+
+    const result = await matchesLlmRubric('Expected output', 'Sample output', {
+      rubricPrompt: 'Grading prompt',
+      provider: Grader,
+    });
+
+    expect(result.pass).toBe(true);
+    expect(result.score).toBe(1);
+  });
+
+  it('fails a zero score when pass is omitted', async () => {
+    vi.spyOn(Grader, 'callApi').mockResolvedValue({
+      output: JSON.stringify({ score: 0, reason: 'Did not meet the rubric' }),
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
+
+    const result = await matchesLlmRubric('Expected output', 'Sample output', {
+      rubricPrompt: 'Grading prompt',
+      provider: Grader,
+    });
+
+    expect(result.pass).toBe(false);
+    expect(result.score).toBe(0);
+  });
+
+  it('passes a score-only zero verdict when threshold is exactly 0', async () => {
+    const rubricPrompt = 'Grading prompt';
+    const llmOutput = 'Sample output';
+    const assertion: Assertion = {
+      type: 'llm-rubric',
+      value: rubricPrompt,
+      threshold: 0,
+    };
+
+    const atFloorProvider = createMockProvider({
+      response: createProviderResponse({
+        output: JSON.stringify({ score: 0, reason: 'At the floor' }),
+      }),
+    });
+
+    await expect(
+      matchesLlmRubric(
+        rubricPrompt,
+        llmOutput,
+        { rubricPrompt, provider: atFloorProvider },
+        {},
+        assertion,
+      ),
+    ).resolves.toEqual(expect.objectContaining({ assertion, pass: true }));
+  });
+
+  it('still honors an explicit pass alongside score 0', async () => {
+    vi.spyOn(Grader, 'callApi').mockResolvedValue({
+      output: JSON.stringify({ pass: true, score: 0, reason: 'Passing per rubric override' }),
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
+
+    const result = await matchesLlmRubric('Expected output', 'Sample output', {
+      rubricPrompt: 'Grading prompt',
+      provider: Grader,
+    });
+
+    expect(result.pass).toBe(true);
   });
 });

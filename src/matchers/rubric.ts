@@ -680,13 +680,7 @@ function appendMediaToChatPrompt(
   }
   if (isChatMessageArray(parsed)) {
     const messages = parsed.map((message) => ({ ...message }));
-    let userMessageIndex = -1;
-    for (let i = messages.length - 1; i >= 0; i--) {
-      if (messages[i].role === 'user') {
-        userMessageIndex = i;
-        break;
-      }
-    }
+    const userMessageIndex = messages.map((message) => message.role).lastIndexOf('user');
 
     if (userMessageIndex >= 0) {
       const userMessage = messages[userMessageIndex];
@@ -773,32 +767,19 @@ async function buildGradingProviderPrompt(
 function parseJsonGradingResponse(
   label: string,
   resp: ProviderResponse,
-  strict = false,
 ): { parsed?: Partial<GradingResult>; failure?: Omit<GradingResult, 'assertion'> } {
   const failWithTokens = (reason: string) => graderFailureFromResponse(reason, resp);
 
   let jsonObjects: unknown[] = [];
   if (typeof resp.output === 'string') {
     try {
-      if (strict) {
-        // Do not repair truncated JSON or accept YAML for structured batches: a
-        // partial response must never become a passing set of component grades.
-        const text = resp.output.trim();
-        const fenced = text.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
-        jsonObjects = [JSON.parse(fenced?.[1] ?? text)];
-      } else {
-        jsonObjects = extractJsonObjects(resp.output);
-      }
+      jsonObjects = extractJsonObjects(resp.output);
       if (jsonObjects.length === 0) {
         return { failure: failWithTokens(`Could not extract JSON from ${label} response`) };
       }
     } catch (err) {
       return {
-        failure: failWithTokens(
-          strict
-            ? `${label} produced malformed JSON`
-            : `${label} produced malformed response: ${err}\n\n${resp.output}`,
-        ),
+        failure: failWithTokens(`${label} produced malformed response: ${err}\n\n${resp.output}`),
       };
     }
   } else if (
@@ -810,9 +791,7 @@ function parseJsonGradingResponse(
   } else {
     return {
       failure: failWithTokens(
-        strict
-          ? `${label} response must be a JSON object`
-          : `${label} produced malformed response - output must be string or object. Output: ${JSON.stringify(resp.output)}`,
+        `${label} produced malformed response - output must be string or object. Output: ${JSON.stringify(resp.output)}`,
       ),
     };
   }
@@ -821,9 +800,7 @@ function parseJsonGradingResponse(
   if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
     return {
       failure: failWithTokens(
-        strict
-          ? `${label} response must be a JSON object`
-          : `${label} produced malformed response. We were not able to parse the response as JSON. Output: ${JSON.stringify(resp.output)}`,
+        `${label} produced malformed response. We were not able to parse the response as JSON. Output: ${JSON.stringify(resp.output)}`,
       ),
     };
   }
@@ -857,29 +834,43 @@ function graderFailureFromResponse(
   return failure;
 }
 
-function normalizeScalarGradingResult(
-  parsed: Partial<GradingResult>,
-  assertion?: Assertion,
-): Pick<GradingResult, 'pass' | 'score' | 'reason'> {
-  let pass = parsed.pass ?? true;
-  if (typeof pass !== 'boolean') {
-    pass = /^(true|yes|pass|y)$/i.test(String(pass));
+function deriveVerdictFromGrader(
+  parsed: { pass?: unknown; score?: unknown },
+  threshold: number | undefined,
+): { pass: boolean; score: number } | undefined {
+  const hasThreshold = typeof threshold === 'number' && Number.isFinite(threshold);
+
+  // Without an explicit verdict, only a finite numeric score can be graded.
+  // Reject malformed values as grader errors so negation cannot make them pass.
+  if (parsed.pass === undefined || parsed.pass === null) {
+    const score =
+      typeof parsed.score === 'number'
+        ? parsed.score
+        : typeof parsed.score === 'string' && parsed.score.trim() !== ''
+          ? Number(parsed.score)
+          : NaN;
+    if (!Number.isFinite(score)) {
+      return undefined;
+    }
+    return { pass: hasThreshold ? score >= threshold : score > 0, score };
   }
 
-  let score = parsed.score;
-  if (typeof score !== 'number') {
-    score = Number.isFinite(Number(score)) ? Number(score) : Number(pass);
-  }
+  let pass =
+    typeof parsed.pass === 'boolean'
+      ? parsed.pass
+      : /^(true|yes|pass|y)$/i.test(String(parsed.pass));
+  const numericScore = Number(parsed.score);
+  const score =
+    typeof parsed.score === 'number'
+      ? parsed.score
+      : Number.isFinite(numericScore)
+        ? numericScore
+        : Number(pass);
 
-  const threshold =
-    typeof assertion?.threshold === 'string' ? Number(assertion.threshold) : assertion?.threshold;
-  if (typeof threshold === 'number' && Number.isFinite(threshold)) {
+  if (hasThreshold) {
     pass = pass && score >= threshold;
   }
-
-  const reason =
-    parsed.reason || (pass ? 'Grading passed' : `Score ${score} below threshold ${threshold}`);
-  return { pass, score, reason };
+  return { pass, score };
 }
 
 export async function runJsonGradingPrompt({
@@ -889,6 +880,7 @@ export async function runJsonGradingPrompt({
   grading,
   label,
   providerCallContext,
+  providerPromptConfig,
   throwOnError,
   vars,
   images,
@@ -901,12 +893,12 @@ export async function runJsonGradingPrompt({
   grading: GradingConfig;
   label: string;
   providerCallContext?: CallApiContextParams;
+  /** Prompt config for the grader call, which providers merge over their own config. */
+  providerPromptConfig?: Record<string, unknown>;
   throwOnError?: boolean;
   vars: Record<string, VarValue>;
   images?: ImageOutput[];
   audio?: ProviderResponse['audio'];
-  // Strict matcher families can validate and aggregate a structured response while
-  // retaining the shared provider, image, cache, and token accounting path.
   parseResult?: (
     parsed: unknown,
   ) =>
@@ -920,12 +912,9 @@ export async function runJsonGradingPrompt({
   const renderedPrompt = await renderLlmRubricPrompt(rubricPrompt, vars);
 
   const defaultProviders = await getDefaultProviders();
-  const defaultProvider =
-    // Rubric-specific defaults (and Codex's JSON default) can enforce a scalar
-    // pass/score schema. Component batches need the unconstrained text grader.
-    parseResult
-      ? defaultProviders.gradingProvider
-      : defaultProviders.llmRubricProvider || defaultProviders.gradingJsonProvider;
+  const defaultProvider = parseResult
+    ? defaultProviders.gradingProvider
+    : defaultProviders.llmRubricProvider || defaultProviders.gradingJsonProvider;
   const finalProvider = await getAndCheckProvider(
     'text',
     grading.provider,
@@ -943,6 +932,7 @@ export async function runJsonGradingPrompt({
     label,
     vars,
     providerCallContext,
+    providerPromptConfig,
   );
   const resp =
     parseResult && !response.cached
@@ -963,23 +953,43 @@ export async function runJsonGradingPrompt({
     }
     return graderFailureFromResponse(error, resp);
   }
-  const { parsed, failure } = parseJsonGradingResponse(label, resp, Boolean(parseResult));
-  if (!parsed) {
-    return failure as Omit<GradingResult, 'assertion'>;
-  }
 
-  let result: Pick<
-    GradingResult,
-    'pass' | 'score' | 'reason' | 'componentResults' | 'namedScores' | 'namedScoreWeights'
-  >;
+  let verdict;
+  let completionDetails = resp.tokenUsage?.completionDetails;
   if (parseResult) {
-    const structuredResult = parseResult(parsed);
-    if (typeof structuredResult === 'string') {
-      return graderFailureFromResponse(structuredResult, resp);
+    let output: unknown = resp.output;
+    if (typeof output === 'string') {
+      try {
+        output = JSON.parse(output.trim().replace(/^```(?:json)?\s*([\s\S]*?)\s*```$/i, '$1'));
+      } catch {
+        return graderFailureFromResponse('Batched llm-rubric response must be valid JSON', resp);
+      }
     }
-    result = structuredResult;
+    verdict = parseResult(output);
+    if (typeof verdict === 'string') {
+      return graderFailureFromResponse(verdict, resp);
+    }
   } else {
-    result = normalizeScalarGradingResult(parsed, assertion);
+    const { parsed, failure } = parseJsonGradingResponse(label, resp);
+    if (!parsed) {
+      return failure as Omit<GradingResult, 'assertion'>;
+    }
+    const threshold =
+      typeof assertion?.threshold === 'string' ? Number(assertion.threshold) : assertion?.threshold;
+    const scalar = deriveVerdictFromGrader(parsed, threshold);
+    if (!scalar) {
+      return graderFailureFromResponse(
+        'Grader response contained neither a pass verdict nor a finite numeric score',
+        resp,
+      );
+    }
+    verdict = {
+      ...scalar,
+      reason:
+        parsed.reason ||
+        (scalar.pass ? 'Grading passed' : `Score ${scalar.score} below threshold ${threshold}`),
+    };
+    completionDetails ??= parsed.tokensUsed?.completionDetails;
   }
 
   let responseMetadata: Record<string, unknown> = {};
@@ -997,12 +1007,10 @@ export async function runJsonGradingPrompt({
 
   return {
     assertion,
-    ...result,
+    ...verdict,
     tokensUsed: normalizeMatcherTokenUsage({
       ...resp.tokenUsage,
-      completionDetails:
-        resp.tokenUsage?.completionDetails ||
-        (parseResult ? undefined : parsed.tokensUsed?.completionDetails),
+      completionDetails,
     }),
     metadata: {
       ...trustedResponseMetadata,

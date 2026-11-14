@@ -1,7 +1,4 @@
-import {
-  isRubricBatchAggregate,
-  ResultFailureReason as ResultFailureReasonEnum,
-} from '../../../types/index';
+import { ResultFailureReason as ResultFailureReasonEnum } from '../../../types/index';
 import { truncateText } from './utils';
 
 import type {
@@ -129,33 +126,18 @@ function formatSingleResult(
   let assertions: FormattedEvalResult['assertions'] = null;
   if (result.gradingResult) {
     const componentResults = result.gradingResult.componentResults || [];
-    const hasBatch = componentResults.some(isRubricBatchAggregate);
-    const countedResults = hasBatch
-      ? componentResults.filter((component) => !isRubricBatchAggregate(component))
-      : componentResults;
     assertions = {
-      totalAssertions: hasBatch ? countedResults.length : result.testCase.assert?.length || 0,
-      passedAssertions: countedResults.filter((r) => r.pass).length,
-      failedAssertions: countedResults.filter((r) => !r.pass).length,
-      componentResults: countedResults.slice(0, assertionLimit).map((cr, idx) => {
-        const assertionSet = cr.metadata?.assertionSet;
-        const setIdentity =
-          assertionSet && typeof assertionSet === 'object' && assertionSet.type === 'assert-set'
-            ? {
-                type: 'assert-set',
-                metric: typeof assertionSet.metric === 'string' ? assertionSet.metric : undefined,
-              }
-            : undefined;
-        const assertion = hasBatch ? cr.assertion || setIdentity : result.testCase.assert?.[idx];
-        return {
-          index: idx,
-          type: assertion?.type || 'unknown',
-          pass: cr.pass,
-          score: cr.score,
-          reason: truncateText(cr.reason || '', 100),
-          metric: assertion?.metric,
-        };
-      }),
+      totalAssertions: result.testCase.assert?.length || 0,
+      passedAssertions: componentResults.filter((r) => r.pass).length,
+      failedAssertions: componentResults.filter((r) => !r.pass).length,
+      componentResults: componentResults.slice(0, assertionLimit).map((cr, idx) => ({
+        index: idx,
+        type: result.testCase.assert?.[idx]?.type || 'unknown',
+        pass: cr.pass,
+        score: cr.score,
+        reason: truncateText(cr.reason || '', 100),
+        metric: result.testCase.assert?.[idx]?.metric,
+      })),
     };
   }
 

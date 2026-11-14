@@ -1,19 +1,12 @@
-import { mockBrowserProperty } from '@app/tests/browserMocks';
+import { mockObjectUrl } from '@app/tests/browserMocks';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { downloadBlob } from './useDownloadEval';
 
 describe('downloadBlob', () => {
-  const createObjectURLMock = vi.fn();
-  const revokeObjectURLMock = vi.fn();
   const clickMock = vi.fn();
 
   beforeEach(() => {
-    createObjectURLMock.mockClear();
-    revokeObjectURLMock.mockClear();
     clickMock.mockClear();
-
-    mockBrowserProperty(URL, 'createObjectURL', createObjectURLMock as typeof URL.createObjectURL);
-    mockBrowserProperty(URL, 'revokeObjectURL', revokeObjectURLMock as typeof URL.revokeObjectURL);
 
     vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(clickMock);
 
@@ -63,32 +56,25 @@ describe('downloadBlob', () => {
       fileName: 'document.pdf',
       mockUrl: 'blob:http://localhost/mock-pdf-uuid',
     },
+    {
+      description: 'with special characters in the filename',
+      blob: new Blob(['file content'], { type: 'text/plain' }),
+      fileName: 'file/with\\special:characters*.txt',
+      mockUrl: 'blob:http://localhost/mock-uuid',
+    },
   ])('should trigger a file download $description', ({ blob, fileName, mockUrl }) => {
-    createObjectURLMock.mockReturnValue(mockUrl);
+    mockObjectUrl(mockUrl);
 
     downloadBlob(blob, fileName);
 
     verifyDownloadProcess(blob, fileName, mockUrl);
   });
 
-  it('should handle filenames with special characters', () => {
-    const blob = new Blob(['file content'], { type: 'text/plain' });
-    const fileName = 'file/with\\special:characters*.txt';
-    const mockUrl = 'blob:http://localhost/mock-uuid';
-    createObjectURLMock.mockReturnValue(mockUrl);
-
-    downloadBlob(blob, fileName);
-
-    expect(document.body.appendChild).toHaveBeenCalledTimes(1);
-    const link = (document.body.appendChild as any).mock.calls[0][0] as HTMLAnchorElement;
-    expect(link.download).toBe(fileName);
-  });
-
   it('should handle errors when URL.createObjectURL fails', () => {
     const blob = new Blob(['file content'], { type: 'text/plain' });
     const fileName = 'results.txt';
     const errorMessage = 'Failed to create object URL';
-    createObjectURLMock.mockImplementation(() => {
+    mockObjectUrl().createObjectURL.mockImplementation(() => {
       throw new Error(errorMessage);
     });
 

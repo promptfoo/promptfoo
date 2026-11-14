@@ -105,7 +105,6 @@ describe('LangfuseProvider', () => {
   it('retrieves observations, parentage, model metadata, token usage, and costs', async () => {
     const result = await new LangfuseProvider(config).fetchTrace(TRACE_ID);
 
-    expect(result).toMatchObject({ traceId: TRACE_ID, services: ['customer-agent'] });
     expect(result?.spans).toHaveLength(2);
     expect(result?.spans[0]).toMatchObject({
       spanId: 'root-span',
@@ -316,7 +315,6 @@ describe('LangfuseProvider', () => {
 
     const result = await new LangfuseProvider(config).fetchTrace(TRACE_ID);
 
-    expect(result?.services).toEqual(['customer-agent']);
     expect(result?.spans[0].attributes).toMatchObject({
       tenant: 'team-west',
       'service.name': 'customer-agent',
@@ -405,7 +403,6 @@ describe('LangfuseProvider', () => {
     expect(Object.hasOwn(attributes!, '__proto__')).toBe(false);
     expect(Object.hasOwn(attributes!, 'gen_ai.constructor.polluted')).toBe(false);
     expect(Object.hasOwn(attributes!, 'prototype')).toBe(false);
-    expect(result?.services).toEqual(['safe-service']);
   });
 
   it('normalizes current Langfuse observation cost details', async () => {

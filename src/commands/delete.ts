@@ -2,7 +2,7 @@ import confirm from '@inquirer/confirm';
 import logger from '../logger';
 import Eval from '../models/eval';
 import telemetry from '../telemetry';
-import { deleteAllEvals, deleteEval, getEvalFromId } from '../util/database';
+import { deleteAllEvals, deleteEval, hasRecentEvalWithIdPrefix } from '../util/database';
 import { setupEnv } from '../util/index';
 import type { Command } from 'commander';
 
@@ -39,8 +39,7 @@ export function deleteCommand(program: Command) {
         name: 'delete',
       });
 
-      const evl = await getEvalFromId(id);
-      if (evl) {
+      if (await hasRecentEvalWithIdPrefix(id)) {
         return handleEvalDelete(id, cmdObj.envPath);
       }
 

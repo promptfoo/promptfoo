@@ -1,4 +1,3 @@
-import { BaseAssertionTypesSchema } from '@promptfoo/types';
 import { describe, expect, it } from 'vitest';
 import {
   getAssertionValueError,
@@ -7,91 +6,10 @@ import {
 } from './assertionValueValidation';
 import type { Assertion } from '@promptfoo/types';
 
-const UNSUPPORTED_TYPE_MESSAGE = 'Select a supported assertion type before running.';
-
 const make = (overrides: Partial<Assertion>): Assertion =>
   ({ type: 'contains', value: '', ...overrides }) as Assertion;
 
 describe('getRunnableAssertionValueError', () => {
-  describe.each(['llm-rubric', 'not-llm-rubric'] as const)('%s components', (type) => {
-    it('accepts a runnable structured batch and preserves legacy values', () => {
-      for (const value of [
-        undefined,
-        'rubric',
-        ['rubric'],
-        { custom: 'rubric' },
-        { components: 'Legacy field' },
-        { components: [{ metric: 'quality', value: 'Accurate', weight: 2 }] },
-      ]) {
-        expect(getRunnableAssertionValueError(make({ type, value }))).toBeUndefined();
-      }
-    });
-
-    it('requires a valid component value only with explicit opt-in', () => {
-      expect(
-        getRunnableAssertionValueError(
-          make({
-            type,
-            rubricComponents: true,
-            value: { components: [{ metric: 'quality', value: 'Good answer' }] },
-          }),
-        ),
-      ).toBeUndefined();
-      expect(
-        getRunnableAssertionValueError(
-          make({ type, rubricComponents: true, value: 'file://rubric.cjs:getRubric' }),
-        ),
-      ).toBeUndefined();
-      for (const value of [
-        undefined,
-        'legacy rubric',
-        { components: 'Legacy field' },
-        { components: [] },
-      ]) {
-        expect(
-          getRunnableAssertionValueError(make({ type, rubricComponents: true, value })),
-        ).toContain('Invalid llm-rubric components');
-        expect(
-          getRunnableAssertionValueError(make({ type, rubricComponents: false, value })),
-        ).toBeUndefined();
-      }
-    });
-
-    it.each([
-      { components: [] },
-      {
-        components: [
-          { metric: 'a', value: 'rubric' },
-          { metric: 'a', value: 'another rubric' },
-        ],
-      },
-      { components: [{ metric: '__proto__', value: 'rubric' }] },
-      { components: [{ metric: '__count', value: 'rubric' }] },
-      { components: [{ metric: '{{ metric }}', value: 'rubric' }] },
-      { components: [{ metric: 'a', value: 'rubric', weight: 0 }] },
-      { components: [{ metric: 'a', value: 'rubric', provider: 'PRIVATE_PROVIDER' }] },
-    ])('rejects invalid components at save and run time', (value) => {
-      const assertion = make({ type, value, rubricComponents: true });
-      expect(getAssertionValueError(assertion)).toContain('Invalid llm-rubric components');
-      expect(getRunnableAssertionValueError(assertion)).toEqual(getAssertionValueError(assertion));
-      expect(getAssertionValueError(assertion)).not.toContain('PRIVATE_PROVIDER');
-    });
-
-    it('rejects parent metric collisions, metric templates, and invalid thresholds', () => {
-      const value = { components: [{ metric: 'quality', value: 'rubric' }] };
-      for (const options of [
-        { metric: 'quality' },
-        { metric: '{{ metric }}' },
-        { metric: '__count' },
-        { threshold: 1.1 },
-      ]) {
-        expect(
-          getRunnableAssertionValueError(make({ type, value, rubricComponents: true, ...options })),
-        ).toBeDefined();
-      }
-    });
-  });
-
   describe('required text/number assertions', () => {
     it('rejects an empty contains value', () => {
       expect(getRunnableAssertionValueError(make({ type: 'contains', value: '' }))).toMatch(
@@ -205,6 +123,35 @@ describe('getRunnableAssertionValueError', () => {
           make({ type: 'similar', value: 'expected', threshold: 0.5 as any }),
         ),
       ).toBeUndefined();
+    });
+  });
+
+  describe.each(['rouge-l', 'rouge-s', 'not-rouge-l', 'not-rouge-s'] as const)('%s', (type) => {
+    it('accepts a string reference and thresholds at both boundaries', () => {
+      expect(
+        getRunnableAssertionValueError(make({ type, value: 'expected output' })),
+      ).toBeUndefined();
+      for (const threshold of [0, 1]) {
+        expect(
+          getRunnableAssertionValueError(make({ type, value: 'expected output', threshold })),
+        ).toBeUndefined();
+      }
+    });
+
+    it('requires a non-blank string reference', () => {
+      for (const value of ['', '   ', 42, ['expected output']]) {
+        expect(getRunnableAssertionValueError(make({ type, value }))).toMatch(
+          /Enter an expected value/,
+        );
+      }
+    });
+
+    it('rejects thresholds outside [0, 1]', () => {
+      for (const threshold of [-0.1, 1.1]) {
+        expect(
+          getRunnableAssertionValueError(make({ type, value: 'expected output', threshold })),
+        ).toMatch(/from 0 to 1/);
+      }
     });
   });
 
@@ -345,6 +292,51 @@ describe('structured value assertions', () => {
         make({ type: 'trace-span-duration', value: { pattern: 'fetch*', max: 250 } as any }),
       ),
     ).toBeUndefined();
+  });
+
+  it.each([
+    'trace-span-count',
+    'not-trace-span-count',
+    'trace-span-duration',
+    'not-trace-span-duration',
+    'trace-error-spans',
+    'not-trace-error-spans',
+  ] as const)('validates attribute filters before running %s', (type) => {
+    const value = { pattern: '*', max: 250 };
+    for (const attributes of [
+      [],
+      null,
+      'search',
+      new Date(),
+      new Map(),
+      { tool: [] },
+      { tool: {} },
+      { tool: undefined },
+      { count: Infinity },
+      { count: NaN },
+    ]) {
+      expect(
+        getRunnableAssertionValueError(make({ type, value: { ...value, attributes } })),
+      ).toMatch(/attribute filters/);
+    }
+    for (const attributes of [
+      undefined,
+      {},
+      Object.create(null),
+      { 'gen_ai.tool.name': 'search', cached: false, count: 0 },
+    ]) {
+      expect(
+        getRunnableAssertionValueError(make({ type, value: { ...value, attributes } })),
+      ).toBeUndefined();
+    }
+  });
+
+  it('preserves optional and numeric trace error limits', () => {
+    for (const value of [undefined, 0, 2]) {
+      expect(
+        getRunnableAssertionValueError(make({ type: 'trace-error-spans', value })),
+      ).toBeUndefined();
+    }
   });
 });
 
@@ -598,21 +590,5 @@ describe('getFirstRunnableAssertionValueError', () => {
       },
     ];
     expect(getFirstRunnableAssertionValueError(list)).toBeUndefined();
-  });
-});
-
-describe('supported assertion type coverage', () => {
-  // Guards against drift: `BASE_ASSERTION_TYPES` is a hand-maintained copy of the
-  // canonical schema, and `satisfies AssertionType[]` only checks the listed entries
-  // are valid — not that the list is complete. A base type added to the schema but
-  // not mirrored here would be wrongly reported as unsupported, falsely blocking a
-  // valid assertion. This test fails if that ever happens.
-  it.each(BaseAssertionTypesSchema.options)('treats base type %s as supported', (type) => {
-    expect(getRunnableAssertionValueError(make({ type: type as any, value: 'x' }))).not.toBe(
-      UNSUPPORTED_TYPE_MESSAGE,
-    );
-    expect(
-      getRunnableAssertionValueError(make({ type: `not-${type}` as any, value: 'x' })),
-    ).not.toBe(UNSUPPORTED_TYPE_MESSAGE);
   });
 });

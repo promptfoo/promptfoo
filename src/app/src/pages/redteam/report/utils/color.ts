@@ -11,20 +11,3 @@ const severityColors: Record<Severity, string> = {
 
 export const getSeverityColor = (severity: Severity): string =>
   severityColors[severity] || 'hsl(var(--muted-foreground))';
-
-export const getProgressColor = (percentage: number, highIsBad: boolean = false): string => {
-  const evalPercentage = highIsBad ? percentage : 100 - percentage;
-  if (evalPercentage >= 90) {
-    return severityColors[Severity.Critical];
-  }
-  if (evalPercentage >= 75) {
-    return severityColors[Severity.High];
-  }
-  if (evalPercentage >= 50) {
-    return 'hsl(25 95% 45%)'; // warning-dark equivalent
-  }
-  if (evalPercentage >= 25) {
-    return 'hsl(25 95% 60%)'; // warning-light equivalent
-  }
-  return severityColors[Severity.Low];
-};

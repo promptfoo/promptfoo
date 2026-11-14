@@ -1,6 +1,7 @@
 import { Button } from '@app/components/ui/button';
 import { DownloadIcon } from '@app/components/ui/icons';
 import { formatASRForDisplay } from '@promptfoo/app/src/utils/redteam';
+import { calculateAttackSuccessRate } from '@promptfoo/presentation/redteamMetrics';
 import {
   ALIASED_PLUGIN_MAPPINGS,
   DOD_AI_ETHICS_PRINCIPLE_NAMES,
@@ -11,7 +12,6 @@ import {
   riskCategorySeverityMap,
   Severity,
 } from '@promptfoo/redteam/constants';
-import { calculateAttackSuccessRate } from '@promptfoo/redteam/metrics';
 import {
   type CategoryStats,
   categorizePlugins,
@@ -47,6 +47,57 @@ const CSVExporter = ({
       ],
     ];
 
+    const appendPluginRows = (framework: string, category: () => string, plugins: Set<string>) => {
+      // Categorize plugins into tested and untested
+      const { compliant, nonCompliant, untested } = categorizePlugins(
+        plugins,
+        categoryStats,
+        pluginPassRateThreshold,
+      );
+
+      const testedPlugins = [...compliant, ...nonCompliant];
+
+      // Add tested plugins
+      testedPlugins.forEach((plugin) => {
+        const stats = categoryStats[plugin];
+        const pluginSeverity =
+          riskCategorySeverityMap[plugin as keyof typeof riskCategorySeverityMap] || Severity.Low;
+        const pluginName = getPluginDisplayName(plugin);
+        const attacksSuccessful = stats.failCount;
+        const asr = formatASRForDisplay(calculateAttackSuccessRate(stats.total, stats.failCount));
+        const status = stats.pass / stats.total >= pluginPassRateThreshold ? 'Pass' : 'Fail';
+
+        csvRows.push([
+          framework,
+          category(),
+          pluginName,
+          pluginSeverity,
+          stats.total.toString(),
+          attacksSuccessful.toString(),
+          asr,
+          status,
+        ]);
+      });
+
+      // Add untested plugins
+      untested.forEach((plugin) => {
+        const pluginSeverity =
+          riskCategorySeverityMap[plugin as keyof typeof riskCategorySeverityMap] || Severity.Low;
+        const pluginName = getPluginDisplayName(plugin);
+
+        csvRows.push([
+          framework,
+          category(),
+          pluginName,
+          pluginSeverity,
+          '0',
+          '0',
+          '0',
+          'Not Tested',
+        ]);
+      });
+    };
+
     // Add data rows for configured frameworks
     frameworksToShow.forEach((frameworkId) => {
       const framework = FRAMEWORK_NAMES[frameworkId];
@@ -72,58 +123,11 @@ const CSVExporter = ({
             // Expand plugins if needed
             const expandedPlugins = expandPluginCollections(categoryPlugins, categoryStats);
 
-            // Categorize plugins into tested and untested
-            const { compliant, nonCompliant, untested } = categorizePlugins(
+            appendPluginRows(
+              framework,
+              () => `${categoryNumber}. ${categoryName}`,
               expandedPlugins,
-              categoryStats,
-              pluginPassRateThreshold,
             );
-
-            const testedPlugins = [...compliant, ...nonCompliant];
-
-            // Add tested plugins
-            testedPlugins.forEach((plugin) => {
-              const stats = categoryStats[plugin];
-              const pluginSeverity =
-                riskCategorySeverityMap[plugin as keyof typeof riskCategorySeverityMap] ||
-                Severity.Low;
-              const pluginName = getPluginDisplayName(plugin);
-              const attacksSuccessful = stats.failCount;
-              const asr = formatASRForDisplay(
-                calculateAttackSuccessRate(stats.total, stats.failCount),
-              );
-              const status = stats.pass / stats.total >= pluginPassRateThreshold ? 'Pass' : 'Fail';
-
-              csvRows.push([
-                framework,
-                `${categoryNumber}. ${categoryName}`,
-                pluginName,
-                pluginSeverity,
-                stats.total.toString(),
-                attacksSuccessful.toString(),
-                asr,
-                status,
-              ]);
-            });
-
-            // Add untested plugins
-            untested.forEach((plugin) => {
-              const pluginSeverity =
-                riskCategorySeverityMap[plugin as keyof typeof riskCategorySeverityMap] ||
-                Severity.Low;
-              const pluginName = getPluginDisplayName(plugin);
-
-              csvRows.push([
-                framework,
-                `${categoryNumber}. ${categoryName}`,
-                pluginName,
-                pluginSeverity,
-                '0',
-                '0',
-                '0',
-                'Not Tested',
-              ]);
-            });
           },
         );
       } else {
@@ -137,45 +141,7 @@ const CSVExporter = ({
           });
         }
 
-        // Categorize plugins
-        const { compliant, nonCompliant, untested } = categorizePlugins(
-          frameworkPlugins,
-          categoryStats,
-          pluginPassRateThreshold,
-        );
-
-        const testedPlugins = [...compliant, ...nonCompliant];
-
-        // Add tested plugins
-        testedPlugins.forEach((plugin) => {
-          const stats = categoryStats[plugin];
-          const pluginSeverity =
-            riskCategorySeverityMap[plugin as keyof typeof riskCategorySeverityMap] || Severity.Low;
-          const pluginName = getPluginDisplayName(plugin);
-          const attacksSuccessful = stats.failCount;
-          const asr = formatASRForDisplay(calculateAttackSuccessRate(stats.total, stats.failCount));
-          const status = stats.pass / stats.total >= pluginPassRateThreshold ? 'Pass' : 'Fail';
-
-          csvRows.push([
-            framework,
-            'N/A',
-            pluginName,
-            pluginSeverity,
-            stats.total.toString(),
-            attacksSuccessful.toString(),
-            asr,
-            status,
-          ]);
-        });
-
-        // Add untested plugins
-        untested.forEach((plugin) => {
-          const pluginSeverity =
-            riskCategorySeverityMap[plugin as keyof typeof riskCategorySeverityMap] || Severity.Low;
-          const pluginName = getPluginDisplayName(plugin);
-
-          csvRows.push([framework, 'N/A', pluginName, pluginSeverity, '0', '0', '0', 'Not Tested']);
-        });
+        appendPluginRows(framework, () => 'N/A', frameworkPlugins);
       }
     });
 

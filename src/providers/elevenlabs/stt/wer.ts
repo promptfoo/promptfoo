@@ -25,37 +25,13 @@ export function calculateWER(reference: string, hypothesis: string): WERResult {
   const refWords = normalizeText(reference);
   const hypWords = normalizeText(hypothesis);
 
-  // Calculate edit distance with traceback
-  const { distance, operations } = levenshteinDistance(refWords, hypWords);
-
-  // Count operation types
-  let substitutions = 0;
-  let deletions = 0;
-  let insertions = 0;
-  let correct = 0;
-
-  for (const op of operations) {
-    switch (op) {
-      case 'S':
-        substitutions++;
-        break;
-      case 'D':
-        deletions++;
-        break;
-      case 'I':
-        insertions++;
-        break;
-      case 'C':
-        correct++;
-        break;
-    }
-  }
+  const { distance, substitutions, deletions, insertions, correct, alignment } = alignWords(
+    refWords,
+    hypWords,
+  );
 
   const totalWords = refWords.length;
   const wer = totalWords > 0 ? distance / totalWords : 0;
-
-  // Generate alignment visualization
-  const alignment = generateAlignment(refWords, hypWords, operations);
 
   return {
     wer,
@@ -77,163 +53,72 @@ export function calculateWER(reference: string, hypothesis: string): WERResult {
  */
 function normalizeText(text: string): string[] {
   return text
+    .normalize('NFC')
     .toLowerCase()
     .trim()
-    .replace(/[^\w\s]/g, '') // Remove punctuation
+    .replace(/[^\p{L}\p{M}\p{N}\s_]/gu, '') // Remove punctuation, keeping non-ASCII letters
     .split(/\s+/)
     .filter((word) => word.length > 0);
 }
 
-/**
- * Calculate Levenshtein distance with operation traceback
- */
-function levenshteinDistance(
-  ref: string[],
-  hyp: string[],
-): { distance: number; operations: string[] } {
-  const m = ref.length;
-  const n = hyp.length;
-
-  // Create DP matrix
-  const dp: number[][] = Array(m + 1)
-    .fill(0)
-    .map(() => Array(n + 1).fill(0));
-
-  // Create traceback matrix
-  const traceback: string[][] = Array(m + 1)
-    .fill('')
-    .map(() => Array(n + 1).fill(''));
-
-  // Initialize first row and column
-  for (let i = 0; i <= m; i++) {
-    dp[i][0] = i;
-    traceback[i][0] = 'D'; // Deletion
-  }
-
-  for (let j = 0; j <= n; j++) {
-    dp[0][j] = j;
-    traceback[0][j] = 'I'; // Insertion
-  }
-
-  traceback[0][0] = 'C'; // Start
-
-  // Fill DP matrix
-  for (let i = 1; i <= m; i++) {
-    for (let j = 1; j <= n; j++) {
-      if (ref[i - 1] === hyp[j - 1]) {
-        // Match (correct)
-        dp[i][j] = dp[i - 1][j - 1];
-        traceback[i][j] = 'C';
-      } else {
-        // Find minimum cost operation
-        const substitution = dp[i - 1][j - 1] + 1;
-        const deletion = dp[i - 1][j] + 1;
-        const insertion = dp[i][j - 1] + 1;
-
-        const minCost = Math.min(substitution, deletion, insertion);
-        dp[i][j] = minCost;
-
-        if (minCost === substitution) {
-          traceback[i][j] = 'S'; // Substitution
-        } else if (minCost === deletion) {
-          traceback[i][j] = 'D'; // Deletion
-        } else {
-          traceback[i][j] = 'I'; // Insertion
-        }
-      }
+/** Minimum word edits for each pair of reference and hypothesis prefixes. */
+function getEditDistances(ref: string[], hyp: string[]): number[][] {
+  const distances = [Array.from({ length: hyp.length + 1 }, (_, j) => j)];
+  for (let i = 1; i <= ref.length; i++) {
+    const previous = distances[i - 1];
+    const row = new Array<number>(hyp.length + 1);
+    row[0] = i;
+    for (let j = 1; j <= hyp.length; j++) {
+      row[j] =
+        ref[i - 1] === hyp[j - 1]
+          ? previous[j - 1]
+          : 1 + Math.min(previous[j - 1], previous[j], row[j - 1]);
     }
+    distances.push(row);
   }
-
-  // Reconstruct operations from traceback
-  const operations: string[] = [];
-  let i = m;
-  let j = n;
-
-  while (i > 0 || j > 0) {
-    const op = traceback[i][j];
-    operations.unshift(op);
-
-    if (op === 'C' || op === 'S') {
-      i--;
-      j--;
-    } else if (op === 'D') {
-      i--;
-    } else if (op === 'I') {
-      j--;
-    } else {
-      break;
-    }
-  }
-
-  return {
-    distance: dp[m][n],
-    operations,
-  };
+  return distances;
 }
 
-/**
- * Generate alignment visualization
- */
-function generateAlignment(ref: string[], hyp: string[], operations: string[]): string {
+function alignWords(ref: string[], hyp: string[]) {
+  const distances = getEditDistances(ref, hyp);
+  const counts = { C: 0, S: 0, D: 0, I: 0 };
   const refLine: string[] = [];
   const hypLine: string[] = [];
   const opLine: string[] = [];
+  let i = ref.length;
+  let j = hyp.length;
 
-  let refIdx = 0;
-  let hypIdx = 0;
-
-  for (const op of operations) {
-    switch (op) {
-      case 'C': {
-        // Correct
-        const word = ref[refIdx];
-        const maxLen = Math.max(word.length, hyp[hypIdx].length);
-        refLine.push(word.padEnd(maxLen));
-        hypLine.push(hyp[hypIdx].padEnd(maxLen));
-        opLine.push(' '.repeat(maxLen));
-        refIdx++;
-        hypIdx++;
-        break;
-      }
-
-      case 'S': {
-        // Substitution
-        const refWord = ref[refIdx];
-        const hypWord = hyp[hypIdx];
-        const maxLen = Math.max(refWord.length, hypWord.length);
-        refLine.push(refWord.padEnd(maxLen));
-        hypLine.push(hypWord.padEnd(maxLen));
-        opLine.push('S'.repeat(maxLen));
-        refIdx++;
-        hypIdx++;
-        break;
-      }
-
-      case 'D': {
-        // Deletion
-        const word = ref[refIdx];
-        refLine.push(word);
-        hypLine.push('*'.repeat(word.length));
-        opLine.push('D'.repeat(word.length));
-        refIdx++;
-        break;
-      }
-
-      case 'I': {
-        // Insertion
-        const word = hyp[hypIdx];
-        refLine.push('*'.repeat(word.length));
-        hypLine.push(word);
-        opLine.push('I'.repeat(word.length));
-        hypIdx++;
-        break;
-      }
+  // Trace backwards. On ties, prefer substitution to deletion, then insertion.
+  while (i > 0 || j > 0) {
+    const match = ref[i - 1] === hyp[j - 1];
+    let op: keyof typeof counts;
+    if (i > 0 && j > 0 && (match || distances[i][j] === distances[i - 1][j - 1] + 1)) {
+      op = match ? 'C' : 'S';
+    } else if (i > 0 && distances[i][j] === distances[i - 1][j] + 1) {
+      op = 'D';
+    } else {
+      op = 'I';
     }
+
+    counts[op]++;
+    const refWord = op === 'I' ? '' : ref[--i];
+    const hypWord = op === 'D' ? '' : hyp[--j];
+    const width = Math.max(refWord.length, hypWord.length);
+    refLine.push(op === 'I' ? '*'.repeat(width) : refWord.padEnd(width));
+    hypLine.push(op === 'D' ? '*'.repeat(width) : hypWord.padEnd(width));
+    opLine.push((op === 'C' ? ' ' : op).repeat(width));
   }
 
-  return [
-    `REF: ${refLine.join(' ')}`,
-    `HYP: ${hypLine.join(' ')}`,
-    `OPS: ${opLine.join(' ')}`,
-  ].join('\n');
+  return {
+    distance: distances[ref.length][hyp.length],
+    substitutions: counts.S,
+    deletions: counts.D,
+    insertions: counts.I,
+    correct: counts.C,
+    alignment: [
+      `REF: ${refLine.reverse().join(' ')}`,
+      `HYP: ${hypLine.reverse().join(' ')}`,
+      `OPS: ${opLine.reverse().join(' ')}`,
+    ].join('\n'),
+  };
 }

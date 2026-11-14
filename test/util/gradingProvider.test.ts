@@ -111,29 +111,22 @@ describe('buildConfiguredProviderMap', () => {
 });
 
 describe('resolveConfiguredProviderReference', () => {
-  it('preserves a fully resolved provider map when no entry needs env injection', () => {
+  it('preserves a fully resolved provider map', () => {
     const provider = makeProvider('litellm:judge');
     const typeMap = { text: provider };
 
-    expect(
-      resolveConfiguredProviderReference(typeMap, buildConfiguredProviderMap([]), {
-        API_KEY: 'suite-key',
-      }),
-    ).toBe(typeMap);
+    expect(resolveConfiguredProviderReference(typeMap, buildConfiguredProviderMap([]))).toBe(
+      typeMap,
+    );
   });
 
-  it('adds env only when a deferred typed provider must still be loaded', () => {
+  it('preserves deferred typed providers until their assertion runs', () => {
     const embeddingProvider = makeProvider('litellm:embedding:judge');
     const typeMap = { text: 'litellm:judge', embedding: embeddingProvider };
 
-    expect(
-      resolveConfiguredProviderReference(typeMap, buildConfiguredProviderMap([]), {
-        API_KEY: 'suite-key',
-      }),
-    ).toEqual({
-      text: { id: 'litellm:judge', env: { API_KEY: 'suite-key' } },
-      embedding: embeddingProvider,
-    });
+    expect(resolveConfiguredProviderReference(typeMap, buildConfiguredProviderMap([]))).toBe(
+      typeMap,
+    );
   });
 
   it('resolves configured typed entries while leaving unconfigured alternatives lazy', () => {

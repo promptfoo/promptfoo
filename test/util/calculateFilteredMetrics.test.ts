@@ -1,3 +1,4 @@
+import { clearEvalTables } from '../util/evalDb';
 /**
  * Unit tests for calculateFilteredMetrics utility.
  *
@@ -12,23 +13,17 @@ import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
 import { ResultFailureReason } from '../../src/types/index';
 import { calculateFilteredMetrics } from '../../src/util/calculateFilteredMetrics';
+import { createEvaluateResult } from '../factories/eval';
 import EvalFactory from '../factories/evalFactory';
 
-import type { GradingResult, TokenUsage } from '../../src/types/index';
+import type { TokenUsage } from '../../src/types/index';
 
 describe('calculateFilteredMetrics', () => {
   beforeAll(async () => {
     await runDbMigrations();
   });
 
-  beforeEach(async () => {
-    const db = await getDb();
-    await db.run('DELETE FROM eval_results');
-    await db.run('DELETE FROM evals_to_datasets');
-    await db.run('DELETE FROM evals_to_prompts');
-    await db.run('DELETE FROM evals_to_tags');
-    await db.run('DELETE FROM evals');
-  });
+  beforeEach(() => clearEvalTables());
 
   afterEach(() => {
     vi.resetAllMocks();
@@ -138,6 +133,37 @@ describe('calculateFilteredMetrics', () => {
     });
   });
 
+  it('aggregates explicit, cached, and legacy costs within the selected rows', async () => {
+    const eval_ = await EvalFactory.create({ numResults: 0 });
+    const responses = [
+      { output: 'retry', incurredCost: 0.5 },
+      { output: 'cache', cached: true },
+      { output: 'legacy' },
+    ];
+    for (const [testIdx, response] of responses.entries()) {
+      await eval_.addResult(createEvaluateResult({ testIdx, cost: 2, response }));
+    }
+    const options = { evalId: eval_.id, numPrompts: 1 };
+    const all = await calculateFilteredMetrics({
+      ...options,
+      whereSql: sql`eval_id = ${eval_.id}`,
+    });
+    expect(all[0]).toMatchObject({ cost: 6, incurredCost: 2.5 });
+
+    const cached = await calculateFilteredMetrics({
+      ...options,
+      whereSql: sql`eval_id = ${eval_.id} AND test_idx = 1`,
+    });
+    expect(cached[0]).toMatchObject({ cost: 2, incurredCost: 0 });
+
+    const legacy = await calculateFilteredMetrics({
+      ...options,
+      whereSql: sql`eval_id = ${eval_.id} AND test_idx = 2`,
+    });
+    expect(legacy[0].cost).toBe(2);
+    expect(legacy[0].incurredCost).toBeUndefined();
+  });
+
   describe('token usage aggregation', () => {
     async function addTokenResult(
       eval_: Awaited<ReturnType<typeof EvalFactory.create>>,
@@ -183,6 +209,35 @@ describe('calculateFilteredMetrics', () => {
         metadata: {},
       });
     }
+
+    it('counts cached target rows separately from cached tokens and graders under filtering', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 0 });
+      await addTokenResult(eval_, {
+        testIdx: 0,
+        responseCached: true,
+        tokenUsage: { total: 0 },
+      });
+      await addTokenResult(eval_, {
+        testIdx: 1,
+        tokenUsage: { total: 10, cached: 10 },
+        gradingCached: true,
+        gradingUsage: { total: 5, cached: 5 },
+      });
+      await addTokenResult(eval_, {
+        testIdx: 2,
+        responseCached: true,
+        tokenUsage: { total: 20 },
+      });
+
+      const metrics = await calculateFilteredMetrics({
+        evalId: eval_.id,
+        numPrompts: 1,
+        whereSql: sql`eval_id = ${eval_.id} AND test_idx < 2`,
+      });
+
+      expect(metrics[0].testPassCount).toBe(2);
+      expect(metrics[0].testCacheHitCount).toBe(1);
+    });
 
     it('should aggregate token usage correctly', async () => {
       const eval_ = await EvalFactory.create({
@@ -603,77 +658,6 @@ describe('calculateFilteredMetrics', () => {
   });
 
   describe('assertion counts aggregation', () => {
-    it('keeps legacy and childless failures while excluding only populated rubric aggregates', async () => {
-      const eval_ = await EvalFactory.create({ numResults: 0 });
-      const child: GradingResult = {
-        pass: true,
-        score: 1,
-        reason: 'Dimension passed',
-        assertion: { type: 'llm-rubric', value: 'Good answer', metric: 'accuracy' },
-      };
-      const batch: GradingResult = {
-        pass: true,
-        score: 1,
-        reason: 'Aggregate passed',
-        assertion: {
-          type: 'llm-rubric',
-          rubricComponents: true,
-          value: { components: [{ metric: 'accuracy', value: 'Good answer' }] },
-        },
-        componentResults: [child],
-        metadata: { rubricComponents: true },
-      };
-      const components: GradingResult[] = [
-        batch,
-        { ...batch, assertion: { ...batch.assertion!, type: 'not-llm-rubric' } },
-        child,
-        { pass: true, score: 1, reason: 'Legacy result without assertion' },
-        {
-          pass: false,
-          score: 0,
-          reason: 'Legacy set',
-          componentResults: [child],
-          metadata: { assertionSet: { type: 'assert-set' } },
-        },
-        { ...batch, pass: false, componentResults: undefined, metadata: { graderError: true } },
-        { ...batch, pass: false, componentResults: [] },
-        {
-          ...batch,
-          metadata: undefined,
-          assertion: { type: 'llm-rubric', value: 'Legacy scalar rubric' },
-        },
-      ];
-      await eval_.addResult({
-        promptIdx: 0,
-        testIdx: 0,
-        testCase: {},
-        promptId: 'test',
-        provider: { id: 'test' },
-        prompt: { raw: 'test', label: 'test' },
-        vars: {},
-        response: { output: 'test' },
-        error: null,
-        failureReason: ResultFailureReason.ASSERT,
-        success: false,
-        score: 0,
-        latencyMs: 1,
-        namedScores: {},
-        gradingResult: {
-          pass: false,
-          score: 0,
-          reason: 'Mixed stored results',
-          componentResults: components,
-        },
-      });
-
-      const metrics = await calculateFilteredMetrics({
-        evalId: eval_.id,
-        numPrompts: 1,
-        whereSql: sql`eval_id = ${eval_.id}`,
-      });
-      expect(metrics[0]).toMatchObject({ assertPassCount: 3, assertFailCount: 3 });
-    });
-
     it('should aggregate assertion pass/fail counts from componentResults', async () => {
       const eval_ = await EvalFactory.create({
         numResults: 10,

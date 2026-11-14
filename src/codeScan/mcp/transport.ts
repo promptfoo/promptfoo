@@ -101,28 +101,19 @@ export class SocketIoMcpBridge {
           }
 
           // Route to appropriate event based on message type
-          if (isResponse) {
-            // JSON-RPC response (has result or error)
-            this.socket?.emit('mcp:response', {
-              session_id: this.sessionId,
-              batch_id: batchId ?? 0,
-              message: restoredMessage,
-            });
-          } else if (isRequest) {
-            // Server-initiated request (has method, no result/error)
-            this.socket?.emit('mcp:server-request', {
-              session_id: this.sessionId,
-              batch_id: batchId ?? 0,
-              message,
-            });
-          } else {
-            // Server-initiated notification (no id, method only)
-            this.socket?.emit('mcp:server-notification', {
-              session_id: this.sessionId,
-              batch_id: batchId ?? 0,
-              message,
-            });
-          }
+          const eventName = isResponse
+            ? // JSON-RPC response (has result or error)
+              'mcp:response'
+            : isRequest
+              ? // Server-initiated request (has method, no result/error)
+                'mcp:server-request'
+              : // Server-initiated notification (no id, method only)
+                'mcp:server-notification';
+          this.socket?.emit(eventName, {
+            session_id: this.sessionId,
+            batch_id: batchId ?? 0,
+            message: restoredMessage,
+          });
         } catch (_error) {
           logger.debug(`Failed to parse MCP output: ${line}`);
         }
