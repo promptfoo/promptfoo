@@ -2,6 +2,15 @@
  * Type definitions for function callbacks across providers
  */
 
+/** Structured record from an MCP tool resolved by a provider callback handler. */
+export interface McpToolCallEntry {
+  name: string;
+  arguments?: unknown;
+  result?: unknown;
+  isError?: boolean;
+  source: 'mcp';
+}
+
 /**
  * Base structure for a function call
  */
@@ -35,6 +44,13 @@ export type FunctionCallbackConfig = Record<string, FunctionCallback | string>;
 export interface FunctionCallResult {
   output: string | any;
   isError: boolean;
+  /**
+   * Structured record of the MCP tool call that produced this result, set
+   * only when the call was resolved via an MCP tool (see
+   * `FunctionCallbackHandler.executeMcpTool`). Omitted for callback- or
+   * passthrough-resolved calls.
+   */
+  toolCall?: McpToolCallEntry;
 }
 
 /** A callback result before conversion to a provider's tool-result wire format. */
