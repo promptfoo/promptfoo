@@ -157,6 +157,47 @@ describe('CIGE agentic test case example', () => {
       expect(result.reason).toMatch(/^Forbidden tool call attempted and blocked before dispatch/);
     });
 
+    it('preserves a denied verdict when its transcript fields and tool name are redacted', async () => {
+      const cige = loadCase('streaming-undeclared-tool.cige.yaml');
+      cige.guardrails.push({
+        rule: 'Hide internal audit terms',
+        enforce: { forbid_output_pattern: 'blocked|delete_session|criteria|evidenceChecks' },
+      });
+      const runner = new CigeRunner();
+      const response = await runner.callApi('', { prompt: { raw: '', label: '' }, vars: { cige } });
+      expect(JSON.stringify(response.output)).not.toMatch(
+        /blocked|delete_session|criteria|evidenceChecks/,
+      );
+      const result = await cliState.withBasePath(exampleDir, () =>
+        runAssertions({
+          prompt: cige.intent.goal,
+          provider: runner,
+          providerResponse: response,
+          test: {
+            vars: { cige },
+            assert: [{ type: 'javascript', value: 'file://cige.mjs:assertIntent' }],
+          },
+        }),
+      );
+      expect(result.pass).toBe(false);
+      expect(result.namedScores).toEqual({ outcome: 1, evidence: 1, guardrails: 0 });
+      expect(result.reason).not.toMatch(/blocked|delete_session/);
+    });
+
+    it('keeps the provider error when redaction matches the preflight response keys', async () => {
+      const cige = loadCase('streaming-requires-approval.cige.yaml');
+      cige.guardrails.push({
+        rule: 'Hide field names',
+        enforce: { forbid_output_pattern: 'refusal|transcript' },
+      });
+      const response = await new CigeRunner().callApi('', {
+        prompt: { raw: '', label: '' },
+        vars: { cige },
+      });
+      expect(response.error).toContain('CIGE preflight refused');
+      expect(response.output).toBeUndefined();
+    });
+
     it('blocks undeclared tools even without a deny guardrail', () => {
       const cige = loadCase('streaming-session.cige.yaml');
       cige.guardrails = [];

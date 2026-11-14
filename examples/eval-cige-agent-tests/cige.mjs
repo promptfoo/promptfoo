@@ -398,6 +398,9 @@ export function gradeCige(cige, transcript) {
  * Promptfoo javascript assertion: `value: file://cige.mjs:assertIntent`.
  */
 export function assertIntent(output, context) {
+  if (context.metadata?.cigeGrade) {
+    return context.metadata.cigeGrade;
+  }
   const transcript = typeof output === 'string' ? JSON.parse(output) : output;
   return gradeCige(context.vars.cige, transcript);
 }

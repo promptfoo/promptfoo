@@ -13,6 +13,7 @@ import {
   checkToolCall,
   classifyGuardrails,
   evaluateCriteria,
+  gradeCige,
   redact,
   validateCige,
 } from './cige.mjs';
@@ -36,23 +37,19 @@ export function runCige(cige, fixtureOptions = {}) {
 
   if (unsupported.length > 0) {
     // Refusals go through the same redaction as completed runs.
-    const { value } = redact(
-      {
-        refusal: `CIGE preflight refused: this runner cannot enforce mandatory guardrail(s) ${unsupported
-          .map(({ rule, kinds }) => `"${rule}"${kinds.length > 0 ? ` (${kinds.join(', ')})` : ''}`)
-          .join(', ')}. No tool calls were made.`,
-        transcript: { status: 'refused', unsupported, received: [] },
-      },
-      enforced,
-    );
-    return value;
+    const message = `CIGE preflight refused: this runner cannot enforce mandatory guardrail(s) ${unsupported
+      .map(({ rule, kinds }) => `"${rule}"${kinds.length > 0 ? ` (${kinds.join(', ')})` : ''}`)
+      .join(', ')}. No tool calls were made.`;
+    return {
+      refusal: redact(message, enforced).value,
+      transcript: redact({ status: 'refused', unsupported, received: [] }, enforced).value,
+    };
   }
 
   const fixture = createStreamingFixture(fixtureOptions);
   const steps = [];
   const blocked = [];
   const evidence = {};
-  let redactions = 0;
 
   cige.execution.initial_path.forEach(({ tool, args = {} }, index) => {
     const gate = checkToolCall(cige, enforced, tool);
@@ -66,32 +63,31 @@ export function runCige(cige, fixtureOptions = {}) {
     if (raw.ok && raw.artifact) {
       evidence[raw.artifact] = raw.data;
     }
-    const { value: result, count } = redact(raw, enforced);
-    redactions += count;
-    steps.push({ index, tool, status: raw.ok ? 'ok' : 'error', result });
+    steps.push({ index, tool, status: raw.ok ? 'ok' : 'error', result: raw });
   });
 
-  // Final pass over everything emitted, so a forbidden value kept elsewhere (for example in
-  // the observed state) cannot leak around the per-step redaction.
-  const { value: transcript, count } = redact(
-    {
-      status: 'completed',
-      runner: 'scripted',
-      steps,
-      blocked,
-      evidence,
-      state: fixture.state,
-      // Checked against the raw state, before redaction can hide a value a criterion needs.
-      criteria: evaluateCriteria(cige, fixture.state),
-      evidenceChecks: checkEvidence(cige, evidence),
-      // Calls that actually reached the fixture, so blocked calls can be shown to be absent.
-      received: fixture.received.map(({ tool }) => tool),
-      advisory,
-      notImplemented,
-    },
-    enforced,
-  );
-  return { transcript: { ...transcript, redactions: redactions + count } };
+  const observation = {
+    status: 'completed',
+    runner: 'scripted',
+    steps,
+    blocked,
+    evidence,
+    state: fixture.state,
+    criteria: evaluateCriteria(cige, fixture.state),
+    evidenceChecks: checkEvidence(cige, evidence),
+    received: fixture.received.map(({ tool }) => tool),
+    advisory,
+    notImplemented,
+  };
+  const { value: transcript, count } = redact(observation, enforced);
+  const grade = gradeCige(cige, { ...observation, redactions: count });
+  // Keep the assertion's booleans and scores independent of transcript redaction.
+  // Only the explanations carry text from the case or fixture.
+  grade.reason = redact(grade.reason, enforced).value;
+  for (const component of grade.componentResults) {
+    component.reason = redact(component.reason, enforced).value;
+  }
+  return { transcript: { ...transcript, redactions: count }, grade };
 }
 
 export default class CigeRunner {
@@ -105,10 +101,13 @@ export default class CigeRunner {
   }
 
   async callApi(_prompt, context) {
-    const { refusal, transcript } = runCige(context?.vars?.cige, context?.vars?.fixture ?? {});
+    const { refusal, transcript, grade } = runCige(
+      context?.vars?.cige,
+      context?.vars?.fixture ?? {},
+    );
     if (refusal) {
       return { error: refusal, metadata: { cige: transcript } };
     }
-    return { output: transcript };
+    return { output: transcript, metadata: { cigeGrade: grade } };
   }
 }
