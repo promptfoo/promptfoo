@@ -6,6 +6,12 @@ prompts:
   - '{{audio_file}}'
 
 providers:
+  - id: openai:transcription:gpt-transcribe
+    config:
+      languages: [en]
+      keywords: [mankind]
+      prompt: A recording of the first Moon landing.
+
   # Standard Whisper model
   - id: openai:transcription:whisper-1
     config:
@@ -16,7 +22,7 @@ providers:
   - id: openai:transcription:gpt-4o-transcribe
     config:
       language: en
-      prompt: This is a technical discussion about AI and machine learning. # Optional: provide context
+      prompt: A recording of the first Moon landing.
 
   # GPT-4o Mini (faster, cheaper)
   - id: openai:transcription:gpt-4o-mini-transcribe

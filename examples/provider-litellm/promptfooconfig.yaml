@@ -9,13 +9,12 @@ description: LiteLLM provider example - unified interface for multiple LLMs
 # 2. Set API keys: OPENAI_API_KEY, ANTHROPIC_API_KEY, GOOGLE_AI_API_KEY
 
 prompts:
-  - 'Translate this to {{language}}: {{text}}'
-  - 'Write a haiku about {{topic}}'
+  - '{{prompt}}'
 
 providers:
   # All providers use the litellm: prefix and connect through the proxy
   - litellm:gpt-4.1
-  - litellm:claude-sonnet-4-6
+  - litellm:claude-sonnet-5
   - litellm:gemini-2.5-pro
 
 # Configure embedding provider for similarity assertions
@@ -27,8 +26,7 @@ defaultTest:
 
 tests:
   - vars:
-      language: French
-      text: 'Hello, world!'
+      prompt: 'Translate this to French: Hello, world!'
     assert:
       - type: contains
         value: 'Bonjour'
@@ -37,7 +35,7 @@ tests:
         threshold: 0.8
 
   - vars:
-      topic: 'artificial intelligence'
+      prompt: 'Write a haiku about artificial intelligence. Return only the three lines of the poem.'
     assert:
       - type: javascript
         value: |

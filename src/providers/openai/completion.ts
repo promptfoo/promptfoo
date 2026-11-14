@@ -1,6 +1,7 @@
 import { fetchWithCache } from '../../cache';
 import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
+import { extractProviderResponseAttributes, withGenAISpan } from '../../tracing/genaiTracer';
 import { getRequestTimeoutMs } from '../shared';
 import { OpenAiGenericProvider } from '.';
 import { calculateOpenAIUsageCost } from './billing';
@@ -8,16 +9,19 @@ import {
   appendOpenAiApiPath,
   assertOpenAiApiModel,
   formatOpenAiError,
+  getOpenAiEffectiveServiceTier,
   getTokenUsage,
+  isOpenAiFirstPartyApiUrl,
+  normalizeOpenAiBillingModelName,
   OPENAI_COMPLETION_MODELS,
 } from './util';
 
-import type { EnvOverrides } from '../../types/env';
 import type {
   CallApiContextParams,
   CallApiOptionsParams,
   ProviderResponse,
 } from '../../types/index';
+import type { ProviderOptions } from '../../types/providers';
 import type { OpenAiCompletionOptions } from './types';
 
 export class OpenAiCompletionProvider extends OpenAiGenericProvider {
@@ -27,9 +31,16 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
 
   config: OpenAiCompletionOptions;
 
+  protected getBillingModelName(config: OpenAiCompletionOptions): string {
+    const passthroughModel = (config.passthrough as { model?: unknown } | undefined)?.model;
+    return typeof passthroughModel === 'string'
+      ? passthroughModel
+      : super.getBillingModelName(config);
+  }
+
   constructor(
     modelName: string,
-    options: { config?: OpenAiCompletionOptions; id?: string; env?: EnvOverrides } = {},
+    options: Pick<ProviderOptions<OpenAiCompletionOptions>, 'config' | 'id' | 'env'> = {},
   ) {
     super(modelName, options);
     this.config = options.config || {};
@@ -50,7 +61,7 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
       throw new Error(this.getMissingApiKeyErrorMessage());
     }
 
-    let stop: string;
+    let stop: unknown;
     try {
       stop = getEnvString('OPENAI_STOP')
         ? JSON.parse(getEnvString('OPENAI_STOP') || '')
@@ -58,6 +69,15 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
     } catch (err) {
       throw new Error(`OPENAI_STOP is not a valid JSON string: ${err}`);
     }
+    const promptConfig = context?.prompt?.config as Partial<OpenAiCompletionOptions> | undefined;
+    const promptReplacesPassthrough =
+      promptConfig && Object.prototype.hasOwnProperty.call(promptConfig, 'passthrough');
+    const effectivePassthrough = promptReplacesPassthrough
+      ? promptConfig.passthrough
+      : this.config.passthrough;
+    const effectiveServiceTier = getOpenAiEffectiveServiceTier(this.config, promptConfig);
+    const isFirstPartyCompletionApi = isOpenAiFirstPartyApiUrl(this.getApiUrl());
+    const requestServiceTier = isFirstPartyCompletionApi ? undefined : effectiveServiceTier;
     const body = {
       model: this.modelName,
       prompt,
@@ -71,10 +91,51 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
       best_of: this.config.best_of ?? getEnvInt('OPENAI_BEST_OF', 1),
       ...(callApiOptions?.includeLogProbs ? { logprobs: callApiOptions.includeLogProbs } : {}),
       ...(stop ? { stop } : {}),
-      ...(this.config.passthrough || {}),
+      ...(effectivePassthrough || {}),
+      ...(requestServiceTier === undefined ? {} : { service_tier: requestServiceTier }),
     };
+    // OpenAI's legacy /v1/completions schema rejects service_tier. Custom gateways may support it.
+    if (isFirstPartyCompletionApi) {
+      delete body.service_tier;
+    }
     assertOpenAiApiModel(body.model, this.getApiUrl());
+    const asNumber = (value: unknown): number | undefined =>
+      typeof value === 'number' ? value : undefined;
+    const stopSequences =
+      typeof body.stop === 'string'
+        ? [body.stop]
+        : Array.isArray(body.stop) &&
+            body.stop.every((item): item is string => typeof item === 'string')
+          ? body.stop
+          : undefined;
 
+    return withGenAISpan(
+      {
+        system: this.getGenAISystem(),
+        operationName: 'text_completion',
+        model: body.model,
+        providerId: this.id(),
+        maxTokens: asNumber(body.max_tokens),
+        temperature: asNumber(body.temperature),
+        topP: asNumber(body.top_p),
+        stopSequences,
+        presencePenalty: asNumber(body.presence_penalty),
+        frequencyPenalty: asNumber(body.frequency_penalty),
+        evalId: context?.evaluationId,
+        testIndex: context?.testIdx ?? (context?.test?.vars?.__testIdx as number | undefined),
+        promptLabel: context?.prompt?.label,
+        traceparent: context?.traceparent,
+        requestBody: prompt,
+      },
+      () => this.callApiInternal(body, context),
+      extractProviderResponseAttributes,
+    );
+  }
+
+  private async callApiInternal(
+    body: Record<string, unknown>,
+    context?: CallApiContextParams,
+  ): Promise<ProviderResponse> {
     let data,
       cached = false,
       latencyMs: number | undefined;
@@ -102,20 +163,32 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
       };
     }
 
-    if (data.error) {
+    if (data?.error) {
       return {
         error: formatOpenAiError(data),
       };
     }
+    if (!data?.choices?.[0]) {
+      return {
+        error: `Malformed response data: ${JSON.stringify(data)}`,
+        cached,
+      };
+    }
     try {
+      const billingModelName = this.getBillingModelName({
+        ...this.config,
+        passthrough: { model: body.model },
+      });
+      const billingLookupModel = normalizeOpenAiBillingModelName(billingModelName);
       return {
         output: data.choices[0].text,
         tokenUsage: getTokenUsage(data, cached),
         cached,
         latencyMs,
-        cost: calculateOpenAIUsageCost(this.modelName, this.config, data.usage, {
+        cost: calculateOpenAIUsageCost(billingLookupModel, this.config, data.usage, {
           cachedResponse: cached,
-          serviceTier: data.service_tier ?? this.config.service_tier,
+          serviceTier: data.service_tier ?? body.service_tier,
+          apiUrl: this.getApiUrl(),
         }),
       };
     } catch (err) {

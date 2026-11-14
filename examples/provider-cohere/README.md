@@ -11,6 +11,8 @@ cd provider-cohere
 
 To get started, set your COHERE_API_KEY environment variable.
 
+The starter uses Command A for text generation and Embed v3 for similarity grading. It does not require managed web search, which [Cohere deprecated for new integrations](https://docs.cohere.com/docs/deprecations).
+
 Next, edit promptfooconfig.yaml.
 
 Then run:

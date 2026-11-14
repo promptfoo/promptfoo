@@ -22,7 +22,7 @@ Testing autonomous coding agents? Start with the [coding-agent red-team guide](/
 
 LLM agents often have varying levels of access to tools, APIs, and data sources. A primary concern is whether an agent can be manipulated to escalate privileges or access unauthorized resources.
 
-A good reference for these sorts of vulnerabilities is the [OWASP API Security Top 10](https://owasp.org/www-project-api-security/). Although it isn't written for LLMs specifically, think of the agent as a user of an API.
+The [OWASP API Security Top 10](https://api-security.owasp.org/) is a good reference for these vulnerabilities. It isn't written for LLMs, but you can treat the agent as a user of an API.
 
 #### Example
 
@@ -405,12 +405,11 @@ redteam:
     includeInAttack: true
     includeInGrading: true
     spanFilter:
-      - 'llm.'
-      - 'agent.'
-      - 'guardrail.'
-      - 'tool.'
-      - 'command.'
-      - 'search.'
+      - 'chat*'
+      - '*tool*'
+      - '*guardrail*'
+      - '*command*'
+      - '*search*'
   plugins:
     - excessive-agency
     - rbac
@@ -421,7 +420,7 @@ redteam:
     - jailbreak:composite
 ```
 
-For useful trajectories, your agent or provider needs to emit spans that identify internal steps. Add attributes such as `tool.name`, `tool.arguments`, Vercel AI SDK `ai.toolCall.name`, `ai.toolCall.args`, `command`, `search.query`, or guardrail decision fields. Built-in providers emit provider-level GenAI spans automatically, but deeper agent evidence requires instrumenting the agent workflow or using a provider that already streams tool and command spans. Keep `spanFilter` aligned with the span names your agent emits; it uses case-insensitive substring matching, not wildcards or regex, so values like `llm.` and `tool.` will match spans such as `llm.chat.completions` or `tool.database_query`. Overly narrow filters can hide the evidence you want graders or assertions to inspect.
+For useful trajectories, your agent or provider needs to emit spans that identify internal steps. Add attributes such as `tool.name`, `tool.arguments`, Vercel AI SDK `ai.toolCall.name`, `ai.toolCall.args`, `command`, `search.query`, or guardrail decision fields. Built-in providers emit provider-level GenAI spans automatically, but deeper agent evidence requires instrumenting the agent workflow or using a provider that already streams tool and command spans. Keep `spanFilter` aligned with the span names your agent emits. Filters are case-insensitive, support `*` and `?` wildcards, and still match plain values as substrings. Overly narrow filters can hide the evidence you want graders or assertions to inspect.
 
 #### How Trace Feedback Improves Attacks
 

@@ -26,6 +26,14 @@ Learn how to measure specific aspects of LLM output quality.
 - [Sandboxed Code Evaluations](/docs/guides/sandboxed-code-evals) — Safely run and test LLM-generated code
 - [HLE Benchmark](/docs/guides/hle-benchmark) — Evaluate models on the Humanity's Last Exam benchmark
 
+## Safety and Guardrails
+
+Test provider safety controls and application-level enforcement.
+
+- [Testing and Validating Guardrails](/docs/guides/testing-guardrails) — Normalize guardrail responses, test attacks and false positives, and compare implementations
+- [Testing Google Cloud Model Armor](/docs/guides/google-cloud-model-armor) — Evaluate Model Armor prompt and response templates
+- [Automated Red Teaming](/docs/red-team/quickstart) — Generate adversarial cases and measure application vulnerabilities
+
 ## Model Comparisons
 
 Compare LLM performance on your own data to make informed model selection decisions.

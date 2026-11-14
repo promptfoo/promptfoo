@@ -404,22 +404,6 @@ html[data-theme='dark'] .resultText {
   margin-top: 1.5rem;
 }
 
-.detectHint {
-  margin-bottom: 1rem;
-  font-size: 0.875rem;
-  color: #64748b;
-  padding: 0.75rem;
-  background-color: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-radius: 0.5rem;
-}
-
-html[data-theme='dark'] .detectHint {
-  background-color: #0f172a;
-  border-color: #334155;
-  color: #94a3b8;
-}
-
 .detectedMessage {
   padding: 1rem;
   background-color: #f1f5f9;

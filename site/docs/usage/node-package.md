@@ -14,11 +14,10 @@ promptfoo is available as a node package [on npm](https://www.npmjs.com/package/
 npm install promptfoo
 ```
 
-:::warning
+:::note
 
-Node.js 20 support ends July 30, 2026 at 00:00 UTC. Library consumers should upgrade to Node.js
-`22.22.0` or newer before updating promptfoo after the cutoff. Node.js 24 LTS is recommended. See the
-[runtime upgrade guide](/docs/installation#nodejs-runtime-support).
+promptfoo requires Node.js `22.22.0` or newer. Node.js 24 LTS is recommended. See the
+[runtime support guide](/docs/installation#nodejs-runtime-support).
 
 :::
 
@@ -45,6 +44,8 @@ The evaluate function takes the following parameters:
 
 The evaluate function returns an `Eval` record. Call `toEvaluateSummary()` on that record to get an [`EvaluateSummary` object](/docs/configuration/reference#evaluatesummary).
 
+Each `evaluate()` call uses its own `env` overrides; an omitted or empty `env` uses process settings without inheriting a previous evaluation. Set `testSuite.basePath` to resolve local references from another directory. Relative values resolve from the working directory; saved config retains the absolute directory. SDK test-file and generator inputs remain source references in saved configs, so replay requires those sources.
+
 ### Provider functions
 
 A `ProviderFunction` is a Javascript function that implements an LLM API call. It takes a prompt string and a context. It returns the LLM response or an error. See [`ProviderFunction` type](/docs/configuration/reference#providerfunction).
@@ -65,6 +66,14 @@ const providerWithOptions = await loadApiProvider('azure:chat:test', {
   },
 });
 ```
+
+During `loadApiProvider` and `loadApiProviders`, an omitted or `undefined` `env` inherits the active environment. An object replaces it, including `{}`. For `loadApiProvider('file://provider.yaml', { env })`, precedence from lowest to highest is inherited environment, file `env`, explicit caller `env`, then provider `options.env`. Providers that read environment variables later use the environment active at that call.
+
+`loadApiProviders('file://provider.yaml', { env })` expands the file into provider options, so the file's `env` overrides caller `env`. File references supplied as provider objects, such as `loadApiProviders([{ id: 'file://provider.yaml' }], { env })`, follow the direct-loader precedence instead. These distinctions preserve existing loader behavior.
+
+Environment files loaded by reusable Node/MCP eval calls stay within that call. The values remain available to provider configuration templates and subprocesses, subject to each provider's environment inheritance controls, without changing the host's `process.env`. Custom JavaScript providers should use templated provider config for values supplied by those files.
+
+Pass environment files with the invocation's `envPath` (CLI: `--env-file`) when values are needed during config or provider loading. Config-defined `commandLineOptions.envPath` retains its existing timing: it loads after config resolution.
 
 ### Assertion functions
 
@@ -105,10 +114,10 @@ score: number;
 reason: string;
 
 // Map of labeled metrics to values
-namedScores?: Record<string, number>;
+namedScores?: Record<string, number> | null;
 
 // Weighted denominator for namedScores when assertion weights are used
-namedScoreWeights?: Record<string, number>;
+namedScoreWeights?: Record<string, number> | null;
 
 // Record of tokens usage for this assertion
 tokensUsed?: Partial<{
@@ -122,7 +131,7 @@ cached?: number;
 metadata?: Record<string, unknown>;
 
 // List of results for each component of the assertion
-componentResults?: GradingResult[];
+componentResults?: GradingResult[] | null;
 
 // The assertion that was evaluated
 assertion?: Assertion;

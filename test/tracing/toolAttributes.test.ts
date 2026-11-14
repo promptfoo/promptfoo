@@ -1,9 +1,27 @@
 import { describe, expect, it } from 'vitest';
 import {
+  getNormalizedToolAttributes,
   getToolNameFromAttributes,
   TOOL_ARGUMENT_ATTRIBUTE_KEYS,
   TOOL_NAME_ATTRIBUTE_KEYS,
 } from '../../src/tracing/toolAttributes';
+
+describe('getNormalizedToolAttributes', () => {
+  it('normalizes structured tool arguments for trace providers', () => {
+    expect(getNormalizedToolAttributes('search', { query: 'customer orders' })).toEqual({
+      'gen_ai.tool.name': 'search',
+      'tool.name': 'search',
+      'tool.arguments': '{"query":"customer orders"}',
+    });
+  });
+
+  it('preserves existing string arguments and omits absent arguments', () => {
+    expect(getNormalizedToolAttributes('search', '{"query":"orders"}')).toMatchObject({
+      'tool.arguments': '{"query":"orders"}',
+    });
+    expect(getNormalizedToolAttributes('search')).not.toHaveProperty('tool.arguments');
+  });
+});
 
 describe('getToolNameFromAttributes', () => {
   it('returns undefined when attributes are missing', () => {

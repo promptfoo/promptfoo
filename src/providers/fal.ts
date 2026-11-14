@@ -1,7 +1,7 @@
 import { createHmac } from 'crypto';
 
 import { getCache, isCacheEnabled } from '../cache';
-import { getEnvString } from '../envars';
+import { getEnvString, getProviderEnvString } from '../envars';
 import logger from '../logger';
 import { ellipsize } from '../util/text';
 import type { Cache } from 'cache-manager';
@@ -115,7 +115,7 @@ class FalProvider<Input = Record<string, unknown>> implements ApiProvider {
 
     this.config = config ?? {};
     const { apiKey, client } = this.config;
-    this.apiKey = apiKey ?? env?.FAL_KEY ?? getEnvString('FAL_KEY');
+    this.apiKey = apiKey ?? getProviderEnvString(env, 'FAL_KEY') ?? getEnvString('FAL_KEY');
     this.clientConfig = client ?? {};
     this.input = getFalModelInput(this.config) as Input;
   }
@@ -165,22 +165,6 @@ class FalProvider<Input = Record<string, unknown>> implements ApiProvider {
       cached = response !== undefined;
     }
 
-    if (!this.fal) {
-      try {
-        this.fal = await import('@fal-ai/client');
-      } catch (err) {
-        logger.error(`Error loading @fal-ai/client: ${err}`);
-        throw new Error(
-          'The @fal-ai/client package is required. Please install it with: npm install @fal-ai/client',
-        );
-      }
-    }
-
-    this.fal.fal.config({
-      credentials: this.apiKey,
-      ...this.clientConfig,
-    } as Parameters<typeof this.fal.fal.config>[0]);
-
     if (!response) {
       response = await this.runInference(input);
     }
@@ -211,7 +195,11 @@ class FalProvider<Input = Record<string, unknown>> implements ApiProvider {
       }
     }
 
-    const result = await this.fal.fal.subscribe(this.modelName, {
+    const client = this.fal.createFalClient({
+      credentials: this.apiKey,
+      ...this.clientConfig,
+    });
+    const result = await client.subscribe(this.modelName, {
       input: input as Record<string, unknown>,
     });
     return result as Result;
