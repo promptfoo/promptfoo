@@ -1,9 +1,10 @@
 import React from 'react';
 
 import { TooltipProvider } from '@app/components/ui/tooltip';
+import * as api from '@app/utils/api';
 import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import HttpEndpointConfiguration from './HttpEndpointConfiguration';
 
 vi.mock('react-simple-code-editor', () => ({
@@ -54,6 +55,30 @@ describe('HttpEndpointConfiguration - Header Field Layout', () => {
     mockSetBodyError = vi.fn();
     mockSetUrlError = vi.fn();
     vi.clearAllMocks();
+  });
+
+  afterEach(() => vi.restoreAllMocks());
+
+  it('shows a failed provider call even when the analyzer suggests no changes', async () => {
+    vi.spyOn(api, 'callApi').mockResolvedValueOnce(
+      Response.json({
+        testResult: { success: false, message: 'Connection timeout', changes_needed: false },
+      }),
+    );
+    const onTargetTested = vi.fn();
+    renderWithProviders(
+      <HttpEndpointConfiguration
+        {...defaultProps}
+        updateCustomTarget={mockUpdateCustomTarget}
+        setBodyError={mockSetBodyError}
+        setUrlError={mockSetUrlError}
+        onTargetTested={onTargetTested}
+      />,
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Test Target' }));
+    expect(await screen.findByText('Test Failed')).toBeVisible();
+    expect(screen.getByText('Connection timeout')).toBeVisible();
+    expect(onTargetTested).toHaveBeenCalledWith(false);
   });
 
   it('should maintain minimum widths for header Name and Value fields on narrow viewports', () => {
