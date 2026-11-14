@@ -140,6 +140,19 @@ describe('stripLeadingHeaders', () => {
     expect(stripLeadingHeaders('   \n  \n  ')).toBe('');
   });
 
+  it('preserves source headings and strips only recognized grading labels', () => {
+    expect(stripLeadingHeaders('# Mammals\nPlatypus lays eggs.')).toBe(
+      '# Mammals\nPlatypus lays eggs.',
+    );
+    expect(stripLeadingHeaders('## Relevant Context ##\nAlpha is first.')).toBe('Alpha is first.');
+    expect(stripLeadingHeaders('#' + '\t'.repeat(64000) + 'Mammals')).toBe(
+      '#' + '\t'.repeat(64000) + 'Mammals',
+    );
+    expect(stripLeadingHeaders('Candidate' + '\t'.repeat(64000) + 'detail')).toBe(
+      'Candidate' + '\t'.repeat(64000) + 'detail',
+    );
+  });
+
   it('preserves regular content, numbers, and sentences without leading headers', () => {
     expect(stripLeadingHeaders('Paris is the capital of France. France is in Europe.')).toBe(
       'Paris is the capital of France. France is in Europe.',
