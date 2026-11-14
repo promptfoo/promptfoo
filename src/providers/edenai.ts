@@ -98,7 +98,10 @@ class EdenAiProvider extends OpenAiChatCompletionProvider {
     return {
       provider: 'edenai',
       model: this.modelName,
-      config: sanitizeObject({ ...this.config, apiKey: undefined }, { sanitizeUrls: true }),
+      config: sanitizeObject(
+        { ...this.config, apiKey: undefined },
+        { sanitizeUrls: true, maxDepth: Number.POSITIVE_INFINITY },
+      ),
     };
   }
 }

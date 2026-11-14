@@ -4,6 +4,7 @@ import { createServer } from 'node:http';
 import { describe, expect, it } from 'vitest';
 import { withCacheEnabled } from '../../src/cache';
 import { createEdenAiProvider } from '../../src/providers/edenai';
+import { sanitizeConfigForOutput } from '../../src/util/sanitizer';
 import { mockProcessEnv } from '../util/utils';
 
 import type { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
@@ -122,6 +123,20 @@ describe('EdenAiProvider configuration', () => {
     expect(JSON.stringify(json)).not.toMatch(/fixture-(secret|auth|header)/);
   });
 
+  it('preserves nested tool schemas when sanitizing provider output', () => {
+    const parameters = {
+      type: 'object' as const,
+      properties: { city: { type: 'string' } },
+      required: ['city'],
+    };
+    const provider = createEdenAiProvider('edenai:openai/gpt-4o-mini', {
+      config: { tools: [{ type: 'function', function: { name: 'weather', parameters } }] },
+    });
+    const expected = { config: { tools: [{ function: { parameters } }] } };
+    expect(asChat(provider).toJSON()).toMatchObject(expected);
+    expect(sanitizeConfigForOutput({ providers: [provider] }).providers).toMatchObject([expected]);
+  });
+
   it('rejects streaming instead of silently dropping it', () => {
     expect(() =>
       createEdenAiProvider('edenai:openai/gpt-4o-mini', { config: { stream: true } }),
@@ -213,6 +228,7 @@ describe('Eden AI HTTP contract', () => {
     });
     server.listen(0, '127.0.0.1');
     await once(server, 'listening');
+    const restoreProxy = mockProcessEnv({ no_proxy: '127.0.0.1', NO_PROXY: '127.0.0.1' });
     try {
       const address = server.address();
       if (!address || typeof address === 'string') {
@@ -241,6 +257,7 @@ describe('Eden AI HTTP contract', () => {
         model: 'openai/gpt-4o-mini',
       });
     } finally {
+      restoreProxy();
       server.closeAllConnections();
       await new Promise<void>((resolve) => server.close(() => resolve()));
     }
