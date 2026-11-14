@@ -1,12 +1,9 @@
 import { renderMetricName } from '../assertions/index';
 
 import type { GradingResult, Vars } from '../types/index';
+import type { NamedMetricAccumulator } from './namedMetricAccumulator';
 
-export interface NamedMetricAccumulator {
-  namedScores: Record<string, number>;
-  namedScoresCount: Record<string, number>;
-  namedScoreWeights?: Record<string, number>;
-}
+export type { NamedMetricAccumulator } from './namedMetricAccumulator';
 
 interface NamedMetricContribution {
   assertionCount: number;

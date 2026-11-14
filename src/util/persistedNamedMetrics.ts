@@ -1,6 +1,6 @@
 import { getEnvBool } from '../envars';
 
-import type { NamedMetricAccumulator } from './namedMetrics';
+import type { NamedMetricAccumulator } from './namedMetricAccumulator';
 
 type NamedMetricGradingResult = Record<string, unknown>;
 
