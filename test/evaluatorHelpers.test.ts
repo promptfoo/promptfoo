@@ -682,6 +682,153 @@ describe('evaluatorHelpers', () => {
       });
     });
 
+    it('should resolve a defined placeholder that follows an unresolved one', () => {
+      const variables = {
+        message: 'Hello {{ undefined_var }} and {{ name }}',
+        name: 'Alice',
+      };
+      expect(resolveVariables(variables)).toEqual({
+        message: 'Hello {{ undefined_var }} and Alice',
+        name: 'Alice',
+      });
+    });
+
+    it('should leave inherited names unresolved but substitute own variables with those names', () => {
+      const message = '{{missing}} / {{constructor}} / {{toString}} / {{name}}';
+      expect(resolveVariables({ message, name: 'Alice' }).message).toBe(
+        '{{missing}} / {{constructor}} / {{toString}} / Alice',
+      );
+      expect(resolveVariables({ message, name: 'Alice', constructor: 'own' }).message).toBe(
+        '{{missing}} / own / {{toString}} / Alice',
+      );
+    });
+
+    it('should resolve multiple defined placeholders after an unresolved one', () => {
+      const variables = {
+        message: '{{ undefined_var }} then {{ first }} and {{ second }}',
+        first: 'A',
+        second: 'B',
+      };
+      expect(resolveVariables(variables)).toEqual({
+        message: '{{ undefined_var }} then A and B',
+        first: 'A',
+        second: 'B',
+      });
+    });
+
+    it('should resolve every repeated defined placeholder after an unresolved one', () => {
+      const variables = { message: '{{unknown}}' + '{{name}}'.repeat(20), name: 'Alice' };
+
+      expect(resolveVariables(variables).message).toBe('{{unknown}}' + 'Alice'.repeat(20));
+    });
+
+    it('should reject excessive growth in acyclic variable references', () => {
+      const variables: Record<string, string> = { a24: 'x' };
+      for (let index = 23; index >= 0; index--) {
+        variables[`a${index}`] = `{{a${index + 1}}}`.repeat(2);
+      }
+
+      expect(() => resolveVariables(variables)).toThrow(/Variable expansion exceeded/);
+    });
+
+    it('should bound expansion when copying skipped values', () => {
+      const variables = {
+        message: '{{payload}}'.repeat(9_000),
+        payload: 'x'.repeat(1_024),
+      };
+
+      expect(() => resolveVariables(variables, ['payload'])).toThrow(
+        /Variable expansion exceeded .*message/,
+      );
+    });
+
+    it('should scan dependencies linearly when substitutions leave unresolved references', () => {
+      const count = 100;
+      const variables = Object.fromEntries(
+        Array.from({ length: count }, (_, index) => [`value${index}`, '{{known}} {{missing}}']),
+      );
+      variables.known = 'value';
+      const matchAll = vi.spyOn(String.prototype, 'matchAll');
+      try {
+        const result = resolveVariables(variables);
+        expect(matchAll.mock.calls.length).toBeLessThan(4 * count);
+        expect(result.value99).toBe('value {{missing}}');
+      } finally {
+        matchAll.mockRestore();
+      }
+    });
+
+    it.each(['{{a}}', '{{a}}{{a}}', '{{ a }}{{a}}'])(
+      'should leave self-references unexpanded: %s',
+      (a) => {
+        const variables = { a, message: '{{a}} {{name}}', name: 'Alice' };
+
+        expect(resolveVariables(variables)).toEqual({
+          a,
+          message: '{{a}} Alice',
+          name: 'Alice',
+        });
+      },
+    );
+
+    it('should leave indirect cycles and aliases to them unexpanded', () => {
+      const variables = {
+        message: '{{a}} {{name}}',
+        a: '{{b}}{{b}}',
+        b: '{{a}}{{a}}',
+        name: 'Alice',
+      };
+
+      expect(resolveVariables(variables)).toEqual({
+        message: '{{a}} Alice',
+        a: '{{b}}{{b}}',
+        b: '{{a}}{{a}}',
+        name: 'Alice',
+      });
+    });
+
+    it.each([false, true])(
+      'should stop cycles assembled from replacement fragments (alias first: %s)',
+      (aliasFirst) => {
+        const a = '{{open}}{{name}}{{close}}'.repeat(4);
+        const variables = aliasFirst
+          ? {
+              message: '{{a}} {{greeting}}',
+              a,
+              open: '{{',
+              name: 'a',
+              close: '}}',
+              greeting: 'Hello',
+            }
+          : {
+              a,
+              message: '{{a}} {{greeting}}',
+              open: '{{',
+              name: 'a',
+              close: '}}',
+              greeting: 'Hello',
+            };
+
+        const result = resolveVariables(variables);
+
+        expect(result.a).toBe('{{a}}'.repeat(4));
+        expect(result.message).toBe(aliasFirst ? '{{a}}'.repeat(4) + ' Hello' : '{{a}} Hello');
+      },
+    );
+
+    it('should preserve skipped contents without an external bookkeeping set', () => {
+      const variables = {
+        message: '{{prefix}} {{payload}}',
+        prefix: '{{greeting}}',
+        greeting: 'Hello',
+        payload: '{{message}}{{secret}}',
+        secret: 'do-not-inline',
+      };
+
+      expect(resolveVariables(variables, ['payload']).message).toBe('Hello {{message}}{{secret}}');
+      expect(variables.payload).toBe('{{message}}{{secret}}');
+    });
+
     it('should handle Date objects as variables', () => {
       const dateObj = new Date('2024-01-15T00:00:00.000Z');
       const variables = {
