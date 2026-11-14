@@ -1909,7 +1909,7 @@ describe('runAssertion', () => {
     });
     expect(result).toMatchObject({
       pass: true,
-      reason: 'ROUGE-N score 1.00 is greater than or equal to threshold 0.75',
+      reason: 'Assertion passed',
     });
   });
 
@@ -1941,7 +1941,7 @@ describe('runAssertion', () => {
     });
     expect(result).toMatchObject({
       pass: true,
-      reason: 'ROUGE-N score 0.22 is less than threshold 0.75',
+      reason: 'Assertion passed',
     });
     expect(result.score).toBeCloseTo(0.78, 2);
   });
@@ -1974,9 +1974,11 @@ describe('runAssertion', () => {
         expect(result).toMatchObject({
           pass,
           score,
-          reason: `${baseType.toUpperCase()} score ${rawScore.toFixed(2)} is ${
-            rawScore >= 0.75 ? 'greater than or equal to' : 'less than'
-          } threshold 0.75`,
+          reason: pass
+            ? 'Assertion passed'
+            : `${baseType.toUpperCase()} score ${rawScore.toFixed(2)} is ${
+                rawScore >= 0.75 ? 'greater than or equal to' : 'less than'
+              } threshold 0.75`,
         });
       },
     );

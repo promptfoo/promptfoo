@@ -23,7 +23,7 @@ describe('handleRougeScore', () => {
 
     expect(result.pass).toBe(true);
     expect(result.score).toBe(1);
-    expect(result.reason).toBe('ROUGE-N score 1.00 is greater than or equal to threshold 0.75');
+    expect(result.reason).toBe('Assertion passed');
   });
 
   it('should fail when the score is below the default threshold', () => {
@@ -43,7 +43,7 @@ describe('handleRougeScore', () => {
 
     expect(result.pass).toBe(true);
     expect(result.score).toBeCloseTo(0.2222, 4);
-    expect(result.reason).toBe('ROUGE-N score 0.22 is greater than or equal to threshold 0.2');
+    expect(result.reason).toBe('Assertion passed');
   });
 
   it('should invert pass/fail and score for inverse assertions', () => {
@@ -103,7 +103,7 @@ describe('handleRougeScore', () => {
 
     expect(result.pass).toBe(true);
     expect(result.score).toBe(1);
-    expect(result.reason).toBe('ROUGE-L score 1.00 is greater than or equal to threshold 0.75');
+    expect(result.reason).toBe('Assertion passed');
   });
 
   it('should support ROUGE-S case-insensitively', () => {
@@ -113,7 +113,7 @@ describe('handleRougeScore', () => {
 
     expect(result.pass).toBe(true);
     expect(result.score).toBe(1);
-    expect(result.reason).toBe('ROUGE-S score 1.00 is greater than or equal to threshold 0.75');
+    expect(result.reason).toBe('Assertion passed');
   });
 
   // js-rouge before 3.2.1 undercounted repeated L/S matches.
@@ -128,7 +128,7 @@ describe('handleRougeScore', () => {
 
       expect(result.score).toBe(1);
       expect(result.pass).toBe(true);
-      expect(result.reason).toBe(`${label} score 1.00 is greater than or equal to threshold 0.75`);
+      expect(result.reason).toBe('Assertion passed');
     });
 
     it('scores disjoint text 0', () => {
@@ -145,7 +145,11 @@ describe('handleRougeScore', () => {
         makeParams('', 'reference', { baseType, threshold: 0, inverse }),
       );
       expect(result).toMatchObject({ pass: !inverse, score: inverse ? 1 : 0 });
-      expect(result.reason).toBe(`${label} score 0.00 is greater than or equal to threshold 0`);
+      expect(result.reason).toBe(
+        inverse
+          ? `${label} score 0.00 is greater than or equal to threshold 0`
+          : 'Assertion passed',
+      );
     });
 
     it('keeps a partial match between 0 and 1', () => {
@@ -222,7 +226,7 @@ describe('handleRougeScore', () => {
 
         expect(result.score).toBeCloseTo(expected, 12);
         expect(result.pass).toBe(pass);
-        expect(result.reason).toBe(reason);
+        expect(result.reason).toBe(pass ? 'Assertion passed' : reason);
       },
     );
 

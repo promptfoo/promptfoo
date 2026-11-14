@@ -57,9 +57,11 @@ export function handleRougeScore({
   return {
     pass,
     score: inverse ? 1 - score : score,
-    reason: `${baseType.toUpperCase()} score ${score.toFixed(2)} is ${
-      score >= threshold ? 'greater than or equal to' : 'less than'
-    } threshold ${threshold}`,
+    reason: pass
+      ? 'Assertion passed'
+      : `${baseType.toUpperCase()} score ${score.toFixed(2)} is ${
+          score >= threshold ? 'greater than or equal to' : 'less than'
+        } threshold ${threshold}`,
     assertion,
   };
 }
