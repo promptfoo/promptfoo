@@ -5,6 +5,16 @@ import type { TestCaseWithPlugin } from '../../../src/types/index';
 
 describe('pluginMatchesStrategyTargets', () => {
   describe('strategy-exempt plugins', () => {
+    it.each(['custom:fixture', 'file://fixture.mjs'])('excludes MCP envelopes from %s', (id) => {
+      expect(
+        pluginMatchesStrategyTargets(
+          { metadata: { pluginId: 'mcp:tool-response-poisoning' } },
+          id,
+          ['mcp'],
+        ),
+      ).toBe(false);
+    });
+
     it('should exclude system-prompt-override plugin', () => {
       const testCase: TestCaseWithPlugin = {
         vars: { input: 'test' },

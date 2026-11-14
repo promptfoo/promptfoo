@@ -1,7 +1,6 @@
 import dedent from 'dedent';
 import logger from '../../logger';
 import { safeJsonStringify } from '../../util/json';
-import { ALL_STRATEGIES } from '../constants/strategies';
 import { RedteamGraderBase, RedteamPluginBase } from './base';
 
 import type {
@@ -368,7 +367,14 @@ function selectRawEvidence(
   if (!rawText.includes(output) && !rawText.includes(escapedOutput)) {
     return rawText;
   }
-  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
+  if (typeof raw === 'string' || Array.isArray(raw)) {
+    // A substring match does not establish that the transform preserved the
+    // full tool response. The unshown part may include private provider data.
+    throw new Error(
+      '[mcp:tool-response-poisoning] Incomplete inspection: only part of the raw response is visible. Grade the untransformed tool output.',
+    );
+  }
+  if (raw === null || typeof raw !== 'object') {
     return undefined;
   }
   const unseenFields = Object.entries(raw).filter(
@@ -558,13 +564,6 @@ export class MCPToolResponsePoisoningPlugin extends RedteamPluginBase {
       return false;
     }
     return this.allowedToolNames === undefined || this.allowedToolNames.has(toolName);
-  }
-
-  protected getDefaultExcludedStrategies(): string[] {
-    // MCPProvider.callApi does a strict JSON.parse on the whole prompt, so
-    // any strategy that rewrites, wraps, or re-encodes it breaks the tool
-    // call. Only the verbatim `basic` baseline is safe.
-    return ALL_STRATEGIES.filter((strategyId) => strategyId !== 'basic');
   }
 
   protected async getTemplate(): Promise<string> {

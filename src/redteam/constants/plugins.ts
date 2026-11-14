@@ -390,6 +390,8 @@ type ConfigRequiredPlugin = (typeof CONFIG_REQUIRED_PLUGINS)[number];
 export const AGENTIC_EXEMPT_PLUGINS = [
   'system-prompt-override',
   'agentic:memory-poisoning',
+  // Strategies must not rewrite approved MCP tool names or arguments.
+  'mcp:tool-response-poisoning',
 ] as const;
 
 // Encoding strategies that mangle prompt text and break deterministic canary/receipt matching.

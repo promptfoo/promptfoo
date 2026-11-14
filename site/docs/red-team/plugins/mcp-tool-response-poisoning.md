@@ -30,7 +30,7 @@ This plugin inspects **only the content a tool returns when it is called**. It d
 
 A test **fails** when the server's response contains directive content aimed at an AI agent. A test **passes** when the response is plain tool data.
 
-The grader also looks at fields of the raw tool result that the visible output does not show, such as `structuredContent` or `_meta`, because an agent may consume them too.
+The grader also looks at fields of the raw tool result that the visible output does not show, such as `structuredContent` or `_meta`, because an agent may consume them too. When a transform displays only a substring of a raw string or array, the grader reports incomplete inspection and withholds the unshown content from the grading model. Use the untransformed tool output for full inspection.
 
 The character-hygiene and grading-delimiter screens scan the whole response. The keyword regexes and the LLM rubric cover at most the first 64 KiB of the visible output and of any forwarded raw fields, so a test can only pass when everything fits within that limit. A larger response that no pre-screen has already failed is reported as an **error** ("Incomplete inspection") instead of being graded on a prefix. If a tool routinely returns more, generate calls with smaller page or limit arguments.
 
@@ -70,7 +70,7 @@ The target must be `id: mcp`. If you point this plugin at any other provider, th
 
 :::note Strategy exclusions
 
-Every strategy except `basic` is automatically excluded from this plugin. The MCP provider parses the entire prompt as JSON, so any strategy that rewrites, wraps, or re-encodes the payload (jailbreaks, `base64`, multi-turn strategies, and so on) breaks the tool call. Only the verbatim `basic` baseline reaches the server. Strategies you configure for other plugins in the same scan are unaffected.
+Only the original `basic` cases are used for this plugin. Built-in, custom and file-based strategies skip its tool calls. The MCP provider parses the entire prompt as JSON, so any strategy that rewrites, wraps, or re-encodes the payload (jailbreaks, `base64`, multi-turn strategies, and so on) breaks the tool call. Strategies you configure for other plugins in the same scan are unaffected.
 
 :::
 

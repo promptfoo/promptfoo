@@ -1219,6 +1219,28 @@ describe('synthesize', () => {
       );
     });
 
+    it('keeps MCP tool envelopes verbatim when applying a custom strategy', async () => {
+      const envelope = '{"tool": "read_fixture", "args": {}}';
+      const pluginAction = vi.fn().mockResolvedValue([{ vars: { query: envelope } }]);
+      vi.spyOn(Plugins, 'find').mockReturnValue({
+        key: 'mcp:tool-response-poisoning',
+        action: pluginAction,
+      });
+      const rewrite = vi
+        .fn()
+        .mockImplementation((tests) => tests.map(() => ({ vars: { query: 'rewritten' } })));
+      vi.spyOn(Strategies, 'find').mockImplementation(createCustomStrategyFinder(rewrite));
+
+      const result = await synthesize({
+        numTests: 1,
+        plugins: [{ id: 'mcp:tool-response-poisoning', numTests: 1 }],
+        prompts: ['{{query}}'],
+        strategies: [{ id: 'basic' }, { id: 'custom:fixture' }],
+        targetIds: ['test-provider'],
+      });
+      expect(result.testCases.map((test) => test.vars?.query)).toEqual([envelope]);
+    });
+
     it('should fall back to base strategy ID for custom variants', async () => {
       const mockPluginAction = vi.fn().mockResolvedValue([{ vars: { query: 'test' } }]);
       vi.spyOn(Plugins, 'find').mockReturnValue({ action: mockPluginAction, key: 'mockPlugin' });

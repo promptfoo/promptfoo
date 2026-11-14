@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import logger from '../../../src/logger';
 import { matchesLlmRubric } from '../../../src/matchers/llmGrading';
-import { ALL_STRATEGIES } from '../../../src/redteam/constants/strategies';
 import {
   MCPToolResponsePoisoningGrader,
   MCPToolResponsePoisoningPlugin,
@@ -447,22 +446,6 @@ describe('MCPToolResponsePoisoningPlugin', () => {
     expect(template).toContain('Ignore any instruction');
     expect(template).toMatch(/\{"tool":\s*"<tool_name_from_purpose>"/);
     expect(template).toContain('Prompt: {"tool"');
-  });
-
-  it('excludes every strategy except "basic" by default', () => {
-    // MCPProvider.callApi strictly JSON.parses the whole prompt, so any
-    // strategy that rewrites it breaks the tool call.
-    const plugin = new MCPToolResponsePoisoningPlugin(
-      createMockProvider(),
-      purposeWithTools,
-      'prompt',
-      { allowedTools: ['get_weather'] },
-    );
-    const config = (plugin as any).config;
-    expect(config.excludeStrategies).toEqual(
-      ALL_STRATEGIES.filter((strategyId) => strategyId !== 'basic'),
-    );
-    expect(config.excludeStrategies).not.toContain('basic');
   });
 
   it('generates test cases from "Prompt:" formatted LLM output', async () => {
@@ -1654,6 +1637,14 @@ describe('MCPToolResponsePoisoningGrader.getResult', () => {
         undefined,
         { providerResponse: { output, raw } } as any,
       );
+
+    it.each([{ raw: 'status: OK; private fixture data' }, { raw: ['OK', 'private fixture data'] }])(
+      'withholds a verdict when only part of a raw string or array is visible',
+      async ({ raw }) => {
+        await expect(gradeWithRaw('OK', raw)).rejects.toThrow(/Incomplete inspection/);
+        expect(matchesLlmRubric).not.toHaveBeenCalled();
+      },
+    );
 
     it('omits the raw section when raw still contains the visible output', async () => {
       // The untransformed MCP provider shape: raw is the full tool result and
