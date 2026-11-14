@@ -6,6 +6,7 @@ import { getEnvBool } from '../../envars';
 import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import { getRequestTimeoutMs } from '../../providers/shared';
+import { describeFetchError } from '../../util/fetch/errors';
 import invariant from '../../util/invariant';
 import { getErrorTokenUsage } from '../../util/tokenUsageUtils';
 import { recordGenerationTokenUsage } from '../generationTokenUsage';
@@ -102,7 +103,7 @@ export async function fetchRemoteGeneration(
     if (provider && !responseRecorded) {
       recordGenerationTokenUsage(provider, { tokenUsage: getErrorTokenUsage(error) });
     }
-    logger.warn(`Error using remote generation for task '${task}': ${error}`);
+    logger.warn(`Error using remote generation for task '${task}': ${describeFetchError(error)}`);
     throw error;
   }
 }

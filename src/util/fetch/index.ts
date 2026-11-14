@@ -19,9 +19,9 @@ import { createDecompressionInterceptor, stripDecompressionHeaders } from './dec
 import {
   extractRateLimitErrorCode,
   extractRateLimitErrorType,
+  formatFetchError,
   getAbortError,
   HttpRateLimitError,
-  type SystemError,
 } from './errors';
 import { monkeyPatchFetch, preserveCloudAuthRedirects } from './monkeyPatchFetch';
 import { getEffectiveRequestSignal } from './requestSignal';
@@ -772,21 +772,17 @@ async function handleRateLimitedResponse(
   await handleRateLimit(response, signal, onRateLimitBackoff);
 }
 
+/**
+ * Render a fetch failure for logs. {@link formatFetchError} supplies the
+ * name / message / cause / code rendering (shared with callers outside this
+ * module); this wrapper additionally replaces any occurrence of the raw request
+ * URL with its sanitized form, since undici echoes the URL into the message and
+ * cause and it can carry credentials or tokens.
+ */
 function formatFetchErrorMessage(error: unknown, url: RequestInfo): string {
-  if (!(error instanceof Error)) {
-    return String(error);
-  }
-  const typedError = error as SystemError;
+  const message = formatFetchError(error);
   const rawUrl = typeof url === 'string' ? url : url.url;
-  const redactUrl = (value: string) => value.split(rawUrl).join(urlForLog(url));
-  let message = `${typedError.name}: ${redactUrl(typedError.message)}`;
-  if (typedError.cause) {
-    message += ` (Cause: ${redactUrl(String(typedError.cause))})`;
-  }
-  if (typedError.code) {
-    message += ` (Code: ${typedError.code})`;
-  }
-  return message;
+  return rawUrl ? message.split(rawUrl).join(urlForLog(url)) : message;
 }
 
 export async function fetchWithRetries(

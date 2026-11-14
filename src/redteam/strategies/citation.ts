@@ -2,6 +2,7 @@ import async from 'async';
 import { Presets, SingleBar } from 'cli-progress';
 import dedent from 'dedent';
 import logger from '../../logger';
+import { describeFetchError } from '../../util/fetch/errors';
 import invariant from '../../util/invariant';
 import {
   getRemoteGenerationExplicitlyDisabledError,
@@ -131,7 +132,7 @@ async function generateCitations(
     if (progressBar) {
       progressBar.stop();
     }
-    logger.error(`Error in remote citation generation: ${error}`);
+    logger.error(`Error in remote citation generation: ${describeFetchError(error)}`);
     return [];
   }
 }
