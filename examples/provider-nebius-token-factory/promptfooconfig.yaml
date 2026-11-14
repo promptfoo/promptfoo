@@ -1,0 +1,36 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Evaluate coding answers with Nebius Token Factory
+
+prompts:
+  - 'Write a concise {{language}} function that returns the {{n}}th Fibonacci number.'
+
+providers:
+  - id: openai:chat:openai/gpt-oss-120b
+    label: Nebius Token Factory - GPT OSS 120B
+    config:
+      apiBaseUrl: https://api.tokenfactory.nebius.com/v1
+      headers:
+        OpenAI-Organization: ''
+      apiKeyEnvar: NEBIUS_API_KEY
+      showThinking: false
+      max_tokens: 512
+      temperature: 0
+
+tests:
+  - vars:
+      language: Python
+      n: 10
+    assert:
+      - type: contains
+        value: 'def '
+      - type: contains-any
+        value: ['55', 'fibonacci', 'Fibonacci']
+
+  - vars:
+      language: TypeScript
+      n: 12
+    assert:
+      - type: contains-any
+        value: ['function', '=>']
+      - type: contains-any
+        value: ['144', 'fibonacci', 'Fibonacci']
