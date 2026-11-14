@@ -15,8 +15,7 @@ import {
 import { importModule } from '../esm';
 import logger from '../logger';
 import { runPython } from '../python/pythonUtils';
-import { isJavascriptFile } from './fileExtensions';
-import { parseFileUrl } from './functions/loadFunction';
+import { isJavascriptFile, isScriptFilePath, parseFileUrl } from './fileExtensions';
 import { safeResolve } from './pathUtils';
 import { renderVarsInObject } from './render';
 import { loadYaml } from './yamlLoad';
@@ -151,17 +150,6 @@ export function maybeLoadFromExternalFile(
   // This handles colon splitting correctly, including Windows drive letters (C:\path)
   const { filePath: cleanPath, functionName } = parseFileUrl(renderedFilePath);
 
-  // In assertion contexts, always preserve script file references
-  // This prevents premature dereferencing of assertion files that should be
-  // handled by the assertion system, not the generic config loader
-  if (
-    context === 'assertion' &&
-    (cleanPath.endsWith('.py') || cleanPath.endsWith('.rb') || isJavascriptFile(cleanPath))
-  ) {
-    logger.debug(`Preserving script file reference in assertion context: ${renderedFilePath}`);
-    return renderedFilePath;
-  }
-
   // In vars contexts, preserve all file:// references for test case expansion
   // This prevents premature file loading - JS/Python files should be executed at runtime
   // by renderPrompt in evaluatorHelpers.ts, and glob patterns should be expanded by
@@ -171,27 +159,22 @@ export function maybeLoadFromExternalFile(
     return renderedFilePath;
   }
 
-  // For script files with function names, return the original string unchanged
-  // to allow the assertion system to handle function loading at execution time.
-  // This prevents premature file existence checks that would fail for function references.
-  if (
-    functionName &&
-    (cleanPath.endsWith('.py') || cleanPath.endsWith('.rb') || isJavascriptFile(cleanPath))
-  ) {
+  if (functionName && isScriptFilePath(cleanPath)) {
     return renderedFilePath;
   }
 
-  // For non-script files, use the original path (ignore potential function name)
-  const pathToUse =
-    functionName &&
-    !(cleanPath.endsWith('.py') || cleanPath.endsWith('.rb') || isJavascriptFile(cleanPath))
-      ? renderedFilePath.slice('file://'.length) // Use original path for non-script files
-      : cleanPath;
-
+  const pathToUse = functionName ? renderedFilePath.slice('file://'.length) : cleanPath;
   const resolvedPath = path.resolve(cliState.basePath || '', pathToUse);
+  const isGlob =
+    hasMagic(pathToUse, { windowsPathsNoEscape: true }) && !fs.existsSync(resolvedPath);
 
-  // Check if the path contains glob patterns
-  if (!fs.existsSync(resolvedPath) && hasMagic(pathToUse, { windowsPathsNoEscape: true })) {
+  // Wildcards supply assertion data. An existing literal file such as "[expected].js"
+  // is a single script, even though the name contains glob characters.
+  if (context === 'assertion' && !isGlob && isScriptFilePath(cleanPath)) {
+    return renderedFilePath;
+  }
+
+  if (isGlob) {
     // Use globSync to expand the pattern
     const basePath = path.resolve(cliState.basePath || '');
     const pattern = path.resolve(

@@ -1000,6 +1000,24 @@ describe('file utilities', () => {
         expect(fs.readFileSync).not.toHaveBeenCalled();
       });
 
+      it('loads scalar script globs as assertion data', () => {
+        vi.mocked(fs.existsSync).mockReturnValue(false);
+        vi.mocked(globSync).mockReturnValue(['/test/expected/a.js', '/test/expected/b.js']);
+        vi.mocked(fs.readFileSync).mockReturnValueOnce('alpha').mockReturnValueOnce('beta');
+
+        const config = { assert: [{ type: 'contains-all', value: 'file://expected/*.js' }] };
+        const result = maybeLoadConfigFromExternalFile(config, 'test-config');
+        expect(result.assert[0].value).toEqual(['alpha', 'beta']);
+      });
+
+      it('preserves a literal script filename containing glob characters', () => {
+        vi.mocked(fs.existsSync).mockReturnValue(true);
+        const config = { assert: [{ type: 'equals', value: 'file://[literal].js' }] };
+        const result = maybeLoadConfigFromExternalFile(config, 'test-config');
+        expect(result.assert[0].value).toBe('file://[literal].js');
+        expect(globSync).not.toHaveBeenCalled();
+      });
+
       it('should load script files in assertion value arrays', () => {
         (fs.readFileSync as ReturnType<typeof vi.fn>).mockReturnValue('source');
         const config = {
