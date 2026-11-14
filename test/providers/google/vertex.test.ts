@@ -477,6 +477,41 @@ describe('VertexChatProvider.callGeminiApi', () => {
     vi.restoreAllMocks();
   });
 
+  it.each([false, true])(
+    'retries an empty Vertex response once (express: %s)',
+    async (expressMode) => {
+      if (expressMode) {
+        vi.mocked(GoogleAuthManager.getApiKey).mockReturnValue({
+          apiKey: 'fixture-key',
+          source: 'config',
+        });
+      }
+      provider = new VertexChatProvider('gemini-pro', {
+        config: {
+          baseRetryDelay: 0,
+          ...(expressMode && { apiKey: 'fixture-key', expressMode: true }),
+        },
+      });
+      const answer = { candidates: [{ content: { parts: [{ text: 'fixture answer' }] } }] };
+      const request = expressMode
+        ? vi
+            .mocked(fetchWithProxy)
+            .mockResolvedValueOnce(Response.json({ candidates: [] }))
+            .mockResolvedValueOnce(Response.json(answer))
+        : mockVertexRequest(answer).mockResolvedValueOnce({ data: { candidates: [] } });
+      const result = await provider.callApi('test prompt');
+      if (expressMode) {
+        expect(request).toHaveBeenNthCalledWith(
+          1,
+          expect.any(String),
+          expect.objectContaining({ disableTransientRetries: true }),
+        );
+      }
+      expect(request).toHaveBeenCalledTimes(2);
+      expect(result).toMatchObject({ output: 'fixture answer', tokenUsage: { numRequests: 2 } });
+    },
+  );
+
   it('should call the Gemini API and return the response', async () => {
     const mockResponse = {
       data: [
@@ -524,6 +559,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
 
     expect(vertexUtil.getGoogleClient).toHaveBeenCalledWith({ credentials: undefined });
     expect(mockRequest).toHaveBeenCalledWith({
+      retry: false,
       url: expect.any(String),
       method: 'POST',
       headers: expect.objectContaining({ 'Content-Type': 'application/json' }),
@@ -531,6 +567,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
         contents: [{ parts: [{ text: 'test prompt' }], role: 'user' }],
       }),
       timeout: expect.any(Number),
+      signal: expect.any(AbortSignal),
     });
   });
 

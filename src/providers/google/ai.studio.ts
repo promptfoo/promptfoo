@@ -10,6 +10,7 @@ import {
 } from '../shared';
 import { GoogleGenericProvider, type GoogleProviderOptions } from './base';
 import { getEmbedding2OptionError, isEmbeddingVector, isGeminiEmbedding2 } from './embedding';
+import { retryGeminiGeneration } from './generationRetry';
 import { CHAT_MODELS } from './shared';
 import {
   calculateGoogleCost,
@@ -162,7 +163,7 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
     }
 
     if (usesGenerateContentApi(this.modelName)) {
-      return this.callGemini(prompt, context);
+      return this.callGemini(prompt, context, options);
     }
 
     // Legacy PaLM API path
@@ -262,7 +263,11 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
   /**
    * Call the Gemini API specifically.
    */
-  async callGemini(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+  async callGemini(
+    prompt: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
     const apiKey = this.getApiKey();
     if (!apiKey) {
       throw new Error(
@@ -369,6 +374,7 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
     }
 
     let data;
+    let requests = 1;
     let cached = false;
     let responseHeaders: unknown;
     let responseTimestamp: number | undefined;
@@ -378,18 +384,35 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
       );
       const headers = await this.getAuthHeaders();
       const authDiscriminator = createAuthCacheDiscriminator(headers);
-      const response = await fetchWithCache(
-        endpoint,
+      const timeoutMs = getRequestTimeoutMs();
+      const result = await retryGeminiGeneration(
         {
-          method: 'POST',
-          headers,
-          body: JSON.stringify(body),
-          ...(authDiscriminator && { _authHash: authDiscriminator }),
-        } as RequestInit,
-        getRequestTimeoutMs(),
-        'json',
-        shouldBustProviderCache(context),
+          streaming: config.streaming,
+          tools: body.tools,
+          hasCallbacks: Boolean(config.functionToolCallbacks),
+          maxRetries: config.maxRetries,
+          baseRetryDelay: config.baseRetryDelay,
+          timeoutMs,
+          signal: options?.abortSignal,
+        },
+        (signal, isRetry, allowTransportRetries) =>
+          fetchWithCache(
+            endpoint,
+            {
+              method: 'POST',
+              headers,
+              body: JSON.stringify(body),
+              ...(signal && { signal }),
+              ...(authDiscriminator && { _authHash: authDiscriminator }),
+            } as RequestInit,
+            timeoutMs,
+            'json',
+            isRetry || shouldBustProviderCache(context),
+            ...(allowTransportRetries ? [] : ([0] as const)),
+          ),
       );
+      const { response } = result;
+      requests = result.requests;
       data = response.data as GeminiResponseData;
       cached = response.cached;
       responseHeaders = response.headers;
@@ -460,7 +483,7 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
               (lastData.usageMetadata?.toolUsePromptTokenCount ?? 0),
         completion: lastData.usageMetadata?.candidatesTokenCount,
         total: lastData.usageMetadata?.totalTokenCount,
-        numRequests: 1,
+        numRequests: requests,
         ...(lastData.usageMetadata?.cachedContentTokenCount !== undefined && {
           cached: lastData.usageMetadata.cachedContentTokenCount,
         }),

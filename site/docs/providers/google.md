@@ -9,6 +9,8 @@ The `google` provider calls Gemini and hosted Gemma models through Google AI Stu
 
 If you are using Vertex AI instead of Google AI Studio, see the [`vertex` provider](/docs/providers/vertex).
 
+For Gemini `generateContent` calls without tools or streaming, Promptfoo retries once by default after an HTTP 503 or a successful response with no candidate parts, safety feedback, or usage. Set `maxRetries` to the number of retries after the initial attempt. Use `0` to disable retries or `baseRetryDelay` to change the 200 ms wait. A prompt-level override applies to that prompt's call. The retry shares the original request timeout.
+
 ## Authentication
 
 To use the Google AI Studio API, you need to authenticate using an API key. Follow these steps:

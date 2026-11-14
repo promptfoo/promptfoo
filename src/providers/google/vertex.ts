@@ -34,6 +34,7 @@ import {
 import { GoogleAuthManager } from './auth';
 import { GoogleGenericProvider, type GoogleProviderOptions } from './base';
 import { getEmbedding2OptionError, isEmbeddingVector, isGeminiEmbedding2 } from './embedding';
+import { retryGeminiGeneration } from './generationRetry';
 import { getVertexApiHostForRegion } from './shared';
 import {
   calculateGoogleCost,
@@ -808,6 +809,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
     }
     if (response === undefined) {
       let data;
+      let requests = 1;
       let responseHeaders: unknown;
       let requestedServiceTier: string | undefined;
       try {
@@ -821,20 +823,46 @@ export class VertexChatProvider extends GoogleGenericProvider {
           ([name]) => name.toLowerCase() === 'x-vertex-ai-llm-shared-request-type',
         )?.[1];
 
+        const timeoutMs = getRequestTimeoutMs();
+        const retryOptions = {
+          streaming: config.streaming,
+          tools: body.tools,
+          hasCallbacks: Boolean(config.functionToolCallbacks),
+          maxRetries: config.maxRetries,
+          baseRetryDelay: config.baseRetryDelay,
+          timeoutMs,
+          signal: options?.abortSignal,
+        };
+
         // Check if we should use express mode (API key without OAuth)
         if (this.isExpressMode()) {
           // Express mode: use simplified endpoint with API key in header
           const url = `https://${apiHost}/${this.getApiVersion()}/publishers/${this.getPublisher()}/models/${this.modelName}:${endpoint}`;
 
-          const res = await fetchWithProxy(url, {
-            method: 'POST',
-            headers: requestHeaders,
-            body: JSON.stringify(body),
-            signal: AbortSignal.timeout(getRequestTimeoutMs()),
+          const result = await retryGeminiGeneration(retryOptions, async (signal) => {
+            const res = await fetchWithProxy(url, {
+              method: 'POST',
+              headers: requestHeaders,
+              body: JSON.stringify(body),
+              disableTransientRetries: true,
+              signal: signal
+                ? AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)])
+                : AbortSignal.timeout(timeoutMs),
+            });
+            return {
+              res,
+              status: res.status,
+              headers: res.headers,
+              data: res.ok
+                ? ((await res.json()) as GeminiApiResponse)
+                : await res.json().catch(() => null),
+            };
           });
+          const { res } = result.response;
+          requests = result.requests;
 
           if (!res.ok) {
-            const errorData = await res.json().catch(() => null);
+            const errorData = result.response.data;
             logger.debug(`Gemini API express mode error:\n${JSON.stringify(errorData)}`);
             return {
               error: `API call error: ${res.status} ${res.statusText}${errorData ? `: ${JSON.stringify(errorData)}` : ''}`,
@@ -842,7 +870,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
             };
           }
 
-          data = (await res.json()) as GeminiApiResponse;
+          data = result.response.data as GeminiApiResponse;
           responseHeaders = res.headers;
         } else {
           // Standard mode: use OAuth and full endpoint
@@ -851,13 +879,20 @@ export class VertexChatProvider extends GoogleGenericProvider {
           const url = `https://${apiHost}/${this.getApiVersion()}/projects/${projectId}/locations/${this.getRegion()}/publishers/${this.getPublisher()}/models/${
             this.modelName
           }:${endpoint}`;
-          const res = await client.request({
-            url,
-            method: 'POST',
-            data: body,
-            headers: requestHeaders,
-            timeout: getRequestTimeoutMs(),
+          const result = await retryGeminiGeneration(retryOptions, async (signal) => {
+            const res = await client.request({
+              url,
+              method: 'POST',
+              data: body,
+              headers: requestHeaders,
+              timeout: timeoutMs,
+              ...(signal && { signal }),
+              retry: false,
+            });
+            return { data: res.data, headers: new Headers(res.headers), status: res.status };
           });
+          const res = result.response;
+          requests = result.requests;
           data = res.data as GeminiApiResponse;
           responseHeaders = res.headers;
         }
@@ -1027,6 +1062,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
         const completionTokenCount = lastData.usageMetadata?.candidatesTokenCount;
         const thoughtsTokenCount = lastData.usageMetadata?.thoughtsTokenCount;
         const tokenUsage = {
+          ...(requests > 1 && { numRequests: requests }),
           total: lastData.usageMetadata?.totalTokenCount || 0,
           prompt: (promptTokenCount || 0) + (lastData.usageMetadata?.toolUsePromptTokenCount ?? 0),
           completion: completionTokenCount || 0,
