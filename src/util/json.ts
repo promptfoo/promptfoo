@@ -6,6 +6,16 @@ import { loadYaml } from './yamlLoad';
 
 import type { EvaluateResult, ResultFailureReason } from '../types/index';
 
+// Re-exported from this module because the evaluator and the Python/Ruby
+// providers already import it. A new import of these files would widen the
+// cross-layer architecture baseline.
+export {
+  getEvalRuntimeVars,
+  omitEvalRuntimeVars,
+  PER_RUN_EVAL_RUNTIME_VAR_KEYS,
+} from './evalRuntimeVars';
+export { scriptInputDigest } from './scriptConfigCacheKey';
+
 const ajvInstances = new Map<boolean, Ajv>();
 
 export function resetAjv(): void {

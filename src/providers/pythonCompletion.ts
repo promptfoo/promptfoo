@@ -10,15 +10,16 @@ import { PythonWorkerPool } from '../python/workerPool';
 import { sha256 } from '../util/createHash';
 import { processConfigFileReferences } from '../util/fileReference';
 import { parsePathOrGlob } from '../util/index';
-import { safeJsonStringify } from '../util/json';
 import { providerRegistry } from './providerRegistry';
 import { sanitizeScriptContext } from './scriptContext';
 import {
   applyCachedCallApiMetadata,
   buildScriptArgs,
+  getScriptInputDigest,
   hasScriptResultError,
   validateScriptResult,
 } from './scriptResult';
+import { shouldBustProviderCache } from './shared';
 
 import type {
   ApiProvider,
@@ -238,22 +239,20 @@ export class PythonProvider implements ApiProvider {
     logger.debug(`Computing file hash for script ${absPath}`);
     const fileHash = sha256(await fs.readFile(absPath, 'utf-8'));
 
-    // Create cache key including the function name to ensure different functions don't share caches
-    const cacheKey = `python:${this.scriptPath}:${this.functionName || 'default'}:${apiType}:${fileHash}:${prompt}:${JSON.stringify(
-      this.options,
-    )}:${JSON.stringify(context?.vars)}`;
-    logger.debug(`PythonProvider cache key: ${cacheKey}`);
-
-    const cache = await getCache();
-    let cachedResult;
-    const cacheEnabled = isCacheEnabled();
-    logger.debug(`PythonProvider cache enabled: ${cacheEnabled}`);
-
-    if (cacheEnabled) {
-      cachedResult = await cache.get(cacheKey);
-      logger.debug(`PythonProvider cache hit: ${Boolean(cachedResult)}`);
-    }
-
+    const sanitizedContext = sanitizeScriptContext('PythonProvider', context);
+    const optionsWithProcessedConfig = {
+      ...this.options,
+      config: { ...this.options?.config, ...this.config },
+    };
+    const args = buildScriptArgs(apiType, prompt, optionsWithProcessedConfig, sanitizedContext);
+    const functionName = this.functionName || apiType;
+    const digest =
+      isCacheEnabled() && !shouldBustProviderCache(context)
+        ? getScriptInputDigest(absPath, functionName, this.options, args)
+        : undefined;
+    const cacheKey = digest && `python:v2:${apiType}:${fileHash}:${digest}`;
+    const cache = cacheKey ? await getCache() : undefined;
+    const cachedResult = cache && cacheKey ? await cache.get(cacheKey) : undefined;
     if (cachedResult) {
       logger.debug(`Returning cached ${apiType} result for script ${absPath}`);
       const parsedResult = JSON.parse(cachedResult as string);
@@ -264,25 +263,8 @@ export class PythonProvider implements ApiProvider {
 
       return applyCachedCallApiMetadata(apiType, parsedResult, 'Python');
     } else {
-      const sanitizedContext = sanitizeScriptContext('PythonProvider', context);
+      logger.debug(`Executing python script ${absPath}`);
 
-      // Create a new options object with processed file references included in the config
-      // This ensures any file:// references are replaced with their actual content
-      const optionsWithProcessedConfig = {
-        ...this.options,
-        config: {
-          ...this.options?.config,
-          ...this.config, // Merge in the processed config containing resolved file references
-        },
-      };
-
-      const args = buildScriptArgs(apiType, prompt, optionsWithProcessedConfig, sanitizedContext);
-
-      logger.debug(
-        `Executing python script ${absPath} via worker pool with args: ${safeJsonStringify(args)}`,
-      );
-
-      const functionName = this.functionName || apiType;
       // Use worker pool instead of runPython
       const result = await this.pool!.execute(functionName, args);
 
@@ -291,13 +273,8 @@ export class PythonProvider implements ApiProvider {
       // Store result in cache if enabled and no errors
       const hasError = hasScriptResultError(result);
 
-      if (isCacheEnabled() && !hasError) {
-        logger.debug(`PythonProvider caching result: ${cacheKey}`);
+      if (cache && cacheKey && !hasError) {
         await cache.set(cacheKey, JSON.stringify(result));
-      } else {
-        logger.debug(
-          `PythonProvider not caching result: ${isCacheEnabled() ? (hasError ? 'has error' : 'unknown reason') : 'cache disabled'}`,
-        );
       }
 
       // Set cached=false on fresh results and ensure numRequests is set

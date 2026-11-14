@@ -69,6 +69,18 @@ strings persist to disk; if it stores hashed keys, the hash persists.
   produce different strings but represent the same config, so naïve stringification
   causes cache misses for semantically identical requests. Sort keys (or use a
   canonical-JSON helper) before hashing.
+- **Omit the per-run eval id from script-provider cache keys.** `context.vars`
+  includes `__evalId`, which is new on every eval run. Build the key with
+  `omitEvalRuntimeVars(vars, PER_RUN_EVAL_RUNTIME_VAR_KEYS)`. Keep `__evalStepId`
+  and `__repeatIndex`: they are stable across runs for the same step and still
+  separate steps and repeats. See `pythonCompletion.ts` and `rubyCompletion.ts`.
+- Python and Ruby fingerprint the script path, source contents, function, API,
+  original options and the serialized worker inputs, including resolved file
+  settings and the full test case. Retain serialized key order because scripts
+  can iterate over dictionaries and hashes. Omit the injected eval/tracing IDs for cache
+  lookup only. Preserve authored metadata, step and repeat IDs in the identity.
+- Bypass cache reads and writes for credential-bearing inputs. Redacting two
+  tenants to the same placeholder would replay a different account's result.
 - Reference pattern for stable key structure and canonicalized hashing:
   `getModerationCacheKey` in `src/providers/azure/moderation.ts`.
 
