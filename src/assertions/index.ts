@@ -406,8 +406,8 @@ export function getAssertionBaseType(assertion: Assertion): AssertionType {
 }
 
 // Zero-weight assertions record their scores without failing the test.
-function applyAssertionWeight(result: GradingResult, weight: number | undefined): GradingResult {
-  return weight === 0 ? { ...result, pass: true } : result;
+function applyAssertionWeight(result: GradingResult, assertion: Assertion): GradingResult {
+  return !assertion.metricOnly && assertion.weight === 0 ? { ...result, pass: true } : result;
 }
 
 /**
@@ -522,7 +522,7 @@ async function runAssertionInternal({
   let renderedValue = assertion.value;
   let valueFromScript: ValueFromScriptType;
   const scriptFailure = (reason: string): GradingResult =>
-    applyAssertionWeight({ pass: false, score: 0, reason, assertion }, assertion.weight);
+    applyAssertionWeight({ pass: false, score: 0, reason, assertion }, assertion);
   if (typeof renderedValue === 'string') {
     if (renderedValue.startsWith('file://')) {
       const basePath = cliState.basePath || '';
@@ -705,7 +705,7 @@ async function runAssertionInternal({
       result.metadata.renderedAssertionValue = renderedValue;
     }
 
-    return assertion.metricOnly ? result : applyAssertionWeight(result, assertion.weight);
+    return applyAssertionWeight(result, assertion);
   }
 
   throw new Error(`Unknown assertion type: ${assertion.type}`);
