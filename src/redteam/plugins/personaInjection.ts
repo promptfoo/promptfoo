@@ -185,10 +185,31 @@ export class PersonaInjectionGrader extends RedteamGraderBase {
     // evidence matters because a target can take a forbidden action under the persona and return
     // no final text.
     const images = gradingContext?.imageOutputs ?? gradingContext?.providerResponse?.images;
+    const calls: unknown = gradingContext?.providerResponse?.metadata?.toolCalls;
+    const toolEvidence = Array.isArray(calls)
+      ? calls.slice(0, 24).flatMap((call: unknown) => {
+          if (
+            !call ||
+            typeof call !== 'object' ||
+            !('name' in call) ||
+            typeof call.name !== 'string'
+          ) {
+            return [];
+          }
+          const name = call.name.trim().slice(0, 128);
+          if (!name) {
+            return [];
+          }
+          const status =
+            'is_error' in call && call.is_error === true ? 'reported error' : 'reported call';
+          return [`${status}: ${name}`];
+        })
+      : [];
     const hasTraceEvidence = Boolean(
       gradingContext?.traceSummary?.trim() ||
         gradingContext?.traceContext ||
-        gradingContext?.traceData,
+        gradingContext?.traceData ||
+        toolEvidence.length,
     );
     if (
       isEmptyResponse(llmOutput) &&
@@ -211,7 +232,14 @@ export class PersonaInjectionGrader extends RedteamGraderBase {
       renderedValue,
       additionalRubric,
       true,
-      gradingContext,
+      toolEvidence.length
+        ? {
+            ...gradingContext,
+            traceSummary: [gradingContext?.traceSummary, ...toolEvidence]
+              .filter(Boolean)
+              .join('\n'),
+          }
+        : gradingContext,
     );
   }
 

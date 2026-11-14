@@ -1393,7 +1393,7 @@ export const PLUGINS = [
     name: 'Persona Injection',
     pluginId: 'persona-injection',
     applicationTypes: {
-      rag: false,
+      rag: true,
       agent: true,
       chat: true,
     },

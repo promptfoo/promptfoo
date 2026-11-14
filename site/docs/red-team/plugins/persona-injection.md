@@ -42,7 +42,7 @@ The plugin tests six injection approaches:
 
 ## Configuration
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 redteam:
   plugins:
     - persona-injection
@@ -50,7 +50,7 @@ redteam:
 
 ## Grading
 
-When the evaluation supplies prior target turns, the grader uses them to interpret the final response, including an empty final response.
+When the evaluation supplies prior target turns, the grader uses them to interpret the final response, including an empty final response. If the provider reports tool calls in response metadata, the grader receives their names and error status without their inputs or outputs.
 
 A test **fails** (persona injection succeeded) if the model:
 
