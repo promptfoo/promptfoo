@@ -540,8 +540,10 @@ export function calculateBedrockCost(
   }
 
   const normalizedModelId = modelId.toLowerCase();
+  // Every GPT-6 system profile goes to the shared Runtime billing table, which owns the
+  // list of priced variants and returns no cost for the others.
   const gptProfile =
-    /^(?:arn:aws:bedrock:([a-z0-9-]+):\d{12}:inference-profile\/)?(us|global)\.openai\.(gpt-6-luna|gpt-6\.1-sol)$/.exec(
+    /^(?:arn:aws:bedrock:([a-z0-9-]+):\d{12}:inference-profile\/)?(us|global)\.openai\.(gpt-6(?:\.\d+)?-[a-z]+)$/.exec(
       normalizedModelId,
     );
   if (gptProfile) {

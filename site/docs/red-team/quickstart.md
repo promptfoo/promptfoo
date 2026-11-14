@@ -132,6 +132,9 @@ promptfoo redteam init --no-gui
 
 When entering a prompt, include an injectable variable such as `{{prompt}}`. The CLI asks you to edit it again until a variable is present.
 
+For a new Google Vertex AI target, the CLI offers `vertex:gemini-3.1-pro-preview` and writes
+`region: global` for it. Existing configurations can still be imported with their saved model IDs.
+
 :::
 
 ## Run the scan
