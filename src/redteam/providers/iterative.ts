@@ -46,6 +46,7 @@ import {
   JUDGE_SYSTEM_PROMPT,
 } from './prompts';
 import {
+  accumulateDiscardedGraderUsage,
   accumulateGraderResult,
   buildGraderResultAssertion,
   callGradingProvider,
@@ -54,6 +55,7 @@ import {
   externalizeResponseForRedteamHistory,
   getGraderAssertionValue,
   getTargetResponse,
+  isTerminalTargetError,
   preserveSelectedError,
   redteamProviderManager,
   resolveStoredGraderResult,
@@ -98,7 +100,7 @@ const getIterativeGoalRubric = (goal: string | undefined): string => {
   `;
 };
 
-type StopReason = 'Grader failed' | 'Max iterations reached';
+type StopReason = 'Grader failed' | 'Max iterations reached' | 'Target error';
 
 interface IterativeMetadata {
   finalIteration: number;
@@ -472,14 +474,20 @@ export async function runRedteamConversation({
     accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
     logger.debug('[Iterative] Raw target response', { response: targetResponse });
     if (targetResponse.error) {
-      logger.info(`[Iterative] ${i + 1}/${numIterations} - Target error`, {
+      if (!isTerminalTargetError(targetResponse)) {
+        if (options?.abortSignal?.aborted) {
+          break;
+        }
+        continue;
+      }
+      logger.info(`[Iterative] ${i + 1}/${numIterations} - Target error, stopping attack`, {
         error: targetResponse.error,
         response: targetResponse,
       });
-      if (options?.abortSignal?.aborted) {
-        break;
-      }
-      continue;
+      stopReason = 'Target error';
+      accumulateDiscardedGraderUsage(totalTokenUsage, storedGraderResult);
+      finalIteration = i + 1;
+      break;
     }
     if (!Object.prototype.hasOwnProperty.call(targetResponse, 'output')) {
       logger.info(
@@ -869,17 +877,24 @@ export async function runRedteamConversation({
     }
   }
 
+  const targetFailed = stopReason === 'Target error';
+  const selectedPrompt = targetFailed
+    ? (targetPrompt ?? lastInjectVar)
+    : (bestInjectVar ?? lastInjectVar);
   return preserveSelectedError(
     {
-      output: bestInjectVar === undefined ? lastResponse?.output || '' : bestResponse,
+      output:
+        targetFailed || bestInjectVar === undefined ? lastResponse?.output || '' : bestResponse,
       ...(lastResponse?.error ? { error: lastResponse.error } : {}),
-      prompt: bestInjectVar ?? lastInjectVar,
+      prompt: selectedPrompt,
       metadata: {
         finalIteration,
         highestScore,
         redteamHistory: previousOutputs,
-        redteamFinalPrompt: bestInjectVar ?? lastInjectVar,
-        storedGraderResult: resolveStoredGraderResult(bestGraderResult, storedGraderResult),
+        redteamFinalPrompt: targetFailed ? lastInjectVar : selectedPrompt,
+        storedGraderResult: targetFailed
+          ? undefined
+          : resolveStoredGraderResult(bestGraderResult, storedGraderResult),
         stopReason: stopReason,
         sessionIds,
         traceSnapshots:

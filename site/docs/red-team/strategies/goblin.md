@@ -10,6 +10,8 @@ The Goblin strategy (`jailbreak:goblin`) uses the same multi-turn execution, bac
 
 Like Hydra, Goblin continues after a grader transport or parsing error, retains an incomplete-grading marker for ungraded attempts, and reports an evaluation error if required final grading throws.
 
+If the target provider returns an error such as HTTP 502, Goblin stops that test case, reports the error, and skips the scan-wide learning update.
+
 Goblin is designed to complement Hydra. Whereas Hydra is more likely to expose weaknesses via natural language, Goblin is intended to help test edge cases and techniques that may be used against more advanced attackers.
 
 ## Implementation

@@ -35,6 +35,7 @@ import {
 import { isCallerAbortError } from '../../util/fetch/requestSignal';
 import {
   composeResponseHeadersObservers,
+  isResponseHeadersObserverErrorResponse,
   preserveResponseHeadersObserverError,
   preserveResponseHeadersObserverErrorResponse,
 } from '../../util/fetch/responseHeadersObserver';
@@ -43,6 +44,7 @@ import { safeJsonStringify } from '../../util/json';
 import { TokenUsageTracker } from '../../util/tokenUsage';
 import {
   accumulateGradingResponseTokenUsage,
+  accumulateGradingTokenUsage,
   accumulateTokenUsage,
 } from '../../util/tokenUsageUtils';
 import { TransformInputType, transform } from '../../util/transform';
@@ -480,6 +482,28 @@ export type TargetResponse = {
     format?: string;
   };
 } & Omit<ProviderResponse, 'output'> & { output: string };
+
+/** Local callback errors and tool errors can recover on a later turn. */
+export function isTerminalTargetError(response: ProviderResponse): boolean {
+  return (
+    Boolean(response.error) &&
+    response.tokenUsage?.numRequests !== 0 &&
+    response.metadata?.errorOrigin !== 'tool' &&
+    !isResponseHeadersObserverErrorResponse(response)
+  );
+}
+
+/** An errored target skips final assertions. Retain usage from earlier graded turns. */
+export function accumulateDiscardedGraderUsage(
+  tokenUsage: TokenUsage,
+  stored: GradingResult | undefined,
+): void {
+  if (stored?.tokensUsed) {
+    accumulateGradingTokenUsage(tokenUsage, stored.tokensUsed, {
+      cached: stored.metadata?.cachedResponse,
+    });
+  }
+}
 
 /** Retain only the selected error's origin when a strategy rebuilds its response. */
 export function preserveSelectedError<T extends ProviderResponse>(
@@ -1018,7 +1042,10 @@ type SharedBacktrackingStopReason =
   | 'Target ended conversation';
 
 export type RoundBacktrackingStopReason = SharedBacktrackingStopReason | 'Max rounds reached';
-export type TurnBacktrackingStopReason = SharedBacktrackingStopReason | 'Max turns reached';
+export type TurnBacktrackingStopReason =
+  | SharedBacktrackingStopReason
+  | 'Max turns reached'
+  | 'Target error';
 
 /**
  * Externalize large blob payloads in provider responses before they are copied into
