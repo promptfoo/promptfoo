@@ -34,7 +34,7 @@ tests:
       - type: regex
         value: '\bAu\b'
   - vars:
-      question: Why does ice float on liquid water?
+      question: Compared with liquid water, is ice more dense or less dense? Reply with just "more dense" or "less dense".
     assert:
-      - type: icontains-any
-        value: [dense, density]
+      - type: regex
+        value: '^\s*[Ll]ess dense[.!]?\s*$'
