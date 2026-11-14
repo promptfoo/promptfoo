@@ -785,6 +785,63 @@ describeEvaluator('select-best runtime grading configuration', () => {
     },
   );
 
+  it('renders templated comparison criteria with test vars before grading', async () => {
+    const { grader, seenKeys, suite } = makeSuite();
+    suite.tests![0].vars = { audience: 'children' };
+    (suite.tests![0].assert![0] as Assertion).value =
+      'Choose the response best suited for {{ audience }}';
+    const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
+
+    await evaluate(suite, record, { maxConcurrency: 1 });
+
+    expect(grader.callApi).toHaveBeenCalledTimes(1);
+    expect(seenKeys).toEqual([secret]);
+    const gradingPrompt = vi.mocked(grader.callApi).mock.calls[0][0] as string;
+    expect(gradingPrompt).toContain('Choose the response best suited for children');
+    expect(gradingPrompt).not.toContain('{{ audience }}');
+
+    const rows = await record.fetchResultsByTestIdx(0);
+    expect(rows).toHaveLength(2);
+    for (const row of rows) {
+      const component = row.gradingResult?.componentResults?.[0];
+      expect(component?.assertion?.value).toBe(
+        'Choose the response best suited for {{ audience }}',
+      );
+      expect(component?.metadata?.renderedAssertionValue).toBe(
+        'Choose the response best suited for children',
+      );
+    }
+  });
+
+  it('preserves literal Nunjucks delimiters in templated comparison criteria', async () => {
+    const { grader, seenKeys, suite } = makeSuite();
+    suite.tests![0].vars = { audience: 'children' };
+    (suite.tests![0].assert![0] as Assertion).value =
+      '{% raw %}Choose the response best suited for {{ audience }}{% endraw %}';
+    const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
+
+    await evaluate(suite, record, { maxConcurrency: 1 });
+
+    expect(grader.callApi).toHaveBeenCalledTimes(1);
+    expect(seenKeys).toEqual([secret]);
+    const gradingPrompt = vi.mocked(grader.callApi).mock.calls[0][0] as string;
+    expect(gradingPrompt).toContain('Choose the response best suited for {{ audience }}');
+    expect(gradingPrompt).not.toContain('{% raw %}');
+    expect(gradingPrompt).not.toContain('{% endraw %}');
+
+    const rows = await record.fetchResultsByTestIdx(0);
+    expect(rows).toHaveLength(2);
+    for (const row of rows) {
+      const component = row.gradingResult?.componentResults?.[0];
+      expect(component?.assertion?.value).toBe(
+        '{% raw %}Choose the response best suited for {{ audience }}{% endraw %}',
+      );
+      expect(component?.metadata?.renderedAssertionValue).toBe(
+        'Choose the response best suited for {{ audience }}',
+      );
+    }
+  });
+
   it('uses the original grader key without exposing it in returned grading results', async () => {
     const { grader, seenKeys, suite } = makeSuite();
     const [result] = await runCompareAssertion(

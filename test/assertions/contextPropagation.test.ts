@@ -398,5 +398,108 @@ describe('Context Propagation in Model-Graded Assertions', () => {
         undefined,
       );
     });
+
+    it('should render templated criteria with test vars before calling matchesSelectBest', async () => {
+      const mockResult = [
+        { pass: true, score: 1, reason: 'best', metadata: { cachedResponse: true } },
+        { pass: false, score: 0, reason: 'not best', metadata: { cachedResponse: true } },
+      ];
+      vi.mocked(matchesSelectBest).mockResolvedValue(mockResult);
+
+      const test = {
+        vars: { preference: 'detailed explanations' },
+        options: { provider: 'test-provider' },
+      };
+      const assertion = { type: 'select-best' as const, value: 'Prefer {{ preference }}' };
+      const outputs = ['output1', 'output2'];
+
+      const results = await runCompareAssertion(test, assertion, outputs, undefined);
+
+      expect(matchesSelectBest).toHaveBeenCalledWith(
+        'Prefer detailed explanations',
+        outputs,
+        { provider: 'test-provider' },
+        { preference: 'detailed explanations' },
+        undefined,
+      );
+      for (const result of results) {
+        expect(result.metadata).toEqual({
+          cachedResponse: true,
+          renderedAssertionValue: 'Prefer detailed explanations',
+        });
+        expect(result.assertion?.value).toBe('Prefer {{ preference }}');
+      }
+    });
+
+    it('should render templated criteria with context vars when they override test vars', async () => {
+      const mockResult = [
+        { pass: true, score: 1, reason: 'best', metadata: { cachedResponse: true } },
+        { pass: false, score: 0, reason: 'not best', metadata: { cachedResponse: true } },
+      ];
+      vi.mocked(matchesSelectBest).mockResolvedValue(mockResult);
+
+      const test = {
+        vars: { preference: 'test vars value' },
+        options: { provider: 'test-provider' },
+      };
+      const context = {
+        ...mockCallApiContext,
+        vars: { preference: 'context vars value' },
+      };
+      const assertion = { type: 'select-best' as const, value: 'Prefer {{ preference }}' };
+      const outputs = ['output1', 'output2'];
+
+      const results = await runCompareAssertion(test, assertion, outputs, context);
+
+      expect(matchesSelectBest).toHaveBeenCalledWith(
+        'Prefer context vars value',
+        outputs,
+        { provider: 'test-provider' },
+        { preference: 'test vars value' },
+        context,
+      );
+      for (const result of results) {
+        expect(result.metadata).toEqual({
+          cachedResponse: true,
+          renderedAssertionValue: 'Prefer context vars value',
+        });
+        expect(result.assertion?.value).toBe('Prefer {{ preference }}');
+      }
+    });
+
+    it('should preserve literal Nunjucks delimiters wrapped in a raw block', async () => {
+      const mockResult = [
+        { pass: true, score: 1, reason: 'best', metadata: { cachedResponse: true } },
+        { pass: false, score: 0, reason: 'not best', metadata: { cachedResponse: true } },
+      ];
+      vi.mocked(matchesSelectBest).mockResolvedValue(mockResult);
+
+      const test = {
+        vars: { preference: 'detailed explanations' },
+        options: { provider: 'test-provider' },
+      };
+      const assertion = {
+        type: 'select-best' as const,
+        value: '{% raw %}Prefer {{ preference }}{% endraw %}',
+      };
+      const outputs = ['output1', 'output2'];
+
+      const results = await runCompareAssertion(test, assertion, outputs, undefined);
+
+      expect(matchesSelectBest).toHaveBeenCalledWith(
+        'Prefer {{ preference }}',
+        outputs,
+        { provider: 'test-provider' },
+        { preference: 'detailed explanations' },
+        undefined,
+      );
+      for (const result of results) {
+        expect(result.metadata).toEqual({
+          cachedResponse: true,
+          renderedAssertionValue: 'Prefer {{ preference }}',
+        });
+        expect(result.assertion?.value).toBe('{% raw %}Prefer {{ preference }}{% endraw %}');
+      }
+    });
   });
 });

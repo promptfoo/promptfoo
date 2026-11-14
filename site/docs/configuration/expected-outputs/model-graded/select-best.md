@@ -28,6 +28,34 @@ The select-best checker:
 3. Selects the best output
 4. Returns pass=true for the winning output and pass=false for others
 
+### Using variables in criteria
+
+The `value` is rendered with the test case's resolved `vars` before it is sent to the grader. This lets the criteria adapt to each test case:
+
+```yaml
+prompts:
+  - 'Explain photosynthesis simply.'
+  - 'Explain photosynthesis in technical detail.'
+providers:
+  - echo
+tests:
+  - vars:
+      audience: children
+    assert:
+      - type: select-best
+        value: 'Choose the response best suited for {{ audience }}'
+```
+
+To send Nunjucks delimiters to the grader literally, wrap them in a `{% raw %}` block:
+
+```yaml
+assert:
+  - type: select-best
+    value: '{% raw %}Choose the response that mentions {{placeholder}}{% endraw %}'
+```
+
+When rendering changes the criteria, the resolved text is recorded as `metadata.renderedAssertionValue` on each comparison result. The original template remains in the assertion value, and any metadata from the matcher (such as a cache hit) is preserved.
+
 ### Example Configuration
 
 Here's a complete example showing how to use select-best to compare different prompt variations:

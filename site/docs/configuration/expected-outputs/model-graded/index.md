@@ -195,6 +195,19 @@ tests:
         value: choose the tweet that contains the most facts
 ```
 
+The `select-best` criteria are rendered with test `vars` before grading, so they can change per test case:
+
+```yaml
+tests:
+  - vars:
+      audience: children
+    assert:
+      - type: select-best
+        value: 'choose the response best suited for {{ audience }}'
+```
+
+To pass Nunjucks delimiters to the grader literally, wrap them in a `{% raw %}` block. The resolved criteria are stored as `metadata.renderedAssertionValue` while the original template stays in the assertion value.
+
 The `max-score` assertion type is used to objectively select the output with the highest score from other assertions:
 
 ```yaml
