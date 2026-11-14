@@ -141,10 +141,12 @@ providers:
       permission_mode: deny # Deny all permission requests
 ```
 
-| Mode          | Behavior                                                 |
-| ------------- | -------------------------------------------------------- |
-| `auto_approve | Select the first `allow_once` or `allow_always` option   |
-| `deny`        | Return `cancelled` for all permission requests (default) |
+| Mode           | Behavior                                                 |
+| -------------- | -------------------------------------------------------- |
+| `auto_approve` | Select the first `allow_once` or `allow_always` option   |
+| `deny`         | Return `cancelled` for all permission requests (default) |
+
+Use an array for executable paths or arguments containing spaces. To run each evaluation step in its own copy of a project, set `working_dir` and `copy_working_dir: true`. Promptfoo bypasses the provider response cache for these copies.
 
 ## Tool Call Tracking
 
@@ -159,14 +161,12 @@ tests:
           return toolCalls.some(t => t.name === 'Read');
 ```
 
-Each tool call entry contains:
+Each tool call entry records the first update time in `startTime` and, when reported, the terminal update time in `endTime` (Unix milliseconds). It also contains:
 
 | Field      | Type    | Description                              |
 | ---------- | ------- | ---------------------------------------- |
 | `id`       | string  | Unique tool call ID                      |
 | `name`     | string  | Tool name (e.g., `Read`, `Bash`, `Grep`) |
-| `input`    | unknown | Arguments passed to the tool             |
-| `output`   | unknown | Tool result                              |
 | `is_error` | boolean | Whether the tool call errored            |
 
 ## Caching
