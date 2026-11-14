@@ -440,7 +440,7 @@ function matchesTransientConnectionError(error: SystemError | undefined): boolea
     return true;
   }
 
-  const message = (error?.message ?? '').toLowerCase();
+  const message = typeof error?.message === 'string' ? error.message.toLowerCase() : '';
   // EPROTO can wrap permanent TLS misconfigs. Exclude when paired with
   // known permanent error phrases to avoid futile retries.
   if (

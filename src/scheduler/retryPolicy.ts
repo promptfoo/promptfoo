@@ -86,7 +86,7 @@ export function shouldRetry(
   if (error) {
     const cause = (error as SystemError).cause as SystemError | undefined;
     const message = (error.message ?? '').toLowerCase();
-    const causeMessage = (cause?.message ?? '').toLowerCase();
+    const causeMessage = typeof cause?.message === 'string' ? cause.message.toLowerCase() : '';
 
     return (
       isTransientConnectionError(error) ||

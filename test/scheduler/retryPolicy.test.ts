@@ -181,6 +181,15 @@ describe('shouldRetry', () => {
       },
     );
 
+    it.each([
+      [{ message: 504, code: 'ECONNREFUSED' }, true],
+      [{ message: { detail: 'unavailable' } }, false],
+    ])('handles a structured cause without a string message', (cause, retryable) => {
+      const error = new TypeError('fetch failed', { cause });
+
+      expect(shouldRetry(0, error, false, DEFAULT_RETRY_POLICY)).toBe(retryable);
+    });
+
     it('should not retry when cause represents a non-transient user error', () => {
       const cause = new Error('Invalid JSON format');
       const error = new Error('Request validation failed', { cause });
