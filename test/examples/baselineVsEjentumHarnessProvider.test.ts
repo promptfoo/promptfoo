@@ -94,6 +94,28 @@ describe('baseline-vs-ejentum-harness provider', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it('requires an explicit gateway when merged endpoint aliases are ambiguous', async () => {
+    const env = {
+      OPENAI_API_HOST: 'suite.invalid',
+      OPENAI_BASE_URL: 'https://provider.invalid/v1',
+    };
+    const underlyingProvider = { callApi: vi.fn().mockResolvedValue({ output: 'ok' }) };
+    const ambiguous = new EjentumAugmentedProvider({ env, underlyingProvider });
+    expect(await ambiguous.callApi('query')).toEqual({
+      error: expect.stringContaining('Set config.apiBaseUrl on both comparison arms'),
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(underlyingProvider.callApi).not.toHaveBeenCalled();
+
+    const explicit = new EjentumAugmentedProvider({
+      env,
+      config: { apiBaseUrl: env.OPENAI_BASE_URL },
+      underlyingProvider,
+    });
+    fetchMock.mockResolvedValueOnce(mockResponse([{ reasoning: 'scaffold' }]));
+    expect(await explicit.callApi('query')).toEqual({ output: 'ok' });
+  });
+
   it('returns only retry headers and status for a rate-limited scaffold', async () => {
     const response = mockResponse('private error body', false, 429);
     response.headers.set('retry-after', '1');

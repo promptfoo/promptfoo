@@ -58,7 +58,7 @@ The Ejentum API endpoint defaults to `https://api.ejentum.com/logicv1/`. You can
     apiUrl: https://api.ejentum.com/logicv1/
 ```
 
-Because `provider.mjs` delegates execution to Promptfoo's native OpenAI provider, all standard OpenAI configuration options (`apiHost`, `apiBaseUrl`, `organization`, `headers`, `apiKeyEnvar`, etc.) work natively and identically across both providers.
+Set the same OpenAI `config.apiBaseUrl` on both arms when targeting a custom model gateway. The adapter receives suite and provider environment variables already merged. If that merged environment contains multiple OpenAI endpoint aliases (`OPENAI_API_HOST`, `OPENAI_API_BASE_URL`, or `OPENAI_BASE_URL`), the adapter requires an explicit `config.apiBaseUrl` or `config.apiHost` before sending the prompt. Other OpenAI configuration options, such as `organization`, `headers`, and `apiKeyEnvar`, are forwarded to the native provider.
 
 ## How the Custom Provider Works
 

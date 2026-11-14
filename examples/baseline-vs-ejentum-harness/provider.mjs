@@ -193,6 +193,20 @@ class EjentumAugmentedProvider {
       };
     }
 
+    // Custom providers receive the merged suite and provider env. The delegated
+    // library cannot recover which layer selected each OpenAI endpoint alias.
+    const endpointAliases = ['OPENAI_API_HOST', 'OPENAI_API_BASE_URL', 'OPENAI_BASE_URL'];
+    if (
+      !this.config.apiHost &&
+      !this.config.apiBaseUrl &&
+      endpointAliases.filter((name) => this.env[name]).length > 1
+    ) {
+      return {
+        error:
+          'Multiple OpenAI endpoint aliases are configured. Set config.apiBaseUrl on both comparison arms or use a single endpoint alias.',
+      };
+    }
+
     const mode = config.mode || 'reasoning';
     const ejentumUrl =
       config.apiUrl ||
