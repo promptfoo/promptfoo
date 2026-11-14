@@ -2,8 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
 import { matchesClassification } from '../../../src/matchers/classification';
 import { matchesLlmRubric } from '../../../src/matchers/llmGrading';
-import { AzureGenericProvider } from '../../../src/providers/azure/generic';
 import { AzureDecisionsProvider } from '../../../src/providers/azure/decisions';
+import { AzureGenericProvider } from '../../../src/providers/azure/generic';
 import { HttpRateLimitError } from '../../../src/util/fetch/errors';
 import { mockProcessEnv } from '../../util/utils';
 
