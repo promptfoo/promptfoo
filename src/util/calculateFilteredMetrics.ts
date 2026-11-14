@@ -23,7 +23,7 @@
  */
 
 import { type SQL, sql } from 'drizzle-orm';
-import { getDb } from '../database/index';
+import { type DatabaseReader, withReadTransaction } from '../database/index';
 import logger from '../logger';
 import { ResultFailureReason } from '../types/index';
 
@@ -40,7 +40,7 @@ export interface FilteredMetricsOptions {
  * Maximum number of results to process for metrics calculation.
  * Protects against OOM on extremely large filtered datasets.
  */
-const MAX_RESULTS_FOR_METRICS = 50000;
+export const MAX_RESULTS_FOR_METRICS = 50000;
 
 function jsonUsageNumber(column: SQL, usagePath: string, field: string): SQL {
   return sql`COALESCE(CAST(json_extract(${column}, ${`${usagePath}.${field}`}) AS INTEGER), 0)`;
@@ -200,48 +200,38 @@ function getFilteredTokenUsage(row: FilteredBasicMetricsRow): PromptMetrics['tok
 export async function calculateFilteredMetrics(
   opts: FilteredMetricsOptions,
 ): Promise<PromptMetrics[]> {
-  const { numPrompts, whereSql } = opts;
-
-  try {
-    // Check result count first (protect against OOM)
-    const countResult = await getResultCount(whereSql);
-    if (countResult > MAX_RESULTS_FOR_METRICS) {
-      logger.warn(`Filtered result count ${countResult} exceeds limit ${MAX_RESULTS_FOR_METRICS}`, {
-        evalId: opts.evalId,
-      });
-      throw new Error(`Result count ${countResult} exceeds maximum ${MAX_RESULTS_FOR_METRICS}`);
+  const { evalId, numPrompts, whereSql } = opts;
+  return withReadTransaction(async (tx) => {
+    // A retained retry makes the cell ambiguous even when only one attempt passed its filters.
+    const summary = await tx.get<{ count: number; overlapping: number | null }>(sql`
+      WITH matched AS MATERIALIZED (
+        SELECT test_idx, prompt_idx FROM eval_results WHERE ${whereSql} LIMIT ${MAX_RESULTS_FOR_METRICS + 1}
+      )
+      SELECT COUNT(*) AS count, CASE WHEN COUNT(*) BETWEEN 1 AND ${MAX_RESULTS_FOR_METRICS} THEN EXISTS (
+        SELECT 1 FROM eval_results
+        WHERE eval_id = ${evalId} AND (test_idx, prompt_idx) IN (SELECT test_idx, prompt_idx FROM matched)
+        GROUP BY test_idx, prompt_idx HAVING COUNT(*) > 1
+      ) END AS overlapping FROM matched
+    `);
+    if (!summary?.count) {
+      return createEmptyMetricsArray(numPrompts);
     }
-
-    return await calculateWithOptimizedQuery(opts);
-  } catch (error) {
-    logger.error('Failed to calculate filtered metrics', { error });
-
-    // Fallback: Return empty metrics
-    return createEmptyMetricsArray(numPrompts);
-  }
-}
-
-/**
- * Get count of filtered results (for OOM protection)
- *
- * SECURITY: Uses parameterized SQL query via Drizzle's sql template strings.
- */
-async function getResultCount(whereSql: SQL<unknown>): Promise<number> {
-  const db = await getDb();
-  const query = sql`
-    SELECT COUNT(*) as count
-    FROM eval_results
-    WHERE ${whereSql}
-  `;
-
-  const result = (await db.get(query)) as { count: number } | undefined;
-  return result?.count || 0;
+    if (summary.count > MAX_RESULTS_FOR_METRICS) {
+      throw new Error(`Filtered result count exceeds ${MAX_RESULTS_FOR_METRICS}`);
+    }
+    if (summary.overlapping) {
+      throw new Error('A filtered row contains overlapping attempts for the same output');
+    }
+    return calculateWithOptimizedQuery(tx, opts);
+  });
 }
 
 /** Aggregate all prompts together using parameterized SQL. */
-async function calculateWithOptimizedQuery(opts: FilteredMetricsOptions): Promise<PromptMetrics[]> {
+async function calculateWithOptimizedQuery(
+  db: DatabaseReader,
+  opts: FilteredMetricsOptions,
+): Promise<PromptMetrics[]> {
   const { numPrompts, whereSql } = opts;
-  const db = await getDb();
 
   // Initialize empty metrics
   const metrics = createEmptyMetricsArray(numPrompts);
@@ -392,10 +382,10 @@ async function calculateWithOptimizedQuery(opts: FilteredMetricsOptions): Promis
   }
 
   // ===== QUERY 2: Named scores (SQL JSON aggregation) =====
-  await aggregateNamedScores(metrics, whereSql);
+  await aggregateNamedScores(db, metrics, whereSql);
 
   // ===== QUERY 3: Assertion counts (SQL JSON aggregation) =====
-  await aggregateAssertions(metrics, whereSql);
+  await aggregateAssertions(db, metrics, whereSql);
 
   logger.debug('Filtered metrics calculated', {
     numPrompts,
@@ -415,11 +405,10 @@ async function calculateWithOptimizedQuery(opts: FilteredMetricsOptions): Promis
  * to fetch potentially thousands of rows into memory.
  */
 async function aggregateNamedScores(
+  db: DatabaseReader,
   metrics: PromptMetrics[],
   whereSql: SQL<unknown>,
 ): Promise<void> {
-  const db = await getDb();
-
   // Use SQLite's json_each to parse JSON in database. When newer results include
   // grading_result.namedScoreWeights, row-level named scores are weighted averages, so we
   // multiply them back into weighted totals before aggregating prompt metrics.
@@ -496,11 +485,10 @@ async function aggregateNamedScores(
  * We need to count pass=true vs pass=false across all results.
  */
 async function aggregateAssertions(
+  db: DatabaseReader,
   metrics: PromptMetrics[],
   whereSql: SQL<unknown>,
 ): Promise<void> {
-  const db = await getDb();
-
   // SQLite query to count assertions from nested JSON
   // This is complex but avoids fetching all results into memory
   const query = sql`
@@ -550,10 +538,7 @@ async function aggregateAssertions(
   }
 }
 
-/**
- * Create empty metrics array initialized with zeros.
- * Used as fallback when calculation fails or no results found.
- */
+/** Initialize each prompt's metrics, including prompts with no matching results. */
 function createEmptyMetricsArray(numPrompts: number): PromptMetrics[] {
   return Array.from({ length: numPrompts }, () => ({
     score: 0,
