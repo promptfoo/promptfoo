@@ -43,6 +43,11 @@ describe('extractNumbers', () => {
     ['1.2 trillion', 1.2e12],
     ['5 thousand', 5e3],
     ['(1,234)', -1234],
+    ['(6%)', -6],
+    ['(6 percent)', -6],
+    ['**$416.2** billion', 416.2e9],
+    ['__3.5__ million', 3.5e6],
+    ['5 **billion**', 5e9],
     ['-3.5', -3.5],
     ['$-42', -42],
     ['.75', 0.75],
@@ -127,6 +132,23 @@ describe('handleNumericMatch', () => {
   it('uses the threshold as the relative tolerance', () => {
     expect(runNumericMatch('105', 100, { threshold: 0.05 }).pass).toBe(true);
     expect(runNumericMatch('106', 100, { threshold: 0.05 }).pass).toBe(false);
+  });
+
+  it('includes decimal boundaries without widening strict or very small tolerances', () => {
+    expect(runNumericMatch('0.315', 0.3, { threshold: 0.05 }).pass).toBe(true);
+    expect(runNumericMatch('-0.315', -0.3, { threshold: 0.05 }).pass).toBe(true);
+    expect(runNumericMatch('0.31500000000001', 0.3, { threshold: 0.05 }).pass).toBe(false);
+    expect(runNumericMatch('1.0000000000000002', 1, { threshold: 0 }).pass).toBe(false);
+    expect(runNumericMatch('1.0000000000000002', 1, { threshold: 1e-20 }).pass).toBe(false);
+    expect(runNumericMatch('-1e308', 1e308, { threshold: 2 }).pass).toBe(true);
+    expect(runNumericMatch('-1.7e308', 1e308, { threshold: 2 }).pass).toBe(false);
+  });
+
+  it('grades the signed and scaled amount shown in the output', () => {
+    expect(runNumericMatch('**$416.2** billion', 416.2).pass).toBe(false);
+    expect(runNumericMatch('Net margin was (6%)', 6).pass).toBe(false);
+    expect(runNumericMatch('Margin was (6%); sales were 12', 12).pass).toBe(true);
+    expect(extractNumbers('2**3**4')).toEqual([2, 3, 4]);
   });
 
   it('scores near misses above wild misses', () => {
@@ -256,6 +278,12 @@ describe('handleNumericMatch', () => {
       expect(runNumericMatch('## Final answer\n* 42\n\nNotes: 7', 42, { mode: 'first' }).pass).toBe(
         true,
       );
+    });
+
+    it.each(['\n', '\r\n'])('grades the first paragraph after a bare heading', (eol) => {
+      const output = ['## Final answer', '  ', '42', '', 'Notes: 99'].join(eol);
+      expect(runNumericMatch(output, 42).pass).toBe(true);
+      expect(runNumericMatch(output, 99, { mode: 'last' }).pass).toBe(false);
     });
 
     it('stops a bare heading block at the next blank line', () => {

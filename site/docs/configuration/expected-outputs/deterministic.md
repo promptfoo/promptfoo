@@ -1068,9 +1068,9 @@ Before comparing, the assertion normalizes:
 - thousands separators (`416,161`)
 - scale words and suffixes: `thousand`, `million`, `billion`, `trillion`, `bn`, `mn`, and `K`, `M`, `B`, `T` when attached to the number (`$416.16B`)
 - scientific notation (`4.16161e11`)
-- negatives, including accounting-style negatives such as `(1,234)`
+- negatives, including accounting-style negatives such as `(1,234)` and `(6%)`
 
-Digits inside words, such as `FY2025` or `Q3`, are ignored.
+Markdown emphasis around a quantity or scale word is supported, including `**$416.2** billion`. Digits inside words, such as `FY2025` or `Q3`, are ignored.
 
 ```yaml
 assert:
@@ -1083,7 +1083,7 @@ With this assertion, `$416.2 billion`, `416,161 million`, `$416.16B` and `416161
 
 `value` can be a number or a string that contains exactly one number, so `value: '$416.161 billion'` and `value: '{{expected}}'` work too. When the expected value is `0`, `threshold` is used as an absolute tolerance. A value that overflows when scaled is rejected as a configuration error.
 
-**Which number is graded.** When the output has a `Final answer` line (`Final answer: 42`, `Final answer - 42` or `Final answer -42`), only the last such line is searched. That lets a prompt ask for a final line, so a figure mentioned in passing is not graded by mistake. Within that text, `config.mode` selects the number:
+**Which number is graded.** When the output has a `Final answer` line (`Final answer: 42`, `Final answer - 42` or `Final answer -42`), only the last such line is searched. A bare heading uses the first paragraph beneath it. That lets a prompt ask for a final line, so a figure mentioned in passing is not graded by mistake. Within that text, `config.mode` selects the number:
 
 | `mode`            | Number graded                                                         |
 | ----------------- | --------------------------------------------------------------------- |

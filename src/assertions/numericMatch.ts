@@ -29,7 +29,7 @@ const SCALE_MULTIPLIERS: Record<string, number> = {
  * be attached to the number, and `bn`/`mn` may follow a space.
  */
 const NUMBER_TOKEN_REGEX =
-  /(?<![\p{L}\p{N}_.])(\()?([-−])?([$€£¥])?([-−])?((?:\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?|\.\d+)(?:e[-+]?\d+)?)(?:(?:\s?(thousand|million|billion|trillion|bn|mn)s?\b)|([kmbt])(?![\p{L}\p{N}_]))?(\))?/giu;
+  /(?<![\p{L}\p{N}_.])(\()?([-−])?([$€£¥])?([-−])?((?:\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?|\.\d+)(?:e[-+]?\d+)?)(?:(?:\s?(thousand|million|billion|trillion|bn|mn)s?\b)|([kmbt])(?![\p{L}\p{N}_]))?([ \t]?(?:%|percent\b|per cent\b))?(\))?/giu;
 
 /**
  * A `Final answer` heading line: `Final answer: 42`, `**Final answer:** 42`, `Final answer - 42`
@@ -43,7 +43,9 @@ const FINAL_ANSWER_REGEX =
 
 /** SEC form names such as `10-K`, `10-Q`, `8-K`, `20-F` and `6-K`. */
 const SEC_FORM_SUFFIX_REGEX = /^-(?:K|Q|F)(?:T|\/A)?(?![\p{L}\p{N}_])/iu;
-const PERCENT_SUFFIX_REGEX = /^\s?(?:%|percent\b|per cent\b)/i;
+// Paired Markdown emphasis can split a quantity from its unit ("**$42** billion").
+const INLINE_EMPHASIS_REGEX =
+  /(?<![\p{L}\p{N}_*])(\*{1,3}|_{1,3})(?!\s)([^*_\r\n]+?)(?<!\s)\1(?![\p{L}\p{N}_*])/gu;
 
 export interface NumberToken {
   value: number;
@@ -58,7 +60,8 @@ export interface NumberToken {
  */
 export function extractNumberTokens(text: string): NumberToken[] {
   const tokens: NumberToken[] = [];
-  for (const match of text.matchAll(NUMBER_TOKEN_REGEX)) {
+  const plainText = text.replace(INLINE_EMPHASIS_REGEX, '$2');
+  for (const match of plainText.matchAll(NUMBER_TOKEN_REGEX)) {
     const [
       token,
       openParen,
@@ -68,6 +71,7 @@ export function extractNumberTokens(text: string): NumberToken[] {
       digits,
       scaleWord,
       scaleSuffix,
+      percentage,
       closeParen,
     ] = match;
     let value = Number.parseFloat(digits.replace(/,/g, ''));
@@ -80,13 +84,13 @@ export function extractNumberTokens(text: string): NumberToken[] {
     if (isNegative) {
       value = -value;
     }
-    const rest = text.slice((match.index ?? 0) + token.length);
+    const rest = plainText.slice((match.index ?? 0) + token.length);
     const isSecFormName = !scale && !closeParen && SEC_FORM_SUFFIX_REGEX.test(rest);
     const isSecItem =
       !currency &&
       !scale &&
-      /\bitem[ \t]+$/i.test(text.slice(Math.max(0, match.index - 12), match.index));
-    const isPercentage = !scale && !closeParen && PERCENT_SUFFIX_REGEX.test(rest);
+      /\bitem[ \t]+$/i.test(plainText.slice(Math.max(0, match.index - 12), match.index));
+    const isPercentage = !scale && Boolean(percentage);
     const isBareYear =
       /^\d{4}$/.test(digits) &&
       !currency &&
@@ -121,7 +125,7 @@ export function getStatedAnswerText(text: string): string {
   }
   // A bare heading: the answer is the block (for example a bullet list) up to the next blank line.
   const afterHeading = text.slice((last.index ?? 0) + last[0].length);
-  return afterHeading.split(/\n[ \t]*\n/)[0];
+  return afterHeading.replace(/^(?:[ \t]*\r?\n)+/, '\n').split(/\r?\n[ \t]*\r?\n/, 1)[0];
 }
 
 function parseExpectedValue(value: unknown): number {
@@ -148,7 +152,13 @@ function parseExpectedValue(value: unknown): number {
 
 function relativeError(actual: number, expected: number): number {
   // With an expected value of 0, fall back to the absolute error.
-  return expected === 0 ? Math.abs(actual) : Math.abs(actual - expected) / Math.abs(expected);
+  if (expected === 0) {
+    return Math.abs(actual);
+  }
+  const difference = Math.abs(actual - expected);
+  return Number.isFinite(difference)
+    ? difference / Math.abs(expected)
+    : Math.abs(actual / expected - 1);
 }
 
 function selectCandidate(
@@ -214,7 +224,12 @@ export function handleNumericMatch({
   }
 
   const error = relativeError(actual, expected);
-  const withinTolerance = error <= tolerance;
+  // Compare in the original units so subtracting and dividing the boundary
+  // (e.g. 0.315 vs 0.3 at 5%) does not turn an inclusive limit into a miss.
+  const margin = expected === 0 ? tolerance : Math.abs(expected) * tolerance;
+  const withinTolerance = Number.isFinite(margin)
+    ? actual >= expected - margin && actual <= expected + margin
+    : error <= tolerance;
   const closeness =
     tolerance === 0 ? (withinTolerance ? 1 : 0) : Math.max(0, Math.min(1, 1 - error / tolerance));
   const pass = withinTolerance !== inverse;
