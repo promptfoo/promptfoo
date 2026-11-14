@@ -74,6 +74,15 @@ describe('Snowflake Cortex Provider', () => {
       expect(provider['getApiUrl']()).toBe('https://custom.snowflakecomputing.com');
     });
 
+    it('rejects an explicit slash-only endpoint before attaching account credentials', () => {
+      expect(
+        () =>
+          new SnowflakeCortexProvider('mistral-large2', {
+            config: { ...createAccountConfig().config, apiBaseUrl: '///' },
+          }),
+      ).toThrow('Snowflake apiBaseUrl must contain a host');
+    });
+
     it('should strip trailing slashes from a provided apiBaseUrl', () => {
       const provider = new SnowflakeCortexProvider('mistral-large2', {
         config: {

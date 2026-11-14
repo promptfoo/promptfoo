@@ -83,18 +83,17 @@ export class SnowflakeCortexProvider extends OpenAiChatCompletionProvider {
       (getProviderEnvString(providerOptions.env, 'SNOWFLAKE_ACCOUNT_IDENTIFIER') ??
         getEnvString('SNOWFLAKE_ACCOUNT_IDENTIFIER'));
 
-    if (!accountIdentifier && !providerOptions.config?.apiBaseUrl) {
+    const configuredUrl = providerOptions.config?.apiBaseUrl?.replace(/\/+$/, '');
+    if (providerOptions.config?.apiBaseUrl && !configuredUrl) {
+      throw new Error('Snowflake apiBaseUrl must contain a host');
+    }
+    if (!accountIdentifier && !configuredUrl) {
       throw new Error(
         'Snowflake provider requires an account identifier. Set SNOWFLAKE_ACCOUNT_IDENTIFIER environment variable or specify accountIdentifier in config.',
       );
     }
 
-    // Construct the base URL from account identifier if not provided
-    // Strip trailing slashes so a configured base URL like `https://host/` does
-    // not produce double-slash request paths.
-    const apiBaseUrl =
-      providerOptions.config?.apiBaseUrl?.replace(/\/+$/, '') ||
-      `https://${accountIdentifier}.snowflakecomputing.com`;
+    const apiBaseUrl = configuredUrl || `https://${accountIdentifier}.snowflakecomputing.com`;
 
     super(modelName, {
       ...providerOptions,
