@@ -166,6 +166,7 @@ const redTeamSidebar = [
         collapsed: true,
         items: [
           'red-team/strategies/arabic-presentation-forms',
+          'red-team/strategies/artprompt',
           'red-team/strategies/base64',
           'red-team/strategies/basic',
           'red-team/strategies/best-of-n',
