@@ -1,6 +1,10 @@
 # provider-yapi (Y-API)
 
-Compare three text chat models on Y-API using the generic OpenAI-compatible provider. Create a gateway key and run the example:
+Compare three text chat models on Y-API using the generic OpenAI-compatible provider.
+
+## Run the comparison
+
+Create a gateway key, export it, and run the example:
 
 ```bash
 export Y_API_API_KEY=your_api_key_here
