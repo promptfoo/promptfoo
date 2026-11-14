@@ -1,3 +1,5 @@
+import path from 'path';
+
 import { isApiProvider, isProviderOptions, type TestCase } from '../types';
 import { canonicalizeProviderId, normalizeProviderRef } from './providerRef';
 import { sanitizeUrl } from './sanitizer';
@@ -72,6 +74,32 @@ export function sanitizeProviderIdForLog(providerId: string): string {
     : providerId;
 }
 
+function normalizeWildcardPath(canonical: string): string {
+  // The shared canonicalizer preserves absolute file IDs for exact matching.
+  return canonical.startsWith('file://')
+    ? `file://${path.normalize(canonical.slice('file://'.length))}`
+    : canonical;
+}
+
+function matchesBasenameScriptWildcard(ref: string, id: string, basePath: unknown): boolean {
+  const script = /^(python|golang):([^:]+)(:[^:]*)?$/.exec(id);
+  if (
+    !script ||
+    [script[2], script[3]].some((part) => part?.includes('/') || part?.includes(path.win32.sep)) ||
+    !script[2].toLowerCase().endsWith(script[1] === 'python' ? '.py' : '.go') ||
+    !ref.startsWith(script[1] + ':')
+  ) {
+    return false;
+  }
+
+  // These constructors omit './' for scripts directly inside their base directory.
+  const directory = typeof basePath === 'string' ? basePath : process.cwd();
+  const refPath = ref.slice(script[1].length + 1);
+  const resolvedRef = path.resolve(directory, refPath);
+  const resolvedId = path.resolve(directory, script[2] + (script[3] ?? ''));
+  return resolvedId.startsWith(resolvedRef.slice(0, -1));
+}
+
 /**
  * Checks if a provider reference matches a given provider.
  * Supports exact matching and wildcard patterns.
@@ -97,7 +125,17 @@ export function doesProviderRefMatch(ref: string, provider: ApiProvider): boolea
   // Wildcard match: 'openai:*' matches 'openai:gpt-4', etc.
   if (ref.endsWith('*')) {
     const prefix = ref.slice(0, -1);
-    if (label?.startsWith(prefix) || id.startsWith(prefix) || canonicalId.startsWith(prefix)) {
+    // Normalize before removing '*' so a directory's trailing separator is retained.
+    const canonicalPrefix = normalizeWildcardPath(canonicalRef).slice(0, -1);
+    if (
+      label?.startsWith(prefix) ||
+      id.startsWith(prefix) ||
+      canonicalId.startsWith(prefix) ||
+      normalizeWildcardPath(canonicalId).startsWith(canonicalPrefix)
+    ) {
+      return true;
+    }
+    if (matchesBasenameScriptWildcard(ref, id, provider.config?.basePath)) {
       return true;
     }
   }

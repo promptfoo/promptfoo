@@ -412,6 +412,43 @@ describe('doesProviderRefMatch', () => {
     expect(doesProviderRefMatch('./my-provider.js', provider)).toBe(true);
     expect(doesProviderRefMatch(`file://${absolutePath}`, provider)).toBe(true);
   });
+
+  it.each([
+    ['file://./providers/*', 'file://providers/alpha.js'],
+    ['exec:./scripts/*', 'exec:scripts/alpha.js'],
+    ['python:./scripts/*', 'python:scripts/alpha.py:call_api'],
+    ['golang:./scripts/*', 'golang:scripts/alpha.go'],
+    [
+      `file://${path.resolve('.')}/other/../providers/*`,
+      `file://${path.resolve('providers/alpha.js')}`,
+    ],
+    [
+      `file://${path.resolve('providers')}/*`,
+      `file://${path.resolve('.')}/other/../providers/alpha.js`,
+    ],
+    ['file://providers/../providers/*', 'file://providers/alpha.js'],
+    ['file://./providers/*', `file://${path.resolve('providers/alpha.js')}`],
+    ['file://providers/*', `file://${path.join('providers', 'alpha.js')}`],
+  ])('matches normalized wildcard %s against %s', (ref, id) => {
+    expect(doesProviderRefMatch(ref, createProvider(id))).toBe(true);
+  });
+
+  it.each(['file://providers-other/alpha.js', 'file://providers'])(
+    'keeps the directory boundary when normalizing a wildcard for %s',
+    (id) => {
+      expect(doesProviderRefMatch('file://./providers/*', createProvider(id))).toBe(false);
+    },
+  );
+
+  it('preserves raw label wildcards that look like file paths', () => {
+    const provider = createProvider('custom-provider', 'file://./providers/alpha');
+    expect(doesProviderRefMatch('file://./providers/*', provider)).toBe(true);
+  });
+
+  it('preserves the global wildcard for file and named providers', () => {
+    expect(doesProviderRefMatch('*', createProvider('file://providers/alpha.js'))).toBe(true);
+    expect(doesProviderRefMatch('*', createProvider('openai:gpt-4'))).toBe(true);
+  });
 });
 
 describe('isProviderAllowed', () => {
