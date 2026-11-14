@@ -57,9 +57,11 @@ ESM and CommonJS. The default profile installs incompatible and supported real
 SDK versions, then exercises success and failure through local subprocess
 protocol fixtures without model-service requests.
 
-The default profile checks both CLI aliases and evaluates compressed HTTP responses
-from a local server. It also checks the Transformers provider with an offline model
-fixture when the optional SDK is absent, incompatible, and installed.
+The default profile checks both CLI aliases and compressed HTTP responses. For
+an extension-loaded HTTP provider, three runs must return A, fresh B
+with `--no-cache`, then cached A, with two requests to the loopback server.
+It also checks the offline Transformers fixture with the optional SDK absent,
+incompatible, and installed.
 Without optional dependencies, native SQLite is unavailable;
 even `--version` must report the expected missing-dependency diagnostic.
 
