@@ -3621,6 +3621,36 @@ describe('util', () => {
       expect(calculateGoogleCost('unknown-model', {}, 100, 50)).toBeUndefined();
     });
 
+    it('prices an unlisted model with explicit rates for each reported modality', () => {
+      const usage = {
+        promptTokensDetails: [{ modality: 'AUDIO', tokenCount: 20 }],
+        cachedContentTokenCount: 50,
+        candidatesTokensDetails: [{ modality: 'VIDEO', tokenCount: 2 }],
+      };
+      const config = {
+        inputCost: 1e-6,
+        audioInputCost: 3e-6,
+        outputCost: 2e-6,
+        videoOutputCost: 5e-6,
+      };
+      expect(
+        calculateGoogleCostFromUsage('future-model', config, 100, 10, false, usage),
+      ).toBeCloseTo((80 + 20 * 3 + 8 * 2 + 2 * 5) / 1e6, 12);
+      expect(
+        calculateGoogleCostFromUsage(
+          'future-model',
+          { audioInputCost: 3e-6 },
+          100,
+          0,
+          false,
+          usage,
+        ),
+      ).toBeUndefined();
+      expect(
+        calculateGoogleCostFromUsage('future-model', { audioInputCost: 3e-6 }, 20, 0, false, usage),
+      ).toBeCloseTo(60e-6, 12);
+    });
+
     it('should calculate cost for gemini-pro model', () => {
       // gemini-pro: input=0.5/1M, output=1.5/1M
       const cost = calculateGoogleCost('gemini-pro', {}, 1000, 500);

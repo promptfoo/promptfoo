@@ -260,7 +260,7 @@ describe('Shared Provider Functions', () => {
         500,
         models,
       );
-      expect(cost).toBeCloseTo(0.000002 * 1000 + 0.00001 * 500);
+      expect(cost).toBeCloseTo(0.000002 * 1000 + 0.00001 * 500, 12);
     });
 
     it('should honor a manual flat cost override for a model not in the known list', () => {
@@ -271,13 +271,13 @@ describe('Shared Provider Functions', () => {
         500,
         models,
       );
-      expect(cost).toBeCloseTo(0.000005 * 1500);
+      expect(cost).toBeCloseTo(0.000005 * 1500, 12);
     });
 
     it('should price an unknown model when the side without a rate used no tokens', () => {
       expect(
         calculateCost('brand-new-embedding-model', { inputCost: 0.000002 }, 1000, 0, models),
-      ).toBeCloseTo(0.000002 * 1000);
+      ).toBeCloseTo(0.000002 * 1000, 12);
     });
 
     it('should still return undefined for an unknown model with only a partial override', () => {
