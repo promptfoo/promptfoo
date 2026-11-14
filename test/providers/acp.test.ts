@@ -81,9 +81,12 @@ const mockChildProcess = {
   stderr: { on: vi.fn() },
   kill: vi.fn(),
   pid: 12345,
+  exitCode: null,
+  signalCode: null,
 };
 
-vi.mock('node:child_process', () => ({
+vi.mock('node:child_process', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('node:child_process')>()),
   spawn: vi.fn(() => mockChildProcess),
 }));
 
@@ -180,7 +183,6 @@ describe('AcpProvider', () => {
       '../../src/providers/agentic-utils',
     );
     agenticUtils.initializeAgenticCache.mockResolvedValue({
-      shouldCache: false,
       shouldReadCache: false,
       shouldWriteCache: false,
     });
@@ -189,6 +191,7 @@ describe('AcpProvider', () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     vi.restoreAllMocks();
     cliState.basePath = originalBasePath;
   });
@@ -217,6 +220,12 @@ describe('AcpProvider', () => {
 
     it('should throw on missing config', () => {
       expect(() => new AcpProvider({})).toThrow("requires a 'command'");
+    });
+
+    it('rejects a misspelled working directory', () => {
+      expect(
+        () => new AcpProvider({ config: { command: 'x', working_di: '/tmp' } as any }),
+      ).toThrow('working_di');
     });
 
     it('should throw on invalid timeout', () => {
@@ -301,10 +310,28 @@ describe('AcpProvider', () => {
         },
       });
 
-      const result = await provider.callApi('This will timeout');
+      vi.useFakeTimers();
+      const call = provider.callApi('This will timeout');
+      await vi.waitFor(() => expect(mockClientBuilder.connectWith).toHaveBeenCalled());
+      await vi.advanceTimersByTimeAsync(1000);
+      const result = await call;
 
       expect(result.error).toContain('timed out');
       expect(result.metadata?.stopReason).toBe('timeout');
+    });
+
+    it('handles an asynchronous spawn error before the session starts', async () => {
+      mockChildProcess.once.mockImplementationOnce((event, listener) => {
+        expect(event).toBe('error');
+        queueMicrotask(() =>
+          listener(Object.assign(new Error('spawn fixture ENOENT'), { code: 'ENOENT' })),
+        );
+      });
+      mockClientBuilder.connectWith.mockImplementationOnce(() => new Promise(() => {}));
+      const provider = new AcpProvider({ config: { command: 'missing-agent' } });
+      expect(await provider.callApi('hello')).toMatchObject({
+        error: 'ACP execution failed: spawn fixture ENOENT',
+      });
     });
 
     it('should handle connection failure gracefully', async () => {
@@ -343,7 +370,6 @@ describe('AcpProvider', () => {
         '../../src/providers/agentic-utils',
       );
       agenticUtils.initializeAgenticCache.mockResolvedValueOnce({
-        shouldCache: true,
         shouldReadCache: true,
         shouldWriteCache: true,
         cache: {} as any,
@@ -526,8 +552,14 @@ describe('AcpProvider', () => {
 
       await provider.callApi('Hello');
 
-      // Verify spawn was called (the env is passed to spawn via child_process)
-      expect(mockClientBuilder.connectWith).toHaveBeenCalled();
+      const { spawn } = await import('node:child_process');
+      expect(spawn).toHaveBeenCalledWith(
+        'kiro-cli',
+        ['acp'],
+        expect.objectContaining({
+          env: expect.objectContaining({ CUSTOM_VAR: 'test-value' }),
+        }),
+      );
     });
   });
 

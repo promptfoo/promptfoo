@@ -7,17 +7,10 @@
  * - The agent must be authenticated (signed in via its own auth flow)
  * - @agentclientprotocol/sdk package installed
  *
- * Run with:
- *   npx vitest run acp.e2e
- *
- * Agent configuration:
- *   Set ACP_E2E_COMMAND to override the default agent (claude).
- *   Example: ACP_E2E_COMMAND=codex npx vitest run acp.e2e
- *
- * Note: Tests will be skipped automatically if prerequisites are not met.
+ * Opt in to live agent calls with ACP_E2E_COMMAND, for example:
+ *   ACP_E2E_COMMAND="kiro-cli acp" npx vitest run acp.e2e
  */
 
-import { execSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 
@@ -32,20 +25,8 @@ const hasSdk = fs.existsSync(
   path.resolve(process.cwd(), 'node_modules/@agentclientprotocol/sdk/package.json'),
 );
 
-// Check if the agent binary is available
-const DEFAULT_COMMAND = process.env.ACP_E2E_COMMAND || 'kiro-cli acp';
-
-function isAgentAvailable(command: string): boolean {
-  // Check if the first word (binary) exists in PATH
-  try {
-    execSync(`command -v ${command.split(' ')[0]}`, { stdio: 'pipe' });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-const hasAgent = isAgentAvailable(DEFAULT_COMMAND);
+const command = process.env.ACP_E2E_COMMAND?.trim() ?? '';
+const hasAgent = command.length > 0;
 
 import { AcpProvider } from '../../src/providers/acp';
 
@@ -55,20 +36,13 @@ describe('AcpProvider E2E', () => {
   // Skip all tests if no agent or SDK not installed
   const describeOrSkip = hasAgent && hasSdk ? describe : describe.skip;
 
-  if (!hasAgent) {
-    it(`Skipped: '${DEFAULT_COMMAND}' not found in PATH`, () => {});
-  }
-  if (!hasSdk) {
-    it('Skipped: @agentclientprotocol/sdk not installed', () => {});
-  }
-
   describeOrSkip('Real ACP Agent Integration', () => {
     it(
       'should complete a simple single-turn prompt',
       async () => {
         const provider = new AcpProvider({
           config: {
-            command: DEFAULT_COMMAND.split(' '),
+            command: command.split(/\s+/),
             timeout: 60,
           },
         });
@@ -91,7 +65,7 @@ describe('AcpProvider E2E', () => {
       async () => {
         const provider = new AcpProvider({
           config: {
-            command: DEFAULT_COMMAND.split(' '),
+            command: command.split(/\s+/),
             working_dir: process.cwd(),
             timeout: 90,
           },
@@ -122,7 +96,7 @@ describe('AcpProvider E2E', () => {
       async () => {
         const provider = new AcpProvider({
           config: {
-            command: DEFAULT_COMMAND.split(' '),
+            command: command.split(/\s+/),
             timeout: 3, // Very short timeout
           },
         });
@@ -146,7 +120,7 @@ describe('AcpProvider E2E', () => {
       async () => {
         const provider = new AcpProvider({
           config: {
-            command: DEFAULT_COMMAND.split(' '),
+            command: command.split(/\s+/),
             working_dir: '/tmp',
             permission_mode: 'auto_approve',
             timeout: 60,
@@ -167,7 +141,7 @@ describe('AcpProvider E2E', () => {
       async () => {
         const provider = new AcpProvider({
           config: {
-            command: DEFAULT_COMMAND.split(' '),
+            command: command.split(/\s+/),
             model: 'claude-sonnet-4-5',
             timeout: 60,
           },

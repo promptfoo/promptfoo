@@ -16,6 +16,7 @@ import {
   initializeAgenticCache,
   resolveAgenticWorkingDir,
 } from './agentic-utils';
+import { assertIsolatedWorkingDir, clearRepositoryEnv } from './agentWorkspace';
 import { providerRegistry } from './providerRegistry';
 import { shouldBustProviderCache } from './shared';
 
@@ -38,6 +39,8 @@ export interface AcpProviderConfig {
 
   /** Working directory for the agent */
   working_dir?: string;
+  copy_working_dir?: boolean | 'git' | 'copy';
+  basePath?: string;
 
   /** Per-session timeout in seconds (default: 300) */
   timeout?: number;
@@ -63,6 +66,8 @@ export interface AcpToolCallEntry {
   id: string;
   name: string;
   is_error?: boolean;
+  startTime: number;
+  endTime?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -71,7 +76,10 @@ export interface AcpToolCallEntry {
 
 const configCacheKey = randomBytes(32);
 
-const AcpConfigSchema = z.object({
+const AcpConfigSchema = z.strictObject({
+  basePath: z.string().optional(),
+  linkedTargetId: z.string().optional(),
+  copy_working_dir: z.union([z.boolean(), z.enum(['git', 'copy'])]).optional(),
   command: z.union([z.string().min(1), z.array(z.string().min(1)).min(1)]),
   working_dir: z.string().optional(),
   timeout: z.number().positive().optional(),
@@ -160,16 +168,26 @@ export class AcpProvider implements ApiProvider {
     if (signal.aborted) {
       return { output: '', error: 'ACP call aborted' };
     }
-    // Resolve working directory
+    const workspaceConfig = {
+      working_dir: context?.prompt?.config?.working_dir ?? this.config.working_dir,
+      copy_working_dir: context?.prompt?.config?.copy_working_dir ?? this.config.copy_working_dir,
+    };
+    let isolated: boolean;
+    try {
+      isolated = assertIsolatedWorkingDir(workspaceConfig);
+    } catch (error) {
+      return { error: String(error) };
+    }
     const workingDir =
-      resolveAgenticWorkingDir(this.config.working_dir, cliState.basePath) || process.cwd();
+      resolveAgenticWorkingDir(
+        workspaceConfig.working_dir,
+        this.config.basePath ?? cliState.basePath,
+      ) || process.cwd();
 
     // Check cache
-    const { cached, cacheResult } = await this.checkCache(
-      prompt,
-      workingDir,
-      shouldBustProviderCache(context),
-    );
+    const { cached, cacheResult } = isolated
+      ? {}
+      : await this.checkCache(prompt, workingDir, shouldBustProviderCache(context));
     if (signal.aborted) {
       return { output: '', error: 'ACP call aborted' };
     }
@@ -193,7 +211,7 @@ export class AcpProvider implements ApiProvider {
 
         let result: ProviderResponse;
         try {
-          result = await this.executeAcp(prompt, workingDir, signal);
+          result = await this.executeAcp(prompt, workingDir, isolated, signal);
         } catch (err: unknown) {
           const error = err instanceof Error ? err.message : String(err);
           result = {
@@ -244,6 +262,7 @@ export class AcpProvider implements ApiProvider {
   private async executeAcp(
     prompt: string,
     workingDir: string,
+    isolated: boolean,
     abortSignal?: AbortSignal,
   ): Promise<ProviderResponse> {
     const startTime = Date.now();
@@ -269,6 +288,9 @@ export class AcpProvider implements ApiProvider {
 
     // Build environment
     const agentEnv = this.buildEnv();
+    if (isolated) {
+      clearRepositoryEnv(agentEnv);
+    }
 
     // Collect results
     const textChunks: string[] = [];
@@ -332,11 +354,14 @@ export class AcpProvider implements ApiProvider {
           if (tcId) {
             let tc = toolMap.get(tcId);
             if (!tc) {
-              tc = { id: tcId, name: '' };
+              tc = { id: tcId, name: '', startTime: Date.now() };
               toolMap.set(tcId, tc);
             }
             if (update.title && !tc.name) {
               tc.name = update.title;
+            }
+            if (update.status === 'completed' || update.status === 'failed') {
+              tc.endTime = Date.now();
             }
             if (update.status === 'failed') {
               tc.is_error = true;
@@ -441,8 +466,18 @@ export class AcpProvider implements ApiProvider {
       if (abortSignal && abortHandler) {
         abortSignal.removeEventListener('abort', abortHandler);
       }
-      if (agentProcess && !agentProcess.killed) {
-        agentProcess.kill();
+      if (agentProcess?.pid && agentProcess.exitCode === null && agentProcess.signalCode === null) {
+        const child = agentProcess;
+        // ACP agents are per-call processes. Give them a chance to exit cleanly,
+        // then terminate an unresponsive agent so cancellation cannot hang the eval.
+        const forceExit = setTimeout(() => {
+          if (child.exitCode === null && child.signalCode === null) {
+            child.kill('SIGKILL');
+          }
+        }, 1000);
+        forceExit.unref();
+        child.once('exit', () => clearTimeout(forceExit));
+        child.kill();
       }
     }
 
@@ -480,13 +515,13 @@ export class AcpProvider implements ApiProvider {
         }
 
         const span = tracer.startSpan(`tool ${tc.name || 'unknown'}`, {
-          startTime: Date.now(),
+          startTime: tc.startTime,
           attributes,
         });
         span.setStatus({
           code: tc.is_error ? SpanStatusCode.ERROR : SpanStatusCode.OK,
         });
-        span.end();
+        span.end(tc.endTime ?? Date.now());
       }
     } catch (err) {
       logger.debug(`[ACP] Failed to emit tool spans: ${err}`);
@@ -504,8 +539,12 @@ export class AcpProvider implements ApiProvider {
     if (Array.isArray(cmd)) {
       return cmd;
     }
-    // Split simple string command
-    return cmd.split(/\s+/);
+    if (/["']/.test(cmd)) {
+      throw new Error(
+        'Use a command array for ACP executable paths or arguments containing quotes or spaces',
+      );
+    }
+    return cmd.trim().split(/\s+/);
   }
 
   private buildEnv(): Record<string, string> {
@@ -579,7 +618,7 @@ export class AcpProvider implements ApiProvider {
         .digest('hex');
       const cacheResult = await initializeAgenticCache(
         { cacheKeyPrefix: 'acp', workingDir, bustCache },
-        { prompt, configFingerprint },
+        { prompt, workingDir, configFingerprint },
       );
       const cached = await getCachedResponse(cacheResult);
       if (cached) {

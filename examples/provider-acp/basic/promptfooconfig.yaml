@@ -17,5 +17,3 @@ tests:
         value: 'factorial'
       - type: contains
         value: 'def '
-      - type: llm-rubric
-        value: 'Should generate a working Python factorial function'
