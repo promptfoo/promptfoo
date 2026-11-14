@@ -1628,6 +1628,30 @@ export default class Eval {
     }
   }
 
+  /** Count the tests exposed by the copied eval's table and export. */
+  async getCopyTestCount(): Promise<number> {
+    if (!this.oldResults) {
+      return this.getResultsCount();
+    }
+
+    // When both formats are present, the table and export use the legacy payload.
+    const { table, results } = this.oldResults;
+    if (Array.isArray(table?.body) && table.body.every((row) => Array.isArray(row?.outputs))) {
+      return table.body.length;
+    }
+
+    // Older flat rows can omit testIdx. Prompt outputs and equal vars cannot identify tests.
+    const indices = new Set<number>();
+    if (Array.isArray(results)) {
+      for (const row of results) {
+        if (Number.isSafeInteger(row?.testIdx) && row.testIdx >= 0) {
+          indices.add(row.testIdx);
+        }
+      }
+    }
+    return indices.size;
+  }
+
   /**
    * Creates a deep copy of this eval including all results.
    * Uses batching to avoid memory exhaustion on large evals.
@@ -1639,7 +1663,7 @@ export default class Eval {
     const copyDescription = description || `${this.description || 'Evaluation'} (Copy)`;
 
     // Get distinct test count for logging and progress tracking
-    const testCount = distinctTestCount ?? (await this.getResultsCount());
+    const testCount = distinctTestCount ?? (await this.getCopyTestCount());
 
     logger.info('Starting eval copy', {
       sourceEvalId: this.id,
@@ -1653,12 +1677,38 @@ export default class Eval {
 
     const newPrompts = structuredClone(this.prompts);
     const newVars = this.vars ? structuredClone(this.vars) : [];
+    const legacyResults = this.oldResults ? structuredClone(this.oldResults) : undefined;
+    if (legacyResults) {
+      // Like normalized copies, legacy copies do not inherit the source's traces.
+      const unlinkTrace = (value: unknown) => {
+        if (!value || typeof value !== 'object' || Array.isArray(value)) {
+          return;
+        }
+        const result = value as Record<string, unknown>;
+        delete result.traceId;
+        delete result.evaluationId;
+        const metadata = result.metadata;
+        if (metadata && typeof metadata === 'object' && !Array.isArray(metadata)) {
+          result.metadata = stripTraceLinkageFromMetadata(metadata as Record<string, unknown>);
+        }
+      };
+      if (Array.isArray(legacyResults.results)) {
+        legacyResults.results.forEach(unlinkTrace);
+      }
+      if (Array.isArray(legacyResults.table?.body)) {
+        for (const row of legacyResults.table.body) {
+          if (row && typeof row === 'object' && !Array.isArray(row) && Array.isArray(row.outputs)) {
+            row.outputs.forEach(unlinkTrace);
+          }
+        }
+      }
+    }
     const author = getAuthor();
 
     const db = await getDb();
 
     // Copy eval, results, and relationships within transaction for atomicity
-    let copiedCount = 0;
+    let copiedCount = Array.isArray(legacyResults?.results) ? legacyResults.results.length : 0;
     await db.transaction(async (tx) => {
       // Create the new eval record first
       await tx
@@ -1669,7 +1719,8 @@ export default class Eval {
           author,
           description: copyDescription,
           config: sanitizeTracingConfigForPersistence(newConfig),
-          results: {},
+          // Legacy evals keep their results, table, and statistics in this column.
+          results: legacyResults ?? {},
           prompts: newPrompts,
           vars: newVars,
           runtimeOptions: sanitizeRuntimeOptions(this.runtimeOptions),

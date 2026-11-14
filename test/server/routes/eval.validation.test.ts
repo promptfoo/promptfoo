@@ -161,11 +161,11 @@ describe('Eval Routes - Zod Validation', () => {
 
     it('should return 201 with valid request', async () => {
       const mockCopy = vi.fn();
-      const mockGetResultsCount = vi.fn();
+      const mockGetCopyTestCount = vi.fn();
       const mockEval = {
         id: 'test-id',
         copy: mockCopy,
-        getResultsCount: mockGetResultsCount,
+        getCopyTestCount: mockGetCopyTestCount,
       };
 
       const copiedEval = {
@@ -173,7 +173,7 @@ describe('Eval Routes - Zod Validation', () => {
       };
 
       mockFindById.mockResolvedValue(mockEval);
-      mockGetResultsCount.mockResolvedValue(10);
+      mockGetCopyTestCount.mockResolvedValue(10);
       mockCopy.mockResolvedValue(copiedEval);
 
       const response = await api.post('/api/eval/test-id/copy').send({
@@ -197,11 +197,11 @@ describe('Eval Routes - Zod Validation', () => {
 
     it('should return 201 when description is omitted (optional field)', async () => {
       const mockCopy = vi.fn();
-      const mockGetResultsCount = vi.fn();
+      const mockGetCopyTestCount = vi.fn();
       const mockEval = {
         id: 'test-id',
         copy: mockCopy,
-        getResultsCount: mockGetResultsCount,
+        getCopyTestCount: mockGetCopyTestCount,
       };
 
       const copiedEval = {
@@ -209,7 +209,7 @@ describe('Eval Routes - Zod Validation', () => {
       };
 
       mockFindById.mockResolvedValue(mockEval);
-      mockGetResultsCount.mockResolvedValue(5);
+      mockGetCopyTestCount.mockResolvedValue(5);
       mockCopy.mockResolvedValue(copiedEval);
 
       const response = await api.post('/api/eval/test-id/copy').send({});
