@@ -471,4 +471,28 @@ describe('parseFileUrl', () => {
       functionName: 'functionName',
     });
   });
+
+  it.each([
+    ['file://grader.cjs:check:detail', 'grader.cjs', 'check:detail'],
+    ['file://C:/graders/grader.cjs:check:detail', 'C:/graders/grader.cjs', 'check:detail'],
+    [
+      'file://path:with:colons/grader.cjs:check:detail',
+      'path:with:colons/grader.cjs',
+      'check:detail',
+    ],
+    ['file://grader.cjs:ns:a:b', 'grader.cjs', 'ns:a:b'],
+  ])('should keep a colon-containing JavaScript export intact: %s', (fileUrl, filePath, fn) => {
+    expect(parseFileUrl(fileUrl)).toEqual({ filePath, functionName: fn });
+  });
+
+  it.each([
+    'file://callbacks/2026-05-27T12:00:00.js',
+    'file://./path/to/file:default.js',
+    'file://C:',
+    'file://grader.cjs:',
+    String.raw`file://grader.cjs:ns\fn`,
+    'file://grader.cjs:other.js',
+  ])('should still treat a path-shaped or empty suffix as part of the path: %s', (fileUrl) => {
+    expect(parseFileUrl(fileUrl)).toEqual({ filePath: fileUrl.slice('file://'.length) });
+  });
 });

@@ -264,6 +264,19 @@ describe('Script value resolution', () => {
 
       expect(result.pass).toBe(false);
     });
+
+    it('should resolve a JavaScript export whose name contains a colon', async () => {
+      const result = await runAssertion({
+        assertion: createStringAssertion('equals', 'file://rubric-generator.cjs:check:detail'),
+        test: { vars: {} },
+        providerResponse: {
+          output: 'COLON_EXPORT_54321',
+          tokenUsage: { total: 0, prompt: 0, completion: 0 },
+        },
+      });
+
+      expect(result.pass).toBe(true);
+    });
   });
 
   describe('regex with file:// script', () => {
