@@ -18,6 +18,7 @@ import { getAjv } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
 import { resolveProviderApiKey } from '../credentials';
 import { resolveProviderEnv } from '../env';
+import { calculateLiveCost } from '../livePricing';
 import { encodePcmToWav } from '../pcm';
 import {
   calculateCost,
@@ -688,6 +689,7 @@ function getGoogleCatalogCost(
  * @param cachedPromptTokens - Number of cached tokens included in the prompt token count
  * @param cachedAudioPromptTokens - Number of cached audio tokens included in the prompt token count
  * @param cachedImagePromptTokens - Number of cached image tokens included in the prompt token count
+ * @param imageCompletionTokens - Image output tokens that cannot be priced using live text rates
  * @returns The calculated cost in dollars, or undefined if it cannot be calculated
  */
 export function calculateGoogleCost(
@@ -707,6 +709,7 @@ export function calculateGoogleCost(
   vertexRegion?: string,
   requestedServiceTier?: unknown,
   pricingTime = Date.now(),
+  imageCompletionTokens?: number,
 ): number | undefined {
   const timestamp = Number.isFinite(pricingTime) ? pricingTime : Date.now();
   const pricingModelName = isVertexMode
@@ -733,7 +736,33 @@ export function calculateGoogleCost(
     usesNonGlobalVertexEndpoint,
   );
   if (!baseModelCost) {
-    return undefined;
+    const serviceTier = normalizeGoogleServiceTier(
+      actualServiceTier ??
+        requestedServiceTier ??
+        config.service_tier ??
+        (config.passthrough as { service_tier?: unknown } | undefined)?.service_tier ??
+        (config.passthrough as { serviceTier?: unknown } | undefined)?.serviceTier,
+    );
+    if (
+      model ||
+      isVertexMode ||
+      (serviceTier !== undefined && serviceTier !== 'standard') ||
+      audioPromptTokens ||
+      audioCompletionTokens ||
+      videoCompletionTokens ||
+      imageCompletionTokens ||
+      imagePromptTokens ||
+      cachedAudioPromptTokens ||
+      cachedImagePromptTokens
+    ) {
+      return undefined;
+    }
+    const cacheRead = clampCachedTokens(cachedPromptTokens, promptTokens);
+    return calculateLiveCost(modelName, config, {
+      input: promptTokens - cacheRead,
+      output: completionTokens,
+      cacheRead,
+    });
   }
 
   const vertexRegionalMultiplier =
@@ -925,6 +954,7 @@ export function calculateGoogleCostFromUsage(
     vertexRegion,
     requestedServiceTier,
     pricingTime,
+    getGoogleModalityTokenCount(responseDetails, ['IMAGE']),
   );
 }
 

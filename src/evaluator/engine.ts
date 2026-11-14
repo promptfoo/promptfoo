@@ -29,7 +29,7 @@ import {
 import { generateIdFromPrompt } from '../prompts/id';
 import { maybeEmitAzureOpenAiWarning } from '../providers/azure/warnings';
 import { providerRegistry } from '../providers/providerRegistry';
-import { isPromptfooSampleTarget } from '../providers/shared';
+import { isPromptfooSampleTarget, warmLivePricing } from '../providers/shared';
 import { redteamProviderManager } from '../redteam/providers/shared';
 import { RateLimitRegistry } from '../scheduler';
 import { withProviderCallExecutionContext } from '../scheduler/providerCallExecutionContext';
@@ -4210,6 +4210,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         otelInitialized = true;
       }
 
+      await warmLivePricing(deadline.providerAbortSignal);
       return await this._runEvaluation(deadline);
     } catch (error) {
       evaluationError = error;
