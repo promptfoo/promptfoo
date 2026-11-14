@@ -24,7 +24,7 @@ export AZURE_API_KEY=your-api-key
 | Provider  | Model                                    | Label         |
 | --------- | ---------------------------------------- | ------------- |
 | OpenAI    | `gpt-5.1`                                | gpt-5.1       |
-| Anthropic | `claude-sonnet-4-6`                      | claude-sonnet |
+| Anthropic | `claude-sonnet-5`                        | claude-sonnet |
 | Meta      | `Llama-4-Maverick-17B-128E-Instruct-FP8` | llama-4       |
 | Mistral   | `Mistral-Large-2411`                     | mistral-large |
 

@@ -37,9 +37,10 @@ The Sequence Provider:
 
 This example sends three related prompts and runs assertions on their combined output:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
-  - openai:chat:gpt-5.6-luna
+  - openai:gpt-6-luna
 
 prompts:
   - '{{prompt}}'

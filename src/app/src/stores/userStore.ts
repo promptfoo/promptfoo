@@ -5,6 +5,7 @@ interface UserState {
   email: string | null;
   userId: string | null;
   isLoading: boolean;
+  authVersion: number;
   setEmail: (email: string) => void;
   setUserId: (userId: string) => void;
   fetchEmail: () => Promise<void>;
@@ -17,7 +18,9 @@ export const useUserStore = create<UserState>((set, getState) => ({
   email: null,
   userId: null,
   isLoading: true,
-  setEmail: (email: string) => set({ email }),
+  authVersion: 0,
+  // The same email can authenticate with different cloud credentials or organizations.
+  setEmail: (email: string) => set((state) => ({ email, authVersion: state.authVersion + 1 })),
   setUserId: (userId: string) => set({ userId }),
   fetchEmail: async () => {
     if (getState().email) {
@@ -58,18 +61,21 @@ export const useUserStore = create<UserState>((set, getState) => ({
         },
       });
 
-      if (response.ok) {
-        set({ email: null, userId: null, isLoading: false });
-      } else {
+      if (!response.ok) {
         console.error('Logout failed');
-        // Clear local state even if logout API call fails
-        set({ email: null, userId: null, isLoading: false });
       }
     } catch (error) {
       console.error('Error during logout:', error);
-      // Clear local state even if API call fails
-      set({ email: null, userId: null, isLoading: false });
+    } finally {
+      // Clear local state even if logout fails.
+      getState().clearUser();
     }
   },
-  clearUser: () => set({ email: null, userId: null, isLoading: false }),
+  clearUser: () =>
+    set((state) => ({
+      email: null,
+      userId: null,
+      isLoading: false,
+      authVersion: state.authVersion + 1,
+    })),
 }));

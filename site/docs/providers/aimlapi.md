@@ -51,12 +51,14 @@ You can omit the type to default to chat mode:
 aimlapi:<model_name>
 ```
 
+For Claude 5, set `omitDefaults: true` to omit Promptfoo's default `temperature: 0`.
+Leave sampling parameters unset in your config and environment; explicit values still apply.
+
 ## Configuration
 
 Configure the provider in your promptfoo configuration file:
 
-```yaml title="promptfooconfig.yaml"
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+```yaml
 providers:
   - id: aimlapi:chat:google/gemini-3-5-flash
     config:
@@ -110,7 +112,9 @@ Use the model ID shown in the [AI/ML API catalog](https://aimlapi.com/models), i
 providers:
   - aimlapi:chat:deepseek/deepseek-v4-pro
   - aimlapi:chat:openai/gpt-5.6-luna
-  - aimlapi:chat:anthropic/claude-sonnet-5
+  - id: aimlapi:chat:anthropic/claude-sonnet-5
+    config:
+      omitDefaults: true
 
 prompts:
   - 'Explain {{concept}} in simple terms'

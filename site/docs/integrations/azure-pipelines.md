@@ -163,14 +163,14 @@ Test across multiple configurations or models in parallel:
 strategy:
   matrix:
     gpt:
-      MODEL: 'gpt-5.1'
+      PROVIDER: 'openai:gpt-5.1'
     claude:
-      MODEL: 'claude-sonnet-4-5-20250929'
+      PROVIDER: 'anthropic:claude-sonnet-5'
 
 steps:
   - script: |
-      npx promptfoo eval --providers.0.config.model=$(MODEL)
-    displayName: 'Test with $(MODEL)'
+      npx promptfoo eval --providers "$(PROVIDER)"
+    displayName: 'Test with $(PROVIDER)'
     env:
       OPENAI_API_KEY: $(OPENAI_API_KEY)
       ANTHROPIC_API_KEY: $(ANTHROPIC_API_KEY)

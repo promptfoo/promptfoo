@@ -125,12 +125,14 @@ prompts:
 
 Some applications generate their prompts dynamically depending on variables. For example, suppose we want to determine the prompt based on the user's destination:
 
+Keep `{{query}}` as a literal placeholder so Promptfoo can preserve red team inputs as data when rendering the prompt.
+
 ```python
 def get_prompt(context):
-  if context['vars']['destination'] === 'Australia':
-    return f"Act as a travel agent, mate: {{query}}"
+  if context['vars']['destination'] == 'Australia':
+    return "Act as a travel agent, mate: {{query}}"
 
-  return f"Act as a travel agent and help the user plan their trip. Be friendly and concise. User query: {{query}}"
+  return "Act as a travel agent and help the user plan their trip. Be friendly and concise. User query: {{query}}"
 
 ```
 
@@ -146,10 +148,10 @@ The equivalent Javascript is also supported:
 ```js
 function getPrompt(context) {
   if (context.vars.destination === 'Australia') {
-    return `Act as a travel agent, mate: ${context.query}`;
+    return 'Act as a travel agent, mate: {{query}}';
   }
 
-  return `Act as a travel agent and help the user plan their trip. Be friendly and concise. User query: ${context.query}`;
+  return 'Act as a travel agent and help the user plan their trip. Be friendly and concise. User query: {{query}}';
 }
 ```
 
@@ -166,7 +168,7 @@ You should choose at least one target. If desired, set multiple in order to comp
 ```yaml
 targets:
   - openai:gpt-5
-  - anthropic:claude-sonnet-4-6
+  - anthropic:claude-sonnet-5
   - ollama:chat:llama4:scout
 ```
 

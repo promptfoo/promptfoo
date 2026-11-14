@@ -370,7 +370,16 @@ describe('writeOutput', () => {
       const restoreEnv = mockProcessEnv(
         Object.fromEntries(Object.keys(flags).map((key) => [key, String(!strip)])),
       );
+      const grader = { id: 'echo', prompts: ['private-nested-selector'] };
+      const application = { prompts: ['ordinary-map-application'] };
+      const graderMap = {
+        text: grader,
+        label: 'ordinary map label',
+        config: { prompts: ['ordinary map configuration'] },
+        application,
+      };
       const testCase = {
+        options: { provider: graderMap },
         vars: { input: 'private-input' },
         metadata: { note: 'private-note' },
         providerOutput: 'private-output',
@@ -394,10 +403,25 @@ describe('writeOutput', () => {
           ],
         },
       ]);
-      const eval_ = new Eval({ env: flags, tests: [testCase], prompts: ['private-config-prompt'] });
+      const provider = { id: 'echo', prompts: ['private-provider-selector'] };
+      const providerPromptMap = { echo: ['private-explicit-selector'] };
+      const config = {
+        providerPromptMap,
+        env: flags,
+        tests: [testCase],
+        prompts: ['private-config-prompt'],
+        providers: [provider],
+      };
+      const eval_ = new Eval(config);
       await eval_.addResult(
         createEvaluateResult({
-          prompt: { raw: 'private-prompt', template: 'private-template', label: 'label' },
+          prompt: {
+            raw: 'private-prompt',
+            template: 'private-template',
+            label: 'label',
+            config: { provider: grader },
+          },
+          provider,
           testCase,
           response: { output: 'private-output', raw: 'private-raw-output' },
           metadata: { note: 'private-note' },
@@ -418,8 +442,13 @@ describe('writeOutput', () => {
         expect(JSON.stringify(resultsFile).includes('private-')).toBe(!strip);
         const output = await createOutputData(eval_, null);
         expect(JSON.stringify(output).includes('private-')).toBe(!strip);
+        expect(Object.hasOwn(output.config, 'providerPromptMap')).toBe(!strip);
         expect(output.results.results[0]).toMatchObject({ success: true, score: 1 });
+        expect(output.config).toMatchObject({
+          tests: [{ options: { provider: { application, config: graderMap.config } } }],
+        });
         if (!strip) {
+          expect(output.config).toMatchObject({ providerPromptMap });
           expect(output.results.results[0]).toMatchObject({
             prompt: { raw: 'private-prompt' },
             testCase,
@@ -441,8 +470,13 @@ describe('writeOutput', () => {
             .join('');
           expect(contents, extension).not.toBe('');
           expect(contents.includes('private-'), extension).toBe(!strip);
+          expect(contents, extension).toContain('ordinary-map-application');
         }
 
+        expect(grader.prompts).toEqual(['private-nested-selector']);
+        expect(provider.prompts).toEqual(['private-provider-selector']);
+        expect(eval_.config.providers).toEqual([provider]);
+        expect(eval_.config).toMatchObject({ providerPromptMap });
         expect(eval_.config.tests).toEqual([testCase]);
         expect(eval_.config.prompts).toEqual(['private-config-prompt']);
         expect(eval_.prompts[0].template).toBe('private-template');
@@ -1199,36 +1233,138 @@ describe('writeOutput', () => {
         expect(names[0][0]).toContain('🚀...');
       } else if (secondId !== 'echo') {
         expect(names[0][0]).toMatch(/^\[target\] prompt 1 \([a-f0-9]{16}\)$/);
-        expect(names[0][1]).toBe('[target] prompt 1');
+        expect(names[0][1]).toMatch(/^\[target\] prompt 1 \([a-f0-9]{16}\)$/);
       }
     },
   );
 
+  // A suite name reserves room for the uniqueness suffix, so it can show fewer
+  // characters than the testcase name built from the same raw text.
   it.each([
-    ['hello\u000bworld', 'hello world'],
-    ['hello\u000cworld', 'hello world'],
-    ['a' + '🚀'.repeat(300), 'a' + '🚀'.repeat(254) + '...'],
-    ['x'.repeat(520) + '\u0000', 'x'.repeat(509) + '...'],
-    ['x'.repeat(512) + '\u0001', 'x'.repeat(509) + '...'],
-    ['y'.repeat(509) + 'ABC' + '\u0000'.repeat(20), 'y'.repeat(509) + '...'],
-  ])('preserves already-valid JUnit identities for %j', async (raw, expected) => {
-    const suite = await junitSuiteWithNames(raw);
-    expect(suite['@_name']).toBe('[' + expected + '] prompt 1');
-    expect(suite.testcase['@_name']).toBe('test 1: ' + expected);
+    { case: 'vertical tab', raw: 'hello\u000bworld', suite: 'hello world' },
+    { case: 'form feed', raw: 'hello\u000cworld', suite: 'hello world' },
+    { case: 'interior controls', raw: 'case \u0000 name', suite: 'case name' },
+    { case: 'surrounding controls', raw: ' \u0001 case \u0000  name \u001f ', suite: 'case name' },
+    {
+      case: 'astral characters past the limit',
+      raw: 'a' + '🚀'.repeat(300),
+      suite: 'a' + '🚀'.repeat(254) + '...',
+    },
+    {
+      case: 'a control inside the limit',
+      raw: 'x'.repeat(490) + '\u0000-v2',
+      suite: 'x'.repeat(490) + '-v2',
+    },
+    {
+      case: 'a control run inside the limit',
+      raw: 'x'.repeat(490) + '\u0000'.repeat(14) + 'XY',
+      suite: 'x'.repeat(490) + 'XY',
+    },
+    {
+      case: 'a control past the limit',
+      raw: 'x'.repeat(520) + '\u0000',
+      suite: 'x'.repeat(490) + '...',
+      testcase: 'x'.repeat(509) + '...',
+    },
+    {
+      case: 'a control just past the limit',
+      raw: 'x'.repeat(512) + '\u0001',
+      suite: 'x'.repeat(490) + '...',
+      testcase: 'x'.repeat(512),
+    },
+    {
+      case: 'a control run that frees up room',
+      raw: 'y'.repeat(509) + 'ABC' + '\u0000'.repeat(20),
+      suite: 'y'.repeat(490) + '...',
+      testcase: 'y'.repeat(509) + 'ABC',
+    },
+  ])(
+    'keeps visible JUnit text for $case',
+    async ({ raw, suite: expectedSuite, testcase = expectedSuite }) => {
+      const suite = await junitSuiteWithNames(raw);
+      expect(suite['@_name'].replace(/ \([a-f0-9]{16}\)$/, '')).toBe(
+        '[' + expectedSuite + '] prompt 1',
+      );
+      expect(suite.testcase['@_classname']).toBe(suite['@_name']);
+      expect(suite.testcase['@_name']).toBe('test 1: ' + testcase);
+    },
+  );
+
+  // Each pair renders to the same visible text once the forbidden character is
+  // removed, so only the uniqueness suffix keeps the two suites apart.
+  it.each([
+    ['a vertical tab collapses into a space', 'my\u000bmodel', 'my model'],
+    ['a form feed collapses into a space', 'my\u000cmodel', 'my model'],
+    ['clean whitespace collapses into a space', 'my  model', 'my model'],
+    [
+      'the forbidden character falls after the display limit',
+      `${'x'.repeat(600)}\u0000`,
+      'x'.repeat(600),
+    ],
+  ])('keeps suite identities distinct when %s', async (_scenario, sanitized, clean) => {
+    const eval_ = new Eval({});
+    for (const label of [sanitized, clean]) {
+      await eval_.addResult(createEvaluateResult({ provider: { id: 'echo', label } }));
+    }
+
+    const xml = await createJunitXml(eval_);
+    expect(() => new SaxesParser().write(xml).close()).not.toThrow();
+    const suites: { '@_name': string }[] = new XMLParser({ ignoreAttributes: false }).parse(xml)
+      .testsuites.testsuite;
+    const names = suites.map((suite) => suite['@_name']);
+    expect(names[0]).toMatch(/ \([a-f0-9]{16}\)$/);
+    expect(names[1]).toMatch(/ \([a-f0-9]{16}\)$/);
+    expect(new Set(names).size).toBe(2);
   });
 
   it.each([
-    ['case \u0000 name', 'case name'],
-    [' \u0001 case \u0000  name \u001f ', 'case name'],
-    ['x'.repeat(490) + '\u0000-v2', 'x'.repeat(490) + '-v2'],
-    ['x'.repeat(490) + '\u0000'.repeat(14) + 'XY', 'x'.repeat(490) + 'XY'],
-  ])('keeps visible JUnit text after removing controls from %j', async (raw, expected) => {
-    const suite = await junitSuiteWithNames(raw);
-    const nameWithoutHash = suite['@_name'].replace(/ \([a-f0-9]{16}\)$/, '');
-    expect(nameWithoutHash).toBe('[' + expected + '] prompt 1');
-    expect(suite.testcase['@_classname']).toBe(suite['@_name']);
-    expect(suite.testcase['@_name']).toBe('test 1: ' + expected);
-  });
+    ['shared', 'shared'],
+    ['shared', ' shared '],
+    ['x'.repeat(520) + 'a', 'x'.repeat(520) + 'b'],
+  ])(
+    'keeps colliding provider and prompt identities stable across result order: %j',
+    async (first, second) => {
+      const rows = [
+        ['provider-a', first, 'prompt-a', 0],
+        ['provider-b', second, 'prompt-a', 0],
+        ['provider-a', first, 'prompt-b', 1],
+        ['provider-b', second, 'prompt-b', 1],
+      ].map(([id, label, promptId, promptIdx]) =>
+        createEvaluateResult({
+          provider: { id: String(id), label: String(label) },
+          promptId: String(promptId),
+          promptIdx: Number(promptIdx),
+          testCase: { description: `${id}:${promptId}` },
+        }),
+      );
+      const identities: Map<string, string>[] = [];
+      for (const results of [rows, [...rows].reverse()]) {
+        const fetchResultsBatched = vi.fn(async function* () {
+          yield results.slice(0, 2);
+          yield results.slice(2);
+        });
+        const eval_ = {
+          persisted: true,
+          createdAt: new Date('2026-01-01'),
+          useOldResults: () => false,
+          fetchResultsBatched,
+        } as unknown as Eval;
+        const xml = await createJunitXml(eval_);
+        expect(() => new SaxesParser().write(xml).close()).not.toThrow();
+        const suites = new XMLParser({ ignoreAttributes: false }).parse(xml).testsuites.testsuite;
+        expect(fetchResultsBatched).toHaveBeenCalledOnce();
+        const identity = new Map<string, string>();
+        for (const suite of suites) {
+          expect(suite['@_name']).toMatch(/ \([a-f0-9]{16}\)$/);
+          expect(suite.testcase['@_classname']).toBe(suite['@_name']);
+          identity.set(suite.testcase['@_name'], suite['@_name']);
+        }
+        expect(new Set(identity.values()).size).toBe(4);
+        identities.push(identity);
+      }
+      expect(identities[1]).toEqual(identities[0]);
+    },
+  );
 
   it('removes forbidden name characters before fallback and length limits', async () => {
     const eval_ = new Eval({});
@@ -1265,7 +1401,7 @@ describe('writeOutput', () => {
     }
   });
 
-  it('keeps different clean prompts numbered under a shared display name', async () => {
+  it('distinguishes providers with matching labels even when their prompts differ', async () => {
     const eval_ = new Eval({});
     for (const id of ['first', 'second']) {
       await eval_.addResult(
@@ -1275,8 +1411,8 @@ describe('writeOutput', () => {
     const suites = new XMLParser({ ignoreAttributes: false }).parse(await createJunitXml(eval_))
       .testsuites.testsuite;
     expect(suites).toMatchObject([
-      { '@_name': '[shared] prompt 1' },
-      { '@_name': '[shared] prompt 2' },
+      { '@_name': expect.stringMatching(/^\[shared\] prompt 1 \([a-f0-9]{16}\)$/) },
+      { '@_name': expect.stringMatching(/^\[shared\] prompt 1 \([a-f0-9]{16}\)$/) },
     ]);
   });
 

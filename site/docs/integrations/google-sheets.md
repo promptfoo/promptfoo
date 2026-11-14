@@ -19,7 +19,7 @@ description: 'Public Google Sheet Example'
 prompts:
   - 'Please translate the following text to {{language}}: {{input}}'
 providers:
-  - anthropic:messages:claude-sonnet-4-6
+  - anthropic:messages:claude-sonnet-5
   - openai:chat:gpt-5
 // highlight-start
 tests: https://docs.google.com/spreadsheets/d/1eqFnv1vzkPvS7zG-mYsqNDwOzvSaiIAsKB3zKg9H18c/edit?usp=sharing
@@ -41,13 +41,9 @@ Swahili,Hello world,similar(0.8):hello world
 
 For private sheets, you'll need to set up Google's Default Application Credentials:
 
-1. **Install the authenticated Sheets package**
+1. **Check the optional package for authenticated reads and writes**
 
-   ```bash
-   npm install @googleapis/sheets
-   ```
-
-   `@googleapis/sheets` is an optional runtime dependency. Public-sheet CSV imports do not need it, but private-sheet reads and Google Sheets output writes do.
+   Standard npm installs include the package for your Promptfoo version. Public-sheet CSV imports work without it. If you omitted optional dependencies, use the package named in the CLI error. Promptfoo 0.125.1 uses `npm install @googleapis/sheets`. Builds that make Sheets REST requests through Google Auth use `npm install google-auth-library`. Run the command in the project where Promptfoo is installed, or add `-g` for a global npm installation.
 
 2. **Set Up Authentication**
    - Create a [service account](https://console.cloud.google.com/iam-admin/serviceaccounts) in Google Cloud
@@ -108,9 +104,9 @@ This behavior helps prevent accidental data overwrites while keeping your evalua
 
 Results are written with columns for test variables followed by prompt outputs. Prompt columns include the provider in the header using the format `[provider] prompt-label`. For example, with two providers testing the same prompt:
 
-| language | input       | [openai:gpt-5] Translate | [anthropic:claude-sonnet-4-5] Translate |
-| -------- | ----------- | ------------------------ | --------------------------------------- |
-| French   | Hello world | Bonjour le monde         | Bonjour monde                           |
+| language | input       | [openai:gpt-5] Translate | [anthropic:claude-sonnet-5] Translate |
+| -------- | ----------- | ------------------------ | ------------------------------------- |
+| French   | Hello world | Bonjour le monde         | Bonjour monde                         |
 
 ## Using Custom Providers for Model-Graded Metrics
 
@@ -122,7 +118,7 @@ prompts:
   - file://prompt1.txt
   - file://prompt2.txt
 providers:
-  - anthropic:messages:claude-sonnet-4-6
+  - anthropic:messages:claude-sonnet-5
   - openai:chat:gpt-5-mini
 tests: https://docs.google.com/spreadsheets/d/1eqFnv1vzkPvS7zG-mYsqNDwOzvSaiIAsKB3zKg9H18c/edit?usp=sharing
 defaultTest:
