@@ -345,9 +345,7 @@ describe('PythonProvider', () => {
 
       const result = await provider.callApi('test prompt');
 
-      expect(mockCache.get).toHaveBeenCalledWith(
-        expect.stringContaining('python:undefined:default:call_api:'),
-      );
+      expect(mockCache.get).toHaveBeenCalledWith(expect.stringMatching(/^python:v2:call_api:/));
       expect(mockPoolInstance.execute).not.toHaveBeenCalled();
       expect(result).toEqual({ output: 'cached result', cached: true });
     });
@@ -365,7 +363,7 @@ describe('PythonProvider', () => {
       await provider.callApi('test prompt');
 
       expect(mockCache.set).toHaveBeenCalledWith(
-        expect.stringContaining('python:undefined:default:call_api:'),
+        expect.stringMatching(/^python:v2:call_api:/),
         '{"output":"new result"}',
       );
     });
@@ -549,7 +547,7 @@ describe('PythonProvider', () => {
         cached: false,
       });
       expect(mockCache.set).toHaveBeenCalledWith(
-        'python:undefined:default:call_api:5633d479dfae75ba7a78914ee380fa202bd6126e7c6b7c22e3ebc9e1a6ddc871:test prompt:undefined:undefined',
+        expect.stringMatching(/^python:v2:call_api:[a-f0-9]{64}:[a-f0-9]{64}$/),
         '{"output":"fresh result"}',
       );
     });
@@ -575,11 +573,7 @@ describe('PythonProvider', () => {
       const cacheSetCalls = mockCache.set.mock.calls;
       expect(cacheSetCalls).toHaveLength(2);
 
-      // The first call should contain 'default' in the cache key
-      expect(cacheSetCalls[0][0]).toContain(':default:');
-
-      // The second call should contain the custom function name
-      expect(cacheSetCalls[1][0]).toContain(':custom_function:');
+      expect(cacheSetCalls[0][0]).not.toBe(cacheSetCalls[1][0]);
     });
 
     it('should not apply cached metadata to embedding results', async () => {
