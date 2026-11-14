@@ -1,8 +1,14 @@
 import { getProcessEnv } from '../../envars';
 import logger from '../../logger';
+import { isPrivateRangeGuardContextActive } from '../../util/fetch/guardContext';
 import { fetchWithProxy } from '../../util/fetch/index';
 import { renderVarsInObject } from '../../util/index';
-import { fetchOAuthToken, type OAuthTokenResult, TOKEN_REFRESH_BUFFER_MS } from '../../util/oauth';
+import {
+  fetchOAuthToken,
+  type OAuthTokenConfig,
+  type OAuthTokenResult,
+  TOKEN_REFRESH_BUFFER_MS,
+} from '../../util/oauth';
 import { sanitizeObject } from '../../util/sanitizer';
 import { waitForPromiseWithAbort } from '../shared';
 import { normalizeRenderedOAuthScopes } from './auth';
@@ -113,7 +119,11 @@ interface OAuthTokenCache extends OAuthTokenResult {
 const oauthTokenCache = new Map<string, OAuthTokenCache>();
 
 /**
- * Get the cache key for an OAuth config
+ * Get the cache key for an OAuth config. Secrets are deliberately not part
+ * of the key: the repo's cache-key hygiene rule forbids hashing raw secrets
+ * into cache keys, and a fast hash of a credential is exactly what CodeQL
+ * flags. Two credentials sharing a client id therefore share the cached
+ * token, which is the pre-existing upstream keying.
  */
 function getOAuthCacheKey(
   auth: MCPOAuthClientCredentialsAuth | MCPOAuthPasswordAuth,
@@ -234,6 +244,33 @@ export async function getOAuthTokenWithExpiry(
   }
 
   const cacheKey = getOAuthCacheKey(auth, tokenUrl);
+
+  // The token request is built once: the guarded path below and the shared
+  // in-flight path both fetch with it.
+  const tokenRequest: Omit<OAuthTokenConfig, 'signal'> = {
+    tokenUrl,
+    // Credentials must not follow a redirect away from a discovered endpoint
+    redirect: auth.tokenUrl ? undefined : 'error',
+    grantType: auth.grantType,
+    clientId: auth.clientId,
+    clientSecret: auth.clientSecret,
+    username: 'username' in auth ? auth.username : undefined,
+    password: 'password' in auth ? auth.password : undefined,
+    scopes: normalizeRenderedOAuthScopes(auth.scopes),
+  };
+
+  // Inside a guarded server route, never read the shared token cache or join
+  // an in-flight request: a token cached by an ordinary eval for a private
+  // tokenUrl would be handed to the guarded request without fetchOAuthToken
+  // ever running, so its tokenUrl validation would never happen and the
+  // ordinary eval's token would be attached to the public MCP request.
+  // Fetch fresh (the validation runs inside fetchOAuthToken) and do not store
+  // the result in the shared cache, so the guarded token never leaks back
+  // into ordinary evals either.
+  if (isPrivateRangeGuardContextActive()) {
+    return fetchOAuthToken({ signal, ...tokenRequest });
+  }
+
   const cached = oauthTokenCache.get(cacheKey);
   if (cached && cached.accessToken !== rejectedToken && Date.now() < cached.refreshAt) {
     return { accessToken: cached.accessToken, expiresAt: cached.expiresAt };
@@ -244,15 +281,7 @@ export async function getOAuthTokenWithExpiry(
     const controller = new AbortController();
     const promise = fetchOAuthToken({
       signal: controller.signal,
-      tokenUrl,
-      // Credentials must not follow a redirect away from a discovered endpoint
-      redirect: auth.tokenUrl ? undefined : 'error',
-      grantType: auth.grantType,
-      clientId: auth.clientId,
-      clientSecret: auth.clientSecret,
-      username: 'username' in auth ? auth.username : undefined,
-      password: 'password' in auth ? auth.password : undefined,
-      scopes: normalizeRenderedOAuthScopes(auth.scopes),
+      ...tokenRequest,
     })
       .then((result) => {
         controller.signal.throwIfAborted();

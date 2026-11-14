@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
 import { getEnvString, getProcessEnv } from '../../src/envars';
 import { getEnvOverridesProvider, setEnvOverridesProvider } from '../../src/envOverrides';
+import { withPrivateRangeGuard } from '../../src/util/fetch/guardContext';
 import {
   analyzeTemplateReference,
   extractVariablesFromTemplate,
@@ -11,6 +12,26 @@ import {
   templateReferencesVariable,
 } from '../../src/util/templates';
 import { mockProcessEnv } from './utils';
+
+describe('guarded diagnostic rendering', () => {
+  it('looks up only own scalar data and never evaluates it a second time', async () => {
+    const engine = getNunjucksEngine();
+    const inherited = Object.create({ sample: 'inherited' });
+    const data = { nested: { sample: '{{ other }}' }, other: 'expanded', inherited };
+    await withPrivateRangeGuard(async () => {
+      expect(engine.renderString('{{ nested.sample }}|{{ inherited.sample }}', data)).toBe(
+        '{{ other }}|',
+      );
+      expect(() => engine.renderString('{% if other %}yes{% endif %}', data)).toThrow(
+        'PROMPTFOO_BLOCK_PRIVATE_RANGES',
+      );
+      const callback = vi.fn();
+      engine.renderString('{{ range(1) }}', {}, callback);
+      expect(callback).toHaveBeenCalledWith(expect.any(Error), null);
+    });
+    expect(engine.renderString('{{ other | upper }}', data)).toBe('EXPANDED');
+  });
+});
 
 describe('extractVariablesFromTemplate', () => {
   it('should extract simple variables', () => {

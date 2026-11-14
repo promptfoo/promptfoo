@@ -10,6 +10,7 @@ import {
   MistralEmbeddingProvider,
 } from '../../src/providers/mistral';
 import { maybeLoadToolsFromExternalFile } from '../../src/util';
+import { withPrivateRangeGuard } from '../../src/util/fetch/guardContext';
 import { createChatCompletion } from '../factories/literalFixtures';
 import { createMockChatResponse, createMockFetchResponse } from './mockProviderResponses';
 
@@ -1228,4 +1229,88 @@ describe('Mistral', () => {
 it('keeps mutable prices independent across model aliases', () => {
   const costs = MistralChatCompletionProvider.MISTRAL_CHAT_MODELS.map(({ cost }) => cost);
   expect(new Set(costs).size).toBe(costs.length);
+});
+
+describe('Mistral guarded in-flight dedupe partition', () => {
+  // This describe sits outside the outer `describe('Mistral')`, so its
+  // beforeEach never runs here: without this reset, `isCacheEnabled` and
+  // `getCache` carry whatever the previous test left (the embedding cache
+  // tests leave caching on with a stub that resolves a cached response),
+  // and the unguarded callApi returns that stale cached response without
+  // ever reaching fetchWithCache, so the first waitFor times out with 0
+  // calls. `clearAllMocks` alone does not restore implementations or
+  // return values, so reset them explicitly to the state these tests assume.
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(fetchWithCache).mockReset();
+    vi.mocked(isCacheEnabled).mockReturnValue(false);
+    vi.mocked(getCache).mockReturnValue({
+      get: vi.fn().mockResolvedValue(null),
+      set: vi.fn(),
+      wrap: vi.fn(),
+      del: vi.fn(),
+      clear: vi.fn(),
+      stores: [
+        {
+          get: vi.fn(),
+          set: vi.fn(),
+        },
+      ] as any,
+      mget: vi.fn(),
+      mset: vi.fn(),
+      mdel: vi.fn(),
+      reset: vi.fn(),
+      ttl: vi.fn(),
+      on: vi.fn(),
+      removeAllListeners: vi.fn(),
+    } as any);
+  });
+
+  it('does not let a guarded call join an unguarded in-flight request', async () => {
+    const provider = new MistralChatCompletionProvider('mistral-tiny');
+    vi.spyOn(provider, 'getApiKey').mockReturnValue('fake-api-key');
+
+    // The unguarded call stays in flight while the guarded one starts. If
+    // the dedupe key had no guard-context component, the guarded call
+    // would join it and receive its response without ever executing the
+    // guarded transport, so a public URL that redirects into private
+    // space would go unvalidated for the guarded caller.
+    let release!: (value: Awaited<ReturnType<typeof fetchWithCache>>) => void;
+    const gate = new Promise<Awaited<ReturnType<typeof fetchWithCache>>>((resolve) => {
+      release = resolve;
+    });
+    vi.mocked(fetchWithCache).mockImplementationOnce(() => gate);
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(createMockChatResponse('guarded answer'));
+
+    const unguarded = provider.callApi('Hello');
+    await vi.waitFor(() => expect(vi.mocked(fetchWithCache)).toHaveBeenCalledTimes(1));
+    const guarded = withPrivateRangeGuard(() => provider.callApi('Hello'));
+    await vi.waitFor(() => expect(vi.mocked(fetchWithCache)).toHaveBeenCalledTimes(2));
+    release(createMockChatResponse('unguarded answer'));
+
+    const [unguardedResult, guardedResult] = await Promise.all([unguarded, guarded]);
+    expect(unguardedResult.output).toBe('unguarded answer');
+    expect(guardedResult.output).toBe('guarded answer');
+  });
+
+  it('still dedupes two guarded calls with each other', async () => {
+    const provider = new MistralChatCompletionProvider('mistral-tiny');
+    vi.spyOn(provider, 'getApiKey').mockReturnValue('fake-api-key');
+
+    let release!: (value: Awaited<ReturnType<typeof fetchWithCache>>) => void;
+    const gate = new Promise<Awaited<ReturnType<typeof fetchWithCache>>>((resolve) => {
+      release = resolve;
+    });
+    vi.mocked(fetchWithCache).mockImplementationOnce(() => gate);
+
+    const first = withPrivateRangeGuard(() => provider.callApi('Hello'));
+    await vi.waitFor(() => expect(vi.mocked(fetchWithCache)).toHaveBeenCalledTimes(1));
+    const second = withPrivateRangeGuard(() => provider.callApi('Hello'));
+    release(createMockChatResponse('shared answer'));
+
+    const [firstResult, secondResult] = await Promise.all([first, second]);
+    expect(vi.mocked(fetchWithCache)).toHaveBeenCalledTimes(1);
+    expect(firstResult.output).toBe('shared answer');
+    expect(secondResult.output).toBe('shared answer');
+  });
 });

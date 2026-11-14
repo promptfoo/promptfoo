@@ -375,6 +375,12 @@ When configured correctly, your self-hosted server handles requests like:
 
 ## Advanced Configuration
 
+### Restrict provider setup requests
+
+Set `PROMPTFOO_BLOCK_PRIVATE_RANGES=true` on the server to validate destinations supplied to the provider connectivity, discovery, and session test endpoints. These endpoints reject private, loopback, link-local, and unresolvable targets. For providers using Promptfoo's guarded fetch transport, the server also checks the effective request URL and each redirect before dispatch. Guarded HTTP provider requests support simple dotted session selectors such as `data.body.sessionId`. Guarded diagnostic templates can interpolate named scalar data, such as `{{ prompt }}`, in a request body or other HTTP configuration fields. Raw request lines, headers, and `file://` references must be literal. These routes refuse template expressions, executable session selectors, and file-backed authentication. WebSocket diagnostics use the built-in response handler and refuse custom `streamResponse` callbacks. Google and Vertex Live diagnostics accept public stateful tool API URLs. Guarded diagnostics refuse local tool processes and executable tool definition files. This setting leaves normal evaluation traffic, including local model servers, available.
+
+Hostname validation happens before the connection. A DNS answer can change before the transport dials, so enforce destination restrictions at the egress proxy or network boundary if callers can supply untrusted provider configurations.
+
 ### Eval Storage Path
 
 By default, promptfoo stores its SQLite database (`promptfoo.db`) in `/home/promptfoo/.promptfoo` _inside the container_. Ensure this directory is mapped to persistent storage using volumes (as shown in the Docker and Docker Compose examples) to save your evals across container restarts.

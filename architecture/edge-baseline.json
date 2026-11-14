@@ -33,7 +33,7 @@
   "node -> contracts": 1,
   "node -> core": 9,
   "node -> legacy-contracts": 100,
-  "node -> legacy-runtime": 156,
+  "node -> legacy-runtime": 158,
   "node -> providers": 7,
   "node -> redteam": 10,
   "node -> validation": 2,
@@ -41,7 +41,7 @@
   "providers -> core": 1,
   "providers -> legacy-contracts": 284,
   "providers -> legacy-runtime": 305,
-  "providers -> node": 345,
+  "providers -> node": 357,
   "providers -> redteam": 4,
   "redteam -> core": 2,
   "redteam -> legacy-contracts": 150,
@@ -51,7 +51,7 @@
   "view-server -> core": 1,
   "view-server -> legacy-contracts": 21,
   "view-server -> legacy-runtime": 36,
-  "view-server -> node": 46,
+  "view-server -> node": 48,
   "view-server -> providers": 3,
   "view-server -> redteam": 13
 }

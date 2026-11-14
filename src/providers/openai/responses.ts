@@ -14,6 +14,7 @@ import {
   HttpRateLimitError,
   isAbortError,
 } from '../../util/fetch/errors';
+import { partitionInFlightKeyByGuardContext } from '../../util/fetch/guardContext';
 import { fetchWithRetries } from '../../util/fetch/index';
 import { renderVarsInObject } from '../../util/index';
 import { isSecretField, sanitizeUrl } from '../../util/sanitizer';
@@ -639,7 +640,10 @@ async function coalesceBackgroundResponse(
       deadline,
     );
   }
-  const cacheKey = getScopedCacheKey(cacheIdentity.key);
+  // Partition the poll key by guard context, like the other provider-level
+  // in-flight maps: without this a guarded caller joins an ordinary caller's
+  // poll and receives its response without guarded transport validation.
+  const cacheKey = partitionInFlightKeyByGuardContext(getScopedCacheKey(cacheIdentity.key));
   let inFlight = inFlightBackgroundResponses.get(cacheKey);
   if (!inFlight) {
     const controller = new AbortController();
