@@ -134,7 +134,7 @@ function isolateEvidenceValue(value: unknown, root: object | null, path: string,
     const record = v as Record<string, unknown>;
     const out: Record<string, unknown> = Object.create(null);
     for (const key in record) {
-      if (!Object.hasOwn(record, key)) {
+      if (!Object.prototype.hasOwnProperty.call(record, key)) {
         continue;
       }
       if (!takeEntry()) {
