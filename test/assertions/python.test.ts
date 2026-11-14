@@ -278,7 +278,23 @@ describe('Python file references', { timeout: 15000 }, () => {
     });
   });
 
-  it.each(['0.8oops', 'Infinity', '-Infinity', '', '   '])(
+  it('keeps signed decimal scores with exponent notation', async () => {
+    vi.mocked(runPythonCode).mockResolvedValueOnce(' +.75e0 ');
+    const result = await runAssertion(createScriptAssertionParams('python'));
+    expect(result).toMatchObject({ pass: true, score: 0.75 });
+  });
+
+  it.each(['0x1', '0b1', '0o1'])(
+    'rejects radix-prefixed scores under negation: %s',
+    async (value) => {
+      vi.mocked(runPythonCode).mockResolvedValueOnce(value);
+      const result = await runAssertion(createScriptAssertionParams('not-python'));
+      expect(result).toMatchObject({ pass: false, score: 0 });
+      expect(result.reason).toContain('Numeric scores must be finite decimals.');
+    },
+  );
+
+  it.each(['0.8oops', '0x1', '0b1', '0o1', 'Infinity', '-Infinity', '', '   '])(
     'rejects a malformed or non-finite Python score: %j',
     async (value) => {
       vi.mocked(runPythonCode).mockResolvedValueOnce(value);
