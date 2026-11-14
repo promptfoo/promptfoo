@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import cliState from '../cliState';
 import logger from '../logger';
 import {
@@ -12,17 +13,6 @@ import {
 import { getDefaultProviders } from '../providers/defaults';
 import { doRemoteGrading } from '../remoteGrading';
 import { doRemoteScoringWithPi } from '../remoteScoring';
-import {
-  type Assertion,
-  type CallApiContextParams,
-  type GradingConfig,
-  type GradingResult,
-  LLM_RUBRIC_COMPONENTS_CONFIG_ERROR,
-  type LlmRubricComponent,
-  LlmRubricComponentsAssertionSchema,
-  type ProviderResponse,
-  type VarValue,
-} from '../types/index';
 import invariant from '../util/invariant';
 import { extractFirstJsonObject } from '../util/json';
 import { accumulateTokenUsage } from '../util/tokenUsageUtils';
@@ -40,6 +30,62 @@ import {
   runJsonGradingPrompt,
 } from './rubric';
 import { graderFail, normalizeMatcherTokenUsage, tryParse } from './shared';
+
+import type {
+  Assertion,
+  CallApiContextParams,
+  GradingConfig,
+  GradingResult,
+  ProviderResponse,
+  VarValue,
+} from '../types/index';
+
+const LlmRubricComponentMetricSchema = z
+  .string()
+  .refine(
+    (metric) =>
+      metric.trim().length > 0 &&
+      !/\{[{%#]/.test(metric) &&
+      metric !== '__count' &&
+      metric !== 'prototype' &&
+      !Object.prototype.hasOwnProperty.call(Object.prototype, metric),
+    'Component and parent metrics must be non-empty literal names, not reserved object keys',
+  );
+
+const LlmRubricComponentsAssertionSchema = z
+  .object({
+    rubricComponents: z.literal(true),
+    value: z
+      .object({
+        components: z
+          .array(
+            z
+              .object({
+                metric: LlmRubricComponentMetricSchema,
+                value: z.string().refine((value) => value.trim().length > 0),
+                weight: z.number().finite().positive().default(1),
+              })
+              .strict(),
+          )
+          .min(1),
+      })
+      .strict(),
+    threshold: z.number().finite().min(0).max(1).optional(),
+    metric: LlmRubricComponentMetricSchema.optional(),
+  })
+  .refine(
+    ({ value: { components }, metric }) =>
+      new Set(components.map((component) => component.metric)).size === components.length &&
+      components.every((component) => component.metric !== metric),
+    'Component metrics must be unique and distinct from the parent metric',
+  );
+
+const LLM_RUBRIC_COMPONENTS_CONFIG_ERROR =
+  'Invalid llm-rubric components: set rubricComponents: true and provide a non-empty list of inline string rubrics with unique, literal, non-reserved metrics distinct from the literal parent metric and positive finite weights (default 1). Only metric, value, and weight are supported per component; the parent threshold must be from 0 to 1.';
+
+type LlmRubricComponent = z.infer<
+  typeof LlmRubricComponentsAssertionSchema
+>['value']['components'][number];
 
 type LlmRubricGradingConfig = GradingConfig & {
   __promptfooPreferRemote?: boolean;
