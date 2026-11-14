@@ -30,7 +30,7 @@ The select-best checker:
 
 ### Using variables in criteria
 
-The `value` is rendered with the test case's resolved `vars` before it is sent to the grader, using the same Nunjucks context as the prompt. This lets the criteria adapt to each test case:
+The `value` is rendered with the test case's resolved `vars` before it is sent to the grader. This lets the criteria adapt to each test case:
 
 ```yaml
 prompts:
