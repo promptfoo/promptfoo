@@ -561,6 +561,25 @@ export function openaiToolsToGoogle(tools: OpenAITool[]): GoogleTool[] {
   return [{ functionDeclarations }];
 }
 
+/**
+ * OpenAI history may contain either JSON-encoded or already-parsed tool arguments. Some
+ * OpenAI-compatible servers send an empty string for a call that takes no arguments.
+ */
+export function parseToolCallArguments(args: unknown): Record<string, unknown> {
+  let parsed: unknown = args === undefined ? {} : args;
+  if (typeof args === 'string') {
+    try {
+      parsed = args.trim() === '' ? {} : JSON.parse(args);
+    } catch {
+      parsed = undefined;
+    }
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error('Tool call arguments must be a JSON object');
+  }
+  return parsed as Record<string, unknown>;
+}
+
 export type ToolFormat = 'openai' | 'anthropic' | 'bedrock' | 'google';
 
 /**

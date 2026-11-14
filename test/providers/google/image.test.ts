@@ -447,6 +447,33 @@ describe('GoogleImageProvider', async () => {
       mockProcessEnv({ GOOGLE_API_KEY: 'test-api-key' });
     });
 
+    it('rejects an explicit slash-only host without sending a request', async () => {
+      const provider = new GoogleImageProvider('imagen-4.0-generate-001', {
+        config: { apiHost: '///' },
+      });
+      expect(await provider.callApi('Test prompt')).toEqual({
+        error: 'Google AI Studio apiHost must contain a host',
+      });
+      expect(mockFetchWithCache).not.toHaveBeenCalled();
+    });
+
+    it('should not double the path separator when apiHost has a trailing slash', async () => {
+      const provider = new GoogleImageProvider('imagen-4.0-generate-001', {
+        config: { apiHost: 'proxy.example/google//' },
+      });
+      mockFetchWithCache.mockResolvedValueOnce(createImagePredictionResponse());
+
+      const result = await provider.callApi('Test prompt');
+
+      expect(result.error).toBeUndefined();
+      expect(mockFetchWithCache).toHaveBeenCalledWith(
+        'https://proxy.example/google/v1beta/models/imagen-4.0-generate-001:predict',
+        expect.any(Object),
+        expect.any(Number),
+        'json',
+      );
+    });
+
     it('should make correct API request to Google AI Studio', async () => {
       const provider = new GoogleImageProvider('imagen-4.0-generate-preview-06-06', {
         config: {
