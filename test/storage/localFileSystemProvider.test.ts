@@ -293,6 +293,50 @@ describe('LocalFileSystemProvider', () => {
     },
   );
 
+  it.each(['audio/not-a-hash.wav', 'internal/abcdef123456.wav'])(
+    'replaces a non-routable legacy index key %s even when its bytes match',
+    async (key) => {
+      tempDir = createTempDir('promptfoo-media-');
+      const payload = Buffer.from('matching bytes');
+      const contentHash = createHash('sha256').update(payload).digest('hex');
+      fs.mkdirSync(path.dirname(path.join(tempDir, key)), { recursive: true });
+      fs.writeFileSync(path.join(tempDir, key), payload);
+      fs.writeFileSync(
+        path.join(tempDir, 'hash-index.json'),
+        JSON.stringify({ [contentHash]: key }),
+      );
+      const provider = new LocalFileSystemProvider({ basePath: tempDir });
+
+      const stored = await provider.store(payload, {
+        contentType: 'audio/wav',
+        mediaType: 'audio',
+      });
+
+      expect(stored.ref.key).toBe(`blob/${contentHash}`);
+      await expect(provider.retrieve(stored.ref.key)).resolves.toEqual(payload);
+      expect(fs.readFileSync(path.join(tempDir, key))).toEqual(payload);
+    },
+  );
+
+  it('ignores a legacy index entry whose bytes were overwritten', async () => {
+    tempDir = createTempDir('promptfoo-media-');
+    const original = Buffer.from('original bytes');
+    const replacement = Buffer.from('different bytes');
+    const contentHash = createHash('sha256').update(original).digest('hex');
+    const key = 'image/123456789abc.png';
+    fs.mkdirSync(path.join(tempDir, 'image'));
+    fs.writeFileSync(path.join(tempDir, key), replacement);
+    fs.writeFileSync(path.join(tempDir, 'hash-index.json'), JSON.stringify({ [contentHash]: key }));
+    const provider = new LocalFileSystemProvider({ basePath: tempDir });
+    const stored = await provider.store(original, {
+      contentType: 'image/png',
+      mediaType: 'image',
+    });
+    expect(stored.ref.key).toBe(`blob/${contentHash}`);
+    await expect(provider.retrieve(stored.ref.key)).resolves.toEqual(original);
+    await expect(provider.retrieve(key)).resolves.toEqual(replacement);
+  });
+
   it('keeps existing legacy sidecars until the corresponding media is deleted', async () => {
     tempDir = createTempDir('promptfoo-media-');
     const payload = Buffer.from('legacy media');

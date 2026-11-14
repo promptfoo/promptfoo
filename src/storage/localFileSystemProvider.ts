@@ -5,6 +5,7 @@
  * Uses content-based hashing for deduplication.
  */
 
+import { createHash } from 'node:crypto';
 import * as fs from 'fs';
 import * as fsPromises from 'fs/promises';
 import * as path from 'path';
@@ -25,6 +26,7 @@ import type {
 
 const MEDIA_SUBDIR = 'media';
 const HASH_INDEX_FILE = 'hash-index.json';
+const LEGACY_MEDIA_KEY = /^(?:audio|image|video)\/[a-fA-F0-9]{12}\.[a-zA-Z0-9]+$/;
 
 /**
  * Local filesystem storage provider
@@ -253,8 +255,29 @@ export class LocalFileSystemProvider implements MediaStorageProvider {
 
   async findByHash(contentHash: string): Promise<string | null> {
     const key = this.hashIndex.get(contentHash);
-    if (key && (await this.exists(key))) {
-      return key;
+    if (typeof key === 'string' && LEGACY_MEDIA_KEY.test(key)) {
+      try {
+        const filePath = await this.getFilePath(key);
+        const file = await fsPromises.open(
+          filePath,
+          fs.constants.O_RDONLY | fs.constants.O_NONBLOCK | (fs.constants.O_NOFOLLOW ?? 0),
+        );
+        try {
+          if ((await file.stat()).isFile()) {
+            const hash = createHash('sha256');
+            for await (const chunk of file.createReadStream({ autoClose: false })) {
+              hash.update(chunk);
+            }
+            if (hash.digest('hex') === contentHash) {
+              return key;
+            }
+          }
+        } finally {
+          await file.close();
+        }
+      } catch {
+        // Unreadable or stale legacy mappings fall through to content-addressed blobs.
+      }
     }
     return (await this.blobs.exists(contentHash)) ? `blob/${contentHash}` : null;
   }
