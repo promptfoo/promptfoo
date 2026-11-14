@@ -84,7 +84,8 @@ export function createStreamingFixture(options = {}) {
     toolNames: Object.keys(TOOLS),
     call(tool, args = {}) {
       received.push({ tool, args });
-      const handler = TOOLS[tool];
+      // Own entries only, so names like `__proto__` take the unknown-tool branch.
+      const handler = Object.hasOwn(TOOLS, tool) ? TOOLS[tool] : undefined;
       if (!handler) {
         return { ok: false, error: `Unknown tool: ${tool}` };
       }

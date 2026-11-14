@@ -209,6 +209,26 @@ describe('CIGE agentic test case example', () => {
       expect(transcript.received).not.toContain('delete_session');
     });
 
+    it('reports inherited object members as unknown tools instead of throwing', () => {
+      const cige = loadCase('streaming-session.cige.yaml');
+      cige.guardrails = [];
+      cige.context.tools.push('__proto__', 'hasOwnProperty');
+      cige.execution.initial_path.push({ tool: '__proto__' }, { tool: 'hasOwnProperty' });
+      const { refusal, transcript } = runCige(cige);
+      expect(refusal).toBeUndefined();
+      expect(transcript.status).toBe('completed');
+      expect(transcript.steps.slice(-2)).toEqual([
+        expect.objectContaining({
+          tool: '__proto__',
+          result: { ok: false, error: 'Unknown tool: __proto__' },
+        }),
+        expect.objectContaining({
+          tool: 'hasOwnProperty',
+          result: { ok: false, error: 'Unknown tool: hasOwnProperty' },
+        }),
+      ]);
+    });
+
     it('fails when tools succeed but required evidence is missing', () => {
       const cige = loadCase('streaming-session.cige.yaml');
       const { transcript } = runCige(cige, { connectionLogRetention: false });
