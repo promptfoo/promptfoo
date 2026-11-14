@@ -6,6 +6,7 @@ describe('posterior', () => {
   it('uses the registered local strategy and preserves the input and metric', async () => {
     const input = {
       vars: { query: 'fixture café' },
+      metadata: { pluginId: 'fixture' },
       assert: [{ type: 'contains' as const, metric: 'Fixture' }],
     };
     const strategy = Strategies.find(({ id }) => id === 'posterior')!;

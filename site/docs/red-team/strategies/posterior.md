@@ -15,5 +15,5 @@ redteam:
     - posterior
 ```
 
-Use a single-input target. The report retains the original injected text and adds
+Use a single-input target. The result retains the original injected text and adds
 `/Posterior` to the assertion metric.
