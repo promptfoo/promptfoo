@@ -8,11 +8,12 @@
 
 import {
   InMemorySpanExporter,
-  NodeTracerProvider,
   SimpleSpanProcessor,
-} from '@opentelemetry/sdk-trace-node';
+  TracerProvider,
+} from '@opentelemetry/sdk-trace';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { withGenAISpan } from '../../src/tracing/genaiTracer';
+import { registerTracerProvider } from '../../src/tracing/tracerProvider';
 
 import type { GenAISpanContext, GenAISpanResult } from '../../src/tracing/genaiTracer';
 
@@ -27,15 +28,15 @@ vi.mock('../../src/logger', () => ({
 }));
 
 describe('OTEL Tracing Smoke Tests', () => {
-  let tracerProvider: NodeTracerProvider;
+  let tracerProvider: TracerProvider;
   let memoryExporter: InMemorySpanExporter;
 
   beforeAll(() => {
     memoryExporter = new InMemorySpanExporter();
-    tracerProvider = new NodeTracerProvider({
-      spanProcessors: [new SimpleSpanProcessor(memoryExporter)],
+    tracerProvider = new TracerProvider({
+      spanProcessors: [new SimpleSpanProcessor({ exporter: memoryExporter })],
     });
-    tracerProvider.register();
+    registerTracerProvider(tracerProvider);
   });
 
   afterAll(async () => {

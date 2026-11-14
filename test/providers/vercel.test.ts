@@ -1,9 +1,9 @@
 import { context as otelContext, propagation, trace } from '@opentelemetry/api';
 import {
   InMemorySpanExporter,
-  NodeTracerProvider,
   SimpleSpanProcessor,
-} from '@opentelemetry/sdk-trace-node';
+  TracerProvider,
+} from '@opentelemetry/sdk-trace';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getCache, isCacheEnabled } from '../../src/cache';
 import { getEnvOverridesProvider, setEnvOverridesProvider } from '../../src/envOverrides';
@@ -13,6 +13,7 @@ import {
   VercelAiEmbeddingProvider,
   VercelAiProvider,
 } from '../../src/providers/vercel';
+import { registerTracerProvider } from '../../src/tracing/tracerProvider';
 import { mockProcessEnv } from '../util/utils';
 
 const createFreshTextResult = () => ({
@@ -74,12 +75,12 @@ afterEach(() => restoreEnv());
 
 const testTraceparent = '00-0123456789abcdef0123456789abcdef-0123456789abcdef-01';
 const spanExporter = new InMemorySpanExporter();
-const testTracerProvider = new NodeTracerProvider({
-  spanProcessors: [new SimpleSpanProcessor(spanExporter)],
+const testTracerProvider = new TracerProvider({
+  spanProcessors: [new SimpleSpanProcessor({ exporter: spanExporter })],
 });
 
 beforeAll(() => {
-  testTracerProvider.register();
+  registerTracerProvider(testTracerProvider);
 });
 
 afterAll(async () => {

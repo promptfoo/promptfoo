@@ -1248,7 +1248,7 @@ describe('importCommand', () => {
 
     for (const { name, sources, grader, testCount, testIndices } of [
       {
-        name: 'should keep non-equivalent multi-run items on separate test rows',
+        name: 'should keep non-equivalent items separate in interleaved runs',
         sources: [
           {
             runId: 'evalrun_first_dataset',
@@ -1258,10 +1258,11 @@ describe('importCommand', () => {
             runId: 'evalrun_second_dataset',
             item: { input: 'Different dataset item' },
           },
+          { runId: 'evalrun_first_dataset', item: { input: 17 } },
         ],
         grader: 'Match',
-        testCount: 2,
-        testIndices: [0, 1],
+        testCount: 3,
+        testIndices: [0, 1, 2],
       },
       {
         name: 'should align rows whose items have identical content but different key orderings',
@@ -1301,7 +1302,8 @@ describe('importCommand', () => {
         const results = await EvalResult.findManyByEvalId(importedEvals[0].id);
 
         expect(importedEvals[0].config.tests).toHaveLength(testCount);
-        expect(results).toHaveLength(2);
+        expect(importedEvals[0].prompts[0].raw).toBe('Imported OpenAI eval item');
+        expect(results).toHaveLength(sources.length);
         expect(results.map((result) => result.testIdx)).toEqual(testIndices);
         expect(results.map((result) => result.testCase.vars?.item)).toEqual(
           sources.map(({ item }) => item),

@@ -231,6 +231,30 @@ describeEvaluator('evaluator basic flows', () => {
     expect(plans[0]).toEqual(plans[1]);
   });
 
+  it('rejects copy_working_dir before copying mutable workspace files or calling the target', async () => {
+    const callApi = vi.fn(async () => ({ output: 'answer' }));
+    await expect(
+      evaluate(
+        {
+          providers: [{ id: () => 'workspace', callApi }],
+          prompts: [
+            {
+              ...toPrompt('question'),
+              function: async () => ({
+                prompt: 'question',
+                config: { copy_working_dir: 'copy', working_dir: '/nonexistent-source' },
+              }),
+            },
+          ],
+          tests: [{}],
+        },
+        new Eval({}),
+        { bayesAtN: true, repeat: 2, cache: false },
+      ),
+    ).rejects.toThrow('does not support copy_working_dir');
+    expect(callApi).not.toHaveBeenCalled();
+  });
+
   it('rejects prompt functions that change the question between repeats before provider calls', async () => {
     const callApi = vi.fn(async () => ({ output: 'answer' }));
     const record = new Eval({});

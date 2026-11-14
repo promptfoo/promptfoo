@@ -570,16 +570,7 @@ export function MediaModal({ item, items, onClose, onNavigate }: MediaModalProps
 
             {item.kind === 'audio' && (
               <div className="flex flex-col items-center gap-6 p-8">
-                <AudioWaveform
-                  hash={item.hash}
-                  isPlaying={isPlaying}
-                  barCount={12}
-                  barWidth={8}
-                  minBarHeight={16}
-                  maxBarHeight={48}
-                  showIcon
-                  iconSize="h-16 w-16"
-                />
+                <AudioWaveform hash={item.hash} isPlaying={isPlaying} size="expanded" />
                 <audio
                   ref={audioRef}
                   src={mediaUrl}

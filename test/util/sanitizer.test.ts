@@ -96,6 +96,15 @@ describe('Bayes@N legacy plan export projection', () => {
       expect(value.metadata.bayesAtNPlan.groups).toHaveLength(2);
     },
   );
+  it('preserves model output that mentions the plan name as a JSON string value', () => {
+    const output = '{  "answer": "bayesAtNPlan"  }';
+    expect(stripBayesAtNInputHashes(output)).toBe(output);
+    const row = { output, metadata: { bayesAtNPlan: legacyPlan() } };
+    const projected = stripBayesAtNInputHashes(row);
+    expect(projected.output).toBe(output);
+    expect(projected.metadata.bayesAtNPlan.groups[0]).not.toHaveProperty('inputHash');
+  });
+
   it('keeps normal sanitizer depth limits for reserved plans', () => {
     expect(sanitizeObject({ bayesAtNPlan: legacyPlan() }, { maxDepth: 0 })).toEqual({
       bayesAtNPlan: '[...]',
@@ -134,7 +143,7 @@ describe('Bayes@N legacy plan export projection', () => {
     value.metadata.bayesAtNPlan = legacyPlan();
     const projected = stripBayesAtNInputHashes(value);
     expect(Object.getPrototypeOf(projected)).toBe(Object.prototype);
-    expect(Object.hasOwn(projected, '__proto__')).toBe(true);
+    expect(Object.prototype.hasOwnProperty.call(projected, '__proto__')).toBe(true);
     expect(projected.polluted).toBeUndefined();
     const nullRecord = Object.create(null);
     nullRecord.bayesAtNPlan = legacyPlan();
@@ -376,6 +385,24 @@ describe('stripProviderPromptSelectors', () => {
 });
 
 describe('sanitizeConfigForOutput', () => {
+  it.each(['AccountKey', 'SharedAccessSignature'])(
+    'redacts Azure Storage connection strings containing %s in exports and request logs',
+    (credentialName) => {
+      const credential = 'synthetic-storage-credential';
+      const env = {
+        AZURE_STORAGE_CONNECTION_STRING: `DefaultEndpointsProtocol=https;AccountName=fixture;${credentialName}=${credential}`,
+        AZURE_CLIENT_ID: 'fixture-client',
+      };
+      const config = { env, providers: [{ id: 'echo', env }] };
+      const safeEnv = { ...env, AZURE_STORAGE_CONNECTION_STRING: '[REDACTED]' };
+      for (const output of [sanitizeConfigForOutput(config), sanitizeObject(config)]) {
+        expect(output).toMatchObject({ env: safeEnv, providers: [{ env: safeEnv }] });
+        expect(JSON.stringify(output)).not.toContain(credential);
+      }
+      expect(config.env.AZURE_STORAGE_CONNECTION_STRING).toContain(credential);
+    },
+  );
+
   it.each([
     { prompts: 'private literal' },
     { prompts: ['private literal'] },

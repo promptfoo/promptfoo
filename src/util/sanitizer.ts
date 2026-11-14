@@ -166,6 +166,7 @@ export const SECRET_FIELD_NAMES = new Set([
   'webhooksecret',
   'anthropicapikey',
   'awsbearertokenbedrock',
+  'azurestorageconnectionstring',
 
   // AWS SigV4 credentials. Both spellings are needed: normalizeFieldName strips
   // underscores, so the env var AWS_SECRET_ACCESS_KEY collapses to
@@ -1544,11 +1545,13 @@ function countOnlyBayesAtNPlan(entry: unknown): unknown {
   };
 }
 
+const SERIALIZED_BAYES_PLAN_KEY = /"bayesAtNPlan"\s*:/;
+
 /** Drop obsolete Bayes input verifiers from public data while retaining count-only plans. */
 export function stripBayesAtNInputHashes<T>(value: T): T {
   const containsPlan = (item: unknown, checked = new WeakSet<object>()): boolean => {
     if (typeof item === 'string') {
-      return item.includes('"bayesAtNPlan"');
+      return SERIALIZED_BAYES_PLAN_KEY.test(item);
     }
     if (
       !item ||
@@ -1571,7 +1574,7 @@ export function stripBayesAtNInputHashes<T>(value: T): T {
   }
   const seen = new WeakMap<object, unknown>();
   const visit = (item: unknown): unknown => {
-    if (typeof item === 'string' && item.includes('"bayesAtNPlan"')) {
+    if (typeof item === 'string' && SERIALIZED_BAYES_PLAN_KEY.test(item)) {
       try {
         return JSON.stringify(visit(JSON.parse(item)));
       } catch {

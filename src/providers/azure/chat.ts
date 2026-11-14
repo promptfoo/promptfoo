@@ -221,8 +221,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
     const isReasoningModel = this.isReasoningModel(capabilityModelName);
     const isFixedReasoningModel = /^gpt-chat-latest(?:-|$)/.test(capabilityModelName);
     const gpt6Variant = getGpt6Variant(capabilityModelName);
-    const useModelDefaults =
-      gpt6Variant === 'sol' || gpt6Variant === 'luna' || gpt6Variant === '6.1-sol';
+    const useModelDefaults = gpt6Variant !== undefined && gpt6Variant !== 'astra';
     const samplingParamsDeprecated = this.isSamplingParamsDeprecatedClaudeModel(config);
     const grokSamplingRestricted = this.isGrok4OrNewerModel();
 
@@ -402,7 +401,7 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       maxTokens: this.config.max_tokens,
       temperature: this.config.temperature,
       topP: this.config.top_p,
-      stopSequences: this.config.stop,
+      stopSequences: typeof this.config.stop === 'string' ? [this.config.stop] : this.config.stop,
       frequencyPenalty: this.config.frequency_penalty,
       presencePenalty: this.config.presence_penalty,
       // Promptfoo context from test case if available

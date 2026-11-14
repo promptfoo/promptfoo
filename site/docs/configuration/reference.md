@@ -1171,7 +1171,8 @@ with errors, cached target responses or grading, duplicate/missing indices, or
 unequal repeat counts have an `unavailableReason` instead of posterior moments.
 Runs with precomputed `providerOutput`, redteam, comparison assertions (including
 inside assertion sets), `_conversation`, `storeOutputAs`, or shared provider
-sessions are unsupported. This binary variant uses a uniform prior without prior
+sessions are unsupported. The `copy_working_dir` option is also unsupported because
+workspace files are copied after trial inputs are prepared. This binary variant uses a uniform prior without prior
 observations or rubric weights.
 
 Bayes@N supports fresh evaluations with an empty result record. Resume,

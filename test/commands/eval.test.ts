@@ -54,9 +54,11 @@ import {
 import * as defaultConfigModule from '../../src/util/config/default';
 import { ConfigResolutionError, resolveConfigs } from '../../src/util/config/load';
 import { createDefaultPromptMetrics } from '../../src/util/eval/promptMetrics';
+import { calculateRepeatStability } from '../../src/util/eval/repeatStability';
 import { writeMultipleOutputs } from '../../src/util/index';
 import { checkProviderApiKeys } from '../../src/util/provider';
 import { TokenUsageTracker } from '../../src/util/tokenUsage';
+import { createEvaluateResult } from '../factories/eval';
 import { mockProcessEnv } from '../util/utils';
 
 import type EvalResult from '../../src/models/evalResult';
@@ -1020,10 +1022,10 @@ describe('evalCommand', () => {
     };
 
     /** The listeners watch mode installed, without disturbing anyone else's. */
-    const installedSince = (before: NodeJS.SignalsListener[]) =>
+    const installedSince = (before: Array<(signal: 'SIGINT') => void>) =>
       process.listeners('SIGINT').filter((listener) => !before.includes(listener));
 
-    let before: NodeJS.SignalsListener[];
+    let before: Array<(signal: 'SIGINT') => void>;
 
     beforeEach(() => {
       before = process.listeners('SIGINT');
@@ -1889,7 +1891,7 @@ describe('evalCommand', () => {
         path.resolve('/suite', 'vars/scenario.yaml'),
         path.resolve('/suite', 'vars/body.txt'),
       ]),
-      { ignored: /^\./, persistent: true },
+      { atomic: true, ignored: /^\./, persistent: true },
     );
 
     const loggerInfoSpy = vi.spyOn(logger, 'info').mockImplementation(() => logger);
@@ -1937,7 +1939,7 @@ describe('evalCommand', () => {
         );
         expect(chokidarMocks.watch).toHaveBeenCalledWith(
           expect.arrayContaining([path.resolve(expected)]),
-          { ignored: /^\./, persistent: true },
+          { atomic: true, ignored: /^\./, persistent: true },
         );
       } finally {
         cwd.mockRestore();
@@ -3910,22 +3912,32 @@ describe('Sharing Precedence - Comprehensive Test Coverage', () => {
       createExplicitSharingCheck(),
     );
 
-    it('should not call createShareableUrl when isSharingEnabled returns false', async () => {
-      const cmdObj = { share: true, table: false, write: false };
-      const config = {} as UnifiedConfig;
-      const evalRecord = new Eval(config);
-
+    it.each([false, true])('prints the signed-out summary (write=%s)', async (write) => {
+      const description = 'View results: repeated case';
+      const row = createEvaluateResult({ description, repeatGroupId: 'g', repeatIndex: 0 });
+      const summary = calculateRepeatStability([row, { ...row, repeatIndex: 1, success: false }]);
       vi.mocked(isSharingEnabled).mockReturnValue(false);
-      vi.mocked(resolveConfigs).mockResolvedValue({
-        config,
-        testSuite: { prompts: [], providers: [] },
-        basePath: path.resolve('/'),
+      vi.mocked(evaluate).mockImplementationOnce(async (_suite, record) => {
+        const evaluation = record as Eval;
+        vi.spyOn(evaluation, 'getObservedRepeatStability').mockResolvedValue(summary);
+        return evaluation;
       });
-      vi.mocked(evaluate).mockResolvedValue(evalRecord);
 
-      await doEval(cmdObj, config, defaultConfigPath, {});
+      const info = vi.spyOn(logger, 'info').mockImplementation(() => logger);
+      try {
+        await doEval({ share: true, table: false, write }, defaultConfig, defaultConfigPath, {});
 
-      expect(createShareableUrl).not.toHaveBeenCalled();
+        const lines = info.mock.calls.map(([message]) => String(message));
+        const completion = lines.findIndex((line) => line.includes('Eval complete'));
+        expect(completion).toBeGreaterThanOrEqual(0);
+        expect(lines[completion + 1].includes('You need to have a cloud account')).toBe(write);
+        expect(createShareableUrl).not.toHaveBeenCalled();
+        expect(info).toHaveBeenCalledWith(expect.stringContaining(description));
+        expect(info).toHaveBeenCalledWith(expect.stringContaining('Results:'));
+        expect(info).toHaveBeenCalledWith(expect.stringContaining('Duration:'));
+      } finally {
+        info.mockRestore();
+      }
     });
   });
 

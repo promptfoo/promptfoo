@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import fs from 'fs/promises';
 import * as path from 'path';
 
@@ -25,6 +27,7 @@ import {
 import { isAudioFile, isImageFile, isJavascriptFile, isVideoFile } from './util/fileExtensions';
 import {
   getNunjucksEngineForFilePath,
+  parseFileUrl,
   renderVarsInObject,
   setLoadedFileMimeTypes,
 } from './util/index';
@@ -50,6 +53,13 @@ export function getPromptVarMimeTypes(vars: Record<string, VarValue>): Record<st
       return mimeType ? [[key, mimeType]] : [];
     }),
   );
+}
+
+export function hashBayesAtNFileReference(reference: string): string {
+  const { filePath } = parseFileUrl(reference);
+  return createHash('sha256')
+    .update(readFileSync(path.resolve(cliState.basePath || '', filePath)))
+    .digest('hex');
 }
 
 export function renderBayesAtNRubricFileReference(reference: string, arrayElement = false): string {
@@ -738,20 +748,16 @@ function restorePromptFunctions(returnedPrompts: Prompt[], originalPrompts: Prom
   // A prompt function that was neither restored nor returned by the hook means the
   // prompt will render its raw source as text — the original #9653 symptom. Surface
   // why, so users get a breadcrumb instead of a silent behavior change.
-  const labelsWithFunction = new Set<string>();
   const returnedLabels = new Set<string>();
   for (const prompt of restored) {
     if (prompt?.label != null) {
       returnedLabels.add(prompt.label);
       if (typeof prompt.function === 'function') {
-        labelsWithFunction.add(prompt.label);
+        originalsByLabel.delete(prompt.label);
       }
     }
   }
   for (const [label, original] of originalsByLabel) {
-    if (labelsWithFunction.has(label)) {
-      continue;
-    }
     if (original === null) {
       if (returnedLabels.has(label)) {
         logger.warn(

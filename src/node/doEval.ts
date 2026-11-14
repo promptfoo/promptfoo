@@ -12,6 +12,7 @@ import { DEFAULT_MAX_CONCURRENCY } from '../constants';
 import { getEnvBool, getEnvFloat, getEnvInt, isCI } from '../envars';
 import { clearCjsModuleCache } from '../esm';
 import { evaluate, PromptSuggestionsRejectedError } from '../evaluator';
+import { EvalRunError } from '../evaluator/errors';
 import {
   checkEmailStatusAndMaybeExit,
   EmailValidationError,
@@ -27,6 +28,7 @@ import { neverGenerateRemote } from '../redteam/remoteGeneration';
 import { createShareableUrl, isSharingEnabled } from '../share';
 import { generateTable } from '../table';
 import telemetry from '../telemetry';
+import { flushOtel, shutdownOtel } from '../tracing/otelSdk';
 import { EMAIL_OK_STATUS } from '../types/email';
 import { isCliEventSource } from '../types/eventSource';
 import { CommandLineOptionsSchema, MAX_SUGGESTIONS_COUNT, TestSuiteSchema } from '../types/index';
@@ -47,7 +49,6 @@ import {
 import { filterTests } from '../util/eval/filterTests';
 import { warnIfRedteamConfigHasNoTests } from '../util/eval/redteamWarning';
 import { generateEvalSummary } from '../util/eval/summary';
-import { maybeLoadFromExternalFile } from '../util/file';
 import {
   printBorder,
   setupEnv,
@@ -69,7 +70,6 @@ import type {
   CommandLineOptions,
   EnvOverrides,
   EvalRuntimeOptions,
-  Scenario,
   TestSuite,
   UnifiedConfig,
 } from '../types/index';
@@ -141,17 +141,8 @@ async function resolveReplayConfigs(
   return configs;
 }
 
-export class EvalRunError extends Error {
-  readonly exitCode: number;
-
-  constructor(message: string, exitCode: number = 1) {
-    super(message);
-    this.name = 'EvalRunError';
-    // POSIX exit codes are 1-255 (0 means success). Coerce silly values to the
-    // default rather than letting `exitCode = 0` silently mask a real failure.
-    this.exitCode = Number.isInteger(exitCode) && exitCode >= 1 && exitCode <= 255 ? exitCode : 1;
-  }
-}
+// Compatibility export for existing source consumers.
+export { EvalRunError } from '../evaluator/errors';
 
 function failEvalRun(
   message: string,
@@ -222,6 +213,39 @@ function watchUntilTerminated(watcher: FSWatcher): Promise<void> {
       process.on(signal, onSignal);
     }
   });
+}
+
+/** How long a CLI eval waits for provider and tracing cleanup after SIGTERM before it ends. */
+export const SIGTERM_CLEANUP_TIMEOUT_MS = 3_000;
+
+async function cleanupOnSigterm(): Promise<void> {
+  // Flush buffered spans first, then keep tracing open for calls that settle during the drain.
+  await flushOtel();
+  try {
+    await providerRegistry.shutdownForProcess();
+  } catch (error) {
+    logger.debug('Provider cleanup failed during SIGTERM', { error });
+  }
+  await shutdownOtel();
+}
+
+/** CLI evals own process termination. Library hosts keep their own SIGTERM policy. */
+export function terminateOnSigterm(): () => void {
+  const onSigterm = async () => {
+    let timer: NodeJS.Timeout | undefined;
+    const timeout = new Promise<void>((resolve) => {
+      timer = setTimeout(resolve, SIGTERM_CLEANUP_TIMEOUT_MS);
+    });
+    try {
+      await Promise.race([cleanupOnSigterm(), timeout]);
+    } finally {
+      clearTimeout(timer);
+      process.removeAllListeners('SIGTERM');
+      process.kill(process.pid, 'SIGTERM');
+    }
+  };
+  process.once('SIGTERM', onSigterm);
+  return () => process.removeListener('SIGTERM', onSigterm);
 }
 
 function resolveSuggestionOptions(
@@ -849,17 +873,6 @@ async function doEvalWithEnv(
     if (!resumeEval) {
       Object.assign(options, resolveSuggestionOptions(cmdObj, commandLineOptions, options));
     }
-    // load scenarios or tests from an external file
-    if (testSuite.scenarios) {
-      testSuite.scenarios = (await maybeLoadFromExternalFile(testSuite.scenarios)) as Scenario[];
-      // Flatten the scenarios array in case glob patterns were used
-      testSuite.scenarios = testSuite.scenarios.flat();
-    }
-    for (const scenario of testSuite.scenarios || []) {
-      if (scenario.tests) {
-        scenario.tests = await maybeLoadFromExternalFile(scenario.tests);
-      }
-    }
 
     const testSuiteSchema = TestSuiteSchema.safeParse(testSuite);
     if (!testSuiteSchema.success) {
@@ -1133,26 +1146,11 @@ async function doEvalWithEnv(
       repeatStability,
     });
 
-    // Special case: show cloud signup instructions when user wants to share but can't
-    if (cmdObj.write && wantsToShare && !canShareEval) {
-      logger.info(summaryLines[0]); // Show just the completion message
-      notCloudEnabledShareInstructions();
-      // Skip the guidance lines and show the rest
-      for (let i = 1; i < summaryLines.length; i++) {
-        if (summaryLines[i].includes('View results:')) {
-          // Skip guidance section
-          while (i < summaryLines.length && !summaryLines[i].includes('Total Tokens:')) {
-            i++;
-          }
-          i--; // Back up one so the for loop increment works
-        } else {
-          logger.info(summaryLines[i]);
-        }
-      }
-    } else {
-      // Normal case: show all summary lines
-      for (const line of summaryLines) {
-        logger.info(line);
+    const showShareInstructions = cmdObj.write && wantsToShare && !canShareEval;
+    for (const [index, line] of summaryLines.entries()) {
+      logger.info(line);
+      if (index === 0 && showShareInstructions) {
+        notCloudEnabledShareInstructions();
       }
     }
 
@@ -1268,7 +1266,12 @@ async function doEvalWithEnv(
         const watchPaths = Array.from(
           new Set([...configPaths, ...promptPaths, ...providerPaths, ...varPaths]),
         );
-        const watcher = chokidar.watch(watchPaths, { ignored: /^\./, persistent: true });
+        // Editor saves must produce a change event even when CHOKIDAR_USEPOLLING is set.
+        const watcher = chokidar.watch(watchPaths, {
+          atomic: true,
+          ignored: /^\./,
+          persistent: true,
+        });
         // Library callers own their own process lifetime, so only the CLI blocks here.
         if (isCliInvocation) {
           watchTermination = watchUntilTerminated(watcher);
@@ -1328,7 +1331,7 @@ async function doEvalWithEnv(
     return ret;
   };
 
-  const runEvaluation = (initialization?: boolean) => {
+  const runEvaluation = async (initialization?: boolean) => {
     // Each watch run keeps its inputs, resolved environment and providers through cleanup.
     const runEnv: EnvOverrides = {};
     const runEnvFileOverrides =
@@ -1338,28 +1341,35 @@ async function doEvalWithEnv(
     const runCommand = { ...cmdObj };
     const runDefaults = { ...defaultConfig };
     const runOptions = { ...evaluateOptions };
-    return cliState.withSafeMode(
-      Boolean(runCommand.safeMode || runDefaults.commandLineOptions?.safeMode),
-      () =>
-        cliState.withConfig(undefined, () =>
-          cliState.withBasePath(undefined, () =>
-            cliState.withEnvFileOverrides(runEnvFileOverrides, () =>
-              cliState.withEnv(runEnv, () =>
-                providerRegistry.withEvaluation(() =>
-                  runEvaluationWithEnv(
-                    runEnv,
-                    runEnvFileOverrides,
-                    runCommand,
-                    runDefaults,
-                    runOptions,
-                    initialization,
+    // Ending the process on SIGTERM is CLI policy too; library hosts keep control of their own.
+    // Keep it until the whole run settles, including sharing and output files after evaluate().
+    const removeSigtermHandler = isCliInvocation ? terminateOnSigterm() : undefined;
+    try {
+      return await cliState.withSafeMode(
+        Boolean(runCommand.safeMode || runDefaults.commandLineOptions?.safeMode),
+        () =>
+          cliState.withConfig(undefined, () =>
+            cliState.withBasePath(undefined, () =>
+              cliState.withEnvFileOverrides(runEnvFileOverrides, () =>
+                cliState.withEnv(runEnv, () =>
+                  providerRegistry.withEvaluation(() =>
+                    runEvaluationWithEnv(
+                      runEnv,
+                      runEnvFileOverrides,
+                      runCommand,
+                      runDefaults,
+                      runOptions,
+                      initialization,
+                    ),
                   ),
                 ),
               ),
             ),
           ),
-        ),
-    );
+      );
+    } finally {
+      removeSigtermHandler?.();
+    }
   };
 
   const result = await runEvaluation(true /* initialization */);

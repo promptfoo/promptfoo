@@ -54,12 +54,12 @@ import {
 } from './util';
 import type Anthropic from '@anthropic-ai/sdk';
 
-import type { EnvOverrides } from '../../types/env';
 import type {
   CallApiContextParams,
   CallApiOptionsParams,
   ProviderResponse,
 } from '../../types/index';
+import type { ProviderOptions } from '../../types/providers';
 import type { MCPClient } from '../mcp/client';
 import type { McpToolCallEntry } from '../mcp/types';
 import type { AnthropicMessageOptions, ClaudeEffort, ClaudeThinkingConfig } from './types';
@@ -111,7 +111,9 @@ function normalizeHeadersForCacheKey(headers: Record<string, string>) {
     });
 }
 
-function getMessagesRequestMetadata(params: Anthropic.Messages.MessageCreateParams) {
+function getMessagesRequestMetadata(
+  params: Anthropic.Messages.MessageCreateParams & { temperature?: number },
+) {
   const mcpServers = (params as { mcp_servers?: unknown }).mcp_servers;
   return {
     model: params.model,
@@ -351,12 +353,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
 
   constructor(
     modelName: string,
-    options: {
-      id?: string;
-      label?: string;
-      config?: AnthropicMessageOptions;
-      env?: EnvOverrides;
-    } = {},
+    options: Pick<ProviderOptions<AnthropicMessageOptions>, 'config' | 'id' | 'label' | 'env'> = {},
   ) {
     super(modelName, options);
     if (
@@ -959,7 +956,8 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       { samplingParamsDeprecated, alwaysOnAdaptiveThinking, modelWarningName },
     );
 
-    // Legacy budget-based thinking and Fable/Mythos 5.1 reject forced tool use.
+    // Legacy budget-based thinking and the models flagged in CLAUDE_MODEL_FAMILIES
+    // (Fable/Mythos 5.1 and 5.2, Opus 5.5, Sonnet 5.5) reject forced tool use.
     // Earlier adaptive models, including Fable 5, accept forced choices. Do not gate
     // this on thinkingEnabled: doing so would silently change their tool-routing evals.
     const modelRejectsForcedToolChoice = isForcedToolChoiceUnsupportedClaudeModel(this.modelName);
