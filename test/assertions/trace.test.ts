@@ -264,6 +264,10 @@ describe('trace assertions', () => {
       ).toBe(true);
     });
 
+    it('loads trace evidence for cross-agent injection assertions', () => {
+      expect(assertionUsesTrace({ type: 'promptfoo:redteam:cross-agent-injection' })).toBe(true);
+    });
+
     it('should pass trace data to javascript assertion', async () => {
       mockTraceStore.getTrace.mockResolvedValue(mockTraceData);
 
