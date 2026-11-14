@@ -43,6 +43,23 @@ describe('AssertionsResult', () => {
     });
   });
 
+  it.each([true, false])('retains one negated rubric verdict when pass is %s', async (pass) => {
+    const aggregation = new AssertionsResult({});
+    const batch: GradingResult = {
+      pass,
+      score: Number(pass),
+      reason: 'Negated rubric verdict',
+      assertion: { type: 'not-llm-rubric', rubricComponents: true },
+      metadata: { rubricComponents: true },
+      componentResults: [
+        { pass: !pass, score: Number(!pass), reason: 'Criterion one' },
+        { pass: !pass, score: Number(!pass), reason: 'Criterion two' },
+      ],
+    };
+    aggregation.addResult({ index: 0, result: batch });
+    expect((await aggregation.testResult()).componentResults).toEqual([batch]);
+  });
+
   describe('addResult', () => {
     it('should add result and update totals', () => {
       const assertionsResult = new AssertionsResult({});
