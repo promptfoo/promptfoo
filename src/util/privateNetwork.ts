@@ -4,7 +4,13 @@ import { isIP } from 'node:net';
 import { CLOUD_PROVIDER_PREFIX } from '../constants';
 import { getEnvBool, getEnvString } from '../envars';
 import logger from '../logger';
+import { PrivateRangeBlockedError } from './fetch/guardContext';
 import { maybeLoadFromExternalFile } from './file';
+import {
+  assertLiteralGuardedFilePath,
+  renderGuardedRawRequest,
+  renderGuardedTemplate,
+} from './guardedTemplate';
 import { isProviderConfigFileReference } from './providerRef';
 
 /**
@@ -177,12 +183,7 @@ export function isPrivateRangeBlockingEnabled(): boolean {
   return getEnvBool('PROMPTFOO_BLOCK_PRIVATE_RANGES');
 }
 
-export class PrivateRangeBlockedError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'PrivateRangeBlockedError';
-  }
-}
+export { PrivateRangeBlockedError };
 
 /**
  * Every message raised by this module shares one prefix. Guard failures
@@ -606,6 +607,7 @@ function isScriptProviderId(id: string): boolean {
 function getRawRequestTarget(rawRequest: string, useHttps: boolean): string {
   let requestText = rawRequest;
   if (requestText.startsWith('file://')) {
+    assertLiteralGuardedFilePath(requestText);
     let loaded: unknown;
     try {
       loaded = maybeLoadFromExternalFile(requestText);
@@ -619,25 +621,8 @@ function getRawRequestTarget(rawRequest: string, useHttps: boolean): string {
     }
     requestText = loaded;
   }
+  renderGuardedRawRequest(requestText);
   const headerBlock = requestText.replace(/\r\n/g, '\n').split('\n\n')[0] ?? '';
-  // A template in the request line or headers can rewrite the effective
-  // target at call time: HttpProvider renders the whole request with
-  // Nunjucks before parsing, and its header reducer lets a later Host
-  // overwrite the first, so `{{prompt}}: 127.0.0.1` with prompt `Host`
-  // preflights as the literal public Host but dispatches to loopback. A
-  // template literal can also smuggle a newline into a header value
-  // (`{{ "a\nHost: 127.0.0.1" }}`), so refusing templates only in header
-  // names is not enough: refuse any template opener in the header block
-  // outright. Templates in the body stay allowed: the body cannot change
-  // the dispatch target (only the request line and the Host header do).
-  // Nunjucks `{% %}` tags need no refusal here: renderRawRequestWithNunjucks
-  // raw-wraps the request and only re-enables `{{...}}` variables, so
-  // `{% %}` never renders.
-  if (headerBlock.includes('{{')) {
-    throw new PrivateRangeBlockedError(
-      'PROMPTFOO_BLOCK_PRIVATE_RANGES is set: refusing provider raw request with an unresolved template in the request line or headers whose rendered target cannot be validated before loading',
-    );
-  }
   const lines = headerBlock.split('\n');
   const target = lines[0]?.trim().split(/\s+/)[1] ?? '';
   // Last Host header wins: the provider collapses duplicate headers by
@@ -668,100 +653,21 @@ function getRawRequestTarget(rawRequest: string, useHttps: boolean): string {
   return `${useHttps ? 'https' : 'http'}://${host}`;
 }
 
-/**
- * Extract every caller-supplied fetch target from provider options, so the
- * preflight can validate each one. A first-match lookup is not enough: the
- * provider that finally runs may ignore the first field and fetch another
- * (e.g. HttpProvider requests `config.url || id` and never reads
- * `config.apiBaseUrl`), which would let a validated public field mask the
- * private effective target.
- *
- * Covers every shape that lets a caller choose the fetch target:
- *
- * - explicit `config.apiBaseUrl` / `config.url` overrides,
- * - an HttpProvider raw `config.request` (Host header authority, else the
- *   absolute request target, mirroring `callApiWithRawRequest`),
- * - a bare `http(s)` provider id, parsed with `URL` so the non-canonical
- *   forms the provider registry accepts (`http:127.0.0.1`, backslash
- *   variants) are caught too,
- * - URL-bearing provider ids the registry unwraps before fetching
- *   (`webhook:<url>`, `n8n:<url>`, `a2a:<url>`, `ws:`/`wss:`),
- * - a file-backed provider id (`file://` YAML/JSON config), refused outright:
- *   `loadApiProvider` expands the file and instantiates the inner provider,
- *   so the preflight cannot validate the effective target without reading
- *   the file, and expanding it here would drag the provider loader into
- *   this shared guard. A templated `file://` id is refused for the same
- *   reason: env-template rendering at load time could turn it into a
- *   config-file reference the preflight never saw,
- * - a cloud provider id (`promptfoo://provider/<uuid>`), refused outright:
- *   `loadApiProvider` replaces it with the saved provider from Cloud and
- *   instantiates that, so the preflight sees no URL here, and resolving
- *   the saved target here would drag the Cloud client into this shared
- *   guard. Refusal keeps the flag fail closed,
- * - a script provider id (`exec:`, `python:`, `golang:`, `ruby:`, a
- *   `file://` script module, or a bare JS/TS module path), refused
- *   outright: the registry executes these outside the fetch layer, so
- *   neither the preflight nor redirect validation would see the network
- *   access they perform,
- * - a provider id carrying an unresolved template (`{{ ... }}`), refused
- *   outright: `loadApiProvider` renders env templates after this preflight
- *   runs, so the rendered id could be a script provider or a private URL
- *   this check never saw, and reproducing the loader's env merge here
- *   would risk a divergence the bypass could hide in,
- * - a string HttpProvider transform (`config.transformRequest`,
- *   `config.transformResponse`, `config.responseParser`), refused
- *   outright: the provider compiles the string with `new Function` and
- *   runs it before dispatch (request) or after fetch (response) with a
- *   process shim that exposes `require`, so a public URL must not mask
- *   code that can reach private services outside `fetchWithProxy`. A
- *   function value cannot arrive over a JSON route body and is left
- *   alone,
- * - a top-level string `transform` on the provider options, refused
- *   outright for the same reason: `loadApiProvider` attaches it to the
- *   loaded provider and the evaluator executes it with the process shim,
- *   so the nested config transforms above do not cover it,
- * - an MCP config embedded in another provider (`config.mcp`), refused
- *   or collected like a standalone MCP provider: the outer id is not
- *   `mcp:`, so the standalone check never runs, yet the provider still
- *   initializes the servers at load time (openai:chat from its
- *   constructor, Anthropic/Azure/Google via McpClientSession). Command
- *   and path transports are refused outright, remote server URLs are
- *   collected for validation, in both the MCPConfig (`server`/`servers`)
- *   and opencode-sdk record shapes,
- * - an HttpProvider session endpoint (`config.session.url`), collected
- *   for validation before the provider is constructed,
- * - a string HttpProvider `sessionParser` or `validateStatus`, or a
- *   string entry in `config.functionToolCallbacks`, refused outright
- *   like the transforms above: the provider compiles them with
- *   `new Function` (or loads a `file://` module) before or around the
- *   fetch, outside the fetch guard. A function value cannot arrive over
- *   a JSON route body and is left alone,
- * - a template (`{{ ... }}`) in the request line or headers of an
- *   HttpProvider raw `config.request`, refused outright: the provider
- *   renders the whole request with Nunjucks before parsing, so a
- *   template can become a second Host header that overwrites the
- *   preflighted one. Templates in the request body stay allowed: the
- *   body cannot change the dispatch target,
- * - a URL field that still carries a `{{ ... }}` template (`config.url`,
- *   `config.apiBaseUrl`, `config.session.url`, an MCP `server.url`, a
- *   raw-request Host header),
- *   refused outright by the URL validation below: providers render URL
- *   templates with call-time variables (e.g. the prompt), so the raw
- *   template can preflight as a public host while the rendered URL
- *   dispatches to a private address,
- * - a named provider whose default endpoint is local (ollama, llama,
- *   litellm, openclaw, ...), validated against its effective default base
- *   URL, unless the provider resolves an explicit `config.apiBaseUrl`
- *   ahead of that default (localai, litellm), in which case the default
- *   is never fetched; providers that derive their endpoint from
- *   `config.baseUrl` instead (helicone, elevenlabs) are validated against
- *   the effective `config.baseUrl`, and providers that derive it from
- *   `config.gateway_url` (openclaw) against the effective gateway URL.
- *
- * Named providers without an override or a local default resolve to their
- * public defaults and need no check.
- */
+function validateHttpTemplateValues(value: unknown): void {
+  if (typeof value === 'string') {
+    if (value.startsWith('file://')) {
+      assertLiteralGuardedFilePath(value);
+    }
+    renderGuardedTemplate(value);
+  } else if (value && typeof value === 'object') {
+    for (const child of Object.values(value)) {
+      validateHttpTemplateValues(child);
+    }
+  }
+}
+
 function collectHttpTargets(config: ProviderTarget['config'], urls: string[]): void {
+  validateHttpTemplateValues(config);
   const auth = config?.auth as { type?: unknown; tokenUrl?: unknown } | undefined;
   if (auth?.type === 'file') {
     throw new PrivateRangeBlockedError(
@@ -840,6 +746,95 @@ function refuseExecutableFields(providerOptions: ProviderTarget): void {
   }
 }
 
+/**
+ * Extract every caller-supplied fetch target from provider options, so the
+ * preflight can validate each one. A first-match lookup is not enough: the
+ * provider that finally runs may ignore the first field and fetch another
+ * (e.g. HttpProvider requests `config.url || id` and never reads
+ * `config.apiBaseUrl`), which would let a validated public field mask the
+ * private effective target.
+ *
+ * Covers every shape that lets a caller choose the fetch target:
+ *
+ * - explicit `config.apiBaseUrl` / `config.url` overrides,
+ * - an HttpProvider raw `config.request` (Host header authority, else the
+ *   absolute request target, mirroring `callApiWithRawRequest`),
+ * - a bare `http(s)` provider id, parsed with `URL` so the non-canonical
+ *   forms the provider registry accepts (`http:127.0.0.1`, backslash
+ *   variants) are caught too,
+ * - URL-bearing provider ids the registry unwraps before fetching
+ *   (`webhook:<url>`, `n8n:<url>`, `a2a:<url>`, `ws:`/`wss:`),
+ * - a file-backed provider id (`file://` YAML/JSON config), refused outright:
+ *   `loadApiProvider` expands the file and instantiates the inner provider,
+ *   so the preflight cannot validate the effective target without reading
+ *   the file, and expanding it here would drag the provider loader into
+ *   this shared guard. A templated `file://` id is refused for the same
+ *   reason: env-template rendering at load time could turn it into a
+ *   config-file reference the preflight never saw,
+ * - a cloud provider id (`promptfoo://provider/<uuid>`), refused outright:
+ *   `loadApiProvider` replaces it with the saved provider from Cloud and
+ *   instantiates that, so the preflight sees no URL here, and resolving
+ *   the saved target here would drag the Cloud client into this shared
+ *   guard. Refusal keeps the flag fail closed,
+ * - a script provider id (`exec:`, `python:`, `golang:`, `ruby:`, a
+ *   `file://` script module, or a bare JS/TS module path), refused
+ *   outright: the registry executes these outside the fetch layer, so
+ *   neither the preflight nor redirect validation would see the network
+ *   access they perform,
+ * - a provider id carrying an unresolved template (`{{ ... }}`), refused
+ *   outright: `loadApiProvider` renders env templates after this preflight
+ *   runs, so the rendered id could be a script provider or a private URL
+ *   this check never saw, and reproducing the loader's env merge here
+ *   would risk a divergence the bypass could hide in,
+ * - a string HttpProvider transform (`config.transformRequest`,
+ *   `config.transformResponse`, `config.responseParser`), refused
+ *   outright: the provider compiles the string with `new Function` and
+ *   runs it before dispatch (request) or after fetch (response) with a
+ *   process shim that exposes `require`, so a public URL must not mask
+ *   code that can reach private services outside `fetchWithProxy`. A
+ *   function value cannot arrive over a JSON route body and is left
+ *   alone,
+ * - a top-level string `transform` on the provider options, refused
+ *   outright for the same reason: `loadApiProvider` attaches it to the
+ *   loaded provider and the evaluator executes it with the process shim,
+ *   so the nested config transforms above do not cover it,
+ * - an MCP config embedded in another provider (`config.mcp`), refused
+ *   or collected like a standalone MCP provider: the outer id is not
+ *   `mcp:`, so the standalone check never runs, yet the provider still
+ *   initializes the servers at load time (openai:chat from its
+ *   constructor, Anthropic/Azure/Google via McpClientSession). Command
+ *   and path transports are refused outright, remote server URLs are
+ *   collected for validation, in both the MCPConfig (`server`/`servers`)
+ *   and opencode-sdk record shapes,
+ * - an HttpProvider session endpoint (`config.session.url`), collected
+ *   for validation before the provider is constructed,
+ * - a string HttpProvider `sessionParser` or `validateStatus`, or a
+ *   string entry in `config.functionToolCallbacks`, refused outright
+ *   like the transforms above: the provider compiles them with
+ *   `new Function` (or loads a `file://` module) before or around the
+ *   fetch, outside the fetch guard. A function value cannot arrive over
+ *   a JSON route body and is left alone,
+ * - templates in a raw request line, headers or file path, refused before
+ *   loading. Body templates may interpolate simple data variables.
+ * - a URL field that still carries a `{{ ... }}` template (`config.url`,
+ *   `config.apiBaseUrl`, `config.session.url`, an MCP `server.url`, a
+ *   raw-request Host header),
+ *   refused outright by the URL validation below: providers render URL
+ *   templates with call-time variables (e.g. the prompt), so the raw
+ *   template can preflight as a public host while the rendered URL
+ *   dispatches to a private address,
+ * - a named provider whose default endpoint is local (ollama, llama,
+ *   litellm, openclaw, ...), validated against its effective default base
+ *   URL, unless the provider resolves an explicit `config.apiBaseUrl`
+ *   ahead of that default (localai, litellm), in which case the default
+ *   is never fetched; providers that derive their endpoint from
+ *   `config.baseUrl` instead (helicone, elevenlabs) are validated against
+ *   the effective `config.baseUrl`, and providers that derive it from
+ *   `config.gateway_url` (openclaw) against the effective gateway URL.
+ *
+ * Named providers without an override or a local default resolve to their
+ * public defaults and need no check.
+ */
 export function getCallerSuppliedBaseUrls(providerOptions: ProviderTarget): string[] {
   const urls: string[] = [];
   const config = providerOptions?.config;

@@ -470,11 +470,6 @@ function seedRequestOwnedOptions(
     // itself carries but an init body does not inherit.
     (finalOptions as FetchOptions & { duplex?: 'half' }).duplex ??= 'half';
   }
-  // An explicit signal of null clears an inherited signal, so only an
-  // unset signal falls back to the Request-owned one.
-  if (finalOptions.signal === undefined) {
-    finalOptions.signal = url.signal;
-  }
   finalOptions.referrer ??= url.referrer;
   finalOptions.credentials ??= url.credentials;
   // A Request-owned redirect mode must survive the same way: the guarded
@@ -499,11 +494,12 @@ export async function fetchWithProxy(
   }
 
   // Combine abort signals: incoming abortSignal parameter + any signal in options
+  const requestSignal = getEffectiveRequestSignal(url, options);
   const combinedSignal = abortSignal
-    ? options.signal
-      ? AbortSignal.any([options.signal, abortSignal])
+    ? requestSignal
+      ? AbortSignal.any([requestSignal, abortSignal])
       : abortSignal
-    : options.signal;
+    : requestSignal;
 
   // This is overridden globally but Node v20 is still complaining so we need to add it here too
   const { getAuthHeaders, ...requestOptions } = options;
@@ -512,7 +508,9 @@ export async function fetchWithProxy(
     headers: getFetchWithProxyHeaders(url, options),
     signal: combinedSignal,
   };
-  seedRequestOwnedOptions(finalOptions, url);
+  if (isPrivateRangeGuardContextActive()) {
+    seedRequestOwnedOptions(finalOptions, url);
+  }
   const logEnabled = new Headers(finalOptions.headers).get('x-promptfoo-silent') !== 'true';
 
   if (typeof url === 'string') {

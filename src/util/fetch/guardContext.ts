@@ -1,5 +1,12 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 
+export class PrivateRangeBlockedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'PrivateRangeBlockedError';
+  }
+}
+
 interface PrivateRangeGuardContext {
   enabled: true;
 }

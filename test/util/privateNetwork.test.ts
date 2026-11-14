@@ -468,6 +468,18 @@ describe('getCallerSuppliedBaseUrls', () => {
     ).toEqual(['http://example.com']);
   });
 
+  it.each([
+    { request: 'POST /submit HTTP/1.1\nHost: example.com\n\n{{ range(1) }}' },
+    { request: 'file://{{ prompt }}.http' },
+    { body: { messages: [{ content: '{{ prompt | upper }}' }] } },
+    { headers: { 'x-sample': '{% if prompt %}sample{% endif %}' } },
+    { session: { body: { sample: '{{ env.FIXTURE }}' } } },
+  ])('refuses expressions before loading an HTTP provider', (config) => {
+    expect(() => getCallerSuppliedBaseUrls({ id: 'http', config })).toThrow(
+      PrivateRangeBlockedError,
+    );
+  });
+
   it('resolves named providers with local default endpoints', () => {
     expect(getCallerSuppliedBaseUrls({ id: 'ollama:chat:llama3' })).toEqual([
       'http://localhost:11434',

@@ -24,6 +24,7 @@ import {
 import { getRequestTimeoutMs } from '../../../src/providers/shared';
 import { wrapProviderWithRateLimiting } from '../../../src/scheduler/providerWrapper';
 import { RateLimitRegistry } from '../../../src/scheduler/rateLimitRegistry';
+import { withPrivateRangeGuard } from '../../../src/util/fetch/guardContext';
 
 const createJsonPostOptions = () => ({
   config: {
@@ -1962,6 +1963,64 @@ describe('HttpProvider scheduler response envelopes', () => {
     } finally {
       registry.dispose();
     }
+  });
+});
+
+describe('HttpProvider guarded diagnostic templates', () => {
+  it('interpolates raw body data once and preserves JSON escaping', async () => {
+    const provider = new HttpProvider('http://example.com', {
+      config: {
+        request:
+          'POST / HTTP/1.1\r\nHost: example.com\r\nContent-Type: application/json\r\n\r\n{"input":"{{ prompt }}"}',
+      },
+    });
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(createSuccessJsonResponse());
+    const input = 'say "hello"\n{{ sample }}';
+
+    await withPrivateRangeGuard(() => provider.callApi(input));
+
+    expect(JSON.parse(String(vi.mocked(fetchWithCache).mock.calls[0][1]?.body))).toEqual({ input });
+  });
+
+  it('keeps normal HTTP fields and a session variable available in a guarded call', async () => {
+    const provider = new HttpProvider('http://example.com', {
+      config: {
+        method: 'POST',
+        body: { input: '{{ prompt }}' },
+        headers: { 'x-session': '{{ sessionId }}' },
+      },
+    });
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(createSuccessJsonResponse());
+
+    await withPrivateRangeGuard(() =>
+      provider.callApi('hello', {
+        prompt: { raw: 'hello', label: 'hello' },
+        vars: { sessionId: 'session1' },
+      }),
+    );
+
+    const options = vi.mocked(fetchWithCache).mock.calls[0][1];
+    expect(options?.headers).toMatchObject({ 'x-session': 'session1' });
+    expect(JSON.parse(String(options?.body))).toEqual({ input: 'hello' });
+  });
+
+  it('refuses expressions in a guarded raw request and keeps ordinary filters available', async () => {
+    const provider = new HttpProvider('http://example.com', {
+      config: {
+        request:
+          'POST / HTTP/1.1\r\nHost: example.com\r\nContent-Type: application/json\r\n\r\n{"input":"{{ prompt | upper }}"}',
+      },
+    });
+
+    await expect(withPrivateRangeGuard(() => provider.callApi('hello'))).rejects.toThrow(
+      'PROMPTFOO_BLOCK_PRIVATE_RANGES',
+    );
+    expect(fetchWithCache).not.toHaveBeenCalled();
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(createSuccessJsonResponse());
+    await provider.callApi('hello');
+    expect(JSON.parse(String(vi.mocked(fetchWithCache).mock.calls[0][1]?.body))).toEqual({
+      input: 'HELLO',
+    });
   });
 });
 

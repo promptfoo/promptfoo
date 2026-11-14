@@ -460,6 +460,21 @@ describe('fetchWithProxy guarded redirects (PROMPTFOO_BLOCK_PRIVATE_RANGES)', ()
     expect(mockGetProxyForUrl).toHaveBeenCalledWith('https://public.example.com/next');
   });
 
+  it('leaves native Request body ownership intact outside guarded routes', async () => {
+    const request = new Request('https://public.example.com/submit', {
+      method: 'POST',
+      body: 'replayable',
+    });
+    mockedMonkeyPatchFetch.mockResolvedValueOnce(new Response('ok'));
+
+    await fetchWithProxy(request);
+
+    const [input, init] = mockedMonkeyPatchFetch.mock.calls[0];
+    expect(input).toBe(request);
+    expect(init?.body).toBeUndefined();
+    expect(await request.text()).toBe('replayable');
+  });
+
   it('replays a Request stream body across a 307 redirect', async () => {
     restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
     // A real fetch consumes the body stream, so the mock consumes it too:
