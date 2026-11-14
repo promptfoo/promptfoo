@@ -32,7 +32,10 @@ import {
   buildRemoteMaterializedInputVariables,
   isRemoteMaterializationUpgradeError,
 } from '../remoteMaterialization';
-import { throwIfTargetPromptExceedsMaxChars } from '../shared/promptLength';
+import {
+  TargetPromptLengthError,
+  throwIfTargetPromptExceedsMaxChars,
+} from '../shared/promptLength';
 import {
   applyRuntimeTransforms,
   type LayerConfig,
@@ -90,7 +93,11 @@ interface SuccessfulGoatAttack extends SuccessfulAttack {
  */
 interface GoatMetadata extends BaseRedteamMetadata {
   redteamFinalPrompt?: string;
-  stopReason: 'Grader failed' | 'Max turns reached' | 'Target ended conversation';
+  stopReason:
+    | 'Grader failed'
+    | 'Max turns reached'
+    | 'Target ended conversation'
+    | 'Message length limit exceeded';
   successfulAttacks?: SuccessfulGoatAttack[];
   totalSuccessfulAttacks?: number;
   storedGraderResult?: GradingResult;
@@ -276,6 +283,7 @@ export default class GoatProvider implements ApiProvider {
     // Generate goal-specific evaluation rubric
     const userGoal = context?.test?.metadata?.goal || context?.vars[this.config.injectVar];
     const additionalRubric = getGoalRubric(userGoal);
+    let lengthError: TargetPromptLengthError | undefined;
     let stopReason: GoatMetadata['stopReason'] = 'Max turns reached';
 
     for (let turn = 0; turn < this.config.maxTurns; turn++) {
@@ -859,6 +867,11 @@ export default class GoatProvider implements ApiProvider {
           }
         }
       } catch (error) {
+        if (error instanceof TargetPromptLengthError) {
+          lengthError = error;
+          stopReason = 'Message length limit exceeded';
+          break;
+        }
         // Re-throw abort errors to properly cancel the operation
         if (error instanceof Error && error.name === 'AbortError') {
           logger.debug('[GOAT] Operation aborted');
@@ -885,6 +898,7 @@ export default class GoatProvider implements ApiProvider {
       transformDisplayVars: lastTransformDisplayVars,
     };
     return {
+      ...(lengthError && { error: lengthError.message }),
       output: reported.output,
       prompt: reported.prompt,
       metadata: {

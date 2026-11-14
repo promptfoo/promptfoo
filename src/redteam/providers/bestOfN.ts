@@ -16,7 +16,6 @@ import {
   neverGenerateRemote,
 } from '../remoteGeneration';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
-import { throwIfTargetPromptExceedsMaxChars } from '../shared/promptLength';
 import { getSessionId } from '../util';
 import { callTargetProvider } from './shared';
 
@@ -183,9 +182,6 @@ export default class BestOfNProvider implements ApiProvider {
           }
 
           try {
-            // The plugin- and strategy-scoped cap is enforced inside
-            // callTargetProvider; this keeps the global cap check explicit here.
-            throwIfTargetPromptExceedsMaxChars(renderedPrompt);
             const response = await callTargetProvider(
               targetProvider,
               renderedPrompt,

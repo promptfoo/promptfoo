@@ -516,7 +516,10 @@ function getTargetPromptMaxCharsPerMessage(context?: CallApiContextParams): numb
     return undefined;
   }
 
-  return configuredLimit;
+  const globalLimit = cliState.config?.redteam?.maxCharsPerMessage;
+  return typeof globalLimit === 'number' && Number.isInteger(globalLimit) && globalLimit > 0
+    ? Math.min(globalLimit, configuredLimit)
+    : configuredLimit;
 }
 
 /** Invoke a red-team target with the same tracing behavior across every strategy. */
@@ -528,8 +531,7 @@ export function callTargetProvider(
 ): Promise<ProviderResponse> {
   // Enforce the request-scoped cap here, before tracing and rate-limit scheduling,
   // so strategies that call the target directly get the same plugin- and
-  // strategy-scoped check as the getTargetResponse path. The limit falls back to
-  // the global redteam cap when no scoped cap is configured.
+  // strategy-scoped check as the getTargetResponse path, bounded by the global cap.
   throwIfTargetPromptExceedsMaxChars(targetPrompt, getTargetPromptMaxCharsPerMessage(context));
   const executionContext = getProviderCallExecutionContext();
   const tracingContext = getProviderCallTracingContext();

@@ -140,13 +140,15 @@ export function getGeneratedPromptOverLimit(
   };
 }
 
+export class TargetPromptLengthError extends Error {}
+
 export function throwIfTargetPromptExceedsMaxChars(prompt: string, limit?: number): void {
   const violation = getPromptLengthViolation(prompt, limit);
   if (!violation) {
     return;
   }
 
-  throw new Error(
+  throw new TargetPromptLengthError(
     `Target prompt message at ${violation.path} exceeds maxCharsPerMessage=${violation.limit}: ${violation.length} characters.`,
   );
 }
