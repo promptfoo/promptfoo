@@ -7,11 +7,21 @@ const { default: phmLiteAssertion, phmLiteCheck, C_LIGHT } = physics;
 describe('PHM-Lite physics-consistency assertion', () => {
   // ---- FAIL: violates universal physical law ----
   it.each([
+    ['compact temperature range includes impossible lower endpoint', 'The range is -300–0 °C.'],
     ['speed above c (fraction)', 'The probe travels at 1.5 c.'],
     ['speed above c (km/s)', 'Signal propagated at 400,000 km/s through the cable.'],
     ['negative superluminal magnitude', 'The particle drifted at -400,000 km/s.'],
     ['temperature below absolute zero (ASCII)', 'We cooled the sample to -300 degC.'],
     ['temperature below absolute zero (U+2212)', 'We cooled the sample to −300 °C.'],
+    [
+      'unrelated preceding temperature delta marker',
+      'The sensor reported a pressure change. The temperature was -300 °C.',
+    ],
+    [
+      'unrelated following temperature delta marker',
+      'The temperature was -300 °C. The pressure change was recorded.',
+    ],
+    ['absolute reading after a drop measured in kelvin', 'It cooled by 300 K to -300 °C.'],
     ['negative mass (kg)', 'The reaction consumed -5 kg of catalyst.'],
     ['probability above 100%', 'We are 150% confident in this result.'],
     ['probability below 0%', 'a probability of -5% is recorded'],
@@ -51,6 +61,9 @@ describe('PHM-Lite physics-consistency assertion', () => {
 
   // ---- PASS: physically plausible ----
   it.each([
+    ['leading-dot shares add up to exactly one whole', 'Traffic shares: A .5%, B 99.5%.'],
+    ['falling speed is not a free-fall distance', 'The speed fell 100 m/s in 1 s.'],
+    ['signed mass flow', 'The signed mass flow is -5 kg s^-1.'],
     ['temperature difference', 'The temperature change was -300 °C.'],
     ['symbolic temperature difference', 'ΔT = -300 °C.'],
     ['probability context in another sentence', 'We checked the probability. Revenue grew 150%.'],
@@ -123,6 +136,8 @@ describe('PHM-Lite physics-consistency assertion', () => {
   it('scans structured outputs with parent-key context', async () => {
     const bad = await phmLiteAssertion({ probability: { value: 150, unit: '%' } });
     expect(bad.pass).toBe(false);
+    const badArray = await phmLiteAssertion({ probability: [{ value: 150, unit: '%' }] });
+    expect(badArray.pass).toBe(false);
     const growth = await phmLiteAssertion({ growth: { value: 150, unit: '%' } });
     expect(growth.pass).toBe(true);
     const benign = await phmLiteAssertion({ probability: { value: 85, unit: '%' } });

@@ -89,33 +89,34 @@ function toCelsius(value, unit) {
   return null;
 }
 
-/**
- * Run PHM-Lite rules over the output text.
- *
- * @param {string} output
- * @returns {{verdict: 'PASS'|'WARN'|'FAIL', violations: Array<object>}}
- */
+// Keep contextual rules local to the quantity, including on long model outputs.
+function quantityContext(text, index) {
+  const boundary = /[.!?](?=\s|$)|\n/;
+  return {
+    before: text
+      .slice(Math.max(0, index - 160), index)
+      .split(boundary)
+      .at(-1),
+    after: text.slice(index, index + 160).split(boundary)[0],
+  };
+}
+
 /**
  * Apply the four per-quantity rules (speed limit, absolute zero,
  * non-negativity of mass, percentage range) to one parsed quantity.
  */
-function checkQuantityRules(
-  { value, unit: rawUnit, raw, index, underflowNeg },
-  violations,
-  normalized,
-) {
+function checkQuantityRules({ value, unit: rawUnit, raw, index }, violations, normalized) {
   // Spelled-out speed units ("400,000 kilometers per second", "meters/s")
   // normalize onto the same rule paths as their compact forms.
-  const unit =
-    rawUnit.startsWith('kilo') || /^kilo(?:meter|metre)/.test(rawUnit)
-      ? 'km/s'
-      : /^met(?:er|re)s?\s*(?:\/|per\s+)/.test(rawUnit)
-        ? 'm/s'
-        : rawUnit;
+  const unit = rawUnit.startsWith('kilo')
+    ? 'km/s'
+    : /^met(?:er|re)s?\s*(?:\/|per\s+)/.test(rawUnit)
+      ? 'm/s'
+      : rawUnit;
 
   // Rule 1: universal speed limit ("1.5 c", "400,000 km/s", "5e8 m/s").
   // 1% tolerance absorbs rounded light-speed notation ("3e8 m/s ≈ c"),
-  // which is common in benign text; nothing macroscopic reaches 0.99c+.
+  // which is common in physics explanations.
   //
   // Bare "c" is ambiguous: physics writes light-speed fractions as "1.5 c",
   // but "the item costs 2 c" (cents) and "the expression is 2c" (algebra)
@@ -126,19 +127,8 @@ function checkQuantityRules(
   //   2. Local motion context wins: a speed claim's sentence carries a
   //      motion verb, so "the equation predicts that the signal travels at
   //      2c" stays FAIL even though "equation" shares the sentence.
-  const cOwnSpan = (() => {
-    if (unit !== 'c') return '';
-    const beforeC = normalized.slice(0, index);
-    const sb = [...beforeC.matchAll(/[.!?](?:\s|$)|\n/g)];
-    const sentStart = sb.length ? sb[sb.length - 1].index + sb[sb.length - 1][0].length : 0;
-    return (
-      normalized.slice(sentStart, index) +
-      normalized
-        .slice(index)
-        .split(/[.!?](?:\s|$)|\n/)[0]
-        .slice(0, 160)
-    );
-  })();
+  const context = unit === 'c' ? quantityContext(normalized, index) : undefined;
+  const cOwnSpan = context ? context.before + context.after : '';
   const MOTION_RE =
     /(?:\b(?:travels?|travelled|traveled|moves?|moved|speeds?|races?|flies|flew|propagat\w*|travelling|traveling|velocit(?:y|ies)|accelerat\w*|launch\w*|zoom\w*|dash\w*|sprint\w*|rocket\w*|soars?|climbs?|hurtl\w*|speed\w*|faster|fastest|slower|reach(?:es|ed)?\s+\d)\b)/i;
   const isAmbiguousC =
@@ -169,29 +159,21 @@ function checkQuantityRules(
   // float round-trip of the exact Fahrenheit boundary (-459.67 °F).
   // Negative deltas ("a temperature change of -300 °C", ΔT) are valid
   // and exempt: only absolute readings are floored.
-  const tempWindow = normalized.slice(Math.max(0, index - 160), index + 120);
-  // The delta marker must belong to THIS quantity: search only the span
-  // after the previous temperature unit, so "dropped by 300 °C to -300 °C"
-  // keeps the absolute -300 °C reading floored.
-  const before = normalized.slice(0, index);
-  const prevTemp = Math.max(
-    before.lastIndexOf('°C'),
-    before.lastIndexOf('degC'),
-    before.lastIndexOf('°F'),
-  );
-  const ownSpan =
-    normalized.slice(prevTemp === -1 ? 0 : prevTemp + 3, index) +
-    normalized.slice(index, index + 120);
-  const isDelta = /(?:\b(?:change|delta|difference|dropped by|fell by|cooled by)\b|\u0394)/i.test(
-    ownSpan,
-  );
   const celsius = toCelsius(value, unit);
-  if (!isDelta && celsius !== null && celsius < ABSOLUTE_ZERO_C - 1e-9) {
-    violations.push({
-      rule: 'absolute-zero',
-      severity: 'FAIL',
-      detail: `stated temperature ${raw} is below absolute zero`,
-    });
+  if (celsius !== null && celsius < ABSOLUTE_ZERO_C - 1e-9) {
+    const { before, after } = quantityContext(normalized, index);
+    // A marker before an earlier temperature applies to that reading.
+    const beforeReading = before.split(/°C|degC|°F|\bK\b/).at(-1);
+    const isDelta = /(?:\b(?:change|delta|difference|dropped by|fell by|cooled by)\b|\u0394)/i.test(
+      beforeReading + after,
+    );
+    if (!isDelta) {
+      violations.push({
+        rule: 'absolute-zero',
+        severity: 'FAIL',
+        detail: `stated temperature ${raw} is below absolute zero`,
+      });
+    }
   }
 
   // Rule 3: non-negativity of mass (kg only — see MASS_UNITS note).
@@ -202,17 +184,10 @@ function checkQuantityRules(
   // the number), so "Conditions changed yesterday. The reaction consumed
   // -5 kg of catalyst." keeps its impossible-mass finding.
   if (MASS_UNITS.has(unit) && value < 0) {
-    const beforeKg = normalized.slice(0, index);
-    const sb = [...beforeKg.matchAll(/[.!?](?:\s|$)|\n/g)];
-    const sentStart = sb.length ? sb[sb.length - 1].index + sb[sb.length - 1][0].length : 0;
-    const massSpan =
-      normalized.slice(sentStart, index) +
-      normalized
-        .slice(index)
-        .split(/[.!?](?:\s|$)|\n/)[0]
-        .slice(0, 160);
+    const { before, after } = quantityContext(normalized, index);
+    const massSpan = before + after;
     const isMassDelta =
-      /(?:\b(?:change|changed|lost|loses?|lost|gained|gains?|dropped|reduced|difference|delta)\b|\u0394)/i.test(
+      /(?:\b(?:change|changed|lost|loses?|gained|gains?|dropped|reduced|difference|delta)\b|\u0394)/i.test(
         massSpan,
       );
     if (!isMassDelta) {
@@ -261,7 +236,7 @@ const unitAlt =
   '°C|degC|°F|K\\b|km\\/s(?!\\s*[/^²³]|\\s*\\d|\\s*per\\s+s)|m\\/s(?!\\s*[/^²³]|\\s*\\d|\\s*per\\s+s)' +
   '|kilo(?:meter|metre)s?\\s*(?:\\/|per\\s+)s(?:ec|econds?)?\\b(?!\\s*(?:squared|²|\\^?2|\\/\\s*s|per\\s+s))' +
   '|met(?:er|re)s?\\s*(?:\\/|per\\s+)s(?:ec|econds?)?\\b(?!\\s*(?:squared|²|\\^?2|\\/\\s*s|per\\s+s))' +
-  '|c\\b|%|kg\\b(?!\\s*[·*/⋅])|g\\b|km\\b|m\\b|J\\b|kJ\\b|MJ\\b|Wh\\b|kWh\\b|MeV\\b|GeV\\b|eV\\b|N\\b|Pa\\b|kPa\\b|MPa\\b|atm\\b|mol\\/L\\b|mg\\/mL\\b';
+  '|c\\b|%|kg\\b(?!\\s*[·*/⋅]|\\s+[ms]\\s*(?:\\^?[-+]\\d|[⁻⁺]))|g\\b|km\\b|m\\b|J\\b|kJ\\b|MJ\\b|Wh\\b|kWh\\b|MeV\\b|GeV\\b|eV\\b|N\\b|Pa\\b|kPa\\b|MPa\\b|atm\\b|mol\\/L\\b|mg\\/mL\\b';
 
 function phmLiteCheck(output) {
   const violations = [];
@@ -274,7 +249,7 @@ function phmLiteCheck(output) {
     .replace(/(\be\.g|\bi\.e|\betc|\bvs|\bcf|\bDr|\bMr|\bMrs|\bMs|\bProf|\bapprox)\./g, '$1\u0001');
   // Shared-unit range propagation
   const rangeProp = new RegExp(
-    `(${num})\\s+(?:to|\\u2013|\\u2014)\\s+(${num})\\s*(${unitAlt})`,
+    `(?<![\\d.,])(${num})(?:\\s+to\\s+|\\s*[–—]\\s*)(${num})\\s*(${unitAlt})`,
     'gi',
   );
   normalized = normalized.replace(rangeProp, (_mm, a, b, u) => `${a} ${u} and ${b} ${u}`);
@@ -295,7 +270,7 @@ function phmLiteCheck(output) {
   const fallRe = new RegExp(
     '(?:fell|drops?|dropped|falls?)\\s+(' +
       fallNum +
-      ')\\s*(?!(?:meters?|metres?)\\s*(?:per\\s+second|/s))(?:m\\b|meters?|metres?)' +
+      ')\\s*(?:m|meters?|metres?)\\b(?!\\s*(?:/|per\\s+))' +
       '((?:(?!fell\\b|drops?\\b|dropped\\b|falls?\\b|[.!?](?=\\s|$))[\\s\\S]){0,200}?)' +
       '(?:in|within|after)\\s+(' +
       fallNum +
@@ -331,11 +306,12 @@ function phmLiteCheck(output) {
   const SHARE_CTX = /\b(?:shares?|allocations?|splits?|portions?|breakdowns?|divided)\b/i;
   const METRIC_CTX = /recall|precision|accuracy|margin|error rate|f1/i;
   for (const sentence of normalized.split(/[.!?]\s|\n/)) {
+    if (!SHARE_CTX.test(sentence) || METRIC_CTX.test(sentence)) continue;
     const breakdown = sentence.replace(PERCENTAGE_CHANGE, '');
-    const pct = [...breakdown.matchAll(/(\d[\d,]*(?:\.\d+)?(?:\s*[eE][+-]?\d+)?)\s*%/g)].map((x) =>
-      Number(x[1].replace(/[\s,]/g, '')),
-    );
-    if (pct.length >= 2 && SHARE_CTX.test(sentence) && !METRIC_CTX.test(sentence)) {
+    const pct = extractQuantities(breakdown)
+      .filter(({ unit }) => unit === '%')
+      .map(({ value }) => value);
+    if (pct.length >= 2) {
       const sum = pct.reduce((a, b) => a + b, 0);
       if (sum > 100 + 1e-9) {
         violations.push({
@@ -372,7 +348,7 @@ function serializeForScan(v) {
       return;
     }
     if (Array.isArray(node)) {
-      node.forEach((item) => walk(item));
+      node.forEach((item) => walk(item, keyHint));
       return;
     }
     const keys = Object.keys(node);
