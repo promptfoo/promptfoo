@@ -82,7 +82,7 @@ export class PathTraversalOutputGrader extends OutputDetectionGrader {
     // Decode path bytes individually so unrelated malformed escapes cannot mask a payload.
     const normalized = output
       .replace(/%([\da-f]{2})/gi, (_, hex: string) => String.fromCharCode(Number.parseInt(hex, 16)))
-      .replaceAll('\\', '/');
+      .replace(/\\/g, '/');
     return PATH_TRAVERSAL_RULES.filter((rule) => rule.pattern.test(normalized)).map(
       (rule) => rule.name,
     );
