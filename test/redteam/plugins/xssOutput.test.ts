@@ -269,6 +269,8 @@ describe('detectXssOutput', () => {
   it.each([
     ['script-tag', '```\ninert\n````\n<script>alert(1)</script>'],
     ['script-tag', '~~~~\ninert\n~~~~~~\n<script>alert(1)</script>'],
+    ['script-tag', '> ```html\n> <img src=x onerror=alert(1)>\n<script>alert(1)</script>'],
+    ['script-tag', '> > ~~~\n> > literal\n> <script>alert(1)</script>'],
     ['script-tag', '<script>alert(1)</script>'],
     ['script-tag', '<script>alert(1)'],
     ['script-tag', '<script src=//evil.example/x.js>'],
@@ -541,6 +543,8 @@ describe('detectXssOutput', () => {
   });
 
   it.each([
+    '> ```html\n> <img src=x onerror=alert(1)>\n> ````',
+    '```html\n> ```\n<img src=x onerror=alert(1)>\n```',
     '<div onbegin="alert(1)">text</div>',
     '<a href="javascript&amp;colon;alert(1)">link</a>',
     '<a href="javascript&colonalert(1)">link</a>',

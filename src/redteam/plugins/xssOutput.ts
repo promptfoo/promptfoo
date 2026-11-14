@@ -176,19 +176,45 @@ function normalizeMarkdownDataUrlDetectionOutput(output: string): string {
     .join('\n');
 }
 
+function maskFencedCodeLines(lines: string[], rawHtmlRanges: SourceRange[]): void {
+  let fence: { marker: string; quoteDepth: number } | undefined;
+  let offset = 0;
+  for (let index = 0; index < lines.length; index += 2) {
+    const line = lines[index];
+    const content = line.replace(
+      /^(?:(?:[ \t]{0,3}>[ \t]?)|(?:[ \t]{0,3}(?:[-+*]|\d+[.)])[ \t]+))*/,
+      '',
+    );
+    const prefix = line.slice(0, line.length - content.length);
+    const quoteDepth = prefix.split('>').length - 1;
+    if (fence && quoteDepth < fence.quoteDepth) {
+      fence = undefined;
+    }
+    const marker = content.match(/^[ \t]{0,3}(`{3,}|~{3,})/);
+    if (fence) {
+      lines[index] = line.replace(/[^\r\n]/g, ' ');
+      if (
+        quoteDepth === fence.quoteDepth &&
+        marker?.[1].startsWith(fence.marker) &&
+        !content.slice(marker[0].length).trim()
+      ) {
+        fence = undefined;
+      }
+    } else if (marker) {
+      const start = offset + prefix.length + marker[0].length - marker[1].length;
+      if (!isInsideRawHtmlBlock(rawHtmlRanges, start, start + marker[1].length)) {
+        fence = { marker: marker[1], quoteDepth };
+        lines[index] = line.replace(/[^\r\n]/g, ' ');
+      }
+    }
+    offset += line.length + (lines[index + 1]?.length ?? 0);
+  }
+}
+
 function maskMarkdownCodeContexts(output: string): string {
-  const mask = (value: string) => value.replace(/[^\r\n]/g, ' ');
   const rawHtmlRanges = findRawHtmlBlockRanges(output);
-  const withoutFences = output.replace(
-    /(^|\r?\n)(?:(?:[ \t]{0,3}>[ \t]?)|(?:[ \t]{0,3}(?:[-+*]|\d+[.)])[ \t]+))*[ \t]{0,3}((`|~)\3{2,})[^\r\n]*(?:\r?\n|$)[\s\S]*?(?:(?:\r?\n)(?:(?:[ \t]{0,3}>[ \t]?)|(?:[ \t]{0,3}(?:[-+*]|\d+[.)])[ \t]+))*[ \t]{0,3}\2\3*[ \t]*(?=\r?\n|$)|$)/g,
-    (match, _lineStart: string, fence: string, _marker: string, offset: number) => {
-      const fenceOffset = offset + match.indexOf(fence);
-      return isInsideRawHtmlBlock(rawHtmlRanges, fenceOffset, fenceOffset + fence.length)
-        ? match
-        : mask(match);
-    },
-  );
-  const lines = withoutFences.split(/(\r?\n)/);
+  const lines = output.split(/(\r?\n)/);
+  maskFencedCodeLines(lines, rawHtmlRanges);
   let inIndentedBlock = false;
   let previousLineWasBlank = true;
   for (let index = 0; index < lines.length; index += 2) {
@@ -199,7 +225,7 @@ function maskMarkdownCodeContexts(output: string): string {
       line,
     );
     if (indented && (listIndented || previousLineWasBlank || inIndentedBlock)) {
-      lines[index] = mask(line);
+      lines[index] = line.replace(/[^\r\n]/g, ' ');
       inIndentedBlock = true;
     } else if (!blank) {
       inIndentedBlock = false;
