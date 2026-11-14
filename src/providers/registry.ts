@@ -12,7 +12,7 @@ import { AI21ChatCompletionProvider } from './ai21';
 import { AlibabaChatCompletionProvider, AlibabaEmbeddingProvider } from './alibaba';
 import { AnthropicCompletionProvider } from './anthropic/completion';
 import { AnthropicMessagesProvider } from './anthropic/messages';
-import { ANTHROPIC_MODELS, looksLikeClaudeModelId } from './anthropic/util';
+import { ANTHROPIC_SHORTHAND_MODEL_IDS, looksLikeClaudeModelId } from './anthropic/util';
 import { createAtlasCloudProvider } from './atlascloud';
 import { AzureAssistantProvider } from './azure/assistant';
 import { AzureChatCompletionProvider } from './azure/chat';
@@ -73,6 +73,7 @@ import { createN8nProvider } from './n8n';
 import { createNovitaProvider } from './novita';
 import { createNscaleProvider } from './nscale';
 import { OllamaChatProvider, OllamaCompletionProvider, OllamaEmbeddingProvider } from './ollama';
+import { resolveOpenAiApiUrl } from './openai';
 import { loadOpenAiAgentsModule } from './openai/agents-availability';
 import { OpenAiAssistantProvider } from './openai/assistant';
 import { OpenAiChatCompletionProvider } from './openai/chat';
@@ -83,7 +84,13 @@ import { OpenAiModerationProvider } from './openai/moderation';
 import { OpenAiRealtimeProvider } from './openai/realtime';
 import { OpenAiResponsesProvider } from './openai/responses';
 import { OpenAiTtsProvider } from './openai/tts';
-import { assertOpenAiApiModel, NON_CONVERSATIONAL_REALTIME_MODELS } from './openai/util';
+import {
+  assertOpenAiApiModel,
+  assertOpenAiModelEndpointCompatibility,
+  getRetiredOpenAiModelRoute,
+  isOpenAiFirstPartyApiUrl,
+  OPENAI_DAYBREAK_ALIASES,
+} from './openai/util';
 import { OpenAiVideoProvider } from './openai/video';
 import { createOpenRouterProvider } from './openrouter';
 import { createOrcaRouterProvider } from './orcarouter';
@@ -178,6 +185,66 @@ function shouldDefaultToOpenAiResponses(modelName: string): boolean {
   const major = Number(version[1]);
   const minor = Number(version[2] ?? 0);
   return major > 5 || (major === 5 && minor >= 6);
+}
+
+const OPENAI_CONFIG_MODEL_OVERRIDE_ROUTES = new Set(['image', 'video']);
+const OPENAI_PASSTHROUGH_MODEL_ROUTES = new Set([
+  'chat',
+  'completion',
+  'embedding',
+  'embeddings',
+  'responses',
+  'speech',
+  'tts',
+]);
+const OPENAI_FIXED_MODEL_ROUTES = new Set(['moderation', 'realtime', 'transcription']);
+
+function getEffectiveOpenAiApiModel(
+  modelType: string,
+  modelName: string,
+  configuredModel: string | undefined,
+  passthroughModel: unknown,
+): string {
+  if (OPENAI_CONFIG_MODEL_OVERRIDE_ROUTES.has(modelType)) {
+    return configuredModel || modelName || modelType;
+  }
+
+  const retiredRoute = getRetiredOpenAiModelRoute(modelType);
+  const explicitRouteUsesConfiguredModel =
+    OPENAI_PASSTHROUGH_MODEL_ROUTES.has(modelType) || OPENAI_FIXED_MODEL_ROUTES.has(modelType);
+  const providerOverridesModelFromConfig =
+    modelType === 'speech' ||
+    modelType === 'tts' ||
+    OpenAiTtsProvider.OPENAI_TTS_MODEL_NAMES.includes(modelType) ||
+    retiredRoute === 'tts';
+  const selectedModel = providerOverridesModelFromConfig
+    ? configuredModel || modelName || modelType
+    : modelName || (explicitRouteUsesConfiguredModel ? configuredModel : undefined) || modelType;
+
+  if (OPENAI_FIXED_MODEL_ROUTES.has(modelType) || modelType === 'gpt-transcribe') {
+    return selectedModel;
+  }
+
+  const bareModelUsesPassthrough =
+    !modelName &&
+    (shouldDefaultToOpenAiResponses(modelType) ||
+      OpenAiChatCompletionProvider.OPENAI_CHAT_MODEL_NAMES.includes(modelType) ||
+      OpenAiCompletionProvider.OPENAI_COMPLETION_MODEL_NAMES.includes(modelType) ||
+      OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES.includes(modelType) ||
+      OpenAiTtsProvider.OPENAI_TTS_MODEL_NAMES.includes(modelType) ||
+      retiredRoute === 'chat' ||
+      retiredRoute === 'responses' ||
+      retiredRoute === 'tts' ||
+      (!retiredRoute &&
+        !OpenAiCompletionProvider.OPENAI_COMPLETION_MODEL_NAMES.includes(modelType) &&
+        !OpenAiTtsProvider.OPENAI_TTS_MODEL_NAMES.includes(modelType) &&
+        !OpenAiRealtimeProvider.OPENAI_REALTIME_MODEL_NAMES.includes(modelType)));
+
+  const routeUsesPassthrough =
+    OPENAI_PASSTHROUGH_MODEL_ROUTES.has(modelType) || bareModelUsesPassthrough;
+  return routeUsesPassthrough && typeof passthroughModel === 'string'
+    ? passthroughModel
+    : selectedModel;
 }
 
 export const providerMap: ProviderFactory[] = [
@@ -335,8 +402,7 @@ export const providerMap: ProviderFactory[] = [
       // released after this build works without waiting for a catalog entry. The
       // provider still logs `Using unknown Anthropic model`, and Anthropic returns
       // not_found_error if the id is not real.
-      const modelIds = ANTHROPIC_MODELS.map((model) => model.id);
-      if (modelIds.includes(modelType) || looksLikeClaudeModelId(modelType)) {
+      if (ANTHROPIC_SHORTHAND_MODEL_IDS.has(modelType) || looksLikeClaudeModelId(modelType)) {
         return new AnthropicMessagesProvider(
           modelNameFromProviderPath(providerPath, 1),
           providerOptions,
@@ -375,6 +441,12 @@ export const providerMap: ProviderFactory[] = [
       const splits = providerPath.split(':');
       const modelType = splits[1];
       const deploymentName = modelNameFromProviderPath(providerPath, 2);
+
+      if (modelType === 'decisions') {
+        throw new Error(
+          'The Decisions API is available through openai:decisions:<model name>, not the Azure provider.',
+        );
+      }
 
       // Azure model types that have no sensible default deployment must name one in
       // the provider path (`azure:<type>:<name>`). Without this, the registry would
@@ -450,7 +522,12 @@ export const providerMap: ProviderFactory[] = [
       }
       if (modelType === 'realtime') {
         requirePathSegment('realtime', 'a deployment name', 'deployment');
-        if (NON_CONVERSATIONAL_REALTIME_MODELS.has(deploymentName)) {
+        // Azure path segments are user-chosen deployment names, not model IDs. Keep only the
+        // two legacy fail-fast cases here instead of applying OpenAI's model-ID routing set.
+        if (
+          deploymentName === 'gpt-realtime-whisper' ||
+          deploymentName === 'gpt-realtime-translate'
+        ) {
           throw new Error(
             deploymentName === 'gpt-realtime-whisper'
               ? 'azure:realtime:gpt-realtime-whisper is transcription-only. Use it as input_audio_transcription.model in a conversational Azure Realtime deployment.'
@@ -548,14 +625,17 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      _context: LoadApiProviderContext,
+      context: LoadApiProviderContext,
     ) => {
       const splits = providerPath.split(':');
       const modelType = splits[1];
       const modelName = splits.slice(2).join(':');
 
       if (modelType === 'embedding' || modelType === 'embeddings') {
-        return new CohereEmbeddingProvider(modelName, providerOptions);
+        return new CohereEmbeddingProvider(modelName, providerOptions.config, {
+          ...context.env,
+          ...providerOptions.env,
+        });
       }
       if (modelType === 'chat' || modelType === undefined) {
         return new CohereChatCompletionProvider(modelName || modelType, providerOptions);
@@ -1016,7 +1096,41 @@ export const providerMap: ProviderFactory[] = [
       const splits = providerPath.split(':');
       const modelType = splits[1];
       const modelName = splits.slice(2).join(':');
+      if (modelType === 'chatkit') {
+        throw new Error(
+          'The openai:chatkit provider has been removed. Export your Agent Builder workflow and evaluate it with the OpenAI Agents SDK, a custom provider, or an HTTP endpoint. Migration guide: https://www.promptfoo.dev/docs/providers/openai-chatkit/',
+        );
+      }
       const configuredModel = getConfiguredOpenAiModel(providerOptions);
+      const assistantModel =
+        modelType === 'assistant' && typeof providerOptions.config?.modelName === 'string'
+          ? providerOptions.config.modelName.trim() || undefined
+          : undefined;
+      const passthrough = providerOptions.config?.passthrough as { model?: unknown } | undefined;
+      const effectiveApiModel = getEffectiveOpenAiApiModel(
+        modelType,
+        modelName,
+        configuredModel,
+        passthrough?.model,
+      );
+      const allowTranscription = modelType === 'gpt-transcribe' || modelType === 'transcription';
+
+      const codexBaseUrl =
+        providerOptions.config?.base_url ?? providerOptions.config?.cli_config?.openai_base_url;
+      const codexModelProvider =
+        providerOptions.config?.model_provider ??
+        providerOptions.config?.cli_config?.model_provider;
+      // Codex can load either backend selector from its own configuration files.
+      // Apply OpenAI model restrictions only when both native selectors are explicit.
+      if (
+        ['codex-app-server', 'codex-desktop', 'codex-sdk', 'codex'].includes(modelType) &&
+        codexModelProvider === 'openai' &&
+        typeof codexBaseUrl === 'string' &&
+        codexBaseUrl.length > 0 &&
+        isOpenAiFirstPartyApiUrl(codexBaseUrl)
+      ) {
+        assertOpenAiModelEndpointCompatibility(modelName || configuredModel);
+      }
 
       if (modelType === 'agents-api') {
         const { OpenAiAgentsApiProvider } = await import('./openai/agents-api');
@@ -1028,8 +1142,8 @@ export const providerMap: ProviderFactory[] = [
 
       // Codex app-server providers (openai:codex-app-server or openai:codex-desktop)
       if (modelType === 'codex-app-server' || modelType === 'codex-desktop') {
-        const { OpenAICodexAppServerProvider } = await import('./openai/codex-app-server');
         const codexModel = modelName || configuredModel;
+        const { OpenAICodexAppServerProvider } = await import('./openai/codex-app-server');
         const codexProviderId = providerOptions.id ?? providerPath;
         return new OpenAICodexAppServerProvider({
           ...providerOptions,
@@ -1049,8 +1163,8 @@ export const providerMap: ProviderFactory[] = [
 
       // Codex SDK providers (openai:codex-sdk or openai:codex)
       if (modelType === 'codex-sdk' || modelType === 'codex') {
-        const { OpenAICodexSDKProvider } = await import('./openai/codex-sdk');
         const codexModel = modelName || configuredModel;
+        const { OpenAICodexSDKProvider } = await import('./openai/codex-sdk');
         const codexProviderId = providerOptions.id ?? providerPath;
         return new OpenAICodexSDKProvider({
           ...providerOptions,
@@ -1065,7 +1179,6 @@ export const providerMap: ProviderFactory[] = [
         });
       }
       const requestedApiModel = modelName || configuredModel || modelType;
-      const passthrough = providerOptions.config?.passthrough as { model?: unknown } | undefined;
       if (
         [modelType, requestedApiModel, passthrough?.model].some(
           (model) =>
@@ -1074,27 +1187,22 @@ export const providerMap: ProviderFactory[] = [
         )
       ) {
         throw new Error(
-          'gpt-live-transcribe requires a dedicated Realtime transcription session, which this provider does not support.',
+          'gpt-live-transcribe requires Realtime transcription sessions, which are not yet supported by promptfoo.',
         );
       }
       const isLiveProvider =
         modelType === 'live' || /^gpt-live-1(?:-\d{4}-\d{2}-\d{2})?$/.test(modelType);
-      if (!isLiveProvider && !['agents', 'chatkit', 'assistant'].includes(modelType)) {
-        const apiHost =
-          providerOptions.config?.apiHost ||
-          providerOptions.env?.OPENAI_API_HOST ||
-          getEnvString('OPENAI_API_HOST');
-        const apiUrl = apiHost
-          ? `https://${apiHost}/v1`
-          : providerOptions.config?.apiBaseUrl ||
-            providerOptions.env?.OPENAI_API_BASE_URL ||
-            providerOptions.env?.OPENAI_BASE_URL ||
-            getEnvString('OPENAI_API_BASE_URL') ||
-            getEnvString('OPENAI_BASE_URL') ||
-            'https://api.openai.com/v1';
-        for (const candidate of [requestedApiModel, configuredModel, passthrough?.model]) {
-          assertOpenAiApiModel(candidate, apiUrl);
-        }
+      const providerEnv =
+        modelType === 'decisions'
+          ? mergeProviderEnv(providerPath, context.env, providerOptions.env)
+          : providerOptions.env;
+      if (
+        !isLiveProvider &&
+        modelType !== 'agents' &&
+        (modelType !== 'assistant' || assistantModel)
+      ) {
+        const apiUrl = resolveOpenAiApiUrl(providerOptions.config ?? {}, providerEnv);
+        assertOpenAiApiModel(assistantModel || effectiveApiModel, apiUrl, { allowTranscription });
       }
       if (modelType === 'chat') {
         return new OpenAiChatCompletionProvider(
@@ -1122,7 +1230,7 @@ export const providerMap: ProviderFactory[] = [
       }
       if (modelType === 'realtime') {
         return new OpenAiRealtimeProvider(
-          modelName || configuredModel || 'gpt-realtime-1.5',
+          modelName || configuredModel || 'gpt-realtime-2.1',
           providerOptions,
         );
       }
@@ -1131,6 +1239,13 @@ export const providerMap: ProviderFactory[] = [
           modelName || configuredModel || 'gpt-6-sol',
           providerOptions,
         );
+      }
+      if (modelType === 'decisions') {
+        const { OpenAiDecisionsProvider } = await import('./openai/decisions');
+        return new OpenAiDecisionsProvider(modelName || configuredModel || '', {
+          ...providerOptions,
+          env: providerEnv,
+        });
       }
       if (modelType === 'transcription') {
         const { OpenAiTranscriptionProvider } = await import('./openai/transcription');
@@ -1153,7 +1268,13 @@ export const providerMap: ProviderFactory[] = [
           providerOptions,
         );
       }
-      if (shouldDefaultToOpenAiResponses(modelType)) {
+      if (
+        shouldDefaultToOpenAiResponses(modelType) ||
+        (OPENAI_DAYBREAK_ALIASES.has(modelType) &&
+          isOpenAiFirstPartyApiUrl(
+            resolveOpenAiApiUrl(providerOptions.config ?? {}, providerOptions.env),
+          ))
+      ) {
         return new OpenAiResponsesProvider(modelType, providerOptions);
       }
       if (OpenAiChatCompletionProvider.OPENAI_CHAT_MODEL_NAMES.includes(modelType)) {
@@ -1165,21 +1286,35 @@ export const providerMap: ProviderFactory[] = [
       if (OpenAiTtsProvider.OPENAI_TTS_MODEL_NAMES.includes(modelType)) {
         return new OpenAiTtsProvider(modelType, providerOptions);
       }
+      if (modelType === 'gpt-transcribe') {
+        const { OpenAiTranscriptionProvider } = await import('./openai/transcription');
+        return new OpenAiTranscriptionProvider(modelType, providerOptions);
+      }
       if (OpenAiRealtimeProvider.OPENAI_REALTIME_MODEL_NAMES.includes(modelType)) {
         return new OpenAiRealtimeProvider(modelType, providerOptions);
       }
       if (OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES.includes(modelType)) {
         return new OpenAiResponsesProvider(modelType, providerOptions);
       }
+      // assertOpenAiApiModel above rejects retired IDs for api.openai.com. Preserve the
+      // historical endpoint family for custom OpenAI-compatible gateways that still serve them.
+      switch (getRetiredOpenAiModelRoute(modelType)) {
+        case 'chat':
+          return new OpenAiChatCompletionProvider(modelType, providerOptions);
+        case 'tts':
+          return new OpenAiTtsProvider(modelType, providerOptions);
+        case 'realtime':
+          return new OpenAiRealtimeProvider(modelType, providerOptions);
+        case 'responses':
+          return new OpenAiResponsesProvider(modelType, providerOptions);
+        case 'moderation':
+          return new OpenAiModerationProvider(modelType, providerOptions);
+      }
       if (modelType === 'agents') {
         const { OpenAiAgentsProvider } = await loadOpenAiAgentsModule(
           () => import('./openai/agents'),
         );
         return new OpenAiAgentsProvider(modelName || 'default-agent', providerOptions);
-      }
-      if (modelType === 'chatkit') {
-        const { OpenAiChatKitProvider } = await import('./openai/chatkit');
-        return new OpenAiChatKitProvider(modelName || '', providerOptions);
       }
       if (modelType === 'assistant') {
         return new OpenAiAssistantProvider(modelName, providerOptions);
@@ -1192,7 +1327,7 @@ export const providerMap: ProviderFactory[] = [
       }
       // Assume user did not provide model type, and it's a chat model
       logger.warn(
-        `Unknown OpenAI model type: ${modelType}. Treating it as a chat model. Use one of the following providers: openai:chat:<model name>, openai:completion:<model name>, openai:embeddings:<model name>, openai:image:<model name>, openai:video:<model name>, openai:tts:<model name>, openai:transcription:<model name>, openai:realtime:<model name>, openai:live:<model name>, openai:agents:<agent name>, openai:chatkit:<workflow_id>, openai:codex-sdk`,
+        `Unknown OpenAI model type: ${modelType}. Treating it as a chat model. Use one of the following providers: openai:chat:<model name>, openai:completion:<model name>, openai:embeddings:<model name>, openai:image:<model name>, openai:video:<model name>, openai:tts:<model name>, openai:transcription:<model name>, openai:realtime:<model name>, openai:live:<model name>, openai:agents:<agent name>, openai:codex-sdk`,
       );
       return new OpenAiChatCompletionProvider(modelType, providerOptions);
     },
@@ -1431,11 +1566,12 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      _context: LoadApiProviderContext,
+      context: LoadApiProviderContext,
     ) => {
       return new VoyageEmbeddingProvider(
         modelNameFromProviderPath(providerPath, 1),
-        providerOptions,
+        providerOptions.config,
+        mergeProviderEnv(providerPath, context.env, providerOptions.env),
       );
     },
   },

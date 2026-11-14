@@ -3,7 +3,7 @@
 export type BedrockApiMode = 'invoke' | 'converse' | 'responses' | 'chat' | 'messages';
 
 export function isRejectedPrefixedMythosId(modelName: string): boolean {
-  return /^[^.]+\.(anthropic\.claude-mythos-5)$/.test(modelName);
+  return /^[^.]+\.(anthropic\.claude-mythos-(?:5|preview))$/.test(modelName);
 }
 
 // Grok 4.6 profiles are served natively; all inference profiles are invalid Mantle IDs.
@@ -37,6 +37,11 @@ export function isBedrockAnthropicMessagesModel(modelName: string): boolean {
       'anthropic.claude-fable-5',
       'anthropic.claude-mythos-5',
       'anthropic.claude-fable-5-1',
+      'anthropic.claude-mythos-preview',
+      'anthropic.claude-opus-4-7',
+      'anthropic.claude-opus-4-8',
+      'anthropic.claude-opus-5',
+      'anthropic.claude-sonnet-5',
     ].includes(modelName) || isBedrockRuntimeMessagesModel(modelName)
   );
 }
@@ -58,7 +63,9 @@ export function isBedrockMantleResponsesModel(modelName: string): boolean {
 }
 
 export function requiresBedrockAnthropicMessagesModel(modelName: string): boolean {
-  return modelName === 'anthropic.claude-mythos-5';
+  return (
+    modelName === 'anthropic.claude-mythos-5' || modelName === 'anthropic.claude-mythos-preview'
+  );
 }
 
 /** Resolve text API aliases, not model availability or regional access. */

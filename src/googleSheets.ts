@@ -54,10 +54,20 @@ function isHtmlExportResponse(
   return prefix.startsWith('<!doctype html') || prefix.startsWith('<html');
 }
 
+/**
+ * Returns the sheet id (`gid`) a Google Sheets URL selects. The browser keeps it in the fragment
+ * (`/edit#gid=123`); newer URLs also repeat it in the query (`/edit?gid=123#gid=123`). It stays a
+ * string so that sheet id 0 is still truthy.
+ */
+function getSheetGid(url: string): string | undefined {
+  const { searchParams, hash } = new URL(url);
+  return searchParams.get('gid') || new URLSearchParams(hash.slice(1)).get('gid') || undefined;
+}
+
 export async function fetchCsvFromGoogleSheetUnauthenticated(url: string): Promise<CsvRow[]> {
   const { parse: parseCsv } = await import('csv-parse/sync');
 
-  const gid = new URL(url).searchParams.get('gid');
+  const gid = getSheetGid(url);
   const csvUrl = `${url.replace(/\/edit.*$/, '/export')}?format=csv${gid ? `&gid=${gid}` : ''}`;
 
   const response = await fetchWithProxy(csvUrl);
@@ -87,12 +97,14 @@ export async function fetchCsvFromGoogleSheetAuthenticated(url: string): Promise
   const spreadsheetId = match[1];
 
   let range: string;
-  const gid = Number(new URL(url).searchParams.get('gid'));
+  const gid = getSheetGid(url);
 
   if (gid) {
     // When gid is provided, get the specific sheet by gid
     const spreadsheet = await sheets.spreadsheets.get({ spreadsheetId, auth });
-    const sheet = spreadsheet.data.sheets?.find((sheet) => sheet.properties?.sheetId === gid);
+    const sheet = spreadsheet.data.sheets?.find(
+      (sheet) => sheet.properties?.sheetId === Number(gid),
+    );
     if (!sheet || !sheet.properties?.title) {
       throw new Error(`Sheet not found for gid: ${gid}`);
     }
@@ -189,12 +201,14 @@ export async function writeCsvToGoogleSheet(rows: CsvRow[], url: string): Promis
   const endColumn = getColumnLetter(numCols);
 
   let range: string;
-  const gid = Number(new URL(url).searchParams.get('gid'));
+  const gid = getSheetGid(url);
 
   if (gid) {
     // Use existing sheet with gid
     const spreadsheet = await sheets.spreadsheets.get({ spreadsheetId, auth });
-    const sheet = spreadsheet.data.sheets?.find((sheet) => sheet.properties?.sheetId === gid);
+    const sheet = spreadsheet.data.sheets?.find(
+      (sheet) => sheet.properties?.sheetId === Number(gid),
+    );
     if (!sheet || !sheet.properties?.title) {
       throw new Error(`Sheet not found for gid: ${gid}`);
     }

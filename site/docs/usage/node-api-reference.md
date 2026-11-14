@@ -107,6 +107,11 @@ Load a single provider instance by path or identifier. You own the returned inst
 should call `await provider.cleanup?.()` when finished. Direct loads remain caller-owned even
 when made from a provider used by an evaluation.
 
+For manually loaded Crescendo and Custom strategies, call
+`await provider.cleanup?.()` after the final call. Their cleanup is terminal and
+releases configured attacker and scoring providers; it leaves directly supplied
+providers and shared redteam cache entries open.
+
 ```typescript
 async function loadApiProvider(
   providerPath: string,
@@ -121,6 +126,8 @@ async function loadApiProvider(
 
 **Returns:** Configured `ApiProvider` instance ready to call
 
+When calling a provider directly, use `await provider.cleanup?.()` in a `finally` block after its last call to release workers, connections, or model pipelines. Finish active calls before cleanup; use an abort signal to cancel an individual request.
+
 **Example:**
 
 ```typescript
@@ -130,9 +137,12 @@ const openaiProvider = await loadApiProvider('openai:chat:gpt-5.5', {
   env: { OPENAI_API_KEY: process.env.MY_SECRET_KEY },
 });
 
-const response = await openaiProvider.callApi('Hello, world!');
-
-console.log(response.output);
+try {
+  const response = await openaiProvider.callApi('Hello, world!');
+  console.log(response.output);
+} finally {
+  await openaiProvider.cleanup?.();
+}
 ```
 
 **Supported Provider Types:**

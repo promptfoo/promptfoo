@@ -34,6 +34,8 @@ When using the GitHub App:
 - No Promptfoo Cloud account is needed—just a valid email address.
   :::
 
+The action installs the scanner before requesting its short-lived OIDC token, so slow installs do not expire the token before scanning.
+
 ## Configuration
 
 ### Action Inputs

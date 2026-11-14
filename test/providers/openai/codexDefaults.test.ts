@@ -3,7 +3,9 @@ import os from 'os';
 import path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import cliState from '../../../src/cliState';
 import { providerRegistry } from '../../../src/providers/providerRegistry';
+import { getPackageVersion } from '../../../src/util/packageVersion';
 import { createDeferred, mockProcessEnv } from '../../util/utils';
 
 import type { OpenAICodexSDKProvider } from '../../../src/providers/openai/codex-sdk';
@@ -45,6 +47,8 @@ vi.mock('../../../src/esm', async (importOriginal) => ({
   resolvePackageEntryPoint: mockResolvePackageEntryPoint,
 }));
 
+vi.mock('../../../src/util/packageVersion', () => ({ getPackageVersion: vi.fn() }));
+
 describe('Codex default providers', () => {
   let codexHome: string;
   let originalCodexApiKey: string | undefined;
@@ -52,7 +56,8 @@ describe('Codex default providers', () => {
   let originalOpenAiApiKey: string | undefined;
 
   beforeEach(async () => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
+    vi.mocked(getPackageVersion).mockReturnValue('0.156.1');
     mockGetDirectory.mockReset();
     mockResolvePackageEntryPoint.mockReset();
     mockGetDirectory.mockReturnValue(process.cwd());
@@ -140,6 +145,54 @@ describe('Codex default providers', () => {
     );
 
     expect(hasCodexDefaultCredentials()).toBe(false);
+  });
+
+  it.each(['0.154.0', '0.157.0', 'invalid', null])(
+    'does not select an incompatible SDK (%s) for implicit grading',
+    async (version) => {
+      mockProcessEnv({ CODEX_API_KEY: 'fixture-key' });
+      vi.mocked(getPackageVersion).mockReturnValue(version);
+      const { hasCodexDefaultCredentials } = await import(
+        '../../../src/providers/openai/codexDefaults'
+      );
+      expect(hasCodexDefaultCredentials()).toBe(false);
+    },
+  );
+
+  it('treats unreadable SDK metadata as unavailable for implicit grading', async () => {
+    mockProcessEnv({ CODEX_API_KEY: 'fixture-key' });
+    vi.mocked(getPackageVersion).mockImplementation(() => {
+      throw new SyntaxError('fixture metadata');
+    });
+    const { hasCodexDefaultCredentials } = await import(
+      '../../../src/providers/openai/codexDefaults'
+    );
+    expect(hasCodexDefaultCredentials()).toBe(false);
+  });
+
+  it('checks the config-directory SDK that explicit provider calls would load', async () => {
+    const previousBasePath = cliState.basePath;
+    cliState.basePath = codexHome;
+    try {
+      mockProcessEnv({ CODEX_API_KEY: 'fixture-key' });
+      mockResolvePackageEntryPoint.mockImplementation((_name, baseDir) =>
+        baseDir === codexHome ? '/fixture/config/index.js' : '/fixture/global/index.js',
+      );
+      vi.mocked(getPackageVersion).mockImplementation((_name, entryPoint) =>
+        entryPoint === '/fixture/config/index.js' ? '0.154.0' : '0.156.1',
+      );
+      const { hasCodexDefaultCredentials } = await import(
+        '../../../src/providers/openai/codexDefaults'
+      );
+      expect(hasCodexDefaultCredentials()).toBe(false);
+      expect(getPackageVersion).toHaveBeenCalledWith(
+        '@openai/codex-sdk',
+        '/fixture/config/index.js',
+      );
+      expect(mockResolvePackageEntryPoint).toHaveBeenCalledTimes(1);
+    } finally {
+      cliState.basePath = previousBasePath;
+    }
   });
 
   it('creates reusable Codex text and web-search providers with a read-only sandbox', async () => {

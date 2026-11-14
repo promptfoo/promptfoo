@@ -1589,6 +1589,37 @@ describe('OpenAiVideoProvider', () => {
       );
     });
 
+    it('should not persist a bearer credential embedded in an image-reference URL path', async () => {
+      const provider = new OpenAiVideoProvider('sora-2', {
+        config: {
+          apiKey: 'test-key',
+          input_reference: 'https://assets.example/bearer-aaaaaaaa/start.png',
+          download_thumbnail: false,
+          download_spritesheet: false,
+        },
+      });
+      mockFetchWithProxy
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ id: 'video_private_bearer_path', status: 'queued' }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ id: 'video_private_bearer_path', status: 'completed' }),
+        })
+        .mockResolvedValueOnce({ ok: true, arrayBuffer: async () => new ArrayBuffer(100) });
+
+      const result = await provider.callApi('Animate a bearer-protected path reference');
+
+      expect(result.error).toBeUndefined();
+      expect(result.cached).toBe(false);
+      expect(fsPromises.readFile).not.toHaveBeenCalled();
+      expect(fsPromises.writeFile).not.toHaveBeenCalled();
+      expect(generateVideoCacheKey).toHaveBeenCalledWith(
+        expect.objectContaining({ inputReference: null, cacheScope: undefined }),
+      );
+    });
+
     it.each([
       ['character', { characters: [{ id: 'char-private' }] }],
       ['file reference', { input_reference: { file_id: 'file-private' } }],

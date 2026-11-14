@@ -204,7 +204,7 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
     // Validate branch and determine base branch
     logger.debug('Processing git diff...');
 
-    const simpleGit = (await import('simple-git')).default;
+    const { simpleGit } = await import('simple-git');
     const git = simpleGit(absoluteRepoPath);
 
     // Validate we're on a branch (only if compare ref not specified)

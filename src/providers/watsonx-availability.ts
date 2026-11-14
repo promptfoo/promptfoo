@@ -3,7 +3,10 @@ import path from 'node:path';
 
 import semverSatisfies from 'semver/functions/satisfies.js';
 import { getDirectory } from '../esm';
-import { isMissingPackageImportError } from '../util/packageImportErrors';
+import {
+  isMissingPackageImportError,
+  optionalPackageInstallHint,
+} from '../util/packageImportErrors';
 import { getPackageVersion } from '../util/packageVersion';
 
 const supportedVersions = {
@@ -27,7 +30,7 @@ export async function loadWatsonXDependency<T>(
     const supportedVersion = supportedVersions[packageName];
     if (!version || !semverSatisfies(version, supportedVersion)) {
       throw new Error(
-        `The WatsonX provider requires ${packageName}@${supportedVersion} (found ${version ?? 'unknown'}). Install it with: ${installCommand}`,
+        `The WatsonX provider requires ${packageName}@${supportedVersion} (found ${version ?? 'unknown'}). ${optionalPackageInstallHint(installCommand)}`,
       );
     }
 
@@ -35,7 +38,7 @@ export async function loadWatsonXDependency<T>(
   } catch (error) {
     if (isMissingPackageImportError(error, packageName)) {
       throw new Error(
-        `The ${packageName} package is required for the WatsonX provider. Install it with: ${installCommand}`,
+        `The ${packageName} package is required for the WatsonX provider. ${optionalPackageInstallHint(installCommand)}`,
       );
     }
     throw error;

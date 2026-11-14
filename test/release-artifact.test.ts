@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { runInNewContext } from 'node:vm';
 
 import * as yaml from 'js-yaml';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -15,6 +16,8 @@ type Step = {
   with?: Record<string, unknown>;
 };
 type Job = {
+  name?: string;
+  strategy?: { matrix: { node: string[] } };
   needs?: string | string[];
   if?: string;
   permissions: Record<string, string>;
@@ -44,12 +47,12 @@ afterEach(() => {
 });
 
 describe('exact artifact release', () => {
-  it('runs smoke examples after the build', () => {
+  it.each(['build', 'package-build'])('runs smoke examples after %s', (jobName) => {
     const ci = yaml.load(
       fs.readFileSync(path.resolve(__dirname, '../.github/workflows/main.yml'), 'utf8'),
     ) as { jobs: Record<string, Job> };
     const smokeCommand = 'npm run test:smoke -- test/smoke/agent-skill-examples.test.ts';
-    const buildSteps = ci.jobs.build.steps;
+    const buildSteps = ci.jobs[jobName].steps;
     const buildIndex = buildSteps.findIndex((step) => step.run === 'npm run build');
     const smokeIndex = buildSteps.findIndex((step) => step.run === smokeCommand);
     expect(buildIndex).toBeGreaterThan(-1);
@@ -57,6 +60,83 @@ describe('exact artifact release', () => {
     expect(ci.jobs['artifact-consumer'].steps.some((step) => step.run === smokeCommand)).toBe(
       false,
     );
+  });
+
+  it.each(['success', 'failure', 'cancelled', 'skipped', ''])(
+    'requires a successful package producer when its result is %j',
+    (result) => {
+      const ci = yaml.load(
+        fs.readFileSync(path.resolve(__dirname, '../.github/workflows/main.yml'), 'utf8'),
+      ) as { jobs: Record<string, Job> };
+      const producer = ci.jobs['package-build'];
+      const acceptance = ci.jobs['package-acceptance'];
+      expect(producer.name).toBe('Prepare package on Node ${{ matrix.node }}');
+      expect(acceptance.name).toBe('Build on Node ${{ matrix.node }}');
+      for (const job of [producer, acceptance]) {
+        expect(job.strategy?.matrix.node).toEqual(['24.x']);
+      }
+      expect(acceptance.name?.replace('${{ matrix.node }}', '24.x')).toBe('Build on Node 24.x');
+      const upload = producer.steps.find((step) =>
+        step.uses?.startsWith('actions/upload-artifact@'),
+      )!;
+      expect(upload.with?.['if-no-files-found']).toBe('error');
+
+      for (const consumer of [acceptance, ci.jobs['artifact-consumer']]) {
+        expect(consumer.needs).toBe('package-build');
+        // A skipped required job is accepted by branch protection. Run the guard
+        // after producer failures/skips, while letting workflow cancellation stop it.
+        expect(consumer.if).toBe('${{ !cancelled() }}');
+        expect(consumer.permissions).toEqual({ contents: 'read' });
+        const guard = consumer.steps[0];
+        expect(guard.env).toEqual({ PACKAGE_BUILD_RESULT: '${{ needs.package-build.result }}' });
+        const checked = spawnSync(bash, ['-e', '-o', 'pipefail'], {
+          input: guard.run,
+          env: { ...process.env, PACKAGE_BUILD_RESULT: result },
+          encoding: 'utf8',
+        });
+        expect(checked.status, checked.stderr).toBe(result === 'success' ? 0 : 1);
+        const download = consumer.steps.find((step) =>
+          step.uses?.startsWith('actions/download-artifact@'),
+        )!;
+        expect(download.with).toEqual({
+          name: upload.with?.name,
+          path: '${{ runner.temp }}/package-artifact',
+        });
+      }
+      expect(ci.jobs['sbom-comparison'].needs).toContain('package-acceptance');
+    },
+  );
+
+  it.each([0, 1, 2])('accepts exactly one downloaded archive when given %i', (count) => {
+    const ci = yaml.load(
+      fs.readFileSync(path.resolve(__dirname, '../.github/workflows/main.yml'), 'utf8'),
+    ) as { jobs: Record<string, Job> };
+    const locate = ci.jobs['package-acceptance'].steps.find(
+      (step) => step.name === 'Locate downloaded package',
+    )!;
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ci-package-locate-'));
+    directories.push(root);
+    for (let index = 0; index < count; index++) {
+      fs.writeFileSync(path.join(root, `package ${index}.tgz`), 'fixture archive');
+    }
+    const output = path.join(root, 'outputs');
+    const checked = spawnSync(bash, ['-e', '-o', 'pipefail'], {
+      input: locate.run,
+      env: {
+        ...process.env,
+        ARTIFACT_DIRECTORY: root.replaceAll('\\', '/'),
+        GITHUB_OUTPUT: output.replaceAll('\\', '/'),
+      },
+      encoding: 'utf8',
+    });
+    expect(checked.status, checked.stderr).toBe(count === 1 ? 0 : 1);
+    if (count === 1) {
+      expect(fs.readFileSync(output, 'utf8').trim()).toBe(
+        `tarball=${root.replaceAll('\\', '/')}/package 0.tgz`,
+      );
+    } else {
+      expect(fs.existsSync(output)).toBe(false);
+    }
   });
 
   it('isolates validation from immutable uploads and the OIDC-only publisher', () => {
@@ -170,6 +250,36 @@ describe('exact artifact release', () => {
     expect(mirror.if).toContain("needs.build.result == 'success'");
     expect(mirror.if).not.toContain('needs.build-npm');
     expect(mirror.if).not.toContain('needs.publish-npm.result');
+  });
+
+  it.each([
+    { npm: 'success', mirror: 'success', cancelled: false, runs: true },
+    { npm: 'skipped', mirror: 'success', cancelled: false, runs: true },
+    { npm: 'failure', mirror: 'success', cancelled: false, runs: true },
+    { npm: 'success', mirror: 'failure', cancelled: false, runs: false },
+    { npm: 'skipped', mirror: 'skipped', cancelled: false, runs: false },
+    { npm: 'skipped', mirror: 'cancelled', cancelled: false, runs: false },
+    { npm: 'success', mirror: 'success', cancelled: true, runs: false },
+  ])('schedules action provenance for publication results %j', (scenario) => {
+    const attestation = workflow.jobs['attest-code-scan-action'];
+    const expression = (attestation.if ?? 'success()')
+      .replace(/^\s*\$\{\{\s*|\s*\}\}\s*$/g, '')
+      .replaceAll('needs.publish-code-scan-action.result', 'mirrorResult');
+    // GitHub implicitly requires success across the dependency chain unless
+    // the guard uses a status function. Evaluate this guard's JS-compatible
+    // expression against the skipped npm ancestor of an action-only release.
+    const hasStatusFunction = /\b(always|cancelled|success|failure)\s*\(/.test(expression);
+    const scheduled = runInNewContext(
+      hasStatusFunction ? expression : 'success() && (' + expression + ')',
+      {
+        always: () => true,
+        cancelled: () => scenario.cancelled,
+        success: () =>
+          !scenario.cancelled && scenario.npm === 'success' && scenario.mirror === 'success',
+        mirrorResult: scenario.mirror,
+      },
+    );
+    expect(scheduled).toBe(scenario.runs);
   });
 
   it('detects current packers and legacy native SQLite from tag manifests', () => {

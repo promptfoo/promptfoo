@@ -45,6 +45,9 @@ describe('optional Langfuse client module', () => {
     await expect(loadLangfuseClient(load)).rejects.toThrow(
       'npm install promptfoo @langfuse/client@^5.11.1',
     );
+    await expect(loadLangfuseClient(load)).rejects.toThrow(
+      'npm install -g promptfoo @langfuse/client@^5.11.1',
+    );
     expect(load).not.toHaveBeenCalled();
   });
 

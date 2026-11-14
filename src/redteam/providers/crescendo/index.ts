@@ -2,6 +2,7 @@ import dedent from 'dedent';
 import { renderPrompt } from '../../../evaluatorHelpers';
 import { isLoggedIntoCloud } from '../../../globalConfig/accounts';
 import logger from '../../../logger';
+import { createProviderCleanupScope } from '../../../providers/lifecycle';
 import { PromptfooChatCompletionProvider } from '../../../providers/promptfoo';
 import {
   extractTraceIdFromTraceparent,
@@ -183,6 +184,7 @@ export class CrescendoProvider implements ApiProvider {
   readonly config: CrescendoConfig;
   private readonly nunjucks: any;
   private userGoal: string | undefined;
+  private readonly providerCleanup = createProviderCleanupScope();
   private redTeamProvider: ApiProvider | undefined;
   private scoringProvider: ApiProvider | undefined;
   private memory: MemorySystem;
@@ -236,43 +238,51 @@ export class CrescendoProvider implements ApiProvider {
     return shouldGenerateRemote() && !this.config.redteamProvider;
   }
 
-  private async getRedTeamProvider(): Promise<ApiProvider> {
-    if (!this.redTeamProvider) {
-      if (this.attackerUsesRemoteProvider()) {
-        this.redTeamProvider = new PromptfooChatCompletionProvider({
-          task: 'crescendo',
-          jsonOnly: true,
-          preferSmallModel: false,
-          ...remoteGenerationContextPayload(this.config.targetId),
-          // Pass inputs schema for multi-input mode
-          inputs: this.config.inputs,
-        });
-      } else {
-        this.redTeamProvider = await redteamProviderManager.getProvider({
-          provider: this.config.redteamProvider,
-          preferSmallModel: false,
-          jsonOnly: true,
-        });
-      }
-    }
-    return this.redTeamProvider;
+  cleanup(): Promise<void> {
+    return this.providerCleanup.cleanup();
   }
 
-  private async getScoringProvider(): Promise<ApiProvider> {
-    if (!this.scoringProvider) {
-      if (this.attackerUsesRemoteProvider()) {
-        this.scoringProvider = new PromptfooChatCompletionProvider({
-          task: 'crescendo',
-          jsonOnly: false,
-          preferSmallModel: false,
-          ...remoteGenerationContextPayload(this.config.targetId),
-        });
-      } else {
-        // Don't pass explicit provider - let getGradingProvider check CLI --grader first
-        this.scoringProvider = await redteamProviderManager.getGradingProvider({});
+  private getRedTeamProvider(): Promise<ApiProvider> {
+    return this.providerCleanup.run(async () => {
+      if (!this.redTeamProvider) {
+        if (this.attackerUsesRemoteProvider()) {
+          this.redTeamProvider = new PromptfooChatCompletionProvider({
+            task: 'crescendo',
+            jsonOnly: true,
+            preferSmallModel: false,
+            ...remoteGenerationContextPayload(this.config.targetId),
+            // Pass inputs schema for multi-input mode
+            inputs: this.config.inputs,
+          });
+        } else {
+          this.redTeamProvider = await redteamProviderManager.getProvider({
+            provider: this.config.redteamProvider,
+            preferSmallModel: false,
+            jsonOnly: true,
+          });
+        }
       }
-    }
-    return this.scoringProvider;
+      return this.redTeamProvider;
+    });
+  }
+
+  private getScoringProvider(): Promise<ApiProvider> {
+    return this.providerCleanup.run(async () => {
+      if (!this.scoringProvider) {
+        if (this.attackerUsesRemoteProvider()) {
+          this.scoringProvider = new PromptfooChatCompletionProvider({
+            task: 'crescendo',
+            jsonOnly: false,
+            preferSmallModel: false,
+            ...remoteGenerationContextPayload(this.config.targetId),
+          });
+        } else {
+          // Don't pass explicit provider - let getGradingProvider check CLI --grader first
+          this.scoringProvider = await redteamProviderManager.getGradingProvider();
+        }
+      }
+      return this.scoringProvider;
+    });
   }
 
   id() {
@@ -531,6 +541,10 @@ export class CrescendoProvider implements ApiProvider {
           break;
         }
 
+        if (lastResponse.error) {
+          continue;
+        }
+
         // Check if the target is asking a blocking question that needs an answer to proceed
         const unblockingResult = await tryUnblocking({
           messages: this.memory.getConversation(this.targetConversationId),
@@ -597,6 +611,10 @@ export class CrescendoProvider implements ApiProvider {
               context.vars['sessionId'] = lastResponse.sessionId;
             }
           }
+        }
+
+        if (lastResponse.error) {
+          continue;
         }
 
         const [isRefusal, refusalRationale] = await this.getRefusalScore(
@@ -1291,7 +1309,7 @@ export class CrescendoProvider implements ApiProvider {
       testIdx: context?.testIdx,
       promptIdx: context?.promptIdx,
     });
-    logger.debug(`[Crescendo] Target response: ${JSON.stringify(targetResponse)}`);
+    logger.debug('[Crescendo] Target response', { response: targetResponse });
 
     invariant(
       Object.prototype.hasOwnProperty.call(targetResponse, 'output'),

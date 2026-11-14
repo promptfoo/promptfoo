@@ -153,22 +153,6 @@ export class EvalRunError extends Error {
   }
 }
 
-function failEvalRun(
-  message: string,
-  isCliInvocation: boolean,
-  options: { logForCli?: () => void; cliFallback?: Eval } = {},
-): Eval {
-  if (isCliInvocation) {
-    (options.logForCli ?? (() => logger.error(chalk.red(message))))();
-    process.exitCode = 1;
-    // Preserve a real Eval (e.g. a just-completed run flagged for a follow-up
-    // failure like watch-mode setup) so downstream summaries don't misreport.
-    return options.cliFallback ?? new Eval({}, { persisted: false });
-  }
-
-  throw new EvalRunError(message);
-}
-
 // Chokidar does not await change handlers; rethrowing would terminate the watch session.
 function logWatchError(error: unknown): void {
   if (error instanceof ConfigResolutionError) {
@@ -336,7 +320,27 @@ async function doEvalWithEnv(
   let watchStopped = false;
   let latestWatchResult: Eval | undefined;
 
-  const runEvaluationWithEnv = async (runEnv: EnvOverrides, initialization?: boolean) => {
+  const runEvaluationWithEnv = async (
+    runEnv: EnvOverrides,
+    runState: { failed: boolean },
+    initialization?: boolean,
+  ) => {
+    function failEvalRun(
+      message: string,
+      options: { logForCli?: () => void; cliFallback?: Eval } = {},
+    ): Eval {
+      if (isCliInvocation) {
+        (options.logForCli ?? (() => logger.error(chalk.red(message))))();
+        process.exitCode = 1;
+        runState.failed = true;
+        // Preserve a real Eval (e.g. a just-completed run flagged for a follow-up
+        // failure like watch-mode setup) so downstream summaries don't misreport.
+        return options.cliFallback ?? new Eval({}, { persisted: false });
+      }
+
+      throw new EvalRunError(message);
+    }
+
     let config: Partial<UnifiedConfig> | undefined;
     let testSuite: TestSuite | undefined;
     let _basePath: string | undefined;
@@ -396,7 +400,6 @@ async function doEvalWithEnv(
       if (configlessDirs.length > 0 && resolvedConfigPaths.length === 0) {
         return failEvalRun(
           `No configuration file found in ${configlessDirs.join(', ')}. ${noConfigHint}`,
-          isCliInvocation,
         );
       }
       cmdObj.config = resolvedConfigPaths;
@@ -409,7 +412,6 @@ async function doEvalWithEnv(
     if (resumeRaw && retryErrors) {
       return failEvalRun(
         'Cannot use --resume and --retry-errors together. Please use one or the other.',
-        isCliInvocation,
       );
     }
 
@@ -417,13 +419,11 @@ async function doEvalWithEnv(
     if (resumeRaw && hasRuntimeTags) {
       return failEvalRun(
         'Cannot use --tag with --resume. Resumed evaluations keep their original tags.',
-        isCliInvocation,
       );
     }
     if (retryErrors && hasRuntimeTags) {
       return failEvalRun(
         'Cannot use --tag with --retry-errors. Retried evaluations keep their original tags.',
-        isCliInvocation,
       );
     }
 
@@ -437,13 +437,12 @@ async function doEvalWithEnv(
       if (cmdObj.write === false) {
         return failEvalRun(
           'Cannot use --resume with --no-write. Resume functionality requires database persistence.',
-          isCliInvocation,
         );
       }
       resumeEval = resumeId === 'latest' ? await Eval.latest() : await Eval.findById(resumeId);
       if (!resumeEval) {
         const message = `Could not find evaluation to resume: ${resumeId}`;
-        return failEvalRun(message, isCliInvocation, {
+        return failEvalRun(message, {
           logForCli: () => logger.error(message),
         });
       }
@@ -471,7 +470,6 @@ async function doEvalWithEnv(
       if (cmdObj.write === false) {
         return failEvalRun(
           'Cannot use --retry-errors with --no-write. Retry functionality requires database persistence.',
-          isCliInvocation,
         );
       }
 
@@ -481,7 +479,7 @@ async function doEvalWithEnv(
       const latestEval = await Eval.latest();
       if (!latestEval) {
         const message = 'No previous evaluation found to retry errors from';
-        return failEvalRun(message, isCliInvocation, {
+        return failEvalRun(message, {
           logForCli: () => logger.error(message),
         });
       }
@@ -554,7 +552,6 @@ async function doEvalWithEnv(
     if (resumeEval && persistedProviderFilter && testSuite.providers.length === 0) {
       return failEvalRun(
         `Stored provider filter "${persistedProviderFilter}" matched no providers while ${describeReplayAction(retryErrors)} evaluation ${resumeEval.id}. The evaluation was not changed.`,
-        isCliInvocation,
       );
     }
     if (resumeEval) {
@@ -752,7 +749,7 @@ async function doEvalWithEnv(
       const missingKeysMessage = `Missing required API keys: ${Array.from(missingApiKeys.entries())
         .map(([envVar, providerDescriptions]) => `${envVar} (${providerDescriptions.join(', ')})`)
         .join('; ')}`;
-      return failEvalRun(missingKeysMessage, isCliInvocation, {
+      return failEvalRun(missingKeysMessage, {
         logForCli: () => {
           for (const [envVar, providerDescriptions] of missingApiKeys) {
             logger.error(chalk.red(`  ✗ Missing ${envVar} (${providerDescriptions.join(', ')})`));
@@ -1193,7 +1190,7 @@ async function doEvalWithEnv(
           const message = `Could not locate config file(s) to watch. Pass --config path/to/promptfooconfig.yaml or run from a directory containing promptfooconfig.{${DEFAULT_CONFIG_EXTENSIONS.join(
             ',',
           )}}.`;
-          return failEvalRun(message, isCliInvocation, {
+          return failEvalRun(message, {
             logForCli: () => logger.error(message),
             cliFallback: ret,
           });
@@ -1271,11 +1268,12 @@ async function doEvalWithEnv(
       const passRateThreshold = getEnvFloat('PROMPTFOO_PASS_RATE_THRESHOLD', 100);
       const failedTestExitCode = getEnvInt('PROMPTFOO_FAILED_TEST_EXIT_CODE', 100);
 
-      if (
-        isCliInvocation &&
-        passRate < (Number.isFinite(passRateThreshold) ? passRateThreshold : 100)
-      ) {
-        if (getEnvFloat('PROMPTFOO_PASS_RATE_THRESHOLD') !== undefined) {
+      const belowThreshold =
+        passRate < (Number.isFinite(passRateThreshold) ? passRateThreshold : 100);
+      // An eval stopped because its target is unavailable did not run every test, so it
+      // fails whatever the tests before the stop did.
+      if (isCliInvocation && (belowThreshold || targetErrorStatus != null)) {
+        if (belowThreshold && getEnvFloat('PROMPTFOO_PASS_RATE_THRESHOLD') !== undefined) {
           logger.info(
             chalk.white(
               `Pass rate ${chalk.red.bold(passRate.toFixed(2))}${chalk.red('%')} is below the threshold of ${chalk.red.bold(passRateThreshold)}${chalk.red('%')}`,
@@ -1283,7 +1281,12 @@ async function doEvalWithEnv(
           );
         }
         process.exitCode = Number.isSafeInteger(failedTestExitCode) ? failedTestExitCode : 100;
-        return ret;
+        runState.failed = process.exitCode !== 0;
+        // A run that failed its tests returns here, as it always has. A run stopped by its
+        // target goes on to clean up its providers, as it did when it still exited with 0.
+        if (targetErrorStatus == null) {
+          return ret;
+        }
       }
     }
     if (testSuite.redteam) {
@@ -1296,12 +1299,13 @@ async function doEvalWithEnv(
   const runEvaluation = (initialization?: boolean) => {
     // Each watch run starts clean and retains its resolved env through output and cleanup.
     const runEnv: EnvOverrides = {};
+    const runState = { failed: false };
     return cliState.withConfig(undefined, () =>
       cliState.withBasePath(undefined, () =>
         cliState.withEnv(runEnv, () =>
           withProviderCleanup(
-            () => runEvaluationWithEnv(runEnv, initialization),
-            () => process.exitCode !== undefined && Number(process.exitCode) !== 0,
+            () => runEvaluationWithEnv(runEnv, runState, initialization),
+            () => runState.failed,
           ),
         ),
       ),

@@ -52,7 +52,7 @@ describe('Scanner fork PR auth rejection', () => {
       resolveGuidance: vi.fn().mockReturnValue(undefined),
     }));
     vi.doMock('simple-git', () => ({
-      default: vi.fn(() => ({
+      simpleGit: vi.fn(() => ({
         branch: vi.fn().mockResolvedValue({ current: 'main', all: ['main'] }),
         revparse: vi.fn().mockResolvedValue('abc123'),
       })),

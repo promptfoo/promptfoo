@@ -1,6 +1,7 @@
 import dedent from 'dedent';
 import { fetchHuggingFaceDataset } from '../../integrations/huggingfaceDatasets';
 import logger from '../../logger';
+import { sampleArray } from '../../util/generation';
 import { isBasicRefusal } from '../util';
 import { RedteamGraderBase, RedteamPluginBase } from './base';
 
@@ -350,13 +351,10 @@ export class BeavertailsPlugin extends RedteamPluginBase {
     const testCases = await fetchAllDatasets(n, this.pluginConfig);
 
     // Take n random test cases, or all if we have fewer than n
-    const selectedTests = testCases
-      .sort(() => Math.random() - 0.5)
-      .slice(0, Math.min(n, testCases.length))
-      .filter(
-        (test): test is BeaverTailsTestCase & { vars: { prompt: string } } =>
-          typeof test.vars.prompt === 'string',
-      );
+    const selectedTests = sampleArray(testCases, n).filter(
+      (test): test is BeaverTailsTestCase & { vars: { prompt: string } } =>
+        typeof test.vars.prompt === 'string',
+    );
 
     return selectedTests.map((test) => ({
       vars: {

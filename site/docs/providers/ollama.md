@@ -54,9 +54,9 @@ To pass configuration options to Ollama, use the `config` key. See Ollama's
 [parameter reference](https://github.com/ollama/ollama/blob/main/docs/modelfile.mdx#parameter)
 for what each one does:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
-  - id: ollama:chat:llama3.3
+  - id: ollama:chat:llama3.2:3b
     config:
       num_predict: 1024
       temperature: 0.7
@@ -178,9 +178,9 @@ You can also pass arbitrary fields directly to the Ollama API using the `passthr
 option. A `passthrough.options` object is merged into the computed options rather than
 replacing them:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
-  - id: ollama:chat:llama3.3
+  - id: ollama:chat:llama3.2:3b
     config:
       passthrough:
         format: 'json'
@@ -192,11 +192,12 @@ providers:
 Ollama chat models that support function calling (like Llama 3.1, Llama 3.3, Qwen, and others) can use tools with the `tools` config:
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - 'What is the weather like in {{city}}?'
 
 providers:
-  - id: ollama:chat:llama3.3
+  - id: ollama:chat:llama3.2:3b
     config:
       tools:
         - type: function
@@ -242,7 +243,7 @@ providers:
 
 Ollama can be used as a local grading provider for assertions that require language model evaluation. When you have tests that use both text-based assertions (like `llm-rubric`, `answer-relevance`) and embedding-based assertions (like `similar`), you can configure different Ollama models for each type:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 defaultTest:
   options:
     provider:
@@ -282,7 +283,7 @@ When running with `--max-concurrency 1`, no per-eval timeout, and no conversatio
 
 Ollama's embedding models can be used with the `similar` assertion to check semantic similarity between outputs and expected values:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 providers:
   - ollama:chat:llama3.2
 
@@ -305,7 +306,7 @@ tests:
 
 You can also set the embedding provider globally for all similarity assertions:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 defaultTest:
   options:
     provider:
@@ -361,7 +362,7 @@ Popular Ollama embedding models include:
 
 ## Using a Remote Ollama Server
 
-To connect to Ollama running on another machine (e.g., a more powerful server on your local network), set `OLLAMA_BASE_URL` to the remote address:
+To connect to Ollama running on another machine (e.g., a server on your local network), set `OLLAMA_BASE_URL` to the remote address:
 
 ```bash
 export OLLAMA_BASE_URL="http://192.168.1.100:11434"
@@ -400,7 +401,7 @@ To investigate and fix this issue, there's a few possible solutions:
 
 ## Evaluating models serially
 
-By default, promptfoo evaluates all providers concurrently for each prompt. However, you can run evaluations serially using the `-j 1` option:
+By default, promptfoo evaluates all providers concurrently for each prompt. However, you can run evals serially using the `-j 1` option:
 
 ```bash
 promptfoo eval -j 1

@@ -99,6 +99,7 @@ export function callProviderWithContext(
 ): Promise<ProviderResponse> {
   const callApiContext = {
     ...context,
+    isGrading: true,
     prompt: {
       raw: prompt,
       label,

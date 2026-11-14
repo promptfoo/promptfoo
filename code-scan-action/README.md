@@ -23,6 +23,8 @@ To also surface findings in GitHub Code Scanning, configure `sarif-output-path` 
 
 Once merged, the scanner will automatically run on future pull requests. Authentication is handled automatically with GitHub OIDC—no API key needed.
 
+The action installs the scanner before requesting its short-lived OIDC token, so slow installs do not expire the token before scanning.
+
 The action runs the scanner with its bundled Node.js 24 runtime. Older action releases and workflow steps that run Promptfoo directly require Node.js `>=22.22.0` on the runner's `PATH`. Configure Node.js 24 LTS for compatibility:
 
 ```yaml

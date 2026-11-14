@@ -14,7 +14,11 @@ import type { Prompt } from '../../types/index';
  * @returns An array of one `Prompt` object.
  * @throws Will throw an error if the file cannot be read.
  */
-export function processJsonFile(filePath: string, prompt: Partial<Prompt>): Prompt[] {
+export function processJsonFile(
+  filePath: string,
+  prompt: Partial<Prompt>,
+  labelPath: string = filePath,
+): Prompt[] {
   const fileContents = fs.readFileSync(filePath, 'utf8');
 
   // Try to parse and resolve file:// references
@@ -32,7 +36,7 @@ export function processJsonFile(filePath: string, prompt: Partial<Prompt>): Prom
   return [
     {
       raw: processedContents,
-      label: prompt.label || `${filePath}: ${processedContents}`,
+      label: prompt.label || `${labelPath}: ${processedContents}`,
       config: prompt.config,
     },
   ];

@@ -7,12 +7,37 @@ import {
 } from './mantle';
 import { isBedrockRuntimeMessagesModel } from './routing';
 import { BedrockTokenProvider } from './tokenProvider';
+import type Anthropic from '@anthropic-ai/sdk';
 import type { ClientOptions } from '@anthropic-ai/sdk';
 
 import type { ProviderOptions } from '../../types/providers';
+import type { AnthropicMessageOptions } from '../anthropic/types';
 
 export const DEFAULT_BEDROCK_ANTHROPIC_REGION = 'us-east-1';
 const FABLE_MANTLE_REGIONS = new Set(['us-east-1', 'eu-north-1']);
+const MYTHOS_PREVIEW_MANTLE_REGIONS = new Set(['us-east-1', 'ap-southeast-4']);
+const BEDROCK_ANTHROPIC_PROTECTED_HEADERS = new Set([
+  'authorization',
+  'x-api-key',
+  'anthropic-version',
+]);
+const BEDROCK_NATIVE_HOSTNAME =
+  /^(?:[a-z0-9-]+\.)?bedrock(?:-mantle|-runtime)?(?:-fips)?\.[a-z0-9-]+(?:\.vpce)?\.(?:api\.aws|amazonaws\.com(?:\.cn)?)$/;
+
+function isConfiguredBedrockProxy(apiBaseUrl: string | undefined): boolean {
+  if (!apiBaseUrl) {
+    return false;
+  }
+  try {
+    const { protocol, hostname } = new URL(apiBaseUrl);
+    return (
+      (protocol === 'https:' || protocol === 'http:') &&
+      !BEDROCK_NATIVE_HOSTNAME.test(hostname.replace(/\.+$/, ''))
+    );
+  } catch {
+    return false;
+  }
+}
 
 export function getBedrockAnthropicBaseUrl(region: string, useRuntime = false): string {
   // Validate the region before interpolating either host, which receives an API key.
@@ -23,6 +48,39 @@ export function getBedrockAnthropicBaseUrl(region: string, useRuntime = false): 
 }
 
 export class BedrockAnthropicMessagesProvider extends AnthropicMessagesProvider {
+  protected override calculateMessageCost(
+    config: AnthropicMessageOptions,
+    message: Pick<Anthropic.Messages.Message, 'stop_details' | 'stop_reason' | 'usage'>,
+  ): number | undefined {
+    const modelName =
+      typeof config.extra_body?.model === 'string' ? config.extra_body.model : this.modelName;
+    let endpointRegion: string | undefined;
+    try {
+      endpointRegion = /^bedrock-mantle\.([a-z0-9-]+)\.api\.aws$/.exec(
+        new URL(this.getApiBaseUrl() ?? '').hostname,
+      )?.[1];
+    } catch {
+      // Opaque provisioned endpoints retain the factory's resolved billing region.
+    }
+    const region =
+      endpointRegion ??
+      resolveBedrockMantleRegion(this.config, this.env, DEFAULT_BEDROCK_ANTHROPIC_REGION);
+    const usesGovCloudOpusPricing =
+      modelName === 'anthropic.claude-opus-4-8' &&
+      (region === 'us-gov-west-1' || region === 'us-gov-east-1');
+    // AWS publishes these GovCloud rates directly. Selecting them at billing time
+    // preserves prompt-level flat overrides and avoids the commercial 1.1 premium.
+    const pricingConfig =
+      usesGovCloudOpusPricing && config.cost == null
+        ? {
+            ...config,
+            inputCost: config.inputCost ?? 6 / 1e6,
+            outputCost: config.outputCost ?? 30 / 1e6,
+          }
+        : config;
+    return super.calculateMessageCost(pricingConfig, message, modelName);
+  }
+
   // Bedrock's Anthropic-compatible endpoint authenticates with an API key via
   // x-api-key resolved for each HTTP request. Never fall back to a local Claude
   // Code OAuth session — that would send an Anthropic OAuth token to the
@@ -88,6 +146,26 @@ export class BedrockAnthropicMessagesProvider extends AnthropicMessagesProvider 
   protected override getGenAISystem(): string {
     return 'bedrock';
   }
+  protected override sanitizeRequestHeaders(
+    headers: Record<string, string>,
+  ): Record<string, string> {
+    // A configured proxy may require its own explicit bearer credential or API key.
+    // Native AWS credentials and Anthropic-scoped defaults stay isolated.
+    const allowProxyCredentials = isConfiguredBedrockProxy(this.config.apiBaseUrl);
+    return {
+      ...Object.fromEntries(
+        Object.entries(headers).filter(
+          ([name]) =>
+            (allowProxyCredentials &&
+              (name.toLowerCase() === 'authorization' || name.toLowerCase() === 'x-api-key')) ||
+            !BEDROCK_ANTHROPIC_PROTECTED_HEADERS.has(name.toLowerCase()),
+        ),
+      ),
+      // The SDK merges request headers after the null defaults used to suppress
+      // ambient Anthropic headers, so restore Bedrock's required version here.
+      'anthropic-version': '2023-06-01',
+    };
+  }
 }
 
 export function createBedrockAnthropicMessagesProvider(
@@ -124,6 +202,17 @@ export function createBedrockAnthropicMessagesProvider(
 
   if (
     !config.apiBaseUrl &&
+    modelName === 'anthropic.claude-mythos-preview' &&
+    !MYTHOS_PREVIEW_MANTLE_REGIONS.has(region)
+  ) {
+    throw new Error(
+      `Amazon Bedrock model "${modelName}" is only available in us-east-1 and ` +
+        `ap-southeast-4. Set config.region or AWS_BEDROCK_REGION to a supported region.`,
+    );
+  }
+
+  if (
+    !config.apiBaseUrl &&
     modelName === 'anthropic.claude-fable-5' &&
     !FABLE_MANTLE_REGIONS.has(region)
   ) {
@@ -138,8 +227,9 @@ export function createBedrockAnthropicMessagesProvider(
     config.apiBaseUrl ||
     getBedrockAnthropicBaseUrl(region, isBedrockRuntimeMessagesModel(modelName));
 
+  const resolvedConfig = { ...config, region, apiBaseUrl };
   return new BedrockAnthropicMessagesProvider(modelName, {
     ...providerOptions,
-    config: { ...config, apiBaseUrl },
+    config: resolvedConfig,
   });
 }

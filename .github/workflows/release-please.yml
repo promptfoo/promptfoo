@@ -557,9 +557,11 @@ jobs:
     # Kept as a separate job so id-token/attestations permissions are confined to
     # steps that never install packages or execute repository code — a compromised
     # dependency lifecycle script in the publish job must not be able to mint OIDC
-    # tokens or sign attestations as this repository. Default `needs` gating (run
-    # only when the publish job succeeded) is exactly the behavior wanted here.
+    # tokens or sign attestations as this repository. Override skipped npm ancestors
+    # for action-only releases, while requiring successful mirror publication.
     needs: [publish-code-scan-action]
+    if: >-
+      ${{ always() && !cancelled() && needs.publish-code-scan-action.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:

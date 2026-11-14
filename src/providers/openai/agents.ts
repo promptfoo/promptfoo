@@ -1,9 +1,11 @@
 import {
+  Agent,
   addTraceProcessor,
   BatchTraceProcessor,
   getOrCreateTrace,
+  handoff,
   protocol,
-  run,
+  Runner,
   startTraceExportLoop,
 } from '@openai/agents';
 import { SandboxAgent } from '@openai/agents/sandbox';
@@ -22,7 +24,7 @@ import {
 import { resolveModelSettings } from './agents-model-settings';
 import { OTLPTracingExporter } from './agents-tracing';
 import { OpenAiGenericProvider } from './index';
-import type { Agent, AgentInputItem, Session } from '@openai/agents';
+import type { AgentInputItem, Handoff, ModelSettings, Session } from '@openai/agents';
 
 import type { EnvOverrides } from '../../types/env';
 import type {
@@ -32,6 +34,7 @@ import type {
 } from '../../types/index';
 import type { OpenAiAgentsOptions, OpenAiAgentsSessionFactory } from './agents-types';
 
+type AgentExecutionOverrides = { model?: string; modelSettings?: ModelSettings };
 /**
  * OpenAI Agents Provider
  *
@@ -41,6 +44,7 @@ import type { OpenAiAgentsOptions, OpenAiAgentsSessionFactory } from './agents-t
 export class OpenAiAgentsProvider extends OpenAiGenericProvider {
   private agentConfig: OpenAiAgentsOptions;
   private agent?: Agent<any, any>;
+  private executionModelSettings?: ModelSettings;
   private session?: Session;
   private sessionInitialization?: Promise<Session>;
   private sessionQueues = new WeakMap<Session, Promise<void>>();
@@ -51,6 +55,10 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
   ) {
     super(modelName, options);
     this.agentConfig = options.config || {};
+    // The Agents SDK can replace its global OpenAI client or model provider independently of
+    // promptfoo (setDefaultOpenAIClient/setDefaultModelProvider), and exposes no public getter for
+    // that effective endpoint. Applying first-party catalog restrictions here would therefore
+    // reject valid custom-provider model IDs. Let the configured SDK provider resolve them.
   }
 
   id(): string {
@@ -120,24 +128,25 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
         loadOutputGuardrails(this.agentConfig.outputGuardrails),
       ]);
 
-      const configuredAgent = agent.clone({
-        tools: mergeArrays(agent.tools, tools),
+      const configuredAgent = cloneAgentPreservingHooks(agent, {
+        tools:
+          mergeArrays(agent.tools, tools) ??
+          (agent.hasExplicitToolConfig() ? agent.tools : undefined),
         handoffs: mergeArrays(agent.handoffs, handoffs),
         inputGuardrails: mergeArrays(agent.inputGuardrails, inputGuardrails),
         outputGuardrails: mergeArrays(agent.outputGuardrails, outputGuardrails),
       });
 
-      const mockAwareAgent = this.wrapToolsIfNeeded(configuredAgent);
-
+      this.executionModelSettings = resolveModelSettings(this.agentConfig.modelSettings);
       logger.debug('[AgentsProvider] Agent initialized successfully', {
-        name: mockAwareAgent.name,
-        toolCount: mockAwareAgent.tools.length,
-        handoffCount: mockAwareAgent.handoffs.length,
-        inputGuardrailCount: mockAwareAgent.inputGuardrails.length,
-        outputGuardrailCount: mockAwareAgent.outputGuardrails.length,
+        name: configuredAgent.name,
+        toolCount: configuredAgent.tools.length,
+        handoffCount: configuredAgent.handoffs.length,
+        inputGuardrailCount: configuredAgent.inputGuardrails.length,
+        outputGuardrailCount: configuredAgent.outputGuardrails.length,
       });
 
-      return mockAwareAgent;
+      return configuredAgent;
     } catch (error) {
       logger.error('[AgentsProvider] Failed to initialize agent', { error });
       throw new Error(`Failed to initialize agent: ${error}`);
@@ -197,24 +206,19 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
         signal: callApiOptions?.abortSignal,
       };
 
-      // Override the agent's model only when the provider config explicitly asks to.
-      // The provider suffix is an agent label, not a model identifier.
-      if (this.agentConfig.model) {
-        runOptions.model = this.agentConfig.model;
-      }
+      const mockTools =
+        this.agentConfig.executeTools === false || this.agentConfig.executeTools === 'mock';
+      // Runner defaults propagate into independent Agent.asTool() runs. Apply execution
+      // overrides only to the initial and handoff agents in the per-run graph below.
+      const runner = new Runner({});
 
-      // Override model settings if specified
-      if (this.agentConfig.modelSettings) {
-        runOptions.modelSettings = resolveModelSettings(this.agentConfig.modelSettings);
-      }
-
-      if (this.agentConfig.executeTools === false || this.agentConfig.executeTools === 'mock') {
+      if (mockTools) {
         assertNoMockToolOverrides(runOptions.modelSettings, 'run options');
       }
 
       const traceContext = parseTraceparent(context?.traceparent);
       const configuredExport = getConfiguredTracingExport();
-      const explicitModel = runOptions.model ?? this.agent?.model;
+      const explicitModel = runOptions.model ?? (this.agentConfig.model || this.agent?.model);
       const traceMetadata = buildTraceMetadata(
         context,
         this.agentConfig.otlpEndpoint ?? configuredExport?.endpoint,
@@ -229,7 +233,16 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
       const executeRun = () =>
         getOrCreateTrace(
           async () => {
-            return await run(this.agent!, this.parsePromptInput(prompt), runOptions);
+            const overriddenAgent = applyExecutionOverrides(
+              this.agent!,
+              {
+                model: this.agentConfig.model || undefined,
+                modelSettings: this.executionModelSettings,
+              },
+              this.agentConfig.executeTools !== false && this.agentConfig.executeTools !== 'mock',
+            );
+            const runtimeAgent = this.wrapToolsIfNeeded(overriddenAgent);
+            return await runner.run(runtimeAgent, this.parsePromptInput(prompt), runOptions);
           },
           {
             ...(traceContext ? { traceId: `trace_${traceContext.traceId}` } : {}),
@@ -353,7 +366,7 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
       }
 
       const hasMockValue = Object.prototype.hasOwnProperty.call(toolMocks, tool.name);
-      return {
+      const mockedTool = {
         ...tool,
         isEnabled: async () => true,
         needsApproval: async () => false,
@@ -365,10 +378,12 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
         invoke: async () =>
           hasMockValue ? toolMocks[tool.name] : { mocked: true, tool: tool.name },
       };
+      Object.freeze(mockedTool.inputGuardrails);
+      Object.freeze(mockedTool.outputGuardrails);
+      return Object.freeze(mockedTool);
     });
 
-    const wrappedAgent = agent.clone({ tools, handoffs: [] });
-    shareAgentEventEmitter(agent, wrappedAgent);
+    const wrappedAgent = cloneAgentPreservingHooks(agent, { tools, handoffs: [] });
     wrappedAgents.set(agent as object, wrappedAgent);
 
     wrappedAgent.handoffs = agent.handoffs.map((agentHandoff) => {
@@ -385,6 +400,23 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
       throw new Error("executeTools: false/'mock' cannot safely wrap an unknown handoff shape");
     });
 
+    // The SDK discovers capabilities after lifecycle hooks, so pin both the graph and its
+    // discovery methods. Hooks can still observe the agents without exposing real tools.
+    const mockTools = Object.freeze(tools);
+    const noMcpTools = Object.freeze([]);
+    for (const [key, value] of Object.entries({
+      tools: mockTools,
+      handoffs: Object.freeze(wrappedAgent.handoffs),
+      mcpServers: noMcpTools,
+      prompt: undefined,
+      modelSettings: snapshotMockModelSettings(wrappedAgent.modelSettings),
+      getAllTools: async (): Promise<typeof mockTools> => mockTools,
+      getMcpTools: async (): Promise<typeof noMcpTools> => noMcpTools,
+      getEnabledHandoffs: Agent.prototype.getEnabledHandoffs.bind(wrappedAgent),
+      getPrompt: async (): Promise<undefined> => undefined,
+    })) {
+      Object.defineProperty(wrappedAgent, key, { value, writable: false, configurable: false });
+    }
     return wrappedAgent;
   }
 
@@ -522,6 +554,80 @@ function mergeArrays<T>(existing?: T[], additions?: T[]): T[] | undefined {
   }
 
   return [...(existing ?? []), ...(additions ?? [])];
+}
+
+function cloneAgentPreservingHooks(
+  source: Agent<any, any>,
+  config: Parameters<Agent<any, any>['clone']>[0],
+): Agent<any, any> {
+  const cloned = source.clone(config);
+  // Agent.clone() creates a fresh emitter. Retain the registered lifecycle listeners.
+  shareAgentEventEmitter(source, cloned);
+  return cloned;
+}
+
+/**
+ * Clone the executable agent graph so provider-level model overrides win on every turn.
+ *
+ * The Agents SDK treats Runner model configuration as a fallback: explicit settings on an agent
+ * take precedence. Handoff agents therefore need the same overrides applied before execution.
+ */
+function applyExecutionOverrides(
+  agent: Agent<any, any>,
+  overrides: AgentExecutionOverrides,
+  refreshPlainHandoffs = true,
+): Agent<any, any> {
+  if (overrides.model === undefined && overrides.modelSettings === undefined) {
+    return agent;
+  }
+
+  const clonedAgents = new WeakMap<Agent<any, any>, Agent<any, any>>();
+
+  const refreshAgent = (
+    source: Agent<any, any>,
+    visited: WeakSet<Agent<any, any>>,
+  ): Agent<any, any> => {
+    const existing = clonedAgents.get(source);
+    if (existing && visited.has(source)) {
+      return existing;
+    }
+
+    const snapshot = cloneAgentPreservingHooks(source, {
+      ...(overrides.model === undefined ? {} : { model: overrides.model }),
+      ...(overrides.modelSettings === undefined ? {} : { modelSettings: overrides.modelSettings }),
+      handoffs: [],
+      // clone() spreads the source, so undefined must explicitly preserve unconfigured tools.
+      tools: source.tools.length > 0 || source.hasExplicitToolConfig() ? source.tools : undefined,
+    });
+    // The SDK tracks tool use by Agent identity. Refresh configuration without replacing the
+    // runtime object when a handoff revisits the same source during this run.
+    const cloned = existing ? Object.assign(existing, snapshot) : snapshot;
+    clonedAgents.set(source, cloned);
+    visited.add(source);
+    cloned.handoffs = source.handoffs.map((candidate) => {
+      const explicitHandoff = 'clone' in candidate && 'agent' in candidate;
+      if (!explicitHandoff && !refreshPlainHandoffs) {
+        // Mock mode needs plain Agent entries for recursive tool wrapping, and cannot run
+        // the tool callbacks that update their targets during execution.
+        return refreshAgent(candidate as Agent<any, any>, visited);
+      }
+
+      const agentHandoff = explicitHandoff
+        ? (candidate as Handoff<any, any>)
+        : handoff(candidate as Agent<any, any>);
+      return agentHandoff.clone({
+        agent: refreshAgent(agentHandoff.agent, visited),
+        // Tool and handoff callbacks can update an already-cloned target or its descendants.
+        // Refresh that graph per transfer while retaining this run's source-to-runtime identities.
+        onInvokeHandoff: async (context, args) =>
+          refreshAgent(await agentHandoff.onInvokeHandoff(context, args), new WeakSet()),
+      });
+    });
+
+    return cloned;
+  };
+
+  return refreshAgent(agent, new WeakSet());
 }
 
 let tracingProcessorRegistration: Promise<void> | undefined;
@@ -673,13 +779,33 @@ function validateExecuteTools(value: unknown): void {
   }
 }
 
+function snapshotMockModelSettings(modelSettings: ModelSettings): ModelSettings {
+  const snapshot = { ...modelSettings };
+  if (modelSettings.providerData) {
+    const providerData = { ...modelSettings.providerData };
+    // These request-body escape hatches can introduce hosted tools or prompts after the
+    // initial validation. Copy before freezing so caller-owned settings stay mutable.
+    for (const key of ['extraBody', 'extra_body']) {
+      const body = providerData[key];
+      if (body && typeof body === 'object' && !Array.isArray(body)) {
+        providerData[key] = Object.freeze({ ...body });
+      }
+    }
+    snapshot.providerData = Object.freeze(providerData);
+  }
+  return Object.freeze(snapshot);
+}
+
 function assertNoMockToolOverrides(modelSettings: unknown, source: string): void {
-  if (!modelSettings || typeof modelSettings !== 'object' || Array.isArray(modelSettings)) {
+  if (
+    !modelSettings ||
+    (typeof modelSettings !== 'object' && typeof modelSettings !== 'function')
+  ) {
     return;
   }
 
   const providerData = (modelSettings as { providerData?: unknown }).providerData;
-  if (!providerData || typeof providerData !== 'object' || Array.isArray(providerData)) {
+  if (!providerData || (typeof providerData !== 'object' && typeof providerData !== 'function')) {
     return;
   }
 
@@ -688,20 +814,12 @@ function assertNoMockToolOverrides(modelSettings: unknown, source: string): void
   const overridesPrompt =
     Object.prototype.hasOwnProperty.call(providerDataRecord, 'prompt') ||
     extraBodies.some(
-      (extraBody) =>
-        !!extraBody &&
-        typeof extraBody === 'object' &&
-        !Array.isArray(extraBody) &&
-        Object.prototype.hasOwnProperty.call(extraBody, 'prompt'),
+      (extraBody) => extraBody != null && Object.prototype.hasOwnProperty.call(extraBody, 'prompt'),
     );
   const overridesTools =
     Object.prototype.hasOwnProperty.call(providerDataRecord, 'tools') ||
     extraBodies.some(
-      (extraBody) =>
-        !!extraBody &&
-        typeof extraBody === 'object' &&
-        !Array.isArray(extraBody) &&
-        Object.prototype.hasOwnProperty.call(extraBody, 'tools'),
+      (extraBody) => extraBody != null && Object.prototype.hasOwnProperty.call(extraBody, 'tools'),
     );
 
   if (overridesPrompt || overridesTools) {

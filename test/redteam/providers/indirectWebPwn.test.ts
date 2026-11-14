@@ -90,6 +90,7 @@ describe('IndirectWebPwnProvider', () => {
 
     expect(result.metadata?.fetchAttempts).toBe(2);
     expect(result.metadata?.stopReason).toBe('Attack succeeded');
+    expect(result.error).toBeUndefined();
     expect(result.tokenUsage?.numRequests).toBe(2);
     expect(result.tokenUsage?.total).toBe(30);
     expect(result.tokenUsage?.prompt).toBe(12);
@@ -143,6 +144,55 @@ describe('IndirectWebPwnProvider', () => {
 
     expect(result.metadata?.fetchAttempts).toBe(1);
     expect(result.metadata?.stopReason).toBe('Error');
+    expect(result.error).toBe('Target failed');
     expect(result.tokenUsage?.numRequests).toBe(1);
+    expect(mockFetchWithRetries).toHaveBeenCalledOnce();
   });
+
+  it.each([null, undefined])(
+    'preserves earlier usage when a later output is %s',
+    async (output) => {
+      mockFetchWithRetries
+        .mockResolvedValueOnce(
+          mockJsonResponse({
+            uuid: 'web-missing',
+            fullUrl: 'https://example.com/web-missing',
+            path: '/web-missing',
+            fetchPrompt: 'Fetch the page',
+          }),
+        )
+        .mockResolvedValueOnce(mockJsonResponse({ wasFetched: false, fetchCount: 0 }));
+      const targetProvider = createMockProvider({ id: 'mock-target' });
+      targetProvider.callApi
+        .mockReset()
+        .mockResolvedValueOnce({
+          output: 'Previous response',
+          tokenUsage: { total: 10, prompt: 4, completion: 6 },
+        })
+        .mockResolvedValueOnce({ output, tokenUsage: { total: 5, prompt: 5, completion: 0 } });
+      const provider = new IndirectWebPwnProvider({
+        injectVar: 'query',
+        maxFetchAttempts: 3,
+        useLlm: false,
+      });
+
+      const result = await provider.callApi('attack prompt', {
+        originalProvider: targetProvider,
+        vars: { query: 'Test objective' },
+        prompt: { raw: '{{query}}', label: 'test' },
+      });
+
+      expect(result.error).toContain('Target returned malformed response');
+      expect(result.output).toBe('Previous response');
+      expect(result.metadata?.stopReason).toBe('Error');
+      expect(result.tokenUsage).toMatchObject({
+        numRequests: 2,
+        total: 15,
+        prompt: 9,
+        completion: 6,
+      });
+      expect(targetProvider.callApi).toHaveBeenCalledTimes(2);
+      expect(mockFetchWithRetries).toHaveBeenCalledTimes(2);
+    },
+  );
 });

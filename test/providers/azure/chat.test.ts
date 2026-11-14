@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
+import { runEval } from '../../../src/evaluator';
 import logger from '../../../src/logger';
 import { AzureChatCompletionProvider } from '../../../src/providers/azure/chat';
 import { mockProcessEnv } from '../../util/utils';
@@ -858,6 +859,50 @@ describe('AzureChatCompletionProvider', () => {
       expect((provider as any).isReasoningModel()).toBe(true);
     });
 
+    it.each(['gpt-chat-latest', 'gpt-chat-latest-2026-06-24'])(
+      'uses reasoning request fields for Azure Chat alias %s',
+      async (deploymentName) => {
+        const provider = new AzureChatCompletionProvider(deploymentName, {
+          config: {
+            max_tokens: 1_000,
+            max_completion_tokens: 2_000,
+            reasoning_effort: 'high',
+            temperature: 0.7,
+          },
+        });
+
+        const { body } = await (provider as any).getOpenAiBody('test prompt');
+
+        expect(body).toHaveProperty('max_completion_tokens', 2_000);
+        expect(body).not.toHaveProperty('reasoning_effort');
+        expect(body).not.toHaveProperty('max_tokens');
+        expect(body).not.toHaveProperty('temperature');
+      },
+    );
+
+    it('omits default and passthrough effort for fixed-reasoning Azure deployments', async () => {
+      const direct = new AzureChatCompletionProvider('gpt-chat-latest');
+      const { body: directBody } = await direct.getOpenAiBody('hello');
+      expect(directBody).not.toHaveProperty('reasoning_effort');
+
+      const provider = new AzureChatCompletionProvider('opaque-deployment', {
+        config: { modelName: 'gpt-4.1' },
+      });
+      const passthrough = { reasoning_effort: 'high' };
+      const { body } = await provider.getOpenAiBody('hello', {
+        vars: {},
+        prompt: {
+          raw: 'hello',
+          label: 'override',
+          config: { modelName: 'gpt-chat-latest', passthrough },
+        },
+      });
+      expect(body.model).toBe('opaque-deployment');
+      expect(body).not.toHaveProperty('reasoning_effort');
+      expect(body).not.toHaveProperty('temperature');
+      expect(passthrough.reasoning_effort).toBe('high');
+    });
+
     it('omits temperature for Claude Opus 4.7 while keeping the standard chat body', async () => {
       const provider = new AzureChatCompletionProvider('claude-opus-4-7', {
         config: {
@@ -1280,6 +1325,113 @@ describe('AzureChatCompletionProvider', () => {
         flaggedOutput: true,
       });
       expect(result.finishReason).toBe('content_filter');
+      expect(result.output).toBe('Some content');
+    });
+
+    it.each(['guardrails', 'not-guardrails'] as const)(
+      'evaluates %s for content-filtered null output instead of reporting an integration error',
+      async (assertionType) => {
+        vi.mocked(fetchWithCache).mockResolvedValueOnce({
+          data: {
+            choices: [
+              {
+                message: { role: 'assistant', content: null },
+                finish_reason: 'content_filter',
+              },
+            ],
+          },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        });
+
+        const [result] = await runEval({
+          provider,
+          prompt: { raw: 'Test prompt', label: 'test-label' },
+          test: {
+            metadata: { purpose: 'A target that blocks unsafe requests' },
+            assert: [{ type: 'promptfoo:redteam:ssrf' }, { type: assertionType }],
+          },
+          delay: 0,
+          testIdx: 0,
+          promptIdx: 0,
+          repeatIndex: 0,
+          isRedteam: true,
+          conversations: {},
+          registers: {},
+        });
+
+        expect(fetchWithCache).toHaveBeenCalledOnce();
+        expect(result.response).toMatchObject({
+          output: '',
+          finishReason: 'content_filter',
+          guardrails: { flagged: true, flaggedInput: false, flaggedOutput: true },
+        });
+        expect(result.success).toBe(assertionType === 'not-guardrails');
+        expect(result.error).toBe(
+          assertionType === 'not-guardrails' ? undefined : 'Output failed safety checks',
+        );
+        expect(result.gradingResult?.componentResults).toEqual([
+          expect.objectContaining({ pass: true }),
+          expect.objectContaining({
+            assertion: { type: assertionType },
+            pass: assertionType === 'not-guardrails',
+          }),
+        ]);
+      },
+    );
+
+    it('grades an explicit Azure refusal even when message content is null', async () => {
+      const refusal = 'I cannot help with that request.';
+      provider.config.response_format = {
+        type: 'json_schema',
+        json_schema: {
+          name: 'result',
+          strict: true,
+          schema: { type: 'object', properties: {}, additionalProperties: false },
+        },
+      };
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: {
+          choices: [
+            { message: { role: 'assistant', content: null, refusal }, finish_reason: 'stop' },
+          ],
+          usage: { prompt_tokens: 5, completion_tokens: 0, total_tokens: 5 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      const [result] = await runEval({
+        provider,
+        prompt: { raw: 'Test prompt', label: 'test-label' },
+        test: {
+          metadata: { purpose: 'A target that refuses unsafe requests' },
+          assert: [
+            { type: 'promptfoo:redteam:ssrf' },
+            { type: 'is-refusal' },
+            { type: 'not-guardrails' },
+          ],
+        },
+        delay: 0,
+        testIdx: 0,
+        promptIdx: 0,
+        repeatIndex: 0,
+        isRedteam: true,
+        conversations: {},
+        registers: {},
+      });
+
+      expect(result.response).toMatchObject({
+        output: refusal,
+        isRefusal: true,
+        finishReason: 'stop',
+        guardrails: { flagged: true },
+      });
+      expect(result.success).toBe(true);
+      expect(result.error).toBeUndefined();
+      expect(result.tokenUsage).toMatchObject({ total: 5 });
     });
 
     it('does not crash when the API returns an empty choices array', async () => {

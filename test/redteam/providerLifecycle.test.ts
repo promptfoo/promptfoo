@@ -1,0 +1,243 @@
+import path from 'node:path';
+
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import cliState from '../../src/cliState';
+import { synthesize } from '../../src/redteam/index';
+import { redteamProviderManager } from '../../src/redteam/providers/shared';
+import { RateLimitRegistry } from '../../src/scheduler/rateLimitRegistry';
+import { createDeferred, mockProcessEnv } from '../util/utils';
+
+import type { SynthesizeOptions } from '../../src/redteam/types';
+import type { ApiProvider, ProviderOptions } from '../../src/types/providers';
+
+vi.mock('../../src/logger');
+vi.mock('../../src/telemetry');
+
+const generatedPrompt = 'Plan a ski trip to Hawaii in July';
+const providerOptions = (config: Record<string, unknown> = {}): ProviderOptions => ({
+  id: path.resolve('test/fixtures/providers/cleanup-provider.mjs'),
+  config: { output: `Prompt: ${generatedPrompt}`, ...config },
+});
+const options: SynthesizeOptions = {
+  prompts: ['Help the user with {{query}}'],
+  purpose: 'Travel assistant',
+  entities: [],
+  numTests: 1,
+  plugins: [{ id: 'overreliance', numTests: 1 }],
+  strategies: [],
+  targetIds: ['travel-assistant'],
+  showProgressBar: false,
+};
+
+describe('generation provider cleanup ownership', () => {
+  let restoreEnv: () => void;
+
+  beforeEach(() => {
+    vi.resetAllMocks();
+    restoreEnv = mockProcessEnv({
+      PROMPTFOO_DISABLE_REMOTE_GENERATION: 'true',
+      PROMPTFOO_DISABLE_ADAPTIVE_SCHEDULER: 'false',
+    });
+    redteamProviderManager.clearProvider();
+    redteamProviderManager.setRateLimitRegistry(undefined);
+  });
+
+  afterEach(() => {
+    restoreEnv();
+    redteamProviderManager.clearProvider();
+    vi.restoreAllMocks();
+  });
+
+  it.each(['explicit', 'cli'] as const)(
+    'cleans an owned %s provider after generating real plugin tests',
+    async (source) => {
+      const cleanup = vi.fn();
+      const call = vi.fn(() => expect(cleanup).not.toHaveBeenCalled());
+      const provider = providerOptions({ cleanup, call });
+      const result = await cliState.withConfig(
+        source === 'cli' ? { redteam: { provider } } : undefined,
+        () => synthesize({ ...options, ...(source === 'explicit' ? { provider } : {}) }),
+      );
+
+      expect(result.testCases).toEqual([
+        expect.objectContaining({
+          vars: { query: generatedPrompt },
+          assert: [{ type: 'promptfoo:redteam:overreliance', metric: 'Overreliance' }],
+          metadata: expect.objectContaining({ pluginId: 'overreliance' }),
+        }),
+      ]);
+      expect(result.failedPlugins).toEqual([]);
+      expect(call).toHaveBeenCalledOnce();
+      expect(cleanup).toHaveBeenCalledOnce();
+    },
+  );
+
+  it.each(['plugin', 'extraction'] as const)(
+    'cleans an owned provider when %s generation fails',
+    async (phase) => {
+      const error = new Error('generation failed');
+      const cleanup = vi.fn();
+      const call = vi.fn().mockRejectedValue(error);
+      const result = synthesize({
+        ...options,
+        purpose: phase === 'extraction' ? undefined : options.purpose,
+        provider: providerOptions({ cleanup, call }),
+      });
+
+      if (phase === 'extraction') {
+        await expect(result).rejects.toBe(error);
+      } else {
+        await expect(result).resolves.toMatchObject({
+          testCases: [],
+          failedPlugins: [{ pluginId: 'overreliance', requested: 1 }],
+        });
+      }
+      expect(call).toHaveBeenCalledOnce();
+      expect(cleanup).toHaveBeenCalledOnce();
+    },
+  );
+
+  it('cleans an owned provider when cancelled after generation starts', async () => {
+    const controller = new AbortController();
+    const cleanup = vi.fn();
+    const call = vi.fn(() => controller.abort());
+
+    await expect(
+      synthesize({
+        ...options,
+        abortSignal: controller.signal,
+        provider: providerOptions({ cleanup, call }),
+      }),
+    ).rejects.toThrow('Operation cancelled');
+
+    expect(call).toHaveBeenCalledOnce();
+    expect(cleanup).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    ['plugin', 'during drain'],
+    ['plugin', 'after drain timeout'],
+    ['scheduler', 'immediately on cancellation'],
+  ] as const)(
+    'blocks %s retries and cleans once when a concurrent provider settles %s',
+    async (retry, completion) => {
+      vi.useFakeTimers();
+      const registry =
+        retry === 'scheduler' ? new RateLimitRegistry({ maxConcurrency: 2 }) : undefined;
+      redteamProviderManager.setRateLimitRegistry(registry);
+      const retrying = vi.fn();
+      registry?.on('request:retrying', retrying);
+      const controller = new AbortController();
+      const started = createDeferred<void>();
+      const releaseFirst = createDeferred<void>();
+      const releaseSecond = createDeferred<void>();
+      const cleanup = vi.fn();
+      const call = vi.fn(async function (this: { output: string }) {
+        const callNumber = call.mock.calls.length;
+        if (callNumber === 1) {
+          await releaseFirst.promise;
+          this.output = 'Prompt: first completed';
+        } else if (callNumber === 2) {
+          started.resolve();
+          await releaseSecond.promise;
+          if (registry) {
+            // The real scheduler must cancel this retry before the cleanup deadline.
+            throw new Error('HTTP 429 retry after 2');
+          }
+          // The real plugin will retry an empty response unless cancellation stops it.
+          this.output = '';
+        } else {
+          this.output = 'Prompt: retry reopened provider';
+        }
+      });
+      const result = synthesize({
+        ...options,
+        abortSignal: controller.signal,
+        maxConcurrency: 2,
+        plugins: Array.from({ length: 3 }, () => ({ id: 'overreliance', numTests: 1 })),
+        provider: providerOptions({ call, cleanup }),
+      }).catch((error: unknown) => error);
+
+      try {
+        await started.promise;
+        if (registry) {
+          releaseSecond.resolve();
+          await vi.advanceTimersByTimeAsync(0);
+        }
+        controller.abort();
+        releaseFirst.resolve();
+        await vi.advanceTimersByTimeAsync(0);
+        const cleanupWhileSecondPending = cleanup.mock.calls.length;
+
+        if (completion === 'after drain timeout') {
+          await vi.advanceTimersByTimeAsync(999);
+          expect(cleanup).not.toHaveBeenCalled();
+          await vi.advanceTimersByTimeAsync(1);
+          expect(await result).toMatchObject({ message: 'Operation cancelled' });
+          expect(cleanup).toHaveBeenCalledOnce();
+        }
+
+        releaseSecond.resolve();
+        await vi.advanceTimersByTimeAsync(0);
+        if (registry) {
+          expect(retrying).toHaveBeenCalledOnce();
+          expect(retrying.mock.calls[0][0]).toMatchObject({ reason: 'ratelimit' });
+          expect(retrying.mock.calls[0][0].delayMs).toBeGreaterThan(1000);
+          await vi.runAllTimersAsync();
+        }
+
+        expect(await result).toMatchObject({ message: 'Operation cancelled' });
+        expect(cleanup).toHaveBeenCalledOnce();
+        // The third queued plugin and the second plugin's late retry must never call the provider.
+        expect(call).toHaveBeenCalledTimes(2);
+        expect(cleanupWhileSecondPending).toBe(registry ? 1 : 0);
+        if (registry) {
+          expect(Object.values(registry.getMetrics())[0]).toMatchObject({
+            completedRequests: 1,
+            failedRequests: 1,
+            retriedRequests: 1,
+            activeRequests: 0,
+            queueDepth: 0,
+          });
+        }
+        expect(vi.getTimerCount()).toBe(0);
+      } finally {
+        releaseFirst.resolve();
+        releaseSecond.resolve();
+        try {
+          await vi.runAllTimersAsync();
+          await result;
+        } finally {
+          registry?.dispose();
+          redteamProviderManager.setRateLimitRegistry(undefined);
+          vi.useRealTimers();
+        }
+      }
+    },
+  );
+
+  it.each(['supplied', 'cached'] as const)(
+    'leaves a %s provider available for subsequent synthesis',
+    async (source) => {
+      const cleanup = vi.fn();
+      const provider: ApiProvider = {
+        id: () => 'borrowed-generation-provider',
+        callApi: vi.fn().mockResolvedValue({ output: `Prompt: ${generatedPrompt}` }),
+        cleanup,
+      };
+      if (source === 'cached') {
+        await redteamProviderManager.setProvider(provider);
+      }
+
+      for (let run = 0; run < 2; run++) {
+        const result = await synthesize({
+          ...options,
+          ...(source === 'supplied' ? { provider } : {}),
+        });
+        expect(result.testCases[0].vars?.query).toBe(generatedPrompt);
+        expect(cleanup).not.toHaveBeenCalled();
+      }
+      expect(provider.callApi).toHaveBeenCalledTimes(2);
+    },
+  );
+});

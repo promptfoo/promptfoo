@@ -8,8 +8,7 @@ interface CleanupProvider {
 }
 
 /**
- * Global registry of Python providers for cleanup on process exit.
- * Ensures no zombie Python processes are left running.
+ * Tracks resource-owning providers for cleanup after evals and on process exit.
  */
 class ProviderRegistry {
   private providers: Set<CleanupProvider> = new Set();
@@ -35,7 +34,12 @@ class ProviderRegistry {
   async shutdown(provider: unknown): Promise<void> {
     const registered = provider as CleanupProvider;
     if (this.providers.delete(registered)) {
-      await registered.shutdown();
+      try {
+        await registered.shutdown();
+      } catch (error) {
+        this.providers.add(registered);
+        throw error;
+      }
     }
   }
 
@@ -48,17 +52,9 @@ class ProviderRegistry {
       }
       shuttingDown = true;
 
-      logger.debug(`Received ${signal}, shutting down ${this.providers.size} Python providers...`);
-
-      await Promise.all(
-        Array.from(this.providers).map((p) =>
-          p.shutdown().catch((err) => {
-            logger.error(`Error shutting down provider: ${err}`);
-          }),
-        ),
-      );
-
-      logger.debug('Python provider shutdown complete');
+      logger.debug(`Received ${signal}, shutting down ${this.providers.size} providers...`);
+      await this.shutdownAll();
+      logger.debug('Provider shutdown complete');
     };
 
     process.once('SIGINT', () => void shutdown('SIGINT'));
@@ -68,7 +64,10 @@ class ProviderRegistry {
   }
 
   async shutdownAll(): Promise<void> {
-    const results = await Promise.allSettled(Array.from(this.providers).map((p) => p.shutdown()));
+    const providers = Array.from(this.providers);
+    // New resources registered during teardown belong to the next cleanup.
+    this.providers.clear();
+    const results = await Promise.allSettled(providers.map(async (p) => p.shutdown()));
 
     // Log any failures but don't throw - cleanup should be defensive
     for (const result of results) {
@@ -76,8 +75,6 @@ class ProviderRegistry {
         logger.warn(`Error shutting down provider: ${result.reason}`);
       }
     }
-
-    this.providers.clear();
   }
 }
 

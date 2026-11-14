@@ -38,11 +38,11 @@ ADK 2.9.2 still supports `SequentialAgent`, but deprecates it in favor of
 `Workflow`. This example retains the original sequential-agent trace contract;
 new graph-based apps should use [ADK workflows](https://adk.dev/workflows/).
 
-To use OpenAI GPT-5 models, install the optional LiteLLM adapter and keep the
-provider prefix so ADK selects the compatible adapter:
+To use OpenAI GPT-5 models, install the optional LiteLLM adapter with its MCP
+dependencies and keep the provider prefix so ADK selects the compatible adapter:
 
 ```bash
-python -m pip install 'litellm>=1.101,<2'
+python -m pip install 'litellm[mcp]>=1.101,<2'
 export OPENAI_API_KEY=your_openai_api_key_here
 export ADK_MODEL=openai/gpt-5.4-mini
 ```

@@ -40,7 +40,7 @@ export OPENAI_API_KEY=sk-abc123
 Run an eval and view results:
 
 ```sh
-cd examples/getting-started
+cd getting-started
 promptfoo eval
 promptfoo view
 ```
