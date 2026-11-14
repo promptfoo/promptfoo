@@ -89,7 +89,7 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
       frequency_penalty:
         this.config.frequency_penalty ?? getEnvFloat('OPENAI_FREQUENCY_PENALTY', 0),
       best_of: this.config.best_of ?? getEnvInt('OPENAI_BEST_OF', 1),
-      ...(callApiOptions?.includeLogProbs ? { logprobs: callApiOptions.includeLogProbs } : {}),
+      ...(callApiOptions?.includeLogProbs ? { logprobs: 0 } : {}),
       ...(stop ? { stop } : {}),
       ...(effectivePassthrough || {}),
       ...(requestServiceTier === undefined ? {} : { service_tier: requestServiceTier }),
@@ -180,11 +180,19 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
         passthrough: { model: body.model },
       });
       const billingLookupModel = normalizeOpenAiBillingModelName(billingModelName);
+      const tokenLogProbs: unknown = data.choices[0].logprobs?.token_logprobs;
       return {
         output: data.choices[0].text,
         tokenUsage: getTokenUsage(data, cached),
         cached,
         latencyMs,
+        // Compatible servers may omit or mis-shape this optional metadata.
+        // With echo, the first prompt token is represented as null.
+        logProbs:
+          Array.isArray(tokenLogProbs) &&
+          tokenLogProbs.every((value) => value === null || Number.isFinite(value))
+            ? tokenLogProbs.filter((value): value is number => value !== null)
+            : undefined,
         cost: calculateOpenAIUsageCost(billingLookupModel, this.config, data.usage, {
           cachedResponse: cached,
           serviceTier: data.service_tier ?? body.service_tier,
