@@ -1138,6 +1138,7 @@ async function gradeRunEvalResponse({
       { abortSignal: deferredGradingAbortSignal, providerCallQueue, rateLimitRegistry },
       () =>
         runAssertions({
+          ...(testSuite?.nunjucksFilters && { filters: testSuite.nunjucksFilters }),
           prompt: renderedPrompt,
           provider,
           providerResponse: assertionProviderResponse,
@@ -1159,6 +1160,7 @@ async function gradeRunEvalResponse({
       { abortSignal, rateLimitRegistry },
       () =>
         runAssertions({
+          ...(testSuite?.nunjucksFilters && { filters: testSuite.nunjucksFilters }),
           prompt: renderedPrompt,
           provider,
           providerResponse: assertionProviderResponse,

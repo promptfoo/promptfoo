@@ -43,7 +43,8 @@ vi.mock('../../src/providers/defaults', () => ({
   getDefaultProviders: mocks.getDefaultProviders,
 }));
 
-vi.mock('../../src/providers/index', () => ({
+vi.mock('../../src/providers/index', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/providers/index')>()),
   loadApiProvider: mocks.loadApiProvider,
 }));
 
@@ -106,6 +107,7 @@ describe('matchesAgentRubric', () => {
 
     expect(mocks.loadApiProvider).toHaveBeenCalledWith('anthropic:claude-agent-sdk', {
       basePath: undefined,
+      configTransform: expect.any(Function),
     });
     expect(mocks.claudeProvider.callApi).toHaveBeenCalledTimes(1);
     expect(result.metadata).toEqual(

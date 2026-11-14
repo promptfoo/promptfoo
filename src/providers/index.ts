@@ -18,8 +18,9 @@ import {
   normalizeProviderRef,
   readProviderConfigFile,
 } from '../util/providerRef';
-import { renderEnvOnlyInObject } from '../util/render';
+import { renderEnvOnlyInObject, renderGradingProviderConfig } from '../util/render';
 import { sanitizeObject } from '../util/sanitizer';
+import { recordProviderLoadPath } from './agentic-utils';
 import { getProviderFactories, mergeProviderEnv } from './registry';
 
 import type { EnvOverrides } from '../types/env';
@@ -83,6 +84,23 @@ function describeInvalidProvider(provider: unknown): string {
   }
 }
 
+export function createGradingConfigTransform(
+  vars: Parameters<typeof renderGradingProviderConfig>[1],
+  filters: Parameters<typeof renderGradingProviderConfig>[3],
+): NonNullable<LoadApiProviderContext['configTransform']> {
+  return (config, env) => renderGradingProviderConfig(config, vars, env, filters);
+}
+
+export async function loadMappedGradingProvider(
+  provider: unknown,
+  context: LoadApiProviderContext,
+): Promise<ApiProvider | undefined> {
+  const ref = normalizeProviderRef(provider);
+  if (ref.kind === 'map') {
+    return loadApiProvider(ref.loadProviderPath, { ...context, options: ref.loadOptions });
+  }
+}
+
 // NOTE: loadApiProvider only accepts string paths. Callers use normalizeProviderRef
 // (src/util/providerRef.ts) to classify provider shapes before calling this function.
 export async function loadApiProvider(
@@ -127,7 +145,13 @@ async function createApiProvider(
   // Render ONLY environment variable templates at load time (e.g., {{ env.AZURE_ENDPOINT }})
   // This allows constructors to access real env values while preserving runtime templates
   // like {{ vars.* }} for per-test customization at callApi() time
-  const renderedConfig = options.config ? renderTemplate(options.config) : undefined;
+  const renderedConfig = options.config
+    ? context.configTransform &&
+      !isCloudProvider(renderedProviderPath) &&
+      !isProviderConfigFileReference(renderedProviderPath)
+      ? cliState.withEnv(templateEnv, () => context.configTransform!(options.config, templateEnv))
+      : renderTemplate(options.config)
+    : undefined;
   const renderedId = options.id ? renderTemplate(options.id) : undefined;
   const mergedEnv = mergeProviderEnv(
     { id: renderedProviderPath, config: renderedConfig },
@@ -274,6 +298,7 @@ async function createApiProvider(
       createApiProvider(
         fileProviderId,
         {
+          configTransform: context.configTransform,
           basePath,
           env: mergedFileEnv,
           options: {
@@ -292,6 +317,9 @@ async function createApiProvider(
       const ret = await cliState.withEnv(mergedEnv, () =>
         factory.create(renderedProviderPath, providerOptions, { ...context, env: mergedEnv }),
       );
+      if (!factory.isCustomModule) {
+        recordProviderLoadPath(ret, renderedProviderPath);
+      }
       ret.transform = options.transform;
       ret.delay = options.delay;
       ret.inputs = options.inputs;
