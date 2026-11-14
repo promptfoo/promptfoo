@@ -839,12 +839,12 @@ export class VertexChatProvider extends GoogleGenericProvider {
           // Express mode: use simplified endpoint with API key in header
           const url = `https://${apiHost}/${this.getApiVersion()}/publishers/${this.getPublisher()}/models/${this.modelName}:${endpoint}`;
 
-          const result = await retryGeminiGeneration(retryOptions, async (signal, isRetry) => {
+          const result = await retryGeminiGeneration(retryOptions, async (signal) => {
             const res = await fetchWithProxy(url, {
               method: 'POST',
               headers: requestHeaders,
               body: JSON.stringify(body),
-              ...(isRetry && { disableTransientRetries: true }),
+              disableTransientRetries: true,
               signal: signal
                 ? AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)])
                 : AbortSignal.timeout(timeoutMs),
@@ -853,14 +853,16 @@ export class VertexChatProvider extends GoogleGenericProvider {
               res,
               status: res.status,
               headers: res.headers,
-              data: res.ok ? ((await res.json()) as GeminiApiResponse) : undefined,
+              data: res.ok
+                ? ((await res.json()) as GeminiApiResponse)
+                : await res.json().catch(() => null),
             };
           });
           const { res } = result.response;
           requests = result.requests;
 
           if (!res.ok) {
-            const errorData = await res.json().catch(() => null);
+            const errorData = result.response.data;
             logger.debug(`Gemini API express mode error:\n${JSON.stringify(errorData)}`);
             return {
               error: `API call error: ${res.status} ${res.statusText}${errorData ? `: ${JSON.stringify(errorData)}` : ''}`,
@@ -877,7 +879,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
           const url = `https://${apiHost}/${this.getApiVersion()}/projects/${projectId}/locations/${this.getRegion()}/publishers/${this.getPublisher()}/models/${
             this.modelName
           }:${endpoint}`;
-          const result = await retryGeminiGeneration(retryOptions, async (signal, isRetry) => {
+          const result = await retryGeminiGeneration(retryOptions, async (signal) => {
             const res = await client.request({
               url,
               method: 'POST',
@@ -885,7 +887,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
               headers: requestHeaders,
               timeout: timeoutMs,
               ...(signal && { signal }),
-              ...(isRetry && { retry: false }),
+              retry: false,
             });
             return { data: res.data, headers: new Headers(res.headers), status: res.status };
           });

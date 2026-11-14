@@ -395,7 +395,7 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
           timeoutMs,
           signal: options?.abortSignal,
         },
-        (signal, isRetry) =>
+        (signal, isRetry, allowTransportRetries) =>
           fetchWithCache(
             endpoint,
             {
@@ -403,13 +403,12 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
               headers,
               body: JSON.stringify(body),
               ...(signal && { signal }),
-              ...(isRetry && { disableTransientRetries: true }),
               ...(authDiscriminator && { _authHash: authDiscriminator }),
             } as RequestInit,
             timeoutMs,
             'json',
             isRetry || shouldBustProviderCache(context),
-            ...(isRetry ? ([0] as const) : []),
+            ...(allowTransportRetries ? [] : ([0] as const)),
           ),
       );
       const { response } = result;

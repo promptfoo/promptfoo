@@ -59,6 +59,13 @@ describe('retryGeminiGeneration', () => {
     expect(request).toHaveBeenCalledTimes(2);
   });
 
+  it('uses the explicit retry budget and preserves the final response when exhausted', async () => {
+    const request = vi.fn().mockResolvedValue({ status: 503 });
+    const result = await retryGeminiGeneration({ ...options, maxRetries: 2 }, request);
+    expect(result).toEqual({ response: { status: 503 }, requests: 3 });
+    expect(request.mock.calls.map((call) => call[1])).toEqual([false, true, true]);
+  });
+
   it('preserves an explicit authentication failure', async () => {
     const response = { status: 401, data: { candidates: [] } };
     const request = vi.fn().mockResolvedValue(response);

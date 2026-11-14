@@ -1972,6 +1972,7 @@ describe('AIStudioChatProvider', () => {
         300000,
         'json',
         false,
+        0,
       );
     });
 
@@ -2085,6 +2086,7 @@ describe('AIStudioChatProvider', () => {
         300000,
         'json',
         false,
+        0,
       );
     });
 
@@ -2430,6 +2432,7 @@ describe('AIStudioChatProvider', () => {
         300000,
         'json',
         false,
+        0,
       );
     });
 
@@ -2526,6 +2529,7 @@ describe('AIStudioChatProvider', () => {
         300000,
         'json',
         false,
+        0,
       );
     });
 
@@ -2596,6 +2600,7 @@ describe('AIStudioChatProvider', () => {
         300000,
         'json',
         false,
+        0,
       );
     });
 

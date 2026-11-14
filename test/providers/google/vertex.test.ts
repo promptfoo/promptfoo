@@ -500,6 +500,13 @@ describe('VertexChatProvider.callGeminiApi', () => {
             .mockResolvedValueOnce(Response.json(answer))
         : mockVertexRequest(answer).mockResolvedValueOnce({ data: { candidates: [] } });
       const result = await provider.callApi('test prompt');
+      if (expressMode) {
+        expect(request).toHaveBeenNthCalledWith(
+          1,
+          expect.any(String),
+          expect.objectContaining({ disableTransientRetries: true }),
+        );
+      }
       expect(request).toHaveBeenCalledTimes(2);
       expect(result).toMatchObject({ output: 'fixture answer', tokenUsage: { numRequests: 2 } });
     },
@@ -552,6 +559,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
 
     expect(vertexUtil.getGoogleClient).toHaveBeenCalledWith({ credentials: undefined });
     expect(mockRequest).toHaveBeenCalledWith({
+      retry: false,
       url: expect.any(String),
       method: 'POST',
       headers: expect.objectContaining({ 'Content-Type': 'application/json' }),
