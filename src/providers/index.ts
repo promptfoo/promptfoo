@@ -127,7 +127,18 @@ async function createApiProvider(
   // Render ONLY environment variable templates at load time (e.g., {{ env.AZURE_ENDPOINT }})
   // This allows constructors to access real env values while preserving runtime templates
   // like {{ vars.* }} for per-test customization at callApi() time
-  const renderedConfig = options.config ? renderTemplate(options.config) : undefined;
+  let renderedConfig = options.config
+    ? renderTemplate({ id: renderedProviderPath, config: options.config }).config
+    : undefined;
+  // A child can bind its own env from the parent. Its config remains a
+  // template until the nested loader has merged those bindings.
+  const child = renderedConfig?.userProvider;
+  if (renderedProviderPath === 'promptfoo:simulated-user' && child?.env) {
+    renderedConfig = {
+      ...renderedConfig,
+      userProvider: { ...child, env: renderTemplate(child.env) },
+    };
+  }
   const renderedId = options.id ? renderTemplate(options.id) : undefined;
   const mergedEnv = mergeProviderEnv(
     { id: renderedProviderPath, config: renderedConfig },
