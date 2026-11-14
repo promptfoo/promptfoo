@@ -4,7 +4,9 @@ import logger from '../../logger';
 import { matchesLlmRubric } from '../../matchers/llmGrading';
 import { isMcpToolNameFilter } from '../../providers/mcp/util';
 import { loadOpenAiAgentsModule } from '../../providers/openai/agents-availability';
+import { isProviderTypeMap } from '../../types/providers';
 import { retryWithDeduplication, sampleArray } from '../../util/generation';
+import { getExplicitGraderProvider } from '../../util/gradingProvider';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import invariant from '../../util/invariant';
 import { extractVariablesFromTemplate, getNunjucksEngine } from '../../util/templates';
@@ -31,6 +33,7 @@ import type {
   AtomicTestCase,
   GradingResult,
   PluginConfig,
+  RedteamFileConfig,
   ResultSuggestion,
   TestCase,
 } from '../../types/index';
@@ -574,14 +577,22 @@ export abstract class RedteamGraderBase {
       typeof cliState.config?.defaultTest === 'object'
         ? (cliState.config.defaultTest as TestCase)
         : undefined;
+    const testGrader = getExplicitGraderProvider(test.options);
+    const testGraderProvider = (isProviderTypeMap(testGrader) ? testGrader.text : testGrader) as
+      | RedteamFileConfig['provider']
+      | undefined;
     const hasConfiguredGradingProvider = Boolean(
-      cliState.config?.redteam?.provider ||
+      testGraderProvider ||
+        cliState.config?.redteam?.provider ||
         defaultTest?.options?.provider ||
         defaultTest?.options?.graderProvider,
     );
     const grading = {
       ...test.options,
-      provider: await redteamProviderManager.getGradingProvider({ jsonOnly: true }),
+      provider: await redteamProviderManager.getGradingProvider({
+        provider: testGraderProvider,
+        jsonOnly: true,
+      }),
     };
     if (!hasConfiguredGradingProvider) {
       Object.defineProperty(grading, '__promptfooPreferRemote', {

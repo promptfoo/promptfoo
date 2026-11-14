@@ -47,12 +47,12 @@ The user should not have access to:
 
 ## Overriding the Grader
 
-You can override the grader model within your `promptfooconfig.yaml` file through modifying the `defaultTest`:
+You can override the grader model within your `promptfooconfig.yaml` file through modifying the `defaultTest`. Use `graderProvider` to name this role explicitly; `provider` remains supported as a backward-compatible alias:
 
 ```yaml
 defaultTest:
   options:
-    provider: 'ollama:chat:llama3.3:70b'
+    graderProvider: 'ollama:chat:llama3.3:70b'
 ```
 
 In this example, we can override the default grader to use Azure OpenAI:

@@ -9,6 +9,36 @@ import invariant from './invariant';
 
 export { GRADING_PROVIDER_TYPE_KEYS, isProviderTypeMap };
 
+const EXPLICIT_GRADER_PROVIDER = Symbol('promptfoo.explicitGraderProvider');
+
+export function markExplicitGraderProvider<T extends Record<string, unknown>>(
+  options: T,
+  ...sources: Array<{ graderProvider?: unknown; provider?: unknown } | undefined>
+): T {
+  const source = [...sources]
+    .reverse()
+    .find(
+      (candidate) => candidate?.graderProvider !== undefined || candidate?.provider !== undefined,
+    );
+  const graderProvider = source ? getExplicitGraderProvider(source) : undefined;
+  if (graderProvider !== undefined) {
+    Object.defineProperty(options, EXPLICIT_GRADER_PROVIDER, { value: graderProvider });
+  }
+  return options;
+}
+
+export function getExplicitGraderProvider(
+  options: { graderProvider?: unknown } | undefined,
+): unknown {
+  if (!options) {
+    return undefined;
+  }
+  return (
+    (options as { [EXPLICIT_GRADER_PROVIDER]?: unknown })[EXPLICIT_GRADER_PROVIDER] ??
+    options.graderProvider
+  );
+}
+
 export function normalizeGraderProvider<T extends { provider?: unknown; graderProvider?: unknown }>(
   options: T | undefined,
   path: string,
