@@ -12,18 +12,14 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
 
+export function isValidMaxCharsPerMessage(limit: unknown): limit is number {
+  return typeof limit === 'number' && Number.isInteger(limit) && limit > 0;
+}
+
 function getMaxCharsPerMessage(limit?: number): number | undefined {
   const maxCharsPerMessage = limit ?? cliState.config?.redteam?.maxCharsPerMessage;
 
-  if (
-    typeof maxCharsPerMessage !== 'number' ||
-    !Number.isInteger(maxCharsPerMessage) ||
-    maxCharsPerMessage <= 0
-  ) {
-    return undefined;
-  }
-
-  return maxCharsPerMessage;
+  return isValidMaxCharsPerMessage(maxCharsPerMessage) ? maxCharsPerMessage : undefined;
 }
 
 function parseChatMessages(prompt: string): ChatMessage[] | undefined {

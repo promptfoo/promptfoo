@@ -887,6 +887,34 @@ describe('shared redteam provider utilities', () => {
       expect(mockProvider.callApi).not.toHaveBeenCalled();
     });
 
+    it.each([
+      { providerCap: 0, strategyCap: 3 },
+      { providerCap: 'invalid', strategyCap: 3 },
+      { providerCap: Number.POSITIVE_INFINITY, strategyCap: 3 },
+      { providerCap: undefined, strategyCap: -1 },
+    ])(
+      'keeps a lower valid limit when a scoped limit is invalid ($providerCap, $strategyCap)',
+      ({ providerCap, strategyCap }) => {
+        setCliStateConfig(undefined);
+        const target = createMockProvider({ response: { output: 'ok' } });
+        const context = {
+          ...createLimitedMessageContext(),
+          test: {
+            provider: { config: { maxCharsPerMessage: providerCap } },
+            metadata: {
+              strategyConfig: { maxCharsPerMessage: strategyCap },
+              pluginConfig: { maxCharsPerMessage: 5 },
+            },
+          },
+        };
+        const limit = strategyCap > 0 ? strategyCap : 5;
+        expect(() => callTargetProvider(target, 'too long', context)).toThrow(
+          `maxCharsPerMessage=${limit}`,
+        );
+        expect(target.callApi).not.toHaveBeenCalled();
+      },
+    );
+
     it('prefers the layered attack provider config over the plugin-scoped cap on direct target calls', async () => {
       const previousConfig = cliState.config;
       // No global cap for this case, regardless of test order.

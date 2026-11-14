@@ -52,7 +52,10 @@ import {
   withGradingUsage,
 } from '../grading/storedResult';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
-import { throwIfTargetPromptExceedsMaxChars } from '../shared/promptLength';
+import {
+  isValidMaxCharsPerMessage,
+  throwIfTargetPromptExceedsMaxChars,
+} from '../shared/promptLength';
 import { ATTACKER_MODEL, ATTACKER_MODEL_SMALL, TEMPERATURE } from './constants';
 
 import type { TraceContextData } from '../../tracing/traceContext';
@@ -502,35 +505,25 @@ export function isConversationEndedResponse(
 }
 
 function getTargetPromptMaxCharsPerMessage(context?: CallApiContextParams): number | undefined {
-  // Layered attack providers (for example GOAT via the layer strategy) store
-  // their step limit in the test provider config, where the metadata-only
-  // strategy and plugin configs cannot see it. Resolve in the same order
-  // GoatProvider.callApi uses, so this boundary agrees with the caller
-  // instead of re-blocking attacks the caller already allowed. The call
-  // context type omits the provider field, so read it through a narrow cast;
-  // at runtime the full test case is carried through.
+  // Layer steps carry their limit in test.provider.config. An invalid override
+  // must not mask a valid limit from the strategy or plugin.
   const providerLimit = (
     context?.test as { provider?: { config?: { maxCharsPerMessage?: unknown } } } | undefined
   )?.provider?.config?.maxCharsPerMessage;
-  const configuredLimit =
-    providerLimit ??
+  const scopedLimit = [
+    providerLimit,
     (context?.test?.metadata?.strategyConfig as { maxCharsPerMessage?: unknown } | undefined)
-      ?.maxCharsPerMessage ??
+      ?.maxCharsPerMessage,
     (context?.test?.metadata?.pluginConfig as { maxCharsPerMessage?: unknown } | undefined)
-      ?.maxCharsPerMessage;
-
-  if (
-    typeof configuredLimit !== 'number' ||
-    !Number.isInteger(configuredLimit) ||
-    configuredLimit <= 0
-  ) {
-    return undefined;
-  }
+      ?.maxCharsPerMessage,
+  ].find(isValidMaxCharsPerMessage);
 
   const globalLimit = cliState.config?.redteam?.maxCharsPerMessage;
-  return typeof globalLimit === 'number' && Number.isInteger(globalLimit) && globalLimit > 0
-    ? Math.min(globalLimit, configuredLimit)
-    : configuredLimit;
+  if (isValidMaxCharsPerMessage(globalLimit)) {
+    return scopedLimit === undefined ? globalLimit : Math.min(globalLimit, scopedLimit);
+  }
+
+  return scopedLimit;
 }
 
 /** Invoke a red-team target with the same tracing behavior across every strategy. */
