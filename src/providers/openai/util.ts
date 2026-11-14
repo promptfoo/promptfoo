@@ -768,13 +768,16 @@ export function isOpenAiFirstPartyApiUrl(apiUrl?: string): boolean {
 }
 
 /** Apply Claude's wire-format restriction after prompt and passthrough overrides are merged. */
-export function omitDeprecatedClaudeSamplingParams(body: Record<string, unknown>): void {
-  if (typeof body.model !== 'string') {
+export function omitDeprecatedClaudeSamplingParams(
+  body: Record<string, unknown>,
+  modelName: unknown = body.model,
+): void {
+  if (typeof modelName !== 'string') {
     return;
   }
   // Only the fine-tune base identifies the model; later fields are user-defined.
-  const fineTuneBase = /(?:^|\/)ft:([^:]+)(?::|$)/.exec(body.model)?.[1];
-  const model = fineTuneBase ?? body.model;
+  const fineTuneBase = /(?:^|\/)ft:([^:]+)(?::|$)/.exec(modelName)?.[1];
+  const model = fineTuneBase ?? modelName;
   const leaf = model.slice(model.lastIndexOf('/') + 1);
   if (isKnownClaudeModelWithDeprecatedSampling(leaf)) {
     delete body.temperature;

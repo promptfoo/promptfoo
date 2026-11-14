@@ -678,7 +678,10 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       isOpenRouter: isOpenRouterGpt6,
     });
 
-    omitDeprecatedClaudeSamplingParams(body);
+    omitDeprecatedClaudeSamplingParams(
+      body,
+      typeof body.model === 'string' ? this.normalizeCapabilityModelName(body.model) : body.model,
+    );
 
     return {
       body,

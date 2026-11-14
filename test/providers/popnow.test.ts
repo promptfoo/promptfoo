@@ -149,6 +149,27 @@ describe('PopNow', () => {
       expect(body.max_tokens).toBeUndefined();
     });
 
+    it.each([
+      ['anthropic/claude-sonnet-5.5/chat', undefined, false],
+      ['google/gemini-3.7-flash/chat', 'anthropic/claude-sonnet-5.5/chat', false],
+      ['anthropic/claude-sonnet-5.5/chat', 'google/gemini-3.7-flash/chat', true],
+    ] as const)('handles sampling for %s with override %s', async (model, override, supported) => {
+      const sampling = { temperature: 0.3, top_p: 0.7, top_k: 5 };
+      const provider = new PopNowProvider(model, {
+        config: { passthrough: { ...sampling, ...(override && { model: override }) } },
+      });
+
+      const { body } = await provider.getOpenAiBody('Test prompt');
+      expect(body.model).toBe(override ?? model);
+      if (supported) {
+        expect(body).toMatchObject(sampling);
+      } else {
+        for (const field of Object.keys(sampling)) {
+          expect(body).not.toHaveProperty(field);
+        }
+      }
+    });
+
     it('should call the PopNow API and return output', async () => {
       const provider = new PopNowProvider('google/gemini-3.7-flash/chat', {});
       mockedFetchWithRetries.mockResolvedValueOnce(
