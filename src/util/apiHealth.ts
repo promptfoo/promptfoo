@@ -23,6 +23,10 @@ export function isNetworkEgressDisabled(): boolean {
  * @returns A promise that resolves to the health check response.
  */
 export async function checkRemoteHealth(url: string): Promise<HealthResponse> {
+  if (isNetworkEgressDisabled()) {
+    return { status: 'DISABLED', message: 'network egress is disabled (PROMPTFOO_NO_NETWORK)' };
+  }
+
   logger.debug(
     `[CheckRemoteHealth] Checking API health: ${JSON.stringify({
       url,

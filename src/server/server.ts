@@ -390,9 +390,23 @@ export function createApp() {
   }
 
   if (noNetworkIndex !== undefined) {
-    app.get(['/', '/index.html'], serveNoNetworkIndex);
+    // Express decodes wildcard segments. Normalize them before static serving
+    // so encoded paths and redundant separators cannot expose the unmarked entry.
+    app.get('/{*entryPath}', (req, res, next) => {
+      const requested = path.normalize(`/${(req.params.entryPath ?? []).join('/')}`);
+      if (requested === path.sep || requested.toLowerCase() === path.join(path.sep, 'index.html')) {
+        serveNoNetworkIndex(req, res);
+      } else {
+        next();
+      }
+    });
   }
-  app.use(express.static(staticDir, { dotfiles: 'allow' }));
+  app.use(
+    express.static(staticDir, {
+      dotfiles: 'allow',
+      index: noNetworkIndex === undefined ? 'index.html' : false,
+    }),
+  );
 
   if (noNetworkIndex !== undefined) {
     app.get('/*splat', serveNoNetworkIndex);

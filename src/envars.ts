@@ -572,6 +572,16 @@ export function getEnvString(key: EnvVarKey, defaultValue?: string): string | un
  * @returns The boolean value of the environment variable, or the default value if provided.
  */
 export function getEnvBool(key: EnvVarKey, defaultValue?: boolean): boolean {
+  // The no-network switch is additive: a provider or suite may opt in but
+  // cannot turn off restrictions requested by the operator or enclosing suite.
+  if (
+    key === 'PROMPTFOO_NO_NETWORK' &&
+    (parseEnvBool(process.env[key]) ||
+      parseEnvBool(getEnvOverrides('file')?.[key]) ||
+      parseEnvBool(getEnvOverrides('suite')?.[key]))
+  ) {
+    return true;
+  }
   return parseEnvBool(getEnvString(key), defaultValue);
 }
 

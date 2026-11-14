@@ -44,6 +44,21 @@ describe('Remote Health Route', () => {
     }
   });
 
+  it.each(['/', '/%69ndex.html', '/%2e%2findex%2ehtml', '//index.html', '/eval/recent'])(
+    'serves the marked entry page for %s in no-network mode',
+    async (url) => {
+      const restore = mockProcessEnv({ PROMPTFOO_NO_NETWORK: 'true' });
+      try {
+        const response = await request(createApp()).get(url);
+        expect(response.status).toBe(200);
+        expect(response.headers['cache-control']).toBe('no-store');
+        expect(response.text).toContain('<meta name="promptfoo-no-network">');
+      } finally {
+        restore();
+      }
+    },
+  );
+
   it('checks upstream health when no-network mode is off', async () => {
     const restoreEnv = mockProcessEnv({
       PROMPTFOO_NO_NETWORK: undefined,

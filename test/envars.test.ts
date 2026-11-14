@@ -341,6 +341,23 @@ describe('envars', () => {
   });
 
   describe('getEnvBool', () => {
+    it.each([
+      ['true', 'false', 'false', 'false', true],
+      ['false', 'yes', 'false', 'false', true],
+      ['false', 'false', '1', 'false', true],
+      ['false', 'false', 'false', 'true', true],
+      ['false', 'false', 'false', 'false', false],
+    ] as const)(
+      'keeps no-network restrictions across env layers (%s/%s/%s/%s)',
+      (parent, file, suite, provider, expected) => {
+        mockProcessEnv({ PROMPTFOO_NO_NETWORK: parent });
+        const layers = { file, suite, provider };
+        setEnvOverridesProvider((layer) => ({ PROMPTFOO_NO_NETWORK: layers[layer] }), {
+          providerLayer: true,
+        });
+        expect(getEnvBool('PROMPTFOO_NO_NETWORK')).toBe(expected);
+      },
+    );
     it('should return true for truthy string values', () => {
       ['1', 'true', 'yes', 'yup'].forEach((value) => {
         mockProcessEnv({ PROMPTFOO_CACHE_ENABLED: value });
