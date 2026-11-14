@@ -3,6 +3,7 @@ import fsPromises from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { isModuleNamespaceObject } from 'node:util/types';
 import vm from 'node:vm';
 
 import { resolveModulePath } from 'exsolve';
@@ -228,6 +229,7 @@ export function getDirectory(): string {
 function getNamedExport(mod: Record<string, unknown>, name: string, bindToModule = false) {
   const exported = mod[name];
   return bindToModule &&
+    !isModuleNamespaceObject(mod) &&
     mod.__esModule !== true &&
     exported !== mod &&
     typeof exported === 'function'
@@ -243,6 +245,7 @@ function bindDefaultExport(
   return bindToModule &&
     owner?.default &&
     owner !== exported &&
+    !isModuleNamespaceObject(owner) &&
     owner.__esModule !== true &&
     typeof exported === 'function'
     ? exported.bind(owner)

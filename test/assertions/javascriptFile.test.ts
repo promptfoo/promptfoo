@@ -120,6 +120,26 @@ describe('JavaScript file graders with the real module loader', () => {
     expect(await grade('hello', {})).toBe(true);
   });
 
+  it('keeps functions in a re-exported ESM namespace unbound', () => {
+    const utilsUrl = pathToFileURL(path.resolve(__dirname, '../../src/assertions/utils.ts')).href;
+    const barrel = path.join(directory, 'barrel.mjs');
+    fs.writeFileSync(
+      path.join(directory, 'grader.mjs'),
+      'export function grade() { return this === undefined; } export default grade;',
+    );
+    fs.writeFileSync(barrel, "export * as default from './grader.mjs';");
+    const runner = path.join(directory, 'check.mjs');
+    fs.writeFileSync(
+      runner,
+      `import { resolveJavaScriptFileFunction } from ${JSON.stringify(utilsUrl)};
+       for (const name of [undefined, 'default', 'grade']) {
+         const grade = await resolveJavaScriptFileFunction(${JSON.stringify(barrel)}, name);
+         if (!grade()) process.exitCode = 1;
+       }`,
+    );
+    execFileSync(process.execPath, ['--import', 'tsx', runner]);
+  });
+
   it.each(['js', 'cjs'])(
     'keeps transpiled named functions and self aliases unbound in .%s',
     (extension) => {
