@@ -18,6 +18,11 @@ import { getCache, withCacheNamespace } from './cache';
 import cliState from './cliState';
 import { DEFAULT_MAX_CONCURRENCY, FILE_METADATA_KEY } from './constants';
 import { getEnvBool, getEnvInt, getEvalTimeoutMs, getMaxEvalTimeMs, isCI } from './envars';
+import {
+  getStructuredVarSources,
+  markStructuredVarSources,
+  mergeStructuredVarSources,
+} from './evaluator/structuredVarSources';
 import { collectFileMetadata, renderPrompt, runExtensionHook } from './evaluatorHelpers';
 import logger, { globalLogCallback, setLogCallback } from './logger';
 import { selectMaxScore } from './matchers/comparison';
@@ -708,6 +713,7 @@ function createRunEvalState({
   promptIndex: number;
 }): RunEvalState {
   const vars = structuredClone(test.vars || {});
+  markStructuredVarSources(vars, getStructuredVarSources(test));
   const fileMetadata = collectFileMetadata(vars);
   // Provider identifiers and prompt ids can both collide, but every result-table
   // column has a unique index. Encode the components as a tuple because identifiers
@@ -1950,6 +1956,7 @@ export function formatVarsForDisplay(
 
 export function generateVarCombinations(
   vars: Record<string, string | string[] | unknown>,
+  loadedRoots = new Set<string>(),
 ): Record<string, VarValue>[] {
   const keys = Object.keys(vars);
   const combinations: Record<string, VarValue>[] = [{}];
@@ -1957,7 +1964,7 @@ export function generateVarCombinations(
   for (const key of keys) {
     let values: Array<string | object> = [];
 
-    if (typeof vars[key] === 'string' && vars[key].startsWith('file://')) {
+    if (!loadedRoots.has(key) && typeof vars[key] === 'string' && vars[key].startsWith('file://')) {
       const filePath = vars[key].slice('file://'.length);
 
       // For glob patterns, we need to resolve the base directory and use relative patterns
@@ -2447,10 +2454,11 @@ function mergeScenarioTest(
   scenarioIndex: number,
 ): AtomicTestCase {
   const defaultTest = getDefaultTest(testSuite);
-  const mergedMetadata = {
+  const mergedMetadata: NonNullable<AtomicTestCase['metadata']> = {
     ...(defaultTest?.metadata || {}),
     ...data.metadata,
     ...test.metadata,
+    ...mergeStructuredVarSources(defaultTest, data, test),
   };
   mergedMetadata.conversationId ??= `__scenario_${scenarioIndex}__`;
 
@@ -2481,8 +2489,13 @@ async function prepareTestVariables(
   const inputTransformDefault = getDefaultTest(testSuite)?.options?.transformVars;
 
   for (const testCase of tests) {
+    const defaults = getDefaultTest(testSuite);
+    const structured = mergeStructuredVarSources(defaults, testCase);
+    if (structured.__promptfoo) {
+      testCase.metadata = { ...testCase.metadata, ...structured };
+    }
     testCase.vars = {
-      ...(getDefaultTest(testSuite)?.vars || {}),
+      ...(defaults?.vars || {}),
       ...testCase?.vars,
     };
     if (!testCase.vars) {
@@ -2673,7 +2686,14 @@ function appendRunEvalOptionsForTestCase({
   const varCombinations =
     getEnvBool('PROMPTFOO_DISABLE_VAR_EXPANSION') || testCase.options?.disableVarExpansion
       ? [testCase.vars]
-      : generateVarCombinations(testCase.vars || {});
+      : generateVarCombinations(
+          testCase.vars || {},
+          new Set(
+            Object.entries(getStructuredVarSources(testCase) ?? {})
+              .filter(([, source]) => source === true)
+              .map(([key]) => key),
+          ),
+        );
 
   const globalRepeat = normalizeRepeatCount(options.repeat);
   const testRepeat = normalizeRepeatCount(testCase.options?.repeat, globalRepeat);

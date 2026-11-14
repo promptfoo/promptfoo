@@ -6,6 +6,7 @@ import { isBinary } from 'istextorbinary';
 import cliState from './cliState';
 import { getEnvBool } from './envars';
 import { importModule } from './esm';
+import { structuredVarSlots } from './evaluator/structuredVarSources';
 import { getPrompt as getHeliconePrompt } from './integrations/helicone';
 import { getPrompt as getLangfusePrompt } from './integrations/langfuse';
 import { getPrompt as getPortkeyPrompt } from './integrations/portkey';
@@ -259,9 +260,10 @@ function setNestedValue(container: object, key: string, value: unknown): void {
  */
 export function collectFileMetadata(vars: Record<string, VarValue>): FileMetadata {
   const fileMetadata: FileMetadata = {};
+  const loaded = structuredVarSlots(vars).get(vars);
 
   for (const [varName, value] of Object.entries(vars)) {
-    if (typeof value === 'string' && value.startsWith('file://')) {
+    if (!loaded?.has(varName) && typeof value === 'string' && value.startsWith('file://')) {
       const filePath = path.resolve(cliState.basePath || '', value.slice('file://'.length));
       const fileExtension = filePath.split('.').pop() || '';
 
@@ -744,6 +746,7 @@ async function resolveNestedFileRefs(
   referencesProtectedTemplate: (template: string) => boolean,
   visited: WeakSet<object>,
   targetsByContainer: WeakMap<object, Map<string, NestedRenderTarget>>,
+  loadedSlots: WeakMap<object, Set<string>>,
 ): Promise<NestedRenderTarget[]> {
   const pending: object[] = [value];
   const renderTargets: NestedRenderTarget[] = [];
@@ -761,6 +764,9 @@ async function resolveNestedFileRefs(
         continue;
       }
 
+      if (loadedSlots.get(container)?.has(key)) {
+        continue;
+      }
       const nestedValue = descriptor.value;
       const isString = typeof nestedValue === 'string';
       const topLevelFileVarName = isString ? getDirectTopLevelReference(nestedValue) : undefined;
@@ -1409,6 +1415,8 @@ export async function renderPrompt(
 ): Promise<string> {
   const nunjucks = getNunjucksEngine(nunjucksFilters);
   const nestedRenderTargets: NestedRenderTarget[] = [];
+  const loadedSlots = structuredVarSlots(vars);
+  const loadedRoots = loadedSlots.get(vars);
   const nestedTargetsByContainer = new WeakMap<object, Map<string, NestedRenderTarget>>();
   const protectedNestedContainers = new WeakSet<object>();
   const protectedPrimitiveValues = new Set<unknown>();
@@ -1506,6 +1514,7 @@ export async function renderPrompt(
         ([varName, value]) =>
           varName !== '_conversation' &&
           !protectedDirectVarNames.has(varName) &&
+          !loadedRoots?.has(varName) &&
           typeof value === 'string' &&
           value.startsWith('file://'),
       )
@@ -1514,7 +1523,7 @@ export async function renderPrompt(
 
   // Load files
   for (const [varName, value] of Object.entries(vars)) {
-    if (preprocessingDisabled) {
+    if (preprocessingDisabled || loadedRoots?.has(varName)) {
       continue;
     }
     if (varName === '_conversation' || protectedVarNames.includes(varName)) {
@@ -1671,6 +1680,7 @@ export async function renderPrompt(
           referencesProtectedTemplate,
           new WeakSet<object>(),
           nestedTargetsByContainer,
+          loadedSlots,
         )),
       );
     }

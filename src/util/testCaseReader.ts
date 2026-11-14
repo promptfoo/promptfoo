@@ -38,6 +38,9 @@ import type {
   TestSuiteConfig,
 } from '../types/index';
 
+type StructuredVarGraph = [string, true | number][][];
+type StructuredVarSource = true | StructuredVarGraph;
+
 type StandaloneTestsFileMetadata = {
   resolvedVarsPath: string;
   pathWithoutFunction: string;
@@ -112,6 +115,7 @@ function resolveVarFileReference(
   visited: WeakSet<object>,
   loadStructuredReference: boolean,
   dependencyPaths?: Set<string>,
+  onStructured?: () => void,
 ): unknown {
   const shouldRender = reference.includes('{{') || reference.includes('{%');
   const renderedReference = shouldRender
@@ -133,6 +137,7 @@ function resolveVarFileReference(
     ? getStructuredVarFilePaths(filePath, absolutePath, declaringBasePath)
     : undefined;
   if (structuredPaths) {
+    onStructured?.();
     return loadStructuredVarFileReference(
       absolutePath,
       structuredPaths,
@@ -159,6 +164,7 @@ function resolveVarFileReferences(
   visited = new WeakSet<object>(),
   loadStructuredReferences = false,
   dependencyPaths?: Set<string>,
+  loadedSlots?: WeakMap<object, Set<string>>,
 ): void {
   if (typeof value !== 'object' || value === null || visited.has(value)) {
     return;
@@ -181,6 +187,7 @@ function resolveVarFileReferences(
         visited,
         loadStructuredReferences,
         dependencyPaths,
+        loadedSlots && (() => markLoadedSlot(loadedSlots, value, key)),
       );
       if (resolvedValue !== nestedValue) {
         Object.defineProperty(value, key, { ...descriptor, value: resolvedValue });
@@ -194,6 +201,7 @@ function resolveVarFileReferences(
         visited,
         loadStructuredReferences,
         dependencyPaths,
+        loadedSlots,
       );
     }
   }
@@ -344,6 +352,35 @@ function loadStructuredVarFileReference(
   return loadedValues;
 }
 
+// Index authored containers once per root. YAML aliases add a single edge rather
+// than duplicating every path. JSON replay can split them into distinct objects.
+function structuredVarSource(
+  root: unknown,
+  slots: WeakMap<object, Set<string>>,
+): StructuredVarGraph | undefined {
+  if (!Array.isArray(root) && !isPlainObject(root)) {
+    return;
+  }
+  const ids = new Map<object, number>([[root, 0]]);
+  const graph: StructuredVarGraph = [];
+  let hasLoadedSlot = false;
+  for (const [container, id] of ids) {
+    const edges: StructuredVarGraph[number] = [];
+    graph[id] = edges;
+    for (const [key, child] of Object.entries(container)) {
+      if (slots.get(container)?.has(key)) {
+        edges.push([key, true]);
+        hasLoadedSlot = true;
+      } else if (Array.isArray(child) || isPlainObject(child)) {
+        const next = ids.get(child) ?? ids.size;
+        ids.set(child, next);
+        edges.push([key, next]);
+      }
+    }
+  }
+  return hasLoadedSlot ? graph : undefined;
+}
+
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   if (typeof value !== 'object' || value === null) {
     return false;
@@ -362,12 +399,19 @@ export function rebaseTestCaseVarFileReferences(
   return testCase;
 }
 
+function markLoadedSlot(slots: WeakMap<object, Set<string>>, parent: object, key: string) {
+  const keys = slots.get(parent) ?? new Set<string>();
+  keys.add(key);
+  slots.set(parent, keys);
+}
+
 function loadTopLevelVarsFileReferences(
   value: unknown,
   declaringBasePath: string,
   resolutionBasePath: string,
   visited: WeakSet<object>,
-  dependencyPaths?: Set<string>,
+  dependencyPaths: Set<string>,
+  loadedSlots: WeakMap<object, Set<string>>,
 ): unknown {
   if (typeof value !== 'object' || value === null) {
     return value;
@@ -396,6 +440,7 @@ function loadTopLevelVarsFileReferences(
     const structuredPaths = getStructuredVarFilePaths(filePath, absolutePath, declaringBasePath);
     let loadedValue: unknown;
     if (structuredPaths) {
+      markLoadedSlot(loadedSlots, value, key);
       loadedValue = loadStructuredVarFileReference(
         absolutePath,
         structuredPaths,
@@ -424,6 +469,7 @@ export async function readTestFiles(
   pathOrGlobs: string | string[],
   basePath: string = '',
   resolutionBasePath: string = basePath || process.cwd(),
+  sources?: Map<string, StructuredVarSource>,
 ): Promise<Record<string, string | string[] | object>> {
   if (typeof pathOrGlobs === 'string') {
     pathOrGlobs = [pathOrGlobs];
@@ -431,6 +477,7 @@ export async function readTestFiles(
 
   const ret: Record<string, string | string[] | object> = {};
   const dependencyPaths = new Set<string>();
+  const slots = new WeakMap<object, Set<string>>();
   for (const pathOrGlob of pathOrGlobs) {
     const renderedPathOrGlob = pathOrGlob.startsWith('file://')
       ? maybeLoadConfigFromExternalFile(pathOrGlob, 'vars')
@@ -454,6 +501,7 @@ export async function readTestFiles(
         resolutionBasePath,
         visited,
         dependencyPaths,
+        slots,
       );
       resolveVarFileReferences(
         yamlData,
@@ -463,8 +511,26 @@ export async function readTestFiles(
         visited,
         true,
         dependencyPaths,
+        slots,
       );
+      if (yamlData && typeof yamlData === 'object') {
+        for (const key of Object.keys(yamlData)) {
+          if (slots.get(yamlData)?.has(key)) {
+            markLoadedSlot(slots, ret, key);
+          } else {
+            slots.get(ret)?.delete(key);
+          }
+        }
+      }
       Object.assign(ret, yamlData);
+    }
+  }
+  if (sources) {
+    for (const [key, child] of Object.entries(ret)) {
+      const source = slots.get(ret)?.has(key) || structuredVarSource(child, slots);
+      if (source) {
+        sources.set(key, source);
+      }
     }
   }
   varFileDependencyPaths.set(ret, [...dependencyPaths]);
@@ -875,7 +941,17 @@ async function loadTestWithVars(
 ): Promise<TestCase> {
   const ret: TestCase = { ...testCase, vars: undefined };
   if (typeof testCase.vars === 'string' || Array.isArray(testCase.vars)) {
-    ret.vars = await readTestFiles(testCase.vars, testBasePath, resolutionBasePath);
+    const sources = new Map<string, StructuredVarSource>();
+    ret.vars = await readTestFiles(testCase.vars, testBasePath, resolutionBasePath, sources);
+    if (sources.size) {
+      ret.metadata = {
+        ...ret.metadata,
+        __promptfoo: {
+          ...ret.metadata?.__promptfoo,
+          structuredVarSources: Object.fromEntries(sources),
+        },
+      };
+    }
     varFileDependencyPaths.set(ret, getVarFileDependencyPaths(ret.vars));
   } else {
     ret.vars = testCase.vars;
