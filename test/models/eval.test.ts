@@ -1176,6 +1176,18 @@ describe('evaluator', () => {
       expect(await copied.getResultsCount()).toBe(0);
     });
 
+    it('uses the visible legacy table when normalized rows also exist', async () => {
+      const source = (await Eval.findById((await EvalFactory.create()).id))!;
+      const legacy = (await Eval.findById((await EvalFactory.createOldResult()).id))!;
+      source.oldResults = legacy.oldResults;
+      await source.save();
+
+      const copied = await source.copy();
+      expect(await copied.getResultsCount()).toBe(2);
+      expect((await copied.getTable()).body).toHaveLength(1);
+      expect(await copied.getCopyTestCount()).toBe(1);
+    });
+
     it('continues copying normalized results with new IDs and their dataset relationship', async () => {
       const source = (await Eval.findById((await EvalFactory.create()).id))!;
       const originalResults = await EvalResult.findManyByEvalId(source.id);
@@ -1187,6 +1199,7 @@ describe('evaluator', () => {
       expect(copied.datasetId).toBe(source.datasetId);
       expect(copied.getPrompts()).toEqual(source.getPrompts());
       expect(await copied.getResultsCount()).toBe(2);
+      expect(await copied.getCopyTestCount()).toBe(2);
       expect(copiedResults).toHaveLength(originalResults.length);
       for (const result of copiedResults) {
         const original = originalResults.find((row) => row.testIdx === result.testIdx)!;

@@ -1628,6 +1628,30 @@ export default class Eval {
     }
   }
 
+  /** Count the tests exposed by the copied eval's table and export. */
+  async getCopyTestCount(): Promise<number> {
+    if (!this.oldResults) {
+      return this.getResultsCount();
+    }
+
+    // When both formats are present, the table and export use the legacy payload.
+    const { table, results } = this.oldResults;
+    if (Array.isArray(table?.body) && table.body.every((row) => Array.isArray(row?.outputs))) {
+      return table.body.length;
+    }
+
+    // Older flat rows can omit testIdx. Prompt outputs and equal vars cannot identify tests.
+    const indices = new Set<number>();
+    if (Array.isArray(results)) {
+      for (const row of results) {
+        if (Number.isSafeInteger(row?.testIdx) && row.testIdx >= 0) {
+          indices.add(row.testIdx);
+        }
+      }
+    }
+    return indices.size;
+  }
+
   /**
    * Creates a deep copy of this eval including all results.
    * Uses batching to avoid memory exhaustion on large evals.
@@ -1639,7 +1663,7 @@ export default class Eval {
     const copyDescription = description || `${this.description || 'Evaluation'} (Copy)`;
 
     // Get distinct test count for logging and progress tracking
-    const testCount = distinctTestCount ?? (await this.getResultsCount());
+    const testCount = distinctTestCount ?? (await this.getCopyTestCount());
 
     logger.info('Starting eval copy', {
       sourceEvalId: this.id,

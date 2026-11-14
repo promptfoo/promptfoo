@@ -71,12 +71,40 @@ describe('Eval Routes - Copy legacy evaluations', () => {
       const copyResponse = await api.post(`/api/eval/${source.id}/copy`).send({});
 
       expect(copyResponse.status).toBe(201);
-      expect(copyResponse.body.distinctTestCount).toBe(0);
+      expect(copyResponse.body.distinctTestCount).toBe(1);
       const copied = (await Eval.findById(copyResponse.body.id))!;
       expect(copied.oldResults).toEqual(originalResults);
       expect((await Eval.findById(source.id))!.oldResults).toEqual(originalResults);
     },
   );
+
+  it('counts distinct valid flat test indices when the legacy table is malformed', async () => {
+    const fixture = oldStyleEval();
+    const result = fixture.results.results[0];
+    const input = path.join(tempDir, 'legacy-indexed.json');
+    fs.writeFileSync(
+      input,
+      JSON.stringify({
+        ...fixture,
+        results: {
+          ...fixture.results,
+          table: { ...fixture.results.table, body: [null] },
+          results: [
+            null,
+            ...[3, 3, 7, -1, 1.5, '9', undefined].map((testIdx) => ({ ...result, testIdx })),
+          ],
+        },
+      }),
+    );
+    const importer = new Command();
+    importCommand(importer);
+    await importer.parseAsync(['node', 'test', 'import', input]);
+
+    const response = await api.post(`/api/eval/${fixture.id}/copy`).send({});
+
+    expect(response.status).toBe(201);
+    expect(response.body.distinctTestCount).toBe(2);
+  });
 
   it('exports the same results after an import and API copy', async () => {
     const fixture = oldStyleEval();
@@ -101,8 +129,8 @@ describe('Eval Routes - Copy legacy evaluations', () => {
 
     expect(response.status).toBe(201);
     expect(response.body.id).not.toBe(fixture.id);
-    // Legacy counts and paginated viewing still use the existing normalized-row path.
-    expect(response.body.distinctTestCount).toBe(0);
+    // One test row has two prompt outputs.
+    expect(response.body.distinctTestCount).toBe(1);
 
     const copied = await exportEval(response.body.id, 'copied.json');
     expect(copied.results.results).toHaveLength(2);
