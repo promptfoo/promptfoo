@@ -106,6 +106,52 @@ describe('PROMPTFOO_BLOCK_PRIVATE_RANGES server guards (#11768 item 2)', () => {
       expect(mockedLoadApiProvider).not.toHaveBeenCalled();
     });
 
+    it.each([
+      ['websocket', '[accumulator, true]'],
+      ['ws', 'file://fixture.cjs'],
+      ['wss', 'return [accumulator, true]'],
+      ['ws://192.0.2.15', '(accumulator) => [accumulator, true]'],
+      ['wss://192.0.2.15', 'file://fixture.cjs:finish'],
+    ])(
+      'refuses streaming callbacks for %s before loading the provider',
+      async (id, streamResponse) => {
+        restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
+        const response = await request(app)
+          .post('/api/providers/test')
+          .send({
+            providerOptions: {
+              id,
+              config: { url: 'wss://192.0.2.15', messageTemplate: '{{ prompt }}', streamResponse },
+            },
+          });
+
+        expect(response.status).toBe(400);
+        expect(response.body.error).toContain('PROMPTFOO_BLOCK_PRIVATE_RANGES');
+        expect(mockedLoadApiProvider).not.toHaveBeenCalled();
+        expect(mockedTestProviderConnectivity).not.toHaveBeenCalled();
+      },
+    );
+
+    it('allows the built-in WebSocket response handler', async () => {
+      restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
+      const response = await request(app)
+        .post('/api/providers/test')
+        .send({
+          providerOptions: {
+            id: 'websocket',
+            config: {
+              url: 'wss://192.0.2.15',
+              messageTemplate: '{{ prompt }}',
+              streamResponse: '',
+            },
+          },
+        });
+
+      expect(response.status).toBe(200);
+      expect(mockedLoadApiProvider).toHaveBeenCalledOnce();
+      expect(mockedTestProviderConnectivity).toHaveBeenCalledOnce();
+    });
+
     it('refuses a websocket provider with a ws+unix config.url when the flag is set', async () => {
       restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
 

@@ -284,6 +284,7 @@ interface ProviderTarget {
     servers?: unknown;
     transformRequest?: unknown;
     transformResponse?: unknown;
+    streamResponse?: unknown;
     responseParser?: unknown;
     mcp?: unknown;
     session?: unknown;
@@ -708,6 +709,17 @@ function collectHttpTargets(config: ProviderTarget['config'], urls: string[]): v
  */
 function refuseExecutableFields(providerOptions: ProviderTarget): void {
   const config = providerOptions?.config;
+  // WebSocket streaming callbacks can be imported at construction or compiled
+  // when the first message arrives. An empty setting selects the built-in handler.
+  if (
+    config?.streamResponse &&
+    typeof providerOptions.id === 'string' &&
+    /^(?:websocket$|wss?(?::|$))/.test(providerOptions.id)
+  ) {
+    throw new PrivateRangeBlockedError(
+      'PROMPTFOO_BLOCK_PRIVATE_RANGES is set: refusing a WebSocket streamResponse transform',
+    );
+  }
   for (const key of ['transformRequest', 'transformResponse', 'responseParser'] as const) {
     const transform = config?.[key];
     if (typeof transform === 'string' && transform.length > 0) {
