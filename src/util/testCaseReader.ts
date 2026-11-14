@@ -65,13 +65,16 @@ function isRemoteTestCase(test: TestCaseWithVarsFile): boolean {
 }
 
 function globFromBase(pattern: string, basePath: string): string[] {
-  const cwd = path.resolve(basePath);
-  const resolved = path.resolve(cwd, pattern);
-  const relative = path.relative(cwd, resolved);
-  // The literal directory stays outside the glob. A leading ./ preserves globstar
-  // traversal of directory links at the first level of a relative pattern.
-  const fromBase =
-    path.isAbsolute(pattern) || path.isAbsolute(relative) ? resolved : `./${relative}`;
+  let cwd = path.resolve(basePath);
+  const root = path.parse(pattern).root;
+  if (root && !path.isAbsolute(pattern)) {
+    // Resolve a native drive-relative prefix without normalizing the authored glob.
+    cwd = path.resolve(cwd, root);
+    pattern = pattern.slice(root.length);
+  }
+  // Keep relative glob components as authored, outside the literal base directory.
+  // A leading ./ preserves globstar traversal of directory links at the first level.
+  const fromBase = path.isAbsolute(pattern) ? path.resolve(cwd, pattern) : `./${pattern}`;
   return globSync(fromBase, { cwd, absolute: true, windowsPathsNoEscape: true });
 }
 
@@ -646,10 +649,13 @@ async function loadTestsFromGlobWithEnv(
     loadTestsGlob = loadTestsGlob.slice('file://'.length);
   }
   const resolvedPath = path.resolve(basePath, loadTestsGlob);
+  const globPattern = path.isAbsolute(loadTestsGlob)
+    ? path.relative(path.resolve(basePath), resolvedPath)
+    : loadTestsGlob;
 
   const testFiles: string[] = fs.existsSync(resolvedPath)
     ? [resolvedPath]
-    : globFromBase(path.relative(path.resolve(basePath), resolvedPath), basePath);
+    : globFromBase(globPattern, basePath);
 
   // Check for possible function names in the path (Windows-aware)
   const pathWithoutFunction = stripFunctionSuffix(resolvedPath);
@@ -673,7 +679,7 @@ async function loadTestsFromGlobWithEnv(
   const ret: TestCase[] = [];
   if (testFiles.length < 1) {
     const message = `No test files found for path: ${resolvedPath}`;
-    if (!hasGlobMagic(path.relative(path.resolve(basePath), resolvedPath))) {
+    if (!hasGlobMagic(globPattern)) {
       throw new Error(message);
     }
     logger.warn(message);
@@ -913,7 +919,11 @@ function hasGlobMagic(reference: string): boolean {
  * watching a pattern's parent directory instead would rerun the evaluation on every
  * unrelated edit beneath it, including the run's own output file.
  */
-function resolveTestsFileReference(reference: string, basePath: string): string[] {
+function resolveTestsFileReference(
+  reference: string,
+  basePath: string,
+  resolution: 'file' | 'tests' | 'vars' = 'file',
+): string[] {
   reference = renderEnvOnlyInObject(reference);
   const withoutScheme = reference.replace(/^file:\/\//, '');
   if (isRemoteTestsReference(withoutScheme)) {
@@ -921,8 +931,12 @@ function resolveTestsFileReference(reference: string, basePath: string): string[
   }
 
   const resolved = path.resolve(basePath, withoutScheme);
-  if (hasGlobMagic(withoutScheme)) {
-    const matches = globFromBase(path.relative(path.resolve(basePath), resolved), basePath);
+  if (hasGlobMagic(withoutScheme) && !(resolution === 'tests' && fs.existsSync(resolved))) {
+    const pattern =
+      resolution === 'file' || path.isAbsolute(withoutScheme)
+        ? path.relative(path.resolve(basePath), resolved)
+        : withoutScheme;
+    const matches = globFromBase(pattern, basePath);
     if (matches.length > 0) {
       return matches.map((match) => getExcelWorkbookPath(match) ?? match);
     }
@@ -1050,7 +1064,7 @@ export function resolveTestsWatchPaths(
         source.endsWith('yaml') ||
         source.endsWith('yml') ||
         (hasGlobMagic(source) && !fs.existsSync(path.resolve(basePath, source)));
-      return resolveTestsFileReference(entry, basePath).flatMap((file) => [
+      return resolveTestsFileReference(entry, basePath, 'tests').flatMap((file) => [
         file,
         ...collectNestedFileReferences(
           file,
@@ -1064,7 +1078,7 @@ export function resolveTestsWatchPaths(
     }
     if ('path' in entry && typeof entry.path === 'string') {
       return [
-        ...resolveTestsFileReference(entry.path, basePath),
+        ...resolveTestsFileReference(entry.path, basePath, 'tests'),
         ...collectConfigFileReferences((entry as { config?: unknown }).config, basePath),
       ];
     }
@@ -1075,7 +1089,7 @@ export function resolveTestsWatchPaths(
       if (typeof entry.vars === 'string' || Array.isArray(entry.vars)) {
         const references = Array.isArray(entry.vars) ? entry.vars : [entry.vars];
         return references.flatMap((value) =>
-          typeof value === 'string' ? resolveTestsFileReference(value, basePath) : [],
+          typeof value === 'string' ? resolveTestsFileReference(value, basePath, 'vars') : [],
         );
       }
       // A mapping: only file:// values are file references, the rest are literal vars.
