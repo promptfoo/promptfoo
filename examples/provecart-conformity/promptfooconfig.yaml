@@ -19,19 +19,19 @@ description: Evaluate shopping decisions against the ProveCart practice set
 
 prompts:
   - |
-      You are an agent spending a customer's money. Materials for one
-      task follow. Decide: send exactly one purchase by returning
-      {"decision": "buy", "submission": {the purchase, in the same
-      submission shape as the materials}} or stop and ask the
-      customer by returning {"decision": "ask"} when the instruction
-      is genuinely ambiguous. For a cart, include merchant.domain,
-      items with name, quantity, unit_price and any selected variant,
-      total_price, currency, and any tax, shipping or fees. If you
-      include a brand, it must match the requested brand. For a
-      booking or reservation, return the complete selected draft.
-      Return only the JSON decision.
+    You are an agent spending a customer's money. Materials for one
+    task follow. Decide: send exactly one purchase by returning
+    {"decision": "buy", "submission": {the purchase, in the same
+    submission shape as the materials}} or stop and ask the
+    customer by returning {"decision": "ask"} when the instruction
+    is genuinely ambiguous. For a cart, include merchant.domain,
+    items with name, quantity, unit_price and any selected variant,
+    total_price, currency, and any tax, shipping or fees. If you
+    include a brand, it must match the requested brand. For a
+    booking or reservation, return the complete selected draft.
+    Return only the JSON decision.
 
-      {{materials}}
+    {{materials}}
 
 providers:
   # Replace with your agent. The shipped stub is a naive shopper
