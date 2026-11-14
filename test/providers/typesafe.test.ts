@@ -144,7 +144,7 @@ describe('TypeSafeProvider', () => {
         output: {
           pass: true,
           score: 0.95,
-          reason: 'Jev Noul probability 0.95 >= threshold 0.5',
+          reason: 'Jev Noul probability 0.95',
         },
         cached: false,
         latencyMs: 12,
@@ -165,8 +165,26 @@ describe('TypeSafeProvider', () => {
       expect(result.output).toEqual({
         pass: false,
         score: 0.6,
-        reason: 'Jev Noul probability 0.6 < threshold 0.7',
+        reason: 'Jev Noul probability 0.6',
       });
+    });
+
+    it('grades a Score answer that carries an object legend and loosely rounded probabilities', async () => {
+      mockAnswer({
+        type: 'score',
+        score: 1.43,
+        legend: { '0': 'Calm', '1': 'Frustrated', '2': 'Very angry' },
+        probabilities: { '0': 0.1, '1': 0.55, '2': 0.35 },
+        confidence: 0.5,
+      });
+
+      const result = await createProvider({ levels: LEVELS }).callApi(
+        '',
+        rubricContext('How frustrated is the customer?', 'Fix this now.'),
+      );
+
+      expect(result.error).toBeUndefined();
+      expect(result.output).toMatchObject({ pass: true, score: 0.715 });
     });
 
     it('asks a Score question when levels are configured and normalizes the score', async () => {
@@ -183,8 +201,7 @@ describe('TypeSafeProvider', () => {
       expect(result.output).toEqual({
         pass: true,
         score: 0.715,
-        reason:
-          'Jev Score 1.43 on levels 0–2 (0.715 normalized) >= threshold 0.5; nearest level: "Frustrated"',
+        reason: 'Jev Score 1.43 on levels 0–2 (0.715 normalized); nearest level: "Frustrated"',
       });
     });
 
@@ -271,13 +288,41 @@ describe('TypeSafeProvider', () => {
       expect(result.tokenUsage).toEqual({ cached: 316, total: 316 });
     });
 
+    it.each([false, true])('reports explicit zero usage (cached=%s)', async (cached) => {
+      mockResponse(
+        {
+          model: 'jev-1.13.0',
+          answers: { grade: { type: 'noul', noul: 0.9 } },
+          usage: { input_tokens: 0, output_tokens: 0 },
+        },
+        { cached },
+      );
+
+      const result = await createProvider().callApi('', rubricContext('Is polite', 'Thanks!'));
+
+      expect(result.error).toBeUndefined();
+      expect(result.tokenUsage).toEqual(
+        cached ? { cached: 0, total: 0 } : { total: 0, prompt: 0, completion: 0, numRequests: 1 },
+      );
+      expect(result.cost).toBe(0);
+    });
+
     it('leaves cost undefined for a model without published pricing', async () => {
-      mockResponse({ model: 'jev-9.0.0', answers: { grade: { type: 'noul', noul: 0.9 } } });
+      mockResponse({
+        model: 'jev-9.0.0',
+        answers: { grade: { type: 'noul', noul: 0.9 } },
+        usage: { input_tokens: 296, output_tokens: 20 },
+      });
 
       const result = await createProvider().callApi('', rubricContext('Is polite', 'Thanks!'));
 
       expect(result.cost).toBeUndefined();
-      expect(result.tokenUsage).toEqual({ total: 0, prompt: 0, completion: 0, numRequests: 1 });
+      expect(result.tokenUsage).toEqual({
+        total: 316,
+        prompt: 296,
+        completion: 20,
+        numRequests: 1,
+      });
     });
 
     it.each([
@@ -307,7 +352,7 @@ describe('TypeSafeProvider', () => {
       expect(result).toMatchObject({
         pass: false,
         score: 0.12,
-        reason: 'Jev Noul probability 0.12 < threshold 0.5',
+        reason: 'Jev Noul probability 0.12',
         tokensUsed: { total: 316, prompt: 296, completion: 20 },
       });
       expect(result.metadata?.typesafe).toEqual({
@@ -366,7 +411,12 @@ describe('TypeSafeProvider', () => {
           },
         },
       });
-      expect(result).toEqual({ classification: TEAM_PROBABILITIES });
+      expect(result).toEqual({
+        classification: TEAM_PROBABILITIES,
+        cached: false,
+        tokenUsage: { total: 316, prompt: 296, completion: 20, numRequests: 1 },
+        metadata: { typesafe: { model: 'jev-1.13.0', requestId: 'req_123' } },
+      });
     });
 
     it('sends label descriptions when labels is a map', async () => {
@@ -388,7 +438,12 @@ describe('TypeSafeProvider', () => {
         labels: ['billing', 'technical', 'sales'],
       }).callClassificationApi('text');
 
-      expect(result).toEqual({ classification: probabilities });
+      expect(result).toEqual({
+        classification: probabilities,
+        cached: false,
+        tokenUsage: { total: 316, prompt: 296, completion: 20, numRequests: 1 },
+        metadata: { typesafe: { model: 'jev-1.13.0', requestId: 'req_123' } },
+      });
     });
 
     it.each([[{ labels: ['a', 'b'] }], [{ instructions }], [{}]])(
@@ -412,6 +467,15 @@ describe('TypeSafeProvider', () => {
         pass: true,
         score: 0.88,
         reason: 'Classification billing has score 0.88 >= 0.5',
+        metadata: { typesafe: { model: 'jev-1.13.0', requestId: 'req_123' } },
+        tokensUsed: {
+          total: 316,
+          prompt: 296,
+          completion: 20,
+          cached: 0,
+          numRequests: 1,
+          completionDetails: { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 },
+        },
       });
     });
   });
@@ -712,11 +776,83 @@ describe('TypeSafeProvider', () => {
 
       const result = await createProvider().callApi('', context);
 
-      expect(result).toEqual({
+      expect(result).toMatchObject({
+        cached: false,
+        latencyMs: 12,
+        metadata: { typesafe: { requestId: 'req_123' } },
         error: `TypeSafe API returned an unexpected response (request id req_123): ${response.data}`,
       });
       expect(response.deleteFromCache).toHaveBeenCalledOnce();
     });
+
+    describe.each([false, true])('malformed usage (cached=%s)', (cached) => {
+      it.each([
+        ['numeric string input', { input_tokens: '296', output_tokens: 20 }],
+        ['non-numeric input', { input_tokens: 'abc', output_tokens: 20 }],
+        ['non-numeric output', { input_tokens: 296, output_tokens: '20' }],
+        ['null input', { input_tokens: null, output_tokens: 20 }],
+        ['null output', { input_tokens: 296, output_tokens: null }],
+        ['overflowing total', { input_tokens: Number.MAX_VALUE, output_tokens: Number.MAX_VALUE }],
+        ['non-object usage', '296'],
+        ['negative input', { input_tokens: -1, output_tokens: 20 }],
+        ['negative output', { input_tokens: 296, output_tokens: -1 }],
+        ['missing usage', undefined],
+        ['null usage', null],
+        ['empty usage', {}],
+        ['missing input', { output_tokens: 20 }],
+        ['missing output', { input_tokens: 296 }],
+      ])('omits accounting for %s on success and error', async (_name, usage) => {
+        const response = mockResponse(
+          { model: 'jev-1.13.0', answers: { grade: { type: 'noul', noul: 0.9 } }, usage },
+          { cached },
+        );
+
+        const success = await createProvider().callApi('', context);
+        expect(success.error).toBeUndefined();
+        expect(success.output).toMatchObject({ pass: true, score: 0.9 });
+        expect(success).not.toHaveProperty('tokenUsage');
+        expect(success).not.toHaveProperty('cost');
+
+        response.data = JSON.stringify({ model: 'jev-1.13.0', answers: {}, usage });
+        const failure = await createProvider().callApi('', context);
+        expect(failure.error).toContain('TypeSafe API returned an unexpected response');
+        expect(failure).not.toHaveProperty('tokenUsage');
+        expect(failure).not.toHaveProperty('cost');
+        expect(response.deleteFromCache).toHaveBeenCalledOnce();
+      });
+    });
+
+    it.each(['rubric', 'classifier', 'missing answer'])(
+      'preserves billed usage when validation fails for %s',
+      async (mode) => {
+        const response = mockResponse({
+          model: 'jev-1.13.0',
+          answers:
+            mode === 'missing answer'
+              ? {}
+              : mode === 'classifier'
+                ? { classification: { type: 'choice', probabilities: { a: '0.9', b: 0.1 } } }
+                : { grade: { type: 'noul', noul: 1.2 } },
+          usage: { input_tokens: 296, output_tokens: 20 },
+        });
+        const provider = createProvider({ instructions: 'Which?', labels: ['a', 'b'] });
+
+        const result =
+          mode === 'classifier'
+            ? await provider.callClassificationApi('text')
+            : await provider.callApi('', context);
+
+        expect(result).toEqual({
+          error: `TypeSafe API returned an unexpected response (request id req_123): ${response.data}`,
+          cached: false,
+          latencyMs: 12,
+          tokenUsage: { total: 316, prompt: 296, completion: 20, numRequests: 1 },
+          ...(mode !== 'classifier' && { cost: 296 * (0.042 / 1_000_000) }),
+          metadata: { typesafe: { model: 'jev-1.13.0', requestId: 'req_123' } },
+        });
+        expect(response.deleteFromCache).toHaveBeenCalledOnce();
+      },
+    );
 
     it('evicts and reports a Score beyond the configured levels', async () => {
       // Levels 0–2 cannot score 5; normalizing it would pass any threshold.
@@ -742,7 +878,10 @@ describe('TypeSafeProvider', () => {
         },
       }).callApi('Payouts are failing!');
 
-      expect(result).toEqual({
+      expect(result).toMatchObject({
+        cached: false,
+        latencyMs: 12,
+        metadata: { typesafe: { requestId: 'req_123' } },
         error: `TypeSafe API returned an unexpected response (request id req_123): ${response.data}`,
       });
       expect(response.deleteFromCache).toHaveBeenCalledOnce();

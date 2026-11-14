@@ -162,6 +162,7 @@ export interface ProviderClassificationResponse {
   error?: string;
   classification?: Record<string, number>;
   tokenUsage?: Partial<TokenUsage>;
+  metadata?: Record<string, unknown>;
 }
 
 /** An invalid model call, which can satisfy a negated tool-call validity assertion. */

@@ -22,6 +22,8 @@ assert:
 
 For hosted Inference Providers, set `HF_TOKEN` (or `HF_API_TOKEN`) to a token with [Inference Providers permissions](https://huggingface.co/docs/inference-providers/tasks/text-classification). For a dedicated endpoint, use a token authorized to access that deployment and set `config.apiEndpoint` to its URL. See the [HuggingFace provider docs](/docs/providers/huggingface/#inference-endpoints).
 
+Classifier providers receive the test's `vars` as context, so providers that support templated config can render fields such as [Nace's `images`](/docs/providers/nace/#images) with `{{photo}}`. Provider metadata is preserved in the assertion result's `metadata`, including on grader failures. Promptfoo reserves `metadata.cachedResponse` for cache provenance and `metadata.graderError` for grader failures; provider-supplied values cannot override these markers.
+
 ## Use cases
 
 Browse [HuggingFace text classification model artifacts](https://huggingface.co/models?pipeline_tag=text-classification). A Hub repository does not guarantee hosted inference: check that [HF Inference](https://huggingface.co/docs/inference-providers/providers/hf-inference) serves the model for the required task, or deploy a compatible endpoint and configure `apiEndpoint`. The links below describe model artifacts, including models that require your own deployment.

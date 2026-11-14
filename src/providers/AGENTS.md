@@ -37,6 +37,8 @@ See `docs/agents/logging.md` - use logger with object context (auto-sanitized).
 
 **OpenAI-compatible providers** extend `OpenAiChatCompletionProvider`. See `src/providers/quiverai.ts` for a minimal example or `src/providers/openrouter.ts` for a more complex one.
 
+**System One providers** reuse `TypeSafeProvider` (`typesafe.ts`): a `SystemOneVendor` profile supplies vendor identity, authentication, endpoint, and pricing. Override `requestBody`, `instructionEntry`, `isValidAnswer`, or `formatErrorDetail` only for protocol differences; keep transport, accounting, caching, and grading shared. See `nace.ts` for image handling and answer validation.
+
 **Config priority:** Explicit options > Environment variables > Provider defaults
 
 ## Provider Routing

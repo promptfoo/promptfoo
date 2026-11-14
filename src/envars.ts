@@ -388,6 +388,9 @@ type EnvVars = {
   // n8n
   N8N_API_KEY?: string;
 
+  // Nace (Drex)
+  NACE_API_KEY?: string;
+
   // Nscale
   NSCALE_SERVICE_TOKEN?: string;
   NSCALE_API_KEY?: string;

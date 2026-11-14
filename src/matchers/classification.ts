@@ -5,7 +5,12 @@ import {
 } from './providers';
 import { graderFail, normalizeMatcherTokenUsage } from './shared';
 
-import type { ApiClassificationProvider, GradingConfig, GradingResult } from '../types/index';
+import type {
+  ApiClassificationProvider,
+  CallApiContextParams,
+  GradingConfig,
+  GradingResult,
+} from '../types/index';
 
 /**
  *
@@ -13,6 +18,7 @@ import type { ApiClassificationProvider, GradingConfig, GradingResult } from '..
  * @param output Text to classify.
  * @param threshold Value between 0 and 1. If the expected classification is undefined, the threshold is the minimum score for any classification. If the expected classification is defined, the threshold is the minimum score for that classification.
  * @param grading
+ * @param vars Test vars, passed to the provider so templated config such as images can render.
  * @returns Pass if the output matches the classification with a score greater than or equal to the threshold.
  */
 export async function matchesClassification(
@@ -20,6 +26,7 @@ export async function matchesClassification(
   output: string,
   threshold: number,
   grading?: GradingConfig,
+  vars?: CallApiContextParams['vars'],
 ): Promise<Omit<GradingResult, 'assertion'>> {
   const finalProvider = (await getAndCheckProvider(
     'classification',
@@ -29,11 +36,24 @@ export async function matchesClassification(
   )) as ApiClassificationProvider;
 
   const callApiOptions = getGradingProviderCallOptions();
-  const resp = await callGradingProvider(finalProvider, 'classification', () =>
-    callApiOptions
+  const resp = await callGradingProvider(finalProvider, 'classification', () => {
+    if (vars) {
+      return finalProvider.callClassificationApi(output, callApiOptions, { vars });
+    }
+    return callApiOptions
       ? finalProvider.callClassificationApi(output, callApiOptions)
-      : finalProvider.callClassificationApi(output),
-  );
+      : finalProvider.callClassificationApi(output);
+  });
+
+  const {
+    cachedResponse: _untrustedCachedResponse,
+    graderError: _untrustedGraderError,
+    ...providerMetadata
+  } = resp.metadata ?? {};
+  const metadata = {
+    ...providerMetadata,
+    ...(resp.cached && { cachedResponse: true }),
+  };
 
   const scores = Object.values(resp.classification ?? {});
   if (!resp.classification || scores.length === 0) {
@@ -45,7 +65,7 @@ export async function matchesClassification(
     );
     return {
       ...failure,
-      ...(resp.cached && { metadata: { ...failure.metadata, cachedResponse: true } }),
+      metadata: { ...metadata, ...failure.metadata },
     };
   }
 
@@ -60,6 +80,6 @@ export async function matchesClassification(
     score,
     reason: `${subject} ${score.toFixed(2)} ${pass ? '>=' : '<'} ${threshold}`,
     ...(resp.tokenUsage && { tokensUsed: normalizeMatcherTokenUsage(resp.tokenUsage) }),
-    ...(resp.cached && { metadata: { cachedResponse: true } }),
+    ...(Object.keys(metadata).length > 0 && { metadata }),
   };
 }
