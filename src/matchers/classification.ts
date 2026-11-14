@@ -35,19 +35,21 @@ export async function matchesClassification(
       : finalProvider.callClassificationApi(output),
   );
 
-  const scores = Object.values(resp.classification ?? {});
+  // A provider can report an error alongside a partial score map.
+  const classification = resp.error ? undefined : resp.classification;
+  const scores = Object.values(classification ?? {});
   const invalidScores =
-    resp.classification &&
-    (typeof resp.classification !== 'object' ||
-      Array.isArray(resp.classification) ||
+    classification &&
+    (typeof classification !== 'object' ||
+      Array.isArray(classification) ||
       scores.some(
         (score) => typeof score !== 'number' || !Number.isFinite(score) || score < 0 || score > 1,
       ));
-  if (!resp.classification || scores.length === 0 || invalidScores) {
+  if (!classification || scores.length === 0 || invalidScores) {
     const failure = graderFail(
       invalidScores
         ? 'Invalid classification scores: expected a label map of finite numbers between 0 and 1'
-        : resp.classification
+        : classification
           ? 'No classification scores returned'
           : resp.error || 'Unknown error fetching classification',
       resp.tokenUsage,
@@ -61,8 +63,8 @@ export async function matchesClassification(
   const score =
     expected === undefined
       ? scores.reduce((max, score) => Math.max(max, score), 0)
-      : Object.prototype.hasOwnProperty.call(resp.classification, expected)
-        ? resp.classification[expected]
+      : Object.prototype.hasOwnProperty.call(classification, expected)
+        ? classification[expected]
         : 0;
   const pass = score >= threshold - Number.EPSILON;
   const subject =
