@@ -22,19 +22,26 @@ import { resolveConfigs } from '../../src/util/config/load';
 import { writeMultipleOutputs } from '../../src/util/output';
 import { shouldShareResults } from '../../src/util/sharing';
 
-import type { EnvOverrides, TestSuite, UnifiedConfig } from '../../src/types/index';
+import type { EnvOverrides, TestCase, TestSuite, UnifiedConfig } from '../../src/types/index';
 
 const dbMocks = vi.hoisted(() => {
   const errorRows: Array<{ id: string }> = [];
+  const resultRows: Array<{
+    id: string;
+    testIdx: number;
+    promptIdx: number;
+    failureReason: number;
+  }> = [];
   const affectedEvalRows: Array<{ evalId: string }> = [];
   const errorRowsAll = vi.fn(async () => errorRows);
+  const resultRowsAll = vi.fn(async () => resultRows);
   const affectedEvalRowsAll = vi.fn(async () => affectedEvalRows);
   const deleteRun = vi.fn(async () => undefined);
   const db = {
-    select: vi.fn(() => ({
+    select: vi.fn((fields?: Record<string, unknown>) => ({
       from: vi.fn(() => ({
         where: vi.fn(() => ({
-          all: errorRowsAll,
+          all: fields && 'testIdx' in fields ? resultRowsAll : errorRowsAll,
         })),
       })),
     })),
@@ -57,6 +64,7 @@ const dbMocks = vi.hoisted(() => {
     db,
     deleteRun,
     errorRows,
+    resultRows,
   };
 });
 
@@ -120,6 +128,7 @@ describe('retryCommand', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     dbMocks.errorRows.splice(0);
+    dbMocks.resultRows.splice(0);
     dbMocks.affectedEvalRows.splice(0);
     cliState.resume = false;
     cliState.retryMode = false;
@@ -131,6 +140,7 @@ describe('retryCommand', () => {
   afterEach(() => {
     vi.resetAllMocks();
     dbMocks.errorRows.splice(0);
+    dbMocks.resultRows.splice(0);
     dbMocks.affectedEvalRows.splice(0);
     cliState.resume = false;
     cliState.retryMode = false;
@@ -178,6 +188,78 @@ describe('retryCommand', () => {
 
     expect(dbMocks.db.selectDistinct).not.toHaveBeenCalled();
     expect(dbMocks.db.delete).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { label: 'function', value: () => () => 'value' },
+    { label: 'symbol', value: () => Symbol('value') },
+    {
+      label: 'cycle',
+      value: () => {
+        const cyclic: Record<string, unknown> = {};
+        cyclic.self = cyclic;
+        return cyclic;
+      },
+    },
+  ])('rejects a configured override with a non-comparable $label layout', async ({ value }) => {
+    const test: TestCase = { vars: { input: 'same' }, metadata: { unsupported: value() } };
+    const originalEval = createEval({ config: { tests: [test] } });
+    vi.mocked(Eval.findById).mockResolvedValue(originalEval);
+    dbMocks.errorRows.push({ id: 'error-result-1' });
+    vi.mocked(resolveConfigs).mockResolvedValue({
+      basePath: '/workspace',
+      commandLineOptions: { filterFirstN: 1 },
+      config: { tests: [test] } as UnifiedConfig,
+      testSuite: { ...testSuite, tests: [test] },
+    });
+
+    await expect(retryCommand(originalEval.id, { config: 'override.yaml' })).rejects.toThrow(
+      /saved test layout.*ERROR results were preserved/,
+    );
+    expect(evaluate).not.toHaveBeenCalled();
+    expect(dbMocks.deleteRun).not.toHaveBeenCalled();
+  });
+
+  it('does not equate unknown bases for relative executable file references', async () => {
+    const test: TestCase = {
+      vars: { input: 'same' },
+      options: { transformVars: 'file://transform.js' },
+    };
+    const originalEval = createEval({ config: { tests: [test] } });
+    vi.mocked(Eval.findById).mockResolvedValue(originalEval);
+    dbMocks.errorRows.push({ id: 'error-result-1' });
+    vi.mocked(resolveConfigs).mockResolvedValue({
+      basePath: '/workspace',
+      commandLineOptions: { filterFirstN: 1 },
+      config: { tests: [test] } as UnifiedConfig,
+      testSuite: { ...testSuite, tests: [test] },
+    });
+
+    await expect(retryCommand(originalEval.id, { config: 'override.yaml' })).rejects.toThrow(
+      /saved test layout.*ERROR results were preserved/,
+    );
+    expect(evaluate).not.toHaveBeenCalled();
+  });
+
+  it('compares layouts without depending on omitted undefined fields or object key order', async () => {
+    const saved: TestCase = { vars: { input: 'same', count: 1 } };
+    const override: TestCase = { description: undefined, vars: { count: 1, input: 'same' } };
+    const originalEval = createEval({ config: { tests: [saved] } });
+    const retriedEval = createEval();
+    vi.mocked(Eval.findById).mockResolvedValue(originalEval);
+    dbMocks.errorRows.push({ id: 'error-result-1' });
+    vi.mocked(resolveConfigs).mockResolvedValue({
+      basePath: '/workspace',
+      commandLineOptions: { filterFirstN: 1 },
+      config: { tests: [override] } as UnifiedConfig,
+      testSuite: { ...testSuite, tests: [override] },
+    });
+    vi.mocked(evaluate).mockResolvedValue(retriedEval);
+
+    await expect(retryCommand(originalEval.id, { config: 'override.yaml' })).resolves.toBe(
+      retriedEval,
+    );
+    expect(evaluate).toHaveBeenCalledTimes(1);
   });
 
   it('recalculates prompt metrics from batched results and persists them', async () => {
@@ -518,6 +600,15 @@ describe('retryCommand', () => {
     vi.mocked(Eval.findById).mockResolvedValue(originalEval);
     dbMocks.errorRows.push({ id: 'error-result-1' });
     dbMocks.affectedEvalRows.push({ evalId: originalEval.id });
+    dbMocks.resultRows.push(
+      { id: 'error-result-1', testIdx: 0, promptIdx: 0, failureReason: ResultFailureReason.ERROR },
+      {
+        id: 'replacement-result',
+        testIdx: 0,
+        promptIdx: 0,
+        failureReason: ResultFailureReason.NONE,
+      },
+    );
     mockResolvedConfig({
       commandLineOptions: { delay: 0, maxConcurrency: 4, share: true },
       config: { sharing: true },
@@ -560,6 +651,30 @@ describe('retryCommand', () => {
     expect(cliState.maxConcurrency).toBeUndefined();
   });
 
+  it.each([
+    { runtimeRange: '1:3', configRange: '2:4', expected: '1:3' },
+    { runtimeRange: undefined, configRange: '2:4', expected: '2:4' },
+  ])('restores saved range options: $expected', async ({ runtimeRange, configRange, expected }) => {
+    const originalEval = createEval({
+      config: { evaluateOptions: { filterRange: configRange } },
+      runtimeOptions: { filterRange: runtimeRange },
+    });
+    const retriedEval = createEval();
+    vi.mocked(Eval.findById).mockResolvedValue(originalEval);
+    dbMocks.errorRows.push({ id: 'error-result-1' });
+    mockResolvedConfig();
+    vi.mocked(evaluate).mockResolvedValue(retriedEval);
+
+    await retryCommand(originalEval.id, {});
+
+    expect(evaluate).toHaveBeenCalledWith(
+      testSuite,
+      originalEval,
+      expect.objectContaining({ filterRange: expected }),
+    );
+    expect(resolveConfigs).toHaveBeenCalledWith({}, originalEval.config);
+  });
+
   it('uses an explicit config and forces concurrency to one when delay is requested', async () => {
     const originalEval = createEval({
       runtimeOptions: { providerFilter: 'selected-target' },
@@ -594,6 +709,7 @@ describe('retryCommand', () => {
     expect(resolveConfigs).toHaveBeenCalledWith(
       { config: ['retry.yaml'], filterProviders: 'selected-target' },
       {},
+      'Evaluation',
     );
     expect(logger.info).toHaveBeenCalledWith(
       'Running at concurrency=1 because 25ms delay was requested between API calls',
@@ -830,6 +946,15 @@ describe('retryCommand', () => {
     const retriedEval = createEval();
     vi.mocked(Eval.findById).mockResolvedValue(originalEval);
     dbMocks.errorRows.push({ id: 'error-result-1' });
+    dbMocks.resultRows.push(
+      { id: 'error-result-1', testIdx: 0, promptIdx: 0, failureReason: ResultFailureReason.ERROR },
+      {
+        id: 'replacement-result',
+        testIdx: 0,
+        promptIdx: 0,
+        failureReason: ResultFailureReason.NONE,
+      },
+    );
     mockResolvedConfig();
     vi.mocked(evaluate).mockResolvedValue(retriedEval);
     dbMocks.deleteRun.mockRejectedValueOnce(new Error('database unavailable'));

@@ -10,6 +10,7 @@ import Eval from '../../../src/models/eval';
 import { doEval } from '../../../src/node/doEval';
 import * as retryModule from '../../../src/node/retry';
 import { isSafeMode } from '../../../src/util/safeMode';
+import { createEvaluateResult, createEvaluateSummaryV2 } from '../../factories/eval';
 import { mockProcessEnv } from '../../util/utils';
 import type { Command } from 'commander';
 
@@ -394,6 +395,331 @@ describe('evaluateOptions behavior', () => {
   });
 
   describe('commandLineOptions behavior', () => {
+    it.each([{ filterFirstN: 1 }, { filterPattern: '^keep$' }])(
+      'filters configured scenario tests before loading their providers: %j',
+      async (commandLineOptions) => {
+        const configFile = writeTempConfig(tmpDir, 'scenario-provider-selection.yaml', {
+          providers: ['echo'],
+          prompts: ['{{input}}'],
+          scenarios: [
+            {
+              config: [{}],
+              tests: [
+                { description: 'keep', vars: { input: 'one' } },
+                { description: 'other', vars: { input: 'two' }, provider: 42 },
+              ],
+            },
+          ],
+          commandLineOptions,
+        });
+
+        await runEvalAndGetOptions({ config: [configFile] });
+
+        const suite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+        expect(suite.scenarios?.[0].tests.map((test) => test.description)).toEqual(['keep']);
+      },
+    );
+
+    describe.each(['top-level', 'scenario'])('%s configured selection', (form) => {
+      it.each([
+        { name: 'first count', configured: { filterFirstN: 1 }, cli: {}, expected: ['keep'] },
+        {
+          name: 'description pattern',
+          configured: { filterPattern: '^keep$' },
+          cli: {},
+          expected: ['keep'],
+        },
+        {
+          name: 'CLI count override',
+          configured: { filterFirstN: 1 },
+          cli: { filterFirstN: 2 },
+          expected: ['keep', 'other'],
+        },
+        {
+          name: 'CLI pattern override',
+          configured: { filterPattern: '^keep$' },
+          cli: { filterPattern: '^other$' },
+          expected: ['other'],
+        },
+        {
+          name: 'explicit empty CLI pattern',
+          configured: { filterPattern: '^keep$' },
+          cli: { filterPattern: '' },
+          expected: ['keep', 'other'],
+        },
+      ])('applies configured test selection: $name', async ({ configured, cli, expected }) => {
+        const tests = [
+          { description: 'keep', vars: { input: 'one' } },
+          { description: 'other', vars: { input: 'two' } },
+        ];
+        const configFile = writeTempConfig(tmpDir, 'configured-test-selection.yaml', {
+          providers: ['echo'],
+          prompts: ['{{input}}'],
+          ...(form === 'scenario' ? { scenarios: [{ config: [{}], tests }] } : { tests }),
+          commandLineOptions: configured,
+        });
+
+        await runEvalAndGetOptions({ config: [configFile], ...cli });
+
+        const suite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+        const selected = form === 'scenario' ? suite.scenarios?.[0]?.tests : suite.tests;
+        expect(selected?.map((test) => test.description)).toEqual(expected);
+      });
+    });
+
+    it('applies a configured pattern to the implicit default test', async () => {
+      const configFile = writeTempConfig(tmpDir, 'configured-implicit-selection.yaml', {
+        providers: ['echo'],
+        prompts: ['Hello'],
+        commandLineOptions: { filterPattern: '^keep$' },
+      });
+
+      await runEvalAndGetOptions({ config: [configFile] });
+
+      const suite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+      expect(suite.tests).toEqual([]);
+      expect(suite.scenarios).toEqual([]);
+    });
+
+    it.each([
+      { name: 'count', configured: { filterFirstN: 1 }, command: {} },
+      { name: 'non-first pattern', configured: { filterPattern: '^keep$' }, command: {} },
+      { name: 'consumed range', configured: { filterFirstN: 1 }, command: { filterRange: '1:3' } },
+      {
+        name: 'sampled order',
+        configured: { filterPattern: '.' },
+        command: { filterSample: 2, filterSampleSeed: 42 },
+      },
+    ])(
+      'preserves selected raw tests across JSON replay: $name',
+      async ({ configured, command }) => {
+        const configFile = writeTempConfig(tmpDir, 'selected-tests-replay.yaml', {
+          providers: ['echo'],
+          prompts: ['{{input}}'],
+          tests: [
+            { description: 'first', vars: { input: 'one' }, provider: 'echo' },
+            { description: 'keep', vars: { input: 'two' }, provider: 'echo' },
+            { description: 'last', vars: { input: 'three' }, provider: 'echo' },
+          ],
+          commandLineOptions: configured,
+        });
+        await runEvalAndGetOptions({ config: [configFile], ...command });
+        const initialSuite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+        const initialEval = evaluateMock.mock.calls.at(-1)?.[1] as Eval;
+        const selectedDescriptions = initialSuite.tests?.map((test) => test.description);
+        const storedConfig = JSON.parse(JSON.stringify(initialEval.config));
+        const saved = new Eval(storedConfig, {
+          id: 'eval-selected-tests-replay',
+          persisted: true,
+          runtimeOptions: JSON.parse(JSON.stringify(initialEval.runtimeOptions)),
+        });
+        const find = vi.spyOn(Eval, 'findById').mockResolvedValue(saved);
+        try {
+          await runEvalAndGetOptions({ resume: saved.id, write: true } as Partial<
+            CommandLineOptions & Command
+          >);
+          const resumedSuite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+          expect(resumedSuite.tests?.map((test) => test.description)).toEqual(selectedDescriptions);
+          expect(
+            storedConfig.tests.map((test: { description?: string }) => test.description),
+          ).toEqual(selectedDescriptions);
+          expect(
+            storedConfig.tests.every((test: { provider?: unknown }) => test.provider === 'echo'),
+          ).toBe(true);
+          expect(
+            (evaluateMock.mock.calls.at(-1)?.[2] as EvaluateOptions).filterRange,
+          ).toBeUndefined();
+        } finally {
+          find.mockRestore();
+        }
+      },
+    );
+
+    it.each([
+      { configured: { filterFirstN: 1 }, count: 1 },
+      { configured: { filterPattern: '^keep$' }, count: 0 },
+    ])(
+      'preserves an implicit selection across JSON replay: $count cases',
+      async ({ configured, count }) => {
+        const configFile = writeTempConfig(tmpDir, 'implicit-replay.yaml', {
+          providers: ['echo'],
+          prompts: ['Hello'],
+          commandLineOptions: configured,
+        });
+        await runEvalAndGetOptions({ config: [configFile] });
+        const initialEval = evaluateMock.mock.calls.at(-1)?.[1] as Eval;
+        const saved = new Eval(JSON.parse(JSON.stringify(initialEval.config)), {
+          id: 'eval-implicit-replay',
+          persisted: true,
+          runtimeOptions: JSON.parse(JSON.stringify(initialEval.runtimeOptions)),
+        });
+        const find = vi.spyOn(Eval, 'findById').mockResolvedValue(saved);
+        try {
+          await runEvalAndGetOptions({ resume: saved.id, write: true } as Partial<
+            CommandLineOptions & Command
+          >);
+          const resumedSuite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+          expect(resumedSuite.tests).toHaveLength(count);
+          if (count === 0) {
+            expect(resumedSuite.scenarios).toEqual([]);
+          }
+        } finally {
+          find.mockRestore();
+        }
+      },
+    );
+
+    it.each([false, true])(
+      'preserves range semantics across replay with scenarios=%s',
+      async (scenarios) => {
+        const configFile = writeTempConfig(tmpDir, 'range-replay.yaml', {
+          providers: ['echo'],
+          prompts: ['{{input}}'],
+          tests: [
+            { description: 'first', vars: { input: 'one' } },
+            { description: 'keep', vars: { input: 'two' } },
+            { description: 'last', vars: { input: 'three' } },
+          ],
+          ...(scenarios
+            ? {
+                scenarios: [
+                  {
+                    config: [{}],
+                    tests: [
+                      { description: 'scenario-first', vars: { input: 'four' } },
+                      { description: 'scenario-last', vars: { input: 'five' } },
+                    ],
+                  },
+                ],
+              }
+            : {}),
+          commandLineOptions: { filterFirstN: 1 },
+          evaluateOptions: { filterRange: '1:3' },
+        });
+        await runEvalAndGetOptions({ config: [configFile] });
+        const initialSuite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+        const initialEval = evaluateMock.mock.calls.at(-1)?.[1] as Eval;
+        const saved = new Eval(JSON.parse(JSON.stringify(initialEval.config)), {
+          id: 'eval-range-replay',
+          persisted: true,
+          runtimeOptions: JSON.parse(JSON.stringify(initialEval.runtimeOptions)),
+        });
+        const find = vi.spyOn(Eval, 'findById').mockResolvedValue(saved);
+        try {
+          await runEvalAndGetOptions({ resume: saved.id, write: true } as Partial<
+            CommandLineOptions & Command
+          >);
+          const resumedSuite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+          expect(resumedSuite.tests).toEqual(initialSuite.tests);
+          expect(resumedSuite.scenarios).toEqual(initialSuite.scenarios);
+          const expectedRange = scenarios ? '1:3' : undefined;
+          expect(saved.runtimeOptions?.filterRange).toBe(expectedRange);
+          expect(saved.config.evaluateOptions?.filterRange).toBe(expectedRange);
+          expect((evaluateMock.mock.calls.at(-1)?.[2] as EvaluateOptions).filterRange).toBe(
+            expectedRange,
+          );
+        } finally {
+          find.mockRestore();
+        }
+      },
+    );
+
+    it.each([false, true])(
+      'preserves historical selected test configs with extracted=%s',
+      async (extracted) => {
+        const configFile = writeTempConfig(tmpDir, 'historical-selection.yaml', {
+          providers: ['echo'],
+          prompts: ['{{input}}'],
+          tests: [
+            {
+              description: extracted ? 'other' : 'keep',
+              vars: { input: extracted ? 'one' : 'two' },
+              provider: 'echo',
+            },
+          ],
+          commandLineOptions: { filterFirstN: 1 },
+        });
+        const history = new Eval({}, { id: 'selection-history', persisted: true });
+        const summary = vi.spyOn(history, 'toEvaluateSummary').mockResolvedValue(
+          createEvaluateSummaryV2({
+            results: [
+              createEvaluateResult({
+                vars: { input: 'two', sessionId: 'prior-session', _conversation: ['prior turn'] },
+                success: false,
+                provider: { id: 'echo' },
+                testCase: { description: 'keep', vars: { input: 'two' }, provider: 'echo' },
+              }),
+            ],
+          }),
+        );
+        const find = vi.spyOn(Eval, 'findById').mockResolvedValue(history);
+        try {
+          await runEvalAndGetOptions({ config: [configFile], filterFailing: history.id });
+          const initialEval = evaluateMock.mock.calls.at(-1)?.[1] as Eval;
+          const storedConfig = JSON.parse(JSON.stringify(initialEval.config));
+          expect(storedConfig.tests).toHaveLength(1);
+          expect(storedConfig.tests[0].description).toBe('keep');
+          expect(storedConfig.tests[0].provider).toBe(extracted ? undefined : 'echo');
+          if (!extracted) {
+            expect(storedConfig.tests[0].vars).toEqual({
+              input: 'two',
+              sessionId: 'prior-session',
+              _conversation: ['prior turn'],
+            });
+          }
+          const saved = new Eval(storedConfig, {
+            id: 'historical-selection-replay',
+            persisted: true,
+            runtimeOptions: JSON.parse(JSON.stringify(initialEval.runtimeOptions)),
+          });
+          find.mockResolvedValue(saved);
+          await runEvalAndGetOptions({ resume: saved.id, write: true } as Partial<
+            CommandLineOptions & Command
+          >);
+          const resumedSuite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+          expect(resumedSuite.tests?.map((test) => test.description)).toEqual(['keep']);
+        } finally {
+          find.mockRestore();
+          summary.mockRestore();
+        }
+      },
+    );
+
+    it('keeps the serialized pattern selection when retrying errors', async () => {
+      const configFile = writeTempConfig(tmpDir, 'selection-retry.yaml', {
+        providers: ['echo'],
+        prompts: ['{{input}}'],
+        tests: [
+          { description: 'other', vars: { input: 'one' } },
+          { description: 'keep', vars: { input: 'two' } },
+        ],
+        commandLineOptions: { filterPattern: '^keep$' },
+      });
+      await runEvalAndGetOptions({ config: [configFile] });
+      const initialEval = evaluateMock.mock.calls.at(-1)?.[1] as Eval;
+      const saved = new Eval(JSON.parse(JSON.stringify(initialEval.config)), {
+        id: 'selection-retry',
+        persisted: true,
+        runtimeOptions: JSON.parse(JSON.stringify(initialEval.runtimeOptions)),
+      });
+      const latest = vi.spyOn(Eval, 'latest').mockResolvedValue(saved);
+      const errors = vi.spyOn(retryModule, 'getErrorResultIds').mockResolvedValue(['failed-row']);
+      const remove = vi.spyOn(retryModule, 'deleteErrorResults').mockResolvedValue(undefined);
+      const metrics = vi
+        .spyOn(retryModule, 'recalculatePromptMetrics')
+        .mockResolvedValue(undefined);
+      try {
+        await runEvalAndGetOptions({ retryErrors: true, write: true });
+        const retriedSuite = evaluateMock.mock.calls.at(-1)?.[0] as TestSuite;
+        expect(retriedSuite.tests?.map((test) => test.description)).toEqual(['keep']);
+      } finally {
+        latest.mockRestore();
+        errors.mockRestore();
+        remove.mockRestore();
+        metrics.mockRestore();
+      }
+    });
+
     it('should respect commandLineOptions.maxConcurrency from config', async () => {
       const tempConfig = writeOptionsConfig(tmpDir, 'test-commandline-maxconcurrency.yaml', {
         commandLineOptions: {

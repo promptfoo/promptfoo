@@ -17,6 +17,11 @@ registerHooks({
   },
 });
 
+// This fresh process has no Vitest telemetry mock. Even when disabled, record() can
+// send an opt-out event, so isolate that external dependency from the runtime checks.
+const { default: telemetry } = await import('../../../src/telemetry');
+telemetry.record = () => {};
+
 const { evaluate } = await import('../../../src/evaluator/engine');
 const { InMemoryEvaluationStore } = await import('../../../src/evaluator/inMemoryStore');
 

@@ -1,9 +1,13 @@
+import path from 'node:path';
+import { isDeepStrictEqual } from 'node:util';
+
 import chalk from 'chalk';
 import { and, eq, inArray } from 'drizzle-orm';
 import cliState from '../cliState';
 import { getDb } from '../database/index';
 import { evalResultsTable } from '../database/tables';
 import { evaluate } from '../evaluator';
+import { hasTestsInRange } from '../evaluator/engine';
 import logger from '../logger';
 import Eval from '../models/eval';
 import { notifyEvaluationChanged } from '../models/evalMutation';
@@ -22,7 +26,7 @@ import { getOutputFileFormat } from '../util/outputFormats';
 import { shouldShareResults } from '../util/sharing';
 import { accumulateGradingTokenUsage, accumulateResponseTokenUsage } from '../util/tokenUsageUtils';
 
-import type { PromptMetrics } from '../types/index';
+import type { PromptMetrics, UnifiedConfig } from '../types/index';
 import type { InternalEvaluateOptions } from '../types/internal';
 
 export interface RetryCommandOptions {
@@ -54,10 +58,129 @@ function assertRetryProviderFilterMatched(
   );
 }
 
+function normalizeRetryLayout(value: unknown, ancestors = new Set<object>()): unknown {
+  if (value === null || typeof value === 'string' || typeof value === 'boolean') {
+    return value;
+  }
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value !== 'object' || ancestors.has(value)) {
+    throw new Error('Retry layout is not safely comparable');
+  }
+  const isArray = Array.isArray(value);
+  const prototype = Object.getPrototypeOf(value);
+  if (!isArray && prototype !== Object.prototype && prototype !== null) {
+    throw new Error('Retry layout is not plain data');
+  }
+  for (const key of Reflect.ownKeys(value)) {
+    const descriptor = Object.getOwnPropertyDescriptor(value, key)!;
+    if (
+      typeof key === 'symbol' ||
+      !('value' in descriptor) ||
+      (!descriptor.enumerable && !(isArray && key === 'length'))
+    ) {
+      throw new Error('Retry layout is not plain data');
+    }
+  }
+  ancestors.add(value);
+  try {
+    return isArray
+      ? value.map((item) => normalizeRetryLayout(item, ancestors))
+      : Object.fromEntries(
+          Object.entries(value)
+            .filter(([, item]) => item !== undefined)
+            .map(([key, item]) => [key, normalizeRetryLayout(item, ancestors)]),
+        );
+  } finally {
+    ancestors.delete(value);
+  }
+}
+
+function normalizeRetryDefaultTest(
+  value: unknown,
+  metadata: unknown,
+  fromSavedEval: boolean,
+): unknown {
+  const normalized = normalizeRetryLayout(value === undefined ? {} : value);
+  if (!normalized || typeof normalized !== 'object' || Array.isArray(normalized)) {
+    return normalized;
+  }
+  // With no authored default metadata, resolveConfigs passes the top-level metadata to tests.
+  // doEval adds generationAccounting to the saved config after resolving those tests.
+  const inherited = normalizeRetryLayout(metadata ?? {});
+  if (fromSavedEval && inherited && typeof inherited === 'object') {
+    Reflect.deleteProperty(inherited, 'generationAccounting');
+  }
+  // Explicit config loading fills these fields; auto-discovery may leave them absent.
+  return { vars: {}, assert: [], options: {}, metadata: inherited, ...normalized };
+}
+
+function hasRelativeFileReference(value: unknown): boolean {
+  if (typeof value === 'string') {
+    return value.startsWith('file://') && !path.isAbsolute(value.slice(7));
+  }
+  if (value && typeof value === 'object') {
+    return Object.values(value).some(hasRelativeFileReference);
+  }
+  return false;
+}
+
+function assertRetryLayoutMatched(
+  originalEval: Eval,
+  config: Partial<UnifiedConfig>,
+  filterRange: string | undefined,
+): void {
+  const savedRange = originalEval.runtimeOptions?.filterRange;
+  const layout = (
+    config: Partial<UnifiedConfig>,
+    range: string | undefined,
+    fromSavedEval: boolean,
+  ) =>
+    normalizeRetryLayout({
+      tests: config.tests,
+      scenarios: config.scenarios,
+      defaultTest: normalizeRetryDefaultTest(config.defaultTest, config.metadata, fromSavedEval),
+      filterRange: range,
+    });
+  let matches = false;
+  try {
+    const original = layout(
+      originalEval.config,
+      typeof savedRange === 'string'
+        ? savedRange
+        : originalEval.config.evaluateOptions?.filterRange,
+      true,
+    );
+    const override = layout(config, filterRange, false);
+    const usesRelativeFiles =
+      hasRelativeFileReference(original) || hasRelativeFileReference(override);
+    const originalBase = originalEval.config.basePath;
+    const overrideBase = config.basePath;
+    matches =
+      isDeepStrictEqual(original, override) &&
+      (!usesRelativeFiles ||
+        (typeof originalBase === 'string' &&
+          typeof overrideBase === 'string' &&
+          path.isAbsolute(originalBase) &&
+          path.isAbsolute(overrideBase) &&
+          path.resolve(originalBase) === path.resolve(overrideBase)));
+  } catch {
+    // Functions, accessors, cycles, and other non-JSON layouts cannot establish index identity.
+  }
+  if (!matches) {
+    throw new ConfigResolutionError(
+      'The override config changes or cannot preserve the saved test layout. ' +
+        'Existing ERROR results were preserved. Retry without --config to use the saved selection, ' +
+        'or start a new evaluation for the changed selection.',
+    );
+  }
+}
+
 async function resolveRetryConfigs(
   originalEval: Eval,
   cmdObj: RetryCommandOptions,
-): Promise<Awaited<ReturnType<typeof resolveConfigs>>> {
+): Promise<Awaited<ReturnType<typeof resolveConfigs>> & { filterRange?: string }> {
   const providerFilterOptions = getPersistedProviderFilterOptions(
     originalEval.runtimeOptions?.providerFilter,
   );
@@ -77,8 +200,49 @@ async function resolveRetryConfigs(
   }
 
   const configs = cmdObj.config
-    ? await resolveConfigs({ config: [cmdObj.config], ...providerFilterOptions }, {})
+    ? await resolveConfigs({ config: [cmdObj.config], ...providerFilterOptions }, {}, 'Evaluation')
     : await resolveConfigs(providerFilterOptions, originalEval.config);
+  // Saved tests are already selected; only their remaining global range needs replaying.
+  const savedRange = originalEval.runtimeOptions?.filterRange;
+  const configured = configs.commandLineOptions;
+  let filterRange = cmdObj.config
+    ? (configured?.filterRange ?? configs.config.evaluateOptions?.filterRange)
+    : typeof savedRange === 'string'
+      ? savedRange
+      : originalEval.config.evaluateOptions?.filterRange;
+
+  if (
+    cmdObj.config &&
+    (configured?.filterFirstN !== undefined || configured?.filterPattern !== undefined)
+  ) {
+    if (configured.filterSample !== undefined && configured.filterSampleSeed === undefined) {
+      throw new ConfigResolutionError(
+        'Cannot retry a configured sample without a seed from an override config. ' +
+          'Existing ERROR results were preserved. Retry without --config to use the saved test order.',
+      );
+    }
+    // doEval imports retry helpers, so load its shared filter only after module initialization.
+    const { applyTestFilters } = await import('./doEval');
+    const consumedTopLevelRange = await applyTestFilters(configs.testSuite, configs.config, {
+      firstN: configured.filterFirstN,
+      pattern: configured.filterPattern,
+      range: filterRange,
+      sample: configured.filterSample,
+      sampleSeed: configured.filterSampleSeed,
+    });
+    if (consumedTopLevelRange) {
+      filterRange = undefined;
+    }
+    if (!hasTestsInRange(configs.testSuite, filterRange)) {
+      throw new ConfigResolutionError(
+        'The override config selected no tests to retry. Existing ERROR results were preserved. ' +
+          'Retry without --config to use the saved test selection.',
+      );
+    }
+  }
+  if (cmdObj.config) {
+    assertRetryLayoutMatched(originalEval, configs.config, filterRange);
+  }
 
   // The original run filtered twice: raw configs in resolveConfigs, then instantiated
   // providers by live id()/label in doEval. Replay both stages so the retried provider
@@ -91,7 +255,7 @@ async function resolveRetryConfigs(
     configs.testSuite.providers.length,
     cmdObj.config,
   );
-  return configs;
+  return { ...configs, filterRange };
 }
 
 async function restoreJsonlOutputsAfterPersistenceFailure(
@@ -135,6 +299,45 @@ export async function getErrorResultIds(evalId: string): Promise<string[]> {
     .all();
 
   return errorResults.map((r) => r.id);
+}
+
+/** Find captured ERROR rows whose index pair has another persisted result. */
+export async function getReplacedErrorResultIds(
+  evalRecord: Eval,
+  errorResultIds: string[],
+): Promise<string[]> {
+  if (errorResultIds.length === 0 || evalRecord.resultPersistenceFailed) {
+    return [];
+  }
+  const originalIds = new Set(errorResultIds);
+  const originalPairs = new Map<string, string>();
+  const replacementPairs = new Set<string>();
+  const db = await getDb();
+  // Read only identities; response and test payloads can be large for long evaluations.
+  const rows = await db
+    .select({
+      id: evalResultsTable.id,
+      testIdx: evalResultsTable.testIdx,
+      promptIdx: evalResultsTable.promptIdx,
+      failureReason: evalResultsTable.failureReason,
+    })
+    .from(evalResultsTable)
+    .where(eq(evalResultsTable.evalId, evalRecord.id))
+    .all();
+  for (const row of rows) {
+    const pair = row.testIdx + ':' + row.promptIdx;
+    if (originalIds.has(row.id)) {
+      if (row.failureReason === ResultFailureReason.ERROR) {
+        originalPairs.set(row.id, pair);
+      }
+    } else {
+      replacementPairs.add(pair);
+    }
+  }
+  return errorResultIds.filter((id) => {
+    const pair = originalPairs.get(id);
+    return pair !== undefined && replacementPairs.has(pair);
+  });
 }
 
 /**
@@ -327,7 +530,12 @@ async function retryWithConfig(
   originalEval: Eval,
   errorResultIds: string[],
   cmdObj: RetryCommandOptions,
-  { testSuite, commandLineOptions, config }: Awaited<ReturnType<typeof resolveRetryConfigs>>,
+  {
+    testSuite,
+    commandLineOptions,
+    config,
+    filterRange,
+  }: Awaited<ReturnType<typeof resolveRetryConfigs>>,
 ) {
   const evalId = originalEval.id;
 
@@ -378,6 +586,7 @@ async function retryWithConfig(
     eventSource: 'cli',
     restorePromptColumns: !cmdObj.config,
     showProgressBar: !cmdObj.verbose, // Show progress bar unless verbose mode
+    ...(filterRange === undefined ? {} : { filterRange }),
   };
 
   try {
@@ -392,7 +601,7 @@ async function retryWithConfig(
 
     let errorRowsDeleted = false;
     try {
-      await deleteErrorResults(errorResultIds);
+      await deleteErrorResults(await getReplacedErrorResultIds(retriedEval, errorResultIds));
       errorRowsDeleted = true;
       await recalculatePromptMetrics(retriedEval);
     } catch (cleanupError) {

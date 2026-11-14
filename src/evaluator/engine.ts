@@ -1006,13 +1006,24 @@ function getDefaultTest(testSuite: TestSuite) {
   return typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest : undefined;
 }
 
-function buildTestsFromSuite(testSuite: TestSuite): AtomicTestCase[] {
+/** Checks the same root/scenario selection used by evaluation, without mutating the suite. */
+export function hasTestsInRange(testSuite: TestSuite, filterRange?: string): boolean {
+  const tests = buildTestsFromSuite(
+    { ...testSuite, tests: testSuite.tests ? [...testSuite.tests] : undefined },
+    false,
+  );
+  return filterByRange(tests, filterRange).length > 0;
+}
+
+function buildTestsFromSuite(testSuite: TestSuite, recordTelemetry = true): AtomicTestCase[] {
   const tests = getInitialTests(testSuite);
   if (!testSuite.scenarios?.length) {
     return tests;
   }
 
-  telemetry.record('feature_used', { feature: 'scenarios' });
+  if (recordTelemetry) {
+    telemetry.record('feature_used', { feature: 'scenarios' });
+  }
   let scenarioIndex = 0;
   for (const scenario of testSuite.scenarios) {
     for (const data of scenario.config) {
