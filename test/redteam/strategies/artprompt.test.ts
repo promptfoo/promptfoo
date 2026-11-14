@@ -177,6 +177,17 @@ describe('artprompt strategy', () => {
       },
     );
 
+    it('skips the reserved multi-input payload without changing its materialized fields', () => {
+      const fields = { question: 'Describe a fictional carousel', label: 'fixture' };
+      const vars = { ...fields, __prompt: JSON.stringify(fields) };
+      expect(addArtPrompt([{ vars }], '__prompt')).toEqual([]);
+      expect(vars).toEqual({ ...fields, __prompt: JSON.stringify(fields) });
+    });
+
+    it('skips absent or structured input without counting it as a text probe', () => {
+      expect(addArtPrompt([{}, { vars: { prompt: { label: 'fixture' } } }], 'prompt')).toEqual([]);
+    });
+
     it('should preserve test cases with no assertions', () => {
       const result = addArtPrompt([{ vars: { prompt: 'disable an alarm' } }], 'prompt');
       expect(result[0].assert).toBeUndefined();

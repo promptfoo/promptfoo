@@ -639,6 +639,7 @@ describe('Plugins', () => {
         ...CANARY_BREAKING_STRATEGY_IDS,
         'custom-strategy',
       ]);
+      expect(result?.[0].metadata?.pluginConfig?.excludeStrategies).toContain('artprompt');
     });
 
     it.each(['coding-agent:core', 'coding-agent:all'])(

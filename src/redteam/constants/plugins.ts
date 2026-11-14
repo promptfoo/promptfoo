@@ -395,6 +395,7 @@ export const AGENTIC_EXEMPT_PLUGINS = [
 // Coding-agent plugins exclude these but allow multi-turn strategies (meta, hydra, goblin, goat, crescendo).
 export const CANARY_BREAKING_STRATEGY_IDS = [
   'arabic-presentation-forms',
+  'artprompt',
   'base64',
   'hex',
   'homoglyph',

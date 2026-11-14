@@ -60,7 +60,7 @@ The strategy transforms each test case by:
 3. Rendering the word as an ASCII art banner (each capital letter drawn as a 5-row block of `#`).
 4. Appending instructions that tell the model to silently decode the art and answer as if `[MASK]` were the decoded word.
 
-The built-in font supports ASCII letters A-Z. `word` must contain only those letters. If the configured word is absent, the strategy uses the automatic heuristic. Inputs without any ASCII word are skipped with a warning and do not count as ArtPrompt probes. Original baseline cases remain available.
+The built-in font supports ASCII letters A-Z. `word` must contain only those letters. If the configured word is absent, the strategy uses the automatic heuristic. Inputs without any ASCII word are skipped with a warning and do not count as ArtPrompt probes. Original baseline cases remain available. ArtPrompt requires a single text input and skips the reserved multi-input variable. Coding-agent plugins exclude ArtPrompt to preserve exact canary and receipt matches.
 
 Masking replaces matching words and regular inflections; unrelated compounds may retain the same letters. This does not guarantee that a content filter will miss the request or that a target will decode the banner.
 

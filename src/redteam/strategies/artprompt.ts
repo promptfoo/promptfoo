@@ -1,4 +1,5 @@
 import logger from '../../logger';
+import { MULTI_INPUT_VAR } from '../constants/plugins';
 
 import type { TestCase } from '../../types/index';
 
@@ -255,10 +256,18 @@ export function addArtPrompt(
   ) {
     throw new Error('ArtPrompt word must contain only ASCII letters (A-Z).');
   }
+  if (injectVar === MULTI_INPUT_VAR) {
+    logger.warn('ArtPrompt skipped multi-input cases. A single text input is required.');
+    return [];
+  }
   const configuredWord = config.word as string | undefined;
   let skipped = 0;
   const transformed = testCases.flatMap((testCase) => {
-    const originalText = String(testCase.vars![injectVar]);
+    const originalText = testCase.vars?.[injectVar];
+    if (typeof originalText !== 'string') {
+      skipped += 1;
+      return [];
+    }
     const word =
       configuredWord && textContainsWord(originalText, configuredWord)
         ? configuredWord
