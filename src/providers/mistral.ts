@@ -4,6 +4,7 @@ import {
   fetchWithCache,
   getAbortSignalScopedKey,
   getCache,
+  getFetchRateLimitResponse,
   getScopedCacheKey,
   isCacheEnabled,
 } from '../cache';
@@ -262,7 +263,13 @@ interface MistralChatCompletionOptions {
 const MISTRAL_CACHE_HASH_KEY = 'promptfoo:mistral:cache-key:v1';
 const MISTRAL_INFLIGHT_REQUESTS = new Map<string, Promise<MistralFetchResult>>();
 
-type MistralFetchResult = { data: any; cached: boolean; status?: number; statusText?: string };
+type MistralFetchResult = {
+  data: any;
+  cached: boolean;
+  headers?: Record<string, string>;
+  status?: number;
+  statusText?: string;
+};
 
 function hashMistralCacheValue(value: unknown): string {
   const serialized = typeof value === 'string' ? value : JSON.stringify(value);
@@ -290,14 +297,14 @@ function fetchMistralWithDedupe(
   abortSignal?: AbortSignal,
 ): Promise<MistralFetchResult> {
   const inflightCacheKey = getAbortSignalScopedKey(getScopedCacheKey(cacheKey), abortSignal);
-  let inflightRequest = MISTRAL_INFLIGHT_REQUESTS.get(inflightCacheKey);
-  if (!inflightRequest) {
-    inflightRequest = fetcher().finally(() => {
-      MISTRAL_INFLIGHT_REQUESTS.delete(inflightCacheKey);
-    });
-    MISTRAL_INFLIGHT_REQUESTS.set(inflightCacheKey, inflightRequest);
+  const existing = MISTRAL_INFLIGHT_REQUESTS.get(inflightCacheKey);
+  if (existing) {
+    // A coalesced call did not produce a second upstream quota observation.
+    return existing.then((result) => ({ ...result, headers: undefined }));
   }
-  return inflightRequest;
+  const request = fetcher().finally(() => MISTRAL_INFLIGHT_REQUESTS.delete(inflightCacheKey));
+  MISTRAL_INFLIGHT_REQUESTS.set(inflightCacheKey, request);
+  return request;
 }
 
 function getMistralUrlMetadata(url: string) {
@@ -571,7 +578,11 @@ export class MistralChatCompletionProvider implements ApiProvider {
     return resolveMistralApiKey(this);
   }
 
-  async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+  async callApi(
+    prompt: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
     // Merge configs from the provider and the prompt
     const config = {
       ...this.config,
@@ -595,7 +606,7 @@ export class MistralChatCompletionProvider implements ApiProvider {
 
     return withGenAISpan(
       spanContext,
-      () => this.callApiInternal(prompt, context, config),
+      () => this.callApiInternal(prompt, context, config, options),
       extractGenAIResponse,
     );
   }
@@ -604,6 +615,7 @@ export class MistralChatCompletionProvider implements ApiProvider {
     prompt: string,
     context?: CallApiContextParams,
     config: MistralChatCompletionOptions = {},
+    options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     const apiKey = this.getApiKey();
     if (!apiKey) {
@@ -626,8 +638,11 @@ export class MistralChatCompletionProvider implements ApiProvider {
         const cachedResult = await cache.get<ProviderResponse>(cacheKey);
         if (cachedResult) {
           logger.debug('Returning cached Mistral response', { model: this.modelName });
+          // Older cache entries may carry headers for a request made in a previous quota window.
+          const { http: _http, ...metadata } = cachedResult.metadata ?? {};
           return {
             ...cachedResult,
+            metadata: Object.keys(metadata).length ? metadata : undefined,
             cached: true,
             tokenUsage: {
               ...cachedResult.tokenUsage,
@@ -645,10 +660,11 @@ export class MistralChatCompletionProvider implements ApiProvider {
     });
 
     let data,
-      cached = false;
+      cached = false,
+      headers: Record<string, string> | undefined;
 
     try {
-      ({ data, cached } = await fetchMistralWithDedupe(cacheKey, async () => {
+      ({ data, cached, headers } = await fetchMistralWithDedupe(cacheKey, async () => {
         return (await fetchWithCache(
           url,
           {
@@ -666,9 +682,11 @@ export class MistralChatCompletionProvider implements ApiProvider {
         )) as unknown as MistralFetchResult;
       }));
     } catch (err) {
-      return {
-        error: `API call error: ${String(err)}`,
-      };
+      return getFetchRateLimitResponse(err) ?? { error: `API call error: ${String(err)}` };
+    }
+
+    if (!cached && headers) {
+      options?.onResponseHeaders?.(headers);
     }
 
     logger.debug('Mistral API response', getMistralResponseMetadata(data));
@@ -706,11 +724,7 @@ export class MistralChatCompletionProvider implements ApiProvider {
         data.usage?.completion_tokens,
         data.usage?.prompt_audio_seconds,
       ),
-      ...(data.choices.length > 1 && {
-        metadata: {
-          choices: data.choices,
-        },
-      }),
+      ...(data.choices.length > 1 && { metadata: { choices: data.choices } }),
     };
 
     if (isCacheEnabled()) {
@@ -776,20 +790,34 @@ export class MistralEmbeddingProvider implements ApiProvider {
     return resolveMistralApiKey(this);
   }
 
-  async callApi(text: string): Promise<ProviderResponse> {
+  async callApi(
+    text: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
+    let headers: Record<string, string> | undefined;
+    let embeddingResponse: ProviderEmbeddingResponse;
     try {
-      const embeddingResponse = await this.callEmbeddingApi(text);
-      return {
-        output: JSON.stringify(embeddingResponse.embedding),
-        tokenUsage: embeddingResponse.tokenUsage,
-        cost: embeddingResponse.cost,
-        ...(embeddingResponse.cached ? { cached: true } : {}),
-      };
+      embeddingResponse = await this.callEmbeddingApi(text, context, {
+        ...options,
+        onResponseHeaders: (liveHeaders) => {
+          headers = liveHeaders;
+        },
+      });
     } catch (err) {
-      return {
-        error: `Embedding API call error: ${String(err)}`,
-      };
+      return (
+        getFetchRateLimitResponse(err) ?? { error: `Embedding API call error: ${String(err)}` }
+      );
     }
+    if (headers) {
+      options?.onResponseHeaders?.(headers);
+    }
+    return {
+      output: JSON.stringify(embeddingResponse.embedding),
+      tokenUsage: embeddingResponse.tokenUsage,
+      cost: embeddingResponse.cost,
+      ...(embeddingResponse.cached ? { cached: true } : {}),
+    };
   }
 
   async callEmbeddingApi(
@@ -839,7 +867,8 @@ export class MistralEmbeddingProvider implements ApiProvider {
       });
 
       try {
-        ({ data, cached, status, statusText } = await fetchMistralWithDedupe(
+        let headers: Record<string, string> | undefined;
+        ({ data, cached, headers, status, statusText } = await fetchMistralWithDedupe(
           cacheKey,
           async () => {
             return (await fetchWithCache(
@@ -861,6 +890,9 @@ export class MistralEmbeddingProvider implements ApiProvider {
           },
           options?.abortSignal,
         ));
+        if (!cached && headers) {
+          options?.onResponseHeaders?.(headers);
+        }
       } catch (err) {
         options?.abortSignal?.throwIfAborted();
         logger.error(`API call error: ${err}`);

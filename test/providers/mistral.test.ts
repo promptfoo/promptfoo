@@ -10,6 +10,7 @@ import {
   MistralEmbeddingProvider,
 } from '../../src/providers/mistral';
 import { maybeLoadToolsFromExternalFile } from '../../src/util';
+import { HttpRateLimitError } from '../../src/util/fetch/errors';
 import { createChatCompletion } from '../factories/literalFixtures';
 import { createMockChatResponse, createMockFetchResponse } from './mockProviderResponses';
 
@@ -163,6 +164,58 @@ describe('Mistral', () => {
         cached: false,
         cost: expect.any(Number),
       });
+    });
+
+    it('preserves retry timing without exporting private response headers', async () => {
+      vi.mocked(fetchWithCache).mockRejectedValueOnce(
+        new HttpRateLimitError({
+          status: 429,
+          statusText: 'Too Many Requests',
+          retryAfterMs: 3000,
+          headers: { 'set-cookie': 'private=fixture', 'retry-after': '3' },
+        }),
+      );
+      const response = await provider.callApi('throttle');
+      expect(response.metadata?.http).toEqual({
+        status: 429,
+        statusText: 'Too Many Requests',
+        headers: { 'retry-after-ms': '3000' },
+      });
+      expect(JSON.stringify(response)).not.toContain('private=fixture');
+    });
+
+    it('observes live quota once and keeps private HTTP headers out of eval results', async () => {
+      const mockResponse = {
+        choices: [{ message: { content: 'Header test output' } }],
+        usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+      };
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: mockResponse,
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers: {
+          'set-cookie': 'private=fixture',
+          'x-ratelimit-remaining-tokens-minute': '450000',
+          'x-ratelimit-limit-tokens-minute': '500000',
+          'x-ratelimit-reset-tokens-minute': '30',
+        },
+      });
+
+      const observe = vi.fn();
+      const [first, duplicate] = await Promise.all([
+        provider.callApi('Test with headers', undefined, { onResponseHeaders: observe }),
+        provider.callApi('Test with headers', undefined, { onResponseHeaders: observe }),
+      ]);
+      expect(observe).toHaveBeenCalledTimes(1);
+      expect(observe).toHaveBeenCalledWith(
+        expect.objectContaining({
+          'x-ratelimit-remaining-tokens-minute': '450000',
+        }),
+      );
+      expect(first.metadata?.http).toBeUndefined();
+      expect(duplicate.metadata?.http).toBeUndefined();
+      expect(JSON.stringify(first)).not.toContain('private=fixture');
     });
 
     it('should preserve explicit zero for top_p, random_seed, and max_tokens', async () => {
@@ -442,11 +495,17 @@ describe('Mistral', () => {
       expect(body.prompt_cache_key).toBe('shared-prefix-1');
     });
 
-    it('should use cache when enabled', async () => {
+    it('retains cached choices without replaying or exporting stale headers', async () => {
       vi.mocked(isCacheEnabled).mockReturnValue(true);
       vi.mocked(getCache).mockReturnValue({
         get: vi.fn().mockResolvedValue({
           output: 'Cached output',
+          metadata: {
+            choices: ['cached alternative'],
+            http: {
+              headers: { 'set-cookie': 'fixture=old', 'x-ratelimit-remaining-req-month': '0' },
+            },
+          },
           tokenUsage: { total: 10, prompt: 5, completion: 5 },
           cost: 0.000005,
         }),
@@ -468,11 +527,17 @@ describe('Mistral', () => {
         on: vi.fn(),
         removeAllListeners: vi.fn(),
       } as any);
-      const result = await provider.callApi('Test prompt');
+      const observe = vi.fn();
+      const result = await provider.callApi('Test prompt', undefined, {
+        onResponseHeaders: observe,
+      });
+
+      expect(observe).not.toHaveBeenCalled();
 
       expect(result.cached).toBe(true);
       expect(result).toEqual({
         output: 'Cached output',
+        metadata: { choices: ['cached alternative'] },
         tokenUsage: {
           total: 10,
           prompt: 5,
@@ -907,6 +972,24 @@ describe('Mistral', () => {
     beforeEach(() => {
       provider = new MistralEmbeddingProvider();
       vi.spyOn(provider, 'getApiKey').mockReturnValue('fake-api-key');
+    });
+
+    it('delivers live embedding quota to the observer without persisting HTTP headers', async () => {
+      const headers = {
+        'x-ratelimit-remaining-tokens-minute': '12',
+        'set-cookie': 'private=fixture',
+      };
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
+        data: createMistralEmbeddingResponse(),
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+        headers,
+      });
+      const observe = vi.fn();
+      const result = await provider.callApi('observed', undefined, { onResponseHeaders: observe });
+      expect(observe).toHaveBeenCalledWith(headers);
+      expect(JSON.stringify(result)).not.toContain('private=fixture');
     });
 
     it('should create a provider with default options', () => {
