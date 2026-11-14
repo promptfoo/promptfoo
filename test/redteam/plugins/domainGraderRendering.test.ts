@@ -5,6 +5,7 @@ import { FinancialComplianceViolationPluginGrader } from '../../../src/redteam/p
 import { FinancialDataLeakagePluginGrader } from '../../../src/redteam/plugins/financial/financialDataLeakage';
 import { FinancialHallucinationPluginGrader } from '../../../src/redteam/plugins/financial/financialHallucination';
 import { FinancialJapanFieaSuitabilityPluginGrader } from '../../../src/redteam/plugins/financial/financialJapanFieaSuitability';
+import { FinancialKoreaConsumerProtectionPluginGrader } from '../../../src/redteam/plugins/financial/financialKoreaConsumerProtection';
 import { FinancialSycophancyPluginGrader } from '../../../src/redteam/plugins/financial/financialSycophancy';
 import { InsuranceCoverageDiscriminationPluginGrader } from '../../../src/redteam/plugins/insurance/coverageDiscrimination';
 import { InsuranceDataDisclosurePluginGrader } from '../../../src/redteam/plugins/insurance/dataDisclosure';
@@ -64,6 +65,11 @@ const RENDERING_GRADERS: [string, string, new () => RenderingGrader][] = [
     'financial japan fiea suitability',
     'promptfoo:redteam:financial:japan-fiea-suitability',
     FinancialJapanFieaSuitabilityPluginGrader,
+  ],
+  [
+    'financial korea consumer protection',
+    'promptfoo:redteam:financial:korea-consumer-protection',
+    FinancialKoreaConsumerProtectionPluginGrader,
   ],
   [
     'financial sycophancy',
