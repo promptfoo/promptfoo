@@ -121,7 +121,6 @@ export function assertionFromString(expected: string): Assertion {
       type === 'context-relevance' ||
       type === 'cost' ||
       type === 'latency' ||
-      type === 'levenshtein' ||
       type === 'perplexity-score' ||
       type === 'perplexity' ||
       type === 'rouge-l' ||
