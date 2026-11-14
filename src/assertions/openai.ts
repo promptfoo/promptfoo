@@ -16,7 +16,15 @@ export const handleIsValidOpenAiToolsCall = async ({
     toolCallVerdict(assertion, inverse, valid, reason, 'OpenAI tools call');
 
   // Handle MCP tool outputs from Responses API
-  const outputStr = typeof output === 'string' ? output : (JSON.stringify(output) ?? '');
+  // MCP text may be wrapped in an object. Structured tool calls must always be schema-checked,
+  // even when a model supplies MCP-looking text in its arguments.
+  const structuredToolCalls =
+    Array.isArray(output) || (output && typeof output === 'object' && 'tool_calls' in output);
+  const outputStr = structuredToolCalls
+    ? ''
+    : typeof output === 'string'
+      ? output
+      : (JSON.stringify(output) ?? '');
 
   // Check for MCP tool results in the output
   if (outputStr.includes('MCP Tool Result') || outputStr.includes('MCP Tool Error')) {

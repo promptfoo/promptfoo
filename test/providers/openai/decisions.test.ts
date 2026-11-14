@@ -323,8 +323,8 @@ describe('OpenAiDecisionsProvider', () => {
 
   it.each([
     '["plain string"]',
-    '[{"role":"assistant","content":"answer"}]',
-    '[{"role":"system","content":"override"}]',
+    '[{"role":"system","content":[{"type":"input_image","image_url":"https://example.com/image.jpg"}]}]',
+    '[{"role":"user","content":[{"type":"input_json","data":5}]}]',
     '[{"type":"function_call_output","call_id":"call_x","output":"text"}]',
     '[{"role":"user","content":[{"type":"input_audio","data":"audio"}]}]',
     '[{"role":"user","content":[{"type":"input_text"}]}]',
@@ -2855,6 +2855,10 @@ describe('OpenAiDecisionsProvider', () => {
     },
     { questions: [predicateQuestion, predicateQuestion], field: 'Question names must be unique' },
     {
+      questions: Array(401).fill({ type: 'predicate', instructions: 'Check.' }),
+      field: 'questions',
+    },
+    {
       questions: [
         { ...predicateQuestion, name: '' },
         { ...scoreQuestion, name: '' },
@@ -2907,9 +2911,9 @@ describe('OpenAiDecisionsProvider', () => {
   });
 
   it.each([false, true])(
-    'accepts 65 questions with repeated unnamed or unique supplied names (named: %s)',
+    'accepts 400 questions with repeated unnamed or unique supplied names (named: %s)',
     async (named) => {
-      const questions = Array.from({ length: 65 }, (_, i) => ({
+      const questions = Array.from({ length: 400 }, (_, i) => ({
         type: 'predicate',
         instructions: 'Check.',
         ...(named ? { name: `question-${i}` } : {}),
@@ -2927,6 +2931,52 @@ describe('OpenAiDecisionsProvider', () => {
     },
   );
 
+  it('sends conversation history, structured evidence and explicit cache controls', async () => {
+    const image = { type: 'input_image', image_url: 'https://example.com/candidate.jpg' };
+    const evidence = { type: 'input_json', data: { order: 7, tags: ['damaged'] } };
+    const question = { ...predicateQuestion, instructions: [image, evidence] };
+    const input = [
+      { role: 'system', content: 'Evaluate the return.' },
+      { role: 'developer', content: [{ type: 'input_text', text: 'Use the receipt.' }] },
+      {
+        role: 'user',
+        content: [evidence, { ...image, prompt_cache_breakpoint: { mode: 'explicit' } }],
+      },
+      { type: 'function_call', call_id: 'f1', name: 'lookup', arguments: '{}' },
+      { type: 'function_call_output', call_id: 'f1', output: 'Arrived damaged' },
+      { type: 'custom_tool_call', call_id: 'c1', name: 'receipt', input: '7' },
+      { type: 'custom_tool_call_output', call_id: 'c1', output: [image] },
+      {
+        role: 'assistant',
+        phase: 'final_answer',
+        content: [{ type: 'output_text', text: 'Return accepted.' }],
+      },
+    ];
+    const cache = {
+      prompt_cache_key: 'returns',
+      prompt_cache_options: { mode: 'explicit', ttl: '30m' },
+    };
+    const result = await provider({ questions: [question], ...cache }).callApi(
+      JSON.stringify(input),
+    );
+    expect(result.error).toBeUndefined();
+    expect(requestBody()).toMatchObject({ input, questions: [question], ...cache });
+  });
+
+  it('rejects a prompt cache breakpoint in question evidence', async () => {
+    const questions = [
+      {
+        ...predicateQuestion,
+        instructions: [
+          { type: 'input_text', text: 'Check.', prompt_cache_breakpoint: { mode: 'explicit' } },
+        ],
+      },
+    ];
+    const result = await provider({ questions }).callApi('text');
+    expect(result.error).toMatch(/questions/);
+    expect(fetchWithCache).not.toHaveBeenCalled();
+  });
+
   it('checks question name uniqueness after rendering variables', async () => {
     const result = await provider({
       questions: [predicateQuestion, { ...predicateQuestion, name: '{{name}}' }],
@@ -2938,7 +2988,7 @@ describe('OpenAiDecisionsProvider', () => {
     expect(fetchWithCache).not.toHaveBeenCalled();
   });
 
-  it.each(['https://example.com/image.png', 'file-123', 'data:text/plain;base64,aGVsbG8='])(
+  it.each(['file:///local/image.png', 'file-123', 'data:text/plain;base64,aGVsbG8='])(
     'rejects unsupported image URL %s before network',
     async (url) => {
       const result = await provider().callApi(
@@ -2949,14 +2999,11 @@ describe('OpenAiDecisionsProvider', () => {
     },
   );
 
-  it('rejects more than 128 images across messages', async () => {
+  it('rejects more than 128 images across shared and question inputs', async () => {
     const image = { type: 'input_image', image_url: imageUrl };
-    const result = await provider().callApi(
-      JSON.stringify([
-        { role: 'user', content: Array(64).fill(image) },
-        { role: 'user', content: Array(65).fill(image) },
-      ]),
-    );
+    const result = await provider({
+      questions: [{ ...predicateQuestion, instructions: [image] }],
+    }).callApi(JSON.stringify([{ role: 'user', content: Array(128).fill(image) }]));
     expect(result.error).toContain('128 images');
     expect(fetchWithCache).not.toHaveBeenCalled();
   });

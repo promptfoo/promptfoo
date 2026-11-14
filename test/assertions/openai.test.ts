@@ -1247,6 +1247,7 @@ describe('OpenAI assertions', () => {
           { call: toolCall, valid: true },
           { call: { name: 'ping', arguments: '{}' }, valid: true },
           { call: { name: 'ping', arguments: '{"unexpected":true}' }, valid: false },
+          { call: { name: 'ping', arguments: '{"unexpected":"MCP Tool Result"}' }, valid: false },
           { call: { name: 'ping', arguments: 'null' }, valid: false },
           { call: { name: 'ping', arguments: '[]' }, valid: false },
           { call: { name: 'unknown', arguments: '{}' }, valid: false },

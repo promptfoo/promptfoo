@@ -130,6 +130,9 @@ If you don't want to use the UI to start a red team, you can use the `init` comm
 promptfoo redteam init --no-gui
 ```
 
+For a new Google Vertex AI target, the CLI offers `vertex:gemini-3.1-pro-preview` and writes
+`region: global` for it. Existing configurations can still be imported with their saved model IDs.
+
 :::
 
 ## Run the scan
