@@ -5,9 +5,9 @@ import { accumulateNamedMetric } from '../util/namedMetrics';
 import { accumulateGradingTokenUsage, accumulateResponseTokenUsage } from '../util/tokenUsageUtils';
 import {
   EvalResultDeletionConflict,
+  evalResultsObject,
   RESULT_WRITER,
   resultDeletionRevision,
-  evalResultsObject,
 } from './evalResultWrite';
 import { getDb } from './index';
 import { evalResultsTable, evalsTable } from './tables';
