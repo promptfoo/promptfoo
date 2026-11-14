@@ -519,6 +519,7 @@ describe('OpenRouter', () => {
 
         expect(result.error).toBeUndefined();
         expect(result.output).toBe('Hello there');
+        expect(result.latencyMs).toEqual(expect.any(Number));
         expect(result.audio).toEqual({
           id: 'audio-1',
           expiresAt: 1730000000,
@@ -606,7 +607,6 @@ describe('OpenRouter', () => {
 
         const malformed = await provider.callApi('Test prompt');
         expect(malformed).toEqual({
-          latencyMs: expect.any(Number),
           error: 'Malformed response data: expected choices[0].message',
           tokenUsage: { total: 5, prompt: 3, completion: 2, numRequests: 1 },
           cached: false,
@@ -668,7 +668,6 @@ describe('OpenRouter', () => {
         // the partial output that rode along must never be graded.
         expect(failed.error).toBe(`API error: ${privateDiagnostic}`);
         expect(failed.error).not.toContain('partial output must not be graded');
-        expect(failed.latencyMs).toEqual(expect.any(Number));
         expect(failed).toMatchObject({
           tokenUsage: { total: 5, prompt: 3, completion: 2, numRequests: 1 },
           cached: false,
@@ -712,7 +711,6 @@ describe('OpenRouter', () => {
 
         expect(result).toEqual({
           error: 'API error: OpenRouter provider returned a generation error',
-          latencyMs: expect.any(Number),
           tokenUsage: { numRequests: 1 },
           cached: false,
           cost: undefined,
