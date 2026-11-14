@@ -374,7 +374,7 @@ For questions about financial plugins:
 
 1. Review the [general red-teaming documentation](/docs/red-team/)
 2. Check the [plugin configuration guide](/docs/red-team/configuration/)
-3. Join our [community discussions](https://github.com/promptfoo/promptfoo/discussions)
+3. Open a [GitHub issue](https://github.com/promptfoo/promptfoo/issues)
 4. Consult with compliance officers for regulatory requirements
 
 ## See Also
