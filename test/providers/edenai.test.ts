@@ -129,12 +129,16 @@ describe('EdenAiProvider configuration', () => {
       properties: { city: { type: 'string' } },
       required: ['city'],
     };
-    const provider = createEdenAiProvider('edenai:openai/gpt-4o-mini', {
-      config: { tools: [{ type: 'function', function: { name: 'weather', parameters } }] },
-    });
+    const providerConfig = {
+      id: 'edenai:openai/gpt-4o-mini',
+      config: { tools: [{ type: 'function' as const, function: { name: 'weather', parameters } }] },
+    };
+    const provider = createEdenAiProvider(providerConfig.id, providerConfig);
     const expected = { config: { tools: [{ function: { parameters } }] } };
     expect(asChat(provider).toJSON()).toMatchObject(expected);
-    expect(sanitizeConfigForOutput({ providers: [provider] }).providers).toMatchObject([expected]);
+    expect(sanitizeConfigForOutput({ providers: [providerConfig] }).providers).toMatchObject([
+      expected,
+    ]);
   });
 
   it('rejects streaming instead of silently dropping it', () => {
