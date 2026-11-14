@@ -88,9 +88,12 @@ export async function readTestFiles(
       for (const [key, value] of Object.entries(rawData ?? {})) {
         // An external structured value is data through test expansion and replay.
         // Directly authored scalar package references still use the normal renderer.
+        // Top-level file references have always used the active config directory.
+        // Nested fields resolve from the vars file that declares them.
+        const referenceBase = typeof value === 'string' ? cliState.basePath : path.dirname(p);
         const loaded = mapVarsFileReferences(
           value,
-          (ref) => maybeLoadConfigFromExternalFile(ref, undefined, path.dirname(p)),
+          (ref) => maybeLoadConfigFromExternalFile(ref, undefined, referenceBase),
           seen,
         );
         if (
