@@ -14,7 +14,7 @@ For an overview of all Python integrations (providers, assertions, test generato
 
 :::
 
-A variable named `output` is injected into the context. The function should return `true` if the output passes the assertion, and `false` otherwise. If the function returns a number, it will be treated as a score.
+A variable named `output` is injected into the context. The function should return `true` if the output passes the assertion, and `false` otherwise. Return a finite number for a score. A numeric string must contain a complete base-10 number, such as `0.75` or `7.5e-1`. Invalid scores fail the assertion, including under negation.
 
 Example:
 

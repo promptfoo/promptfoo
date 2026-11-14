@@ -132,6 +132,21 @@ describe('Ruby assertions', () => {
     },
   );
 
+  it.each(['0x1', '0o1', '0b1'])('rejects a radix-prefixed string score %s', async (value) => {
+    for (const type of ['ruby', 'not-ruby'] as const) {
+      vi.mocked(runRubyCode).mockResolvedValueOnce(value);
+      const result = await runAssertion(createScriptAssertionParams(type));
+      expect(result).toMatchObject({ pass: false, score: 0 });
+      expect(result.reason).toContain('Numeric scores must be finite decimals.');
+    }
+  });
+
+  it('accepts a signed decimal exponent with surrounding whitespace', async () => {
+    vi.mocked(runRubyCode).mockResolvedValueOnce(' +.75e0 ');
+    const result = await runAssertion(createScriptAssertionParams('ruby'));
+    expect(result).toMatchObject({ pass: true, score: 0.75 });
+  });
+
   it.each([2, Number.POSITIVE_INFINITY])(
     'validates snake_case weights in nested script results: %s',
     async (weight) => {

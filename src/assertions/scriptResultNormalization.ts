@@ -265,10 +265,11 @@ export function normalizeScriptResult(
   }
 
   const rawScore = String(result).trim();
-  const score = rawScore === '' ? Number.NaN : Number(rawScore);
+  const isDecimal = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(rawScore);
+  const score = isDecimal ? Number(rawScore) : Number.NaN;
   if (!Number.isFinite(score)) {
     throw new Error(
-      `${labels.language} assertion must return a boolean, number, or {pass, score, reason} object. Instead got:\n${result}`,
+      `${labels.language} assertion must return a boolean, number, or {pass, score, reason} object. Numeric scores must be finite decimals.`,
     );
   }
   return normalizeScriptAssertionResult(assertion, score, inverse, labels, reasonSuffix);

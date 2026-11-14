@@ -177,6 +177,8 @@ For tool-call validity assertions, `not-` inverts a validation verdict. Tool con
 
 When a `not-javascript` assertion returns a full grading result, its `reason` is preserved verbatim, including an empty string, for either inverted outcome. For `not-python` and `not-ruby`, a negated failure keeps its custom `reason`, falling back to a generic message if it is empty; a negated pass reports `Assertion passed`. All three preserve the script's score.
 
+Python and Ruby scalar scores must be finite. Numeric strings accept decimal and exponent notation. An invalid scalar score fails both the regular and negated assertion.
+
 The `search-rubric` and `not-search-rubric` assertions require a rubric value that renders to a string.
 
 For `not-classifier`, `not-search-rubric`, `not-factuality` (also `not-model-graded-factuality`), and `not-model-graded-closedqa`, a grader error or missing verdict remains a failure with score `0`. Negation only inverts a valid grading result.
