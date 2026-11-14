@@ -25,20 +25,23 @@ import {
   type CallApiContextParams,
   type CallApiOptionsParams,
   type GradingResult,
-  isApiProvider,
-  isProviderOptions,
   type ProviderResponse,
   type RedteamFileConfig,
   type TokenUsage,
   type VarValue,
 } from '../../types/index';
+import {
+  isApiProvider,
+  isProviderOptions,
+  isProviderTypeMap,
+  type ProviderOptions,
+} from '../../types/providers';
 import { isCallerAbortError } from '../../util/fetch/requestSignal';
 import {
   composeResponseHeadersObservers,
   preserveResponseHeadersObserverError,
   preserveResponseHeadersObserverErrorResponse,
 } from '../../util/fetch/responseHeadersObserver';
-import { isProviderTypeMap } from '../../util/gradingProvider';
 import invariant from '../../util/invariant';
 import { safeJsonStringify } from '../../util/json';
 import { TokenUsageTracker } from '../../util/tokenUsage';
@@ -57,7 +60,6 @@ import { throwIfTargetPromptExceedsMaxChars } from '../shared/promptLength';
 import { ATTACKER_MODEL, ATTACKER_MODEL_SMALL, TEMPERATURE } from './constants';
 
 import type { TraceContextData } from '../../tracing/traceContext';
-import type { ProviderOptions } from '../../types/providers';
 import type { TransformContext, TransformFunction } from '../../types/transform';
 import type { RedteamHistoryEntry } from '../types';
 

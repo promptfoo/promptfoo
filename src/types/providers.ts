@@ -242,6 +242,42 @@ export function isProviderOptions(provider: any): provider is ProviderOptions {
   );
 }
 
+export const GRADING_PROVIDER_TYPE_KEYS = [
+  'text',
+  'embedding',
+  'classification',
+  'moderation',
+] as const;
+
+function isTypedProviderValue(value: unknown): boolean {
+  if (typeof value === 'string') {
+    return value.length > 0;
+  }
+  if (isApiProvider(value)) {
+    return true;
+  }
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return false;
+  }
+  const id = (value as { id?: unknown }).id;
+  return typeof id === 'string' && id.length > 0;
+}
+
+export function isProviderTypeMap(provider: unknown): provider is ProviderTypeMap {
+  return Boolean(
+    provider &&
+      typeof provider === 'object' &&
+      !Array.isArray(provider) &&
+      !isApiProvider(provider) &&
+      !Object.prototype.hasOwnProperty.call(provider, 'id') &&
+      GRADING_PROVIDER_TYPE_KEYS.some(
+        (providerType) =>
+          Object.prototype.hasOwnProperty.call(provider, providerType) &&
+          isTypedProviderValue((provider as Record<string, unknown>)[providerType]),
+      ),
+  );
+}
+
 export interface ProviderTestResponse {
   testResult: {
     message?: string;
