@@ -403,10 +403,18 @@ providersRouter.post('/test-session', async (req: Request, res: Response): Promi
   }
   const { provider: validatedProvider, sessionConfig, mainInputVariable } = bodyResult.data;
 
-  // SSRF guard for intentionally exposed servers: when PROMPTFOO_BLOCK_PRIVATE_RANGES
-  // is set, refuse caller-chosen private targets before any provider is loaded.
+  // Validate exactly the options used to construct the session provider.
+  const options = {
+    ...validatedProvider,
+    config: {
+      ...validatedProvider.config,
+      maxRetries: 1,
+      sessionSource: sessionConfig?.sessionSource || validatedProvider.config?.sessionSource,
+      sessionParser: sessionConfig?.sessionParser || validatedProvider.config?.sessionParser,
+    },
+  };
   try {
-    await assertProviderTargetPublic(validatedProvider);
+    await assertProviderTargetPublic(options);
   } catch (error) {
     if (error instanceof PrivateRangeBlockedError) {
       logger.warn('[POST /providers/test-session] Blocked private-range provider target');
@@ -420,17 +428,7 @@ providersRouter.post('/test-session', async (req: Request, res: Response): Promi
     // Keep provider loading inside the guard context (see /providers/test):
     // constructor-time requests must get redirect validation too.
     const loadedProvider = await runGuardedProviderCall(() =>
-      loadApiProvider(validatedProvider.id, {
-        options: {
-          ...validatedProvider,
-          config: {
-            ...validatedProvider.config,
-            maxRetries: 1,
-            sessionSource: sessionConfig?.sessionSource || validatedProvider.config?.sessionSource,
-            sessionParser: sessionConfig?.sessionParser || validatedProvider.config?.sessionParser,
-          },
-        },
-      }),
+      loadApiProvider(validatedProvider.id, { options }),
     );
 
     // Pass inputs from validatedProvider since loaded provider may not expose config.inputs

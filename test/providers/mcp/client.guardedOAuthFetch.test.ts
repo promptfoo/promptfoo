@@ -88,7 +88,7 @@ import { PrivateRangeBlockedError } from '../../../src/util/privateNetwork';
 const mockedMonkeyPatchFetch = vi.mocked(monkeyPatchFetch);
 
 const oauthServer = {
-  url: 'http://localhost:3000',
+  url: 'https://192.0.2.1',
   headers: { 'X-Custom-Header': 'custom-value' },
   auth: {
     type: 'oauth' as const,
@@ -157,7 +157,7 @@ describe('MCP OAuth transport fetch under the private-range guard', () => {
 
     await expect(
       withPrivateRangeGuard(() =>
-        oauthFetch('http://localhost:3000/', {
+        oauthFetch('https://192.0.2.1/', {
           method: 'POST',
           body: '{"method":"tools/call"}',
         }),
@@ -173,7 +173,7 @@ describe('MCP OAuth transport fetch under the private-range guard', () => {
       .spyOn(globalThis, 'fetch')
       .mockResolvedValue(new Response('ok', { status: 200 }));
 
-    const response = await oauthFetch('http://localhost:3000/', {
+    const response = await oauthFetch('https://192.0.2.1/', {
       method: 'POST',
       body: '{}',
     });
@@ -194,7 +194,7 @@ describe('MCP OAuth transport fetch under the private-range guard', () => {
       .mockResolvedValueOnce(new Response('ok', { status: 200 }));
 
     const response = await withPrivateRangeGuard(() =>
-      oauthFetch('http://localhost:3000/', {
+      oauthFetch('https://192.0.2.1/', {
         method: 'POST',
         body: '{"id":1}',
       }),

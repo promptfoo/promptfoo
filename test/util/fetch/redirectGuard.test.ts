@@ -55,6 +55,16 @@ describe('fetchWithProxy guarded redirects (PROMPTFOO_BLOCK_PRIVATE_RANGES)', ()
     vi.resetAllMocks();
   });
 
+  it.each(['follow', 'manual', 'error'] as const)(
+    'validates the initial URL before dispatch in %s mode',
+    async (redirect) => {
+      await expect(guardedFetch('http://127.0.0.1/', { redirect })).rejects.toThrow(
+        PrivateRangeBlockedError,
+      );
+      expect(mockedMonkeyPatchFetch).not.toHaveBeenCalled();
+    },
+  );
+
   it('refuses a redirect from a public URL into link-local space', async () => {
     restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
     mockedMonkeyPatchFetch.mockResolvedValueOnce(

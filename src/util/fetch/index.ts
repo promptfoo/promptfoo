@@ -317,6 +317,10 @@ async function fetchWithRedirectValidation(
   options: FetchOptions & { dispatcher?: any },
   tlsOptions: ConnectionOptions,
 ): Promise<Response> {
+  // Providers can derive URLs after route preflight (for example raw HTTP
+  // request targets and OAuth token endpoints). Validate the actual first
+  // destination for every redirect mode before sending a request.
+  await assertUrlResolvesPublic(initialUrl);
   let currentUrl = initialUrl;
   let currentOptions: FetchOptions & { dispatcher?: any } = {
     ...options,

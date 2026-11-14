@@ -29,9 +29,9 @@ import { isProviderConfigFileReference } from './providerRef';
  *
  * Redirects: the preflight below validates the initial target, and the fetch
  * layer (`fetchWithProxy`) re-validates every redirect destination while the
- * flag is set, so a public URL cannot 302 into private space.
+ * guard context is active. The effective first hop is checked there too.
  *
- * DNS-rebinding caveat: the hostname is resolved once, before the request.
+ * DNS-rebinding caveat: the hostname is resolved before the connection.
  * A record that flips between the check and the connection (rebind attack)
  * is not defended against here; operators needing that guarantee should
  * terminate provider traffic at an egress proxy.
@@ -221,7 +221,7 @@ export async function assertUrlResolvesPublic(rawUrl: string): Promise<void> {
     parsed = new URL(rawUrl);
   } catch {
     throw new PrivateRangeBlockedError(
-      `PROMPTFOO_BLOCK_PRIVATE_RANGES is set: refusing to fetch unparseable provider URL ${JSON.stringify(rawUrl)}`,
+      'PROMPTFOO_BLOCK_PRIVATE_RANGES is set: refusing to fetch unparseable provider URL',
     );
   }
   // Fail closed on targets with no host to resolve (e.g. ws+unix:///path,
@@ -232,7 +232,7 @@ export async function assertUrlResolvesPublic(rawUrl: string): Promise<void> {
   // unsupported-scheme target has no public network endpoint to verify.
   if (parsed.hostname === '' || !['http:', 'https:', 'ws:', 'wss:'].includes(parsed.protocol)) {
     throw new PrivateRangeBlockedError(
-      `PROMPTFOO_BLOCK_PRIVATE_RANGES is set: refusing to fetch provider URL with no resolvable host or unsupported scheme ${JSON.stringify(rawUrl)}`,
+      'PROMPTFOO_BLOCK_PRIVATE_RANGES is set: refusing to fetch provider URL with no resolvable host or unsupported scheme',
     );
   }
   const hostname = parsed.hostname;
@@ -272,6 +272,7 @@ interface ProviderTarget {
   /** Top-level executable transform (`ProviderOptions.transform`). */
   transform?: unknown;
   config?: {
+    auth?: unknown;
     apiBaseUrl?: unknown;
     baseUrl?: unknown;
     url?: unknown;
@@ -368,9 +369,7 @@ const LOCAL_DEFAULT_ENDPOINTS: Array<{
     baseUrl: () => 'https://api.elevenlabs.io/v1',
     // Every ElevenLabs provider (tts, stt, agents, ...) hands config.baseUrl
     // to ElevenLabsClient, which dispatches `${baseUrl}${endpoint}` via
-    // fetchWithProxy. The client-side guard validates redirects but not the
-    // initial hop, so the configured baseUrl must be preflighted here; the
-    // public default needs no exception because it is public.
+    // fetchWithProxy. Preflight the same baseUrl before constructing the client.
     configBaseUrlWins: true,
   },
   {
@@ -730,9 +729,7 @@ function getRawRequestTarget(rawRequest: string, useHttps: boolean): string {
  *   collected for validation, in both the MCPConfig (`server`/`servers`)
  *   and opencode-sdk record shapes,
  * - an HttpProvider session endpoint (`config.session.url`), collected
- *   for validation: the provider fetches it before the main request
- *   through a guarded fetch that validates only redirect destinations,
- *   so the initial session hop would otherwise go unchecked,
+ *   for validation before the provider is constructed,
  * - a string HttpProvider `sessionParser` or `validateStatus`, or a
  *   string entry in `config.functionToolCallbacks`, refused outright
  *   like the transforms above: the provider compiles them with
@@ -764,27 +761,29 @@ function getRawRequestTarget(rawRequest: string, useHttps: boolean): string {
  * Named providers without an override or a local default resolve to their
  * public defaults and need no check.
  */
-/**
- * Collect the HttpProvider session endpoint for validation. The provider
- * calls it before the main request (fetchSessionFromEndpoint renders
- * config.session.url with the prompt and fetches it through
- * fetchWithCache), but the guarded fetch validates only redirect
- * destinations, not the initial hop, so a private session URL would
- * never be checked unless it is collected here. A templated session URL
- * is refused by the URL validation below, same as config.url. The
- * session responseParser string is deliberately not refused with the
- * transforms below: the schema requires it for every session config, so
- * refusing it would block all session use under the flag; that residual
- * code-execution surface needs a maintainer decision, not a silent
- * behavior change here.
- */
-function collectSessionUrl(config: ProviderTarget['config'], urls: string[]): void {
-  const session = config?.session;
-  if (typeof session === 'object' && session !== null) {
-    const sessionUrl = (session as { url?: unknown }).url;
-    if (typeof sessionUrl === 'string' && sessionUrl.length > 0) {
-      urls.push(sessionUrl);
-    }
+function collectHttpTargets(config: ProviderTarget['config'], urls: string[]): void {
+  const auth = config?.auth as { type?: unknown; tokenUrl?: unknown } | undefined;
+  if (auth?.type === 'file') {
+    throw new PrivateRangeBlockedError(
+      'PROMPTFOO_BLOCK_PRIVATE_RANGES is set: refusing file authentication outside the fetch guard',
+    );
+  }
+  if (auth?.type === 'oauth' && typeof auth.tokenUrl === 'string') {
+    urls.push(auth.tokenUrl);
+  }
+  const session = config?.session as { url?: unknown; responseParser?: unknown } | undefined;
+  if (typeof session?.url === 'string' && session.url.length > 0) {
+    urls.push(session.url);
+  }
+  // The HTTP provider compiles this expression. Guarded session endpoints
+  // may select a property of the response but cannot invoke arbitrary code.
+  if (
+    typeof session?.responseParser === 'string' &&
+    !/^data(?:\.[A-Za-z_$][\w$]*)+$/.test(session.responseParser.trim())
+  ) {
+    throw new PrivateRangeBlockedError(
+      'PROMPTFOO_BLOCK_PRIVATE_RANGES is set: refusing an executable session endpoint response parser',
+    );
   }
 }
 
@@ -850,7 +849,9 @@ export function getCallerSuppliedBaseUrls(providerOptions: ProviderTarget): stri
       urls.push(configUrl);
     }
   }
-  collectSessionUrl(config, urls);
+  if (typeof providerOptions?.id === 'string' && /^https?(?:$|:)/.test(providerOptions.id)) {
+    collectHttpTargets(config, urls);
+  }
   const rawRequest = config?.request;
   if (typeof rawRequest === 'string' && rawRequest.length > 0) {
     urls.push(getRawRequestTarget(rawRequest, config?.useHttps === true));

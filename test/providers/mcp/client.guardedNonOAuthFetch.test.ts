@@ -79,7 +79,7 @@ const mockedMonkeyPatchFetch = vi.mocked(monkeyPatchFetch);
 // preflighted public server.url could 307 into private space and the SDK's
 // default fetch followed it outside the guard.
 const noAuthServer = {
-  url: 'http://localhost:3000',
+  url: 'https://192.0.2.1',
   headers: { 'X-Custom-Header': 'custom-value' },
 };
 
@@ -136,7 +136,7 @@ describe('MCP non-OAuth transport fetch under the private-range guard', () => {
 
     await expect(
       withPrivateRangeGuard(() =>
-        transportFetch('http://localhost:3000/', {
+        transportFetch('https://192.0.2.1/', {
           method: 'POST',
           body: '{"method":"tools/call"}',
         }),
@@ -152,7 +152,7 @@ describe('MCP non-OAuth transport fetch under the private-range guard', () => {
       .spyOn(globalThis, 'fetch')
       .mockResolvedValue(new Response('ok', { status: 200 }));
 
-    const response = await transportFetch('http://localhost:3000/', {
+    const response = await transportFetch('https://192.0.2.1/', {
       method: 'POST',
       body: '{}',
     });

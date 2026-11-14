@@ -365,6 +365,25 @@ describe('getCallerSuppliedBaseUrls', () => {
     ).toEqual(['https://public.example.com/hook', 'http://169.254.169.254/session']);
   });
 
+  it('preflights HTTP OAuth and refuses file auth and executable session selectors', () => {
+    expect(
+      getCallerSuppliedBaseUrls({
+        id: 'http',
+        config: {
+          auth: { type: 'oauth', tokenUrl: 'https://auth.example/token' },
+        },
+      }),
+    ).toEqual(['https://auth.example/token']);
+    for (const config of [
+      { auth: { type: 'file', path: 'file://fixture.js' } },
+      { session: { url: 'https://public.example', responseParser: 'String(data.body.id)' } },
+    ]) {
+      expect(() => getCallerSuppliedBaseUrls({ id: 'http', config })).toThrow(
+        PrivateRangeBlockedError,
+      );
+    }
+  });
+
   it('reads config.url (the HttpProvider request URL)', () => {
     expect(
       getCallerSuppliedBaseUrls({ id: 'http', config: { url: 'http://127.0.0.1:8080/hook' } }),
@@ -1126,7 +1145,7 @@ describe('assertProviderTargetPublic', () => {
   it('blocks a private HttpProvider session endpoint when the flag is set', async () => {
     restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
     // The session endpoint is fetched before the main request through a
-    // guarded fetch that validates only redirect destinations. The public
+    // guarded transport. During route preflight, the public
     // main URL resolves first; the private session literal then refuses
     // without a DNS lookup of its own.
     mockedLookup.mockResolvedValue([{ address: '93.184.216.34', family: 4 } as LookupAddress]);

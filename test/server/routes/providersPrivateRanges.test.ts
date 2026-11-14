@@ -388,6 +388,21 @@ describe('PROMPTFOO_BLOCK_PRIVATE_RANGES server guards (#11768 item 2)', () => {
   describe('POST /api/providers/test-session', () => {
     const body = { provider: { id: 'http://169.254.169.254/v1' } };
 
+    it('checks the merged parser override before loading the session provider', async () => {
+      restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
+      const response = await request(app)
+        .post('/api/providers/test-session')
+        .send({
+          provider: { id: 'http', config: { url: 'https://93.184.216.34/' } },
+          sessionConfig: { sessionParser: 'data.sessionId' },
+        });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('PROMPTFOO_BLOCK_PRIVATE_RANGES');
+      expect(mockedLoadApiProvider).not.toHaveBeenCalled();
+      expect(mockedTestProviderSession).not.toHaveBeenCalled();
+    });
+
     it('refuses a private target with 400 when the flag is set', async () => {
       restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
 

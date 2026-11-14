@@ -40,7 +40,7 @@ describe('Anthropic SDK transport under the private-range guard', () => {
     );
 
     const provider = new AnthropicMessagesProvider('claude-sonnet-4-6', {
-      config: { apiKey: 'guard-test-key', apiBaseUrl: 'https://public.example.com' },
+      config: { apiKey: 'guard-test-key', apiBaseUrl: 'https://192.0.2.1' },
     });
 
     const result = await withPrivateRangeGuard(() => provider.callApi('ping'));
@@ -51,7 +51,7 @@ describe('Anthropic SDK transport under the private-range guard', () => {
     // Every attempt went to the public base URL; the private hop was never
     // requested, even across SDK retries.
     for (const call of mockedMonkeyPatchFetch.mock.calls) {
-      expect(getRequestUrl(call)).toMatch(/^https:\/\/public\.example\.com\//);
+      expect(getRequestUrl(call)).toMatch(/^https:\/\/192\.0\.2\.1\//);
       expect(getRequestUrl(call)).not.toContain('169.254.169.254');
     }
   });
@@ -65,7 +65,7 @@ describe('Anthropic SDK transport under the private-range guard', () => {
       .mockResolvedValue(new Response('not json', { status: 200 }));
 
     const provider = new AnthropicMessagesProvider('claude-sonnet-4-6', {
-      config: { apiKey: 'guard-test-key', apiBaseUrl: 'https://public.example.com' },
+      config: { apiKey: 'guard-test-key', apiBaseUrl: 'https://192.0.2.1' },
     });
 
     try {
