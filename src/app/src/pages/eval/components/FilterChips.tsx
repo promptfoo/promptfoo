@@ -10,7 +10,7 @@ import {
 } from '@promptfoo/redteam/plugins/policy/utils';
 import { CheckCircle, ChevronDown, ChevronUp, XCircle } from 'lucide-react';
 import { useTableStore } from './store';
-import { getNamedMetricTotal } from './utils';
+import { getNamedMetricTotal, mergeFilteredNamedMetrics } from './utils';
 
 const DEFAULT_VISIBLE_COUNT = 8;
 
@@ -19,7 +19,8 @@ const DEFAULT_VISIBLE_COUNT = 8;
  * Shows in the filters section below table actions for red team evaluations.
  */
 export function FilterChips() {
-  const { filters, addFilter, removeFilter, config, table } = useTableStore();
+  const { filters, addFilter, removeFilter, config, table, derivedMetricNamesByPrompt } =
+    useTableStore();
   const policiesById = useCustomPoliciesMap(config?.redteam?.plugins ?? []);
   const [isExpanded, setIsExpanded] = useState(false);
 
@@ -30,15 +31,21 @@ export function FilterChips() {
     }
     const metricMap = new Map<string, { passCount: number; testCount: number | undefined }>();
 
-    table.head.prompts.forEach((prompt) => {
-      if (prompt.metrics?.namedScores) {
-        Object.keys(prompt.metrics.namedScores).forEach((metric) => {
+    const baseDerivedNames = config?.derivedMetrics?.map((metric) => metric.name) ?? [];
+    table.head.prompts.forEach((prompt, idx) => {
+      // These chips offer all evaluation metrics, including choices outside the active filter.
+      const metrics = mergeFilteredNamedMetrics(
+        prompt.metrics,
+        null,
+        derivedMetricNamesByPrompt?.[idx] ?? baseDerivedNames,
+      );
+      if (metrics?.namedScores) {
+        Object.entries(metrics.namedScores).forEach(([metric, score]) => {
           const existing = metricMap.get(metric) || { passCount: 0, testCount: 0 };
-          const score = prompt.metrics?.namedScores?.[metric] ?? 0;
           if (!Number.isFinite(score)) {
             return;
           }
-          const count = getNamedMetricTotal(prompt.metrics, metric);
+          const count = getNamedMetricTotal(metrics, metric);
           metricMap.set(metric, {
             passCount: existing.passCount + score,
             testCount:
@@ -65,7 +72,7 @@ export function FilterChips() {
           return a.metric.localeCompare(b.metric);
         })
     );
-  }, [table]);
+  }, [config?.derivedMetrics, derivedMetricNamesByPrompt, table]);
 
   // Get display name for a metric (handles policy metrics)
   const getDisplayName = (metric: string): string => {

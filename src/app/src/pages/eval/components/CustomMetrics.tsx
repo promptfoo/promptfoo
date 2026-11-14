@@ -18,6 +18,7 @@ import { useTableStore } from './store';
 
 interface CustomMetricsProps {
   lookup: Record<string, number>;
+  totalMetricNames?: readonly string[];
   counts?: Record<string, number>;
   metricTotals?: Record<string, number>;
   /**
@@ -46,7 +47,9 @@ const MetricValue = ({ metric, score, counts, metricTotals }: MetricValueProps) 
     return <span data-testid={`metric-value-${metric}`}>—</span>;
   }
   const total =
-    metricTotals && Object.hasOwn(metricTotals, metric) ? metricTotals[metric] : undefined;
+    metricTotals && Object.prototype.hasOwnProperty.call(metricTotals, metric)
+      ? metricTotals[metric]
+      : undefined;
   if (
     total !== undefined &&
     total !== 0 &&
@@ -59,7 +62,8 @@ const MetricValue = ({ metric, score, counts, metricTotals }: MetricValueProps) 
       </span>
     );
   }
-  const count = counts && Object.hasOwn(counts, metric) ? counts[metric] : undefined;
+  const count =
+    counts && Object.prototype.hasOwnProperty.call(counts, metric) ? counts[metric] : undefined;
   if (
     count !== undefined &&
     count !== 0 &&
@@ -77,6 +81,7 @@ const MetricValue = ({ metric, score, counts, metricTotals }: MetricValueProps) 
 
 const CustomMetrics = ({
   lookup,
+  totalMetricNames = [],
   counts,
   metricTotals,
   truncationCount = 10,
@@ -133,6 +138,10 @@ const CustomMetrics = ({
               </>
             );
           }
+        }
+
+        if (totalMetricNames.includes(metric)) {
+          displayLabel = `${displayLabel} (total)`;
         }
 
         return metric && typeof score !== 'undefined' ? (

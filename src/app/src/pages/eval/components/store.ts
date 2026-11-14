@@ -289,6 +289,7 @@ interface TableState {
    * When present, components should use these metrics instead of prompt.metrics.
    */
   filteredMetrics: PromptMetrics[] | null;
+  derivedMetricNamesByPrompt: string[][] | null;
   setFilteredMetrics: (metrics: PromptMetrics[] | null) => void;
 
   /**
@@ -529,7 +530,8 @@ const clearFilters = (prevState: TableState) => ({
 export const useTableStore = create<TableState>()(
   subscribeWithSelector((set, get) => ({
     evalId: null,
-    setEvalId: (evalId: string) => set(() => ({ evalId, filteredMetrics: null })),
+    setEvalId: (evalId: string) =>
+      set(() => ({ evalId, filteredMetrics: null, derivedMetricNamesByPrompt: null })),
 
     author: null,
     setAuthor: (author: string | null) => set(() => ({ author })),
@@ -561,6 +563,7 @@ export const useTableStore = create<TableState>()(
     setTotalResultsCount: (count: number) => set(() => ({ totalResultsCount: count })),
 
     filteredMetrics: null,
+    derivedMetricNamesByPrompt: null,
     setFilteredMetrics: (metrics: PromptMetrics[] | null) =>
       set(() => ({ filteredMetrics: metrics })),
 
@@ -669,6 +672,18 @@ export const useTableStore = create<TableState>()(
             shouldHighlightSearchText: searchText !== '',
             // Store filtered metrics from backend (null when no filters or feature disabled)
             filteredMetrics: data.filteredMetrics || null,
+            // Earlier servers identify comparison columns by evaluation-prefixed labels.
+            // Their filtered array, when available, also covers only base columns.
+            derivedMetricNamesByPrompt:
+              data.derivedMetricNamesByPrompt ??
+              (url.searchParams.has('comparisonEvalIds')
+                ? data.table.head.prompts.map((prompt, idx) =>
+                    idx < (data.filteredMetrics?.length ?? 0) ||
+                    prompt.label?.startsWith(`[${id}] `)
+                      ? (data.config?.derivedMetrics?.map((metric) => metric.name) ?? [])
+                      : [],
+                  )
+                : null),
             // Store evaluation-level stats including durationMs
             stats: data.stats || null,
             filters: {

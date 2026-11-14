@@ -2,8 +2,8 @@
  * Calculate metrics for filtered evaluation results.
  *
  * Basic numeric fields stay on a grouped SQL query. Row-level JSON fields are
- * processed in bounded pages so named metrics use the same accumulator as live
- * evaluation without loading the full filtered dataset into memory.
+ * processed in bounded pages to recover assertion counts and stored weights
+ * without evaluating saved templates or loading the entire dataset into memory.
  *
  * SECURITY: whereSql is a Drizzle SQL fragment, not a raw string. Persisted
  * metric templates are handled by accumulateNamedMetrics's data-only renderer.

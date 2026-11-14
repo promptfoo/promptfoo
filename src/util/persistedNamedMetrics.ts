@@ -4,11 +4,6 @@ import type { NamedMetricAccumulator } from './namedMetrics';
 
 type NamedMetricGradingResult = Record<string, unknown>;
 
-type MetricNameRenderer = (
-  metric: string | undefined,
-  vars: Record<string, unknown>,
-) => string | undefined;
-
 const SIMPLE_METRIC_PLACEHOLDER =
   /\{\{\s*([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\s*\}\}/g;
 const FORBIDDEN_METRIC_PATH_SEGMENTS = new Set(['env', '__proto__', 'prototype', 'constructor']);
@@ -110,7 +105,6 @@ function getContributingAssertionCounts(
   namedScores: Record<string, unknown>,
   gradingResult: NamedMetricGradingResult | null | undefined,
   testVars: Record<string, unknown>,
-  renderComponentMetric: MetricNameRenderer,
 ): Map<string, number> | undefined {
   const counts = new Map<string, number>();
   const scoreNames = Object.keys(namedScores);
@@ -130,49 +124,34 @@ function getContributingAssertionCounts(
       return [];
     }
     const metric = component.assertion.metric;
-    return [typeof metric === 'string' ? metric : undefined];
+    return typeof metric === 'string' ? [metric] : [];
   });
-  const passive = renderComponentMetric === renderPersistedMetricName;
-  const renderedNames = new Map<string | undefined, string | undefined>();
+  const renderedNames = new Map<string, string | undefined>();
   // Keep expansion work proportional to stored input, with room for short aliases.
-  let remainingNameLength = passive
-    ? Math.max(
-        1024,
-        scoreNames.reduce((total, name) => total + name.length, 0) +
-          metricNames.reduce((total, metric) => total + (metric?.length ?? 0), 0),
-      )
-    : 0;
+  let remainingNameLength = Math.max(
+    1024,
+    scoreNames.reduce((total, name) => total + name.length, 0) +
+      metricNames.reduce((total, name) => total + name.length, 0),
+  );
   for (const metric of metricNames) {
-    const cached = passive && renderedNames.has(metric);
-    let renderedMetric = cached
-      ? renderedNames.get(metric)
-      : passive
-        ? renderPersistedMetricName(metric, testVars, maxMetricNameLength)
-        : renderComponentMetric(metric, testVars);
-    if (passive && !cached) {
+    let renderedMetric = renderedNames.get(metric);
+    if (!renderedNames.has(metric)) {
+      renderedMetric = renderPersistedMetricName(metric, testVars, maxMetricNameLength);
       remainingNameLength -= renderedMetric?.length ?? 0;
       if (remainingNameLength < 0) {
         return undefined;
       }
-    }
-    if (
-      passive &&
-      renderedMetric !== undefined &&
-      renderedMetric === metric &&
-      /\{[{%#]/.test(renderedMetric) &&
-      !Object.prototype.hasOwnProperty.call(namedScores, renderedMetric)
-    ) {
-      // This component could contribute to any rendered metric, including one
-      // already matched by another component. Partial counts are not denominators.
-      return undefined;
-    }
-    if (
-      renderedMetric !== undefined &&
-      !Object.prototype.hasOwnProperty.call(namedScores, renderedMetric)
-    ) {
-      renderedMetric = undefined;
-    }
-    if (passive && !cached) {
+      if (
+        renderedMetric !== undefined &&
+        !Object.prototype.hasOwnProperty.call(namedScores, renderedMetric)
+      ) {
+        // An unresolved template could contribute to an already matched name.
+        // A partial count would give that score a misleading denominator.
+        if (renderedMetric === metric && /\{[{%#]/.test(metric)) {
+          return undefined;
+        }
+        renderedMetric = undefined;
+      }
       renderedNames.set(metric, renderedMetric);
     }
     if (renderedMetric !== undefined) {
@@ -240,7 +219,6 @@ export function accumulateNamedMetrics(
     gradingResult: NamedMetricGradingResult | null | undefined;
     testVars?: Record<string, unknown>;
   },
-  renderComponentMetric: MetricNameRenderer = renderPersistedMetricName,
 ): void {
   const scores = Object.entries(namedScores).filter(
     (entry): entry is [string, number] => typeof entry[1] === 'number' && Number.isFinite(entry[1]),
@@ -248,12 +226,7 @@ export function accumulateNamedMetrics(
   if (scores.length === 0) {
     return;
   }
-  const assertionCounts = getContributingAssertionCounts(
-    namedScores,
-    gradingResult,
-    testVars,
-    renderComponentMetric,
-  );
+  const assertionCounts = getContributingAssertionCounts(namedScores, gradingResult, testVars);
   for (const [metricName, metricValue] of scores) {
     const assertionCount = assertionCounts ? (assertionCounts.get(metricName) ?? 1) : undefined;
     const storedWeight = getStoredMetricWeight(gradingResult, metricName);

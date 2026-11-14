@@ -290,27 +290,23 @@ describe('accumulateNamedMetrics', () => {
     });
   });
 
-  it('renders each component once when a result contributes to multiple metrics', () => {
+  it('counts repeated and distinct persisted names on the same row', () => {
     const metrics: NamedMetricAccumulator = { namedScores: {}, namedScoresCount: {} };
-    const render = vi.fn((metric) => metric);
-    accumulateNamedMetrics(
-      metrics,
-      {
-        namedScores: { accuracy: 1.5, relevance: 0.5 },
-        gradingResult: {
-          componentResults: [
-            { assertion: { metric: 'accuracy' } },
-            { assertion: { metric: 'accuracy' } },
-            { assertion: { metric: 'relevance' } },
-          ],
-        },
+    accumulateNamedMetrics(metrics, {
+      namedScores: { accuracy: 1.5, relevance: 0.5 },
+      testVars: { name: 'accuracy' },
+      gradingResult: {
+        componentResults: [
+          { assertion: { metric: '{{ name }}' } },
+          { assertion: { metric: '{{ name }}' } },
+          { assertion: { metric: 'relevance' } },
+        ],
       },
-      render,
-    );
+    });
     expect(metrics.namedScoresCount).toEqual({ accuracy: 2, relevance: 1 });
     expect(metrics.namedScoreWeights).toEqual({ accuracy: 2, relevance: 1 });
-    expect(render).toHaveBeenCalledTimes(3);
   });
+
   it('preserves weighted totals from grading results while keeping assertion counts', () => {
     const metrics = {
       namedScores: {},
@@ -523,33 +519,6 @@ describe('accumulateNamedMetrics', () => {
       namedScoresCount: { huge: 1 },
       namedScoreWeights: { huge: 1 },
     });
-  });
-
-  it('accepts the live assertion renderer explicitly without using it for persisted reads', () => {
-    const metrics: NamedMetricAccumulator = {
-      namedScores: {},
-      namedScoresCount: {},
-      namedScoreWeights: {},
-    };
-    const renderLiveMetric = (metric: string | undefined) =>
-      metric === 'accuracy:{% if suffix %}alpha{% endif %}' ? 'accuracy:alpha' : metric;
-
-    accumulateNamedMetrics(
-      metrics,
-      {
-        namedScores: { ['accuracy:alpha']: 0.8 },
-        gradingResult: {
-          componentResults: [
-            { assertion: { metric: 'accuracy:{% if suffix %}alpha{% endif %}' } },
-            { assertion: { metric: 'accuracy:{% if suffix %}alpha{% endif %}' } },
-          ],
-        },
-        testVars: { suffix: true },
-      },
-      renderLiveMetric,
-    );
-
-    expect(metrics.namedScoresCount['accuracy:alpha']).toBe(2);
   });
 });
 

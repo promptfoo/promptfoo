@@ -536,6 +536,8 @@ These metrics will be shown in the UI:
 
 Named metric percentages in column headers use each column's own graded assertions, including assertion weights. Results that never reach grading, such as provider errors, do not contribute to the metric total. If an older or imported eval has no recorded metric total, its column header shows the aggregate score without a percentage.
 
+When a filter is active, named assertion metrics in the column headers and Custom Metrics dialog use matching results across all pages. Derived metrics retain their evaluation-wide score, including when an assertion uses the same name. The `(total)` label identifies evaluation-wide values for derived metrics, comparison columns and columns whose filtered metrics are unavailable.
+
 See [named metrics example](https://github.com/promptfoo/promptfoo/tree/main/examples/eval-named-metrics).
 
 ## Creating derived metrics
