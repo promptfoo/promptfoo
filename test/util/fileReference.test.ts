@@ -5,7 +5,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as esmModule from '../../src/esm';
 import logger from '../../src/logger';
 import * as pythonUtils from '../../src/python/pythonUtils';
-import { isJavascriptFile } from '../../src/util/fileExtensions';
 import { loadFileReference, processConfigFileReferences } from '../../src/util/fileReference';
 import { loadYaml } from '../../src/util/yamlLoad';
 import type { Logger } from 'winston';
@@ -33,7 +32,6 @@ vi.mock('../../src/esm', () => ({
 vi.mock('../../src/python/pythonUtils', () => ({
   runPython: vi.fn(),
 }));
-vi.mock('../../src/util/fileExtensions');
 vi.mock('../../src/logger', () => ({
   default: {
     debug: vi.fn(),
@@ -83,13 +81,6 @@ describe('fileReference utility functions', () => {
       return parts.length > 1 ? `.${parts[parts.length - 1]}` : '';
     });
 
-    vi.mocked(isJavascriptFile).mockImplementation((filePath) => {
-      if (!filePath) {
-        return false;
-      }
-      return ['.js', '.mjs', '.ts', '.cjs'].some((ext) => filePath.endsWith(ext));
-    });
-
     importModule.mockResolvedValue({});
     runPython.mockResolvedValue({});
   });
@@ -128,7 +119,6 @@ describe('fileReference utility functions', () => {
       const fileRef = 'file:///path/to/config.js';
       const moduleOutput = { settings: { temperature: 0.7 } };
 
-      vi.mocked(isJavascriptFile).mockReturnValue(true);
       importModule.mockResolvedValue(moduleOutput);
 
       const result = await loadFileReference(fileRef);
@@ -141,7 +131,6 @@ describe('fileReference utility functions', () => {
       const fileRef = 'file:///path/to/config.js:getConfig';
       const moduleOutput = { getConfig: 'success' };
 
-      vi.mocked(isJavascriptFile).mockReturnValue(true);
       importModule.mockResolvedValue(moduleOutput);
 
       const result = await loadFileReference(fileRef);
@@ -207,7 +196,6 @@ describe('fileReference utility functions', () => {
       const fileRef = 'file:///path/to/file.xyz';
 
       vi.mocked(path.extname).mockReturnValue('.xyz');
-      vi.mocked(isJavascriptFile).mockReturnValue(false);
 
       await expect(loadFileReference(fileRef)).rejects.toThrow('Unsupported file extension: .xyz');
     });
