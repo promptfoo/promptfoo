@@ -96,7 +96,11 @@ export function appendApiPath(apiUrl: string, endpoint: string, query?: string):
   const existingQuery = queryIndex === -1 ? '' : urlWithoutFragment.slice(queryIndex);
   const appendedQuery = query ? `${existingQuery ? '&' : '?'}${query}` : '';
 
-  return `${base.replace(/\/+$/, '')}/${endpoint.replace(/^\/+/, '')}${existingQuery}${appendedQuery}${fragment}`;
+  let pathEnd = base.length;
+  while (pathEnd > 0 && base[pathEnd - 1] === '/') {
+    pathEnd--;
+  }
+  return `${base.slice(0, pathEnd)}/${endpoint.replace(/^\/+/, '')}${existingQuery}${appendedQuery}${fragment}`;
 }
 
 /** Returns the complete model suffix after the given number of provider/type segments. */

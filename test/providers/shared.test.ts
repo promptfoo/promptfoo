@@ -47,6 +47,12 @@ describe('Shared Provider Functions', () => {
     });
   });
 
+  it('preserves slashes inside a gateway path and its encoded query when appending an endpoint', () => {
+    expect(appendApiPath('https://gateway.test/a//b///?tenant=a%2Fb#ref', '/jobs', 'page=2')).toBe(
+      'https://gateway.test/a//b/jobs?tenant=a%2Fb&page=2#ref',
+    );
+  });
+
   it.each(['https://', 'https://?tenant=one', 'https://#fragment'])(
     'rejects a hostless base %s before the endpoint can become the hostname',
     (base) => {
