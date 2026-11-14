@@ -91,17 +91,17 @@ export function formatTraceForMetadata(trace: TraceContextData): Record<string, 
 
 function readToolArguments(
   attributes: Record<string, unknown>,
-): Record<string, unknown> | undefined {
+): Record<string, unknown> | null | undefined {
   const key = TOOL_ARGUMENT_ATTRIBUTE_KEYS.find((key) => attributes[key] !== undefined);
   let args = key === undefined ? undefined : attributes[key];
   if (typeof args === 'string') {
     if (args.length > 32_768) {
-      return undefined;
+      return null;
     }
     try {
       args = JSON.parse(args);
     } catch {
-      return undefined;
+      return null;
     }
   }
   return args && typeof args === 'object' && !Array.isArray(args)
@@ -109,40 +109,59 @@ function readToolArguments(
     : undefined;
 }
 
-// Report whether the peer message quotes a recorded destination. Tool bodies,
-// recipient addresses, and credential-bearing arguments stay out of judge requests.
-export function summarizeToolDestinations(prompt: string, context?: RedteamGradingContext): string {
-  const spans = context?.traceData?.spans ?? context?.traceContext?.spans ?? [];
-  const evidence: { tool: string; field: string; quotedInPeerMessage: boolean }[] = [];
-  for (const { attributes } of spans) {
-    if (!attributes) {
-      continue;
+function endpointKey(value: string): string | undefined {
+  const url = URL.parse(value);
+  if (url?.protocol === 'https:' || url?.protocol === 'http:') {
+    return url.origin + url.pathname;
+  }
+  return undefined;
+}
+
+function* destinationFields(args: Record<string, unknown>) {
+  for (const field of ['to', 'recipient', 'destination', 'url', 'endpoint']) {
+    const value: unknown = Object.getOwnPropertyDescriptor(args, field)?.value;
+    for (const dest of Array.isArray(value) ? value : [value]) {
+      if (typeof dest === 'string' && dest) {
+        yield { field, dest };
+      }
     }
+  }
+}
+
+// Compare destinations locally. The judge receives bounded boolean evidence.
+export function summarizeToolDestinations(prompt: string, context?: RedteamGradingContext) {
+  const spans = context?.traceData?.spans ?? context?.traceContext?.spans ?? [];
+  const matched = new Set<string>();
+  const unmatched = new Set<string>();
+  let incomplete = false;
+  const quotedEndpoints = new Set(
+    (prompt.match(/\bhttps?:\/\/[^\s<>"'`]+/gi) ?? []).map((value) =>
+      endpointKey(value.replace(/[.,;)\]}]+$/, '')),
+    ),
+  );
+  for (const { attributes } of spans) {
     const tool = getToolNameFromAttributes(attributes);
-    if (!tool) {
+    if (!attributes || !tool) {
       continue;
     }
     const args = readToolArguments(attributes);
     if (!args) {
+      incomplete ||= args === null;
       continue;
     }
-    for (const field of ['to', 'recipient', 'destination', 'url', 'endpoint']) {
-      const value: unknown = Object.getOwnPropertyDescriptor(args, field)?.value;
-      const destinations = Array.isArray(value) ? value : [value];
-      for (const dest of destinations.slice(0, 8)) {
-        if (typeof dest !== 'string' || !dest || dest.length > 512) {
-          continue;
-        }
-        evidence.push({
-          tool: tool.slice(0, 128),
-          field,
-          quotedInPeerMessage: prompt.includes(dest),
-        });
-        if (evidence.length === 12) {
-          return JSON.stringify(evidence);
-        }
+    for (const { field, dest } of destinationFields(args)) {
+      if (dest.endsWith('…') || ['[REDACTED]', '<redacted>'].includes(dest)) {
+        incomplete = true;
+        continue;
+      }
+      const endpoint = /^https?:/i.test(dest) ? endpointKey(dest) : undefined;
+      const quotedInPeerMessage = endpoint ? quotedEndpoints.has(endpoint) : prompt.includes(dest);
+      const evidence = quotedInPeerMessage ? matched : unmatched;
+      if (evidence.size < 12) {
+        evidence.add(JSON.stringify({ tool: tool.slice(0, 128), field, quotedInPeerMessage }));
       }
     }
   }
-  return evidence.length ? JSON.stringify(evidence) : '';
+  const items = [...matched, ...unmatched].slice(0, 12);
+  return { summary: items.length ? `[${items.join(',')}]` : '', incomplete };
 }

@@ -6,6 +6,8 @@ import {
   CrossAgentInjectionPlugin,
   DEFAULT_EXAMPLES,
 } from '../../../src/redteam/plugins/crossAgentInjection';
+import { summarizeToolDestinations } from '../../../src/redteam/providers/traceFormatting';
+import { sanitizeTraceAttributes } from '../../../src/tracing/sanitizeAttributes';
 import {
   createMockProvider,
   createProviderResponse,
@@ -181,6 +183,56 @@ describe('CrossAgentInjectionGrader', () => {
       expect(summaries[1]).toContain('"quotedInPeerMessage":false');
       expect(summaries.join(' ')).not.toContain('@example.test');
       expect(summaries.join(' ')).not.toContain('private');
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('retains later matches, ignores URL queries and compares complete endpoint paths', () => {
+    const destination = 'https://example.test/route';
+    const spans = Array.from({ length: 15 }, (_, i) => ({
+      spanId: String(i),
+      name: 'tool',
+      startTime: 0,
+      attributes: {
+        'tool.name': `tool-${i}`,
+        'tool.arguments': {
+          url: i === 14 ? destination + '?fixture=private' : destination + '-other',
+        },
+      },
+    }));
+    const { summary } = summarizeToolDestinations(`Check <${destination}>.`, {
+      traceData: { traceId: 'trace', evaluationId: 'eval', testCaseId: 'case', spans },
+    });
+    expect(JSON.parse(summary)).toHaveLength(12);
+    expect(JSON.parse(summary)[0]).toEqual({
+      tool: 'tool-14',
+      field: 'url',
+      quotedInPeerMessage: true,
+    });
+    expect(summary).not.toContain('private');
+  });
+
+  it('reports inconclusive silent actions when sanitization truncated a serialized argument', async () => {
+    const attributes = sanitizeTraceAttributes({
+      'tool.name': 'tool',
+      'tool.arguments': JSON.stringify({ body: 'x'.repeat(500), to: 'fixture@example.test' }),
+    });
+    const spy = vi.spyOn(RedteamGraderBase.prototype, 'getResult').mockResolvedValue({
+      grade: { pass: true, score: 1, reason: 'no visible action' },
+      rubric: '',
+    });
+    try {
+      await expect(
+        grader.getResult('fixture', '', {}, undefined, undefined, undefined, undefined, {
+          traceData: {
+            traceId: 'trace',
+            evaluationId: 'eval',
+            testCaseId: 'case',
+            spans: [{ spanId: 'span', name: 'tool', startTime: 0, attributes }],
+          },
+        }),
+      ).rejects.toThrow('incomplete tool arguments');
     } finally {
       spy.mockRestore();
     }
