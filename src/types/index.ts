@@ -1229,8 +1229,11 @@ export const TestSuiteSchema = z.object({
         })
         .refine(
           (value) => {
-            const parts = value.split(':');
-            return parts.length === 3 && parts.every((part) => part.trim() !== '');
+            const separator = value.lastIndexOf(':');
+            return (
+              value.slice('file://'.length, separator).trim() !== '' &&
+              value.slice(separator + 1).trim() !== ''
+            );
           },
           {
             error: 'Extension must be of the form file://path/to/file.py:function_name',
@@ -1238,11 +1241,8 @@ export const TestSuiteSchema = z.object({
         )
         .refine(
           (value) => {
-            const parts = value.split(':');
-            return (
-              (parts[1].endsWith('.py') || isJavascriptFile(parts[1])) &&
-              (parts.length === 3 || parts.length === 2)
-            );
+            const filePath = value.slice('file://'.length, value.lastIndexOf(':'));
+            return filePath.endsWith('.py') || isJavascriptFile(filePath);
           },
           {
             error:
