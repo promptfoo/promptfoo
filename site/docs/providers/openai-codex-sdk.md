@@ -41,10 +41,10 @@ You can reference this provider using either base ID, and you can inline the mod
 
 ## Installation
 
-Install Promptfoo and the Codex SDK together in your eval project. Use Codex SDK `^0.156.1` (at least `0.156.1`, below `0.157.0`). [Codex 0.156.1](https://github.com/openai/codex/releases/tag/rust-v0.156.1) bundles GPT-6 Sol, Luna, and Astra model metadata, including Sol's Ultra setting:
+Install Promptfoo and the Codex SDK together in your eval project. Promptfoo supports SDK versions from 0.156.1 through 0.166.x. Model availability depends on your Codex version and account. The [0.165.0 catalog](https://github.com/openai/codex/releases/tag/rust-v0.165.0) includes GPT-6.1 Sol and Terra with Ultra reasoning.
 
 ```bash
-npm install promptfoo @openai/codex-sdk@^0.156.1
+npm install promptfoo "@openai/codex-sdk@>=0.156.1 <0.167.0"
 ```
 
 Use Node.js `>=22.22.0`, which matches promptfoo's repo/runtime requirement and the provider's loader checks.
@@ -99,33 +99,23 @@ ChatGPT login support is specific to the Codex SDK provider. Promptfoo can use t
 
 ### Option 3: Run on Amazon Bedrock
 
-Codex can run OpenAI's frontier models hosted on [Amazon Bedrock](/docs/providers/aws-bedrock/#openai-models) instead of the OpenAI Platform. Set `model_provider: amazon-bedrock`, use the Bedrock model id (the `openai.`-prefixed form), and provide AWS credentials and a Region to the Codex CLI through `cli_env`:
+Set `model_provider: amazon-bedrock` to run Codex through Bedrock's Mantle Responses API. Choose a Bedrock model ID from your Codex CLI's catalog and enable access in the AWS Region where you plan to run it. This example uses GPT-6.1 Terra in US East (N. Virginia). [Codex 0.165.0 Bedrock catalog](https://github.com/openai/codex/blob/rust-v0.165.0/codex-rs/model-provider/src/amazon_bedrock/catalog.rs) · [AWS model card](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-openai-gpt-6-1-terra.html)
 
-```yaml title="promptfooconfig.yaml"
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+```yaml
 providers:
   - id: openai:codex-sdk
     config:
-      model: openai.gpt-5.6-sol # Bedrock model id (note the openai. prefix)
       model_provider: amazon-bedrock
-      model_reasoning_effort: max
+      model: openai.gpt-6.1-terra
       sandbox_mode: read-only
       cli_env:
-        AWS_REGION: us-east-2
-        AWS_ACCESS_KEY_ID: '{{env.AWS_ACCESS_KEY_ID}}'
-        AWS_SECRET_ACCESS_KEY: '{{env.AWS_SECRET_ACCESS_KEY}}'
-
-prompts:
-  - 'Write a Python function that calculates the factorial of a number'
+        AWS_REGION: us-east-1
+        AWS_BEARER_TOKEN_BEDROCK: '{{env.AWS_BEARER_TOKEN_BEDROCK}}'
 ```
 
-Notes:
+Export a Bedrock API key as `AWS_BEARER_TOKEN_BEDROCK` before running the example. To use AWS credentials instead, replace that entry in `cli_env` with `AWS_PROFILE` or with `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`. Temporary key pairs also require `AWS_SESSION_TOKEN`.
 
-- **Model ids are Bedrock ids**: use `openai.gpt-5.6-sol`, `openai.gpt-5.6-terra`, or `openai.gpt-5.6-luna`, not a bare `gpt-5.6` alias. The Codex Bedrock provider serves frontier models through Bedrock's OpenAI-compatible Responses endpoint (`https://bedrock-mantle.<region>.api.aws/openai/v1/responses`), which is separate from the classic `bedrock-runtime` `InvokeModel` API.
-- **Region matters**: GPT-5.6 Sol is available in `us-east-1` and `us-east-2`; GPT-5.6 Terra and Luna also support `us-west-2`. GPT-5.5 remains available in `us-east-1` and `us-east-2`, and GPT-5.4 in `us-east-1`, `us-east-2`, and `us-west-2`. Request model access first.
-- **Use a current Codex CLI**: GPT-5.6 Bedrock catalog support and `max` reasoning require Codex 0.144.0 or later. Codex `ultra` is a multi-agent mode for supported models, not a Responses API reasoning-effort value.
-- **GPT-6 on Bedrock**: AWS serves Sol and Luna on Mantle in `us-east-1`, but the [Codex 0.156.1 Bedrock catalog](https://github.com/openai/codex/blob/rust-v0.156.1/codex-rs/model-provider/src/amazon_bedrock/catalog.rs) does not list them. Use the [direct Promptfoo Bedrock provider](/docs/providers/aws-bedrock/#openai-models) to evaluate these models without the Codex agent runtime.
-- **Credentials must reach the Codex CLI**: the Codex CLI reads AWS credentials from its own environment. Because promptfoo runs the CLI with a minimal environment by default, pass `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` (or `AWS_BEARER_TOKEN_BEDROCK`, or `AWS_PROFILE`) and `AWS_REGION` via `cli_env`, or set `inherit_process_env: true`. If you use **temporary credentials** (SSO, STS, assumed roles, or MFA), also forward `AWS_SESSION_TOKEN` — without it the credentials are incomplete and Codex will fail to authenticate. For direct inference, the [Promptfoo Bedrock provider](/docs/providers/aws-bedrock/#openai-models) accepts a Bedrock API key or AWS credentials.
+For Bedrock Runtime, Codex 0.165.0 supports `model_provider: amazon-bedrock-runtime` with an inference profile ID such as `us.openai.gpt-6.1-terra`. Check the catalog for your CLI version and AWS partition when choosing a different model. [Codex Runtime catalog](https://github.com/openai/codex/blob/rust-v0.165.0/codex-rs/model-provider/src/amazon_bedrock/runtime_catalog.rs) · [OpenAI models on Amazon Bedrock](/docs/providers/aws-bedrock/#openai-models)
 
 :::warning
 
@@ -647,7 +637,7 @@ Promptfoo validates the allowed enum values, but model-specific support is ultim
 `ultra` is Codex-specific and uses subagents; do not send it as a Responses API `reasoning.effort` value. GPT-6 Luna does not support `ultra` in Codex.
 
 :::note GPT-5.6 requires Codex 0.144.0 or later
-Install `@openai/codex-sdk@^0.156.1` using the setup above. An older SDK or Codex binary may silently ignore GPT-5.6 reasoning levels. Confirm the effective reasoning with request tracing. For direct `max` reasoning, you can also use `openai:gpt-5.6-sol`.
+Install a supported Codex SDK using the setup above. An older SDK or Codex binary may silently ignore GPT-5.6 reasoning levels. Confirm the effective reasoning with request tracing. For direct `max` reasoning, you can also use `openai:gpt-5.6-sol`.
 :::
 
 ## Additional Directories
@@ -1005,7 +995,7 @@ See the [examples directory](https://github.com/promptfoo/promptfoo/tree/main/ex
 - [Skills testing](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-codex-sdk/skills) - Evaluate local Codex skills with `skill-used` and traced skill evidence
 - [Thread persistence](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-codex-sdk/thread-persistence) - Reuse one prompt-template thread across multiple tests
 - [Sandbox enforcement](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-codex-sdk/sandbox) - Verify `read-only` mode blocks writes in a sample workspace
-- [Amazon Bedrock](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-codex-sdk/bedrock) - Run Codex against OpenAI GPT-5.6 Sol, Terra, and Luna on Amazon Bedrock
+- [Amazon Bedrock](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-codex-sdk/bedrock) - Run Codex with a Bedrock model and a regional Bedrock API key
 - [Agentic SDK comparison](https://github.com/promptfoo/promptfoo/tree/main/examples/compare-agentic-sdks) - Side-by-side comparison with Claude Agent SDK
 
 ### Verified end-to-end example runs

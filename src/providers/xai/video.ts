@@ -663,7 +663,10 @@ export class XAIVideoProvider implements ApiProvider {
       });
 
       if (!response.ok) {
-        return { error: `Failed to download video: ${response.status} ${response.statusText}` };
+        return {
+          error:
+            `Failed to download video: HTTP ${response.status} ${response.statusText}`.trimEnd(),
+        };
       }
 
       const buffer = Buffer.from(await response.arrayBuffer());
@@ -760,7 +763,7 @@ export class XAIVideoProvider implements ApiProvider {
 
     // Check cache (skip for edits)
     if (!isEdit && cacheKey) {
-      const cachedVideoKey = await checkVideoCache(cacheKey, PROVIDER_NAME);
+      const cachedVideoKey = (await checkVideoCache(cacheKey, PROVIDER_NAME))?.videoKey;
       if (cachedVideoKey) {
         logger.info(`[${PROVIDER_NAME}] Cache hit for video: ${cacheKey}`);
 

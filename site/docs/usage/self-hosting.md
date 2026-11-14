@@ -281,6 +281,13 @@ first advance the checkout to the desired release, then rebuild and redeploy. Us
 tagged parent image must be refreshed. An unchanged build context produces the same Promptfoo
 version.
 
+To refresh Alpine packages even when the parent image is unchanged, change the
+`OS_PACKAGE_REFRESH` build argument on each rebuild:
+
+```sh
+docker build --pull --build-arg OS_PACKAGE_REFRESH="$(date +%s)" -t promptfoo:custom .
+```
+
 Custom Dockerfiles that bake Promptfoo into another base image should identify themselves so update
 notices do not suggest a host-level `npm` or `npx` command:
 

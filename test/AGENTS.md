@@ -232,28 +232,13 @@ npx vitest run test/smoke/cli.test.ts --config vitest.smoke.config.ts
 **Reference pattern** (from `test/smoke/filters-and-flags.test.ts`):
 
 ```typescript
-import { spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { CLI_PATH, runCli } from './runCli';
 
-const CLI_PATH = path.resolve(__dirname, '../../dist/src/main.js');
 const FIXTURES_DIR = path.resolve(__dirname, 'fixtures/configs');
 const OUTPUT_DIR = path.resolve(__dirname, '.temp-output');
-
-function runCli(args: string[], options: { cwd?: string } = {}) {
-  const result = spawnSync('node', [CLI_PATH, ...args], {
-    cwd: options.cwd || path.resolve(__dirname, '../..'),
-    encoding: 'utf-8',
-    env: { ...process.env, NO_COLOR: '1' },
-    timeout: 60000,
-  });
-  return {
-    stdout: result.stdout || '',
-    stderr: result.stderr || '',
-    exitCode: result.status ?? 1,
-  };
-}
 
 describe('My Smoke Tests', () => {
   beforeAll(() => {

@@ -29,13 +29,13 @@ const SIGNAL_WATCHER_DEBOUNCE_MS = 250;
 
 /**
  * The legacy `evalId:timestamp` text format can't be told apart from a stray short token, so
- * {@link readLegacySignalEvalId} only recovers eval ids at least this long. Generated ids
+ * {@link readLegacySignal} only recovers eval ids at least this long. Generated ids
  * (`eval-<rand>-<iso>`) always clear it; a short caller-provided id (e.g. an imported `demo`) is
  * written as JSON instead, which stores the id explicitly and survives the round trip.
  */
 const MIN_LEGACY_EVAL_ID_LENGTH = 9;
 
-/** Whether {@link readLegacySignalEvalId} can recover this id from the legacy text format. */
+/** Whether {@link readLegacySignal} can recover this id from the legacy text format. */
 function isLegacyRecoverableEvalId(evalId: string): boolean {
   return evalId.length >= MIN_LEGACY_EVAL_ID_LENGTH;
 }
@@ -199,27 +199,17 @@ function parseSignalJson(content: string): { signal: DatabaseSignal; timestamp?:
  * Returns null when the file is stale (outside the window), unreadable, or unparseable.
  */
 function readPendingSignal(now: number): DatabaseSignal | null {
-  const withinWindow = (timestamp: string | undefined): boolean => {
-    if (timestamp === undefined) {
-      return false;
-    }
-    const elapsed = now - Date.parse(timestamp);
-    return Number.isFinite(elapsed) && elapsed >= 0 && elapsed <= SIGNAL_WATCHER_DEBOUNCE_MS;
-  };
-
   try {
     const content = fs.readFileSync(getDbSignalPath(), 'utf8').trim();
     const json = parseSignalJson(content);
-    if (json) {
-      return withinWindow(json.timestamp) ? json.signal : null;
-    }
-
-    // Legacy text format: `evalId:timestamp` or a bare timestamp.
-    const legacyTimestamp = content.match(/(\d{4}-\d{2}-\d{2}T[0-9:.]+Z?)$/)?.[1];
-    if (!withinWindow(legacyTimestamp)) {
+    const timestamp = json ? json.timestamp : content.match(/(\d{4}-\d{2}-\d{2}T[0-9:.]+Z?)$/)?.[1];
+    if (timestamp === undefined) {
       return null;
     }
-    return { type: 'update', evalId: readLegacySignalEvalId(content) };
+    const elapsed = now - Date.parse(timestamp);
+    return elapsed >= 0 && elapsed <= SIGNAL_WATCHER_DEBOUNCE_MS
+      ? (json?.signal ?? readLegacySignal(content))
+      : null;
   } catch {
     return null;
   }
@@ -267,14 +257,14 @@ export function updateSignalFileForDeletedEvals(deletedEvalIds?: string[]): void
   );
 }
 
-function readLegacySignalEvalId(content: string): string | undefined {
-  if (/^\d{4}-\d{2}-\d{2}T/.test(content)) {
-    return undefined;
-  }
-
-  const legacyScopedSignal = content.match(/^(.*):\d{4}-\d{2}-\d{2}T/);
-  const evalId = legacyScopedSignal?.[1];
-  return evalId && isLegacyRecoverableEvalId(evalId) ? evalId : undefined;
+function readLegacySignal(content: string): DatabaseSignal {
+  const evalId = /^\d{4}-\d{2}-\d{2}T/.test(content)
+    ? undefined
+    : content.match(/^(.*):\d{4}-\d{2}-\d{2}T/)?.[1];
+  return {
+    type: 'update',
+    evalId: evalId && isLegacyRecoverableEvalId(evalId) ? evalId : undefined,
+  };
 }
 
 /**
@@ -289,11 +279,7 @@ export function readSignalFile(): DatabaseSignal {
   const filePath = getDbSignalPath();
   try {
     const content = fs.readFileSync(filePath, 'utf8').trim();
-    const json = parseSignalJson(content);
-    if (json) {
-      return json.signal;
-    }
-    return { type: 'update', evalId: readLegacySignalEvalId(content) };
+    return parseSignalJson(content)?.signal ?? readLegacySignal(content);
   } catch {
     return { type: 'update' };
   }
