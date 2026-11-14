@@ -575,7 +575,9 @@ export abstract class RedteamGraderBase {
         ? (cliState.config.defaultTest as TestCase)
         : undefined;
     const hasConfiguredGradingProvider = Boolean(
-      cliState.config?.redteam?.provider || defaultTest?.options?.provider,
+      cliState.config?.redteam?.provider ||
+        defaultTest?.options?.provider ||
+        defaultTest?.options?.graderProvider,
     );
     const grading = {
       ...test.options,

@@ -1894,91 +1894,94 @@ describe('evaluate with external defaultTest', () => {
       createEvalSpy.mockRestore();
     });
 
-    it('serializes live ApiProvider references before persisting the Eval config', async () => {
-      const cyclicClient: Record<string, unknown> = {};
-      cyclicClient.self = cyclicClient;
-      const liveProvider = createMockProvider({
-        id: 'live-provider',
-        label: 'Live Provider',
-        config: { region: 'us-east-1' },
-      }) as ReturnType<typeof createMockProvider> & { sdkClient?: unknown };
-      liveProvider.sdkClient = cyclicClient;
+    it.each(['provider', 'graderProvider'] as const)(
+      'serializes %s before persisting the Eval config',
+      async (key) => {
+        const cyclicClient: Record<string, unknown> = {};
+        cyclicClient.self = cyclicClient;
+        const liveProvider = createMockProvider({
+          id: 'live-provider',
+          label: 'Live Provider',
+          config: { region: 'us-east-1' },
+        }) as ReturnType<typeof createMockProvider> & { sdkClient?: unknown };
+        liveProvider.sdkClient = cyclicClient;
 
-      loadApiProvidersSpy.mockResolvedValueOnce([liveProvider]);
+        loadApiProvidersSpy.mockResolvedValueOnce([liveProvider]);
 
-      const createEvalSpy = vi.spyOn(Eval, 'create');
+        const createEvalSpy = vi.spyOn(Eval, 'create');
 
-      const testSuite = {
-        prompts: ['test prompt'],
-        providers: [liveProvider],
-        defaultTest: {
-          provider: liveProvider,
-          options: {
+        const testSuite = {
+          prompts: ['test prompt'],
+          providers: [liveProvider],
+          defaultTest: {
             provider: liveProvider,
-          },
-        },
-        tests: [
-          {
             options: {
-              provider: liveProvider,
+              [key]: liveProvider,
             },
-            assert: [
-              {
-                type: 'llm-rubric' as const,
-                value: 'looks good',
-                provider: liveProvider,
-              },
-            ],
           },
-        ],
-        scenarios: [
-          {
-            config: [{}],
-            tests: [
-              {
-                options: {
+          tests: [
+            {
+              options: {
+                [key]: liveProvider,
+              },
+              assert: [
+                {
+                  type: 'llm-rubric' as const,
+                  value: 'looks good',
                   provider: liveProvider,
                 },
-              },
-            ],
-          },
-        ],
-        writeLatestResults: true,
-      };
-
-      await evaluate(testSuite);
-
-      const persistedConfig = createEvalSpy.mock.calls.at(-1)?.[0] as {
-        providers?: unknown;
-        defaultTest?: {
-          provider?: unknown;
-          options?: { provider?: unknown };
+              ],
+            },
+          ],
+          scenarios: [
+            {
+              config: [{}],
+              tests: [
+                {
+                  options: {
+                    [key]: liveProvider,
+                  },
+                },
+              ],
+            },
+          ],
+          writeLatestResults: true,
         };
-        tests?: Array<{
-          options?: { provider?: unknown };
-          assert?: Array<{ provider?: unknown }>;
-        }>;
-        scenarios?: Array<{ tests?: Array<{ options?: { provider?: unknown } }> }>;
-      };
-      const serializableProvider = {
-        id: 'live-provider',
-        label: 'Live Provider',
-        config: { region: 'us-east-1' },
-      };
 
-      expect(() => JSON.stringify(persistedConfig)).not.toThrow();
-      expect(persistedConfig.providers).toEqual([serializableProvider]);
-      expect(persistedConfig.defaultTest?.provider).toEqual(serializableProvider);
-      expect(persistedConfig.defaultTest?.options?.provider).toEqual(serializableProvider);
-      expect(persistedConfig.tests?.[0].options?.provider).toEqual(serializableProvider);
-      expect(persistedConfig.tests?.[0].assert?.[0].provider).toEqual(serializableProvider);
-      expect(persistedConfig.scenarios?.[0].tests?.[0].options?.provider).toEqual(
-        serializableProvider,
-      );
-      expect(JSON.stringify(persistedConfig)).not.toContain('sdkClient');
+        await evaluate(testSuite);
 
-      createEvalSpy.mockRestore();
-    });
+        const persistedConfig = createEvalSpy.mock.calls.at(-1)?.[0] as {
+          providers?: unknown;
+          defaultTest?: {
+            provider?: unknown;
+            options?: { provider?: unknown };
+          };
+          tests?: Array<{
+            options?: { provider?: unknown };
+            assert?: Array<{ provider?: unknown }>;
+          }>;
+          scenarios?: Array<{ tests?: Array<{ options?: { provider?: unknown } }> }>;
+        };
+        const serializableProvider = {
+          id: 'live-provider',
+          label: 'Live Provider',
+          config: { region: 'us-east-1' },
+        };
+
+        expect(() => JSON.stringify(persistedConfig)).not.toThrow();
+        expect(persistedConfig.providers).toEqual([serializableProvider]);
+        expect(persistedConfig.defaultTest?.provider).toEqual(serializableProvider);
+        expect(persistedConfig.defaultTest?.options?.provider).toEqual(serializableProvider);
+        expect(persistedConfig.tests?.[0].options?.provider).toEqual(serializableProvider);
+        expect(persistedConfig.tests?.[0].assert?.[0].provider).toEqual(serializableProvider);
+        expect(persistedConfig.scenarios?.[0].tests?.[0].options?.provider).toEqual(
+          serializableProvider,
+        );
+        expect(JSON.stringify(persistedConfig)).not.toContain('sdkClient');
+
+        createEvalSpy.mockRestore();
+      },
+    );
 
     it('replaces function-valued transforms with "[inline function]" markers in the persisted config and warns', async () => {
       // Function transforms are first-class at runtime but not JSON-serializable.

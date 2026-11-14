@@ -221,17 +221,20 @@ class RedteamProviderManager {
     this.jsonOnlyProvider = loadedJsonOnlyProvider;
   }
 
-  private getDefaultTestProvider(): RedteamFileConfig['provider'] | undefined {
-    if (typeof cliState.config?.defaultTest !== 'object') {
+  private getDefaultTestProvider(gradingFirst = false): RedteamFileConfig['provider'] | undefined {
+    const test = cliState.config?.defaultTest;
+    if (!test || typeof test !== 'object') {
       return undefined;
     }
 
-    return (
-      (cliState.config.defaultTest as any)?.provider ||
-      (cliState.config.defaultTest as any)?.options?.provider?.text ||
-      (cliState.config.defaultTest as any)?.options?.provider ||
-      undefined
+    const options = test.options;
+    invariant(
+      options?.provider === undefined || options.graderProvider === undefined,
+      'Specify only one of defaultTest.options.provider or defaultTest.options.graderProvider',
     );
+    const grading = options?.graderProvider ?? options?.provider;
+    const textProvider = grading?.text ?? grading;
+    return gradingFirst ? (textProvider ?? test.provider) : (test.provider ?? textProvider);
   }
 
   private resolveProviderCandidate({
@@ -437,14 +440,7 @@ class RedteamProviderManager {
     }
 
     // 3) Try defaultTest config chain (grading-first)
-    const cfg =
-      (typeof cliState.config?.defaultTest === 'object' &&
-        (cliState.config?.defaultTest as any)?.provider) ||
-      (typeof cliState.config?.defaultTest === 'object' &&
-        (cliState.config?.defaultTest as any)?.options?.provider?.text) ||
-      (typeof cliState.config?.defaultTest === 'object' &&
-        (cliState.config?.defaultTest as any)?.options?.provider) ||
-      undefined;
+    const cfg = this.getDefaultTestProvider(true);
 
     if (cfg) {
       const loaded = await loadRedteamProvider({ provider: cfg, jsonOnly, purpose: 'grading' });

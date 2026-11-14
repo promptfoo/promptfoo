@@ -132,7 +132,8 @@ function toSerializableTestCase(test: unknown, droppedRef: { value: boolean }): 
   let sanitizedTest = withSerializableProvider(test);
 
   if (isRecord(test.options)) {
-    let options = withSerializableProvider(test.options);
+    const normalized = normalizeGraderProvider(test.options, 'test.options');
+    let options = withSerializableProvider(normalized ?? test.options);
     options = replaceFunctionTransforms(options, droppedRef);
     if (options !== test.options) {
       sanitizedTest = {
