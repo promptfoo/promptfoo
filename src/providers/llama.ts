@@ -1,6 +1,6 @@
 import { fetchWithCache } from '../cache';
 import { resolveProviderEnv } from './env';
-import { getRequestTimeoutMs } from './shared';
+import { appendApiPath, getRequestTimeoutMs } from './shared';
 
 import type { EnvOverrides } from '../contracts/env';
 import type { ApiProvider, ProviderResponse } from '../types/index';
@@ -82,7 +82,7 @@ export class LlamaProvider implements ApiProvider {
     let latencyMs: number | undefined;
     try {
       ({ data, cached, latencyMs } = await fetchWithCache<LlamaCompletionResponse>(
-        `${url}/completion`,
+        appendApiPath(url, 'completion'),
         {
           method: 'POST',
           headers: {

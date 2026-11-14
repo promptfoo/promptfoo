@@ -52,7 +52,7 @@ describe('LlamaProvider', () => {
     beforeEach(() => {
       vi.clearAllMocks();
     });
-    it('should call fetchWithCache with correct parameters', async () => {
+    it('sends the expected request to the default endpoint', async () => {
       vi.mocked(fetchWithCache).mockResolvedValue({
         ...response,
         cached: false,
@@ -60,10 +60,10 @@ describe('LlamaProvider', () => {
         statusText: 'OK',
       });
 
-      const provider = new LlamaProvider(modelName, { config });
+      const provider = new LlamaProvider(modelName, { config, env: { LLAMA_BASE_URL: '' } });
       await provider.callApi(prompt);
       expect(fetchWithCache).toHaveBeenCalledWith(
-        `${process.env.LLAMA_BASE_URL || 'http://localhost:8080'}/completion`,
+        'http://localhost:8080/completion',
         {
           method: 'POST',
           headers: {
@@ -129,13 +129,19 @@ describe('LlamaProvider', () => {
       });
     });
 
-    it('should return the correct response on success', async () => {
+    it('returns the completion from a base URL with trailing slashes', async () => {
       vi.mocked(fetchWithCache).mockResolvedValue(
         createMockFetchResponse({ content: 'test response' }),
       );
 
-      const provider = new LlamaProvider(modelName, { config });
+      const provider = new LlamaProvider(modelName, {
+        config,
+        env: { LLAMA_BASE_URL: 'http://localhost:8080/proxy///' },
+      });
       const result = await provider.callApi(prompt);
+      expect(vi.mocked(fetchWithCache).mock.calls[0][0]).toBe(
+        'http://localhost:8080/proxy/completion',
+      );
       expect(result).toEqual({
         output: response.data.content,
         cached: false,

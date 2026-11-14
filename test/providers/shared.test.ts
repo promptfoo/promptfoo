@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getEnvBool, getEnvInt } from '../../src/envars';
 import {
+  appendApiPath,
   calculateCost,
   clampCachedTokens,
   getRequestTimeoutMs,
@@ -45,6 +46,19 @@ describe('Shared Provider Functions', () => {
       return defaultValue ?? 0;
     });
   });
+
+  it('preserves slashes inside a gateway path and its encoded query when appending an endpoint', () => {
+    expect(appendApiPath('https://gateway.test/a//b///?tenant=a%2Fb#ref', '/jobs', 'page=2')).toBe(
+      'https://gateway.test/a//b/jobs?tenant=a%2Fb&page=2#ref',
+    );
+  });
+
+  it.each(['https://', 'https://?tenant=one', 'https://#fragment'])(
+    'rejects a hostless base %s before the endpoint can become the hostname',
+    (base) => {
+      expect(() => appendApiPath(base, 'responses')).toThrow('Invalid provider API base URL');
+    },
+  );
 
   describe('modelNameFromProviderPath', () => {
     it('keeps colons that belong to the model id', () => {

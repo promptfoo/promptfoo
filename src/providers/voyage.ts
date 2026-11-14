@@ -2,7 +2,7 @@ import { fetchWithCache } from '../cache';
 import { type EnvVarKey, getEnvString, getProviderEnvString } from '../envars';
 import logger from '../logger';
 import { resolveProviderEnv } from './env';
-import { getRequestTimeoutMs } from './shared';
+import { appendApiPath, getRequestTimeoutMs } from './shared';
 
 import type {
   ApiEmbeddingProvider,
@@ -92,7 +92,7 @@ export class VoyageEmbeddingProvider implements ApiEmbeddingProvider {
       latencyMs: number | undefined;
     try {
       ({ data, cached, status, statusText, latencyMs } = (await fetchWithCache(
-        `${this.getApiUrl()}/embeddings`,
+        appendApiPath(this.getApiUrl(), 'embeddings'),
         {
           method: 'POST',
           headers: {

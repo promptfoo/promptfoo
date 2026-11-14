@@ -13,6 +13,8 @@ import { prepareOpenAiFunctions } from './prepare';
 import type { TokenUsage, VarValue } from '../../types/index';
 import type { ProviderConfig } from '../shared';
 
+export { appendApiPath as appendOpenAiApiPath } from '../shared';
+
 export const GPT_LONG_CONTEXT_THRESHOLD = 272_000;
 
 // Billing relationships verified September 11, 2026. Keep the alias on the wire.
@@ -267,17 +269,6 @@ export function resolveMaxToolIterations(value: unknown): number {
     : DEFAULT_MAX_TOOL_ITERATIONS;
 }
 
-export function appendOpenAiApiPath(apiUrl: string, endpoint: string, query?: string): string {
-  const fragmentIndex = apiUrl.indexOf('#');
-  const fragment = fragmentIndex === -1 ? '' : apiUrl.slice(fragmentIndex);
-  const urlWithoutFragment = fragmentIndex === -1 ? apiUrl : apiUrl.slice(0, fragmentIndex);
-  const queryIndex = urlWithoutFragment.indexOf('?');
-  const base = queryIndex === -1 ? urlWithoutFragment : urlWithoutFragment.slice(0, queryIndex);
-  const existingQuery = queryIndex === -1 ? '' : urlWithoutFragment.slice(queryIndex);
-  const appendedQuery = query ? `${existingQuery ? '&' : '?'}${query}` : '';
-
-  return `${base.replace(/\/+$/, '')}/${endpoint.replace(/^\/+/, '')}${existingQuery}${appendedQuery}${fragment}`;
-}
 type OpenAIModelCost = {
   input: number;
   output: number;

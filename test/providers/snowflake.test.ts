@@ -73,6 +73,15 @@ describe('Snowflake Cortex Provider', () => {
 
       expect(provider['getApiUrl']()).toBe('https://custom.snowflakecomputing.com');
     });
+
+    it('rejects an explicit slash-only endpoint before attaching account credentials', () => {
+      expect(
+        () =>
+          new SnowflakeCortexProvider('mistral-large2', {
+            config: { ...createAccountConfig().config, apiBaseUrl: '///' },
+          }),
+      ).toThrow('Snowflake apiBaseUrl must contain a host');
+    });
   });
 
   describe('toJSON', () => {
@@ -103,8 +112,19 @@ describe('Snowflake Cortex Provider', () => {
       mockProcessEnv({ SNOWFLAKE_API_KEY: 'test-key' });
     });
 
-    it('should call Snowflake Cortex API with correct endpoint', async () => {
-      const provider = new SnowflakeCortexProvider('mistral-large2', createAccountConfig());
+    it.each([
+      [
+        undefined,
+        'https://myorg-myaccount.snowflakecomputing.com/api/v2/cortex/inference:complete',
+      ],
+      [
+        'https://proxy.example/snowflake///?tenant=one',
+        'https://proxy.example/snowflake/api/v2/cortex/inference:complete?tenant=one',
+      ],
+    ])('calls the Cortex endpoint with base URL %s', async (apiBaseUrl, expectedUrl) => {
+      const provider = new SnowflakeCortexProvider('mistral-large2', {
+        config: { ...createAccountConfig().config, apiBaseUrl },
+      });
 
       const mockResponse = {
         choices: [
@@ -121,7 +141,7 @@ describe('Snowflake Cortex Provider', () => {
       const result = await provider.callApi('Test prompt');
 
       expect(mockFetchWithCache).toHaveBeenCalledWith(
-        'https://myorg-myaccount.snowflakecomputing.com/api/v2/cortex/inference:complete',
+        expectedUrl,
         expect.objectContaining({
           method: 'POST',
           headers: expect.objectContaining({

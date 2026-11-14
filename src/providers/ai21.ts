@@ -2,7 +2,7 @@ import { fetchWithCache } from '../cache';
 import { getEnvString, getProviderEnvString } from '../envars';
 import logger from '../logger';
 import { resolveProviderEnv } from './env';
-import { calculateCost, getRequestTimeoutMs, parseChatPrompt } from './shared';
+import { appendApiPath, calculateCost, getRequestTimeoutMs, parseChatPrompt } from './shared';
 
 import type { EnvVarKey } from '../envars';
 import type { EnvOverrides } from '../types/env';
@@ -150,14 +150,12 @@ export class AI21ChatCompletionProvider implements ApiProvider {
       response_format: config.response_format || { type: 'text' },
     };
 
-    const url = `${this.getApiUrl()}/chat/completions`;
-
     let data,
       cached = false;
 
     try {
       ({ data, cached } = (await fetchWithCache(
-        url,
+        appendApiPath(this.getApiUrl(), 'chat/completions'),
         {
           method: 'POST',
           headers: {

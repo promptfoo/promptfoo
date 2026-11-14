@@ -83,6 +83,26 @@ export function waitForPromiseWithAbort<T>(
   });
 }
 
+/** Append an endpoint to the base path while preserving gateway query parameters and fragments. */
+export function appendApiPath(apiUrl: string, endpoint: string, query?: string): string {
+  if (!URL.canParse(apiUrl)) {
+    throw new Error('Invalid provider API base URL');
+  }
+  const fragmentIndex = apiUrl.indexOf('#');
+  const fragment = fragmentIndex === -1 ? '' : apiUrl.slice(fragmentIndex);
+  const urlWithoutFragment = fragmentIndex === -1 ? apiUrl : apiUrl.slice(0, fragmentIndex);
+  const queryIndex = urlWithoutFragment.indexOf('?');
+  const base = queryIndex === -1 ? urlWithoutFragment : urlWithoutFragment.slice(0, queryIndex);
+  const existingQuery = queryIndex === -1 ? '' : urlWithoutFragment.slice(queryIndex);
+  const appendedQuery = query ? `${existingQuery ? '&' : '?'}${query}` : '';
+
+  let pathEnd = base.length;
+  while (pathEnd > 0 && base[pathEnd - 1] === '/') {
+    pathEnd--;
+  }
+  return `${base.slice(0, pathEnd)}/${endpoint.replace(/^\/+/, '')}${existingQuery}${appendedQuery}${fragment}`;
+}
+
 /** Returns the complete model suffix after the given number of provider/type segments. */
 export function modelNameFromProviderPath(providerPath: string, segments: number): string {
   return providerPath.split(':').slice(segments).join(':');
