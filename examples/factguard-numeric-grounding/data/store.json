@@ -1,0 +1,14 @@
+{
+  "store": {
+    "name": "Acme Prints",
+    "orders": 42,
+    "prev_month_orders": 21,
+    "rating": 4.68,
+    "conversion_rate": 0.038,
+    "revenue_usd": 1234567
+  },
+  "products": [
+    { "name": "Holo Sticker", "price": 12.5, "units_sold": 30 },
+    { "name": "Die-cut Magnet", "price": 7.5, "units_sold": 12 }
+  ]
+}
