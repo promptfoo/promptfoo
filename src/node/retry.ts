@@ -180,13 +180,13 @@ async function resolveRetryConfigs(
     : await resolveConfigs(providerFilterOptions, originalEval.config);
   // Saved tests are already selected; only their remaining global range needs replaying.
   const savedRange = originalEval.runtimeOptions?.filterRange;
+  const configured = configs.commandLineOptions;
   let filterRange = cmdObj.config
-    ? undefined
+    ? (configured?.filterRange ?? configs.config.evaluateOptions?.filterRange)
     : typeof savedRange === 'string'
       ? savedRange
       : originalEval.config.evaluateOptions?.filterRange;
 
-  const configured = configs.commandLineOptions;
   if (
     cmdObj.config &&
     (configured?.filterFirstN !== undefined || configured?.filterPattern !== undefined)
@@ -199,7 +199,6 @@ async function resolveRetryConfigs(
     }
     // doEval imports retry helpers, so load its shared filter only after module initialization.
     const { applyTestFilters } = await import('./doEval');
-    filterRange = configured.filterRange ?? configs.config.evaluateOptions?.filterRange;
     const consumedTopLevelRange = await applyTestFilters(configs.testSuite, configs.config, {
       firstN: configured.filterFirstN,
       pattern: configured.filterPattern,

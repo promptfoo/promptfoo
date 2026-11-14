@@ -223,6 +223,27 @@ describe('retry configured test selection', () => {
     });
   });
 
+  it('accepts an unchanged range-only retry override', async () => {
+    const fixture = await initialEval('mixed', { filterRange: '1:3' });
+    await assertRetryMatchesInitial(fixture, true);
+  });
+
+  it('preserves ERROR rows when an override adds a range without a count or pattern', async () => {
+    const fixture = await initialEval('mixed', {});
+    const errors = await getErrorResultIds(fixture.record.id);
+    fs.writeFileSync(
+      fixture.configPath,
+      JSON.stringify({
+        ...fixture.config,
+        commandLineOptions: { filterRange: '1:3' },
+      }),
+    );
+    await expect(retryCommand(fixture.record.id, { config: fixture.configPath })).rejects.toThrow(
+      /saved test layout/,
+    );
+    expect(await getErrorResultIds(fixture.record.id)).toEqual(errors);
+  });
+
   it('allows transport-only override changes when the selected test layout is unchanged', async () => {
     const fixture = await initialEval('top-level', { filterFirstN: 1 });
     fs.writeFileSync(
