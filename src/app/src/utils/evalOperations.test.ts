@@ -133,14 +133,10 @@ describe('evalOperations', () => {
         json: async () => ({ traces: [] }),
       } as Response;
 
-      vi.mocked(callApi).mockResolvedValue(mockApiResponse);
+      getCallApiMock().mockResolvedValue(mockApiResponse);
 
-      const { result } = renderHook(() => useEvalOperations());
       const signal = new AbortController().signal;
-
-      await act(async () => {
-        await result.current.fetchTraces('imported/eval?#1', signal);
-      });
+      await fetchTraces('imported/eval?#1', signal);
 
       expect(callApi).toHaveBeenCalledTimes(1);
       expect(callApi).toHaveBeenCalledWith('/traces/evaluation/imported%2Feval%3F%231', {
