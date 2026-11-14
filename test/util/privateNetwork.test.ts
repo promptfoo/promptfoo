@@ -480,6 +480,38 @@ describe('getCallerSuppliedBaseUrls', () => {
     );
   });
 
+  it('refuses a templated file:// raw request before loading it', () => {
+    // maybeLoadFromExternalFile renders the file path with Nunjucks, so a
+    // templated reference must be refused before dereferencing: the
+    // constructor expression would otherwise execute Node code outside the
+    // guard, and the later file-read failure cannot undo that side effect.
+    expect(() =>
+      getCallerSuppliedBaseUrls({
+        id: 'echo',
+        config: {
+          request:
+            "file://{{ range.constructor(\"process.getBuiltinModule('http').get('http://127.0.0.1/'); return 'x'\")() }}",
+        },
+      }),
+    ).toThrow(PrivateRangeBlockedError);
+  });
+
+  it('refuses an executable template in a raw request body', () => {
+    // A literal public Host must not mask a constructor expression in the
+    // body: the body reaches renderRawRequestWithNunjucks before any
+    // guarded fetch, so only plain data lookups may interpolate there.
+    expect(() =>
+      getCallerSuppliedBaseUrls({
+        id: 'http',
+        config: {
+          request:
+            'POST /hook HTTP/1.1\r\nHost: example.com\r\nContent-Type: text/plain\r\n\r\n' +
+            "{{ range.constructor(\"process.getBuiltinModule('http').get('http://127.0.0.1/'); return 'x'\")() }}",
+        },
+      }),
+    ).toThrow(PrivateRangeBlockedError);
+  });
+
   it('resolves named providers with local default endpoints', () => {
     expect(getCallerSuppliedBaseUrls({ id: 'ollama:chat:llama3' })).toEqual([
       'http://localhost:11434',
@@ -642,6 +674,32 @@ describe('getCallerSuppliedBaseUrls', () => {
     ).toThrow(PrivateRangeBlockedError);
   });
 
+  it('refuses a string or file-backed streamResponse instead of letting it execute unseen', () => {
+    // WebSocketProvider compiles a string streamResponse with new Function
+    // (or loads a file:// module) and runs it with a process shim on the
+    // first message, outside the guarded transport, so a public URL must
+    // not mask a transform that can reach a private service.
+    expect(() =>
+      getCallerSuppliedBaseUrls({
+        id: 'ws',
+        config: {
+          url: 'ws://8.8.8.8/',
+          streamResponse:
+            "process.mainModule.require('http').get('http://169.254.169.254/'); return [{output:'x'}, true];",
+        },
+      }),
+    ).toThrow(PrivateRangeBlockedError);
+    expect(() =>
+      getCallerSuppliedBaseUrls({
+        id: 'ws',
+        config: {
+          url: 'ws://8.8.8.8/',
+          streamResponse: 'file://./transform.js:handler',
+        },
+      }),
+    ).toThrow(PrivateRangeBlockedError);
+  });
+
   it('returns an empty list for named providers without overrides', () => {
     expect(getCallerSuppliedBaseUrls({ id: 'openai:gpt-4o-mini' })).toEqual([]);
     expect(getCallerSuppliedBaseUrls({ id: 'openai:gpt-4o-mini', config: {} })).toEqual([]);
@@ -707,6 +765,23 @@ describe('assertUrlResolvesPublic', () => {
     // raw template preflights as public.example while the rendered URL can
     // dispatch to loopback through the userinfo slot.
     await expect(assertUrlResolvesPublic('http://{{prompt}}@public.example/')).rejects.toThrow(
+      PrivateRangeBlockedError,
+    );
+    expect(mockedLookup).not.toHaveBeenCalled();
+  });
+
+  it('refuses a URL with a Nunjucks block tag that renders to a private host', async () => {
+    // No `{{` here, so an interpolation-only check passes it: the URL
+    // parses as the public host 8.8.8.8, but WebSocketProvider renders it
+    // to ws://127.0.0.1/ and dials that directly.
+    await expect(
+      assertUrlResolvesPublic('ws://{% if false %}@8.8.8.8/{% endif %}127.0.0.1/'),
+    ).rejects.toThrow(PrivateRangeBlockedError);
+    expect(mockedLookup).not.toHaveBeenCalled();
+  });
+
+  it('refuses a URL with a Nunjucks comment tag without touching DNS', async () => {
+    await expect(assertUrlResolvesPublic('ws://8.8.8.8/{# comment #}127.0.0.1/')).rejects.toThrow(
       PrivateRangeBlockedError,
     );
     expect(mockedLookup).not.toHaveBeenCalled();

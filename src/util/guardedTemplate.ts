@@ -3,6 +3,17 @@ import { PrivateRangeBlockedError } from './fetch/guardContext';
 const TEMPLATE_OPENER = /\{[{%#]/;
 
 /**
+ * True when the value still carries Nunjucks template syntax: a `{{ ... }}`
+ * interpolation, a `{% ... %}` block tag, or a `{# ... #}` comment. Any of
+ * these can change the effective target when the value is rendered at call
+ * time, so a preflight that only looks for `{{` can be bypassed with a
+ * block tag that renders a private host into the URL.
+ */
+export function containsTemplateSyntax(value: string): boolean {
+  return TEMPLATE_OPENER.test(value);
+}
+
+/**
  * Guarded diagnostics accept only scalar values from their own call context.
  * A replacement is data and is never parsed again as template source.
  * With no variables, validate the same grammar during route preflight.

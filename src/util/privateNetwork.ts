@@ -8,6 +8,7 @@ import { PrivateRangeBlockedError } from './fetch/guardContext';
 import { maybeLoadFromExternalFile } from './file';
 import {
   assertLiteralGuardedFilePath,
+  containsTemplateSyntax,
   renderGuardedRawRequest,
   renderGuardedTemplate,
 } from './guardedTemplate';
@@ -205,14 +206,17 @@ export function isPrivateRangeBlockedMessage(message: unknown): boolean {
  * exposed server).
  */
 export async function assertUrlResolvesPublic(rawUrl: string): Promise<void> {
-  // A URL that still carries a template placeholder was never validated as
-  // the target that will actually be fetched: providers render Nunjucks
+  // A URL that still carries Nunjucks template syntax was never validated
+  // as the target that will actually be fetched: providers render Nunjucks
   // templates in URL fields at call time (e.g. HttpProvider renders
   // `config.url` with the prompt), so `http://{{prompt}}@public.example/`
   // preflights as public.example but can dispatch to 127.0.0.1 once the
-  // prompt fills the userinfo slot. Refuse it outright: the preflight
+  // prompt fills the userinfo slot. Block tags are the same bypass without
+  // any `{{`: `ws://{% if false %}@8.8.8.8/{% endif %}127.0.0.1/` parses
+  // as the public host 8.8.8.8 but renders to ws://127.0.0.1/ before the
+  // socket is dialed. Refuse any template syntax outright: the preflight
   // cannot prove the rendered target public.
-  if (rawUrl.includes('{{')) {
+  if (containsTemplateSyntax(rawUrl)) {
     throw new PrivateRangeBlockedError(
       'PROMPTFOO_BLOCK_PRIVATE_RANGES is set: refusing to fetch provider URL with an unresolved template whose rendered target cannot be validated before loading',
     );
@@ -793,11 +797,12 @@ function refuseExecutableFields(providerOptions: ProviderTarget): void {
  *   outright: the registry executes these outside the fetch layer, so
  *   neither the preflight nor redirect validation would see the network
  *   access they perform,
- * - a provider id carrying an unresolved template (`{{ ... }}`), refused
- *   outright: `loadApiProvider` renders env templates after this preflight
- *   runs, so the rendered id could be a script provider or a private URL
- *   this check never saw, and reproducing the loader's env merge here
- *   would risk a divergence the bypass could hide in,
+ * - a provider id carrying unresolved template syntax (`{{ ... }}`,
+ *   `{% ... %}`, `{# ... #}`), refused outright: `loadApiProvider`
+ *   renders env templates after this preflight runs, so the rendered id
+ *   could be a script provider or a private URL this check never saw, and
+ *   reproducing the loader's env merge here would risk a divergence the
+ *   bypass could hide in,
  * - a string HttpProvider transform (`config.transformRequest`,
  *   `config.transformResponse`, `config.responseParser`), refused
  *   outright: the provider compiles the string with `new Function` and
@@ -828,9 +833,9 @@ function refuseExecutableFields(providerOptions: ProviderTarget): void {
  *   a JSON route body and is left alone,
  * - templates in a raw request line, headers or file path, refused before
  *   loading. Body templates may interpolate simple data variables.
- * - a URL field that still carries a `{{ ... }}` template (`config.url`,
- *   `config.apiBaseUrl`, `config.session.url`, an MCP `server.url`, a
- *   raw-request Host header),
+ * - a URL field that still carries template syntax (`{{ ... }}`,
+ *   `{% ... %}`, `{# ... #}`) (`config.url`, `config.apiBaseUrl`,
+ *   `config.session.url`, an MCP `server.url`, a raw-request Host header),
  *   refused outright by the URL validation below: providers render URL
  *   templates with call-time variables (e.g. the prompt), so the raw
  *   template can preflight as a public host while the rendered URL
@@ -868,12 +873,15 @@ export function getCallerSuppliedBaseUrls(providerOptions: ProviderTarget): stri
   if (typeof id !== 'string' || id.length === 0) {
     return urls;
   }
-  if (id.includes('{{')) {
+  if (containsTemplateSyntax(id)) {
     throw new PrivateRangeBlockedError(
       'PROMPTFOO_BLOCK_PRIVATE_RANGES is set: refusing provider id with an unresolved template whose rendered target cannot be validated before loading',
     );
   }
-  if (id.startsWith('file://') && (isProviderConfigFileReference(id) || id.includes('{{'))) {
+  if (
+    id.startsWith('file://') &&
+    (isProviderConfigFileReference(id) || containsTemplateSyntax(id))
+  ) {
     throw new PrivateRangeBlockedError(
       'PROMPTFOO_BLOCK_PRIVATE_RANGES is set: refusing file-backed provider reference whose expanded target cannot be validated before loading',
     );
