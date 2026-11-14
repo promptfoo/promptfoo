@@ -310,6 +310,17 @@ export function setRuntimeFileVarNames(vars: Record<string, VarValue>, names: st
   }
 }
 
+const loadedVarsFileNames = Symbol('loadedVarsFileNames');
+
+export function setLoadedVarsFileNames(
+  vars: Record<string, VarValue>,
+  names: readonly string[],
+): void {
+  if (names.length > 0) {
+    Object.defineProperty(vars, loadedVarsFileNames, { value: new Set(names), enumerable: true });
+  }
+}
+
 /**
  * Renders a prompt template with variable substitution using Nunjucks.
  *
@@ -338,6 +349,9 @@ export async function renderPrompt(
     runtimeFileVarNames
   ];
   const skipVars = runtimeVars ? [...(skipRenderVars ?? []), ...runtimeVars] : skipRenderVars;
+  const preloadedVars = (vars as typeof vars & { [loadedVarsFileNames]?: ReadonlySet<string> })[
+    loadedVarsFileNames
+  ];
 
   let basePrompt = prompt.raw;
 
@@ -345,7 +359,7 @@ export async function renderPrompt(
 
   // Load files
   for (const [varName, value] of Object.entries(vars)) {
-    if (skipVars?.includes(varName) || isRuntimeVar(varName)) {
+    if (preloadedVars?.has(varName) || skipVars?.includes(varName) || isRuntimeVar(varName)) {
       continue;
     }
 
