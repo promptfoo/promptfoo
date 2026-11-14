@@ -4167,6 +4167,19 @@
                             "type": "string",
                             "enum": ["low", "medium", "high", "critical"]
                           },
+                          "xssOutputPatterns": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "id": { "type": "string" },
+                                "pattern": { "type": "string" },
+                                "description": { "type": "string" },
+                                "flags": { "type": "string" }
+                              },
+                              "required": ["id", "pattern"]
+                            }
+                          },
                           "name": { "type": "string" },
                           "multilingual": { "type": "boolean" },
                           "indirectInjectionVar": { "type": "string" },
