@@ -4,7 +4,7 @@ import type { CallApiContextParams } from '../types/index';
 
 // The eval ID is unique to each run. Keep stable step/repeat inputs in the identity.
 export function getScriptCacheVars(vars: CallApiContextParams['vars'] | undefined) {
-  if (!vars || !Object.hasOwn(vars, '__evalId')) {
+  if (!vars || !Object.prototype.hasOwnProperty.call(vars, '__evalId')) {
     return vars;
   }
   const stableVars = { ...vars };
