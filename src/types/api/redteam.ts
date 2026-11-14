@@ -146,7 +146,10 @@ export const RedteamSchemas = {
     Response: RedteamRunResponseSchema,
     Conflict: RedteamRunConflictSchema,
   },
-  Cancel: { Response: RedteamCancelResponseSchema },
+  Cancel: {
+    Request: z.object({ jobId: z.string().uuid().optional() }),
+    Response: RedteamCancelResponseSchema,
+  },
   Task: {
     Params: RedteamTaskParamsSchema,
     Request: RedteamTaskRequestSchema,

@@ -4814,6 +4814,18 @@
         "operationId": "cancelRedteam",
         "tags": ["Redteam"],
         "summary": "Cancel the running redteam job",
+        "requestBody": {
+          "description": "Cancel only the specified job when jobId is supplied",
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": { "jobId": { "type": "string", "format": "uuid" } }
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "Successful response",
@@ -4829,6 +4841,24 @@
           },
           "400": {
             "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": { "type": "string" },
+                    "details": {},
+                    "suggestion": { "type": "string" },
+                    "success": { "type": "boolean", "enum": [false] }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The selected job is no longer running",
             "content": {
               "application/json": {
                 "schema": {

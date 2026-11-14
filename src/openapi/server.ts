@@ -1003,8 +1003,18 @@ export function createServerOpenApiRegistry() {
     operationId: 'cancelRedteam',
     tags: ['Redteam'],
     summary: 'Cancel the running redteam job',
+    request: {
+      body: {
+        ...jsonBody(
+          RedteamSchemas.Cancel.Request,
+          'Cancel only the specified job when jobId is supplied',
+        ),
+        required: false,
+      },
+    },
     responses: {
       200: jsonResponse(RedteamSchemas.Cancel.Response),
+      409: jsonResponse(ErrorResponseSchema, 'The selected job is no longer running'),
       400: jsonResponse(ErrorResponseSchema, 'Validation error'),
     },
   });

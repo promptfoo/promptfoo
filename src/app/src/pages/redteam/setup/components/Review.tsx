@@ -181,7 +181,7 @@ export default function Review({
   const [maxConcurrency, setMaxConcurrency] = React.useState(
     String(config.maxConcurrency || REDTEAM_DEFAULTS.MAX_CONCURRENCY),
   );
-  const [isJobStatusDialogOpen, setIsJobStatusDialogOpen] = useState(false);
+  const [conflictingJobId, setConflictingJobId] = useState<string | null>(null);
   const [isEmailDialogOpen, setIsEmailDialogOpen] = useState(false);
   const confirmedRunTargetRef = useRef<ProviderOptions | null>(null);
   const [emailVerificationMessage, setEmailVerificationMessage] = useState('');
@@ -549,14 +549,16 @@ export default function Review({
     [clearJob, recordEvent, showToast],
   );
 
-  const handleRunWithSettings = async () => {
+  const handleRunWithSettings = async (restartTarget?: ProviderOptions) => {
     if (targetConfigError) {
       confirmedRunTargetRef.current = null;
       showToast(targetConfigError, 'error');
       return;
     }
     const confirmedTarget =
-      confirmedRunTargetRef.current ?? structuredClone(useRedTeamConfig.getState().config.target);
+      restartTarget ??
+      confirmedRunTargetRef.current ??
+      structuredClone(useRedTeamConfig.getState().config.target);
     confirmedRunTargetRef.current = confirmedTarget;
 
     // Check email verification first
@@ -582,7 +584,7 @@ export default function Review({
       showToast(emailResult.status.message, 'warning');
     }
 
-    const { hasRunningJob } = await checkForRunningJob();
+    const { hasRunningJob, jobId } = await checkForRunningJob();
 
     const { config: latestConfig } = useRedTeamConfig.getState();
     const { targetConfigError: latestTargetConfigError } =
@@ -599,7 +601,12 @@ export default function Review({
     }
 
     if (hasRunningJob) {
-      setIsJobStatusDialogOpen(true);
+      if (jobId) {
+        setConflictingJobId(jobId);
+      } else {
+        confirmedRunTargetRef.current = null;
+        showToast('Could not identify the running job. Check its status and try again.', 'error');
+      }
       return;
     }
     confirmedRunTargetRef.current = null;
@@ -656,9 +663,13 @@ export default function Review({
       });
 
       if (response.status === 409) {
+        const conflict = await response.json();
+        if (typeof conflict.jobId !== 'string' || !conflict.jobId) {
+          throw new Error('The server did not identify the running job.');
+        }
         confirmedRunTargetRef.current = confirmedTarget;
         setIsRunning(false);
-        setIsJobStatusDialogOpen(true);
+        setConflictingJobId(conflict.jobId);
         return;
       }
       if (!response.ok) {
@@ -682,11 +693,22 @@ export default function Review({
     }
   };
 
-  const handleCancel = async () => {
+  const handleCancel = async (jobId: string) => {
     try {
-      await callApi('/redteam/cancel', {
+      const response = await callApi('/redteam/cancel', {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jobId }),
       });
+      if (!response.ok) {
+        showToast(
+          response.status === 409
+            ? 'The selected job is no longer running.'
+            : 'Failed to cancel job',
+          'error',
+        );
+        return false;
+      }
 
       if (pollIntervalRef.current) {
         window.clearInterval(pollIntervalRef.current);
@@ -696,22 +718,23 @@ export default function Review({
       setIsRunning(false);
       clearJob();
       showToast('Cancel request submitted', 'success');
+      return true;
     } catch (error) {
       console.error('Error cancelling job:', error);
       showToast('Failed to cancel job', 'error');
+      return false;
     }
   };
 
   const handleCancelExistingAndRun = async () => {
-    try {
-      await handleCancel();
-      setIsJobStatusDialogOpen(false);
-      setTimeout(() => {
-        handleRunWithSettings();
-      }, 500);
-    } catch (error) {
-      console.error('Error canceling existing job:', error);
-      showToast('Failed to cancel existing job', 'error');
+    const restartTarget = confirmedRunTargetRef.current;
+    if (!conflictingJobId || !restartTarget) {
+      return;
+    }
+    setConflictingJobId(null);
+    confirmedRunTargetRef.current = null;
+    if (await handleCancel(conflictingJobId)) {
+      await handleRunWithSettings(restartTarget);
     }
   };
 
@@ -1303,7 +1326,12 @@ export default function Review({
                   {runNowTooltipMessage && <TooltipContent>{runNowTooltipMessage}</TooltipContent>}
                 </Tooltip>
                 {isRunning && (
-                  <Button variant="destructive" onClick={handleCancel} className="gap-2">
+                  <Button
+                    variant="destructive"
+                    disabled={!savedJobId}
+                    onClick={() => savedJobId && handleCancel(savedJobId)}
+                    className="gap-2"
+                  >
                     <X className="size-4" />
                     Cancel
                   </Button>
@@ -1344,10 +1372,10 @@ export default function Review({
 
         {/* Job Status Dialog */}
         <Dialog
-          open={isJobStatusDialogOpen}
+          open={Boolean(conflictingJobId)}
           onOpenChange={(open) => {
-            setIsJobStatusDialogOpen(open);
             if (!open) {
+              setConflictingJobId(null);
               confirmedRunTargetRef.current = null;
             }
           }}
@@ -1364,7 +1392,7 @@ export default function Review({
               <Button
                 variant="outline"
                 onClick={() => {
-                  setIsJobStatusDialogOpen(false);
+                  setConflictingJobId(null);
                   confirmedRunTargetRef.current = null;
                 }}
               >

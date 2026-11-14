@@ -745,6 +745,18 @@ describe('Redteam Routes', () => {
       });
     });
 
+    it('keeps the replacement job running when a stale confirmation requests cancellation', async () => {
+      mockedDoRedteamRun.mockReturnValueOnce(new Promise(() => {}));
+      const active = await request(app).post('/api/redteam/run').send({ config: {} });
+      expect(active.status).toBe(200);
+      const cancel = (jobId: string) => request(app).post('/api/redteam/cancel').send({ jobId });
+      expect((await cancel('00000000-0000-4000-8000-000000000001')).status).toBe(409);
+      expect((await cancel('invalid')).status).toBe(400);
+      expect(mockedDoRedteamRun.mock.calls[0][0].abortSignal?.aborted).toBe(false);
+      expect((await cancel(active.body.id)).status).toBe(200);
+      expect(mockedDoRedteamRun.mock.calls[0][0].abortSignal?.aborted).toBe(true);
+    });
+
     it('should allow a new run after the previous job settled', async () => {
       mockedDoRedteamRun.mockResolvedValueOnce(undefined as any);
       const firstResponse = await request(app)
