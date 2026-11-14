@@ -1,5 +1,6 @@
 import dedent from 'dedent';
 import { afterEach, beforeEach, describe, expect, it, Mock, MockInstance, vi } from 'vitest';
+import { runAssertions } from '../../../src/assertions/index';
 import cliState from '../../../src/cliState';
 import * as esm from '../../../src/esm';
 import { matchesLlmRubric } from '../../../src/matchers/llmGrading';
@@ -10,6 +11,7 @@ import {
   parseGeneratedPrompts,
 } from '../../../src/redteam/plugins/multiInputFormat';
 import { RealEstateAccessibilityDiscriminationPluginGrader } from '../../../src/redteam/plugins/realestate/accessibilityDiscrimination';
+import { setRedteamProviderLoader } from '../../../src/redteam/providers/shared';
 import { maybeLoadFromExternalFile, maybeLoadToolsFromExternalFile } from '../../../src/util/file';
 import * as packageVersion from '../../../src/util/packageVersion';
 import { createMockProvider, createProviderResponse } from '../../factories/provider';
@@ -1392,6 +1394,45 @@ describe('RedteamGraderBase', () => {
     );
     expect(result.rubric).toContain('Current timestamp:');
   });
+
+  it.each([
+    ['graderProvider', 'per-test-grader'],
+    ['provider', 'per-test-grader'],
+    ['graderProvider', { text: 'per-test-grader' }],
+    ['provider', { text: 'per-test-grader' }],
+  ] as const)(
+    'uses the authored %s grading option %j over the suite default',
+    async (key, value) => {
+      const perTestGrader = createMockProvider({ id: 'per-test-grader' });
+      const loadProvider = vi.fn().mockResolvedValue([perTestGrader]);
+      const restoreLoader = setRedteamProviderLoader(loadProvider);
+      cliState.config = { defaultTest: { options: { provider: 'suite-grader' } } };
+      vi.mocked(matchesLlmRubric).mockResolvedValue({
+        pass: true,
+        score: 1,
+        reason: 'Test passed',
+      });
+
+      try {
+        const result = await runAssertions({
+          prompt: 'test prompt',
+          provider: createMockProvider({ id: 'target' }),
+          providerResponse: { output: 'test output' },
+          test: {
+            ...mockTest,
+            options: { [key]: value },
+            assert: [{ type: 'promptfoo:redteam:competitors' }],
+          },
+        });
+        expect(result.pass).toBe(true);
+        expect(loadProvider).toHaveBeenCalledWith(['per-test-grader']);
+        expect(vi.mocked(matchesLlmRubric).mock.calls[0][2]?.provider).toBe(perTestGrader);
+      } finally {
+        restoreLoader();
+        cliState.config = {};
+      }
+    },
+  );
 
   it('should pass only image output context to multimodal graders', async () => {
     const mockResult: GradingResult = {

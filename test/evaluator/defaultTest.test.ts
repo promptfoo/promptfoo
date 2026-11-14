@@ -99,6 +99,34 @@ describe('evaluator defaultTest merging', () => {
     });
   });
 
+  it('should resolve graderProvider in the shared evaluator path', async () => {
+    const grader = vi.spyOn(llmGrading, 'matchesLlmRubric').mockResolvedValue({
+      pass: true,
+      score: 1,
+      reason: 'Fixture grading result',
+    });
+    const testSuite: TestSuite = {
+      prompts: [toPrompt('Test prompt')],
+      providers: [mockApiProvider],
+      tests: [
+        {
+          assert: [{ type: 'llm-rubric', value: 'Output is correct' }],
+        },
+      ],
+      defaultTest: {
+        options: { graderProvider: 'openai:gpt-4.1-mini' },
+      },
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+
+    expect(grader).toHaveBeenCalledOnce();
+    expect(grader.mock.calls[0][2]).toMatchObject({
+      provider: 'openai:gpt-4.1-mini',
+    });
+  });
+
   it('should allow test case options to override defaultTest options', async () => {
     const grader = vi.spyOn(llmGrading, 'matchesLlmRubric').mockResolvedValue({
       pass: true,

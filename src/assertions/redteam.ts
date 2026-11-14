@@ -154,14 +154,16 @@ function getRedteamPrompt(
 }
 
 function createInitialGradingContext({
+  test,
   assertionValueContext,
   providerResponse,
   conversationTranscript,
-}: Pick<AssertionParams, 'assertionValueContext' | 'providerResponse'> & {
+}: Pick<AssertionParams, 'test' | 'assertionValueContext' | 'providerResponse'> & {
   conversationTranscript?: string;
 }): RedteamGradingContext {
   const gradingContext: RedteamGradingContext = {
     providerResponse,
+    ...(test.options?.provider != null && { useTestGradingProvider: true }),
     ...(conversationTranscript === undefined ? {} : { conversationTranscript }),
   };
 
@@ -275,6 +277,7 @@ export const handleRedteam = async (
   // graders; pass only a compact trajectory summary into model-graded rubrics.
   // This includes exfil tracking data from indirect-web-pwn strategy
   let gradingContext = createInitialGradingContext({
+    test,
     assertionValueContext,
     providerResponse,
     conversationTranscript: gradesCurrentTurnOnly ? undefined : conversationTranscript,
