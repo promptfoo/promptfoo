@@ -52,6 +52,13 @@ const rawRedteamProviderFactories: ProviderFactory[] = [
     },
   },
   {
+    test: (providerPath: string) => providerPath === 'promptfoo:redteam:react-crescendo',
+    create: async (_providerPath, providerOptions) => {
+      const { ReactCrescendoProvider } = await import('./react-crescendo/index');
+      return new ReactCrescendoProvider(providerOptions.config);
+    },
+  },
+  {
     test: (providerPath: string) =>
       providerPath === 'promptfoo:redteam:custom' ||
       providerPath.startsWith('promptfoo:redteam:custom:'),

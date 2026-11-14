@@ -54,6 +54,7 @@ const STRATEGY_METADATA: Record<string, StrategyMetadata> = {
   'ascii-smuggling': { humanExploitable: false, humanComplexity: 'high' },
   multilingual: { humanExploitable: true, humanComplexity: 'low' },
   crescendo: { humanExploitable: true, humanComplexity: 'high' },
+  'react-crescendo': { humanExploitable: false, humanComplexity: 'high' },
   goat: { humanExploitable: false, humanComplexity: 'high' },
   'jailbreak:tree': { humanExploitable: false, humanComplexity: 'high' },
   'math-prompt': { humanExploitable: true, humanComplexity: 'medium' },

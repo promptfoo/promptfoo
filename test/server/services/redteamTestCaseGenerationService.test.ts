@@ -126,6 +126,77 @@ describe('redteamTestCaseGenerationService', () => {
       await expectTaskRequest(fetchWithRetries, 'crescendo');
     });
 
+    it('should request ReAct reasoning for React Crescendo strategy previews', async () => {
+      const fetchWithRetries = mockRemoteGeneration({
+        result: {
+          generatedQuestion: 'test question',
+          lastResponseSummary: 'summary',
+          rationaleBehindJailbreak: 'rationale',
+          observation: 'observed refusal',
+          reasoning: 'switch vectors',
+          strategyVector: 'hypothetical-reframing',
+        },
+      });
+
+      await generatePromptForStrategy('react-crescendo');
+
+      await expectTaskRequest(fetchWithRetries, 'crescendo');
+      const [, request] = fetchWithRetries.mock.calls[0]!;
+      const body = JSON.parse(String(request.body));
+      expect(body.prompt).toContain('ReAct Crescendo Multi-turn');
+      expect(body.prompt).toContain('OBSERVE');
+      expect(body.prompt).toContain('strategyVector');
+    });
+
+    it('round trips bounded ReAct state to the next preview turn', async () => {
+      const fetchWithRetries = mockRemoteGeneration({
+        result: {
+          generatedQuestion: 'first question',
+          observation: 'x'.repeat(700),
+          reasoning: 'private intermediate trace',
+          strategyVector: 'gradual-escalation',
+        },
+      });
+      fetchWithRetries.mockResolvedValueOnce(
+        createMockResponse({
+          body: { result: { generatedQuestion: 'second question' } },
+        }),
+      );
+      const { generateMultiTurnPrompt } = await import(
+        '../../../src/server/services/redteamTestCaseGenerationService'
+      );
+      const { ReactPreviewStateSchema } = await import('../../../src/redteam/types');
+      const params = {
+        pluginId: 'harmful:hate',
+        strategyId: 'react-crescendo',
+        strategyConfigRecord: {},
+        history: [],
+        turn: 0,
+        maxTurns: 2,
+        baseMetadata: {},
+        generatedPrompt: 'fixture',
+        purpose: 'preview',
+      } satisfies MultiTurnPromptParams;
+      const first = await generateMultiTurnPrompt(params);
+      const state = ReactPreviewStateSchema.parse(first.metadata.reactPreviewState);
+      expect(state.observation).toHaveLength(512);
+      expect(first.metadata).not.toHaveProperty('observation');
+      expect(first.metadata).not.toHaveProperty('reasoning');
+      expect(first.metadata).not.toHaveProperty('strategyVector');
+      await generateMultiTurnPrompt({
+        ...params,
+        turn: 1,
+        history: [
+          { role: 'user', content: first.prompt },
+          { role: 'assistant', content: 'fixture response' },
+        ],
+        reactPreviewState: state,
+      });
+      const body = JSON.parse(String(fetchWithRetries.mock.calls[1]![1].body));
+      expect(body.prompt).toContain(JSON.stringify(state));
+      expect(body.prompt).toContain('fixture response');
+    });
+
     it('should call fetchWithRetries with correct parameters for Hydra strategy', async () => {
       const fetchWithRetries = mockRemoteGeneration({
         result: { prompt: 'test prompt' },
