@@ -1,4 +1,6 @@
-import { type Config } from '../types';
+import { requiresPluginConfig } from '../constants';
+
+import type { Config, LocalPluginConfig } from '../types';
 
 /**
  * Counts the number of custom policies defined in the config.
@@ -60,4 +62,30 @@ export function countSelectedCustomIntents(config: Pick<Config, 'plugins'>): num
 
     return count + countIntentEntries(plugin.config?.intent);
   }, 0);
+}
+
+export function isPluginConfigComplete(
+  plugin: string,
+  config?: LocalPluginConfig[string],
+): boolean {
+  if (!requiresPluginConfig(plugin)) {
+    return true;
+  }
+  if (plugin === 'mcp:tool-response-poisoning') {
+    const tools = config?.allowedTools;
+    return (
+      Array.isArray(tools) &&
+      tools.length > 0 &&
+      tools.every((name) => typeof name === 'string' && name.trim() !== '')
+    );
+  }
+  return (
+    !!config &&
+    Object.keys(config).length > 0 &&
+    Object.values(config).every(
+      (value) =>
+        !(Array.isArray(value) && value.length === 0) &&
+        !(typeof value === 'string' && value.trim() === ''),
+    )
+  );
 }

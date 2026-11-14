@@ -40,10 +40,29 @@ export interface MCPToolInputSchema {
   [key: string]: any;
 }
 
+/**
+ * Behavioural hints a server may attach to a tool in its `tools/list` response.
+ *
+ * These are advisory and self-declared, so they are only ever safe to act on in
+ * the restrictive direction: use them to skip a tool, never to grant one extra
+ * trust. A server that misreports them is no worse off than one that omits them.
+ */
+export interface MCPToolAnnotations {
+  title?: string;
+  /** True when the tool does not modify its environment. */
+  readOnlyHint?: boolean;
+  /** True when the tool may perform destructive updates. Only meaningful when `readOnlyHint` is not true. */
+  destructiveHint?: boolean;
+  idempotentHint?: boolean;
+  openWorldHint?: boolean;
+  [key: string]: unknown;
+}
+
 export interface MCPTool {
   name: string;
   description: string;
   inputSchema: MCPToolInputSchema;
+  annotations?: MCPToolAnnotations;
 }
 
 export interface MCPToolResult {

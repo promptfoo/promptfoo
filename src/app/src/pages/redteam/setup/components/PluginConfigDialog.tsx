@@ -14,6 +14,7 @@ import { Textarea } from '@app/components/ui/textarea';
 import { categoryAliases, displayNameOverrides } from '@promptfoo/redteam/constants';
 import { Minus, Plus } from 'lucide-react';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
+import { isPluginConfigComplete } from '../utils/plugins';
 import type { Plugin } from '@promptfoo/redteam/constants';
 import type { PluginConfig } from '@promptfoo/redteam/types';
 
@@ -182,6 +183,26 @@ export default function PluginConfigDialog({
           </div>
         );
         break;
+      case 'mcp:tool-response-poisoning':
+        specificConfig = (
+          <div className="space-y-2">
+            <Label htmlFor="allowed-mcp-tools">Allowed MCP tools</Label>
+            <Textarea
+              id="allowed-mcp-tools"
+              aria-describedby="allowed-mcp-tools-help"
+              value={
+                Array.isArray(localConfig.allowedTools) ? localConfig.allowedTools.join('\n') : ''
+              }
+              onChange={(event) =>
+                setLocalConfig({ ...localConfig, allowedTools: event.target.value.split('\n') })
+              }
+            />
+            <p id="allowed-mcp-tools-help" className="text-xs text-muted-foreground">
+              Enter one approved, read-only tool name per line. The scan may call each tool listed.
+            </p>
+          </div>
+        );
+        break;
       case 'prompt-extraction':
         const key = 'systemPrompt';
         specificConfig = (
@@ -324,6 +345,10 @@ export default function PluginConfigDialog({
     if (plugin && localConfig) {
       const configToSave = { ...localConfig };
 
+      if (plugin === 'mcp:tool-response-poisoning' && Array.isArray(configToSave.allowedTools)) {
+        configToSave.allowedTools = configToSave.allowedTools.map((name) => name.trim());
+      }
+
       // Remove empty graderGuidance
       if (!configToSave.graderGuidance || (configToSave.graderGuidance as string).trim() === '') {
         delete configToSave.graderGuidance;
@@ -359,7 +384,17 @@ export default function PluginConfigDialog({
           <Button variant="outline" onClick={onClose}>
             {isReadOnlyPlugin ? 'Close' : 'Cancel'}
           </Button>
-          {!isReadOnlyPlugin && <Button onClick={handleSave}>Save</Button>}
+          {!isReadOnlyPlugin && (
+            <Button
+              onClick={handleSave}
+              disabled={
+                plugin === 'mcp:tool-response-poisoning' &&
+                !isPluginConfigComplete(plugin, localConfig)
+              }
+            >
+              Save
+            </Button>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>
