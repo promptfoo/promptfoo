@@ -855,6 +855,56 @@ describe('EvalOutputCell', () => {
     expect(renderedSources).toEqual([dataUri, 'https://example.com/secondary-inline.png']);
   });
 
+  it.each([
+    ['storageRef:/image/123456789abc.png', '\n', '/api/media/image/123456789abc.png'],
+    ['storageRef:/image/my file.png', '\n', '/api/media/image/my file.png'],
+    [`promptfoo://blob/${'a'.repeat(64)}`, '\n', `/api/blobs/${'a'.repeat(64)}`],
+    [`promptfoo://blob/${'a'.repeat(64)}`, ' ', `/api/blobs/${'a'.repeat(64)}`],
+  ])(
+    'retains diagnostics after a leading media reference %s',
+    (source, separator, expectedPath) => {
+      const { container } = renderWithProviders(
+        <EvalOutputCell
+          {...defaultProps}
+          output={{ ...defaultProps.output, text: `${source}${separator}Assertion details` }}
+        />,
+      );
+      expect(container.querySelector('img')?.getAttribute('src')).toMatch(expectedPath);
+      expect(screen.getByText('Assertion details')).toBeInTheDocument();
+    },
+  );
+
+  it('uses the local data URL for a whitespace-prefixed inline image', () => {
+    const source = 'data:image/png;base64,AA==';
+    const { container } = renderWithProviders(
+      <EvalOutputCell
+        {...defaultProps}
+        output={{ ...defaultProps.output, text: `\u00a0${source}` }}
+      />,
+    );
+    expect(container.querySelector('img')?.getAttribute('src')).toBe(source);
+  });
+
+  it('deduplicates an embedded image from structured images without losing surrounding text', () => {
+    const dataUri = 'data:image/png;base64,aGVsbG8=';
+    const props: MockEvalOutputCellProps = {
+      ...defaultProps,
+      output: {
+        ...defaultProps.output,
+        text: `Generated preview: ${dataUri}\nAssertion details`,
+        images: [
+          { data: dataUri, mimeType: 'image/png' },
+          { data: 'https://example.com/secondary.png', mimeType: 'image/png' },
+        ],
+      },
+    };
+    const { container } = renderWithProviders(<EvalOutputCell {...props} />);
+    expect(
+      [...container.querySelectorAll('img')].map((image) => image.getAttribute('src')),
+    ).toEqual([dataUri, 'https://example.com/secondary.png']);
+    expect(screen.getByText(/Generated preview:/)).toHaveTextContent('Assertion details');
+  });
+
   it('falls back to text when all structured images are invalid/skipped', () => {
     const propsWithInvalidStructuredImages: MockEvalOutputCellProps = {
       ...defaultProps,
@@ -3051,6 +3101,74 @@ describe('EvalOutputCell inline image lightbox', () => {
 
     await user.click(container.querySelector('.lightbox')!);
     expect(container.querySelector('.lightbox')).not.toBeInTheDocument();
+  });
+
+  it('renders an embedded image source alongside failure text', async () => {
+    const user = userEvent.setup();
+    const dataUri =
+      'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+
+    const props: MockEvalOutputCellProps = {
+      firstOutput: {
+        cost: 0,
+        id: 'test-id',
+        latencyMs: 100,
+        namedScores: {},
+        pass: true,
+        failureReason: ResultFailureReason.NONE,
+        prompt: 'Test prompt',
+        provider: 'test-provider',
+        score: 1.0,
+        text: 'First output',
+        testCase: {},
+      },
+      maxTextLength: 1000,
+      onRating: mockOnRating,
+      output: {
+        cost: 0,
+        gradingResult: {
+          componentResults: [
+            {
+              assertion: {
+                type: 'contains' as AssertionType,
+                value: 'expected text',
+              },
+              pass: false,
+              reason: 'Assertion failed',
+              score: 0,
+            },
+          ],
+          pass: false,
+          reason: 'Assertion failed',
+          score: 0,
+        },
+        id: 'test-id',
+        latencyMs: 100,
+        namedScores: {},
+        pass: false,
+        failureReason: ResultFailureReason.ASSERT,
+        prompt: 'Test prompt',
+        provider: 'test-provider',
+        score: 0,
+        text: `${dataUri}\n\nAssertion message with details`,
+        testCase: {},
+      },
+      promptIndex: 0,
+      rowIndex: 0,
+      searchText: '',
+      showDiffs: false,
+      showStats: false,
+    };
+
+    const { container } = renderWithProviders(<EvalOutputCell {...props} />);
+
+    const imageElement = screen.getByRole('img');
+    expect(imageElement).toHaveAttribute('src', dataUri);
+    expect(screen.getByText('Assertion message with details')).toBeInTheDocument();
+    expect(screen.getByText('Assertion failed')).toBeInTheDocument();
+
+    await user.click(imageElement);
+    expect(container.querySelector('.lightbox img')).toHaveAttribute('src', dataUri);
   });
 
   it('toggleLightbox maintains stable behavior across multiple toggles', async () => {
