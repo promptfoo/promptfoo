@@ -20,6 +20,7 @@ import {
   loadTestsFromGlob,
   readStandaloneTestsFile,
   readTest,
+  readTestConfig,
   readTestFiles,
   readTests,
 } from '../../src/util/testCaseReader';
@@ -344,7 +345,7 @@ describe('readStandaloneTestsFile', () => {
             { type: 'llm-rubric', value: 'The chart shows exactly 3 months' },
           ],
           metadata: { id: 1, skill_name: 'csv-analyzer' },
-          options: { disableVarExpansion: true, skipRenderVars: ['prompt'] },
+          options: { disableVarExpansion: true, skipRenderVars: ['prompt', 'files'] },
         },
         {
           description: 'eval inv-2',
@@ -377,6 +378,34 @@ describe('readStandaloneTestsFile', () => {
         prompt: `Analyze the CSV.\n\nFiles available for this eval:\n- ${salesFile}`,
         files: [salesFile],
       });
+    });
+
+    it('converts prefixed file paths to literal paths without a loader directive', async () => {
+      vi.mocked(fs.readFileSync).mockReturnValueOnce(
+        JSON.stringify({
+          skill_name: 'sample',
+          evals: [
+            {
+              prompt: 'Open the input.',
+              expected_output: 'The input is read by the agent.',
+              files: ['file://input.js'],
+            },
+          ],
+        }),
+      );
+      const [test] = await readStandaloneTestsFile('evals.json', '/fixtures/skill');
+      const expected = path.resolve('/fixtures/skill/input.js');
+      expect(test.vars?.files).toEqual([expected]);
+      expect(test.vars?.prompt).toContain(expected);
+      expect(test.vars?.prompt).not.toContain('file://');
+    });
+
+    it('preserves literal file-like prompts in replayable test configs', async () => {
+      const test = await readTestConfig(
+        { vars: { prompt: 'file://missing' }, options: { skipRenderVars: ['prompt'] } },
+        '/suite',
+      );
+      expect(test.vars?.prompt).toBe('file://missing');
     });
 
     it('resolves file entries beside AgentSkills JSON outside the standard layout', async () => {
@@ -473,9 +502,9 @@ describe('readStandaloneTestsFile', () => {
         }),
       );
 
-      const result = await readStandaloneTestsFile('evals.json');
-
-      expect(result).toEqual([]);
+      await expect(readStandaloneTestsFile('evals.json')).rejects.toThrow(
+        'contains no runnable evals',
+      );
     });
   });
 
@@ -1678,7 +1707,7 @@ describe('readTests', () => {
         },
         assert: [{ type: 'llm-rubric', value: 'Is concise' }],
         metadata: { id: 'case-1', skill_name: 'summarizer' },
-        options: { skipRenderVars: ['prompt'] },
+        options: { skipRenderVars: ['prompt', 'files'] },
       },
     ]);
   });

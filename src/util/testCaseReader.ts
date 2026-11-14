@@ -402,7 +402,7 @@ function parseJsonTestCases(
   return testCases.map(withDefaultDescription);
 }
 
-function maybeConvertAgentSkillsEvalsJson(input: unknown, sourcePath?: string): TestCase[] | null {
+function maybeConvertAgentSkillsEvalsJson(input: unknown, sourcePath: string): TestCase[] | null {
   const testCases = parseAgentSkillsEvalsJson(input, sourcePath);
   if (testCases) {
     telemetry.record('feature_used', {
@@ -439,7 +439,7 @@ type AgentSkillsEvalsFile = {
  *   - `id`               -> `metadata.id` and `description`
  *   - top-level `skill_name` -> `metadata.skill_name`
  */
-function parseAgentSkillsEvalsJson(input: unknown, sourcePath?: string): TestCase[] | null {
+function parseAgentSkillsEvalsJson(input: unknown, sourcePath: string): TestCase[] | null {
   if (!input || typeof input !== 'object' || Array.isArray(input)) {
     return null;
   }
@@ -460,17 +460,21 @@ function parseAgentSkillsEvalsJson(input: unknown, sourcePath?: string): TestCas
       typeof (entry as Partial<AgentSkillsEvalCase>).prompt === 'string' &&
       Boolean((entry as AgentSkillsEvalCase).prompt.trim()),
   );
-  return validCases.flatMap((entry, idx) => {
+  const cases = validCases.flatMap((entry, idx) => {
     const testCase = agentSkillsEvalToTestCase(entry, idx, skillName, sourcePath);
     return testCase ? [testCase] : [];
   });
+  if (cases.length === 0) {
+    throw new Error(`AgentSkills test source ${sourcePath} contains no runnable evals`);
+  }
+  return cases;
 }
 
 function agentSkillsEvalToTestCase(
   entry: AgentSkillsEvalCase,
   idx: number,
   skillName: string,
-  sourcePath?: string,
+  sourcePath: string,
 ): TestCase | null {
   const assertions = buildAgentSkillsAssertions(entry);
   if (assertions.length === 0) {
@@ -480,22 +484,18 @@ function agentSkillsEvalToTestCase(
   const idValue =
     typeof entry.id === 'string' || typeof entry.id === 'number' ? entry.id : undefined;
 
-  const sourceDirectory = sourcePath ? path.dirname(sourcePath) : undefined;
+  const sourceDirectory = path.dirname(sourcePath);
   const isStandardAgentSkillsLayout =
-    sourcePath &&
-    sourceDirectory &&
-    path.basename(sourcePath) === 'evals.json' &&
-    path.basename(sourceDirectory) === 'evals';
+    path.basename(sourcePath) === 'evals.json' && path.basename(sourceDirectory) === 'evals';
   const sourceRoot = isStandardAgentSkillsLayout ? path.dirname(sourceDirectory) : sourceDirectory;
+  // Pass the declared paths to the agent as literal data.
   const files = (
     Array.isArray(entry.files)
       ? entry.files.filter(
           (file): file is string => typeof file === 'string' && Boolean(file.trim()),
         )
       : []
-  ).map((file) =>
-    sourceRoot && !file.startsWith('file://') ? path.resolve(sourceRoot, file) : file,
-  );
+  ).map((file) => path.resolve(sourceRoot, file.replace(/^file:\/\//, '')));
   const prompt =
     files.length > 0
       ? `${entry.prompt}\n\nFiles available for this eval:\n${files.map((file) => `- ${file}`).join('\n')}`
@@ -516,7 +516,7 @@ function agentSkillsEvalToTestCase(
       // disable expansion when needed so that any defaultTest.vars arrays
       // inherited by this test case still expand into their own variants.
       ...(files.length > 1 ? { disableVarExpansion: true } : {}),
-      skipRenderVars: ['prompt'],
+      skipRenderVars: files.length ? ['prompt', 'files'] : ['prompt'],
     },
   };
   if (metadata) {
@@ -638,7 +638,7 @@ export async function readTestConfig(
   );
 }
 
-function resolveVarsFileReferences(value: unknown, basePath: string): unknown {
+function resolveVarsFileReferences(value: unknown, basePath: string, skipVars?: string[]): unknown {
   if (typeof value === 'string') {
     if (!value.startsWith('file://')) {
       return value;
@@ -651,7 +651,10 @@ function resolveVarsFileReferences(value: unknown, basePath: string): unknown {
   }
   if (value && typeof value === 'object' && Object.getPrototypeOf(value) === Object.prototype) {
     return Object.fromEntries(
-      Object.entries(value).map(([key, item]) => [key, resolveVarsFileReferences(item, basePath)]),
+      Object.entries(value).map(([key, item]) => [
+        key,
+        skipVars?.includes(key) ? item : resolveVarsFileReferences(item, basePath),
+      ]),
     );
   }
   return value;
@@ -704,7 +707,11 @@ async function readTestWithEnv(
   }
 
   if (!loadProviders) {
-    testCase.vars = resolveVarsFileReferences(testCase.vars, basePath) as TestCase['vars'];
+    testCase.vars = resolveVarsFileReferences(
+      testCase.vars,
+      basePath,
+      testCase.options?.skipRenderVars,
+    ) as TestCase['vars'];
     if (typeof testCase.provider === 'string' && testCase.provider.startsWith('file://')) {
       testCase.provider = resolveVarsFileReferences(testCase.provider, effectiveBasePath) as string;
     } else if (
