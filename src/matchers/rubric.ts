@@ -858,7 +858,9 @@ function deriveVerdictFromGrader(
   let pass =
     typeof parsed.pass === 'boolean'
       ? parsed.pass
-      : /^(true|yes|pass|y)$/i.test(String(parsed.pass));
+      : parsed.pass === 1 ||
+        parsed.pass === '1' ||
+        /^(true|yes|pass|y)$/i.test(String(parsed.pass));
   const numericScore = Number(parsed.score);
   const score =
     typeof parsed.score === 'number'
