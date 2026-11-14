@@ -1459,6 +1459,17 @@ export const providerMap: ProviderFactory[] = [
     },
   },
   {
+    test: (providerPath: string) => providerPath.startsWith('bland:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      const { createBlandProvider } = await import('./bland');
+      return createBlandProvider(providerPath, providerOptions, context.env);
+    },
+  },
+  {
     test: (providerPath: string) => providerPath.startsWith('quiverai:'),
     create: async (
       providerPath: string,

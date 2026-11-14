@@ -270,6 +270,9 @@
         "AZURE_TOKEN_SCOPE": {
           "type": "string"
         },
+        "BLAND_API_KEY": {
+          "type": "string"
+        },
         "CDP_DOMAIN": {
           "type": "string"
         },
