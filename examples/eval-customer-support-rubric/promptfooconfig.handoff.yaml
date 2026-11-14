@@ -44,9 +44,10 @@ defaultTest:
           const accepted = facts.receiverAuthorized &&
             facts.contextDelivered && facts.receiverAcknowledged;
           const state = !required ? 'not_needed' : accepted ? 'accepted' : 'pending';
+          const hasUnresolvedWork = facts.sourceStatus !== 'supported' || facts.requiresApproval;
           return decision.handoffRequired === required && decision.handoffState === state &&
             decision.businessApproved === false &&
-            (facts.sourceStatus === 'supported' || decision.unresolved.length > 0);
+            (!hasUnresolvedWork || decision.unresolved.length > 0);
         } catch {
           return false;
         }

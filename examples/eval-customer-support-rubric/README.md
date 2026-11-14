@@ -78,7 +78,7 @@ From the repository root, use the local CLI:
 npm run local -- eval -c examples/eval-customer-support-rubric/promptfooconfig.handoff.yaml --no-cache -o handoff-results.json
 ```
 
-A customer request for a person, missing or conflicting sources, or a business exception requires a handoff. It stays `pending` until an authorized receiver receives the context and acknowledges it. Approving a refund or a price change is a separate decision. The fixtures all require `businessApproved: false`.
+A customer request for a person, missing or conflicting sources, or a business exception requires a handoff. It stays `pending` until an authorized receiver receives the context and acknowledges it. Approving a refund or a price change is a separate decision. The fixtures all require `businessApproved: false`. If a source is missing or conflicting, or a business exception still needs approval, the response must list unresolved work.
 
 JSON Schema checks the response shape. The `handoff_contract` assertion checks the decision against the supplied facts. To try a failing case, change a pending response to `accepted`. When adapting the example to a live provider, get authorization and acknowledgement from the receiving system.
 
