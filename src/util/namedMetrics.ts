@@ -1,4 +1,4 @@
-import { renderMetricName } from '../assertions/index';
+import { renderMetricName } from './templates';
 
 import type { GradingResult, Vars } from '../types/index';
 
