@@ -1159,12 +1159,12 @@ describe('OTLPReceiver', () => {
       const listeningCallbacks: Array<() => void> = [];
       const listenSpy = vi.spyOn(OTLPReceiver.prototype, 'listen').mockImplementation(
         () =>
-          new Promise<void>((resolve) => {
-            listeningCallbacks.push(resolve);
+          new Promise<number>((resolve) => {
+            listeningCallbacks.push(() => resolve(45000));
           }),
       );
 
-      const firstStart = startOTLPReceiver(4318, '127.0.0.1', ['json']);
+      const firstStart = startOTLPReceiver(0, '127.0.0.1', ['json']);
       const sharedReceiver = listenSpy.mock.contexts[0] as OTLPReceiver;
       const secondStart = startOTLPReceiver(4319, '127.0.0.2', ['protobuf']);
 
@@ -1174,8 +1174,9 @@ describe('OTLPReceiver', () => {
         for (const finishListening of listeningCallbacks) {
           finishListening();
         }
-        await Promise.all([firstStart, secondStart]);
-        expect(listenSpy).toHaveBeenCalledExactlyOnceWith(4318, '127.0.0.1');
+        expect(await Promise.all([firstStart, secondStart])).toEqual([45000, 45000]);
+        expect(listenSpy).toHaveBeenCalledExactlyOnceWith(0, '127.0.0.1');
+        expect(await startOTLPReceiver(4320, '127.0.0.2', ['protobuf'])).toBe(45000);
         const info = await request(sharedReceiver.getApp()).get('/v1/traces').expect(200);
         expect(info.body.supported_formats).toEqual(['json']);
         await request(sharedReceiver.getApp())
@@ -1194,7 +1195,7 @@ describe('OTLPReceiver', () => {
     });
 
     it('does not let an idle stop close a receiver started in the same turn', async () => {
-      const listenSpy = vi.spyOn(OTLPReceiver.prototype, 'listen').mockResolvedValue(undefined);
+      const listenSpy = vi.spyOn(OTLPReceiver.prototype, 'listen').mockResolvedValue(4318);
       const stopSpy = vi.spyOn(OTLPReceiver.prototype, 'stop').mockResolvedValue(undefined);
 
       try {
@@ -1210,7 +1211,7 @@ describe('OTLPReceiver', () => {
     });
 
     it('shares shutdown and waits for it before starting a fresh receiver', async () => {
-      const listenSpy = vi.spyOn(OTLPReceiver.prototype, 'listen').mockResolvedValue(undefined);
+      const listenSpy = vi.spyOn(OTLPReceiver.prototype, 'listen').mockResolvedValue(4318);
       let finishStopping: (() => void) | undefined;
       const stopSpy = vi
         .spyOn(OTLPReceiver.prototype, 'stop')
@@ -1223,7 +1224,7 @@ describe('OTLPReceiver', () => {
         );
       let firstStop: Promise<void> | undefined;
       let secondStop: Promise<void> | undefined;
-      let restart: Promise<void> | undefined;
+      let restart: Promise<number> | undefined;
 
       try {
         await startOTLPReceiver(4318, '127.0.0.1', ['json']);
@@ -1264,6 +1265,7 @@ describe('OTLPReceiver', () => {
       let activeListeners = 0;
       vi.spyOn(OTLPReceiver.prototype, 'listen').mockImplementation(async () => {
         activeListeners += 1;
+        return 4318;
       });
       let finishStopping: (() => void) | undefined;
       const firstShutdown = new Promise<void>((resolve) => {
@@ -1276,7 +1278,7 @@ describe('OTLPReceiver', () => {
         }
         activeListeners -= 1;
       });
-      const pending: Promise<void>[] = [];
+      const pending: Array<Promise<void> | Promise<number>> = [];
 
       try {
         await startOTLPReceiver(4318, '127.0.0.1', ['json']);
@@ -1300,7 +1302,7 @@ describe('OTLPReceiver', () => {
     });
 
     it('keeps startup fallback policies while registering each later evaluation policy', async () => {
-      const listenSpy = vi.spyOn(OTLPReceiver.prototype, 'listen').mockResolvedValue(undefined);
+      const listenSpy = vi.spyOn(OTLPReceiver.prototype, 'listen').mockResolvedValue(4318);
       try {
         await startOTLPReceiver(4318, '127.0.0.1', ['json'], {
           commandToolNames: ['bash'],
@@ -1396,7 +1398,7 @@ describe('OTLPReceiver', () => {
       const listenSpy = vi
         .spyOn(OTLPReceiver.prototype, 'listen')
         .mockRejectedValueOnce(new Error('EADDRINUSE'))
-        .mockResolvedValueOnce(undefined);
+        .mockResolvedValueOnce(4319);
 
       try {
         const firstStart = startOTLPReceiver(4318, '127.0.0.1', ['json']);
@@ -1415,10 +1417,7 @@ describe('OTLPReceiver', () => {
       }
     });
 
-    it('rejects (instead of spuriously resolving) when the port is already in use', async () => {
-      // Regression: Express invokes the listen callback even on EADDRINUSE (with
-      // server.listening === false), which previously resolved listen() successfully and
-      // defeated `failOnReceiverStartFailure`. listen() must reject on bind failure.
+    it('rejects when the TCP port is already in use', async () => {
       const http = await import('node:http');
       const blocker = http.createServer();
       await new Promise<void>((resolve) => blocker.listen(0, '127.0.0.1', () => resolve()));
@@ -1431,6 +1430,25 @@ describe('OTLPReceiver', () => {
         );
       } finally {
         await new Promise<void>((resolve) => blocker.close(() => resolve()));
+      }
+    });
+
+    it('resolves with the OS-chosen port for port 0 and reports it from /debug/status', async () => {
+      const first = new OTLPReceiver({ acceptFormats: ['json'] });
+      const second = new OTLPReceiver({ acceptFormats: ['json'] });
+      try {
+        const [firstPort, secondPort] = await Promise.all([
+          first.listen(0, '127.0.0.1'),
+          second.listen(0, '127.0.0.1'),
+        ]);
+
+        expect(firstPort).toBeGreaterThan(0);
+        expect(secondPort).toBeGreaterThan(0);
+        expect(firstPort).not.toBe(secondPort);
+        const status = await fetch(`http://127.0.0.1:${firstPort}/debug/status`);
+        expect((await status.json()).port).toBe(firstPort);
+      } finally {
+        await Promise.all([first.stop(), second.stop()]);
       }
     });
   });

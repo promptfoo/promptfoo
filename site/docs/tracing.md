@@ -321,7 +321,7 @@ tracing:
   otlp:
     http:
       enabled: true # Defaults to true when an http block is present; false disables the receiver
-      # port: 4318   # Optional - defaults to 4318 (standard OTLP HTTP port)
+      # port: 4318   # Set to 0 to let the OS choose an available port.
       # host: '127.0.0.1'  # Optional - defaults to loopback
       # acceptFormats: ['json', 'protobuf']  # Optional - defaults to both
       # redactAttributes: ['tool.arguments', 'authorization']  # Replace matched values before storage
@@ -331,7 +331,7 @@ tracing:
     retentionDays: 30
 ```
 
-Omit `otlp.http` entirely if you do not want to start the built-in receiver. Tracing itself defaults to disabled unless you enable it.
+The receiver defaults to port 4318. With `port: 0`, the startup log and `/debug/status` report the assigned port. Omit `otlp.http` to run without the built-in receiver. Tracing itself defaults to disabled unless you enable it.
 
 `redactAttributes` is matched case-insensitively as a **substring** of each attribute
 key, so short patterns over-match: `token` also matches `gen_ai.usage.input_tokens`, and
