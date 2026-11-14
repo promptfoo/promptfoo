@@ -192,17 +192,31 @@ This combination gives the grader both conceptual understanding and specific exa
 
 ### Setting the Grader Output Language
 
-By default the grader writes the `reason` field in English. Set `redteam.graderLanguage` to any natural-language name when your team reviews results in another language:
+Set `redteam.graderLanguage` to request a language for explanations from the LLM grader. Deterministic verdicts and provider errors retain their existing wording.
 
 ```yaml
 redteam:
   graderLanguage: Japanese
-  plugins:
-    - harmful:hate
-    - excessive-agency
 ```
 
-The language name is injected as an instruction into every LLM grading rubric, so all grader explanations and justifications will be written in the specified language. This applies globally to every plugin in the scan; there is no per-plugin override.
+## Reviewing Results
 
-:::note
-Localization applies to reasons written by an LLM grader. Reasons generated directly by Promptfoo, such as deterministic verdicts and provider errors, keep their existing wording.
+You can review the results of the grader by going into **Evals** section of the platform and selecting the specific scan.
+
+<div align="center">
+  <img src="/img/docs/grading/eval_assertions_view.png" alt="Eval results view" width="900" />
+</div>
+
+Scores range from 0 to 1 and help guide the judge in agentic cases to distinguish outputs that are more impactful or higher risk. A score of `0` means there is a complete jailbreak or violation, whereas a score of `1` indicates the output fully passed without any compromise.
+
+Inside the evals view, you can review the grader reasoning for each result, modify whether it was a pass or fail, and edit the test score.
+
+<div align="center">
+  <img src="/img/docs/grading/changing_results.gif" alt="Changing results" width="900" />
+</div>
+
+### Addressing False Positives
+
+False positives are when a test case is marked as passing when it should have been marked as failing or vice versa. A common cause of false positives is when the Promptfoo graders don't know enough about the target to make an accurate assessment.
+
+The best way to reduce false positives is by adding additional context to your target `Purpose`. If you find that false positives are higher for specific plugins, then consider creating custom graders at the plugin level to specify your requirements.
