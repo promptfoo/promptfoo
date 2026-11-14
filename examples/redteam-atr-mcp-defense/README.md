@@ -47,7 +47,7 @@ When those patterns surface in final outputs, ATR can flag examples such as:
 
 ATR also has broader rule categories for surfaces such as tool poisoning and skill compromise. This example does not inspect those raw artifacts directly; it only sees them if their text reaches the final model output.
 
-Full rule list: [ATR rule categories](https://github.com/Agent-Threat-Rule/agent-threat-rules#what-atr-detects)
+Full rule list: [ATR rule categories](https://github.com/Agent-Threat-Rule/agent-threat-rules#detection-categories)
 
 ## Customization
 
