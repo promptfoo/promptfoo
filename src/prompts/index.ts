@@ -66,14 +66,28 @@ async function processPromptFile(
     return await processExecutableFile(filePath, prompt, functionName, labelPath);
   }
   // If no extension matched but file exists and is executable, treat it as an executable
+  let stats;
   try {
-    const stats = await stat(filePath);
-    if (stats.isFile() && (stats.mode & 0o111) !== 0) {
-      // File is executable
-      return await processExecutableFile(filePath, prompt, functionName, labelPath);
+    stats = await stat(filePath);
+  } catch (error) {
+    // The path was only a maybeFilePath heuristic guess, which also matches
+    // plain prompt text that merely ends like a file name (e.g. "Summarize
+    // changes in 1.20"). When nothing exists at that path, treat the raw
+    // string as the prompt, mirroring the glob fallback in processPrompt.
+    // Other stat failures (permissions, I/O errors) still propagate.
+    if ((error as NodeJS.ErrnoException)?.code === 'ENOENT') {
+      if (prompt.raw?.startsWith('file://')) {
+        return [];
+      }
+      logger.debug(
+        `Attempted to load file at "${prompt.raw}", but no file found. Using raw string.`,
+      );
+      return processString(prompt);
     }
-  } catch (_e) {
-    // File doesn't exist or can't be accessed, fall through
+    throw error;
+  }
+  if (stats.isFile() && (stats.mode & 0o111) !== 0) {
+    return processExecutableFile(filePath, prompt, functionName, labelPath);
   }
   return [];
 }

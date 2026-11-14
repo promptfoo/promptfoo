@@ -1,4 +1,5 @@
 import * as fs from 'fs';
+import { stat } from 'fs/promises';
 
 import dedent from 'dedent';
 import { globSync } from 'glob';
@@ -23,6 +24,14 @@ vi.mock('glob', async () => {
 });
 
 vi.mock('fs');
+
+vi.mock('fs/promises', async () => {
+  const actual = await vi.importActual<typeof import('fs/promises')>('fs/promises');
+  return {
+    ...actual,
+    stat: vi.fn().mockImplementation(actual.stat),
+  };
+});
 
 vi.mock('python-shell');
 vi.mock('../../src/esm', async () => {
@@ -97,11 +106,45 @@ describe('readPrompts', () => {
   it('should throw an error for an unsupported file format', async () => {
     vi.mocked(fs.statSync).mockReturnValueOnce({ isDirectory: () => false } as fs.Stats);
     vi.mocked(maybeFilePath).mockReturnValueOnce(true);
+    // The file exists but has an extension no processor handles
+    vi.mocked(stat).mockResolvedValueOnce({ isFile: () => true, mode: 0o644 } as fs.Stats);
     mockProcessEnv({ PROMPTFOO_STRICT_FILES: 'true' });
     await expect(readPrompts(['unsupported.for.mat'])).rejects.toThrow(
       'There are no prompts in "unsupported.for.mat"',
     );
     expect(fs.readFileSync).toHaveBeenCalledTimes(0);
+  });
+
+  it('should fall back to a string when a heuristic file path does not exist', async () => {
+    // maybeFilePath also matches plain prompt text ending in ".YZ" or ".YZW"
+    // (e.g. version or decimal numbers); with no file at that path the input is
+    // a literal prompt, mirroring the glob fallback above.
+    await expect(readPrompts('Summarize changes in 1.20')).resolves.toEqual([
+      expect.objectContaining({
+        raw: 'Summarize changes in 1.20',
+        label: 'Summarize changes in 1.20',
+      }),
+    ]);
+    await expect(readPrompts('Explain the move to v2.100')).resolves.toEqual([
+      expect.objectContaining({
+        raw: 'Explain the move to v2.100',
+        label: 'Explain the move to v2.100',
+      }),
+    ]);
+  });
+
+  it('should reject an explicit file URI for a missing prompt', async () => {
+    await expect(readPrompts('file://missing.for.mat')).rejects.toThrow('There are no prompts');
+  });
+
+  it('should propagate non-ENOENT stat errors for heuristic file paths', async () => {
+    // Only a missing file justifies the literal-prompt fallback; permission and
+    // other filesystem failures must surface rather than be swallowed.
+    const eacces = Object.assign(new Error('EACCES: permission denied, stat'), {
+      code: 'EACCES',
+    });
+    vi.mocked(stat).mockRejectedValueOnce(eacces);
+    await expect(readPrompts('Summarize changes in 1.20')).rejects.toThrow('EACCES');
   });
 
   it('should read a single prompt', async () => {
