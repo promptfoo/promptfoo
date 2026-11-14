@@ -1,9 +1,11 @@
 import { createRequire } from 'node:module';
 import * as fs from 'fs';
 
+import nunjucks from 'nunjucks';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   type AfterEachExtensionHookContext,
+  clearPromptTemplateCache,
   collectFileMetadata,
   extractTextFromPDF,
   getExtensionHookName,
@@ -550,6 +552,90 @@ describe('evaluatorHelpers', () => {
       const prompt = toPrompt('Unfinished comment: {# comment');
       const renderedPrompt = await renderPrompt(prompt, {}, {});
       expect(renderedPrompt).toBe('Unfinished comment: {# comment');
+    });
+
+    it('should compile template once and reuse across multiple rows', async () => {
+      clearPromptTemplateCache();
+      const compileSpy = vi.spyOn(nunjucks.Template.prototype as any, '_compile');
+      try {
+        const prompt = toPrompt('Hello {{ name }}, question: {{ q }}');
+        const r1 = await renderPrompt(prompt, { name: 'Alice', q: '1+1' });
+        const r2 = await renderPrompt(prompt, { name: 'Bob', q: '2+2' });
+        const r3 = await renderPrompt(prompt, { name: 'Charlie', q: '3+3' });
+
+        expect(r1).toBe('Hello Alice, question: 1+1');
+        expect(r2).toBe('Hello Bob, question: 2+2');
+        expect(r3).toBe('Hello Charlie, question: 3+3');
+        expect(compileSpy).toHaveBeenCalledTimes(1);
+      } finally {
+        compileSpy.mockRestore();
+        clearPromptTemplateCache();
+      }
+    });
+
+    it('does not reuse the loader environment for statement templates', async () => {
+      const renderString = vi.spyOn(nunjucks.Environment.prototype, 'renderString');
+      try {
+        const prompt = toPrompt('{% if name %}Hello {{ name }}{% endif %}');
+        expect(await renderPrompt(prompt, { name: 'Alice' })).toBe('Hello Alice');
+        expect(await renderPrompt(prompt, { name: 'Bob' })).toBe('Hello Bob');
+        expect(renderString).toHaveBeenCalledTimes(2);
+      } finally {
+        renderString.mockRestore();
+      }
+    });
+
+    it('should differentiate template cache by custom nunjucks filters', async () => {
+      clearPromptTemplateCache();
+      const compileSpy = vi.spyOn(nunjucks.Template.prototype as any, '_compile');
+      try {
+        const prompt = toPrompt('{{ text | customFilter }}');
+        const filters1 = { customFilter: (s: string) => s.toUpperCase() };
+        const filters2 = { customFilter: (s: string) => s.toLowerCase() };
+
+        const r1 = await renderPrompt(prompt, { text: 'Hello' }, filters1);
+        const r2 = await renderPrompt(prompt, { text: 'World' }, filters1);
+        const r3 = await renderPrompt(prompt, { text: 'HELLO' }, filters2);
+
+        expect(r1).toBe('HELLO');
+        expect(r2).toBe('WORLD');
+        expect(r3).toBe('hello');
+        // Compiled once for filters1, once for filters2
+        expect(compileSpy).toHaveBeenCalledTimes(2);
+      } finally {
+        compileSpy.mockRestore();
+        clearPromptTemplateCache();
+      }
+    });
+
+    it('should use the current filter after a filter map is edited in place', async () => {
+      clearPromptTemplateCache();
+      try {
+        const prompt = toPrompt('{{ text | customFilter }}');
+        const filters: Record<string, (s: string) => string> = {
+          customFilter: (s) => s.toUpperCase(),
+        };
+        expect(await renderPrompt(prompt, { text: 'Hello' }, filters)).toBe('HELLO');
+        filters.customFilter = (s) => s.toLowerCase();
+        expect(await renderPrompt(prompt, { text: 'Hello' }, filters)).toBe('hello');
+      } finally {
+        clearPromptTemplateCache();
+      }
+    });
+
+    it('should not share a cache key between filtered and filterless templates', async () => {
+      clearPromptTemplateCache();
+      try {
+        await renderPrompt(toPrompt('{{ text }}'), { text: 'x' }, { up: (s: string) => s });
+        // The filter map got some id fN, so its key looks like `fN:...`. A filterless
+        // template whose text starts with `fN:` must not pick that entry up.
+        for (let i = 1; i <= 50; i++) {
+          const rendered = await renderPrompt(toPrompt(`f${i}:{{ text }}`), { text: 'x' });
+          expect(rendered).toBe(`f${i}:x`);
+        }
+      } finally {
+        clearPromptTemplateCache();
+      }
     });
   });
 

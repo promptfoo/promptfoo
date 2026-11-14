@@ -1,6 +1,8 @@
 import fs from 'fs/promises';
 import * as path from 'path';
 
+import { LRUCache } from 'lru-cache';
+import nunjucks from 'nunjucks';
 import cliState from './cliState';
 import { getEnvBool } from './envars';
 import { importModule } from './esm';
@@ -226,6 +228,67 @@ function detectMimeFromBase64(base64Data: string): string | null {
   return null;
 }
 
+const promptTemplateCache = new LRUCache<string, nunjucks.Template>({
+  max: 1000,
+});
+
+let filterIdCounter = 0;
+const filterMapIds = new WeakMap<NunjucksFilterMap, { id: number; entries: [string, unknown][] }>();
+
+function getFilterKey(filters?: NunjucksFilterMap): string {
+  if (!filters) {
+    return '';
+  }
+  const entries = Object.entries(filters);
+  if (entries.length === 0) {
+    return '';
+  }
+  // A map edited in place gets a new id, so templates compiled with the old filters aren't reused.
+  let cached = filterMapIds.get(filters);
+  const prev = cached?.entries;
+  const unchanged =
+    prev?.length === entries.length &&
+    entries.every(([name, fn], i) => prev[i][0] === name && prev[i][1] === fn);
+  if (!cached || !unchanged) {
+    cached = { id: ++filterIdCounter, entries };
+    filterMapIds.set(filters, cached);
+  }
+  return `f${cached.id}`;
+}
+
+/** Drops the compiled interpolation templates. */
+export function clearPromptTemplateCache(): void {
+  promptTemplateCache.clear();
+}
+
+function renderTemplateString(
+  templateStr: string,
+  context: Record<string, unknown>,
+  getEngine: () => nunjucks.Environment,
+  nunjucksFilters?: NunjucksFilterMap,
+): string {
+  if (getEnvBool('PROMPTFOO_DISABLE_TEMPLATING')) {
+    return templateStr;
+  }
+  if (!templateStr.includes('{')) {
+    return templateStr;
+  }
+  // Statement tags can load templates whose contents change independently of the prompt.
+  // Preserve the loader's normal per-render behavior for these prompts.
+  if (templateStr.includes('{%')) {
+    return getEngine().renderString(templateStr, context);
+  }
+  const filterKey = getFilterKey(nunjucksFilters);
+  // Always prefix, so a filterless template whose text starts with `f1:` can't share a key with a filtered one.
+  const cacheKey = `${filterKey}:${templateStr}`;
+  let tmpl = promptTemplateCache.get(cacheKey);
+  if (!tmpl) {
+    tmpl = new nunjucks.Template(templateStr, getEngine());
+    promptTemplateCache.set(cacheKey, tmpl);
+  }
+  return tmpl.render(context);
+}
+
 /**
  * Renders a prompt template with variable substitution using Nunjucks.
  *
@@ -246,7 +309,8 @@ export async function renderPrompt(
   provider?: ApiProvider,
   skipRenderVars?: string[],
 ): Promise<string> {
-  const nunjucks = getNunjucksEngine(nunjucksFilters);
+  let nunjucksInstance: nunjucks.Environment | undefined;
+  const getNunjucks = () => (nunjucksInstance ??= getNunjucksEngine(nunjucksFilters));
   const loadedMimeTypes = setLoadedFileMimeTypes(vars);
 
   let basePrompt = prompt.raw;
@@ -509,7 +573,7 @@ export async function renderPrompt(
     if (getEnvBool('PROMPTFOO_DISABLE_JSON_AUTOESCAPE')) {
       // Pre-process: auto-wrap in {% raw %} if partial Nunjucks tags detected
       basePrompt = autoWrapRawIfPartialNunjucks(basePrompt);
-      return nunjucks.renderString(basePrompt, vars);
+      return renderTemplateString(basePrompt, vars, getNunjucks, nunjucksFilters);
     }
 
     const parsed = JSON.parse(basePrompt);
@@ -532,7 +596,15 @@ export async function renderPrompt(
           return [key, value];
         }
 
-        return [key, nunjucks.renderString(autoWrapRawIfPartialNunjucks(value), vars)];
+        return [
+          key,
+          renderTemplateString(
+            autoWrapRawIfPartialNunjucks(value),
+            vars,
+            getNunjucks,
+            nunjucksFilters,
+          ),
+        ];
       }),
     );
 
@@ -541,7 +613,7 @@ export async function renderPrompt(
     // Note: Explicitly not using `renderVarsInObject` as it will re-call `renderString`; each call will
     // strip Nunjucks Tags, which breaks using raw (https://mozilla.github.io/nunjucks/templating.html#raw) e.g.
     // {% raw %}{{some_string}}{% endraw %} -> {{some_string}} -> ''
-    return nunjucks.renderString(basePrompt, renderedVars);
+    return renderTemplateString(basePrompt, renderedVars, getNunjucks, nunjucksFilters);
   }
 }
 
