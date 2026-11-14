@@ -114,33 +114,24 @@ export class ElevenLabsWebSocketClient {
       try {
         const parsed = JSON.parse(data.toString());
 
+        if (parsed.error) {
+          callback({ type: 'error', data: parsed.error });
+          return;
+        }
+
         if (parsed.audio) {
-          callback({
-            type: 'audio',
-            data: parsed.audio, // Base64 encoded audio chunk
-          });
-        } else if (parsed.alignment) {
-          callback({
-            type: 'alignment',
-            data: parsed.alignment, // Word-level timestamps
-          });
-        } else if (parsed.error) {
-          callback({
-            type: 'error',
-            data: parsed.error,
-          });
-        } else if (!parsed.isFinal) {
+          callback({ type: 'audio', data: parsed.audio });
+        }
+        if (parsed.alignment) {
+          callback({ type: 'alignment', data: parsed.alignment });
+        }
+        if (parsed.isFinal) {
+          callback({ type: 'flush' });
+        } else if (!parsed.audio && !parsed.alignment) {
           logger.debug('[ElevenLabs WebSocket] Received unknown message type', {
             keys: Object.keys(parsed),
           });
-          callback({
-            type: 'unknown',
-            data: parsed,
-          });
-        }
-
-        if (parsed.isFinal && !parsed.error) {
-          callback({ type: 'flush' });
+          callback({ type: 'unknown', data: parsed });
         }
       } catch (error) {
         logger.error('[ElevenLabs WebSocket] Failed to parse message', { error });

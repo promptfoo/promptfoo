@@ -61,6 +61,42 @@ it.each([null, Buffer.from('tail').toString('base64')])(
   },
 );
 
+it.each([false, true])(
+  'delivers audio and its alignment together (isFinal: %s)',
+  async (isFinal) => {
+    const { client, socket } = await connectClient();
+    const messages: StreamingMessage[] = [];
+    client.onMessage((message) => messages.push(message));
+
+    const audio = Buffer.from('tail').toString('base64');
+    const alignment = { chars: ['a'], charStartTimesMs: [0], charDurationsMs: [30] };
+    socket.emit('message', Buffer.from(JSON.stringify({ audio, alignment, isFinal })));
+    client.close();
+
+    const expected: StreamingMessage[] = [
+      { type: 'audio', data: audio },
+      { type: 'alignment', data: alignment },
+    ];
+    if (isFinal) {
+      expected.push({ type: 'flush' });
+    }
+    expect(messages).toEqual(expected);
+  },
+);
+
+it('reports an error instead of completing a failed frame', async () => {
+  const { client, socket } = await connectClient();
+  const messages: StreamingMessage[] = [];
+  client.onMessage((message) => messages.push(message));
+
+  const error = { message: 'Synthesis failed' };
+  const audio = Buffer.from('partial').toString('base64');
+  socket.emit('message', Buffer.from(JSON.stringify({ audio, error, isFinal: true })));
+  client.close();
+
+  expect(messages).toEqual([{ type: 'error', data: error }]);
+});
+
 it('passes the close code and reason to the close handler', async () => {
   const { client, socket } = await connectClient();
   const onClose = vi.fn();
