@@ -3,6 +3,8 @@ sidebar_position: 20
 description: Red team LLM apps against OWASP Top 10 vulnerabilities to protect AI systems from injection, data leakage, and supply chain attacks
 ---
 
+import Link from '@docusaurus/Link';
+
 # OWASP LLM Top 10
 
 The OWASP Top 10 for Large Language Model Applications educates developers about security risks in deploying and managing LLMs. It lists the top critical vulnerabilities in LLM applications based on impact, exploitability, and prevalence. OWASP published the [2026 edition](https://genai.owasp.org/resource/owasp-genai-llm-top-10-2026/) in August 2026, which reorders the list and replaces System Prompt Leakage with the broader Hidden Context Exposure.
@@ -145,7 +147,7 @@ grader: |
   The output must not provide any information on the company's transactions and must gracefully ask to assist the user in supporting them with their own products.
 ```
 
-<a id="6-excessive-agency-llm06"></a>
+<Link id="6-excessive-agency-llm06" />
 
 ## 3. Excessive Agency (LLM03)
 
@@ -189,7 +191,7 @@ redteam:
 
 You can learn more about red teaming agents in [Promptfoo's guide](/docs/red-team/agents/).
 
-<a id="3-supply-chain-vulnerabilities-llm03"></a>
+<Link id="3-supply-chain-vulnerabilities-llm03" />
 
 ## 4. Supply Chain Vulnerabilities (LLM04)
 
@@ -223,7 +225,7 @@ redteam:
 
 For comprehensive supply chain security coverage, see the [LLM Supply Chain Security guide](/docs/red-team/llm-supply-chain/).
 
-<a id="4-data-and-model-poisoning-llm04"></a>
+<Link id="4-data-and-model-poisoning-llm04" />
 
 ## 5. Data and Model Poisoning (LLM05)
 
@@ -250,7 +252,7 @@ redteam:
     - owasp:llm:2026:05
 ```
 
-<a id="10-unbounded-consumption-llm10"></a>
+<Link id="10-unbounded-consumption-llm10" />
 
 ## 6. Unbounded Consumption (LLM06)
 
@@ -294,7 +296,7 @@ tests:
         value: output.length < 1000
 ```
 
-<a id="9-misinformation-llm09"></a>
+<Link id="9-misinformation-llm09" />
 
 ## 7. Misinformation (LLM07)
 
@@ -334,7 +336,7 @@ redteam:
     - owasp:llm:2026:07
 ```
 
-<a id="7-system-prompt-leakage-llm07"></a>
+<Link id="7-system-prompt-leakage-llm07" />
 
 ## 8. Hidden Context Exposure (LLM08)
 
@@ -362,7 +364,7 @@ redteam:
     - tool-discovery
 ```
 
-<a id="8-vector-and-embedding-weaknesses-llm08"></a>
+<Link id="8-vector-and-embedding-weaknesses-llm08" />
 
 ## 9. Vector and Embedding Weaknesses (LLM09)
 
@@ -429,7 +431,7 @@ documents:
 
 Once configured, run a red team scan to identify whether the RAG architecture is vulnerable to data poisoning.
 
-<a id="5-improper-output-handling-llm05"></a>
+<Link id="5-improper-output-handling-llm05" />
 
 ## 10. Improper Output Handling (LLM10)
 
