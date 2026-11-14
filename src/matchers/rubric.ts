@@ -813,6 +813,10 @@ function graderFailureFromResponse(
   response: ProviderResponse,
 ): Omit<GradingResult, 'assertion'> {
   const failure = graderFail(reason, response.tokenUsage);
+  const model = response.metadata?.model;
+  if (typeof model === 'string' && model) {
+    failure.metadata = { ...failure.metadata, model };
+  }
   if (response.cached) {
     return {
       ...failure,

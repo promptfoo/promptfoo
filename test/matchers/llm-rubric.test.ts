@@ -1427,6 +1427,20 @@ describe('matchesLlmRubric', () => {
     });
   });
 
+  it('records the served model on malformed grading replies without trusting verdict or cache metadata', async () => {
+    const result = await matchesLlmRubric('Expected output', 'Sample output', {
+      provider: createMockProvider({
+        response: {
+          output: 'non-JSON reply',
+          metadata: { model: 'served-revision', graderError: false, cachedResponse: true },
+        },
+      }),
+    });
+
+    expect(result.pass).toBe(false);
+    expect(result.metadata).toEqual({ model: 'served-revision', graderError: true });
+  });
+
   it('counts a fresh failed grading request even when its provider reports no usage', async () => {
     const result = await matchesLlmRubric('Expected output', 'Sample output', {
       rubricPrompt: 'Grading prompt',
