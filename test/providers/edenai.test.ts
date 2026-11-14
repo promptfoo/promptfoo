@@ -59,14 +59,14 @@ describe('EdenAiProvider cost', () => {
     expect(cost).toBe(0.0123);
   });
 
-  it('ignores the Eden AI cost on cache hits', () => {
+  it('preserves the reported Eden AI cost on cache hits', () => {
     const provider = createEdenAiProvider('edenai:openai/gpt-4o-mini') as any;
     const cost = provider.calculateResponseCost(
       { cost: 0.0123, usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 } },
       {},
       true,
     );
-    expect(cost).not.toBe(0.0123);
+    expect(cost).toBe(0.0123);
   });
 });
 
@@ -149,6 +149,7 @@ describe('EdenAiProvider key resolution', () => {
 
   it('does NOT fall back to OPENAI_API_KEY or forward the OpenAI organization', () => {
     const restore = mockProcessEnv({
+      EDENAI_API_KEY: undefined,
       OPENAI_API_KEY: 'sk-openai-secret',
       OPENAI_ORGANIZATION: 'org-openai-secret',
     });
@@ -175,7 +176,7 @@ describe('EdenAiProvider key resolution', () => {
 });
 
 describe('Eden AI HTTP contract', () => {
-  it('sends a chat request, reports cost once, and handles HTTP errors', async () => {
+  it('sends a single request across a cache replay, retains cost, and handles HTTP errors', async () => {
     const requests: Array<{
       url?: string;
       authorization?: string;
@@ -229,7 +230,7 @@ describe('Eden AI HTTP contract', () => {
         });
         const repeated = await provider.callApi('fixture prompt');
         expect(repeated.cached).toBe(true);
-        expect(repeated.cost).toBe(0);
+        expect(repeated.cost).toBe(response.cost);
       });
       expect((await provider.callApi('invalid fixture')).error).toContain('fixture rejected input');
       expect(requests).toHaveLength(2);

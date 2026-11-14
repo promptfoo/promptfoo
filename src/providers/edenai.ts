@@ -72,18 +72,16 @@ class EdenAiProvider extends OpenAiChatCompletionProvider {
   // Eden AI returns an authoritative top-level `cost` (USD) on successful
   // responses. Prefer it over the OpenAI token based estimate, which would be
   // wrong for non-OpenAI models routed through the gateway (and missing for
-  // vendors promptfoo has no price table for). Cache hits defer to the base,
-  // which returns no cost.
+  // vendors promptfoo has no price table for). The evaluator accounts for
+  // incurred cost separately on cache replay.
   protected override calculateResponseCost(
     data: OpenAiChatCompletionCostData,
     config: OpenAiCompletionOptions,
     cached: boolean,
   ): number | undefined {
-    if (!cached) {
-      const edenCost = (data as { cost?: unknown }).cost;
-      if (typeof edenCost === 'number' && Number.isFinite(edenCost)) {
-        return edenCost;
-      }
+    const edenCost = (data as { cost?: unknown }).cost;
+    if (typeof edenCost === 'number' && Number.isFinite(edenCost)) {
+      return edenCost;
     }
     return super.calculateResponseCost(data, config, cached);
   }
