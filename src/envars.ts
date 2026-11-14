@@ -113,9 +113,14 @@ type EnvVars = {
    */
   PROMPTFOO_OTEL_DEBUG?: boolean;
   /**
-   * Standard OTEL environment variable for OTLP endpoint.
+   * Standard OTEL environment variable for the OTLP base endpoint; `/v1/traces` is appended
+   * when it has no path.
    */
   OTEL_EXPORTER_OTLP_ENDPOINT?: string;
+  /**
+   * Standard OTEL environment variable for the OTLP traces endpoint, used verbatim.
+   */
+  OTEL_EXPORTER_OTLP_TRACES_ENDPOINT?: string;
 
   //=========================================================================
   // promptfoo configuration options

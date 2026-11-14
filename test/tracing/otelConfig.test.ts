@@ -65,39 +65,26 @@ describe('otelConfig', () => {
       expect(config.serviceName).toBe('my-service');
     });
 
-    it('should prefer PROMPTFOO_OTEL_ENDPOINT over OTEL_EXPORTER_OTLP_ENDPOINT', () => {
-      mockedGetEnvBool.mockImplementation((_key, defaultVal) => defaultVal ?? false);
-      mockedGetEnvString.mockImplementation((key, defaultVal) => {
-        if (key === 'PROMPTFOO_OTEL_ENDPOINT') {
-          return 'http://custom:4318';
-        }
-        if (key === 'OTEL_EXPORTER_OTLP_ENDPOINT') {
-          return 'http://standard:4318';
-        }
-        return defaultVal;
-      });
-
-      const config = getOtelConfigFromEnv();
-
-      expect(config.endpoint).toBe('http://custom:4318');
-    });
-
-    it('should fall back to OTEL_EXPORTER_OTLP_ENDPOINT', () => {
-      mockedGetEnvBool.mockImplementation((_key, defaultVal) => defaultVal ?? false);
-      mockedGetEnvString.mockImplementation(((key: string, defaultVal?: string) => {
-        if (key === 'PROMPTFOO_OTEL_ENDPOINT') {
-          return defaultVal;
-        }
-        if (key === 'OTEL_EXPORTER_OTLP_ENDPOINT') {
-          return 'http://standard:4318';
-        }
-        return defaultVal;
-      }) as typeof getEnvString);
-
-      const config = getOtelConfigFromEnv();
-
-      expect(config.endpoint).toBe('http://standard:4318');
-    });
+    it.each([
+      [undefined, undefined, 'http://collector:4318', 'http://collector:4318/v1/traces'],
+      [' ', ' ', 'http://collector:4318/?tenant=a', 'http://collector:4318/v1/traces?tenant=a'],
+      [undefined, undefined, 'http://collector/v1/traces', 'http://collector/v1/traces'],
+      [undefined, undefined, 'http://collector/custom/path', 'http://collector/custom/path'],
+      [undefined, undefined, 'invalid URL', 'invalid URL'],
+      [undefined, 'http://traces:4318', 'http://collector', 'http://traces:4318'],
+      ['http://override/root', 'http://traces', 'http://collector', 'http://override/root'],
+    ])(
+      'resolves traces endpoints with override %s, signal %s, and generic %s',
+      (override, signal, generic, expected) => {
+        const values: Record<string, string | undefined> = {
+          PROMPTFOO_OTEL_ENDPOINT: override,
+          OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: signal,
+          OTEL_EXPORTER_OTLP_ENDPOINT: generic,
+        };
+        mockedGetEnvString.mockImplementation((key, fallback) => values[key] ?? fallback);
+        expect(getOtelConfigFromEnv().endpoint).toBe(expected);
+      },
+    );
 
     it('should read PROMPTFOO_OTEL_LOCAL_EXPORT', () => {
       mockedGetEnvBool.mockImplementation((key, defaultVal) => {
