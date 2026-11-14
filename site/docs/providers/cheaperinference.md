@@ -1,6 +1,7 @@
 ---
-sidebar_label: Cheaper Inference
-description: Run evals against Cheaper Inference chat models using the OpenAI-compatible provider with a custom base URL and API key.
+title: Cheaper Inference
+sidebar_position: 87
+description: Compare chat models through Cheaper Inference with Promptfoo. Configure the OpenAI-compatible endpoint, isolate credentials, and interpret cost estimates.
 ---
 
 # Cheaper Inference
