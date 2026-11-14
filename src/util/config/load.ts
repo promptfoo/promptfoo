@@ -1086,26 +1086,22 @@ async function resolveLoadedConfig(
 
   // Load defaultTest from file:// reference if needed
   let processedDefaultTest: Partial<TestCase> | undefined;
-  // When `defaultTest` is loaded from a file, remember its directory so
-  // nested file:// refs inside it (assertion includes, var files) are
-  // resolved relative to it rather than the config root.
-  let defaultTestBasePath: string = basePath;
+  // Assertion includes are relative to the file that declares them.
+  let defaultAssertionBasePath = basePath;
   if (typeof defaultTestRaw === 'string' && defaultTestRaw.startsWith('file://')) {
     const loaded = await maybeLoadFromExternalFile(defaultTestRaw);
     processedDefaultTest = loaded as Partial<TestCase>;
     const defaultTestFilePath = path.resolve(basePath, defaultTestRaw.slice('file://'.length));
-    defaultTestBasePath = path.dirname(defaultTestFilePath);
+    defaultAssertionBasePath = path.dirname(defaultTestFilePath);
   } else if (defaultTestRaw) {
     processedDefaultTest = defaultTestRaw as Partial<TestCase>;
   }
 
-  // Expand `file://*.yaml|json` assertion include entries in defaultTest.assert
-  // so the spread at line 887 below surfaces a schema-valid list instead of
-  // bare `{ value: file://...yaml }` entries. `readTest()` also expands, but
-  // its result is stored separately from `processedDefaultTest`.
+  // Expand the include entries before normalizing the default test. Its vars
+  // and provider continue to resolve from the suite configuration directory.
   if (processedDefaultTest?.assert) {
     const expandedDefault = await expandAssertionFileRefs(processedDefaultTest.assert, {
-      baseDir: defaultTestBasePath,
+      baseDir: defaultAssertionBasePath,
     });
     if (expandedDefault) {
       processedDefaultTest.assert = expandedDefault;
@@ -1197,7 +1193,7 @@ async function resolveLoadedConfig(
   const runtimeEnv = stringifyEnvValues(config.env);
 
   config.defaultTest = processedDefaultTest
-    ? await readTestConfig(processedDefaultTest, defaultTestBasePath, true, runtimeEnv)
+    ? await readTestConfig(processedDefaultTest, basePath, true, runtimeEnv)
     : undefined;
   const parsedDefaultTest = config.defaultTest
     ? await readTest(clone(config.defaultTest), basePath, true, runtimeEnv)
