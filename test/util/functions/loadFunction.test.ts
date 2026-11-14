@@ -281,6 +281,13 @@ describe('loadFunction', () => {
 });
 
 describe('parseFileUrl', () => {
+  it('keeps extension-like colon sequences in directory components', () => {
+    expect(parseFileUrl('file://cache.py:backup/grader.js:fn')).toEqual({
+      filePath: 'cache.py:backup/grader.js',
+      functionName: 'fn',
+    });
+  });
+
   it('should parse file URL with function name', () => {
     const result = parseFileUrl('file:///path/to/file.js:functionName');
     expect(result).toEqual({
@@ -389,6 +396,14 @@ describe('parseFileUrl', () => {
     expect(result).toEqual({
       filePath: 'path:with:colons/hooks.js',
       functionName: 'functionName',
+    });
+  });
+
+  it('should retain namespace separators in Ruby method names', () => {
+    const result = parseFileUrl('file://some_ruby_file.rb:MyModule::Nested.method');
+    expect(result).toEqual({
+      filePath: 'some_ruby_file.rb',
+      functionName: 'MyModule::Nested.method',
     });
   });
 });
