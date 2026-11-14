@@ -686,7 +686,10 @@ describeEvaluator('evaluator execution control', () => {
   });
 
   it('preserves the JSON type of conversation IDs when grouping rows', () => {
-    const provider: ApiProvider = { id: () => 'echo', callApi: vi.fn() };
+    const provider: ApiProvider = {
+      id: () => 'echo',
+      callApi: vi.fn().mockResolvedValue({ output: 'unused' }),
+    };
     const prompt = toPrompt('{{ _conversation }}');
 
     expect(buildConversationKey(provider, prompt, { metadata: { conversationId: 1 } })).not.toBe(
