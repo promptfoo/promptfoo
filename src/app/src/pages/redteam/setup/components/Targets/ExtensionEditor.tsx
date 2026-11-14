@@ -5,7 +5,7 @@ import { HelperText } from '@app/components/ui/helper-text';
 import { Input } from '@app/components/ui/input';
 import { Label } from '@app/components/ui/label';
 import { cn } from '@app/lib/utils';
-import { isJavascriptFile } from '@promptfoo/util/fileExtensions';
+import { isJavascriptFile, splitExtensionReference } from '@promptfoo/util/fileExtensions';
 import { SetupSection } from '../SetupSection';
 
 interface ValidationError {
@@ -28,15 +28,15 @@ const validatePath = (value: string, isTyping: boolean): ValidationError | undef
     return undefined;
   }
 
-  const withoutPrefix = value.replace(FILE_PROTOCOL_PREFIX, '');
-  const [filePath, functionName] = withoutPrefix.split(':');
+  const reference = value.startsWith(FILE_PROTOCOL_PREFIX) ? value : FILE_PROTOCOL_PREFIX + value;
+  const [, filePath, functionName, ...extra] = splitExtensionReference(reference);
 
   // During typing, only show format error if they've already typed a colon
-  if (isTyping && !value.includes(':')) {
+  if (isTyping && functionName === undefined) {
     return undefined;
   }
 
-  if (!filePath || !functionName) {
+  if (!filePath?.trim() || !functionName?.trim() || extra.length > 0) {
     return { message: 'Incorrect format. Must be of the format /path/to/file.js:hookFunction' };
   }
 

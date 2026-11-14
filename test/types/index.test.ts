@@ -1554,6 +1554,7 @@ describe('TestSuiteSchema', () => {
       ['path/to/file.py:function_name', 'Missing file:// prefix'],
       ['file://path/to/file.txt:function_name', 'Invalid file extension'],
       ['file://path/to/file.py', 'Missing function name'],
+      ['hooks', 'Missing protocol and selector'],
       ['file://path/to/file.py:', 'Empty function name'],
       ['file://:function_name', 'Missing file path'],
       ['file://path/to/file.py:function_name:extra_arg', 'Extra argument'],
