@@ -378,6 +378,7 @@ describe('MCP Server', () => {
           [mcpHostProtection],
           [csrfProtection],
           ['json-middleware'],
+          [expect.any(Function)], // Express error handler registered after the routes
         ]);
         const transportOptions = streamableHttpMocks.constructor.mock.calls[0][0] as {
           sessionIdGenerator: () => string;

@@ -140,7 +140,7 @@ providers:
   - openai:gpt-5-mini
   - openai:gpt-5
   - anthropic:claude-sonnet-5
-  - google:gemini-2.5-flash
+  - google:gemini-3.5-flash-lite
 prompts:
   - |
     Question: What is the capital of {{location}}?
