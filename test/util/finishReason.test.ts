@@ -88,5 +88,12 @@ describe('normalizeFinishReason', () => {
     it('should lowercase unknown reasons after normalization', () => {
       expect(normalizeFinishReason('CUSTOM_REASON')).toBe('custom_reason');
     });
+
+    it.each([
+      [' CONSTRUCTOR ', 'constructor'],
+      [' __PROTO__ ', '__proto__'],
+    ])('should preserve inherited object key %s as a normalized string', (raw, expected) => {
+      expect(normalizeFinishReason(raw)).toBe(expected);
+    });
   });
 });
