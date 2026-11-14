@@ -2312,7 +2312,7 @@ export class HttpProvider implements ApiProvider {
         }
       } catch {
         logger.warn(
-          `[HTTP Provider] Content-Type is application/json, but body is a string. This is likely to cause unexpected results. It should be an object or array. Body: ${body} headers: ${safeJsonStringify(headers)}`,
+          '[HTTP Provider] Content-Type is application/json, but body is a string. This is likely to cause unexpected results. It should be an object or array.',
         );
       }
     }
