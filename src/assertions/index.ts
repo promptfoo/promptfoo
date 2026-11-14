@@ -40,7 +40,7 @@ import {
 import { isApiProvider } from '../types/providers';
 import { isJavascriptFile } from '../util/fileExtensions';
 import invariant from '../util/invariant';
-import { sanitizeUrlForLogging } from '../util/sanitizer';
+import { REDACTED, sanitizeUrlForLogging } from '../util/sanitizer';
 import { getNunjucksEngine } from '../util/templates';
 import { sleep } from '../util/time';
 import { transform } from '../util/transform';
@@ -377,10 +377,26 @@ function getProviderIdentifiers(provider?: ApiProvider): string[] {
 }
 
 function redactXFailIdentifier(identifier: string): string {
-  if (identifier.startsWith('/')) {
-    return sanitizeUrlForLogging(identifier);
-  }
-  return identifier.replace(/[a-z][a-z0-9+.-]*:\/\/[^\s]+/gi, (url) => sanitizeUrlForLogging(url));
+  return identifier.replace(/\S+/g, (token) => {
+    const separator = token.indexOf('://');
+    let start = token.startsWith('(') ? 1 : 0;
+    if (separator >= 0) {
+      // Locate the scheme from its separator once, even for long labels.
+      start = separator;
+      while (start > 0 && /[a-z0-9+.-]/i.test(token[start - 1])) {
+        start--;
+      }
+      if (!/[a-z]/i.test(token[start]) || token.includes('://', separator + 3)) {
+        return REDACTED;
+      }
+    } else if (token[start] !== '/') {
+      return token;
+    }
+
+    const parenthesized = start > 0 && token[start - 1] === '(' && token.endsWith(')');
+    const url = token.slice(start, parenthesized ? -1 : undefined);
+    return token.slice(0, start) + sanitizeUrlForLogging(url) + (parenthesized ? ')' : '');
+  });
 }
 
 function getProviderDisplayName(provider?: ApiProvider): string {

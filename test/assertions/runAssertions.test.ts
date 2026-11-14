@@ -551,20 +551,40 @@ describe('runAssertions', () => {
     expect(result.pass).toBe(true);
   });
 
-  it('matches raw provider URLs without exposing credentials in xfail annotations', async () => {
-    const url = 'https://xatu-user:xatu-password@example.test/v1?api_key=xatu-key';
+  it.each([
+    'https://xatu-user:xatu-password@example.test/v1?api_key=xatu-key',
+    'judge(https://xatu-user:xatu-password@example.test/v1(model)?api_key=xatu-key)',
+    'judge (/v1/model?api_key=xatu-key)',
+  ])('redacts credentials in generated xfail annotations for %s', async (label) => {
     const result = await runAssertions({
-      provider: createMockProvider({ id: url }),
-      test: { assert: [{ type: 'equals', value: 'different', xfail: url }] },
+      provider: createMockProvider({ label }),
+      test: { assert: [{ type: 'equals', value: 'different', xfail: label }] },
       providerResponse: { output: 'sample' },
     });
     expect(result.pass).toBe(true);
     const component = result.componentResults?.[0];
-    expect(component?.metadata?.xfail?.expected).toBe(true);
-    const annotation = JSON.stringify([component?.metadata?.xfail, component?.reason]);
-    expect(annotation).toContain('example.test');
-    expect(annotation).not.toMatch(/xatu-(user|password|key)/);
+    const annotation = component?.metadata?.xfail;
+    expect(annotation?.expected).toBe(true);
+    expect(annotation?.provider).toContain('/v1');
+    expect(annotation?.pattern).toBe(annotation?.provider);
+    expect(JSON.stringify([annotation, component?.reason])).not.toMatch(/xatu-(user|password|key)/);
+    if (label.endsWith(')')) {
+      expect(annotation?.provider).toMatch(/^judge.*\)$/);
+    }
   });
+
+  it.each(['', ' (https://example.test/v1)'])(
+    'preserves long provider labels with optional trailing URLs',
+    async (suffix) => {
+      const label = 'a'.repeat(32_000) + suffix;
+      const result = await runAssertions({
+        provider: createMockProvider({ label }),
+        test: { assert: [{ type: 'equals', value: 'different', xfail: true }] },
+        providerResponse: { output: 'sample' },
+      });
+      expect(result.componentResults?.[0].metadata?.xfail?.provider).toBe(label);
+    },
+  );
 
   it('should ignore expected failures for nonmatching providers', async () => {
     const provider = createMockProvider({ id: 'anthropic:messages:claude-sonnet-4-5' });
