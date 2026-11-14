@@ -179,6 +179,15 @@ const providerCatalog: ProviderTypeOption[] = [
     fileAliases: ['openai_agents', 'openai-agents'],
   },
   {
+    value: 'codex-sdk',
+    label: 'OpenAI Codex SDK',
+    description: 'Evaluate coding agents with the OpenAI Codex SDK',
+    tag: 'agents',
+    defaultId: 'openai:codex-sdk',
+    createConfig: () => ({ sandbox_mode: 'read-only' }),
+    editor: 'custom',
+  },
+  {
     value: 'codex-security',
     label: 'Codex Security SDK',
     description: 'Evaluate security scans, finding validation, model reasoning, and cost',
