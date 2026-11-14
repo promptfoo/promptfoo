@@ -1,12 +1,8 @@
-import { render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { useSettingsState } from './hooks/useSettingsState';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { useResultsViewSettingsStore } from '../store';
 import TableSettingsModal from './TableSettingsModal';
-
-vi.mock('./hooks/useSettingsState', () => ({
-  useSettingsState: vi.fn(),
-}));
 
 vi.mock('./components/SettingsPanel', () => ({
   default: () => <div data-testid="mock-settings-panel"></div>,
@@ -14,7 +10,6 @@ vi.mock('./components/SettingsPanel', () => ({
 
 describe('TableSettingsModal', () => {
   const mockOnClose = vi.fn();
-  const mockResetToDefaults = vi.fn();
   const mockOnResultsTableZoomChange = vi.fn();
   const defaultProps = {
     open: true,
@@ -25,8 +20,10 @@ describe('TableSettingsModal', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+  });
 
-    vi.mocked(useSettingsState).mockReturnValue({ resetToDefaults: mockResetToDefaults });
+  afterEach(() => {
+    useResultsViewSettingsStore.setState(useResultsViewSettingsStore.getInitialState(), true);
   });
 
   it("should not render the settings dialog when 'open' is false", () => {
@@ -51,15 +48,49 @@ describe('TableSettingsModal', () => {
     expect(mockOnClose).toHaveBeenCalledTimes(1);
   });
 
-  it('should call resetToDefaults when the "Reset to Defaults" button is clicked', async () => {
+  it('uses the current setters to reset table preferences in order, then resets zoom', async () => {
     const user = userEvent.setup();
     render(<TableSettingsModal {...defaultProps} />);
+
+    const settings = {
+      ...useResultsViewSettingsStore.getState(),
+      maxTextLength: 900,
+      showPrompts: true,
+    };
+    const resets = [
+      ['setStickyHeader', true],
+      ['setWordBreak', 'break-word'],
+      ['setRenderMarkdown', true],
+      ['setPrettifyJson', true],
+      ['setShowPrompts', false],
+      ['setShowPassFail', true],
+      ['setShowPassReasons', false],
+      ['setShowMetricPills', true],
+      ['setShowInferenceDetails', true],
+      ['setMaxTextLength', 500],
+      ['setMaxImageWidth', 500],
+      ['setMaxImageHeight', 300],
+    ] as const;
+    const setters = resets.map(([name]) => vi.spyOn(settings, name));
+    act(() => useResultsViewSettingsStore.setState(settings));
 
     const resetButton = screen.getByRole('button', { name: 'Reset settings to defaults' });
     await user.click(resetButton);
 
-    expect(mockResetToDefaults).toHaveBeenCalled();
-    expect(mockOnResultsTableZoomChange).toHaveBeenCalledWith(1);
+    setters.forEach((setter, index) => {
+      expect(setter).toHaveBeenCalledExactlyOnceWith(resets[index][1]);
+    });
+    expect(mockOnResultsTableZoomChange).toHaveBeenCalledExactlyOnceWith(1);
+    const callOrder = [...setters, mockOnResultsTableZoomChange].map(
+      (mock) => mock.mock.invocationCallOrder[0],
+    );
+    expect(callOrder).toEqual([...callOrder].sort((a, b) => a - b));
+    expect(useResultsViewSettingsStore.getState()).toMatchObject({
+      maxTextLength: 500,
+      showPrompts: false,
+      renderMarkdown: true,
+      prettifyJson: true,
+    });
   });
 
   it('should display "Done" button', () => {
