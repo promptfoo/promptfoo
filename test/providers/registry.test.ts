@@ -1112,6 +1112,24 @@ describe('Provider Registry', () => {
       expect(provider.id()).toBe('atlascloud:deepseek-v3');
     });
 
+    it('should handle popnow providers correctly', async () => {
+      const factory = providerMap.find((f) => f.test('popnow:google/gemini-3.7-flash/chat'));
+      expect(factory).toBeDefined();
+
+      const popnowOptions = {
+        ...mockProviderOptions,
+        id: undefined,
+      };
+
+      const provider = await factory!.create(
+        'popnow:google/gemini-3.7-flash/chat',
+        popnowOptions,
+        mockContext,
+      );
+      expect(provider).toBeDefined();
+      expect(provider.id()).toBe('popnow:google/gemini-3.7-flash/chat');
+    });
+
     it.each(['llamaapi:vendor:model', 'llamaapi:chat:vendor:model'])(
       'routes %s uniquely to the Llama API provider',
       async (providerPath) => {
