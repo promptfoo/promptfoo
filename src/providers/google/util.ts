@@ -689,6 +689,7 @@ function getGoogleCatalogCost(
  * @param cachedPromptTokens - Number of cached tokens included in the prompt token count
  * @param cachedAudioPromptTokens - Number of cached audio tokens included in the prompt token count
  * @param cachedImagePromptTokens - Number of cached image tokens included in the prompt token count
+ * @param imageCompletionTokens - Image output tokens that cannot be priced using live text rates
  * @returns The calculated cost in dollars, or undefined if it cannot be calculated
  */
 export function calculateGoogleCost(
@@ -708,6 +709,7 @@ export function calculateGoogleCost(
   vertexRegion?: string,
   requestedServiceTier?: unknown,
   pricingTime = Date.now(),
+  imageCompletionTokens?: number,
 ): number | undefined {
   const timestamp = Number.isFinite(pricingTime) ? pricingTime : Date.now();
   const pricingModelName = isVertexMode
@@ -748,6 +750,7 @@ export function calculateGoogleCost(
       audioPromptTokens ||
       audioCompletionTokens ||
       videoCompletionTokens ||
+      imageCompletionTokens ||
       imagePromptTokens ||
       cachedAudioPromptTokens ||
       cachedImagePromptTokens
@@ -951,6 +954,7 @@ export function calculateGoogleCostFromUsage(
     vertexRegion,
     requestedServiceTier,
     pricingTime,
+    getGoogleModalityTokenCount(responseDetails, ['IMAGE']),
   );
 }
 

@@ -105,6 +105,13 @@ describe('live estimates through provider billing paths', () => {
       }),
     ).toBeUndefined();
   });
+  it('leaves Google image output unpriced when only live text rates are available', () => {
+    expect(
+      calculateGoogleCostFromUsage('fixture-new-gemini', {}, 5, 10, false, {
+        candidatesTokensDetails: [{ modality: 'IMAGE', tokenCount: 10 }],
+      }),
+    ).toBeUndefined();
+  });
   it('does not price any unknown provider model when the opt-in is disabled', () => {
     vi.stubEnv('PROMPTFOO_LIVE_PRICING', 'false');
     expect(
