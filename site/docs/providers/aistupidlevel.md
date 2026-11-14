@@ -13,7 +13,7 @@ The router calls providers (OpenAI, Anthropic, Google, DeepSeek, Moonshot, Zhipu
 
 ## Setup
 
-Create a router key at [aistupidlevel.info/router/keys](https://aistupidlevel.info/router/keys), add at least one provider key, and set `ASL_ROUTER_KEY` in your shell, or load it from a file with `--env-file`.
+Create a router key at [aistupidlevel.info/router/keys](https://aistupidlevel.info/router/keys) and set `ASL_ROUTER_KEY` in your shell, or load it from a file with `--env-file`. Add at least one provider key to your account for live model calls.
 
 ```yaml
 providers:
@@ -53,7 +53,7 @@ The model ID is a routing mode, or a real model ID to pin one model:
 
 ## Testing without spending
 
-Add `X-ASL-Sandbox: 'true'` to `headers` to check a configuration: the router runs its real routing and returns a mock answer without calling any provider, and the request does not count against your plan.
+Add `X-ASL-Sandbox: 'true'` to `headers` to check a configuration: the router uses your router key and returns a mock answer. No provider key is needed, and the request does not count against your plan.
 
 ## Example
 
