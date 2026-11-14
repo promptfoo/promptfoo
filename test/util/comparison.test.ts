@@ -55,6 +55,14 @@ describe('resultIsForTestCase', () => {
     expect(resultIsForTestCase(result, testCase)).toBe(true);
   });
 
+  it('matches legacy results without a strategy but keeps explicit saved strategies distinct', () => {
+    const basic = { ...testCase, metadata: { strategyId: 'basic' } };
+    const saved = { ...result, testCase: basic };
+    expect(resultIsForTestCase(result, basic)).toBe(true);
+    expect(resultIsForTestCase(saved, testCase)).toBe(false);
+    expect(resultIsForTestCase(saved, { ...basic, metadata: { strategyId: 'other' } })).toBe(false);
+  });
+
   it('is false if provider is different', async () => {
     const nonMatchTestCase: TestCase = {
       provider: 'different',
@@ -552,6 +560,19 @@ describe('getTestCaseDeduplicationKey', () => {
     });
   });
 
+  it('uses the persisted JSON value of nested variables', () => {
+    const vars = {
+      flag: Object(false),
+      item: { toJSON: (key: string) => ({ key, value: 1 }) },
+      payload: JSON.parse('{"__proto__":"user input"}'),
+    };
+    expect(JSON.parse(getTestCaseDeduplicationKey({ vars })).vars).toEqual({
+      flag: false,
+      item: { key: 'item', value: 1 },
+      payload: { ['__proto__']: 'user input' },
+    });
+  });
+
   it('should handle undefined vars', () => {
     const testCase: TestCase = {
       metadata: { strategyId: 'test' },
@@ -575,6 +596,14 @@ describe('deduplicateTestCases', () => {
     expect(result).toHaveLength(2);
     expect(result[0].vars).toEqual({ prompt: 'hello' });
     expect(result[1].vars).toEqual({ prompt: 'world' });
+  });
+
+  it('ignores object key order, including inside arrays, but preserves array order', () => {
+    const first = { vars: { turns: [{ x: 1, y: 2 }, 'end'], language: 'en' } };
+    const reordered = { vars: { language: 'en', turns: [{ y: 2, x: 1 }, 'end'] } };
+    const reversed = { vars: { language: 'en', turns: ['end', { x: 1, y: 2 }] } };
+
+    expect(deduplicateTestCases([first, reordered, reversed])).toEqual([first, reversed]);
   });
 
   it('should keep tests with same vars but different strategyId', () => {

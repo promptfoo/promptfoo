@@ -75,28 +75,26 @@ export function varsMatch(vars1: Vars | undefined, vars2: Vars | undefined) {
   return deepEqual(vars1, vars2);
 }
 
-/**
- * Generate a unique key for a test case for deduplication purposes.
- * Excludes runtime variables and includes strategyId to distinguish tests
- * with the same prompt but different strategies.
- *
- * @param testCase - The test case to generate a key for
- * @returns A JSON string that uniquely identifies the test case
- */
+/** Reruns identify a test by its variables and strategy, excluding runtime state. */
 export function getTestCaseDeduplicationKey(testCase: TestCase): string {
   const filteredVars = filterRuntimeVars(testCase.vars);
   const strategyId = testCase.metadata?.strategyId || 'none';
-  return JSON.stringify({ vars: filteredVars, strategyId });
+  // Sort the persisted JSON representation, including values with a custom toJSON().
+  const persisted = JSON.parse(JSON.stringify({ vars: filteredVars, strategyId }));
+  return JSON.stringify(persisted, (_key, value) => {
+    if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+      return value;
+    }
+
+    return Object.fromEntries(
+      Object.keys(value)
+        .sort()
+        .map((key) => [key, value[key]]),
+    );
+  });
 }
 
-/**
- * Deduplicates an array of test cases based on their vars and strategyId.
- * Tests with the same vars but different strategies are considered different.
- * Runtime variables (like _conversation, sessionId) are filtered out before comparison.
- *
- * @param tests - Array of test cases to deduplicate
- * @returns Deduplicated array of test cases
- */
+/** Keeps the first test for each key. */
 export function deduplicateTestCases(tests: TestCase[]): TestCase[] {
   const seen = new Set<string>();
   return tests.filter((test) => {
@@ -110,6 +108,11 @@ export function deduplicateTestCases(tests: TestCase[]): TestCase[] {
 }
 
 export function resultIsForTestCase(result: EvaluateResult, testCase: TestCase): boolean {
+  const resultStrategy = result.testCase?.metadata?.strategyId;
+  if (resultStrategy && resultStrategy !== (testCase.metadata?.strategyId || 'none')) {
+    return false;
+  }
+
   const testProviderId = testCase.provider ? providerToIdentifier(testCase.provider) : undefined;
   const resultProviderId = providerToIdentifier(result.provider);
 

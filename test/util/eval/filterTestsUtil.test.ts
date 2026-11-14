@@ -3,6 +3,7 @@ import Eval from '../../../src/models/eval';
 import { ResultFailureReason } from '../../../src/types/index';
 import { filterTestsByResults } from '../../../src/util/eval/filterTestsUtil';
 import * as util from '../../../src/util/index';
+import { createEvaluateResult, createEvaluateSummaryV2 } from '../../factories/eval';
 
 import type { EvaluateResult, Prompt, ProviderResponse, TestSuite } from '../../../src/types/index';
 
@@ -1346,90 +1347,63 @@ describe('filterTestsUtil', () => {
       expect(result[0]?.provider).toBeUndefined();
     });
 
-    it('should deduplicate extracted tests with same vars', async () => {
-      const { resultIsForTestCase: realResultIsForTestCase } =
-        await vi.importActual<typeof import('../../../src/util/index')>('../../../src/util/index');
-      vi.mocked(util.resultIsForTestCase).mockImplementation(realResultIsForTestCase);
+    it.each([false, true])(
+      'keeps distinct saved strategies with config matches: %s',
+      async (withConfig) => {
+        const { resultIsForTestCase } =
+          await vi.importActual<typeof import('../../../src/util/index')>(
+            '../../../src/util/index',
+          );
+        vi.mocked(util.resultIsForTestCase).mockImplementation(resultIsForTestCase);
 
-      const testSuite: TestSuite = {
-        prompts: [],
-        providers: [],
-        tests: [], // Empty config - all tests will be extracted
-      };
+        const defaultVars = { enabled: false, retries: 0, label: '' };
+        const basic = {
+          vars: { input: { a: 1, b: 2 }, ...defaultVars },
+          metadata: { strategyId: 'basic' },
+        };
+        const reordered = {
+          vars: { ...defaultVars, input: { b: 2, a: 1 } },
+          metadata: basic.metadata,
+        };
+        const saved = [
+          { ...basic, description: 'first' },
+          { ...reordered, description: 'duplicate' },
+          { ...basic, description: 'alternate', metadata: { strategyId: 'alternate' } },
+          { ...basic, description: 'other input', vars: { input: { a: 2, b: 1 } } },
+        ];
+        vi.mocked(util.readOutput).mockResolvedValue({
+          evalId: null,
+          results: createEvaluateSummaryV2({
+            results: saved.map((testCase) =>
+              createEvaluateResult({ testCase, vars: testCase.vars }),
+            ),
+          }),
+          config: {},
+          shareableUrl: null,
+        });
 
-      // Multiple results with the same vars (duplicates)
-      const duplicateResults: EvaluateResult[] = [
-        {
-          vars: { prompt: 'duplicate test' },
-          success: false,
-          failureReason: ResultFailureReason.ERROR,
-          provider: { id: 'test-provider' },
-          prompt: mockPrompt,
-          response: mockResponse,
-          promptIdx: 0,
-          testIdx: 0,
-          testCase: { vars: { prompt: 'duplicate test' }, metadata: { pluginId: 'plugin1' } },
-          promptId: 'test',
-          latencyMs: 0,
-          score: 0,
-          namedScores: {},
-        },
-        {
-          vars: { prompt: 'duplicate test' }, // Same vars as above
-          success: false,
-          failureReason: ResultFailureReason.ERROR,
-          provider: { id: 'test-provider' },
-          prompt: mockPrompt,
-          response: mockResponse,
-          promptIdx: 1,
-          testIdx: 1,
-          testCase: { vars: { prompt: 'duplicate test' }, metadata: { pluginId: 'plugin1' } },
-          promptId: 'test',
-          latencyMs: 0,
-          score: 0,
-          namedScores: {},
-        },
-        {
-          vars: { prompt: 'unique test' }, // Different vars
-          success: false,
-          failureReason: ResultFailureReason.ERROR,
-          provider: { id: 'test-provider' },
-          prompt: mockPrompt,
-          response: mockResponse,
-          promptIdx: 2,
-          testIdx: 2,
-          testCase: { vars: { prompt: 'unique test' }, metadata: { pluginId: 'plugin2' } },
-          promptId: 'test',
-          latencyMs: 0,
-          score: 0,
-          namedScores: {},
-        },
-      ];
+        const tests = await filterTestsByResults(
+          {
+            prompts: [],
+            providers: [],
+            defaultTest: { vars: defaultVars, metadata: basic.metadata },
+            tests: withConfig
+              ? [{ description: 'current', vars: { input: basic.vars.input } }, reordered]
+              : [],
+          },
+          'results.json',
+          () => true,
+        );
 
-      vi.mocked(util.readOutput).mockResolvedValue({
-        evalId: null,
-        results: {
-          version: 2,
-          timestamp: new Date().toISOString(),
-          results: duplicateResults,
-          table: { head: { prompts: [], vars: [] }, body: [] },
-          stats: { successes: 0, failures: 0, errors: 3, tokenUsage: mockTokenUsage },
-        },
-        config: {},
-        shareableUrl: null,
-      });
-
-      const result = await filterTestsByResults(
-        testSuite,
-        'results.json',
-        (r) => r.failureReason === ResultFailureReason.ERROR,
-      );
-
-      // Should extract only 2 unique tests (duplicates are removed)
-      expect(result).toHaveLength(2);
-      expect(result.map((t) => t.vars?.prompt)).toContain('duplicate test');
-      expect(result.map((t) => t.vars?.prompt)).toContain('unique test');
-    });
+        expect(tests.map((test) => test.description)).toEqual([
+          withConfig ? 'current' : 'first',
+          'alternate',
+          'other input',
+        ]);
+        expect(tests.at(-1)?.vars).toEqual({ ...defaultVars, input: { a: 2, b: 1 } });
+        expect(saved.at(-1)?.vars).toEqual({ input: { a: 2, b: 1 } });
+      },
+    );
 
     it('should combine config matches and extracted tests', async () => {
       const { resultIsForTestCase: realResultIsForTestCase } =
