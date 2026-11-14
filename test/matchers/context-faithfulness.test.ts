@@ -3,6 +3,11 @@ import { DEFAULT_RAG_ASSERTION_THRESHOLD } from '../../src/assertions/ragDefault
 import { matchesContextFaithfulness } from '../../src/matchers/rag';
 import { DefaultGradingProvider } from '../../src/providers/openai/defaults';
 
+const createOutputResponse = (output: string) => ({
+  output,
+  tokenUsage: { total: 10, prompt: 5, completion: 5 },
+});
+
 describe('matchesContextFaithfulness', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -11,16 +16,12 @@ describe('matchesContextFaithfulness', () => {
     vi.spyOn(DefaultGradingProvider, 'callApi').mockReset();
     vi.spyOn(DefaultGradingProvider, 'callApi')
       .mockImplementationOnce(() => {
-        return Promise.resolve({
-          output: 'Statement 1\nStatement 2\nStatement 3\n',
-          tokenUsage: { total: 10, prompt: 5, completion: 5 },
-        });
+        return Promise.resolve(createOutputResponse('Statement 1\nStatement 2\nStatement 3\n'));
       })
       .mockImplementationOnce(() => {
-        return Promise.resolve({
-          output: 'Final verdict for each statement in order: Yes. No. Yes.',
-          tokenUsage: { total: 10, prompt: 5, completion: 5 },
-        });
+        return Promise.resolve(
+          createOutputResponse('Final verdict for each statement in order: Yes. No. Yes.'),
+        );
       });
   });
 
@@ -37,16 +38,12 @@ describe('matchesContextFaithfulness', () => {
     const mockCallApi = vi
       .fn()
       .mockImplementationOnce(() => {
-        return Promise.resolve({
-          output: 'Statement 1\nStatement 2\nStatement 3\n',
-          tokenUsage: { total: 10, prompt: 5, completion: 5 },
-        });
+        return Promise.resolve(createOutputResponse('Statement 1\nStatement 2\nStatement 3\n'));
       })
       .mockImplementationOnce(() => {
-        return Promise.resolve({
-          output: 'Final verdict for each statement in order: Yes. No. Yes.',
-          tokenUsage: { total: 10, prompt: 5, completion: 5 },
-        });
+        return Promise.resolve(
+          createOutputResponse('Final verdict for each statement in order: Yes. No. Yes.'),
+        );
       });
 
     const callApiSpy = vi.spyOn(DefaultGradingProvider, 'callApi');
@@ -77,10 +74,7 @@ describe('matchesContextFaithfulness', () => {
     const mockCallApi = vi
       .fn()
       .mockImplementationOnce(() => {
-        return Promise.resolve({
-          output: 'Statement 1\nStatement 2\nStatement 3',
-          tokenUsage: { total: 10, prompt: 5, completion: 5 },
-        });
+        return Promise.resolve(createOutputResponse('Statement 1\nStatement 2\nStatement 3'));
       })
       .mockImplementationOnce(() => {
         return Promise.resolve({
@@ -174,10 +168,9 @@ describe('matchesContextFaithfulness', () => {
         output: 'Statement from answer.',
         tokenUsage: { total: 10, prompt: 5, completion: 5 },
       })
-      .mockResolvedValueOnce({
-        output: 'Final verdict for each statement in order: Yes.',
-        tokenUsage: { total: 10, prompt: 5, completion: 5 },
-      });
+      .mockResolvedValueOnce(
+        createOutputResponse('Final verdict for each statement in order: Yes.'),
+      );
 
     const callApiSpy = vi.spyOn(DefaultGradingProvider, 'callApi');
     callApiSpy.mockReset();
@@ -238,10 +231,7 @@ describe('matchesContextFaithfulness', () => {
     const mockCallApi = vi
       .fn()
       .mockImplementationOnce(() => {
-        return Promise.resolve({
-          output: 'Statement 1\nStatement 2\nStatement 3',
-          tokenUsage: { total: 10, prompt: 5, completion: 5 },
-        });
+        return Promise.resolve(createOutputResponse('Statement 1\nStatement 2\nStatement 3'));
       })
       .mockImplementationOnce(() => {
         return Promise.resolve({
@@ -302,16 +292,12 @@ describe('matchesContextFaithfulness', () => {
     const mockCallApi = vi
       .fn()
       .mockImplementationOnce(() => {
-        return Promise.resolve({
-          output: 'Statement 1\nStatement 2\nStatement 3',
-          tokenUsage: { total: 10, prompt: 5, completion: 5 },
-        });
+        return Promise.resolve(createOutputResponse('Statement 1\nStatement 2\nStatement 3'));
       })
       .mockImplementationOnce(() => {
-        return Promise.resolve({
-          output: 'Final verdict for each statement in order: Yes.',
-          tokenUsage: { total: 10, prompt: 5, completion: 5 },
-        });
+        return Promise.resolve(
+          createOutputResponse('Final verdict for each statement in order: Yes.'),
+        );
       });
 
     const callApiSpy = vi.spyOn(DefaultGradingProvider, 'callApi');
@@ -342,10 +328,7 @@ describe('matchesContextFaithfulness', () => {
     const mockCallApi = vi
       .fn()
       .mockImplementationOnce(() => {
-        return Promise.resolve({
-          output: 'Statement 1\nStatement 2\nStatement 3',
-          tokenUsage: { total: 10, prompt: 5, completion: 5 },
-        });
+        return Promise.resolve(createOutputResponse('Statement 1\nStatement 2\nStatement 3'));
       })
       .mockImplementationOnce(() => {
         return Promise.resolve({
@@ -382,10 +365,7 @@ describe('matchesContextFaithfulness', () => {
     const mockCallApi = vi
       .fn()
       .mockImplementationOnce(() => {
-        return Promise.resolve({
-          output: 'Statement 1\nStatement 2\nStatement 3',
-          tokenUsage: { total: 10, prompt: 5, completion: 5 },
-        });
+        return Promise.resolve(createOutputResponse('Statement 1\nStatement 2\nStatement 3'));
       })
       .mockImplementationOnce(() => {
         return Promise.resolve({
@@ -423,10 +403,9 @@ describe('matchesContextFaithfulness', () => {
         output: 'Statement 1',
         tokenUsage: { total: 10, prompt: 5, completion: 5 },
       })
-      .mockResolvedValueOnce({
-        output: 'Final verdict for each statement in order: Yes.',
-        tokenUsage: { total: 10, prompt: 5, completion: 5 },
-      });
+      .mockResolvedValueOnce(
+        createOutputResponse('Final verdict for each statement in order: Yes.'),
+      );
 
     const callApiSpy = vi.spyOn(DefaultGradingProvider, 'callApi');
     callApiSpy.mockReset();
