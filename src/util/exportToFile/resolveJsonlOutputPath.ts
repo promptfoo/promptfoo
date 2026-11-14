@@ -119,6 +119,9 @@ function resolveDotComponent(
   if (!currentIsDirectory) {
     throw notDirectoryError(currentPath);
   }
+  if (!isWindows && !path.isAbsolute(currentPath)) {
+    return { currentPath: path.join(currentPath, component), currentIsDirectory: true };
+  }
   const isAtRoot = isWindows
     ? currentPath.replace(/[\\/]+$/, '').toLowerCase() === root.replace(/[\\/]+$/, '').toLowerCase()
     : currentPath === root;
@@ -195,7 +198,12 @@ function planForResolvedPath(outputPath: string, resolvedPath: string): JsonlOut
 function* walkJsonlOutputPath(
   outputPath: string,
 ): Generator<PathOperation, JsonlOutputPathPlan, PathOperationResult> {
-  const { root, components } = getAbsolutePathParts(outputPath, process.cwd());
+  // POSIX relative lookups must start at the open cwd. Its ancestors might
+  // no longer be searchable even though files below it are still writable.
+  const { root, components } =
+    !isWindows && !path.isAbsolute(outputPath)
+      ? { root: '.', components: splitComponents(outputPath) }
+      : getAbsolutePathParts(outputPath, process.cwd());
   let currentPath = root;
   let currentRoot = root;
   let currentIsDirectory = true;
@@ -326,6 +334,9 @@ async function runPathWalk(outputPath: string): Promise<JsonlOutputPathPlan> {
 }
 
 export async function resolveJsonlOutputPath(outputPath: string): Promise<JsonlOutputPathPlan> {
+  if (!isWindows && !path.isAbsolute(outputPath)) {
+    return runPathWalk(outputPath);
+  }
   try {
     return planForResolvedPath(outputPath, await fsPromises.realpath(outputPath));
   } catch (error) {
@@ -338,6 +349,9 @@ export async function resolveJsonlOutputPath(outputPath: string): Promise<JsonlO
 }
 
 export function resolveJsonlOutputPathSync(outputPath: string): JsonlOutputPathPlan {
+  if (!isWindows && !path.isAbsolute(outputPath)) {
+    return runPathWalkSync(outputPath);
+  }
   try {
     return planForResolvedPath(outputPath, realpathSync.native(outputPath));
   } catch (error) {

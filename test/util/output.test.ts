@@ -1656,7 +1656,8 @@ describe('writeOutput', () => {
     const intermediatePath = path.join('artifacts', 'current.jsonl');
     const firstSymlinkTarget = path.basename(intermediatePath);
     const secondSymlinkTarget = path.join('nested', 'missing.jsonl');
-    const resolvedTarget = path.resolve(path.dirname(intermediatePath), secondSymlinkTarget);
+    const target = path.join(path.dirname(intermediatePath), secondSymlinkTarget);
+    const resolvedTarget = process.platform === 'win32' ? path.resolve(target) : target;
     vi.mocked(fsPromises.lstat).mockImplementation(async (filePath) => {
       const resolvedPath = path.resolve(String(filePath));
       if (
@@ -1689,7 +1690,8 @@ describe('writeOutput', () => {
     const intermediatePath = path.join('artifacts', 'current.jsonl');
     const firstSymlinkTarget = path.basename(intermediatePath);
     const secondSymlinkTarget = path.join('nested', 'missing.jsonl');
-    const resolvedTarget = path.resolve(path.dirname(intermediatePath), secondSymlinkTarget);
+    const target = path.join(path.dirname(intermediatePath), secondSymlinkTarget);
+    const resolvedTarget = process.platform === 'win32' ? path.resolve(target) : target;
     vi.mocked(fsPromises.lstat).mockImplementation(async (filePath) => {
       const resolvedPath = path.resolve(String(filePath));
       if (

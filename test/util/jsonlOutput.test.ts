@@ -3,6 +3,7 @@ import * as os from 'os';
 import * as path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { JsonlFileWriter } from '../../src/util/exportToFile/writeToFile';
 import { writeOutput } from '../../src/util/index';
 import { createTempDir, removeTempDir } from './utils';
 
@@ -305,6 +306,32 @@ describe('JSONL output with proper line endings', () => {
     expect(fs.lstatSync(directoryLink).isSymbolicLink()).toBe(true);
     expect(fs.readFileSync(targetPath, 'utf8')).toContain('"output":"replacement"');
   });
+
+  it.skipIf(process.platform === 'win32' || process.getuid?.() === 0)(
+    'keeps writable relative outputs accessible in a restricted cwd',
+    async () => {
+      const cwd = process.cwd();
+      const child = path.join(tempDir, 'inside');
+      fs.mkdirSync(child);
+      process.chdir(child);
+      try {
+        fs.chmodSync(tempDir, 0);
+        fs.writeFileSync('out.jsonl', '');
+        const writer = new JsonlFileWriter('out.jsonl');
+        await writer.write({ row: 1 });
+        await writer.close();
+        expect(JSON.parse(fs.readFileSync('out.jsonl', 'utf8'))).toEqual({ row: 1 });
+        mockEval.fetchResultsBatched.mockImplementation(async function* () {
+          yield [{ testIdx: 0, success: true }];
+        });
+        await writeOutput('nested/final.jsonl', mockEval, null);
+        expect(fs.existsSync('nested/final.jsonl')).toBe(true);
+      } finally {
+        fs.chmodSync(tempDir, 0o700);
+        process.chdir(cwd);
+      }
+    },
+  );
 
   it('should rewrite an artifact with a long valid basename', async () => {
     if (process.platform === 'win32') {
