@@ -227,8 +227,10 @@ export function getDirectory(): string {
 
 function getNamedExport(mod: Record<string, unknown>, name: string, bindToModule = false) {
   const exported = mod[name];
-  const transpiledDefault = bindToModule && name === 'default' && mod.__esModule === true;
-  return bindToModule && !transpiledDefault && typeof exported === 'function'
+  return bindToModule &&
+    mod.__esModule !== true &&
+    exported !== mod &&
+    typeof exported === 'function'
     ? exported.bind(mod)
     : exported;
 }
@@ -240,6 +242,7 @@ function bindDefaultExport(
 ) {
   return bindToModule &&
     owner?.default &&
+    owner !== exported &&
     owner.__esModule !== true &&
     typeof exported === 'function'
     ? exported.bind(owner)

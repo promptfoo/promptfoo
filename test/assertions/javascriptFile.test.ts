@@ -120,6 +120,39 @@ describe('JavaScript file graders with the real module loader', () => {
     expect(await grade('hello', {})).toBe(true);
   });
 
+  it.each(['js', 'cjs'])(
+    'keeps transpiled named functions and self aliases unbound in .%s',
+    (extension) => {
+      const utilsUrl = pathToFileURL(path.resolve(__dirname, '../../src/assertions/utils.ts')).href;
+      for (const [source, names] of [
+        [
+          "Object.defineProperty(exports, '__esModule', { value: true }); exports.grade = grade;",
+          ['grade'],
+        ],
+        ['module.exports = grade; module.exports.default = grade;', [undefined, 'default']],
+      ] as const) {
+        const filePath = path.join(directory, `standalone-${names.length}.${extension}`);
+        fs.writeFileSync(
+          filePath,
+          `'use strict'; function grade() { return this === undefined; } ${source}`,
+        );
+        const runner = path.join(directory, 'check.mjs');
+        fs.writeFileSync(
+          runner,
+          `import { resolveJavaScriptFileFunction } from ${JSON.stringify(utilsUrl)};
+        for (const name of ${JSON.stringify(names)}) {
+          const grade = await resolveJavaScriptFileFunction(${JSON.stringify(filePath)}, name ?? undefined);
+          if (!grade()) process.exitCode = 1;
+        }`,
+        );
+        const result = execFileSync(process.execPath, ['--import', 'tsx', runner], {
+          encoding: 'utf8',
+        });
+        expect(result.trim()).toBe('');
+      }
+    },
+  );
+
   it.each(['', 'export default () => false;\n'])(
     'keeps standalone named ESM exports unbound with default export %j',
     async (defaultExport) => {
