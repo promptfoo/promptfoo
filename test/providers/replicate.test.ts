@@ -60,7 +60,9 @@ describe.each([
     const legacyKey = name === 'image' ? /^replicate:image:test-model:/ : /^replicate:test-model:/;
     mockCache.get.mockImplementation(async (key: string) =>
       legacyKey.test(key)
-        ? JSON.stringify(name === 'image' ? ['https://example.invalid/partial'] : { output: 'partial' })
+        ? JSON.stringify(
+            name === 'image' ? ['https://example.invalid/partial'] : { output: 'partial' },
+          )
         : undefined,
     );
     mockedFetchWithCache.mockResolvedValue(
