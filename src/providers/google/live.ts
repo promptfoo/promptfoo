@@ -3,9 +3,10 @@ import { type ChildProcess, spawn } from 'child_process';
 import { getEnvString, getProcessEnv } from '../../envars';
 import logger from '../../logger';
 import { validatePythonPath } from '../../python/pythonUtils';
-import { fetchWithProxy } from '../../util/fetch/index';
-import { maybeLoadToolsFromExternalFile } from '../../util/index';
+import { maybeLoadToolsFromExternalFile } from '../../util/file';
+import { validateGuardedLiveTools } from '../../util/privateNetwork';
 import { resolveProviderApiKey } from '../credentials';
+import { fetchWithProviderProxy } from '../fetch';
 import { loadProviderCallbackFromFileUrl } from '../functionCallbackUtils';
 import { encodePcmToWav } from '../pcm';
 import { withGenAIToolSpan } from '../tracing';
@@ -409,7 +410,7 @@ const getGemini38ConfigError = (
  * Helper function to fetch JSON with error handling
  */
 export const fetchJson = async <T = unknown>(url: string, options?: RequestInit): Promise<T> => {
-  const response = await fetchWithProxy(url, options);
+  const response = await fetchWithProviderProxy(url, options);
   if (!response.ok) {
     throw new Error(`HTTP error - status: ${response.status}`);
   }
@@ -524,6 +525,9 @@ export class GoogleLiveProvider implements ApiProvider {
     const usesInteractionStatus = this.modelName === 'gemini-3.8-live-extended-thinking';
     const promptConfig = context?.prompt?.config as Partial<GoogleProviderConfig> | undefined;
     const config = mergeGoogleCompletionOptions(this.config, promptConfig);
+    if (config.functionToolStatefulApi || config.functionToolCallbacks) {
+      await validateGuardedLiveTools(config);
+    }
     const promptBasePath = promptConfig?.basePath ?? this.config.basePath;
     const isLiveTranscribe = this.modelName === GEMINI_LIVE_TRANSCRIBE_MODEL;
     const isRoboticsStreaming = this.modelName.startsWith('gemini-robotics-er-2-streaming-');

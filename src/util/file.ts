@@ -15,7 +15,7 @@ import {
 import { importModule } from '../esm';
 import logger from '../logger';
 import { runPython } from '../python/pythonUtils';
-import { isPrivateRangeGuardContextActive } from './fetch/guardContext';
+import { isPrivateRangeGuardContextActive, PrivateRangeBlockedError } from './fetch/guardContext';
 import { isJavascriptFile } from './fileExtensions';
 import { parseFileUrl } from './functions/loadFunction';
 import { assertLiteralGuardedFilePath } from './guardedTemplate';
@@ -568,6 +568,11 @@ export async function maybeLoadToolsFromExternalFile(
     const { filePath, functionName } = parseFileUrl(rendered);
 
     if (functionName && (filePath.endsWith('.py') || isJavascriptFile(filePath))) {
+      if (isPrivateRangeGuardContextActive()) {
+        throw new PrivateRangeBlockedError(
+          'PROMPTFOO_BLOCK_PRIVATE_RANGES is set: refusing executable tool definitions',
+        );
+      }
       // Execute the function to get tool definitions
       const fileType = filePath.endsWith('.py') ? 'Python' : 'JavaScript';
       logger.debug(
