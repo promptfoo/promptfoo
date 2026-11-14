@@ -1102,6 +1102,31 @@ describe('handleRedteam', () => {
     expect(grade.metadata?.gradingIncomplete).toBe(true);
   });
 
+  it('keeps unavailable DSI evidence an error after mixed iterative grading', async () => {
+    const assertion = { type: 'promptfoo:redteam:data-structure-injection' } as const;
+    const test = {
+      ...createHateJailbreakTest(),
+      assert: [assertion],
+      metadata: {
+        pluginId: 'data-structure-injection',
+        strategyId: 'jailbreak',
+        dataStructureInjectionContract: { forbiddenValues: ['synthetic-fixture'] },
+      },
+    };
+    const providerResponse = {
+      output: 'Done.',
+      metadata: {
+        redteamHistory: [
+          { prompt: 'first', output: 'one', graderError: 'No evidence' },
+          { prompt: 'second', output: 'two' },
+        ],
+      },
+    };
+    await expect(runAssertions({ prompt: 'test prompt', test, providerResponse })).rejects.toThrow(
+      'Data-structure injection evidence unavailable',
+    );
+  });
+
   it('throws error when iterative strategy has ALL grader errors and re-grading fails', async () => {
     const assertion = {
       type: 'promptfoo:redteam:harmful:hate' as const,
