@@ -129,7 +129,7 @@ assert:
 
 The parent score is `sum(component.score * component.weight) / sum(component.weight)`. With a parent `threshold`, that score alone determines whether the batch passes. Without a threshold, every component must return `pass: true`. For example, scores of 1 and 0.5 with weights 2 and 1 produce a score of approximately 0.833, which passes a threshold of 0.8 even if the second component fails.
 
-Each component must have a unique, literal `metric` name and a non-empty inline rubric string in `value`. Rubric strings support test variables. Weights must be positive finite numbers, and their total must be finite. Parent and component metric names cannot use templates, reserved object keys such as `__proto__` or `constructor`, or the derived-metric variable `__count`; the parent metric must also differ from every component metric.
+Each component must have a unique, literal `metric` name and a non-empty inline rubric string in `value`. Rubric strings support test variables. Weights must be positive finite numbers. Parent and component metric names cannot use templates, reserved object keys such as `__proto__` or `constructor`, or the derived-metric variable `__count`; the parent metric must also differ from every component metric.
 
 The explicit flag preserves existing object rubrics, including objects with their own `components` key: when the flag is omitted or false, they retain scalar grading behavior. A `file://` script or data reference may also supply the component object; the original reference remains in the result.
 

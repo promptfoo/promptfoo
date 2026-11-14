@@ -208,16 +208,18 @@ function gradeRubricComponents(
     byMetric.set(result.metric, { pass: result.pass, score: result.score, reason: result.reason });
   }
 
-  const totalWeight = components.reduce((sum, component) => sum + component.weight, 0);
+  // Normalize before summing so individually finite weights cannot overflow
+  // the denominator or underflow a fractional criterion score.
+  const maxWeight = components.reduce((max, component) => Math.max(max, component.weight), 0);
+  const weights = components.map((component) => component.weight / maxWeight);
+  const totalWeight = weights.reduce((sum, weight) => sum + weight, 0);
   const componentResults = components.map((component) => ({
     ...byMetric.get(component.metric)!,
     assertion: { type: 'llm-rubric' as const, ...component },
   }));
   const score =
-    componentResults.reduce(
-      (sum, result, index) => sum + result.score * components[index].weight,
-      0,
-    ) / totalWeight;
+    componentResults.reduce((sum, result, index) => sum + result.score * weights[index], 0) /
+    totalWeight;
   const allPass = componentResults.every((result) => result.pass);
   const pass = threshold === undefined ? allPass : score >= threshold;
 

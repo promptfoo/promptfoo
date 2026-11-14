@@ -808,9 +808,8 @@ export const LlmRubricComponentsAssertionSchema = z
   .refine(
     ({ value: { components }, metric }) =>
       new Set(components.map((component) => component.metric)).size === components.length &&
-      components.every((component) => component.metric !== metric) &&
-      Number.isFinite(components.reduce((sum, component) => sum + component.weight, 0)),
-    'Component metrics must be unique and distinct from the parent metric, with finite total weight',
+      components.every((component) => component.metric !== metric),
+    'Component metrics must be unique and distinct from the parent metric',
   );
 
 export const LLM_RUBRIC_COMPONENTS_CONFIG_ERROR =
