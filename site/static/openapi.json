@@ -4739,7 +4739,7 @@
         "operationId": "runRedteam",
         "tags": ["Redteam"],
         "summary": "Start a redteam run",
-        "description": "Starting a run cancels the previous active red team on this server. Poll GET /api/eval/job/{id} with the returned ID for progress and results.",
+        "description": "A server accepts one active red team job at a time. Poll GET /api/eval/job/{id} with the returned ID for progress and results.",
         "requestBody": {
           "description": "JSON request body",
           "required": true,
@@ -4789,6 +4789,22 @@
                 }
               }
             }
+          },
+          "409": {
+            "description": "A red team job is already running",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "enum": [false] },
+                    "error": { "type": "string" },
+                    "jobId": { "type": "string", "format": "uuid" }
+                  },
+                  "required": ["success", "error", "jobId"]
+                }
+              }
+            }
           }
         }
       }
@@ -4798,6 +4814,18 @@
         "operationId": "cancelRedteam",
         "tags": ["Redteam"],
         "summary": "Cancel the running redteam job",
+        "requestBody": {
+          "description": "Cancel only the specified job when jobId is supplied",
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": { "jobId": { "type": "string", "format": "uuid" } }
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "Successful response",
@@ -4813,6 +4841,24 @@
           },
           "400": {
             "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": { "type": "string" },
+                    "details": {},
+                    "suggestion": { "type": "string" },
+                    "success": { "type": "boolean", "enum": [false] }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The selected job is no longer running",
             "content": {
               "application/json": {
                 "schema": {

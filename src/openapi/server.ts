@@ -986,13 +986,14 @@ export function createServerOpenApiRegistry() {
     tags: ['Redteam'],
     summary: 'Start a redteam run',
     description:
-      'Starting a run cancels the previous active red team on this server. Poll GET /api/eval/job/{id} with the returned ID for progress and results.',
+      'A server accepts one active red team job at a time. Poll GET /api/eval/job/{id} with the returned ID for progress and results.',
     request: {
       body: jsonBody(RedteamSchemas.Run.Request),
     },
     responses: {
       200: jsonResponse(RedteamSchemas.Run.Response),
       400: jsonResponse(ErrorResponseSchema, 'Validation error'),
+      409: jsonResponse(RedteamSchemas.Run.Conflict, 'A red team job is already running'),
     },
   });
 
@@ -1002,8 +1003,18 @@ export function createServerOpenApiRegistry() {
     operationId: 'cancelRedteam',
     tags: ['Redteam'],
     summary: 'Cancel the running redteam job',
+    request: {
+      body: {
+        ...jsonBody(
+          RedteamSchemas.Cancel.Request,
+          'Cancel only the specified job when jobId is supplied',
+        ),
+        required: false,
+      },
+    },
     responses: {
       200: jsonResponse(RedteamSchemas.Cancel.Response),
+      409: jsonResponse(ErrorResponseSchema, 'The selected job is no longer running'),
       400: jsonResponse(ErrorResponseSchema, 'Validation error'),
     },
   });
