@@ -40,6 +40,8 @@ strategies:
 
 The `injectVar` parameter specifies which variable in your prompt template should receive the authoritative markup injection. If not specified, the strategy will use the default `prompt` injection variable.
 
+If the rendered message exceeds `maxCharsPerMessage`, the eval reports a length error and retains the generation token usage. The target receives no request.
+
 Combine with red team plugins to test specific vulnerability categories:
 
 ```yaml title="promptfooconfig.yaml"

@@ -222,6 +222,53 @@ describe('MemoryPoisoningProvider', () => {
     });
   });
 
+  it('returns an error response carrying accumulated usage when a scoped cap rejects the follow-up', async () => {
+    const scenario = {
+      memory: 'mem',
+      followUp: 'too long',
+      tokenUsage: { prompt: 4, completion: 2, total: 6 },
+    };
+
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve(scenario),
+    } as Response);
+
+    mockTargetProvider.callApi
+      .mockResolvedValueOnce({
+        output: 'memory response',
+        tokenUsage: { prompt: 10, completion: 5, total: 15, numRequests: 1 },
+      })
+      .mockResolvedValueOnce({
+        output: 'test response',
+        tokenUsage: { prompt: 20, completion: 10, total: 30, numRequests: 1 },
+      });
+
+    const context: CallApiContextParams = {
+      prompt: { raw: 'test', display: 'test', label: 'test' },
+      vars: {},
+      originalProvider: mockTargetProvider,
+      test: {
+        metadata: {
+          purpose: 'test purpose',
+          pluginConfig: { maxCharsPerMessage: 5 },
+        },
+      },
+    };
+
+    const result = await provider.callApi('test', context);
+
+    expect(result.error).toContain('maxCharsPerMessage=5');
+    expect(result.tokenUsage).toMatchObject({
+      numRequests: 2,
+      prompt: 30,
+      completion: 15,
+      total: 45,
+      attacker: { prompt: 4, completion: 2, total: 6, numRequests: 1 },
+    });
+    expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(2);
+  });
+
   it('should handle errors during execution', async () => {
     mockFetch.mockRejectedValueOnce(new Error('Network error'));
 

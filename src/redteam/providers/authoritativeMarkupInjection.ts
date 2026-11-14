@@ -16,7 +16,7 @@ import {
   neverGenerateRemote,
 } from '../remoteGeneration';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
-import { throwIfTargetPromptExceedsMaxChars } from '../shared/promptLength';
+import { TargetPromptLengthError } from '../shared/promptLength';
 import { callTargetProvider, preserveSelectedError } from './shared';
 
 import type {
@@ -30,6 +30,7 @@ import type {
 interface AuthoritativeMarkupInjectionConfig {
   injectVar: string;
   targetId?: string;
+  maxCharsPerMessage?: number;
 }
 
 export default class AuthoritativeMarkupInjectionProvider implements ApiProvider {
@@ -42,6 +43,7 @@ export default class AuthoritativeMarkupInjectionProvider implements ApiProvider
   constructor(
     options: ProviderOptions & {
       injectVar?: string;
+      maxCharsPerMessage?: number;
       targetId?: string;
     } = {},
   ) {
@@ -53,6 +55,10 @@ export default class AuthoritativeMarkupInjectionProvider implements ApiProvider
     invariant(typeof options.injectVar === 'string', 'Expected injectVar to be set');
     this.config = {
       injectVar: options.injectVar,
+      // Keep the layer step cap on the loaded instance so the target-call
+      // boundary can read it from test.provider.config after readTest
+      // replaces the provider descriptor.
+      ...(options.maxCharsPerMessage ? { maxCharsPerMessage: options.maxCharsPerMessage } : {}),
       targetId: options.targetId,
     };
     logger.debug('[AuthoritativeMarkupInjection] Constructor options', {
@@ -130,14 +136,20 @@ export default class AuthoritativeMarkupInjectionProvider implements ApiProvider
       prompt: renderedAttackerPrompt,
     });
 
-    // Call the target provider with the injected attack
-    throwIfTargetPromptExceedsMaxChars(renderedAttackerPrompt);
-    const targetResponse = await callTargetProvider(
-      targetProvider,
-      renderedAttackerPrompt,
-      context,
-      options,
-    );
+    let targetResponse: ProviderResponse;
+    try {
+      targetResponse = await callTargetProvider(
+        targetProvider,
+        renderedAttackerPrompt,
+        context,
+        options,
+      );
+    } catch (error) {
+      if (error instanceof TargetPromptLengthError) {
+        return { output: '', error: error.message, tokenUsage: totalTokenUsage };
+      }
+      throw error;
+    }
     accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
 
     logger.debug('[AuthoritativeMarkupInjection] Target response', {

@@ -16,7 +16,6 @@ import {
   neverGenerateRemote,
 } from '../remoteGeneration';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
-import { throwIfTargetPromptExceedsMaxChars } from '../shared/promptLength';
 import { getSessionId } from '../util';
 import { callTargetProvider } from './shared';
 
@@ -38,6 +37,7 @@ interface BestOfNConfig {
   maxConcurrency: number;
   nSteps?: number;
   maxCandidatesPerStep?: number;
+  maxCharsPerMessage?: number;
 }
 
 export default class BestOfNProvider implements ApiProvider {
@@ -53,6 +53,7 @@ export default class BestOfNProvider implements ApiProvider {
       maxConcurrency?: number;
       nSteps?: number;
       maxCandidatesPerStep?: number;
+      maxCharsPerMessage?: number;
       targetId?: string;
     } = {},
   ) {
@@ -66,6 +67,10 @@ export default class BestOfNProvider implements ApiProvider {
       maxConcurrency: options.maxConcurrency || 3,
       nSteps: options.nSteps,
       maxCandidatesPerStep: options.maxCandidatesPerStep,
+      // Keep the layer step cap on the loaded instance so the target-call
+      // boundary can read it from test.provider.config after readTest
+      // replaces the provider descriptor.
+      ...(options.maxCharsPerMessage ? { maxCharsPerMessage: options.maxCharsPerMessage } : {}),
       targetId: options.targetId,
     };
   }
@@ -183,9 +188,6 @@ export default class BestOfNProvider implements ApiProvider {
           }
 
           try {
-            // TODO(ian): Pass the strategy/plugin metadata maxCharsPerMessage limit here so
-            // plugin-scoped caps are enforced even when no top-level redteam cap is configured.
-            throwIfTargetPromptExceedsMaxChars(renderedPrompt);
             const response = await callTargetProvider(
               targetProvider,
               renderedPrompt,
