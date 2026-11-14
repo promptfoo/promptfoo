@@ -8,6 +8,7 @@ import * as llmGradingMatchers from '../../src/matchers/llmGrading';
 import { runPython } from '../../src/python/pythonUtils';
 import { runRuby } from '../../src/ruby/rubyUtils.js';
 import { createStringAssertion } from '../factories/literalFixtures';
+import { createMockProvider } from '../factories/provider';
 
 import type { ProviderResponse } from '../../src/types/index';
 
@@ -285,6 +286,62 @@ describe('Script value resolution', () => {
   });
 
   describe('error handling', () => {
+    it('should not apply xfail when a Python assertion script throws', async () => {
+      const mockRunPython = vi.mocked(runPython);
+      mockRunPython.mockRejectedValue(new Error('Python execution error'));
+
+      const result = await runAssertion({
+        assertion: {
+          type: 'equals',
+          value: 'file://broken.py:get_assert',
+          xfail: 'openai:*',
+        },
+        provider: createMockProvider({ id: 'openai:gpt-4o-mini' }),
+        test: { vars: {} },
+        providerResponse: baseProviderResponse,
+      });
+
+      expect(mockRunPython).toHaveBeenCalledWith(
+        expect.stringContaining('broken.py'),
+        'get_assert',
+        expect.any(Array),
+      );
+      expect(result).toMatchObject({
+        pass: false,
+        score: 0,
+        reason: 'Python execution error',
+      });
+      expect(result.metadata?.xfail).toBeUndefined();
+    });
+
+    it('should not apply xfail when a Ruby assertion script throws', async () => {
+      const mockRunRuby = vi.mocked(runRuby);
+      mockRunRuby.mockRejectedValue(new Error('Ruby execution error'));
+
+      const result = await runAssertion({
+        assertion: {
+          type: 'equals',
+          value: 'file://broken.rb:get_assert',
+          xfail: 'openai:*',
+        },
+        provider: createMockProvider({ id: 'openai:gpt-4o-mini' }),
+        test: { vars: {} },
+        providerResponse: baseProviderResponse,
+      });
+
+      expect(mockRunRuby).toHaveBeenCalledWith(
+        expect.stringContaining('broken.rb'),
+        'get_assert',
+        expect.any(Array),
+      );
+      expect(result).toMatchObject({
+        pass: false,
+        score: 0,
+        reason: 'Ruby execution error',
+      });
+      expect(result.metadata?.xfail).toBeUndefined();
+    });
+
     it('should throw error when script returns function for non-script assertion', async () => {
       await expect(
         runAssertion({

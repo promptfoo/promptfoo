@@ -88,6 +88,18 @@ export async function loadFromJavaScriptFile(
   return fn(...args);
 }
 
+export async function readAssertions(filePath: string): Promise<Assertion[]> {
+  try {
+    const assertions = loadYaml(await fs.promises.readFile(filePath, 'utf-8')) as Assertion[];
+    if (!Array.isArray(assertions) || assertions[0]?.type === undefined) {
+      throw new Error('Assertions file must be an array of assertion objects');
+    }
+    return assertions;
+  } catch (err) {
+    throw new Error(`Failed to read assertions from ${filePath}:\n${err}`);
+  }
+}
+
 export function processFileReference(fileRef: string): object | string {
   const basePath = cliState.basePath || '';
   const filePath = path.resolve(basePath, fileRef.slice('file://'.length));

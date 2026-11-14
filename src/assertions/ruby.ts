@@ -42,6 +42,7 @@ end
       score: 0,
       reason: `Ruby code execution failed: ${(err as Error).message}`,
       assertion,
+      metadata: { scriptError: true },
     };
   }
 };

@@ -65,6 +65,9 @@ export async function handleWebhook({
       score: 0,
       reason: `Webhook error: ${(err as Error).message}`,
       assertion,
+      metadata: {
+        webhookError: true,
+      },
     };
   }
 }

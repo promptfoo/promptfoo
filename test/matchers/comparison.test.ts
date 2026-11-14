@@ -41,6 +41,7 @@ describe('matchesSelectBest', () => {
     expect(result[0]).toMatchObject({
       pass: false,
       reason: 'Invalid select-best verdict: NaN',
+      metadata: { graderError: true },
       tokensUsed: {
         total: 7,
         prompt: 3,

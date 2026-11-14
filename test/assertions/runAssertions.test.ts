@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { renderMetricName, runAssertions } from '../../src/assertions/index';
+import { renderMetricName, runAssertion, runAssertions } from '../../src/assertions/index';
 import cliState from '../../src/cliState';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { DefaultGradingJsonProvider } from '../../src/providers/openai/defaults';
@@ -13,6 +13,7 @@ import { mockProcessEnv, TestGrader } from '../util/utils';
 
 import type {
   ApiProvider,
+  Assertion,
   AtomicTestCase,
   GradingResult,
   ProviderResponse,
@@ -211,6 +212,483 @@ describe('runAssertions', () => {
     });
   });
 
+  it.each([
+    ['*a*a?a', 'baaaxa', true],
+    ['*a*a?z', 'baaaaa', false],
+    ['vendor[1]:?/*', 'vendor[1]:x/path', true],
+    ['vendor[1]:?/*', 'vendor1:x/path', false],
+  ] as const)('matches the xfail pattern %s against %s', async (pattern, id, matches) => {
+    const result = await runAssertions({
+      provider: createMockProvider({ id }),
+      test: { assert: [{ type: 'equals', value: 'expected', xfail: pattern }] },
+      providerResponse: { output: 'mismatch' },
+    });
+
+    expect(result.pass).toBe(matches);
+  });
+
+  it('should pass when a matching provider assertion fails as expected', async () => {
+    const provider = createMockProvider({ id: 'openai:gpt-4o-mini' });
+
+    const result: GradingResult = await runAssertions({
+      prompt: 'Some prompt',
+      provider,
+      test: {
+        assert: [
+          {
+            type: 'equals',
+            value: 'Expected output',
+            xfail: {
+              providers: 'openai:*',
+              reason: 'Known provider-specific mismatch',
+            },
+          },
+        ],
+      },
+      providerResponse: { output: 'Actual output' },
+    });
+
+    expect(result).toMatchObject({
+      pass: true,
+      score: 1,
+      reason: 'All assertions passed',
+    });
+    expect(result.componentResults?.[0]).toMatchObject({
+      pass: true,
+      score: 1,
+      reason:
+        'Assertion failed as expected for provider "openai:gpt-4o-mini" (Known provider-specific mismatch): Expected output "Actual output" to equal "Expected output"',
+      metadata: {
+        xfail: {
+          expected: true,
+          originalPass: false,
+          originalScore: 0,
+          provider: 'openai:gpt-4o-mini',
+          pattern: 'openai:*',
+          reason: 'Known provider-specific mismatch',
+        },
+      },
+    });
+  });
+
+  it('should fail when a matching provider assertion unexpectedly passes', async () => {
+    const provider = createMockProvider({ id: 'openai:gpt-4o-mini' });
+
+    const result: GradingResult = await runAssertions({
+      prompt: 'Some prompt',
+      provider,
+      test: {
+        assert: [
+          {
+            type: 'equals',
+            value: 'Expected output',
+            xfail: 'openai:gpt-4o-mini',
+          },
+        ],
+      },
+      providerResponse: { output: 'Expected output' },
+    });
+
+    expect(result).toMatchObject({
+      pass: false,
+      score: 0,
+      reason: 'Assertion was expected to fail for provider "openai:gpt-4o-mini", but passed',
+    });
+    expect(result.componentResults?.[0]?.metadata?.xfail).toMatchObject({
+      expected: true,
+      originalPass: true,
+      originalScore: 1,
+      provider: 'openai:gpt-4o-mini',
+      pattern: 'openai:gpt-4o-mini',
+    });
+  });
+
+  it('should apply expected failures when runAssertion is called directly', async () => {
+    const provider = createMockProvider({ id: 'openai:gpt-4o-mini' });
+
+    const result = await runAssertion({
+      prompt: 'Some prompt',
+      provider,
+      assertion: {
+        type: 'equals',
+        value: 'Expected output',
+        xfail: 'openai:*',
+      },
+      test: {},
+      providerResponse: { output: 'Actual output' },
+    });
+
+    expect(result).toMatchObject({
+      pass: true,
+      score: 1,
+      metadata: {
+        xfail: {
+          expected: true,
+          originalPass: false,
+          provider: 'openai:gpt-4o-mini',
+          pattern: 'openai:*',
+        },
+      },
+    });
+  });
+
+  it('should fail direct runAssertion calls when expected failures unexpectedly pass', async () => {
+    const provider = createMockProvider({ id: 'openai:gpt-4o-mini' });
+
+    const result = await runAssertion({
+      prompt: 'Some prompt',
+      provider,
+      assertion: {
+        type: 'equals',
+        value: 'Expected output',
+        xfail: 'openai:*',
+      },
+      test: {},
+      providerResponse: { output: 'Expected output' },
+    });
+
+    expect(result).toMatchObject({
+      pass: false,
+      score: 0,
+      reason: 'Assertion was expected to fail for provider "openai:gpt-4o-mini", but passed',
+      metadata: {
+        xfail: {
+          expected: true,
+          originalPass: true,
+          provider: 'openai:gpt-4o-mini',
+          pattern: 'openai:*',
+        },
+      },
+    });
+  });
+
+  it('should match wildcard expected failures without provider context', async () => {
+    const result = await runAssertion({
+      prompt: 'Some prompt',
+      assertion: {
+        type: 'equals',
+        value: 'Expected output',
+        xfail: {
+          providers: '*',
+          reason: 'Known mismatch',
+        },
+      },
+      test: {},
+      providerResponse: { output: 'Actual output' },
+    });
+
+    expect(result).toMatchObject({
+      pass: true,
+      score: 1,
+      metadata: {
+        xfail: {
+          expected: true,
+          originalPass: false,
+          provider: 'unknown provider',
+          pattern: '*',
+          reason: 'Known mismatch',
+        },
+      },
+    });
+  });
+
+  it('should normalize named scores when a matching provider assertion fails as expected', async () => {
+    const provider = createMockProvider({ id: 'openai:gpt-4o-mini' });
+
+    const result: GradingResult = await runAssertions({
+      prompt: 'Some prompt',
+      provider,
+      test: {
+        assert: [
+          {
+            type: 'javascript',
+            value: () => ({
+              pass: false,
+              score: 0,
+              reason: 'custom metric failed',
+              namedScores: { safety: 0 },
+              namedScoreWeights: { safety: 3 },
+            }),
+            xfail: 'openai:*',
+          } as Assertion,
+        ],
+      },
+      providerResponse: { output: 'Actual output' },
+    });
+
+    expect(result).toMatchObject({
+      pass: true,
+      score: 1,
+      namedScores: { safety: 1 },
+      namedScoreWeights: { safety: 3 },
+    });
+    expect(result.componentResults?.[0]).toMatchObject({
+      pass: true,
+      score: 1,
+      namedScores: { safety: 1 },
+      namedScoreWeights: { safety: 3 },
+    });
+  });
+
+  it('should not apply expected failures to grader transport errors', async () => {
+    const provider = createMockProvider({ id: 'openai:gpt-4o-mini' });
+    const callApiSpy = vi.spyOn(DefaultGradingJsonProvider, 'callApi').mockResolvedValue({
+      error: 'Grader unavailable',
+    });
+
+    try {
+      const result: GradingResult = await runAssertions({
+        prompt: 'Some prompt',
+        provider,
+        test: {
+          assert: [
+            {
+              type: 'llm-rubric',
+              value: 'Output must satisfy rubric',
+              xfail: 'openai:*',
+            },
+          ],
+        },
+        providerResponse: { output: 'Actual output' },
+      });
+
+      expect(result).toMatchObject({
+        pass: false,
+        score: 0,
+        reason: 'Grader unavailable',
+      });
+      expect(result.componentResults?.[0]).toMatchObject({
+        pass: false,
+        score: 0,
+        reason: 'Grader unavailable',
+        metadata: {
+          graderError: true,
+        },
+      });
+      expect(result.componentResults?.[0]?.metadata?.xfail).toBeUndefined();
+    } finally {
+      callApiSpy.mockRestore();
+    }
+  });
+
+  it('should fail unexpected expected-failure passes even when the threshold passes', async () => {
+    const provider = createMockProvider({ id: 'openai:gpt-4o-mini' });
+
+    const result: GradingResult = await runAssertions({
+      prompt: 'Some prompt',
+      provider,
+      test: {
+        threshold: 0.5,
+        assert: [
+          {
+            type: 'equals',
+            value: 'Expected output',
+            xfail: 'openai:*',
+          },
+          {
+            type: 'contains',
+            value: 'Expected',
+          },
+        ],
+      },
+      providerResponse: { output: 'Expected output' },
+    });
+
+    expect(result).toMatchObject({
+      pass: false,
+      score: 0.5,
+      reason: 'Assertion was expected to fail for provider "openai:gpt-4o-mini", but passed',
+    });
+  });
+
+  it('should fail unexpected expected-failure passes for redteam guardrails', async () => {
+    const provider = createMockProvider({ id: 'openai:gpt-4o-mini' });
+
+    const result: GradingResult = await runAssertions({
+      prompt: 'Some prompt',
+      provider,
+      test: {
+        assert: [
+          {
+            type: 'guardrails',
+            config: {
+              purpose: 'redteam',
+            },
+            xfail: 'openai:*',
+          },
+        ],
+      },
+      providerResponse: {
+        output: 'Safe output',
+        guardrails: {
+          flagged: false,
+          flaggedInput: false,
+          flaggedOutput: false,
+        },
+      },
+    });
+
+    expect(result).toMatchObject({
+      pass: false,
+      score: 0,
+      reason: 'Assertion was expected to fail for provider "openai:gpt-4o-mini", but passed',
+    });
+  });
+
+  it('preserves a flagged redteam guardrail alongside a failing assertion under xfail', async () => {
+    const result = await runAssertions({
+      test: {
+        assert: [
+          { type: 'guardrails', config: { purpose: 'redteam' }, xfail: true },
+          { type: 'equals', value: 'unexpected output' },
+        ],
+      },
+      providerResponse: {
+        output: 'Blocked',
+        guardrails: { flagged: true, flaggedInput: true, flaggedOutput: false },
+      },
+    });
+    expect(result.pass).toBe(true);
+  });
+
+  it.each([
+    'https://xatu-user:xatu-password@example.test/v1?api_key=xatu-key',
+    'judge(https://xatu-user:xatu-password@example.test/v1(model)?api_key=xatu-key)',
+    'judge (/v1/model?api_key=xatu-key)',
+  ])('redacts credentials in generated xfail annotations for %s', async (label) => {
+    const result = await runAssertions({
+      provider: createMockProvider({ label }),
+      test: { assert: [{ type: 'equals', value: 'different', xfail: label }] },
+      providerResponse: { output: 'sample' },
+    });
+    expect(result.pass).toBe(true);
+    const component = result.componentResults?.[0];
+    const annotation = component?.metadata?.xfail;
+    expect(annotation?.expected).toBe(true);
+    expect(annotation?.provider).toContain('/v1');
+    expect(annotation?.pattern).toBe(annotation?.provider);
+    expect(JSON.stringify([annotation, component?.reason])).not.toMatch(/xatu-(user|password|key)/);
+    if (label.endsWith(')')) {
+      expect(annotation?.provider).toMatch(/^judge.*\)$/);
+    }
+  });
+
+  it.each([
+    ['https://example.test/v1?api_key=xatu-left xatu-right', '[REDACTED]'],
+    ['https://xatu-left xatu-right@example.test/v1', '[REDACTED]'],
+    ['judge(https://example.test/v1(model)?api_key=xatu-left xatu-right)', 'judge([REDACTED])'],
+    ['judge (/v1/model?api_key=xatu-left xatu-right)', 'judge ([REDACTED])'],
+  ])('withholds ambiguous URL tails from generated xfail annotations', async (label, display) => {
+    const result = await runAssertions({
+      provider: createMockProvider({ label }),
+      test: { assert: [{ type: 'equals', value: 'different', xfail: label }] },
+      providerResponse: { output: 'sample' },
+    });
+    expect(result.pass).toBe(true);
+    const component = result.componentResults?.[0];
+    expect(component?.metadata?.xfail).toMatchObject({ provider: display, pattern: display });
+    expect(component?.reason).toContain(`provider "${display}"`);
+    expect(component?.reason).not.toMatch(/xatu-(left|right)/);
+  });
+
+  it.each(['', ' (https://example.test/v1)'])(
+    'preserves long provider labels with optional trailing URLs',
+    async (suffix) => {
+      const label = 'a'.repeat(32_000) + suffix;
+      const result = await runAssertions({
+        provider: createMockProvider({ label }),
+        test: { assert: [{ type: 'equals', value: 'different', xfail: true }] },
+        providerResponse: { output: 'sample' },
+      });
+      expect(result.componentResults?.[0].metadata?.xfail?.provider).toBe(label);
+    },
+  );
+
+  it('should ignore expected failures for nonmatching providers', async () => {
+    const provider = createMockProvider({ id: 'anthropic:messages:claude-sonnet-4-5' });
+
+    const result: GradingResult = await runAssertions({
+      prompt: 'Some prompt',
+      provider,
+      test: {
+        assert: [
+          {
+            type: 'equals',
+            value: 'Expected output',
+            xfail: 'openai:*',
+          },
+        ],
+      },
+      providerResponse: { output: 'Actual output' },
+    });
+
+    expect(result).toMatchObject({
+      pass: false,
+      score: 0,
+      reason: 'Expected output "Actual output" to equal "Expected output"',
+    });
+    expect(result.componentResults?.[0]?.metadata?.xfail).toBeUndefined();
+  });
+
+  it('should match expected failures against provider labels', async () => {
+    const provider = createMockProvider({
+      id: 'custom:provider',
+      label: 'staging-model',
+    });
+
+    const result: GradingResult = await runAssertions({
+      prompt: 'Some prompt',
+      provider,
+      test: {
+        assert: [
+          {
+            type: 'equals',
+            value: 'Expected output',
+            xfail: ['staging-*'],
+          },
+        ],
+      },
+      providerResponse: { output: 'Actual output' },
+    });
+
+    expect(result).toMatchObject({
+      pass: true,
+      score: 1,
+      reason: 'All assertions passed',
+    });
+    expect(result.componentResults?.[0]?.metadata?.xfail).toMatchObject({
+      originalPass: false,
+      provider: 'staging-model',
+      pattern: 'staging-*',
+    });
+  });
+
+  it('should not fail unexpectedly passing metric-only assertions', async () => {
+    const provider = createMockProvider({ id: 'openai:gpt-4o-mini' });
+
+    const result: GradingResult = await runAssertions({
+      prompt: 'Some prompt',
+      provider,
+      test: {
+        assert: [
+          {
+            type: 'equals',
+            value: 'Expected output',
+            weight: 0,
+            xfail: 'openai:gpt-4o-mini',
+          },
+        ],
+      },
+      providerResponse: { output: 'Expected output' },
+    });
+
+    expect(result).toMatchObject({
+      pass: true,
+      reason: 'All assertions passed',
+    });
+    expect(result.componentResults?.[0]?.metadata?.xfail).toBeUndefined();
+  });
+
   it.each([false, true])(
     'preserves empty-reason failures in assertion sets: %s',
     async (nested) => {
@@ -270,10 +748,9 @@ describe('runAssertions', () => {
       },
       providerResponse: { output: 'Hi there world' },
     });
-    expect(result).toMatchObject({
-      pass: true,
-      reason: 'Aggregate score 0.33 ≥ 0.25 threshold',
-    });
+    expect(result).toMatchObject({ pass: true });
+    expect(result.reason).toContain('Aggregate score 0.33');
+    expect(result.reason).toContain('0.25 threshold');
   });
 
   describe('similarity score compatibility', () => {
@@ -468,6 +945,48 @@ describe('runAssertions', () => {
       expect(result).toMatchObject({
         pass: false,
         reason: 'Aggregate score 0.33 < 0.5 threshold',
+      });
+    });
+
+    it('fails unexpected xfail passes inside assert-set despite parent thresholds', async () => {
+      const output = 'Expected output';
+      const provider = createMockProvider({ id: 'openai:gpt-4o-mini' });
+      const test: AtomicTestCase = {
+        threshold: 0.5,
+        assert: [
+          {
+            type: 'assert-set',
+            threshold: 0.5,
+            assert: [
+              {
+                type: 'equals',
+                value: output,
+                xfail: 'openai:*',
+              },
+              {
+                type: 'contains',
+                value: 'Expected',
+              },
+            ],
+          },
+          {
+            type: 'contains',
+            value: 'Expected',
+          },
+        ],
+      };
+
+      const result: GradingResult = await runAssertions({
+        prompt,
+        provider,
+        test,
+        providerResponse: { output },
+      });
+
+      expect(result).toMatchObject({
+        pass: false,
+        score: 0.75,
+        reason: 'Assertion was expected to fail for provider "openai:gpt-4o-mini", but passed',
       });
     });
 

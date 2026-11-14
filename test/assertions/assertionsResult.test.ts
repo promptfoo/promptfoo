@@ -44,6 +44,16 @@ describe('AssertionsResult', () => {
   });
 
   describe('addResult', () => {
+    it('accepts deeply nested custom grader results without a configured xfail', async () => {
+      const aggregate = new AssertionsResult({});
+      let result: GradingResult = { pass: true, score: 1, reason: 'ok' };
+      for (let depth = 0; depth < 4000; depth++) {
+        result = { pass: true, score: 1, reason: 'ok', componentResults: [result, result] };
+      }
+      aggregate.addResult({ index: 0, result });
+      expect((await aggregate.testResult()).pass).toBe(true);
+    });
+
     it('should add result and update totals', () => {
       const assertionsResult = new AssertionsResult({});
       const result: GradingResult = {
