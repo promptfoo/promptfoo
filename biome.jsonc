@@ -1,5 +1,5 @@
 {
-  "$schema": "https://biomejs.dev/schemas/2.5.14/schema.json",
+  "$schema": "https://biomejs.dev/schemas/2.6.2/schema.json",
   "vcs": {
     "enabled": true,
     "clientKind": "git",
@@ -123,6 +123,7 @@
         "useIsNan": "error"
       },
       "style": {
+        "useReduceTypeParameter": "warn",
         "noEnum": "error",
         "noNegationElse": "error",
         "useConst": "error",
@@ -159,6 +160,7 @@
         }
       },
       "suspicious": {
+        "noIdenticalTestTitle": "error",
         "noAsyncPromiseExecutor": "error",
         "noDebugger": "error",
         "noExplicitAny": "error",
@@ -198,9 +200,7 @@
         // resolved `string | null` as a promise in a conditional. Re-enable when
         // upstream makes it cheaper and fixes the await-unwrapping.
         "noMisusedPromises": "off",
-        "noUselessTypeConversion": "error",
-        "noIdenticalTestTitle": "error",
-        "useReduceTypeParameter": "warn"
+        "noUselessTypeConversion": "error"
       }
     }
   },

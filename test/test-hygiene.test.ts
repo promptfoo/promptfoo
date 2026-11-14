@@ -62,6 +62,12 @@ const allowedSkippedTests: AllowedSkip[] = [
     reason: 'requires built dist artifacts when this integration file runs outside build jobs',
   },
   {
+    file: 'globalConfig/permissions.test.ts',
+    kind: 'skipIf',
+    linePattern: /^describe\.skipIf\(process\.platform === 'win32'\)\('POSIX credential targets'/,
+    reason: 'Symlink and filesystem FIFO protection exercises the POSIX credential writer',
+  },
+  {
     file: 'prompts/processors/executable.test.ts',
     kind: 'skip',
     linePattern: /process\.platform === 'win32' \? describe\.skip : describe/,
@@ -136,6 +142,12 @@ const allowedSkippedTests: AllowedSkip[] = [
     reason: 'Ruby smoke coverage requires the Ruby toolchain',
   },
   {
+    file: 'smoke/sigterm-eval.test.ts',
+    kind: 'skipIf',
+    linePattern: /^describe\.skipIf\(process\.platform === 'win32'\)\('SIGTERM during an eval'/,
+    reason: 'Windows has no POSIX signals, so SIGTERM ends the child without running handlers',
+  },
+  {
     file: 'smoke/extension-hooks.test.ts',
     kind: 'skipIf',
     linePattern: /^it\.skipIf\(!PYTHON_PATH\)\($/,
@@ -184,7 +196,6 @@ const legacyModuleScopePersistentMockFiles = new Set<string>([
   'external/assertions.test.ts',
   'external/conversationRelevancy.test.ts',
   'globalConfig.test.ts',
-  'googleSheets.test.ts',
   'index.test.ts',
   'integration/envPath.test.ts',
   'migrate.test.ts',
@@ -244,7 +255,6 @@ const legacyModuleScopePersistentMockFiles = new Set<string>([
   'redteam/strategies/simpleAudio.test.ts',
   'redteam/strategies/simpleVideo.test.ts',
   'sagemaker.test.ts',
-  'server/findStaticDir.test.ts',
   'server/server.test.ts',
   'telemetry.test.ts',
   'tracing/integration.test.ts',
