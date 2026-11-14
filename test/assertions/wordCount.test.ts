@@ -120,6 +120,27 @@ describe('handleWordCount', () => {
     });
   });
 
+  describe.each([false, true])('range validation with inverse=%s', (inverse) => {
+    it.each([
+      { label: 'null minimum', value: { min: null } },
+      { label: 'string maximum', value: { max: 'invalid' } },
+      { label: 'boolean minimum', value: { min: true } },
+      { label: 'infinite maximum', value: { max: Number.POSITIVE_INFINITY } },
+      { label: 'NaN minimum', value: { min: Number.NaN } },
+      { label: 'null maximum in a range', value: { min: 0, max: null } },
+    ])('rejects $label before grading', ({ value }) => {
+      expect(() =>
+        handleWordCount({
+          ...defaultParams,
+          assertion: { type: inverse ? 'not-word-count' : 'word-count', value },
+          renderedValue: value,
+          outputString: 'hello world',
+          inverse,
+        }),
+      ).toThrow('"word-count" assertion min/max must be finite numbers');
+    });
+  });
+
   describe('range (min and max)', () => {
     it('should pass when word count is within range', () => {
       const params: AssertionParams = {
