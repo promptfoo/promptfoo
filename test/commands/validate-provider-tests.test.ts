@@ -10,8 +10,6 @@ import { createMockProvider, type MockApiProvider } from '../factories/provider'
 
 import type { UnifiedConfig } from '../../src/types/index';
 
-const { createUuidModuleFactory } = await vi.hoisted(() => import('../factories/moduleMocks'));
-
 vi.mock('../../src/logger');
 vi.mock('../../src/util/config/load', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../src/util/config/load')>()),
@@ -26,7 +24,6 @@ vi.mock('../../src/telemetry', () => ({
     send: vi.fn(),
   },
 }));
-vi.mock('../../src/util/uuid', createUuidModuleFactory());
 
 describe('Validate Command Provider Tests', () => {
   let program: Command;
@@ -250,8 +247,8 @@ describe('Validate Command Provider Tests', () => {
       expect(responseLog?.[0]).not.toContain('...');
     });
 
-    it('should load cloud provider when -t flag is UUID', async () => {
-      const cloudUUID = '12345678-1234-1234-1234-123456789abc';
+    it('loads a cloud provider when -t is a UUIDv7', async () => {
+      const cloudUUID = '0191ab19-7d3a-7e7c-8c22-3651cd50e791';
       const mockProviderOptions = {
         id: 'openai:gpt-4',
         config: {},
@@ -431,7 +428,7 @@ describe('Validate Command Provider Tests', () => {
     });
 
     it('should test cloud provider with UUID when no config file is present', async () => {
-      const cloudUUID = '12345678-1234-1234-1234-123456789abc';
+      const cloudUUID = '12345678-1234-4234-8234-123456789abc';
       const mockProviderOptions = {
         id: 'openai:gpt-4',
         config: {},
