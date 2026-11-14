@@ -1,0 +1,42 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: AI Stupid Level routing modes compared on the same prompts
+
+prompts:
+  - 'Answer briefly. {{question}}'
+
+# All three use one router key (ASL_ROUTER_KEY). The router picks a model per request from its
+# benchmark results and calls it with the provider keys on your AI Stupid Level account.
+providers:
+  - id: openai:chat:auto-coding
+    label: 'auto-coding (top coding score)'
+    config: &asl
+      apiBaseUrl: https://aistupidlevel.info/v1
+      apiKeyEnvar: ASL_ROUTER_KEY
+      headers:
+        OpenAI-Organization: ''
+      omitDefaults: true
+      max_tokens: 4096
+      showThinking: false
+  - id: openai:chat:auto-value-coding
+    label: 'auto-value-coding (most coding points per dollar)'
+    config: *asl
+  - id: openai:chat:auto-fastest-quality
+    label: 'auto-fastest-quality (fastest near-top model)'
+    config: *asl
+
+tests:
+  - vars:
+      question: Write a Python function is_palindrome(s) that ignores case and non-alphanumeric characters. Return only code.
+    assert:
+      - type: icontains
+        value: def is_palindrome
+  - vars:
+      question: What does HTTP status code 429 mean? One sentence.
+    assert:
+      - type: icontains-any
+        value: [too many requests, rate limit]
+  - vars:
+      question: Which is larger, 9.11 or 9.9? Answer with the number only.
+    assert:
+      - type: contains
+        value: '9.9'
