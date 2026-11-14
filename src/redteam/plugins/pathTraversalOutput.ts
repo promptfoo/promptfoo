@@ -635,9 +635,7 @@ function scanOutput(
     );
   } catch (error) {
     if ((error as NodeJS.ErrnoException)?.code === 'ERR_SCRIPT_EXECUTION_TIMEOUT') {
-      throw new Error('path-traversal-output: configured detector exceeded its scan time limit', {
-        cause: error,
-      });
+      throw new Error('path-traversal-output: configured detector exceeded its scan time limit');
     }
     throw error;
   }
