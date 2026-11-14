@@ -116,14 +116,16 @@ describe('evalport interchange', () => {
       expect(validateEvalPortSuite(suite).valid).toBe(true);
     });
 
-    it('records negation honestly instead of inventing a negated grader', () => {
+    it('exports negation as a custom grader without inferring a positive expected output', () => {
       const tests: TestCase[] = [
         { vars: { q: 'a' }, assert: [{ type: 'not-contains', value: 'secret' }] },
       ];
       const suite = promptfooTestsToEvalPortSuite(tests, { suiteId: 's' });
-      expect(suite.graders[0]?.type).toBe('contains');
+      expect(suite.test_cases[0]).not.toHaveProperty('expected_output');
+      expect(suite.graders[0]?.type).toBe('custom');
       expect(suite.graders[0]).not.toHaveProperty('metadata');
       expect(suite.graders[0]?.params).toMatchObject({
+        handler: 'promptfoo:not-contains',
         promptfoo: { assertionType: 'not-contains', inverse: true },
       });
     });
@@ -1060,6 +1062,17 @@ describe('evalport interchange', () => {
       const exported = promptfooTestsToEvalPortSuite(tests, { suiteId: 'custom-rubric' });
       const restored = evalPortSuiteToPromptfooTests(JSON.parse(JSON.stringify(exported)));
       expect(restored[0]?.assert).toEqual(tests[0].assert);
+    });
+
+    it('redacts credential-bearing rubric URLs in stored and executable prompt representations', () => {
+      const rubricPrompt = 'https://example.com/grade?api_key=fixture-only';
+      const suite = promptfooTestsToEvalPortSuite(
+        [{ assert: [{ type: 'llm-rubric', value: 'criterion', rubricPrompt }] }],
+        { suiteId: 'rubric-url' },
+      );
+      expect(JSON.stringify(suite)).not.toContain('fixture-only');
+      const [restored] = evalPortSuiteToPromptfooTests(suite);
+      expect(restored?.assert?.[0]).toMatchObject({ type: 'llm-rubric', value: 'criterion' });
     });
 
     it('round-trips structured providers and execution fields', () => {

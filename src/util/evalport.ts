@@ -37,8 +37,7 @@ import type {
  * - On the results side, `EvaluateResult.gradingResult` maps to EvalPort
  *   `GraderResult`s: a `componentResults` array (from `assert-set` grouping)
  *   maps to one `GraderResult` per component rather than being collapsed.
- * - `not-<type>` assertions keep their mapping but record `inverse: true` in
- *   params.promptfoo, since EvalPort has no negation primitive.
+ * - Negated assertions use custom graders because EvalPort has no negation primitive.
  */
 
 export const EVALPORT_SPEC_VERSION = '1.0.0';
@@ -241,19 +240,6 @@ const REFERENCE_TYPES = new Set([
   ...SEMANTIC_TYPES,
 ]);
 
-interface SplitAssertionType {
-  original: string;
-  base: string;
-  inverse: boolean;
-}
-
-function splitAssertionType(type: string): SplitAssertionType {
-  if (type.startsWith('not-')) {
-    return { original: type, base: type.slice(4), inverse: true };
-  }
-  return { original: type, base: type, inverse: false };
-}
-
 function serializableAssertionValue(value: unknown): unknown {
   if (typeof value === 'function') {
     return '[function]';
@@ -319,7 +305,10 @@ function buildStoredAssertion(
     });
   }
   if (assertion.rubricPrompt !== undefined) {
-    stored.rubricPrompt = assertion.rubricPrompt;
+    stored.rubricPrompt = sanitizeObject(assertion.rubricPrompt, {
+      context: 'EvalPort rubric prompt',
+      sanitizeUrls: true,
+    });
   }
   if (typeof assertion.transform === 'string') {
     stored.transform = assertion.transform;
@@ -341,7 +330,8 @@ function buildStoredAssertion(
  * `assert-set` entries must be expanded by the caller (see `flattenAssertions`).
  */
 export function assertionToEvalPortGrader(assertion: Assertion, id: string): EvalPortGrader {
-  const { original, base, inverse } = splitAssertionType(assertion.type);
+  const original = assertion.type;
+  const inverse = original.startsWith('not-');
   const valueString = assertion.value === undefined ? '' : valueToString(assertion.value);
   const weight = assertion.weight ?? 1;
   const description = `promptfoo ${original}${inverse ? ' (inverse)' : ''}`;
@@ -354,7 +344,7 @@ export function assertionToEvalPortGrader(assertion: Assertion, id: string): Eva
   };
   const storedAssertion = buildStoredAssertion(assertion, promptfooMeta);
 
-  if (EXACT_MATCH_TYPES.has(base)) {
+  if (EXACT_MATCH_TYPES.has(original)) {
     return {
       id,
       type: 'exact_match',
@@ -363,32 +353,32 @@ export function assertionToEvalPortGrader(assertion: Assertion, id: string): Eva
       description,
     };
   }
-  if (CONTAINS_TYPES.has(base)) {
+  if (CONTAINS_TYPES.has(original)) {
     return {
       id,
       type: 'contains',
       params: {
         substring: valueString,
-        ignore_case: base === 'icontains',
+        ignore_case: original === 'icontains',
         promptfoo: storedAssertion,
       },
       weight,
       description,
     };
   }
-  if (REGEX_TYPES.has(base)) {
+  if (REGEX_TYPES.has(original)) {
     return {
       id,
       type: 'regex',
       params: {
-        pattern: base === 'starts-with' ? `^${escapeRegExp(valueString)}` : valueString,
+        pattern: original === 'starts-with' ? `^${escapeRegExp(valueString)}` : valueString,
         promptfoo: storedAssertion,
       },
       weight,
       description,
     };
   }
-  if (SEMANTIC_TYPES.has(base)) {
+  if (SEMANTIC_TYPES.has(original)) {
     return {
       id,
       type: 'semantic_similarity',
@@ -397,11 +387,11 @@ export function assertionToEvalPortGrader(assertion: Assertion, id: string): Eva
       description,
     };
   }
-  if (LLM_JUDGE_TYPES.has(base)) {
+  if (LLM_JUDGE_TYPES.has(original)) {
     const providerModel = assertionProviderModel(assertion.provider) ?? 'promptfoo-default';
     const rubric =
-      typeof assertion.rubricPrompt === 'string' && assertion.rubricPrompt !== ''
-        ? assertion.rubricPrompt
+      typeof storedAssertion.rubricPrompt === 'string' && storedAssertion.rubricPrompt !== ''
+        ? storedAssertion.rubricPrompt
         : valueString;
     const prompt =
       rubric.includes('{output}') || rubric.includes('{input}') || rubric.includes('{expected}')
@@ -503,8 +493,7 @@ function resolveGraderId(draft: EvalPortGrader, state: GraderDedupState): string
 
 function inferExpectedOutput(flat: FlattenedAssertion[]): string | undefined {
   for (const item of flat) {
-    const { base } = splitAssertionType(item.assertion.type);
-    if (REFERENCE_TYPES.has(base) && item.assertion.value !== undefined) {
+    if (REFERENCE_TYPES.has(item.assertion.type) && item.assertion.value !== undefined) {
       const candidate = valueToString(item.assertion.value);
       if (candidate !== '' && candidate !== '[function]') {
         return candidate;
