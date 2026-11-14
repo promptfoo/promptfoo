@@ -7,6 +7,7 @@ import {
   EvalResultDeletionConflict,
   RESULT_WRITER,
   resultDeletionRevision,
+  evalResultsObject,
 } from './evalResultWrite';
 import { getDb } from './index';
 import { evalResultsTable, evalsTable } from './tables';
@@ -15,6 +16,27 @@ export class EvalResultNotFoundError extends Error {}
 
 type PromptMetrics = ReturnType<typeof createDefaultPromptMetrics>;
 type ResultRow = typeof evalResultsTable.$inferSelect;
+
+// Imported and interrupted runs may retain totals that their saved rows cannot reproduce.
+function matchesSavedMetrics(saved: unknown, rebuilt: unknown, key?: string): boolean {
+  if (typeof saved === 'number' && typeof rebuilt === 'number') {
+    return Math.abs(saved - rebuilt) <= 1e-12 * Math.max(1, Math.abs(saved), Math.abs(rebuilt));
+  }
+  if (saved && typeof saved === 'object' && rebuilt && typeof rebuilt === 'object') {
+    if (
+      (key === 'namedScores' || key === 'namedScoresCount' || key === 'namedScoreWeights') &&
+      Object.keys(saved).length !== Object.keys(rebuilt).length
+    ) {
+      return false;
+    }
+    return Object.entries(saved).every(
+      ([field, value]) =>
+        Object.hasOwn(rebuilt, field) &&
+        matchesSavedMetrics(value, Reflect.get(rebuilt, field), field),
+    );
+  }
+  return saved === rebuilt;
+}
 
 function accumulate(metrics: PromptMetrics, row: ResultRow) {
   updatePromptResultCounts(metrics, {
@@ -120,27 +142,18 @@ export async function deleteEvalResult(evalId: string, resultId: string): Promis
     }
     const observed = structuredClone(remaining);
     accumulate(observed, result);
-    const counts = [
-      'testPassCount',
-      'testFailCount',
-      'testErrorCount',
-      'assertPassCount',
-      'assertFailCount',
-    ] as const;
-    const closeEnough = (a: number, b: number) =>
-      Math.abs(a - b) <= 1e-8 * Math.max(1, Math.abs(a), Math.abs(b));
-    const metricBuckets = ['namedScores', 'namedScoresCount', 'namedScoreWeights'] as const;
+    // Stored red-team buckets have their own lifecycle and are validated above.
+    const { redteam: _redteam, ...saved } = original;
     if (
-      counts.some((key) => original[key] !== observed[key]) ||
-      metricBuckets.some((bucket) => {
-        const saved = original[bucket];
-        const recomputed = observed[bucket];
-        return (
-          saved &&
-          recomputed &&
-          (Object.keys(saved).length !== Object.keys(recomputed).length ||
-            Object.entries(saved).some(([name, value]) => !closeEnough(value, recomputed[name])))
-        );
+      // The saved counts establish that this prompt has complete result accounting.
+      original.testPassCount !== observed.testPassCount ||
+      original.testFailCount !== observed.testFailCount ||
+      original.testErrorCount !== observed.testErrorCount ||
+      original.assertPassCount !== observed.assertPassCount ||
+      original.assertFailCount !== observed.assertFailCount ||
+      !matchesSavedMetrics(saved, {
+        ...observed,
+        incurredCost: observed.incurredCost ?? observed.cost,
       })
     ) {
       throw new EvalResultDeletionConflict(
@@ -158,7 +171,7 @@ export async function deleteEvalResult(evalId: string, resultId: string): Promis
     await tx
       .update(evalsTable)
       .set({
-        results: sql`json_set(${evalsTable.results}, '$.__promptfooResultDeletionRevision', ${resultDeletionRevision} + 1)`,
+        results: sql`json_set(${evalResultsObject}, '$.__promptfooResultDeletionRevision', ${resultDeletionRevision} + 1)`,
         prompts: row.prompts!.map((item, index) =>
           index === result.promptIdx ? { ...item, metrics: { ...original, ...remaining } } : item,
         ),

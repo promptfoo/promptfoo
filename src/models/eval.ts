@@ -1,7 +1,11 @@
 import { and, desc, eq, type SQL, sql } from 'drizzle-orm';
 import { DEFAULT_QUERY_LIMIT, HUMAN_ASSERTION_TYPE } from '../constants';
 import { deleteTraceRecordsForEvals } from '../database/evalDeletion';
-import { EvalResultDeletionConflict, resultDeletionRevision } from '../database/evalResultWrite';
+import {
+  EvalResultDeletionConflict,
+  evalResultsObject,
+  resultDeletionRevision,
+} from '../database/evalResultWrite';
 import { getDb } from '../database/index';
 import {
   datasetsTable,
@@ -688,7 +692,7 @@ export default class Eval {
       // For V4 evals, atomically merge duration fields into the results column
       // using json_set so concurrent save() calls don't clobber each other's keys.
       // Guard against malformed or non-object JSON (arrays, strings, null) in legacy rows.
-      let expr: SQL = sql`CASE WHEN json_valid(${evalsTable.results}) AND json_type(${evalsTable.results}) = 'object' THEN ${evalsTable.results} ELSE '{}' END`;
+      let expr: SQL = evalResultsObject;
       if (this.durationMs !== undefined) {
         expr = sql`json_set(${expr}, '$.durationMs', ${this.durationMs})`;
       }

@@ -8,7 +8,8 @@ import { evalsTable } from './tables';
 export class EvalResultDeletionConflict extends Error {}
 
 export const RESULT_WRITER = '__promptfooResultWriter';
-export const resultDeletionRevision = sql<number>`coalesce(json_extract(${evalsTable.results}, '$.__promptfooResultDeletionRevision'), 0)`;
+export const evalResultsObject = sql`CASE WHEN json_valid(${evalsTable.results}) AND json_type(${evalsTable.results}) = 'object' THEN ${evalsTable.results} ELSE '{}' END`;
+export const resultDeletionRevision = sql<number>`coalesce(json_extract(${evalResultsObject}, '$.__promptfooResultDeletionRevision'), 0)`;
 const writerPath = '$.' + RESULT_WRITER;
 
 function endpoint(id: string): string {
@@ -58,7 +59,7 @@ export async function withEvalResultWriter<T>(
     // Probe outside a transaction. A conditional update proves the observed writer did not change.
     const previous = await db
       .select({
-        writer: sql<unknown>`json_extract(${evalsTable.results}, ${writerPath})`,
+        writer: sql<unknown>`json_extract(${evalResultsObject}, ${writerPath})`,
       })
       .from(evalsTable)
       .where(predicate)
@@ -72,9 +73,9 @@ export async function withEvalResultWriter<T>(
 
     const [updated] = await db
       .update(evalsTable)
-      .set({ results: sql`json_set(${evalsTable.results}, ${writerPath}, ${id})` })
+      .set({ results: sql`json_set(${evalResultsObject}, ${writerPath}, ${id})` })
       .where(
-        sql`${predicate} AND json_extract(${evalsTable.results}, ${writerPath}) IS ${previous.writer}`,
+        sql`${predicate} AND json_extract(${evalResultsObject}, ${writerPath}) IS ${previous.writer}`,
       )
       .returning({ prompts: evalsTable.prompts, revision: resultDeletionRevision });
     if (!updated) {
@@ -91,7 +92,7 @@ export async function withEvalResultWriter<T>(
       await db
         .update(evalsTable)
         .set({ results: sql`json_remove(${evalsTable.results}, ${writerPath})` })
-        .where(sql`${predicate} AND json_extract(${evalsTable.results}, ${writerPath}) = ${id}`)
+        .where(sql`${predicate} AND json_extract(${evalResultsObject}, ${writerPath}) = ${id}`)
         .run();
     }
   } finally {

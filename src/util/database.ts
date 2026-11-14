@@ -410,8 +410,9 @@ export async function getStandaloneEvals({
         // @ts-ignore
         (acc, row) => {
           const pluginId = row.test.metadata?.pluginId;
-          if (pluginId) {
-            const isPass = row.outputs[index].pass;
+          const output = row.outputs[index];
+          if (pluginId && output) {
+            const isPass = output.pass;
             acc.pluginPassCount[pluginId] = (acc.pluginPassCount[pluginId] || 0) + (isPass ? 1 : 0);
             acc.pluginFailCount[pluginId] = (acc.pluginFailCount[pluginId] || 0) + (isPass ? 0 : 1);
           }

@@ -235,27 +235,29 @@ export function DownloadDialog({ open, onClose }: DownloadDialogProps) {
       return;
     }
 
-    const humanEvalCases = table.body
-      .filter((row) => row.outputs.some((output) => output != null))
-      .map((row) => ({
-        vars: {
-          ...row.test.vars,
-          output: row.outputs[0]?.text.includes('---')
-            ? row.outputs[0]!.text.split('---\n')[1]
-            : (row.outputs[0]?.text ?? ''),
-          redteamFinalPrompt: row.outputs[0]?.metadata?.redteamFinalPrompt,
-          ...(row.outputs[0]?.gradingResult?.comment
-            ? { comment: row.outputs[0]!.gradingResult!.comment }
-            : {}),
-        },
-        assert: [
-          {
-            type: 'javascript',
-            value: `${row.outputs[0]?.pass ? '' : '!'}JSON.parse(output).pass`,
+    const humanEvalCases = table.body.flatMap((row) => {
+      const output = row.outputs.find(Boolean);
+      if (!output) {
+        return [];
+      }
+      return [
+        {
+          vars: {
+            ...row.test.vars,
+            output: output.text.includes('---') ? output.text.split('---\n')[1] : output.text,
+            redteamFinalPrompt: output.metadata?.redteamFinalPrompt,
+            ...(output.gradingResult?.comment ? { comment: output.gradingResult.comment } : {}),
           },
-        ],
-        metadata: row.test.metadata,
-      }));
+          assert: [
+            {
+              type: 'javascript',
+              value: `${output.pass ? '' : '!'}JSON.parse(output).pass`,
+            },
+          ],
+          metadata: row.test.metadata,
+        },
+      ];
+    });
 
     const yamlContent = yaml.dump(humanEvalCases);
     const blob = new Blob([yamlContent], { type: 'application/x-yaml' });
