@@ -1,4 +1,7 @@
-import { getRepeatPassRateGroupTestIdx } from './repeatPassRateMetadata';
+import {
+  getRepeatPassRateGroupTestIdx,
+  getTaggedRepeatPassRateGroupTestIdx,
+} from './repeatPassRateMetadata';
 
 import type Eval from '../models/eval';
 import type EvalResult from '../models/evalResult';
@@ -34,8 +37,11 @@ type Bucket = {
   description?: string;
 };
 
-function addResultToBuckets(buckets: Map<string, Bucket>, result: RepeatPassRateResult) {
-  const testIdx = getRepeatPassRateGroupTestIdx(result);
+function addResultToBuckets(
+  buckets: Map<string, Bucket>,
+  result: RepeatPassRateResult,
+  testIdx: number | undefined,
+) {
   if (testIdx === undefined) {
     // Row was not part of a repeat group (e.g. a test opted out with
     // `options.repeat: 1` inside a globally repeated run). A single, intentionally
@@ -98,7 +104,7 @@ export function computeRepeatPassRateViolations(
 
   const buckets = new Map<string, Bucket>();
   for (const result of results) {
-    addResultToBuckets(buckets, result);
+    addResultToBuckets(buckets, result, getRepeatPassRateGroupTestIdx(result));
   }
   return collectViolations(buckets, threshold);
 }
@@ -122,14 +128,14 @@ export async function findRepeatPassRateViolations(
   const buckets = new Map<string, Bucket>();
   for await (const batch of evalRecord.fetchResultsBatched()) {
     for (const result of batch) {
-      addResultToBuckets(buckets, result);
+      addResultToBuckets(buckets, result, getRepeatPassRateGroupTestIdx(result));
     }
   }
   // Rows that failed to persist live only in memory and are not returned by the batched
   // DB stream. Merge them back in so a failed-to-persist attempt still counts against the
   // per-test repeat pass rate instead of silently dropping the failing repeat.
   for (const result of evalRecord.getFailedResults()) {
-    addResultToBuckets(buckets, result);
+    addResultToBuckets(buckets, result, getTaggedRepeatPassRateGroupTestIdx(result));
   }
   return collectViolations(buckets, threshold);
 }

@@ -1031,6 +1031,22 @@ describe('EvalResult', () => {
   });
 
   describe('createManyFromEvaluateResult', () => {
+    it('persists the internal repeat tag and trace linkage when bulk rows are copied', async () => {
+      const metadata = { __promptfooRepeatGroupTestIdx: 17 };
+      const tagged = tagRepeatPassRateResult(
+        createEvaluateResult({ metadata, traceId: 'bulk-repeat-trace' }),
+        0,
+      );
+      const [created] = await EvalResult.createManyFromEvaluateResult([tagged], 'bulk-repeat');
+      const stored = await EvalResult.findById(created.id);
+
+      expect(stored?.metadata).toMatchObject({
+        __promptfoo: { [REPEAT_PASS_RATE_GROUP_METADATA_KEY]: 0 },
+      });
+      expect(stored?.toEvaluateResult().traceId).toBe('bulk-repeat-trace');
+      expect(stored?.toEvaluateResult().metadata).toEqual(metadata);
+    });
+
     it('preserves trace linkage across bulk persistence', async () => {
       const [result] = await EvalResult.createManyFromEvaluateResult(
         [
@@ -1250,19 +1266,17 @@ describe('EvalResult', () => {
     });
 
     it('stores repeat grouping internally without exposing it in public results', async () => {
-      const taggedResult = tagRepeatPassRateResult(
-        createEvaluateResult({ metadata: { visible: 'metadata' } }),
-        7,
-      );
+      const metadata = { __promptfooRepeatGroupTestIdx: 23, __promptfoo: { other: 'preserved' } };
+      const taggedResult = tagRepeatPassRateResult(createEvaluateResult({ metadata }), 7);
       const result = await EvalResult.createFromEvaluateResult('test-eval-id', taggedResult, {
         persist: false,
       });
 
-      expect(result.metadata).toMatchObject({
-        visible: 'metadata',
-        [REPEAT_PASS_RATE_GROUP_METADATA_KEY]: 7,
+      expect(result.metadata).toEqual({
+        __promptfooRepeatGroupTestIdx: 23,
+        __promptfoo: { other: 'preserved', [REPEAT_PASS_RATE_GROUP_METADATA_KEY]: 7 },
       });
-      expect(result.toEvaluateResult().metadata).toEqual({ visible: 'metadata' });
+      expect(result.toEvaluateResult().metadata).toEqual(metadata);
     });
 
     it('should preserve the original response object when response stripping is disabled', () => {

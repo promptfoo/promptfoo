@@ -41,7 +41,6 @@ import { randomSequence, sha256 } from '../util/createHash';
 import { convertTestResultsToTableRow } from '../util/exportToFile/index';
 import { isNonTransientHttpStatus, NON_TRANSIENT_HTTP_STATUSES } from '../util/fetch/errors';
 import invariant from '../util/invariant';
-import { REPEAT_PASS_RATE_GROUP_METADATA_KEY } from '../util/repeatPassRateMetadata';
 import { sanitizeRuntimeOptions, sanitizeTracingConfigForPersistence } from '../util/sanitizer';
 import { getCurrentTimestamp } from '../util/time';
 import {
@@ -241,14 +240,12 @@ export class EvalQueries {
             AND json_valid(metadata)
           LIMIT 10000
         ) t, json_each(t.metadata) j
-        WHERE j.key != ${REPEAT_PASS_RATE_GROUP_METADATA_KEY}
+        WHERE j.key != ${PROMPTFOO_METADATA_KEY}
         ORDER BY j.key
         LIMIT 1000
       `;
       const results = await db.all<MetadataKeyResult>(query);
-      // `__promptfoo` is a reserved internal namespace (e.g. trace linkage). Don't expose
-      // it through the metadata-keys API — pair this with the value-side filter below.
-      return results.map((r) => r.key).filter((key) => key !== PROMPTFOO_METADATA_KEY);
+      return results.map((r) => r.key);
     } catch (error) {
       // Log error but return empty array to prevent breaking the UI
       logger.error(
@@ -267,7 +264,7 @@ export class EvalQueries {
   static async getMetadataValuesFromEval(evalId: string, key: string): Promise<string[]> {
     const db = await getDb();
     const trimmedKey = key.trim();
-    if (!trimmedKey || trimmedKey === REPEAT_PASS_RATE_GROUP_METADATA_KEY) {
+    if (!trimmedKey) {
       return [];
     }
     // `__promptfoo` is a reserved internal namespace (e.g. trace linkage). Don't expose

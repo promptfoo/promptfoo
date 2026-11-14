@@ -1,10 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { REPEAT_PASS_RATE_GROUP_METADATA_KEY } from '../../src/util/repeatPassRateMetadata';
+import {
+  REPEAT_PASS_RATE_GROUP_METADATA_KEY,
+  tagRepeatPassRateResult,
+} from '../../src/util/repeatPassRateMetadata';
 import {
   computeRepeatPassRateViolations,
   findRepeatPassRateViolations,
   formatRepeatPassRateViolation,
 } from '../../src/util/repeatPassRateThreshold';
+import { createEvaluateResult } from '../factories/eval';
 
 import type Eval from '../../src/models/eval';
 import type { AtomicTestCase } from '../../src/types/index';
@@ -25,7 +29,7 @@ function makeResult(opts: {
     metadata:
       opts.repeatGroupTestIdx === undefined
         ? {}
-        : { [REPEAT_PASS_RATE_GROUP_METADATA_KEY]: opts.repeatGroupTestIdx },
+        : { __promptfoo: { [REPEAT_PASS_RATE_GROUP_METADATA_KEY]: opts.repeatGroupTestIdx } },
     testCase: opts.testCase ?? ({} as AtomicTestCase),
   };
 }
@@ -109,6 +113,23 @@ describe('computeRepeatPassRateViolations', () => {
     expect(violations.map((v) => `${v.testIdx}:${v.promptIdx}=${v.passRate}`)).toEqual([
       '0:0=50',
       '1:0=0',
+    ]);
+  });
+
+  it('ignores a singleton with user metadata matching the old flat grouping key', () => {
+    const singleton = {
+      ...makeResult({ testIdx: 2, promptIdx: 0, success: false }),
+      metadata: { __promptfooRepeatGroupTestIdx: 0 },
+    };
+    const results = [
+      makeResult({ testIdx: 0, repeatGroupTestIdx: 0, promptIdx: 0, success: true }),
+      makeResult({ testIdx: 1, repeatGroupTestIdx: 0, promptIdx: 0, success: false }),
+      singleton,
+    ];
+
+    expect(computeRepeatPassRateViolations(results, 50)).toEqual([]);
+    expect(computeRepeatPassRateViolations(results, 60)).toMatchObject([
+      { testIdx: 0, promptIdx: 0, successes: 1, total: 2, passRate: 50 },
     ]);
   });
 
@@ -364,7 +385,12 @@ describe('findRepeatPassRateViolations', () => {
       persisted: true,
       fetchResultsBatched,
       getFailedResults: () => [
-        makeResult({ testIdx: 0, repeatGroupTestIdx: 0, promptIdx: 0, success: false }),
+        tagRepeatPassRateResult(createEvaluateResult({ testIdx: 2, success: false }), 0),
+        createEvaluateResult({
+          testIdx: 3,
+          success: false,
+          metadata: { __promptfoo: { [REPEAT_PASS_RATE_GROUP_METADATA_KEY]: 0 } },
+        }),
       ],
     } as unknown as Eval;
 

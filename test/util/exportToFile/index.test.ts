@@ -23,12 +23,17 @@ describe('exportToFile utils', () => {
         failureReason: ResultFailureReason.NONE,
         metadata: {
           visible: 'metadata',
-          [REPEAT_PASS_RATE_GROUP_METADATA_KEY]: 7,
+          __promptfooRepeatGroupTestIdx: 23,
+          __promptfoo: { other: 'preserved', [REPEAT_PASS_RATE_GROUP_METADATA_KEY]: 7 },
         },
       };
 
       const output = convertEvalResultToTableCell(result as EvalResult);
-      expect(output.metadata).toEqual({ visible: 'metadata' });
+      expect(output.metadata).toEqual({
+        visible: 'metadata',
+        __promptfooRepeatGroupTestIdx: 23,
+        __promptfoo: { other: 'preserved' },
+      });
     });
 
     it('should handle successful assertion result', () => {

@@ -567,8 +567,8 @@ describe('runEval', () => {
       undefined,
     );
     expect(result.testCase.metadata).toEqual({ visible: 'metadata' });
-    expect(result.metadata).not.toHaveProperty('__promptfooRepeatGroupTestIdx');
-    expect(JSON.stringify(result)).not.toContain('__promptfooRepeatGroupTestIdx');
+    expect(result.metadata).not.toHaveProperty('__promptfoo.repeatGroupTestIdx');
+    expect(JSON.stringify(result)).not.toContain('repeatGroupTestIdx');
   });
 
   it('should preserve provider error context and plugin metadata on failure', async () => {

@@ -798,7 +798,9 @@ describeEvaluator('evaluator execution control', () => {
 
       expect(storedResults).toHaveLength(2);
       expect(
-        storedResults.map((result) => result.metadata?.[REPEAT_PASS_RATE_GROUP_METADATA_KEY]),
+        storedResults.map(
+          (result) => result.metadata?.__promptfoo?.[REPEAT_PASS_RATE_GROUP_METADATA_KEY],
+        ),
       ).toEqual([0, 0]);
       expect(JSON.stringify(publicSummary)).not.toContain(REPEAT_PASS_RATE_GROUP_METADATA_KEY);
     } finally {

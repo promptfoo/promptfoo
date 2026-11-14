@@ -410,7 +410,7 @@ function sanitizeGradingResultForDb<T>(gradingResult: T): T {
 }
 
 // `__promptfoo` is reserved at the metadata top level for promptfoo-internal namespaced data
-// (currently `traceLinkage`). User-supplied non-object values under this key are overwritten —
+// (trace linkage and repeat grouping). User-supplied non-object values under this key are overwritten —
 // log so the rare collision is visible. Mirrored in `EvalQueries.getMetadataKeysFromEval` /
 // `getMetadataValuesFromEval`, which hide the namespace from the metadata-discovery API.
 export const PROMPTFOO_METADATA_KEY = '__promptfoo';
@@ -712,7 +712,12 @@ export default class EvalResult {
             promptIdx: result.promptIdx,
           })
         : result.response;
-      processedResults.push({ ...result, response: processedResponse ?? undefined });
+      // Capture the evaluator's non-enumerable group tag before copying the row.
+      processedResults.push({
+        ...result,
+        metadata: addStoredRepeatPassRateMetadata(result.metadata, result),
+        response: processedResponse ?? undefined,
+      });
     }
 
     await db.transaction(async (tx) => {
@@ -731,11 +736,7 @@ export default class EvalResult {
             response: sanitizeForDb(result.response),
             gradingResult: sanitizeForDb(result.gradingResult),
             metadata: sanitizeForDb(
-              persistTraceMetadata(
-                addStoredRepeatPassRateMetadata(result.metadata, result),
-                result.traceId,
-                result.evaluationId,
-              ),
+              persistTraceMetadata(result.metadata, result.traceId, result.evaluationId),
             ),
           }),
           namedScores: sanitizeForDb(result.namedScores),
