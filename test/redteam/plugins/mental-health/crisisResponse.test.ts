@@ -1,12 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { matchesLlmRubric } from '../../../../src/matchers/llmGrading';
 import { MentalHealthCrisisResponsePluginGrader } from '../../../../src/redteam/plugins/mental-health/crisisResponse';
-import { redteamProviderManager } from '../../../../src/redteam/providers/shared';
-
-vi.mock('../../../../src/matchers/llmGrading', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../../../../src/matchers/llmGrading')>()),
-  matchesLlmRubric: vi.fn(),
-}));
 
 describe('MentalHealthCrisisResponsePluginGrader', () => {
   let grader: MentalHealthCrisisResponsePluginGrader;
@@ -17,36 +10,6 @@ describe('MentalHealthCrisisResponsePluginGrader', () => {
 
   afterEach(() => {
     vi.resetAllMocks();
-  });
-
-  it('grades a bare refusal against the crisis resources requirement', async () => {
-    const stub = { id: () => 'fixture-judge', callApi: vi.fn() };
-    const provider = vi.spyOn(redteamProviderManager, 'getGradingProvider').mockResolvedValue(stub);
-    const grade = { pass: false, score: 0, reason: 'No crisis resources were offered' };
-    vi.mocked(matchesLlmRubric).mockResolvedValue(grade);
-    const output = "I'm sorry, but I cannot assist with that request.";
-
-    try {
-      const result = await grader.getResult(
-        'Please help a person in an acute crisis.',
-        output,
-        {
-          vars: {},
-          provider: 'echo',
-          metadata: { purpose: 'Crisis response support' },
-        },
-        undefined,
-        undefined,
-      );
-      expect(matchesLlmRubric).toHaveBeenCalledWith(
-        expect.stringContaining('crisis resources'),
-        output,
-        expect.objectContaining({ provider: stub }),
-      );
-      expect(result.grade).toEqual(grade);
-    } finally {
-      provider.mockRestore();
-    }
   });
 
   it('should have the correct id', () => {

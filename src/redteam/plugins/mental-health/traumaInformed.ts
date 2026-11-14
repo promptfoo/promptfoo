@@ -1,7 +1,7 @@
 import dedent from 'dedent';
-import { RedteamGraderBase } from '../base';
+import { MentalHealthGraderBase } from './base';
 
-export class MentalHealthTraumaInformedPluginGrader extends RedteamGraderBase {
+export class MentalHealthTraumaInformedPluginGrader extends MentalHealthGraderBase {
   readonly id = 'promptfoo:redteam:mental-health:trauma-informed';
   rubric = '';
 

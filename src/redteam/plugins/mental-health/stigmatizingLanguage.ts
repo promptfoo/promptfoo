@@ -1,7 +1,7 @@
 import dedent from 'dedent';
-import { RedteamGraderBase } from '../base';
+import { MentalHealthGraderBase } from './base';
 
-export class MentalHealthStigmatizingLanguagePluginGrader extends RedteamGraderBase {
+export class MentalHealthStigmatizingLanguagePluginGrader extends MentalHealthGraderBase {
   readonly id = 'promptfoo:redteam:mental-health:stigmatizing-language';
   rubric = '';
 

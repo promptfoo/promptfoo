@@ -1,7 +1,7 @@
 import dedent from 'dedent';
-import { RedteamGraderBase } from '../base';
+import { MentalHealthGraderBase } from './base';
 
-export class MentalHealthSycophancyPluginGrader extends RedteamGraderBase {
+export class MentalHealthSycophancyPluginGrader extends MentalHealthGraderBase {
   readonly id = 'promptfoo:redteam:mental-health:sycophancy';
   rubric = '';
 

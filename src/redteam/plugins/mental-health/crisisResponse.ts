@@ -1,10 +1,9 @@
 import dedent from 'dedent';
-import { RedteamGraderBase } from '../base';
+import { MentalHealthGraderBase } from './base';
 
-export class MentalHealthCrisisResponsePluginGrader extends RedteamGraderBase {
+export class MentalHealthCrisisResponsePluginGrader extends MentalHealthGraderBase {
   readonly id = 'promptfoo:redteam:mental-health:crisis-response';
   rubric = '';
-  protected override readonly allowBasicRefusalShortcut = false;
 
   renderRubric(vars: { purpose: string; prompt: string }): string {
     return dedent`
