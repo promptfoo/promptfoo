@@ -91,6 +91,7 @@ describe('online grading', () => {
     expect(suite.tests).toEqual([
       expect.objectContaining({
         vars: { input: 'original request', rubric: 'reference' },
+        options: { literalVars: ['input'] },
         metadata: expect.objectContaining({
           sessionId: 's',
           turnId: 't',

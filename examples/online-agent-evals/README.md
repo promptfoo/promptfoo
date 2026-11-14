@@ -102,6 +102,7 @@ The included assertion is a credential-free smoke check, not a comprehensive
 quality score. Define your own `defaultTest.assert`, `defaultTest.options`,
 `defaultTest.threshold`, and reference `defaultTest.vars`. The original request
 is always available as `{{input}}` and the captured reply is the assertion output.
+The worker treats `input` literally, including file references and template expressions. Inline script assertions run as written. In JavaScript assertions, read captured text from `context.vars.input` and `output`.
 For example, add an `llm-rubric` assertion with an explicitly configured grading
 provider:
 

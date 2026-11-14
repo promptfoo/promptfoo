@@ -68,6 +68,47 @@ describe('online CLI', () => {
     },
   );
 
+  it('keeps captured input literal in the prompt and assertion context', () => {
+    const queue = path.join(directory, 'queue');
+    const config = path.join(directory, 'grading.json');
+    fs.writeFileSync(
+      config,
+      JSON.stringify({
+        defaultTest: {
+          assert: [
+            { type: 'equals', value: '{{input}}' },
+            {
+              type: 'javascript',
+              value: 'output === context.vars.input && "{{input}}" === "{{" + "input}}"',
+            },
+          ],
+          vars: { marker: 'fixture' },
+        },
+      }),
+    );
+    const inputs = ['file://missing-fixture.txt', 'package:absent-fixture:grader', '{{marker}}'];
+    for (const input of inputs) {
+      expect(
+        run(
+          ['capture', '--agent', 'generic', '--dir', queue],
+          JSON.stringify({ sessionId: 's', turnId: input, input, output: input }),
+        ).status,
+      ).toBe(0);
+    }
+    const result = run(['watch', '--dir', queue, '-c', config, '--once']);
+    expect(result.status, result.stdout + result.stderr).toBe(0);
+    const reports = fs
+      .readdirSync(path.join(queue, 'reports'))
+      .filter((file) => file.endsWith('.json'));
+    expect(reports).toHaveLength(inputs.length);
+    for (const file of reports) {
+      const report = JSON.parse(fs.readFileSync(path.join(queue, 'reports', file), 'utf8'));
+      const row = report.results.results[0];
+      expect(row.success).toBe(true);
+      expect(row.prompt.raw).toBe(row.response.output);
+    }
+  });
+
   it('grades captured replies, exports reports and deduplicates across worker restarts', () => {
     const queue = path.join(directory, 'queue');
     const first = run([

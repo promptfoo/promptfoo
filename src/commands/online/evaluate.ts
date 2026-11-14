@@ -54,6 +54,7 @@ export async function evaluateTurn(
       tests: [
         {
           ...config.grading,
+          options: { ...config.grading.options, literalVars: ['input'] },
           vars: { ...config.grading.vars, input: turn.input },
           metadata: {
             online: true,
