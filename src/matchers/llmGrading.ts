@@ -507,14 +507,20 @@ export async function matchesGEval(
   let steps;
 
   try {
-    // Graders often pretty-print or fence the JSON, so find the object rather than one line of it.
-    const stepsObject = extractJsonObjects(respSteps.output).find((object) => 'steps' in object);
-    if (!stepsObject) {
+    const candidates = extractJsonObjects(respSteps.output) as { steps?: unknown }[];
+    const candidate =
+      candidates.find(
+        ({ steps }) =>
+          Array.isArray(steps) &&
+          steps.length > 0 &&
+          steps.every((step) => typeof step === 'string' && step.trim() !== ''),
+      ) ?? candidates.find((object) => 'steps' in object);
+    if (!candidate) {
       return failWithTokens(
         `LLM-proposed evaluation steps are not in JSON format: ${respSteps.output}`,
       );
     }
-    steps = (stepsObject as { steps: unknown }).steps;
+    steps = candidate.steps;
 
     if (!Array.isArray(steps)) {
       return failWithTokens(
@@ -567,27 +573,40 @@ export async function matchesGEval(
   if (typeof resp.output !== 'string') {
     return failWithTokens('LLM-proposed evaluation result response is not a string');
   }
-  let result;
+  const parseScore = (score: unknown): number =>
+    typeof score === 'number'
+      ? score
+      : typeof score === 'string' && score.trim() !== ''
+        ? Number(score)
+        : Number.NaN;
 
+  let result: { score?: unknown; reason?: unknown };
   try {
-    result = extractJsonObjects(resp.output)[0] as
-      | { score?: unknown; reason?: unknown }
-      | undefined;
-    if (!result) {
+    const candidates = extractJsonObjects(resp.output) as { score?: unknown; reason?: unknown }[];
+    const candidate =
+      candidates.find(({ score, reason }) => {
+        const parsedScore = parseScore(score);
+        return (
+          Number.isFinite(parsedScore) &&
+          parsedScore >= 0 &&
+          parsedScore <= maxScore &&
+          typeof reason === 'string' &&
+          reason.trim() !== ''
+        );
+      }) ??
+      candidates.find((object) => 'score' in object || 'reason' in object) ??
+      candidates[0];
+    if (!candidate) {
       return failWithTokens(`LLM-proposed evaluation result is not in JSON format: ${resp.output}`);
     }
+    result = candidate;
   } catch (err) {
     return failWithTokens(
       `LLM-proposed evaluation result is not in JSON format: ${(err as Error).message}\n\n${resp.output}`,
     );
   }
 
-  const rawScore =
-    typeof result.score === 'number'
-      ? result.score
-      : typeof result.score === 'string' && result.score.trim() !== ''
-        ? Number(result.score)
-        : Number.NaN;
+  const rawScore = parseScore(result.score);
   if (!Number.isFinite(rawScore)) {
     return failWithTokens(
       `G-Eval result has invalid or missing score: ${JSON.stringify(result.score)}`,

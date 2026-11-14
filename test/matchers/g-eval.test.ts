@@ -600,4 +600,17 @@ describe('matchesGEval', () => {
       numRequests: 0,
     });
   });
+  it('selects usable grader JSON when an invalid candidate also appears', async () => {
+    const steps = ['{"steps":["Check accuracy"]}', '{"steps":[""]}'];
+    const grades = ['{"score":8,"reason":"Clear"}', '{"score":15,"reason":"Malformed"}'];
+    steps.reverse();
+    grades.reverse();
+    vi.spyOn(DefaultGradingProvider, 'callApi')
+      .mockResolvedValueOnce({ output: steps.join('\n') })
+      .mockResolvedValueOnce({ output: grades.join('\n') });
+
+    const result = await matchesGEval('Evaluate accuracy', 'Test input', 'Test output', 0.7);
+
+    expect(result).toMatchObject({ pass: true, score: 0.8, reason: 'Clear' });
+  });
 });
