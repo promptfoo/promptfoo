@@ -2337,47 +2337,50 @@ describe('util', () => {
           }
         });
 
-        it('should handle JPEG data URLs and extract base64', () => {
-          const base64Data = validBase64Image;
-          const dataUrl = `data:image/jpeg;base64,${base64Data}`;
+        it.each(['data', 'DATA', 'dAtA'])(
+          'extracts JPEG base64 from the %s URL scheme',
+          (scheme) => {
+            const base64Data = validBase64Image;
+            const dataUrl = `${scheme}:image/jpeg;base64,${base64Data}`;
 
-          const prompt = JSON.stringify([
-            {
-              role: 'user',
-              parts: [
-                {
-                  text: `Here is an image:\n${dataUrl}\nEnd of image.`,
-                },
-              ],
-            },
-          ]);
-
-          const contextVars = {
-            image1: dataUrl,
-          };
-
-          const { contents } = geminiFormatAndSystemInstructions(prompt, contextVars);
-
-          expect(contents).toEqual([
-            {
-              role: 'user',
-              parts: [
-                {
-                  text: 'Here is an image:',
-                },
-                {
-                  inlineData: {
-                    mimeType: 'image/jpeg',
-                    data: base64Data, // Should extract raw base64
+            const prompt = JSON.stringify([
+              {
+                role: 'user',
+                parts: [
+                  {
+                    text: `Here is an image:\n${dataUrl}\nEnd of image.`,
                   },
-                },
-                {
-                  text: 'End of image.',
-                },
-              ],
-            },
-          ]);
-        });
+                ],
+              },
+            ]);
+
+            const contextVars = {
+              image1: dataUrl,
+            };
+
+            const { contents } = geminiFormatAndSystemInstructions(prompt, contextVars);
+
+            expect(contents).toEqual([
+              {
+                role: 'user',
+                parts: [
+                  {
+                    text: 'Here is an image:',
+                  },
+                  {
+                    inlineData: {
+                      mimeType: 'image/jpeg',
+                      data: base64Data, // Should extract raw base64
+                    },
+                  },
+                  {
+                    text: 'End of image.',
+                  },
+                ],
+              },
+            ]);
+          },
+        );
 
         it('should handle PNG data URLs', () => {
           const base64Data =

@@ -155,11 +155,15 @@ describe('dataUrl utilities', () => {
       expect(result).toBeNull();
     });
 
-    it('should reject case-insensitive data URLs', () => {
-      expect(isDataUrl('DATA:image/jpeg;base64,test')).toBe(false);
-      expect(isDataUrl('Data:image/jpeg;base64,test')).toBe(false);
-      expect(isDataUrl('dAtA:image/jpeg;base64,test')).toBe(false);
-    });
+    it.each(['DATA', 'Data', 'dAtA'])(
+      'accepts the %s scheme without changing the payload',
+      (scheme) => {
+        const url = `${scheme}:image/jpeg;base64,aBcD+/==`;
+        expect(isDataUrl(url)).toBe(true);
+        expect(parseDataUrl(url)).toEqual({ mimeType: 'image/jpeg', base64Data: 'aBcD+/==' });
+        expect(extractBase64FromDataUrl(url)).toBe('aBcD+/==');
+      },
+    );
 
     it('should reject data URLs with newlines in base64', () => {
       const result = parseDataUrl('data:image/jpeg;base64,/9j/\n4AAQ\ntest');
