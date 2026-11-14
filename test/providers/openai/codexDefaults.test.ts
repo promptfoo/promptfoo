@@ -118,15 +118,19 @@ describe('Codex default providers', () => {
     expect(hasCodexDefaultCredentials()).toBe(true);
   });
 
-  it('returns true when Codex auth state exists and the Codex SDK package can be resolved', async () => {
-    fs.writeFileSync(path.join(codexHome, 'auth.json'), '{"ok":true}');
+  it.each(['0.165.0', '0.166.0'])(
+    'selects SDK %s for implicit grading when signed in',
+    async (version) => {
+      vi.mocked(getPackageVersion).mockReturnValue(version);
+      fs.writeFileSync(path.join(codexHome, 'auth.json'), '{"ok":true}');
 
-    const { hasCodexDefaultCredentials } = await import(
-      '../../../src/providers/openai/codexDefaults'
-    );
+      const { hasCodexDefaultCredentials } = await import(
+        '../../../src/providers/openai/codexDefaults'
+      );
 
-    expect(hasCodexDefaultCredentials()).toBe(true);
-  });
+      expect(hasCodexDefaultCredentials()).toBe(true);
+    },
+  );
 
   it('returns false when Codex auth state exists but the Codex SDK package cannot be resolved', async () => {
     fs.writeFileSync(path.join(codexHome, 'auth.json'), '{"ok":true}');
@@ -147,7 +151,7 @@ describe('Codex default providers', () => {
     expect(hasCodexDefaultCredentials()).toBe(false);
   });
 
-  it.each(['0.154.0', '0.157.0', 'invalid', null])(
+  it.each(['0.156.0', '0.167.0', 'invalid', null])(
     'does not select an incompatible SDK (%s) for implicit grading',
     async (version) => {
       mockProcessEnv({ CODEX_API_KEY: 'fixture-key' });
