@@ -253,8 +253,10 @@ const FrameworkCard = ({
     <Card
       className={cn(
         'framework-item',
-        isCompliant ? 'compliant' : 'non-compliant',
-        isCompliant ? 'bg-emerald-50/50 dark:bg-emerald-950/20' : 'bg-red-50/50 dark:bg-red-950/20',
+        testedFrameworkPlugins.length > 0 &&
+          (isCompliant
+            ? 'compliant bg-emerald-50/50 dark:bg-emerald-950/20'
+            : 'non-compliant bg-red-50/50 dark:bg-red-950/20'),
         idx !== 0 && 'break-inside-avoid print:break-inside-avoid',
       )}
     >
@@ -270,7 +272,9 @@ const FrameworkCard = ({
             </Tooltip>
           </div>
           <div className="flex items-center">
-            {isCompliant ? (
+            {testedFrameworkPlugins.length === 0 ? (
+              <Badge variant="secondary">Untested</Badge>
+            ) : isCompliant ? (
               <CheckCircle className="icon-compliant size-5 text-emerald-600 dark:text-emerald-500" />
             ) : (
               <Tooltip>
@@ -391,10 +395,18 @@ const FrameworkCard = ({
               <div className="flex items-center justify-between border-b border-border bg-black/5 p-2 dark:bg-white/5">
                 <span className="text-sm font-medium">Framework Results</span>
                 <Badge
-                  variant={nonCompliantPlugins.length === 0 ? 'success' : 'destructive'}
+                  variant={
+                    testedFrameworkPlugins.length === 0
+                      ? 'secondary'
+                      : nonCompliantPlugins.length === 0
+                        ? 'success'
+                        : 'destructive'
+                  }
                   className="h-5 whitespace-nowrap text-[0.7rem]"
                 >
-                  {nonCompliantPlugins.length} / {testedFrameworkPlugins.length} failed
+                  {testedFrameworkPlugins.length === 0
+                    ? 'No plugins tested'
+                    : `${nonCompliantPlugins.length} / ${testedFrameworkPlugins.length} failed`}
                 </Badge>
               </div>
               <div>

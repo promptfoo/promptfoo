@@ -295,7 +295,9 @@ describe('FrameworkCard', () => {
       },
     });
 
-    expect(screen.getByText('0 / 0 failed')).toBeInTheDocument();
+    expect(screen.getByText('No plugins tested')).toBeInTheDocument();
+    expect(screen.getByText('Untested')).toBeInTheDocument();
+    expect(document.querySelector('.icon-compliant')).not.toBeInTheDocument();
     expect(screen.queryByText('Passed:')).not.toBeInTheDocument();
     expect(screen.queryByText('harmful:hate')).not.toBeInTheDocument();
   });
