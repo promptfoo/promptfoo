@@ -289,6 +289,118 @@ describe('parseFileUrl', () => {
     });
   });
 
+  it('should parse a Ruby file URL with function name', () => {
+    const result = parseFileUrl('file:///path/to/assert.rb:check');
+    expect(result).toEqual({
+      filePath: '/path/to/assert.rb',
+      functionName: 'check',
+    });
+  });
+
+  it('should keep namespaced Ruby method names intact', () => {
+    const result = parseFileUrl('file:///path/to/assert.rb:Validators::Format.check_length');
+    expect(result).toEqual({
+      filePath: '/path/to/assert.rb',
+      functionName: 'Validators::Format.check_length',
+    });
+  });
+
+  it('should keep a colon in a non-script file name as part of the path', () => {
+    const result = parseFileUrl('file:///path/to/data:part.json');
+    expect(result).toEqual({
+      filePath: '/path/to/data:part.json',
+    });
+  });
+
+  it('resolves a JavaScript export containing colons only in assertion references', () => {
+    const reference = 'file://C:/suite:one/checks.mjs:grade:v2';
+    expect(parseFileUrl(reference)).toEqual({ filePath: 'C:/suite:one/checks.mjs:grade:v2' });
+    expect(parseFileUrl(reference, (candidate) => candidate === 'C:/suite:one/checks.mjs')).toEqual(
+      {
+        filePath: 'C:/suite:one/checks.mjs',
+        functionName: 'grade:v2',
+      },
+    );
+  });
+
+  it('uses the longest existing script when a JS export name contains a file extension', () => {
+    const ref = 'file://checks.mjs:grade.js:v2';
+    const files = new Set(['checks.mjs']);
+    const exists = (candidate: string) => files.has(candidate);
+    expect(parseFileUrl(ref, exists)).toEqual({
+      filePath: 'checks.mjs',
+      functionName: 'grade.js:v2',
+    });
+    files.add('checks.mjs:grade.js');
+    expect(parseFileUrl(ref, exists)).toEqual({
+      filePath: 'checks.mjs:grade.js',
+      functionName: 'v2',
+    });
+    files.add('checks.mjs:grade.js:v2');
+    expect(parseFileUrl(ref, exists)).toEqual({ filePath: 'checks.mjs:grade.js:v2' });
+  });
+
+  it('preserves an existing multi-colon data filename in an assertion', () => {
+    const filename = 'data.js:2026-05-27T12:00:00.json';
+    expect(parseFileUrl(`file://${filename}`, (candidate) => candidate === filename)).toEqual({
+      filePath: filename,
+    });
+  });
+
+  it('should keep multi-colon data file names intact', () => {
+    const result = parseFileUrl('file://data.js:2026-05-27T12:00:00.json');
+    expect(result).toEqual({
+      filePath: 'data.js:2026-05-27T12:00:00.json',
+    });
+  });
+
+  it('should keep a colon in a directory name before the script file', () => {
+    const result = parseFileUrl('file://project.js:old/hooks.js:handler');
+    expect(result).toEqual({
+      filePath: 'project.js:old/hooks.js',
+      functionName: 'handler',
+    });
+  });
+
+  it('should split namespaced Ruby methods after a colon-containing path', () => {
+    expect(parseFileUrl('file://dir:name/assert.rb:Validators::Format.check')).toEqual({
+      filePath: 'dir:name/assert.rb',
+      functionName: 'Validators::Format.check',
+    });
+    expect(parseFileUrl('file://./2026-05-27T12:00/assert.rb:Mod::fn')).toEqual({
+      filePath: './2026-05-27T12:00/assert.rb',
+      functionName: 'Mod::fn',
+    });
+    expect(parseFileUrl('file://project.js:old/assert.rb:Mod::fn')).toEqual({
+      filePath: 'project.js:old/assert.rb',
+      functionName: 'Mod::fn',
+    });
+  });
+
+  it('should backtrack to the Ruby file after colon-containing path components', () => {
+    expect(parseFileUrl('file://dir.rb:x/assert.rb:Mod::fn')).toEqual({
+      filePath: 'dir.rb:x/assert.rb',
+      functionName: 'Mod::fn',
+    });
+    expect(parseFileUrl('file://checks.rb:old/assert.rb:Validators::Format.check')).toEqual({
+      filePath: 'checks.rb:old/assert.rb',
+      functionName: 'Validators::Format.check',
+    });
+    expect(parseFileUrl('file://build.rb:2026-05-27T12:00/assert.rb:Mod::fn')).toEqual({
+      filePath: 'build.rb:2026-05-27T12:00/assert.rb',
+      functionName: 'Mod::fn',
+    });
+  });
+
+  it('should not treat a Ruby-like directory suffix as a function name', () => {
+    expect(parseFileUrl('file://project.rb:Old::Checks/payload.json')).toEqual({
+      filePath: 'project.rb:Old::Checks/payload.json',
+    });
+    expect(parseFileUrl('file://project.rb:Old/payload.json')).toEqual({
+      filePath: 'project.rb:Old/payload.json',
+    });
+  });
+
   it('should parse file URL without function name', () => {
     const result = parseFileUrl('file:///path/to/file.js');
     expect(result).toEqual({

@@ -878,6 +878,25 @@ describe('file utilities', () => {
       });
     });
 
+    it('should not treat an assert key as assertion context without test-config opt-in', () => {
+      (fs.readFileSync as ReturnType<typeof vi.fn>).mockReturnValue('console.log("hi")');
+      const result = maybeLoadConfigFromExternalFile({ assert: [{ value: 'file://snippet.js' }] });
+      expect(result.assert[0].value).toBe('console.log("hi")');
+      expect(fs.readFileSync).toHaveBeenCalledTimes(1);
+    });
+
+    it('should not treat assert keys in data-only test fields as assertions', () => {
+      (fs.readFileSync as ReturnType<typeof vi.fn>).mockReturnValue('console.log("hi")');
+      const config = {
+        providerOutput: { assert: [{ value: 'file://snippet.js' }] },
+        assert: [{ type: 'contains', value: 'file://assert.js' }],
+      };
+      const result = maybeLoadConfigFromExternalFile(config, 'test-config');
+      expect(result.providerOutput.assert[0].value).toBe('console.log("hi")');
+      expect(result.assert[0].value).toBe('file://assert.js');
+      expect(fs.readFileSync).toHaveBeenCalledTimes(1);
+    });
+
     describe('maybeLoadConfigFromExternalFile with assertion detection', () => {
       it('should preserve Python assertion file references', () => {
         const config = {
@@ -888,7 +907,7 @@ describe('file utilities', () => {
             },
           ],
         };
-        const result = maybeLoadConfigFromExternalFile(config);
+        const result = maybeLoadConfigFromExternalFile(config, 'test-config');
         expect(result.assert[0].value).toBe('file://good_assertion.py');
         expect(fs.readFileSync).not.toHaveBeenCalled();
       });
@@ -902,7 +921,7 @@ describe('file utilities', () => {
             },
           ],
         };
-        const result = maybeLoadConfigFromExternalFile(config);
+        const result = maybeLoadConfigFromExternalFile(config, 'test-config');
         expect(result.assert[0].value).toBe('file://assertion.js:checkResult');
         expect(fs.readFileSync).not.toHaveBeenCalled();
       });
@@ -912,7 +931,7 @@ describe('file utilities', () => {
         const config = {
           util: 'file://helper.py',
         };
-        const result = maybeLoadConfigFromExternalFile(config);
+        const result = maybeLoadConfigFromExternalFile(config, 'test-config');
         expect(result.util).toBe('def utility(): pass');
         expect(fs.readFileSync).toHaveBeenCalled();
       });
@@ -930,9 +949,104 @@ describe('file utilities', () => {
             },
           ],
         };
-        const result = maybeLoadConfigFromExternalFile(config);
+        const result = maybeLoadConfigFromExternalFile(config, 'test-config');
         expect(result.tests[0].assert[0].value).toBe('file://nested_assertion.py');
         expect(fs.readFileSync).not.toHaveBeenCalled();
+      });
+
+      it('should preserve script references in non-script assertion types', () => {
+        const config = {
+          tests: [
+            {
+              assert: [
+                {
+                  type: 'contains',
+                  value: 'file://assert.js',
+                },
+              ],
+            },
+          ],
+        };
+        const result = maybeLoadConfigFromExternalFile(config, 'test-config');
+        expect(result.tests[0].assert[0].value).toBe('file://assert.js');
+        expect(fs.readFileSync).not.toHaveBeenCalled();
+      });
+
+      it('should preserve Ruby script references in assertions', () => {
+        const config = {
+          assert: [
+            {
+              type: 'ruby',
+              value: 'file://assert.rb:Validators::Format.check_length',
+            },
+          ],
+        };
+        const result = maybeLoadConfigFromExternalFile(config, 'test-config');
+        expect(result.assert[0].value).toBe('file://assert.rb:Validators::Format.check_length');
+        expect(fs.readFileSync).not.toHaveBeenCalled();
+      });
+
+      it('should preserve script references in nested assert-set values', () => {
+        const config = {
+          assert: [
+            {
+              type: 'assert-set',
+              assert: [{ type: 'contains', value: 'file://assert.js' }],
+            },
+          ],
+        };
+        const result = maybeLoadConfigFromExternalFile(config, 'test-config');
+        expect(result.assert[0].assert[0].value).toBe('file://assert.js');
+        expect(fs.readFileSync).not.toHaveBeenCalled();
+      });
+
+      it('loads scalar script globs as assertion data', () => {
+        vi.mocked(fs.existsSync).mockReturnValue(false);
+        vi.mocked(globSync).mockReturnValue(['/test/expected/a.js', '/test/expected/b.js']);
+        vi.mocked(fs.readFileSync).mockReturnValueOnce('alpha').mockReturnValueOnce('beta');
+
+        const config = { assert: [{ type: 'contains-all', value: 'file://expected/*.js' }] };
+        const result = maybeLoadConfigFromExternalFile(config, 'test-config');
+        expect(result.assert[0].value).toEqual(['alpha', 'beta']);
+      });
+
+      it('preserves a literal script filename containing glob characters', () => {
+        vi.mocked(fs.existsSync).mockReturnValue(true);
+        const config = { assert: [{ type: 'equals', value: 'file://[literal].js' }] };
+        const result = maybeLoadConfigFromExternalFile(config, 'test-config');
+        expect(result.assert[0].value).toBe('file://[literal].js');
+        expect(globSync).not.toHaveBeenCalled();
+      });
+
+      it('should load script files in assertion value arrays', () => {
+        (fs.readFileSync as ReturnType<typeof vi.fn>).mockReturnValue('source');
+        const config = {
+          assert: [
+            {
+              type: 'contains-any',
+              value: ['file://assert.js', 'FROM_TXT'],
+            },
+          ],
+        };
+        const result = maybeLoadConfigFromExternalFile(config, 'test-config');
+        expect(result.assert[0].value).toEqual(['source', 'FROM_TXT']);
+        expect(fs.readFileSync).toHaveBeenCalledTimes(1);
+      });
+
+      it('should load script files in assertion config normally', () => {
+        (fs.readFileSync as ReturnType<typeof vi.fn>).mockReturnValue('source');
+        const config = {
+          assert: [
+            {
+              type: 'contains',
+              value: 'x',
+              config: { helper: 'file://assert.js' },
+            },
+          ],
+        };
+        const result = maybeLoadConfigFromExternalFile(config, 'test-config');
+        expect(result.assert[0].config.helper).toBe('source');
+        expect(fs.readFileSync).toHaveBeenCalledTimes(1);
       });
 
       it('should handle mixed assertion types', () => {
@@ -953,7 +1067,7 @@ describe('file utilities', () => {
             },
           ],
         };
-        const result = maybeLoadConfigFromExternalFile(config);
+        const result = maybeLoadConfigFromExternalFile(config, 'test-config');
         expect(result.assert[0].value).toBe('file://python_assert.py');
         expect(result.assert[1].value).toBe('some data'); // contains assertion loads file
         expect(result.assert[2].value).toBe('file://js_assert.js');

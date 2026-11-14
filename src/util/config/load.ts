@@ -1,3 +1,4 @@
+import { existsSync } from 'fs';
 import * as fsPromises from 'fs/promises';
 import * as path from 'path';
 import process from 'process';
@@ -18,6 +19,8 @@ import { readPrompts } from '../../prompts/index';
 import { loadApiProviders, resolveProviderConfigs } from '../../providers/index';
 import telemetry from '../../telemetry';
 import {
+  type Assertion,
+  type AssertionOrSet,
   type CommandLineOptions,
   CommandLineOptionsSchema,
   EvaluateOptionsSchema,
@@ -36,7 +39,7 @@ import {
 } from '../../types/index';
 import { isApiProvider } from '../../types/providers';
 import { maybeLoadFromExternalFile, pathExists } from '../../util/file';
-import { isJavascriptFile } from '../../util/fileExtensions';
+import { isJavascriptFile, isScriptFilePath, parseFileUrl } from '../../util/fileExtensions';
 import { readFilters, renderEnvOnlyInObject } from '../../util/index';
 import invariant from '../../util/invariant';
 import { PromptSchema } from '../../validators/prompts';
@@ -554,16 +557,60 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
 
 type TestSource = { tests: TestSuiteConfig['tests']; basePath: string };
 
+function resolveSourceAssertions(assertions: AssertionOrSet[], basePath: string): AssertionOrSet[] {
+  function resolveScript(assertion: Assertion): Assertion {
+    const value = assertion?.value;
+    if (typeof value !== 'string' || !value.startsWith('file://')) {
+      return assertion;
+    }
+    const { filePath, functionName } = parseFileUrl(value, (candidate) =>
+      existsSync(path.resolve(basePath, candidate)),
+    );
+    if (path.isAbsolute(filePath) || !isScriptFilePath(filePath)) {
+      return assertion;
+    }
+    const suffix = functionName === undefined ? '' : `:${functionName}`;
+    return { ...assertion, value: `file://${path.resolve(basePath, filePath)}${suffix}` };
+  }
+
+  return assertions.map((assertion) => {
+    if (assertion?.type === 'assert-set') {
+      return Array.isArray(assertion.assert)
+        ? { ...assertion, assert: assertion.assert.map(resolveScript) }
+        : assertion;
+    }
+    return resolveScript(assertion);
+  });
+}
+
+function scopeTestAssertions<T extends Partial<TestCase>>(
+  row: T,
+  sourceBasePath: string,
+  suiteBasePath: string | undefined,
+): T {
+  // Deferred scripts run relative to the combined suite's first config.
+  // Keep local rows from other directories bound to their source.
+  return sourceBasePath !== suiteBasePath &&
+    Array.isArray(row?.assert) &&
+    row.metadata?.__promptfoo?.remote !== true
+    ? { ...row, assert: resolveSourceAssertions(row.assert, sourceBasePath) }
+    : row;
+}
+
 async function readTestSources(
   sources: TestSource[],
   env: TestSuite['env'],
   loadProviders = true,
+  suiteBasePath = sources[0]?.basePath,
 ): Promise<TestCase[]> {
   const read = loadProviders ? readTests : readTestConfigs;
   const tests: TestCase[] = [];
   for (const source of sources) {
     try {
-      tests.push(...(await read(source.tests, source.basePath, env)));
+      const rows = await read(source.tests, source.basePath, env);
+      for (const row of rows) {
+        tests.push(scopeTestAssertions(row, source.basePath, suiteBasePath));
+      }
     } catch (error) {
       throw new ConfigResolutionError(
         `Failed to load tests from ${source.basePath || process.cwd()}: ${error instanceof Error ? error.message : String(error)}`,
@@ -596,6 +643,7 @@ async function prepareCombinedConfig(
     }
   }
 
+  const suiteBasePath = configSources[0]?.basePath;
   const configs = configSources.map(({ config }) => config);
   const combinedEnv = configs.reduce((env, config) => ({ ...env, ...config.env }), {});
   const providers: UnifiedConfig['providers'] = [];
@@ -732,7 +780,7 @@ async function prepareCombinedConfig(
         ...('config' in test && { config: resolveNestedFileReferences(basePath, test.config) }),
       };
     }
-    const source = test as TestCase;
+    const source = scopeTestAssertions(test as TestCase, basePath, suiteBasePath);
     // Keep grader IDs unchanged so references can reuse configured providers.
     return {
       ...source,
@@ -810,21 +858,33 @@ async function prepareCombinedConfig(
             )
           : source;
       for (const scenario of [loaded].flat()) {
-        scenarios.push(
-          typeof scenario === 'object' && scenario?.tests
-            ? {
-                ...scenario,
-                ...(Array.isArray(scenario.config) && {
-                  config: scenario.config.map((test: unknown) => makeTestAbsolute(basePath, test)),
-                }),
-                tests: [scenario.tests].flat().map((test) => makeTestAbsolute(basePath, test)),
-              }
-            : scenario,
-        );
+        if (typeof scenario !== 'object' || !scenario?.tests) {
+          scenarios.push(scenario);
+          continue;
+        }
+        const tests = [scenario.tests].flat().map((test) => makeTestAbsolute(basePath, test));
+        scenarios.push({
+          ...scenario,
+          ...(Array.isArray(scenario.config) && {
+            config: scenario.config.map((test: unknown) => makeTestAbsolute(basePath, test)),
+          }),
+          // Read later sources once while their owning directory can still resolve
+          // deferred scripts, including ambiguous named exports and literal glob characters.
+          tests:
+            basePath === suiteBasePath
+              ? tests
+              : await readTestSources(
+                  [{ tests: tests as TestSuiteConfig['tests'], basePath }],
+                  stringifyEnvValues(combinedEnv),
+                  false,
+                  suiteBasePath,
+                ),
+        });
       }
     }
   }
 
+  let defaultFileBasePath: string | undefined;
   // Combine all configs into a single UnifiedConfig
   const combinedConfig: UnifiedConfig = {
     tags: configs.reduce((prev, curr) => ({ ...prev, ...curr.tags }), {}),
@@ -838,6 +898,7 @@ async function prepareCombinedConfig(
       const { config: curr, basePath } = source;
       // The last file default wins; inline defaults only merge when no file was selected.
       if (typeof curr.defaultTest === 'string') {
+        defaultFileBasePath = basePath;
         return makeTestAbsolute(basePath, curr.defaultTest) as string;
       }
       // If prev is already a string (file reference), keep it
@@ -849,7 +910,10 @@ async function prepareCombinedConfig(
         return undefined;
       }
       // Otherwise merge objects
-      const currDefaultTest = typeof curr.defaultTest === 'object' ? curr.defaultTest : {};
+      const currDefaultTest =
+        typeof curr.defaultTest === 'object'
+          ? scopeTestAssertions(curr.defaultTest, basePath, suiteBasePath)
+          : {};
       const prevObj = typeof prev === 'object' ? prev : {};
       return {
         ...prevObj,
@@ -893,6 +957,22 @@ async function prepareCombinedConfig(
     })(),
     tracing: configs.find((config) => config.tracing)?.tracing,
   };
+
+  // Only load the winning file, after the default precedence rules above have run.
+  if (
+    defaultFileBasePath &&
+    defaultFileBasePath !== suiteBasePath &&
+    typeof combinedConfig.defaultTest === 'string' &&
+    combinedConfig.defaultTest.startsWith('file://')
+  ) {
+    const reference = combinedConfig.defaultTest;
+    const loaded = await cliState.withEnv(combinedEnv, () => maybeLoadFromExternalFile(reference));
+    combinedConfig.defaultTest = scopeTestAssertions(
+      loaded as Partial<TestCase>,
+      defaultFileBasePath,
+      suiteBasePath,
+    );
+  }
 
   return {
     config: combinedConfig,
