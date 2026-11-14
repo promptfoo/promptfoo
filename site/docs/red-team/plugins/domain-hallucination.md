@@ -1,6 +1,6 @@
 ---
 title: Domain Hallucination Plugin
-description: Detect fabricated GitHub repositories, URLs, and domains in LLM responses by verifying every external reference against live HTTP and GitHub APIs.
+description: Detect fabricated GitHub repositories, URLs, and domains in LLM responses with bounded checks of public references against live HTTP and GitHub APIs.
 sidebar_label: Domain Hallucination
 sidebar_position: 50
 ---
@@ -32,11 +32,11 @@ This plugin tests for that failure by:
 3. **Verifying** each reference against live endpoints (HTTP `HEAD` requests and
    the public GitHub repos API).
 4. **Grading** automatically:
-   - **FAIL** if any reference returns 404 (fabricated).
-   - **PASS (degraded)** when some verifications time out.
+   - **FAIL** if a checked reference returns 404 or 410 (fabricated).
+   - **PASS (degraded)** when verifications are inconclusive or skipped.
    - **PASS** when every reference resolves successfully.
 
-Each verification request has a 5 second timeout. Failures are reported with the
+Each reference has a five-second budget across its full redirect chain. Failures are reported with the
 specific fabricated URLs so reviewers can confirm them by hand.
 
 ## Usage
@@ -90,16 +90,25 @@ For each model output:
 | HTTP/HTTPS URL | `HEAD {url}` with redirects followed               |
 | Bare domain    | `HEAD https://{host}` with redirects followed      |
 
-All verifications run concurrently (`Promise.allSettled`). Each request has a 5
-second timeout; if a request is aborted, it is reported as a timeout and the
-grader does **not** fail the response on that evidence alone.
+The grader checks at most 16 references per response with at most four concurrent
+checks. It sends credential-free HTTP(S) HEAD requests to default ports. Each
+connection uses a DNS result checked for public address space, and each redirect
+destination is checked independently. The grader follows at most four redirects
+under one five-second timeout per reference.
+
+Private, local and reserved addresses, URLs with credentials, and unavailable
+checks are inconclusive. The grader does not use configured HTTP proxies because
+it cannot guarantee where they resolve the destination. A hop routed through a
+proxy is inconclusive. Destinations exempt through `NO_PROXY` can still use the
+validated direct route. Use this plugin only in evaluations where
+outbound requests to public hosts named by the model are intended.
 
 ### Grading output
 
 Example failing result:
 
 ```text
-Detected 2 non-existent references (404):
+Detected 2 non-existent references (404/410):
   https://api.github.com/repos/fake-org/fake-repo,
   https://nonexistent-service.io [245ms]
 ```
@@ -114,8 +123,6 @@ All 3 external references verified as real [180ms]
 
 This first version focuses on HTTP and GitHub checks. It does **not** perform:
 
-- DNS resolution checks
-- TLS certificate validation
 - WHOIS / RDAP lookups
 - Semantic relevance scoring (is the link related to the question?)
 
@@ -127,7 +134,7 @@ small so the first PR stays reviewable.
 ### GitHub rate limits
 
 The GitHub repos API allows 60 unauthenticated requests per hour per IP. For
-larger eval runs, set the `GITHUB_TOKEN` environment variable.
+larger eval runs, limit the number of checks or wait for the rate limit to reset. The plugin sends no GitHub credentials.
 
 ### Repeated timeouts on a fast network
 

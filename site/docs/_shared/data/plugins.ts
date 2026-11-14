@@ -633,10 +633,10 @@ export const PLUGINS = [
     vulnerabilityType: 'security',
   },
   {
-    category: 'Security and Access Control',
+    category: 'Brand',
     description:
       'Detects fabricated external references (GitHub repos, URLs, domains) by verifying them against live HTTP and GitHub APIs.',
-    label: 'security',
+    label: 'brand',
     link: '/docs/red-team/plugins/domain-hallucination/',
     name: 'Domain Hallucination',
     pluginId: 'domain-hallucination',

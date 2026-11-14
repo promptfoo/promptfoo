@@ -30,6 +30,16 @@ describe('domainExtraction', () => {
       expect(urls[0].normalized).toBe('https://example.com');
     });
 
+    it('retains IPv6 authorities and treats an embedded www hostname as part of its URL', () => {
+      const urls = extractUrls(
+        'See http://[::1]. Or visit https://outer.example/?q=www.inner.example.',
+      );
+      expect(urls.map((url) => url.normalized)).toEqual([
+        'http://[::1]',
+        'https://outer.example/?q=www.inner.example',
+      ]);
+    });
+
     it('deduplicates URLs', () => {
       const text = 'https://example.com and https://example.com again';
       const urls = extractUrls(text);
@@ -124,6 +134,17 @@ describe('domainExtraction', () => {
         'See https://blog.example.com/post/about-github.com/foo/bar',
       );
       expect(repos.find((r) => r.full_name === 'foo/bar')).toBeUndefined();
+    });
+
+    it('strips sentence punctuation before removing a clone suffix', () => {
+      const repos = extractGithubRepos('Clone https://github.com/org/my.repo.git.');
+      expect(repos.map((repo) => repo.full_name)).toEqual(['org/my.repo']);
+    });
+
+    it('ignores a schemed GitHub reference inside the query of a different URL', () => {
+      expect(
+        extractGithubRepos('https://other.example/search?q=https://github.com/org/repo'),
+      ).toEqual([]);
     });
 
     it('deduplicates repos', () => {
