@@ -59,6 +59,21 @@ describe('Remote Health Route', () => {
     },
   );
 
+  it('serves HEAD metadata for encoded entry paths and leaves POST to the router', async () => {
+    const restore = mockProcessEnv({ PROMPTFOO_NO_NETWORK: 'true' });
+    try {
+      const server = request(createApp());
+      const head = await server.head('/%69ndex.html');
+      expect(head.status).toBe(200);
+      expect(head.headers['cache-control']).toBe('no-store');
+      expect(head.headers['content-type']).toMatch(/^text\/html/);
+      expect(head.text).toBeUndefined();
+      expect((await server.post('/%69ndex.html')).status).toBe(404);
+    } finally {
+      restore();
+    }
+  });
+
   it('checks upstream health when no-network mode is off', async () => {
     const restoreEnv = mockProcessEnv({
       PROMPTFOO_NO_NETWORK: undefined,

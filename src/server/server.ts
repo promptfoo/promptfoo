@@ -384,7 +384,7 @@ export function createApp() {
           .replace(/<head>/i, '<head><meta name="promptfoo-no-network">')
       : undefined;
 
-  function serveNoNetworkIndex(_req: Request, res: Response): void {
+  function serveNoNetworkIndex(res: Response): void {
     res.setHeader('Cache-Control', 'no-store');
     res.type('html').send(noNetworkIndex);
   }
@@ -392,13 +392,18 @@ export function createApp() {
   if (noNetworkIndex !== undefined) {
     // Express decodes wildcard segments. Normalize them before static serving
     // so encoded paths and redundant separators cannot expose the unmarked entry.
-    app.get('/{*entryPath}', (req, res, next) => {
-      const requested = path.normalize(`/${(req.params.entryPath ?? []).join('/')}`);
-      if (requested === path.sep || requested.toLowerCase() === path.join(path.sep, 'index.html')) {
-        serveNoNetworkIndex(req, res);
-      } else {
-        next();
+    app.use('/{*entryPath}', (req, res, next) => {
+      if (req.method === 'GET' || req.method === 'HEAD') {
+        const requested = path.normalize(`/${(req.params.entryPath ?? []).join('/')}`);
+        if (
+          requested === path.sep ||
+          requested.toLowerCase() === path.join(path.sep, 'index.html')
+        ) {
+          serveNoNetworkIndex(res);
+          return;
+        }
       }
+      next();
     });
   }
   app.use(
@@ -408,12 +413,13 @@ export function createApp() {
     }),
   );
 
-  if (noNetworkIndex !== undefined) {
-    app.get('/*splat', serveNoNetworkIndex);
-  }
-  // Handle client routing, return all requests to the app
+  // Handle client routing after static assets.
   app.get('/*splat', (_req: Request, res: Response): void => {
-    res.sendFile('index.html', { root: staticDir, dotfiles: 'allow' });
+    if (noNetworkIndex === undefined) {
+      res.sendFile('index.html', { root: staticDir, dotfiles: 'allow' });
+    } else {
+      serveNoNetworkIndex(res);
+    }
   });
   app.use(defaultErrorHandler);
   return app;
