@@ -30,7 +30,11 @@ export type CrescendoScoreResponse = {
  * recovers the judge's verdict from merged fragments.
  */
 export function parseCrescendoScoreResponse(output: string): CrescendoScoreResponse | undefined {
-  return selectVerdictObject<CrescendoScoreResponse>(extractJsonObjectsWithMeta(output), ['value']);
+  return selectVerdictObject<CrescendoScoreResponse>(
+    extractJsonObjectsWithMeta(output),
+    ['value'],
+    ['value', 'metadata'],
+  );
 }
 
 interface ScoringContext {

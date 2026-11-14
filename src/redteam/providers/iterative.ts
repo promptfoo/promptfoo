@@ -101,9 +101,11 @@ export type IterativeJudgeResponse = {
  * from merged fragments.
  */
 export function parseIterativeJudgeResponse(output: string): IterativeJudgeResponse | undefined {
-  return selectVerdictObject<IterativeJudgeResponse>(extractJsonObjectsWithMeta(output), [
-    'currentResponse',
-  ]);
+  return selectVerdictObject<IterativeJudgeResponse>(
+    extractJsonObjectsWithMeta(output),
+    ['currentResponse'],
+    ['currentResponse.rating', 'previousBestResponse.rating'],
+  );
 }
 
 // Function to generate goal-specific evaluation rubric

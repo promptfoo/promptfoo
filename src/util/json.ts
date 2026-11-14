@@ -575,6 +575,21 @@ function containsConflictingNestedVerdict(
   return false;
 }
 
+function readDecision(obj: Record<string, unknown>, path: string): unknown {
+  let value: unknown = obj;
+  for (const key of path.split('.')) {
+    if (
+      value === null ||
+      typeof value !== 'object' ||
+      !Object.prototype.hasOwnProperty.call(value, key)
+    ) {
+      return undefined;
+    }
+    value = (value as Record<string, unknown>)[key];
+  }
+  return value;
+}
+
 /**
  * Security: pick the verdict object from everything extracted out of an
  * LLM-judge response.
@@ -603,6 +618,7 @@ function containsConflictingNestedVerdict(
 export function selectVerdictObject<T extends object>(
   entries: ExtractedJsonObject[],
   verdictKeys: string[],
+  comparisonKeys = verdictKeys,
 ): T | undefined {
   if (entries.length === 0) {
     return undefined;
@@ -613,19 +629,25 @@ export function selectVerdictObject<T extends object>(
     .map((entry) => entry.object as Record<string, unknown>)
     .filter((obj) => isVerdictShaped(obj, verdictKeys));
   if (completeVerdicts.length >= 2) {
-    for (const key of verdictKeys) {
+    let hasSharedDecision = false;
+    for (const key of comparisonKeys) {
       const values = new Set<string>();
+      let seen = 0;
       for (const obj of completeVerdicts) {
-        if (key in obj) {
-          const normalized = normalizeVerdictValue(obj[key]);
-          if (normalized !== undefined) {
-            values.add(normalized);
-          }
+        const normalized = normalizeVerdictValue(readDecision(obj, key));
+        if (normalized !== undefined) {
+          values.add(normalized);
+          seen++;
         }
       }
       if (values.size > 1) {
-        return undefined; // conflicting verdicts: ambiguous, fail closed
+        return undefined;
       }
+      hasSharedDecision ||= seen === completeVerdicts.length;
+    }
+    // Without a decision field in common, the candidates cannot corroborate each other.
+    if (!hasSharedDecision) {
+      return undefined;
     }
   }
 

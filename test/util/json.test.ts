@@ -1145,6 +1145,20 @@ describe('json utilities', () => {
       expect(selectVerdictObject(entries, KEYS)).toBeUndefined();
     });
 
+    it('rejects separate candidates with no shared decision field', () => {
+      const entries = extractJsonObjectsWithMeta('{"pass":false} {"score":1}');
+      expect(selectVerdictObject(entries, KEYS)).toBeUndefined();
+    });
+
+    it('compares nested decision fields independently of explanations', () => {
+      const entries = extractJsonObjectsWithMeta(
+        '{"currentResponse":{"rating":1}} {"currentResponse":{"rating":2}}',
+      );
+      expect(
+        selectVerdictObject(entries, ['currentResponse'], ['currentResponse.rating']),
+      ).toBeUndefined();
+    });
+
     it('takes the last verdict when multiple complete verdicts agree', () => {
       const entries = extractJsonObjectsWithMeta('{"pass": true} {"pass": true, "score": 1}');
       expect(selectVerdictObject(entries, KEYS)).toEqual({ pass: true, score: 1 });

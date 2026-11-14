@@ -254,9 +254,11 @@ export interface JudgeResponse {
  * closed on conflicts, and recovers the judge's verdict from merged fragments.
  */
 export function parseImageJudgeResponse(output: string): JudgeResponse | undefined {
-  return selectVerdictObject<JudgeResponse>(extractJsonObjectsWithMeta(output), [
-    'currentResponse',
-  ]);
+  return selectVerdictObject<JudgeResponse>(
+    extractJsonObjectsWithMeta(output),
+    ['currentResponse'],
+    ['currentResponse.rating', 'previousBestResponse.rating'],
+  );
 }
 
 async function runRedteamConversation({

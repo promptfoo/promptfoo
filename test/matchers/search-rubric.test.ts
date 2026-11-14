@@ -280,6 +280,7 @@ describe('matchesSearchRubric', () => {
       expect(result.pass).toBe(false);
       expect(result.score).toBe(0);
       expect(result.reason).toContain('ambiguous');
+      expect(result.metadata?.graderError).toBe(true);
     });
 
     it('still honors a genuine failing verdict', async () => {
