@@ -89,8 +89,9 @@ const PAGE_SIZE_OPTIONS = [10, 50, 100, 500, 1000].filter(
 // ResultsTable can synchronously parse 1,000 JSON-string cells, so keep that opt-in work and its
 // retained output close to the normal truncated-cell display range.
 const MAX_JSON_CELL_PRETTIFY_LENGTH = 512;
+// Inspect a single structured cell on demand while keeping the table preview inexpensive.
+const MAX_INSPECTED_JSON_LENGTH = 64 * 1024;
 const MAX_JSON_PRETTIFY_DEPTH = 64;
-const MAX_JSON_SERIALIZATION_NODES = 512;
 const MAX_JSON_BOUNDARY_SCAN = 64;
 const JSON_PRETTIFY_INDENT = 2;
 const JSON_SERIALIZATION_LIMIT_EXCEEDED = Symbol('json-serialization-limit-exceeded');
@@ -150,7 +151,7 @@ function getMetadataColumnDisplayText(value: unknown): string {
   }
 
   if (typeof value === 'object') {
-    return stringifyStructuredValue(value).value;
+    return stringifyStructuredValue(value, MAX_JSON_CELL_PRETTIFY_LENGTH).value;
   }
 
   try {
@@ -533,9 +534,13 @@ function prettifyJsonPreservingTokens(value: string): string | undefined {
   return formatted;
 }
 
-function stringifyStructuredValue(value: object): {
+function stringifyStructuredValue(
+  value: object,
+  maxLength: number,
+): {
   value: string;
   serializedAsJson: boolean;
+  exceedsPreview?: boolean;
 } {
   const activeObjects = new WeakSet<object>();
   const ancestors: object[] = [];
@@ -544,7 +549,7 @@ function stringifyStructuredValue(value: object): {
 
   const account = (length: number) => {
     estimatedLength += length;
-    if (estimatedLength > MAX_JSON_CELL_PRETTIFY_LENGTH) {
+    if (estimatedLength > maxLength) {
       throw JSON_SERIALIZATION_LIMIT_EXCEEDED;
     }
   };
@@ -553,14 +558,14 @@ function stringifyStructuredValue(value: object): {
     if (!key) {
       return;
     }
-    if (key.length > MAX_JSON_CELL_PRETTIFY_LENGTH) {
+    if (key.length > maxLength) {
       throw JSON_SERIALIZATION_LIMIT_EXCEEDED;
     }
     account(Array.isArray(holder) ? 1 : JSON.stringify(key).length + 2);
   };
 
   const replacer = function (this: unknown, key: string, currentValue: unknown): unknown {
-    if (++nodeCount > MAX_JSON_SERIALIZATION_NODES) {
+    if (++nodeCount > maxLength) {
       throw JSON_SERIALIZATION_LIMIT_EXCEEDED;
     }
     while (ancestors.length > 0 && ancestors[ancestors.length - 1] !== this) {
@@ -584,7 +589,7 @@ function stringifyStructuredValue(value: object): {
     if (typeof currentValue === 'bigint') {
       throw new TypeError('BigInt is not JSON serializable');
     }
-    if (typeof currentValue === 'string' && currentValue.length > MAX_JSON_CELL_PRETTIFY_LENGTH) {
+    if (typeof currentValue === 'string' && currentValue.length > maxLength) {
       throw JSON_SERIALIZATION_LIMIT_EXCEEDED;
     }
 
@@ -604,7 +609,7 @@ function stringifyStructuredValue(value: object): {
     }
   } catch (error) {
     if (error === JSON_SERIALIZATION_LIMIT_EXCEEDED) {
-      return { value: JSON_DISPLAY_LIMIT_MESSAGE, serializedAsJson: false };
+      return { value: JSON_DISPLAY_LIMIT_MESSAGE, serializedAsJson: false, exceedsPreview: true };
     }
     return { value: '[Unserializable value]', serializedAsJson: false };
   }
@@ -612,12 +617,9 @@ function stringifyStructuredValue(value: object): {
   return { value: '[Unserializable value]', serializedAsJson: false };
 }
 
-function stringifyVariableValue(value: unknown): {
-  value: string;
-  serializedAsJson: boolean;
-} {
+function stringifyVariableValue(value: unknown): ReturnType<typeof stringifyStructuredValue> {
   if (value !== null && typeof value === 'object') {
-    return stringifyStructuredValue(value);
+    return stringifyStructuredValue(value, MAX_JSON_CELL_PRETTIFY_LENGTH);
   }
 
   try {
@@ -640,6 +642,7 @@ function formatVariableCellValue({
   isJsonPrettified: boolean;
   isJsonValue: boolean;
   isJsonStringCandidate: boolean;
+  exceedsPreview: boolean;
 } {
   const isObjectValue = typeof value === 'object' && value !== null;
   const serialized = stringifyVariableValue(value);
@@ -681,7 +684,35 @@ function formatVariableCellValue({
 
   const isJsonValue = isJsonPrettified || (isObjectValue && serialized.serializedAsJson);
 
-  return { value: formattedValue, isJsonPrettified, isJsonValue, isJsonStringCandidate };
+  return {
+    value: formattedValue,
+    isJsonPrettified,
+    isJsonValue,
+    isJsonStringCandidate,
+    exceedsPreview: !!serialized.exceedsPreview,
+  };
+}
+
+function InspectableJsonCell({ value }: { value: object }) {
+  const [inspected, setInspected] = React.useState<{ source: object; text: string }>();
+  if (inspected?.source === value) {
+    return <code className="whitespace-pre-wrap break-words">{inspected.text}</code>;
+  }
+  return (
+    <Button
+      type="button"
+      variant="link"
+      size="sm"
+      onClick={() =>
+        setInspected({
+          source: value,
+          text: stringifyStructuredValue(value, MAX_INSPECTED_JSON_LENGTH).value,
+        })
+      }
+    >
+      Inspect JSON
+    </Button>
+  );
 }
 
 const VariableCellContent = React.memo(function VariableCellContent({
@@ -701,6 +732,7 @@ const VariableCellContent = React.memo(function VariableCellContent({
 }) {
   const {
     value: formattedValue,
+    exceedsPreview,
     isJsonPrettified,
     isJsonValue,
     isJsonStringCandidate,
@@ -708,6 +740,10 @@ const VariableCellContent = React.memo(function VariableCellContent({
     () => formatVariableCellValue({ value, prettifyJson, prettifyStructuredValues }),
     [prettifyJson, prettifyStructuredValues, value],
   );
+
+  if (exceedsPreview && typeof value === 'object' && value !== null) {
+    return <InspectableJsonCell value={value} />;
+  }
 
   if (renderMarkdown && isJsonStringCandidate && !isJsonPrettified) {
     return (

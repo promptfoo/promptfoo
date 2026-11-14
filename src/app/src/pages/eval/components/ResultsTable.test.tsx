@@ -2514,7 +2514,7 @@ describe('ResultsTable Variable JSON Formatting', () => {
 
   it.each([false, true])(
     'bounds structured transformed values when prettification is %s',
-    (prettifyJson) => {
+    async (prettifyJson) => {
       let deeplyNestedValue: Record<string, unknown> = { leaf: true };
       for (let index = 0; index < 100; index++) {
         deeplyNestedValue = { child: deeplyNestedValue };
@@ -2538,6 +2538,7 @@ describe('ResultsTable Variable JSON Formatting', () => {
         <ResultsTable {...defaultProps} maxTextLength={1_000} />,
       );
 
+      await userEvent.click(screen.getByRole('button', { name: 'Inspect JSON' }));
       expect(container).toHaveTextContent(JSON_DISPLAY_LIMIT_MESSAGE_FOR_TEST);
       if (prettifyJson) {
         expect(
@@ -2551,6 +2552,22 @@ describe('ResultsTable Variable JSON Formatting', () => {
       }
     },
   );
+
+  it('opens a large structured variable on demand without interpreting its Markdown', async () => {
+    const payload = { note: 'x'.repeat(1024), tail: '**unchanged**' };
+    mockTableState(createMockTable({ vars: [], transformedDisplayVars: { __details: payload } }));
+    vi.mocked(useResultsViewSettingsStore).mockImplementation(() => ({
+      inComparisonMode: false,
+      renderMarkdown: true,
+      prettifyJson: true,
+    }));
+
+    const { container } = renderWithProviders(<ResultsTable {...defaultProps} />);
+    expect(container.textContent).not.toContain(payload.tail);
+    await userEvent.click(screen.getByRole('button', { name: 'Inspect JSON' }));
+    expect(container.textContent).toContain(JSON.stringify(payload));
+    expect(screen.queryByText('unchanged', { selector: 'strong' })).toBeNull();
+  });
 
   it('falls back safely when an object cannot be serialized or coerced', () => {
     const unrenderable = {
