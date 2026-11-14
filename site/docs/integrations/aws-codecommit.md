@@ -66,7 +66,7 @@ cache:
 
 - Loads `OPENAI_API_KEY` from Parameter Store
 - Runs the eval suite defined in `promptfooconfig.yaml`
-- Fails the CodeBuild build if any assertions fail
+- Fails the build when the eval misses the default 100% test pass rate
 - Saves JSON and HTML reports as build artifacts
 - Caches promptfoo responses between builds
 

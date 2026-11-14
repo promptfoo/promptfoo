@@ -108,13 +108,15 @@ SonarQube integration is available in [Promptfoo Enterprise](/docs/enterprise/).
 
 ### 3. Quality Gates
 
-Fail the build when quality thresholds aren't met:
+By default, `eval` requires all tests to pass.
 
 ```bash
-# Require all tests to pass (default)
 npx promptfoo@latest eval
+```
 
-# Require a minimum pass rate of 95%
+For a 95% quality gate, use this command as the eval step in your pipeline.
+
+```bash
 PROMPTFOO_PASS_RATE_THRESHOLD=95 npx promptfoo@latest eval -o results.json
 ```
 
@@ -431,7 +433,8 @@ const evalOutput = JSON.parse(fs.readFileSync('results.json', 'utf8'));
 const { stats, results: evalResults } = evalOutput.results;
 
 // Calculate metrics
-const passRate = (stats.successes / (stats.successes + stats.failures)) * 100;
+const total = stats.successes + stats.failures + stats.errors;
+const passRate = total ? (stats.successes / total) * 100 : 0;
 
 console.log(`Pass rate: ${passRate.toFixed(2)}%`);
 console.log(`Shareable URL: ${evalOutput.shareableUrl}`);
@@ -454,7 +457,7 @@ Post eval results to PR comments, Slack, or other channels:
 ```bash
 # Extract and post results
 SHARE_URL=$(jq -r '.shareableUrl' results.json)
-PASS_RATE=$(jq '.results.stats.successes / (.results.stats.successes + .results.stats.failures) * 100' results.json)
+PASS_RATE=$(jq '.results.stats | (.successes + .failures + .errors) as $total | if $total > 0 then .successes / $total * 100 else 0 end' results.json)
 
 # Post to GitHub PR
 gh pr comment --body "
