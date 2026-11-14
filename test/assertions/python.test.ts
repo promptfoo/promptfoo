@@ -278,6 +278,51 @@ describe('Python file references', { timeout: 15000 }, () => {
     });
   });
 
+  it('keeps signed decimal scores with exponent notation', async () => {
+    vi.mocked(runPythonCode).mockResolvedValueOnce(' +.75e0 ');
+    const result = await runAssertion(createScriptAssertionParams('python'));
+    expect(result).toMatchObject({ pass: true, score: 0.75 });
+  });
+
+  it.each(['0x1', '0b1', '0o1'])(
+    'rejects radix-prefixed scores under negation: %s',
+    async (value) => {
+      vi.mocked(runPythonCode).mockResolvedValueOnce(value);
+      const result = await runAssertion(createScriptAssertionParams('not-python'));
+      expect(result).toMatchObject({ pass: false, score: 0 });
+      expect(result.reason).toContain('Numeric scores must be finite decimals.');
+    },
+  );
+
+  it.each(['0.8oops', '0x1', '0b1', '0o1', 'Infinity', '-Infinity', '', '   '])(
+    'rejects a malformed or non-finite Python score: %j',
+    async (value) => {
+      vi.mocked(runPythonCode).mockResolvedValueOnce(value);
+
+      const assertion: Assertion = {
+        type: 'python',
+        value: JSON.stringify(value),
+        threshold: 0.5,
+      };
+
+      const result = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse: { output: 'Expected output' },
+      });
+
+      expect(result).toMatchObject({
+        pass: false,
+        score: 0,
+        reason: expect.stringContaining(
+          'Python assertion must return a boolean, number, or {pass, score, reason} object',
+        ),
+      });
+    },
+  );
+
   it.each([
     ['boolean', false, 0, 'Python code returned false', false, undefined],
     ['number', 0, 0, 'Python code returned false', false, undefined],
