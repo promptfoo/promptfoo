@@ -114,6 +114,7 @@ import { createSnowflakeProvider } from './snowflake';
 import { TransformersEmbeddingProvider, TransformersTextGenerationProvider } from './transformers';
 import { createTrueFoundryProvider } from './truefoundry';
 import { createVercelProvider } from './vercel';
+import { createVolcengineProvider } from './volcengine';
 import { VoyageEmbeddingProvider } from './voyage';
 import { WatsonXChatProvider, WatsonXProvider } from './watsonx';
 import { WebhookProvider } from './webhook';
@@ -1588,6 +1589,12 @@ export const providerMap: ProviderFactory[] = [
         env: context.env,
       });
     },
+  },
+  {
+    test: (providerPath: string) =>
+      providerPath === 'volcengine' || providerPath.startsWith('volcengine:'),
+    create: async (providerPath: string, providerOptions: ProviderOptions) =>
+      createVolcengineProvider(providerPath, providerOptions),
   },
   {
     test: (providerPath: string) => providerPath.startsWith('voyage:'),
