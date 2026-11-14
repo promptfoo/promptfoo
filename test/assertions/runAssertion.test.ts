@@ -105,6 +105,7 @@ vi.mock('glob', () => ({
 
 vi.mock('fs', () => {
   const fsMock = {
+    realpathSync: (filename: string) => filename,
     readFileSync: vi.fn(),
     existsSync: vi.fn(),
     writeFileSync: vi.fn(),

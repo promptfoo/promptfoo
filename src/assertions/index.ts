@@ -328,6 +328,12 @@ const ASSERTION_HANDLERS: Record<
 
 const nunjucks = getNunjucksEngine();
 
+function renderAssertionFile(reference: string, vars: Record<string, VarValue>) {
+  const rendered = nunjucks.renderString(reference, vars);
+  const contents = processFileReference(rendered, rendered !== reference);
+  return typeof contents === 'string' ? nunjucks.renderString(contents, vars) : contents;
+}
+
 /**
  * Renders a metric name template with test variables.
  * @param metric - The metric name, possibly containing Nunjucks template syntax
@@ -535,10 +541,7 @@ async function runAssertionInternal({
           return scriptFailure((error as Error).message);
         }
       } else {
-        renderedValue = processFileReference(nunjucks.renderString(renderedValue, resolvedVars));
-        if (typeof renderedValue === 'string') {
-          renderedValue = nunjucks.renderString(renderedValue, resolvedVars);
-        }
+        renderedValue = renderAssertionFile(renderedValue, resolvedVars);
       }
     } else if (isPackagePath(renderedValue)) {
       const basePath = cliState.basePath || '';
@@ -561,20 +564,13 @@ async function runAssertionInternal({
       renderedValue = nunjucks.renderString(renderedValue, resolvedVars);
     }
   } else if (renderedValue && Array.isArray(renderedValue)) {
-    // Process each element in the array
-    renderedValue = renderedValue.map((v) => {
-      if (typeof v === 'string') {
-        const interpolated = nunjucks.renderString(v, resolvedVars);
-        if (v.startsWith('file://')) {
-          const processed = processFileReference(interpolated);
-          if (typeof processed === 'string') {
-            return nunjucks.renderString(processed, resolvedVars);
-          }
-          return processed;
-        }
-        return interpolated;
+    renderedValue = renderedValue.map((value) => {
+      if (typeof value !== 'string') {
+        return value;
       }
-      return v;
+      return value.startsWith('file://')
+        ? renderAssertionFile(value, resolvedVars)
+        : nunjucks.renderString(value, resolvedVars);
     });
   }
 
