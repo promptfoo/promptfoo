@@ -7,7 +7,7 @@
  */
 import { fileURLToPath } from 'node:url';
 
-import { configureCliOutput } from './cliOutput';
+import { configureCliOutput } from './commands/cliOutput';
 
 configureCliOutput(process.argv.slice(2));
 

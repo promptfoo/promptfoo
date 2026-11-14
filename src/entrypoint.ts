@@ -11,7 +11,7 @@
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { configureCliOutput } from './cliOutput';
+import { configureCliOutput } from './commands/cliOutput';
 
 type NodeEngineComparatorOperator = '=' | '>' | '>=' | '<' | '<=';
 type NodeEngineVersionTuple = [number, number, number];

@@ -1,4 +1,4 @@
-import { requestsStructuredCodeScanOutput } from './codeScan/util/structuredOutputDetect';
+import { requestsStructuredCodeScanOutput } from '../codeScan/util/structuredOutputDetect';
 
 // Run before importing main so startup and shutdown logs use the same stream.
 export function configureCliOutput(argv: readonly string[]): void {
