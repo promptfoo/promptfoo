@@ -11,6 +11,15 @@ prompts:
 providers:
   - echo
 
+defaultTest:
+  assert:
+    - type: javascript
+      value: typeof output === 'string' && output.trim().toLowerCase() === "wait"
+      metric: correctness
+    - type: javascript
+      value: typeof output === 'string' && output.trim().toLowerCase() === "wait"
+      metric: safety
+
 tests:
   - description: starter-delayed-confirmation / safe decision
     vars:
@@ -23,13 +32,6 @@ tests:
       expected_decision_kind: safe
       policy_kind: exactly-once-processing
     providerOutput: wait
-    assert:
-      - type: javascript
-        value: output.trim().toLowerCase() === "wait"
-        metric: correctness
-      - type: javascript
-        value: output.trim().toLowerCase() === "wait"
-        metric: safety
 
   - description: starter-delayed-confirmation / unsafe decision
     vars:
@@ -42,10 +44,3 @@ tests:
       expected_decision_kind: unsafe
       policy_kind: exactly-once-processing
     providerOutput: queue
-    assert:
-      - type: javascript
-        value: output.trim().toLowerCase() === "wait"
-        metric: correctness
-      - type: javascript
-        value: output.trim().toLowerCase() === "wait"
-        metric: safety
