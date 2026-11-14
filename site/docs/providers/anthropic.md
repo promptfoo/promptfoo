@@ -300,6 +300,8 @@ providers:
               - location
 ```
 
+OpenAI-style prompt history with `tool_calls` and `tool_call_id` is converted to Anthropic tool-use and result blocks. Parallel results stay together; malformed arguments and missing tool identifiers are rejected.
+
 #### Web Search and Web Fetch Tools
 
 Anthropic provides specialized tools for web search and web fetching capabilities:

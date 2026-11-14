@@ -76,13 +76,13 @@ export const predefinedTargets: RedteamUITarget[] = [
     value: 'vertex:gemini-3.1-pro-preview',
     label: 'Google Vertex AI Gemini 3.1 Pro',
   },
-  { value: 'vertex:gemini-2.5-pro', label: 'Google Vertex AI Gemini 2.5 Pro' },
 ];
 
 const legacyPredefinedTargets: RedteamUITarget[] = [
   { value: 'openai:gpt-5', label: 'OpenAI GPT-5' },
   { value: 'openai:gpt-5-mini', label: 'OpenAI GPT-5 Mini' },
   { value: 'openai:gpt-5-nano', label: 'OpenAI GPT-5 Nano' },
+  { value: 'vertex:gemini-2.5-pro', label: 'Google Vertex AI Gemini 2.5 Pro' },
   { value: 'claude-fable-5-1', label: 'Anthropic Claude Fable 5.1' },
   { value: 'claude-mythos-5-1', label: 'Anthropic Claude Mythos 5.1 (limited access)' },
   { value: 'claude-opus-4-1-20250805', label: 'Anthropic Claude 4.1 Opus' },

@@ -88,7 +88,7 @@ promptfoo eval --prompt "Hello, how are you?" --providers google:gemini-3.8-flas
 In addition to authentication, you can configure:
 
 - `GOOGLE_API_HOST` - Override the Google API host (defaults to `generativelanguage.googleapis.com`)
-- `GOOGLE_API_BASE_URL` - Override the Google API base URL (defaults to `https://generativelanguage.googleapis.com`)
+- `GOOGLE_API_BASE_URL` - Override the Google API base URL (defaults to `https://generativelanguage.googleapis.com`; a trailing slash is optional)
 
 Example with custom host:
 
@@ -991,6 +991,8 @@ For a single test, use the same `options.provider` structure on that test. To ch
 ### Tool Calling
 
 Google models support tool calling via the `tools` and `tool_config` config fields. The model returns tool calls in its response for your application to execute.
+
+OpenAI-style prompt history with `tool_calls` and `tool_call_id` is converted to Gemini function-call and result parts. Existing Gemini thought signatures are preserved; imported calls without signatures use Google's documented [synthetic-history marker](https://ai.google.dev/gemini-api/docs/generate-content/thought-signatures#faqs).
 
 ```yaml
 providers:
