@@ -1250,6 +1250,11 @@ const SENSITIVE_PROVIDER_EVIDENCE_FIELDS = new Set([
   'token',
   'xapikey',
   'accesstoken',
+  'refreshtoken',
+  'sessiontoken',
+  'awssessiontoken',
+  'secretaccesskey',
+  'awssecretaccesskey',
   'clientsecret',
 ]);
 const EMBEDDED_PROVIDER_CREDENTIAL_PATTERNS: Array<[RegExp, string]> = [
@@ -1495,11 +1500,10 @@ function getProviderRawGradingEvidence(
     }
     const record = item as Record<string, unknown>;
     const type = typeof record.type === 'string' ? record.type : '';
-    const fields = PROVIDER_RAW_EVIDENCE_FIELDS[type];
-    if (!fields) {
+    if (!Object.hasOwn(PROVIDER_RAW_EVIDENCE_FIELDS, type)) {
       continue;
     }
-    const details = getProviderEvidenceDetails(record, fields);
+    const details = getProviderEvidenceDetails(record, PROVIDER_RAW_EVIDENCE_FIELDS[type]);
     if (
       type === 'agent_message' &&
       typeof details.text === 'string' &&

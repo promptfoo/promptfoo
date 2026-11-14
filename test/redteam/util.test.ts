@@ -1267,6 +1267,11 @@ describe('isBasicRefusal', () => {
     const credentials = {
       'x-api-key': 'PF_X_API_KEY_SENTINEL_123456789',
       access_token: 'PF_ACCESS_TOKEN_SENTINEL_123456789',
+      refresh_token: 'fake-refresh-credential',
+      AWS_SECRET_ACCESS_KEY: 'fake-aws-credential',
+      sessionToken: 'fake-session-credential',
+      AWS_SESSION_TOKEN: 'fake-aws-session-credential',
+      secretAccessKey: 'fake-access-credential',
       client_secret: 'PF_CLIENT_SECRET_SENTINEL_123456789',
       'proxy-authorization': 'Basic PF_PROXY_AUTH_SENTINEL_123456789',
     };
@@ -1304,6 +1309,11 @@ describe('isBasicRefusal', () => {
     for (const credential of Object.values(credentials)) {
       expect(jsonEvidence).not.toContain(credential);
     }
+  });
+
+  it('ignores unknown provider event types that collide with inherited names', () => {
+    const raw = { items: [{ type: 'constructor' }, { type: 'toString' }] };
+    expect(getProviderResponseGradingEvidence({ raw, output: 'hello' })).toEqual([]);
   });
 
   it('marks oversized string-valued raw evidence without parsing it', () => {
