@@ -2,11 +2,8 @@ import { IncomingMessage, ServerResponse } from 'node:http';
 import { Duplex } from 'node:stream';
 
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { EvalRunningError } from '../../../src/database/evalRun';
-import {
-  createServerOpenApiDocument,
-  SERVER_OPENAPI_ROUTE_COUNT,
-} from '../../../src/openapi/server';
+import { globalLogCallback, setLogCallback } from '../../../src/logger';
+import { createServerOpenApiDocument } from '../../../src/openapi/server';
 import { createApp } from '../../../src/server/server';
 import { promptCacheService } from '../../../src/server/services/promptCacheService';
 import type { Express } from 'express';
@@ -117,6 +114,7 @@ vi.mock('../../../src/envars', () => ({
   getEvalTimeoutMs: vi.fn(() => 0),
   getMaxEvalTimeMs: vi.fn(() => 0),
   getEnvString: mocks.getEnvString,
+  getEnvOverrides: vi.fn(),
   isCI: vi.fn(() => false),
   isNonInteractive: vi.fn(() => true),
 }));
@@ -205,10 +203,6 @@ vi.mock('../../../src/util/database', () => ({
   deleteEval: mocks.deleteEval,
   deleteEvalResult: mocks.deleteEvalResult,
   deleteEvals: mocks.deleteEvals,
-  // `EvalResultNotFoundError` is a runtime export from the same module; the route
-  // narrows on `instanceof`, so mocking it as a plain class keeps the check stable
-  // while the smoke test only exercises the success path.
-  EvalResultNotFoundError: class EvalResultNotFoundError extends Error {},
   getPrompts: mocks.getPrompts,
   getPromptsForTestCasesHash: mocks.getPromptsForTestCasesHash,
   getStandaloneEvals: mocks.getStandaloneEvals,
@@ -370,6 +364,12 @@ const validUuid = '00000000-0000-4000-8000-000000000000';
 const validMediaFilename = 'abcdef123456.mp3';
 
 const smokeCases: SmokeCase[] = [
+  {
+    method: 'get',
+    openApiPath: '/api/openapi.json',
+    path: '/api/openapi.json',
+    expectedStatus: 200,
+  },
   { method: 'get', openApiPath: '/health', path: '/health', expectedStatus: 200 },
   {
     method: 'get',
@@ -467,6 +467,12 @@ const smokeCases: SmokeCase[] = [
     expectedStatus: 200,
   },
   {
+    method: 'delete',
+    openApiPath: '/api/eval/{evalId}/results/{id}',
+    path: '/api/eval/eval-1/results/result-1',
+    expectedStatus: 204,
+  },
+  {
     method: 'patch',
     openApiPath: '/api/eval/{id}/author',
     path: '/api/eval/eval-1/author',
@@ -525,12 +531,6 @@ const smokeCases: SmokeCase[] = [
     path: '/api/eval',
     body: { ids: [] },
     expectedStatus: 400,
-  },
-  {
-    method: 'delete',
-    openApiPath: '/api/eval/{evalId}/results/{id}',
-    path: '/api/eval/eval-1/results/result-1',
-    expectedStatus: 204,
   },
   {
     method: 'post',
@@ -864,12 +864,18 @@ describe('server route end-to-end smoke coverage', { concurrent: false }, () => 
     vi.resetAllMocks();
   });
 
+  it('serves the published routes with the installed version and request origin', async () => {
+    const endpoint = smokeCases.find((entry) => entry.path === '/api/openapi.json')!;
+    const response = await sendRequest(createApp(), endpoint);
+    expect(response.status).toBe(200);
+    const expected = createServerOpenApiDocument();
+    expect(JSON.parse(response.text)).toEqual({ ...expected, servers: [{ url: '/' }] });
+  });
+
   it('has one smoke case for every generated OpenAPI route', () => {
     const smokeKeys = smokeCases.map(routeKey).sort();
     const documentedKeys = documentedRouteKeys().sort();
 
-    expect(smokeCases).toHaveLength(SERVER_OPENAPI_ROUTE_COUNT);
-    expect(new Set(smokeKeys).size).toBe(SERVER_OPENAPI_ROUTE_COUNT);
     expect(smokeKeys).toEqual(documentedKeys);
   });
 
@@ -888,17 +894,38 @@ describe('server route end-to-end smoke coverage', { concurrent: false }, () => 
     }
   });
 
-  it('returns a conflict when deleting a result from a running eval', async () => {
-    const error = new EvalRunningError('eval-1');
-    mocks.deleteEvalResult.mockRejectedValueOnce(error);
-    const response = await sendRequest(app, {
-      method: 'delete',
-      openApiPath: '/api/eval/{evalId}/results/{id}',
-      path: '/api/eval/eval-1/results/result-1',
-      expectedStatus: 409,
-    });
-
-    expect(response.status).toBe(409);
-    expect(response.body).toEqual({ error: error.message });
+  it('handles malformed JSON before route dispatch and keeps the app healthy', async () => {
+    const canary = 'malformed-request-body-canary';
+    const environment = app.get('env');
+    const previousLogCallback = globalLogCallback;
+    const messages: string[] = [];
+    setLogCallback((message) => messages.push(message));
+    app.set('env', 'production');
+    try {
+      const response = await sendRequest(app, {
+        method: 'post',
+        openApiPath: '/api/telemetry',
+        path: '/api/telemetry',
+        rawJsonBody: `{"payloadNote":"${canary}","padding":"${'x'.repeat(512)}","broken":}`,
+        expectedStatus: 400,
+      });
+      expect(response.status).toBe(400);
+      expect(response.headers['content-type']).toContain('application/json');
+      expect(response.body).toEqual({ error: 'Bad Request' });
+      expect(response.text).not.toContain(canary);
+      expect(mocks.telemetry.record).not.toHaveBeenCalled();
+      const healthy = await sendRequest(app, {
+        method: 'get',
+        openApiPath: '/health',
+        path: '/health',
+        expectedStatus: 200,
+      });
+      expect(healthy.status).toBe(200);
+      expect(messages.join('\n')).toContain('SyntaxError');
+      expect(messages.join('\n')).not.toContain(canary);
+    } finally {
+      app.set('env', environment);
+      setLogCallback(previousLogCallback);
+    }
   });
 });

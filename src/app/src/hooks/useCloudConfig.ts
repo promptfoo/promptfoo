@@ -1,6 +1,6 @@
 import useApiConfig from '@app/stores/apiConfig';
 import { useUserStore } from '@app/stores/userStore';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { callApi, getApiBaseUrl } from '../utils/api';
 
 export type CloudConfigData = {
@@ -13,12 +13,10 @@ export default function useCloudConfig(): {
   data: CloudConfigData | null;
   isLoading: boolean;
   error: string | null;
-  refetch: () => void;
 } {
   const endpoint = getApiBaseUrl(useApiConfig((state) => state.apiBaseUrl));
   const authVersion = useUserStore((state) => state.authVersion);
   const queryKey = ['cloud-config', endpoint, authVersion];
-  const client = useQueryClient();
   const query = useQuery<CloudConfigData>({
     queryKey,
     queryFn: async ({ signal }) => {
@@ -52,10 +50,5 @@ export default function useCloudConfig(): {
         : query.error instanceof Error
           ? query.error.message
           : 'Unknown error',
-    refetch: () => {
-      // Explicit refresh must supersede even an initial request without cached data.
-      void client.cancelQueries({ queryKey, exact: true });
-      void query.refetch();
-    },
   };
 }

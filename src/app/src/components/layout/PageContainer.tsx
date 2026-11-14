@@ -7,7 +7,7 @@ interface PageContainerProps extends React.ComponentProps<'div'> {
 
 /**
  * PageContainer provides the base background layer for all pages.
- * Uses a subtle tinted background (zinc-50/950) instead of pure white/black.
+ * Uses the shared background and foreground tokens in both themes.
  *
  * @example
  * ```tsx
@@ -19,7 +19,13 @@ interface PageContainerProps extends React.ComponentProps<'div'> {
  */
 export function PageContainer({ children, className, ...props }: PageContainerProps) {
   return (
-    <div className={cn('min-h-screen bg-zinc-50 dark:bg-zinc-950', className)} {...props}>
+    <div
+      className={cn(
+        'min-h-[calc(100dvh-var(--nav-height)-var(--update-banner-height,0px))] bg-background text-foreground',
+        className,
+      )}
+      {...props}
+    >
       {children}
     </div>
   );

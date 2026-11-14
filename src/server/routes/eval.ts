@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { EvalResultDeletionError } from '../../database/evalRun';
+import { HUMAN_ASSERTION_TYPE } from '../../constants';
 import { getUserEmail, setUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import Eval, { EvalQueries } from '../../models/eval';
@@ -11,8 +11,10 @@ import {
   deleteEval,
   deleteEvalResult,
   deleteEvals,
+  EvalResultDeletionConflict,
   EvalResultNotFoundError,
   updateResult,
+  withEvalResultWriter,
   writeResultsToDatabase,
 } from '../../util/database';
 import {
@@ -24,6 +26,7 @@ import {
   mergeComparisonTables,
 } from '../../util/eval/evalTableUtils';
 import invariant from '../../util/invariant';
+import { loadProviderConfigsFromFile, normalizeProviderRef } from '../../util/providerRef';
 import {
   redactAzureBlobSasTokens,
   restoreAzureBlobSasTokens,
@@ -218,37 +221,23 @@ evalRouter.get('/job/:id', (req: Request, res: Response): void => {
   }
 
   const { id } = paramsResult.data;
-  const job = evalJobService.get(id);
-  if (!job) {
-    res.status(404).json({ error: 'Job not found' });
-    return;
-  }
+  try {
+    const job = evalJobService.get(id);
+    if (!job) {
+      res.status(404).json({ error: 'Job not found' });
+      return;
+    }
 
-  if (job.status === 'complete') {
-    res.json(
-      EvalSchemas.GetJob.Response.parse({
-        status: 'complete',
-        result: job.result,
-        evalId: job.evalId,
-        logs: job.logs,
-      }),
-    );
-  } else if (job.status === 'error') {
-    res.json(
-      EvalSchemas.GetJob.Response.parse({
-        status: 'error',
-        logs: job.logs,
-      }),
-    );
-  } else {
-    res.json(
-      EvalSchemas.GetJob.Response.parse({
-        status: 'in-progress',
-        progress: job.progress,
-        total: job.total,
-        logs: job.logs,
-      }),
-    );
+    res.json(EvalSchemas.GetJob.Response.parse(job));
+  } catch (error) {
+    const category =
+      error instanceof z.ZodError
+        ? 'invalid-result'
+        : error instanceof SyntaxError
+          ? 'invalid-json'
+          : 'unavailable';
+    // Logs are shared with active jobs; omit snapshot contents and filesystem details.
+    sendError(res, 500, 'Failed to load eval job', { category });
   }
 });
 
@@ -301,7 +290,7 @@ evalRouter.patch('/:id/author', async (req: Request, res: Response): Promise<voi
     }
 
     eval_.author = author;
-    await eval_.save({ updatePrompts: false });
+    await eval_.save();
 
     // NOTE: Side effect. If user email is not set, set it to the author's email
     if (!getUserEmail()) {
@@ -645,6 +634,26 @@ evalRouter.post('/replay', async (req: Request, res: Response): Promise<void> =>
       providerConfig = providers;
     }
 
+    // Replay is a one-prompt diagnostic. Keep the saved selection and local options,
+    // but replace evaluation routing filters after expanding provider config files.
+    const selectedRef = normalizeProviderRef(providerConfig);
+    const replayProviders = (
+      selectedRef.kind === 'file'
+        ? loadProviderConfigsFromFile(selectedRef.loadProviderPath, eval_.config.basePath)
+        : [providerConfig]
+    ).map((provider) => {
+      const ref = normalizeProviderRef(provider);
+      if (ref.kind === 'options' || ref.kind === 'map') {
+        const options = { ...ref.loadOptions, prompts: ['Replay'] };
+        return ref.kind === 'map' ? { [ref.loadProviderPath]: options } : options;
+      }
+      if (ref.kind === 'named') {
+        return { id: ref.loadProviderPath, prompts: ['Replay'] };
+      }
+      // Persisted refs are declarative; leave other forms for normal loader validation.
+      return provider;
+    });
+
     // Run the prompt through the provider
     const result = await evaluateWithSource(
       {
@@ -654,7 +663,8 @@ evalRouter.post('/replay', async (req: Request, res: Response): Promise<void> =>
             label: 'Replay', // Add required label field
           },
         ],
-        providers: [providerConfig],
+        providers: replayProviders,
+        basePath: eval_.config.basePath,
         tests: [
           {
             vars: (variables || {}) as Vars,
@@ -724,21 +734,90 @@ evalRouter.post(
       const { evalId, id } = paramsResult.data;
       // Double-cast needed: Zod's .passthrough() adds index signature that doesn't overlap with GradingResult
       const gradingResult = bodyResult.data as unknown as GradingResult;
-      const ratingResult = await EvalResult.submitRating(evalId, id, gradingResult);
-      if (ratingResult.status === 'result-not-found') {
+      const result = await EvalResult.findById(id);
+      if (!result || result.evalId !== evalId) {
         res.status(404).json({ error: 'Result not found' });
         return;
       }
-      if (ratingResult.status === 'eval-not-found') {
+
+      const eval_ = await Eval.findById(evalId);
+      if (!eval_) {
         res.status(404).json({ error: 'Eval not found' });
         return;
       }
-      if (ratingResult.status === 'prompt-metrics-not-found') {
-        res.status(400).json({ error: 'Prompt metrics not found' });
+
+      const rating = await withEvalResultWriter(eval_, async () => {
+        const currentResult = await EvalResult.findById(id);
+        if (!currentResult || currentResult.evalId !== evalId) {
+          return { status: 404, response: { error: 'Result not found' } };
+        }
+
+        // Capture the current state before we change it
+        const hasExistingManualOverride = Boolean(
+          currentResult.gradingResult?.componentResults?.some(
+            (r) => r.assertion?.type === HUMAN_ASSERTION_TYPE,
+          ),
+        );
+        const successChanged = currentResult.success !== gradingResult.pass;
+        const scoreChange = gradingResult.score - currentResult.score;
+
+        // Update the result
+        currentResult.gradingResult = gradingResult;
+        currentResult.success = gradingResult.pass;
+        currentResult.score = gradingResult.score;
+
+        // Update the prompt metrics
+        const prompt = eval_.prompts[currentResult.promptIdx];
+        invariant(prompt, 'Prompt not found');
+        if (!prompt.metrics) {
+          logger.error(
+            `[${id}] This is not normal. Prompt metrics not found for prompt ${currentResult.promptIdx}`,
+          );
+
+          return { status: 400, response: { error: 'Prompt metrics not found' } };
+        }
+
+        if (successChanged) {
+          if (currentResult.success) {
+            // Result changed from fail to pass
+            prompt.metrics.testPassCount += 1;
+            prompt.metrics.testFailCount -= 1;
+            prompt.metrics.assertPassCount += 1;
+            prompt.metrics.score += scoreChange;
+            if (hasExistingManualOverride) {
+              // If there was an existing manual override, we need to decrement the assertFailCount because it changed from fail to pass
+              prompt.metrics.assertFailCount -= 1;
+            }
+          } else {
+            prompt.metrics.testPassCount -= 1;
+            prompt.metrics.testFailCount += 1;
+            prompt.metrics.assertFailCount += 1;
+            prompt.metrics.score += scoreChange;
+            if (hasExistingManualOverride) {
+              // If there was an existing manual override, we need to decrement the assertPassCount because it changed from pass to fail
+              prompt.metrics.assertPassCount -= 1;
+            }
+          }
+        } else if (!hasExistingManualOverride) {
+          // Nothing changed, so the user just added an assertion
+          if (currentResult.success) {
+            prompt.metrics.assertPassCount += 1;
+          } else {
+            prompt.metrics.assertFailCount += 1;
+          }
+        }
+
+        await currentResult.save();
+        await eval_.save();
+
+        return { status: 200, response: EvalSchemas.SubmitRating.Response.parse(currentResult) };
+      });
+      res.status(rating.status).json(rating.response);
+    } catch (error) {
+      if (error instanceof EvalResultDeletionConflict) {
+        res.status(409).json({ error: error.message });
         return;
       }
-      res.json(EvalSchemas.SubmitRating.Response.parse(ratingResult.result));
-    } catch (error) {
       sendError(res, 500, 'Failed to submit rating', error);
     }
   },
@@ -795,6 +874,30 @@ evalRouter.post('/', async (req: Request, res: Response): Promise<void> => {
   }
 });
 
+evalRouter.delete('/:evalId/results/:id', async (req: Request, res: Response): Promise<void> => {
+  const paramsResult = EvalSchemas.DeleteResult.Params.safeParse(req.params);
+  if (!paramsResult.success) {
+    replyValidationError(res, paramsResult.error);
+    return;
+  }
+
+  const { evalId, id } = paramsResult.data;
+  try {
+    await deleteEvalResult(evalId, id);
+    res.status(204).send();
+  } catch (error) {
+    if (error instanceof EvalResultDeletionConflict) {
+      res.status(409).json({ error: error.message });
+      return;
+    }
+    if (error instanceof EvalResultNotFoundError) {
+      res.status(404).json({ error: 'Eval result not found' });
+      return;
+    }
+    sendError(res, 500, 'Failed to delete eval result', error);
+  }
+});
+
 evalRouter.delete('/:id', async (req: Request, res: Response): Promise<void> => {
   const paramsResult = EvalSchemas.Delete.Params.safeParse(req.params);
   if (!paramsResult.success) {
@@ -838,30 +941,6 @@ evalRouter.delete('/', async (req: Request, res: Response) => {
     res.status(204).send();
   } catch {
     res.status(500).json({ error: 'Failed to delete evals' });
-  }
-});
-
-evalRouter.delete('/:evalId/results/:id', async (req: Request, res: Response): Promise<void> => {
-  const paramsResult = EvalSchemas.DeleteResult.Params.safeParse(req.params);
-  if (!paramsResult.success) {
-    replyValidationError(res, paramsResult.error);
-    return;
-  }
-
-  const { evalId, id } = paramsResult.data;
-  try {
-    await deleteEvalResult(evalId, id);
-    res.status(204).send();
-  } catch (error) {
-    if (error instanceof EvalResultDeletionError) {
-      res.status(409).json({ error: error.message });
-      return;
-    }
-    if (error instanceof EvalResultNotFoundError) {
-      res.status(404).json({ error: 'Eval result not found' });
-      return;
-    }
-    sendError(res, 500, 'Failed to delete eval result', error);
   }
 });
 

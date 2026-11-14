@@ -60,19 +60,16 @@ export function resetBlobStorageProvider(): void {
   defaultProvider = null;
 }
 
-export interface BlobContext {
-  evalId?: string;
-  testIdx?: number;
-  promptIdx?: number;
-  location?: string;
-  kind?: string;
-  isCancelled?: () => boolean;
-}
-
 export async function storeBlob(
   data: Buffer,
   mimeType: string,
-  refContext?: BlobContext,
+  refContext?: {
+    evalId?: string;
+    testIdx?: number;
+    promptIdx?: number;
+    location?: string;
+    kind?: string;
+  },
 ): Promise<BlobStoreResult> {
   const provider = getBlobStorageProvider();
   const result = await provider.store(data, mimeType);
@@ -82,9 +79,6 @@ export async function storeBlob(
   // Keep stored bytes if persistence fails: another eval may already reference them,
   // including bytes adopted after this store began. Unreferenced bytes are safer than data loss.
   const registeredMimeType = await db.transaction(async (tx) => {
-    if (refContext?.isCancelled?.()) {
-      return result.ref.mimeType;
-    }
     await tx
       .insert(blobAssetsTable)
       .values({
@@ -98,7 +92,7 @@ export async function storeBlob(
       .onConflictDoNothing()
       .run();
 
-    if (refContext?.evalId && !refContext.isCancelled?.()) {
+    if (refContext?.evalId) {
       await tx
         .insert(blobReferencesTable)
         .values({
@@ -175,9 +169,17 @@ export async function getShareAuthorizedBlob(
   return getBlobByHash(hash);
 }
 
-export async function recordBlobReference(hash: string, refContext: BlobContext): Promise<void> {
-  const evalId = refContext.evalId;
-  if (!evalId) {
+export async function recordBlobReference(
+  hash: string,
+  refContext: {
+    evalId?: string;
+    testIdx?: number;
+    promptIdx?: number;
+    location?: string;
+    kind?: string;
+  },
+): Promise<void> {
+  if (!refContext.evalId) {
     return;
   }
 
@@ -186,69 +188,65 @@ export async function recordBlobReference(hash: string, refContext: BlobContext)
   if (!exists) {
     logger.debug('[BlobStorage] Attempted to record reference for missing blob', {
       hash,
-      evalId,
+      evalId: refContext.evalId,
       location: refContext.location,
     });
     return;
   }
 
   const db = await getDb();
-  await db.transaction(async (tx) => {
-    if (refContext.isCancelled?.()) {
-      return;
-    }
-    // A failed store can retain bytes without committing their asset registration.
-    // Referencing those bytes must not adopt them or create an invalid foreign key.
-    const asset = await tx
-      .select({ hash: blobAssetsTable.hash })
-      .from(blobAssetsTable)
-      .where(eq(blobAssetsTable.hash, hash))
-      .get();
-    if (!asset) {
-      return;
-    }
+  // A failed store can retain bytes without committing their asset registration.
+  // Referencing those bytes must not adopt them or create an invalid foreign key.
+  const asset = await db
+    .select({ hash: blobAssetsTable.hash })
+    .from(blobAssetsTable)
+    .where(eq(blobAssetsTable.hash, hash))
+    .get();
+  if (!asset) {
+    return;
+  }
 
-    const existing = await tx
-      .select({
-        id: blobReferencesTable.id,
-        kind: blobReferencesTable.kind,
-        location: blobReferencesTable.location,
-      })
-      .from(blobReferencesTable)
-      .where(and(eq(blobReferencesTable.blobHash, hash), eq(blobReferencesTable.evalId, evalId)))
-      .get();
+  const existing = await db
+    .select({
+      id: blobReferencesTable.id,
+      kind: blobReferencesTable.kind,
+      location: blobReferencesTable.location,
+    })
+    .from(blobReferencesTable)
+    .where(
+      and(
+        eq(blobReferencesTable.blobHash, hash),
+        eq(blobReferencesTable.evalId, refContext.evalId),
+      ),
+    )
+    .get();
 
-    if (refContext.isCancelled?.()) {
-      return;
+  if (existing) {
+    const strongerReference: { kind?: string; location?: string } = {
+      ...(refContext.kind && !existing.kind && { kind: refContext.kind }),
+      ...(refContext.location === 'import' &&
+        existing.location !== 'import' && { location: 'import' }),
+    };
+    if (Object.keys(strongerReference).length > 0) {
+      await db
+        .update(blobReferencesTable)
+        .set(strongerReference)
+        .where(eq(blobReferencesTable.id, existing.id))
+        .run();
     }
+    return;
+  }
 
-    if (existing) {
-      const strongerReference: { kind?: string; location?: string } = {
-        ...(refContext.kind && !existing.kind && { kind: refContext.kind }),
-        ...(refContext.location === 'import' &&
-          existing.location !== 'import' && { location: 'import' }),
-      };
-      if (Object.keys(strongerReference).length > 0) {
-        await tx
-          .update(blobReferencesTable)
-          .set(strongerReference)
-          .where(eq(blobReferencesTable.id, existing.id))
-          .run();
-      }
-      return;
-    }
-
-    await tx
-      .insert(blobReferencesTable)
-      .values({
-        id: randomUUID(),
-        blobHash: hash,
-        evalId,
-        testIdx: refContext.testIdx,
-        promptIdx: refContext.promptIdx,
-        location: refContext.location,
-        kind: refContext.kind,
-      })
-      .run();
-  });
+  await db
+    .insert(blobReferencesTable)
+    .values({
+      id: randomUUID(),
+      blobHash: hash,
+      evalId: refContext.evalId,
+      testIdx: refContext.testIdx,
+      promptIdx: refContext.promptIdx,
+      location: refContext.location,
+      kind: refContext.kind,
+    })
+    .run();
 }

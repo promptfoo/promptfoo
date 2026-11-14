@@ -48,7 +48,7 @@ import { evaluate } from 'promptfoo';
 
 const evalRecord = await evaluate({
   prompts: ['What is 2+2?'],
-  providers: ['openai:chat:gpt-5.5', 'anthropic:messages:claude-opus-4-7'],
+  providers: ['openai:chat:gpt-5.5', 'anthropic:messages:claude-opus-5'],
   tests: [
     {
       vars: { query: 'math question' },
@@ -109,10 +109,12 @@ async function loadApiProvider(
 
 **Parameters:**
 
-- `providerPath`: Provider identifier (e.g., `'openai:chat:gpt-5.5'`, `'anthropic:messages:claude-opus-4-7'`, or `'file://./custom-provider.js'`)
+- `providerPath`: Provider identifier (e.g., `'openai:chat:gpt-5.5'`, `'anthropic:messages:claude-opus-5'`, or `'file://./custom-provider.js'`)
 - `context`: Optional context with environment overrides
 
 **Returns:** Configured `ApiProvider` instance ready to call
+
+When calling a provider directly, use `await provider.cleanup?.()` in a `finally` block after its last call to release workers, connections, or model pipelines. Finish active calls before cleanup; use an abort signal to cancel an individual request.
 
 **Example:**
 
@@ -123,9 +125,12 @@ const openaiProvider = await loadApiProvider('openai:chat:gpt-5.5', {
   env: { OPENAI_API_KEY: process.env.MY_SECRET_KEY },
 });
 
-const response = await openaiProvider.callApi('Hello, world!');
-
-console.log(response.output);
+try {
+  const response = await openaiProvider.callApi('Hello, world!');
+  console.log(response.output);
+} finally {
+  await openaiProvider.cleanup?.();
+}
 ```
 
 **Supported Provider Types:**
@@ -168,7 +173,7 @@ import { loadApiProviders } from 'promptfoo';
 
 const providers = await loadApiProviders([
   'openai:chat:gpt-5.5',
-  'anthropic:messages:claude-opus-4-7',
+  'anthropic:messages:claude-opus-5',
   {
     id: 'custom-provider',
     config: {
@@ -934,7 +939,7 @@ import { assertions, loadApiProviders } from 'promptfoo';
 
 const providers = await loadApiProviders([
   'openai:chat:gpt-5.5',
-  'anthropic:messages:claude-opus-4-7',
+  'anthropic:messages:claude-opus-5',
 ]);
 
 const testCases = ['2+2=?', 'What is AI?'];

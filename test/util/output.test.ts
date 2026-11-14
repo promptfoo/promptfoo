@@ -370,7 +370,16 @@ describe('writeOutput', () => {
       const restoreEnv = mockProcessEnv(
         Object.fromEntries(Object.keys(flags).map((key) => [key, String(!strip)])),
       );
+      const grader = { id: 'echo', prompts: ['private-nested-selector'] };
+      const application = { prompts: ['ordinary-map-application'] };
+      const graderMap = {
+        text: grader,
+        label: 'ordinary map label',
+        config: { prompts: ['ordinary map configuration'] },
+        application,
+      };
       const testCase = {
+        options: { provider: graderMap },
         vars: { input: 'private-input' },
         metadata: { note: 'private-note' },
         providerOutput: 'private-output',
@@ -394,10 +403,25 @@ describe('writeOutput', () => {
           ],
         },
       ]);
-      const eval_ = new Eval({ env: flags, tests: [testCase], prompts: ['private-config-prompt'] });
+      const provider = { id: 'echo', prompts: ['private-provider-selector'] };
+      const providerPromptMap = { echo: ['private-explicit-selector'] };
+      const config = {
+        providerPromptMap,
+        env: flags,
+        tests: [testCase],
+        prompts: ['private-config-prompt'],
+        providers: [provider],
+      };
+      const eval_ = new Eval(config);
       await eval_.addResult(
         createEvaluateResult({
-          prompt: { raw: 'private-prompt', template: 'private-template', label: 'label' },
+          prompt: {
+            raw: 'private-prompt',
+            template: 'private-template',
+            label: 'label',
+            config: { provider: grader },
+          },
+          provider,
           testCase,
           response: { output: 'private-output', raw: 'private-raw-output' },
           metadata: { note: 'private-note' },
@@ -418,8 +442,13 @@ describe('writeOutput', () => {
         expect(JSON.stringify(resultsFile).includes('private-')).toBe(!strip);
         const output = await createOutputData(eval_, null);
         expect(JSON.stringify(output).includes('private-')).toBe(!strip);
+        expect(Object.hasOwn(output.config, 'providerPromptMap')).toBe(!strip);
         expect(output.results.results[0]).toMatchObject({ success: true, score: 1 });
+        expect(output.config).toMatchObject({
+          tests: [{ options: { provider: { application, config: graderMap.config } } }],
+        });
         if (!strip) {
+          expect(output.config).toMatchObject({ providerPromptMap });
           expect(output.results.results[0]).toMatchObject({
             prompt: { raw: 'private-prompt' },
             testCase,
@@ -441,8 +470,13 @@ describe('writeOutput', () => {
             .join('');
           expect(contents, extension).not.toBe('');
           expect(contents.includes('private-'), extension).toBe(!strip);
+          expect(contents, extension).toContain('ordinary-map-application');
         }
 
+        expect(grader.prompts).toEqual(['private-nested-selector']);
+        expect(provider.prompts).toEqual(['private-provider-selector']);
+        expect(eval_.config.providers).toEqual([provider]);
+        expect(eval_.config).toMatchObject({ providerPromptMap });
         expect(eval_.config.tests).toEqual([testCase]);
         expect(eval_.config.prompts).toEqual(['private-config-prompt']);
         expect(eval_.prompts[0].template).toBe('private-template');
@@ -1199,7 +1233,7 @@ describe('writeOutput', () => {
         expect(names[0][0]).toContain('🚀...');
       } else if (secondId !== 'echo') {
         expect(names[0][0]).toMatch(/^\[target\] prompt 1 \([a-f0-9]{16}\)$/);
-        expect(names[0][1]).toBe('[target] prompt 1');
+        expect(names[0][1]).toMatch(/^\[target\] prompt 1 \([a-f0-9]{16}\)$/);
       }
     },
   );
@@ -1261,6 +1295,7 @@ describe('writeOutput', () => {
   it.each([
     ['a vertical tab collapses into a space', 'my\u000bmodel', 'my model'],
     ['a form feed collapses into a space', 'my\u000cmodel', 'my model'],
+    ['clean whitespace collapses into a space', 'my  model', 'my model'],
     [
       'the forbidden character falls after the display limit',
       `${'x'.repeat(600)}\u0000`,
@@ -1278,9 +1313,58 @@ describe('writeOutput', () => {
       .testsuites.testsuite;
     const names = suites.map((suite) => suite['@_name']);
     expect(names[0]).toMatch(/ \([a-f0-9]{16}\)$/);
-    expect(names[1]).not.toMatch(/ \([a-f0-9]{16}\)$/);
+    expect(names[1]).toMatch(/ \([a-f0-9]{16}\)$/);
     expect(new Set(names).size).toBe(2);
   });
+
+  it.each([
+    ['shared', 'shared'],
+    ['shared', ' shared '],
+    ['x'.repeat(520) + 'a', 'x'.repeat(520) + 'b'],
+  ])(
+    'keeps colliding provider and prompt identities stable across result order: %j',
+    async (first, second) => {
+      const rows = [
+        ['provider-a', first, 'prompt-a', 0],
+        ['provider-b', second, 'prompt-a', 0],
+        ['provider-a', first, 'prompt-b', 1],
+        ['provider-b', second, 'prompt-b', 1],
+      ].map(([id, label, promptId, promptIdx]) =>
+        createEvaluateResult({
+          provider: { id: String(id), label: String(label) },
+          promptId: String(promptId),
+          promptIdx: Number(promptIdx),
+          testCase: { description: `${id}:${promptId}` },
+        }),
+      );
+      const identities: Map<string, string>[] = [];
+      for (const results of [rows, [...rows].reverse()]) {
+        const fetchResultsBatched = vi.fn(async function* () {
+          yield results.slice(0, 2);
+          yield results.slice(2);
+        });
+        const eval_ = {
+          persisted: true,
+          createdAt: new Date('2026-01-01'),
+          useOldResults: () => false,
+          fetchResultsBatched,
+        } as unknown as Eval;
+        const xml = await createJunitXml(eval_);
+        expect(() => new SaxesParser().write(xml).close()).not.toThrow();
+        const suites = new XMLParser({ ignoreAttributes: false }).parse(xml).testsuites.testsuite;
+        expect(fetchResultsBatched).toHaveBeenCalledOnce();
+        const identity = new Map<string, string>();
+        for (const suite of suites) {
+          expect(suite['@_name']).toMatch(/ \([a-f0-9]{16}\)$/);
+          expect(suite.testcase['@_classname']).toBe(suite['@_name']);
+          identity.set(suite.testcase['@_name'], suite['@_name']);
+        }
+        expect(new Set(identity.values()).size).toBe(4);
+        identities.push(identity);
+      }
+      expect(identities[1]).toEqual(identities[0]);
+    },
+  );
 
   it('removes forbidden name characters before fallback and length limits', async () => {
     const eval_ = new Eval({});
@@ -1317,7 +1401,7 @@ describe('writeOutput', () => {
     }
   });
 
-  it('keeps different clean prompts numbered under a shared display name', async () => {
+  it('distinguishes providers with matching labels even when their prompts differ', async () => {
     const eval_ = new Eval({});
     for (const id of ['first', 'second']) {
       await eval_.addResult(
@@ -1327,8 +1411,8 @@ describe('writeOutput', () => {
     const suites = new XMLParser({ ignoreAttributes: false }).parse(await createJunitXml(eval_))
       .testsuites.testsuite;
     expect(suites).toMatchObject([
-      { '@_name': '[shared] prompt 1' },
-      { '@_name': '[shared] prompt 2' },
+      { '@_name': expect.stringMatching(/^\[shared\] prompt 1 \([a-f0-9]{16}\)$/) },
+      { '@_name': expect.stringMatching(/^\[shared\] prompt 1 \([a-f0-9]{16}\)$/) },
     ]);
   });
 
@@ -1971,49 +2055,6 @@ describe('writeOutput', () => {
     expect(html).toContain('>FAIL<');
   });
 
-  it('writeOutput with HTML keeps sparse prompt columns aligned', async () => {
-    const realFs = await vi.importActual<typeof import('fs')>('fs');
-    const templatePath = path.resolve(__dirname, '../../src/tableOutput.html');
-    const templateContent = realFs.readFileSync(templatePath, 'utf-8');
-    vi.mocked(fsPromises.readFile).mockResolvedValue(templateContent);
-
-    const eval_ = new Eval({ description: 'HTML sparse prompt columns' });
-    await eval_.addPrompts([
-      { raw: 'Prompt zero', label: 'Prompt zero', provider: 'provider' },
-      { raw: 'Prompt one', label: 'Prompt one', provider: 'provider' },
-    ]);
-    eval_.setVars(['input']);
-
-    await eval_.addResult({
-      success: true,
-      failureReason: ResultFailureReason.NONE,
-      score: 1,
-      namedScores: {},
-      latencyMs: 100,
-      provider: { id: 'provider' },
-      prompt: { raw: 'Prompt one', label: 'Prompt one' },
-      response: { output: 'Surviving prompt one output' },
-      vars: { input: 'sparse' },
-      promptIdx: 1,
-      testIdx: 0,
-      testCase: { vars: { input: 'sparse' } },
-      promptId: 'prompt-one',
-      gradingResult: {
-        pass: true,
-        score: 1,
-        reason: 'survivor',
-      },
-    });
-
-    await writeOutput('output.html', eval_, null);
-
-    const html = vi.mocked(fsPromises.writeFile).mock.calls[0][1] as string;
-    expect(html.match(/<td\s+data-output-cell="true"/g)).toHaveLength(2);
-    expect(html).toContain('Result detail - row 1, prompt 1');
-    expect(html).toContain('Result detail - row 1, prompt 2');
-    expect(html).toContain('Surviving prompt one output');
-  });
-
   it('writeOutput with HTML keeps visible runtime errors searchable without pre-rendering row variables per output', async () => {
     const realFs = await vi.importActual<typeof import('fs')>('fs');
     const templatePath = path.resolve(__dirname, '../../src/tableOutput.html');
@@ -2153,39 +2194,6 @@ describe('writeOutput', () => {
     const columnKeys = Object.keys(rows[0]);
     expect(columnKeys).toContain('[openai:gpt-4] Test Prompt');
     expect(columnKeys).toContain('[anthropic:claude-3] Test Prompt');
-  });
-
-  it('writes blank Google Sheets cells for sparse prompt outputs', async () => {
-    const outputPath = 'https://docs.google.com/spreadsheets/d/1234567890/edit#gid=0';
-
-    const eval_ = new Eval({});
-    await eval_.addPrompts([
-      { raw: 'prompt1', label: 'First Prompt', provider: 'openai:gpt-4' },
-      { raw: 'prompt2', label: 'Second Prompt', provider: 'anthropic:claude-3' },
-    ]);
-    eval_.setVars(['input']);
-
-    await eval_.addResult({
-      success: true,
-      failureReason: ResultFailureReason.NONE,
-      score: 0.8,
-      namedScores: {},
-      latencyMs: 150,
-      provider: { id: 'anthropic:claude-3' },
-      prompt: { raw: 'prompt2', label: 'Second Prompt' },
-      response: { output: 'Surviving output' },
-      vars: { input: 'test input' },
-      promptIdx: 1,
-      testIdx: 0,
-      testCase: { vars: { input: 'test input' } },
-      promptId: 'prompt2',
-    });
-
-    await writeOutput(outputPath, eval_, null);
-
-    const rows = vi.mocked(googleSheets.writeCsvToGoogleSheet).mock.calls[0][0];
-    expect(rows[0]['[openai:gpt-4] First Prompt']).toBe('');
-    expect(rows[0]['[anthropic:claude-3] Second Prompt']).toContain('Surviving output');
   });
 });
 

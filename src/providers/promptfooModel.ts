@@ -124,7 +124,7 @@ export class PromptfooModelProvider implements ApiProvider {
 
       if (!response.ok) {
         const errorText = await response.text();
-        throw new Error(`PromptfooModel task API error: ${response.status} ${errorText}`);
+        throw new Error(`PromptfooModel task API error: HTTP ${response.status} ${errorText}`);
       }
 
       const data = await response.json();

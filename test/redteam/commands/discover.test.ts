@@ -21,6 +21,17 @@ const { mockProgressBar, mockSingleBar } = vi.hoisted(() => ({
   mockSingleBar: vi.fn(),
 }));
 
+function createDiscoveryResponseSequence(mockResponses: unknown[]) {
+  return function () {
+    return Promise.resolve(
+      new Response(JSON.stringify(mockResponses.shift()), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+  };
+}
+
 vi.mock('cli-progress', () => ({
   default: {
     SingleBar: mockSingleBar,
@@ -208,14 +219,7 @@ describe('doTargetPurposeDiscovery', () => {
       },
     ];
 
-    mockedFetchWithProxy.mockImplementation(function () {
-      return Promise.resolve(
-        new Response(JSON.stringify(mockResponses.shift()), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        }),
-      );
-    });
+    mockedFetchWithProxy.mockImplementation(createDiscoveryResponseSequence(mockResponses));
 
     const target = createMockProvider({
       id: 'test',
@@ -384,14 +388,7 @@ describe('doTargetPurposeDiscovery', () => {
       },
     ];
 
-    mockedFetchWithProxy.mockImplementation(function () {
-      return Promise.resolve(
-        new Response(JSON.stringify(mockResponses.shift()), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        }),
-      );
-    });
+    mockedFetchWithProxy.mockImplementation(createDiscoveryResponseSequence(mockResponses));
 
     const target = createMockProvider({
       id: 'test',
@@ -450,14 +447,7 @@ describe('doTargetPurposeDiscovery', () => {
       },
     ];
 
-    mockedFetchWithProxy.mockImplementation(function () {
-      return Promise.resolve(
-        new Response(JSON.stringify(mockResponses.shift()), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        }),
-      );
-    });
+    mockedFetchWithProxy.mockImplementation(createDiscoveryResponseSequence(mockResponses));
 
     const target = {
       id: () => 'test',
@@ -596,14 +586,7 @@ describe('doTargetPurposeDiscovery', () => {
       },
     ];
 
-    mockedFetchWithProxy.mockImplementation(function () {
-      return Promise.resolve(
-        new Response(JSON.stringify(mockResponses.shift()), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        }),
-      );
-    });
+    mockedFetchWithProxy.mockImplementation(createDiscoveryResponseSequence(mockResponses));
 
     const target = {
       id: () => 'test',

@@ -12,45 +12,12 @@ import MonitorHeartIcon from '@mui/icons-material/MonitorHeart';
 import ShieldIcon from '@mui/icons-material/Shield';
 import SupportAgentIcon from '@mui/icons-material/SupportAgent';
 import VerifiedUserIcon from '@mui/icons-material/VerifiedUser';
+import { ApplicationCard } from '@site/src/components/ApplicationCard';
+import { BenefitItem } from '@site/src/components/BenefitItem';
 import Layout from '@theme/Layout';
 import clsx from 'clsx';
+import { ComplianceCard, RiskCard } from '../../components/SolutionCards';
 import styles from '../landing-page.module.css';
-
-function RiskCard({ name, description }: { name: string; description: string }) {
-  return (
-    <div className={styles.vulnCard}>
-      <h4 className={styles.vulnName}>{name}</h4>
-      <p className={styles.vulnDescription}>{description}</p>
-    </div>
-  );
-}
-
-function ComplianceCard({
-  icon,
-  title,
-  items,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  items: { name: string; description: string }[];
-}) {
-  return (
-    <div className={styles.solutionCard}>
-      <div className={styles.solutionTitle}>
-        <span className={styles.solutionIcon}>{icon}</span>
-        {title}
-      </div>
-      <div className={styles.regulationBadges}>
-        {items.map((item) => (
-          <div key={item.name} className={styles.regulationBadge}>
-            <span className={styles.badgeName}>{item.name}</span>
-            <span className={styles.badgeDesc}>{item.description}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
 
 export default function Insurance() {
   const canonicalUrl = useBaseUrl('/solutions/insurance/', { absolute: true });
@@ -234,46 +201,38 @@ export default function Insurance() {
             <h2 className={styles.sectionTitle}>Tested across the insurance enterprise</h2>
 
             <div className={styles.solutionGrid}>
-              <div className={styles.solutionCard}>
-                <div className={styles.solutionTitle}>
-                  <SupportAgentIcon className={styles.solutionIcon} />
-                  Policyholder Service
-                </div>
-                <p>
-                  Coverage inquiry chatbots, eligibility verification, claims status assistants,
-                  agent copilots, and portal support.
-                </p>
-              </div>
-              <div className={styles.solutionCard}>
-                <div className={styles.solutionTitle}>
-                  <AssignmentIcon className={styles.solutionIcon} />
-                  Claims & Underwriting
-                </div>
-                <p>
-                  Claims triage, automated adjudication, renewal decisions, rating support, and
-                  underwriting assistants.
-                </p>
-              </div>
-              <div className={styles.solutionCard}>
-                <div className={styles.solutionTitle}>
-                  <HomeRepairServiceIcon className={styles.solutionIcon} />
-                  Provider & Vendor Networks
-                </div>
-                <p>
-                  Medical provider directories, DRP body shops, preferred contractors, rental
-                  partners, and network status tools.
-                </p>
-              </div>
-              <div className={styles.solutionCard}>
-                <div className={styles.solutionTitle}>
-                  <ShieldIcon className={styles.solutionIcon} />
-                  Sensitive Data Workflows
-                </div>
-                <p>
-                  PHI, claims history, driving behavior, property details, beneficiary data, and
-                  commercial coverage information.
-                </p>
-              </div>
+              <ApplicationCard
+                styles={styles}
+                icon={<SupportAgentIcon className={styles.solutionIcon} />}
+                title="Policyholder Service"
+              >
+                Coverage inquiry chatbots, eligibility verification, claims status assistants, agent
+                copilots, and portal support.
+              </ApplicationCard>
+              <ApplicationCard
+                styles={styles}
+                icon={<AssignmentIcon className={styles.solutionIcon} />}
+                title="Claims & Underwriting"
+              >
+                Claims triage, automated adjudication, renewal decisions, rating support, and
+                underwriting assistants.
+              </ApplicationCard>
+              <ApplicationCard
+                styles={styles}
+                icon={<HomeRepairServiceIcon className={styles.solutionIcon} />}
+                title="Provider & Vendor Networks"
+              >
+                Medical provider directories, DRP body shops, preferred contractors, rental
+                partners, and network status tools.
+              </ApplicationCard>
+              <ApplicationCard
+                styles={styles}
+                icon={<ShieldIcon className={styles.solutionIcon} />}
+                title="Sensitive Data Workflows"
+              >
+                PHI, claims history, driving behavior, property details, beneficiary data, and
+                commercial coverage information.
+              </ApplicationCard>
             </div>
           </div>
         </section>
@@ -369,38 +328,32 @@ export default function Insurance() {
             <h2 className={styles.sectionTitle}>Why insurers choose Promptfoo</h2>
 
             <div className={styles.benefitsList}>
-              <div className={styles.benefitItem}>
-                <LockIcon className={styles.benefitIcon} />
-                <div className={styles.benefitContent}>
-                  <h3>Private deployment options</h3>
-                  <p>
-                    Run entirely within your infrastructure with sensitive policyholder data kept in
-                    your environment. Self-hosted options support internal privacy controls and data
-                    residency policies.
-                  </p>
-                </div>
-              </div>
-              <div className={styles.benefitItem}>
-                <MonitorHeartIcon className={styles.benefitIcon} />
-                <div className={styles.benefitContent}>
-                  <h3>Continuous compliance monitoring</h3>
-                  <p>
-                    Integrate with CI/CD pipelines to catch compliance regressions before
-                    deployment. Track security and discrimination metrics across model updates.
-                  </p>
-                </div>
-              </div>
-              <div className={styles.benefitItem}>
-                <VerifiedUserIcon className={styles.benefitIcon} />
-                <div className={styles.benefitContent}>
-                  <h3>Audit-ready documentation</h3>
-                  <p>
-                    Generate structured reports for privacy reviews, model governance, and federal
-                    and state insurance examinations. Demonstrate due diligence with reproducible
-                    test results.
-                  </p>
-                </div>
-              </div>
+              <BenefitItem
+                styles={styles}
+                icon={<LockIcon className={styles.benefitIcon} />}
+                title="Private deployment options"
+              >
+                Run entirely within your infrastructure with sensitive policyholder data kept in
+                your environment. Self-hosted options support internal privacy controls and data
+                residency policies.
+              </BenefitItem>
+              <BenefitItem
+                styles={styles}
+                icon={<MonitorHeartIcon className={styles.benefitIcon} />}
+                title="Continuous compliance monitoring"
+              >
+                Integrate with CI/CD pipelines to catch compliance regressions before deployment.
+                Track security and discrimination metrics across model updates.
+              </BenefitItem>
+              <BenefitItem
+                styles={styles}
+                icon={<VerifiedUserIcon className={styles.benefitIcon} />}
+                title="Audit-ready documentation"
+              >
+                Generate structured reports for privacy reviews, model governance, and federal and
+                state insurance examinations. Demonstrate due diligence with reproducible test
+                results.
+              </BenefitItem>
             </div>
           </div>
         </section>
@@ -416,36 +369,30 @@ export default function Insurance() {
             </p>
 
             <div className={styles.solutionGrid}>
-              <div className={styles.solutionCard}>
-                <div className={styles.solutionTitle}>
-                  <ShieldIcon className={styles.solutionIcon} />
-                  Provider Status Accuracy
-                </div>
-                <p>
-                  Test whether AI correctly identifies in-network vs out-of-network providers,
-                  facility status, tiering, and appointment or intake availability.
-                </p>
-              </div>
-              <div className={styles.solutionCard}>
-                <div className={styles.solutionTitle}>
-                  <HomeRepairServiceIcon className={styles.solutionIcon} />
-                  Preferred Vendor Verification
-                </div>
-                <p>
-                  Detect when AI references terminated contractor, body shop, rental partner, or
-                  provider agreements that could expose policyholders to unexpected costs.
-                </p>
-              </div>
-              <div className={styles.solutionCard}>
-                <div className={styles.solutionTitle}>
-                  <VerifiedUserIcon className={styles.solutionIcon} />
-                  Capacity & Credentialing
-                </div>
-                <p>
-                  Identify when AI directs policyholders to providers or vendors that are
-                  unavailable, unlicensed, not accepting work, or no longer in the network.
-                </p>
-              </div>
+              <ApplicationCard
+                styles={styles}
+                icon={<ShieldIcon className={styles.solutionIcon} />}
+                title="Provider Status Accuracy"
+              >
+                Test whether AI correctly identifies in-network vs out-of-network providers,
+                facility status, tiering, and appointment or intake availability.
+              </ApplicationCard>
+              <ApplicationCard
+                styles={styles}
+                icon={<HomeRepairServiceIcon className={styles.solutionIcon} />}
+                title="Preferred Vendor Verification"
+              >
+                Detect when AI references terminated contractor, body shop, rental partner, or
+                provider agreements that could expose policyholders to unexpected costs.
+              </ApplicationCard>
+              <ApplicationCard
+                styles={styles}
+                icon={<VerifiedUserIcon className={styles.solutionIcon} />}
+                title="Capacity & Credentialing"
+              >
+                Identify when AI directs policyholders to providers or vendors that are unavailable,
+                unlicensed, not accepting work, or no longer in the network.
+              </ApplicationCard>
             </div>
           </div>
         </section>

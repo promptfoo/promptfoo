@@ -21,6 +21,8 @@ import {
   createIterationContext,
   externalizeResponseForRedteamHistory,
   getTargetResponse,
+  isTargetCallAbortError,
+  preserveSelectedError,
   redteamProviderManager,
   type TargetResponse,
 } from './shared';
@@ -390,7 +392,6 @@ async function runRedteamConversation({
       );
       targetResponse = await externalizeResponseForRedteamHistory(targetResponse, {
         evalId: context?.evaluationId,
-        isCancelled: context?.isCancelled,
         testIdx: context?.testIdx,
         promptIdx: context?.promptIdx,
       });
@@ -400,6 +401,9 @@ async function runRedteamConversation({
       if (targetResponse.error) {
         logger.debug(`Iteration ${i + 1}: Target provider error: ${targetResponse.error}`);
         // Keep lastResponse with its output so final result can surface mapped output while marking error
+        if (options?.abortSignal?.aborted) {
+          break;
+        }
         continue;
       }
 
@@ -575,7 +579,7 @@ async function runRedteamConversation({
       }
     } catch (err) {
       // Re-throw abort errors to properly cancel the operation
-      if (err instanceof Error && err.name === 'AbortError') {
+      if (isTargetCallAbortError(err, options?.abortSignal)) {
         throw err;
       }
       logger.error(`Iteration ${i + 1} failed: ${err}`);
@@ -583,22 +587,25 @@ async function runRedteamConversation({
     }
   }
 
-  return {
-    output:
-      bestResponse?.output ||
-      (typeof lastResponse?.output === 'string' ? lastResponse.output : undefined),
-    prompt: targetPrompt || undefined,
-    metadata: {
-      finalIteration,
-      highestScore,
-      redteamHistory,
-      redteamFinalPrompt: targetPrompt || undefined,
-      bestImageUrl: bestResponse?.imageUrl,
-      bestImageDescription: bestResponse?.imageDescription,
+  return preserveSelectedError(
+    {
+      output:
+        bestResponse?.output ||
+        (typeof lastResponse?.output === 'string' ? lastResponse.output : undefined),
+      prompt: targetPrompt || undefined,
+      metadata: {
+        finalIteration,
+        highestScore,
+        redteamHistory,
+        redteamFinalPrompt: targetPrompt || undefined,
+        bestImageUrl: bestResponse?.imageUrl,
+        bestImageDescription: bestResponse?.imageDescription,
+      },
+      tokenUsage: totalTokenUsage,
+      ...(lastResponse?.error ? { error: lastResponse.error } : {}),
     },
-    tokenUsage: totalTokenUsage,
-    ...(lastResponse?.error ? { error: lastResponse.error } : {}),
-  };
+    lastResponse,
+  );
 }
 
 class RedteamIterativeProvider implements ApiProvider {

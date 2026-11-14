@@ -1,4 +1,5 @@
 const express = require('express');
+const defaultErrorHandler = require('./defaultErrorHandler.cjs');
 const https = require('https');
 const fs = require('fs');
 const crypto = require('crypto');
@@ -118,6 +119,8 @@ app.post('/chat', chatRateLimiter, validateSignature, async (req, res) => {
 });
 
 const PORT = process.env.PORT || 2347;
+
+app.use(defaultErrorHandler);
 
 // Initialize the server
 async function startServer() {

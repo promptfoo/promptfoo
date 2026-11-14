@@ -1,12 +1,8 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 import * as yaml from 'js-yaml';
 import { loadYaml } from '../src/util/yamlLoad';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 /**
  * Represents the structure of package.json file
@@ -94,8 +90,8 @@ async function getReleaseDate(version: string): Promise<string | null> {
  * @throws {Error} If there's an issue reading or writing files
  */
 export const updateCitation = async (): Promise<void> => {
-  const packageJsonPath: string = path.join(__dirname, '../package.json');
-  const citationPath: string = path.join(__dirname, '../CITATION.cff');
+  const packageJsonPath: string = path.join(import.meta.dirname, '../package.json');
+  const citationPath: string = path.join(import.meta.dirname, '../CITATION.cff');
 
   const packageJson: PackageJson = JSON.parse(await fs.readFile(packageJsonPath, 'utf8'));
 

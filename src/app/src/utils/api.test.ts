@@ -23,8 +23,6 @@ const mockState = (apiBaseUrl: string) =>
   ({
     apiBaseUrl,
     setApiBaseUrl: vi.fn(),
-    fetchingPromise: null,
-    setFetchingPromise: vi.fn(),
     persistApiBaseUrl: false,
     enablePersistApiBaseUrl: vi.fn(),
   }) as ReturnType<typeof useApiConfig.getState>;

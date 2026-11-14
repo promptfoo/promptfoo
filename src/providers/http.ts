@@ -6,7 +6,7 @@ import path from 'path';
 
 import httpZ from 'http-z';
 import { LRUCache } from 'lru-cache';
-import { Agent, type Dispatcher, interceptors } from 'undici';
+import { Agent, type Dispatcher } from 'undici';
 import { z } from 'zod';
 import { fetchWithCache } from '../cache';
 import cliState from '../cliState';
@@ -21,7 +21,10 @@ import { HttpTlsFieldsSchema } from '../contracts/providerConfig/httpTls';
 import { getEnvString } from '../envars';
 import { importModule } from '../esm';
 import logger from '../logger';
-import { stripDecompressionHeaders } from '../util/fetch/stripDecompressionHeaders';
+import {
+  createDecompressionInterceptor,
+  stripDecompressionHeaders,
+} from '../util/fetch/decompress';
 import {
   maybeLoadConfigFromExternalFile,
   maybeLoadFromExternalFile,
@@ -32,7 +35,9 @@ import { renderVarsInObject } from '../util/index';
 import invariant from '../util/invariant';
 import { safeJsonStringify } from '../util/json';
 import { TOKEN_REFRESH_BUFFER_MS } from '../util/oauth';
+import { optionalPackageInstallHint } from '../util/packageImportErrors';
 import { safeResolve } from '../util/pathUtils';
+import { readPfxPrivateKey } from '../util/pfx';
 import {
   isSecretField,
   looksLikeSecret,
@@ -321,17 +326,15 @@ export function urlEncodeRawRequestPath(rawRequest: string) {
     // Use the built-in URL class to parse and encode the URL
     const parsedUrl = new URL(url, 'http://placeholder-base.com');
 
-    // Replace the original URL in the first line
-    rawRequest = rawRequest.replace(
+    // A callback preserves literal dollar patterns in the URL.
+    return rawRequest.replace(
       firstLine,
-      `${method} ${parsedUrl.pathname}${parsedUrl.search}${protocol ? ' ' + protocol : ''}`,
+      () => `${method} ${parsedUrl.pathname}${parsedUrl.search}${protocol ? ' ' + protocol : ''}`,
     );
   } catch (err) {
     logger.error(`[Http Provider] Error parsing URL in HTTP request: ${String(err)}`);
     throw new Error(`[Http Provider] Error parsing URL in HTTP request: ${String(err)}`);
   }
-
-  return rawRequest;
 }
 
 /**
@@ -447,7 +450,7 @@ export async function generateSignature(
         // Use eval to avoid TypeScript static analysis of the dynamic import
         const jksModule = await import('jks-js').catch(() => {
           throw new Error(
-            'JKS certificate support requires the "jks-js" package. Install it with: npm install jks-js',
+            `JKS certificate support requires the "jks-js" package. ${optionalPackageInstallHint('npm install promptfoo jks-js@^1.1.5')}`,
           );
         });
 
@@ -523,90 +526,21 @@ export async function generateSignature(
             );
           }
 
-          try {
-            // Use eval to avoid TypeScript static analysis of the dynamic import
-            const pemModule = await import('pem').catch(() => {
-              throw new Error(
-                'PFX certificate support requires the "pem" package. Install it with: npm install pem',
-              );
-            });
-
-            const pem = pemModule.default as any;
-
-            let result: { key: string; cert: string };
-
-            if (signatureAuth.pfxContent || signatureAuth.certificateContent) {
-              // Use base64 encoded content from database
-              const content = signatureAuth.pfxContent || signatureAuth.certificateContent;
-              logger.debug(`[Signature Auth] Loading PFX from base64 content`);
-              const pfxBuffer = Buffer.from(content, 'base64');
-
-              logger.debug(
-                `[Signature Auth][PFX] Base64 content length: ${content.length}, decoded bytes: ${pfxBuffer.byteLength}`,
-              );
-
-              result = await new Promise<{ key: string; cert: string }>((resolve, reject) => {
-                pem.readPkcs12(pfxBuffer, { p12Password: pfxPassword }, (err: any, data: any) => {
-                  if (err) {
-                    reject(err);
-                  } else {
-                    resolve(data);
-                  }
-                });
-              });
-            } else {
-              // Use file path (existing behavior)
-              const resolvedPath = safeResolve(cliState.basePath || '', signatureAuth.pfxPath);
-              logger.debug(`[Signature Auth] Loading PFX file: ${resolvedPath}`);
-              try {
-                const stat = await fs.stat(resolvedPath);
-                logger.debug(`[Signature Auth][PFX] PFX file size: ${stat.size} bytes`);
-              } catch (e) {
-                logger.debug(`[Signature Auth][PFX] Could not stat PFX file: ${String(e)}`);
-              }
-
-              result = await new Promise<{ key: string; cert: string }>((resolve, reject) => {
-                pem.readPkcs12(
-                  resolvedPath,
-                  { p12Password: pfxPassword },
-                  (err: any, data: any) => {
-                    if (err) {
-                      reject(err);
-                    } else {
-                      resolve(data);
-                    }
-                  },
-                );
-              });
-            }
-
-            if (!result.key) {
-              logger.error('[Signature Auth][PFX] No private key extracted from PFX');
-              throw new Error('No private key found in PFX file');
-            }
-
-            privateKey = result.key;
-            keySource =
-              signatureAuth.pfxContent || signatureAuth.certificateContent
-                ? 'pfxContent'
-                : `pfxPath ${safeResolve(cliState.basePath || '', signatureAuth.pfxPath)}`;
-            logger.debug(
-              `[Signature Auth] Successfully extracted private key from PFX using pem library`,
+          const openssl = getEnvString('OPENSSL_BIN') || 'openssl';
+          if (hasPfxContent) {
+            keySource = 'pfxContent';
+            privateKey = await readPfxPrivateKey(
+              Buffer.from(hasPfxContent, 'base64'),
+              pfxPassword,
+              openssl,
             );
-          } catch (err) {
-            if (err instanceof Error) {
-              if (err.message.includes('ENOENT') && signatureAuth.pfxPath) {
-                const resolvedPath = safeResolve(cliState.basePath || '', signatureAuth.pfxPath);
-                throw new Error(`PFX file not found: ${resolvedPath}`);
-              }
-              if (err.message.includes('invalid') || err.message.includes('decrypt')) {
-                throw new Error(`Invalid PFX file format or wrong password: ${err.message}`);
-              }
+          } else {
+            const resolvedPath = safeResolve(cliState.basePath || '', signatureAuth.pfxPath);
+            if (!(await pathExists(resolvedPath))) {
+              throw new Error(`PFX file not found: ${resolvedPath}`);
             }
-            logger.error(`Error loading PFX certificate: ${String(err)}`);
-            throw new Error(
-              `Failed to load PFX certificate. Make sure the ${signatureAuth.pfxContent || signatureAuth.certificateContent ? 'content is valid' : 'file exists'} and the password is correct: ${String(err)}`,
-            );
+            keySource = `pfxPath ${resolvedPath}`;
+            privateKey = await readPfxPrivateKey(resolvedPath, pfxPassword, openssl);
           }
         } else if (hasCertAndKey) {
           try {
@@ -1599,7 +1533,7 @@ async function createHttpsAgent(
     try {
       const jksModule = await import('jks-js').catch(() => {
         throw new Error(
-          'JKS certificate support requires the "jks-js" package. Install it with: npm install jks-js',
+          `JKS certificate support requires the "jks-js" package. ${optionalPackageInstallHint('npm install promptfoo jks-js@^1.1.5')}`,
         );
       });
       const jks = jksModule as any;
@@ -1740,7 +1674,7 @@ async function createHttpsAgent(
   return new Agent({
     connect: tlsOptions,
   })
-    .compose(interceptors.decompress({ skipErrorResponses: false }))
+    .compose(createDecompressionInterceptor())
     .compose(stripDecompressionHeaders());
 }
 

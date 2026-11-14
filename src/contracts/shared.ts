@@ -64,6 +64,14 @@ export type DocxInjectionPlacement = z.infer<typeof DocxInjectionPlacementSchema
 export const DocumentMediaInjectionPlacementValues = ['body', 'header', 'footer'] as const;
 export const DocumentMediaInjectionPlacementSchema = z.enum(DocumentMediaInjectionPlacementValues);
 
+// Exhaustive mapping keeps runtime validation and portable structural variants in sync.
+const InputPlacementSchemas = {
+  text: z.string().min(1),
+  pdf: DocumentMediaInjectionPlacementSchema,
+  docx: DocxInjectionPlacementSchema,
+  image: DocumentMediaInjectionPlacementSchema,
+} satisfies Record<InputType, z.ZodType<string>>;
+
 export const InputConfigSchema = z.object({
   benign: z.boolean().optional(),
   inputPurpose: z
@@ -79,38 +87,36 @@ export const InputConfigSchema = z.object({
 });
 export type InputConfig = z.infer<typeof InputConfigSchema>;
 
-export const InputDefinitionObjectSchema = z
-  .object({
-    config: InputConfigSchema.optional(),
-    description: z.string().min(1, {
-      error: 'Input descriptions must be non-empty strings',
-    }),
-    type: InputTypeSchema.optional(),
-  })
-  .superRefine((input, ctx) => {
-    const inputType = input.type ?? 'text';
-    const injectionPlacements = input.config?.injectionPlacements ?? [];
+const InputDefinitionFieldsSchema = z.object({
+  config: InputConfigSchema.optional(),
+  description: z.string().min(1, {
+    error: 'Input descriptions must be non-empty strings',
+  }),
+  type: InputTypeSchema.optional(),
+});
 
-    if (inputType === 'text' || injectionPlacements.length === 0) {
-      return;
-    }
+export const InputDefinitionObjectSchema = InputDefinitionFieldsSchema.superRefine((input, ctx) => {
+  const inputType = input.type ?? 'text';
+  const injectionPlacements = input.config?.injectionPlacements ?? [];
 
-    const placementSchema =
-      inputType === 'docx' ? DocxInjectionPlacementSchema : DocumentMediaInjectionPlacementSchema;
-    const placementValues =
-      inputType === 'docx' ? DocxInjectionPlacementValues : DocumentMediaInjectionPlacementValues;
-    const invalidPlacements = injectionPlacements.filter(
-      (placement) => !placementSchema.safeParse(placement).success,
-    );
+  if (inputType === 'text' || injectionPlacements.length === 0) {
+    return;
+  }
 
-    if (invalidPlacements.length > 0) {
-      ctx.addIssue({
-        code: 'custom',
-        path: ['config', 'injectionPlacements'],
-        message: `Invalid ${inputType.toUpperCase()} injection placements: ${invalidPlacements.join(', ')}. Expected one of: ${placementValues.join(', ')}`,
-      });
-    }
-  });
+  const placementSchema = InputPlacementSchemas[inputType];
+  const placementValues = InputPlacementSchemas[inputType].options;
+  const invalidPlacements = injectionPlacements.filter(
+    (placement) => !placementSchema.safeParse(placement).success,
+  );
+
+  if (invalidPlacements.length > 0) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['config', 'injectionPlacements'],
+      message: `Invalid ${inputType.toUpperCase()} injection placements: ${invalidPlacements.join(', ')}. Expected one of: ${placementValues.join(', ')}`,
+    });
+  }
+});
 
 export const InputDefinitionSchema = z.union([
   z.string().min(1, {
@@ -184,6 +190,34 @@ export function buildInputPromptDescription(input: InputDefinition): string {
 const InputVariableNameSchema = z.string().regex(/^[a-zA-Z_][a-zA-Z0-9_]*$/, {
   error: 'Input variable names must be valid identifiers (start with letter or underscore)',
 });
+
+function documentInputSchema<T extends Exclude<InputType, 'text'>>(type: T) {
+  return InputDefinitionFieldsSchema.strict().extend({
+    type: z.literal(type),
+    config: InputConfigSchema.strict()
+      .extend({
+        injectionPlacements: z.array(InputPlacementSchemas[type]).min(1).optional(),
+      })
+      .optional(),
+  });
+}
+
+// The exhaustive keys also preserve each type's placement literals in inferred types.
+const StructuralInputDefinitions = {
+  text: InputDefinitionFieldsSchema.strict().extend({
+    type: z.literal('text').optional(),
+    config: InputConfigSchema.strict().optional(),
+  }),
+  pdf: documentInputSchema('pdf'),
+  docx: documentInputSchema('docx'),
+  image: documentInputSchema('image'),
+} satisfies Record<InputType, z.ZodType>;
+
+/** Strict serializable input definitions; runtime schemas retain stripping and diagnostics. */
+export const InputsInputSchema = z.record(
+  InputVariableNameSchema,
+  z.union([InputDefinitionSchema.options[0], ...Object.values(StructuralInputDefinitions)]),
+);
 
 // Inputs schema for multi-variable test case generation.
 // Keys are variable names, values are descriptions or typed definitions for what the variable should contain.

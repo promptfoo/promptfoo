@@ -18,10 +18,7 @@ interface State {
  * Catches rendering errors and displays a fallback UI instead of crashing.
  */
 export class StoreErrorBoundary extends Component<Props, State> {
-  constructor(props: Props) {
-    super(props);
-    this.state = { hasError: false, error: null };
-  }
+  state: Readonly<State> = { hasError: false, error: null };
 
   static getDerivedStateFromError(error: Error): State {
     return { hasError: true, error };
@@ -31,10 +28,6 @@ export class StoreErrorBoundary extends Component<Props, State> {
     // Log error for debugging (could send to error tracking service)
     console.error('[Store] Error caught by boundary:', error, errorInfo);
   }
-
-  handleRetry = (): void => {
-    this.setState({ hasError: false, error: null });
-  };
 
   render(): React.ReactNode {
     if (this.state.hasError) {
@@ -59,7 +52,7 @@ export class StoreErrorBoundary extends Component<Props, State> {
           </Typography>
           <Button
             variant="contained"
-            onClick={this.handleRetry}
+            onClick={() => this.setState({ hasError: false, error: null })}
             sx={{
               mt: 2,
               backgroundColor: 'var(--ifm-color-primary-darker)',

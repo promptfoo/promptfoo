@@ -277,11 +277,7 @@ async function removeTemporaryJsonlOutput(tempOutputPath: string): Promise<void>
   });
 }
 
-const outputToSimpleString = (output: EvaluateTableOutput | undefined) => {
-  if (!output) {
-    return '';
-  }
-
+const outputToSimpleString = (output: EvaluateTableOutput) => {
   const passFailText = output.pass
     ? '[PASS]'
     : output.failureReason === ResultFailureReason.ASSERT
@@ -306,11 +302,7 @@ const outputToSimpleString = (output: EvaluateTableOutput | undefined) => {
     `.trim();
 };
 
-const outputToHtmlReportCell = (output?: EvaluateTableOutput) => {
-  if (!output) {
-    return {};
-  }
-
+const outputToHtmlReportCell = (output: EvaluateTableOutput) => {
   const status = output.pass
     ? 'pass'
     : output.failureReason === ResultFailureReason.ERROR
@@ -349,34 +341,6 @@ const outputToHtmlReportCell = (output?: EvaluateTableOutput) => {
         : '',
   };
 };
-
-type EvalTableForHtml = NonNullable<Awaited<ReturnType<Eval['getTable']>>>;
-
-function buildHtmlReportTable(table: EvalTableForHtml) {
-  return [
-    [
-      ...table.head.vars,
-      ...table.head.prompts.map((prompt) => `[${prompt.provider}] ${prompt.label}`),
-    ],
-    ...table.body.map((row, rowIndex) => [
-      ...row.vars.map((value, variableIndex) => ({
-        kind: 'variable',
-        name: table.head.vars[variableIndex],
-        text: value,
-      })),
-      ...Array.from({ length: table.head.prompts.length }, (_, outputIndex) => {
-        const output = row.outputs[outputIndex];
-        return {
-          kind: 'output',
-          detailId: `result-detail-${rowIndex}-${outputIndex}`,
-          detailTitle: `Result detail - row ${rowIndex + 1}, prompt ${outputIndex + 1}`,
-          description: row.description || row.test?.description || '',
-          ...outputToHtmlReportCell(output),
-        };
-      }),
-    ]),
-  ];
-}
 
 async function createOutputSummary(
   evalRecord: Eval,
@@ -568,47 +532,6 @@ async function writeJsonOutputSafely(
   }
 }
 
-async function writeHtmlOutput(outputPath: string, evalRecord: Eval): Promise<void> {
-  const table = await evalRecord.getTable();
-  invariant(table, 'Table is required');
-  const stripFlags = getStripFlags(evalRecord.config.env);
-  const summary = await createOutputSummary(evalRecord, stripFlags);
-  const redactedConfig = sanitizeConfigForOutput(evalRecord.config, stripFlags);
-  const metadata = createOutputMetadata(evalRecord);
-  const template = await fsPromises.readFile(
-    path.join(getDirectory(), 'tableOutput.html'),
-    'utf-8',
-  );
-  const htmlTable = buildHtmlReportTable(table);
-  const reportOutputs = table.body.flatMap((row) =>
-    row.outputs.filter((output): output is EvaluateTableOutput => Boolean(output)),
-  );
-  const totalResults = reportOutputs.length;
-  const successes = reportOutputs.filter((output) => output.pass).length;
-  const errors = reportOutputs.filter(
-    (output) => !output.pass && output.failureReason === ResultFailureReason.ERROR,
-  ).length;
-  const failures = totalResults - successes - errors;
-  const passRate = totalResults > 0 ? (successes / totalResults) * 100 : 0;
-  const htmlOutput = getNunjucksEngine().renderString(template, {
-    config: redactedConfig,
-    table: htmlTable,
-    results: summary,
-    metadata,
-    report: {
-      totalResults,
-      totalRows: table.body.length,
-      promptCount: table.head.prompts.length,
-      variableCount: table.head.vars.length,
-      successes,
-      failures,
-      errors,
-      passRateDisplay: `${passRate.toFixed(1)}%`,
-    },
-  });
-  await fsPromises.writeFile(outputPath, htmlOutput);
-}
-
 export async function writeOutput(
   outputPath: string,
   evalRecord: Eval,
@@ -617,7 +540,6 @@ export async function writeOutput(
 ) {
   if (outputPath.match(/^https:\/\/docs\.google\.com\/spreadsheets\//)) {
     const table = await evalRecord.getTable();
-    invariant(table, 'Table is required');
     const rows = table.body.map((row) => {
       const csvRow: CsvRow = {};
       table.head.vars.forEach((varName, index) => {
@@ -667,7 +589,60 @@ export async function writeOutput(
       yaml.dump(await createOutputData(evalRecord, shareableUrl, options)),
     );
   } else if (outputExtension === 'html') {
-    await writeHtmlOutput(outputPath, evalRecord);
+    const table = await evalRecord.getTable();
+    const stripFlags = getStripFlags(evalRecord.config.env);
+    const summary = await createOutputSummary(evalRecord, stripFlags);
+    const redactedConfig = sanitizeConfigForOutput(evalRecord.config, stripFlags);
+    const metadata = createOutputMetadata(evalRecord);
+    const template = await fsPromises.readFile(
+      path.join(getDirectory(), 'tableOutput.html'),
+      'utf-8',
+    );
+    const htmlTable = [
+      [
+        ...table.head.vars,
+        ...table.head.prompts.map((prompt) => `[${prompt.provider}] ${prompt.label}`),
+      ],
+      ...table.body.map((row, rowIndex) => [
+        ...row.vars.map((value, variableIndex) => ({
+          kind: 'variable',
+          name: table.head.vars[variableIndex],
+          text: value,
+        })),
+        ...row.outputs.map((output, outputIndex) => ({
+          kind: 'output',
+          detailId: `result-detail-${rowIndex}-${outputIndex}`,
+          detailTitle: `Result detail - row ${rowIndex + 1}, prompt ${outputIndex + 1}`,
+          description: row.description || row.test?.description || '',
+          ...outputToHtmlReportCell(output),
+        })),
+      ]),
+    ];
+    const reportOutputs = table.body.flatMap((row) => row.outputs);
+    const totalResults = reportOutputs.length;
+    const successes = reportOutputs.filter((output) => output.pass).length;
+    const errors = reportOutputs.filter(
+      (output) => !output.pass && output.failureReason === ResultFailureReason.ERROR,
+    ).length;
+    const failures = totalResults - successes - errors;
+    const passRate = totalResults > 0 ? (successes / totalResults) * 100 : 0;
+    const htmlOutput = getNunjucksEngine().renderString(template, {
+      config: redactedConfig,
+      table: htmlTable,
+      results: summary,
+      metadata,
+      report: {
+        totalResults,
+        totalRows: table.body.length,
+        promptCount: table.head.prompts.length,
+        variableCount: table.head.vars.length,
+        successes,
+        failures,
+        errors,
+        passRateDisplay: `${passRate.toFixed(1)}%`,
+      },
+    });
+    await fsPromises.writeFile(outputPath, htmlOutput);
   } else if (outputExtension === 'jsonl') {
     const jsonlOutputPath = await resolveJsonlOutputPath(outputPath);
     if (jsonlOutputPath !== outputPath) {
@@ -738,12 +713,6 @@ export async function writeOutput(
     const sanitizeForXml = (obj: any): any => {
       if (obj === null || obj === undefined) {
         return '';
-      }
-      if (typeof obj === 'boolean' || typeof obj === 'number') {
-        return String(obj);
-      }
-      if (typeof obj === 'string') {
-        return obj;
       }
       if (Array.isArray(obj)) {
         return obj.map(sanitizeForXml);

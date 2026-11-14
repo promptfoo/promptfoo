@@ -70,26 +70,10 @@ describe('shared cloud configuration', () => {
     await waitFor(() => views.forEach((view) => expect(view.result.current.data).toEqual(enabled)));
   });
 
-  it('keeps the newer explicit refetch when the initial request finishes last', async () => {
+  it('keeps loading until the replacement endpoint request finishes', async () => {
     const view = mount();
     act(() => {
-      view.result.current.refetch();
-    });
-    await waitFor(() => expect(requests).toHaveLength(2));
-    await act(async () => {
-      requests[1].resolve(response(disabled));
-    });
-    await waitFor(() => expect(view.result.current.data).toEqual(disabled));
-    await act(async () => {
-      requests[0].resolve(response(enabled));
-    });
-    expect(view.result.current.data).toEqual(disabled);
-  });
-
-  it('keeps loading until the newer explicit refetch finishes', async () => {
-    const view = mount();
-    act(() => {
-      view.result.current.refetch();
+      useApiConfig.getState().setApiBaseUrl('https://api-b.example');
     });
     await waitFor(() => expect(requests).toHaveLength(2));
     await act(async () => {
@@ -101,6 +85,49 @@ describe('shared cloud configuration', () => {
       requests[1].resolve(response(disabled));
     });
     await waitFor(() => expect(view.result.current.data).toEqual(disabled));
+  });
+
+  it('refreshes shared data when a later consumer mounts', async () => {
+    const first = mount();
+    await act(async () => requests[0].resolve(response(enabled)));
+    await waitFor(() => expect(first.result.current.data).toEqual(enabled));
+    const second = mount();
+    await waitFor(() => expect(requests).toHaveLength(2));
+    // Query observers deliver subscription updates asynchronously.
+    await waitFor(() => expect(first.result.current.isLoading).toBe(true));
+    expect(first.result.current.data).toEqual(enabled);
+    expect(requests[1].url).toBe('https://api-a.example/api/user/cloud-config');
+    expect(requests[1].signal).toBeInstanceOf(AbortSignal);
+    await act(async () => requests[1].resolve(response(disabled)));
+    await waitFor(() => {
+      for (const view of [first, second]) {
+        expect(view.result.current).toMatchObject({
+          data: disabled,
+          isLoading: false,
+          error: null,
+        });
+      }
+    });
+  });
+
+  it('retains cached data when a later consumer refresh fails', async () => {
+    const first = mount();
+    await act(async () => requests[0].resolve(response(enabled)));
+    await waitFor(() => expect(first.result.current.data).toEqual(enabled));
+    const second = mount();
+    await waitFor(() => expect(requests).toHaveLength(2));
+    await waitFor(() => expect(first.result.current.isLoading).toBe(true));
+    await act(async () => requests[1].reject(new Error('Refetch failed')));
+    // Data should remain unchanged when refetch fails
+    await waitFor(() => {
+      for (const view of [first, second]) {
+        expect(view.result.current).toMatchObject({
+          data: enabled,
+          isLoading: false,
+          error: 'Refetch failed',
+        });
+      }
+    });
   });
 
   it('cancels a shared request only after its last consumer unmounts', () => {
@@ -210,7 +237,7 @@ describe('shared cloud configuration', () => {
     });
     await waitFor(() => expect(view.result.current.error).toBe('Initial failure'));
     act(() => {
-      view.result.current.refetch();
+      mount();
     });
     await waitFor(() => expect(view.result.current.isLoading).toBe(true));
     expect(view.result.current.error).toBeNull();
@@ -218,6 +245,8 @@ describe('shared cloud configuration', () => {
       requests[1].resolve(response(enabled));
     });
     await waitFor(() => expect(view.result.current.data).toEqual(enabled));
+    expect(view.result.current.error).toBeNull();
+    expect(view.result.current.isLoading).toBe(false);
   });
 
   it('fetches fresh configuration on an A-to-B-to-A endpoint round trip', async () => {

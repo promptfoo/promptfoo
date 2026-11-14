@@ -1,6 +1,6 @@
 ---
 sidebar_label: Simulated User
-description: 'Simulate realistic user interactions and behaviors for comprehensive testing of conversational AI systems and chatbots'
+description: 'Simulate realistic user interactions and behaviors for testing of conversational AI systems and chatbots'
 ---
 
 # Simulated User
@@ -131,6 +131,7 @@ This allows you to control how much new interaction happens while testing from a
 Here's a simple example testing a customer service agent:
 
 ```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - You are a helpful customer service agent. Answer questions politely and try to resolve issues.
 
@@ -199,11 +200,11 @@ tests:
 
 This enables automatic evaluation of whether your agent successfully handles different customer types and scenarios.
 
-For a complete working example with 31 customer personas and comprehensive assertions, see the [Simulated User example](https://github.com/promptfoo/promptfoo/tree/main/examples/integration-tau).
+For a complete working example with 31 customer personas and assertions, see the [Simulated User example](https://github.com/promptfoo/promptfoo/tree/main/examples/integration-tau).
 
 ### Using with Custom Providers
 
-The Simulated User Provider works seamlessly with custom providers (Python, JavaScript, etc.). All test-level `vars` are automatically passed to your custom provider's context, allowing you to access dynamic values like user IDs, session data, or routing information during conversations.
+The Simulated User Provider works with custom providers (Python, JavaScript, etc.). All test-level `vars` are automatically passed to your custom provider's context, allowing you to access dynamic values like user IDs, session data, or routing information during conversations.
 
 ```yaml
 providers:

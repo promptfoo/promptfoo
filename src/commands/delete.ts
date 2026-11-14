@@ -5,10 +5,9 @@ import telemetry from '../telemetry';
 import {
   deleteAllEvals,
   deleteEval,
-  deleteEvalResult,
+  deleteEvalResultById,
   EvalResultNotFoundError,
-  getEvalFromId,
-  getEvalIdForResult,
+  hasRecentEvalWithIdPrefix,
 } from '../util/database';
 import { setupEnv } from '../util/index';
 import type { Command } from 'commander';
@@ -37,13 +36,7 @@ export async function handleEvalDeleteAll() {
 
 export async function handleEvalResultDelete(resultId: string) {
   try {
-    const evalId = await getEvalIdForResult(resultId);
-    if (!evalId) {
-      logger.error(`No eval result found with ID ${resultId}.`);
-      process.exitCode = 1;
-      return;
-    }
-    await deleteEvalResult(evalId, resultId);
+    await deleteEvalResultById(resultId);
     logger.info(`Eval result with ID ${resultId} has been successfully deleted.`);
   } catch (error) {
     if (error instanceof EvalResultNotFoundError) {
@@ -69,8 +62,7 @@ export function deleteCommand(program: Command) {
         name: 'delete',
       });
 
-      const evl = await getEvalFromId(id);
-      if (evl) {
+      if (await hasRecentEvalWithIdPrefix(id)) {
         return handleEvalDelete(id, cmdObj.envPath);
       }
 

@@ -1,7 +1,15 @@
+const { createLoggerModule } = await vi.hoisted(async () => import('../factories/logger'));
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../src/cache';
 import { createLiteLLMProvider, LiteLLMProvider } from '../../src/providers/litellm';
+import { createApiKeyOptions } from '../factories/literalFixtures';
 import { mockProcessEnv } from '../util/utils';
+import { createMockChatResponse, createMockFetchResponse } from './mockProviderResponses';
+
+const createNestedApiKeyConfig = () => ({
+  config: createApiKeyOptions(),
+});
 
 vi.mock('../../src/cache', async (importOriginal) => {
   return {
@@ -9,14 +17,7 @@ vi.mock('../../src/cache', async (importOriginal) => {
     fetchWithCache: vi.fn(),
   };
 });
-vi.mock('../../src/logger', () => ({
-  default: {
-    debug: vi.fn(),
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-  },
-}));
+vi.mock('../../src/logger', () => createLoggerModule());
 
 const mockFetchWithCache = vi.mocked(fetchWithCache);
 
@@ -43,6 +44,18 @@ describe('LiteLLM Provider', () => {
     }
   });
   describe('createLiteLLMProvider', () => {
+    const createNestedLiteLlmUrlCheck = () => () => {
+      const customUrl = 'https://custom.litellm.com';
+      const provider = createLiteLLMProvider('litellm:chat:gpt-4', {
+        config: {
+          config: {
+            apiBaseUrl: customUrl,
+          },
+        },
+      });
+      expect(provider.config.apiBaseUrl).toBe(customUrl);
+    };
+
     it('should create a chat provider by default', () => {
       const provider = createLiteLLMProvider('litellm:gpt-4', {});
       expect(provider).toBeInstanceOf(LiteLLMProvider);
@@ -74,17 +87,7 @@ describe('LiteLLM Provider', () => {
       expect(provider.toString()).toContain('LiteLLM Provider embedding');
     });
 
-    it('should use custom apiBaseUrl from config', () => {
-      const customUrl = 'https://custom.litellm.com';
-      const provider = createLiteLLMProvider('litellm:chat:gpt-4', {
-        config: {
-          config: {
-            apiBaseUrl: customUrl,
-          },
-        },
-      });
-      expect(provider.config.apiBaseUrl).toBe(customUrl);
-    });
+    it('should use custom apiBaseUrl from config', createNestedLiteLlmUrlCheck());
 
     it('should use default apiBaseUrl if not provided', () => {
       const provider = createLiteLLMProvider('litellm:chat:gpt-4', {});
@@ -226,17 +229,7 @@ describe('LiteLLM Provider', () => {
         expect(provider3.config.apiBaseUrl).toBe('');
       });
 
-      it('should override default apiBaseUrl with truthy values', () => {
-        const customUrl = 'https://custom.litellm.com';
-        const provider = createLiteLLMProvider('litellm:chat:gpt-4', {
-          config: {
-            config: {
-              apiBaseUrl: customUrl,
-            },
-          },
-        });
-        expect(provider.config.apiBaseUrl).toBe(customUrl);
-      });
+      it('should override default apiBaseUrl with truthy values', createNestedLiteLlmUrlCheck());
 
       it('should use LITELLM_API_BASE from provider env when config.apiBaseUrl is not set', () => {
         const provider = createLiteLLMProvider('litellm:chat:gpt-4', {
@@ -367,26 +360,12 @@ describe('LiteLLM Provider', () => {
   });
 
   describe('Temperature omission for proxy providers (GitHub issue #8044)', () => {
-    const mockResponse = {
-      data: {
-        choices: [{ message: { content: 'Test output' } }],
-        usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
-      },
-      cached: false,
-      status: 200,
-      statusText: 'OK',
-    };
+    const mockResponse = createMockChatResponse();
 
     it('should omit temperature from request body when not configured', async () => {
       mockFetchWithCache.mockResolvedValue(mockResponse);
 
-      const provider = createLiteLLMProvider('litellm:chat:gpt-4', {
-        config: {
-          config: {
-            apiKey: 'test-key',
-          },
-        },
-      });
+      const provider = createLiteLLMProvider('litellm:chat:gpt-4', createNestedApiKeyConfig());
 
       await provider.callApi('Test prompt');
 
@@ -443,13 +422,7 @@ describe('LiteLLM Provider', () => {
       mockFetchWithCache.mockResolvedValue(mockResponse);
       mockProcessEnv({ OPENAI_TEMPERATURE: '0.5' });
 
-      const provider = createLiteLLMProvider('litellm:chat:gpt-4', {
-        config: {
-          config: {
-            apiKey: 'test-key',
-          },
-        },
-      });
+      const provider = createLiteLLMProvider('litellm:chat:gpt-4', createNestedApiKeyConfig());
 
       await provider.callApi('Test prompt');
 
@@ -502,13 +475,7 @@ describe('LiteLLM Provider', () => {
     it('should omit max_tokens from request body when not configured', async () => {
       mockFetchWithCache.mockResolvedValue(mockResponse);
 
-      const provider = createLiteLLMProvider('litellm:chat:gpt-4', {
-        config: {
-          config: {
-            apiKey: 'test-key',
-          },
-        },
-      });
+      const provider = createLiteLLMProvider('litellm:chat:gpt-4', createNestedApiKeyConfig());
 
       await provider.callApi('Test prompt');
 
@@ -529,18 +496,16 @@ describe('LiteLLM Provider', () => {
 
     afterEach(() => restoreEnv());
 
-    const unauthorized = {
-      data: {
+    const unauthorized = createMockFetchResponse(
+      {
         error: {
           message: 'Authentication Error, No api key passed in.',
           type: 'auth_error',
           code: '401',
         },
       },
-      cached: false,
-      status: 401,
-      statusText: 'Unauthorized',
-    };
+      { status: 401, statusText: 'Unauthorized' },
+    );
 
     it.each(['chat', 'completion', 'embedding'])(
       'explains a keyless %s authentication failure',
@@ -560,12 +525,9 @@ describe('LiteLLM Provider', () => {
 
     it('does not send an OpenAI key to a keyless proxy that accepts the request', async () => {
       mockProcessEnv({ OPENAI_API_KEY: 'openai-only-key' });
-      mockFetchWithCache.mockResolvedValue({
-        data: { choices: [{ message: { content: 'ok' } }] },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      });
+      mockFetchWithCache.mockResolvedValue(
+        createMockFetchResponse({ choices: [{ message: { content: 'ok' } }] }),
+      );
       const provider = createLiteLLMProvider('litellm:chat:test-model');
       const result = await provider.callApi('test');
 
@@ -576,12 +538,12 @@ describe('LiteLLM Provider', () => {
     });
 
     it('does not alter unrelated errors or errors with an explicitly configured credential', async () => {
-      mockFetchWithCache.mockResolvedValueOnce({
-        data: { error: { message: 'Unavailable' } },
-        cached: false,
-        status: 503,
-        statusText: 'Service Unavailable',
-      });
+      mockFetchWithCache.mockResolvedValueOnce(
+        createMockFetchResponse(
+          { error: { message: 'Unavailable' } },
+          { status: 503, statusText: 'Service Unavailable' },
+        ),
+      );
       const keyless = createLiteLLMProvider('litellm:chat:test-model');
       const unavailable = await keyless.callApi('test');
       expect(unavailable.error).toContain('503');

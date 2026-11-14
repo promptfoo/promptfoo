@@ -1,6 +1,5 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 import {
   extractModuleSpecifiers,
@@ -24,7 +23,7 @@ interface PackageJson {
 
 type DependencyKind = 'dependency' | 'optional' | 'peer' | 'optional-peer';
 
-const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const repoRoot = path.resolve(import.meta.dirname, '..');
 const config = readLayerConfig(repoRoot);
 const packageJson = JSON.parse(
   fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8'),

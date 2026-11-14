@@ -75,7 +75,8 @@ The provider returns a Markdown image reference, `![prompt](url)`. To check that
 
 ### Full Example
 
-```yaml
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
   - id: modelslab:image:flux
     config:

@@ -28,9 +28,10 @@ const throttled = () =>
 describe('provider operation retry ownership', () => {
   let registry: RateLimitRegistry;
   beforeEach(() => {
+    // Fake timers keep jittered retries fast without mocking Math.random, which
+    // source-map also uses to choose quicksort pivots while formatting SDK errors.
     vi.useFakeTimers();
     vi.stubEnv('PROMPTFOO_DISABLE_ADAPTIVE_SCHEDULER', 'false');
-    vi.spyOn(Math, 'random').mockReturnValue(0);
     registry = new RateLimitRegistry({ maxConcurrency: 4 });
   });
   afterEach(() => {
@@ -41,7 +42,10 @@ describe('provider operation retry ownership', () => {
     vi.unstubAllEnvs();
   });
 
-  async function invoke(provider: ApiProvider): Promise<ProviderResponse> {
+  async function invoke(
+    provider: ApiProvider,
+    advanceTimersByMs?: number,
+  ): Promise<ProviderResponse> {
     const pending = withCacheEnabled(false, () =>
       wrapProviderWithRateLimiting(provider, registry).callApi('hello', {
         vars: {},
@@ -49,9 +53,48 @@ describe('provider operation retry ownership', () => {
       }),
     );
     const handled = pending.catch((error: Error) => ({ error: error.message }));
-    await vi.runAllTimersAsync();
+    if (advanceTimersByMs === undefined) {
+      await vi.runAllTimersAsync();
+    } else {
+      await vi.advanceTimersByTimeAsync(advanceTimersByMs);
+    }
     return handled;
   }
+
+  it('delays later n8n calls after a 429 without replaying the webhook', async () => {
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response('busy', {
+          status: 429,
+          statusText: 'Too Many Requests',
+          headers: { 'retry-after': '30' },
+        }),
+      )
+      .mockResolvedValue(
+        new Response(JSON.stringify({ output: 'ready' }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }),
+      );
+    vi.stubGlobal('fetch', fetch);
+    const provider = new N8nProvider('https://retry.fixture.test/n8n');
+    const wrapped = wrapProviderWithRateLimiting(provider, registry);
+    const first = wrapped.callApi('first');
+    await vi.advanceTimersByTimeAsync(0);
+    expect((await first).metadata?.http?.status).toBe(429);
+    expect(fetch).toHaveBeenCalledOnce();
+    const second = wrapped.callApi('second');
+    await vi.advanceTimersByTimeAsync(29_999);
+    expect(fetch).toHaveBeenCalledOnce();
+    await vi.runAllTimersAsync();
+    expect((await second).output).toBe('ready');
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(Object.values(registry.getMetrics())[0]).toMatchObject({
+      failedRequests: 1,
+      retriedRequests: 0,
+    });
+  });
 
   it.each([0, 1, 3])(
     'retains HTTP scheduler recovery with maxRetries=%i after transport exhaustion',
@@ -364,8 +407,8 @@ describe('provider operation retry ownership', () => {
     expect(fetch).toHaveBeenCalledTimes(4);
   });
 
-  it.each(['POST', 'PATCH'] as const)(
-    'does not replay a stateful n8n %s with request-local zero retries',
+  it.each(['GET', 'HEAD', 'PUT', 'POST', 'PATCH'] as const)(
+    'does not replay a stateful n8n webhook %s with request-local zero retries',
     async (method) => {
       const fetch = vi.fn().mockImplementation(async () => throttled());
       vi.stubGlobal('fetch', fetch);
@@ -382,7 +425,7 @@ describe('provider operation retry ownership', () => {
     vi.stubGlobal('fetch', fetch);
     const config = { apiKey: 'fixture', apiBaseUrl: 'https://retry.fixture.test', maxRetries: 1 };
     const provider = new AnthropicMessagesProvider('claude-sonnet-4-6', { config });
-    const result = await invoke(provider);
+    const result = await invoke(provider, 120_000);
     expect(result.error).toContain('429');
     // The SDK's two retries and the scheduler's one retry remain separate.
     expect(fetch).toHaveBeenCalledTimes(6);

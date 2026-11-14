@@ -1,3 +1,4 @@
+import { addCompletionDetails } from '../contracts/completionDetails';
 import {
   BaseTokenUsageSchema,
   type CompletionTokenDetails,
@@ -5,74 +6,22 @@ import {
   type TokenUsage,
 } from '../types/shared';
 
-import type { GradingResult, ProviderResponse } from '../types/index';
-
-export function hasGradingTokenUsage(
-  grade: GradingResult | null | undefined,
-): grade is GradingResult & { tokensUsed: TokenUsage } {
-  return Boolean(
-    grade &&
-      typeof grade === 'object' &&
-      !Array.isArray(grade) &&
-      grade.tokensUsed &&
-      typeof grade.tokensUsed === 'object' &&
-      !Array.isArray(grade.tokensUsed),
-  );
-}
-
-/** Replay the ordinary and comparison phases retained in a persisted result. */
-export function accumulateResultTokenUsage(
-  usage: TokenUsage,
-  result: { response?: ProviderResponse | null; gradingResult?: GradingResult | null },
-): void {
-  accumulateResponseTokenUsage(usage, result.response ?? undefined);
-  const grade = result.gradingResult;
-  if (!hasGradingTokenUsage(grade)) {
-    return;
-  }
-  const comparisons = Array.isArray(grade.componentResults)
-    ? grade.componentResults.filter(
-        (r) => r?.assertion?.type === 'select-best' && hasGradingTokenUsage(r),
-      )
-    : grade.assertion?.type === 'select-best'
-      ? [grade]
-      : [];
-  if (grade.assertion?.type !== 'select-best') {
-    const initialTokens = structuredClone(grade.tokensUsed);
-    const initialUsage: TokenUsage = {
-      assertions: initialTokens,
-      ...(initialTokens.incurredTokenUsage && {
-        incurredTokenUsage: { assertions: initialTokens.incurredTokenUsage },
-      }),
-    };
-    for (const comparison of comparisons) {
-      const comparisonUsage: TokenUsage = initialTokens.incurredTokenUsage
-        ? { incurredTokenUsage: {} }
-        : {};
-      accumulateComparisonTokenUsage(comparisonUsage, comparison.tokensUsed!, {
-        cached: comparison.metadata?.cachedResponse,
-      });
-      subtractTokenUsage(initialUsage, comparisonUsage);
-    }
-    accumulateGradingTokenUsage(usage, initialTokens, { cached: grade.metadata?.cachedResponse });
-  }
-  for (const comparison of comparisons) {
-    accumulateComparisonTokenUsage(usage, comparison.tokensUsed!, {
-      cached: comparison.metadata?.cachedResponse,
-    });
-  }
-}
-
 /**
  * Safely extract token usage carried by a thrown value.
  */
 export function getErrorTokenUsage(error: unknown): TokenUsage | undefined {
-  if (!error || typeof error !== 'object' || !('tokenUsage' in error)) {
+  try {
+    if (!error || typeof error !== 'object' || !('tokenUsage' in error)) {
+      return undefined;
+    }
+
+    const parsedTokenUsage = BaseTokenUsageSchema.safeParse(error.tokenUsage);
+    return parsedTokenUsage.success && Object.keys(parsedTokenUsage.data).length > 0
+      ? parsedTokenUsage.data
+      : undefined;
+  } catch {
     return undefined;
   }
-
-  const parsedTokenUsage = BaseTokenUsageSchema.safeParse(error.tokenUsage);
-  return parsedTokenUsage.success ? parsedTokenUsage.data : undefined;
 }
 
 /**
@@ -176,9 +125,6 @@ function getAccumulatedTokenTotal(usage: Partial<TokenUsage>): number {
   return componentTotal;
 }
 
-/**
- * Helper to accumulate completion details
- */
 function accumulateCompletionDetails(
   target: CompletionTokenDetails | undefined,
   update: CompletionTokenDetails | undefined,
@@ -187,16 +133,7 @@ function accumulateCompletionDetails(
     return target;
   }
 
-  return {
-    reasoning: addNumbers(target?.reasoning, update.reasoning),
-    acceptedPrediction: addNumbers(target?.acceptedPrediction, update.acceptedPrediction),
-    rejectedPrediction: addNumbers(target?.rejectedPrediction, update.rejectedPrediction),
-    cacheReadInputTokens: addNumbers(target?.cacheReadInputTokens, update.cacheReadInputTokens),
-    cacheCreationInputTokens: addNumbers(
-      target?.cacheCreationInputTokens,
-      update.cacheCreationInputTokens,
-    ),
-  };
+  return addCompletionDetails(target, update);
 }
 
 /**
@@ -390,44 +327,6 @@ export function accumulateGradingResponseTokenUsage(
   });
 }
 
-/** Comparison grading already carries its credited request count and logical token totals. */
-export function accumulateComparisonTokenUsage(
-  tokenUsage: TokenUsage,
-  assertionTokens: Partial<TokenUsage>,
-  options?: { cached?: boolean },
-): void {
-  if (tokenUsage && assertionTokens) {
-    const reportedTotal =
-      assertionTokens.total ?? (assertionTokens.prompt ?? 0) + (assertionTokens.completion ?? 0);
-    const cachedTokens = assertionTokens.cached ?? 0;
-    const cachedResponse =
-      options?.cached === true ||
-      (options?.cached === undefined &&
-        assertionTokens.numRequests === 0 &&
-        cachedTokens > 0 &&
-        reportedTotal <= cachedTokens);
-
-    if (cachedResponse && !tokenUsage.incurredTokenUsage) {
-      tokenUsage.incurredTokenUsage = cloneTokenUsageBreakdown(tokenUsage);
-    }
-
-    if (!tokenUsage.assertions) {
-      tokenUsage.assertions = createEmptyAssertions();
-    }
-
-    // Accumulate assertion tokens using the specialized assertion function
-    accumulateAssertionTokenUsage(tokenUsage.assertions, assertionTokens);
-
-    if (tokenUsage.incurredTokenUsage && !cachedResponse) {
-      tokenUsage.incurredTokenUsage.assertions ??= createEmptyAssertions();
-      accumulateAssertionTokenUsage(
-        tokenUsage.incurredTokenUsage.assertions,
-        assertionTokens.incurredTokenUsage ?? assertionTokens,
-      );
-    }
-  }
-}
-
 /** Record logical grading alongside the subset of grading work executed during this run. */
 export function accumulateGradingTokenUsage(
   target: TokenUsage,
@@ -470,53 +369,6 @@ export function accumulateGradingTokenUsage(
       incurredTokenUsage: { assertions: incurredAssertions },
     }),
   });
-}
-
-/** Subtract a normalized contribution without inventing fields absent from legacy aggregates. */
-export function subtractTokenUsage(
-  target: TokenUsage,
-  update: Partial<TokenUsage> | undefined,
-): void {
-  if (!update) {
-    return;
-  }
-  subtractUsageBreakdown(target, update);
-  if (target.incurredTokenUsage) {
-    subtractUsageBreakdown(target.incurredTokenUsage, update.incurredTokenUsage ?? update);
-  }
-}
-
-function subtractUsageBreakdown(target: TokenUsage, update: Partial<TokenUsage>): void {
-  const pairs = [
-    [target, update],
-    [target.assertions, update.assertions],
-    [target.attacker, update.attacker],
-    [target.generation, update.generation],
-  ] as const;
-  for (const [tracked, delta] of pairs) {
-    if (!tracked || !delta) {
-      continue;
-    }
-    for (const field of ['total', 'prompt', 'completion', 'cached', 'numRequests'] as const) {
-      const value = delta[field];
-      if (tracked[field] !== undefined && typeof value === 'number' && Number.isFinite(value)) {
-        tracked[field] -= value;
-        if (field === 'numRequests') {
-          tracked[field] = Math.max(0, tracked[field]);
-        }
-      }
-    }
-    if (tracked.completionDetails && delta.completionDetails) {
-      for (const field of Object.keys(tracked.completionDetails) as Array<
-        keyof CompletionTokenDetails
-      >) {
-        const value = delta.completionDetails[field];
-        if (typeof value === 'number' && Number.isFinite(value)) {
-          tracked.completionDetails[field] = (tracked.completionDetails[field] ?? 0) - value;
-        }
-      }
-    }
-  }
 }
 
 /**
@@ -673,7 +525,9 @@ export function accumulateGenerationTokenUsage(target: TokenUsage, update: unkno
   } = parsed.data;
   const hasUsage =
     Object.values(generationUsage).some((value) => typeof value === 'number' && value !== 0) ||
-    Object.values(generationUsage.completionDetails ?? {}).some((value) => value !== 0);
+    Object.values(generationUsage.completionDetails ?? {}).some(
+      (value) => typeof value === 'number' && value !== 0,
+    );
   if (!hasUsage) {
     return false;
   }

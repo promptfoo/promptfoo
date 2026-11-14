@@ -1,7 +1,7 @@
-import { and, desc, eq, inArray, type SQL, sql } from 'drizzle-orm';
+import { and, desc, eq, type SQL, sql } from 'drizzle-orm';
 import { DEFAULT_QUERY_LIMIT, HUMAN_ASSERTION_TYPE } from '../constants';
 import { deleteTraceRecordsForEvals } from '../database/evalDeletion';
-import { EVAL_ACTIVE_RUNS_KEY } from '../database/evalRun';
+import { EvalResultDeletionConflict, resultDeletionRevision } from '../database/evalResultWrite';
 import { getDb } from '../database/index';
 import {
   datasetsTable,
@@ -15,7 +15,6 @@ import {
 } from '../database/tables';
 import { getAuthor } from '../globalConfig/accounts';
 import logger from '../logger';
-import { hashPrompt } from '../prompts/utils';
 import { PLUGIN_CATEGORIES } from '../redteam/constants';
 import { calculateAttackSuccessRate } from '../redteam/metrics';
 import { getRiskCategorySeverityMap } from '../redteam/sharedFrontend';
@@ -31,6 +30,7 @@ import {
   type EvaluateTable,
   type EvaluateTableRow,
   type Prompt,
+  type RepeatStabilitySummary,
   ResultFailureReason,
   type ResultsFile,
   type UnifiedConfig,
@@ -38,6 +38,7 @@ import {
 import { calculateFilteredMetrics } from '../util/calculateFilteredMetrics';
 import { convertResultsToTable } from '../util/convertEvalResultsToTable';
 import { randomSequence, sha256 } from '../util/createHash';
+import { calculateRepeatStability, RepeatStabilityCalculator } from '../util/eval/repeatStability';
 import { convertTestResultsToTableRow } from '../util/exportToFile/index';
 import { isNonTransientHttpStatus, NON_TRANSIENT_HTTP_STATUSES } from '../util/fetch/errors';
 import invariant from '../util/invariant';
@@ -66,11 +67,13 @@ import EvalResult, {
   getResultIndexKey,
   getStripFlags,
   PROMPTFOO_METADATA_KEY,
+  persistRepeatMetadata,
   persistTraceMetadata,
   projectPrompt,
   projectTracesForOutput,
   stripTraceLinkageFromMetadata,
 } from './evalResult';
+import { generateIdFromPrompt } from './prompt';
 
 import type { EvalResultsFilterMode, TraceData } from '../types/index';
 
@@ -98,7 +101,45 @@ export function createEvalId(createdAt: Date = new Date()) {
   return `eval-${randomSequence(3)}-${createdAt.toISOString().slice(0, 19)}`;
 }
 
-const EVAL_SUMMARY_TEST_COUNT_BATCH_SIZE = 500;
+type EvalRelationDb = Pick<Awaited<ReturnType<typeof getDb>>, 'insert'>;
+
+export async function insertEvalPrompts(tx: EvalRelationDb, evalId: string, prompts: Prompt[]) {
+  for (const prompt of prompts) {
+    const label = prompt.label || prompt.display || prompt.raw;
+    const promptId = generateIdFromPrompt(prompt);
+    await tx
+      .insert(promptsTable)
+      .values({ id: promptId, prompt: label })
+      .onConflictDoNothing()
+      .run();
+    await tx.insert(evalsToPromptsTable).values({ evalId, promptId }).onConflictDoNothing().run();
+    logger.debug(`Inserting prompt ${promptId}`);
+  }
+}
+
+export async function insertEvalDatasetAndTags(
+  tx: EvalRelationDb,
+  evalId: string,
+  dataset: typeof datasetsTable.$inferInsert,
+  config: Pick<UnifiedConfig, 'tags'>,
+) {
+  await tx.insert(datasetsTable).values(dataset).onConflictDoNothing().run();
+  await tx
+    .insert(evalsToDatasetsTable)
+    .values({ evalId, datasetId: dataset.id })
+    .onConflictDoNothing()
+    .run();
+  logger.debug(`Inserting dataset ${dataset.id}`);
+
+  if (config.tags) {
+    for (const [name, value] of Object.entries(config.tags)) {
+      const tagId = sha256(`${name}:${value}`);
+      await tx.insert(tagsTable).values({ id: tagId, name, value }).onConflictDoNothing().run();
+      await tx.insert(evalsToTagsTable).values({ evalId, tagId }).onConflictDoNothing().run();
+      logger.debug(`Inserting tag ${tagId}`);
+    }
+  }
+}
 
 /** Result from queries extracting variable keys with eval IDs */
 export interface VarKeyWithEvalIdResult {
@@ -334,6 +375,11 @@ export default class Eval {
   runtimeOptions?: EvalRuntimeOptions;
   _shared: boolean = false;
   resultPersistenceFailed: boolean = false;
+  /**
+   * The first non-transient HTTP status among the rows added in this run. It stands in for
+   * the database when that cannot be queried afterwards.
+   */
+  private observedTargetErrorStatus?: number;
   private failedResults = new Map<string, EvaluateResult>();
   // Reconstructed EvalResults for rows that failed to persist, cached so comparison
   // assertions reuse the SAME instance across passes (select-best then max-score).
@@ -342,6 +388,7 @@ export default class Eval {
   // instance is what lets later grading build on earlier grading instead of a stale row.
   private failedEvalResults = new Map<string, EvalResult>();
   private finalJsonlResults = new Map<string, EvaluateResult>();
+  private observedRepeatedResults = false;
   /** Total wall-clock duration. For redteam evals: generationDurationMs + evaluationDurationMs.
    *  For non-redteam evals: equals evaluationDurationMs (generation phase is N/A). */
   durationMs?: number;
@@ -372,6 +419,8 @@ export default class Eval {
 
     return await Eval.findById(db_results[0].id);
   }
+
+  resultDeletionRevision?: number;
 
   static async findById(id: string) {
     const db = await getDb();
@@ -425,6 +474,10 @@ export default class Eval {
       generationDurationMs,
       evaluationDurationMs,
     });
+    const deletionRevision = resultsObj?.__promptfooResultDeletionRevision;
+    if (typeof deletionRevision === 'number') {
+      evalInstance.resultDeletionRevision = deletionRevision;
+    }
     if (eval_.results && 'table' in eval_.results) {
       evalInstance.oldResults = eval_.results as EvaluateSummaryV2;
     }
@@ -521,30 +574,7 @@ export default class Eval {
         })
         .run();
 
-      for (const prompt of renderedPrompts) {
-        const label = prompt.label || prompt.display || prompt.raw;
-        const promptId = hashPrompt(prompt);
-
-        await tx
-          .insert(promptsTable)
-          .values({
-            id: promptId,
-            prompt: label,
-          })
-          .onConflictDoNothing()
-          .run();
-
-        await tx
-          .insert(evalsToPromptsTable)
-          .values({
-            evalId,
-            promptId,
-          })
-          .onConflictDoNothing()
-          .run();
-
-        logger.debug(`Inserting prompt ${promptId}`);
-      }
+      await insertEvalPrompts(tx, evalId, renderedPrompts);
 
       if (opts?.results && opts.results.length > 0) {
         const res = await tx
@@ -552,7 +582,11 @@ export default class Eval {
           .values(
             opts.results?.map((r) => ({
               ...r,
-              metadata: persistTraceMetadata(r.metadata, r.traceId, r.evaluationId),
+              metadata: persistTraceMetadata(
+                persistRepeatMetadata(r.metadata, r.repeatIndex, r.repeatGroupId),
+                r.traceId,
+                r.evaluationId,
+              ),
               evalId,
               id: crypto.randomUUID(),
             })),
@@ -561,52 +595,7 @@ export default class Eval {
         logger.debug(`Inserted ${res.rowsAffected} eval results`);
       }
 
-      await tx
-        .insert(datasetsTable)
-        .values({
-          id: datasetId,
-          tests: config.tests,
-        })
-        .onConflictDoNothing()
-        .run();
-
-      await tx
-        .insert(evalsToDatasetsTable)
-        .values({
-          evalId,
-          datasetId,
-        })
-        .onConflictDoNothing()
-        .run();
-
-      logger.debug(`Inserting dataset ${datasetId}`);
-
-      if (config.tags) {
-        for (const [tagKey, tagValue] of Object.entries(config.tags)) {
-          const tagId = sha256(`${tagKey}:${tagValue}`);
-
-          await tx
-            .insert(tagsTable)
-            .values({
-              id: tagId,
-              name: tagKey,
-              value: tagValue,
-            })
-            .onConflictDoNothing()
-            .run();
-
-          await tx
-            .insert(evalsToTagsTable)
-            .values({
-              evalId,
-              tagId,
-            })
-            .onConflictDoNothing()
-            .run();
-
-          logger.debug(`Inserting tag ${tagId}`);
-        }
-      }
+      await insertEvalDatasetAndTags(tx, evalId, { id: datasetId, tests: config.tests }, config);
     });
 
     invalidateEvaluationCache(evalId);
@@ -675,30 +664,22 @@ export default class Eval {
     this.oldResults.table = table;
   }
 
-  async save({ updatePrompts = true }: { updatePrompts?: boolean } = {}) {
+  async save() {
     const db = await getDb();
     const updateObj: Record<string, unknown> = {
       config: sanitizeTracingConfigForPersistence(this.config),
       isRedteam: this.config.redteam !== undefined,
+      prompts: this.prompts,
       description: this.config.description,
       author: this.author,
       updatedAt: getCurrentTimestamp(),
       vars: Array.from(this.vars),
       runtimeOptions: sanitizeRuntimeOptions(this.runtimeOptions),
     };
-    if (updatePrompts) {
-      updateObj.prompts = this.prompts;
-    }
 
     if (this.useOldResults()) {
       invariant(this.oldResults, 'Old results not found');
-      // Run ownership belongs to the database, including when a legacy table is replaced.
-      const runsPath = `$.${EVAL_ACTIVE_RUNS_KEY}`;
-      const results = JSON.stringify(this.oldResults);
-      updateObj.results = sql`CASE
-        WHEN json_valid(${evalsTable.results}) AND json_type(${evalsTable.results}, ${runsPath}) = 'object'
-        THEN json_set(${results}, ${runsPath}, json_extract(${evalsTable.results}, ${runsPath}))
-        ELSE json_remove(${results}, ${runsPath}) END`;
+      updateObj.results = this.oldResults;
     } else if (
       this.durationMs !== undefined ||
       this.generationDurationMs !== undefined ||
@@ -719,7 +700,22 @@ export default class Eval {
       }
       updateObj.results = expr;
     }
-    await db.update(evalsTable).set(updateObj).where(eq(evalsTable.id, this.id)).run();
+    const revision = this.resultDeletionRevision ?? 0;
+    const { rowsAffected } = await db
+      .update(evalsTable)
+      .set(updateObj)
+      .where(
+        and(
+          eq(evalsTable.id, this.id),
+          this.useOldResults() ? undefined : eq(resultDeletionRevision, revision),
+        ),
+      )
+      .run();
+    if (rowsAffected === 0 && !this.useOldResults()) {
+      throw new EvalResultDeletionConflict(
+        'The evaluation changed while saving. Reload it and try again.',
+      );
+    }
     notifyEvaluationChanged(this.id);
     this.persisted = true;
   }
@@ -766,6 +762,17 @@ export default class Eval {
   }
 
   async addResult(result: EvaluateResult) {
+    if (result.repeatGroupId !== undefined) {
+      this.observedRepeatedResults = true;
+    }
+    const httpStatus = result.response?.metadata?.http?.status;
+    if (
+      this.observedTargetErrorStatus === undefined &&
+      typeof httpStatus === 'number' &&
+      isNonTransientHttpStatus(httpStatus)
+    ) {
+      this.observedTargetErrorStatus = httpStatus;
+    }
     const newResult = await EvalResult.createFromEvaluateResult(this.id, result, {
       persist: this.persisted,
     });
@@ -782,10 +789,19 @@ export default class Eval {
 
   recordFinalJsonlResult(result: EvaluateResult) {
     this.finalJsonlResults.set(getResultIndexKey(result), result);
+    if (result.repeatGroupId !== undefined) {
+      this.observedRepeatedResults = true;
+    }
   }
 
   getFinalJsonlResults() {
     return Array.from(this.finalJsonlResults.values());
+  }
+
+  async getObservedRepeatStability(): Promise<RepeatStabilitySummary | undefined> {
+    // Read final grading from the existing result store. Retaining each raw response
+    // here both defeats persisted-eval batching and reports stale comparison verdicts.
+    return this.observedRepeatedResults ? this.getRepeatStability() : undefined;
   }
 
   recordResultPersistenceFailure(result: EvaluateResult) {
@@ -856,13 +872,14 @@ export default class Eval {
    * Find a non-transient HTTP error status from evaluation results.
    * Returns the first non-transient status (401, 403, 404, 500, 501) found, or undefined.
    *
-   * For persisted evals: Uses efficient O(1) database query with LIMIT 1.
+   * For persisted evals: Uses efficient O(1) database query with LIMIT 1, and also scans
+   * the rows that could not be saved, which the database does not have.
    * For non-persisted evals: Falls back to scanning in-memory results.
    */
   async findTargetErrorStatus(): Promise<number | undefined> {
-    // Helper to scan in-memory results
-    const scanInMemory = (): number | undefined => {
-      for (const result of this.results) {
+    // Helper to scan results held in memory
+    const scan = (results: Iterable<Pick<EvaluateResult, 'response'>>): number | undefined => {
+      for (const result of results) {
         const status = result.response?.metadata?.http?.status;
         if (typeof status === 'number' && isNonTransientHttpStatus(status)) {
           return status;
@@ -870,11 +887,16 @@ export default class Eval {
       }
       return undefined;
     };
+    const scanInMemory = () => scan(this.results);
 
     // For non-persisted evals, scan in-memory results
     if (!this.persisted) {
       return scanInMemory();
     }
+
+    // A row that could not be saved is kept in memory instead. The row that stopped the eval
+    // can be one of them, and the query below would not find it.
+    const unsavedStatus = scan(this.failedResults.values());
 
     // For persisted evals, use efficient database query
     try {
@@ -899,11 +921,11 @@ export default class Eval {
         .limit(1)
         .get();
 
-      return result?.httpStatus ?? undefined;
+      return result?.httpStatus ?? unsavedStatus;
     } catch {
-      // Fall back to in-memory scan if database query fails
-      // This handles edge cases like mocked databases in tests
-      return scanInMemory();
+      // Fall back to what is held in memory if the database query fails: loaded results,
+      // rows that could not be saved, and what the rows added in this run showed.
+      return scanInMemory() ?? unsavedStatus ?? this.observedTargetErrorStatus;
     }
   }
 
@@ -960,7 +982,31 @@ export default class Eval {
       const filterConditions: FilterConditionWithOperator[] = [];
 
       opts.filters.forEach((filter) => {
-        const { logicOperator, type, operator, value, field } = JSON.parse(filter);
+        let parsedFilter: unknown;
+        try {
+          parsedFilter = JSON.parse(filter);
+        } catch {
+          logger.warn('Ignoring malformed eval filter JSON');
+          return;
+        }
+        if (!parsedFilter || typeof parsedFilter !== 'object' || Array.isArray(parsedFilter)) {
+          logger.warn('Ignoring invalid eval filter');
+          return;
+        }
+        const { logicOperator, type, operator, value, field } = parsedFilter as Record<
+          string,
+          unknown
+        >;
+        if (
+          typeof type !== 'string' ||
+          typeof operator !== 'string' ||
+          (logicOperator !== undefined && typeof logicOperator !== 'string') ||
+          (field !== undefined && typeof field !== 'string') ||
+          (value !== undefined && typeof value !== 'string' && typeof value !== 'number')
+        ) {
+          logger.warn('Ignoring invalid eval filter fields');
+          return;
+        }
         let condition: SQL<unknown> | null = null;
 
         if (type === 'metric') {
@@ -973,7 +1019,7 @@ export default class Eval {
           }
 
           // Value must be a number
-          const numericValue = typeof value === 'number' ? value : Number.parseFloat(value);
+          const numericValue = typeof value === 'number' ? value : Number.parseFloat(String(value));
 
           if (operator === 'is_defined' || (operator === 'equals' && !field)) {
             // 'is_defined': new operator that checks if metric exists
@@ -1070,7 +1116,7 @@ export default class Eval {
                 AND LENGTH(TRIM(COALESCE(json_each.value, ''))) > 0
             )`;
           }
-        } else if (type === 'plugin') {
+        } else if (type === 'plugin' && typeof value === 'string') {
           const isCategory = Object.keys(PLUGIN_CATEGORIES).includes(value);
 
           if (operator === 'equals') {
@@ -1378,7 +1424,6 @@ export default class Eval {
   }
 
   async setResults(results: EvalResult[]) {
-    this.results = results;
     if (this.persisted && results.length > 0) {
       const db = await getDb();
       await db
@@ -1386,14 +1431,24 @@ export default class Eval {
         .values(
           results.map((r) => ({
             ...r,
-            metadata: persistTraceMetadata(r.metadata, r.traceId, r.evaluationId),
+            metadata: persistTraceMetadata(
+              persistRepeatMetadata(r.metadata, r.repeatIndex, r.repeatGroupId),
+              r.traceId,
+              r.evaluationId,
+            ),
             evalId: this.id,
           })),
         )
         .run();
       notifyEvaluationChanged(this.id);
     }
-    this._resultsLoaded = true;
+    if (this.persisted) {
+      // Upload chunks append in storage; reload the complete set on the next read.
+      this.clearResults();
+    } else {
+      this.results = results;
+      this._resultsLoaded = true;
+    }
   }
 
   async loadResults() {
@@ -1433,6 +1488,9 @@ export default class Eval {
       stats.successes += prompt.metrics?.testPassCount ?? 0;
       stats.failures += prompt.metrics?.testFailCount ?? 0;
       stats.errors += prompt.metrics?.testErrorCount ?? 0;
+      if (prompt.metrics?.testCacheHitCount) {
+        stats.cacheHits = (stats.cacheHits ?? 0) + prompt.metrics.testCacheHitCount;
+      }
 
       accumulateTokenUsage(stats.tokenUsage, prompt.metrics?.tokenUsage);
     }
@@ -1443,6 +1501,32 @@ export default class Eval {
     );
 
     return stats;
+  }
+
+  async getRepeatStability(): Promise<RepeatStabilitySummary | undefined> {
+    if (this.useOldResults()) {
+      return calculateRepeatStability(this.oldResults?.results ?? []);
+    }
+
+    const calculator = new RepeatStabilityCalculator();
+    // Failed writes and their finalized comparisons are already retained for artifact
+    // recovery. Prefer those authoritative rows over stale or missing database rows.
+    const recovered = new Map<string, EvalResult | EvaluateResult>(this.failedResults);
+    for (const [key, result] of this.failedEvalResults) {
+      recovered.set(key, result);
+    }
+    for (const [key, result] of this.finalJsonlResults) {
+      recovered.set(key, result);
+    }
+    for await (const batch of this.fetchResultsBatched()) {
+      for (const result of batch) {
+        const key = getResultIndexKey(result);
+        calculator.addResult(recovered.get(key) ?? result);
+        recovered.delete(key);
+      }
+    }
+    calculator.addResults(recovered.values());
+    return calculator.getSummary();
   }
 
   async toEvaluateSummary(): Promise<EvaluateSummaryV3 | EvaluateSummaryV2> {
@@ -1465,12 +1549,23 @@ export default class Eval {
 
     const prompts = this.prompts.map((p) => projectPrompt(p, stripFlags.shouldStripPromptText));
 
+    const calculator = new RepeatStabilityCalculator();
+    const results = this.results.map((result) => {
+      const exported = result.toEvaluateResult(stripFlags);
+      // Output stripping must not turn cached grading into independent samples.
+      // Keep projected labels in the summary while using the original cache evidence.
+      calculator.addResult({ ...exported, gradingResult: result.gradingResult });
+      return exported;
+    });
+    const repeatStability = calculator.getSummary();
+
     return {
       version: 3,
       timestamp: new Date(this.createdAt).toISOString(),
       prompts,
-      results: this.results.map((r) => r.toEvaluateResult(stripFlags)),
+      results,
       stats,
+      ...(repeatStability && { repeatStability }),
     };
   }
 
@@ -1785,26 +1880,6 @@ export async function getEvalSummaries(
     .orderBy(desc(evalsTable.createdAt), desc(evalsTable.id))
     .all();
 
-  const distinctTestCountsByEvalId = new Map<string, number>();
-  for (let start = 0; start < results.length; start += EVAL_SUMMARY_TEST_COUNT_BATCH_SIZE) {
-    const evalIdBatch = results
-      .slice(start, start + EVAL_SUMMARY_TEST_COUNT_BATCH_SIZE)
-      .map((result) => result.evalId);
-    const rows = await db
-      .select({
-        evalId: evalResultsTable.evalId,
-        testCount: sql<number>`count(distinct ${evalResultsTable.testIdx})`,
-      })
-      .from(evalResultsTable)
-      .where(inArray(evalResultsTable.evalId, evalIdBatch))
-      .groupBy(evalResultsTable.evalId)
-      .all();
-
-    for (const row of rows) {
-      distinctTestCountsByEvalId.set(row.evalId, Number(row.testCount));
-    }
-  }
-
   /**
    * Deserialize the evals. A few things to note:
    *
@@ -1831,12 +1906,11 @@ export async function getEvalSummaries(
       );
     }) ?? [0];
 
-    const metricDerivedTestCount = testCounts.length > 0 ? Math.max(...testCounts) : 0;
-    const testCount = Math.max(
-      distinctTestCountsByEvalId.get(result.evalId) ?? 0,
-      metricDerivedTestCount,
-    );
-    const testRunCount = testCounts.reduce((sum, count) => sum + count, 0);
+    // Derive the number of tests from the first prompt.
+    const testCount = testCounts.length > 0 ? testCounts[0] : 0;
+
+    // Test count * prompt count
+    const testRunCount = testCount * (result.prompts?.length ?? 0);
 
     // Construct an array of providers
     const deserializedProviders = [];

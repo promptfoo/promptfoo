@@ -23,7 +23,6 @@ describe('AssertionsResult', () => {
     reason: 'All assertions passed',
     componentResults: [succeedingResult],
     namedScores: {},
-    metadata: { namedMetricCountsKnown: true },
     tokensUsed: { total: 1, prompt: 2, completion: 3, cached: 0, numRequests: 0 },
   };
   let assertionsResult: AssertionsResult;
@@ -280,7 +279,6 @@ describe('AssertionsResult', () => {
         pass: true,
         score: 1,
         reason: 'No assertions',
-        componentResults: [],
         tokensUsed: { total: 0, prompt: 0, completion: 0, cached: 0, numRequests: 0 },
       });
     });
@@ -384,7 +382,7 @@ describe('AssertionsResult', () => {
     );
   });
 
-  it('handles named scores with undefined metric', async () => {
+  const verifyUndefinedNamedMetric = async () => {
     const resultWithNamedScores = {
       pass: true,
       score: 1,
@@ -404,7 +402,9 @@ describe('AssertionsResult', () => {
     expect(result.namedScores).toEqual({
       'metric-1': 0.8,
     });
-  });
+  };
+
+  it('handles named scores with undefined metric', verifyUndefinedNamedMetric);
 
   it('handles scoring function with async GradingResult', async () => {
     const mockScoringFunction = vi.fn().mockResolvedValue({
@@ -422,27 +422,5 @@ describe('AssertionsResult', () => {
     expect(result.pass).toBe(true);
     expect(result.score).toBe(0.9);
     expect(result.reason).toBe('Async scoring result');
-  });
-
-  it('handles multiple named scores with undefined metrics', async () => {
-    const resultWithNamedScores = {
-      pass: true,
-      score: 1,
-      reason: 'Test passed',
-      tokensUsed: { total: 1, prompt: 2, completion: 3, cached: 0, numRequests: 0 },
-      namedScores: {
-        'metric-1': 0.8,
-      } as Record<string, number>,
-    };
-
-    assertionsResult.addResult({
-      index: 0,
-      result: resultWithNamedScores,
-    });
-
-    const result = await assertionsResult.testResult();
-    expect(result.namedScores).toEqual({
-      'metric-1': 0.8,
-    });
   });
 });

@@ -1,11 +1,8 @@
 import { mockClipboard } from '@app/tests/browserMocks';
 import { restoreTestTimers, type TestTimers, useTestTimers } from '@app/tests/timers';
 import { renderWithProviders as baseRender } from '@app/utils/testutils';
-import {
-  type AssertionType,
-  type EvaluateTableOutput,
-  ResultFailureReason,
-} from '@promptfoo/types';
+import { type AssertionType, type EvaluateTableOutput } from '@promptfoo/types';
+import { ResultFailureReason } from '@promptfoo/types/results';
 import { act, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -213,45 +210,6 @@ describe('EvalOutputCell', () => {
 
     expect(() => renderWithProviders(<EvalOutputCell {...propsWithoutText} />)).not.toThrow();
   });
-
-  it.each([null, undefined])(
-    'keeps the surviving cell prompt when the first output becomes %s',
-    (firstOutput) => {
-      const output = { ...defaultProps.output, prompt: 'Surviving column prompt' };
-      const { rerender } = renderWithProviders(
-        <EvalOutputCell {...defaultProps} output={output} promptIndex={1} />,
-      );
-
-      expect(screen.getByText('Surviving column prompt')).toBeInTheDocument();
-
-      rerender(
-        <ShiftKeyProvider>
-          <EvalOutputCell
-            {...defaultProps}
-            output={output}
-            promptIndex={1}
-            firstOutput={firstOutput}
-          />
-        </ShiftKeyProvider>,
-      );
-
-      expect(screen.getByText('Surviving column prompt')).toBeInTheDocument();
-
-      mockResultsViewSettings.showPrompts = false;
-      rerender(
-        <ShiftKeyProvider>
-          <EvalOutputCell
-            {...defaultProps}
-            output={output}
-            promptIndex={1}
-            firstOutput={firstOutput}
-          />
-        </ShiftKeyProvider>,
-      );
-
-      expect(screen.queryByText('Surviving column prompt')).not.toBeInTheDocument();
-    },
-  );
 
   it('passes metadata correctly to the dialog', async () => {
     const user = userEvent.setup();
@@ -955,7 +913,7 @@ describe('EvalOutputCell', () => {
     expect(written).toContain('rowId=1');
   });
 
-  it('shows checkmark after copying link', async () => {
+  it('resets the link and output copy indicators independently', async () => {
     timers = useTestTimers();
     const clipboard = mockClipboardWriteText();
 
@@ -972,11 +930,20 @@ describe('EvalOutputCell', () => {
     expect(clipboard.writeText).toHaveBeenCalled();
     expect(shareButton.querySelector('.lucide-check')).toBeInTheDocument();
 
-    act(() => {
-      timers?.advanceBy(3000);
+    act(() => timers?.advanceBy(1000));
+    const copyButton = screen.getByRole('button', { name: /Copy output to clipboard/i });
+    await act(async () => {
+      dispatchClick(copyButton);
+      await clipboard.writeText.mock.results[1]?.value;
     });
+    expect(shareButton.querySelector('.lucide-check')).toBeInTheDocument();
+    expect(copyButton.querySelector('.lucide-check')).toBeInTheDocument();
 
+    act(() => timers?.advanceBy(2000));
     expect(shareButton.querySelector('.lucide-link')).toBeInTheDocument();
+    expect(copyButton.querySelector('.lucide-check')).toBeInTheDocument();
+    act(() => timers?.advanceBy(1000));
+    expect(copyButton.querySelector('.lucide-check')).not.toBeInTheDocument();
   });
 
   it('clears the link feedback timer on unmount after copying link', async () => {
@@ -2405,6 +2372,26 @@ describe('EvalOutputCell extra actions hover behavior', () => {
       'View output and test details',
     ]);
   });
+  it.each(['google:gemini-nano-banana-2.1', 'custom-image-target'])(
+    'keeps structured images visible after long text from %s',
+    (provider) => {
+      const explanation = 'A detailed explanation of the generated image. '.repeat(10);
+      const { container } = renderWithProviders(
+        <EvalOutputCell
+          {...defaultProps}
+          maxTextLength={250}
+          output={{
+            ...defaultProps.output,
+            provider,
+            text: explanation,
+            images: [{ data: 'data:image/png;base64,aW1hZ2U=', mimeType: 'image/png' }],
+          }}
+        />,
+      );
+      expect(container.querySelectorAll('img')).toHaveLength(1);
+      expect(container.textContent).toContain(explanation.trim());
+    },
+  );
 });
 
 describe('isImageProvider helper function', () => {
@@ -2464,6 +2451,10 @@ describe('isVideoProvider helper function', () => {
 
   it('should return true for Google Veo 3.1 provider', () => {
     expect(isVideoProvider('google:video:veo-3.1-generate-preview')).toBe(true);
+  });
+
+  it('should return true for Google Veo on Vertex AI', () => {
+    expect(isVideoProvider('vertex:video:veo-3.1-generate-001')).toBe(true);
   });
 
   it('should return true for Google Veo 3.1 Fast provider', () => {

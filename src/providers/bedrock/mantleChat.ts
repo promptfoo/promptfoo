@@ -1,11 +1,23 @@
+import { getBedrockBillingEndpoint } from '../openai/billing';
 import { OpenAiChatCompletionProvider } from '../openai/chat';
 import {
   getBedrockMantleOrigin,
   resolveBedrockMantleApiKey,
   resolveBedrockMantleRegion,
 } from './mantle';
-import { isBedrockGrokModel, isBedrockOpenAiResponsesModel } from './routing';
+import {
+  BEDROCK_OPENAI_MANTLE_REGIONS,
+  getBedrockCapabilityModelName,
+  getBedrockMantleBillingModelName,
+} from './openaiModels';
+import {
+  isBedrockGrokModel,
+  isBedrockOpenAiChatModel,
+  isBedrockOpenAiResponsesModel,
+} from './routing';
 import { BedrockTokenProvider, type BedrockTokenProviderConfig } from './tokenProvider';
+
+import type { OpenAiCompletionOptions } from '../openai/types';
 
 type OpenAiChatProviderOptions = NonNullable<
   ConstructorParameters<typeof OpenAiChatCompletionProvider>[1]
@@ -18,14 +30,13 @@ type BedrockMantleChatBodyContext = Parameters<OpenAiChatCompletionProvider['get
 type BedrockMantleChatCallApiOptions = Parameters<OpenAiChatCompletionProvider['getOpenAiBody']>[2];
 
 /**
- * The Bedrock **Mantle** engine exposes an OpenAI-compatible **Chat Completions** API at
+ * The Bedrock **Mantle** endpoint exposes an OpenAI-compatible **Chat Completions** API at
  *
  *   https://bedrock-mantle.<region>.api.aws/<route>/chat/completions
  *
- * Mantle has its own regional model catalog, including models and IDs that differ from
- * the native `InvokeModel`/`Converse` APIs. `bedrock:mantle:<id>`
- * routes here so any mantle Chat Completions model is reachable. Most models use `/v1`; xAI
- * and Gemma 4 use `/openai/v1` (see {@link getBedrockMantleChatBaseUrl}).
+ * `bedrock:mantle:<id>` selects this API explicitly. Mantle and Runtime have distinct
+ * catalogs and model namespaces, including Mantle's Qwen `*-instruct` ids. Most models
+ * use `/v1`; xAI, Gemma 4, and OpenAI frontier models use `/openai/v1`.
  *
  * This is the Chat Completions counterpart to {@link createBedrockOpenAiResponsesProvider} (the
  * `/openai/v1/responses` path used by the OpenAI frontier and xAI Grok models). Use the bare
@@ -40,15 +51,20 @@ export const DEFAULT_BEDROCK_MANTLE_GROK_CHAT_REGION = 'us-west-2';
 
 /**
  * Base URL for the mantle Chat Completions API. Most mantle chat models use the bare `/v1`
- * path, but Bedrock's xAI Chat Completions models and Gemma 4 chat models use `/openai/v1`.
+ * path, but xAI, Gemma 4, and OpenAI frontier models use `/openai/v1`.
  */
 export function getBedrockMantleChatBaseUrl(region: string, modelName?: string): string {
   const path =
     (modelName !== undefined && isBedrockGrokModel(modelName)) ||
+    (modelName !== undefined && isBedrockOpenAiChatModel(modelName)) ||
     modelName?.startsWith('google.gemma-4')
       ? 'openai/v1'
       : 'v1';
   return `${getBedrockMantleOrigin(region)}/${path}`;
+}
+
+function isBedrockMantleEndpoint(apiBaseUrl: string): boolean {
+  return getBedrockBillingEndpoint(URL.parse(apiBaseUrl)?.hostname)?.service === 'mantle';
 }
 
 /**
@@ -58,16 +74,15 @@ export function getBedrockMantleChatBaseUrl(region: string, modelName?: string):
  */
 export class BedrockMantleChatProvider extends OpenAiChatCompletionProvider {
   private readonly bedrockTokenProvider: BedrockTokenProvider;
+  private readonly bedrockRegion: string;
 
   constructor(modelName: string, options: BedrockMantleChatProviderOptions = {}) {
     super(modelName, options);
-    const region = resolveBedrockMantleRegion(
-      options.config ?? {},
-      options.env,
-      isBedrockGrokModel(modelName)
-        ? DEFAULT_BEDROCK_MANTLE_GROK_CHAT_REGION
-        : DEFAULT_BEDROCK_MANTLE_CHAT_REGION,
-    );
+    const defaultRegion = isBedrockGrokModel(modelName)
+      ? DEFAULT_BEDROCK_MANTLE_GROK_CHAT_REGION
+      : (BEDROCK_OPENAI_MANTLE_REGIONS.get(modelName)?.[0] ?? DEFAULT_BEDROCK_MANTLE_CHAT_REGION);
+    const region = resolveBedrockMantleRegion(options.config ?? {}, options.env, defaultRegion);
+    this.bedrockRegion = region;
     // Pin direct construction too, before any AWS credential can be resolved.
     this.config = {
       ...this.config,
@@ -91,22 +106,31 @@ export class BedrockMantleChatProvider extends OpenAiChatCompletionProvider {
     };
   }
 
-  getOpenAiRequestHeaders(
-    customHeaders: Record<string, string> | undefined = this.config.headers,
-  ): Record<string, string> {
-    return customHeaders ?? {};
-  }
-
   protected override getGenAISystem(): string {
     return 'bedrock';
   }
 
+  protected override getBillingRegion(): string {
+    return this.bedrockRegion;
+  }
+
+  protected normalizeCapabilityModelName(modelName: string): string {
+    return getBedrockCapabilityModelName(modelName);
+  }
+
   protected getCapabilityModelName(): string {
-    return this.modelName.replace(/^(openai|xai)\./, '');
+    return this.normalizeCapabilityModelName(this.modelName);
   }
 
   protected isReasoningModel(): boolean {
     return isBedrockGrokModel(this.modelName) || super.isReasoningModel();
+  }
+
+  protected override getBillingModelName(config: OpenAiCompletionOptions): string {
+    const passthroughModel = (config.passthrough as { model?: unknown } | undefined)?.model;
+    return getBedrockMantleBillingModelName(
+      typeof passthroughModel === 'string' ? passthroughModel : this.modelName,
+    );
   }
 
   protected supportsTemperature(): boolean {
@@ -119,15 +143,25 @@ export class BedrockMantleChatProvider extends OpenAiChatCompletionProvider {
     callApiOptions?: BedrockMantleChatCallApiOptions,
   ) {
     const result = await super.getOpenAiBody(prompt, context, callApiOptions);
+    const model = result.body.model;
+    const apiUrl = new URL(this.getApiUrl());
+    if (isBedrockMantleEndpoint(apiUrl.href)) {
+      const expectedPath = new URL(
+        getBedrockMantleChatBaseUrl(DEFAULT_BEDROCK_MANTLE_CHAT_REGION, model),
+      ).pathname;
+      if (apiUrl.pathname.replace(/\/+$/, '') !== expectedPath) {
+        throw new Error(
+          `Bedrock model ${model} requires the ${expectedPath} Mantle endpoint. ` +
+            `Configure a separate provider using bedrock:mantle:${model}.`,
+        );
+      }
+    }
     // Gemma 4 accepts this field even though the base provider's OpenAI-specific reasoning
     // model detection does not recognize its Bedrock model id.
-    if (
-      this.modelName.startsWith('google.gemma-4-') &&
-      result.config.reasoning_effort !== undefined
-    ) {
+    if (model.startsWith('google.gemma-4-') && result.config.reasoning_effort !== undefined) {
       result.body.reasoning_effort = result.config.reasoning_effort;
     }
-    if (isBedrockGrokModel(this.modelName)) {
+    if (isBedrockGrokModel(model)) {
       delete result.body.presence_penalty;
       delete result.body.frequency_penalty;
       delete result.body.stop;
@@ -143,6 +177,14 @@ export class BedrockMantleChatProvider extends OpenAiChatCompletionProvider {
    */
   getApiUrl(): string {
     return this.config.apiBaseUrl || super.getApiUrl();
+  }
+
+  getOpenAiRequestHeaders(
+    customHeaders: Record<string, string> | undefined = this.config.headers,
+  ): Record<string, string> {
+    // Match the Bedrock Responses adapter: ambient OpenAI account headers do not apply
+    // to Bedrock. Preserve only headers explicitly configured for this provider.
+    return customHeaders ?? {};
   }
 
   protected shouldBustCache(): boolean {
@@ -163,26 +205,30 @@ export function createBedrockMantleChatProvider(
   modelName: string,
   providerOptions: BedrockMantleChatProviderOptions = {},
 ): BedrockMantleChatProvider {
-  if (isBedrockOpenAiResponsesModel(modelName)) {
+  if (isBedrockOpenAiResponsesModel(modelName) && !isBedrockOpenAiChatModel(modelName)) {
     throw new Error(
-      `Amazon Bedrock model "bedrock:mantle:${modelName}" does not support Chat Completions. ` +
+      `Amazon Bedrock model "bedrock:mantle:${modelName}" is not supported by promptfoo's ` +
+        `Mantle Chat Completions adapter. ` +
         `Use the bare "bedrock:${modelName}" id so promptfoo routes it through Bedrock's ` +
         `OpenAI-compatible Responses API.`,
     );
   }
   const config: Record<string, any> = providerOptions.config ?? {};
-  const region = resolveBedrockMantleRegion(
-    config,
-    providerOptions.env,
-    isBedrockGrokModel(modelName)
-      ? DEFAULT_BEDROCK_MANTLE_GROK_CHAT_REGION
-      : DEFAULT_BEDROCK_MANTLE_CHAT_REGION,
-  );
-  const apiBaseUrl = config.apiBaseUrl || getBedrockMantleChatBaseUrl(region, modelName);
+  const profile = modelName.match(/^[a-z-]+\.(openai\.gpt-.+)$/);
+  if (
+    profile &&
+    isBedrockOpenAiChatModel(profile[1]) &&
+    (!config.apiBaseUrl || isBedrockMantleEndpoint(config.apiBaseUrl))
+  ) {
+    throw new Error(
+      `Amazon Bedrock inference profile "${modelName}" cannot be used on Mantle. Use ` +
+        `"bedrock:mantle:${profile[1]}" for Mantle Chat Completions. Use bedrock:converse: with a Runtime profile listed on the AWS model card.`,
+    );
+  }
   const isGrok = isBedrockGrokModel(modelName);
 
   return new BedrockMantleChatProvider(modelName, {
     ...providerOptions,
-    config: { ...config, apiBaseUrl, ...(isGrok ? { omitDefaults: true } : {}) },
+    config: { ...config, ...(isGrok ? { omitDefaults: true } : {}) },
   });
 }

@@ -10,6 +10,7 @@ import * as yaml from 'js-yaml';
 import { CheckCircle, Copy, Download } from 'lucide-react';
 import { DownloadFormat, downloadBlob, useDownloadEval } from '../../../hooks/useDownloadEval';
 import { useToast } from '../../../hooks/useToast';
+import { toPortableConfig } from '../../../utils/portableConfig';
 import { useTableStore as useResultsViewStore } from './store';
 import type { UnifiedConfig } from '@promptfoo/types';
 
@@ -84,18 +85,9 @@ export function DownloadDialog({ open, onClose }: DownloadDialogProps) {
   const { showToast } = useToast();
 
   // Use the new hooks for CSV and JSON downloads
-  const { download: downloadCsvApi, isLoading: isLoadingCsv } = useDownloadEval(
-    DownloadFormat.CSV,
-    {
-      onSuccess: (fileName) => setDownloadedFiles((prev) => new Set([...prev, fileName])),
-    },
-  );
+  const { download: downloadCsvApi, isLoading: isLoadingCsv } = useDownloadEval(DownloadFormat.CSV);
   const { download: downloadJsonApi, isLoading: isLoadingJson } = useDownloadEval(
     DownloadFormat.JSON,
-
-    {
-      onSuccess: (fileName) => setDownloadedFiles((prev) => new Set([...prev, fileName])),
-    },
   );
 
   const openDownloadDialog = (blob: Blob, downloadName: string) => {
@@ -137,7 +129,7 @@ export function DownloadDialog({ open, onClose }: DownloadDialogProps) {
     const schemaLine = '# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json\n';
 
     // Clean top-level empty properties
-    const cleanConfig = removeEmpty(configToDownload);
+    const cleanConfig = removeEmpty(toPortableConfig(configToDownload));
 
     // Convert to YAML
     const configData = yaml.dump(cleanConfig, options);
@@ -178,7 +170,7 @@ export function DownloadDialog({ open, onClose }: DownloadDialogProps) {
 
     // Find the failed tests
     const failedTests = table.body
-      .filter((row) => row.outputs.some((output) => output != null && !output.pass))
+      .filter((row) => row.outputs.some((output) => !output?.pass))
       .map((row) => row.test);
 
     if (failedTests.length === 0) {
@@ -221,25 +213,13 @@ export function DownloadDialog({ open, onClose }: DownloadDialogProps) {
     handleClose();
   };
 
-  const downloadTable = async () => {
+  const downloadResults = async (download: (evalId: string) => Promise<void>) => {
     if (!evalId) {
       showToast('No evaluation ID', 'error');
       return;
     }
     try {
-      await downloadJsonApi(evalId);
-    } catch {
-      // Error is already handled by the hook
-    }
-  };
-
-  const downloadCsv = async () => {
-    if (!evalId) {
-      showToast('No evaluation ID', 'error');
-      return;
-    }
-    try {
-      await downloadCsvApi(evalId);
+      await download(evalId);
     } catch {
       // Error is already handled by the hook
     }
@@ -257,24 +237,25 @@ export function DownloadDialog({ open, onClose }: DownloadDialogProps) {
 
     const humanEvalCases = table.body
       .filter((row) => row.outputs.some((output) => output != null))
-      .map((row) => {
-        const output = row.outputs.find((candidate) => candidate != null)!;
-        return {
-          vars: {
-            ...row.test.vars,
-            output: output.text.includes('---') ? output.text.split('---\n')[1] : output.text,
-            redteamFinalPrompt: output.metadata?.redteamFinalPrompt,
-            ...(output.gradingResult?.comment ? { comment: output.gradingResult.comment } : {}),
+      .map((row) => ({
+        vars: {
+          ...row.test.vars,
+          output: row.outputs[0]?.text.includes('---')
+            ? row.outputs[0]!.text.split('---\n')[1]
+            : (row.outputs[0]?.text ?? ''),
+          redteamFinalPrompt: row.outputs[0]?.metadata?.redteamFinalPrompt,
+          ...(row.outputs[0]?.gradingResult?.comment
+            ? { comment: row.outputs[0]!.gradingResult!.comment }
+            : {}),
+        },
+        assert: [
+          {
+            type: 'javascript',
+            value: `${row.outputs[0]?.pass ? '' : '!'}JSON.parse(output).pass`,
           },
-          assert: [
-            {
-              type: 'javascript',
-              value: `${output.pass ? '' : '!'}JSON.parse(output).pass`,
-            },
-          ],
-          metadata: row.test.metadata,
-        };
-      });
+        ],
+        metadata: row.test.metadata,
+      }));
 
     const yamlContent = yaml.dump(humanEvalCases);
     const blob = new Blob([yamlContent], { type: 'application/x-yaml' });
@@ -360,9 +341,7 @@ export function DownloadDialog({ open, onClose }: DownloadDialogProps) {
                     disabled={
                       !table ||
                       !table.body ||
-                      table.body.every((row) =>
-                        row.outputs.every((output) => output == null || output.pass),
-                      )
+                      table.body.every((row) => row.outputs.every((output) => output?.pass))
                     }
                   >
                     <Download className="size-4 mr-2" />
@@ -391,7 +370,7 @@ export function DownloadDialog({ open, onClose }: DownloadDialogProps) {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <Button
-                  onClick={downloadCsv}
+                  onClick={() => downloadResults(downloadCsvApi)}
                   variant="outline"
                   className="h-12"
                   disabled={isLoadingCsv}
@@ -401,7 +380,7 @@ export function DownloadDialog({ open, onClose }: DownloadDialogProps) {
                 </Button>
 
                 <Button
-                  onClick={downloadTable}
+                  onClick={() => downloadResults(downloadJsonApi)}
                   variant="outline"
                   className="h-12"
                   disabled={isLoadingJson}

@@ -1,7 +1,4 @@
-import type { Server } from 'node:http';
-
-import request from 'supertest';
-import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
 import EvalResult from '../../src/models/evalResult';
@@ -9,6 +6,7 @@ import { createApp } from '../../src/server/server';
 import { STRIPPED_TABLE_CELL_PROMPT } from '../../src/util/eval/evalTableUtils';
 import invariant from '../../src/util/invariant';
 import EvalFactory from '../factories/evalFactory';
+import { setupTestServer } from '../util/testServer';
 
 vi.mock('../../src/database/signal', async () => {
   const actual = await vi.importActual('../../src/database/signal');
@@ -19,28 +17,9 @@ vi.mock('../../src/database/signal', async () => {
 });
 
 describe('eval routes', () => {
-  let api: ReturnType<typeof request.agent>;
-  let server: Server;
   const testEvalIds = new Set<string>();
 
-  beforeAll(async () => {
-    await runDbMigrations();
-    await new Promise<void>((resolve, reject) => {
-      server = createApp().listen(0, '127.0.0.1', (error?: Error) =>
-        error ? reject(error) : resolve(),
-      );
-    });
-    api = request.agent(server);
-  });
-
-  afterAll(async () => {
-    if (!server.listening) {
-      return;
-    }
-    await new Promise<void>((resolve, reject) => {
-      server.close((error) => (error ? reject(error) : resolve()));
-    });
-  });
+  const api = setupTestServer(createApp, runDbMigrations);
 
   afterEach(async () => {
     vi.restoreAllMocks();
@@ -174,7 +153,9 @@ describe('eval routes', () => {
     });
 
     it('returns a JSON 500 response when rating storage fails', async () => {
-      vi.spyOn(EvalResult, 'submitRating').mockRejectedValueOnce(new Error('database unavailable'));
+      const findByIdSpy = vi
+        .spyOn(EvalResult, 'findById')
+        .mockRejectedValueOnce(new Error('database unavailable'));
 
       const res = await api
         .post('/api/eval/eval-1/results/result-1/rating')
@@ -182,6 +163,7 @@ describe('eval routes', () => {
 
       expect(res.status).toBe(500);
       expect(res.body).toEqual({ error: 'Failed to submit rating' });
+      expect(findByIdSpy).toHaveBeenCalledWith('result-1');
     });
 
     it('returns the persisted result row so SDK clients see refreshed metrics', async () => {
@@ -214,6 +196,27 @@ describe('eval routes', () => {
       expect(res.body.gradingResult?.pass).toBe(true);
       expect(res.body.gradingResult?.score).toBe(1);
       expect(res.body.gradingResult?.reason).toContain('Manual result');
+    });
+
+    it('persists the rated result before notifying through the eval save', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+      const results = await eval_.getResults();
+      const result = results[1];
+      invariant(result.id, 'Result ID is required');
+      const resultSaveSpy = vi.spyOn(EvalResult.prototype, 'save');
+      const evalSaveSpy = vi.spyOn(Eval.prototype, 'save');
+
+      const res = await api
+        .post(`/api/eval/${eval_.id}/results/${result.id}/rating`)
+        .send(createManualRatingPayload(result, true));
+
+      expect(res.status).toBe(200);
+      expect(resultSaveSpy).toHaveBeenCalledTimes(1);
+      expect(evalSaveSpy).toHaveBeenCalledTimes(1);
+      expect(resultSaveSpy.mock.invocationCallOrder[0]).toBeLessThan(
+        evalSaveSpy.mock.invocationCallOrder[0],
+      );
     });
 
     it('Passing test and the user marked it as passing (no change)', async () => {
@@ -376,6 +379,7 @@ describe('eval routes', () => {
     it('preserves config tests returned from the table endpoint when saved back', async () => {
       const eval_ = await EvalFactory.create();
       testEvalIds.add(eval_.id);
+      const originalTable = await eval_.getTable();
 
       const res = await api.get(`/api/eval/${eval_.id}/table`);
 
@@ -384,13 +388,19 @@ describe('eval routes', () => {
 
       const patchRes = await api
         .patch(`/api/eval/${eval_.id}`)
-        .send({ config: { ...res.body.config, description: 'renamed eval' } });
+        .send({ config: { ...res.body.config, description: 'renamed eval', otherField: 'value' } });
 
       expect(patchRes.status).toBe(200);
+      expect(patchRes.body).toEqual({ message: 'Eval updated successfully' });
 
       const updatedEval = await Eval.findById(eval_.id);
       invariant(updatedEval, 'Eval is required');
       expect(updatedEval.config.tests).toHaveLength(2);
+      expect(updatedEval.config).toMatchObject({
+        description: 'renamed eval',
+        otherField: 'value',
+      });
+      expect(await updatedEval.getTable()).toEqual(originalTable);
     });
 
     it('preserves Azure Blob SAS tokens when a redacted table config is saved back', async () => {

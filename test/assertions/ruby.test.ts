@@ -3,11 +3,13 @@ import * as path from 'path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { runAssertion } from '../../src/assertions/index';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
-import * as rubyUtils from '../../src/ruby/rubyUtils.js';
 import { runRuby } from '../../src/ruby/rubyUtils.js';
 import { runRubyCode } from '../../src/ruby/wrapper';
+import { createScriptAssertionParams } from '../factories/literalFixtures';
 
 import type { Assertion, AtomicTestCase, GradingResult } from '../../src/types/index';
+
+const { createPathFactory } = await vi.hoisted(() => import('../factories/moduleMocks'));
 
 vi.mock('../../src/ruby/wrapper', async () => {
   const actual =
@@ -28,18 +30,7 @@ vi.mock('../../src/ruby/rubyUtils.js', async () => {
   };
 });
 
-vi.mock('path', async () => {
-  const actualPath = await vi.importActual<typeof import('path')>('path');
-  const mocked = {
-    ...actualPath,
-    extname: vi.fn(),
-    resolve: vi.fn(),
-  };
-  return {
-    ...mocked,
-    default: mocked,
-  };
-});
+vi.mock('path', createPathFactory());
 
 describe('Ruby assertions', () => {
   const resetRubyMocks = () => {
@@ -48,9 +39,6 @@ describe('Ruby assertions', () => {
     vi.mocked(path.extname).mockReset();
     vi.mocked(runRubyCode).mockReset();
     vi.mocked(runRuby).mockReset();
-    rubyUtils.state.cachedRubyPath = null;
-    rubyUtils.state.validationPromise = null;
-    rubyUtils.state.validatingPath = null;
   };
 
   beforeEach(() => {
@@ -61,12 +49,39 @@ describe('Ruby assertions', () => {
     resetRubyMocks();
   });
 
+  it('accepts the result shapes earlier releases recorded from Ruby graders', async () => {
+    vi.mocked(runRubyCode).mockResolvedValueOnce({
+      pass_: true,
+      score: 1,
+      reason: 'ok',
+      named_scores: { exact_match: true, has_citation: false, skipped: null, relevance: '0.5' },
+      component_results: [{ pass_: true, score: 0.75 }, { pass_: false }],
+    });
+
+    const result = await runAssertion({
+      assertion: { type: 'ruby', value: 'unused' },
+      test: {},
+      providerResponse: { output: 'Test output' },
+    });
+
+    expect(result).toMatchObject({
+      pass: true,
+      score: 1,
+      reason: 'ok',
+      namedScores: { exact_match: 1, has_citation: 0, skipped: 0, relevance: 0.5 },
+      componentResults: [
+        { pass: true, score: 0.75, reason: '' },
+        { pass: false, score: 0, reason: '' },
+      ],
+    });
+  });
+
   it('omits rejected object payloads from validation errors', async () => {
     vi.mocked(runRubyCode).mockResolvedValueOnce({
       pass_: true,
       score: 1,
       reason: 'Custom grade',
-      named_scores: { quality: null },
+      named_scores: { quality: 'high' },
       metadata: { http: { requestHeaders: { authorization: 'diagnostic-placeholder' } } },
     });
 
@@ -102,12 +117,7 @@ describe('Ruby assertions', () => {
       };
       vi.mocked(runRubyCode).mockResolvedValueOnce(scriptResult);
 
-      const result = await runAssertion({
-        prompt: 'Test',
-        assertion: { type: 'ruby', value: 'unused' },
-        test: {},
-        providerResponse: { output: 'Test output' },
-      });
+      const result = await runAssertion(createScriptAssertionParams('ruby'));
 
       expect(result).toMatchObject({ pass: true, score: 1, reason: 'ok' });
       expect(result).toHaveProperty(mappedField, null);
@@ -143,12 +153,7 @@ describe('Ruby assertions', () => {
       };
       vi.mocked(runRubyCode).mockResolvedValueOnce(scriptResult);
 
-      const result = await runAssertion({
-        prompt: 'Test',
-        assertion: { type: 'ruby', value: 'unused' },
-        test: {},
-        providerResponse: { output: 'Test output' },
-      });
+      const result = await runAssertion(createScriptAssertionParams('ruby'));
 
       if (Number.isFinite(weight)) {
         expect(result.namedScoreWeights).toEqual({ quality: 3 });
@@ -184,7 +189,7 @@ describe('Ruby assertions', () => {
       undefined,
       false,
       0.6,
-      'Ruby code returned true',
+      'Custom reason',
     ],
     [
       'JSON-stringified GradingResult below threshold',
@@ -247,7 +252,7 @@ describe('Ruby assertions', () => {
       undefined,
       false,
       0.75,
-      'Ruby code returned true',
+      'Custom reason',
     ],
   ])(
     'should honor inverse mode when a file:// not-ruby assertion returns a %s',

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../src/cache';
 import { WebhookProvider } from '../../src/providers/webhook';
+import { createMockFetchResponse } from './mockProviderResponses';
 
 vi.mock('../../src/cache');
 
@@ -42,14 +43,9 @@ describe('WebhookProvider', () => {
 
   describe('callApi', () => {
     it('should call webhook and return output', async () => {
-      const mockFetchResponse = {
-        data: {
-          output: 'test response',
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      };
+      const mockFetchResponse = createMockFetchResponse({
+        output: 'test response',
+      });
 
       vi.mocked(fetchWithCache).mockResolvedValue(mockFetchResponse);
 
@@ -79,14 +75,9 @@ describe('WebhookProvider', () => {
     });
 
     it('should include config in request if provided', async () => {
-      const mockFetchResponse = {
-        data: {
-          output: 'test response',
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      };
+      const mockFetchResponse = createMockFetchResponse({
+        output: 'test response',
+      });
 
       vi.mocked(fetchWithCache).mockResolvedValue(mockFetchResponse);
 
@@ -125,14 +116,9 @@ describe('WebhookProvider', () => {
     });
 
     it('should handle invalid response format', async () => {
-      const mockFetchResponse = {
-        data: {
-          foo: 'bar',
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-      };
+      const mockFetchResponse = createMockFetchResponse({
+        foo: 'bar',
+      });
 
       vi.mocked(fetchWithCache).mockResolvedValue(mockFetchResponse);
 
