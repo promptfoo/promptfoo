@@ -62,6 +62,17 @@ function isExecutableScript(node: DefaultTreeAdapterMap['element']): boolean {
   return !type || SCRIPT_TYPE.test(type);
 }
 
+function frameAllowsScripts(node: DefaultTreeAdapterMap['element']): boolean {
+  const sandbox = node.attrs.find((attr) => attr.name === 'sandbox');
+  return (
+    !sandbox ||
+    sandbox.value
+      .toLowerCase()
+      .split(/[\t\n\f\r ]+/)
+      .includes('allow-scripts')
+  );
+}
+
 function findXssRules(output: string): string[] {
   if (!output.includes('<')) {
     return CSS_JAVASCRIPT_URL.test(output) ? ['javascript-uri'] : [];
@@ -93,7 +104,12 @@ function findXssRules(output: string): string[] {
         const rule = attributeRule(name, value);
         if (rule) {
           record(rule);
-        } else if (node.tagName === 'iframe' && name === 'srcdoc' && value.includes('<')) {
+        } else if (
+          node.tagName === 'iframe' &&
+          name === 'srcdoc' &&
+          value.includes('<') &&
+          frameAllowsScripts(node)
+        ) {
           documents.push(value);
         }
       }
