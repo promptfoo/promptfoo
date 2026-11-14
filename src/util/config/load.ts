@@ -680,7 +680,11 @@ async function prepareCombinedConfig(
     return prefix + path.resolve(basePath, reference.slice(prefix.length));
   };
 
-  const resolveNestedFileReferences = (basePath: string, value: unknown): unknown => {
+  const resolveNestedFileReferences = (
+    basePath: string,
+    value: unknown,
+    skipVars?: string[],
+  ): unknown => {
     if (typeof value === 'string') {
       return value.startsWith('file://') ? resolveConfigPath(basePath, value) : value;
     }
@@ -691,7 +695,7 @@ async function prepareCombinedConfig(
       return Object.fromEntries(
         Object.entries(value).map(([key, item]) => [
           key,
-          resolveNestedFileReferences(basePath, item),
+          skipVars?.includes(key) ? item : resolveNestedFileReferences(basePath, item),
         ]),
       );
     }
@@ -742,7 +746,7 @@ async function prepareCombinedConfig(
             ? resolveConfigPath(basePath, source.vars)
             : Array.isArray(source.vars)
               ? source.vars.map((value) => resolveConfigPath(basePath, value))
-              : resolveNestedFileReferences(basePath, source.vars),
+              : resolveNestedFileReferences(basePath, source.vars, source.options?.skipRenderVars),
       }),
       ...(typeof source.provider === 'string' &&
         source.provider.startsWith('file://') && {
