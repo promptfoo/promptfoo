@@ -307,31 +307,35 @@ describe('JSONL output with proper line endings', () => {
     expect(fs.readFileSync(targetPath, 'utf8')).toContain('"output":"replacement"');
   });
 
-  it.skipIf(process.platform === 'win32' || process.getuid?.() === 0)(
-    'keeps writable relative outputs accessible in a restricted cwd',
-    async () => {
-      const cwd = process.cwd();
-      const child = path.join(tempDir, 'inside');
-      fs.mkdirSync(child);
-      process.chdir(child);
-      try {
+  it('streams and rewrites relative paths from a writable child directory', async () => {
+    const cwd = process.cwd();
+    const child = path.join(tempDir, 'inside');
+    // POSIX permits relative access from the cwd even if an ancestor stops
+    // granting search permission. Windows lacks this directory mode.
+    const restrictParent = process.platform !== 'win32';
+    fs.mkdirSync(child);
+    process.chdir(child);
+    try {
+      if (restrictParent) {
         fs.chmodSync(tempDir, 0);
-        fs.writeFileSync('out.jsonl', '');
-        const writer = new JsonlFileWriter('out.jsonl');
-        await writer.write({ row: 1 });
-        await writer.close();
-        expect(JSON.parse(fs.readFileSync('out.jsonl', 'utf8'))).toEqual({ row: 1 });
-        mockEval.fetchResultsBatched.mockImplementation(async function* () {
-          yield [{ testIdx: 0, success: true }];
-        });
-        await writeOutput('nested/final.jsonl', mockEval, null);
-        expect(fs.existsSync('nested/final.jsonl')).toBe(true);
-      } finally {
-        fs.chmodSync(tempDir, 0o700);
-        process.chdir(cwd);
       }
-    },
-  );
+      fs.writeFileSync('out.jsonl', '');
+      const writer = new JsonlFileWriter('out.jsonl');
+      await writer.write({ row: 1 });
+      await writer.close();
+      expect(JSON.parse(fs.readFileSync('out.jsonl', 'utf8'))).toEqual({ row: 1 });
+      mockEval.fetchResultsBatched.mockImplementation(async function* () {
+        yield [{ testIdx: 0, success: true }];
+      });
+      await writeOutput('nested/final.jsonl', mockEval, null);
+      expect(fs.existsSync('nested/final.jsonl')).toBe(true);
+    } finally {
+      if (restrictParent) {
+        fs.chmodSync(tempDir, 0o700);
+      }
+      process.chdir(cwd);
+    }
+  });
 
   it('should rewrite an artifact with a long valid basename', async () => {
     if (process.platform === 'win32') {
