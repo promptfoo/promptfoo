@@ -13,6 +13,7 @@ Practical tutorials to help you get the most out of promptfoo evals. Each guide 
 Learn how to measure specific aspects of LLM output quality.
 
 - [Evaluating RAG Pipelines](/docs/guides/evaluate-rag) — Test retrieval-augmented generation end-to-end
+- [RAG Failure Modes](/docs/guides/rag-failure-modes) — Diagnose retrieval, grounding, citation, and refusal failures
 - [Preventing Hallucinations](/docs/guides/prevent-llm-hallucinations) — Measure and reduce hallucination rates with perplexity, RAG, and controlled decoding
 - [Evaluating JSON Outputs](/docs/guides/evaluate-json) — Validate structured LLM outputs against schemas
 - [Evaluating Coding Agents](/docs/guides/evaluate-coding-agents) — Test AI coding assistants
