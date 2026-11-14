@@ -3,7 +3,7 @@ import { getDefaultProviders } from '../providers/defaults';
 import invariant from '../util/invariant';
 import { callProviderWithContext, getAndCheckProvider } from './providers';
 import { loadRubricPrompt, renderLlmRubricPrompt } from './rubric';
-import { fail, normalizeMatcherTokenUsage, tryParse } from './shared';
+import { graderFail, normalizeMatcherTokenUsage, tryParse } from './shared';
 
 import type {
   Assertion,
@@ -59,22 +59,24 @@ export async function matchesSelectBest(
       : resp.tokenUsage,
   );
   const cacheMetadata = resp.cached ? { metadata: { cachedResponse: true } } : {};
-  const failureResults = (reason: () => string) =>
-    Array.from({ length: outputs.length }, () => ({
-      ...fail(reason(), tokensUsed),
-      ...cacheMetadata,
-    }));
+  const failureResults = (reason: string) =>
+    outputs.map(() => {
+      const result = graderFail(reason, tokensUsed);
+      return { ...result, metadata: { ...result.metadata, ...cacheMetadata.metadata } };
+    });
   if (resp.error || !resp.output) {
-    return failureResults(() => resp.error || 'No output');
+    return failureResults(resp.error || 'No output');
   }
 
-  invariant(typeof resp.output === 'string', 'select-best produced malformed response');
+  if (typeof resp.output !== 'string') {
+    return failureResults('select-best produced malformed response');
+  }
 
   const firstIntegerMatch = resp.output.trim().match(/\d+/);
   const verdict = firstIntegerMatch ? Number.parseInt(firstIntegerMatch[0], 10) : Number.NaN;
 
   if (Number.isNaN(verdict) || verdict < 0 || verdict >= outputs.length) {
-    return failureResults(() => `Invalid select-best verdict: ${verdict}`);
+    return failureResults(`Invalid select-best verdict: ${verdict}`);
   }
 
   return outputs.map((_output, index) => {

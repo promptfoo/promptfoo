@@ -41,6 +41,7 @@ describe('matchesSelectBest', () => {
     expect(result[0]).toMatchObject({
       pass: false,
       reason: 'Invalid select-best verdict: NaN',
+      metadata: { graderError: true },
       tokensUsed: {
         total: 7,
         prompt: 3,
@@ -84,7 +85,7 @@ describe('matchesSelectBest', () => {
     for (const gradingResult of result) {
       expect(gradingResult).toMatchObject({
         pass: false,
-        metadata: { cachedResponse: true },
+        metadata: { cachedResponse: true, graderError: true },
         tokensUsed: { total: 30, cached: 30 },
       });
     }
@@ -92,6 +93,7 @@ describe('matchesSelectBest', () => {
 
   it.each([
     { label: 'valid verdict', response: { output: '0' } },
+    { label: 'non-string verdict', response: { output: { index: 0 } } },
     { label: 'invalid verdict', response: { output: 'not a verdict' } },
     { label: 'provider error', response: { error: 'comparison provider failed', output: '' } },
   ])('preserves mixed cached and incurred comparison usage for a $label', async ({ response }) => {

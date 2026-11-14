@@ -188,7 +188,7 @@ These metrics are model-assisted, and rely on LLMs or other machine learning mod
 
 See [Model-graded evals](/docs/configuration/expected-outputs/model-graded), [classification](/docs/configuration/expected-outputs/classifier), and [similarity](/docs/configuration/expected-outputs/similar) docs for more information.
 
-Failed assertions caused by [grader errors](/docs/configuration/expected-outputs/model-graded/#common-patterns-and-troubleshooting) are recorded as `ERROR`.
+Failed assertions caused by [grader errors](/docs/configuration/expected-outputs/model-graded/#common-patterns-and-troubleshooting) are recorded as `ERROR`. A `select-best` grader outage or invalid verdict marks every candidate in the comparison as an error.
 
 | Assertion Type                                                                                       | Method                                                                           |
 | ---------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |

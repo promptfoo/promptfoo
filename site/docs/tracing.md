@@ -108,6 +108,8 @@ Grading spans describe each assertion with `gen_ai.evaluation.name`,
 reason, `gen_ai.evaluation.explanation` records a sanitized, shortened version. Any model call used
 by the grader appears in a child span. See [`is-refusal`](/docs/configuration/expected-outputs/deterministic/#is-refusal) for how provider-reported refusals and output transforms affect grading.
 
+If a `select-best` grader fails to return a usable verdict, the saved evaluation records an error for each candidate. The error rows retain any usage reported by the grader.
+
 ### Example Trace Output
 
 When calling OpenAI's GPT-6 Luna through Chat Completions with `reasoning_effort: none`:
