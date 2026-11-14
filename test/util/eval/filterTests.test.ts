@@ -176,6 +176,12 @@ describe('filterTests', () => {
         expect(result.map((t: TestCase) => t.vars?.var1)).toEqual(['test1', 'test2', 'test3']);
       });
 
+      it('keeps unannotated tests when the OR list is empty', async () => {
+        const tests = [...(multiMetadataTestSuite.tests ?? []), { vars: { var1: 'no-metadata' } }];
+        const result = await filterTests({ ...multiMetadataTestSuite, tests }, { metadataAny: [] });
+        expect(result).toEqual(tests);
+      });
+
       it('should combine AND and OR metadata filters', async () => {
         const result = await filterTests(multiMetadataTestSuite, {
           metadata: 'env=dev',

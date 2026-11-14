@@ -709,7 +709,11 @@ async function doEvalWithEnv(
       : (cmdObj.filterRange ?? commandLineOptions?.filterRange ?? evaluateOptions.filterRange);
     const filterSample = cmdObj.filterSample ?? commandLineOptions?.filterSample;
     const filterSampleSeed = cmdObj.filterSampleSeed ?? commandLineOptions?.filterSampleSeed;
-    const filterMetadataAny = cmdObj.filterMetadataAny ?? commandLineOptions?.filterMetadataAny;
+    const configuredMetadataAny = cmdObj.filterMetadataAny ?? commandLineOptions?.filterMetadataAny;
+    const filterMetadataAny =
+      Array.isArray(configuredMetadataAny) && configuredMetadataAny.length === 0
+        ? undefined
+        : configuredMetadataAny;
     if (!resumeEval && filterMetadataAny !== undefined && hasScenarios) {
       throw new Error(
         '--filter-metadata-any supports top-level tests only. Remove scenarios before using this option.',

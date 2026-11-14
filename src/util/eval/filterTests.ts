@@ -90,11 +90,11 @@ function createMetadataFilter(
   testSuite: TestSuite,
   options: FilterOptions,
 ): TestFilterFn | undefined {
-  if (options.metadata === undefined && options.metadataAny === undefined) {
+  const anyFilters = parseMetadataFilters(options.metadataAny, '--filter-metadata-any');
+  if (options.metadata === undefined && anyFilters.length === 0) {
     return undefined;
   }
   const allFilters = parseMetadataFilters(options.metadata, '--filter-metadata');
-  const anyFilters = parseMetadataFilters(options.metadataAny, '--filter-metadata-any');
   const defaultMetadata =
     anyFilters.length > 0 && typeof testSuite.defaultTest === 'object'
       ? testSuite.defaultTest.metadata
