@@ -122,7 +122,7 @@ export interface HydraConfig {
   scanId?: string;
   targetId?: string;
   maxTurns?: number;
-  maxBacktracks?: number;
+  maxBacktracks?: number | string;
   stateful?: boolean;
   excludeTargetOutputFromAgenticAttackGeneration?: boolean;
   /**
@@ -219,7 +219,10 @@ export class HydraProvider implements ApiProvider {
     this.injectVar = config.injectVar;
     const configuredMaxTurns = config.maxTurns ?? DEFAULT_MAX_TURNS;
     this.maxTurns = isLoggedIntoCloud() ? configuredMaxTurns : Math.min(configuredMaxTurns, 10);
-    this.maxBacktracks = config.maxBacktracks ?? DEFAULT_MAX_BACKTRACKS;
+    this.maxBacktracks = Number(config.maxBacktracks ?? DEFAULT_MAX_BACKTRACKS);
+    if (!Number.isFinite(this.maxBacktracks)) {
+      throw new Error(`${this.providerOptions.strategyName} maxBacktracks must be a finite number`);
+    }
 
     this.stateful = config.stateful ?? false;
     this.excludeTargetOutputFromAgenticAttackGeneration =
@@ -833,7 +836,6 @@ export class HydraProvider implements ApiProvider {
           turn,
           backtrackCount,
           conversationLength: this.conversationHistory.length,
-          willDecrementTurn: turn > 1,
         });
 
         if (backtrackCount >= this.maxBacktracks) {
@@ -848,9 +850,8 @@ export class HydraProvider implements ApiProvider {
           break;
         }
 
-        if (turn > 1) {
-          turn--; // Decrement turn to retry
-        }
+        // Retry the turn whose messages were rolled back.
+        turn--;
         continue;
       }
 
