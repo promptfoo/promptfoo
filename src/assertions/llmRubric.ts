@@ -26,8 +26,12 @@ const MAX_EVIDENCE_DEPTH = 20;
  * The path is a dotted identifier like `metadata.fileChanges.0.path`. The leading
  * `metadata` segment is stripped before walking the remaining segments.
  */
-export function getMetadataPathValue(metadata: unknown, path: string): unknown {
-  if (typeof path !== 'string' || !path.startsWith('metadata')) {
+export function getMetadataPathValue(
+  metadata: unknown,
+  path: string,
+  ancestors?: WeakSet<object>,
+): unknown {
+  if (typeof path !== 'string' || !path.startsWith('metadata.')) {
     return undefined;
   }
   const parts = path.split('.').slice(1);
@@ -36,8 +40,11 @@ export function getMetadataPathValue(metadata: unknown, path: string): unknown {
     if (value === null || value === undefined || typeof value !== 'object') {
       return undefined;
     }
+    if (!Object.prototype.hasOwnProperty.call(value, part)) {
+      return undefined;
+    }
+    ancestors?.add(value);
     const rec = value as Record<string, unknown>;
-    // Support both `array.0` and `array."0"` — either works for a numeric index.
     value = rec[part];
   }
   return value;
@@ -62,29 +69,7 @@ export function getMetadataPathValue(metadata: unknown, path: string): unknown {
  * references (common in trace entries or summaries) while still eliding real
  * cycles.
  */
-function isolateEvidenceValue(value: unknown, root: object | null, path: string, maxBytes: number) {
-  if (root === null || value === null || typeof value !== 'object') {
-    return { value, limited: false };
-  }
-
-  // The path is known here, so discover ancestors without scanning sibling fields.
-  const ancestors: object[] = [root];
-  let current: unknown = root;
-  for (const part of path.split('.').slice(1)) {
-    if (current === null || typeof current !== 'object') {
-      break;
-    }
-    current = (current as Record<string, unknown>)[part];
-    if (current !== null && typeof current === 'object') {
-      ancestors.push(current);
-    }
-  }
-
-  // Build the ancestor set for back-reference elision. We exclude:
-  //   - The endpoint itself (which we're cloning and must preserve)
-  //   - Any ancestor that IS the same object as the endpoint (cyclic-endpoint
-  //     case where the selected path points to an ancestor)
-  const ancestorSet = new WeakSet<object>(ancestors.filter((ancestor) => ancestor !== value));
+function isolateEvidenceValue(value: unknown, ancestorSet: WeakSet<object>, maxBytes: number) {
   // A byte limit cannot usefully include more entries than bytes. Cap the
   // walk as well, so a small projection need not clone an entire wide subtree.
   let remainingEntries = Math.max(0, Math.min(maxBytes, 65_536));
@@ -100,10 +85,10 @@ function isolateEvidenceValue(value: unknown, root: object | null, path: string,
   }
 
   function clone(v: unknown, pathAncestors: object[] = [], depth: number = 0): unknown {
-    if (v === null || v === undefined) {
-      return v;
+    if (typeof v === 'function' || typeof v === 'symbol') {
+      return undefined;
     }
-    if (typeof v !== 'object') {
+    if (v === null || typeof v !== 'object') {
       return v;
     }
     // Bounded depth — replace anything past the limit with a sentinel so we
@@ -235,22 +220,15 @@ export function projectEvidenceValues(
     return undefined;
   }
 
-  const rootIsObject = metadata !== null && typeof metadata === 'object';
-  const rootObj = rootIsObject ? (metadata as object) : null;
-
   const projected: EvidenceEntry[] = [];
   for (const item of evidence) {
-    const rawValue = getMetadataPathValue(metadata, item.from);
-    if (rawValue === undefined) {
+    const ancestors = new WeakSet<object>();
+    const rawValue = getMetadataPathValue(metadata, item.from, ancestors);
+    if (rawValue === undefined || typeof rawValue === 'symbol' || typeof rawValue === 'function') {
       continue;
     }
 
-    // Break any back-reference from this subtree to the metadata root before
-    // we serialise — prevents sibling keys (including credentials) from leaking
-    // through a selected child's parent pointer. Pass the validated path so
-    // ancestors are collected correctly even when the selected endpoint IS a
-    // cyclic ancestor (e.g. `metadata.self = metadata` with `from: metadata.self`).
-    const isolated = isolateEvidenceValue(rawValue, rootObj, item.from, item.maxBytes);
+    const isolated = isolateEvidenceValue(rawValue, ancestors, item.maxBytes);
 
     // Serialise → escape → truncate. Escape BEFORE truncation so the byte limit
     // bounds the FINAL grader-facing content — an HTML-rich payload would

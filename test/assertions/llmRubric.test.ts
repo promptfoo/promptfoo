@@ -755,6 +755,23 @@ describe('projectEvidenceValues', () => {
     expect(projectEvidenceValues(ev, meta)).toBeUndefined();
   });
 
+  it('skips unsupported evidence and never invokes metadata serialization hooks', () => {
+    const toJSON = vi.fn(() => 'unselected secret');
+    const projected = projectEvidenceValues(
+      ['unsupported', 'inherited', 'selected'].map((key) => ({
+        from: `metadata.${key}`,
+        maxBytes: 1024,
+      })),
+      Object.assign(Object.create({ inherited: 'unselected' }), {
+        unsupported: Symbol('unsupported'),
+        selected: { publicValue: 'visible', toJSON },
+      }),
+    );
+
+    expect(projected?.map(({ value }) => value)).toEqual(['{"publicValue":"visible"}']);
+    expect(toJSON).not.toHaveBeenCalled();
+  });
+
   it('handles bigint values without throwing', () => {
     const ev: AssertionEvidence[] = [{ from: 'metadata.counter', label: 'c', maxBytes: 1024 }];
     const meta = { counter: 9007199254740993n };
@@ -786,6 +803,7 @@ describe('projectEvidenceValues', () => {
     expect(out).toBeDefined();
     const serialized = JSON.stringify(out);
     expect(serialized).not.toContain('leaked');
+    expect(out?.[0].value).toContain('Back-reference to metadata ancestor omitted');
   });
 
   it('truncates on a UTF-8 boundary when the maxBytes limit cuts through continuation bytes', () => {
