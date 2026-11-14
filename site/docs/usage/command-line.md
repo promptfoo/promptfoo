@@ -483,7 +483,7 @@ Unlike `--filter-errors-only` which creates a new eval, `promptfoo retry` update
 
 Compare two evals row by row. Each argument is an eval ID, `latest`, or a JSON results file written by `promptfoo eval -o` or `promptfoo export eval`.
 
-Rows are matched by test, prompt position, and provider. A test is identified by its `description`, or by its vars if it has none. A provider is identified by its `label`, or by its ID if it has no label, so give providers the same `label` in both configs to compare across a model change.
+Rows are matched by test, provider, and prompt position within that provider. Reordering providers preserves these matches. Keep the prompts for each provider in the same order across both evals. A test is identified by its `description`, or by its vars if it has none. A provider is identified by its `label`, or by its ID if it has no label, so give providers the same `label` in both configs to compare across a model change.
 
 Only rows graded in both evals count toward the pass rate, mean score, median latency, and per-provider pass rates. This way an eval with more errors isn't scored on an easier subset. Errors and rows with no counterpart are counted separately. The output also lists every row that passed in one eval and failed in the other.
 
