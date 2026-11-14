@@ -31,30 +31,53 @@ const ANTHROPIC_HEADERS = {
   resetTokens: 'anthropic-ratelimit-tokens-reset',
 } as const;
 
-// Mistral-style headers (per-minute and per-month rate limits)
-const MISTRAL_HEADERS = {
-  remainingRequests: 'x-ratelimit-remaining-req-minute',
-  remainingRequestsPlural: 'x-ratelimit-remaining-requests-minute',
-  remainingTokens: 'x-ratelimit-remaining-tok-minute',
-  remainingTokensPlural: 'x-ratelimit-remaining-tokens-minute',
-  limitRequests: 'x-ratelimit-limit-req-minute',
-  limitRequestsPlural: 'x-ratelimit-limit-requests-minute',
-  limitTokens: 'x-ratelimit-limit-tok-minute',
-  limitTokensPlural: 'x-ratelimit-limit-tokens-minute',
-  resetRequests: 'x-ratelimit-reset-req-minute',
-  resetRequestsPlural: 'x-ratelimit-reset-requests-minute',
-  resetTokens: 'x-ratelimit-reset-tok-minute',
-  resetTokensPlural: 'x-ratelimit-reset-tokens-minute',
-  // Monthly fallback variants
-  remainingRequestsMonth: 'x-ratelimit-remaining-req-month',
-  remainingRequestsMonthPlural: 'x-ratelimit-remaining-requests-month',
-  remainingTokensMonth: 'x-ratelimit-remaining-tok-month',
-  remainingTokensMonthPlural: 'x-ratelimit-remaining-tokens-month',
-  limitRequestsMonth: 'x-ratelimit-limit-req-month',
-  limitRequestsMonthPlural: 'x-ratelimit-limit-requests-month',
-  limitTokensMonth: 'x-ratelimit-limit-tok-month',
-  limitTokensMonthPlural: 'x-ratelimit-limit-tokens-month',
-} as const;
+// Mistral exposes minute and month constraints simultaneously. Keep a window's
+// limit and reset associated with the remaining count that drives throttling.
+function mistralWindow(
+  headers: Record<string, string>,
+  dimension: 'requests' | 'tokens',
+  window: 'minute' | 'month',
+) {
+  const short = dimension === 'requests' ? 'req' : 'tok';
+  const keys = (field: string) => [
+    `x-ratelimit-${field}-${dimension}-${window}`,
+    `x-ratelimit-${field}-${short}-${window}`,
+  ];
+  const remaining = parseFirstMatch(headers, keys('remaining'));
+  const limit = parseFirstMatch(headers, keys('limit'));
+  let resetAt: number | undefined;
+  for (const key of keys('reset')) {
+    if (headers[key] !== undefined) {
+      resetAt = parseResetTime(headers[key]) ?? undefined;
+      if (resetAt !== undefined) {
+        break;
+      }
+    }
+  }
+  return { remaining, limit, resetAt };
+}
+
+function mistralQuota(headers: Record<string, string>, dimension: 'requests' | 'tokens') {
+  const minute = mistralWindow(headers, dimension, 'minute');
+  const month = mistralWindow(headers, dimension, 'month');
+  if (month.remaining === undefined) {
+    return minute.remaining !== undefined ||
+      minute.limit !== undefined ||
+      minute.resetAt !== undefined
+      ? minute
+      : month;
+  }
+  if (minute.remaining === undefined) {
+    return month;
+  }
+  if (month.remaining === 0 && minute.remaining === 0) {
+    return (month.resetAt ?? 0) > (minute.resetAt ?? 0) ? month : minute;
+  }
+  if (minute.limit && month.limit) {
+    return month.remaining / month.limit < minute.remaining / minute.limit ? month : minute;
+  }
+  return month.remaining < minute.remaining ? month : minute;
+}
 
 // Standard/generic headers (RFC 6585 style)
 const STANDARD_HEADERS = {
@@ -74,47 +97,21 @@ export function parseRateLimitHeaders(headers: Record<string, string>): ParsedRa
   const result: ParsedRateLimitHeaders = {};
   const h = lowercaseKeys(headers);
 
-  // --- Remaining counts (ordered: OpenAI, Anthropic, Mistral, Standard) ---
-  result.remainingRequests = parseFirstMatch(h, [
-    OPENAI_HEADERS.remainingRequests,
-    ANTHROPIC_HEADERS.remainingRequests,
-    MISTRAL_HEADERS.remainingRequestsPlural,
-    MISTRAL_HEADERS.remainingRequests,
-    MISTRAL_HEADERS.remainingRequestsMonthPlural,
-    MISTRAL_HEADERS.remainingRequestsMonth,
-    STANDARD_HEADERS.remainingAlt,
-    STANDARD_HEADERS.remaining,
-  ]);
-
-  result.remainingTokens = parseFirstMatch(h, [
-    OPENAI_HEADERS.remainingTokens,
-    ANTHROPIC_HEADERS.remainingTokens,
-    MISTRAL_HEADERS.remainingTokensPlural,
-    MISTRAL_HEADERS.remainingTokens,
-    MISTRAL_HEADERS.remainingTokensMonthPlural,
-    MISTRAL_HEADERS.remainingTokensMonth,
-  ]);
-
-  // --- Limits (ordered: OpenAI, Anthropic, Mistral, Standard) ---
-  result.limitRequests = parseFirstMatch(h, [
-    OPENAI_HEADERS.limitRequests,
-    ANTHROPIC_HEADERS.limitRequests,
-    MISTRAL_HEADERS.limitRequestsPlural,
-    MISTRAL_HEADERS.limitRequests,
-    MISTRAL_HEADERS.limitRequestsMonthPlural,
-    MISTRAL_HEADERS.limitRequestsMonth,
-    STANDARD_HEADERS.limitAlt,
-    STANDARD_HEADERS.limit,
-  ]);
-
-  result.limitTokens = parseFirstMatch(h, [
-    OPENAI_HEADERS.limitTokens,
-    ANTHROPIC_HEADERS.limitTokens,
-    MISTRAL_HEADERS.limitTokensPlural,
-    MISTRAL_HEADERS.limitTokens,
-    MISTRAL_HEADERS.limitTokensMonthPlural,
-    MISTRAL_HEADERS.limitTokensMonth,
-  ]);
+  const requests = mistralQuota(h, 'requests');
+  const tokens = mistralQuota(h, 'tokens');
+  result.remainingRequests =
+    parseFirstMatch(h, [OPENAI_HEADERS.remainingRequests, ANTHROPIC_HEADERS.remainingRequests]) ??
+    requests.remaining ??
+    parseFirstMatch(h, [STANDARD_HEADERS.remainingAlt, STANDARD_HEADERS.remaining]);
+  result.remainingTokens =
+    parseFirstMatch(h, [OPENAI_HEADERS.remainingTokens, ANTHROPIC_HEADERS.remainingTokens]) ??
+    tokens.remaining;
+  result.limitRequests =
+    parseFirstMatch(h, [OPENAI_HEADERS.limitRequests, ANTHROPIC_HEADERS.limitRequests]) ??
+    requests.limit ??
+    parseFirstMatch(h, [STANDARD_HEADERS.limitAlt, STANDARD_HEADERS.limit]);
+  result.limitTokens =
+    parseFirstMatch(h, [OPENAI_HEADERS.limitTokens, ANTHROPIC_HEADERS.limitTokens]) ?? tokens.limit;
 
   // --- Reset time (ordered: OpenAI, Anthropic, Mistral, Standard) ---
   for (const name of [
@@ -124,10 +121,6 @@ export function parseRateLimitHeaders(headers: Record<string, string>): ParsedRa
     // Token limits bind before request limits on eval workloads, and a
     // token-limited 429 may carry only the tokens reset.
     ANTHROPIC_HEADERS.resetTokens,
-    MISTRAL_HEADERS.resetRequestsPlural,
-    MISTRAL_HEADERS.resetRequests,
-    MISTRAL_HEADERS.resetTokensPlural,
-    MISTRAL_HEADERS.resetTokens,
     STANDARD_HEADERS.resetAlt,
     STANDARD_HEADERS.reset,
   ]) {
@@ -139,6 +132,14 @@ export function parseRateLimitHeaders(headers: Record<string, string>): ParsedRa
       }
     }
   }
+
+  // Use the latest exhausted deadline if both constraints must recover.
+  const exhaustedResets = [requests, tokens].flatMap((quota) =>
+    quota.remaining === 0 && quota.resetAt !== undefined ? [quota.resetAt] : [],
+  );
+  result.resetAt ??= exhaustedResets.length
+    ? Math.max(...exhaustedResets)
+    : (requests.resetAt ?? tokens.resetAt);
 
   // --- Retry-After ---
   if (h['retry-after-ms'] !== undefined) {

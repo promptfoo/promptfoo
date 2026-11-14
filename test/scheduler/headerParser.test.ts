@@ -246,6 +246,28 @@ describe('parseRateLimitHeaders', () => {
       expect(result.resetAt).toBe(now + 40000);
     });
 
+    it('keeps the lowest remaining fraction and its reset together', () => {
+      vi.spyOn(Date, 'now').mockReturnValue(1000);
+      const quota = parseRateLimitHeaders({
+        'x-ratelimit-remaining-req-minute': '5',
+        'x-ratelimit-limit-req-minute': '10',
+        'x-ratelimit-remaining-req-month': '6',
+        'x-ratelimit-limit-req-month': '1000000',
+        'x-ratelimit-reset-req-minute': '10s',
+        'x-ratelimit-reset-req-month': '60s',
+      });
+      expect(quota).toMatchObject({ remainingRequests: 6, limitRequests: 1000000, resetAt: 61000 });
+    });
+
+    it('does not associate a monthly remaining count with the minute limit', () => {
+      const quota = parseRateLimitHeaders({
+        'x-ratelimit-remaining-tok-month': '5',
+        'x-ratelimit-limit-tok-minute': '10',
+      });
+      expect(quota.remainingTokens).toBe(5);
+      expect(quota.limitTokens).toBeUndefined();
+    });
+
     it('should parse Mistral monthly fallback rate limit headers', () => {
       const headers = {
         'x-ratelimit-remaining-req-month': '10000',
