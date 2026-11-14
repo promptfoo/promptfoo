@@ -269,7 +269,7 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
         cost: undefined,
       };
 
-      if (this.agentConfig.includeToolCalls) {
+      if (this.agentConfig.includeToolCalls === true) {
         response.metadata = { toolCalls: extractToolCalls(result.newItems) };
       }
 
