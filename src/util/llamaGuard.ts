@@ -51,9 +51,8 @@ export function isKnownLlamaGuardCategory(code: unknown): boolean {
  * Parses LlamaGuard's classification output: a first line of `safe` or `unsafe`,
  * followed (when unsafe) by a comma-separated list of hazard category codes.
  *
- * Any output that isn't the literal string `safe` is treated as unsafe, mirroring the
- * lenient behavior already shipped in ReplicateModerationProvider.callModerationApi —
- * a malformed or unexpected first line does not throw, it just yields no categories.
+ * This lower-level parser returns recognized and unknown category codes.
+ * Graders validate the complete response with parseLlamaGuardGradingResponse.
  *
  * A first line of `safe` is only honored when nothing non-empty follows it. Contradictory
  * output such as `safe\nS1` or `safe\nunexpected classifier output` is symmetric with a
@@ -96,7 +95,7 @@ export function parseLlamaGuardOutput(output: string): LlamaGuardVerdict {
 const UNSAFE_VERDICT =
   /^unsafe[^\S\r\n]*\r?\n[^\S\r\n]*S[1-9]\d*(?:[^\S\r\n]*,[^\S\r\n]*S[1-9]\d*)*$/;
 
-/** A portable text grader must produce a complete, unambiguous verdict. */
+/** A LlamaGuard grader must produce a complete, unambiguous verdict. */
 export function parseLlamaGuardGradingResponse(
   output: string,
   finishReason?: string,

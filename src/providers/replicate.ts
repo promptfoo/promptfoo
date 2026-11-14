@@ -12,7 +12,10 @@ import logger from '../logger';
 import { getRequestTimeoutMs } from '../providers/shared';
 import { extractGenAIResponse, type GenAISpanContext, withGenAISpan } from '../tracing/genaiTracer';
 import { safeJsonStringify } from '../util/json';
-import { LLAMAGUARD_CATEGORY_DESCRIPTIONS, parseLlamaGuardOutput } from '../util/llamaGuard';
+import {
+  LLAMAGUARD_CATEGORY_DESCRIPTIONS,
+  parseLlamaGuardGradingResponse,
+} from '../util/llamaGuard';
 import { ellipsize } from '../util/text';
 import { sleep, sleepWithAbort } from '../util/time';
 import { createEmptyTokenUsage } from '../util/tokenUsageUtils';
@@ -556,7 +559,13 @@ export class ReplicateModerationProvider
         };
       }
 
-      const verdict = parseLlamaGuardOutput(output);
+      const verdict = parseLlamaGuardGradingResponse(output, response.finishReason);
+      if ('error' in verdict) {
+        return { error: verdict.error, ...tokenUsageResult };
+      }
+      if (verdict.unknownCategories.length > 0) {
+        return { error: 'LlamaGuard returned an unsupported hazard category', ...tokenUsageResult };
+      }
       const flags: ModerationFlag[] = verdict.categories.map((code) => ({
         code,
         description: LLAMAGUARD_DESCRIPTIONS[code],

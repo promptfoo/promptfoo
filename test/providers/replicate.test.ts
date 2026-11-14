@@ -523,6 +523,25 @@ describe('ReplicateModerationProvider', () => {
     expect(result.flags).toEqual([]);
   });
 
+  it.each([
+    { output: 'safe \nS1', error: 'LlamaGuard returned an unparseable verdict' },
+    { output: 'unsafe', error: 'LlamaGuard returned an unparseable verdict' },
+    { output: 'unsafe\nS99', error: 'LlamaGuard returned an unsupported hazard category' },
+    { output: 'unsafe\nS1,S99', error: 'LlamaGuard returned an unsupported hazard category' },
+  ])(
+    'returns a grader error with usage for an ambiguous verdict $output',
+    async ({ output, error }) => {
+      const provider = new ReplicateModerationProvider('test-model', {
+        config: { apiKey: mockApiKey },
+      });
+      vi.spyOn(provider, 'callApi').mockResolvedValue({ output, tokenUsage: reportedTokenUsage });
+      await expect(provider.callModerationApi('prompt', 'response')).resolves.toEqual({
+        error,
+        tokenUsage: reportedTokenUsage,
+      });
+    },
+  );
+
   it('should forward non-zero token usage reported by the underlying completion', async () => {
     // Prove that callModerationApi preserves provider-reported usage unchanged.
     const provider = new ReplicateModerationProvider('test-model', {
