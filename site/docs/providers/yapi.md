@@ -1,7 +1,7 @@
 ---
 title: Y-API
 sidebar_position: 86
-description: Run text chat evals through Y-API with the OpenAI-compatible provider. Configure a separate gateway key, choose a catalog model, and estimate costs in USD per token.
+description: Run text chat evals through Y-API with the OpenAI-compatible provider. Use a separate key, choose a catalog model, and estimate costs in USD per token.
 ---
 
 # Y-API
