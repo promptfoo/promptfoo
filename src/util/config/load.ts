@@ -188,9 +188,9 @@ export function resolveCliProvidersWithConfig(
 // These fields carry schemas owned by the provider. Their nested references use
 // the schema's root and must also be excluded during external resolution.
 const PROVIDER_SCHEMA_PATH =
-  /^#\/providers\/\d+\/(?:[^/]+\/)?config\/(?:response_format\/json_schema\/schema|text\/format\/schema|output_format\/schema|output_config\/format\/schema|output_schema|outputSchema|responseSchema)$/;
+  /^#\/providers\/\d+\/(?:[^/]+\/)?config\/(?:response_format\/json_schema\/schema|text\/format\/schema|output_format\/schema|output_config\/format\/schema|output_schema|outputSchema|responseSchema|generationConfig\/response_schema|format\/schema)$/;
 
-function isStandaloneProviderSchema(path: string, value: unknown): boolean {
+function isStandaloneProviderSchema(path: string, value: unknown, config: UnifiedConfig): boolean {
   if (
     !PROVIDER_SCHEMA_PATH.test(path) ||
     !value ||
@@ -199,8 +199,22 @@ function isStandaloneProviderSchema(path: string, value: unknown): boolean {
   ) {
     return false;
   }
-  // A reference-only field can still point to a reusable Promptfoo config value.
-  return !('$ref' in value) || Object.keys(value).length > 1;
+  if (!('$ref' in value) || typeof value.$ref !== 'string') {
+    return true;
+  }
+  // A schema-root config reference may carry sibling annotations. Only protect
+  // it when the schema declares its own base or defines the local target.
+  const ref = value.$ref;
+  if (ref.startsWith('#/')) {
+    const rootKey = ref.split('/')[1].replace(/~1/g, '/').replace(/~0/g, '~');
+    if (Object.hasOwn(value, rootKey) || Object.hasOwn(value, '$id')) {
+      return true;
+    }
+    if (Object.hasOwn(config, rootKey)) {
+      return false;
+    }
+  }
+  return ref === '#' || Object.keys(value).length > 1;
 }
 
 export async function dereferenceConfig(rawConfig: UnifiedConfig): Promise<UnifiedConfig> {
@@ -284,9 +298,11 @@ export async function dereferenceConfig(rawConfig: UnifiedConfig): Promise<Unifi
   }
 
   // Dereference JSON
+  const excludeSchema = (path: string, value?: unknown) =>
+    isStandaloneProviderSchema(path, value, rawConfig);
   const config = (await $RefParser.dereference(rawConfig, {
-    resolveExcludedPathMatcher: isStandaloneProviderSchema,
-    dereference: { excludedPathMatcher: isStandaloneProviderSchema },
+    resolveExcludedPathMatcher: excludeSchema,
+    dereference: { excludedPathMatcher: excludeSchema },
   })) as unknown as UnifiedConfig;
 
   // Restore functions and tools parameters
