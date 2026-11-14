@@ -225,6 +225,85 @@ describe('evaluatorHelpers', () => {
       expect(renderedPrompt).toBe('world');
     });
 
+    it('should load file references nested in vars objects and arrays', async () => {
+      const prompt = toPrompt(
+        '{{ reporting_period.previous.report }}|{{ reporting_period.previous.note }}|{{ attachments[0] }}',
+      );
+      const vars = {
+        reporting_period: {
+          current: { period: '2023-12-31' },
+          previous: {
+            period: '2024-02-15',
+            report: 'file://data/mixed_report_tables.html.txt',
+            note: 'see file://data/mixed_report_tables.html.txt for details',
+          },
+        },
+        attachments: ['file://data/notes.txt'],
+      };
+
+      vi.spyOn(fs, 'readFileSync')
+        .mockReturnValueOnce('report content')
+        .mockReturnValueOnce('notes content');
+
+      const renderedPrompt = await renderPrompt(
+        prompt,
+        vars,
+        {},
+        undefined,
+        undefined,
+        new Set(Object.keys(vars)),
+      );
+
+      expect(renderedPrompt).toBe(
+        'report content|see file://data/mixed_report_tables.html.txt for details|notes content',
+      );
+    });
+
+    it('should keep a nested __proto__ key as an own property instead of polluting the prototype', async () => {
+      // JSON.parse defines `__proto__` as an own property; plain assignment would write
+      // through to Object.prototype instead.
+      const vars = JSON.parse(
+        '{"payload":{"__proto__":{"polluted":true},"note":"file://data/notes.txt"}}',
+      );
+
+      vi.spyOn(fs, 'readFileSync').mockReturnValueOnce('notes content');
+
+      const renderedPrompt = await renderPrompt(
+        toPrompt('{{ payload.note }}'),
+        vars,
+        {},
+        undefined,
+        undefined,
+        new Set(['payload']),
+      );
+
+      expect(renderedPrompt).toBe('notes content');
+      expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+    });
+
+    it('resolves a shared file object once across authored var aliases', async () => {
+      const shared = { report: 'file://data/shared.txt' };
+      const vars = { first: shared, second: { shared } };
+      const read = vi.spyOn(fs, 'readFileSync').mockReturnValueOnce('shared contents');
+      const rendered = await renderPrompt(
+        toPrompt('{{ first.report }}|{{ second.shared.report }}'),
+        vars,
+        {},
+        undefined,
+        undefined,
+        new Set(Object.keys(vars)),
+      );
+      expect(rendered).toBe('shared contents|shared contents');
+      expect(read).toHaveBeenCalledTimes(1);
+      expect(vars.first).toBe(vars.second.shared);
+    });
+
+    it('leaves nested paths in runtime vars as literal text', async () => {
+      const vars = { stored: { report: 'file://untrusted-runtime-reference.txt' } };
+      const rendered = await renderPrompt(toPrompt('{{ stored.report }}'), vars);
+      expect(rendered).toBe('file://untrusted-runtime-reference.txt');
+    });
+
     it('should render a JSON prompt', async () => {
       const prompt = toPrompt('[{"text": "Test prompt "}, {"text": "{{ var1 }}"}]');
       const renderedPrompt = await renderPrompt(prompt, { var1: 'value1' }, {});
@@ -647,6 +726,11 @@ describe('evaluatorHelpers', () => {
   });
 
   describe('resolveVariables', () => {
+    it('bounds self-referential aliases containing multiple placeholders', () => {
+      const vars = { self: '{{self}}{{self}}' };
+      expect(resolveVariables(vars).self).toBe('{{self}}'.repeat(33));
+    });
+
     it('should replace placeholders with corresponding variable values', () => {
       const variables = {
         final: '{{ my_greeting }}, {{name}}!',
