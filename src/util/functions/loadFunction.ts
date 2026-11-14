@@ -92,7 +92,11 @@ export async function loadFunction<T extends Function>({
 // legitimately start with `/X:` (a directory literally named `X:`) are preserved.
 const WIN32_DRIVE_PREFIX = /^\/[A-Za-z]:[\\/]/;
 
-function normalizeFilePath(filePath: string): string {
+/**
+ * Removes the leading slash that a canonical Windows file URL leaves before the drive letter
+ * (`/C:/path` from `file:///C:/path`), so the path resolves on Windows.
+ */
+export function normalizeFilePath(filePath: string): string {
   if (process.platform === 'win32' && WIN32_DRIVE_PREFIX.test(filePath)) {
     return filePath.slice(1);
   }

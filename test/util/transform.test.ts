@@ -196,6 +196,29 @@ describe('util', () => {
       expect(transformedOutput).toBe('HELLO NAMED');
     });
 
+    it('loads a named function from a canonical Windows file URL on Windows', async () => {
+      const originalPlatform = process.platform;
+      Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
+      mockedImportModule.mockResolvedValueOnce({
+        namedFunction: (output: string) => output.toUpperCase() + ' WINDOWS',
+      });
+
+      try {
+        const transformedOutput = await transform(
+          'file:///C:/path/to/transform.js:namedFunction',
+          'hello',
+          { vars: {}, prompt: {} },
+        );
+        expect(transformedOutput).toBe('HELLO WINDOWS');
+        expect(mockedImportModule).toHaveBeenCalledWith('C:/path/to/transform.js');
+      } finally {
+        Object.defineProperty(process, 'platform', {
+          value: originalPlatform,
+          configurable: true,
+        });
+      }
+    });
+
     it('transforms output using a named function from a Python file', async () => {
       const output = 'hello';
       const context = { vars: { key: 'value' }, prompt: { id: '123' } };
