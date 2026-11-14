@@ -1033,6 +1033,46 @@ describe('writeOutput', () => {
     });
   });
 
+  it('ignores missing, negative and nonfinite legacy latency when summing JUnit suite time', async () => {
+    const makeLegacyResult = (testIdx: number, latencyMs?: number): EvaluateResult =>
+      ({
+        success: true,
+        failureReason: ResultFailureReason.NONE,
+        score: 1,
+        namedScores: {},
+        ...(latencyMs === undefined ? {} : { latencyMs }),
+        provider: { id: 'echo' },
+        prompt: { raw: 'Prompt A', label: '' },
+        response: { output: '' },
+        vars: {},
+        promptIdx: 0,
+        testIdx,
+        testCase: {},
+        promptId: 'legacy-prompt',
+      }) as EvaluateResult;
+    const eval_ = {
+      createdAt: '2026-05-03T15:00:00.000Z',
+      fetchResultsBatched: vi.fn(),
+      getResults: vi
+        .fn()
+        .mockResolvedValue([
+          makeLegacyResult(0, 2000),
+          makeLegacyResult(1),
+          makeLegacyResult(2, -500),
+          makeLegacyResult(3, Number.POSITIVE_INFINITY),
+        ]),
+      persisted: false,
+      results: [],
+      useOldResults: () => true,
+    } as unknown as Eval;
+
+    const xml = await createJunitXml(eval_);
+    const parsed = new XMLParser({ ignoreAttributes: false }).parse(xml);
+
+    expect(parsed.testsuites.testsuite['@_time']).toBe('2');
+    expect(parsed.testsuites['@_time']).toBe('2');
+  });
+
   it('keeps legacy prompts without ids in separate suites', async () => {
     const makeLegacyResult = (promptIdx: number, raw: string): EvaluateResult => ({
       success: true,
