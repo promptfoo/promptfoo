@@ -1,6 +1,6 @@
 # provider-aistupidlevel (AI Stupid Level)
 
-Compare three AI Stupid Level routing modes on the same prompts, using promptfoo's OpenAI-compatible provider. Each mode picks a model per request from continuously re-run benchmarks, and calls it with your own provider keys.
+Compare three AI Stupid Level routing modes on the same prompts, using Promptfoo's OpenAI-compatible provider. Each mode picks a model per request from continuously re-run benchmarks, and calls it with your own provider keys.
 
 ## Usage
 

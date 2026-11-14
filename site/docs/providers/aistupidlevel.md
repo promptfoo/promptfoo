@@ -1,13 +1,13 @@
 ---
 title: AI Stupid Level
 sidebar_label: AI Stupid Level
-description: Evaluate AI Stupid Level's benchmark-based routing modes in promptfoo with the OpenAI-compatible provider, using your own provider keys and a single router key.
+description: Evaluate AI Stupid Level's benchmark-based routing modes in Promptfoo with the OpenAI-compatible provider, using your own provider keys and a single router key.
 sidebar_position: 42
 ---
 
 # AI Stupid Level
 
-[AI Stupid Level](https://aistupidlevel.info) runs coding, reasoning and tool-use benchmarks on the major models continuously. Its Smart Router is an [OpenAI-compatible API](https://aistupidlevel.info/router/docs) that sends each request to the model that currently scores best for the kind of work. Use promptfoo's [OpenAI provider](/docs/providers/openai/) with the router's endpoint and your router key.
+[AI Stupid Level](https://aistupidlevel.info) runs coding, reasoning and tool-use benchmarks on the major models continuously. Its Smart Router is an [OpenAI-compatible API](https://aistupidlevel.info/router/docs) that sends each request to the model that currently scores best for the kind of work. Use Promptfoo's [OpenAI provider](/docs/providers/openai/) with the router's endpoint and your router key.
 
 The router calls providers (OpenAI, Anthropic, Google, DeepSeek, Moonshot, Zhipu) with the provider keys you add to your AI Stupid Level account, so each provider bills you directly. Prompt logging is off by default. See the [privacy policy](https://aistupidlevel.info/privacy) and [terms of service](https://aistupidlevel.info/terms).
 
@@ -46,7 +46,7 @@ The model ID is a routing mode, or a real model ID to pin one model:
 
 ## Configuration
 
-- `omitDefaults: true` leaves out promptfoo's default output limit and temperature, so each routed model uses its own defaults.
+- `omitDefaults: true` leaves out Promptfoo's default output limit and temperature, so each routed model uses its own defaults.
 - `max_tokens` caps output, including reasoning tokens on reasoning models.
 - `showThinking: false` keeps reasoning text out of the answer used by assertions.
 - Tool calling (`tools`, `tool_choice`) and `response_format` work as with OpenAI. A multi-turn tool loop stays on the model that started it.
