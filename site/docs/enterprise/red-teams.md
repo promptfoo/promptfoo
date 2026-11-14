@@ -45,6 +45,8 @@ To create a plugin collection, navigate to the "Plugin Collections" tab under th
 
 ## Configuring Scans
 
+For on-prem deployments, [configure spend tracking by team](./teams.md#track-openai-spend-by-team-on-prem) to attribute generation and grading requests to the intended OpenAI API project. Target credentials are configured separately.
+
 When you want to run a new red team scan, navigate to the "Red team" navigation header and click on "Scan Configurations". You will see a list of all the scan configurations that your team has created. Click on "New Scan" to create a new scan.
 
 ![Create Scan Configuration interface](/img/enterprise-docs/create-scan.png)
