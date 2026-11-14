@@ -36,6 +36,11 @@ function containsCredential(value: unknown, key = '', parentKey = ''): boolean {
       }
     }
     if (value.includes('://') || value.startsWith('/')) {
+      // URL parsing strips tabs and newlines and collapses parent path segments.
+      // Inspect the original spelling before a credential component can disappear.
+      if (/[\t\r\n]/.test(value) || /[\\/](?:\.|%2e){2}(?=[\\/?#]|$)/i.test(value)) {
+        return true;
+      }
       return sanitizeUrlForLogging(value) !== value;
     }
     return false;
@@ -48,19 +53,43 @@ function containsCredential(value: unknown, key = '', parentKey = ''): boolean {
   );
 }
 
+interface ScriptOptions {
+  config?: { basePath?: unknown };
+}
+
+interface ScriptInvocation {
+  path: string;
+  functionName: string;
+  sourceOptions?: ScriptOptions;
+  inputs: [string, ScriptOptions, unknown?];
+}
+
+function asFileReference(value: string): string {
+  // A long POSIX directory can consist entirely of base64 characters, including '/'.
+  // Check its individual components and any query or fragment as a file URL.
+  return value.startsWith('/') && !value.startsWith('//') ? `file://${value}` : value;
+}
+
 /**
  * Hash JSON that a worker can observe. An unrepresentable or credential-bearing
  * input bypasses both cache operations, before any digest of that input exists.
  */
-export function scriptInputDigest(value: unknown): string | undefined {
+export function scriptInputDigest(invocation: ScriptInvocation): string | undefined {
   try {
     // Respect Date, toJSON, omitted functions, and array nulls just like worker IPC.
     // For cyclic objects we can still execute the worker, but skip caching.
-    const json = JSON.stringify(value);
-    if (!json || containsCredential(JSON.parse(json))) {
+    const json = JSON.stringify(invocation);
+    const copy: ScriptInvocation = JSON.parse(json);
+    copy.path = asFileReference(copy.path);
+    for (const config of [copy.sourceOptions?.config, copy.inputs[1]?.config]) {
+      if (typeof config?.basePath === 'string') {
+        config.basePath = asFileReference(config.basePath);
+      }
+    }
+    if (containsCredential(copy)) {
       return undefined;
     }
-    // Python dictionaries and Ruby hashes preserve and expose insertion order.
+    // Hash the original JSON, preserving exact path spellings and worker-visible key order.
     return sha256(json);
   } catch {
     return undefined;

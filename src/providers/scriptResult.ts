@@ -58,7 +58,8 @@ export function getScriptInputDigest(
   args: ReturnType<typeof buildScriptArgs>,
 ) {
   const [prompt, options, context] = args;
-  const inputs = args.length === 3 ? [prompt, options, scriptCacheContext(context)] : args;
+  const inputs: typeof args =
+    args.length === 3 ? [prompt, options, scriptCacheContext(context)] : args;
   return scriptInputDigest({ path, functionName, sourceOptions, inputs });
 }
 
