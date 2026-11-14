@@ -377,10 +377,17 @@ describe('MiniMax H3 video provider', () => {
 
   it.each([true, false])('rejects oversized content (declared length: %s)', async (declared) => {
     const cancel = vi.fn();
-    const chunk = new Uint8Array(1024 * 1024);
+    const limit = 128 * 1024 * 1024;
+    // Cross the stream limit on the second read without copying a full clip during the test.
     const oversized = new Response(
-      new ReadableStream({ pull: (controller) => controller.enqueue(chunk), cancel }),
-      { headers: declared ? { 'content-length': String(129 * chunk.byteLength) } : {} },
+      new ReadableStream({
+        start(controller) {
+          controller.enqueue(new Uint8Array(1));
+          controller.enqueue(new Uint8Array(limit));
+        },
+        cancel,
+      }),
+      { headers: declared ? { 'content-length': String(limit + 1) } : {} },
     );
     vi.mocked(fetch.fetchWithProxy)
       .mockResolvedValueOnce(createResponse({ task_id: 'task-1' }))
