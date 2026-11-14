@@ -1,0 +1,23 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'ACP provider skills evaluation - verify agent discovers and uses skills'
+
+prompts:
+  - 'Use the token-skill skill. Return only the token.'
+
+providers:
+  - id: acp
+    config:
+      command: ['kiro-cli', 'acp']
+      working_dir: ./sample-project
+      timeout: 180
+      permission_mode: auto_approve
+
+tests:
+  - vars: {}
+    assert:
+      - type: contains
+        value: 'CERULEAN-FALCON'
+      - type: javascript
+        value: |
+          const toolCalls = context.providerResponse?.metadata?.toolCalls || [];
+          return toolCalls.length > 0;
