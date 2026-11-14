@@ -1,5 +1,6 @@
 import path from 'path';
 
+import { Messages } from '@anthropic-ai/sdk/resources/messages';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { loadFromJavaScriptFile } from '../../src/assertions/utils';
 import cliState from '../../src/cliState';
@@ -7,6 +8,7 @@ import { importModule } from '../../src/esm';
 import { matchesLlmRubric } from '../../src/matchers/llmGrading';
 import { renderLlmRubricPrompt } from '../../src/matchers/rubric';
 import { tryParse } from '../../src/matchers/shared';
+import { DEFAULT_ANTHROPIC_MODEL } from '../../src/providers/anthropic/defaults';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { DefaultGradingProvider } from '../../src/providers/openai/defaults';
 import * as remoteGrading from '../../src/remoteGrading';
@@ -370,6 +372,50 @@ describe('matchesLlmRubric', () => {
     expect(result.metadata).toEqual({
       renderedGradingPrompt: 'Grading prompt',
     });
+  });
+
+  it('should keep the served model reported to the default Anthropic grader', async () => {
+    const restoreEnv = mockProcessEnv({
+      OPENAI_API_KEY: undefined,
+      AZURE_DEPLOYMENT_NAME: undefined,
+      AZURE_OPENAI_DEPLOYMENT_NAME: undefined,
+      ANTHROPIC_API_KEY: 'test-anthropic-key',
+    });
+    const create = vi.spyOn(Messages.prototype, 'create').mockResolvedValue({
+      id: 'msg_grade',
+      type: 'message',
+      role: 'assistant',
+      model: `${DEFAULT_ANTHROPIC_MODEL}-20260101`,
+      content: [
+        {
+          type: 'tool_use',
+          id: 'grade-id',
+          name: 'grade_output',
+          input: { pass: true, score: 1, reason: 'Mentions the refund window' },
+        },
+      ],
+      stop_reason: 'tool_use',
+      stop_sequence: null,
+      usage: { input_tokens: 10, output_tokens: 20 },
+    } as unknown as Awaited<ReturnType<Messages['create']>>);
+    try {
+      const result = await matchesLlmRubric(
+        'Mentions the refund window',
+        'Refunds are accepted within 30 days of purchase.',
+        {},
+      );
+
+      expect(create).toHaveBeenCalledTimes(1);
+      expect(create.mock.calls[0][0]).toMatchObject({
+        model: DEFAULT_ANTHROPIC_MODEL,
+        tool_choice: { type: 'tool', name: 'grade_output' },
+      });
+      expect(result.pass).toBe(true);
+      expect(result.metadata?.model).toBe(`${DEFAULT_ANTHROPIC_MODEL}-20260101`);
+    } finally {
+      create.mockRestore();
+      restoreEnv();
+    }
   });
 
   it('should sanitize circular provider metadata before attaching it to the grading result', async () => {
@@ -1379,6 +1425,20 @@ describe('matchesLlmRubric', () => {
       metadata: { graderError: true, cachedResponse: true },
       tokensUsed: { total: 37, prompt: 23, completion: 14, numRequests: 1 },
     });
+  });
+
+  it('records the served model on malformed grading replies without trusting verdict or cache metadata', async () => {
+    const result = await matchesLlmRubric('Expected output', 'Sample output', {
+      provider: createMockProvider({
+        response: {
+          output: 'non-JSON reply',
+          metadata: { model: 'served-revision', graderError: false, cachedResponse: true },
+        },
+      }),
+    });
+
+    expect(result.pass).toBe(false);
+    expect(result.metadata).toEqual({ model: 'served-revision', graderError: true });
   });
 
   it('counts a fresh failed grading request even when its provider reports no usage', async () => {
