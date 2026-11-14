@@ -123,6 +123,36 @@ describe('config-schema.json', () => {
       ['dynamic host', { pass: 'https://{{evalId}}.example.com/' }, false],
       ['query credentials', { pass: 'https://reviews.example.com/?API_Key=secret' }, false],
       ['fragment credentials', { pass: 'https://reviews.example.com/#access-token=secret' }, false],
+      [
+        'key in ordinary query',
+        { pass: 'https://reviews.example.com/?review=sk-' + 'a'.repeat(20) },
+        false,
+      ],
+      [
+        'encoded key in fragment',
+        { fail: 'https://reviews.example.com/#review=%73k%2D' + '%41'.repeat(20) },
+        false,
+      ],
+      [
+        'cloud key under ordinary name',
+        { pass: 'https://reviews.example.com/?ref=AKIA' + 'A'.repeat(16) },
+        false,
+      ],
+      [
+        'Google key under ordinary name',
+        { pass: 'https://reviews.example.com/#ref=AIza' + 'b'.repeat(35) },
+        false,
+      ],
+      [
+        'generic key in second parameter',
+        { pass: 'https://reviews.example.com/?case={{testCaseId}}&ref=key-' + 'A'.repeat(20) },
+        false,
+      ],
+      [
+        'ordinary escaped review label',
+        { pass: 'https://reviews.example.com/?review=sk-short%20label&rating={{rating}}' },
+        true,
+      ],
       ['encoded credential name', { pass: 'https://reviews.example.com/?%61pi_key=secret' }, false],
       ['session credential', { pass: 'https://reviews.example.com/?session_token=secret' }, false],
       ['API header credential', { pass: 'https://reviews.example.com/#x-api-key=secret' }, false],

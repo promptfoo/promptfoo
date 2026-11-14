@@ -44,6 +44,33 @@ const noEncodedKeysPattern = new RegExp(
   `^${lengthGuard}(?![\\s\\S]*[?&#;][^?&#;=%]*%[^?&#;=]*=)[\\s\\S]*$`,
 );
 
+// Match recognizable key formats in query and fragment values even under a neutral name.
+// JSON Schema cannot decode form values, so match literal and percent-encoded ASCII here.
+function encodedPrefix(prefix: string): string {
+  return [...prefix]
+    .map((char) => {
+      const hex = char
+        .charCodeAt(0)
+        .toString(16)
+        .replace(/[a-f]/g, (c) => `[${c}${c.toUpperCase()}]`);
+      return `(?:${char}|%${hex})`;
+    })
+    .join('');
+}
+
+const alphanumeric = '(?:[A-Za-z0-9]|%(?:3[0-9]|[46][1-9a-fA-F]|[57][0-9aA]))';
+const keyChar = `(?:${alphanumeric}|[-_]|%2[dD]|%5[fF])`;
+const accessIdChar = '(?:[A-Z0-9]|%(?:3[0-9]|4[1-9a-fA-F]|5[0-9aA]))';
+const keyValue = [
+  `${encodedPrefix('sk-')}${keyChar}{20}`,
+  `${encodedPrefix('key-')}${alphanumeric}{20}`,
+  `${encodedPrefix('AKIA')}${accessIdChar}{16}`,
+  `${encodedPrefix('AIza')}${keyChar}{35}`,
+].join('|');
+const noKeyValuesPattern = new RegExp(
+  `^${lengthGuard}(?![\\s\\S]*[?&#;][^?&#;=]*=(?:${keyValue}))[\\s\\S]*$`,
+);
+
 export const RatingFeedbackUrlSchema = z
   .string()
   .min(1)
@@ -53,7 +80,8 @@ export const RatingFeedbackUrlSchema = z
     'Feedback URLs require HTTPS, no URL credentials, and supported placeholders outside the host',
   )
   .regex(noCredentialsPattern, 'Feedback URLs must not contain credential parameters')
-  .regex(noEncodedKeysPattern, 'Feedback URL parameter names must not be percent-encoded');
+  .regex(noEncodedKeysPattern, 'Feedback URL parameter names must not be percent-encoded')
+  .regex(noKeyValuesPattern, 'Feedback URLs must not contain API keys in parameter values');
 
 // A union preserves the at-least-one-link requirement in generated JSON Schema.
 export const RatingFeedbackSchema = z.union([
