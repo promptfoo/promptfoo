@@ -133,6 +133,8 @@ assert.equal(contracts.hasFunctionToolCallValidator({ validateFunctionToolCall: 
 assert.equal(contracts.UserSchemas.Login.Request, contracts.LoginRequestSchema);
 assert.equal(contracts.OpenAiProviderOptionsInputSchema.safeParse({ id: 'openai:responses:test', config: { max_output_tokens: 20 } }).success, true);
 assert.equal(contracts.OpenAiProviderOptionsInputSchema.safeParse({ id: 'openai:chat:test', config: { temperature: 'warm' } }).success, false);
+assert.equal(contracts.AzureProviderOptionsInputSchema.safeParse({ id: 'azureopenai:chat:deployment', config: { temperature: 0 } }).success, true);
+assert.equal(contracts.AnthropicProviderOptionsInputSchema.safeParse({ id: 'anthropic:messages:test', config: { thinking: { type: 'enabled' } } }).success, false);
 assert.deepEqual(contracts.McpClientConfigInputSchema.parse({server: {command: 'fixture'}}), {server: {command: 'fixture'}});
 assert.equal(contracts.McpClientConfigInputSchema.safeParse({defaultArgs: {session: 'ignored'}}).success, false);
 assert.equal(contracts.McpConfigInputSchema.safeParse({defaultArgs: {session: 'supported'}}).success, true);
@@ -155,6 +157,10 @@ const user: contracts.GetUserResponse = { email: null };
 const openai: contracts.OpenAiProviderOptionsInput = { id: 'openai:chat:test', config: { temperature: 0 } };
 // @ts-expect-error Exported provider configs must retain numeric sampling fields.
 const invalidOpenai: contracts.OpenAiProviderOptionsInput = { id: 'openai:chat:test', config: { temperature: 'warm' } };
+const azure: contracts.AzureProviderOptionsInput = { id: 'azure:responses:deployment', config: { max_output_tokens: 20 } };
+const anthropic: contracts.AnthropicProviderOptionsInput = { id: 'anthropic:messages:test', config: { thinking: { type: 'adaptive' } } };
+// @ts-expect-error Thinking configuration must retain its required numeric budget.
+const invalidAnthropic: contracts.AnthropicProviderOptionsInput = { id: 'anthropic:messages:test', config: { thinking: { type: 'enabled' } } };
 contracts.PromptSchema.parse(prompt);
 contracts.GetUserResponseSchema.parse(user);
 // @ts-expect-error Public declarations must retain the required string prompt body.
@@ -167,7 +173,7 @@ const mcpProvider: contracts.McpConfigInput = { ...mcpClient, defaultArgs: { nes
 const invalidClient: contracts.McpClientConfigInput = { defaultArgs: {session: 'ignored'} };
 // @ts-expect-error Portable tool arguments must be JSON values.
 const invalidDefaults: contracts.McpConfigInput = { defaultArgs: { callback() {} } };
-void [response, invalid, invalidBlob, openai, invalidOpenai, mcpClient, mcpProvider, invalidClient, invalidDefaults];
+void [response, invalid, invalidBlob, openai, invalidOpenai, azure, anthropic, invalidAnthropic, mcpClient, mcpProvider, invalidClient, invalidDefaults];
 `;
   fs.writeFileSync(
     path.join(consumer, 'types.mts'),

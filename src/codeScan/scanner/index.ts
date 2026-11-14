@@ -18,7 +18,8 @@ import {
 } from '../../types/codeScan';
 import { type AgentClient, createAgentClient } from '../../util/agent/agentClient';
 import { loadConfigOrDefault, mergeConfigWithOptions, resolveGuidance } from '../config/loader';
-import { validateOnBranch } from '../git/diff';
+import { runGit } from '../git/command';
+import { countUncommittedFiles, getDefaultBaseBranch, validateOnBranch } from '../git/diff';
 import { processDiff } from '../git/diffProcessor';
 import { extractMetadata } from '../git/metadata';
 import {
@@ -32,10 +33,9 @@ import { parseGitHubPr } from '../util/github';
 import { registerCleanupHandlers } from './cleanup';
 import { createSpinner, displayScanResults } from './output';
 import { buildScanRequest, executeScanRequestWithRetry } from './request';
-import type { SimpleGit } from 'simple-git';
 
 async function describeEmptyScan(
-  git: SimpleGit,
+  repoPath: string,
   files: FileRecord[],
   baseBranch: string,
   compareRef: string,
@@ -52,7 +52,7 @@ async function describeEmptyScan(
     details.push(`${skipped.length} file(s) skipped: ${reasons}.`);
   }
   try {
-    const dirtyCount = (await git.status()).files.length;
+    const dirtyCount = await countUncommittedFiles(repoPath);
     if (dirtyCount) {
       details.push(`${dirtyCount} uncommitted file(s) are not part of the scan.`);
     }
@@ -239,27 +239,13 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
     // Validate branch and determine base branch
     logger.debug('Processing git diff...');
 
-    const { simpleGit } = await import('simple-git');
-    const git = simpleGit(absoluteRepoPath);
-
     // Validate we're on a branch (only if compare ref not specified)
     if (!options.compare) {
-      await validateOnBranch(git);
+      await validateOnBranch(absoluteRepoPath);
     }
 
     // Determine base branch (use provided or auto-detect)
-    let baseBranch: string;
-    if (options.base) {
-      baseBranch = options.base;
-    } else {
-      const branches = await git.branch();
-      baseBranch =
-        branches.all.includes('main') || branches.all.includes('origin/main')
-          ? 'main'
-          : branches.all.includes('master') || branches.all.includes('origin/master')
-            ? 'master'
-            : 'main';
-    }
+    const baseBranch = options.base || (await getDefaultBaseBranch(absoluteRepoPath));
 
     // Determine compare ref (use provided or default to HEAD)
     const compareRef = options.compare || 'HEAD';
@@ -280,7 +266,7 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
       // For non-text formats (JSON, SARIF), keep the stable machine-readable
       // review string for programmatic consumption
       if (outputFormat === CodeScanOutputFormat.TEXT) {
-        const msg = await describeEmptyScan(git, files, baseBranch, compareRef);
+        const msg = await describeEmptyScan(absoluteRepoPath, files, baseBranch, compareRef);
         if (spinner) {
           spinner.succeed(msg);
         } else {
@@ -306,7 +292,7 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
     let pullRequest: PullRequestContext | undefined = undefined;
     if (parsedPR) {
       // Get current commit SHA
-      const currentCommit = await git.revparse(['HEAD']);
+      const currentCommit = await runGit(absoluteRepoPath, ['rev-parse', '--verify', 'HEAD']);
 
       pullRequest = {
         owner: parsedPR.owner,
