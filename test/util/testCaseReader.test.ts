@@ -320,6 +320,16 @@ describe('readStandaloneTestsFile', () => {
     ]);
   });
 
+  it('should read JSONL file with a UTF-8 BOM and return test cases', async () => {
+    vi.mocked(fs.readFileSync).mockReturnValue(
+      '\uFEFF{"vars":{"var1":"value1","var2":"value2"},"assert":[{"type":"equals","value":"Hello World"}]}\n{"vars":{"var1":"value3","var2":"value4"},"assert":[{"type":"equals","value":"Hello World"}]}',
+    );
+    const result = await readStandaloneTestsFile('test.jsonl');
+
+    expect(result[0].vars).toEqual({ var1: 'value1', var2: 'value2' });
+    expect(result[1].vars).toEqual({ var1: 'value3', var2: 'value4' });
+  });
+
   it('should preserve existing description from JSONL rows', async () => {
     vi.mocked(fs.readFileSync).mockReturnValue(
       `{"description":"Custom Desc","vars":{"x":"y"}}
@@ -1467,6 +1477,29 @@ describe('readTests', () => {
     const result = await readTests(['test.jsonl']);
 
     expect(result).toEqual(expectedTests);
+  });
+
+  it('should handle JSONL files with a UTF-8 BOM', async () => {
+    const jsonlContent = '\uFEFF{"vars":{"var1":"value1"}}\n{"vars":{"var2":"value2"}}';
+    vi.mocked(fs.readFileSync).mockReturnValueOnce(jsonlContent);
+    vi.mocked(globSync).mockImplementation((pathOrGlob) => [pathOrGlob].flat());
+
+    const result = await readTests(['test.jsonl']);
+
+    expect(result[0].vars).toEqual({ var1: 'value1' });
+    expect(result[1].vars).toEqual({ var2: 'value2' });
+  });
+
+  it('should handle JSON files with a UTF-8 BOM', async () => {
+    vi.mocked(fs.readFileSync).mockReturnValueOnce(
+      '\uFEFF[{"vars":{"var1":"value1"}},{"vars":{"var2":"value2"}}]',
+    );
+    vi.mocked(globSync).mockImplementation((pathOrGlob) => [pathOrGlob].flat());
+
+    const result = await readTests(['test.json']);
+
+    expect(result[0].vars).toEqual({ var1: 'value1' });
+    expect(result[1].vars).toEqual({ var2: 'value2' });
   });
 
   it('should handle file read errors gracefully', async () => {
