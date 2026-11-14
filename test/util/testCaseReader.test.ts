@@ -917,7 +917,7 @@ describe('readTest', () => {
 
   it('loads structured vars from their declaring file once and retains their provenance', async () => {
     vi.mocked(globSync).mockReturnValueOnce(['/project/cases/vars.yaml']);
-    vi.mocked(fs.readFileSync).mockReturnValueOnce('nested: file://payload.json');
+    vi.mocked(fs.readFileSync).mockReturnValueOnce('nested: { data: file://payload.json }');
     const payload = { path: 'file://from-payload.txt' };
     vi.mocked(maybeLoadConfigFromExternalFile).mockReturnValueOnce(payload);
     const result = await readTest({ vars: 'cases/vars.yaml' }, '/project');
@@ -926,7 +926,7 @@ describe('readTest', () => {
       undefined,
       path.dirname('/project/cases/vars.yaml'),
     );
-    expect(result.vars).toEqual({ nested: payload });
+    expect(result.vars).toEqual({ nested: { data: payload } });
     expect(result.metadata?.__promptfoo?.varsFileKeys).toEqual(['nested']);
   });
 
