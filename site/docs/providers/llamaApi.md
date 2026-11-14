@@ -8,8 +8,7 @@ sidebar_label: Meta Llama API
 
 :::warning Retired service
 
-Meta [retired the Llama API Public Preview on July 6, 2026](https://llama.developer.meta.com/docs/llama-api-deprecation/),
-including `api.llama.com`. The `llamaapi:` provider is still registered so existing configs load,
+Meta retired the Llama API Public Preview on July 6, 2026, including `api.llama.com`. The `llamaapi:` provider is still registered so existing configs load,
 but requests to the retired endpoint will not succeed.
 
 :::

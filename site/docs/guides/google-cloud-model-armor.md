@@ -360,4 +360,4 @@ promptfoo eval
 - [Testing Guardrails Guide](/docs/guides/testing-guardrails/) - General guardrails testing patterns
 - [Vertex AI Provider](/docs/providers/vertex/) - Using Gemini with Model Armor
 - [Model Armor Documentation](https://cloud.google.com/security-command-center/docs/model-armor-overview) - Official Google Cloud docs
-- [Model Armor Floor Settings](https://cloud.google.com/security-command-center/docs/set-up-model-armor-floor-settings) - Configure organization-wide policies
+- [Model Armor Floor Settings](https://docs.cloud.google.com/model-armor/configure-floor-settings) - Configure organization-wide policies
