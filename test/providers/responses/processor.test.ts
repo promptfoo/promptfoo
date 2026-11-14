@@ -205,29 +205,247 @@ describe('ResponsesProcessor', () => {
       });
     });
 
-    it('should process function calls', async () => {
-      mockFunctionCallbackHandler.processCalls.mockResolvedValue('Function executed successfully');
+    it.each(['completed', undefined])(
+      'should process function calls with status %s',
+      async (status) => {
+        mockFunctionCallbackHandler.processCalls.mockResolvedValue(
+          'Function executed successfully',
+        );
 
-      const mockData = {
-        output: [
-          {
-            type: 'function_call',
-            name: 'test_function',
-            arguments: '{"param": "value"}',
-            status: 'completed',
+        const mockData = {
+          output: [
+            {
+              type: 'function_call',
+              name: 'test_function',
+              arguments: '{"param": "value"}',
+              ...(status === undefined ? {} : { status }),
+            },
+          ],
+          usage: { input_tokens: 10, output_tokens: 8 },
+        };
+
+        const result = await processor.processResponseOutput(mockData, {}, false);
+
+        expect(result.output).toBe('Function executed successfully');
+        expect(mockFunctionCallbackHandler.processCalls).toHaveBeenCalledWith(
+          mockData.output[0],
+          undefined,
+        );
+      },
+    );
+
+    it.each(['incomplete', 'in_progress'])(
+      'should retain %s function calls without invoking callbacks',
+      async (status) => {
+        mockFunctionCallbackHandler.processCalls.mockResolvedValue('Unexpected callback');
+        const item = {
+          id: 'fc_unfinished',
+          call_id: 'call_unfinished',
+          type: 'function_call',
+          name: 'test_function',
+          arguments: '{"param":"value"}',
+          status,
+        };
+        const mockData = {
+          id: 'resp_unfinished',
+          model: 'gpt-4.1',
+          status: 'incomplete',
+          incomplete_details: { reason: 'max_output_tokens' },
+          output: [item],
+          usage: { input_tokens: 10, output_tokens: 8, total_tokens: 18 },
+        };
+        const original = structuredClone(mockData);
+
+        const result = await processor.processResponseOutput(mockData, {}, false);
+
+        expect(mockFunctionCallbackHandler.processCalls).not.toHaveBeenCalled();
+        expect(result.output).toBe(JSON.stringify(item));
+        expect(result.error).toBeUndefined();
+        expect(result.raw).toBe(mockData);
+        expect(mockData).toEqual(original);
+        expect(result).toMatchObject({
+          cached: false,
+          cost: 0.001,
+          finishReason: 'length',
+          tokenUsage: { prompt: 10, completion: 8, total: 18 },
+          metadata: {
+            responseId: 'resp_unfinished',
+            model: 'gpt-4.1',
+            responseStatus: 'incomplete',
+            incompleteReason: 'max_output_tokens',
           },
-        ],
-        usage: { input_tokens: 10, output_tokens: 8 },
-      };
+        });
+      },
+    );
 
-      const result = await processor.processResponseOutput(mockData, {}, false);
+    it.each(['incomplete', 'in_progress'])(
+      'uses the enclosing %s response status for a status-less function call',
+      async (status) => {
+        mockFunctionCallbackHandler.processCalls.mockResolvedValue('Unexpected callback');
+        const item = { type: 'function_call', name: 'lookup', arguments: '{"value":"partial"}' };
+        const data = {
+          status,
+          output: [item],
+          usage: { input_tokens: 10, output_tokens: 8, total_tokens: 18 },
+        };
 
-      expect(result.output).toBe('Function executed successfully');
-      expect(mockFunctionCallbackHandler.processCalls).toHaveBeenCalledWith(
-        mockData.output[0],
-        undefined,
-      );
-    });
+        const result = await processor.processResponseOutput(data, {}, false);
+
+        expect(mockFunctionCallbackHandler.processCalls).not.toHaveBeenCalled();
+        expect(result.output).toBe(JSON.stringify(item));
+        expect(result.raw).toBe(data);
+        expect(result).toMatchObject({
+          cost: 0.001,
+          tokenUsage: { prompt: 10, completion: 8, total: 18 },
+          metadata: { responseStatus: status },
+        });
+      },
+    );
+
+    it.each([
+      {
+        type: 'function_call',
+        responseStatus: 'incomplete',
+        messageStatus: undefined,
+        callStatus: undefined,
+        execute: false,
+      },
+      {
+        type: 'tool_use',
+        responseStatus: 'incomplete',
+        messageStatus: undefined,
+        callStatus: undefined,
+        execute: false,
+      },
+      {
+        type: 'function_call',
+        responseStatus: 'in_progress',
+        messageStatus: undefined,
+        callStatus: undefined,
+        execute: false,
+      },
+      {
+        type: 'tool_use',
+        responseStatus: 'completed',
+        messageStatus: 'incomplete',
+        callStatus: undefined,
+        execute: false,
+      },
+      {
+        type: 'tool_use',
+        responseStatus: 'completed',
+        messageStatus: 'in_progress',
+        callStatus: undefined,
+        execute: false,
+      },
+      {
+        type: 'function_call',
+        responseStatus: 'incomplete',
+        messageStatus: 'completed',
+        callStatus: undefined,
+        execute: true,
+      },
+      {
+        type: 'tool_use',
+        responseStatus: 'incomplete',
+        messageStatus: 'incomplete',
+        callStatus: 'completed',
+        execute: true,
+      },
+      {
+        type: 'tool_use',
+        responseStatus: undefined,
+        messageStatus: undefined,
+        callStatus: undefined,
+        execute: true,
+      },
+    ])(
+      'uses the nearest status for $type (response: $responseStatus, message: $messageStatus, call: $callStatus)',
+      async ({ type, responseStatus, messageStatus, callStatus, execute }) => {
+        mockFunctionCallbackHandler.processCalls.mockResolvedValue('Callback output');
+        const item = {
+          type,
+          name: 'lookup',
+          arguments: '{"value":"partial"}',
+          ...(callStatus === undefined ? {} : { status: callStatus }),
+        };
+        const data = {
+          ...(responseStatus === undefined ? {} : { status: responseStatus }),
+          output: [
+            {
+              type: 'message',
+              role: 'assistant',
+              ...(messageStatus === undefined ? {} : { status: messageStatus }),
+              content: [{ type: 'output_text', text: 'Partial ' }, item],
+            },
+          ],
+        };
+
+        const result = await processor.processResponseOutput(data, {}, false);
+
+        expect(mockFunctionCallbackHandler.processCalls).toHaveBeenCalledTimes(execute ? 1 : 0);
+        expect(result.output).toBe(execute ? 'Callback output' : `Partial ${JSON.stringify(item)}`);
+        expect(result.error).toBeUndefined();
+        expect(result.raw).toBe(data);
+      },
+    );
+
+    it.each([true, false])(
+      'should retain partial text and execute completed siblings (unfinished first: %s)',
+      async (unfinishedFirst) => {
+        mockFunctionCallbackHandler.processCalls.mockResolvedValue('Completed call result');
+        const completed = {
+          type: 'function_call',
+          name: 'test_function',
+          arguments: '{"param":"complete"}',
+          status: 'completed',
+        };
+        const unfinished = {
+          ...completed,
+          arguments: '{"param":"partial"}',
+          status: 'incomplete',
+        };
+        const mockData = {
+          status: 'incomplete',
+          incomplete_details: { reason: 'max_output_tokens' },
+          output: [
+            {
+              type: 'message',
+              role: 'assistant',
+              content: [{ type: 'output_text', text: 'Partial text' }],
+            },
+            ...(unfinishedFirst ? [unfinished, completed] : [completed, unfinished]),
+          ],
+          usage: { input_tokens: 10, output_tokens: 8, total_tokens: 18 },
+        };
+
+        const result = await processor.processResponseOutput(mockData, {}, false);
+
+        expect(mockFunctionCallbackHandler.processCalls).toHaveBeenCalledExactlyOnceWith(
+          completed,
+          undefined,
+        );
+        expect(result.output).toBe(
+          [
+            'Partial text',
+            ...(unfinishedFirst
+              ? [JSON.stringify(unfinished), 'Completed call result']
+              : ['Completed call result', JSON.stringify(unfinished)]),
+          ].join('\n'),
+        );
+        expect(result.error).toBeUndefined();
+        expect(result.raw).toBe(mockData);
+        expect(result).toMatchObject({
+          cost: 0.001,
+          finishReason: 'length',
+          tokenUsage: { prompt: 10, completion: 8, total: 18 },
+          metadata: {
+            responseStatus: 'incomplete',
+            incompleteReason: 'max_output_tokens',
+          },
+        });
+      },
+    );
 
     it('should handle empty function arguments correctly', async () => {
       const mockData = {
@@ -248,6 +466,88 @@ describe('ResponsesProcessor', () => {
       expect(result.output).toContain('empty_function');
       // Should not call the function callback handler for empty args
       expect(mockFunctionCallbackHandler.processCalls).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['function_call', 'incomplete'],
+      ['function_call', 'in_progress'],
+      ['tool_use', 'incomplete'],
+      ['tool_use', 'in_progress'],
+    ])('should retain unfinished nested %s (%s) and partial text', async (type, status) => {
+      mockFunctionCallbackHandler.processCalls.mockResolvedValue('Unexpected callback');
+      const item = {
+        type,
+        name: 'test_function',
+        arguments: '{"param":"value"}',
+        status,
+      };
+      const mockData = {
+        status: 'incomplete',
+        incomplete_details: { reason: 'max_output_tokens' },
+        output: [
+          {
+            type: 'message',
+            role: 'assistant',
+            content: [
+              { type: 'output_text', text: 'Before ' },
+              item,
+              { type: 'output_text', text: ' after' },
+            ],
+          },
+        ],
+        usage: { input_tokens: 10, output_tokens: 8, total_tokens: 18 },
+      };
+      const original = structuredClone(mockData);
+
+      const result = await processor.processResponseOutput(mockData, {}, false);
+
+      expect(mockFunctionCallbackHandler.processCalls).not.toHaveBeenCalled();
+      expect(result.output).toBe(`Before ${JSON.stringify(item)} after`);
+      expect(result.error).toBeUndefined();
+      expect(result.raw).toBe(mockData);
+      expect(mockData).toEqual(original);
+      expect(result).toMatchObject({
+        cost: 0.001,
+        finishReason: 'length',
+        tokenUsage: { prompt: 10, completion: 8, total: 18 },
+        metadata: {
+          responseStatus: 'incomplete',
+          incompleteReason: 'max_output_tokens',
+        },
+      });
+    });
+
+    it.each([
+      ['function_call', 'completed', '{}'],
+      ['function_call', undefined, '{"param":"value"}'],
+      ['tool_use', 'completed', '{}'],
+      ['tool_use', undefined, '{"param":"value"}'],
+    ])('should still dispatch nested %s with status %s and args %s', async (type, status, args) => {
+      mockFunctionCallbackHandler.processCalls.mockResolvedValue('Completed call result');
+      const item = {
+        type,
+        name: 'test_function',
+        arguments: args,
+        ...(status === undefined ? {} : { status }),
+      };
+      const mockData = {
+        output: [
+          {
+            type: 'message',
+            role: 'assistant',
+            content: [{ type: 'output_text', text: 'Existing prefix' }, item],
+          },
+        ],
+      };
+
+      const result = await processor.processResponseOutput(mockData, {}, false);
+
+      expect(mockFunctionCallbackHandler.processCalls).toHaveBeenCalledExactlyOnceWith(
+        item,
+        undefined,
+      );
+      expect(result.output).toBe('Completed call result');
+      expect(result.error).toBeUndefined();
     });
 
     it('should process reasoning output', async () => {
