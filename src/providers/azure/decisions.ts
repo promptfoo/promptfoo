@@ -13,6 +13,7 @@ import invariant from '../../util/invariant';
 import { renderVarsInObject } from '../../util/render';
 import {
   isCredentialHeader,
+  isSecretField,
   sanitizeObject,
   sanitizeUrlEncodedString,
   sanitizeUrlForLogging,
@@ -34,7 +35,7 @@ import {
 } from '../openai/decisionsProtocol';
 import { hasSensitiveOpenAiCacheString } from '../openai/util';
 import { getResponsesTokenUsage } from '../responses/processor';
-import { getRequestTimeoutMs } from '../shared';
+import { getRequestTimeoutMs, shouldBustProviderCache, withResponseCacheMetadata } from '../shared';
 import { decodeUrlComponent } from '../urlEncoding';
 import { AzureGenericProvider } from './generic';
 
@@ -56,10 +57,19 @@ const cacheScopes = new LRUCache<string, string>({
 
 function hasSensitiveValue(value: unknown): boolean {
   if (typeof value === 'string') {
-    return hasSensitiveOpenAiCacheString(value);
+    if (hasSensitiveOpenAiCacheString(value)) {
+      return true;
+    }
+    // Check named assignments inside prose and serialized JSON, as well as nested JSON fields.
+    for (const match of value.matchAll(/\b([a-z][a-z0-9_-]{0,80})["']?\s*[:=]\s*[^\s,}]/gi)) {
+      if (isSecretField(match[1])) {
+        return true;
+      }
+    }
+    return false;
   }
   return value !== null && typeof value === 'object'
-    ? Object.values(value).some(hasSensitiveValue)
+    ? Object.entries(value).some(([key, item]) => isSecretField(key) || hasSensitiveValue(item))
     : false;
 }
 
@@ -357,9 +367,23 @@ export class AzureDecisionsProvider extends AzureGenericProvider<AzureDecisionsO
     if (apiKey) {
       authHeaders = { 'api-key': apiKey };
     } else {
-      await this.ensureInitialized();
-      invariant(this.authHeaders, 'auth headers are not initialized');
-      authHeaders = this.authHeaders;
+      if (config.apiKeyEnvar) {
+        throw new Error('The selected Azure API key environment variable is unset.');
+      }
+      const identityFields = [
+        'azureClientId',
+        'azureClientSecret',
+        'azureTenantId',
+        'azureAuthorityHost',
+        'azureTokenScope',
+      ] as const;
+      // Only share a cached bearer token among requests selecting the same identity.
+      const identity = identityFields.some((field) => this.config[field] !== config[field])
+        ? new AzureGenericProvider(this.deploymentName, { config, env: this.env })
+        : this;
+      await identity.ensureInitialized();
+      invariant(identity.authHeaders, 'auth headers are not initialized');
+      authHeaders = identity.authHeaders;
     }
 
     const apiBaseUrl = config.apiBaseUrl
@@ -524,11 +548,21 @@ export class AzureDecisionsProvider extends AzureGenericProvider<AzureDecisionsO
         scope = randomUUID();
         cacheScopes.set(transport, scope);
       }
-      const bust = (context?.bustCache ?? context?.debug) || hasSensitiveValue(body);
+      const bust = shouldBustProviderCache(context) || hasSensitiveValue(body);
       const cacheKey = bust
         ? undefined
         : `azure-decisions:${createHash('sha256')
-            .update(JSON.stringify({ scope, body }))
+            .update(
+              JSON.stringify({ scope, body }, (_key, value) =>
+                value && typeof value === 'object' && !Array.isArray(value)
+                  ? Object.fromEntries(
+                      Object.keys(value)
+                        .sort()
+                        .map((key) => [key, value[key]]),
+                    )
+                  : value,
+              ),
+            )
             .digest('hex')}`;
       const response = await fetchWithCache(
         url,
@@ -588,21 +622,19 @@ export class AzureDecisionsProvider extends AzureGenericProvider<AzureDecisionsO
       const outputCost = config.outputCost ?? config.cost;
       const cost =
         inputCost !== undefined && outputCost !== undefined
-          ? cached
-            ? 0
-            : usage.input_tokens * inputCost + usage.output_tokens * outputCost
+          ? usage.input_tokens * inputCost + usage.output_tokens * outputCost
           : undefined;
-      const accounting = {
+      const accounting = withResponseCacheMetadata(
+        {
+          latencyMs,
+          tokenUsage: {
+            ...getResponsesTokenUsage(result.data, false),
+            cached: usage.input_tokens_details?.cached_tokens,
+          },
+          ...(cost === undefined ? {} : { cost }),
+        },
         cached,
-        latencyMs,
-        tokenUsage: cached
-          ? { total: usage.total_tokens, cached: usage.total_tokens }
-          : {
-              ...getResponsesTokenUsage(result.data, false),
-              cached: usage.input_tokens_details?.cached_tokens,
-            },
-        ...(cost === undefined ? {} : { cost }),
-      };
+      );
       if (!answersMatchDecisionQuestions(answers, body.questions)) {
         await deleteFromCache?.();
         return {

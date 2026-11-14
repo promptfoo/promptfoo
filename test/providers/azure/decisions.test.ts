@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
 import { matchesClassification } from '../../../src/matchers/classification';
 import { matchesLlmRubric } from '../../../src/matchers/llmGrading';
+import { AzureGenericProvider } from '../../../src/providers/azure/generic';
 import { AzureDecisionsProvider } from '../../../src/providers/azure/decisions';
 import { HttpRateLimitError } from '../../../src/util/fetch/errors';
 import { mockProcessEnv } from '../../util/utils';
@@ -172,6 +173,57 @@ describe('AzureDecisionsProvider', () => {
     expect(result.error).toBeUndefined();
     expect(url).toBe('https://prompt-only.openai.azure.com/openai/v1/decisions');
     expect(new Headers(request?.headers).get('api-key')).toBe('prompt-only-key');
+  });
+
+  it('fails closed when a selected API key environment variable is missing', async () => {
+    const provider = new AzureDecisionsProvider('deployment', { config });
+    await expect(
+      provider.callApi(
+        'Refund me',
+        context({
+          prompt: {
+            raw: 'Refund me',
+            label: 'ticket',
+            config: {
+              apiBaseUrl: 'https://other.example',
+              apiKeyEnvar: 'MISSING_FIXTURE_KEY',
+            },
+          },
+        }),
+      ),
+    ).rejects.toThrow(/API key/);
+    expect(fetchWithCache).not.toHaveBeenCalled();
+  });
+
+  it('uses the requested Entra principal and scope for this prompt', async () => {
+    const getToken = vi
+      .fn()
+      .mockResolvedValue({ token: 'scoped-token', expiresOnTimestamp: Date.now() + 3600000 });
+    const credential = vi
+      .spyOn(AzureGenericProvider.prototype, 'getAzureTokenCredential')
+      .mockResolvedValue({ getToken });
+    const provider = new AzureDecisionsProvider('deployment', {
+      config: { ...config, apiKey: undefined },
+    });
+    await provider.callApi(
+      'Refund me',
+      context({
+        prompt: {
+          raw: 'Refund me',
+          label: 'ticket',
+          config: {
+            azureClientId: 'scoped-client',
+            azureClientSecret: 'fixture-only',
+            azureTenantId: 'scoped-tenant',
+            azureTokenScope: 'https://other.example/.default',
+          },
+        },
+      }),
+    );
+    expect(credential.mock.contexts.at(-1)).toMatchObject({
+      config: { azureClientId: 'scoped-client', azureTenantId: 'scoped-tenant' },
+    });
+    expect(getToken).toHaveBeenCalledWith('https://other.example/.default');
   });
 
   it('requires an Azure endpoint before transport', async () => {
@@ -509,12 +561,30 @@ describe('AzureDecisionsProvider', () => {
   it.each([
     'Review https://example.com/file?X-Amz-Signature=embedded-signature',
     'Review this Bearer embedded-bearer-token before continuing',
+    'Review api_key=0123456789abcdef0123456789abcdef before continuing',
   ])('bypasses persistent caching for embedded credentials: %s', async (input) => {
     const provider = new AzureDecisionsProvider('deployment', { config });
     await provider.callApi(input);
     expect(vi.mocked(fetchWithCache).mock.calls[0]![4]).toMatchObject({
       bust: true,
       cacheKey: undefined,
+    });
+  });
+
+  it('keys equivalent JSON inputs identically while preserving array order', async () => {
+    const provider = new AzureDecisionsProvider('deployment', { config });
+    async function keyFor(data: Record<string, unknown>) {
+      await provider.callApi(
+        JSON.stringify([{ role: 'user', content: [{ type: 'input_json', data }] }]),
+      );
+      return vi.mocked(fetchWithCache).mock.lastCall?.[4];
+    }
+    const first = await keyFor({ a: 1, b: [2, 3] });
+    expect(first).toMatchObject({ bust: false, cacheKey: expect.any(String) });
+    const reordered = await keyFor({ b: [2, 3], a: 1 });
+    expect(reordered).toMatchObject({ cacheKey: (first as { cacheKey: string }).cacheKey });
+    expect(await keyFor({ a: 1, b: [3, 2] })).not.toMatchObject({
+      cacheKey: (first as { cacheKey: string }).cacheKey,
     });
   });
 
@@ -558,10 +628,13 @@ describe('AzureDecisionsProvider', () => {
       status: 200,
       statusText: 'OK',
     });
-    const provider = new AzureDecisionsProvider('deployment', { config });
+    const provider = new AzureDecisionsProvider('deployment', {
+      config: { ...config, cost: 0.01 },
+    });
     expect(await provider.callApi('Refund me')).toMatchObject({
       cached: true,
-      tokenUsage: { total: 20, cached: 20 },
+      cost: 0.2,
+      tokenUsage: { total: 20, prompt: 20, cached: 20, numRequests: 0 },
       metadata: { model: 'resolved-model' },
     });
   });
