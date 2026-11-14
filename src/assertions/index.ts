@@ -20,7 +20,6 @@ import {
 import { matchesSimilarity } from '../matchers/similarity';
 import { isPackagePath, loadFromPackage } from '../providers/packageParser';
 import { runPython } from '../python/pythonUtils';
-import { runRuby } from '../ruby/rubyUtils.js';
 import {
   getProviderCallExecutionContext,
   getProviderCallTracingContext,
@@ -347,7 +346,11 @@ function renderAssertionValue(
       if (isJavascriptFile(filePath) || filePath.endsWith('.py') || filePath.endsWith('.rb')) {
         return fileReference;
       }
-      return renderAssertionValue(processFileReference(`file://${filePath}`), vars, false);
+      return renderAssertionValue(
+        processFileReference(`file://${filePath}`, fileReference !== value),
+        vars,
+        false,
+      );
     }
     return nunjucks.renderString(value, vars);
   }
@@ -379,6 +382,18 @@ function getRubyWrapperMethodName(functionName: string | undefined): string {
   return separatorIndex === -1 || methodName.includes('.')
     ? methodName
     : `${methodName.slice(0, separatorIndex)}.${methodName.slice(separatorIndex + 2)}`;
+}
+
+async function runFileAssertion(
+  filePath: string,
+  method: string,
+  output: string | object,
+  context: AssertionValueFunctionContext,
+): Promise<ValueFromScript> {
+  const runScript = filePath.endsWith('.py')
+    ? runPython
+    : (await import('../ruby/rubyUtils.js')).runRuby;
+  return runScript<ValueFromScript>(filePath, method, [output, context]);
 }
 
 function validateScriptAssertion(assertion: Assertion): void {
@@ -417,11 +432,11 @@ async function executeAssertionScript({
   }
   if (baseType === 'python') {
     invariant(filePath.endsWith('.py'), 'python assertion script must reference a .py file');
-    return runPython(filePath, functionName || 'get_assert', [output, context]);
+    return runFileAssertion(filePath, functionName || 'get_assert', output, context);
   }
   if (baseType === 'ruby') {
     invariant(filePath.endsWith('.rb'), 'ruby assertion script must reference a .rb file');
-    return runRuby(filePath, getRubyWrapperMethodName(functionName), [output, context]);
+    return runFileAssertion(filePath, getRubyWrapperMethodName(functionName), output, context);
   }
 }
 
@@ -672,13 +687,11 @@ async function runAssertionInternal({
         logger.debug(`Javascript script ${filePath} output: ${valueFromScript}`);
       } else if (filePath.endsWith('.py') || filePath.endsWith('.rb')) {
         try {
-          const runScript = filePath.endsWith('.py')
-            ? runPython
-            : (await import('../ruby/rubyUtils.js')).runRuby;
-          valueFromScript = await runScript<ValueFromScript>(
+          valueFromScript = await runFileAssertion(
             filePath,
             functionName || 'get_assert',
-            [output, context],
+            output,
+            context,
           );
           logger.debug(`Script ${filePath} output: ${valueFromScript}`);
         } catch (error) {

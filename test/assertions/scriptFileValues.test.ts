@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
@@ -143,10 +143,29 @@ describe('script assertion data-file parameters', () => {
     const file = path.join(directory, 'literal {{ second }}.txt');
     await writeFile(file, 'expected');
 
-    await checkInlineAndExternal('file://{{ dataPath }}', 'expected', {
-      dataPath: file,
-      second: 'must-not-be-rendered',
-    });
+    await cliState.withBasePath(directory, () =>
+      checkInlineAndExternal('file://{{ dataPath }}', 'expected', {
+        dataPath: file,
+        second: 'must-not-be-rendered',
+      }),
+    );
+  });
+
+  it('rejects traversal and symlink escapes from interpolated data paths', async () => {
+    const base = path.join(directory, 'suite');
+    await mkdir(base);
+    await writeFile(path.join(directory, 'outside.txt'), 'outside');
+    const outside = path.join(directory, 'other');
+    await mkdir(outside);
+    await writeFile(path.join(outside, 'fixture.txt'), 'outside');
+    await symlink(outside, path.join(base, 'link'), 'junction');
+    for (const file of ['../outside.txt', 'link/fixture.txt']) {
+      await expect(
+        cliState.withBasePath(base, () =>
+          checkInlineAndExternal('file://{{ file }}', 'outside', { file }),
+        ),
+      ).rejects.toThrow('must be inside the configuration directory');
+    }
   });
 
   it('does not render substituted syntax in an executable parameter reference', async () => {
@@ -254,11 +273,13 @@ describe('script assertion data-file parameters', () => {
       const [test] = await loadTestsFromGlob(testFile);
       for (const assertion of test.assert!.slice(1)) {
         await expect(
-          runAssertion({
-            assertion: assertion as Assertion,
-            test: test as AtomicTestCase,
-            providerResponse: { output: JSON.stringify('rendered') },
-          }),
+          cliState.withBasePath(directory, () =>
+            runAssertion({
+              assertion: assertion as Assertion,
+              test: test as AtomicTestCase,
+              providerResponse: { output: JSON.stringify('rendered') },
+            }),
+          ),
         ).resolves.toMatchObject({ pass: true, score: 1 });
       }
     },

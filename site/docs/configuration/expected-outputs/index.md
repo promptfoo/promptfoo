@@ -498,6 +498,8 @@ Assertion templates reuse a named assertion definition. For script assertions th
 
 Script parameters also support `.txt`, `.json`, `.yaml`, and `.yml` data-file references such as `value: file://expected.json`, in both inline and external test cases. JavaScript, Python, and Ruby file references in `value` remain literal parameters; only `script` selects the code to execute.
 
+When a test variable selects the data file, its resolved path must stay inside the configuration directory. A literal file reference can select a shared fixture elsewhere.
+
 ## Defining named metrics
 
 Each assertion supports a `metric` field that allows you to tag the result however you like. Use this feature to combine related assertions into aggregate metrics.
