@@ -30,10 +30,12 @@ vi.mock('../../../src/logger', () => ({
 }));
 
 beforeEach(() => {
+  vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
   sockets.length = 0;
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.clearAllMocks();
 });
 
