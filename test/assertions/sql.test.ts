@@ -419,6 +419,8 @@ describe('is-sql assertion', () => {
       'SELECT 1 -- generate_series(1, 5)\n',
       'SELECT 1 # generate_series(1, 5)\n',
       "SELECT 1 /*! + LENGTH('select a b from t') */",
+      "SELECT 1 /*! + LENGTH('generate_series(1, 5)') */",
+      "SELECT 1 /*!80000 + LENGTH('generate_series(1, 5)') */",
       "SELECT 1 /*!80000 + LENGTH('select a b from t') */",
     ])(
       'should ignore function-like text in MySQL literals and comments: %s',

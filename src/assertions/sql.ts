@@ -102,9 +102,9 @@ function stripIgnoredSqlText(
     } else if (character === '/' && sql[cursor + 1] === '*') {
       const commentEnd = sql.indexOf('*/', cursor + 2);
       ignoredTextEnd = commentEnd === -1 ? sql.length : commentEnd + 2;
-      // MySQL executes /*! ... */ comments. Preserve their existing validation.
-      if (isMySql && sql[cursor + 2] === '!') {
-        replacement = sql.slice(cursor, ignoredTextEnd);
+      // Executable comments contain SQL, including ordinary quoted literals.
+      if (isMySql && sql[cursor + 2] === '!' && commentEnd !== -1) {
+        replacement = stripIgnoredSqlText(sql.slice(cursor + 3, commentEnd), databaseType, mode);
       }
     } else if (character === '$' && !isMySql) {
       const delimiter = readDollarQuoteDelimiter(sql, cursor);
