@@ -595,11 +595,7 @@ function validateTestCase(testCase: TestCase): void {
     typeof testCase.threshold !== 'number'
   ) {
     throw new Error(
-      `Test case must contain assert, vars, options, metadata, provider, providerOutput, threshold, or only a description.\n\nInstead got:\n${JSON.stringify(
-        testCase,
-        null,
-        2,
-      )}`,
+      'Test case must contain assert, vars, options, metadata, provider, providerOutput, threshold, or only a description.',
     );
   }
 }

@@ -1,6 +1,6 @@
 import { isApiProvider, isProviderOptions, type TestCase } from '../types';
 import { canonicalizeProviderId, normalizeProviderRef } from './providerRef';
-import { sanitizeUrl } from './sanitizer';
+import { sanitizeUrl, sanitizeUrlForLogging } from './sanitizer';
 
 import type { ApiProvider } from '../types/providers';
 
@@ -47,17 +47,27 @@ export function getProviderIdentifier(provider: ApiProvider): string {
   return provider.label || provider.id();
 }
 
+/** Format provider references for diagnostics without disclosing command arguments or URL credentials. */
+export function formatProviderReference(ref: string): string {
+  if (/^exec:/i.test(ref)) {
+    return 'exec:[REDACTED]';
+  }
+  const urlIndex = ref.search(/(?:https?|wss?):\/\//i);
+  return urlIndex >= 0 ? ref.slice(0, urlIndex) + sanitizeUrlForLogging(ref.slice(urlIndex)) : ref;
+}
+
 /**
  * Gets a descriptive identifier string for a provider, showing both label and ID when both exist.
  * Useful for error messages to help users debug provider reference issues.
  */
-export function getProviderDescription(provider: ApiProvider): string {
+export function getProviderDescription(provider: Pick<ApiProvider, 'id' | 'label'>): string {
   const label = provider.label;
   const id = provider.id();
+  const displayId = formatProviderReference(id);
   if (label && label !== id) {
-    return `${label} (${id})`;
+    return `${formatProviderReference(label)} (${displayId})`;
   }
-  return id;
+  return displayId;
 }
 
 export function sanitizeProviderIdForLog(providerId: string): string {
@@ -76,7 +86,10 @@ export function sanitizeProviderIdForLog(providerId: string): string {
  * Checks if a provider reference matches a given provider.
  * Supports exact matching and wildcard patterns.
  */
-export function doesProviderRefMatch(ref: string, provider: ApiProvider): boolean {
+export function doesProviderRefMatch(
+  ref: string,
+  provider: Pick<ApiProvider, 'id' | 'label'>,
+): boolean {
   const label = provider.label;
   const id = provider.id();
 
