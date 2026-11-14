@@ -7,6 +7,9 @@ import { BLOB_MAX_SIZE, BLOB_MIN_SIZE, BLOB_SCHEME } from './constants';
 import { type BlobRef, recordBlobReference, storeBlob } from './index';
 
 import type { ProviderResponse } from '../types/providers';
+import type { BlobTransaction } from './index';
+
+export type { BlobTransaction } from './index';
 
 interface BlobContext {
   evalId?: string;
@@ -115,7 +118,7 @@ type StoreOnce = (
   minSizeBytes?: number,
 ) => Promise<BlobRef | null>;
 
-function createStoreOnce(blobContext: BlobContext): StoreOnce {
+function createStoreOnce(blobContext: BlobContext, transaction?: BlobTransaction): StoreOnce {
   const cache = new Map<string, Promise<BlobRef>>();
   return async (base64OrDataUrl, defaultMimeType, location, kind, minSizeBytes) => {
     const parsed = parseBinary(base64OrDataUrl, defaultMimeType);
@@ -134,11 +137,16 @@ function createStoreOnce(blobContext: BlobContext): StoreOnce {
     }
 
     // Blob extraction is local-only. Remote synchronization happens when an eval is shared.
-    const pendingStore = storeBlob(parsed.buffer, parsed.mimeType || 'application/octet-stream', {
-      ...blobContext,
-      location,
-      kind,
-    }).then(({ ref }) => ref);
+    const pendingStore = storeBlob(
+      parsed.buffer,
+      parsed.mimeType || 'application/octet-stream',
+      {
+        ...blobContext,
+        location,
+        kind,
+      },
+      ...(transaction ? [transaction] : []),
+    ).then(({ ref }) => ref);
     cache.set(cacheKey, pendingStore);
 
     try {
@@ -330,6 +338,7 @@ async function externalizeMetadataAudio(
 export async function extractAndStoreBinaryData(
   response: ProviderResponse | null | undefined,
   context?: BlobContext,
+  transaction?: BlobTransaction,
 ): Promise<ProviderResponse | null | undefined> {
   if (!response) {
     return response;
@@ -338,7 +347,7 @@ export async function extractAndStoreBinaryData(
   let mutated = false;
   const next: ProviderResponse = { ...response };
   const blobContext = context || {};
-  const storeOnce = createStoreOnce(blobContext);
+  const storeOnce = createStoreOnce(blobContext, transaction);
 
   // Audio at top level
   if (response.audio?.data && typeof response.audio.data === 'string') {
@@ -515,7 +524,7 @@ export async function extractAndStoreBinaryData(
 
   const finalResponse = mutated ? next : response;
   if (blobContext.evalId) {
-    await recordExistingBlobReferences(finalResponse, blobContext, 'response');
+    await recordExistingBlobReferences(finalResponse, blobContext, 'response', transaction);
   }
 
   return finalResponse;
@@ -530,17 +539,22 @@ async function recordExistingBlobReferences(
   value: unknown,
   context: BlobContext,
   location: string,
+  transaction?: BlobTransaction,
 ): Promise<void> {
   const hashes = [...new Set(extractBlobHashesFromValue(value))];
   if (hashes.length > 0) {
-    await Promise.all(hashes.map((hash) => recordBlobReference(hash, { ...context, location })));
+    await Promise.all(
+      hashes.map((hash) =>
+        recordBlobReference(hash, { ...context, location }, ...(transaction ? [transaction] : [])),
+      ),
+    );
     return;
   }
 
   if (Array.isArray(value)) {
     await Promise.all(
       value.map((child, idx) =>
-        recordExistingBlobReferences(child, context, `${location}[${idx}]`),
+        recordExistingBlobReferences(child, context, `${location}[${idx}]`, transaction),
       ),
     );
     return;
@@ -548,7 +562,12 @@ async function recordExistingBlobReferences(
 
   if (value && typeof value === 'object') {
     for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
-      await recordExistingBlobReferences(child, context, location ? `${location}.${key}` : key);
+      await recordExistingBlobReferences(
+        child,
+        context,
+        location ? `${location}.${key}` : key,
+        transaction,
+      );
     }
   }
 }

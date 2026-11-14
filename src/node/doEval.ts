@@ -75,6 +75,7 @@ import type {
 } from '../types/index';
 import type { InternalEvaluateOptions } from '../types/internal';
 import type { FilterOptions } from '../util/eval/filterTests';
+import type { RetryStage } from './evaluationStore';
 
 export const EvalCommandSchema = CommandLineOptionsSchema.extend({
   help: z.boolean().optional(),
@@ -965,10 +966,12 @@ async function doEvalWithEnv(
         }
       }
 
-      const retryReplacementIds = retryErrorResultIds ? new Set<string>() : undefined;
+      const retryStage: RetryStage | undefined = retryErrorResultIds
+        ? { originalIds: new Set(retryErrorResultIds), rows: [] }
+        : undefined;
       ret = await evaluate(testSuite, evalRecord, {
         ...options,
-        retryReplacementIds,
+        retryStage,
         restorePromptColumns: Boolean(resumeEval),
         filterRange: hasScenarios || resumeEval ? filterRange : undefined,
         abortSignal: evaluateOptions.abortSignal,
@@ -977,11 +980,11 @@ async function doEvalWithEnv(
       });
 
       // Delete original results only after their replacements are saved.
-      if (retryErrorResultIds && retryReplacementIds && !paused) {
+      if (retryStage && !paused) {
         if (ret.resultPersistenceFailed) {
           throw new Error('Retry results failed to persist. Original results were preserved.');
         }
-        if (!(await replaceRetryResults(ret.id, retryErrorResultIds, retryReplacementIds))) {
+        if (!(await replaceRetryResults(ret, retryStage))) {
           throw new Error(
             'Retry did not replace all selected results. Original results were preserved.',
           );
@@ -989,7 +992,7 @@ async function doEvalWithEnv(
         try {
           await recalculatePromptMetrics(ret);
           logger.debug(
-            `Cleaned up ${retryErrorResultIds.length} original results after successful retry`,
+            `Cleaned up ${retryStage.originalIds.size} original results after successful retry`,
           );
         } catch (cleanupError) {
           // Cleanup failure is non-fatal - retry itself succeeded
@@ -1014,7 +1017,9 @@ async function doEvalWithEnv(
     if (paused && cmdObj.write !== false) {
       printBorder();
       logger.info(`${chalk.yellow('⏸')} Evaluation paused. ID: ${chalk.cyan(evalRecord.id)}`);
-      logger.info(`» Resume with: ${chalk.green.bold('promptfoo eval --resume ' + evalRecord.id)}`);
+      logger.info(
+        `» Resume with: ${chalk.green.bold(retryErrors ? 'promptfoo eval --retry-errors' : 'promptfoo eval --resume ' + evalRecord.id)}`,
+      );
       printBorder();
       return ret;
     }

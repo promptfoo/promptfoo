@@ -1,5 +1,9 @@
 import { and, eq, gte, inArray, lt, ne, notInArray } from 'drizzle-orm';
-import { extractAndStoreBinaryData, isBlobStorageEnabled } from '../blobs/extractor';
+import {
+  type BlobTransaction,
+  extractAndStoreBinaryData,
+  isBlobStorageEnabled,
+} from '../blobs/extractor';
 import { getDb } from '../database/index';
 import { evalResultsTable } from '../database/tables';
 import {
@@ -44,7 +48,7 @@ export default class EvalResult {
   static async createFromEvaluateResult(
     evalId: string,
     result: EvaluateResult,
-    opts?: { persist: boolean },
+    opts?: { persist: boolean; deferMedia?: boolean },
   ) {
     const persist = opts?.persist == null ? true : opts.persist;
     const {
@@ -74,11 +78,13 @@ export default class EvalResult {
       evaluationId,
     );
 
-    const processedResponse = await extractAndStoreBinaryData(result.response, {
-      evalId,
-      testIdx: result.testIdx,
-      promptIdx: result.promptIdx,
-    });
+    const processedResponse = opts?.deferMedia
+      ? result.response
+      : await extractAndStoreBinaryData(result.response, {
+          evalId,
+          testIdx: result.testIdx,
+          promptIdx: result.promptIdx,
+        });
 
     // Sanitize all JSON fields to remove circular references and non-serializable values.
     // `testCase` and `prompt` can contain a resolved runtime provider under
@@ -383,6 +389,20 @@ export default class EvalResult {
     this.pluginId = opts.testCase.metadata?.pluginId;
   }
 
+  async saveRetryReplacement(transaction: BlobTransaction) {
+    this.response =
+      (await extractAndStoreBinaryData(
+        this.response,
+        {
+          evalId: this.evalId,
+          testIdx: this.testIdx,
+          promptIdx: this.promptIdx,
+        },
+        transaction,
+      )) ?? undefined;
+    await this.save(transaction);
+  }
+
   async save(transaction?: Pick<Awaited<ReturnType<typeof getDb>>, 'insert' | 'update'>) {
     const db = transaction ?? (await getDb());
     // Trace/repeat linkage and `pluginId` aren't schema columns — `pluginId` is re-derived
@@ -414,7 +434,10 @@ export default class EvalResult {
         .where(eq(evalResultsTable.id, this.id))
         .run();
     } else {
-      const result = await db.insert(evalResultsTable).values(persistedValues).returning();
+      const result = await db
+        .insert(evalResultsTable)
+        .values({ ...persistedValues, ...redactSensitiveResultFieldsForDb(persistedValues) })
+        .returning();
       this.id = result[0].id;
       this.persisted = true;
     }

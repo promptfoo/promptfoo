@@ -7,11 +7,11 @@ import { eq } from 'drizzle-orm';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDb } from '../../src/database/index';
 import { updateSignalFile } from '../../src/database/signal';
-import { evalResultsTable } from '../../src/database/tables';
-import logger from '../../src/logger';
+import { evalResultsTable, evalsTable } from '../../src/database/tables';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
 import { getTotalResultRowCount } from '../../src/models/evalPerformance';
+import EvalResult from '../../src/models/evalResult';
 import {
   deleteErrorResults,
   getErrorResultIds,
@@ -150,7 +150,7 @@ describe('retry command', () => {
       const errorIds = await getErrorResultIds(emptyEval.id);
       expect(errorIds).toHaveLength(0);
       expect(await getRetryResultIds(emptyEval.id)).toEqual([]);
-      expect(await replaceRetryResults(emptyEval.id, [], new Set())).toBe(true);
+      expect(await replaceRetryResults(emptyEval, { originalIds: new Set(), rows: [] })).toBe(true);
     });
   });
 
@@ -207,25 +207,29 @@ describe('retry command', () => {
       expect((await getErrorResultIds(evalRecord.id)).sort()).toEqual(
         ['comparison-error', 'ordinary-error'].map((id) => `${evalRecord.id}-${id}`).sort(),
       );
-      const replacementIds = new Set<string>();
-      expect(await replaceRetryResults(evalRecord.id, selectedIds, replacementIds)).toBe(false);
-      const replace = async (originals: typeof rows) => {
-        const replacements = originals.map((row) => ({
-          ...row,
-          id: `${row.id}-replacement`,
-          success: true,
-          score: 1,
-          failureReason: ResultFailureReason.NONE,
-        }));
-        await db.insert(evalResultsTable).values(replacements);
-        replacements.forEach(({ id }) => replacementIds.add(id));
+      const stage = { originalIds: new Set(selectedIds), rows: [] as EvalResult[] };
+      expect(await replaceRetryResults(evalRecord, stage)).toBe(false);
+      const stageSuccessfulRows = (originals: typeof rows) => {
+        for (const row of originals) {
+          stage.rows.push(
+            new EvalResult({
+              ...row,
+              id: `${row.id}-replacement`,
+              response: row.response ?? null,
+              gradingResult: row.gradingResult ?? null,
+              success: true,
+              score: 1,
+              failureReason: ResultFailureReason.NONE,
+            }),
+          );
+        }
       };
-      await replace(rows.filter((row) => row.failureReason === ResultFailureReason.ERROR));
-      expect(await replaceRetryResults(evalRecord.id, selectedIds, replacementIds)).toBe(false);
-      await replace(
+      stageSuccessfulRows(rows.filter((row) => row.failureReason === ResultFailureReason.ERROR));
+      expect(await replaceRetryResults(evalRecord, stage)).toBe(false);
+      stageSuccessfulRows(
         rows.filter((row) => row.testIdx === 0 && row.failureReason !== ResultFailureReason.ERROR),
       );
-      expect(await replaceRetryResults(evalRecord.id, selectedIds, replacementIds)).toBe(true);
+      expect(await replaceRetryResults(evalRecord, stage)).toBe(true);
     },
   );
 
@@ -356,6 +360,9 @@ describe('retry command', () => {
         const readSavedRow = (id: string) =>
           db.select().from(evalResultsTable).where(eq(evalResultsTable.id, id)).get();
         const expected = await Promise.all(ids.map(readSavedRow));
+        const readEvaluation = () =>
+          db.select().from(evalsTable).where(eq(evalsTable.id, evalRecord.id)).get();
+        const expectedEval = await readEvaluation();
         let expectedHistorical: Awaited<ReturnType<typeof readSavedRow>>;
         fs.writeFileSync(
           configPath,
@@ -401,6 +408,13 @@ describe('retry command', () => {
               ? { ...expected[1], gradingResult: manualGrading }
               : expected[1],
           );
+          expect(await readEvaluation()).toEqual(expectedEval);
+          expect(
+            await db
+              .select()
+              .from(evalResultsTable)
+              .where(eq(evalResultsTable.evalId, evalRecord.id)),
+          ).toHaveLength(3);
           expect(expectedHistorical).toBeDefined();
           expect(await readSavedRow(historical.id)).toEqual(expectedHistorical);
         } finally {
@@ -526,18 +540,9 @@ describe('retry command', () => {
           '      name: World',
         ].join('\n'),
       );
-      const originalAddPrompts = Eval.prototype.addPrompts;
-      let addPromptsCalls = 0;
-      vi.spyOn(Eval.prototype, 'addPrompts').mockImplementation(async function (
-        this: Eval,
-        prompts,
-      ) {
-        addPromptsCalls += 1;
-        if (addPromptsCalls === 4) {
-          throw new Error('simulated prompt metric save failure');
-        }
-        return originalAddPrompts.call(this, prompts);
-      });
+      const saveMetrics = vi
+        .spyOn(Eval.prototype, 'addPrompts')
+        .mockRejectedValueOnce(new Error('simulated prompt metric save failure'));
 
       try {
         await retryCommand(evalRecord.id, { config: configPath });
@@ -558,7 +563,7 @@ describe('retry command', () => {
         expect(JSON.stringify(rows)).not.toContain(staleResultId);
         expect(JSON.stringify(rows)).not.toContain('stale error');
         expect(fs.existsSync(jsonOutputPath)).toBe(false);
-        expect(addPromptsCalls).toBe(4);
+        expect(saveMetrics).toHaveBeenCalledOnce();
 
         const persistedRows = await db
           .select()
@@ -626,8 +631,8 @@ describe('retry command', () => {
           '      name: World',
         ].join('\n'),
       );
-      const addResultSpy = vi
-        .spyOn(Eval.prototype, 'addResult')
+      const stageResultSpy = vi
+        .spyOn(EvalResult, 'createFromEvaluateResult')
         .mockRejectedValueOnce(new Error('simulated result persistence failure'));
 
       try {
@@ -635,7 +640,7 @@ describe('retry command', () => {
           'Retry results failed to persist. Existing ERROR rows were preserved.',
         );
 
-        expect(addResultSpy).toHaveBeenCalledTimes(1);
+        expect(stageResultSpy).toHaveBeenCalledTimes(1);
         expect(await getErrorResultIds(evalRecord.id)).toEqual([staleResultId]);
         const artifactRows = fs
           .readFileSync(jsonlOutputPath, 'utf8')
@@ -656,7 +661,7 @@ describe('retry command', () => {
       }
     });
 
-    it('rewrites JSONL from the partially persisted database state when retry persistence fails', async () => {
+    it('rolls back an inserted replacement and leaves JSONL unchanged when the next insert fails', async () => {
       const artifactId = randomUUID();
       const jsonlOutputPath = path.join(os.tmpdir(), `promptfoo-retry-${artifactId}.jsonl`);
       const configPath = path.join(os.tmpdir(), `promptfoo-retry-${artifactId}.yaml`);
@@ -708,17 +713,17 @@ describe('retry command', () => {
           '      name: Mars',
         ].join('\n'),
       );
-      const originalAddResult = Eval.prototype.addResult;
-      vi.spyOn(Eval.prototype, 'addResult')
-        .mockImplementationOnce(function (this: Eval, result) {
-          return originalAddResult.call(this, result);
+      const saveReplacement = EvalResult.prototype.saveRetryReplacement;
+      vi.spyOn(EvalResult.prototype, 'saveRetryReplacement')
+        .mockImplementationOnce(function (this: EvalResult, tx) {
+          return saveReplacement.call(this, tx);
         })
         .mockRejectedValueOnce(new Error('simulated result persistence failure'));
 
       try {
         await expect(
           retryCommand(evalRecord.id, { config: configPath, maxConcurrency: 1 }),
-        ).rejects.toThrow('Retry results failed to persist. Existing ERROR rows were preserved.');
+        ).rejects.toThrow('simulated result persistence failure');
 
         const persistedRows = await db
           .select()
@@ -732,79 +737,8 @@ describe('retry command', () => {
         expect(artifactRows.map((row) => row.id).sort()).toEqual(
           persistedRows.map((row) => row.id).sort(),
         );
-        expect(artifactRows).toHaveLength(3);
-      } finally {
-        fs.rmSync(jsonlOutputPath, { force: true });
-        fs.rmSync(configPath, { force: true });
-      }
-    });
-
-    it('keeps the persistence error primary when restoring JSONL output also fails', async () => {
-      const artifactId = randomUUID();
-      const jsonlOutputPath = path.join(os.tmpdir(), `promptfoo-retry-${artifactId}.jsonl`);
-      const configPath = path.join(os.tmpdir(), `promptfoo-retry-${artifactId}.yaml`);
-      const prompt = { raw: 'Hello {{name}}', label: 'Hello {{name}}' };
-      const evalRecord = await Eval.create(
-        {
-          outputPath: jsonlOutputPath,
-          prompts: [prompt.raw],
-          providers: ['echo'],
-          tests: [{ vars: { name: 'World' } }],
-        },
-        [prompt],
-        { id: uniqueEvalId() },
-      );
-      const db = await getDb();
-      const staleResultId = `${evalRecord.id}-stale-error`;
-      await db.insert(evalResultsTable).values({
-        id: staleResultId,
-        evalId: evalRecord.id,
-        promptIdx: 0,
-        testIdx: 0,
-        prompt,
-        testCase: { vars: { name: 'World' } },
-        provider: { id: 'echo' },
-        response: { output: 'stale error' },
-        error: 'stale error',
-        success: false,
-        score: 0,
-        failureReason: ResultFailureReason.ERROR,
-        namedScores: {},
-      });
-      fs.writeFileSync(jsonlOutputPath, `${JSON.stringify({ id: staleResultId })}\n`);
-      fs.writeFileSync(
-        configPath,
-        [
-          'providers:',
-          '  - echo',
-          'prompts:',
-          `  - "${prompt.raw}"`,
-          'tests:',
-          '  - vars:',
-          '      name: World',
-        ].join('\n'),
-      );
-      vi.spyOn(Eval.prototype, 'addResult').mockRejectedValueOnce(
-        new Error('simulated result persistence failure'),
-      );
-      vi.spyOn(Eval.prototype, 'fetchResultsBatched').mockImplementationOnce(async function* () {
-        throw new Error('simulated artifact restore failure');
-      });
-      const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => logger);
-
-      try {
-        await expect(retryCommand(evalRecord.id, { config: configPath })).rejects.toThrow(
-          'Retry results failed to persist. Existing ERROR rows were preserved.',
-        );
-        expect(warnSpy).toHaveBeenCalledWith(
-          'Retry results failed to persist, and restoring JSONL output failed.',
-          expect.objectContaining({
-            error: expect.objectContaining({
-              errors: [expect.objectContaining({ message: 'simulated artifact restore failure' })],
-            }),
-            jsonlOutputPaths: [jsonlOutputPath],
-          }),
-        );
+        expect(artifactRows).toHaveLength(2);
+        expect(await getErrorResultIds(evalRecord.id)).toEqual(staleResultIds);
       } finally {
         fs.rmSync(jsonlOutputPath, { force: true });
         fs.rmSync(configPath, { force: true });

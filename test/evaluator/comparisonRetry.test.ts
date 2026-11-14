@@ -83,9 +83,12 @@ it.each(['select-best', 'max-score'] as const)(
     cliState.resume = true;
     cliState.retryMode = true;
     cliState._retryErrorResultIds = selected;
-    const retryReplacementIds = new Set<string>();
-    await evaluate(suite, record, { cache: false, maxConcurrency: 1, retryReplacementIds });
-    expect(await replaceRetryResults(record.id, selected, retryReplacementIds)).toBe(true);
+    const retryStage = { originalIds: new Set(selected), rows: [] };
+    await evaluate(suite, record, { cache: false, maxConcurrency: 1, retryStage });
+    expect((await record.fetchResultsByTestIdx(0)).map((row) => row.id).sort()).toEqual(
+      [...selected].sort(),
+    );
+    expect(await replaceRetryResults(record, retryStage)).toBe(true);
     await recalculatePromptMetrics(record);
 
     const retried = await record.fetchResultsByTestIdx(0);

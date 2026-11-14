@@ -2164,11 +2164,10 @@ describe('evalCommand', () => {
         { filterProviders: 'selected-target' },
         latestEval.config,
       );
-      expect(replaceRetryResults).toHaveBeenCalledWith(
-        latestEval.id,
-        ['result-1', 'result-2'],
-        expect.any(Set),
-      );
+      expect(replaceRetryResults).toHaveBeenCalledWith(latestEval, {
+        originalIds: new Set(['result-1', 'result-2']),
+        rows: [],
+      });
       expect(recalculatePromptMetrics).toHaveBeenCalledWith(latestEval);
     } finally {
       latestSpy.mockRestore();

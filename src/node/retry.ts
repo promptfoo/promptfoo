@@ -25,7 +25,8 @@ import { shouldShareResults } from '../util/sharing';
 import { accumulateGradingTokenUsage, accumulateResponseTokenUsage } from '../util/tokenUsageUtils';
 
 import type { GradingResult, PromptMetrics } from '../types/index';
-import type { InternalEvaluateOptions } from '../types/internal';
+import type { NodeEvaluateOptions } from './evaluateTestSuite';
+import type { RetryStage } from './evaluationStore';
 
 export interface RetryCommandOptions {
   config?: string;
@@ -94,29 +95,6 @@ async function resolveRetryConfigs(
     cmdObj.config,
   );
   return configs;
-}
-
-async function restoreJsonlOutputsAfterPersistenceFailure(
-  jsonlOutputPaths: string[],
-  evalRecord: Eval,
-): Promise<void> {
-  if (jsonlOutputPaths.length === 0) {
-    return;
-  }
-
-  try {
-    // A failed retry must restore the pre-retry database view, not union in
-    // replacement rows that were streamed before persistence failed.
-    evalRecord.resultPersistenceFailed = false;
-    await writeMultipleOutputs(jsonlOutputPaths, evalRecord, null);
-  } catch (error) {
-    logger.warn('Retry results failed to persist, and restoring JSONL output failed.', {
-      error,
-      jsonlOutputPaths,
-    });
-  } finally {
-    evalRecord.resultPersistenceFailed = true;
-  }
 }
 
 /**
@@ -196,20 +174,24 @@ function hasManualGrading(grading: GradingResult | null | undefined): boolean {
 }
 
 /**
- * Validate the rows written by this attempt and delete originals in the same transaction.
- * A manually edited original vetoes deleting any row in the selection.
+ * Validate the current originals and commit only this attempt's staged rows.
+ * A manually edited original vetoes replacing any row in the selection.
  */
-export async function replaceRetryResults(
-  evalId: string,
-  originalIds: string[],
-  replacementIds: ReadonlySet<string>,
-): Promise<boolean> {
-  if (originalIds.length === 0) {
-    return true;
+export async function replaceRetryResults(evaluation: Eval, stage: RetryStage): Promise<boolean> {
+  const { originalIds, rows } = stage;
+  if (originalIds.size === 0 || rows.length !== originalIds.size) {
+    return originalIds.size === 0 && rows.length === 0;
   }
+
+  const replacementKeys = new Set(rows.map(getResultIndexKey));
   if (
-    replacementIds.size !== originalIds.length ||
-    originalIds.some((id) => replacementIds.has(id))
+    replacementKeys.size !== rows.length ||
+    rows.some(
+      (row) =>
+        row.persisted ||
+        row.evalId !== evaluation.id ||
+        row.failureReason === ResultFailureReason.ERROR,
+    )
   ) {
     return false;
   }
@@ -217,8 +199,8 @@ export async function replaceRetryResults(
   const db = await getDb();
   const replaced = await db.transaction(async (tx) => {
     const originalFilter = and(
-      eq(evalResultsTable.evalId, evalId),
-      inArray(evalResultsTable.id, originalIds),
+      eq(evalResultsTable.evalId, evaluation.id),
+      inArray(evalResultsTable.id, [...originalIds]),
     );
     const originalRows = await tx
       .select({
@@ -229,7 +211,11 @@ export async function replaceRetryResults(
       .from(evalResultsTable)
       .where(originalFilter)
       .all();
-    if (originalRows.length !== originalIds.length) {
+    if (
+      originalRows.length !== originalIds.size ||
+      new Set(originalRows.map(getResultIndexKey)).size !== originalRows.length ||
+      !originalRows.every((row) => replacementKeys.has(getResultIndexKey(row)))
+    ) {
       return false;
     }
     if (originalRows.some((row) => hasManualGrading(row.gradingResult))) {
@@ -238,28 +224,15 @@ export async function replaceRetryResults(
       );
     }
 
-    const replacementRows = await tx
-      .select({ testIdx: evalResultsTable.testIdx, promptIdx: evalResultsTable.promptIdx })
-      .from(evalResultsTable)
-      .where(
-        and(eq(evalResultsTable.evalId, evalId), inArray(evalResultsTable.id, [...replacementIds])),
-      )
-      .all();
-    const replacements = new Set(replacementRows.map(getResultIndexKey));
-    if (
-      replacementRows.length !== replacementIds.size ||
-      replacements.size !== originalRows.length ||
-      new Set(originalRows.map(getResultIndexKey)).size !== originalRows.length ||
-      !originalRows.every((row) => replacements.has(getResultIndexKey(row)))
-    ) {
-      return false;
+    for (const row of rows) {
+      await row.saveRetryReplacement(tx);
     }
-
     await tx.delete(evalResultsTable).where(originalFilter).run();
+    await evaluation.save(tx);
     return true;
   });
   if (replaced) {
-    notifyEvaluationChanged(evalId);
+    notifyEvaluationChanged(evaluation.id);
   }
   return replaced;
 }
@@ -489,12 +462,12 @@ async function retryWithConfig(
     cliState.maxConcurrency = effectiveMaxConcurrency;
   }
 
-  const retryReplacementIds = new Set<string>();
+  const retryStage: RetryStage = { originalIds: new Set(errorResultIds), rows: [] };
 
   // Set up evaluation options
-  const evaluateOptions: InternalEvaluateOptions = {
+  const evaluateOptions: NodeEvaluateOptions = {
     cache: false,
-    retryReplacementIds,
+    retryStage,
     maxConcurrency: effectiveDelay && effectiveDelay > 0 ? 1 : effectiveMaxConcurrency,
     delay: effectiveDelay,
     eventSource: 'cli',
@@ -508,10 +481,9 @@ async function retryWithConfig(
     const jsonlOutputPaths = getJsonlOutputPaths(originalEval.config.outputPath);
 
     if (retriedEval.resultPersistenceFailed) {
-      await restoreJsonlOutputsAfterPersistenceFailure(jsonlOutputPaths, retriedEval);
       throw new Error('Retry results failed to persist. Existing ERROR rows were preserved.');
     }
-    if (!(await replaceRetryResults(evalId, errorResultIds, retryReplacementIds))) {
+    if (!(await replaceRetryResults(retriedEval, retryStage))) {
       throw new Error(
         'Retry did not replace all selected results. Original results were preserved.',
       );

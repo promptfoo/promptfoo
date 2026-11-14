@@ -121,7 +121,7 @@ describe('nodeEvaluatorRuntime', () => {
   it('creates an Eval-backed evaluation store', async () => {
     const result = { success: true } as EvaluateResult;
     const evaluation = new Eval({});
-    const addResult = vi.spyOn(evaluation, 'addResult').mockResolvedValue('result-id');
+    const addResult = vi.spyOn(evaluation, 'addResult').mockResolvedValue(undefined);
     const store = nodeEvaluatorRuntime.createEvaluationStore(evaluation);
 
     await store.appendResult(result);
