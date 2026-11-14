@@ -207,8 +207,22 @@ describe('DagOrchestrator', () => {
     );
   });
 
-  it('should normalize invalid maxConcurrency options to 1', async () => {
-    const orchestrator = new DagOrchestrator({ maxConcurrency: 0 });
+  it('executes a prototype method with the registered task as its receiver', async () => {
+    class Task {
+      id = 'class-task';
+      #value = 42;
+
+      async run() {
+        return this.#value;
+      }
+    }
+
+    const result = await new DagOrchestrator().addTask(new Task()).execute();
+    expect(result.outputs.get('class-task')).toBe(42);
+  });
+
+  it.each([0, 0.5])('dispatches work when maxConcurrency is %s', async (maxConcurrency) => {
+    const orchestrator = new DagOrchestrator({ maxConcurrency });
     orchestrator.addTask({ id: 'task-1', run: async () => 'done' });
     const result = await orchestrator.execute();
     expect(result.stats.completedTasks).toBe(1);

@@ -67,7 +67,7 @@ export interface DagTask<TOutput = unknown> {
 }
 
 export interface DagOrchestratorOptions {
-  /** Maximum number of tasks to execute concurrently. Default: Infinity (unbounded) */
+  /** Concurrent task limit, rounded down with a minimum of one. Default: Infinity (unbounded). */
   maxConcurrency?: number;
 
   /**
@@ -112,14 +112,11 @@ export class DagOrchestrator {
   private options: Required<DagOrchestratorOptions>;
 
   constructor(options?: DagOrchestratorOptions) {
-    let maxConcurrency = options?.maxConcurrency ?? Infinity;
-    if (typeof maxConcurrency === 'number') {
-      if (Number.isNaN(maxConcurrency) || maxConcurrency <= 0) {
-        maxConcurrency = 1;
-      } else if (Number.isFinite(maxConcurrency)) {
-        maxConcurrency = Math.floor(maxConcurrency);
-      }
-    }
+    const requestedConcurrency = options?.maxConcurrency ?? Infinity;
+    const maxConcurrency =
+      typeof requestedConcurrency === 'number' && requestedConcurrency > 0
+        ? Math.max(1, Math.floor(requestedConcurrency))
+        : 1;
 
     this.options = {
       maxConcurrency,
@@ -137,12 +134,11 @@ export class DagOrchestrator {
     }
 
     const dependenciesCopy = Array.isArray(task.dependencies) ? [...task.dependencies] : [];
-    const clonedTask: DagTask<unknown> = {
-      ...task,
+    this.tasks.set(task.id, {
+      id: task.id,
       dependencies: dependenciesCopy,
-    };
-
-    this.tasks.set(task.id, clonedTask);
+      run: task.run.bind(task),
+    });
     if (!this.adjacencyList.has(task.id)) {
       this.adjacencyList.set(task.id, new Set());
     }
