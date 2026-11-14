@@ -13,10 +13,13 @@ afterEach(async () => {
 });
 
 describe('providerRegistry', () => {
-  it('waits for pending script-provider cache writes during process shutdown', async () => {
+  it('waits for pending script-provider cache writes from another module copy at shutdown', async () => {
+    vi.resetModules();
+    const library = await import('../../src/providers/scriptResult');
+    expect(library.publishScriptProviderCacheWrite).not.toBe(publishScriptProviderCacheWrite);
     const registry = new ProviderRegistry();
     const write = createDeferred<void>();
-    publishScriptProviderCacheWrite(
+    library.publishScriptProviderCacheWrite(
       { set: () => write.promise },
       'shutdown-flush-key',
       '{"output":"x"}',
@@ -29,10 +32,12 @@ describe('providerRegistry', () => {
     });
     // Let the empty active-call drain finish; only the detached write should block now.
     await new Promise((resolve) => setImmediate(resolve));
-    expect(settled).toBe(false);
-
-    write.resolve();
-    await shutdown;
+    try {
+      expect(settled).toBe(false);
+    } finally {
+      write.resolve();
+      await shutdown;
+    }
     expect(settled).toBe(true);
   });
 

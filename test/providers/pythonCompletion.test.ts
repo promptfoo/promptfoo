@@ -389,12 +389,18 @@ describe('PythonProvider', () => {
       await write.promise;
     });
 
-    it('logs a warning and still returns when a cache write fails', async () => {
+    it.each(['rejection', 'synchronous throw'])('returns after a cache write %s', async (mode) => {
       const provider = new PythonProvider('script.py');
       mockIsCacheEnabled.mockReturnValue(true);
       const mockCache = {
         get: vi.fn().mockResolvedValue(null),
-        set: vi.fn().mockRejectedValue(new Error('disk full')),
+        set: vi.fn(() => {
+          const error = new Error('disk full');
+          if (mode === 'synchronous throw') {
+            throw error;
+          }
+          return Promise.reject(error);
+        }),
       };
       mockGetCache.mockResolvedValue(mockCache as never);
       mockPoolInstance.execute.mockResolvedValue({ output: 'fresh result' });
