@@ -40,6 +40,13 @@ describe('domainExtraction', () => {
       ]);
     });
 
+    it('preserves internal punctuation and trims prose after the path', () => {
+      const path = `/part${'.'.repeat(1024)}end`;
+      const url = `https://example.com${path}`;
+      expect(extractUrls(`${url}。！`)[0]).toMatchObject({ raw: url, normalized: url, path });
+      expect(extractUrls('http://[2001:db8::1]！')[0].normalized).toBe('http://[2001:db8::1]');
+    });
+
     it('deduplicates URLs', () => {
       const text = 'https://example.com and https://example.com again';
       const urls = extractUrls(text);

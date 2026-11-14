@@ -38,7 +38,7 @@ const GITHUB_RESERVED_PATHS = new Set([
   'contact',
 ]);
 
-const TRAILING_CHARS_RE = /[\s.。．，,;；:：!！?？)）\]】}>"'`]+$/;
+const TRAILING_CHAR = /[\s.。．，,;；:：!！?？)）\]】}>"'`]/;
 
 export interface ExtractedUrl {
   raw: string;
@@ -99,30 +99,18 @@ function urlSpanChecker(text: string): (idx: number) => boolean {
   };
 }
 
-function cleanUrl(raw: string): string {
-  if (!raw) {
-    return '';
+function trimTrailingPunctuation(value: string, minLength = 0): string {
+  let end = value.length;
+  while (end > minLength && TRAILING_CHAR.test(value[end - 1])) {
+    end--;
   }
-  let url = raw.trim();
-  url = url.replace(/^[`'"]+|[`'"]+$/g, '');
-  // Keep the closing bracket of a bare IPv6 authority.
-  if (/^https?:\/\/\[[0-9a-f:.]+\]/i.test(url)) {
-    const authorityEnd = url.indexOf(']') + 1;
-    return url.slice(0, authorityEnd) + url.slice(authorityEnd).replace(TRAILING_CHARS_RE, '');
-  }
-  url = url.replace(TRAILING_CHARS_RE, '');
-  return url;
+  return value.slice(0, end);
 }
 
-function normalizeUrl(raw: string, defaultScheme: string = 'https'): string {
-  const url = cleanUrl(raw);
-  if (!url) {
-    return '';
-  }
-  if (!/^https?:\/\//i.test(url)) {
-    return `${defaultScheme}://${url}`;
-  }
-  return url;
+function cleanUrl(raw: string): string {
+  // A bare IPv6 authority needs its closing bracket even at the end of a sentence.
+  const authorityEnd = /^https?:\/\/\[[0-9a-f:.]+\]/i.test(raw) ? raw.indexOf(']') + 1 : 0;
+  return trimTrailingPunctuation(raw, authorityEnd);
 }
 
 export function extractUrls(text: string, source: string = 'model_answer'): ExtractedUrl[] {
@@ -134,9 +122,9 @@ export function extractUrls(text: string, source: string = 'model_answer'): Extr
   const seen = new Set<string>();
 
   for (const match of text.matchAll(URL_PATTERN)) {
-    const raw = match[0];
-    const normalized = normalizeUrl(raw);
-    if (!normalized || seen.has(normalized)) {
+    const raw = cleanUrl(match[0]);
+    const normalized = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+    if (seen.has(normalized)) {
       continue;
     }
 
@@ -149,7 +137,7 @@ export function extractUrls(text: string, source: string = 'model_answer'): Extr
 
       seen.add(normalized);
       results.push({
-        raw: cleanUrl(raw),
+        raw,
         normalized,
         scheme: parsed.protocol.replace(':', ''),
         host,
@@ -172,7 +160,7 @@ function normalizeDomain(raw: string): string | null {
   }
 
   let domain = raw.trim().toLowerCase();
-  domain = domain.replace(TRAILING_CHARS_RE, '');
+  domain = trimTrailingPunctuation(domain);
 
   if (domain.startsWith('http://') || domain.startsWith('https://')) {
     try {
@@ -193,7 +181,7 @@ function normalizeDomain(raw: string): string | null {
     domain = domain.split(':')[0];
   }
 
-  domain = domain.replace(/^\.+/, '').replace(TRAILING_CHARS_RE, '');
+  domain = trimTrailingPunctuation(domain.replace(/^\.+/, ''));
 
   if (!domain || /^\d+\.\d+\.\d+\.\d+$/.test(domain)) {
     return null;
