@@ -30,7 +30,11 @@ import {
   setCachedStandaloneEvals,
 } from '../../src/util/standaloneEvalCache';
 import { createEmptyTokenUsage } from '../../src/util/tokenUsageUtils';
-import { createEvaluateResult } from '../factories/eval';
+import {
+  createEvaluateResult,
+  createEvaluateTableOutput,
+  createEvaluateTableRow,
+} from '../factories/eval';
 import EvalFactory from '../factories/evalFactory';
 import { createAccuracyFilter, createPassFailOptions } from '../factories/literalFixtures';
 
@@ -93,12 +97,32 @@ describe('evaluator', () => {
         ],
       };
       const metadata = { bayesAtNPlan: plan, label: 'retained' };
+      const payload = { bayesAtNPlan: 'user data', answer: 42 };
+      const row = createEvaluateResult({
+        metadata,
+        response: { output: payload },
+        testCase: { metadata, vars: { payload } },
+      });
       const evaluation = new Eval({});
       evaluation.oldResults = {
         version: 2,
         timestamp: '',
-        results: [createEvaluateResult({ metadata, testCase: { metadata } })],
-        table: { head: { prompts: [], vars: [] }, body: [] },
+        results: [row],
+        table: {
+          head: { prompts: [], vars: [] },
+          body: [
+            createEvaluateTableRow({
+              test: row.testCase,
+              outputs: [
+                createEvaluateTableOutput({
+                  metadata,
+                  response: row.response,
+                  testCase: row.testCase,
+                }),
+              ],
+            }),
+          ],
+        },
         stats: { successes: 1, failures: 0, errors: 0, tokenUsage: createEmptyTokenUsage() },
       };
       vi.spyOn(evaluation, 'useOldResults').mockReturnValue(true);
@@ -106,6 +130,17 @@ describe('evaluator', () => {
       expect(summary.version).toBe(2);
       expect(summary.results[0].metadata?.label).toBe('retained');
       expect(JSON.stringify(summary)).not.toContain('inputHash');
+      expect(summary).toMatchObject({
+        results: [{ response: { output: payload }, testCase: { vars: { payload } } }],
+        table: {
+          body: [
+            {
+              test: { vars: { payload } },
+              outputs: [{ response: { output: payload }, testCase: { vars: { payload } } }],
+            },
+          ],
+        },
+      });
       expect(evaluation.oldResults!.results[0].metadata?.bayesAtNPlan).toEqual(plan);
     });
 

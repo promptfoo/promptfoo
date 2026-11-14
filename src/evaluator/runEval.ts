@@ -318,6 +318,21 @@ function hashRunEvalInputs(
     providerConfig: (provider) => nativeConfigs.get(provider),
     providerFiles: includeProviderInputs
       ? (provider, target) => {
+          const declaration =
+            typeof provider === 'string'
+              ? provider
+              : provider && typeof provider === 'object' && 'id' in provider
+                ? provider.id
+                : undefined;
+          if (
+            typeof declaration === 'string' &&
+            declaration.startsWith('file://') &&
+            /\.(?:json|ya?ml)$/.test(declaration)
+          ) {
+            throw new Error(
+              'Bayes@N requires loaded grading providers for config-file references to validate native inputs',
+            );
+          }
           const inputProvider = provider as ApiProvider | undefined;
           if (!inputProvider || typeof inputProvider !== 'object') {
             return [];
@@ -348,8 +363,15 @@ function hashRunEvalInputs(
           if (native?.config !== undefined) {
             nativeConfigs.set(inputProvider, native.config);
           }
-          if (!native && Object.getPrototypeOf(inputProvider) !== Object.prototype) {
-            if (!('config' in inputProvider)) {
+          if (
+            !native &&
+            (Object.getPrototypeOf(inputProvider) !== Object.prototype ||
+              !isApiProvider(inputProvider))
+          ) {
+            if (
+              Object.getPrototypeOf(inputProvider) !== Object.prototype &&
+              !('config' in inputProvider)
+            ) {
               throw new Error(
                 'Bayes@N requires getEvaluationInputs for providers with private inputs',
               );

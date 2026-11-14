@@ -24,6 +24,33 @@ interface BayesAtNResult {
   provider: ProviderIdentity;
   success: boolean;
   failureReason: number;
+  gradingResult?: BayesAtNGradingResult | null;
+}
+
+interface BayesAtNGradingResult {
+  metadata?: { graderError?: boolean };
+  componentResults?: BayesAtNGradingResult[] | null;
+}
+
+function hasGradingError(result?: BayesAtNGradingResult | null): boolean {
+  const pending = [result];
+  const visited = new Set<BayesAtNGradingResult>();
+  for (let index = 0; index < pending.length; index++) {
+    const grade = pending[index];
+    if (!grade || typeof grade !== 'object' || visited.has(grade)) {
+      continue;
+    }
+    visited.add(grade);
+    if (grade.metadata?.graderError === true) {
+      return true;
+    }
+    if (Array.isArray(grade.componentResults)) {
+      for (const component of grade.componentResults) {
+        pending.push(component);
+      }
+    }
+  }
+  return false;
 }
 
 interface BayesAtNCohort {
@@ -148,6 +175,8 @@ export class BayesAtNCalculator {
     group.indices.add(index);
     if (result.failureReason === 2) {
       group.unavailableReason = 'Results contain execution errors';
+    } else if (hasGradingError(result.gradingResult)) {
+      group.unavailableReason = 'Results contain grading errors';
     } else if (typeof result.success !== 'boolean') {
       group.unavailableReason = 'Results do not contain binary pass/fail outcomes';
     } else if (cached) {

@@ -1521,13 +1521,16 @@ export default class Eval {
   async toEvaluateSummary(): Promise<EvaluateSummaryV3 | EvaluateSummaryV2> {
     if (this.useOldResults()) {
       invariant(this.oldResults, 'Old results not found');
-      return stripBayesAtNInputHashes({
-        version: 2,
-        timestamp: new Date(this.createdAt).toISOString(),
-        results: this.oldResults.results,
-        table: this.oldResults.table,
-        stats: this.oldResults.stats,
-      });
+      return stripBayesAtNInputHashes(
+        {
+          version: 2,
+          timestamp: new Date(this.createdAt).toISOString(),
+          results: this.oldResults.results,
+          table: this.oldResults.table,
+          stats: this.oldResults.stats,
+        },
+        'summary',
+      );
     }
     if (this.results.length === 0) {
       await this.loadResults();

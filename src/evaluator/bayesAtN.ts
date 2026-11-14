@@ -121,6 +121,12 @@ function isInputProvider(provider: unknown): provider is InputStep['provider'] {
 const providerTypes = ['text', 'embedding', 'classification', 'moderation'] as const;
 
 export function hasBayesAtNSharedSession(step: InputStep): boolean {
+  const conversationId = step.test.metadata?.conversationId;
+  const hasConversation =
+    (typeof conversationId === 'string' && conversationId !== '') ||
+    typeof conversationId === 'number';
+  const sharedConfig = (config: Record<string, unknown>) =>
+    hasSharedSession(config) || (config.maintainContext === true && hasConversation);
   const seenProviders = new Set<object>();
   const hasSharedProvider = (provider: unknown, target = false): boolean => {
     if (!provider || typeof provider !== 'object' || seenProviders.has(provider)) {
@@ -134,8 +140,8 @@ export function hasBayesAtNSharedSession(step: InputStep): boolean {
       const config =
         'config' in provider ? ((provider.config as Record<string, unknown>) ?? {}) : {};
       return (
-        hasSharedSession(config) ||
-        hasSharedSession({
+        sharedConfig(config) ||
+        sharedConfig({
           ...config,
           ...(target && {
             ...(step.prompt.config as Record<string, unknown>),

@@ -60,7 +60,7 @@ export function getWilsonScoreInterval(
 }
 
 interface RepeatStabilityGradingResult {
-  metadata?: { cachedResponse?: boolean };
+  metadata?: { cachedResponse?: boolean; graderError?: boolean };
   componentResults?: RepeatStabilityGradingResult[] | null;
 }
 

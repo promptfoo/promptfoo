@@ -3,6 +3,8 @@ import { createBayesAtNPlan } from '../../../src/evaluator/bayesAtN';
 import { calculateRepeatStability } from '../../../src/util/eval/repeatStability';
 import { createEvaluateResult } from '../../factories/eval';
 
+import type { GradingResult } from '../../../src/types/index';
+
 function fixture(rows: boolean[][]) {
   const results = rows.flatMap((row, question) =>
     row.map((success, repeatIndex) =>
@@ -102,6 +104,23 @@ describe('Bayes@N repeat summary', () => {
     const enabled = calculateRepeatStability(results, plan)!;
     const { bayesAtN, ...existing } = enabled;
     expect(bayesAtN).toHaveLength(1);
+    expect(existing).toEqual(calculateRepeatStability(results));
+  });
+
+  it('detects grading errors in shared and cyclic component trees without changing Wilson summaries', () => {
+    const { results, plan } = fixture([[false, true]]);
+    const grade: GradingResult = { pass: false, score: 0, reason: 'aggregate' };
+    grade.componentResults = [
+      grade,
+      null as unknown as GradingResult,
+      { pass: false, score: 0, reason: 'grader failed', metadata: { graderError: true } },
+    ];
+    results[0].gradingResult = grade;
+    const enabled = calculateRepeatStability(results, plan)!;
+    const { bayesAtN, ...existing } = enabled;
+    expect(bayesAtN?.[0].unavailableReason).toBe('Results contain grading errors');
+    expect(bayesAtN?.[0].mean).toBeUndefined();
+    expect(bayesAtN?.[0].posteriorStd).toBeUndefined();
     expect(existing).toEqual(calculateRepeatStability(results));
   });
 

@@ -821,7 +821,7 @@ export function sanitizeConfigForOutput(
         : scenario,
     );
   }
-  const sanitized = sanitizeObject(outputConfig, {
+  const sanitized = sanitizeObject(stripBayesAtNInputHashes(outputConfig, 'config'), {
     context: 'output config',
     sanitizeUrls: true,
     throwOnError: true,
@@ -1379,12 +1379,7 @@ function sanitizePlainObject(
     ) {
       key = `${redactedKey}#${++keySuffix}`;
     }
-    if (key === 'bayesAtNPlan') {
-      const plan = depth + 1 > maxDepth ? value : countOnlyBayesAtNPlan(value);
-      if (plan !== undefined) {
-        sanitized[key] = recursiveSanitize(plan, depth + 1, maxDepth, sanitizeUrls);
-      }
-    } else if (isSecretKey(key)) {
+    if (isSecretKey(key)) {
       sanitized[key] = REDACTED;
     } else if (key.toLowerCase() === 'headers' && value && typeof value === 'object') {
       sanitized[key] = Object.fromEntries(
@@ -1545,78 +1540,60 @@ function countOnlyBayesAtNPlan(entry: unknown): unknown {
   };
 }
 
-const SERIALIZED_BAYES_PLAN_KEY = /"bayesAtNPlan"\s*:/;
-
-/** Drop obsolete Bayes input verifiers from public data while retaining count-only plans. */
-export function stripBayesAtNInputHashes<T>(value: T): T {
-  const containsPlan = (item: unknown, checked = new WeakSet<object>()): boolean => {
-    if (typeof item === 'string') {
-      return SERIALIZED_BAYES_PLAN_KEY.test(item);
-    }
-    if (
-      !item ||
-      typeof item !== 'object' ||
-      checked.has(item) ||
-      (!Array.isArray(item) &&
-        Object.getPrototypeOf(item) !== null &&
-        Object.getPrototypeOf(item) !== Object.prototype)
-    ) {
-      return false;
-    }
-    checked.add(item);
-    if (Object.prototype.hasOwnProperty.call(item, 'bayesAtNPlan')) {
-      return true;
-    }
-    return Object.values(item).some((entry) => containsPlan(entry, checked));
-  };
-  if (!containsPlan(value)) {
-    return value;
-  }
-  const seen = new WeakMap<object, unknown>();
-  const visit = (item: unknown): unknown => {
-    if (typeof item === 'string' && SERIALIZED_BAYES_PLAN_KEY.test(item)) {
-      try {
-        return JSON.stringify(visit(JSON.parse(item)));
-      } catch {
-        return item;
-      }
-    }
-    if (
-      !item ||
-      typeof item !== 'object' ||
-      (Object.getPrototypeOf(item) !== null &&
-        Object.getPrototypeOf(item) !== Object.prototype &&
-        !Array.isArray(item))
-    ) {
+/** Project legacy plans only in metadata owned by the evaluation schema. */
+export function stripBayesAtNInputHashes<T>(
+  value: T,
+  scope: 'result' | 'config' | 'summary' = 'result',
+): T {
+  const paths =
+    scope === 'config'
+      ? [
+          ['metadata'],
+          ['defaultTest', 'metadata'],
+          ['tests', '*', 'metadata'],
+          ['scenarios', '*', 'config', '*', 'metadata'],
+          ['scenarios', '*', 'tests', '*', 'metadata'],
+        ]
+      : scope === 'summary'
+        ? [
+            ['results', '*', 'metadata'],
+            ['results', '*', 'testCase', 'metadata'],
+            ['table', 'body', '*', 'test', 'metadata'],
+            ['table', 'body', '*', 'outputs', '*', 'metadata'],
+            ['table', 'body', '*', 'outputs', '*', 'testCase', 'metadata'],
+          ]
+        : [['metadata'], ['testCase', 'metadata']];
+  const project = (item: unknown, path: string[]): unknown => {
+    if (!item || typeof item !== 'object') {
       return item;
     }
-    if (seen.has(item)) {
-      return seen.get(item);
-    }
-    const copy: Record<string, unknown> | unknown[] = Array.isArray(item)
-      ? new Array(item.length)
-      : Object.create(Object.getPrototypeOf(item));
-    const put = (key: string, value: unknown) =>
-      Object.defineProperty(copy, key, {
-        value,
-        enumerable: true,
-        configurable: true,
-        writable: true,
-      });
-    seen.set(item, copy);
-    for (const [key, entry] of Object.entries(item)) {
-      if (key !== 'bayesAtNPlan') {
-        put(key, visit(entry));
-        continue;
+    if (path[0] === '*') {
+      if (!Array.isArray(item)) {
+        return item;
       }
-      const plan = countOnlyBayesAtNPlan(entry);
-      if (plan !== undefined) {
-        put(key, plan);
-      }
+      const projected = item.map((entry) => project(entry, path.slice(1)));
+      return projected.some((entry, index) => entry !== item[index]) ? projected : item;
     }
-    return copy;
+    if (Array.isArray(item)) {
+      return item;
+    }
+    const record = item as Record<string, unknown>;
+    if (path.length === 0) {
+      if (!Object.prototype.hasOwnProperty.call(record, 'bayesAtNPlan')) {
+        return item;
+      }
+      const { bayesAtNPlan, ...metadata } = record;
+      const plan = countOnlyBayesAtNPlan(bayesAtNPlan);
+      return plan === undefined ? metadata : { ...metadata, bayesAtNPlan: plan };
+    }
+    const [key, ...rest] = path;
+    if (!Object.prototype.hasOwnProperty.call(record, key)) {
+      return item;
+    }
+    const projected = project(record[key], rest);
+    return projected === record[key] ? item : { ...record, [key]: projected };
   };
-  return visit(value) as T;
+  return paths.reduce((item, path) => project(item, path) as T, value);
 }
 
 /**
