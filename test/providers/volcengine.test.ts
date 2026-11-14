@@ -1,10 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import * as cache from '../../src/cache';
+import { loadApiProvider } from '../../src/providers';
 import {
   calculateVolcengineCost,
   createVolcengineProvider,
   VOLCENGINE_CHAT_MODELS,
   VolcengineProvider,
 } from '../../src/providers/volcengine';
+import { HttpRateLimitError } from '../../src/util/fetch/errors';
 
 describe('calculateVolcengineCost', () => {
   it('should calculate cost without cache', () => {
@@ -242,6 +245,8 @@ describe('VolcengineProvider', () => {
     const provider = new VolcengineProvider('doubao-seed-2-1-pro-260628', {
       config: {
         apiKey: 'secret-key',
+        headers: { Authorization: 'Bearer secret-header' },
+        apiBaseUrl: 'https://user:secret-password@example.test/api',
         temperature: 0.5,
       },
     });
@@ -250,75 +255,116 @@ describe('VolcengineProvider', () => {
     expect(json.model).toBe('doubao-seed-2-1-pro-260628');
     expect(json.config.apiKey).toBeUndefined();
     expect(json.config.temperature).toBe(0.5);
+    expect(JSON.stringify(json)).not.toMatch(/secret-(key|header|password)/);
   });
 });
 
 describe('VolcengineProvider.callApi', () => {
-  const RATE = 6.737012;
-  const model = 'doubao-seed-2-1-pro-260628';
-
-  const withSuper = async (superResponse: any, context?: any) => {
-    const provider = new VolcengineProvider(model, { config: {} });
-    vi.spyOn(
-      Object.getPrototypeOf(Object.getPrototypeOf(provider)) as any,
-      'callApi',
-    ).mockResolvedValue(superResponse);
-    return provider.callApi('hi', context);
-  };
-
   afterEach(() => {
     vi.restoreAllMocks();
+    vi.unstubAllEnvs();
   });
 
-  it('passes through an errored response untouched', async () => {
-    const r = await withSuper({ error: 'boom' });
-    expect(r).toEqual({ error: 'boom' });
-  });
-
-  it('passes through an empty response untouched', async () => {
-    const r = await withSuper(undefined);
-    expect(r).toBeUndefined();
-  });
-
-  it('computes cost from token usage', async () => {
-    const r = await withSuper({
-      output: 'ok',
-      tokenUsage: { prompt: 1000000, completion: 1000000 },
+  const usage = {
+    prompt_tokens: 10,
+    completion_tokens: 5,
+    total_tokens: 15,
+    prompt_tokens_details: { cached_tokens: 2 },
+  };
+  function mockResponse(data: unknown, cached = false) {
+    return vi.spyOn(cache, 'fetchWithCache').mockResolvedValue({
+      status: 200,
+      statusText: 'OK',
+      cached,
+      data,
     });
-    expect(r.cost).toBeCloseTo(36.0 / RATE / 1e6 / 1e-6, 4);
-  });
+  }
 
-  it('prices cache hits from normalized tokenUsage', async () => {
-    const r = await withSuper({
-      output: 'ok',
-      tokenUsage: {
-        prompt: 1000000,
-        completion: 1000000,
-        completionDetails: { cacheReadInputTokens: 500000 },
+  it('sends only the selected Ark endpoint, credentials and tuning options through the public loader', async () => {
+    vi.stubEnv('OPENAI_API_HOST', 'openai.invalid');
+    vi.stubEnv('OPENAI_ORGANIZATION', 'unrelated-org');
+    for (const name of [
+      'OPENAI_TOP_P',
+      'OPENAI_FREQUENCY_PENALTY',
+      'OPENAI_PRESENCE_PENALTY',
+      'OPENAI_TEMPERATURE',
+      'OPENAI_MAX_TOKENS',
+    ]) {
+      vi.stubEnv(name, '42');
+    }
+    const fetch = mockResponse({
+      choices: [{ message: { content: 'answer' }, finish_reason: 'stop' }],
+      usage,
+    });
+    const provider = await loadApiProvider('volcengine:unlisted', {
+      env: { ARK_API_KEY: 'suite-key', ARK_API_BASE_URL: 'https://suite.invalid/v1' },
+      options: {
+        env: { ARK_API_KEY: 'provider-key', ARK_API_BASE_URL: 'https://provider.invalid/v1' },
+        config: {
+          apiBaseUrl: '',
+          max_completion_tokens: 32,
+          inputCost: 1,
+          outputCost: 4,
+          cacheReadCost: 0.5,
+        },
       },
     });
-    // 500k cached at cache_read, 500k fresh at input, 1M output
-    expect(r.cost).toBeCloseTo(33.6 / RATE / 1e6 / 1e-6, 4);
+    const response = await provider.callApi('hi', {
+      prompt: { raw: 'hi', label: 'test', config: { apiBaseUrl: null, outputCost: 2 } },
+      vars: {},
+    });
+    const [url, request] = fetch.mock.calls[0];
+    expect(url).toBe('https://provider.invalid/v1/chat/completions');
+    expect(request?.headers).toMatchObject({ Authorization: 'Bearer provider-key' });
+    expect(request?.headers).not.toHaveProperty('OpenAI-Organization');
+    expect(JSON.parse(String(request?.body))).toEqual({
+      model: 'unlisted',
+      messages: [{ role: 'user', content: 'hi' }],
+      max_completion_tokens: 32,
+    });
+    expect(response).toMatchObject({
+      output: 'answer',
+      cost: 19,
+      tokenUsage: { prompt: 10, completion: 5 },
+    });
   });
 
-  it('lets a prompt-level cost override win', async () => {
-    const r = await withSuper(
-      {
-        output: 'ok',
-        tokenUsage: { prompt: 1000000, completion: 1000000 },
-      },
-      { prompt: { config: { cost: 1.0 / 1e6 } } },
+  it('requires an Ark key even when an OpenAI key is available', async () => {
+    vi.stubEnv('ARK_API_KEY', '');
+    vi.stubEnv('OPENAI_API_KEY', 'unrelated-key');
+    const provider = new VolcengineProvider('unlisted');
+    const fetch = mockResponse({});
+    await expect(provider.callApi('hi')).rejects.toThrow('ARK_API_KEY');
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('returns provider errors from the transport', async () => {
+    mockResponse({ error: { message: 'Ark error', code: 'invalid_request' } });
+    const provider = new VolcengineProvider('unlisted', { config: { apiKey: 'fixture' } });
+    expect((await provider.callApi('hi')).error).toContain('Ark error');
+  });
+
+  it('keeps retryable Ark rate limits visible to the scheduler', async () => {
+    vi.spyOn(cache, 'fetchWithCache').mockRejectedValue(
+      new HttpRateLimitError({ status: 429, headers: { 'retry-after': '2' } }),
     );
-    expect(r.cost).toBeCloseTo(2.0);
+    const provider = new VolcengineProvider('unlisted', { config: { apiKey: 'fixture' } });
+    expect(await provider.callApi('hi')).toMatchObject({
+      error: expect.stringContaining('Rate limit exceeded'),
+      metadata: {
+        rateLimitKind: 'rate_limit',
+        http: { status: 429, headers: { 'retry-after': '2' } },
+      },
+    });
   });
 
-  it('does not recompute cost for a cached response', async () => {
-    const r = await withSuper({
-      output: 'ok',
-      cached: true,
-      tokenUsage: { prompt: 1000, completion: 1000 },
-    });
-    expect(r.cost).toBeUndefined();
+  it('prices a cached response at zero', async () => {
+    mockResponse(
+      { choices: [{ message: { content: 'answer' }, finish_reason: 'stop' }], usage },
+      true,
+    );
+    const provider = new VolcengineProvider('unlisted', { config: { apiKey: 'fixture', cost: 1 } });
+    expect(await provider.callApi('hi')).toMatchObject({ cached: true, cost: 0 });
   });
 });
 
@@ -336,6 +382,7 @@ describe('createVolcengineProvider routing', () => {
   });
 
   it('throws on sub-types this provider does not implement', () => {
+    expect(() => createVolcengineProvider('volcengine:responses')).toThrow(/only.*chat models/i);
     expect(() => createVolcengineProvider('volcengine:embedding:doubao-embedding')).toThrow(
       /only.*chat models/i,
     );

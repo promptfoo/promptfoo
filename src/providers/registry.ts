@@ -1593,16 +1593,8 @@ export const providerMap: ProviderFactory[] = [
   {
     test: (providerPath: string) =>
       providerPath === 'volcengine' || providerPath.startsWith('volcengine:'),
-    create: async (
-      providerPath: string,
-      providerOptions: ProviderOptions,
-      context: LoadApiProviderContext,
-    ) => {
-      return createVolcengineProvider(providerPath, {
-        config: providerOptions,
-        env: context.env,
-      });
-    },
+    create: async (providerPath: string, providerOptions: ProviderOptions) =>
+      createVolcengineProvider(providerPath, providerOptions),
   },
   {
     test: (providerPath: string) => providerPath.startsWith('voyage:'),

@@ -1,18 +1,20 @@
-import { getEnvString } from '../envars';
-import logger from '../logger';
-import { OpenAiChatCompletionProvider } from './openai/chat';
-import { calculateCost, clampCachedTokens } from './shared';
+import { resolveProviderApiKey } from './credentials';
+import { resolveProviderEnv } from './env';
+import { type OpenAiChatCompletionCostData, OpenAiChatCompletionProvider } from './openai/chat';
+import { sanitizeProviderObject } from './providerLogging';
+import { clampCachedTokens } from './shared';
 
-import type { ApiProvider, ProviderOptions } from '../types/index';
-import type { OpenAiCompletionOptions } from './openai/types';
+import type {
+  ApiProvider,
+  CallApiContextParams,
+  CallApiOptionsParams,
+  ProviderOptions,
+} from '../types/index';
+import type { OpenAiBillingConfig, OpenAiChatConfig } from './openai/config';
 
-type VolcengineConfig = OpenAiCompletionOptions;
+type VolcengineConfig = OpenAiChatConfig & { cacheReadCost?: number };
+const ARK_ENDPOINT = 'https://ark.cn-beijing.volces.com/api/v3';
 
-type VolcengineProviderOptions = Omit<ProviderOptions, 'config'> & {
-  config?: VolcengineConfig & {
-    config?: VolcengineConfig;
-  };
-};
 /**
  * Volcengine Ark publishes prices in CNY per 1M tokens.
  * Exchange rate: 1 USD = 6.737012 CNY (2026-08-26, source: https://open.er-api.com/v6/latest/USD)
@@ -169,7 +171,7 @@ export const VOLCENGINE_CHAT_MODELS = [
  */
 export function calculateVolcengineCost(
   modelName: string,
-  config: any,
+  config: Pick<VolcengineConfig, 'cost' | 'inputCost' | 'outputCost' | 'cacheReadCost'>,
   promptTokens?: number,
   completionTokens?: number,
   cachedTokens?: number,
@@ -185,73 +187,83 @@ export function calculateVolcengineCost(
     return undefined;
   }
 
-  const model = VOLCENGINE_CHAT_MODELS.find((m) => m.id === modelName);
-  if (!model || !model.cost) {
-    // Use default pricing for unknown models
-    return calculateCost(modelName, config, promptTokens, completionTokens, VOLCENGINE_CHAT_MODELS);
+  const rates = VOLCENGINE_CHAT_MODELS.find((model) => model.id === modelName)?.cost;
+  const cached = clampCachedTokens(cachedTokens, promptTokens);
+  const fresh = promptTokens - cached;
+  const inputRate = config.inputCost ?? config.cost ?? rates?.input;
+  const outputRate = config.outputCost ?? config.cost ?? rates?.output;
+  const cacheRate = config.cacheReadCost ?? config.inputCost ?? config.cost ?? rates?.cache_read;
+  if (
+    (inputRate == null && outputRate == null && cacheRate == null) ||
+    (fresh > 0 && inputRate == null) ||
+    (cached > 0 && cacheRate == null) ||
+    (completionTokens > 0 && outputRate == null)
+  ) {
+    return undefined;
   }
-
-  const billableCachedTokens = clampCachedTokens(cachedTokens, promptTokens);
-  const uncachedPromptTokens = promptTokens - billableCachedTokens;
-  const inputCost = config.inputCost ?? config.cost ?? model.cost.input;
-  const outputCost = config.outputCost ?? config.cost ?? model.cost.output;
-  // Fall through the input overrides for cached tokens too, otherwise a user who
-  // sets `cost`/`inputCost` gets their rate on fresh tokens but the built-in rate
-  // on cached ones.
-  const cacheReadCost =
-    config.cacheReadCost ?? config.inputCost ?? config.cost ?? model.cost.cache_read;
-
-  const inputCostTotal = inputCost * uncachedPromptTokens;
-  const cacheReadCostTotal = cacheReadCost * billableCachedTokens;
-  const outputCostTotal = outputCost * completionTokens;
-
-  logger.debug(
-    `Volcengine cost calculation for ${modelName}: ` +
-      `promptTokens=${promptTokens}, completionTokens=${completionTokens}, ` +
-      `cachedTokens=${billableCachedTokens}, ` +
-      `inputCost=${inputCostTotal}, cacheReadCost=${cacheReadCostTotal}, outputCost=${outputCostTotal}`,
+  return (
+    fresh * (inputRate ?? 0) + cached * (cacheRate ?? 0) + completionTokens * (outputRate ?? 0)
   );
-
-  return inputCostTotal + cacheReadCostTotal + outputCostTotal;
 }
 
 export class VolcengineProvider extends OpenAiChatCompletionProvider {
-  private originalConfig?: VolcengineConfig;
-
-  protected get apiKey(): string | undefined {
-    return this.config?.apiKey;
-  }
-
-  constructor(modelName: string, providerOptions: VolcengineProviderOptions) {
-    // Extract the nested config
-    const volcengineConfig = providerOptions.config?.config;
-
-    // registry.ts hands us the whole ProviderOptions as `config`, so pull out the
-    // OpenAI options and drop the wrapper keys (id/label/env/nested config).
-    // Spreading them wholesale would leave a nested `config.apiKey` that toJSON()
-    // does not scrub.
-    const { config: _nested, ...outerConfig } = (providerOptions.config ?? {}) as Record<
-      string,
-      any
-    >;
-    delete outerConfig.id;
-    delete outerConfig.label;
-    delete outerConfig.env;
-
+  constructor(modelName: string, options: ProviderOptions<VolcengineConfig> = {}) {
+    const { config, env } = options;
     super(modelName, {
-      ...providerOptions,
+      ...options,
       config: {
-        apiKeyEnvar: 'ARK_API_KEY',
+        ...config,
+        apiKeyEnvar: config?.apiKeyEnvar || 'ARK_API_KEY',
         apiBaseUrl:
-          (providerOptions.env as any)?.ARK_API_BASE_URL ||
-          getEnvString('ARK_API_BASE_URL') ||
-          'https://ark.cn-beijing.volces.com/api/v3',
-        ...outerConfig,
-        ...volcengineConfig,
+          config?.apiBaseUrl ||
+          resolveProviderEnv(env, ['ARK_API_BASE_URL'])?.value ||
+          ARK_ENDPOINT,
       },
     });
+  }
 
-    this.originalConfig = volcengineConfig;
+  override getOrganization(): undefined {
+    return undefined;
+  }
+
+  override getApiUrl(config = this.config): string {
+    if (config.apiHost) {
+      return `https://${config.apiHost}/v1`;
+    }
+    return config.apiBaseUrl || this.config.apiBaseUrl || ARK_ENDPOINT;
+  }
+
+  override getApiKey(config = this.config): string | undefined {
+    return resolveProviderApiKey(config, this.env, ['ARK_API_KEY']);
+  }
+
+  override async getOpenAiBody(
+    prompt: string,
+    context?: CallApiContextParams,
+    callApiOptions?: CallApiOptionsParams,
+  ) {
+    const prepared = await super.getOpenAiBody(prompt, context, callApiOptions);
+    const { config, body } = prepared;
+    // Ark supplies its own defaults. Only emit options set by the user.
+    for (const field of [
+      'max_tokens',
+      'max_completion_tokens',
+      'temperature',
+      'top_p',
+      'presence_penalty',
+      'frequency_penalty',
+    ] as const) {
+      const value = config.passthrough?.[field] ?? config[field];
+      if (value == null) {
+        delete body[field];
+      } else {
+        Object.assign(body, { [field]: value });
+      }
+    }
+    if (body.max_completion_tokens != null) {
+      delete body.max_tokens;
+    }
+    return prepared;
   }
 
   id(): string {
@@ -263,47 +275,30 @@ export class VolcengineProvider extends OpenAiChatCompletionProvider {
   }
 
   toJSON() {
+    const { apiKey: _apiKey, ...config } = this.config;
     return {
       provider: 'volcengine',
       model: this.modelName,
-      config: {
-        ...this.config,
-        ...(this.apiKey && { apiKey: undefined }),
-      },
+      config: sanitizeProviderObject(config, 'Ark provider config', {
+        sanitizeUrls: true,
+      }) as Record<string, unknown>,
     };
   }
 
-  async callApi(prompt: string, context?: any, callApiOptions?: any): Promise<any> {
-    const response = await super.callApi(prompt, context, callApiOptions);
-
-    if (!response || response.error) {
-      return response;
-    }
-
-    // The OpenAI adapter normalizes Ark's usage.prompt_tokens_details.cached_tokens
-    // onto tokenUsage.completionDetails.cacheReadInputTokens; it does not surface the
-    // upstream body, so read the normalized field.
-    const cachedTokens = response.tokenUsage?.completionDetails?.cacheReadInputTokens ?? 0;
-
-    // Calculate cost with cache information. Prompt-level cost overrides win over the
-    // provider config so per-test pricing stays authoritative.
-    if (response.tokenUsage && !response.cached) {
-      const mergedConfig = { ...(this.config || {}), ...(context?.prompt?.config ?? {}) };
-      // passthrough.model overrides the model actually sent (see OpenAiChatCompletionProvider),
-      // so bill against that rather than the provider path's model.
-      const passthroughModel = (mergedConfig.passthrough as { model?: unknown } | undefined)?.model;
-      const billingModel = typeof passthroughModel === 'string' ? passthroughModel : this.modelName;
-
-      response.cost = calculateVolcengineCost(
-        billingModel,
-        mergedConfig,
-        response.tokenUsage.prompt,
-        response.tokenUsage.completion,
-        cachedTokens,
-      );
-    }
-
-    return response;
+  protected override calculateResponseCost(
+    data: OpenAiChatCompletionCostData,
+    config: OpenAiBillingConfig & { cacheReadCost?: number },
+    cached: boolean,
+  ): number | undefined {
+    const usage = data.usage;
+    const cost = calculateVolcengineCost(
+      this.getBillingModelName(config),
+      config,
+      usage?.prompt_tokens,
+      usage?.completion_tokens,
+      usage?.prompt_tokens_details?.cached_tokens,
+    );
+    return cached && cost !== undefined ? 0 : cost;
   }
 }
 
@@ -322,12 +317,12 @@ const UNSUPPORTED_SUBTYPES = new Set([
 
 export function createVolcengineProvider(
   providerPath: string,
-  options: VolcengineProviderOptions = {},
+  options: ProviderOptions<VolcengineConfig> = {},
 ): ApiProvider {
   const splits = providerPath.split(':');
   const rest = splits.slice(1);
 
-  if (rest.length > 1 && UNSUPPORTED_SUBTYPES.has(rest[0])) {
+  if (UNSUPPORTED_SUBTYPES.has(rest[0])) {
     throw new Error(
       `Unsupported Volcengine provider type: ${rest[0]}. The volcengine provider only ` +
         `supports chat models, e.g. volcengine:doubao-seed-2-1-pro-260628`,

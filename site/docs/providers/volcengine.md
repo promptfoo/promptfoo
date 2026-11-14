@@ -1,4 +1,6 @@
 ---
+title: Volcengine Ark (Doubao)
+sidebar_position: 60
 sidebar_label: Volcengine Ark (Doubao)
 description: Configure Volcengine Ark (Doubao) models with OpenAI-compatible API, deep thinking mode, and prompt caching for LLM testing in promptfoo.
 ---
