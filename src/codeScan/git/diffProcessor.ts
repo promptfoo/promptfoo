@@ -13,12 +13,12 @@ import path from 'path';
 
 import async from 'async';
 import binaryExtensions from 'binary-extensions';
-import { isText } from 'istextorbinary';
 import textExtensions from 'text-extensions';
 import logger from '../../logger';
 import { DiffProcessorError } from '../../types/codeScan';
-import { runCommand } from '../../util/runCommand';
 import { isInDenylist, MAX_BLOB_SIZE_BYTES, MAX_PATCH_SIZE_BYTES } from '../constants/filtering';
+import { isTextBlob } from './blobText';
+import { readGitBlob, runGit } from './command';
 import { annotateDiffWithLineRanges } from './diffAnnotator';
 import { parseRawDiff } from './rawDiffParser';
 
@@ -76,21 +76,21 @@ async function discoverChangedFiles(
   compare: string,
 ): Promise<FileRecord[]> {
   // Run git diff --raw and --numstat in parallel
-  const [rawResult, numstatResult] = await Promise.all([
-    runCommand(
-      'git',
-      ['diff', '--raw', '-z', '--no-color', '--no-ext-diff', '--no-abbrev', `${base}...${compare}`],
-      {
-        cwd: repoPath,
-      },
-    ),
-    runCommand('git', ['diff', '--numstat', '-z', `${base}...${compare}`], {
-      cwd: repoPath,
-    }),
+  const [raw, numstat] = await Promise.all([
+    runGit(repoPath, [
+      'diff',
+      '--raw',
+      '-z',
+      '--no-color',
+      '--no-ext-diff',
+      '--no-abbrev',
+      `${base}...${compare}`,
+    ]),
+    runGit(repoPath, ['diff', '--numstat', '-z', `${base}...${compare}`]),
   ]);
 
-  const rawFiles = parseRawDiff(rawResult.stdout);
-  const numstatMap = parseNumstat(numstatResult.stdout);
+  const rawFiles = parseRawDiff(raw);
+  const numstatMap = parseNumstat(numstat);
 
   // Merge the data
   return rawFiles.map((file) => {
@@ -140,18 +140,17 @@ async function collectBlobSizes(
 
   // Use git cat-file --batch-check
   const shaList = Array.from(shas).join('\n');
-  const result = await runCommand(
-    'git',
+  const output = await runGit(
+    repoPath,
     ['cat-file', '--batch-check=%(objectname) %(objecttype) %(objectsize)'],
     {
-      cwd: repoPath,
       input: shaList,
     },
   );
 
   const sizeMap = new Map<string, number>();
 
-  for (const line of result.stdout.split('\n')) {
+  for (const line of output.split('\n')) {
     if (!line.trim()) {
       continue;
     }
@@ -195,13 +194,7 @@ function attachBlobSizesAndFilter(files: FileRecord[], sizeMap: Map<string, numb
 
 async function isBlobText(repoPath: string, sha: string): Promise<boolean> {
   try {
-    const result = await runCommand('git', ['cat-file', 'blob', sha], {
-      cwd: repoPath,
-      encoding: 'buffer',
-    });
-
-    // isText can return boolean | null, treat null as false
-    return isText(null, result.stdout) === true;
+    return isTextBlob(await readGitBlob(repoPath, sha));
   } catch {
     return false;
   }
@@ -266,8 +259,8 @@ async function generatePatchForFile(
 ): Promise<FileRecord> {
   const filePath = file.path;
   try {
-    const result = await runCommand(
-      'git',
+    const patch = await runGit(
+      repoPath,
       [
         'diff',
         '--patch',
@@ -279,12 +272,9 @@ async function generatePatchForFile(
         filePath,
       ],
       {
-        cwd: repoPath,
         maxBuffer: MAX_PATCH_SIZE_BYTES,
       },
     );
-
-    const patch = result.stdout;
 
     // Double check patch size
     const patchSize = Buffer.byteLength(patch, 'utf8');
