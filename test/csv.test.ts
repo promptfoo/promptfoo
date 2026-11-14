@@ -18,6 +18,16 @@ describe.each([
   ['Node.js', parseCsv],
   ['browser', parseBrowserCsv],
 ] as const)('%s CSV parsing', (_name, parse) => {
+  it.each(['first,last', 'quoted"name', 'line\nbreak', 'carriage\rreturn', '\uFEFFfirst'])(
+    'round-trips CSV header %j',
+    (name) => {
+      const vars = [{ [name]: 'Ada', ordinary: 'control' }];
+      const csv = serializeObjectArrayAsCSV(vars);
+
+      expect(parse(csv, { columns: true, bom: true })).toEqual(vars);
+    },
+  );
+
   it('preserves special column names as own properties', () => {
     const [record] = parse<Record<string, string>>(
       '__proto__,constructor,toString\nproto-value,constructor-value,toString-value',
