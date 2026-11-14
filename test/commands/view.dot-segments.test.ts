@@ -1,8 +1,10 @@
 import { Command } from 'commander';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { viewCommand } from '../../src/commands/view';
+import { getDefaultPort } from '../../src/constants';
 import logger from '../../src/logger';
 import { startServer } from '../../src/server/server';
+import { BrowserBehavior } from '../../src/util/server';
 
 vi.mock('../../src/logger', () => ({
   default: {
@@ -60,16 +62,16 @@ describe('viewCommand ambiguous eval IDs', () => {
     'archive%3F2026',
     'archive%232026',
     'archive%252026',
-  ])('reports the ambiguous percent-encoded eval ID %s cleanly', async (evalId) => {
+  ])('opens the literal percent-encoded eval ID %s', async (evalId) => {
     viewCommand(program);
     const viewCmd = program.commands[0];
 
-    await expect(viewCmd.parseAsync(['node', 'test', '--id', evalId])).resolves.toBeDefined();
+    await viewCmd.parseAsync(['node', 'test', '--id', evalId]);
 
-    expect(logger.error).toHaveBeenCalledWith(
-      'Eval IDs containing literal percent-encoded sequences cannot be opened with --id because routers may decode them into different IDs.',
+    expect(startServer).toHaveBeenCalledWith(
+      getDefaultPort(),
+      BrowserBehavior.ASK,
+      `/eval/${encodeURIComponent(evalId)}`,
     );
-    expect(process.exitCode).toBe(1);
-    expect(startServer).not.toHaveBeenCalled();
   });
 });

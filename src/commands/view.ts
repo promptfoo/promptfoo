@@ -67,14 +67,6 @@ export function viewCommand(program: Command) {
             return;
           }
 
-          if (/%[0-9a-f]{2}/i.test(cmdObj.id)) {
-            logger.error(
-              'Eval IDs containing literal percent-encoded sequences cannot be opened with --id because routers may decode them into different IDs.',
-            );
-            process.exitCode = 1;
-            return;
-          }
-
           await startServer(cmdObj.port, browserBehavior, `/eval/${encodeURIComponent(cmdObj.id)}`);
           return;
         }
