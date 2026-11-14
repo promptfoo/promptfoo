@@ -4,6 +4,7 @@ import { fetchWithProxy } from '../../util/fetch/index';
 import {
   maybeLoadResponseFormatFromExternalFile,
   maybeLoadToolsFromExternalFile,
+  renderEnvOnlyInObject,
   renderVarsInObject,
 } from '../../util/index';
 import { resolveProviderApiKey } from '../credentials';
@@ -114,7 +115,7 @@ export type XAIAgentTool =
   | XAICollectionsSearchTool
   | XAIMCPTool;
 
-function buildTextFormat(responseFormat: any) {
+function buildTextFormat(responseFormat: any, renderEnvWithoutVars: boolean) {
   if (!responseFormat) {
     return { format: { type: 'text' } };
   }
@@ -129,6 +130,7 @@ function buildTextFormat(responseFormat: any) {
     const strict = resolveResponseSchemaStrict(
       responseFormat.json_schema?.strict,
       responseFormat.strict,
+      renderEnvWithoutVars ? renderEnvOnlyInObject : undefined,
     );
     return {
       format: {
@@ -345,7 +347,7 @@ export class XAIResponsesProvider implements ApiProvider {
       context?.vars,
     );
 
-    const textFormat = buildTextFormat(responseFormat);
+    const textFormat = buildTextFormat(responseFormat, context?.vars === undefined);
 
     // Load tools from external file if needed
     const loadedTools = config.tools

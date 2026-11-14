@@ -4,6 +4,7 @@ import logger from '../../logger';
 import {
   maybeLoadResponseFormatFromExternalFile,
   maybeLoadToolsFromExternalFile,
+  renderEnvOnlyInObject,
   renderVarsInObject,
 } from '../../util/index';
 import invariant from '../../util/invariant';
@@ -214,6 +215,7 @@ export class AzureResponsesProvider extends AzureGenericProvider<AzureResponsesO
         const strict = resolveResponseSchemaStrict(
           responseFormat.json_schema?.strict,
           responseFormat.strict,
+          context?.vars === undefined ? renderEnvOnlyInObject : undefined,
         );
 
         textFormat = {
