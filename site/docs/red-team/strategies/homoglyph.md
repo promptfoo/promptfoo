@@ -48,13 +48,18 @@ The homoglyph strategy works by:
 
 ## Example Scenarios
 
-| Original Character | Homoglyph Replacement | Unicode Name                      |
-| ------------------ | --------------------- | --------------------------------- |
-| a                  | а                     | Cyrillic Small Letter A (U+0430)  |
-| e                  | е                     | Cyrillic Small Letter Ie (U+0435) |
-| o                  | о                     | Cyrillic Small Letter O (U+043E)  |
-| p                  | р                     | Cyrillic Small Letter Er (U+0440) |
-| x                  | х                     | Cyrillic Small Letter Ha (U+0445) |
+| Original Character | Homoglyph Replacement | Unicode Name                                       |
+| ------------------ | --------------------- | -------------------------------------------------- |
+| a                  | а                     | Cyrillic Small Letter A (U+0430)                   |
+| e                  | е                     | Cyrillic Small Letter Ie (U+0435)                  |
+| o                  | о                     | Cyrillic Small Letter O (U+043E)                   |
+| p                  | р                     | Cyrillic Small Letter Er (U+0440)                  |
+| x                  | х                     | Cyrillic Small Letter Ha (U+0445)                  |
+| ş                  | ș                     | Latin Small Letter S With Comma Below (U+0219)     |
+| ö                  | ӧ                     | Cyrillic Small Letter O With Diaeresis (U+04E7)    |
+| ü                  | ϋ                     | Greek Small Letter Upsilon With Dialytika (U+03CB) |
+
+The map also substitutes `ç Ç ş Ş ğ Ğ ö Ö ı ü`. These replacements remain distinct from the original letters after NFC normalization. Visual similarity depends on the font, especially for `ı` → `𝚤` (mathematical italic dotless i). `Ü` and `İ` are currently left unchanged.
 
 **Examples:**
 

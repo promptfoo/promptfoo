@@ -66,6 +66,18 @@ export const homoglyphMap: { [key: string]: string } = {
   '7': '𝟽', // Mathematical monospace 7
   '8': '𝟾', // Mathematical monospace 8
   '9': '𝟿', // Mathematical monospace 9
+  // Additional lookalikes for Turkish letters; each remains distinct under NFC.
+  ç: 'ҫ', // Cyrillic small es with descender (U+04AB)
+  Ç: 'Ҫ', // Cyrillic capital es with descender (U+04AA)
+  ş: 'ș', // Latin small s with comma below (U+0219)
+  Ş: 'Ș', // Latin capital s with comma below (U+0218)
+  ğ: 'ǧ', // Latin small g with caron (U+01E7)
+  Ğ: 'Ǧ', // Latin capital g with caron (U+01E6)
+  ö: 'ӧ', // Cyrillic small o with diaeresis (U+04E7)
+  Ö: 'Ӧ', // Cyrillic capital o with diaeresis (U+04E6)
+  ü: 'ϋ', // Greek small upsilon with dialytika (U+03CB)
+  // This mathematical variant can look different depending on the font.
+  ı: '𝚤', // Mathematical italic small dotless i (U+1D6A4)
 };
 
 /**
