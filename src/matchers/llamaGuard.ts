@@ -97,7 +97,7 @@ export async function matchesLlamaGuard(
   if (typeof resp.output !== 'string') {
     return graderFail('LlamaGuard produced a non-text response', resp.tokenUsage);
   }
-  const verdict = parseLlamaGuardGradingResponse(resp.output, resp.finishReason);
+  const verdict = parseLlamaGuardGradingResponse(resp.output, resp);
   if ('error' in verdict) {
     return graderFail(verdict.error, resp.tokenUsage);
   }

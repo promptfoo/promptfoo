@@ -559,7 +559,7 @@ export class ReplicateModerationProvider
         };
       }
 
-      const verdict = parseLlamaGuardGradingResponse(output, response.finishReason);
+      const verdict = parseLlamaGuardGradingResponse(output, response);
       if ('error' in verdict) {
         return { error: verdict.error, ...tokenUsageResult };
       }

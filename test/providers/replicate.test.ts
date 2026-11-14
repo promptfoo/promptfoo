@@ -542,6 +542,21 @@ describe('ReplicateModerationProvider', () => {
     },
   );
 
+  it('preserves usage and rejects verdict text from a blocked completion', async () => {
+    const provider = new ReplicateModerationProvider('test-model', {
+      config: { apiKey: mockApiKey },
+    });
+    vi.spyOn(provider, 'callApi').mockResolvedValue({
+      output: 'safe',
+      guardrails: { flagged: true },
+      tokenUsage: reportedTokenUsage,
+    });
+    await expect(provider.callModerationApi('prompt', 'response')).resolves.toEqual({
+      error: 'LlamaGuard verdict was refused or blocked by the grader provider',
+      tokenUsage: reportedTokenUsage,
+    });
+  });
+
   it('should forward non-zero token usage reported by the underlying completion', async () => {
     // Prove that callModerationApi preserves provider-reported usage unchanged.
     const provider = new ReplicateModerationProvider('test-model', {

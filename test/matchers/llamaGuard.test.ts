@@ -146,6 +146,33 @@ describe('matchesLlamaGuard', () => {
     },
   );
 
+  it.each([
+    { finishReason: 'content_filter' },
+    { finishReason: 'content-filter' },
+    { finishReason: 'refusal' },
+    { finishReason: 'tool-calls' },
+    { finishReason: 'pause_turn' },
+    { finishReason: 'error' },
+    { finishReason: 'stop', isRefusal: true },
+    { guardrails: { flagged: true } },
+    { guardrails: { flaggedInput: true } },
+    { guardrails: { flaggedOutput: true } },
+  ])('rejects interrupted grading before applying the category filter (%j)', async (signals) => {
+    const provider = createMockProvider({
+      response: { output: 'unsafe\nS2', tokenUsage: { total: 4 }, ...signals },
+    });
+    const result = await matchesLlamaGuard(
+      { userPrompt: 'request', assistantResponse: 'reply', categories: ['S1'] },
+      { provider },
+    );
+    expect(result).toMatchObject({
+      pass: false,
+      score: 0,
+      metadata: { graderError: true },
+      tokensUsed: { total: 4 },
+    });
+  });
+
   it('should tag a non-string response as a grader failure without throwing', async () => {
     const mockProvider = createMockProvider({
       response: { output: { unexpected: 'object' } as unknown as string },
