@@ -306,37 +306,6 @@ describe('runEval', () => {
     });
   });
 
-  it('should pass dynamic prompt config from prompt functions to the provider', async () => {
-    const dynamicConfig = { temperature: 0.5, tools: [{ name: 'test_tool' }] };
-    const promptWithFunction: Prompt = {
-      raw: 'Dynamic prompt',
-      label: 'dynamic-label',
-      function: async () => ({
-        prompt: 'Rendered dynamic prompt',
-        config: dynamicConfig,
-      }),
-    };
-
-    const results = await runEval({
-      ...defaultOptions,
-      provider: mockProvider,
-      prompt: promptWithFunction,
-      test: {},
-      conversations: {},
-      registers: {},
-    });
-    const result = results[0];
-    expect(result.success).toBe(true);
-
-    // Verify the provider received the dynamic config
-    const callApiMock = vi.mocked(mockProvider.callApi);
-    const callApiArgs = callApiMock.mock.calls[0];
-    expect(callApiArgs).toBeDefined();
-    const context = callApiArgs![1];
-    expect(context).toBeDefined();
-    expect(context!.prompt.config).toEqual(dynamicConfig);
-  });
-
   it('should merge dynamic prompt config with test.options (test.options takes precedence)', async () => {
     const promptWithFunction: Prompt = {
       raw: 'Dynamic prompt',

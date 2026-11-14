@@ -67,7 +67,10 @@ export const handleSimilar = async ({
       );
       // A similarity-provider outage is not evidence about any remaining value,
       // so surface it instead of folding it into the "closest score" tally.
-      if ((inverse ? !result.pass : result.pass) || result.metadata?.similarityProviderError === true) {
+      if (
+        (inverse ? !result.pass : result.pass) ||
+        result.metadata?.similarityProviderError === true
+      ) {
         return {
           assertion,
           ...result,
