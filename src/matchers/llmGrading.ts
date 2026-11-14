@@ -234,7 +234,10 @@ export async function matchesLlmRubric(
           rubric,
           evidence: options?.evidence ? JSON.stringify(options.evidence) : undefined,
           output: gradingOutput,
-          vars: vars || {},
+          vars:
+            options?.evidence === undefined
+              ? (vars ?? {})
+              : { ...vars, evidence: options.evidence },
           ...(imageOutputs.length ? { images: imageOutputs } : {}),
           ...getRemoteGradingContext(),
         })),

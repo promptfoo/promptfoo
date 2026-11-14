@@ -9,13 +9,7 @@ import type {
   GradingResult,
 } from '../types/index';
 
-/**
- * Maximum depth for evidence value cloning. Prevents pathological objects
- * (e.g., deeply nested trees or list-of-lists-of-lists…) from consuming
- * unbounded memory even when the byte-truncation step would eventually cut
- * them short. The limit is generous enough for realistic metadata (tool
- * traces, file-change summaries) but tight enough to bound local work.
- */
+/** Bound recursion independently of the serialized byte budget. */
 const MAX_EVIDENCE_DEPTH = 20;
 
 /**
@@ -50,150 +44,107 @@ export function getMetadataPathValue(
   return value;
 }
 
-/**
- * Return a deep-cloned copy of `value` with all back-references to any object
- * in the path ancestor chain replaced by a sentinel string.
- *
- * We use this to isolate a selected metadata subtree from its parent `metadata`
- * root before serialising it for the grader — otherwise a selected child that
- * holds a reference back to an intermediate ancestor (e.g. `metadata.run.files.parent = metadata.run`
- * while projecting `metadata.run.files`) would leak sibling fields from that
- * ancestor into the evidence block.
- *
- * The ancestors are collected by walking the validated `path` from `root` to
- * the endpoint, so cyclic endpoint cases (e.g. `metadata.self = metadata` with
- * `from: metadata.self`) still block the ancestor object correctly.
- *
- * We also use an ancestor stack for in-cycle detection inside the cloned
- * subtree, instead of a global WeakSet — this preserves non-circular shared
- * references (common in trace entries or summaries) while still eliding real
- * cycles.
- */
-function isolateEvidenceValue(value: unknown, ancestorSet: WeakSet<object>, maxBytes: number) {
-  // A byte limit cannot usefully include more entries than bytes. Cap the
-  // walk as well, so a small projection need not clone an entire wide subtree.
-  let remainingEntries = Math.max(0, Math.min(maxBytes, 65_536));
-  let limited = false;
+/** Write the XML-escaped JSON prefix directly, stopping on a UTF-8 boundary. */
+function serializeEvidencePrefix(value: unknown, ancestors: WeakSet<object>, maxBytes: number) {
+  let remaining = Number.isFinite(maxBytes) ? Math.max(0, maxBytes) : 0;
+  let remainingKeys = Math.min(remaining, 65_536);
+  let output = '';
+  let truncated = false;
+  const active = new WeakSet<object>();
 
-  function takeEntry(): boolean {
-    if (!(remainingEntries > 0)) {
-      limited = true;
-      return false;
+  function append(text: string) {
+    if (truncated) {
+      return;
     }
-    remainingEntries--;
-    return true;
+    for (const char of text) {
+      const bytes = Buffer.byteLength(char);
+      if (bytes > remaining) {
+        truncated = true;
+        return;
+      }
+      output += char;
+      remaining -= bytes;
+    }
   }
 
-  function clone(v: unknown, pathAncestors: object[] = [], depth: number = 0): unknown {
-    if (typeof v === 'function' || typeof v === 'symbol') {
-      return undefined;
-    }
-    if (v === null || typeof v !== 'object') {
-      return v;
-    }
-    // Bounded depth — replace anything past the limit with a sentinel so we
-    // can still serialise the outer structure without blowing up on nested
-    // monstrosities.
-    if (depth >= MAX_EVIDENCE_DEPTH) {
-      return '[Max depth exceeded]';
-    }
-    const obj = v as object;
-    // Back-reference to a metadata-path ancestor — must be elided to prevent
-    // leaking unselected siblings through cyclic pointers.
-    if (ancestorSet.has(obj)) {
-      return '[Back-reference to metadata ancestor omitted]';
-    }
-    // Real cycle in the cloned subtree — elide. Using an ancestor stack (not
-    // a global WeakSet) so shared-but-non-circular objects are preserved.
-    if (pathAncestors.includes(obj)) {
-      return '[Cycle omitted]';
-    }
-    const nextAncestors = [...pathAncestors, obj];
-    if (Array.isArray(v)) {
-      const out: unknown[] = [];
-      for (let index = 0; index < v.length && takeEntry(); index++) {
-        out.push(clone(v[index], nextAncestors, depth + 1));
+  function writeString(text: string) {
+    append('"');
+    for (const char of text) {
+      if (truncated) {
+        return;
       }
-      return out;
+      // Escape one code point at a time so a large input string is never copied in full.
+      const escaped = JSON.stringify(char).slice(1, -1);
+      append(escaped.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'));
     }
-    const record = v as Record<string, unknown>;
-    const out: Record<string, unknown> = Object.create(null);
-    for (const key in record) {
-      if (!Object.prototype.hasOwnProperty.call(record, key)) {
-        continue;
+    append('"');
+  }
+
+  function writeArray(entry: unknown[], depth: number) {
+    append('[');
+    for (let i = 0; i < entry.length && !truncated; i++) {
+      if (i > 0) {
+        append(',');
       }
-      if (!takeEntry()) {
+      if (!truncated) {
+        write(entry[i], depth + 1);
+      }
+    }
+    append(']');
+  }
+
+  function writeObject(entry: Record<string, unknown>, depth: number) {
+    append('{');
+    let first = true;
+    for (const key in entry) {
+      if (truncated || remainingKeys-- <= 0) {
+        truncated = true;
         break;
       }
-      out[key] = clone(record[key], nextAncestors, depth + 1);
-    }
-    return out;
-  }
-
-  const isolated = clone(value);
-  return { value: isolated, limited };
-}
-
-/**
- * Truncate a UTF-8 string so that its encoded form fits within `maxBytes`.
- *
- * We slice at a UTF-8 code-unit boundary that is also a valid UTF-8
- * byte-sequence boundary, so re-decoding never produces replacement
- * characters from a truncated trailing multibyte sequence.
- */
-function truncateToMaxBytes(value: string, maxBytes: number) {
-  if (!Number.isFinite(maxBytes) || maxBytes <= 0) {
-    return { value: '', truncated: true };
-  }
-  const bytes = Buffer.from(value, 'utf8');
-  if (bytes.byteLength <= maxBytes) {
-    return { value, truncated: false };
-  }
-
-  // Walk backwards from maxBytes to find a safe cut point that does not split
-  // a UTF-8 continuation byte (0x80..0xBF) from its lead byte.
-  let safeEnd = maxBytes;
-  while (safeEnd > 0) {
-    const b = bytes[safeEnd];
-    if (b === undefined || (b & 0xc0) !== 0x80) {
-      break;
-    }
-    safeEnd--;
-  }
-  // After walking back over continuation bytes, `safeEnd` is already the
-  // correct exclusive cut point. When we land at a multi-byte lead byte,
-  // that entire character lies at indices [safeEnd, safeEnd+N), which is
-  // outside our slice — we already cut before it. No further decrement is
-  // needed; doing so would land inside the *preceding* multibyte character's
-  // continuation bytes and corrupt otherwise-complete evidence.
-  const sliced = bytes.subarray(0, safeEnd).toString('utf8');
-  return { value: sliced, truncated: true };
-}
-
-/**
- * Escape characters inside evidence content that could break prompt XML/YAML
- * boundaries. We escape `<`, `>`, and `&` so retrieved documents or tool
- * traces cannot close <Output>, <Evidence>, or Markdown fence markers.
- */
-function escapeEvidenceContent(raw: string): string {
-  return raw.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-}
-
-/**
- * Serialize a single evidence value to a compact JSON string suitable for
- * the grader prompt. Replaces bigints with their string representation.
- */
-function serializeEvidenceValue(value: unknown): string {
-  try {
-    return JSON.stringify(value, (_key, nestedValue) => {
-      if (typeof nestedValue === 'bigint') {
-        return nestedValue.toString();
+      if (!Object.prototype.hasOwnProperty.call(entry, key)) {
+        continue;
       }
-      return nestedValue;
-    });
-  } catch {
-    return String(value);
+      const child = entry[key];
+      if (child === undefined || typeof child === 'symbol' || typeof child === 'function') {
+        continue;
+      }
+      if (!first) {
+        append(',');
+      }
+      first = false;
+      writeString(key);
+      append(':');
+      if (!truncated) {
+        write(child, depth + 1);
+      }
+    }
+    append('}');
   }
+
+  function write(entry: unknown, depth: number) {
+    if (typeof entry === 'string' || typeof entry === 'bigint') {
+      writeString(String(entry));
+    } else if (entry === null || typeof entry !== 'object') {
+      append(JSON.stringify(entry) ?? 'null');
+    } else if (ancestors.has(entry)) {
+      writeString('[Back-reference to metadata ancestor omitted]');
+    } else if (active.has(entry)) {
+      writeString('[Cycle omitted]');
+    } else if (depth >= MAX_EVIDENCE_DEPTH) {
+      writeString('[Max depth exceeded]');
+    } else {
+      active.add(entry);
+      if (Array.isArray(entry)) {
+        writeArray(entry, depth);
+      } else {
+        writeObject(entry as Record<string, unknown>, depth);
+      }
+      active.delete(entry);
+    }
+  }
+
+  write(value, 0);
+  return { value: output, truncated };
 }
 
 /**
@@ -201,8 +152,7 @@ function serializeEvidenceValue(value: unknown): string {
  *
  * Each configured `from` path walks the metadata, breaks any back-references
  * to metadata ancestors (preventing unselected siblings from leaking through
- * cyclic pointers), clones with a depth limit, serialises to compact JSON,
- * escapes XML boundary characters, and truncates to the configured byte limit.
+ * cyclic pointers), and writes a bounded prefix of XML-escaped compact JSON.
  *
  * The resulting entries form a structured `evidence` variable for the grader
  * — they are NOT appended to the candidate output and are NOT auto-injected
@@ -228,20 +178,12 @@ export function projectEvidenceValues(
       continue;
     }
 
-    const isolated = isolateEvidenceValue(rawValue, ancestors, item.maxBytes);
-
-    // Serialise → escape → truncate. Escape BEFORE truncation so the byte limit
-    // bounds the FINAL grader-facing content — an HTML-rich payload would
-    // otherwise expand 4-5× after truncation and exceed the requested limit.
-    const serialized = serializeEvidenceValue(isolated.value);
-    const escaped = escapeEvidenceContent(serialized);
-    const truncated = truncateToMaxBytes(escaped, item.maxBytes);
+    const prefix = serializeEvidencePrefix(rawValue, ancestors, item.maxBytes);
 
     projected.push({
       from: item.from,
       label: item.label || item.from,
-      value: truncated.value,
-      truncated: isolated.limited || truncated.truncated,
+      ...prefix,
       maxBytes: item.maxBytes,
     });
   }
@@ -281,13 +223,11 @@ export const handleLlmRubric = async ({
   // corrupt the image-output comparison inside getGradingOutputForImages.
   // Instead, we project evidence as a structured entry and pass it separately
   // to the matcher so the grader receives it as its own `evidence` variable.
-  const evidence = projectEvidenceValues(assertion.evidence, providerResponse?.metadata);
+  const evidence = assertion.evidence?.length
+    ? (projectEvidenceValues(assertion.evidence, providerResponse?.metadata) ?? [])
+    : undefined;
 
-  // Only forward provider media to the matcher when (a) we have evidence
-  // to inject or (b) there is no assertion transform. When `assertion.transform`
-  // is set, the `outputString` passed above is the transformed text, so the
-  // original provider images/audio no longer correspond — the matcher would
-  // end up grading transformed text against stale media.
+  // A transform replaces the candidate output, so the original media no longer corresponds.
   const hasMedia =
     !assertion.transform && (providerResponse?.images?.length || providerResponse?.audio);
   const matcherOptions =

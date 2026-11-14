@@ -942,7 +942,7 @@ export async function runJsonGradingPrompt({
     finalProvider,
     providerPrompt,
     label,
-    vars,
+    templateVars,
     providerCallContext,
     providerPromptConfig,
   );

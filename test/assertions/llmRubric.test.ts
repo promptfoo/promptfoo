@@ -248,6 +248,16 @@ describe('handleLlmRubric', () => {
     expect(options?.evidence).toHaveLength(1);
   });
 
+  it('reserves the evidence variable for configured paths even when none resolve', async () => {
+    mockMatchesLlmRubric.mockResolvedValue({ pass: true, score: 1, reason: 'ok' });
+    await handleLlmRubric({
+      ...defaultParams,
+      test: { ...defaultParams.test, vars: { evidence: 'unselected' } },
+      assertion: { type: 'llm-rubric', evidence: [{ from: 'metadata.missing', maxBytes: 16 }] },
+    });
+    expect(mockMatchesLlmRubric.mock.calls[0][5]?.evidence).toEqual([]);
+  });
+
   it('should truncate projected metadata evidence to its configured byte limit', async () => {
     const params: AssertionParams = {
       ...defaultParams,
@@ -720,26 +730,42 @@ describe('getMetadataPathValue', () => {
 });
 
 describe('projectEvidenceValues', () => {
-  it('limits property reads before serializing wide metadata', () => {
-    const entries: Record<string, unknown> = {};
-    let reads = 0;
-    for (let index = 0; index < 10_000; index++) {
-      Object.defineProperty(entries, `entry${index}`, {
-        enumerable: true,
-        get() {
-          reads++;
-          return index;
-        },
-      });
-    }
-    const [result] = projectEvidenceValues(
-      [{ from: 'metadata.entries', label: 'entries', maxBytes: 20 }],
-      { entries },
-    )!;
-    expect(reads).toBeLessThanOrEqual(20);
-    expect(Buffer.byteLength(result.value)).toBeLessThanOrEqual(20);
-    expect(result.truncated).toBe(true);
+  it('stops before reading later values when a large scalar fills the byte budget', () => {
+    const text = '<'.repeat(8192);
+    const rows = [text];
+    Object.defineProperty(rows, 1, {
+      get: () => {
+        throw new Error('read past the budget');
+      },
+    });
+    const [entry] = projectEvidenceValues([{ from: 'metadata.rows', maxBytes: 24 }], { rows })!;
+    expect(entry.value).toBe('["' + '&lt;'.repeat(5) + '&l');
+    expect(entry.truncated).toBe(true);
   });
+
+  it.each([true, false])(
+    'limits property reads before serializing wide metadata (defined: %s)',
+    (defined) => {
+      const entries: Record<string, unknown> = {};
+      let reads = 0;
+      for (let index = 0; index < 10_000; index++) {
+        Object.defineProperty(entries, `entry${index}`, {
+          enumerable: true,
+          get() {
+            reads++;
+            return defined ? index : undefined;
+          },
+        });
+      }
+      const [result] = projectEvidenceValues(
+        [{ from: 'metadata.entries', label: 'entries', maxBytes: 20 }],
+        { entries },
+      )!;
+      expect(reads).toBeLessThanOrEqual(20);
+      expect(Buffer.byteLength(result.value)).toBeLessThanOrEqual(20);
+      expect(result.truncated).toBe(true);
+    },
+  );
 
   it('returns undefined when metadata is null', () => {
     const ev: AssertionEvidence[] = [{ from: 'metadata.fileChanges', label: 'c', maxBytes: 1024 }];
