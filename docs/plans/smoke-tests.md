@@ -867,15 +867,15 @@ afterAll(() => {
 
 ### Available Assertion Types
 
-There is **no `ends-with` assertion type**. To check string suffixes, use the `regex` assertion with a `$` anchor:
+To check a string suffix, use the `ends-with` assertion:
 
 ```yaml
 # Check if output ends with "42."
-- type: regex
-  value: '42\.$'
+- type: ends-with
+  value: '42.'
 ```
 
-Available assertion types include: `contains`, `contains-all`, `contains-any`, `icontains`, `icontains-all`, `icontains-any`, `equals`, `starts-with`, `regex`, `is-json`, `contains-json`, `is-html`, `is-xml`, `is-sql`, `javascript`, `python`, and model-graded assertions.
+Available assertion types include: `contains`, `contains-all`, `contains-any`, `icontains`, `icontains-all`, `icontains-any`, `equals`, `starts-with`, `ends-with`, `regex`, `is-json`, `contains-json`, `is-html`, `is-xml`, `is-sql`, `javascript`, `python`, and model-graded assertions.
 
 ### Glob Patterns for Prompts
 
