@@ -533,6 +533,47 @@ describe('evalCommand', () => {
     });
   });
 
+  it.each([
+    { flags: [], columns: 1, cacheHits: 0, expected: false },
+    { flags: ['--pass-rate-ci'], columns: 1, cacheHits: 0, expected: true },
+    { flags: ['--pass-rate-ci'], columns: 1, cacheHits: 18, expected: false },
+    { flags: ['--pass-rate-ci', '--repeat', '10'], columns: 1, cacheHits: 0, expected: false },
+    { flags: ['--pass-rate-ci'], columns: 2, cacheHits: 0, expected: false },
+  ])(
+    'reports the sampled pass rate with $flags, $columns columns, $cacheHits cached rows',
+    async ({ flags, columns, cacheHits, expected }) => {
+      evalCommand(program, defaultConfig, defaultConfigPath);
+      const previousExitCode = process.exitCode;
+      const info = vi.spyOn(logger, 'info').mockImplementation(() => logger);
+      vi.mocked(evaluate).mockImplementation(async (_suite, evalRecord) => {
+        const record = evalRecord as Eval;
+        for (let i = 0; i < columns; i++) {
+          record.prompts.push({ raw: 'Question', label: 'Question', provider: `provider-${i}` });
+        }
+        const stats = record.getStats();
+        vi.spyOn(record, 'getStats').mockReturnValue({
+          ...stats,
+          successes: 10,
+          failures: 10,
+          errors: 0,
+          cacheHits,
+        });
+        return record;
+      });
+      try {
+        await program.parseAsync(['node', 'test', 'eval', '--no-table', '--no-write', ...flags]);
+        const line = info.mock.calls
+          .map(([message]) => String(message))
+          .find((message) => message.includes('passed'));
+        expect(line).toBeDefined();
+        expect(line?.includes('95% CI')).toBe(expected);
+      } finally {
+        process.exitCode = previousExitCode;
+        info.mockRestore();
+      }
+    },
+  );
+
   it('should parse repeated --tag options from Commander', async () => {
     evalCommand(program, defaultConfig, defaultConfigPath);
     vi.mocked(resolveConfigs).mockResolvedValue({

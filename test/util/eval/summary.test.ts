@@ -710,6 +710,39 @@ describe('generateEvalSummary', () => {
   });
 
   describe('pass rate and results', () => {
+    it.each([
+      {
+        showPassRateInterval: true,
+        cacheHits: 0,
+        expected: '17 passed (85.00%; 95% CI 64.0–94.8%)',
+      },
+      { showPassRateInterval: true, cacheHits: 18, expected: '17 passed (85.00%)' },
+      { showPassRateInterval: false, cacheHits: 0, expected: '17 passed (85.00%)' },
+    ])(
+      'formats a sampled pass rate with opt-in $showPassRateInterval and $cacheHits cache hits',
+      ({ showPassRateInterval, cacheHits, expected }) => {
+        const params: EvalSummaryParams = {
+          evalId: 'eval-sampled',
+          isRedteam: false,
+          writeToDatabase: false,
+          shareableUrl: null,
+          wantsToShare: false,
+          hasExplicitDisable: false,
+          cloudEnabled: false,
+          tokenUsage: { total: 0 },
+          successes: 17,
+          failures: 3,
+          errors: 0,
+          duration: 1000,
+          maxConcurrency: 1,
+          tracker: mockTracker,
+          showPassRateInterval,
+          cacheHits,
+        };
+        expect(stripAnsi(generateEvalSummary(params).join('\n'))).toContain(expected);
+      },
+    );
+
     it('should show percentages for each result line at 100% pass rate', () => {
       const params: EvalSummaryParams = {
         evalId: 'eval-100',
@@ -732,7 +765,7 @@ describe('generateEvalSummary', () => {
       const plainOutput = stripAnsi(lines.join('\n'));
 
       expect(plainOutput).toContain('Results:');
-      expect(plainOutput).toContain('10 passed (100%; 95% CI 72.2–100.0%)');
+      expect(plainOutput).toContain('10 passed (100%)');
       expect(plainOutput).toContain('0 failed (0%)');
       expect(plainOutput).toContain('0 errors (0%)');
     });
@@ -759,7 +792,7 @@ describe('generateEvalSummary', () => {
       const plainOutput = stripAnsi(lines.join('\n'));
 
       expect(plainOutput).toContain('Results:');
-      expect(plainOutput).toContain('17 passed (85.00%; 95% CI 64.0–94.8%)');
+      expect(plainOutput).toContain('17 passed (85.00%)');
       expect(plainOutput).toContain('3 failed (15.00%)');
       expect(plainOutput).toContain('0 errors (0%)');
     });
@@ -786,7 +819,7 @@ describe('generateEvalSummary', () => {
       const plainOutput = stripAnsi(lines.join('\n'));
 
       expect(plainOutput).toContain('Results:');
-      expect(plainOutput).toContain('5 passed (50.00%; 95% CI 23.7–76.3%)');
+      expect(plainOutput).toContain('5 passed (50.00%)');
       expect(plainOutput).toContain('5 failed (50.00%)');
       expect(plainOutput).toContain('0 errors (0%)');
     });
@@ -815,7 +848,7 @@ describe('generateEvalSummary', () => {
       const hasLineMatching = (pattern: RegExp) => outputLines.some((line) => pattern.test(line));
 
       expect(plainOutput).toContain('Results:');
-      expect(hasLineMatching(/^\s*(✓\s+)?8 passed \(80\.00%; 95% CI 49\.0–94\.3%\)$/)).toBe(true);
+      expect(hasLineMatching(/^\s*(✓\s+)?8 passed \(80\.00%\)$/)).toBe(true);
       expect(hasLineMatching(/^\s*(✗\s+)?1 failed \(10\.00%\)$/)).toBe(true);
       expect(hasLineMatching(/^\s*(✗\s+)?1 error \(10\.00%\)$/)).toBe(true);
       expect(plainOutput).not.toContain('1 errors');
@@ -870,7 +903,7 @@ describe('generateEvalSummary', () => {
       const lines = generateEvalSummary(params);
 
       expect(lines).toContain(
-        `  ${chalk.green('✓')} ${chalk.white.bold('8')} ${chalk.white('passed')} ${chalk.gray('(80.00%; 95% CI 49.0–94.3%)')}`,
+        `  ${chalk.green('✓')} ${chalk.white.bold('8')} ${chalk.white('passed')} ${chalk.gray('(80.00%)')}`,
       );
       expect(lines).toContain(
         `  ${chalk.red('✗')} ${chalk.white.bold('1')} ${chalk.white('failed')} ${chalk.gray('(10.00%)')}`,
@@ -878,58 +911,6 @@ describe('generateEvalSummary', () => {
       expect(lines).toContain(
         `  ${chalk.red('✗')} ${chalk.white.bold('1')} ${chalk.white('error')} ${chalk.gray('(10.00%)')}`,
       );
-    });
-
-    it('should omit the pass-rate interval when totals pool several columns', () => {
-      const params: EvalSummaryParams = {
-        evalId: 'eval-paired',
-        isRedteam: false,
-        writeToDatabase: false,
-        shareableUrl: null,
-        wantsToShare: false,
-        hasExplicitDisable: false,
-        cloudEnabled: false,
-        tokenUsage: { total: 0 },
-        // 20 test rows evaluated under 3 prompts: 60 pooled results, not 60 independent trials.
-        successes: 48,
-        failures: 12,
-        errors: 0,
-        duration: 5000,
-        maxConcurrency: 4,
-        tracker: mockTracker,
-        columnCount: 3,
-      };
-
-      const lines = generateEvalSummary(params);
-      const plainOutput = stripAnsi(lines.join('\n'));
-
-      expect(plainOutput).toContain('48 passed (80.00%)');
-      expect(plainOutput).not.toContain('95% CI');
-    });
-
-    it('should keep the pass-rate interval for a single column', () => {
-      const params: EvalSummaryParams = {
-        evalId: 'eval-single-column',
-        isRedteam: false,
-        writeToDatabase: false,
-        shareableUrl: null,
-        wantsToShare: false,
-        hasExplicitDisable: false,
-        cloudEnabled: false,
-        tokenUsage: { total: 0 },
-        successes: 17,
-        failures: 3,
-        errors: 0,
-        duration: 5000,
-        maxConcurrency: 4,
-        tracker: mockTracker,
-        columnCount: 1,
-      };
-
-      const lines = generateEvalSummary(params);
-      const plainOutput = stripAnsi(lines.join('\n'));
-
-      expect(plainOutput).toContain('17 passed (85.00%; 95% CI 64.0–94.8%)');
     });
   });
 

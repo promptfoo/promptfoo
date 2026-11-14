@@ -1,6 +1,6 @@
 import chalk from 'chalk';
 import { formatDuration } from '../../util/formatDuration';
-import { wilsonInterval } from './passRateStats';
+import { getWilsonScoreInterval } from './repeatStability';
 
 import type { RepeatStabilitySummary, TokenUsage } from '../../types/index';
 import type { TokenUsageTracker } from '../../util/tokenUsage';
@@ -38,6 +38,8 @@ export interface EvalSummaryParams {
   errors: number;
   /** Number of test cases served from the response cache (shown only when > 0) */
   cacheHits?: number;
+  /** User opted into an interval for a single, independently sampled series. */
+  showPassRateInterval?: boolean;
   /** Duration of the evaluation in seconds */
   duration: number;
   /** Maximum concurrent API calls during evaluation */
@@ -46,15 +48,6 @@ export interface EvalSummaryParams {
   tracker: TokenUsageTracker;
   /** HTTP status code if the scan was aborted due to a non-transient target error (401, 403, 404, 501) */
   targetErrorStatus?: number;
-  /**
-   * Number of prompt/provider columns the totals were pooled from.
-   *
-   * Columns reuse the same test rows, so pooled counts are not independent trials and a
-   * binomial interval over them would be too narrow. The pass-rate interval is therefore
-   * shown only when there is a single column. Omitted means single-column.
-   */
-  columnCount?: number;
-  repeatCount?: number;
   /** Aggregate pass/fail consistency for repeated test executions. */
   repeatStability?: RepeatStabilitySummary;
 }
@@ -334,16 +327,12 @@ function formatResultLine(
   icon: string | undefined,
   iconColor: (text: string) => string,
   totalTests: number,
+  details = formatResultPercentage(count, totalTests),
 ): string {
   const iconPart = icon ? `${iconColor(icon)} ` : '';
   return `  ${iconPart}${chalk.white.bold(count.toLocaleString())} ${chalk.white(
     label,
-  )} ${chalk.gray(`(${formatResultPercentage(count, totalTests)})`)}`;
-}
-
-function formatPassRateInterval(successes: number, totalTests: number): string {
-  const { low, high } = wilsonInterval(successes, totalTests);
-  return `95% CI ${(low * 100).toFixed(1)}–${(high * 100).toFixed(1)}%`;
+  )} ${chalk.gray(`(${details})`)}`;
 }
 
 function getResultsLines({
@@ -353,8 +342,7 @@ function getResultsLines({
   cacheHits,
   duration,
   maxConcurrency,
-  columnCount,
-  repeatCount = 1,
+  showPassRateInterval,
 }: Pick<
   EvalSummaryParams,
   | 'successes'
@@ -363,35 +351,27 @@ function getResultsLines({
   | 'cacheHits'
   | 'duration'
   | 'maxConcurrency'
-  | 'columnCount'
-  | 'repeatCount'
+  | 'showPassRateInterval'
 >) {
   const totalTests = successes + failures + errors;
   const errorLabel = errors === 1 ? 'error' : 'errors';
-
-  // With several prompt/provider columns the totals pool the same test rows repeatedly, so the
-  // observations are paired rather than independent and a binomial interval would understate the
-  // uncertainty. Report the interval only when the assumption holds.
-  const intervalApplies = (columnCount === undefined || columnCount <= 1) && repeatCount === 1;
-  const passRateDetails =
-    totalTests > 0 && intervalApplies
-      ? `${formatResultPercentage(successes, totalTests)}; ${formatPassRateInterval(
-          successes,
-          totalTests,
-        )}`
-      : formatResultPercentage(successes, totalTests);
-
-  const passedLine =
-    totalTests > 0
-      ? `  ${successes > 0 ? `${chalk.green('✓')} ` : ''}${chalk.white.bold(
-          successes.toLocaleString(),
-        )} ${chalk.white('passed')} ${chalk.gray(`(${passRateDetails})`)}`
-      : formatResultLine(successes, 'passed', undefined, chalk.green, totalTests);
+  const interval =
+    showPassRateInterval && !cacheHits ? getWilsonScoreInterval(successes, totalTests) : undefined;
+  const passDetails = interval
+    ? `${formatResultPercentage(successes, totalTests)}; 95% CI ${(interval.lower * 100).toFixed(1)}–${(interval.upper * 100).toFixed(1)}%`
+    : undefined;
 
   return [
     '',
     chalk.bold('Results:'),
-    passedLine,
+    formatResultLine(
+      successes,
+      'passed',
+      successes > 0 ? '✓' : undefined,
+      chalk.green,
+      totalTests,
+      passDetails,
+    ),
     formatResultLine(failures, 'failed', failures > 0 ? '✗' : undefined, chalk.red, totalTests),
     formatResultLine(errors, errorLabel, errors > 0 ? '✗' : undefined, chalk.red, totalTests),
     ...(cacheHits
