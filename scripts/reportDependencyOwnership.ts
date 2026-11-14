@@ -1,6 +1,5 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 import {
   extractModuleSpecifiers,
@@ -18,21 +17,30 @@ interface DependencyUsage {
 interface PackageJson {
   dependencies?: Record<string, string>;
   optionalDependencies?: Record<string, string>;
+  peerDependencies?: Record<string, string>;
+  peerDependenciesMeta?: Record<string, { optional?: boolean }>;
 }
 
-const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+type DependencyKind = 'dependency' | 'optional' | 'peer' | 'optional-peer';
+
+const repoRoot = path.resolve(import.meta.dirname, '..');
 const config = readLayerConfig(repoRoot);
 const packageJson = JSON.parse(
   fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8'),
 ) as PackageJson;
 
-const runtimeDependencies = new Map<string, Set<'dependency' | 'optional'>>();
+const runtimeDependencies = new Map<string, Set<DependencyKind>>();
 for (const dependency of Object.keys(packageJson.dependencies ?? {})) {
   runtimeDependencies.set(dependency, new Set(['dependency']));
 }
 for (const dependency of Object.keys(packageJson.optionalDependencies ?? {})) {
-  const kinds = runtimeDependencies.get(dependency) ?? new Set<'dependency' | 'optional'>();
+  const kinds = runtimeDependencies.get(dependency) ?? new Set<DependencyKind>();
   kinds.add('optional');
+  runtimeDependencies.set(dependency, kinds);
+}
+for (const dependency of Object.keys(packageJson.peerDependencies ?? {})) {
+  const kinds = runtimeDependencies.get(dependency) ?? new Set<DependencyKind>();
+  kinds.add(packageJson.peerDependenciesMeta?.[dependency]?.optional ? 'optional-peer' : 'peer');
   runtimeDependencies.set(dependency, kinds);
 }
 

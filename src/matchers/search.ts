@@ -70,7 +70,7 @@ export async function matchesSearchRubric(
   if (!searchProvider || !hasWebSearchCapability(searchProvider)) {
     throw new Error(
       'search-rubric assertion requires a grading provider with web search capabilities. ' +
-        `Use --grader with a web search provider (e.g., anthropic:messages:${DEFAULT_ANTHROPIC_MODEL}, openai:responses:o4-mini with tools configured, perplexity:sonar) or configure one in defaultTest.options.provider`,
+        `Use --grader with a web search provider (e.g., anthropic:messages:${DEFAULT_ANTHROPIC_MODEL}, openai:responses:gpt-6-luna with web_search configured, perplexity:sonar) or configure one in defaultTest.options.provider`,
     );
   }
 

@@ -5,7 +5,7 @@ prompts:
   - file://prompt.json
 providers:
   - anthropic:messages:claude-haiku-4-5-20251001
-  - anthropic:messages:claude-sonnet-4-6
+  - anthropic:messages:claude-sonnet-5
   - bedrock:us.anthropic.claude-sonnet-4-6
 
 tests:

@@ -13,12 +13,16 @@ type JfrogMlProviderOptions = ProviderOptions & {
 
 export class JfrogMlChatCompletionProvider extends OpenAiChatCompletionProvider {
   constructor(modelName: string, providerOptions: JfrogMlProviderOptions) {
+    const baseUrl = (
+      providerOptions.config?.baseUrl || 'https://models.qwak-prod.qwak.ai/v1'
+    ).replace(/\/+$/, '');
+
     super(modelName, {
       ...providerOptions,
       config: {
         ...providerOptions.config,
-        apiKeyEnvar: 'QWAK_TOKEN',
-        apiBaseUrl: `${providerOptions.config?.baseUrl || 'https://models.qwak-prod.qwak.ai/v1'}/${modelName}`,
+        apiKeyEnvar: providerOptions.config?.apiKeyEnvar || 'QWAK_TOKEN',
+        apiBaseUrl: providerOptions.config?.apiBaseUrl || `${baseUrl}/${modelName}`,
       },
     });
   }

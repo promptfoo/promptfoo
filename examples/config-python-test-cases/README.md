@@ -29,16 +29,12 @@ tests:
 
 ## Requirements
 
-1. **Python Dependencies**:
+Python 3.9 or newer is sufficient; this example uses only the standard library.
+For the configured OpenAI provider, export `OPENAI_API_KEY`.
 
-   ```bash
-   pip install pandas
-   ```
-
-2. **Environment Variables**:
-   ```bash
-   export OPENAI_API_KEY=your_api_key_here
-   ```
+The CSV-style generator accepts a `data` dictionary containing equal-length
+`source_text`, `target_language`, and `expected_translation` lists. `max_rows` is
+an integer: zero selects no rows and a negative value omits rows from the end.
 
 ## Usage
 
@@ -99,3 +95,9 @@ This enables:
 - **Backward compatibility**: Existing generators work unchanged
 - **Flexible configuration**: Pass any parameters as JSON
 - **Reusable functions**: Same function, different configurations
+
+## Local checks
+
+```bash
+python -m unittest discover -s . -p '*_test.py'
+```

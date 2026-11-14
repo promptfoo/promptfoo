@@ -680,13 +680,7 @@ function appendMediaToChatPrompt(
   }
   if (isChatMessageArray(parsed)) {
     const messages = parsed.map((message) => ({ ...message }));
-    let userMessageIndex = -1;
-    for (let i = messages.length - 1; i >= 0; i--) {
-      if (messages[i].role === 'user') {
-        userMessageIndex = i;
-        break;
-      }
-    }
+    const userMessageIndex = messages.map((message) => message.role).lastIndexOf('user');
 
     if (userMessageIndex >= 0) {
       const userMessage = messages[userMessageIndex];
@@ -808,19 +802,10 @@ function parseJsonGradingResponse(
   // verdict to the grader's own concluding object rather than to an injected
   // one. Falls back to the first object for non-string outputs (structured
   // provider responses, which are inherently single-object).
-  let parsed: Record<string, unknown> | undefined;
-  if (typeof resp.output === 'string') {
-    parsed = extractLastVerdictJsonObject<Record<string, unknown>>(resp.output);
-    if (!parsed) {
-      return {
-        failure: failWithTokens(
-          `${label} produced no verdict-shaped JSON object (expected a \`pass\` or \`score\` key). Output: ${JSON.stringify(resp.output)}`,
-        ),
-      };
-    }
-  } else {
-    parsed = jsonObjects[0] as Record<string, unknown>;
-  }
+  const parsed =
+    typeof resp.output === 'string'
+      ? (extractLastVerdictJsonObject<Record<string, unknown>>(resp.output) ?? {})
+      : jsonObjects[0];
   if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
     return {
       failure: failWithTokens(
@@ -858,6 +843,45 @@ function graderFailureFromResponse(
   return failure;
 }
 
+function deriveVerdictFromGrader(
+  parsed: { pass?: unknown; score?: unknown },
+  threshold: number | undefined,
+): { pass: boolean; score: number } | undefined {
+  const hasThreshold = typeof threshold === 'number' && Number.isFinite(threshold);
+
+  // Without an explicit verdict, only a finite numeric score can be graded.
+  // Reject malformed values as grader errors so negation cannot make them pass.
+  if (parsed.pass === undefined || parsed.pass === null) {
+    const score =
+      typeof parsed.score === 'number'
+        ? parsed.score
+        : typeof parsed.score === 'string' && parsed.score.trim() !== ''
+          ? Number(parsed.score)
+          : NaN;
+    if (!Number.isFinite(score)) {
+      return undefined;
+    }
+    return { pass: hasThreshold ? score >= threshold : score > 0, score };
+  }
+
+  let pass =
+    typeof parsed.pass === 'boolean'
+      ? parsed.pass
+      : /^(true|yes|pass|y)$/i.test(String(parsed.pass));
+  const numericScore = Number(parsed.score);
+  const score =
+    typeof parsed.score === 'number'
+      ? parsed.score
+      : Number.isFinite(numericScore)
+        ? numericScore
+        : Number(pass);
+
+  if (hasThreshold) {
+    pass = pass && score >= threshold;
+  }
+  return { pass, score };
+}
+
 export async function runJsonGradingPrompt({
   assertion,
   checkName,
@@ -865,6 +889,7 @@ export async function runJsonGradingPrompt({
   grading,
   label,
   providerCallContext,
+  providerPromptConfig,
   throwOnError,
   vars,
   images,
@@ -876,6 +901,8 @@ export async function runJsonGradingPrompt({
   grading: GradingConfig;
   label: string;
   providerCallContext?: CallApiContextParams;
+  /** Prompt config for the grader call, which providers merge over their own config. */
+  providerPromptConfig?: Record<string, unknown>;
   throwOnError?: boolean;
   vars: Record<string, VarValue>;
   images?: ImageOutput[];
@@ -904,6 +931,7 @@ export async function runJsonGradingPrompt({
     label,
     vars,
     providerCallContext,
+    providerPromptConfig,
   );
   if (resp.error || !resp.output) {
     if (throwOnError) {
@@ -916,42 +944,17 @@ export async function runJsonGradingPrompt({
     return failure as Omit<GradingResult, 'assertion'>;
   }
 
-  // Fail closed: when `pass` is absent, a verdict-shaped object that was
-  // selected via its `score` key should not default to pass=true. Only objects
-  // that explicitly carry `pass` (or whose `pass` maps to a truthy string)
-  // pass; otherwise we derive from the score vs threshold, and if there is no
-  // threshold either, fail closed.
-  let pass: boolean;
-  if (parsed.pass !== undefined) {
-    pass =
-      typeof parsed.pass === 'boolean'
-        ? parsed.pass
-        : /^(true|yes|pass|y)$/i.test(String(parsed.pass));
-  } else if (parsed.score === undefined) {
-    pass = false;
-  } else {
-    // No explicit pass key but score is present — coerce to number and
-    // check positivity. The threshold check below may override this.
-    const rawScore = parsed.score;
-    const numericScore =
-      typeof rawScore === 'number'
-        ? rawScore
-        : Number.isFinite(Number(rawScore))
-          ? Number(rawScore)
-          : NaN;
-    pass = Number.isFinite(numericScore) ? numericScore > 0 : false;
-  }
-
-  let score = parsed.score;
-  if (typeof score !== 'number') {
-    score = Number.isFinite(Number(score)) ? Number(score) : Number(pass);
-  }
-
   const threshold =
     typeof assertion?.threshold === 'string' ? Number(assertion.threshold) : assertion?.threshold;
-  if (typeof threshold === 'number' && Number.isFinite(threshold)) {
-    pass = pass && score >= threshold;
+
+  const verdict = deriveVerdictFromGrader(parsed, threshold);
+  if (!verdict) {
+    return graderFailureFromResponse(
+      'Grader response contained neither a pass verdict nor a finite numeric score',
+      resp,
+    );
   }
+  const { pass, score } = verdict;
 
   const reason =
     parsed.reason || (pass ? 'Grading passed' : `Score ${score} below threshold ${threshold}`);

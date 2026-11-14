@@ -1,12 +1,11 @@
-import {
-  extendZodWithOpenApi,
-  OpenAPIRegistry,
-  OpenApiGeneratorV31,
-} from '@asteasolutions/zod-to-openapi';
+// Exercise consumer-style static imports: initialize Zod before constructing contracts.
+import './zodOpenApiSetup';
+
+import { OpenAPIRegistry, OpenApiGeneratorV31 } from '@asteasolutions/zod-to-openapi';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
-
-extendZodWithOpenApi(z);
+import { HttpProviderConfigFieldsSchema } from '../../src/contracts/providerConfig/http';
+import { McpConfigInputSchema } from '../../src/contracts/providerConfig/mcp';
 
 function generateSchemas(registry: OpenAPIRegistry) {
   return new OpenApiGeneratorV31(registry.definitions).generateDocument({
@@ -16,6 +15,75 @@ function generateSchemas(registry: OpenAPIRegistry) {
 }
 
 describe('zod-to-openapi compatibility', () => {
+  it('preserves HTTP field descriptions and parser deprecation metadata', () => {
+    const registry = new OpenAPIRegistry();
+    registry.register(
+      'HttpConfigMetadata',
+      HttpProviderConfigFieldsSchema.pick({
+        auth: true,
+        headers: true,
+        responseParser: true,
+      }),
+    );
+    expect(generateSchemas(registry)?.HttpConfigMetadata).toMatchObject({
+      properties: {
+        auth: { anyOf: expect.any(Array) },
+        headers: { description: expect.stringContaining('support templates') },
+        responseParser: {
+          type: 'string',
+          deprecated: true,
+          description: 'Deprecated alias for transformResponse',
+        },
+      },
+    });
+  });
+
+  it('preserves MCP descriptions and deprecation without inventing timeout defaults', () => {
+    const registry = new OpenAPIRegistry();
+    // Recursive JSON values need a named component in zod-to-openapi.
+    registry.register(
+      'McpDefaultArgumentValue',
+      McpConfigInputSchema.shape.defaultArgs.unwrap().valueType,
+    );
+    registry.registerPath({
+      method: 'post',
+      path: '/mcp-config',
+      request: {
+        body: { content: { 'application/json': { schema: McpConfigInputSchema } } },
+      },
+      responses: { 200: { description: 'Valid configuration' } },
+    });
+    const document = new OpenApiGeneratorV31(registry.definitions).generateDocument({
+      openapi: '3.1.0',
+      info: { title: 'MCP documentation', version: '1.0.0' },
+    });
+    const body = document.paths?.['/mcp-config'].post?.requestBody;
+    const schema = body && 'content' in body ? body.content['application/json'].schema : undefined;
+    expect(schema).toMatchObject({
+      properties: {
+        timeout: {
+          type: 'number',
+          description: expect.stringContaining('60000 (60 seconds)'),
+        },
+        responseParser: {
+          type: 'string',
+          description: 'Deprecated alias for transformResponse',
+          deprecated: true,
+        },
+      },
+    });
+    expect(schema).toMatchObject({
+      properties: {
+        defaultArgs: {
+          type: 'object',
+          additionalProperties: { $ref: '#/components/schemas/McpDefaultArgumentValue' },
+        },
+      },
+    });
+    expect(document.components?.schemas?.McpDefaultArgumentValue).toHaveProperty('anyOf');
+    expect(schema).not.toHaveProperty('properties.timeout.default');
+  });
+
   it('preserves discriminator mappings for nested discriminated unions', () => {
     const registry = new OpenAPIRegistry();
     const circle = z.object({ type: z.literal('circle') }).openapi('Circle');

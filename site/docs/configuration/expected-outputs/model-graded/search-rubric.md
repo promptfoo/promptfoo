@@ -63,21 +63,22 @@ tests:
 
 ## Grading Providers
 
-The search-rubric assertion requires a grading provider with web search capabilities:
+The search-rubric assertion requires a grading provider with web search capabilities. Configure it in `defaultTest.options.provider`:
 
 ### 1. Anthropic Claude
 
-Anthropic Claude models support web search through the `web_search_20250305` tool:
+Anthropic Claude models support web search through the `web_search_20260209` tool:
 
 ```yaml
-grading:
-  provider: anthropic:messages:claude-opus-4-6
-  providerOptions:
-    config:
-      tools:
-        - type: web_search_20250305
-          name: web_search
-          max_uses: 5
+defaultTest:
+  options:
+    provider:
+      id: anthropic:messages:claude-opus-5
+      config:
+        tools:
+          - type: web_search_20260209
+            name: web_search
+            max_uses: 5
 ```
 
 ### 2. OpenAI with Web Search
@@ -85,12 +86,13 @@ grading:
 OpenAI's responses API supports web search through the `web_search_preview` tool:
 
 ```yaml
-grading:
-  provider: openai:responses:gpt-5.1
-  providerOptions:
-    config:
-      tools:
-        - type: web_search_preview
+defaultTest:
+  options:
+    provider:
+      id: openai:responses:gpt-5.1
+      config:
+        tools:
+          - type: web_search_preview
 ```
 
 ### 3. Perplexity
@@ -98,8 +100,9 @@ grading:
 Perplexity models have built-in web search:
 
 ```yaml
-grading:
-  provider: perplexity:sonar
+defaultTest:
+  options:
+    provider: perplexity:sonar
 ```
 
 ### 4. Google Gemini
@@ -107,12 +110,13 @@ grading:
 Google's Gemini models support web search through the `googleSearch` tool:
 
 ```yaml
-grading:
-  provider: google:gemini-3.1-pro-preview
-  providerOptions:
-    config:
-      tools:
-        - googleSearch: {}
+defaultTest:
+  options:
+    provider:
+      id: google:gemini-3.1-pro-preview
+      config:
+        tools:
+          - googleSearch: {}
 ```
 
 ### 5. xAI Grok
@@ -120,12 +124,13 @@ grading:
 xAI's Grok models can use server-side web search tools through the Responses API:
 
 ```yaml
-grading:
-  provider: xai:responses:grok-4.3
-  providerOptions:
-    config:
-      tools:
-        - type: web_search
+defaultTest:
+  options:
+    provider:
+      id: xai:responses:grok-4.3
+      config:
+        tools:
+          - type: web_search
 ```
 
 ## Use Cases

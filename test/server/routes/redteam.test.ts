@@ -1,6 +1,13 @@
 import request from 'supertest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../../../src/server/server';
+import { createConfigItem } from '../../factories/literalFixtures';
+
+const createAssistantConfig = () => ({
+  applicationDefinition: {
+    purpose: 'test assistant',
+  },
+});
 
 // Mock dependencies
 vi.mock('../../../src/redteam/plugins/index');
@@ -74,19 +81,9 @@ describe('Redteam Routes', () => {
         const response = await request(app)
           .post('/api/redteam/generate-test')
           .send({
-            plugin: {
-              id: 'aegis',
-              config: {},
-            },
-            strategy: {
-              id: 'basic',
-              config: {},
-            },
-            config: {
-              applicationDefinition: {
-                purpose: 'test assistant',
-              },
-            },
+            plugin: createConfigItem('aegis'),
+            strategy: createConfigItem('basic'),
+            config: createAssistantConfig(),
           });
 
         expect(response.status).toBe(200);
@@ -105,14 +102,8 @@ describe('Redteam Routes', () => {
         const response = await request(app)
           .post('/api/redteam/generate-test')
           .send({
-            plugin: {
-              id: 'aegis',
-              config: {},
-            },
-            strategy: {
-              id: 'basic',
-              config: {},
-            },
+            plugin: createConfigItem('aegis'),
+            strategy: createConfigItem('basic'),
             config: {
               applicationDefinition: {},
             },
@@ -135,19 +126,9 @@ describe('Redteam Routes', () => {
         const response = await request(app)
           .post('/api/redteam/generate-test')
           .send({
-            plugin: {
-              id: 'aegis',
-              config: {},
-            },
-            strategy: {
-              id: 'basic',
-              config: {},
-            },
-            config: {
-              applicationDefinition: {
-                purpose: 'test assistant',
-              },
-            },
+            plugin: createConfigItem('aegis'),
+            strategy: createConfigItem('basic'),
+            config: createAssistantConfig(),
           });
 
         expect(response.status).toBe(200);
@@ -167,19 +148,9 @@ describe('Redteam Routes', () => {
         const response = await request(app)
           .post('/api/redteam/generate-test')
           .send({
-            plugin: {
-              id: 'aegis',
-              config: {},
-            },
-            strategy: {
-              id: 'basic',
-              config: {},
-            },
-            config: {
-              applicationDefinition: {
-                purpose: 'test assistant',
-              },
-            },
+            plugin: createConfigItem('aegis'),
+            strategy: createConfigItem('basic'),
+            config: createAssistantConfig(),
             provider: 'openai:chat:gpt-4.1',
           });
 
@@ -361,15 +332,8 @@ describe('Redteam Routes', () => {
                 inputs: { query: 'user query', context: 'additional context' },
               },
             },
-            strategy: {
-              id: 'basic',
-              config: {},
-            },
-            config: {
-              applicationDefinition: {
-                purpose: 'test assistant',
-              },
-            },
+            strategy: createConfigItem('basic'),
+            config: createAssistantConfig(),
           });
 
         expect(response.status).toBe(200);
@@ -387,15 +351,8 @@ describe('Redteam Routes', () => {
                 inputs: { query: 'user query', context: 'additional context' },
               },
             },
-            strategy: {
-              id: 'basic',
-              config: {},
-            },
-            config: {
-              applicationDefinition: {
-                purpose: 'test assistant',
-              },
-            },
+            strategy: createConfigItem('basic'),
+            config: createAssistantConfig(),
           });
 
         expect(response.status).toBe(200);
@@ -417,15 +374,8 @@ describe('Redteam Routes', () => {
               id: 'cca',
               config: {}, // No inputs - should not be excluded
             },
-            strategy: {
-              id: 'basic',
-              config: {},
-            },
-            config: {
-              applicationDefinition: {
-                purpose: 'test assistant',
-              },
-            },
+            strategy: createConfigItem('basic'),
+            config: createAssistantConfig(),
           });
 
         expect(response.status).toBe(200);
@@ -452,15 +402,8 @@ describe('Redteam Routes', () => {
                 inputs: {}, // Empty inputs - should not be excluded
               },
             },
-            strategy: {
-              id: 'basic',
-              config: {},
-            },
-            config: {
-              applicationDefinition: {
-                purpose: 'test assistant',
-              },
-            },
+            strategy: createConfigItem('basic'),
+            config: createAssistantConfig(),
           });
 
         expect(response.status).toBe(200);
@@ -484,15 +427,8 @@ describe('Redteam Routes', () => {
                 inputs: { systemPrompt: 'system', userInput: 'user' },
               },
             },
-            strategy: {
-              id: 'basic',
-              config: {},
-            },
-            config: {
-              applicationDefinition: {
-                purpose: 'test assistant',
-              },
-            },
+            strategy: createConfigItem('basic'),
+            config: createAssistantConfig(),
           });
 
         expect(response.status).toBe(200);
@@ -514,15 +450,8 @@ describe('Redteam Routes', () => {
               id: 'special-token-injection',
               config: {}, // No inputs
             },
-            strategy: {
-              id: 'basic',
-              config: {},
-            },
-            config: {
-              applicationDefinition: {
-                purpose: 'test assistant',
-              },
-            },
+            strategy: createConfigItem('basic'),
+            config: createAssistantConfig(),
           });
 
         expect(response.status).toBe(200);
@@ -540,19 +469,9 @@ describe('Redteam Routes', () => {
         const response = await request(app)
           .post('/api/redteam/generate-test')
           .send({
-            plugin: {
-              id: 'harmful:hate',
-              config: {},
-            },
-            strategy: {
-              id: 'basic',
-              config: {},
-            },
-            config: {
-              applicationDefinition: {
-                purpose: 'test assistant',
-              },
-            },
+            plugin: createConfigItem('harmful:hate'),
+            strategy: createConfigItem('basic'),
+            config: createAssistantConfig(),
           });
 
         expect(response.status).toBe(200);
@@ -578,15 +497,8 @@ describe('Redteam Routes', () => {
                 inputs: { query: 'user input', context: 'context' },
               },
             },
-            strategy: {
-              id: 'basic',
-              config: {},
-            },
-            config: {
-              applicationDefinition: {
-                purpose: 'test assistant',
-              },
-            },
+            strategy: createConfigItem('basic'),
+            config: createAssistantConfig(),
           });
 
         expect(response.status).toBe(200);
@@ -611,15 +523,8 @@ describe('Redteam Routes', () => {
                 functionalCategories: ['contextual'],
               },
             },
-            strategy: {
-              id: 'basic',
-              config: {},
-            },
-            config: {
-              applicationDefinition: {
-                purpose: 'test assistant',
-              },
-            },
+            strategy: createConfigItem('basic'),
+            config: createAssistantConfig(),
           });
 
         expect(response.status).toBe(200);
@@ -650,15 +555,8 @@ describe('Redteam Routes', () => {
               id: 'invalid-plugin-id',
               config: {},
             },
-            strategy: {
-              id: 'basic',
-              config: {},
-            },
-            config: {
-              applicationDefinition: {
-                purpose: 'test assistant',
-              },
-            },
+            strategy: createConfigItem('basic'),
+            config: createAssistantConfig(),
           });
 
         expect(response.status).toBe(400);
@@ -669,19 +567,12 @@ describe('Redteam Routes', () => {
         const response = await request(app)
           .post('/api/redteam/generate-test')
           .send({
-            plugin: {
-              id: 'harmful:hate',
-              config: {},
-            },
+            plugin: createConfigItem('harmful:hate'),
             strategy: {
               id: 'invalid-strategy',
               config: {},
             },
-            config: {
-              applicationDefinition: {
-                purpose: 'test assistant',
-              },
-            },
+            config: createAssistantConfig(),
           });
 
         expect(response.status).toBe(400);
@@ -696,19 +587,9 @@ describe('Redteam Routes', () => {
         const response = await request(app)
           .post('/api/redteam/generate-test')
           .send({
-            plugin: {
-              id: 'harmful:hate',
-              config: {},
-            },
-            strategy: {
-              id: 'basic',
-              config: {},
-            },
-            config: {
-              applicationDefinition: {
-                purpose: 'test assistant',
-              },
-            },
+            plugin: createConfigItem('harmful:hate'),
+            strategy: createConfigItem('basic'),
+            config: createAssistantConfig(),
           });
 
         expect(response.status).toBe(400);
@@ -893,6 +774,17 @@ describe('Redteam Routes', () => {
       expect(runArgs.liveRedteamConfig).toEqual({ purpose: 'test' });
       expect(runArgs).not.toHaveProperty('delay');
       expect(runArgs).not.toHaveProperty('maxConcurrency');
+    });
+
+    it('should ignore a request-supplied filesystem base path', async () => {
+      const response = await request(app)
+        .post('/api/redteam/run')
+        .send({ config: { purpose: 'test', basePath: '../private' } });
+
+      expect(response.status).toBe(200);
+      expect(mockedDoRedteamRun.mock.calls[0][0].liveRedteamConfig).toEqual({
+        purpose: 'test',
+      });
     });
 
     it('should return 400 when config is missing', async () => {
