@@ -82,6 +82,26 @@ describe('PaginatedMcpClient', () => {
     expect(requested).toEqual([undefined, 'second']);
   });
 
+  it('cancels a stalled later page at the total deadline and leaves the client usable', async () => {
+    const pages: Array<string | undefined> = [];
+    server.setRequestHandler(ListToolsRequestSchema, async ({ params }, { signal }) => {
+      pages.push(params?.cursor);
+      if (params?.cursor === undefined) {
+        return { tools: [], nextCursor: 'next' };
+      }
+      await new Promise<void>((resolve) =>
+        signal.addEventListener('abort', () => resolve(), { once: true }),
+      );
+      return { tools: [] };
+    });
+    await expect(
+      client.listTools(undefined, { timeout: 5_000, maxTotalTimeout: 100 }),
+    ).rejects.toThrow(/timeout/i);
+    expect(pages).toEqual([undefined, 'next']);
+    listPages(() => ({ tools: [tool('healthy')] }));
+    await expect(client.listTools()).resolves.toEqual({ tools: [tool('healthy')] });
+  });
+
   it('returns a single page when the caller supplies a cursor', async () => {
     const requested = listPages(() => ({ tools: [], nextCursor: 'next' }));
     await expect(client.listTools({ cursor: '' })).resolves.toEqual({
