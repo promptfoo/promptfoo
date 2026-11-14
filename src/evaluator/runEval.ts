@@ -5,7 +5,12 @@ import { getCache, isCacheEnabled, withCacheEnabled, withCacheNamespace } from '
 import cliState from '../cliState';
 import { FILE_METADATA_KEY } from '../constants';
 import { getEnvBool, getEnvInt } from '../envars';
-import { collectFileMetadata, renderPrompt, setRuntimeFileVarNames } from '../evaluatorHelpers';
+import {
+  collectFileMetadata,
+  renderPrompt,
+  setLoadedVarsFileNames,
+  setRuntimeFileVarNames,
+} from '../evaluatorHelpers';
 import logger from '../logger';
 import { type AgentWorkspace, createAgentWorkspaceForConfig } from '../providers/agentWorkspace';
 import { providerRegistry } from '../providers/providerRegistry';
@@ -1356,6 +1361,10 @@ export async function runEvalInternal(
   );
   Object.assign(state.vars, registers);
   setRuntimeFileVarNames(state.vars, Object.keys(registers ?? {}));
+  const varsFileKeys = test.metadata?.__promptfoo?.varsFileKeys;
+  if (Array.isArray(varsFileKeys)) {
+    setLoadedVarsFileNames(state.vars, varsFileKeys);
+  }
   Object.assign(
     state.vars,
     getEvalRuntimeVars({
