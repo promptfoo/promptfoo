@@ -82,6 +82,13 @@ export interface OpenAiAgentsOptions extends OpenAiSharedOptions {
   executeTools?: boolean | 'mock' | 'real';
 
   /**
+   * Include serializable function call records from the agent run in response metadata.
+   * Tool results are never included.
+   * @default false
+   */
+  includeToolCalls?: boolean;
+
+  /**
    * Mock tool responses (when executeTools is 'mock' or false)
    * Key is tool name, value is the mocked response
    */

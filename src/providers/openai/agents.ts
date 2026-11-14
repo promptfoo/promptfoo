@@ -25,7 +25,7 @@ import {
 import { resolveModelSettings } from './agents-model-settings';
 import { OTLPTracingExporter } from './agents-tracing';
 import { OpenAiGenericProvider } from './index';
-import type { AgentInputItem, Handoff, ModelSettings, Session } from '@openai/agents';
+import type { AgentInputItem, Handoff, ModelSettings, RunItem, Session } from '@openai/agents';
 
 import type { EnvOverrides } from '../../types/env';
 import type {
@@ -268,6 +268,10 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
         // agents with different models. Without per-model usage, no exact total is available.
         cost: undefined,
       };
+
+      if (this.agentConfig.includeToolCalls === true) {
+        response.metadata = { toolCalls: extractToolCalls(result.newItems) };
+      }
 
       return response;
     } catch (error) {
@@ -540,6 +544,28 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
       }
     }
   }
+}
+
+type AgentToolCall = { callId: string; name: string; arguments: unknown };
+
+/** Return only function-call inputs; tool outputs may contain large or sensitive data. */
+export function extractToolCalls(items: RunItem[]): AgentToolCall[] {
+  const calls: AgentToolCall[] = [];
+  for (const item of items) {
+    if (item.type !== 'tool_call_item' || item.rawItem.type !== 'function_call') {
+      continue;
+    }
+
+    const { callId, name, arguments: rawArguments } = item.rawItem;
+    let args: unknown = rawArguments;
+    try {
+      args = JSON.parse(rawArguments);
+    } catch {
+      // Keep malformed SDK arguments inspectable as the original string.
+    }
+    calls.push({ callId, name, arguments: args });
+  }
+  return calls;
 }
 
 function mergeArrays<T>(existing?: T[], additions?: T[]): T[] | undefined {

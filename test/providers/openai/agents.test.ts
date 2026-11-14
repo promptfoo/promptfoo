@@ -592,6 +592,18 @@ describe('OpenAiAgentsProvider', () => {
     await expect(mockRun.mock.calls[0][0].tools[0].invoke({}, '{}')).resolves.toBeNull();
   });
 
+  it('requires an explicit boolean opt-in to expose tool inputs', async () => {
+    const provider = new OpenAiAgentsProvider('gpt-5-mini', {
+      config: {
+        ...createSupportAgentOptions().config,
+        includeToolCalls: 'false' as unknown as boolean,
+      },
+    });
+
+    const response = await provider.callApi('Run a tool');
+    expect(response.metadata?.toolCalls).toBeUndefined();
+  });
+
   it.each(['false', 'mocked', null, 0, {}])(
     'rejects malformed executeTools value %# before loading or running an agent',
     async (executeTools) => {

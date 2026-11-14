@@ -77,9 +77,22 @@ implicit default as a stable eval input.
 | `sandbox`          | Sandbox runtime config, local client definition, factory, or `file://` export       | -                     |
 | `runOptions`       | Additional non-streaming SDK `run()` options such as `conversationId` or filters    | -                     |
 | `executeTools`     | Execute function tools normally (`real`) or replace them with mocked results        | `real`                |
+| `includeToolCalls` | Include function-call names, arguments, and call IDs in response metadata           | `false`               |
 | `toolMocks`        | Mocked tool outputs keyed by tool name, used when `executeTools` is `mock` or false | -                     |
 | `tracing`          | Enable Promptfoo OTLP export for SDK spans                                          | false                 |
 | `otlpEndpoint`     | Custom OTLP endpoint URL for Promptfoo tracing                                      | http://localhost:4318 |
+
+Set `includeToolCalls: true` to expose function-call records in `response.metadata.toolCalls`.
+Each record contains its `callId`, `name`, and parsed `arguments`; tool results are omitted.
+For example, use the existing `tool-call-f1` assertion to check the exact tool-name set:
+
+```yaml
+assert:
+  - type: tool-call-f1
+    value: [check_inventory]
+    threshold: 1
+    transform: context.metadata?.toolCalls ?? []
+```
 
 `config.model` and `config.modelSettings` are execution overrides. When present, each option
 replaces the corresponding field on the initial agent and every handoff agent, including agents
