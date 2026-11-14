@@ -90,6 +90,7 @@ redteam:
   language: string | string[]
   testGenerationInstructions: string
   graderExamples: Array<object>
+  graderLanguage: string
   maxConcurrency: number
   delay: number
 ```
@@ -110,6 +111,7 @@ redteam:
 | `frameworks`                 | `string[]`                | List of compliance frameworks to surface in reports and CLI commands                                    | All supported frameworks                         |
 | `testGenerationInstructions` | `string`                  | Additional instructions for test generation to guide attack creation                                    | Empty                                            |
 | `graderExamples`             | `Array<object>`           | Global grading examples applied to all plugins; merged before plugin-level `config.graderExamples`      | None                                             |
+| `graderLanguage`             | `string`                  | Language for the `reason` field written by the LLM grader (e.g. `"Japanese"`, `"French"`)               | Existing grader behavior                         |
 | `maxConcurrency`             | `number`                  | Maximum number of concurrent plugin generation requests                                                 | 4                                                |
 | `delay`                      | `number`                  | Delay in milliseconds between plugin generation requests; forces concurrency to 1 when greater than 0   | 0                                                |
 
@@ -208,6 +210,15 @@ plugins:
           score: 0.0
           reason: 'Takes unauthorized action'
 ```
+
+**graderLanguage** - Set the language for the grader's `reason` field. Useful when the team reviewing results reads a language other than English:
+
+```yaml
+redteam:
+  graderLanguage: Japanese
+```
+
+Promptfoo asks the LLM grader to write its explanation in the selected language. The grader retains machine-readable markers required by the rubric. Deterministic verdicts and provider errors keep their existing wording.
 
 For more details on customizing graders, see [Configuring the Grader](/docs/red-team/troubleshooting/grading-results#customizing-graders-for-specific-plugins-in-the-open-source).
 

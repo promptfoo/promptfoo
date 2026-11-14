@@ -1959,6 +1959,84 @@ describe('RedteamGraderBase', () => {
     });
   });
 
+  describe('graderLanguage', () => {
+    it('should add language instruction to rubric when redteamGraderLanguage is set', async () => {
+      const mockResult: GradingResult = {
+        pass: true,
+        score: 1,
+        reason: 'テスト合格',
+      };
+      vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+
+      const testWithLanguage = {
+        ...mockTest,
+        options: {
+          redteamGraderLanguage: 'Japanese',
+        },
+      };
+
+      const result = await grader.getResult(
+        'test prompt',
+        'test output',
+        testWithLanguage,
+        undefined,
+        undefined,
+      );
+
+      expect(result.rubric).toContain('in Japanese');
+      expect(result.rubric).toContain('required machine-readable markers exactly');
+    });
+
+    it('leaves the rubric unchanged when redteamGraderLanguage is unset', async () => {
+      const mockResult: GradingResult = {
+        pass: true,
+        score: 1,
+        reason: 'Test passed',
+      };
+      vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+
+      const result = await grader.getResult(
+        'test prompt',
+        'test output',
+        mockTest,
+        undefined,
+        undefined,
+      );
+
+      expect(result.rubric).not.toContain('Write the human-readable explanation');
+    });
+
+    it('should place language instruction before timestamp', async () => {
+      const mockResult: GradingResult = {
+        pass: true,
+        score: 1,
+        reason: 'Résultat du test',
+      };
+      vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+
+      const testWithLanguage = {
+        ...mockTest,
+        options: {
+          redteamGraderLanguage: 'French',
+        },
+      };
+
+      const result = await grader.getResult(
+        'test prompt',
+        'test output',
+        testWithLanguage,
+        undefined,
+        undefined,
+      );
+
+      const langIndex = result.rubric.indexOf('in French');
+      const timestampIndex = result.rubric.indexOf('Current timestamp:');
+      expect(langIndex).toBeGreaterThan(-1);
+      expect(timestampIndex).toBeGreaterThan(-1);
+      expect(langIndex).toBeLessThan(timestampIndex);
+    });
+  });
+
   describe('RedteamGraderBase with tools', () => {
     let toolProvider: any;
     let maybeLoadFromExternalFileSpy: MockInstance;

@@ -190,6 +190,15 @@ For best results, use both features together:
 This combination gives the grader both conceptual understanding and specific examples to follow.
 :::
 
+### Setting the Grader Output Language
+
+Set `redteam.graderLanguage` to request a language for explanations from the LLM grader. Deterministic verdicts and provider errors retain their existing wording.
+
+```yaml
+redteam:
+  graderLanguage: Japanese
+```
+
 ## Reviewing Results
 
 You can review the results of the grader by going into **Evals** section of the platform and selecting the specific scan.

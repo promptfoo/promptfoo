@@ -253,7 +253,11 @@ function mergeProviderPromptConfig(
   promptConfig: Prompt['config'],
   testOptions: AtomicTestCase['options'],
 ): Prompt['config'] {
-  const { repeat: _repeat, ...providerOptions } = testOptions ?? {};
+  const {
+    repeat: _repeat,
+    redteamGraderLanguage: _graderLanguage,
+    ...providerOptions
+  } = testOptions ?? {};
   return {
     ...(promptConfig ?? {}),
     ...providerOptions,
