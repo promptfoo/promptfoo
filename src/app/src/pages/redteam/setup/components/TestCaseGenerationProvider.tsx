@@ -296,11 +296,13 @@ export const TestCaseGenerationProvider: React.FC<{
         });
 
         const history = getHistory(generatedTestCases, targetResponses);
+        const lastMetadata = generatedTestCases[generatedTestCases.length - 1]?.metadata;
         const previewState =
-          strategy.id === 'react-crescendo'
-            ? ReactPreviewStateSchema.safeParse(
-                generatedTestCases.at(-1)?.metadata?.reactPreviewState,
-              )
+          strategy.id === 'react-crescendo' &&
+          typeof lastMetadata === 'object' &&
+          lastMetadata !== null &&
+          'reactPreviewState' in lastMetadata
+            ? ReactPreviewStateSchema.safeParse(lastMetadata.reactPreviewState)
             : undefined;
 
         const response = await callTestGenerationApi(
