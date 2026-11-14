@@ -146,6 +146,30 @@ describe('PluginConfigDialog - OSS', () => {
   });
 
   describe('Plugin-Specific Config', () => {
+    it('requires named tools before saving an MCP response inspection', async () => {
+      const user = userEvent.setup();
+      render(
+        <PluginConfigDialog
+          open
+          plugin="mcp:tool-response-poisoning"
+          config={{ graderGuidance: 'existing' }}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+        />,
+      );
+      const save = screen.getByRole('button', { name: 'Save' });
+      expect(save).toBeDisabled();
+      const tools = screen.getByRole('textbox', { name: 'Allowed MCP tools' });
+      await user.type(tools, '  ');
+      expect(save).toBeDisabled();
+      await user.type(tools, 'read_fixture_status');
+      await user.click(save);
+      expect(mockOnSave).toHaveBeenCalledWith('mcp:tool-response-poisoning', {
+        allowedTools: ['read_fixture_status'],
+        graderGuidance: 'existing',
+      });
+    });
+
     it('keeps footer actions visible while long plugin content scrolls independently', () => {
       render(
         <PluginConfigDialog

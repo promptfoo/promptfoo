@@ -48,6 +48,7 @@ import {
 import { ErrorBoundary } from 'react-error-boundary';
 import { useSearchParams } from 'react-router';
 import { requiresPluginConfig } from '../constants';
+import { isPluginConfigComplete } from '../utils/plugins';
 import PluginConfigDialog from './PluginConfigDialog';
 import PresetCard from './PresetCard';
 import {
@@ -58,7 +59,6 @@ import { TestCaseGenerateButton } from './TestCaseDialog';
 import { useTestCaseGeneration } from './TestCaseGenerationProvider';
 import VerticalSuiteCard from './VerticalSuiteCard';
 import { DOMAIN_SPECIFIC_PLUGINS, VERTICAL_SUITES } from './verticalSuites';
-import type { PluginConfig } from '@promptfoo/redteam/types';
 
 import type { LocalPluginConfig } from '../types';
 
@@ -229,26 +229,7 @@ export default function PluginsTab({
 
   // Helper functions
   const isPluginConfigured = useCallback(
-    (plugin: Plugin) => {
-      if (plugin === 'policy' || !requiresPluginConfig(plugin)) {
-        return true;
-      }
-      const config = pluginConfig[plugin];
-      if (!config || Object.keys(config).length === 0) {
-        return false;
-      }
-
-      for (const key in config) {
-        const value = config[key as keyof PluginConfig];
-        if (Array.isArray(value) && value.length === 0) {
-          return false;
-        }
-        if (typeof value === 'string' && value.trim() === '') {
-          return false;
-        }
-      }
-      return true;
-    },
+    (plugin: Plugin) => isPluginConfigComplete(plugin, pluginConfig[plugin]),
     [pluginConfig],
   );
 
@@ -754,6 +735,7 @@ export default function PluginsTab({
 
           {/* Plugin config dialog */}
           <PluginConfigDialog
+            key={selectedConfigPlugin ?? 'closed'}
             open={configDialogOpen}
             onClose={() => {
               setConfigDialogOpen(false);
