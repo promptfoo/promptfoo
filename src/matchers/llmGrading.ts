@@ -211,7 +211,10 @@ function gradeRubricComponents(
   // Normalize before summing so individually finite weights cannot overflow
   // the denominator or underflow a fractional criterion score.
   const maxWeight = components.reduce((max, component) => Math.max(max, component.weight), 0);
-  const weights = components.map((component) => component.weight / maxWeight);
+  // A power of two preserves ordinary binary weight ratios exactly. In
+  // particular 9:1 at threshold 0.9 must keep its original verdict.
+  const scale = 2 ** Math.min(1023, Math.floor(Math.log2(maxWeight)));
+  const weights = components.map((component) => component.weight / scale);
   const totalWeight = weights.reduce((sum, weight) => sum + weight, 0);
   const componentResults = components.map((component) => ({
     ...byMetric.get(component.metric)!,

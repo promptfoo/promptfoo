@@ -119,22 +119,30 @@ describe('matchesLlmRubric', () => {
     cliState.selectedProviderConfigs = undefined;
   });
 
-  it.each([Number.MAX_VALUE, Number.MIN_VALUE])(
-    'averages finite component weights of %d in one judge call',
-    async (weight) => {
+  it.each([
+    { first: Number.MAX_VALUE, second: Number.MAX_VALUE, fractionalScore: 0.5, expected: 0.25 },
+    { first: Number.MIN_VALUE, second: Number.MIN_VALUE, fractionalScore: 0.5, expected: 0.25 },
+    { first: 9, second: 1, fractionalScore: 1, expected: 0.9 },
+  ])(
+    'compares the weighted average of $first:$second accurately at threshold $expected',
+    async ({ first, second, fractionalScore, expected }) => {
       const components = [
-        { metric: 'first', value: 'First criterion', weight },
-        { metric: 'second', value: 'Second criterion', weight },
+        { metric: 'first', value: 'First criterion', weight: first },
+        { metric: 'second', value: 'Second criterion', weight: second },
       ];
       const callApi = vi.spyOn(Grader, 'callApi').mockResolvedValue({
         output: JSON.stringify({
           components: [
             { metric: 'second', pass: false, score: 0, reason: 'Absent' },
-            { metric: 'first', pass: true, score: 0.5, reason: 'Partial' },
+            { metric: 'first', pass: true, score: fractionalScore, reason: 'Partial' },
           ],
         }),
       });
-      const assertion: Assertion = { type: 'llm-rubric', rubricComponents: true, threshold: 0.25 };
+      const assertion: Assertion = {
+        type: 'llm-rubric',
+        rubricComponents: true,
+        threshold: expected,
+      };
       const result = await matchesLlmRubric(
         { components },
         'output',
@@ -145,9 +153,9 @@ describe('matchesLlmRubric', () => {
       expect(callApi).toHaveBeenCalledTimes(1);
       expect(result).toMatchObject({
         pass: true,
-        score: 0.25,
-        namedScores: { first: 0.5, second: 0 },
-        namedScoreWeights: { first: weight, second: weight },
+        score: expected,
+        namedScores: { first: fractionalScore, second: 0 },
+        namedScoreWeights: { first, second },
       });
     },
   );
