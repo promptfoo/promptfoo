@@ -236,6 +236,20 @@ describe('file utilities', () => {
       expect(result).toEqual([mockData1, mockData2]);
     });
 
+    it('appends large globbed arrays in source order', () => {
+      const rows = Array.from({ length: 175_000 }, (_, index) => index);
+      vi.mocked(globSync).mockReturnValue(['/mock/batch.json', '/mock/final.json']);
+      vi.mocked(fs.readFileSync)
+        .mockReturnValueOnce(JSON.stringify(rows))
+        .mockReturnValueOnce('false');
+
+      const result = maybeLoadFromExternalFile('file://*.json');
+      expect(result).toHaveLength(rows.length + 1);
+      expect(result[0]).toBe(0);
+      expect(result.at(-2)).toBe(rows.length - 1);
+      expect(result.at(-1)).toBe(false);
+    });
+
     it('expands Windows glob paths using real glob detection', () => {
       vi.mocked(globSync).mockReturnValue(['C:/suite/scenario.yaml']);
       vi.mocked(fs.readFileSync).mockReturnValue('description: scenario');

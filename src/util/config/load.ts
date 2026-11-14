@@ -563,7 +563,9 @@ async function readTestSources(
   const tests: TestCase[] = [];
   for (const source of sources) {
     try {
-      tests.push(...(await read(source.tests, source.basePath, env)));
+      for (const test of await read(source.tests, source.basePath, env)) {
+        tests.push(test);
+      }
     } catch (error) {
       throw new ConfigResolutionError(
         `Failed to load tests from ${source.basePath || process.cwd()}: ${error instanceof Error ? error.message : String(error)}`,
