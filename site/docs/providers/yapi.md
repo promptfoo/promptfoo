@@ -49,7 +49,7 @@ The published catalog is machine-readable at [y-api.bestvirtualgoods.com/models.
 
 `apiBaseUrl` defaults to `https://api.y-api.bestvirtualgoods.com/v1`. Set it in the provider config to route through a proxy or a self-hosted deployment.
 
-`apiKeyEnvar` defaults to `Y_API_API_KEY`. This provider does not read `OPENAI_API_KEY`, `OPENAI_API_HOST`, `OPENAI_API_BASE_URL`, or `OPENAI_BASE_URL` — those are reserved for the `openai` provider, and consulting them would send `y-api:` traffic to whatever OpenAI-compatible endpoint you configured for OpenAI. Precedence is `config.apiBaseUrl` → the Y-API default, and `config.apiKey` → `config.apiKeyEnvar` → `$Y_API_API_KEY`.
+`apiKeyEnvar` defaults to `Y_API_API_KEY`. This provider does not read `OPENAI_API_KEY`, `OPENAI_API_HOST`, `OPENAI_API_BASE_URL`, or `OPENAI_BASE_URL` — those are reserved for the `openai` provider, and consulting them would send `y-api:` traffic to whatever OpenAI-compatible endpoint you configured for OpenAI. An explicit `apiKey` takes precedence. When `apiKeyEnvar` names another variable, only that variable supplies the key.
 
 ```yaml
 providers:
@@ -61,25 +61,23 @@ providers:
 
 ## Supported request features
 
-- Streaming and non-streaming chat completions.
+- Non-streaming chat completions. The provider expects a JSON completion response.
 - `tools` (function calling).
 - `response_format: json_object`.
 
 ## Limitations
 
-- **No cost reporting.** Y-API meters usage in account credit rather than USD, and its credit-to-cash conversion has changed before (a limited-time 1:20 promo reverted to the standard 1:10 on 2026-10-01), so any USD figure compiled into the provider would go stale. This provider reports no `cost` and eval results carry token counts only. Live prices are published at [y-api.bestvirtualgoods.com/pricing.json](https://y-api.bestvirtualgoods.com/pricing.json). To track spend in an eval, set `inputCost` / `outputCost` to the **USD you actually pay** per 1M tokens — that is the published `credit_price` divided by `top_up.quota_rate`, not the credit figure itself. At the standard 1:10 conversion, `deepseek/deepseek-v4-pro` (credit price 0.5 input / 1 output per 1M) works out to $0.05 / $0.10:
+- **Cost estimates require explicit rates.** Y-API bills in account credits. Promptfoo reports token usage and omits cost by default. To estimate cost in USD, divide the published credit price per million tokens by the number of credits per dollar, then divide by 1,000,000. Read both values from the current [pricing file](https://y-api.bestvirtualgoods.com/pricing.json).
+
+  For example, at 10 credits per dollar, prices of 0.5 input credits and 1 output credit per million tokens translate to the following USD rates **per token**:
 
   ```yaml
   providers:
     - id: y-api:deepseek/deepseek-v4-pro
       config:
-        # USD per 1M tokens = credit_price / top_up.quota_rate (currently 1:10).
-        # Read top_up.quota_rate from pricing.json — it has changed before.
-        inputCost: 0.05
-        outputCost: 0.1
+        inputCost: 0.00000005
+        outputCost: 0.0000001
   ```
-
-  Recompute both numbers from `pricing.json` rather than trusting this example — the conversion rate is published there and changes without notice.
 
 - **Unknown model IDs return HTTP 503, not a 4xx.** A typo in a model ID surfaces as a server-error status, which reads as retryable. Verify the ID against `models.json` if a provider consistently fails.
 

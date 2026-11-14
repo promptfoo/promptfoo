@@ -1,4 +1,4 @@
-import { type EnvVarKey, getEnvString } from '../envars';
+import { calculateCustomUsageCost, extractOpenAIBillingUsage } from './openai/billing';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 
 import type { EnvOverrides } from '../types/env';
@@ -37,12 +37,12 @@ export interface YApiProviderFactoryOptions {
  * under one key, using slash-namespaced model IDs (`deepseek/deepseek-v4-pro`,
  * `anthropic/claude-sonnet-5`, …) copied verbatim from the model catalog.
  *
- * Implemented on the wire: non-streaming and streaming `/chat/completions`, `tools`
+ * Implemented by this provider: non-streaming `/chat/completions`, `tools`
  * (function calling), and `response_format: json_object`. The gateway also serves the
  * Anthropic Messages protocol at `/v1/messages`, but that surface is not exposed here —
  * use `y-api:<model>` for chat completions.
  *
- * Extends `OpenAiChatCompletionProvider` so it inherits tool handling, streaming,
+ * Extends `OpenAiChatCompletionProvider` so it inherits tool handling,
  * caching and error normalization. Deliberate deviations from the base class:
  *
  *  - `getApiKey()` never falls back to `OPENAI_API_KEY`. Sending an OpenAI key to a
@@ -51,7 +51,7 @@ export interface YApiProviderFactoryOptions {
  *    which are meant for the `openai` provider and would otherwise misroute `y-api:`
  *    traffic to whatever OpenAI-compatible endpoint the user configured for OpenAI.
  *    `config.apiBaseUrl` is the supported override.
- *  - `calculateResponseCost()` always returns `undefined` — see the comment there.
+ *  - Costs use only configured rates because Y-API meters in account credit.
  *
  * Model-specific parameter behaviour (reasoning-model detection, `temperature`
  * suppression) is inherited unchanged rather than guessed at, because Y-API's catalog
@@ -78,18 +78,6 @@ export class YApiProvider extends OpenAiChatCompletionProvider {
   }
 
   /**
-   * Resolve the credential without the base class's `OPENAI_API_KEY` fallback.
-   */
-  getApiKey(): string | undefined {
-    const envar = this.config?.apiKeyEnvar || Y_API_DEFAULT_API_KEY_ENVAR;
-    return (
-      this.config.apiKey ||
-      this.env?.[envar as keyof EnvOverrides] ||
-      getEnvString(envar as EnvVarKey)
-    );
-  }
-
-  /**
    * Y-API has no OpenAI organization, and `OPENAI_ORGANIZATION` must not leak into
    * requests to a third-party host.
    */
@@ -112,29 +100,15 @@ export class YApiProvider extends OpenAiChatCompletionProvider {
     return 'y-api';
   }
 
-  protected getMissingApiKeyErrorMessage(): string {
-    return `API key is not set. Set the ${this.config.apiKeyEnvar || Y_API_DEFAULT_API_KEY_ENVAR} environment variable or add \`apiKey\` to the provider config.`;
-  }
-
-  /**
-   * Y-API meters in account credit, not USD. The credit-to-cash conversion has changed
-   * at least once (a limited-time 1:20 promo ended and reverted to 1:10 on 2026-10-01),
-   * so any USD figure baked into the provider would go stale — no `cost` is reported and
-   * eval results fall back to token counts. Live prices and the rate currently in force:
-   * https://y-api.bestvirtualgoods.com/pricing.json
-   *
-   * This also avoids a concrete misreporting bug inherited from the base class: it
-   * resolves billing rates from `modelName.split('/').pop()`, so a Y-API model ID such as
-   * `openai/gpt-5.6-luna` collapses to `gpt-5.6-luna` and matches OpenAI's *direct*
-   * rate table. Without this override promptfoo would publish OpenAI's list price as
-   * though it were what the Y-API call cost.
-   */
-  protected calculateResponseCost(
-    _data: OpenAiChatCompletionCostData,
-    _config: OpenAiCompletionOptions,
-    _cached: boolean,
-  ): undefined {
-    return undefined;
+  /** Y-API credits have no fixed USD value. Estimate cost only from configured rates. */
+  protected override calculateResponseCost(
+    data: OpenAiChatCompletionCostData,
+    config: OpenAiCompletionOptions,
+    cached: boolean,
+  ): number | undefined {
+    return data.usage
+      ? calculateCustomUsageCost(extractOpenAIBillingUsage(data.usage), config, cached)
+      : undefined;
   }
 }
 

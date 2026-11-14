@@ -10,7 +10,7 @@ import { mockProcessEnv } from '../util/utils';
 
 /**
  * These tests are offline by construction: they assert registry dispatch, class
- * construction, endpoint/credential resolution and cost suppression. No HTTP request
+ * construction, endpoint/credential resolution and billing. No HTTP request
  * is made and no live API key is used.
  */
 describe('YApiProvider', () => {
@@ -59,6 +59,12 @@ describe('YApiProvider', () => {
       new YApiProvider('z-ai/glm-5.3', { env: { Y_API_API_KEY: 'ctx-key' } }).getApiKey(),
     ).toBe('ctx-key');
     expect(new YApiProvider('z-ai/glm-5.3').getApiKey()).toBe('proc-key');
+  });
+
+  it('keeps an explicitly empty provider credential from using the host credential', () => {
+    restoreEnv = mockProcessEnv({ Y_API_API_KEY: 'host-only' });
+    const provider = new YApiProvider('z-ai/glm-5.3', { env: { Y_API_API_KEY: '' } });
+    expect(provider.getApiKey()).toBeUndefined();
   });
 
   it('reads a custom apiKeyEnvar instead of Y_API_API_KEY', () => {
@@ -115,6 +121,20 @@ describe('YApiProvider', () => {
     it('reports no cost, because Y-API meters in credit rather than USD', () => {
       const provider = new YApiProvider('deepseek/deepseek-v4-pro', { config: { apiKey: 'k' } });
 
+      expect(costFor(provider)).toBeUndefined();
+    });
+
+    it('uses user-specified per-token rates, including for model names in the OpenAI catalog', () => {
+      const provider = new YApiProvider('openai/gpt-5.6-luna', {
+        config: { inputCost: 0.00000005, outputCost: 0.0000001 },
+      });
+      expect(costFor(provider)).toBeCloseTo(0.00015, 10);
+      expect((provider as any).calculateResponseCost({ usage }, provider.config, true)).toBe(0);
+      expect((provider as any).calculateResponseCost({}, provider.config, false)).toBeUndefined();
+    });
+
+    it('keeps cost unknown when a rate for consumed tokens is missing', () => {
+      const provider = new YApiProvider('openai/gpt-5.6-luna', { config: { inputCost: 0.01 } });
       expect(costFor(provider)).toBeUndefined();
     });
 
