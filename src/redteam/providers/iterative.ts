@@ -46,6 +46,7 @@ import {
   JUDGE_SYSTEM_PROMPT,
 } from './prompts';
 import {
+  accumulateDiscardedGraderUsage,
   accumulateGraderResult,
   buildGraderResultAssertion,
   callGradingProvider,
@@ -484,6 +485,7 @@ export async function runRedteamConversation({
         response: targetResponse,
       });
       stopReason = 'Target error';
+      accumulateDiscardedGraderUsage(totalTokenUsage, storedGraderResult);
       finalIteration = i + 1;
       break;
     }
@@ -889,7 +891,7 @@ export async function runRedteamConversation({
         finalIteration,
         highestScore,
         redteamHistory: previousOutputs,
-        redteamFinalPrompt: selectedPrompt,
+        redteamFinalPrompt: targetFailed ? lastInjectVar : selectedPrompt,
         storedGraderResult: targetFailed
           ? undefined
           : resolveStoredGraderResult(bestGraderResult, storedGraderResult),

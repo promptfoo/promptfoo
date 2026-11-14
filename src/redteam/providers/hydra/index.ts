@@ -44,6 +44,7 @@ import {
   isBasicRefusal,
 } from '../../util';
 import {
+  accumulateDiscardedGraderUsage,
   accumulateGraderResult,
   buildGraderResultAssertion,
   externalizeResponseForRedteamHistory,
@@ -688,6 +689,7 @@ export class HydraProvider implements ApiProvider {
         });
         // The dispatched request counts as an attempted round.
         stopReason = 'Target error';
+        accumulateDiscardedGraderUsage(totalTokenUsage, storedGraderResult);
         storedGraderResult = undefined;
         break;
       }
@@ -1017,7 +1019,7 @@ export class HydraProvider implements ApiProvider {
     }
 
     // Update scan learnings
-    if (scanId && !options?.abortSignal?.aborted) {
+    if (scanId && stopReason !== 'Target error' && !options?.abortSignal?.aborted) {
       try {
         const turnsCompleted = this.conversationHistory.filter((m) => m.role === 'user').length;
         const learningRequest = {

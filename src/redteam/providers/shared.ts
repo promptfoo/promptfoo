@@ -44,6 +44,7 @@ import { safeJsonStringify } from '../../util/json';
 import { TokenUsageTracker } from '../../util/tokenUsage';
 import {
   accumulateGradingResponseTokenUsage,
+  accumulateGradingTokenUsage,
   accumulateTokenUsage,
 } from '../../util/tokenUsageUtils';
 import { TransformInputType, transform } from '../../util/transform';
@@ -490,6 +491,18 @@ export function isTerminalTargetError(response: ProviderResponse): boolean {
     response.metadata?.errorOrigin !== 'tool' &&
     !isResponseHeadersObserverErrorResponse(response)
   );
+}
+
+/** An errored target skips final assertions. Retain usage from earlier graded turns. */
+export function accumulateDiscardedGraderUsage(
+  tokenUsage: TokenUsage,
+  stored: GradingResult | undefined,
+): void {
+  if (stored?.tokensUsed) {
+    accumulateGradingTokenUsage(tokenUsage, stored.tokensUsed, {
+      cached: stored.metadata?.cachedResponse,
+    });
+  }
 }
 
 /** Retain only the selected error's origin when a strategy rebuilds its response. */

@@ -1146,11 +1146,20 @@ describe('HydraProvider', () => {
       expect(result.metadata?.stopReason).toBe('Target error');
       // The dispatched target request counts as an attempted round.
       expect(result.metadata?.hydraRoundsCompleted).toBe(1);
-      // Agent is called once for the errored turn (no further turns, no learning update retry).
-      expect(mockAgentProvider.callApi).toHaveBeenCalledTimes(2);
+      expect(mockAgentProvider.callApi).toHaveBeenCalledTimes(1);
     });
 
     it('should stop immediately and surface the error when target provider errors mid-run', async () => {
+      mockGetGraderById.mockReturnValue({
+        getResult: vi.fn().mockResolvedValue({
+          grade: {
+            pass: true,
+            score: 1,
+            reason: 'defended',
+            tokensUsed: { total: 7, numRequests: 1 },
+          },
+        }),
+      });
       mockAgentProvider.callApi.mockResolvedValue({
         output: 'Attack message',
         tokenUsage: { total: 100, prompt: 50, completion: 50 },
@@ -1193,6 +1202,9 @@ describe('HydraProvider', () => {
       expect(result.metadata?.hydraRoundsCompleted).toBe(2);
       // The successful first turn is recorded; the errored second turn is not.
       expect(result.metadata?.redteamHistory).toHaveLength(1);
+      expect(result.metadata?.storedGraderResult).toBeUndefined();
+      expect(result.tokenUsage?.assertions).toMatchObject({ total: 7, numRequests: 1 });
+      expect(mockAgentProvider.callApi).toHaveBeenCalledTimes(2);
     });
 
     it('should stop when target ends conversation', async () => {

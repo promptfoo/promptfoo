@@ -62,6 +62,8 @@ Hydra manages attacker-side history and backtracking. Your target provider manag
 
 A grader transport or parsing error is not recorded as a successful attack. Hydra continues within its configured turn limit to seek a valid verdict. Results retain an incomplete-grading marker while attempts remain ungraded. An exception during required final grading remains an evaluation error.
 
+If the target provider returns an error such as HTTP 502, Hydra stops that test case, reports the error, and skips the scan-wide learning update.
+
 Hydra keeps a per-scan memory so later test cases can reuse successful tactics discovered earlier in the run.
 
 ## Hydra vs Other Agentic Strategies

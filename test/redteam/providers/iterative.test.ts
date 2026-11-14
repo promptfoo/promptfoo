@@ -1146,14 +1146,14 @@ describe('RedteamIterativeProvider', () => {
         return getResult;
       };
 
-      const runConversation = (numIterations: number) =>
+      const runConversation = (numIterations: number, raw = 'test') =>
         runRedteamConversation({
           context: { prompt: { raw: '', label: '' }, vars: {}, test },
           filters: undefined,
           injectVar: 'test',
           numIterations,
           options: {},
-          prompt: { raw: 'test', label: 'test' },
+          prompt: { raw, label: 'test' },
           redteamProvider: mockRedteamProvider,
           gradingProvider: mockRedteamProvider,
           targetProvider: mockTargetProvider,
@@ -1161,6 +1161,33 @@ describe('RedteamIterativeProvider', () => {
           vars: { test: 'goal' },
           excludeTargetOutputFromAgenticAttackGeneration: false,
         });
+
+      it('keeps the failed request, retry variable, and prior grading usage after a target error', async () => {
+        grades({
+          pass: true,
+          score: 1,
+          reason: 'defended',
+          tokensUsed: { total: 7, numRequests: 1 },
+        });
+        mockGetTargetResponse
+          .mockResolvedValueOnce({ output: 'first answer' })
+          .mockResolvedValueOnce({ output: 'partial answer', error: 'target unavailable' });
+        mockRedteamProvider.callApi
+          .mockImplementationOnce(attackerTurn('first attack'))
+          .mockImplementationOnce(judgeRating(3))
+          .mockImplementationOnce(attackerTurn('second attack'));
+
+        const result = await runConversation(3, 'User request: {{test}}');
+
+        expect(result).toMatchObject({
+          error: 'target unavailable',
+          output: 'partial answer',
+          prompt: 'User request: second attack',
+          metadata: { stopReason: 'Target error', redteamFinalPrompt: 'second attack' },
+          tokenUsage: { assertions: { total: 7, numRequests: 2 } },
+        });
+        expect(result.metadata.storedGraderResult).toBeUndefined();
+      });
 
       it.each([
         ['return an error', { error: 'judge unavailable' }],

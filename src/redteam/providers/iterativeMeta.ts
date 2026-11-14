@@ -39,6 +39,7 @@ import { Strategies } from '../strategies';
 import { checkExfilTracking } from '../strategies/indirectWebPwn';
 import { extractInputVarsFromPrompt, extractPromptFromTags } from '../util';
 import {
+  accumulateDiscardedGraderUsage,
   accumulateGraderResult,
   buildGraderResultAssertion,
   createIterationContext,
@@ -530,6 +531,7 @@ export async function runMetaAgentRedteam({
         error: targetResponse.error,
       });
       stopReason = 'Target error';
+      accumulateDiscardedGraderUsage(totalTokenUsage, storedGraderResult);
       failedTargetPrompt = targetPrompt;
       finalIteration = i + 1;
       break;
@@ -731,7 +733,7 @@ export async function runMetaAgentRedteam({
         vulnerabilityAchieved,
         // Use the last prompt sent to target (e.g., fetchPrompt for indirect-web-pwn layer)
         // This ensures UI shows what was actually sent, not the pre-transform jailbreak
-        redteamFinalPrompt: failedTargetPrompt ?? (lastFinalAttackPrompt || bestPrompt),
+        redteamFinalPrompt: lastFinalAttackPrompt ?? bestPrompt,
         storedGraderResult: stopReason === 'Target error' ? undefined : storedGraderResult,
         stopReason,
         redteamHistory,

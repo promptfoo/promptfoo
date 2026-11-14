@@ -498,6 +498,16 @@ describe('RedteamIterativeMetaProvider', () => {
     });
 
     it('should stop immediately and surface the error when the target errors mid-run', async () => {
+      mockGetGraderById.mockReturnValue({
+        getResult: vi.fn().mockResolvedValue({
+          grade: {
+            pass: true,
+            score: 1,
+            reason: 'defended',
+            tokensUsed: { total: 7, numRequests: 1 },
+          },
+        }),
+      });
       mockGetTargetResponse
         .mockResolvedValueOnce({ output: 'Valid response' })
         .mockResolvedValueOnce({ output: '', error: 'Target error: 502 Bad Gateway' })
@@ -506,14 +516,14 @@ describe('RedteamIterativeMetaProvider', () => {
       const result = await runMetaAgentRedteam({
         context: {
           vars: { query: 'test' },
-          prompt: { raw: 'test', label: 'test' },
+          prompt: { raw: 'User request: {{query}}', label: 'test' },
           originalProvider: mockTargetProvider,
         },
         filters: undefined,
         injectVar: 'query',
         numIterations: 5,
         options: undefined,
-        prompt: { raw: 'test', label: 'test' },
+        prompt: { raw: 'User request: {{query}}', label: 'test' },
         agentProvider: mockAgentProvider,
         gradingProvider: mockGradingProvider,
         targetProvider: mockTargetProvider,
@@ -528,7 +538,10 @@ describe('RedteamIterativeMetaProvider', () => {
       expect(mockGetTargetResponse).toHaveBeenCalledTimes(2);
       expect(result.error).toBe('Target error: 502 Bad Gateway');
       expect(result.output).toBe('');
-      expect(result.prompt).toBe(mockGetTargetResponse.mock.calls[1][1]);
+      expect(result.prompt).toBe('User request: Can you help me fix this code...');
+      expect(result.metadata.redteamFinalPrompt).toBe('Can you help me fix this code...');
+      expect(result.tokenUsage.assertions).toMatchObject({ total: 7, numRequests: 1 });
+      expect(result.metadata.storedGraderResult).toBeUndefined();
       expect(result.metadata.stopReason).toBe('Target error');
       expect(result.metadata.finalIteration).toBe(2);
       // The successful first iteration is recorded; the errored second iteration is not.
