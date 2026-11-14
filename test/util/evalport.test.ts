@@ -867,17 +867,10 @@ describe('evalport interchange', () => {
       expect(resultSet.provider).toBeUndefined();
     });
 
-    it('summarizes empty result lists without NaN', () => {
-      const resultSet = evaluateResultsToEvalPortResultSet([], { suiteId: 's', runId: 'r' });
-      expect(resultSet.summary).toMatchObject({
-        total: 0,
-        passed: 0,
-        failed: 0,
-        skipped: 0,
-        pass_rate: 0,
-        avg_score: 0,
-        duration_ms: 0,
-      });
+    it('rejects an empty export instead of creating an invalid result set', () => {
+      expect(() => evaluateResultsToEvalPortResultSet([], { suiteId: 's', runId: 'r' })).toThrow(
+        'EvalPort result sets require at least one evaluated result',
+      );
     });
 
     it('falls back to positional ids for negative test indexes', () => {

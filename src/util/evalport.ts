@@ -893,6 +893,9 @@ export function evaluateResultsToEvalPortResultSet(
   results: EvaluateResult[],
   options: ToEvalPortResultSetOptions,
 ): EvalPortResultSet {
+  if (results.length === 0) {
+    throw new Error('EvalPort result sets require at least one evaluated result');
+  }
   const startedAt = options.startedAt ?? new Date().toISOString();
   const suiteGraderIds = suiteGraderIdByKey(options.suite);
   // Ordinary summaries repeat a testIdx across prompts, providers, and

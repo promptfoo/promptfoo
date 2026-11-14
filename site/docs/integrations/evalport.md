@@ -54,6 +54,8 @@ const resultSet = evaluateSummaryToEvalPortResultSet(output.results ?? output, {
 });
 ```
 
+EvalPort result sets require at least one result. The exporter throws if the evaluation has no results.
+
 ## Import
 
 Only run tests imported from a trusted suite. A suite can contain executable graders and transforms. Review exported artifacts for sensitive test inputs and outputs before sharing them.
