@@ -68,6 +68,7 @@ function makeConfig(configPath: string, evaluateOptions: Partial<EvaluateOptions
         cache: evaluateOptions.cache ?? false,
         timeoutMs: evaluateOptions.timeoutMs ?? 9999,
         maxEvalTimeMs: evaluateOptions.maxEvalTimeMs ?? 99999,
+        maxErrors: evaluateOptions.maxErrors ?? 7,
       },
       providers: [{ id: 'openai:gpt-4o-mini' }],
       prompts: ['test prompt'],
@@ -312,6 +313,14 @@ describe('evaluateOptions behavior', () => {
 
       expect(options[key]).toBe(expected);
     });
+
+    it('should read evaluateOptions.maxErrors', async () => {
+      const options = await runEvalAndGetOptions({
+        config: [configPath],
+      });
+
+      expect(options.maxErrors).toBe(7);
+    });
   });
 
   describe('Prioritization of CLI options over config file options', () => {
@@ -329,6 +338,24 @@ describe('evaluateOptions behavior', () => {
         expect(options[key]).toBe(expected);
       },
     );
+
+    it('should prioritize maxErrors from command line options over config file options', async () => {
+      const options = await runEvalAndGetOptions({
+        config: [configPath],
+        maxErrors: 5,
+      });
+
+      expect(options.maxErrors).toBe(5);
+    });
+
+    it('should preserve explicit maxErrors 0 as disabled', async () => {
+      const options = await runEvalAndGetOptions({
+        config: [configPath],
+        maxErrors: 0,
+      });
+
+      expect(options.maxErrors).toBe(0);
+    });
   });
 
   it('should correctly merge evaluateOptions from multiple sources', async () => {
@@ -445,6 +472,43 @@ describe('evaluateOptions behavior', () => {
       });
 
       expect(options.maxConcurrency).toBe(10); // commandLineOptions wins
+    });
+
+    it('should respect commandLineOptions.maxErrors from config', async () => {
+      const tempConfig = writeTempConfig(tmpDir, 'test-commandline-maxerrors.yaml', {
+        commandLineOptions: {
+          maxErrors: 4,
+        },
+        providers: [{ id: 'openai:gpt-4o-mini' }],
+        prompts: ['Test prompt'],
+        tests: [{ vars: { input: 'test' } }],
+      });
+
+      const options = await runEvalAndGetOptions({
+        config: [tempConfig],
+      });
+
+      expect(options.maxErrors).toBe(4);
+    });
+
+    it('should prioritize commandLineOptions.maxErrors over evaluateOptions.maxErrors', async () => {
+      const tempConfig = writeTempConfig(tmpDir, 'test-commandline-vs-evaluate-maxerrors.yaml', {
+        commandLineOptions: {
+          maxErrors: 4,
+        },
+        evaluateOptions: {
+          maxErrors: 8,
+        },
+        providers: [{ id: 'openai:gpt-4o-mini' }],
+        prompts: ['Test prompt'],
+        tests: [{ vars: { input: 'test' } }],
+      });
+
+      const options = await runEvalAndGetOptions({
+        config: [tempConfig],
+      });
+
+      expect(options.maxErrors).toBe(4);
     });
 
     it('should respect commandLineOptions.repeat from config', async () => {
