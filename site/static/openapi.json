@@ -4486,6 +4486,14 @@
                     },
                     "default": []
                   },
+                  "reactPreviewState": {
+                    "type": "object",
+                    "properties": {
+                      "observation": { "type": "string", "maxLength": 512 },
+                      "strategyVector": { "type": "string", "pattern": "^[a-z-]{1,64}$" }
+                    },
+                    "required": ["observation", "strategyVector"]
+                  },
                   "goal": { "type": "string" },
                   "stateful": { "type": "boolean" },
                   "count": { "type": "integer", "minimum": 1, "maximum": 10, "default": 1 }
