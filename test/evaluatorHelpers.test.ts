@@ -542,6 +542,17 @@ describe('evaluatorHelpers', () => {
       },
     );
 
+    it('preserves quoted regex literals inside statements', async () => {
+      const template = '{% set a = r/"/ %}{{ foo }}{% set b = r/"/ %}';
+      expect(
+        await renderPrompt(
+          toPrompt('{{ template }}'),
+          { template, foo: '{{ bar | upper }}', bar: 'hello' },
+          {},
+        ),
+      ).toBe('HELLO');
+    });
+
     it('resolves references between statements with quoted delimiters', async () => {
       const vars = {
         template: '{% set a = "{{" %}{{ foo }}{% set b = "}}" %}',

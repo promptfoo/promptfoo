@@ -129,7 +129,7 @@ function maskNunjucksBlocks(value: string): string {
       const output = match[0] === '{{';
       const closing = output ? '}}' : '%}';
       let quote = '';
-      let sawQuote = false;
+      let hasLiteral = false;
       let i = tokens.lastIndex;
       while (i < value.length) {
         const ch = value[i];
@@ -139,9 +139,16 @@ function maskNunjucksBlocks(value: string): string {
           } else if (ch === quote) {
             quote = '';
           }
+        } else if (ch === 'r' && value[i + 1] === '/' && !/[\w$]/.test(value[i - 1])) {
+          // Nunjucks treats r/.../ as a single token, including quotes or delimiters inside it.
+          hasLiteral = true;
+          i += 2;
+          while (i < value.length && (value[i] !== '/' || value[i - 1] === '\\')) {
+            i++;
+          }
         } else if (ch === '"' || ch === "'") {
           quote = ch;
-          sawQuote = true;
+          hasLiteral = true;
         } else if (value.startsWith(closing, i)) {
           i += 2;
           break;
@@ -155,7 +162,7 @@ function maskNunjucksBlocks(value: string): string {
         i++;
       }
       tokens.lastIndex = Math.min(i, value.length);
-      if (output && !sawQuote) {
+      if (output && !hasLiteral) {
         continue;
       }
     }
