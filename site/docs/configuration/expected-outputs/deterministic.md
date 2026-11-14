@@ -230,6 +230,10 @@ assert:
     value: file://./path/to/schema.json
 ```
 
+With a boolean schema, `value: true` matches any JSON object found in the output.
+For example, `[{"id": 1}]` contains a matching object, while `[1, 2]` and `null` do not.
+The schema `value: false` rejects every object.
+
 See also: [`is-json`](#is-json)
 
 ### Contains-Html
@@ -427,6 +431,9 @@ assert:
   - type: is-json
     value: file://./path/to/schema.json
 ```
+
+Boolean JSON Schemas are also supported: `value: true` accepts every JSON value,
+while `value: false` rejects every JSON value.
 
 ### Is-XML
 
