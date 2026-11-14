@@ -302,7 +302,7 @@ const outputToSimpleString = (output: EvaluateTableOutput) => {
     `.trim();
 };
 
-const outputToHtmlReportCell = (output: EvaluateTableOutput) => {
+const outputToHtmlReportCell = (output: EvaluateTableOutput, legacyTable: boolean) => {
   const status = output.pass
     ? 'pass'
     : output.failureReason === ResultFailureReason.ERROR
@@ -312,17 +312,26 @@ const outputToHtmlReportCell = (output: EvaluateTableOutput) => {
     name,
     value: value?.toFixed(2),
   }));
+  const reason = output.gradingResult?.reason?.trim();
+  const error = output.error?.trim();
+  let text = output.text;
+  if (!legacyTable && text === output.error) {
+    // The table can use the provider error as text even when a partial reply exists.
+    const value = output.response?.output ?? '';
+    text = typeof value === 'object' ? JSON.stringify(value) : String(value);
+  }
 
   return {
     status,
     statusLabel: status.toUpperCase(),
     score: output.score?.toFixed(2),
     namedScores,
-    text: output.text,
-    reason: output.gradingResult?.reason || '',
+    text,
+    openOutput: output.pass || (!error && !reason),
+    reason,
     prompt: output.prompt,
     provider: output.provider || '',
-    error: output.error || '',
+    error: error === reason ? undefined : error,
     failureReason: output.failureReason,
     latencyDisplay: Number.isFinite(output.latencyMs) ? `${output.latencyMs.toFixed(0)} ms` : '',
     costDisplay:
@@ -590,6 +599,7 @@ export async function writeOutput(
     );
   } else if (outputExtension === 'html') {
     const table = await evalRecord.getTable();
+    const legacyTable = evalRecord.useOldResults();
     const stripFlags = getStripFlags(evalRecord.config.env);
     const summary = await createOutputSummary(evalRecord, stripFlags);
     const redactedConfig = sanitizeConfigForOutput(evalRecord.config, stripFlags);
@@ -614,7 +624,7 @@ export async function writeOutput(
           detailId: `result-detail-${rowIndex}-${outputIndex}`,
           detailTitle: `Result detail - row ${rowIndex + 1}, prompt ${outputIndex + 1}`,
           description: row.description || row.test?.description || '',
-          ...outputToHtmlReportCell(output),
+          ...outputToHtmlReportCell(output, legacyTable),
         })),
       ]),
     ];
