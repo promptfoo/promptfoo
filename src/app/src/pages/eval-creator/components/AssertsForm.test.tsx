@@ -106,6 +106,38 @@ describe('AssertsForm', () => {
     expect(onAdd).toHaveBeenCalledWith([{ type: 'contains', value: 'initial value' }]);
   });
 
+  it('should expose character count assertions in the type selector', async () => {
+    initialValues = [{ type: 'equals', value: '' }];
+    renderComponent(<AssertsForm onAdd={onAdd} initialValues={initialValues} />);
+
+    await userEvent.click(screen.getByRole('combobox', { name: 'Type' }));
+
+    expect(await screen.findByRole('option', { name: 'character-count' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'not-character-count' })).toBeInTheDocument();
+  });
+
+  it('should display and parse character count ranges', async () => {
+    const user = userEvent.setup();
+    initialValues = [{ type: 'character-count', value: { min: 1, max: 3 } }];
+    renderComponent(<AssertsForm onAdd={onAdd} initialValues={initialValues} />);
+
+    const valueInput = screen.getByLabelText('Value');
+    expect(valueInput).toHaveValue('{"min":1,"max":3}');
+    await user.clear(valueInput);
+    await user.paste('{"min":2,"max":4}');
+    expect(onAdd).toHaveBeenLastCalledWith([
+      { type: 'character-count', value: { min: 2, max: 4 } },
+    ]);
+
+    const typeSelect = screen.getByRole('combobox', { name: 'Type' });
+    await user.tab({ shift: true });
+    expect(typeSelect).toHaveFocus();
+    await user.keyboard('eq');
+    expect(typeSelect).toHaveTextContent('equals');
+    expect(valueInput).toHaveValue('{"min":2,"max":4}');
+    expect(onAdd).toHaveBeenLastCalledWith([{ type: 'equals', value: '{"min":2,"max":4}' }]);
+  });
+
   it.each(['rouge-l', 'rouge-s', 'not-rouge-l', 'not-rouge-s'] as const)(
     'lets users select %s without losing the reference',
     async (type) => {
