@@ -334,22 +334,31 @@ export function testCaseFromCsvRow(row: CsvRow): TestCase {
 
 /**
  * Serialize a list of VarMapping objects as a CSV string.
+ *
+ * The columns are the keys of all objects in order of first appearance, and each value
+ * is written to the column of its key, so objects may list their keys in a different
+ * order or omit keys. Missing and null/undefined values become empty cells.
  * @param vars - The list of VarMapping objects to serialize.
  * @returns A CSV string.
  */
 export function serializeObjectArrayAsCSV(vars: object[]): string {
   invariant(vars.length > 0, 'No variables to serialize');
-  const columnNames = Object.keys(vars[0]).join(',');
+  const columns = [...new Set(vars.flatMap((result) => Object.keys(result)))];
+  const columnNames = columns.join(',');
   // This generated test-case dataset is intentionally not formula-escaped because
   // prefixing a cell would corrupt vars on round-trip. Formula escaping is applied
   // only by the eval result export path.
   const rows = vars
-    .map(
-      (result) =>
-        `"${Object.values(result)
-          .map((value) => value.toString().replace(/"/g, '""'))
-          .join('","')}"`,
-    )
+    .map((result) => {
+      const cells = columns.map((column) => {
+        // Own properties only, so a missing key named e.g. "constructor" stays empty.
+        const value = Object.prototype.hasOwnProperty.call(result, column)
+          ? (result as Record<string, unknown>)[column]
+          : undefined;
+        return String(value ?? '').replace(/"/g, '""');
+      });
+      return `"${cells.join('","')}"`;
+    })
     .join('\n');
   return [columnNames, rows].join('\n') + '\n';
 }

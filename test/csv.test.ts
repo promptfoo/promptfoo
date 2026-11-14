@@ -1081,14 +1081,76 @@ describe('serializeObjectArrayAsCSV', () => {
     expect(serializeObjectArrayAsCSV(vars)).toBe(expected);
   });
 
-  it('should handle vars with different properties', () => {
+  it('should add a column for keys that only appear in later rows', () => {
     const vars = [
       { name: 'John', age: '30' },
       { name: 'Jane', age: '25', city: 'NY' },
     ];
 
-    // Note: The actual implementation includes quotes around values and a trailing newline
-    const expected = 'name,age\n"John","30"\n"Jane","25","NY"\n';
+    // The extra key gets its own header column and earlier rows get an empty cell,
+    // instead of the value landing in a column that has no header.
+    const expected = 'name,age,city\n"John","30",""\n"Jane","25","NY"\n';
     expect(serializeObjectArrayAsCSV(vars)).toBe(expected);
+  });
+
+  it('should keep values aligned when rows list the same keys in a different order', () => {
+    const vars = [
+      { topic: 'weather', tone: 'formal' },
+      { tone: 'casual', topic: 'sports' },
+    ];
+
+    expect(serializeObjectArrayAsCSV(vars)).toBe(
+      'topic,tone\n"weather","formal"\n"sports","casual"\n',
+    );
+  });
+
+  it('should leave a cell empty when a row is missing a key', () => {
+    const vars = [{ topic: 'weather', tone: 'formal' }, { topic: 'sports' }, { tone: 'casual' }];
+
+    expect(serializeObjectArrayAsCSV(vars)).toBe(
+      'topic,tone\n"weather","formal"\n"sports",""\n"","casual"\n',
+    );
+  });
+
+  it('should order columns by first appearance across all rows', () => {
+    const vars = [{ b: '1' }, { a: '2', b: '3' }, { c: '4', a: '5' }];
+
+    expect(serializeObjectArrayAsCSV(vars)).toBe('b,a,c\n"1","",""\n"3","2",""\n"","5","4"\n');
+  });
+
+  it('should serialize null and undefined values as empty cells instead of throwing', () => {
+    const vars = [
+      { topic: 'weather', tone: null },
+      { topic: undefined, tone: 'casual' },
+    ];
+
+    expect(serializeObjectArrayAsCSV(vars)).toBe('topic,tone\n"weather",""\n"","casual"\n');
+  });
+
+  it('should keep falsy values that are not null or undefined', () => {
+    const vars = [{ count: 0, flag: false, text: '' }];
+
+    expect(serializeObjectArrayAsCSV(vars)).toBe('count,flag,text\n"0","false",""\n');
+  });
+
+  it('should not read inherited properties for rows that lack a key', () => {
+    const vars: object[] = [{ constructor: 'x', toString: 'y' }, { other: 'z' }];
+
+    expect(serializeObjectArrayAsCSV(vars)).toBe(
+      'constructor,toString,other\n"x","y",""\n"","","z"\n',
+    );
+  });
+
+  it('should keep the existing quoting for rows that share the same keys', () => {
+    const vars = [
+      { name: 'John, "Smithy" Smith', age: 30, active: true, note: 'line one\nline two' },
+      { name: 'Jane', age: 25, active: false, note: '' },
+    ];
+
+    expect(serializeObjectArrayAsCSV(vars)).toBe(
+      'name,age,active,note\n' +
+        '"John, ""Smithy"" Smith","30","true","line one\nline two"\n' +
+        '"Jane","25","false",""\n',
+    );
   });
 });
