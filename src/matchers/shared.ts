@@ -106,7 +106,50 @@ export function tryParse(content: string) {
 }
 
 export function splitIntoSentences(text: string) {
-  return text.split('\n').filter((sentence) => sentence.trim() !== '');
+  const cleaned = stripLeadingHeaders(text);
+  if (!cleaned) {
+    return [];
+  }
+  return cleaned.split('\n').filter((sentence) => sentence.trim() !== '');
+}
+
+const PREAMBLE_LABEL =
+  /^(?:(?:candidate|extracted|relevant|selected)\s+(?:sentences?|context|passages?|information|units?)\b(?:\(s\))?|context\s+relevance\b)/i;
+const HEADER_LABEL =
+  /^(?:candidate|extracted|relevant|context|sentences?|results?|analysis|output)$/i;
+
+/** Strip recognized grading labels while preserving source headings and other text. */
+export function stripLeadingHeaders(text: string): string {
+  const lines = text.split('\n');
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (!line) {
+      continue;
+    }
+    const heading = line.match(/^#{1,6}\s+/);
+    const title = heading ? line.slice(heading[0].length) : line;
+    if (heading && HEADER_LABEL.test(title.replace(/[:*`_#]/g, '').trim())) {
+      continue;
+    }
+    const labelText = title.replace(/^(?:\*{1,2}|_{1,2}|`+)/, '').trimStart();
+    const label = PREAMBLE_LABEL.exec(labelText);
+    if (label) {
+      const rest = labelText
+        .slice(label[0].length)
+        .trimStart()
+        .replace(/^:/, '')
+        .replace(/^(?:\*{1,2}|_{1,2}|`+)/, '')
+        .trimStart()
+        .replace(/^:/, '')
+        .trimStart();
+      if (!rest || (heading && /^#+$/.test(rest))) {
+        continue;
+      }
+      lines[i] = rest;
+    }
+    return lines.slice(i).join('\n').trim();
+  }
+  return '';
 }
 
 /**
@@ -142,8 +185,12 @@ export function splitIntoSentences(text: string) {
 const ENUMERATION_MARKER_ONLY = /^\d+[.)]$/;
 
 export function splitTextIntoSentences(text: string): string[] {
-  const lines = text.split('\n').filter((line) => line.trim() !== '');
-  const segments = lines.length > 1 ? lines : text.split(/(?<=[.!?])\s+/);
+  const cleaned = stripLeadingHeaders(text);
+  if (!cleaned) {
+    return [];
+  }
+  const lines = cleaned.split('\n').filter((line) => line.trim() !== '');
+  const segments = lines.length > 1 ? lines : cleaned.split(/(?<=[.!?])\s+/);
   return segments
     .map((sentence) => sentence.trim())
     .filter((sentence) => sentence.length > 0 && !ENUMERATION_MARKER_ONLY.test(sentence));
