@@ -4,6 +4,7 @@ import path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { loadApiProviders } from '../../src/providers/index';
+import { OpenAiGenericProvider } from '../../src/providers/openai/index';
 import { readConfig } from '../../src/util/config/load';
 import { mockProcessEnv } from '../util/utils';
 
@@ -114,16 +115,15 @@ describe('provider-tokenlab README', () => {
     const config = await readConfig(
       path.join(__dirname, '../..', 'examples', 'provider-tokenlab', 'promptfooconfig.yaml'),
     );
-    const providers = (await loadApiProviders(config.providers as any)) as Array<{
-      id: () => string;
-      getApiKey?: () => string | undefined;
-      getApiUrl: () => string;
-    }>;
+    const providers = await loadApiProviders(config.providers as any);
 
     expect(providers.length).toBeGreaterThan(0);
     for (const provider of providers) {
+      if (!(provider instanceof OpenAiGenericProvider)) {
+        throw new Error(`Expected an OpenAI-compatible TokenLab provider, got ${provider.id()}`);
+      }
       expect(provider.getApiUrl()).toBe('https://api.tokenlab.sh/v1');
-      expect(provider.getApiKey?.(), `Provider "${provider.id()}" resolves no credential`).toBe(
+      expect(provider.getApiKey(), `Provider "${provider.id()}" resolves no credential`).toBe(
         TOKENLAB_KEY,
       );
     }
