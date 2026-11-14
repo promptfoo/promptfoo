@@ -148,13 +148,19 @@ describe('test data file extension matching', () => {
   });
 
   it.each(['.YAML', '.YML'])(
-    'loads the %s dotfile through both scalar readers',
+    'loads the %s dotfile through both scalar readers and watches its vars file',
     async (filename) => {
-      fs.writeFileSync(path.join(directory, filename), JSON.stringify(tests));
+      fs.writeFileSync(path.join(directory, filename), JSON.stringify([{ vars: 'Values.yaml' }]));
+      fs.writeFileSync(path.join(directory, 'Values.yaml'), 'value: from-vars-file');
       for (const read of [readTests, readTestConfigs]) {
-        expect((await read(filename, directory)).map((test) => test.vars)).toEqual(values);
+        expect((await read(filename, directory)).map((test) => test.vars)).toEqual([
+          { value: 'from-vars-file' },
+        ]);
       }
-      expect(resolveTestsWatchPaths(filename, directory)).toEqual([path.join(directory, filename)]);
+      expect(resolveTestsWatchPaths(filename, directory)).toEqual([
+        path.join(directory, filename),
+        path.join(directory, 'Values.yaml'),
+      ]);
     },
   );
 

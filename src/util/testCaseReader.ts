@@ -974,8 +974,9 @@ function collectNestedFileReferences(
   basePath: string,
   varsBasePath: string,
 ): string[] {
-  const ext = parsePath(testsFile).ext.slice(1).toLowerCase();
-  if (!['yaml', 'yml', 'json', 'jsonl'].includes(ext)) {
+  // The test loaders also accept dotfiles such as .YAML, which path.extname omits.
+  const ext = /\.(yaml|yml|jsonl?)$/.exec(path.basename(testsFile).toLowerCase())?.[1];
+  if (!ext) {
     return [];
   }
   try {
