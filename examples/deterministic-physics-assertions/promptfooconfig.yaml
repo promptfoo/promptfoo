@@ -1,0 +1,58 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+
+description: 'Deterministic physics bounds validation using custom Python assertions'
+
+prompts:
+  - '{{prompt}}'
+
+providers:
+  - id: mcp
+    label: 'Deterministic Physics Validator'
+    config:
+      enabled: true
+
+      server:
+        name: physics-validation-server
+        path: ./physics-server.js
+
+tests:
+  - description: 'Valid probability and physical measurements should pass'
+    vars:
+      prompt: '{"tool":"validate_measurements","args":{"probability":0.7,"mass_kg":12,"distance_m":25,"duration_s":60}}'
+    assert:
+      - type: python
+        value: file://assertions/physics_bounds.py
+
+  - description: 'Probability above 1 should fail validation'
+    vars:
+      prompt: '{"tool":"validate_measurements","args":{"probability":1.5}}'
+    assert:
+      - type: not-python
+        value: file://assertions/physics_bounds.py
+
+  - description: 'Negative mass should fail validation'
+    vars:
+      prompt: '{"tool":"validate_measurements","args":{"mass_kg":-5}}'
+    assert:
+      - type: not-python
+        value: file://assertions/physics_bounds.py
+
+  - description: 'Infinity should fail validation'
+    vars:
+      prompt: '{"tool":"validate_measurements","args":{"distance_m":"Infinity"}}'
+    assert:
+      - type: not-python
+        value: file://assertions/physics_bounds.py
+
+  - description: 'Boolean values should fail numeric validation'
+    vars:
+      prompt: '{"tool":"validate_measurements","args":{"probability":true}}'
+    assert:
+      - type: not-python
+        value: file://assertions/physics_bounds.py
+  - description: 'NaN should fail validation'
+    vars:
+      prompt: '{"tool":"validate_measurements","args":{"distance_m":"NaN"}}'
+    assert:
+      - type: not-python
+        value: file://assertions/physics_bounds.py
