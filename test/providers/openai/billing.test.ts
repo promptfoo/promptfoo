@@ -6,6 +6,7 @@ import {
   extractOpenAIBillingUsage,
   type OpenAIProcessingTier,
 } from '../../../src/providers/openai/billing';
+import { getOpenAICompletionTokenDetails, getTokenUsage } from '../../../src/providers/openai/util';
 
 const createCachedResponsesUsage = () => ({
   input_tokens: 2000,
@@ -1046,6 +1047,41 @@ describe('OpenAI billing helpers', () => {
       );
     },
   );
+
+  it('applies the cached-input discount to top-level cached_tokens (Moonshot-style usage)', () => {
+    // Some OpenAI-compatible APIs (e.g. Moonshot) report cached prompt tokens at
+    // the top level of usage instead of inside prompt_tokens_details. The token
+    // usage layer already surfaces them as cacheReadInputTokens; billing must
+    // discount them the same way as nested prompt_tokens_details.cached_tokens.
+    const topLevelCached = {
+      prompt_tokens: 1_000,
+      completion_tokens: 100,
+      total_tokens: 1_100,
+      cached_tokens: 800,
+    };
+    const nestedCached = {
+      prompt_tokens: 1_000,
+      completion_tokens: 100,
+      total_tokens: 1_100,
+      prompt_tokens_details: { cached_tokens: 800 },
+    };
+
+    const expected = (200 * 0.15 + 800 * 0.075 + 100 * 0.6) / 1e6;
+    expect(calculateOpenAIUsageCost('gpt-4o-mini', {}, topLevelCached)).toBeCloseTo(expected, 10);
+    expect(calculateOpenAIUsageCost('gpt-4o-mini', {}, nestedCached)).toBeCloseTo(expected, 10);
+    expect(extractOpenAIBillingUsage(topLevelCached).cachedInputTokens).toBe(800);
+  });
+
+  it.each([
+    [{ cached_input_tokens: 400, cached_tokens: 800 }, 400],
+    [{ prompt_tokens_details: { cached_tokens: 0 }, cached_tokens: 800 }, 0],
+  ])('uses the same cached count for billing and token reporting', (details, expected) => {
+    const usage = { prompt_tokens: 1000, completion_tokens: 100, ...details };
+
+    expect(extractOpenAIBillingUsage(usage).cachedInputTokens).toBe(expected);
+    expect(getTokenUsage({ usage }, false).completionDetails?.cacheReadInputTokens).toBe(expected);
+    expect(getOpenAICompletionTokenDetails(usage)?.cacheReadInputTokens ?? 0).toBe(expected);
+  });
 
   it('applies Batch pricing to fine-tuned inference and leaves unsupported Flex and Fast unset', () => {
     const model = 'ft:gpt-4.1-mini-2025-04-14:company::model';
