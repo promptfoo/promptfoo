@@ -86,7 +86,7 @@ For GPT-5.6 and newer models, use `openai:<model>`, such as `openai:gpt-6-luna`.
 | Classification and scoring             | `openai:decisions:<model>`                 | [Decisions API](./openai-decisions.md)                                   |
 | Embeddings                             | `openai:embedding:<model>`                 | [Embedding dimensions](#reducing-embedding-dimensions)                   |
 | Moderation                             | `openai:moderation:omni-moderation-latest` | [Moderation assertions](/docs/configuration/expected-outputs/moderation) |
-| Image generation                       | `openai:image:<model>`                     | [Images](#images)                                                        |
+| Image generation and editing           | `openai:image:<model>`                     | [Images](#images)                                                        |
 | Audio input and output                 | `openai:chat:gpt-audio-1.5`                | [Audio](#audio-capabilities)                                             |
 | Text to speech                         | `openai:tts:gpt-4o-mini-tts`               | [Text to speech](#text-to-speech)                                        |
 | Conversational Realtime                | `openai:realtime:gpt-realtime-2.1`         | [Realtime](#realtime-api-models)                                         |
@@ -449,7 +449,7 @@ providers:
         cyber: daybreak_blue
 ```
 
-Your OpenAI project needs access to the selected model and program. Use `daybreak_blue` with supported mainline models and `daybreak_red` with cyber models such as `gpt-5.6-cyber`. Use `standard` to explicitly request standard safeguards. If omitted, OpenAI chooses based on the model and your access. See [OpenAI's Daybreak guide](https://developers.openai.com/api/docs/guides/daybreak) for model eligibility.
+Your OpenAI project needs access to the selected model and program. Use `daybreak_blue` with supported mainline models and `daybreak_red` with cyber models such as `gpt-5.6-cyber`. Use `standard` to explicitly request standard safeguards. If omitted, OpenAI chooses based on the model and your access. See [OpenAI's Daybreak guide](https://developers.openai.com/api/docs/guides/daybreak) for model eligibility. For AWS deployments, see [Daybreak Red on Bedrock](./aws-bedrock.md#daybreak-red-on-aws-govcloud).
 
 The selected program is available in the provider response's `raw.access_programs.cyber` when OpenAI returns it. Existing `config.passthrough.access_programs` settings continue to work and override the named option.
 
@@ -474,6 +474,8 @@ The selected program is available in the provider response's `raw.access_program
 The provider response's `raw` field contains the Responses object, including `id` and `output` items. Its `metadata` includes extracted annotations and HTTP metadata. Use these fields when you need to inspect tool results or continue a conversation.
 
 For incomplete Responses output, `metadata.responseStatus` and `metadata.incompleteReason` expose the API status and reason. `max_output_tokens` maps to `finishReason: 'length'`, which you can check with a `finish-reason` assertion. Partial text remains available in `output`; Promptfoo does not automatically retry or continue it.
+
+A failed foreground generation returned with HTTP 200 retains reported token usage and any available cost estimate. Without reported usage, both remain unknown.
 
 </details>
 
@@ -686,6 +688,10 @@ Inline tool definitions and file-reference paths can use test variables. Promptf
 
 For Chat Completions and Responses, `functionToolCallbacks` maps tool names to local functions. A callback receives the arguments as a JSON string and should return a string or `Promise<string>`.
 
+Chat Completions skips function callbacks and MCP tools when `finish_reason` is `length`, preserving partial output, token usage, and any estimated cost.
+
+Responses tool calls are returned as data without callbacks when the call, or its enclosing message or response when the call has no status, is `in_progress` or `incomplete`. Completed calls and legacy calls without any status keep their normal callback behavior. Partial text and completion metadata remain available for inspection.
+
 These providers return callback results as eval output; they do not run a general model-to-tool loop that sends every result back to the model. To evaluate a complete agent loop, use the [Agents SDK provider](/docs/providers/openai-agents) or a [custom provider](/docs/providers/custom-api/).
 
 <details>
@@ -873,46 +879,40 @@ See the [OpenAI vision example](https://github.com/promptfoo/promptfoo/tree/main
 <Link id="gpt-image-1-mini" />
 <Link id="example" />
 
-`openai:image` defaults to `gpt-image-2.5-flare` and calls `/v1/images/generations` for text-to-image evals. Use `gpt-image-2.5-sunburst` to compare Sunburst on the same prompts; both aliases and their `2026-09-08` snapshots are supported.
+Use `openai:image` to generate an image with Promptfoo's default OpenAI image model. To select a model explicitly, use `openai:image:<model>`.
 
 ```yaml title="promptfooconfig.yaml"
 prompts:
-  - 'A product photo of {{product}} on a plain white background.'
-
+  - 'A product photo of a blue ceramic mug on a white background.'
 providers:
-  - id: openai:image:gpt-image-2.5-flare
+  - id: openai:image
     config:
-      size: 1024x1024
       quality: low
-      output_format: webp
-
-tests:
-  - vars:
-      product: a blue ceramic mug
 ```
 
-GPT Image 2.5 also accepts `quality: xhigh` and `quality: max`. For transparent output, use `background: transparent` with PNG or WebP. Cost comes from the response's token usage; it is left unset when usage is missing because older models' per-image estimates do not apply. See the [Image API guide](https://developers.openai.com/api/docs/guides/image-generation).
+Set `size` to control the dimensions and `output_format` to choose the file type. For a transparent background, choose a model that supports transparency and use `background: transparent` with PNG or WebP. Supported sizes, formats, quality levels, and pricing depend on the model. [OpenAI image guide](https://developers.openai.com/api/docs/guides/image-generation) · [OpenAI pricing](https://developers.openai.com/api/docs/pricing)
 
-This provider supports generation only. Image editing, masks, reference images, variations, and streaming are not implemented.
+**GIF and SVG generation.** Select `openai:image:gpt-image-2.6-flare` or `openai:image:gpt-image-2.6-sunburst`. Both accept `complexity` (`low`, `medium`, or `high`) to control planning separately from rendering `quality`.
 
-<details>
-<summary>GPT Image 2 options</summary>
+- For a looping animation, describe the motion in the prompt and set `output_format: gif`. Use `frame_count` for the number of frames and `frame_duration_ms` for the time per frame.
+- For an editable vector image, set `output_format: svg` and generate one image (`n: 1`). SVG supports `background: transparent`. Promptfoo leaves its cost unset because the response omits the separate SVG authoring charge.
 
-| Option               | Values                                                                 |
-| -------------------- | ---------------------------------------------------------------------- |
-| `size`               | `auto`, standard sizes such as `1024x1024`, or valid custom dimensions |
-| `quality`            | `low`, `medium`, `high`, `auto`                                        |
-| `background`         | `opaque`, `auto`; transparency is unsupported for this model           |
-| `output_format`      | `png`, `jpeg`, `webp`                                                  |
-| `output_compression` | 0 to 100; only with `jpeg` or `webp`                                   |
-| `moderation`         | `auto`, `low`                                                          |
-| `n`                  | 1 to 10 images                                                         |
+**Editing an image.** With either of those models, use `operation: edit` and supply the source in `images`. Each reference accepts a `file_id` or an `image_url` (HTTPS or a base64 data URL). For a markup-guided edit, add a transparent PNG overlay with the same dimensions as the first image. Replace the file IDs below with your uploaded source and overlay.
 
-Custom dimensions must be multiples of 16, with a maximum edge of 3,840 pixels, an aspect ratio no greater than 3:1, and 655,360 to 8,294,400 total pixels. Promptfoo validates these constraints before sending the request.
+```yaml
+prompts:
+  - 'Recolor the circled vase blue and remove the circle.'
+providers:
+  - id: openai:image:gpt-image-2.6-sunburst
+    config:
+      operation: edit
+      images:
+        - file_id: file-source
+      markup:
+        file_id: file-overlay
+```
 
-Cost estimates may be absent for `quality: auto` or custom sizes. Returned usage remains available for inspection. See the [image example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-images) and [OpenAI image guide](https://developers.openai.com/api/docs/guides/image-generation).
-
-</details>
+For a masked edit, use `mask` in place of `markup`. Edits return PNG, JPEG, or WebP. To compare generation prompts side by side, run the [OpenAI images example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-images).
 
 ## Audio {#audio-capabilities}
 
@@ -1183,8 +1183,8 @@ Use [OpenAI's deprecation schedule](https://developers.openai.com/api/docs/depre
 | `openai:assistant:<id>`                                     | The native Assistants API shut down on August 26, 2026. Move instructions, tools, and state to Responses; assistant IDs are not response IDs. See the [migration guide](https://developers.openai.com/api/docs/assistants/migration). |
 | `openai:completion:*`                                       | Native Babbage, Davinci, and GPT-3.5 Turbo Instruct models retired on September 28, 2026. Use Chat Completions or Responses with compatible prompts and options.                                                                      |
 | `openai:video:*`                                            | The native Videos API and Sora 2 models retired on September 24, 2026. OpenAI lists no replacement API.                                                                                                                               |
-| `dall-e-2`, `dall-e-3`, `gpt-image-1`                       | Select an available GPT Image model, such as `gpt-image-2.5-flare`. DALL·E 2 and 3 retired in May 2026 and GPT Image 1 retired in October.                                                                                            |
-| `gpt-image-1.5`, `gpt-image-1-mini`, `chatgpt-image-latest` | These native image models retire on December 1, 2026. Select a current GPT Image model and its supported generation options.                                                                                                          |
+| `dall-e-2`, `dall-e-3`, `gpt-image-1`                       | Choose a supported model with `openai:image:<model>`. When migrating from DALL·E, describe the style in the prompt and use `output_format` to choose the file type. See [generating images](#generating-images).                      |
+| `gpt-image-1.5`, `gpt-image-1-mini`, `chatgpt-image-latest` | Check the replacement model's supported sizes, quality levels, and background options before reusing your generation settings.                                                                                                        |
 | `tts-1`, `tts-1-hd`, `gpt-4o-mini-tts`                      | These speech models retire on January 6, 2027. Migrate new voice workflows to the Realtime endpoint using `gpt-realtime-2.1-mini`.                                                                                                    |
 | Original `gpt-audio` and `gpt-realtime` families            | These native families retire on January 20, 2027. Use `gpt-audio-1.5` or `gpt-realtime-2.1` for new evals.                                                                                                                            |
 | `functions` and `function_call`                             | Replace them with `tools` and `tool_choice`, using the selected endpoint's schema.                                                                                                                                                    |
