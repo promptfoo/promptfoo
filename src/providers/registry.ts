@@ -2,7 +2,8 @@ import os from 'os';
 import path from 'path';
 
 import dedent from 'dedent';
-import { getEnvString } from '../envars';
+import { getEnvString, getProviderEnvString } from '../envars';
+import { getExplicitProviderEnv, setExplicitProviderEnv } from '../envOverrides';
 import { importModule } from '../esm';
 import logger from '../logger';
 import { isJavascriptFile } from '../util/fileExtensions';
@@ -42,6 +43,7 @@ import {
 import { FalImageGenerationProvider } from './fal';
 import { createGitHubProvider } from './github/index';
 import { GolangProvider } from './golangCompletion';
+import { determineGoogleVertexMode } from './google/auth';
 import { GroqProvider, GroqResponsesProvider } from './groq/index';
 import { HeliconeGatewayProvider } from './helicone';
 import { HttpProvider } from './http';
@@ -132,17 +134,20 @@ const CODEX_CLI_PROVIDER_PATH = /^openai:(?:codex|codex-sdk|codex-app-server|cod
 function getProviderEnvAliasGroups(
   providerPath: string,
   config?: ProviderOptions['config'],
+  env?: ProviderOptions['env'],
 ): readonly (readonly string[])[] {
+  const isGeminiImage = /^(?:google|palm):(?:image:)?(?:[^:]*-image|gemini-nano-banana-2\.1$)/.test(
+    providerPath,
+  );
   if (
-    config?.vertexai === true &&
-    /^(?:google|palm):(?:(?:interactions:)?gemini-omni-flash-preview$|(?:image:)?[^:]*-image)/.test(
-      providerPath,
-    )
+    (isGeminiImage && determineGoogleVertexMode(config ?? {}, env)) ||
+    (config?.vertexai === true &&
+      /^(?:google|palm):(?:interactions:)?gemini-omni-flash-preview$/.test(providerPath))
   ) {
     return [
       ['VERTEX_API_KEY', 'GOOGLE_API_KEY'],
       ['VERTEX_PROJECT_ID', 'GOOGLE_PROJECT_ID', 'GOOGLE_CLOUD_PROJECT'],
-      providerPath.includes('-image')
+      isGeminiImage
         ? ['VERTEX_REGION', 'GOOGLE_CLOUD_LOCATION', 'GOOGLE_LOCATION']
         : ['VERTEX_REGION', 'GOOGLE_CLOUD_LOCATION'],
     ];
@@ -174,16 +179,25 @@ function getProviderEnvAliasGroups(
   }
   if (providerPath.startsWith('bedrock:')) {
     const mode = getBedrockTextRoute(providerPath)?.apiMode;
-    return mode === 'chat' || mode === 'messages' || mode === 'responses'
+    return mode === 'chat' ||
+      mode === 'messages' ||
+      mode === 'responses' ||
+      mode === 'runtime-chat' ||
+      mode === 'runtime-responses'
       ? [['AWS_BEDROCK_REGION', 'AWS_REGION', 'AWS_DEFAULT_REGION']]
       : [];
   }
   if (/^(?:google|palm):live:/.test(providerPath)) {
     return [['GOOGLE_API_KEY', 'GEMINI_API_KEY']];
   }
-  if (/^(?:google|palm):(?:image:|[^:]*-image)/.test(providerPath)) {
+  if (isGeminiImage || /^(?:google|palm):image:/.test(providerPath)) {
     return [
-      ['GOOGLE_API_KEY', 'GOOGLE_GENERATIVE_AI_API_KEY', 'GEMINI_API_KEY'],
+      [
+        'GOOGLE_API_KEY',
+        'GOOGLE_GENERATIVE_AI_API_KEY',
+        'GEMINI_API_KEY',
+        ...(isGeminiImage ? ['PALM_API_KEY'] : []),
+      ],
       ['VERTEX_PROJECT_ID', 'GOOGLE_PROJECT_ID', 'GOOGLE_CLOUD_PROJECT'],
       ['VERTEX_REGION', 'GOOGLE_CLOUD_LOCATION', 'GOOGLE_LOCATION'],
     ];
@@ -205,7 +219,7 @@ function getProviderEnvAliasGroups(
     ];
   }
   if (
-    /^(?:google|palm):(?:interactions:)?(?:gemini-omni-flash-preview|gemini-omni-1\.1-flash|gemini-robotics-er-2-preview)$/.test(
+    /^(?:google|palm):(?:interactions:)?(?:gemini-omni-flash-preview|gemini-omni-1\.1-flash|gemini-3\.5-transcribe|gemini-robotics-er-2-preview)$/.test(
       providerPath,
     )
   ) {
@@ -258,12 +272,22 @@ export function mergeProviderEnv(
     typeof provider !== 'string' && provider.preserveAliases
       ? []
       : [
-          ...getProviderEnvAliasGroups(providerPath, config),
+          ...getProviderEnvAliasGroups(
+            providerPath,
+            config,
+            Object.fromEntries(
+              layers
+                .flatMap((layer) => Object.entries(layer ?? {}))
+                .filter(([, value]) => value !== undefined),
+            ),
+          ),
           getProviderEndpointAliases(providerPath),
         ];
   const isWindowsOpenCode = os.platform() === 'win32' && /^opencode(?::|$)/.test(providerPath);
   let merged: NonNullable<ProviderOptions['env']> | undefined;
-  for (const layer of layers) {
+  const explicitLayers = layers.map(getExplicitProviderEnv);
+  const explicit: NonNullable<ProviderOptions['env']> = {};
+  for (const [index, layer] of layers.entries()) {
     if (!layer) {
       continue;
     }
@@ -274,6 +298,7 @@ export function mergeProviderEnv(
       if (aliases.some((key) => layer[key])) {
         for (const key of aliases) {
           delete merged[key];
+          delete explicit[key];
         }
       }
     }
@@ -281,17 +306,23 @@ export function mergeProviderEnv(
       if (value === undefined) {
         continue;
       }
+      const isExplicit = explicitLayers[index]?.[key] !== undefined;
       if (isWindowsOpenCode) {
         for (const existingKey of Object.keys(merged)) {
           if (existingKey !== key && existingKey.toUpperCase() === key.toUpperCase()) {
             // Keep earlier spellings available to case-sensitive provider templates.
             // The server environment later collapses aliases with this same value.
             merged[existingKey] = value;
+            explicit[existingKey] = isExplicit ? value : undefined;
           }
         }
       }
       merged[key] = value;
+      explicit[key] = isExplicit ? value : undefined;
     }
+  }
+  if (merged && layers.some((layer, index) => layer !== explicitLayers[index])) {
+    setExplicitProviderEnv(merged, explicit);
   }
   return merged;
 }
@@ -331,6 +362,12 @@ function configuredProviderFactory(
   };
 }
 
+const LEGACY_OPENAI_COMPLETION_DEFAULT = 'gpt-3.5-turbo-instruct';
+const OPENAI_EMBEDDING_MODEL_IDS = new Set([
+  'text-embedding-3-large',
+  'text-embedding-3-small',
+  'text-embedding-ada-002',
+]);
 const OPENAI_CONFIG_MODEL_OVERRIDE_ROUTES = new Set(['image', 'video']);
 const OPENAI_PASSTHROUGH_MODEL_ROUTES = new Set([
   'chat',
@@ -363,9 +400,15 @@ function getEffectiveOpenAiApiModel(
     retiredRoute === 'tts';
   const selectedModel = providerOverridesModelFromConfig
     ? configuredModel || modelName || modelType
-    : modelName || (explicitRouteUsesConfiguredModel ? configuredModel : undefined) || modelType;
+    : modelName ||
+      (explicitRouteUsesConfiguredModel ? configuredModel : undefined) ||
+      (modelType === 'completion' ? LEGACY_OPENAI_COMPLETION_DEFAULT : modelType);
 
-  if (OPENAI_FIXED_MODEL_ROUTES.has(modelType) || modelType === 'gpt-transcribe') {
+  if (
+    OPENAI_FIXED_MODEL_ROUTES.has(modelType) ||
+    OpenAiModerationProvider.MODERATION_MODEL_IDS.includes(modelType) ||
+    modelType === 'gpt-transcribe'
+  ) {
     return selectedModel;
   }
 
@@ -377,6 +420,7 @@ function getEffectiveOpenAiApiModel(
       OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES.includes(modelType) ||
       OpenAiTtsProvider.OPENAI_TTS_MODEL_NAMES.includes(modelType) ||
       retiredRoute === 'chat' ||
+      retiredRoute === 'completion' ||
       retiredRoute === 'responses' ||
       retiredRoute === 'tts' ||
       (!retiredRoute &&
@@ -486,7 +530,7 @@ export const providerMap: ProviderFactory[] = [
         ...providerOptions,
         id: providerOptions.id ?? providerPath,
         config: model ? { ...providerOptions.config, model } : providerOptions.config,
-        env: { ...context.env, ...providerOptions.env },
+        env: mergeProviderEnv(providerPath, context.env, providerOptions.env),
       });
     },
   },
@@ -847,7 +891,7 @@ export const providerMap: ProviderFactory[] = [
       const endpoint = providerPath.slice('f5:'.length).replace(/^\/+/, '');
       const configuredBaseUrl =
         providerOptions.config?.apiBaseUrl ??
-        providerOptions.env?.F5_API_BASE_URL ??
+        getProviderEnvString(providerOptions.env, 'F5_API_BASE_URL') ??
         getEnvString('F5_API_BASE_URL');
       if (!configuredBaseUrl) {
         throw new Error(
@@ -872,9 +916,12 @@ export const providerMap: ProviderFactory[] = [
       providerOptions: ProviderOptions,
       _context: LoadApiProviderContext,
     ) => {
-      const [_, modelType, modelName] = providerPath.split(':');
+      const modelType = providerPath.split(':')[1];
       if (modelType === 'image') {
-        return new FalImageGenerationProvider(modelName, providerOptions);
+        return new FalImageGenerationProvider(
+          modelNameFromProviderPath(providerPath, 2),
+          providerOptions,
+        );
       }
       throw new Error(
         `Invalid fal provider path: ${providerPath}. Use one of the following providers: fal:image:<model name>`,
@@ -894,7 +941,7 @@ export const providerMap: ProviderFactory[] = [
         // loadApiProvider merges any provider-level `env` block into
         // providerOptions.env, so let those overrides win over the suite-level
         // env from context.
-        env: { ...context.env, ...providerOptions.env },
+        env: mergeProviderEnv(providerPath, context.env, providerOptions.env),
       });
     },
   },
@@ -1117,10 +1164,7 @@ export const providerMap: ProviderFactory[] = [
               model: codexModel,
             }
           : providerOptions.config,
-        env: {
-          ...context.env,
-          ...providerOptions.env,
-        },
+        env: mergeProviderEnv(providerPath, context.env, providerOptions.env),
       });
     },
   },
@@ -1175,7 +1219,7 @@ export const providerMap: ProviderFactory[] = [
         const { OpenAiAgentsApiProvider } = await import('./openai/agents-api');
         return new OpenAiAgentsApiProvider(modelName, {
           ...providerOptions,
-          env: { ...context.env, ...providerOptions.env },
+          env: mergeProviderEnv(providerPath, context.env, providerOptions.env),
         });
       }
 
@@ -1254,7 +1298,7 @@ export const providerMap: ProviderFactory[] = [
       }
       if (modelType === 'completion') {
         return new OpenAiCompletionProvider(
-          modelName || configuredModel || 'gpt-3.5-turbo-instruct',
+          modelName || configuredModel || LEGACY_OPENAI_COMPLETION_DEFAULT,
           providerOptions,
         );
       }
@@ -1305,13 +1349,29 @@ export const providerMap: ProviderFactory[] = [
         );
       }
       if (
+        modelType === 'gpt-rosalind-discovery' &&
+        isOpenAiFirstPartyApiUrl(
+          resolveOpenAiApiUrl(providerOptions.config ?? {}, providerOptions.env),
+        )
+      ) {
+        throw new Error(
+          'Promptfoo requires an explicit API endpoint for Rosalind Discovery on native OpenAI hosts. Select openai:responses:gpt-rosalind-discovery or openai:chat:gpt-rosalind-discovery for an endpoint your project supports.',
+        );
+      }
+      if (
         shouldDefaultToOpenAiResponses(modelType) ||
-        (OPENAI_DAYBREAK_ALIASES.has(modelType) &&
+        ((OPENAI_DAYBREAK_ALIASES.has(modelType) || modelType === 'gpt-rosalind-research') &&
           isOpenAiFirstPartyApiUrl(
             resolveOpenAiApiUrl(providerOptions.config ?? {}, providerOptions.env),
           ))
       ) {
         return new OpenAiResponsesProvider(modelType, providerOptions);
+      }
+      if (OPENAI_EMBEDDING_MODEL_IDS.has(modelType)) {
+        return new OpenAiEmbeddingProvider(modelType, providerOptions);
+      }
+      if (OpenAiModerationProvider.MODERATION_MODEL_IDS.includes(modelType)) {
+        return new OpenAiModerationProvider(modelType, providerOptions);
       }
       if (OpenAiChatCompletionProvider.OPENAI_CHAT_MODEL_NAMES.includes(modelType)) {
         return new OpenAiChatCompletionProvider(modelType, providerOptions);
@@ -1337,6 +1397,8 @@ export const providerMap: ProviderFactory[] = [
       switch (getRetiredOpenAiModelRoute(modelType)) {
         case 'chat':
           return new OpenAiChatCompletionProvider(modelType, providerOptions);
+        case 'completion':
+          return new OpenAiCompletionProvider(modelType, providerOptions);
         case 'tts':
           return new OpenAiTtsProvider(modelType, providerOptions);
         case 'realtime':
@@ -1356,7 +1418,10 @@ export const providerMap: ProviderFactory[] = [
         return new OpenAiAssistantProvider(modelName, providerOptions);
       }
       if (modelType === 'image') {
-        return new OpenAiImageProvider(modelName, providerOptions);
+        return new OpenAiImageProvider(
+          modelName || configuredModel || 'gpt-image-2.5-flare',
+          providerOptions,
+        );
       }
       if (modelType === 'video') {
         return new OpenAiVideoProvider(modelName || 'sora-2', providerOptions);
