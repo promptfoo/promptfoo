@@ -100,7 +100,12 @@ export function euclideanDistance(vecA: number[], vecB: number[]): number {
 
 export function tryParse(content: string) {
   try {
-    return JSON.parse(content);
+    const parsed = JSON.parse(content);
+    // Keep objects and arrays for property access in grader templates. A parsed scalar
+    // would reach the grader changed: "0.50" as 0.5, big integers rounded, "null" as empty.
+    if (parsed !== null && typeof parsed === 'object') {
+      return parsed;
+    }
   } catch {}
   return content;
 }
