@@ -10,22 +10,16 @@ import { PythonWorkerPool } from '../python/workerPool';
 import { sha256 } from '../util/createHash';
 import { processConfigFileReferences } from '../util/fileReference';
 import { parsePathOrGlob } from '../util/index';
-import {
-  isScriptResolvedConfigCacheable,
-  omitEvalRuntimeVars,
-  PER_RUN_EVAL_RUNTIME_VAR_KEYS,
-  safeJsonStringify,
-  scriptResolvedConfigCacheKey,
-  scriptVisibleContextCacheKey,
-} from '../util/json';
 import { providerRegistry } from './providerRegistry';
 import { sanitizeScriptContext } from './scriptContext';
 import {
   applyCachedCallApiMetadata,
   buildScriptArgs,
+  getScriptInputDigest,
   hasScriptResultError,
   validateScriptResult,
 } from './scriptResult';
+import { shouldBustProviderCache } from './shared';
 
 import type {
   ApiProvider,
@@ -245,36 +239,20 @@ export class PythonProvider implements ApiProvider {
     logger.debug(`Computing file hash for script ${absPath}`);
     const fileHash = sha256(await fs.readFile(absPath, 'utf-8'));
 
-    // Create cache key including the function name to ensure different functions don't share caches.
-    // Drop the per-run `__evalId`. `__evalStepId` and `__repeatIndex` are stable across
-    // runs for the same step, so they stay and still separate steps and repeats.
-    // `this.options` keeps unresolved `file://` strings. The resolved config from
-    // `initialize()` is fingerprinted separately so an updated settings file misses.
-    // Prompt label and test metadata are script-visible and are fingerprinted too.
-    // A file-backed secret is redacted to one placeholder, so it cannot identify an
-    // account. Skip the cache instead of replaying another credential's response.
-    const varsForCache =
-      context?.vars == null
-        ? context?.vars
-        : omitEvalRuntimeVars(context.vars, PER_RUN_EVAL_RUNTIME_VAR_KEYS);
-    const cacheResolvedConfig = isScriptResolvedConfigCacheable(this.config, this.options?.config);
-    const cacheKey = `python:${this.scriptPath}:${this.functionName || 'default'}:${apiType}:${fileHash}:${prompt}:${JSON.stringify(
-      this.options,
-    )}:${scriptResolvedConfigCacheKey(this.config)}:${scriptVisibleContextCacheKey(context)}:${JSON.stringify(varsForCache)}`;
-    logger.debug(`PythonProvider cache key: ${cacheKey}`);
-
-    const cache = await getCache();
-    let cachedResult;
-    const cacheEnabled = isCacheEnabled() && cacheResolvedConfig;
-    logger.debug(
-      `PythonProvider cache enabled: ${cacheEnabled}, file-backed secrets redacted: ${!cacheResolvedConfig}`,
-    );
-
-    if (cacheEnabled) {
-      cachedResult = await cache.get(cacheKey);
-      logger.debug(`PythonProvider cache hit: ${Boolean(cachedResult)}`);
-    }
-
+    const sanitizedContext = sanitizeScriptContext('PythonProvider', context);
+    const optionsWithProcessedConfig = {
+      ...this.options,
+      config: { ...this.options?.config, ...this.config },
+    };
+    const args = buildScriptArgs(apiType, prompt, optionsWithProcessedConfig, sanitizedContext);
+    const functionName = this.functionName || apiType;
+    const digest =
+      isCacheEnabled() && !shouldBustProviderCache(context)
+        ? getScriptInputDigest(absPath, functionName, this.options, args)
+        : undefined;
+    const cacheKey = digest && `python:v2:${apiType}:${fileHash}:${digest}`;
+    const cache = cacheKey ? await getCache() : undefined;
+    const cachedResult = cache && cacheKey ? await cache.get(cacheKey) : undefined;
     if (cachedResult) {
       logger.debug(`Returning cached ${apiType} result for script ${absPath}`);
       const parsedResult = JSON.parse(cachedResult as string);
@@ -285,25 +263,8 @@ export class PythonProvider implements ApiProvider {
 
       return applyCachedCallApiMetadata(apiType, parsedResult, 'Python');
     } else {
-      const sanitizedContext = sanitizeScriptContext('PythonProvider', context);
+      logger.debug(`Executing python script ${absPath}`);
 
-      // Create a new options object with processed file references included in the config
-      // This ensures any file:// references are replaced with their actual content
-      const optionsWithProcessedConfig = {
-        ...this.options,
-        config: {
-          ...this.options?.config,
-          ...this.config, // Merge in the processed config containing resolved file references
-        },
-      };
-
-      const args = buildScriptArgs(apiType, prompt, optionsWithProcessedConfig, sanitizedContext);
-
-      logger.debug(
-        `Executing python script ${absPath} via worker pool with args: ${safeJsonStringify(args)}`,
-      );
-
-      const functionName = this.functionName || apiType;
       // Use worker pool instead of runPython
       const result = await this.pool!.execute(functionName, args);
 
@@ -312,13 +273,8 @@ export class PythonProvider implements ApiProvider {
       // Store result in cache if enabled and no errors
       const hasError = hasScriptResultError(result);
 
-      if (cacheEnabled && !hasError) {
-        logger.debug(`PythonProvider caching result: ${cacheKey}`);
+      if (cache && cacheKey && !hasError) {
         await cache.set(cacheKey, JSON.stringify(result));
-      } else {
-        logger.debug(
-          `PythonProvider not caching result: ${cacheResolvedConfig ? (isCacheEnabled() ? (hasError ? 'has error' : 'unknown reason') : 'cache disabled') : 'file-backed secret redacted'}`,
-        );
       }
 
       // Set cached=false on fresh results and ensure numRequests is set

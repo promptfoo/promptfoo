@@ -347,9 +347,7 @@ describe('RubyProvider', () => {
 
       const result = await provider.callApi('test prompt');
 
-      expect(mockCache.get).toHaveBeenCalledWith(
-        expect.stringContaining('ruby:script.rb:default:call_api:'),
-      );
+      expect(mockCache.get).toHaveBeenCalledWith(expect.stringMatching(/^ruby:v2:call_api:/));
       expect(mockRunRuby).not.toHaveBeenCalled();
       expect(result).toEqual({ output: 'cached result', cached: true });
     });
@@ -367,7 +365,7 @@ describe('RubyProvider', () => {
       await provider.callApi('test prompt');
 
       expect(mockCache.set).toHaveBeenCalledWith(
-        expect.stringContaining('ruby:script.rb:default:call_api:'),
+        expect.stringMatching(/^ruby:v2:call_api:/),
         '{"output":"new result"}',
       );
     });
@@ -520,9 +518,7 @@ describe('RubyProvider', () => {
         cached: false,
       });
       expect(mockCache.set).toHaveBeenCalledWith(
-        expect.stringMatching(
-          /^ruby:script\.rb:default:call_api:[a-f0-9]{64}:test prompt:undefined:[a-f0-9]{64}:[a-f0-9]{64}:undefined$/,
-        ),
+        expect.stringMatching(/^ruby:v2:call_api:[a-f0-9]{64}:[a-f0-9]{64}$/),
         '{"output":"fresh result"}',
       );
     });
@@ -548,11 +544,7 @@ describe('RubyProvider', () => {
       const cacheSetCalls = mockCache.set.mock.calls;
       expect(cacheSetCalls).toHaveLength(2);
 
-      // The first call should contain 'default' in the cache key
-      expect(cacheSetCalls[0][0]).toContain(':default:');
-
-      // The second call should contain the custom function name
-      expect(cacheSetCalls[1][0]).toContain(':custom_function:');
+      expect(cacheSetCalls[0][0]).not.toBe(cacheSetCalls[1][0]);
     });
 
     it('should not apply cached metadata to embedding results', async () => {
@@ -627,9 +619,6 @@ describe('RubyProvider', () => {
       expect(firstKey).not.toContain('__evalId');
       expect(firstKey).not.toContain('eval-FYA-2026-11-05T00:08:12');
       expect(firstKey).not.toContain('eval-TYC-2026-11-05T00:08:13');
-      expect(firstKey).toContain('"name":"world"');
-      expect(firstKey).toContain('"__evalStepId":"test-0-prompt-0-repeat-0"');
-      expect(firstKey).toContain('"__repeatIndex":0');
       expect(mockRunRuby).toHaveBeenCalledTimes(1);
       const executedContext = mockRunRuby.mock.calls[0]?.[2]?.[2] as { vars: typeof firstVars };
       expect(executedContext.vars).toBe(firstVars);
@@ -653,12 +642,8 @@ describe('RubyProvider', () => {
       const worldKey = cache.get.mock.calls[0][0] as string;
       const marsKey = cache.get.mock.calls[1][0] as string;
       expect(marsKey).not.toBe(worldKey);
-      expect(worldKey).toContain('"name":"world"');
-      expect(marsKey).toContain('"name":"mars"');
       expect(worldKey).not.toContain('__evalId');
       expect(marsKey).not.toContain('__evalId');
-      expect(worldKey).toContain('"__evalStepId":"test-0-prompt-0-repeat-0"');
-      expect(marsKey).toContain('"__repeatIndex":0');
       expect(mockRunRuby).toHaveBeenCalledTimes(2);
     });
 
@@ -678,9 +663,6 @@ describe('RubyProvider', () => {
       const firstKey = cache.get.mock.calls[0][0] as string;
       const repeatKey = cache.get.mock.calls[1][0] as string;
       expect(repeatKey).not.toBe(firstKey);
-      expect(firstKey).toContain('"__repeatIndex":0');
-      expect(repeatKey).toContain('"__evalStepId":"test-0-prompt-0-repeat-1"');
-      expect(repeatKey).toContain('"__repeatIndex":1');
       expect(firstKey).not.toContain('__evalId');
       expect(repeatKey).not.toContain('__evalId');
       expect(mockRunRuby).toHaveBeenCalledTimes(2);

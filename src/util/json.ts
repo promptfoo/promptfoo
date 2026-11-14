@@ -14,11 +14,7 @@ export {
   omitEvalRuntimeVars,
   PER_RUN_EVAL_RUNTIME_VAR_KEYS,
 } from './evalRuntimeVars';
-export {
-  isScriptResolvedConfigCacheable,
-  scriptResolvedConfigCacheKey,
-} from './scriptConfigCacheKey';
-export { scriptVisibleContextCacheKey } from './scriptContextCacheKey';
+export { scriptInputDigest } from './scriptConfigCacheKey';
 
 const ajvInstances = new Map<boolean, Ajv>();
 

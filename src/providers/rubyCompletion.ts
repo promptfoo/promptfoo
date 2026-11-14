@@ -7,21 +7,15 @@ import { runRuby } from '../ruby/rubyUtils';
 import { sha256 } from '../util/createHash';
 import { processConfigFileReferences } from '../util/fileReference';
 import { parsePathOrGlob } from '../util/index';
-import {
-  isScriptResolvedConfigCacheable,
-  omitEvalRuntimeVars,
-  PER_RUN_EVAL_RUNTIME_VAR_KEYS,
-  safeJsonStringify,
-  scriptResolvedConfigCacheKey,
-  scriptVisibleContextCacheKey,
-} from '../util/json';
 import { sanitizeScriptContext } from './scriptContext';
 import {
   applyCachedCallApiMetadata,
   buildScriptArgs,
+  getScriptInputDigest,
   hasScriptResultError,
   validateScriptResult,
 } from './scriptResult';
+import { shouldBustProviderCache } from './shared';
 
 import type {
   ApiProvider,
@@ -145,36 +139,20 @@ export class RubyProvider implements ApiProvider {
     logger.debug(`Computing file hash for script ${absPath}`);
     const fileHash = sha256(await fs.readFile(absPath, 'utf-8'));
 
-    // Create cache key including the function name to ensure different functions don't share caches.
-    // Drop the per-run `__evalId`. `__evalStepId` and `__repeatIndex` are stable across
-    // runs for the same step, so they stay and still separate steps and repeats.
-    // `this.options` keeps unresolved `file://` strings. The resolved config from
-    // `initialize()` is fingerprinted separately so an updated settings file misses.
-    // Prompt label and test metadata are script-visible and are fingerprinted too.
-    // A file-backed secret is redacted to one placeholder, so it cannot identify an
-    // account. Skip the cache instead of replaying another credential's response.
-    const varsForCache =
-      context?.vars == null
-        ? context?.vars
-        : omitEvalRuntimeVars(context.vars, PER_RUN_EVAL_RUNTIME_VAR_KEYS);
-    const cacheResolvedConfig = isScriptResolvedConfigCacheable(this.config, this.options?.config);
-    const cacheKey = `ruby:${this.scriptPath}:${this.functionName || 'default'}:${apiType}:${fileHash}:${prompt}:${safeJsonStringify(
-      this.options,
-    )}:${scriptResolvedConfigCacheKey(this.config)}:${scriptVisibleContextCacheKey(context)}:${safeJsonStringify(varsForCache)}`;
-    logger.debug(`RubyProvider cache key: ${cacheKey}`);
-
-    const cache = await getCache();
-    let cachedResult;
-    const cacheEnabled = isCacheEnabled() && cacheResolvedConfig;
-    logger.debug(
-      `RubyProvider cache enabled: ${cacheEnabled}, file-backed secrets redacted: ${!cacheResolvedConfig}`,
-    );
-
-    if (cacheEnabled) {
-      cachedResult = await cache.get(cacheKey);
-      logger.debug(`RubyProvider cache hit: ${Boolean(cachedResult)}`);
-    }
-
+    const sanitizedContext = sanitizeScriptContext('RubyProvider', context);
+    const optionsWithProcessedConfig = {
+      ...this.options,
+      config: { ...this.options?.config, ...this.config },
+    };
+    const args = buildScriptArgs(apiType, prompt, optionsWithProcessedConfig, sanitizedContext);
+    const functionName = this.functionName || apiType;
+    const digest =
+      isCacheEnabled() && !shouldBustProviderCache(context)
+        ? getScriptInputDigest(absPath, functionName, this.options, args)
+        : undefined;
+    const cacheKey = digest && `ruby:v2:${apiType}:${fileHash}:${digest}`;
+    const cache = cacheKey ? await getCache() : undefined;
+    const cachedResult = cache && cacheKey ? await cache.get(cacheKey) : undefined;
     abortSignal?.throwIfAborted();
     if (cachedResult) {
       logger.debug(`Returning cached ${apiType} result for script ${absPath}`);
@@ -186,25 +164,8 @@ export class RubyProvider implements ApiProvider {
 
       return applyCachedCallApiMetadata(apiType, parsedResult, 'Ruby');
     } else {
-      const sanitizedContext = sanitizeScriptContext('RubyProvider', context);
+      logger.debug(`Executing ruby script ${absPath}`);
 
-      // Create a new options object with processed file references included in the config
-      // This ensures any file:// references are replaced with their actual content
-      const optionsWithProcessedConfig = {
-        ...this.options,
-        config: {
-          ...this.options?.config,
-          ...this.config, // Merge in the processed config containing resolved file references
-        },
-      };
-
-      const args = buildScriptArgs(apiType, prompt, optionsWithProcessedConfig, sanitizedContext);
-
-      logger.debug(
-        `Running ruby script ${absPath} with scriptPath ${this.scriptPath} and args: ${safeJsonStringify(args)}`,
-      );
-
-      const functionName = this.functionName || apiType;
       const result = await runRuby(absPath, functionName, args, {
         rubyExecutable: this.config.rubyExecutable,
         ...(abortSignal ? { abortSignal } : {}),
@@ -216,13 +177,8 @@ export class RubyProvider implements ApiProvider {
       // Store result in cache if enabled and no errors
       const hasError = hasScriptResultError(result);
 
-      if (cacheEnabled && !hasError) {
-        logger.debug(`RubyProvider caching result: ${cacheKey}`);
+      if (cache && cacheKey && !hasError) {
         await cache.set(cacheKey, JSON.stringify(result));
-      } else {
-        logger.debug(
-          `RubyProvider not caching result: ${cacheResolvedConfig ? (isCacheEnabled() ? (hasError ? 'has error' : 'unknown reason') : 'cache disabled') : 'file-backed secret redacted'}`,
-        );
       }
 
       // Set cached=false on fresh results
