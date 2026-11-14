@@ -79,12 +79,13 @@ function replaceBlobUris(value: string, cache: BlobInlineCache): string {
   });
 }
 
-async function inlineValue(
+function inlineValue(
   value: unknown,
   cache: BlobInlineCache,
-  visited: WeakSet<object>,
+  memo: WeakMap<object, unknown>[],
+  ancestors: WeakMap<object, unknown>,
   depth: number,
-): Promise<unknown> {
+): unknown {
   if (depth > MAX_DEPTH) {
     return value;
   }
@@ -93,20 +94,31 @@ async function inlineValue(
     return replaceBlobUris(value, cache);
   }
 
-  if (Array.isArray(value)) {
-    return Promise.all(value.map((child) => inlineValue(child, cache, visited, depth + 1)));
-  }
-
   if (!value || typeof value !== 'object') {
     return value;
   }
 
-  if (visited.has(value)) {
-    return value;
+  // The same object can have different eligible descendants at different depths.
+  const atDepth = (memo[depth] ??= new WeakMap());
+  const existing = ancestors.get(value) ?? atDepth.get(value);
+  if (existing !== undefined) {
+    return existing;
   }
-  visited.add(value);
+
+  if (Array.isArray(value)) {
+    const next: unknown[] = new Array(value.length);
+    atDepth.set(value, next);
+    ancestors.set(value, next);
+    value.forEach((child, index) => {
+      next[index] = inlineValue(child, cache, memo, ancestors, depth + 1);
+    });
+    ancestors.delete(value);
+    return next;
+  }
 
   const next: Record<string, unknown> = { ...(value as Record<string, unknown>) };
+  atDepth.set(value, next);
+  ancestors.set(value, next);
 
   if ('blobRef' in next) {
     const blobHash = extractHashFromBlobRef(next.blobRef);
@@ -125,9 +137,9 @@ async function inlineValue(
   }
 
   for (const [key, child] of Object.entries(next)) {
-    next[key] = await inlineValue(child, cache, visited, depth + 1);
+    next[key] = inlineValue(child, cache, memo, ancestors, depth + 1);
   }
-
+  ancestors.delete(value);
   return next;
 }
 
@@ -145,5 +157,5 @@ export async function inlineBlobRefsForShare<T>(
     maxStringLength: MAX_STRING_LENGTH_TO_SCAN,
   });
   await ensureBlobPayloads(hashes, cache, localEvalId);
-  return (await inlineValue(value, cache, new WeakSet(), 0)) as T;
+  return inlineValue(value, cache, [], new WeakMap(), 0) as T;
 }

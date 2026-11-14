@@ -61,6 +61,7 @@ export function collectBlobHashes(
   hashes = new Set<string>(),
   visited = new WeakSet<object>(),
   depth = 0,
+  shallowestVisit = new WeakMap<object, number>(),
 ): Set<string> {
   if (options.maxDepth !== undefined && depth > options.maxDepth) {
     return hashes;
@@ -74,14 +75,21 @@ export function collectBlobHashes(
     return hashes;
   }
 
-  if (visited.has(value)) {
+  // A shallower alias may expose children beyond an earlier path's depth limit.
+  if (
+    visited.has(value) &&
+    (options.maxDepth === undefined || depth >= (shallowestVisit.get(value) ?? 0))
+  ) {
     return hashes;
   }
   visited.add(value);
+  if (options.maxDepth !== undefined) {
+    shallowestVisit.set(value, depth);
+  }
 
   const children = Array.isArray(value) ? value : Object.values(value as Record<string, unknown>);
   for (const child of children) {
-    collectBlobHashes(child, options, hashes, visited, depth + 1);
+    collectBlobHashes(child, options, hashes, visited, depth + 1, shallowestVisit);
   }
 
   return hashes;
