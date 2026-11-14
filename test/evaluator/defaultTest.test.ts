@@ -45,6 +45,88 @@ describe('evaluator defaultTest merging', () => {
     );
   });
 
+  it.each([
+    ['inherits omitted affixes', {}, '<hello>'],
+    ['overrides nonempty affixes', { prefix: '[', suffix: ']' }, '[hello]'],
+    ['overrides the prefix with an empty string', { prefix: '' }, 'hello>'],
+    ['overrides the suffix with an empty string', { suffix: '' }, '<hello'],
+    ['overrides both affixes with empty strings', { prefix: '', suffix: '' }, 'hello'],
+    ['keeps empty affixes without defaults', { prefix: '', suffix: '' }, 'hello', {}],
+    ['preserves whitespace affixes', { prefix: ' ', suffix: ' ' }, ' hello '],
+    ['renders templated defaults', {}, 'hello:hello!', { prefix: '{{text}}:', suffix: '!' }],
+  ] as const)(
+    'prompt affixes: %s',
+    async (_name, options, expected, defaultOptions: { prefix?: string; suffix?: string } = {
+      prefix: '<',
+      suffix: '>',
+    }) => {
+      const provider: ApiProvider = {
+        id: () => 'echo-affixes',
+        callApi: vi.fn(async (prompt: string) => ({ output: prompt })),
+      };
+      const testSuite: TestSuite = {
+        prompts: [toPrompt('{{text}}')],
+        providers: [provider],
+        defaultTest: { options: defaultOptions },
+        tests: [
+          {
+            vars: { text: 'hello' },
+            options,
+            assert: [{ type: 'equals', value: expected }],
+          },
+        ],
+      };
+
+      const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+      await evaluate(testSuite, evalRecord, { cache: false });
+      const summary = await evalRecord.toEvaluateSummary();
+
+      expect(provider.callApi).toHaveBeenCalledOnce();
+      expect(vi.mocked(provider.callApi).mock.calls[0][0]).toBe(expected);
+      expect(summary.results[0]).toMatchObject({
+        success: true,
+        score: 1,
+        response: { output: expected },
+      });
+    },
+  );
+
+  it('prompt affixes: keeps an empty test override after merging scenario options', async () => {
+    const provider: ApiProvider = {
+      id: () => 'echo-scenario-affixes',
+      callApi: vi.fn(async (prompt: string) => ({ output: prompt })),
+    };
+    const testSuite: TestSuite = {
+      prompts: [toPrompt('{{text}}')],
+      providers: [provider],
+      defaultTest: { options: { prefix: '<', suffix: '>' } },
+      scenarios: [
+        {
+          config: [{ options: { prefix: '[', suffix: ']' } }],
+          tests: [
+            {
+              vars: { text: 'hello' },
+              options: { prefix: '' },
+              assert: [{ type: 'equals', value: 'hello]' }],
+            },
+          ],
+        },
+      ],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, { cache: false });
+    const summary = await evalRecord.toEvaluateSummary();
+
+    expect(provider.callApi).toHaveBeenCalledOnce();
+    expect(vi.mocked(provider.callApi).mock.calls[0][0]).toBe('hello]');
+    expect(summary.results[0]).toMatchObject({
+      success: true,
+      score: 1,
+      response: { output: 'hello]' },
+    });
+  });
+
   it('should merge defaultTest.options.provider with test case options', async () => {
     const mockProvider: ApiProvider = {
       id: vi.fn().mockReturnValue('mock-provider'),
