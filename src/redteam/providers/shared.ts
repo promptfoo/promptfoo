@@ -38,6 +38,7 @@ import {
   preserveResponseHeadersObserverError,
   preserveResponseHeadersObserverErrorResponse,
 } from '../../util/fetch/responseHeadersObserver';
+import { isProviderTypeMap } from '../../util/gradingProvider';
 import invariant from '../../util/invariant';
 import { safeJsonStringify } from '../../util/json';
 import { TokenUsageTracker } from '../../util/tokenUsage';
@@ -233,7 +234,7 @@ class RedteamProviderManager {
       'Specify only one of defaultTest.options.provider or defaultTest.options.graderProvider',
     );
     const grading = options?.graderProvider ?? options?.provider;
-    const textProvider = grading?.text ?? grading;
+    const textProvider = isProviderTypeMap(grading) ? grading.text : grading;
     return gradingFirst ? (textProvider ?? test.provider) : (test.provider ?? textProvider);
   }
 

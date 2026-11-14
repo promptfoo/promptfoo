@@ -591,6 +591,24 @@ describe('shared redteam provider utilities', () => {
         },
       );
 
+      it.each(['provider', 'graderProvider'])(
+        'falls back to defaultTest.provider when defaultTest.options.%s has no text provider',
+        async (key) => {
+          redteamProviderManager.clearProvider();
+          const target = createMockProvider({ id: 'configured-target' });
+          mockedLoadApiProviders.mockResolvedValue([target]);
+          setCliStateConfig({
+            defaultTest: {
+              provider: 'configured-target',
+              options: { [key]: { embedding: 'local-embedding' } },
+            },
+          });
+
+          expect(await redteamProviderManager.getGradingProvider()).toBe(target);
+          expect(mockedLoadApiProviders).toHaveBeenCalledWith(['configured-target']);
+        },
+      );
+
       it('falls back to redteam provider when grading not set', async () => {
         redteamProviderManager.clearProvider();
         setCliStateConfig({}); // no defaultTest
