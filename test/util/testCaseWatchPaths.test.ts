@@ -142,6 +142,24 @@ describe('resolveTestsWatchPaths', () => {
     expect(watched).toContain(path.join(base, 'dataset.yaml'));
   });
 
+  it('uses the declaring directory for nested vars and the config directory for top-level vars', () => {
+    const source = 'nested/source.json';
+    fs.writeFileSync(
+      path.join(base, source),
+      JSON.stringify([
+        {
+          vars: {
+            report: { path: 'file://report.txt' },
+            legacy: 'file://vars.csv',
+          },
+        },
+      ]),
+    );
+    expect(resolve(source as TestSuiteConfig['tests'])).toEqual(
+      expect.arrayContaining([path.join(base, 'nested/report.txt'), path.join(base, 'vars.csv')]),
+    );
+  });
+
   it('watches references in inline object and array vars', () => {
     expect(resolve([{ vars: { payload: [{ file: 'file://vars.csv' }] } }])).toContain(
       path.join(base, 'vars.csv'),
