@@ -1,4 +1,6 @@
+import { Command } from 'commander';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { feedbackCommand } from '../src/commands/feedback';
 import { gatherFeedback, sendFeedback } from '../src/feedback';
 import logger from '../src/logger';
 import { fetchWithProxy } from '../src/util/fetch/index';
@@ -98,15 +100,19 @@ describe('Feedback Module', () => {
       expect(fetchWithProxy).not.toHaveBeenCalled();
     });
 
-    it('should handle errors during feedback gathering', async () => {
-      // Mock promptUser to throw an error
+    it('reports prompt errors before the feedback command finishes', async () => {
+      const program = new Command();
+      feedbackCommand(program);
+      const finished = vi.fn();
+      program.hook('postAction', finished);
       vi.mocked(readlineUtils.promptUser).mockRejectedValueOnce(new Error('Test error'));
 
-      await gatherFeedback();
+      await program.parseAsync(['feedback'], { from: 'user' });
 
       expect(logger.error).toHaveBeenCalledWith(
         expect.stringContaining('Error gathering feedback'),
       );
+      expect(logger.error).toHaveBeenCalledBefore(finished);
     });
   });
 });
