@@ -1803,6 +1803,7 @@ describe('ResultsTable rating actions', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
+    useTableStore.getState().ratingQueues.clear();
     setTable = vi.fn();
     callApi = vi.mocked((await import('@app/utils/api')).callApi);
     callApi.mockReset().mockResolvedValue({ ok: true } as Response);
