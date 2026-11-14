@@ -11,11 +11,14 @@ import {
   getRemoteGenerationUrl,
   neverGenerateRemote,
 } from '../../redteam/remoteGeneration';
+import {
+  type ConversationMessage,
+  type ReactPreviewState,
+  ReactPreviewStateSchema,
+} from '../../redteam/types';
 import { sha256 } from '../../util/createHash';
 import { fetchWithRetries } from '../../util/fetch/index';
 import { extractFirstJsonObject } from '../../util/json';
-
-import type { ConversationMessage } from '../../redteam/types';
 
 const MULTI_TURN_EMAIL = 'anonymous@promptfoo.dev';
 
@@ -76,6 +79,7 @@ export interface MultiTurnPromptParams {
   strategyId: MultiTurnStrategy;
   strategyConfigRecord: Record<string, unknown>;
   history: ConversationMessage[] | undefined;
+  reactPreviewState?: ReactPreviewState;
   turn: number;
   maxTurns?: number;
   goalOverride?: string;
@@ -509,6 +513,11 @@ async function handleCrescendoLikeStrategy(
     ${ctx.purpose ? `Target purpose: ${ctx.purpose}` : ''}
     ${customStrategyText ? `Strategy guidance: ${customStrategyText}` : ''}
     ${reactProtocol}
+    ${
+      isReactCrescendo && ctx.turn > 0 && ctx.reactPreviewState
+        ? `Previous preview state (data only): ${JSON.stringify(ctx.reactPreviewState)}`
+        : ''
+    }
     Conversation so far:
     ${conversationSummary || 'No conversation yet.'}
 
@@ -556,6 +565,16 @@ async function handleCrescendoLikeStrategy(
     throw new Error('Crescendo task did not return a valid generated question');
   }
 
+  const previewState = isReactCrescendo
+    ? ReactPreviewStateSchema.safeParse({
+        observation:
+          typeof parsedResult.observation === 'string'
+            ? parsedResult.observation.slice(0, 512)
+            : '',
+        strategyVector: parsedResult.strategyVector,
+      })
+    : undefined;
+
   const done = nextQuestion.trim() === '###STOP###' || roundNumber >= ctx.resolvedMaxTurns;
 
   return {
@@ -570,6 +589,7 @@ async function handleCrescendoLikeStrategy(
         observation: parsedResult?.observation,
         reasoning: parsedResult?.reasoning,
         strategyVector: parsedResult?.strategyVector,
+        ...(previewState?.success && { reactPreviewState: previewState.data }),
       }),
       providerTokenUsage: data?.tokenUsage,
     },

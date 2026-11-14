@@ -142,6 +142,7 @@ const TestConsumer = ({
   testStrategy,
   isPluginStatic = false,
   isStrategyStatic = false,
+  maxTurns,
   onError,
 }: {
   testPlugin: Plugin;
@@ -149,6 +150,7 @@ const TestConsumer = ({
   testStrategy: Strategy;
   isPluginStatic?: boolean;
   isStrategyStatic?: boolean;
+  maxTurns?: number;
   onError?: (error: Error) => void;
 }) => {
   const { isGenerating, plugin, strategy, generateTestCase } = useTestCaseGeneration();
@@ -156,7 +158,7 @@ const TestConsumer = ({
   async function handleGenerateTestCase() {
     await generateTestCase(
       { id: testPlugin, config: pluginConfig, isStatic: isPluginStatic },
-      { id: testStrategy, config: {}, isStatic: isStrategyStatic },
+      { id: testStrategy, config: { maxTurns }, isStatic: isStrategyStatic },
       undefined,
       onError,
     );
@@ -895,6 +897,50 @@ describe('TestCaseGenerationProvider', () => {
       // Wait for the target response to be displayed
       await waitFor(() => {
         expect(targetResponseComponent).toHaveTextContent('Simulated target output');
+      });
+    });
+
+    it('sends only the previous bounded ReAct state on turn two', async () => {
+      const user = userEvent.setup();
+      const state = {
+        observation: 'first fixture observation',
+        strategyVector: 'gradual-escalation',
+      };
+      callApiMock.mockImplementation((path, options) => {
+        if (path === '/redteam/generate-test' && JSON.parse(String(options?.body)).turn === 0) {
+          return Promise.resolve(
+            createJsonResponse({
+              prompt: 'Generated test prompt',
+              context: 'Test context',
+              metadata: { reactPreviewState: state },
+            }),
+          );
+        }
+        return defaultCallApiImplementation(path, options);
+      });
+      render(
+        <ToastProvider>
+          <TestCaseGenerationProvider
+            redTeamConfig={{ ...MOCK_CONFIG, target: createHttpGenerationProvider() }}
+          >
+            <TestConsumer testPlugin="harmful:hate" testStrategy="react-crescendo" maxTurns={2} />
+          </TestCaseGenerationProvider>
+        </ToastProvider>,
+      );
+      await user.click(screen.getByTestId('test-case-generation-btn'));
+      await waitFor(() =>
+        expect(screen.getByTestId('chat-message-3')).toHaveTextContent(
+          'Simulated target output (turn 1)',
+        ),
+      );
+      const [first, second] = callApiMock.mock.calls
+        .filter(([path]) => path === '/redteam/generate-test')
+        .map(([, options]) => JSON.parse(String(options?.body)));
+      expect(first.reactPreviewState).toBeUndefined();
+      expect(second.reactPreviewState).toEqual(state);
+      expect(second.history).toContainEqual({
+        role: 'assistant',
+        content: 'Simulated target output',
       });
     });
 
