@@ -207,10 +207,13 @@ function isStandaloneProviderSchema(path: string, value: unknown, config: Unifie
   const ref = value.$ref;
   if (ref.startsWith('#/')) {
     const rootKey = ref.split('/')[1].replace(/~1/g, '/').replace(/~0/g, '~');
-    if (Object.hasOwn(value, rootKey) || Object.hasOwn(value, '$id')) {
+    if (
+      Object.prototype.hasOwnProperty.call(value, rootKey) ||
+      Object.prototype.hasOwnProperty.call(value, '$id')
+    ) {
       return true;
     }
-    if (Object.hasOwn(config, rootKey)) {
+    if (Object.prototype.hasOwnProperty.call(config, rootKey)) {
       return false;
     }
   }
