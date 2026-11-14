@@ -5,6 +5,7 @@ import {
   GUARDRAIL_BLOCKED_REASON,
 } from '../../src/assertions/assertionsResult';
 import { getEnvBool } from '../../src/envars';
+import { countedComponentResults } from '../../src/types/results';
 import {
   accumulateGradingRequest,
   accumulateGradingTokenUsage,
@@ -159,6 +160,297 @@ describe('AssertionsResult', () => {
           result,
         }),
       ).toThrow('Critical failure');
+    });
+  });
+
+  describe('metricOnly assertions', () => {
+    it('marks the complete metric-only result tree without mutating shared descendants', async () => {
+      const leaf: GradingResult = {
+        pass: false,
+        score: 0.25,
+        reason: 'shared leaf failure',
+        assertion: { type: 'javascript', metric: 'leaf', metricOnly: false },
+        metadata: { source: 'synthetic' },
+      };
+      const branch: GradingResult = {
+        pass: false,
+        score: 0.25,
+        reason: 'assertionless branch',
+        componentResults: [leaf],
+      };
+      const original: GradingResult = {
+        pass: false,
+        score: 0.25,
+        reason: 'parent',
+        componentResults: [branch, branch],
+      };
+      const before = structuredClone(original);
+      const assertionsResult = new AssertionsResult({});
+      assertionsResult.addResult({
+        index: 0,
+        result: original,
+        metric: 'counter',
+        metricOnly: true,
+      });
+      const aggregate = await assertionsResult.testResult();
+      expect(aggregate).toMatchObject({ pass: true, score: 0, namedScores: { counter: 0.25 } });
+      const marked = aggregate.componentResults![0];
+      expect(marked.componentResults![0]).toBe(marked.componentResults![1]);
+      const pending = [marked];
+      while (pending.length) {
+        const node = pending.pop()!;
+        expect(countedComponentResults([node])).toHaveLength(0);
+        pending.push(...(node.componentResults ?? []));
+      }
+      expect(marked.componentResults![0].componentResults![0]).toMatchObject({
+        pass: false,
+        score: 0.25,
+        reason: 'shared leaf failure',
+        assertion: { type: 'javascript', metric: 'leaf', metricOnly: true },
+        metadata: { source: 'synthetic' },
+      });
+      expect(original).toEqual(before);
+      expect(original.componentResults![0]).toBe(branch);
+      expect(branch.componentResults![0]).toBe(leaf);
+    });
+
+    it('should not fail the test when a metricOnly assertion fails, while still recording its named metric', async () => {
+      const assertionsResult = new AssertionsResult({});
+
+      assertionsResult.addResult({
+        index: 0,
+        result: {
+          pass: true,
+          score: 1,
+          reason: 'Real assertion passed',
+          tokensUsed: DEFAULT_TOKENS_USED,
+        },
+        weight: 1,
+      });
+
+      assertionsResult.addResult({
+        index: 1,
+        result: {
+          pass: false,
+          score: 0.25,
+          reason: 'Metric emitter scored low',
+          tokensUsed: DEFAULT_TOKENS_USED,
+        },
+        metric: 'fp',
+        metricOnly: true,
+      });
+
+      const result = await assertionsResult.testResult();
+
+      expect(result.pass).toBe(true);
+      expect(result.reason).toBe('All assertions passed');
+      expect(result.namedScores!['fp']).toBeCloseTo(0.25);
+    });
+
+    it('should exclude metricOnly assertions from the weighted score', async () => {
+      const assertionsResult = new AssertionsResult({});
+
+      assertionsResult.addResult({
+        index: 0,
+        result: {
+          pass: true,
+          score: 0.5,
+          reason: 'Real assertion',
+          tokensUsed: DEFAULT_TOKENS_USED,
+        },
+        weight: 1,
+      });
+
+      // A passing metricOnly assertion must not inflate the aggregate score.
+      assertionsResult.addResult({
+        index: 1,
+        result: {
+          pass: true,
+          score: 1,
+          reason: 'Metric emitter',
+          tokensUsed: DEFAULT_TOKENS_USED,
+        },
+        metric: 'tp',
+        metricOnly: true,
+      });
+
+      const result = await assertionsResult.testResult();
+
+      // Without metricOnly this would be (0.5 + 1) / 2 = 0.75.
+      expect(result.score).toBe(0.5);
+      expect(result.namedScores!['tp']).toBe(1);
+    });
+
+    it('should keep the real pass/fail of a metricOnly assertion in componentResults', async () => {
+      const assertionsResult = new AssertionsResult({});
+
+      assertionsResult.addResult({
+        index: 0,
+        result: {
+          pass: false,
+          score: 0,
+          reason: 'Metric emitter failed',
+          tokensUsed: DEFAULT_TOKENS_USED,
+        },
+        metric: 'fp',
+        metricOnly: true,
+      });
+
+      const result = await assertionsResult.testResult();
+
+      expect(result.pass).toBe(true);
+      expect(result.componentResults![0].pass).toBe(false);
+    });
+
+    it('should not short-circuit on a failing metricOnly assertion', () => {
+      vi.mocked(getEnvBool).mockReturnValue(true);
+
+      const assertionsResult = new AssertionsResult({});
+
+      expect(() =>
+        assertionsResult.addResult({
+          index: 0,
+          result: {
+            pass: false,
+            score: 0,
+            reason: 'Metric emitter failed',
+            tokensUsed: DEFAULT_TOKENS_USED,
+          },
+          metric: 'fp',
+          metricOnly: true,
+        }),
+      ).not.toThrow();
+    });
+
+    it('should ignore weight when recording named scores for metricOnly assertions', async () => {
+      const assertionsResult = new AssertionsResult({});
+
+      // Migration trap: legacy weight: 0 workarounds left alongside metricOnly
+      // must not zero out the metric contribution.
+      assertionsResult.addResult({
+        index: 0,
+        result: {
+          pass: true,
+          score: 1,
+          reason: 'Metric emitter',
+          tokensUsed: DEFAULT_TOKENS_USED,
+        },
+        metric: 'tp',
+        weight: 0,
+        metricOnly: true,
+      });
+
+      const result = await assertionsResult.testResult();
+
+      expect(result.namedScores!['tp']).toBe(1);
+      expect(result.namedScoreWeights).toEqual({
+        tp: 1,
+      });
+    });
+
+    it('should average a shared metric with the metricOnly contribution counted at weight 1', async () => {
+      const assertionsResult = new AssertionsResult({});
+
+      assertionsResult.addResult({
+        index: 0,
+        result: {
+          pass: true,
+          score: 0.5,
+          reason: 'Weighted assertion',
+          tokensUsed: DEFAULT_TOKENS_USED,
+        },
+        metric: 'accuracy',
+        weight: 3,
+      });
+
+      assertionsResult.addResult({
+        index: 1,
+        result: {
+          pass: true,
+          score: 1,
+          reason: 'Metric emitter',
+          tokensUsed: DEFAULT_TOKENS_USED,
+        },
+        metric: 'accuracy',
+        weight: 42, // Ignored: metricOnly contributions always count at weight 1.
+        metricOnly: true,
+      });
+
+      const result = await assertionsResult.testResult();
+
+      // accuracy: (0.5 * 3 + 1 * 1) / (3 + 1) = 0.625
+      expect(result.namedScores!['accuracy']).toBeCloseTo(0.625);
+      expect(result.namedScoreWeights).toEqual({
+        accuracy: 4,
+      });
+    });
+
+    it('should not let a failing metricOnly redteam guardrail block the test result', async () => {
+      const assertionsResult = new AssertionsResult({});
+
+      // A real failing assertion.
+      assertionsResult.addResult({
+        index: 0,
+        result: {
+          pass: false,
+          score: 0,
+          reason: 'Real assertion failed',
+          tokensUsed: DEFAULT_TOKENS_USED,
+        },
+        weight: 1,
+      });
+
+      // A metricOnly redteam guardrail failure is a plain metric emission: it
+      // must not trigger the content-safety block that force-passes the test.
+      assertionsResult.addResult({
+        index: 1,
+        result: {
+          pass: false,
+          score: 0,
+          reason: 'Failed safety check',
+          assertion: {
+            type: 'guardrails',
+            config: {
+              purpose: 'redteam',
+            },
+          },
+          tokensUsed: DEFAULT_TOKENS_USED,
+        },
+        metric: 'guardrail_flags',
+        metricOnly: true,
+      });
+
+      const result = await assertionsResult.testResult();
+
+      expect(result.pass).toBe(false);
+      expect(result.reason).toBe('Real assertion failed');
+      expect(result.namedScores!['guardrail_flags']).toBe(0);
+    });
+
+    it('should mark a failing metricOnly result that has no assertion object (e.g. a grader failure)', async () => {
+      const assertionsResult = new AssertionsResult({});
+
+      // A metricOnly model-graded assertion whose grader hits a transport or
+      // parse failure returns a GradingResult without an `assertion` object.
+      // It must still be marked so downstream stats exclude it, rather than
+      // leaking into assertFailCount.
+      assertionsResult.addResult({
+        index: 0,
+        result: {
+          pass: false,
+          score: 0,
+          reason: 'Grader request failed',
+          tokensUsed: DEFAULT_TOKENS_USED,
+        },
+        metric: 'grader_metric',
+        metricOnly: true,
+      });
+
+      const result = await assertionsResult.testResult();
+
+      expect(result.pass).toBe(true);
+      expect(result.componentResults![0].metadata?.metricOnly).toBe(true);
+      expect(result.componentResults![0].assertion).toBeUndefined();
     });
   });
 

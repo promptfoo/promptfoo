@@ -263,11 +263,25 @@ export const SubmitRatingParamsSchema = z.object({
   id: z.string().min(1),
 });
 
-/** Permissive grading result schema. */
+// Validate the containers used for counting while preserving legacy and SDK grading data.
+// Legacy results may carry non-boolean metricOnly values; only boolean true marks a
+// metric-only result, matching countedComponentResults.
+const RatingMetricOnlyMarkerSchema = z.object({ metricOnly: z.unknown().optional() }).passthrough();
+
+const RatingComponentSchema = z
+  .object({
+    pass: z.boolean(),
+    assertion: RatingMetricOnlyMarkerSchema.nullish(),
+    metadata: RatingMetricOnlyMarkerSchema.nullish(),
+  })
+  .passthrough();
+
+/** Permissive grading result schema with validated assertion contributions. */
 export const SubmitRatingRequestSchema = z
   .object({
     pass: z.boolean(),
     score: z.number(),
+    componentResults: z.array(RatingComponentSchema.nullable()).nullish(),
   })
   .passthrough();
 

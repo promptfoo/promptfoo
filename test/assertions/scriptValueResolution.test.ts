@@ -415,6 +415,25 @@ describe('Script value resolution', () => {
       });
     });
 
+    it('retains the failure of a zero-weight metric-only script', async () => {
+      const result = await runAssertion({
+        assertion: {
+          type: 'javascript',
+          value: 'file://throws.cjs',
+          metric: 'observed',
+          metricOnly: true,
+          weight: 0,
+        },
+        test: { vars: {} },
+        providerResponse: baseProviderResponse,
+      });
+      expect(result).toMatchObject({
+        pass: false,
+        score: 0,
+        reason: 'Custom function threw error: boom',
+      });
+    });
+
     it('should apply the weight: 0 override to a throwing file assertion', async () => {
       const result = await runAssertion({
         assertion: { type: 'javascript', value: 'file://throws.cjs', weight: 0 },

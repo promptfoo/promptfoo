@@ -1,6 +1,7 @@
 import dedent from 'dedent';
 import { z } from 'zod';
 import { runAssertions } from '../../../assertions/index';
+import { validateAssertions } from '../../../assertions/validateAssertions';
 import logger from '../../../logger';
 import { createToolResponse } from '../lib/utils';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -40,6 +41,10 @@ export function registerRunAssertionTool(server: McpServer) {
           threshold: z.number().optional().describe('Score threshold for pass/fail (0-1)'),
           weight: z.number().optional().describe('Weight of this assertion (default: 1)'),
           metric: z.string().optional().describe('Name this assertion as a metric'),
+          metricOnly: z
+            .boolean()
+            .optional()
+            .describe('Record the metric without affecting aggregate pass/fail or score'),
           provider: z.any().optional().describe('LLM provider config for model-graded assertions'),
           transform: z.string().optional().describe('Transform the output before assertion'),
           config: z
@@ -85,6 +90,9 @@ export function registerRunAssertionTool(server: McpServer) {
           vars,
           assert: [assertion as Assertion],
         };
+        if (assertion.metricOnly === true) {
+          validateAssertions([testCase]);
+        }
 
         // Create a mock provider response
         const providerResponse = {
@@ -112,6 +120,7 @@ export function registerRunAssertionTool(server: McpServer) {
             threshold: assertion.threshold,
             weight: assertion.weight || 1,
             metric: assertion.metric,
+            metricOnly: assertion.metricOnly,
           },
           result: {
             pass: result.pass,
@@ -160,7 +169,7 @@ export function registerRunAssertionTool(server: McpServer) {
           },
         };
 
-        return createToolResponse('run_assertion', false, errorData);
+        return createToolResponse('run_assertion', false, errorData, errorMessage);
       }
     },
   );

@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { AssertValidationError, validateAssertions } from '../../src/assertions/validateAssertions';
+import logger from '../../src/logger';
 
 import type { TestCase } from '../../src/types/index';
 
@@ -137,6 +138,123 @@ describe('validateAssertions', () => {
       ];
 
       expect(() => validateAssertions(tests)).not.toThrow();
+    });
+
+    it('rejects metricOnly on the assert-set itself', () => {
+      const tests: TestCase[] = [
+        {
+          vars: {},
+          assert: [
+            {
+              type: 'assert-set',
+              metricOnly: true,
+              assert: [
+                {
+                  type: 'equals',
+                  value: 'Expected output',
+                },
+              ],
+            } as any,
+          ],
+        },
+      ];
+
+      expect(() => validateAssertions(tests)).toThrow(AssertValidationError);
+      expect(() => validateAssertions(tests)).toThrow(/metricOnly/);
+    });
+
+    it('rejects metricOnly on max-score', () => {
+      const tests: TestCase[] = [
+        {
+          vars: {},
+          assert: [{ type: 'max-score', metricOnly: true } as any],
+        },
+      ];
+
+      expect(() => validateAssertions(tests)).toThrow(AssertValidationError);
+      expect(() => validateAssertions(tests)).toThrow(/metricOnly/);
+    });
+
+    it('rejects metricOnly on select-best', () => {
+      const tests: TestCase[] = [
+        {
+          vars: {},
+          assert: [{ type: 'select-best', value: 'best criteria', metricOnly: true } as any],
+        },
+      ];
+
+      expect(() => validateAssertions(tests)).toThrow(AssertValidationError);
+      expect(() => validateAssertions(tests)).toThrow(/metricOnly/);
+    });
+
+    it('allows metricOnly on assertions inside an assert-set', () => {
+      const tests: TestCase[] = [
+        {
+          vars: {},
+          assert: [
+            {
+              type: 'assert-set',
+              assert: [
+                {
+                  type: 'javascript',
+                  value: '1',
+                  metric: 'tp',
+                  metricOnly: true,
+                },
+              ],
+            },
+          ],
+        },
+      ];
+
+      expect(() => validateAssertions(tests)).not.toThrow();
+    });
+
+    it.each(['max-score', 'select-best', 'assert-set'] as const)(
+      'allows an explicitly disabled metricOnly flag on %s',
+      (type) => {
+        const assertion =
+          type === 'assert-set'
+            ? {
+                type,
+                metricOnly: false as const,
+                assert: [{ type: 'equals' as const, value: 'ok' }],
+              }
+            : { type, metricOnly: false, value: 'best criteria' };
+        expect(() => validateAssertions([{ assert: [assertion] }])).not.toThrow();
+      },
+    );
+
+    it('accepts zero-weight named measurements without an obsolete migration warning', () => {
+      const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => logger);
+      try {
+        const legacyCounter: TestCase[] = [
+          {
+            vars: {},
+            assert: [{ type: 'javascript', value: '1', metric: 'tp', weight: 0 }],
+          },
+        ];
+        validateAssertions(legacyCounter);
+        expect(warnSpy).not.toHaveBeenCalled();
+
+        warnSpy.mockClear();
+        const migrated: TestCase[] = [
+          {
+            vars: {},
+            // weight: 0 left behind by a migration is fine once metricOnly is set,
+            // and weight: 0 without a metric is the documented force-pass usage.
+            assert: [
+              { type: 'javascript', value: '1', metric: 'tp', weight: 0, metricOnly: true },
+              { type: 'javascript', value: '1', weight: 0 },
+              { type: 'cost', metric: 'inference_cost', weight: 0 },
+            ],
+          },
+        ];
+        validateAssertions(migrated);
+        expect(warnSpy).not.toHaveBeenCalled();
+      } finally {
+        warnSpy.mockRestore();
+      }
     });
 
     it('validates assert-set has assert property', () => {
