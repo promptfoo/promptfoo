@@ -310,6 +310,11 @@ describe('cleanMathText', async () => {
     );
   });
 
+  it('ignores unfinished hidden output and keeps visible text before the tag', () => {
+    expect(cleanMathText('42<THINKING>' + '<thinking>'.repeat(16_000))).toBe('42');
+    expect(cleanMathText('42\n' + 'Thinking: hidden\n'.repeat(8_000))).toBe('42');
+  });
+
   it('strips Bedrock <thinking> blocks', async () => {
     expect(cleanMathText('<thinking>\n$$2$$\n</thinking>\n\n0.5')).toBe('0.5');
   });
@@ -613,6 +618,12 @@ describe('extractMathAnswer', async () => {
     const malformed = '\\boxed{'.repeat(8000);
     const startedAt = performance.now();
     await extractMathAnswer(malformed);
+    expect(performance.now() - startedAt).toBeLessThan(500);
+  });
+
+  it('does not rescan each suffix of a long identifier with no assignment', async () => {
+    const startedAt = performance.now();
+    await extractMathAnswer(`${'z'.repeat(60_000)}\nFinal answer: 42`);
     expect(performance.now() - startedAt).toBeLessThan(500);
   });
 

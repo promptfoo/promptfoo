@@ -65,12 +65,13 @@ const TRIG_REWRITES: [RegExp, string][] = TRIG_FNS.flatMap((fn) => [
   ],
 ]);
 
-const ASSIGNMENT_PATTERN = /(?:[A-Za-z_]\w*|P\([^)]*\))\s*(?:=|\u2248|\\approx\b)/gi;
+const ASSIGNMENT_PATTERN = /\b(?:[A-Za-z_]\w*|P\([^()]*\))\s*(?:=|\u2248|\\approx\b)/gi;
 const DISQUALIFYING_CLAIM_PATTERN =
   /\b(?:is|are)\s+(?:not\b|unequal\s+to\b|less\s+than\b|greater\s+than\b)|\b(?:does\s+not|doesn't)\s+equal(?:s)?(?:\s+to)?\b|\bisn't(?:\s+equal(?:s)?(?:\s+to)?)?\s+(?=[-+\\($\dA-Za-z])|\b(?:cannot|can't)\s+be\b|\b(?:incorrect|wrong)\s+answer\b|\b(?:less|greater)\s+than(?:\s+or\s+equal\s+to)?\b|\bnot\s+(?=[-+\\($\dA-Za-z])|\\text\s*\{\s*(?:not\b|unequal\s+to\b|(?:does\s+not|doesn't|isn't)\s+equal(?:s)?(?:\s+to)?\b)|(?:!=|!==|<=|>=|<|>|\u2260|\u2264|\u2265|\\ne(?:q)?\b|\\le(?:q)?\b|\\ge(?:q)?\b)/i;
 
 function hasAdditionalAssignment(text: string): boolean {
-  return [...text.matchAll(ASSIGNMENT_PATTERN)].length > 1;
+  const assignments = text.matchAll(ASSIGNMENT_PATTERN);
+  return !assignments.next().done && !assignments.next().done;
 }
 
 function hasDisqualifyingClaim(text: string): boolean {
@@ -795,28 +796,50 @@ function remainderAfterLastBoxed(line: string): string | undefined {
  * `$$2$$` up as the answer; the docs promise that thinking blocks are ignored.
  */
 function stripThinkingBlocks(text: string): string {
-  return (
-    text
-      // Provider-native XML thinking wrappers (Bedrock, etc.).
-      .replace(/<thinking>[\s\S]*?<\/thinking>/gi, '')
-      .replace(/<think>[\s\S]*?<\/think>/gi, '')
-      // Anthropic extended thinking: multi-line body, then a Signature line.
-      // A terminal thinking block may not be followed by a blank line.
-      .replace(
-        /(^|\r?\n)[ \t]*Thinking:[\s\S]*?\r?\n[ \t]*Signature:[^\n]*(?:(?:\r?\n)+|$)/gi,
-        '$1',
-      )
-      // Anthropic redacted thinking is a single rendered line and may be terminal.
-      .replace(/(^|\r?\n)[ \t]*Redacted[ \t]+Thinking:[^\r\n]*(?:(?:\r?\n)+|$)/gi, '$1')
-      // Responses API reasoning summaries are rendered as individually prefixed lines.
-      // Keep line separators available for the next global match so adjacent
-      // prefixed summary lines are all removed.
-      .replace(/(^|\r?\n)[ \t]*Reasoning:[^\r\n]*(?=\r?\n|$)/gi, '$1')
-      // OpenAI/OpenRouter-style signatureless thinking (`Thinking: ${reasoning}\n\n${output}`).
-      // Stop at the first blank-line separator so later blank lines inside ${output}
-      // (e.g. "Final answer: 3\n\nNotes") are not consumed.
-      .replace(/(^|\r?\n)[ \t]*Thinking:[\s\S]*?\r?\n\r?\n/gi, '$1')
+  // Scan each tag once. Repeated unclosed opening tags must not restart a
+  // search for a closing tag at every position. An unfinished block is hidden.
+  const visible: string[] = [];
+  let hiddenTag: string | undefined;
+  let start = 0;
+  for (const tag of text.matchAll(/<(\/?)(think(?:ing)?)>/gi)) {
+    const name = tag[2].toLowerCase();
+    if (!hiddenTag && !tag[1]) {
+      visible.push(text.slice(start, tag.index));
+      hiddenTag = name;
+    } else if (hiddenTag === name && tag[1]) {
+      start = tag.index + tag[0].length;
+      hiddenTag = undefined;
+    }
+  }
+  if (!hiddenTag) {
+    visible.push(text.slice(start));
+  }
+
+  // Signed thinking can contain blank lines. Find signatures first so a run
+  // of unsigned Thinking lines never rescans the rest of the response.
+  const lines = visible.join('').split(/\r?\n/);
+  const signatures = lines.flatMap((line, index) =>
+    /^[ \t]*Signature:/i.test(line) ? [index] : [],
   );
+  const output: string[] = [];
+  let signature = 0;
+  for (let i = 0; i < lines.length; i++) {
+    if (/^[ \t]*Thinking:/i.test(lines[i])) {
+      while (signature < signatures.length && signatures[signature] <= i) {
+        signature++;
+      }
+      if (signature < signatures.length) {
+        i = signatures[signature++];
+      } else {
+        while (i + 1 < lines.length && lines[i + 1].trim() !== '') {
+          i++;
+        }
+      }
+    } else if (!/^[ \t]*(?:Reasoning:|Redacted[ \t]+Thinking:)/i.test(lines[i])) {
+      output.push(lines[i]);
+    }
+  }
+  return output.join('\n');
 }
 
 function hasTrailingDisplaySuffix(line: string): boolean {
