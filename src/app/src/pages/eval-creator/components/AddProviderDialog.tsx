@@ -36,7 +36,7 @@ export default function AddProviderDialog({
   const [step, setStep] = useState<'select' | 'configure'>('select');
   const [provider, setProvider] = useState<ProviderOptions | undefined>(initialProvider);
   const [providerType, setProviderType] = useState<string | undefined>(
-    initialProvider ? getProviderTypeFromId(initialProvider.id) : undefined,
+    initialProvider ? getProviderTypeFromId(initialProvider.id, initialProvider.config) : undefined,
   );
   const [error, setError] = useState<string | null>(null);
   const [shouldValidate, setShouldValidate] = useState(false);
@@ -56,7 +56,7 @@ export default function AddProviderDialog({
     if (open) {
       if (initialProvider) {
         setProvider(initialProvider);
-        setProviderType(getProviderTypeFromId(initialProvider.id));
+        setProviderType(getProviderTypeFromId(initialProvider.id, initialProvider.config));
         setStep('configure');
       } else {
         // Use placeholder ID to prevent ProviderTypeSelector from auto-selecting HTTP
@@ -197,6 +197,9 @@ export default function AddProviderDialog({
   );
 }
 
-export function getProviderTypeFromId(id: string | undefined): string | undefined {
-  return getProviderEditorType(id);
+export function getProviderTypeFromId(
+  id: string | undefined,
+  config?: Record<string, unknown>,
+): string | undefined {
+  return getProviderEditorType(id, config);
 }
