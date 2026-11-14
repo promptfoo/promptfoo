@@ -1,6 +1,7 @@
 import OpenAI from 'openai';
 import { describe, expect, it, vi } from 'vitest';
 import {
+  appendOpenAiApiPath,
   assertOpenAiApiModel,
   calculateOpenAICost,
   calculateSafeOpenAICost,
@@ -27,6 +28,34 @@ import {
 import { isProviderResponseRateLimited } from '../../../src/scheduler/types';
 
 vi.mock('../../../src/cache');
+
+describe('appendOpenAiApiPath', () => {
+  it.each([
+    ['https://example.test/v1', 'models', undefined, 'https://example.test/v1/models'],
+    [
+      'https://example.test/v1///?a=/b#c/?d',
+      '///models',
+      'k=v',
+      'https://example.test/v1/models?a=/b&k=v#c/?d',
+    ],
+    [
+      'https://example.test#section?x',
+      '/models',
+      'k=v',
+      'https://example.test/models?k=v#section?x',
+    ],
+    ['///', '/', undefined, '/'],
+  ] as const)('appends the endpoint to %s', (base, endpoint, query, expected) => {
+    expect(appendOpenAiApiPath(base, endpoint, query)).toBe(expected);
+  });
+
+  it('preserves long interior slash runs while trimming the base path suffix', () => {
+    const gateway = `https://example.test/v1/${'/'.repeat(50_000)}tenant`;
+    expect(appendOpenAiApiPath(`${gateway}///?version=1#ref`, '/chat/completions')).toBe(
+      `${gateway}/chat/completions?version=1#ref`,
+    );
+  });
+});
 
 describe('getOpenAiEffectiveServiceTier', () => {
   it('preserves layer precedence when prompt passthrough replaces provider passthrough', () => {

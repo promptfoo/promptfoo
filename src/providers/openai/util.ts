@@ -276,7 +276,11 @@ export function appendOpenAiApiPath(apiUrl: string, endpoint: string, query?: st
   const existingQuery = queryIndex === -1 ? '' : urlWithoutFragment.slice(queryIndex);
   const appendedQuery = query ? `${existingQuery ? '&' : '?'}${query}` : '';
 
-  return `${base.replace(/\/+$/, '')}/${endpoint.replace(/^\/+/, '')}${existingQuery}${appendedQuery}${fragment}`;
+  let end = base.length;
+  while (end > 0 && base[end - 1] === '/') {
+    end--;
+  }
+  return `${base.slice(0, end)}/${endpoint.replace(/^\/+/, '')}${existingQuery}${appendedQuery}${fragment}`;
 }
 type OpenAIModelCost = {
   input: number;
