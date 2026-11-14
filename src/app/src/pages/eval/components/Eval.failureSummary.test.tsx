@@ -120,6 +120,7 @@ describe('failure groups with real router and store', () => {
     expect(filters).toEqual([
       expect.objectContaining({ type: 'error', value: 'a'.repeat(64), evalId: 'eval-a' }),
     ]);
+    expect(filters[0]).not.toHaveProperty('label');
     expect(new URLSearchParams(window.location.search).has('rowId')).toBe(false);
     expect(
       JSON.parse(tableRequests[tableRequests.length - 1]!.searchParams.get('filter')!),
@@ -138,6 +139,31 @@ describe('failure groups with real router and store', () => {
     ).toBe(true);
     expect(Object.values(useTableStore.getState().filters.values)).toEqual([]);
     expect(new URLSearchParams(window.location.search).has('filter')).toBe(false);
+  });
+
+  it('removes the display label from a copied URL while preserving the filter and details', async () => {
+    const filter = {
+      id: 'old',
+      type: 'error',
+      operator: 'equals',
+      value: 'a'.repeat(64),
+      evalId: 'eval-a',
+      sortIndex: 0,
+      logicOperator: 'and',
+      label: 'private provider context',
+    };
+    mount(`?filter=${encodeURIComponent(JSON.stringify([filter]))}&rowId=details&other=1#prompt-0`);
+    await screen.findByRole('button', { name: '2 failures: Timeout' });
+    const params = new URLSearchParams(window.location.search);
+    const [saved] = JSON.parse(params.get('filter')!);
+    expect(saved.value).toBe(filter.value);
+    expect(saved).not.toHaveProperty('label');
+    expect(params.get('rowId')).toBe('details');
+    expect(params.get('other')).toBe('1');
+    expect(window.location.hash).toBe('#prompt-0');
+    expect(
+      tableRequests.every((url) => !decodeURIComponent(url.search).includes(filter.label)),
+    ).toBe(true);
   });
 
   it('drops a copied group from another eval before the first table request', async () => {
