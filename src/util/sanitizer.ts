@@ -1740,3 +1740,43 @@ export function sanitizeUrlForLogging(url: string): string {
     return unparseableUrlMightLeakSecret(url) || hasOpaquePath ? REDACTED : sanitized;
   }
 }
+
+/** Keep a judge recognizable in saved results and in older, unsanitized result displays. */
+export function sanitizeGradingProviderDisplay(display: string): string {
+  return display.replace(/\S+/g, (token) => {
+    const separator = token.indexOf('://');
+    let start = token.startsWith('(') ? 1 : 0;
+    if (separator >= 0) {
+      // Find the scheme boundary in one pass, including URLs embedded in labels.
+      start = separator;
+      while (start > 0 && /[a-z0-9+.-]/i.test(token[start - 1])) {
+        start--;
+      }
+      if (!/[a-z]/i.test(token[start]) || token.includes('://', separator + 3)) {
+        return REDACTED;
+      }
+    } else if (token[start] !== '/') {
+      return token;
+    }
+
+    const prefix = token.slice(0, start);
+    const closing = token.endsWith(')') && prefix.endsWith('(');
+    const value = token.slice(start, closing ? -1 : undefined);
+    try {
+      const url = new URL(value, DUMMY_BASE);
+      const authority =
+        separator >= 0
+          ? `${url.protocol}//${url.host}`
+          : value.startsWith('//')
+            ? `//${url.host}`
+            : '';
+      const path =
+        authority && url.pathname === '/' && !value.endsWith('/')
+          ? ''
+          : sanitizeUrlForLogging(url.pathname);
+      return prefix + authority + path + (closing ? ')' : '');
+    } catch {
+      return REDACTED;
+    }
+  });
+}

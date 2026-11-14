@@ -724,6 +724,22 @@ it('falls back to assertion.provider for search-rubric without searchProvider', 
   ).toBe('openai:gpt-4o');
 });
 
+it.each(['pi', 'search-rubric'] as const)(
+  'omits the configured provider when it cannot identify the %s judge',
+  async (type) => {
+    const { getGradingProviderDisplay } = await import('./utils');
+    expect(
+      getGradingProviderDisplay({
+        pass: false,
+        score: 0,
+        reason: 'grader failed',
+        assertion: { type, provider: 'openai:gpt-4o' },
+        metadata: { graderError: true },
+      }),
+    ).toBeUndefined();
+  },
+);
+
 it('strips credentials from a stored raw search-rubric searchProvider URL', async () => {
   const { getGradingProviderDisplay } = await import('./utils');
   expect(
@@ -752,6 +768,53 @@ it('strips credentials from a judge URL that has a label', async () => {
       },
     }),
   ).toBe('https://judge.example.com/v1 (My judge)');
+});
+
+it.each([
+  ['https://u:p@judge.example/grade(v2)?token=fixture', 'https://judge.example/grade(v2)'],
+  ['id (https://judge.example/grade(v2)?token=fixture)', 'id (https://judge.example/grade(v2))'],
+  ['/token/abcdef1234567890/grade?token=fixture', '/token/%5BREDACTED%5D/grade'],
+])(
+  'sanitizes the complete endpoint in stored and configured judges',
+  async (provider, expected) => {
+    const { getGradingProviderDisplay } = await import('./utils');
+    const result = { pass: true, score: 1, reason: 'ok' };
+    expect(getGradingProviderDisplay({ ...result, metadata: { gradingProvider: provider } })).toBe(
+      expected,
+    );
+    expect(
+      getGradingProviderDisplay({ ...result, assertion: { type: 'llm-rubric', provider } }),
+    ).toBe(expected);
+  },
+);
+
+it('redacts a complete URL embedded in a label', async () => {
+  const { getGradingProviderDisplay } = await import('./utils');
+  const gradingProvider = 'see=https://u:p(w)@judge.example/grade(v2)?token=fixture';
+  expect(
+    getGradingProviderDisplay({
+      pass: true,
+      score: 1,
+      reason: 'ok',
+      metadata: { gradingProvider },
+    }),
+  ).toBe('see=https://judge.example/grade(v2)');
+});
+
+it('handles long labels and redacts malformed endpoints', async () => {
+  const { getGradingProviderDisplay } = await import('./utils');
+  const label = 'A'.repeat(100_000);
+  const display = (gradingProvider: string) =>
+    getGradingProviderDisplay({
+      pass: true,
+      reason: 'ok',
+      score: 1,
+      metadata: { gradingProvider },
+    });
+  expect(display(label)).toBe(label);
+  expect(display(label + '!https://[?token=fixture')).toBe('[REDACTED]');
+  expect(display('://u:p@judge.example')).toBe('[REDACTED]');
+  expect(display('https://one.example/https://u:p@two.example')).toBe('[REDACTED]');
 });
 
 it('leaves provider ids without a URL unchanged', async () => {

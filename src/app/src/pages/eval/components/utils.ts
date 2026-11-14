@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from 'react';
 
 import { HUMAN_ASSERTION_TYPE } from '@promptfoo/providers/constants';
+import { sanitizeGradingProviderDisplay } from '../../../../../util/sanitizer';
 import type {
   EvaluateTable,
   EvaluateTableOutput,
@@ -225,7 +226,6 @@ const LLM_JUDGE_ASSERTION_TYPES = new Set<string>([
   'llm-rubric',
   'model-graded-closedqa',
   'model-graded-factuality',
-  'pi',
   'search-rubric',
   'trajectory:goal-success',
 ]);
@@ -270,25 +270,6 @@ function formatConfiguredProvider(configured: unknown): string | undefined {
 }
 
 /**
- * Strip credentials from URLs inside a provider id before it is shown. HTTP
- * provider ids are their endpoint URL, and results stored by older versions
- * (or fields persisted without sanitization) can carry userinfo or secret
- * query parameters. The judge only needs to be recognizable, so keep the
- * scheme, host and path and drop userinfo, query and fragment.
- */
-function redactProviderUrls(display: string): string {
-  return display.replace(/[a-z][a-z0-9+.-]*:\/\/[^\s()]+/gi, (match) => {
-    try {
-      const url = new URL(match);
-      const path = url.pathname === '/' && !match.endsWith('/') ? '' : url.pathname;
-      return `${url.protocol}//${url.host}${path}`;
-    } catch {
-      return match.replace(/\/\/[^/@]*@/, '//').split(/[?#]/)[0];
-    }
-  });
-}
-
-/**
  * Resolve the LLM-as-a-judge provider id for display.
  * Prefer the runtime-persisted `metadata.gradingProvider`; fall back to an
  * explicitly configured `assertion.provider` for older eval results, but only
@@ -298,7 +279,7 @@ export function getGradingProviderDisplay(
   result: GradingResult | null | undefined,
 ): string | undefined {
   const display = resolveGradingProviderDisplay(result);
-  return display === undefined ? undefined : redactProviderUrls(display);
+  return display === undefined ? undefined : sanitizeGradingProviderDisplay(display);
 }
 
 function resolveGradingProviderDisplay(
@@ -320,6 +301,9 @@ function resolveGradingProviderDisplay(
     const fromSearch = result?.metadata?.searchProvider;
     if (typeof fromSearch === 'string' && fromSearch.trim()) {
       return fromSearch.trim();
+    }
+    if (result?.metadata?.graderError) {
+      return undefined;
     }
   }
 

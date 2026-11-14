@@ -166,7 +166,7 @@ describe('matchesSearchRubric', () => {
         reason: 'Search rubric evaluation failed: search unavailable',
         // Tagged so inverse-aware callers propagate the failure verbatim
         // instead of flipping a transport error into a spurious pass.
-        metadata: { graderError: true },
+        metadata: { graderError: true, searchProvider: mocks.webSearchProvider.id() },
       }),
     );
   });
@@ -192,7 +192,7 @@ describe('matchesSearchRubric', () => {
         score: 0,
         reason:
           'Search rubric evaluation failed: Expected a JSON object with a boolean "pass" field',
-        metadata: { graderError: true },
+        metadata: { graderError: true, searchProvider: mocks.webSearchProvider.id() },
         tokensUsed: { total: 5, prompt: 3, completion: 2 },
       }),
     );

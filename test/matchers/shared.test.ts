@@ -189,9 +189,7 @@ describe('formatResolvedGradingProvider', () => {
       callApi: async () => ({ output: '' }),
     } as ApiProvider;
 
-    expect(formatResolvedGradingProvider(provider)).toBe(
-      'https://***:***@judge.example/grade?api_key=%5BREDACTED%5D',
-    );
+    expect(formatResolvedGradingProvider(provider)).toBe('https://judge.example/grade');
   });
 
   it('redacts credentials when a label is appended', () => {
@@ -202,7 +200,7 @@ describe('formatResolvedGradingProvider', () => {
     } as ApiProvider;
 
     expect(formatResolvedGradingProvider(provider)).toBe(
-      'https://judge.example/grade?api_key=%5BREDACTED%5D (Custom Judge)',
+      'https://judge.example/grade (Custom Judge)',
     );
   });
 
@@ -215,7 +213,7 @@ describe('formatResolvedGradingProvider', () => {
 
     const result = attachGradingProvider({ pass: true, score: 1, reason: 'ok' }, provider);
 
-    expect(result.metadata.gradingProvider).toContain('Judge https://***:***@judge.example/grade');
+    expect(result.metadata.gradingProvider).toContain('Judge https://judge.example/grade');
     expect(result.metadata.gradingProvider).not.toContain('label-password');
     expect(result.metadata.gradingProvider).not.toContain('label-token');
   });
@@ -244,9 +242,7 @@ describe('attachGradingProvider', () => {
     };
     const result = attachGradingProvider(baseResult, provider);
 
-    expect(result.metadata.gradingProvider).toBe(
-      'https://judge.example/grade?api_key=%5BREDACTED%5D',
-    );
+    expect(result.metadata.gradingProvider).toBe('https://judge.example/grade');
     expect(result.metadata.gradingProvider).not.toContain('super-secret');
   });
 });

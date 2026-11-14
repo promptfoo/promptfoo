@@ -1,4 +1,4 @@
-import { sanitizeProviderIdForLog } from '../util/provider';
+import { sanitizeGradingProviderDisplay } from '../util/sanitizer';
 
 import type { ApiProvider, GradingResult, TokenUsage } from '../types/index';
 
@@ -11,14 +11,7 @@ import type { ApiProvider, GradingResult, TokenUsage } from '../types/index';
 export function formatResolvedGradingProvider(provider: ApiProvider): string {
   const id = provider.id();
   const label = typeof provider.label === 'string' ? provider.label.trim() : '';
-  const safeId = sanitizeProviderIdForLog(id);
-  if (!label || label === id) {
-    return safeId;
-  }
-  const safeLabel = label.replace(/[a-z][a-z0-9+.-]*:\/\/[^\s]+/gi, (url) =>
-    sanitizeProviderIdForLog(url),
-  );
-  return `${safeId} (${safeLabel})`;
+  return sanitizeGradingProviderDisplay(label && label !== id ? `${id} (${label})` : id);
 }
 
 /**
@@ -26,7 +19,7 @@ export function formatResolvedGradingProvider(provider: ApiProvider): string {
  * with credential-bearing HTTP ids redacted like `metadata.gradingProvider`.
  */
 export function formatSanitizedProviderId(provider: ApiProvider): string {
-  return sanitizeProviderIdForLog(provider.id());
+  return sanitizeGradingProviderDisplay(provider.id());
 }
 
 /**
@@ -39,9 +32,10 @@ export function attachGradingProvider<T extends Omit<GradingResult, 'assertion'>
   result: T,
   provider: ApiProvider | string,
 ): T & { metadata: NonNullable<GradingResult['metadata']> } {
-  const gradingProvider = sanitizeProviderIdForLog(
-    typeof provider === 'string' ? provider : formatResolvedGradingProvider(provider),
-  );
+  const gradingProvider =
+    typeof provider === 'string'
+      ? sanitizeGradingProviderDisplay(provider)
+      : formatResolvedGradingProvider(provider);
   return {
     ...result,
     metadata: {

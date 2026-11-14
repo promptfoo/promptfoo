@@ -539,7 +539,11 @@ export const useTableStore = create<TableState>()(
   subscribeWithSelector((set, get) => ({
     evalId: null,
     setEvalId: (evalId: string) =>
-      set(() => ({ evalId, filteredMetrics: null, accumulatedGradingProviders: [] })),
+      set((state) => ({
+        evalId,
+        filteredMetrics: null,
+        ...(state.evalId === evalId ? {} : { accumulatedGradingProviders: [] }),
+      })),
 
     author: null,
     setAuthor: (author: string | null) => set(() => ({ author })),
@@ -678,6 +682,10 @@ export const useTableStore = create<TableState>()(
             buildRedteamFilterOptions(data.config, data.table),
             extractPolicyIdToNameMap(data.config?.redteam?.plugins ?? []),
           ]);
+
+          if (skipSettingEvalId && get().evalId !== id) {
+            return data;
+          }
 
           set((prevState) => {
             const nextEvalId = skipSettingEvalId ? prevState.evalId : id;

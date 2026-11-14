@@ -1277,6 +1277,57 @@ describe('useTableStore', () => {
         'openai:judge-a',
         'openai:judge-b',
       ]);
+
+      (callApi as Mock).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          table: pageOne,
+          totalCount: 2,
+          filteredCount: 2,
+        }),
+      } as any);
+
+      await act(async () => {
+        const store = useTableStore.getState();
+        store.setEvalId(mockEvalId);
+        await store.fetchEvalData(mockEvalId, {
+          skipSettingEvalId: true,
+          skipLoadingState: true,
+        });
+      });
+
+      expect(useTableStore.getState().accumulatedGradingProviders).toEqual([
+        'openai:judge-a',
+        'openai:judge-b',
+      ]);
+    });
+
+    it('does not let a pending page update the next evaluation', async () => {
+      const store = useTableStore.getState();
+      let completePage!: (response: Response) => void;
+      const pendingPage = new Promise<Response>((resolve) => {
+        completePage = resolve;
+      });
+      (callApi as Mock).mockReturnValueOnce(pendingPage);
+
+      await act(async () => {
+        store.setEvalId('previous-eval');
+        const request = store.fetchEvalData('previous-eval', {
+          skipSettingEvalId: true,
+          skipLoadingState: true,
+        });
+        store.setEvalId('current-eval');
+        completePage(
+          new Response(JSON.stringify({ table: { head: { prompts: [], vars: [] }, body: [] } })),
+        );
+        await request;
+      });
+
+      expect(useTableStore.getState()).toMatchObject({
+        evalId: 'current-eval',
+        table: null,
+        accumulatedGradingProviders: [],
+      });
     });
 
     it('resets accumulated judges when switching to a different eval', async () => {
