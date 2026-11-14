@@ -75,6 +75,7 @@ describe('online grading', () => {
       defaultTest: {
         assert: [{ type: 'contains', value: 'ok' }],
         vars: { input: 'wrong', rubric: 'reference' },
+        options: { literalVars: ['rubric', 'input'] },
       },
     });
     const config = await loadOnlineConfig('/trusted/grading.yaml');
@@ -91,7 +92,7 @@ describe('online grading', () => {
     expect(suite.tests).toEqual([
       expect.objectContaining({
         vars: { input: 'original request', rubric: 'reference' },
-        options: { literalVars: ['input'] },
+        options: { literalVars: ['rubric', 'input'] },
         metadata: expect.objectContaining({
           sessionId: 's',
           turnId: 't',
