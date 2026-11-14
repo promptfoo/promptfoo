@@ -211,21 +211,14 @@ export function maybeLoadFromExternalFile(
         }
         throw error;
       }
-      if (matchedFile.endsWith('.json')) {
-        const parsed = JSON.parse(contents);
+      const isJson = matchedFile.endsWith('.json');
+      if (isJson || matchedFile.endsWith('.yaml') || matchedFile.endsWith('.yml')) {
+        const parsed = isJson ? JSON.parse(contents) : loadYaml(contents);
         if (Array.isArray(parsed)) {
-          allContents.push(...parsed);
-        } else {
-          allContents.push(parsed);
-        }
-      } else if (matchedFile.endsWith('.yaml') || matchedFile.endsWith('.yml')) {
-        const parsed = loadYaml(contents);
-        if (parsed === null || parsed === undefined) {
-          continue; // Skip empty files
-        }
-        if (Array.isArray(parsed)) {
-          allContents.push(...parsed);
-        } else {
+          for (const item of parsed) {
+            allContents.push(item);
+          }
+        } else if (isJson || parsed != null) {
           allContents.push(parsed);
         }
       } else if (matchedFile.endsWith('.csv')) {
@@ -234,10 +227,9 @@ export function maybeLoadFromExternalFile(
         };
         const records = csvParse<Record<string, string>>(contents, csvOptions);
         // If single column, return array of values to match single file behavior
-        if (records.length > 0 && Object.keys(records[0]).length === 1) {
-          allContents.push(...records.map((record) => Object.values(record)[0]));
-        } else {
-          allContents.push(...records);
+        const singleColumn = records.length > 0 && Object.keys(records[0]).length === 1;
+        for (const record of records) {
+          allContents.push(singleColumn ? Object.values(record)[0] : record);
         }
       } else {
         allContents.push(contents);
