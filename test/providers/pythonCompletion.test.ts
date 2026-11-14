@@ -211,6 +211,28 @@ describe('PythonProvider', () => {
       ]);
     });
 
+    it('should keep the provider config out of log messages and context', async () => {
+      const secret = 'fake-api-key-for-this-test';
+      const provider = new PythonProvider('script.py', {
+        config: { connection: { opaque: secret } },
+      });
+      // with the cache on, so the cache key and caching messages are logged too
+      mockIsCacheEnabled.mockReturnValue(true);
+      mockGetCache.mockResolvedValue({
+        get: vi.fn().mockResolvedValue(null),
+        set: vi.fn(),
+      } as never);
+      mockPoolInstance.execute.mockResolvedValue({ output: 'test output' });
+
+      await provider.callApi('test prompt');
+
+      const calls = (['debug', 'info', 'warn', 'error'] as const).flatMap(
+        (level) => vi.mocked(logger[level]).mock.calls,
+      );
+      expect(JSON.stringify(calls)).not.toContain(secret);
+      expect(JSON.stringify(calls)).not.toMatch(/cache key \(sha256\)/i);
+    });
+
     describe('error handling', () => {
       it('should throw a specific error when Python script returns invalid result', async () => {
         const provider = new PythonProvider('script.py');

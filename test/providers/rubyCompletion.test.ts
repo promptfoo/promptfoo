@@ -3,6 +3,7 @@ import path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getCache, isCacheEnabled } from '../../src/cache';
+import logger from '../../src/logger';
 import { RubyProvider } from '../../src/providers/rubyCompletion';
 import { runRuby } from '../../src/ruby/rubyUtils';
 import * as fileReference from '../../src/util/fileReference';
@@ -151,6 +152,30 @@ describe('RubyProvider', () => {
         { rubyExecutable: undefined },
       );
       expect(result).toEqual({ output: 'test output', cached: false });
+    });
+
+    it('should keep the provider config out of log messages and context', async () => {
+      const secret = 'fake-api-key-for-this-test';
+      const spies = (['debug', 'info', 'warn', 'error'] as const).map((level) =>
+        vi.spyOn(logger, level),
+      );
+      const provider = new RubyProvider('script.rb', {
+        config: { connection: { opaque: secret } },
+      });
+      // with the cache on, so the cache key and caching messages are logged too
+      mockIsCacheEnabled.mockReturnValue(true);
+      mockGetCache.mockResolvedValue({
+        get: vi.fn().mockResolvedValue(null),
+        set: vi.fn(),
+      } as never);
+      mockRunRuby.mockResolvedValue({ output: 'test output' });
+
+      await provider.callApi('test prompt');
+
+      const calls = spies.flatMap((spy) => spy.mock.calls);
+      spies.forEach((spy) => spy.mockRestore());
+      expect(JSON.stringify(calls)).not.toContain(secret);
+      expect(JSON.stringify(calls)).not.toMatch(/cache key \(sha256\)/i);
     });
 
     it('should not mutate the caller context when sanitizing', async () => {

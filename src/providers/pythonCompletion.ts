@@ -10,7 +10,6 @@ import { PythonWorkerPool } from '../python/workerPool';
 import { sha256 } from '../util/createHash';
 import { processConfigFileReferences } from '../util/fileReference';
 import { parsePathOrGlob } from '../util/index';
-import { safeJsonStringify } from '../util/json';
 import { providerRegistry } from './providerRegistry';
 import { sanitizeScriptContext } from './scriptContext';
 import {
@@ -242,7 +241,6 @@ export class PythonProvider implements ApiProvider {
     const cacheKey = `python:${this.scriptPath}:${this.functionName || 'default'}:${apiType}:${fileHash}:${prompt}:${JSON.stringify(
       this.options,
     )}:${JSON.stringify(context?.vars)}`;
-    logger.debug(`PythonProvider cache key: ${cacheKey}`);
 
     const cache = await getCache();
     let cachedResult;
@@ -278,9 +276,7 @@ export class PythonProvider implements ApiProvider {
 
       const args = buildScriptArgs(apiType, prompt, optionsWithProcessedConfig, sanitizedContext);
 
-      logger.debug(
-        `Executing python script ${absPath} via worker pool with args: ${safeJsonStringify(args)}`,
-      );
+      logger.debug(`Executing python script ${absPath} via worker pool`);
 
       const functionName = this.functionName || apiType;
       // Use worker pool instead of runPython
@@ -292,7 +288,7 @@ export class PythonProvider implements ApiProvider {
       const hasError = hasScriptResultError(result);
 
       if (isCacheEnabled() && !hasError) {
-        logger.debug(`PythonProvider caching result: ${cacheKey}`);
+        logger.debug('PythonProvider caching result');
         await cache.set(cacheKey, JSON.stringify(result));
       } else {
         logger.debug(
