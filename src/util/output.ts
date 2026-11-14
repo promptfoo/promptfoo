@@ -29,6 +29,7 @@ import { streamEvalCsv } from './eval/evalTableUtils';
 import invariant from './invariant';
 import { writeJunitXmlOutput } from './junit';
 import { getOutputFileFormat, SUPPORTED_OUTPUT_FILE_FORMATS } from './outputFormats';
+import { isMissingPackageImportError, optionalPackageInstallHint } from './packageImportErrors';
 import { sanitizeConfigForOutput, sanitizeRuntimeOptions } from './sanitizer';
 import { getNunjucksEngine } from './templates';
 
@@ -598,9 +599,11 @@ async function writePdfOutput(outputPath: string, evalRecord: Eval): Promise<voi
   try {
     ({ chromium } = await import('playwright'));
   } catch (error) {
-    throw new Error(
-      `PDF output requires the playwright package. Install it with: npm install playwright && npx playwright install chromium\n${error instanceof Error ? error.message : String(error)}`,
-    );
+    if (!isMissingPackageImportError(error, 'playwright')) {
+      throw error;
+    }
+    const hint = optionalPackageInstallHint('npm install promptfoo "playwright@^1.63.0"');
+    throw new Error(`PDF output requires Playwright. ${hint}`);
   }
   const htmlOutput = await renderEvalHtmlReport(evalRecord);
   const htmlBytes = Buffer.byteLength(htmlOutput);
@@ -614,7 +617,7 @@ async function writePdfOutput(outputPath: string, evalRecord: Eval): Promise<voi
     browser = await chromium.launch({ headless: true });
   } catch (error) {
     throw new Error(
-      `Failed to launch Chromium for PDF output: ${error instanceof Error ? error.message : String(error)}\nIf the browser is not installed, run: npx playwright install chromium`,
+      `Failed to launch Chromium for PDF output: ${error instanceof Error ? error.message : String(error)}\nInstall matching Chromium with npx playwright install chromium in your project, or playwright install chromium for a global installation.`,
     );
   }
   try {
