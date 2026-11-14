@@ -1,11 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { handleSimilar } from '../../src/assertions/similar';
 import cliState from '../../src/cliState';
 import { matchesSimilarity } from '../../src/matchers/similarity';
 import { DefaultEmbeddingProvider } from '../../src/providers/openai/defaults';
 import { OpenAiEmbeddingProvider } from '../../src/providers/openai/embedding';
 import * as remoteGeneration from '../../src/redteam/remoteGeneration';
 import * as remoteGrading from '../../src/remoteGrading';
-import { withProviderCallTracingContext } from '../../src/scheduler/providerCallExecutionContext';
+import {
+  withProviderCallExecutionContext,
+  withProviderCallTracingContext,
+} from '../../src/scheduler/providerCallExecutionContext';
+import { withTracedProviderCall } from '../../src/tracing/targetTracer';
+import { createEmbeddingResult, createPassingGrade } from '../factories/literalFixtures';
 import { createMockProvider } from '../factories/provider';
 import { mockProcessEnv } from '../util/utils';
 
@@ -13,21 +19,30 @@ import type { OpenAiChatCompletionProvider } from '../../src/providers/openai/ch
 import type { ProviderCallTracingContext } from '../../src/scheduler/providerCallExecutionContext';
 import type { GradingConfig } from '../../src/types/index';
 
+const createEmbeddingProviderConfig = () => ({
+  provider: {
+    id: 'openai:embedding:text-embedding-ada-9999999',
+    config: {
+      apiKey: 'abc123',
+      temperature: 3.1415926,
+    },
+  },
+});
+
+const createSimilarityResponse = () => ({
+  similarity: 0.9,
+  tokenUsage: { total: 5, prompt: 2, completion: 3 },
+});
+
 describe('matchesSimilarity', () => {
   beforeEach(() => {
     cliState.config = {};
     cliState.selectedProviderConfigs = undefined;
     vi.spyOn(DefaultEmbeddingProvider, 'callEmbeddingApi').mockImplementation((text) => {
       if (text === 'Expected output' || text === 'Sample output') {
-        return Promise.resolve({
-          embedding: [1, 0, 0],
-          tokenUsage: { total: 5, prompt: 2, completion: 3 },
-        });
+        return Promise.resolve(createEmbeddingResult(1, 0));
       } else if (text === 'Different output') {
-        return Promise.resolve({
-          embedding: [0, 1, 0],
-          tokenUsage: { total: 5, prompt: 2, completion: 3 },
-        });
+        return Promise.resolve(createEmbeddingResult(0, 1));
       }
       return Promise.reject(new Error('Unexpected input'));
     });
@@ -37,6 +52,65 @@ describe('matchesSimilarity', () => {
     cliState.selectedProviderConfigs = undefined;
     vi.restoreAllMocks();
   });
+
+  it.each([
+    { tracing: false, cancellation: true, array: false },
+    { tracing: true, cancellation: false, array: false },
+    { tracing: true, cancellation: true, array: true },
+  ])(
+    'forwards assertion context through the real tracing path: %j',
+    async ({ tracing, cancellation, array }) => {
+      const abortSignal = cancellation ? new AbortController().signal : undefined;
+      const callContext = {
+        prompt: { raw: 'fixture', label: 'embedding' },
+        vars: { fixture: 'preserved' },
+        bustCache: true,
+        ...(tracing
+          ? { traceparent: '00-0123456789abcdef0123456789abcdef-0123456789abcdef-01' }
+          : {}),
+      };
+      const providerSpan =
+        vi.fn<ProviderCallTracingContext['withProviderSpan']>(withTracedProviderCall);
+      const invoke = () =>
+        handleSimilar({
+          assertion: { type: 'similar', value: 'Expected output', threshold: 0.5 },
+          renderedValue: array ? ['Expected output'] : 'Expected output',
+          outputString: 'Sample output',
+          inverse: false,
+          test: {},
+          baseType: 'similar',
+          output: 'Sample output',
+          providerResponse: { output: 'Sample output' },
+          assertionValueContext: {
+            prompt: 'fixture',
+            vars: callContext.vars,
+            test: {},
+            logProbs: undefined,
+            provider: createMockProvider(),
+            providerResponse: { output: 'Sample output' },
+          },
+          providerCallContext: callContext,
+        });
+      await withProviderCallExecutionContext({ abortSignal }, () =>
+        tracing
+          ? withProviderCallTracingContext(
+              {
+                getActiveTraceparent: () => callContext.traceparent,
+                withGraderSpan: async (_options, run) => run(),
+                withProviderSpan: providerSpan,
+              },
+              invoke,
+            )
+          : invoke(),
+      );
+      const calls = vi.mocked(DefaultEmbeddingProvider.callEmbeddingApi).mock.calls;
+      expect(calls).toHaveLength(2);
+      for (const [, context, options] of calls) {
+        expect(context).toMatchObject(callContext);
+        expect(options).toEqual(abortSignal ? { abortSignal } : undefined);
+      }
+    },
+  );
 
   it('should pass when similarity is above the threshold', async () => {
     const expected = 'Expected output';
@@ -129,11 +203,7 @@ describe('matchesSimilarity', () => {
       redteam: {},
     };
     vi.spyOn(remoteGeneration, 'shouldGenerateRemote').mockReturnValue(true);
-    vi.spyOn(remoteGrading, 'doRemoteGrading').mockResolvedValue({
-      pass: true,
-      score: 1,
-      reason: 'remote',
-    });
+    vi.spyOn(remoteGrading, 'doRemoteGrading').mockResolvedValue(createPassingGrade(1, 'remote'));
 
     await matchesSimilarity('Expected output', 'Sample output', 0.5);
 
@@ -154,11 +224,7 @@ describe('matchesSimilarity', () => {
     };
     cliState.selectedProviderConfigs = ['promptfoo://provider/selected-target'];
     vi.spyOn(remoteGeneration, 'shouldGenerateRemote').mockReturnValue(true);
-    vi.spyOn(remoteGrading, 'doRemoteGrading').mockResolvedValue({
-      pass: true,
-      score: 1,
-      reason: 'remote',
-    });
+    vi.spyOn(remoteGrading, 'doRemoteGrading').mockResolvedValue(createPassingGrade(1, 'remote'));
 
     await matchesSimilarity('Expected output', 'Sample output', 0.5);
 
@@ -220,24 +286,13 @@ describe('matchesSimilarity', () => {
     const expected = 'Expected output';
     const output = 'Sample output';
     const threshold = 0.5;
-    const grading: GradingConfig = {
-      provider: {
-        id: 'openai:embedding:text-embedding-ada-9999999',
-        config: {
-          apiKey: 'abc123',
-          temperature: 3.1415926,
-        },
-      },
-    };
+    const grading: GradingConfig = createEmbeddingProviderConfig();
 
     const mockCallApi = vi.spyOn(OpenAiEmbeddingProvider.prototype, 'callEmbeddingApi');
     mockCallApi.mockImplementation(function (this: OpenAiChatCompletionProvider) {
       expect(this.config.temperature).toBe(3.1415926);
       expect(this.getApiKey()).toBe('abc123');
-      return Promise.resolve({
-        embedding: [1, 0, 0],
-        tokenUsage: { total: 5, prompt: 2, completion: 3 },
-      });
+      return Promise.resolve(createEmbeddingResult(1, 0));
     });
 
     await expect(matchesSimilarity(expected, output, threshold, false, grading)).resolves.toEqual({
@@ -262,15 +317,7 @@ describe('matchesSimilarity', () => {
     const expected = 'Expected output';
     const output = 'Sample output';
     const threshold = 0.5;
-    const grading: GradingConfig = {
-      provider: {
-        id: 'openai:embedding:text-embedding-ada-9999999',
-        config: {
-          apiKey: 'abc123',
-          temperature: 3.1415926,
-        },
-      },
-    };
+    const grading: GradingConfig = createEmbeddingProviderConfig();
 
     vi.spyOn(OpenAiEmbeddingProvider.prototype, 'callEmbeddingApi').mockRejectedValueOnce(
       new Error('API call failed'),
@@ -346,19 +393,66 @@ describe('matchesSimilarity', () => {
     });
   });
 
+  describe('finite score compatibility', () => {
+    beforeEach(() => {
+      vi.spyOn(DefaultEmbeddingProvider, 'callEmbeddingApi').mockImplementation((text) => {
+        const vectors: Record<string, [number, number]> = {
+          small: [3, 4],
+          large: [6, 8],
+          opposite: [-3, -4],
+          huge: [1e200, 1e200],
+          negativeHuge: [-1e200, -1e200],
+        };
+        const vector = vectors[text];
+        return vector
+          ? Promise.resolve(createEmbeddingResult(vector[0], vector[1]))
+          : Promise.reject(new Error('Unexpected input'));
+      });
+    });
+
+    it.each([
+      { metric: 'cosine', output: 'opposite', inverse: false, score: -1, pass: false },
+      { metric: 'cosine', output: 'opposite', inverse: true, score: 2, pass: true },
+      { metric: 'dot_product', output: 'large', inverse: false, score: 50, pass: true },
+      { metric: 'dot_product', output: 'large', inverse: true, score: -49, pass: false },
+      { metric: 'dot_product', output: 'opposite', inverse: false, score: -25, pass: false },
+      { metric: 'dot_product', output: 'opposite', inverse: true, score: 26, pass: true },
+    ] as const)('preserves the native score and inverse complement: %j', async (testCase) => {
+      const { metric, output, inverse, score, pass } = testCase;
+      await expect(
+        matchesSimilarity('small', output, 0.75, inverse, undefined, metric),
+      ).resolves.toMatchObject({ pass, score });
+    });
+
+    it.each([
+      { metric: 'cosine', output: 'huge', invalidScore: 'NaN' },
+      { metric: 'dot_product', output: 'huge', invalidScore: 'Infinity' },
+      { metric: 'dot_product', output: 'negativeHuge', invalidScore: '-Infinity' },
+      { metric: 'euclidean', output: 'small', invalidScore: 'Infinity' },
+    ] as const)(
+      'rejects computed non-finite values, including inverse assertions: %j',
+      async ({ metric, output, invalidScore }) => {
+        for (const inverse of [false, true]) {
+          await expect(
+            matchesSimilarity('huge', output, 0.75, inverse, undefined, metric),
+          ).resolves.toMatchObject({
+            pass: false,
+            score: 0,
+            reason: `Invalid similarity score: ${invalidScore}`,
+            tokensUsed: { total: 10, prompt: 4, completion: 6 },
+          });
+        }
+      },
+    );
+  });
+
   describe('euclidean metric', () => {
     beforeEach(() => {
       vi.spyOn(DefaultEmbeddingProvider, 'callEmbeddingApi').mockImplementation((text) => {
         if (text === 'Expected output' || text === 'Sample output') {
-          return Promise.resolve({
-            embedding: [1, 0, 0],
-            tokenUsage: { total: 5, prompt: 2, completion: 3 },
-          });
+          return Promise.resolve(createEmbeddingResult(1, 0));
         } else if (text === 'Different output') {
-          return Promise.resolve({
-            embedding: [0, 1, 0],
-            tokenUsage: { total: 5, prompt: 2, completion: 3 },
-          });
+          return Promise.resolve(createEmbeddingResult(0, 1));
         }
         return Promise.reject(new Error('Unexpected input'));
       });
@@ -386,6 +480,7 @@ describe('matchesSimilarity', () => {
         matchesSimilarity(expected, output, threshold, false, undefined, 'euclidean'),
       ).resolves.toMatchObject({
         pass: false,
+        score: 1 / (1 + Math.sqrt(2)),
         reason: expect.stringContaining('Distance 1.41 is greater than threshold 0.5'),
       });
     });
@@ -400,6 +495,7 @@ describe('matchesSimilarity', () => {
         matchesSimilarity(expected, output, threshold, true, undefined, 'euclidean'),
       ).resolves.toMatchObject({
         pass: true,
+        score: 1 - 1 / (1 + Math.sqrt(2)),
         reason: expect.stringContaining('Distance 1.41 is greater than threshold 0.5'),
       });
     });
@@ -424,6 +520,23 @@ describe('matchesSimilarity', () => {
   });
 
   describe('metric validation', () => {
+    it.each([NaN, Infinity, '0.9', { pass: true, score: 50 }])(
+      'rejects malformed native similarity values: %j',
+      async (similarity) => {
+        const provider = Object.assign(createMockProvider({ id: 'native-similarity' }), {
+          callSimilarityApi: vi.fn().mockResolvedValue({ similarity }),
+        });
+
+        await expect(
+          matchesSimilarity('expected', 'output', 0.8, false, { provider }),
+        ).resolves.toMatchObject({
+          pass: false,
+          score: 0,
+          reason: `Invalid similarity score: ${similarity}`,
+        });
+      },
+    );
+
     it('records native similarity providers beneath the grading trace', async () => {
       const provider = Object.assign(createMockProvider({ id: 'native-similarity' }), {
         callSimilarityApi: vi.fn().mockResolvedValue({ similarity: 0.9 }),
@@ -449,10 +562,7 @@ describe('matchesSimilarity', () => {
 
     it('should normalize missing completion details for native similarity providers', async () => {
       const mockProvider = Object.assign(createMockProvider({ id: 'test-similarity-provider' }), {
-        callSimilarityApi: vi.fn().mockResolvedValue({
-          similarity: 0.9,
-          tokenUsage: { total: 5, prompt: 2, completion: 3 },
-        }),
+        callSimilarityApi: vi.fn().mockResolvedValue(createSimilarityResponse()),
       });
 
       const grading: GradingConfig = {
@@ -474,10 +584,7 @@ describe('matchesSimilarity', () => {
 
     it('should reject non-cosine metric for callSimilarityApi providers', async () => {
       const mockProvider = Object.assign(createMockProvider({ id: 'test-similarity-provider' }), {
-        callSimilarityApi: vi.fn().mockResolvedValue({
-          similarity: 0.9,
-          tokenUsage: { total: 5, prompt: 2, completion: 3 },
-        }),
+        callSimilarityApi: vi.fn().mockResolvedValue(createSimilarityResponse()),
       });
 
       const grading: GradingConfig = {
@@ -523,11 +630,7 @@ describe('matchesSimilarity', () => {
     it('should keep non-cosine metrics local when remote grading is enabled', async () => {
       (cliState as any).config = { redteam: {} };
       vi.spyOn(remoteGeneration, 'shouldGenerateRemote').mockReturnValue(true);
-      vi.spyOn(remoteGrading, 'doRemoteGrading').mockResolvedValue({
-        pass: true,
-        score: 1,
-        reason: 'remote',
-      });
+      vi.spyOn(remoteGrading, 'doRemoteGrading').mockResolvedValue(createPassingGrade(1, 'remote'));
 
       await expect(
         matchesSimilarity('Expected output', 'Sample output', 0.5, false, undefined, 'dot_product'),

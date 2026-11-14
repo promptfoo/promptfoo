@@ -134,7 +134,7 @@ describe('parseXlsxFile', () => {
   });
 
   describe('sheet selection syntax', () => {
-    it('should select sheet by name using # syntax', async () => {
+    it('selects the first matching sheet by name using # syntax', async () => {
       const mockRows = [
         ['col1', 'col2'],
         ['sheet2data', 'value2'],
@@ -143,7 +143,7 @@ describe('parseXlsxFile', () => {
       mockReadXlsxFile.mockResolvedValue([
         createMockSheet('Sheet1'),
         createMockSheet('DataSheet', mockRows),
-        createMockSheet('Sheet3'),
+        createMockSheet('DataSheet'),
       ]);
 
       const result = await parseXlsxFile('test.xlsx#DataSheet');

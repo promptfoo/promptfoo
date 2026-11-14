@@ -1,4 +1,6 @@
-# compare-gpt-temperature (Gpt 4o Temperature Comparison)
+# compare-gpt-temperature (GPT-6 Luna Temperature Comparison)
+
+This example compares temperatures `0` and `1` with GPT-6 Luna. Both providers set reasoning effort to `none`, which enables temperature sampling.
 
 You can run this example with:
 
@@ -9,14 +11,10 @@ cd compare-gpt-temperature
 
 ## Usage
 
-To get started, set the OPENAI_API_KEY environment variable.
-
-Next, edit promptfooconfig.yaml.
-
-Then run:
+Set `OPENAI_API_KEY`, then run:
 
 ```bash
-promptfoo eval
+npx promptfoo@latest eval --no-cache
 ```
 
-Afterwards, you can view the results by running `promptfoo view`
+Afterwards, you can view the results by running `npx promptfoo@latest view`

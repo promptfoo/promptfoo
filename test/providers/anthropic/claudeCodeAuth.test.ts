@@ -88,6 +88,14 @@ describe('claudeCodeAuth', () => {
   });
 
   describe('loadClaudeCodeCredential', () => {
+    const createMissingKeychainItem = () => () => {
+      const err = new Error('The specified item could not be found in the keychain.') as Error & {
+        status?: number;
+      };
+      err.status = 44;
+      throw err;
+    };
+
     it('returns a credential parsed from the macOS keychain on darwin', () => {
       setPlatform('darwin');
       const blob = JSON.stringify({
@@ -166,13 +174,7 @@ describe('claudeCodeAuth', () => {
     it('falls back to the CLAUDE_CONFIG_DIR credentials file when the profile keychain entry is missing', () => {
       setPlatform('darwin');
       setEnv({ CLAUDE_CONFIG_DIR: '/custom/claude-config' });
-      mocks.execFileSync.mockImplementation(() => {
-        const err = new Error('The specified item could not be found in the keychain.') as Error & {
-          status?: number;
-        };
-        err.status = 44;
-        throw err;
-      });
+      mocks.execFileSync.mockImplementation(createMissingKeychainItem());
       mocks.existsSync.mockReturnValue(true);
       mocks.readFileSync.mockReturnValue(
         JSON.stringify({ claudeAiOauth: { accessToken: 'sk-ant-oat-profile-file' } }),
@@ -226,13 +228,7 @@ describe('claudeCodeAuth', () => {
     it('falls through silently when the macOS keychain entry is simply missing (exit 44)', () => {
       setPlatform('darwin');
       const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
-      mocks.execFileSync.mockImplementation(() => {
-        const err = new Error('The specified item could not be found in the keychain.') as Error & {
-          status?: number;
-        };
-        err.status = 44;
-        throw err;
-      });
+      mocks.execFileSync.mockImplementation(createMissingKeychainItem());
       mocks.existsSync.mockReturnValue(false);
 
       expect(loadClaudeCodeCredential()).toBeNull();

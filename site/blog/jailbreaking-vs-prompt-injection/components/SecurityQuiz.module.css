@@ -115,99 +115,6 @@
   cursor: not-allowed;
 }
 
-.matching {
-  margin-bottom: 1.5rem;
-}
-
-.choices h4,
-.categories h4 {
-  font-size: 1.1rem;
-  font-weight: 600;
-  color: #374151;
-  margin-bottom: 1rem;
-}
-
-.choicesList {
-  display: grid;
-  gap: 0.5rem;
-  margin-bottom: 2rem;
-}
-
-.choice {
-  padding: 0.75rem 1rem;
-  background: #3b82f6;
-  color: white;
-  border-radius: 6px;
-  cursor: grab;
-  transition: all 0.2s ease;
-  font-weight: 500;
-  text-align: center;
-  user-select: none;
-}
-
-.choice:hover {
-  background: #2563eb;
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
-}
-
-.choice:active {
-  cursor: grabbing;
-}
-
-.choice.placed {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.choice.correct {
-  background: #10b981;
-}
-
-.choice.incorrect {
-  background: #ef4444;
-}
-
-.categories {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 1rem;
-}
-
-.category {
-  background: #f8fafc;
-  border: 2px dashed #cbd5e1;
-  border-radius: 8px;
-  padding: 1rem;
-  min-height: 150px;
-}
-
-.dropZone {
-  min-height: 100px;
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  align-items: center;
-  justify-content: center;
-}
-
-.droppedChoice {
-  padding: 0.5rem 0.75rem;
-  background: #e2e8f0;
-  border-radius: 4px;
-  font-size: 0.875rem;
-  color: #475569;
-  text-align: center;
-  width: 100%;
-}
-
-.dropHint {
-  color: #94a3b8;
-  font-style: italic;
-  text-align: center;
-  font-size: 0.875rem;
-}
-
 .explanation {
   background: #f0f9ff;
   border: 1px solid #0ea5e9;
@@ -323,37 +230,6 @@
   margin-bottom: 1rem;
 }
 
-.timeDisplay {
-  color: #64748b;
-  font-size: 0.875rem;
-  margin-top: 0.5rem;
-}
-
-.resultsSummary {
-  background: white;
-  border-radius: 12px;
-  padding: 1.5rem;
-  margin-bottom: 2rem;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
-}
-
-.resultsSummary h3 {
-  margin: 0 0 1rem 0;
-  color: #1e293b;
-}
-
-.resultItem {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 0.5rem 0;
-  border-bottom: 1px solid #f1f5f9;
-}
-
-.resultItem:last-child {
-  border-bottom: none;
-}
-
 .correct {
   color: #059669;
   font-weight: 600;
@@ -362,11 +238,6 @@
 .incorrect {
   color: #dc2626;
   font-weight: 600;
-}
-
-.points {
-  font-weight: 600;
-  color: #64748b;
 }
 
 .actions {
@@ -419,10 +290,6 @@
 
   .questionCard {
     padding: 1.5rem;
-  }
-
-  .categories {
-    grid-template-columns: 1fr;
   }
 
   .scoreDisplay {
@@ -510,25 +377,6 @@ html[data-theme='dark'] .option.incorrect {
   color: #fca5a5;
 }
 
-html[data-theme='dark'] .choices h4,
-html[data-theme='dark'] .categories h4 {
-  color: #e2e8f0;
-}
-
-html[data-theme='dark'] .category {
-  background: #111827;
-  border-color: #334155;
-}
-
-html[data-theme='dark'] .droppedChoice {
-  background: #1f2937;
-  color: #cbd5e1;
-}
-
-html[data-theme='dark'] .dropHint {
-  color: #94a3b8;
-}
-
 html[data-theme='dark'] .explanation {
   background: #0c1a2e;
   border-color: #0284c7;
@@ -547,24 +395,13 @@ html[data-theme='dark'] .hint {
   background: #111827;
 }
 
-html[data-theme='dark'] .scoreDisplay,
-html[data-theme='dark'] .resultsSummary {
+html[data-theme='dark'] .scoreDisplay {
   background: #0b1220;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
 }
 
-html[data-theme='dark'] .scoreText h2,
-html[data-theme='dark'] .resultsSummary h3 {
+html[data-theme='dark'] .scoreText h2 {
   color: #e2e8f0;
-}
-
-html[data-theme='dark'] .timeDisplay,
-html[data-theme='dark'] .points {
-  color: #94a3b8;
-}
-
-html[data-theme='dark'] .resultItem {
-  border-bottom-color: #1f2937;
 }
 
 html[data-theme='dark'] .retryButton {

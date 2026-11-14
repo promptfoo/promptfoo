@@ -1,7 +1,5 @@
-import { fetchWithCache } from '../../cache';
-import { getEnvString } from '../../envars';
-import logger from '../../logger';
-import { getRequestTimeoutMs } from '../shared';
+import { getEnvString, getProviderEnvString } from '../../envars';
+import { requestHyperbolicJson } from './transport';
 
 import type { EnvOverrides } from '../../types/env';
 import type {
@@ -36,6 +34,8 @@ export type HyperbolicImageOptions = {
   loras?: Record<string, number>;
   response_format?: 'url' | 'b64_json';
 };
+
+const NO_IMAGES_ERROR = 'No images returned from API';
 
 const HYPERBOLIC_IMAGE_MODELS = [
   {
@@ -125,7 +125,9 @@ export class HyperbolicImageProvider implements ApiProvider {
     if (this.config?.apiKey) {
       return this.config.apiKey;
     }
-    return this.env?.HYPERBOLIC_API_KEY || getEnvString('HYPERBOLIC_API_KEY');
+    return (
+      getProviderEnvString(this.env, 'HYPERBOLIC_API_KEY') || getEnvString('HYPERBOLIC_API_KEY')
+    );
   }
 
   getApiUrl(): string {
@@ -157,8 +159,9 @@ export class HyperbolicImageProvider implements ApiProvider {
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
-    _callApiOptions?: CallApiOptionsParams,
+    callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
+    callApiOptions?.abortSignal?.throwIfAborted();
     const apiKey = this.getApiKey();
     if (!apiKey) {
       throw new Error(
@@ -175,7 +178,7 @@ export class HyperbolicImageProvider implements ApiProvider {
     const endpoint = '/image/generation';
     const responseFormat = config.response_format || 'url';
 
-    const body: Record<string, any> = {
+    const body: Record<string, unknown> = {
       model_name: modelName,
       prompt,
       height: config.height || 1024,
@@ -227,50 +230,24 @@ export class HyperbolicImageProvider implements ApiProvider {
       body.loras = config.loras;
     }
 
-    const headers = {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`,
-    } as Record<string, string>;
-
-    let data: any, status: number, statusText: string, latencyMs: number | undefined;
-    let cached = false;
-    try {
-      ({ data, cached, status, statusText, latencyMs } = await fetchWithCache(
-        `${this.getApiUrl()}${endpoint}`,
-        {
-          method: 'POST',
-          headers,
-          body: JSON.stringify(body),
-        },
-        getRequestTimeoutMs(),
-      ));
-
-      if (status < 200 || status >= 300) {
-        return {
-          error: `API error: ${status} ${statusText}\n${typeof data === 'string' ? data : JSON.stringify(data)}`,
-        };
-      }
-    } catch (err) {
-      logger.error(`API call error: ${String(err)}`);
-      return {
-        error: `API call error: ${String(err)}`,
-      };
+    const result = await requestHyperbolicJson<{ images?: { image: string }[] }>(
+      `${this.getApiUrl()}${endpoint}`,
+      apiKey,
+      body,
+      context,
+      callApiOptions?.abortSignal,
+      NO_IMAGES_ERROR,
+    );
+    if (!result.ok) {
+      return { error: result.error };
     }
-
-    if (data.error) {
-      return {
-        error: typeof data.error === 'string' ? data.error : JSON.stringify(data.error),
-      };
-    }
+    const { data, cached, latencyMs } = result;
 
     try {
-      if (!data.images || !Array.isArray(data.images) || data.images.length === 0) {
-        return {
-          error: 'No images returned from API',
-        };
+      const imageData = Array.isArray(data?.images) ? data.images[0]?.image : undefined;
+      if (typeof imageData !== 'string' || !imageData.trim()) {
+        return { error: NO_IMAGES_ERROR };
       }
-
-      const imageData = data.images[0].image;
       const cost = cached ? 0 : this.calculateImageCost();
 
       // Format the output for proper rendering

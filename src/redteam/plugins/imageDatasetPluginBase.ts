@@ -1,7 +1,6 @@
 import dedent from 'dedent';
 import logger from '../../logger';
-import { RedteamGraderBase, RedteamPluginBase } from './base';
-import { ImageDatasetManager } from './imageDatasetUtils';
+import { createAssertion, RedteamGraderBase, RedteamPluginBase } from './base';
 
 import type { Assertion, AtomicTestCase, PluginConfig, TestCase } from '../../types/index';
 
@@ -21,7 +20,9 @@ export abstract class ImageDatasetPluginBase<
   TConfig extends ImageDatasetPluginConfig = ImageDatasetPluginConfig,
 > extends RedteamPluginBase {
   protected abstract readonly pluginId: string;
-  protected abstract readonly datasetManager: ImageDatasetManager<TInput>;
+  protected abstract readonly datasetManager: {
+    getFilteredRecords(limit: number, config?: any): Promise<TInput[]>;
+  };
   protected pluginConfig?: TConfig;
 
   constructor(provider: any, purpose: string, injectVar: string, config?: TConfig) {
@@ -49,12 +50,7 @@ export abstract class ImageDatasetPluginBase<
    * Get assertions for a test case
    */
   protected getAssertions(_prompt: string): Assertion[] {
-    return [
-      {
-        type: this.pluginId as Assertion['type'],
-        metric: this.getMetricName(),
-      },
-    ];
+    return [createAssertion(this.pluginId as Assertion['type'], this.getMetricName())];
   }
 
   /**
@@ -112,8 +108,7 @@ export abstract class ImageDatasetPluginBase<
           vars: { [this.injectVar]: this.extractImageFromRecord(record) },
           assert: [
             {
-              type: this.pluginId as Assertion['type'],
-              metric: this.getMetricName(),
+              ...createAssertion(this.pluginId as Assertion['type'], this.getMetricName()),
               value: this.extractAssertionValue(record),
             },
           ],
