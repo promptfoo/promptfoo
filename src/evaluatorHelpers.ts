@@ -71,15 +71,18 @@ export function resolveVariables(
         continue;
       }
       const value = variables[key] as string;
-      const match = regex.exec(value);
+      const match = regex.exec(maskNunjucksBlocks(value));
       if (match) {
         const [placeholder, varName] = match;
         if (variables[varName] === undefined) {
           // Do nothing - final nunjucks render will fail if necessary.
           // logger.warn(`Variable "${varName}" not found for substitution.`);
         } else {
-          // A replacer function keeps `$&`, `$'` and `` $` `` in the value literal.
-          variables[key] = value.replace(placeholder, () => variables[varName] as string);
+          // Use the match offset from the masked value and insert replacement text literally.
+          variables[key] =
+            value.slice(0, match.index) +
+            String(variables[varName]) +
+            value.slice(match.index + placeholder.length);
           if (skipResolveVars?.includes(varName) || varsResolvedFromSkipped?.has(varName)) {
             varsResolvedFromSkipped?.add(key);
           }
@@ -91,6 +94,82 @@ export function resolveVariables(
   } while (!resolved && iterations < 5);
 
   return variables;
+}
+
+/**
+ * Hide literal Nunjucks contents from variable-to-variable resolution. Spaces
+ * preserve match offsets, so substitutions can use the original string without
+ * introducing placeholders that could collide with variable contents.
+ */
+function maskNunjucksBlocks(value: string): string {
+  if (!/['"]|\{[%#]/.test(value)) {
+    return value;
+  }
+
+  const tokens = /\{%-?\s*(raw|verbatim)\s*-?%\}|\{%|\{#|\{\{/g;
+  const rawTags = /\{%-?\s*(end)?(raw|verbatim)\s*-?%\}/g;
+  const pieces: string[] = [];
+  let cursor = 0;
+  for (let match = tokens.exec(value); match; match = tokens.exec(value)) {
+    if (match[1]) {
+      const kind = match[1];
+      rawTags.lastIndex = tokens.lastIndex;
+      let depth = 1;
+      let tag: RegExpExecArray | null;
+      while (depth && (tag = rawTags.exec(value))) {
+        if (tag[2] === kind) {
+          depth += tag[1] ? -1 : 1;
+        }
+      }
+      tokens.lastIndex = depth ? value.length : rawTags.lastIndex;
+    } else if (match[0] === '{#') {
+      const end = value.indexOf('#}', tokens.lastIndex);
+      tokens.lastIndex = end === -1 ? value.length : end + 2;
+    } else {
+      const output = match[0] === '{{';
+      const closing = output ? '}}' : '%}';
+      let quote = '';
+      let hasLiteral = false;
+      let i = tokens.lastIndex;
+      while (i < value.length) {
+        const ch = value[i];
+        if (quote) {
+          if (ch === '\\') {
+            i++;
+          } else if (ch === quote) {
+            quote = '';
+          }
+        } else if (ch === 'r' && value[i + 1] === '/' && !/[\w$]/.test(value[i - 1])) {
+          // Nunjucks treats r/.../ as a single token, including quotes or delimiters inside it.
+          hasLiteral = true;
+          i += 2;
+          while (i < value.length && (value[i] !== '/' || value[i - 1] === '\\')) {
+            i++;
+          }
+        } else if (ch === '"' || ch === "'") {
+          quote = ch;
+          hasLiteral = true;
+        } else if (value.startsWith(closing, i)) {
+          i += 2;
+          break;
+        } else if (
+          value.startsWith('{{', i) ||
+          value.startsWith('{%', i) ||
+          value.startsWith('{#', i)
+        ) {
+          break;
+        }
+        i++;
+      }
+      tokens.lastIndex = Math.min(i, value.length);
+      if (output && !hasLiteral) {
+        continue;
+      }
+    }
+    pieces.push(value.slice(cursor, match.index), ' '.repeat(tokens.lastIndex - match.index));
+    cursor = tokens.lastIndex;
+  }
+  return pieces.length ? pieces.join('') + value.slice(cursor) : value;
 }
 
 // Utility: Detect partial/unclosed Nunjucks tags and wrap in {% raw %} if needed
