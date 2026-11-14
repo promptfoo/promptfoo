@@ -4,7 +4,7 @@ description: Automatic response evaluation using LLM rubric scoring
 prompts:
   - file://prompts.txt
 providers:
-  - openai:chat:gpt-5.4
+  - openai:gpt-6-sol
 defaultTest:
   assert:
     - type: llm-rubric

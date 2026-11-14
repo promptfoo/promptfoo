@@ -10,7 +10,7 @@
  */
 
 import invariant from '../util/invariant';
-import { getNGrams } from './ngrams';
+import { countNGrams, getNGrams } from './ngrams';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 
@@ -40,28 +40,16 @@ function tokenize(text: string): string[] {
 }
 
 /**
- * Counts how many times each n-gram occurs.
- *
- * @internal
- */
-function countNGrams(ngrams: string[]): Map<string, number> {
-  const counts = new Map<string, number>();
-  for (const gram of ngrams) {
-    counts.set(gram, (counts.get(gram) ?? 0) + 1);
-  }
-  return counts;
-}
-
-/**
  * Calculates BLEU score for a candidate string against reference strings.
  *
  * @param candidate - The string to evaluate
  * @param references - Array of reference strings to compare against
  * @param weights - Weights for each n-gram precision (1-gram to 4-gram). Must be
  *   non-negative and sum to 1 (BLEU weights are non-negative by definition).
- * @returns BLEU score between 0 and 1 (0 for an empty or whitespace-only candidate)
+ * @returns BLEU score between 0 and 1 (0 for an empty or whitespace-only candidate,
+ *   or when every reference is blank)
  * @throws When the candidate is null/undefined, references is empty, weights are
- *   negative, or weights don't sum to 1
+ *   not four finite numbers, are negative, or don't sum to 1
  */
 export function calculateBleuScore(
   candidate: string,
@@ -71,12 +59,8 @@ export function calculateBleuScore(
   if (candidate == null || references.length === 0 || weights.length !== 4) {
     throw new Error('Invalid inputs');
   }
-  // An empty or whitespace-only candidate (a refusal or truncated generation) has
-  // zero n-gram overlap with any reference, so its BLEU score is 0. Return early to
-  // avoid throwing — which would crash the eval — or letting `tokenize('   ')` (which
-  // yields `['']`) smooth to a misleadingly tiny nonzero score.
-  if (candidate.trim() === '') {
-    return 0;
+  if (Array.from(weights).some((weight) => !Number.isFinite(weight))) {
+    throw new Error('Weights must be finite numbers');
   }
   // BLEU weights are non-negative by definition. Rejecting negatives keeps the
   // score within the documented [0, 1] range (a negative weight on a smoothed
@@ -89,9 +73,21 @@ export function calculateBleuScore(
   if (Math.abs(weights.reduce((a, b) => a + b) - 1) > 1e-4) {
     throw new Error('Weights must sum to 1');
   }
+  // An empty or whitespace-only candidate (a refusal or truncated generation) has
+  // zero n-gram overlap with any reference, so its BLEU score is 0. Return before
+  // `tokenize('   ')` (which yields `['']`) can smooth it to a misleadingly tiny
+  // nonzero score.
+  if (candidate.trim() === '') {
+    return 0;
+  }
 
   const candidateWords = tokenize(candidate);
-  const referenceWordsList = references.map(tokenize);
+  // A blank reference (an unset template var, an empty CSV cell) has no n-grams. Drop it so
+  // tokenize('')'s one-token length cannot win the closest-length pick for the brevity penalty.
+  const referenceWordsList = references.filter((r) => r.trim() !== '').map(tokenize);
+  if (referenceWordsList.length === 0) {
+    return 0;
+  }
 
   // Find reference length closest to the candidate length for the brevity penalty.
   // On ties, prefer the shorter reference (BLEU / NLTK `closest_ref_length`

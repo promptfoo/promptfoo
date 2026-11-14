@@ -14,7 +14,7 @@ echo ""
 # Check if litellm is installed
 if ! command -v litellm &>/dev/null; then
   echo "ERROR: LiteLLM is not installed."
-  echo "Install it with: pip install 'litellm[proxy]'"
+  echo "Install it with: python -m pip install --upgrade 'litellm[proxy]>=1.101.0,<2'"
   exit 1
 fi
 

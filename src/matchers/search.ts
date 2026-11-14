@@ -6,7 +6,7 @@ import { hasWebSearchCapability, loadWebSearchProvider } from '../providers/webS
 import { extractFirstJsonObject } from '../util/json';
 import { callProviderWithContext, getGradingProvider } from './providers';
 import { loadRubricPrompt, renderLlmRubricPrompt } from './rubric';
-import { tryParse } from './shared';
+import { graderFail, tryParse } from './shared';
 
 import type {
   ApiProvider,
@@ -70,7 +70,7 @@ export async function matchesSearchRubric(
   if (!searchProvider || !hasWebSearchCapability(searchProvider)) {
     throw new Error(
       'search-rubric assertion requires a grading provider with web search capabilities. ' +
-        `Use --grader with a web search provider (e.g., anthropic:messages:${DEFAULT_ANTHROPIC_MODEL}, openai:responses:o4-mini with tools configured, perplexity:sonar) or configure one in defaultTest.options.provider`,
+        `Use --grader with a web search provider (e.g., anthropic:messages:${DEFAULT_ANTHROPIC_MODEL}, openai:responses:gpt-6-luna with web_search configured, perplexity:sonar) or configure one in defaultTest.options.provider`,
     );
   }
 
@@ -92,15 +92,14 @@ export async function matchesSearchRubric(
   );
 
   if (resp.error || !resp.output) {
+    // A provider that errored gave no verdict to invert on; `graderFail` tags it
+    // so not-search-rubric never flips a transport failure into a pass.
     return {
-      pass: false,
-      score: 0,
-      reason: `Search rubric evaluation failed: ${resp.error || 'No output'}`,
-      tokensUsed: resp.tokenUsage,
+      ...graderFail(
+        `Search rubric evaluation failed: ${resp.error || 'No output'}`,
+        resp.tokenUsage,
+      ),
       assertion,
-      // A provider that errored gave no verdict to invert on; tag it so
-      // not-search-rubric never flips a transport failure into a pass.
-      metadata: { graderError: true },
     };
   }
 

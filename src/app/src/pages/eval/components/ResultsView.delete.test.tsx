@@ -3,7 +3,7 @@ import React from 'react';
 import { renderWithProviders } from '@app/utils/testutils';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ResultsView from './ResultsView';
 
@@ -24,8 +24,8 @@ vi.mock('@app/hooks/useToast', () => ({
   useToast: () => ({ showToast: mockShowToast }),
 }));
 
-vi.mock('react-router-dom', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('react-router-dom')>();
+vi.mock('react-router', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('react-router')>();
   return {
     ...actual,
     useNavigate: () => mockNavigate,
@@ -48,15 +48,6 @@ vi.mock('@app/stores/evalConfig', () => ({
   useStore: () => ({
     updateConfig: vi.fn(),
   }),
-}));
-
-vi.mock('@app/components/ui/dialog', () => ({
-  Dialog: ({ open, children }: { open: boolean; children: React.ReactNode }) =>
-    open ? <div>{children}</div> : null,
-  DialogContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  DialogFooter: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  DialogHeader: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  DialogTitle: ({ children }: { children: React.ReactNode }) => <h2>{children}</h2>,
 }));
 
 vi.mock('@app/components/ui/dropdown-menu', () => ({
@@ -531,7 +522,9 @@ describe('ResultsView - Delete Functionality', () => {
 
     const deleteButton = screen.getByRole('button', { name: 'Delete' });
     await user.click(deleteButton);
-    await user.click(document.body);
+    const overlay = document.querySelector('.fixed.inset-0')!;
+    expect(overlay).toBeInTheDocument();
+    await user.click(overlay);
     document.body.focus();
     await user.keyboard('{Escape}');
 

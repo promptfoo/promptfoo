@@ -6,39 +6,18 @@
  *
  * @see docs/plans/smoke-tests.md for the full checklist
  */
-import { spawnSync } from 'child_process';
+
+import { setTimeout as delay } from 'node:timers/promises';
+import { spawn } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { getOpenAiMissingApiKeyMessage } from '../providers/openai/shared';
+import { CLI_PATH, runCli } from './runCli';
 
-// Path to the built CLI binary
-const CLI_PATH = path.resolve(__dirname, '../../dist/src/main.js');
-const ROOT_DIR = path.resolve(__dirname, '../..');
 const FIXTURES_DIR = path.resolve(__dirname, 'fixtures');
 const OUTPUT_DIR = path.resolve(__dirname, '.temp-output-configs');
-
-/**
- * Helper to run the CLI and capture output
- */
-function runCli(
-  args: string[],
-  options: { cwd?: string; env?: NodeJS.ProcessEnv } = {},
-): { stdout: string; stderr: string; exitCode: number } {
-  const result = spawnSync('node', [CLI_PATH, ...args], {
-    cwd: options.cwd || ROOT_DIR,
-    encoding: 'utf-8',
-    env: { ...process.env, ...options.env, NO_COLOR: '1' },
-    timeout: 60000,
-  });
-
-  return {
-    stdout: result.stdout || '',
-    stderr: result.stderr || '',
-    exitCode: result.status ?? 1,
-  };
-}
 
 describe('Config Format Smoke Tests', () => {
   beforeAll(() => {
@@ -51,6 +30,116 @@ describe('Config Format Smoke Tests', () => {
   afterAll(() => {
     if (fs.existsSync(OUTPUT_DIR)) {
       fs.rmSync(OUTPUT_DIR, { recursive: true, force: true });
+    }
+  });
+
+  it.each(['js', 'mjs'])(
+    'loads .%s configs with extensionless helper imports in a fresh CLI',
+    (ext) => {
+      const configPath = path.join(OUTPUT_DIR, `promptfooconfig.${ext}`);
+      const outputPath = path.join(OUTPUT_DIR, `extensionless-${ext}.json`);
+      fs.writeFileSync(
+        path.join(OUTPUT_DIR, 'helper.js'),
+        "export default 'extensionless helper';",
+      );
+      fs.writeFileSync(
+        configPath,
+        "import prompt from './helper'; export default { prompts: [prompt], providers: ['echo'], tests: [{ assert: [{ type: 'equals', value: prompt }] }] };",
+      );
+
+      const result = runCli(
+        ['eval', '-c', configPath, '-o', outputPath, '--no-cache', '--no-share'],
+        {
+          env: { NODE_OPTIONS: '', PROMPTFOO_CONFIG_DIR: path.join(OUTPUT_DIR, `config-${ext}`) },
+        },
+      );
+
+      expect(result.exitCode, result.stdout + result.stderr).toBe(0);
+      const exported = JSON.parse(fs.readFileSync(outputPath, 'utf-8'));
+      expect(exported.results.results).toHaveLength(1);
+      expect(exported.results.results[0]).toMatchObject({
+        success: true,
+        score: 1,
+        response: { output: 'extensionless helper' },
+      });
+      expect(exported.results.results[0].error).toBeFalsy();
+    },
+  );
+
+  it.each(['native', 'polling'])('reloads a CJS config after a %s editor save', async (backend) => {
+    const directory = fs.mkdtempSync(path.join(OUTPUT_DIR, 'watch-cjs-'));
+    const configPath = path.join(directory, 'promptfooconfig.js');
+    const outputPath = path.join(directory, 'output.json');
+    fs.writeFileSync(path.join(directory, 'package.json'), '{"type":"module"}');
+    const writeConfig = (value: string, target = configPath) =>
+      fs.writeFileSync(
+        target,
+        `require('node:fs'); module.exports = ${JSON.stringify({
+          prompts: [value],
+          providers: ['echo'],
+          tests: [{ assert: [{ type: 'equals', value }] }],
+        })};`,
+      );
+    writeConfig('before watch edit');
+    // Default discovery depends on CWD; the child has an isolated fixture and database.
+    const child = spawn(
+      process.execPath,
+      [CLI_PATH, 'eval', '--watch', '--no-cache', '--no-share', '-o', outputPath],
+      {
+        cwd: directory,
+        env: {
+          ...process.env,
+          NODE_OPTIONS: '',
+          CHOKIDAR_USEPOLLING: backend === 'polling' ? '1' : '0',
+          CHOKIDAR_INTERVAL: '10',
+          PROMPTFOO_CONFIG_DIR: path.join(directory, 'state'),
+          PROMPTFOO_DISABLE_UPDATE: 'true',
+          PROMPTFOO_DISABLE_TELEMETRY: 'true',
+          NO_COLOR: '1',
+        },
+      },
+    );
+    let output = '';
+    child.stdout.on('data', (chunk) => {
+      output += chunk;
+    });
+    child.stderr.on('data', (chunk) => {
+      output += chunk;
+    });
+    const closed = new Promise<void>((resolve) => child.once('close', () => resolve()));
+    try {
+      await vi.waitFor(() => expect(output).toContain('Watching for file changes'), {
+        timeout: 10000,
+      });
+      const initial = JSON.parse(fs.readFileSync(outputPath, 'utf-8'));
+      expect(initial.results.results[0].response.output).toBe('before watch edit');
+      if (backend === 'polling') {
+        const replacement = path.join(directory, 'replacement.tmp');
+        writeConfig('after watch edit', replacement);
+        fs.renameSync(configPath, path.join(directory, 'previous.js'));
+        // Let the child poll the missing path during Chokidar's 100 ms atomic-save window.
+        await delay(40);
+        fs.renameSync(replacement, configPath);
+      } else {
+        writeConfig('after watch edit');
+      }
+      await vi.waitFor(
+        () => {
+          const exported = JSON.parse(fs.readFileSync(outputPath, 'utf-8'));
+          expect(exported.results.results[0]).toMatchObject({
+            success: true,
+            score: 1,
+            response: { output: 'after watch edit' },
+          });
+          expect(exported.results.results[0].error).toBeFalsy();
+        },
+        { timeout: 10000 },
+      );
+    } finally {
+      child.kill('SIGTERM');
+      const forcedExit = setTimeout(() => child.kill('SIGKILL'), 1000);
+      await closed;
+      clearTimeout(forcedExit);
     }
   });
 
@@ -80,6 +169,41 @@ describe('Provider Smoke Tests', () => {
     if (fs.existsSync(OUTPUT_DIR)) {
       fs.rmSync(OUTPUT_DIR, { recursive: true, force: true });
     }
+  });
+
+  it('resolves a JavaScript provider entry to its TypeScript implementation', () => {
+    const providerPath = path.join(OUTPUT_DIR, 'alias-provider.ts');
+    const configPath = path.join(OUTPUT_DIR, 'alias-config.json');
+    const outputPath = path.join(OUTPUT_DIR, 'alias-output.json');
+    fs.writeFileSync(
+      providerPath,
+      "export default class Provider { id() { return 'alias-provider'; } async callApi(prompt: string) { return { output: prompt }; } }",
+    );
+    fs.writeFileSync(
+      configPath,
+      JSON.stringify({
+        prompts: ['entry alias'],
+        providers: ['file://' + providerPath.replace(/\.ts$/, '.js')],
+        tests: [{ assert: [{ type: 'equals', value: 'entry alias' }] }],
+      }),
+    );
+
+    const result = runCli(
+      ['eval', '-c', configPath, '-o', outputPath, '--no-cache', '--no-share'],
+      {
+        env: { NODE_OPTIONS: '', PROMPTFOO_CONFIG_DIR: path.join(OUTPUT_DIR, 'alias-config') },
+      },
+    );
+
+    expect(result.exitCode, result.stdout + result.stderr).toBe(0);
+    const exported = JSON.parse(fs.readFileSync(outputPath, 'utf-8'));
+    expect(exported.results.results).toHaveLength(1);
+    expect(exported.results.results[0]).toMatchObject({
+      success: true,
+      score: 1,
+      response: { output: 'entry alias' },
+    });
+    expect(exported.results.results[0].error).toBeFalsy();
   });
 
   describe('3.1 Built-in Providers', () => {

@@ -1,6 +1,7 @@
 import logger from './logger';
 import { fetchWithProxy } from './util/fetch/index';
 import { isMissingPackageImportError } from './util/packageImportErrors';
+import type { GoogleAuth } from 'google-auth-library';
 
 import type { CsvRow } from './types/index';
 
@@ -11,27 +12,77 @@ class GoogleSheetAuthenticationRequiredError extends Error {
   }
 }
 
-async function loadGoogleSheetsApi(): Promise<typeof import('@googleapis/sheets')> {
+async function createSheetsAuth(scope: string): Promise<GoogleAuth> {
   try {
-    return await import('@googleapis/sheets');
+    const { GoogleAuth } = await import('google-auth-library');
+    return new GoogleAuth({ scopes: [`https://www.googleapis.com/auth/${scope}`] });
   } catch (error) {
-    if (isMissingPackageImportError(error, '@googleapis/sheets')) {
+    if (isMissingPackageImportError(error, 'google-auth-library')) {
       throw new Error(
-        'The @googleapis/sheets package is required for authenticated Google Sheets access. Install it with: npm install @googleapis/sheets',
+        'The google-auth-library package is required for authenticated Google Sheets access. Install it with: npm install google-auth-library',
       );
     }
     throw error;
   }
 }
 
+function encodePathSegment(value: string): string {
+  if (value === '.' || value === '..') {
+    throw new Error(`Invalid Google Sheets path segment: ${value}`);
+  }
+  return encodeURIComponent(value).replace(
+    /[!'()*]/g,
+    (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`,
+  );
+}
+
+async function openSpreadsheet(url: string, scope: string) {
+  const match = url.match(/\/d\/([^/]+)/);
+  if (!match) {
+    throw new Error(`Invalid Google Sheets URL: ${url}`);
+  }
+  const spreadsheetId = encodePathSegment(match[1]);
+  const auth = await createSheetsAuth(scope);
+  // The Sheets client uses the process-level Google universe and verifies it against ADC.
+  const domain = process.env.GOOGLE_CLOUD_UNIVERSE_DOMAIN ?? 'googleapis.com';
+  const credentialDomain = await auth.getUniverseDomain();
+  if (domain !== credentialDomain) {
+    throw new Error(
+      `The configured universe domain (${domain}) does not match the universe domain found in the credentials (${credentialDomain}).`,
+    );
+  }
+  const endpoint = new URL('https://sheets.googleapis.com');
+  endpoint.hostname = `sheets.${domain}`;
+  return { auth, endpoint: `${endpoint.origin}/v4/spreadsheets/${spreadsheetId}` };
+}
+
+function readSheet<T>(auth: GoogleAuth, url: string) {
+  return auth.request<T>({
+    url,
+    method: 'GET',
+    retry: true,
+    // Google requires both headers to enable gzip response compression.
+    headers: { 'Accept-Encoding': 'gzip', 'User-Agent': 'promptfoo (gzip)' },
+  });
+}
+
+async function getSheetTitle(auth: GoogleAuth, endpoint: string, gid?: string): Promise<string> {
+  const { data } = await readSheet<{
+    sheets?: Array<{ properties?: { sheetId?: number; title?: string } }>;
+  }>(auth, endpoint);
+  const sheet = gid
+    ? data.sheets?.find((entry) => entry.properties?.sheetId === Number(gid))
+    : data.sheets?.[0];
+  if (!sheet?.properties?.title) {
+    throw new Error(gid ? `Sheet not found for gid: ${gid}` : 'No sheets found in spreadsheet');
+  }
+  return sheet.properties.title;
+}
+
 export async function checkGoogleSheetAccess(url: string) {
   try {
     const response = await fetchWithProxy(url);
-    if (response.ok) {
-      return { public: true, status: response.status };
-    } else {
-      return { public: false, status: response.status };
-    }
+    return { public: Boolean(response.ok), status: response.status };
   } catch (error) {
     logger.error(`Error checking sheet access: ${error}`);
     return { public: false };
@@ -54,10 +105,20 @@ function isHtmlExportResponse(
   return prefix.startsWith('<!doctype html') || prefix.startsWith('<html');
 }
 
+/**
+ * Returns the sheet id (`gid`) a Google Sheets URL selects. The browser keeps it in the fragment
+ * (`/edit#gid=123`); newer URLs also repeat it in the query (`/edit?gid=123#gid=123`). It stays a
+ * string so that sheet id 0 is still truthy.
+ */
+function getSheetGid(url: string): string | undefined {
+  const { searchParams, hash } = new URL(url);
+  return searchParams.get('gid') || new URLSearchParams(hash.slice(1)).get('gid') || undefined;
+}
+
 export async function fetchCsvFromGoogleSheetUnauthenticated(url: string): Promise<CsvRow[]> {
   const { parse: parseCsv } = await import('csv-parse/sync');
 
-  const gid = new URL(url).searchParams.get('gid');
+  const gid = getSheetGid(url);
   const csvUrl = `${url.replace(/\/edit.*$/, '/export')}?format=csv${gid ? `&gid=${gid}` : ''}`;
 
   const response = await fetchWithProxy(csvUrl);
@@ -74,42 +135,12 @@ export async function fetchCsvFromGoogleSheetUnauthenticated(url: string): Promi
 }
 
 export async function fetchCsvFromGoogleSheetAuthenticated(url: string): Promise<CsvRow[]> {
-  const { sheets: googleSheets, auth: googleAuth } = await loadGoogleSheetsApi();
-  const auth = new googleAuth.GoogleAuth({
-    scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
-  });
-  const sheets = googleSheets('v4');
-
-  const match = url.match(/\/d\/([^/]+)/);
-  if (!match) {
-    throw new Error(`Invalid Google Sheets URL: ${url}`);
-  }
-  const spreadsheetId = match[1];
-
-  let range: string;
-  const gid = Number(new URL(url).searchParams.get('gid'));
-
-  if (gid) {
-    // When gid is provided, get the specific sheet by gid
-    const spreadsheet = await sheets.spreadsheets.get({ spreadsheetId, auth });
-    const sheet = spreadsheet.data.sheets?.find((sheet) => sheet.properties?.sheetId === gid);
-    if (!sheet || !sheet.properties?.title) {
-      throw new Error(`Sheet not found for gid: ${gid}`);
-    }
-    // Use just the sheet name to get all data from that sheet
-    range = sheet.properties.title;
-  } else {
-    // When no gid is provided, get the first sheet
-    const spreadsheet = await sheets.spreadsheets.get({ spreadsheetId, auth });
-    const firstSheet = spreadsheet.data.sheets?.[0];
-    if (!firstSheet || !firstSheet.properties?.title) {
-      throw new Error(`No sheets found in spreadsheet`);
-    }
-    // Use just the sheet name to get all data from the first sheet
-    range = firstSheet.properties.title;
-  }
-
-  const response = await sheets.spreadsheets.values.get({ spreadsheetId, range, auth });
+  const { auth, endpoint } = await openSpreadsheet(url, 'spreadsheets.readonly');
+  const title = await getSheetTitle(auth, endpoint, getSheetGid(url));
+  const response = await readSheet<{ values?: string[][] }>(
+    auth,
+    `${endpoint}/values/${encodePathSegment(title)}`,
+  );
 
   const rows = response.data.values;
   if (!rows?.length) {
@@ -133,38 +164,21 @@ export async function fetchCsvFromGoogleSheet(url: string): Promise<CsvRow[]> {
   const access = await checkGoogleSheetAccess(url);
   const { public: isPublic } = access;
   logger.debug(`Google Sheets URL: ${url}, isPublic: ${isPublic}`);
-  if (isPublic) {
+  // A failed probe leaves public access unknown. Try the export before requesting credentials.
+  if (isPublic || !('status' in access)) {
     try {
       return await fetchCsvFromGoogleSheetUnauthenticated(url);
     } catch (error) {
-      if (error instanceof GoogleSheetAuthenticationRequiredError) {
-        return fetchCsvFromGoogleSheetAuthenticated(url);
+      if (isPublic && !(error instanceof GoogleSheetAuthenticationRequiredError)) {
+        throw error;
       }
-      throw error;
-    }
-  }
-  if (!('status' in access)) {
-    try {
-      return await fetchCsvFromGoogleSheetUnauthenticated(url);
-    } catch {
-      return fetchCsvFromGoogleSheetAuthenticated(url);
     }
   }
   return fetchCsvFromGoogleSheetAuthenticated(url);
 }
 
 export async function writeCsvToGoogleSheet(rows: CsvRow[], url: string): Promise<void> {
-  const { sheets: googleSheets, auth: googleAuth } = await loadGoogleSheetsApi();
-  const auth = new googleAuth.GoogleAuth({
-    scopes: ['https://www.googleapis.com/auth/spreadsheets'],
-  });
-  const sheets = googleSheets('v4');
-
-  const match = url.match(/\/d\/([^/]+)/);
-  if (!match) {
-    throw new Error(`Invalid Google Sheets URL: ${url}`);
-  }
-  const spreadsheetId = match[1];
+  const { auth, endpoint } = await openSpreadsheet(url, 'spreadsheets');
 
   // Extract headers from the first row
   const headers = Object.keys(rows[0]);
@@ -188,49 +202,25 @@ export async function writeCsvToGoogleSheet(rows: CsvRow[], url: string): Promis
   const numCols = headers.length;
   const endColumn = getColumnLetter(numCols);
 
-  let range: string;
-  const gid = Number(new URL(url).searchParams.get('gid'));
-
-  if (gid) {
-    // Use existing sheet with gid
-    const spreadsheet = await sheets.spreadsheets.get({ spreadsheetId, auth });
-    const sheet = spreadsheet.data.sheets?.find((sheet) => sheet.properties?.sheetId === gid);
-    if (!sheet || !sheet.properties?.title) {
-      throw new Error(`Sheet not found for gid: ${gid}`);
-    }
-    // Create range with actual data dimensions
-    range = `${sheet.properties.title}!A1:${endColumn}${numRows}`;
-  } else {
-    // Create a new sheet if no gid is provided
-    const newSheetTitle = `Sheet${Date.now()}`;
-    await sheets.spreadsheets.batchUpdate({
-      spreadsheetId,
-      auth,
-      requestBody: {
-        requests: [
-          {
-            addSheet: {
-              properties: {
-                title: newSheetTitle,
-              },
-            },
-          },
-        ],
-      },
+  const gid = getSheetGid(url);
+  const title = gid ? await getSheetTitle(auth, endpoint, gid) : `Sheet${Date.now()}`;
+  if (!gid) {
+    await auth.request({
+      url: `${endpoint}:batchUpdate`,
+      method: 'POST',
+      retry: true,
+      data: { requests: [{ addSheet: { properties: { title } } }] },
     });
-    // Create range with actual data dimensions
-    range = `${newSheetTitle}!A1:${endColumn}${numRows}`;
   }
+  const range = `${title}!A1:${endColumn}${numRows}`;
 
   // Write data to the sheet
   logger.debug(`Writing CSV to Google Sheets URL: ${url} with ${values.length} rows`);
-  await sheets.spreadsheets.values.update({
-    spreadsheetId,
-    range,
-    valueInputOption: 'USER_ENTERED',
-    auth,
-    requestBody: {
-      values,
-    },
+  await auth.request({
+    url: `${endpoint}/values/${encodePathSegment(range)}`,
+    method: 'PUT',
+    retry: true,
+    params: { valueInputOption: 'USER_ENTERED' },
+    data: { values },
   });
 }
