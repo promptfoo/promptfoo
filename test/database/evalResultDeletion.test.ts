@@ -3,9 +3,14 @@ import { randomUUID } from 'node:crypto';
 import { parse as parseCsv } from 'csv-parse/sync';
 import { eq, sql } from 'drizzle-orm';
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { deleteEvalResult, EvalResultNotFoundError } from '../../src/database/evalResultDeletion';
+import {
+  deleteEvalResult,
+  deleteEvalResultById,
+  EvalResultNotFoundError,
+} from '../../src/database/evalResultDeletion';
 import {
   EvalResultDeletionConflict,
+  RESULT_WRITER,
   withEvalResultWriter,
 } from '../../src/database/evalResultWrite';
 import { getDb } from '../../src/database/index';
@@ -81,6 +86,129 @@ describe('individual eval result deletion', () => {
       expect(await EvalResult.findById(removeId)).toBeDefined();
     });
     await deleteEvalResult(evaluation.id, removeId);
+  });
+
+  it('blocks a second evaluator and releases the writer after a failed run', async () => {
+    const { evaluation, removeId } = await seed();
+    const failure = new Error('evaluation interrupted');
+    await expect(
+      withEvalResultWriter(evaluation, async () => {
+        await expect(
+          withEvalResultWriter(evaluation, async () => {
+            throw new Error('the second evaluator must not run');
+          }),
+        ).rejects.toBeInstanceOf(EvalResultDeletionConflict);
+        throw failure;
+      }),
+    ).rejects.toBe(failure);
+
+    await deleteEvalResultById(removeId);
+    await expect(deleteEvalResultById(removeId)).rejects.toBeInstanceOf(EvalResultNotFoundError);
+  });
+
+  it('recovers an abandoned writer and retains unrelated result metadata', async () => {
+    const { evaluation } = await seed();
+    const db = await getDb();
+    const staleId = randomUUID();
+    await db
+      .update(evalsTable)
+      .set({ results: sql`json_object(${RESULT_WRITER}, ${staleId}, 'marker', 'keep')` })
+      .where(eq(evalsTable.id, evaluation.id))
+      .run();
+
+    await withEvalResultWriter(evaluation, async () => {
+      const active = await db
+        .select()
+        .from(evalsTable)
+        .where(eq(evalsTable.id, evaluation.id))
+        .get();
+      expect(active?.results).toHaveProperty(RESULT_WRITER, expect.any(String));
+      expect(active?.results).not.toHaveProperty(RESULT_WRITER, staleId);
+    });
+
+    const released = await db
+      .select()
+      .from(evalsTable)
+      .where(eq(evalsTable.id, evaluation.id))
+      .get();
+    expect(released?.results).toEqual({ marker: 'keep' });
+  });
+
+  it('preserves a writer marker it cannot identify', async () => {
+    const { evaluation } = await seed();
+    const db = await getDb();
+    await db
+      .update(evalsTable)
+      .set({ results: sql`json_object(${RESULT_WRITER}, 'unknown-writer')` })
+      .where(eq(evalsTable.id, evaluation.id))
+      .run();
+
+    await expect(withEvalResultWriter(evaluation, async () => 'unexpected')).rejects.toBeInstanceOf(
+      EvalResultDeletionConflict,
+    );
+    const row = await db.select().from(evalsTable).where(eq(evalsTable.id, evaluation.id)).get();
+    expect(row?.results).toHaveProperty(RESULT_WRITER, 'unknown-writer');
+  });
+
+  it('removes only the selected result contribution to assertion and cost accounting', async () => {
+    const { evaluation, removeId, keepId } = await seed();
+    const db = await getDb();
+    const components = [
+      {
+        pass: true,
+        score: 1,
+        reason: 'matched',
+        assertion: { type: 'equals' as const, metric: 'quality' },
+      },
+      { pass: false, score: 0, reason: 'missed', assertion: { type: 'contains' as const } },
+    ];
+    await db
+      .update(evalResultsTable)
+      .set({
+        cost: 0.25,
+        response: { output: 'cached', cached: true },
+        gradingResult: { pass: false, score: 0, reason: 'partial', componentResults: components },
+        namedScores: { quality: 1 },
+      })
+      .where(eq(evalResultsTable.id, keepId))
+      .run();
+    const metrics = evaluation.prompts[0].metrics!;
+    metrics.tokenUsage.numRequests = 1;
+    Object.assign(metrics, {
+      cost: 0.25,
+      incurredCost: 0,
+      testCacheHitCount: 1,
+      namedScores: { quality: 1 },
+      namedScoresCount: { quality: 1 },
+      namedScoreWeights: { quality: 1 },
+      assertPassCount: 1,
+      assertFailCount: 1,
+    });
+    await evaluation.addPrompts(evaluation.prompts);
+    await deleteEvalResultById(removeId);
+    expect((await Eval.findById(evaluation.id))?.prompts[0].metrics).toMatchObject({
+      cost: 0.25,
+      incurredCost: 0,
+      testCacheHitCount: 1,
+      assertPassCount: 1,
+      assertFailCount: 1,
+      namedScores: { quality: 1 },
+      namedScoresCount: { quality: 1 },
+      namedScoreWeights: { quality: 1 },
+      testPassCount: 0,
+      testFailCount: 1,
+    });
+    await deleteEvalResultById(keepId);
+    expect((await Eval.findById(evaluation.id))?.prompts[0].metrics).toMatchObject({
+      cost: 0,
+      incurredCost: 0,
+      testCacheHitCount: 0,
+      assertPassCount: 0,
+      assertFailCount: 0,
+      namedScores: {},
+      namedScoresCount: {},
+      namedScoreWeights: {},
+    });
   });
 
   it('leaves saved results untouched when metrics are incomplete', async () => {
