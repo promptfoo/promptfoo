@@ -51,6 +51,8 @@ From a local promptfoo checkout:
 npm run local -- eval -c examples/agentest-checklist/promptfooconfig.smoke.yaml --no-cache
 ```
 
+The generator tests use a local CSV fixture. Run them from this example directory with `python -m unittest discover -s tests`.
+
 ## Links
 
 - Dataset: https://huggingface.co/datasets/srinivaspadmanabhuni/agentic-ai-test-checklist-110
