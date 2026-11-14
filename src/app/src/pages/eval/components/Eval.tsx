@@ -389,10 +389,13 @@ export default function Eval({ fetchId }: EvalOptions) {
     }
 
     if (filters?.some((filter) => filter.type === 'error' && filter.label !== undefined)) {
-      _searchParams.set('filter', serializeFilters(Object.values(useTableStore.getState().filters.values)));
+      _searchParams.set(
+        'filter',
+        serializeFilters(Object.values(useTableStore.getState().filters.values)),
+      );
       navigate(
         {
-          pathname: window.location.pathname,
+          pathname: location.pathname,
           search: _searchParams.toString(),
           hash: window.location.hash,
         },

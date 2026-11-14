@@ -53,10 +53,10 @@ function Page() {
   const { id } = useParams();
   return <Eval fetchId={id ?? null} />;
 }
-function mount(search = '?mode=passes&rowId=old') {
-  window.history.replaceState(null, '', `/eval/eval-a${search}`);
+function mount(search = '?mode=passes&rowId=old', basename = '') {
+  window.history.replaceState(null, '', `${basename}/eval/eval-a${search}`);
   return render(
-    <BrowserRouter>
+    <BrowserRouter basename={basename || undefined}>
       <FilterModeProvider>
         <TooltipProvider>
           <Routes>
@@ -152,10 +152,14 @@ describe('failure groups with real router and store', () => {
       logicOperator: 'and',
       label: 'private provider context',
     };
-    mount(`?filter=${encodeURIComponent(JSON.stringify([filter]))}&rowId=details&other=1#prompt-0`);
+    mount(
+      `?filter=${encodeURIComponent(JSON.stringify([filter]))}&rowId=details&other=1#prompt-0`,
+      '/promptfoo',
+    );
     await screen.findByRole('button', { name: '2 failures: Timeout' });
     const params = new URLSearchParams(window.location.search);
     const [saved] = JSON.parse(params.get('filter')!);
+    expect(window.location.pathname).toBe('/promptfoo/eval/eval-a');
     expect(saved.value).toBe(filter.value);
     expect(saved).not.toHaveProperty('label');
     expect(params.get('rowId')).toBe('details');
