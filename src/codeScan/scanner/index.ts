@@ -13,6 +13,7 @@ import {
   CodeScanOutputFormat,
   CodeScanOutputFormatSchema,
   type FileRecord,
+  FilesystemMcpError,
   type PullRequestContext,
   type ScanResponse,
 } from '../../types/codeScan';
@@ -151,6 +152,12 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
 
     // Load and merge configuration
     const config = mergeConfigWithOptions(loadConfigOrDefault(options.config), options);
+
+    if (!config.diffsOnly && Number.parseInt(process.versions.node, 10) < 24) {
+      throw new FilesystemMcpError(
+        'Full-repository code scans require Node.js 24 or later. Reinstall and run promptfoo with Node.js 24 or later, or use --diffs-only.',
+      );
+    }
 
     // Resolve guidance (CLI options take precedence)
     const guidance = resolveGuidance(options, config);

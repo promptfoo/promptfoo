@@ -17,26 +17,15 @@ Install promptfoo globally:
 npm install -g promptfoo
 ```
 
-Full-repository scans use the pinned filesystem MCP server installed with promptfoo. Keep the installation outside the repository being scanned. If you installed with `--omit=optional`, reinstall with optional dependencies or use `--diffs-only`.
+Install and run promptfoo with Node.js 24 or later for full-repository scans. On Node.js 22.22 or later, you can scan changed lines with `promptfoo code-scans run --diffs-only`.
 
-For pnpm 11, add this to the external installation's `pnpm-workspace.yaml` and reinstall. The pinned filesystem server imports Zod without declaring it, so strict dependency resolution needs this package extension:
+During a full scan, the hosted scanner can request file contents throughout the selected checkout, including untracked files. Use a checkout containing only files you intend to share, or pass `--diffs-only` to limit the scanner to the diff.
 
-```yaml title="pnpm-workspace.yaml"
-packageExtensions:
-  '@modelcontextprotocol/server-filesystem@2026.8.31':
-    dependencies:
-      zod: '^4.3.6'
-```
+Full scans use the read-only filesystem MCP server installed with promptfoo. Keep the installation outside the repository being scanned. If you installed with `--omit=optional`, reinstall with optional dependencies or use `--diffs-only`.
 
-For Yarn Plug'n'Play, add this to the external installation's `.yarnrc.yml` and reinstall. The package extension supplies a dependency omitted by the pinned filesystem server:
+Use a stable checkout for a full scan. Directory listings read the live filesystem, so use a separate checkout if another process may replace directories while the scan runs.
 
-```yaml title=".yarnrc.yml"
-pnpEnableEsmLoader: true
-packageExtensions:
-  '@modelcontextprotocol/server-filesystem@2026.8.31':
-    dependencies:
-      zod: '^4.3.6'
-```
+If Yarn Plug'n'Play reports a missing ESM loader, set `pnpEnableEsmLoader: true` in the external installation's `.yarnrc.yml` and reinstall.
 
 Authenticate with your promptfoo account:
 
@@ -70,7 +59,7 @@ promptfoo code-scans run [repo-path] [options]
 | `--api-key <key>`                 | Promptfoo API key                                                                                   | From `promptfoo auth` or `PROMPTFOO_API_KEY` env var |
 | `--base <ref>`                    | Base branch/commit to compare against                                                               | Auto-detects either main or master                   |
 | `--compare <ref>`                 | Branch/commit to scan                                                                               | `HEAD`                                               |
-| `--config <path>`                 | Path to config file                                                                                 | `.promptfoo-code-scan.yaml`                          |
+| `--config <path>`                 | Path to config file                                                                                 | None                                                 |
 | `--guidance <text>`               | Custom guidance to tailor the scan                                                                  | None                                                 |
 | `--guidance-file <path>`          | Load guidance from a file                                                                           | None                                                 |
 | `--api-host <url>`                | Promptfoo API host URL                                                                              | `https://api.promptfoo.app`                          |
@@ -123,15 +112,21 @@ SARIF output includes location-backed findings that GitHub Code Scanning can dis
 
 ## Configuration File
 
-Create a `.promptfoo-code-scan.yaml` file in your repository root:
+To use a configuration file, pass its path explicitly:
+
+```bash
+promptfoo code-scans run --config .promptfoo-code-scan.yaml
+```
+
+For example, this `.promptfoo-code-scan.yaml` limits the scan to the diff:
 
 ```yaml
 # Minimum severity level to report (low|medium|high|critical)
 # Both minSeverity and minimumSeverity are supported
 minSeverity: medium
 
-# Scan only PR diffs without filesystem exploration (default: false = explore full repo)
-diffsOnly: false
+# Limit the hosted scanner to the diff. The default is a full scan.
+diffsOnly: true
 
 # Optional: Custom guidance to tailor the scan to your needs
 guidance: |

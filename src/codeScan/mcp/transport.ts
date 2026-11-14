@@ -14,12 +14,39 @@ import { SocketIoMcpBridgeError } from '../../types/codeScan';
 
 import type { JsonRpcMessage } from '../../types/codeScan';
 
+// The hosted scanner may inspect the checkout, including files outside the diff.
+const readOnlyTools = new Set([
+  'directory_tree',
+  'get_file_info',
+  'list_allowed_directories',
+  'list_directory',
+  'list_directory_with_sizes',
+  'read_file',
+  'read_media_file',
+  'read_multiple_files',
+  'read_text_file',
+  'search_files',
+]);
+
+const passthroughMethods = new Set(['ping', 'notifications/initialized', 'tools/list']);
+
+function isReadOnlyTool(tool: unknown): boolean {
+  return (
+    typeof tool === 'object' &&
+    tool !== null &&
+    'name' in tool &&
+    typeof tool.name === 'string' &&
+    readOnlyTools.has(tool.name)
+  );
+}
+
 /**
  * Wire ID mapping for tracking request/response correlation
  */
 interface WireIdMapping {
   batchId: number;
-  originalId: string | number | null;
+  originalId: string | number;
+  method: string;
 }
 
 /**
@@ -56,7 +83,7 @@ export class SocketIoMcpBridge {
       throw new SocketIoMcpBridgeError('Socket not initialized');
     }
 
-    // Bridge 1: MCP stdout → Socket.io (classify as response/request/notification)
+    // Return the server's responses and notifications to the scanner.
     this.mcpProcess.stdout?.on('data', (chunk: Buffer) => {
       this.readBuffer += chunk.toString('utf8');
 
@@ -77,42 +104,43 @@ export class SocketIoMcpBridge {
         try {
           const message = JSON.parse(line);
 
-          // Classify JSON-RPC message type
-          const isResponse = 'result' in message || 'error' in message;
-          const isRequest = 'method' in message && !isResponse;
-
-          // For responses, restore original ID from wire ID
-          let batchId: number | undefined;
-          let restoredMessage = message;
-
-          if (isResponse && message.id !== undefined) {
-            const wireId = String(message.id);
-            const mapping = this.wireIdMap.get(wireId);
-
-            if (mapping) {
-              // Restore original ID and extract batch ID
-              batchId = mapping.batchId;
-              restoredMessage = { ...message, id: mapping.originalId };
-              this.wireIdMap.delete(wireId); // Clean up
+          if ('method' in message) {
+            if (message.id == null) {
+              this.socket.emit('mcp:server-notification', {
+                session_id: this.sessionId,
+                batch_id: 0,
+                message,
+              });
             } else {
-              // No mapping found - use message as-is (shouldn't happen)
-              batchId = 0;
+              // No optional client capabilities are negotiated. Answer a server ping locally.
+              const reply =
+                message.method === 'ping'
+                  ? { result: {} }
+                  : { error: { code: -32601, message: 'Unsupported client method' } };
+              this.mcpProcess.stdin?.write(
+                JSON.stringify({ jsonrpc: '2.0', id: message.id, ...reply }) + '\n',
+              );
             }
+            continue;
           }
 
-          // Route to appropriate event based on message type
-          const eventName = isResponse
-            ? // JSON-RPC response (has result or error)
-              'mcp:response'
-            : isRequest
-              ? // Server-initiated request (has method, no result/error)
-                'mcp:server-request'
-              : // Server-initiated notification (no id, method only)
-                'mcp:server-notification';
-          this.socket?.emit(eventName, {
+          const wireId = String(message.id);
+          const mapping = this.wireIdMap.get(wireId);
+          if (!mapping) {
+            continue;
+          }
+          this.wireIdMap.delete(wireId);
+          if (mapping.method === 'initialize' && message.result?.capabilities) {
+            // The hosted client can discover and call tools through this bridge.
+            message.result.capabilities = message.result.capabilities.tools ? { tools: {} } : {};
+          }
+          if (mapping.method === 'tools/list' && Array.isArray(message.result?.tools)) {
+            message.result.tools = message.result.tools.filter(isReadOnlyTool);
+          }
+          this.socket.emit('mcp:response', {
             session_id: this.sessionId,
-            batch_id: batchId ?? 0,
-            message: restoredMessage,
+            batch_id: mapping.batchId,
+            message: { ...message, id: mapping.originalId },
           });
         } catch (_error) {
           logger.debug(`Failed to parse MCP output: ${line}`);
@@ -120,27 +148,53 @@ export class SocketIoMcpBridge {
       }
     });
 
-    // Bridge 2: Socket.io (mcp:request) → MCP stdin
+    // Allow the scanner to control a read-only MCP client session.
     this.socket.on('mcp:request', (message: JsonRpcMessage) => {
       try {
-        // Extract batch ID
-        const batchId: number = (message._batch_id as number | undefined) ?? 0;
-
-        // Remove _batch_id before processing (not part of JSON-RPC spec)
-        const { _batch_id, ...cleanMessage } = message;
-
-        // Generate wire ID and store mapping if this message has an ID
-        let messageToSend = cleanMessage;
-        if (cleanMessage.id !== undefined && cleanMessage.id !== null) {
-          // Use sequence counter to guarantee uniqueness even if (batch, id) pair is reused
-          const seq = this.wireIdSeq++;
-          const wireId = `b${batchId}:${String(cleanMessage.id)}:${seq}`;
-          this.wireIdMap.set(wireId, { batchId, originalId: cleanMessage.id });
-          messageToSend = { ...cleanMessage, id: wireId };
+        const { id, method, params, _batch_id } = message;
+        if (
+          message.jsonrpc !== '2.0' ||
+          typeof method !== 'string' ||
+          'error' in message ||
+          'result' in message
+        ) {
+          return;
         }
-
+        const batchId = typeof _batch_id === 'number' ? _batch_id : 0;
+        const forwarded: JsonRpcMessage = { jsonrpc: '2.0', method, params };
+        if (method === 'initialize') {
+          // Client-provided roots must never replace the directory passed by the local launcher.
+          forwarded.params = { ...(typeof params === 'object' ? params : {}), capabilities: {} };
+        } else if (method === 'notifications/cancelled') {
+          const translated = this.takeCancellationParams(batchId, params);
+          if (!translated) {
+            return;
+          }
+          forwarded.params = translated;
+        } else if (
+          !passthroughMethods.has(method) &&
+          !(method === 'tools/call' && isReadOnlyTool(params))
+        ) {
+          if (id != null) {
+            this.socket.emit('mcp:response', {
+              session_id: this.sessionId,
+              batch_id: batchId,
+              message: {
+                jsonrpc: '2.0',
+                id,
+                error: { code: -32601, message: 'Unsupported read-only scan request' },
+              },
+            });
+          }
+          return;
+        }
+        if (id != null) {
+          const wireId = `b${batchId}:${String(id)}:${++this.wireIdSeq}`;
+          this.wireIdMap.set(wireId, { batchId, originalId: id, method });
+          forwarded.id = wireId;
+        }
         // Write JSON-RPC message to MCP stdin with newline
-        const jsonLine = JSON.stringify(messageToSend) + '\n';
+        const jsonLine = JSON.stringify(forwarded) + '\n';
         this.mcpProcess.stdin?.write(jsonLine);
       } catch (error) {
         logger.error(
@@ -150,6 +204,19 @@ export class SocketIoMcpBridge {
     });
 
     logger.debug('MCP ↔ Socket.io bridge active');
+  }
+
+  private takeCancellationParams(batchId: number, params: unknown) {
+    if (params && typeof params === 'object' && 'requestId' in params) {
+      for (const [wireId, mapping] of this.wireIdMap) {
+        if (mapping.batchId === batchId && mapping.originalId === params.requestId) {
+          // A cancelled request may never receive a response.
+          this.wireIdMap.delete(wireId);
+          return { ...params, requestId: wireId };
+        }
+      }
+    }
+    return undefined;
   }
 
   /**
