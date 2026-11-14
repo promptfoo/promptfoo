@@ -317,7 +317,9 @@ async function createApiProvider(
       const ret = await cliState.withEnv(mergedEnv, () =>
         factory.create(renderedProviderPath, providerOptions, { ...context, env: mergedEnv }),
       );
-      recordProviderLoadPath(ret, renderedProviderPath);
+      if (!factory.isCustomModule) {
+        recordProviderLoadPath(ret, renderedProviderPath);
+      }
       ret.transform = options.transform;
       ret.delay = options.delay;
       ret.inputs = options.inputs;

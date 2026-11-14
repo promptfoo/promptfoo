@@ -25,7 +25,11 @@ vi.mock('../src/providers/registry', async (importOriginal) => {
   return {
     ...original,
     getProviderFactories: async (providerPath: string) => {
-      if (providerPath !== graderId) {
+      if (
+        ![graderId, 'openai:codex-sdk:config-test', 'openai:responses:gpt-fixture'].includes(
+          providerPath,
+        )
+      ) {
         return original.getProviderFactories(providerPath);
       }
       return [
@@ -247,7 +251,7 @@ describe('agent-rubric per-case provider config', () => {
     },
   );
 
-  it('uses actual grading output and rubric ahead of same-named test vars in configs', async () => {
+  it('uses only configured case vars to choose the grading workspace', async () => {
     const result = await evaluate(
       {
         providers: ['echo'],
@@ -276,8 +280,8 @@ describe('agent-rubric per-case provider config', () => {
     );
     expect((await result.toEvaluateSummary()).results[0].success).toBe(true);
     expect(configs[0].config).toMatchObject({
-      working_dir: './evidence/actual',
-      custom: 'Inspect actual evidence',
+      working_dir: './wrong',
+      custom: 'wrong rubric',
     });
   });
 
@@ -387,6 +391,39 @@ describe('agent-rubric per-case provider config', () => {
       working_dir: './fixture-a',
       custom: 'provider-value',
     });
+  });
+
+  it('preserves the provider credential alias when the suite supplies another alias', async () => {
+    const suite = makeSuite('assertion');
+    suite.env = { OPENAI_API_KEY: 'suite-value' };
+    suite.tests = [
+      {
+        vars: { trace_id: 'case' },
+        assert: [
+          {
+            type: 'agent-rubric',
+            value: 'Inspect',
+            provider: {
+              id: 'openai:codex-sdk:config-test',
+              env: { CODEX_API_KEY: 'provider-value' },
+              config: { working_dir: './{{trace_id}}' },
+            },
+          },
+        ],
+      },
+    ];
+    const result = await evaluate(suite, { cache: false });
+    expect((await result.toEvaluateSummary()).results[0].success).toBe(true);
+    expect(configs[0].env?.CODEX_API_KEY).toBe('provider-value');
+    expect(configs[0].env?.OPENAI_API_KEY).toBeUndefined();
+  });
+
+  it('rejects an ordinary provider even if it is given an agentic ID', async () => {
+    await expect(
+      matchesAgentRubric('Inspect', 'answer', {
+        provider: { 'openai:responses:gpt-fixture': { id: 'openai:codex-sdk' } },
+      }),
+    ).rejects.toThrow('requires an agentic grading provider');
   });
 
   it('fails before creating a grader when a workspace variable is missing', async () => {

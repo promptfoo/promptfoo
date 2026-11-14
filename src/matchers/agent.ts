@@ -31,21 +31,14 @@ export async function matchesAgentRubric(
 
   const gradingVars = { ...vars, output: tryParse(llmOutput), rubric };
   const configuredProvider = grading.provider
-    ? await getAgentRubricGradingProvider(
-        grading.provider,
-        gradingVars,
-        providerCallContext?.filters,
-      )
+    ? await getAgentRubricGradingProvider(grading.provider, vars, providerCallContext?.filters)
     : null;
   const agentProvider = configuredProvider || getCodexDefaultProviders().llmRubricProvider;
 
   const providerPath = agentProvider && getProviderLoadPath(agentProvider);
   // Factory identity recognizes custom IDs, while custom file providers retain
   // their existing ability to identify themselves as an agentic runtime.
-  const runtimeProvider =
-    providerPath && !isAgenticGradingProvider(agentProvider)
-      ? { ...agentProvider, id: () => providerPath }
-      : agentProvider;
+  const runtimeProvider = providerPath ? { id: () => providerPath } : agentProvider;
   if (!agentProvider || !isAgenticGradingProvider(runtimeProvider)) {
     throw new Error(
       'agent-rubric assertion requires an agentic grading provider. ' +

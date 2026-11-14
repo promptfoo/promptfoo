@@ -219,10 +219,9 @@ async function resolveGradingProvider(
         isCloudProvider(renderedPath) ||
         hasProviderConfigTemplates(options)
       ) {
-        // Files and inline templates need final case vars. Preserve map loader
-        // paths separately from custom IDs, and carry suite env to construction.
-        const deferredOptions = env ? { ...options, env } : options;
-        return ref.kind === 'map' ? { [ref.loadProviderPath]: deferredOptions } : deferredOptions;
+        // The evaluation's scoped suite environment remains available at load time.
+        // Keeping provider overrides separate preserves credential alias precedence.
+        return ref.kind === 'map' ? { [ref.loadProviderPath]: options } : options;
       }
     }
   }

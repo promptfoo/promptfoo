@@ -32,7 +32,7 @@ export function getProviderLoadPath(provider: ApiProvider): string | undefined {
  *
  * Keep this list aligned with docs/agents/coding-agent-provider-taxonomy.md.
  */
-export function isAgenticProvider(provider: ApiProvider | null | undefined): boolean {
+export function isAgenticProvider(provider: Pick<ApiProvider, 'id'> | null | undefined): boolean {
   if (!provider || typeof provider.id !== 'function') {
     return false;
   }
@@ -61,7 +61,9 @@ export function isAgenticProvider(provider: ApiProvider | null | undefined): boo
 /**
  * Security scanners run agentic workflows but cannot return rubric grading verdicts.
  */
-export function isAgenticGradingProvider(provider: ApiProvider | null | undefined): boolean {
+export function isAgenticGradingProvider(
+  provider: Pick<ApiProvider, 'id'> | null | undefined,
+): boolean {
   if (!provider || !isAgenticProvider(provider)) {
     return false;
   }

@@ -42,7 +42,7 @@ When the target runs with [`copy_working_dir`](/docs/guides/evaluate-coding-agen
 
 ## Per-test-case workspaces
 
-Top-level strings in the grading provider's `config` support Nunjucks templates, including `{{ variable }}` expressions and `{% if ... %}` blocks. Templates use each test case's final `vars` and the suite's `nunjucksFilters` before the grader is created. The reserved `output` and `rubric` variables contain the actual grading inputs and override test variables with the same names; JSON output is parsed before it is exposed to templates:
+Top-level strings in the grading provider's `config` support Nunjucks templates, including `{{ variable }}` expressions and `{% if ... %}` blocks. Templates use each test case's final `vars` and the suite's `nunjucksFilters` before the grader is created. The candidate output and rubric are passed to the grading prompt separately.
 
 ```yaml
 prompts:
