@@ -21,33 +21,36 @@ afterEach(() => {
   vi.resetAllMocks();
 });
 
-it('reports a message limit error and stops before dispatching to the target', async () => {
-  const provider = new RedteamGoatProvider({
-    injectVar: 'goal',
-    maxCharsPerMessage: 5,
-    maxTurns: 2,
-    stateful: true,
-  });
-  vi.mocked(fetchWithProxy).mockImplementation(async () =>
-    Response.json({
-      message: { role: 'assistant', content: 'too long' },
-      tokenUsage: { total: 7, prompt: 5, completion: 2 },
-    }),
-  );
-  const target = { id: () => 'local-target', callApi: vi.fn() };
-  const result = await provider.callApi('test prompt', {
-    originalProvider: target,
-    vars: { goal: 'hi' },
-    prompt: { raw: '{{goal}}', label: 'test' },
-  });
+it.each([true, false])(
+  'reports a message limit error before dispatch (stateful=%s)',
+  async (stateful) => {
+    const provider = new RedteamGoatProvider({
+      injectVar: 'goal',
+      maxCharsPerMessage: 5,
+      maxTurns: 2,
+      stateful,
+    });
+    vi.mocked(fetchWithProxy).mockImplementation(async () =>
+      Response.json({
+        message: { role: 'assistant', content: 'too long' },
+        tokenUsage: { total: 7, prompt: 5, completion: 2 },
+      }),
+    );
+    const target = { id: () => 'local-target', callApi: vi.fn() };
+    const result = await provider.callApi('test prompt', {
+      originalProvider: target,
+      vars: { goal: 'hi' },
+      prompt: { raw: '{{goal}}', label: 'test' },
+    });
 
-  expect(result.error).toContain('maxCharsPerMessage=5');
-  expect(result.metadata.stopReason).toBe('Message length limit exceeded');
-  expect(result.tokenUsage?.numRequests).toBe(0);
-  expect(result.tokenUsage?.attacker?.total).toBe(7);
-  expect(fetchWithProxy).toHaveBeenCalledTimes(1);
-  expect(target.callApi).not.toHaveBeenCalled();
-});
+    expect(result.error).toContain('maxCharsPerMessage=5');
+    expect(result.metadata.stopReason).toBe('Message length limit exceeded');
+    expect(result.tokenUsage?.numRequests).toBe(0);
+    expect(result.tokenUsage?.attacker?.total).toBe(7);
+    expect(fetchWithProxy).toHaveBeenCalledTimes(1);
+    expect(target.callApi).not.toHaveBeenCalled();
+  },
+);
 
 it('preserves a confirmed finding when a later turn exceeds the message limit', async () => {
   const provider = new RedteamGoatProvider({
@@ -98,6 +101,10 @@ it('preserves a confirmed finding when a later turn exceeds the message limit', 
   expect(result.output).toBe('vuln output');
   expect(result.metadata?.stopReason).toBe('Message length limit exceeded');
   expect(result.metadata?.storedGraderResult?.pass).toBe(false);
+  expect(result.metadata.messages).toEqual([
+    { role: 'user', content: 'ok' },
+    { role: 'assistant', content: 'vuln output' },
+  ]);
   expect(fetchWithProxy).toHaveBeenCalledTimes(2);
   expect(target.callApi).toHaveBeenCalledTimes(1);
 });

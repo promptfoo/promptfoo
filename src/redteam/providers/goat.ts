@@ -501,7 +501,8 @@ export default class GoatProvider implements ApiProvider {
           Object.keys(attackerVars),
         );
 
-        const pendingMessage = { role: attackerMessage.role, content: renderedAttackerPrompt };
+        // The generator's reply is a user turn in the target conversation.
+        const pendingMessage: Message = { role: 'user', content: renderedAttackerPrompt };
         const turnMessages = [...messages, pendingMessage];
 
         logger.debug(
