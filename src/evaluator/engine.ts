@@ -2736,7 +2736,6 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     prompts,
     serialRunEvalOptions,
     shouldGroupGradingByProvider,
-    startTime,
   }: {
     checkAbort: () => void;
     ciProgressReporter: CIProgressReporter | null;
@@ -2754,7 +2753,6 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     prompts: CompletedPrompt[];
     serialRunEvalOptions: RunEvalOptions[];
     shouldGroupGradingByProvider: boolean;
-    startTime: number;
   }): Promise<TEvaluation | undefined> {
     try {
       if (shouldGroupGradingByProvider) {
@@ -2806,7 +2804,6 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
           processingContext,
           progressBarManager,
           prompts,
-          startTime,
         });
       }
     }
@@ -3033,14 +3030,12 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     processingContext,
     progressBarManager,
     prompts,
-    startTime,
   }: {
     ciProgressReporter: CIProgressReporter | null;
     globalTimeout?: NodeJS.Timeout;
     processingContext: EvalProcessingContext;
     progressBarManager: ProgressBarManager | null;
     prompts: CompletedPrompt[];
-    startTime: number;
   }) {
     logger.info('Evaluation interrupted, saving progress...');
     if (globalTimeout) {
@@ -3051,10 +3046,6 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     ciProgressReporter?.finish();
     this.store.setVars(Array.from(processingContext.vars));
     await this.store.appendPrompts(prompts);
-    this.store.setDurationMs(Date.now() - startTime);
-    if (this.store.persisted) {
-      await this.store.save();
-    }
     return this.store.evaluation;
   }
 
@@ -4119,7 +4110,6 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       prompts,
       serialRunEvalOptions,
       shouldGroupGradingByProvider,
-      startTime,
     });
     if (interruptedEval) {
       return interruptedEval;
@@ -4146,7 +4136,6 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         processingContext,
         progressBarManager,
         prompts,
-        startTime,
       });
     }
 
