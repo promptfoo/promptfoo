@@ -227,6 +227,64 @@ providers:
 
 This example tests input only. To test document attacks, populate `documents` and keep their decisions in metadata.
 
+### Testing Alovia Watchdog
+
+[Alovia Watchdog](https://aloviaai.com/docs/watchdog) is a runtime guardrail for agents: it checks tool calls, tool results and inbound documents, and a tool runs only on `allow`. Its `/v1/check` endpoint returns a `verdict` of `allow`, `block`, `challenge` (hold for a human) or `unknown`, plus `findings` with a type, severity and detail. Watchdog blocks on structure and escalates on wording, so send attacks the way they reach an agent: as a tool result.
+
+```yaml
+providers:
+  - id: https
+    config:
+      url: https://watchdog.aloviaai.com/v1/check
+      method: POST
+      headers:
+        Authorization: 'Bearer {{ env.ALOVIA_WATCHDOG_API_KEY }}'
+        Content-Type: application/json
+      body:
+        actor:
+          kind: registered
+          registeredName: promptfoo-target
+        message:
+          role: tool
+          content: ''
+        toolResult:
+          toolName: read_document
+          text: '{{prompt}}'
+        policy:
+          failMode: closed
+      transformResponse: |
+        (json, text, context) => {
+          const status = context?.response?.status;
+          if ((status && (status < 200 || status >= 300)) || json.error) {
+            throw new Error(
+              json.error?.message || json.error || `Watchdog request failed with HTTP ${status ?? 'unknown'}`,
+            );
+          }
+          if (!['allow', 'block', 'challenge', 'unknown'].includes(json.verdict)) {
+            throw new Error(`Watchdog returned an unexpected verdict: ${json.verdict ?? 'missing'}`);
+          }
+          if (json.verdict === 'unknown') {
+            throw new Error('Watchdog did not reach a verdict for this request');
+          }
+          const flagged = json.verdict === 'block' || json.verdict === 'challenge';
+          const reason = (json.findings || [])
+            .map((f) => `${f.type} (${f.severity}): ${f.detail}`)
+            .join('; ');
+          return {
+            output: flagged ? `Watchdog ${json.verdict}: ${reason}` : 'Watchdog allowed the request',
+            guardrails: {
+              flagged,
+              flaggedInput: flagged,
+              flaggedOutput: false,
+              ...(reason ? { reason } : {}),
+            },
+            metadata: { watchdog: json },
+          };
+        }
+```
+
+The agent named in `actor.registeredName` needs a mission first, declared with the fleet's deploy key through the SDK's `register_mission` or `POST /v1/missions`; Watchdog denies an agent with no mission after a short grace period, and the verdicts depend on what the mission allows, so state it alongside your test cases. For generated attacks, add `not-guardrails` so an attack Watchdog did not flag fails outright, plus `guardrails` with `purpose: redteam` as in [Comparing Guardrail Performance](#comparing-guardrail-performance), since a Watchdog block is an enforced stop. `escalated: true` in the response means Watchdog's optional review model will look at the request after the fact; the assertion sees the synchronous verdict only. The [alovia-watchdog example](https://github.com/promptfoo/promptfoo/tree/main/examples/alovia-watchdog) adds a user-message target and fixed attack and benign cases.
+
 ## Testing AWS Bedrock Guardrails
 
 Use the built-in Bedrock provider to apply a guardrail during model inference:
