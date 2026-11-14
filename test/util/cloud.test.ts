@@ -2294,14 +2294,14 @@ describe('cloud utils', () => {
     });
 
     it('should link to a self-hosted app derived from the API host', async () => {
-      mockCloudConfig.getApiHost.mockReturnValue('https://promptfoo.example.com/api');
+      mockCloudConfig.getApiHost.mockReturnValue('https://promptfoo.example.com:3201/api');
 
       const promise = validateLinkedTargetId('wrong://provider/123');
 
       await expect(promise).rejects.toThrow(
-        'Log in to Promptfoo Cloud: https://promptfoo.example.com\n',
+        'Log in to Promptfoo Cloud: https://promptfoo.example.com:3201\n',
       );
-      await expect(promise).rejects.toThrow('https://promptfoo.example.com/redteam/targets');
+      await expect(promise).rejects.toThrow('https://promptfoo.example.com:3201/redteam/targets');
     });
 
     it('should throw error when API returns non-ok response', async () => {

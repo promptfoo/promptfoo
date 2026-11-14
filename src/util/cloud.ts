@@ -878,7 +878,7 @@ function getCloudAppUrl(): string {
   if (apiHost === CLOUD_API_HOST) {
     return cloudConfig.getAppUrl();
   }
-  return apiHost.replace(/\/api$/, '').replace(':3201', '');
+  return apiHost.replace(/\/api$/, '');
 }
 
 /**
