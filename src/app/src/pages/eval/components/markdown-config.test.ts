@@ -151,6 +151,8 @@ describe('markdown-config', () => {
       'data:image/png',
       'data:image/png;base64',
       'data:image/png;charset=utf-8;base64',
+      '\u00a0data:image/png;base64,AA==',
+      '\u2003data:image/png;base64,AA==',
       'data:image/png;base64%2CAA==',
       'data:image/',
       'data:image/,AA==',

@@ -171,6 +171,11 @@ function addImageSrcComparisonKeys(keys: Set<string>, src: string) {
 }
 
 function addRenderedMarkdownImageSrcComparisonKeys(keys: Set<string>, src: string) {
+  // Only browser-trimmable whitespace can surround a data URL. Other spaces
+  // belong to a relative image path and must not hide the structured image.
+  if (!isImageDataUrl(src) && isImageDataUrl(src.trimStart())) {
+    return;
+  }
   const normalized = src.trim();
   keys.add(normalized);
   const dataUriKey = getImageDataUriComparisonKey(normalized);
@@ -630,6 +635,11 @@ function renderOutputNode({
     renderedImagePreview = formattedNode.renderedImagePreview;
     renderedMarkdownOutput = formattedNode.renderedMarkdownOutput;
     renderedStructuredImages = formattedNode.renderedStructuredImages ?? false;
+  }
+
+  // Keep literal text independently truncatable when appending structured images.
+  if (!node && normalizedText && output.images?.length) {
+    node = <TruncatedText text={normalizedText} maxLength={maxTextLength} />;
   }
 
   return {

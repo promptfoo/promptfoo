@@ -106,6 +106,36 @@ describe('EvalOutputCell duplicate image prevention', () => {
   });
 
   describe('primaryRenderedAsImage detection', () => {
+    it.each([false, true])(
+      'retains the structured image for an NBSP-prefixed URL (Markdown %s)',
+      (renderMarkdown) => {
+        viewSettings.renderMarkdown = renderMarkdown;
+        const dataUri = 'data:image/png;base64,AA==';
+        const text = `![Relative path](&#xA0;${dataUri})`;
+        const props = createBaseProps({ text, images: [{ data: dataUri }] });
+        const { container } = renderWithProviders(<EvalOutputCell {...props} />);
+        const sources = [...container.querySelectorAll('img')].map((image) =>
+          image.getAttribute('src'),
+        );
+        expect(sources).toContain(dataUri);
+        if (!renderMarkdown) {
+          expect(sources).toEqual([dataUri]);
+          expect(screen.getByText(text)).toBeInTheDocument();
+        }
+      },
+    );
+
+    it('keeps the structured image visible while its literal diagnostic is collapsed', () => {
+      const text = 'A long diagnostic pasted alongside a generated image';
+      const dataUri = 'data:image/png;base64,AA==';
+      const props = createBaseProps({ text, images: [{ data: dataUri }] });
+      const { container } = renderWithProviders(<EvalOutputCell {...props} maxTextLength={17} />);
+
+      expect(container.textContent).toContain(text.slice(0, 17));
+      expect(container.textContent).not.toContain(text);
+      expect(container.querySelector('img')?.getAttribute('src')).toBe(dataUri);
+    });
+
     it('should detect data URI with image/png as primary rendered image', () => {
       const dataUri =
         'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';

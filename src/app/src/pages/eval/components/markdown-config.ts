@@ -15,7 +15,7 @@ export const REMARK_PLUGINS = [remarkGfm];
 
 const MARKDOWN_PARSER = unified().use(remarkParse).use(remarkGfm);
 const IMAGE_DATA_URL_HEADER =
-  /^\s*data:(?:image\/[a-z0-9!#$%&'*+.^_`|~-]+|application\/octet-stream)(?:;[^,]*)?,/i;
+  /^[ \t\r\n\f]*data:(?:image\/[a-z0-9!#$%&'*+.^_`|~-]+|application\/octet-stream)(?:;[^,]*)?,/i;
 
 interface MarkdownAstNode {
   type: string;
