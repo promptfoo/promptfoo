@@ -969,6 +969,26 @@ describe('runEval', () => {
     expect(results[0].response?.output).toBe('original-provider-test');
   });
 
+  it('decodes character-split output before the configured test transform', async () => {
+    const results = await runEval({
+      ...defaultOptions,
+      provider: {
+        id: () => 'char-split-fixture',
+        callApi: async () => ({ output: 'H.e.l.l.o..' }),
+      },
+      prompt: { raw: 'Test prompt', label: 'test-label' },
+      test: {
+        metadata: { strategyId: 'char-split', charSplitDelimiter: '.' },
+        options: { transform: 'output + "-test"' },
+      },
+      conversations: {},
+      registers: {},
+    });
+
+    expect(results[0].response?.output, results[0].error ?? undefined).toBe('Hello.-test');
+    expect(results[0].success).toBe(true);
+  });
+
   it('should skip rendering redteam inject variable to prevent nunjucks errors on template syntax', async () => {
     // This tests the fix for Discord issue where redteam prompts containing {{purpose | trim}}
     // caused "TypeError: Cannot read properties of undefined (reading 'replace')"

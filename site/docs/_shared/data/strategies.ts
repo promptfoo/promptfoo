@@ -235,6 +235,17 @@ export const strategies: Strategy[] = [
   },
   {
     category: 'Static (Single-Turn)',
+    strategy: 'image-stego',
+    displayName: 'LSB Image Steganography',
+    description: 'PNG least-significant-bit payload embedding',
+    longDescription:
+      'Tests handling of UTF-8 payloads embedded in the least significant bits of lossless PNG images',
+    cost: 'Low',
+    asrIncrease: 'Variable',
+    link: '/docs/red-team/strategies/image-stego/',
+  },
+  {
+    category: 'Static (Single-Turn)',
     strategy: 'audio',
     displayName: 'Audio Encoding',
     description: 'Text-to-speech encoding bypass',
@@ -365,6 +376,17 @@ export const strategies: Strategy[] = [
     cost: 'Low',
     asrIncrease: '0-5%',
     link: '/docs/red-team/strategies/other-encodings/#camelcase',
+  },
+  {
+    category: 'Static (Single-Turn)',
+    strategy: 'char-split',
+    displayName: 'Character Split Output Format',
+    description: 'Intra-word output delimiter formatting',
+    longDescription:
+      'Instructs the model to insert character delimiters inside words in its output and normalizes responses before scoring',
+    cost: 'Low',
+    asrIncrease: 'Variable',
+    link: '/docs/red-team/strategies/char-split/',
   },
   {
     category: 'Static (Single-Turn)',

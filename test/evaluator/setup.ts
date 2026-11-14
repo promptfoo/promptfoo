@@ -98,7 +98,8 @@ async function mockTransform(code: unknown, input: any, context?: any) {
   );
 }
 
-vi.mock('../../src/util/transform', () => ({
+vi.mock('../../src/util/transform', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/util/transform')>()),
   TransformInputType: {
     OUTPUT: 'output',
     VARS: 'vars',
