@@ -179,18 +179,6 @@ describe('filesystem MCP launcher', () => {
     }
   });
 
-  it('names the Node floor when the optional server is not installed', () => {
-    // The server ships as an optional dependency and needs Node 24+, so the
-    // installer skips it on older Node versions. The failure has to say so,
-    // instead of leaving the reader to guess why the package is missing.
-    mocks.resolve.mockImplementation(() => {
-      throw new Error("Cannot find module '@modelcontextprotocol/server-filesystem'");
-    });
-
-    expect(() => startFilesystemMcpServer(rootDir)).toThrow(/Node\.js 24/);
-    expect(() => startFilesystemMcpServer(rootDir)).toThrow(/--diffs-only/);
-  });
-
   it('runs the installed server with the current Node executable', () => {
     startFilesystemMcpServer(rootDir);
 

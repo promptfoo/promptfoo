@@ -47,7 +47,7 @@ function resolveFilesystemMcpServerEntry(): string {
     return require.resolve('@modelcontextprotocol/server-filesystem/dist/index.js');
   } catch {
     throw new Error(
-      'The @modelcontextprotocol/server-filesystem package is required to scan beyond the diff. It ships as an optional dependency and needs Node.js 24 or newer, so reinstall promptfoo with optional dependencies on Node 24+ (or use --diffs-only).',
+      'The @modelcontextprotocol/server-filesystem package is required to scan beyond the diff. Reinstall promptfoo with optional dependencies or use --diffs-only.',
     );
   }
 }

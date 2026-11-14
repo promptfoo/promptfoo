@@ -246,7 +246,7 @@
     "@azure/storage-blob": "^12.31.0",
     "@fal-ai/client": "~1.10.1",
     "@modelcontextprotocol/sdk": "^1.32.2",
-    "@modelcontextprotocol/server-filesystem": "^2.2.0",
+    "@modelcontextprotocol/server-filesystem": "1.0.0",
     "@opencode-ai/sdk": "^1.19.4",
     "@smithy/node-http-handler": "^4.4.14",
     "google-auth-library": "^11.3.3",
