@@ -5,6 +5,7 @@ import logger from '../../../src/logger';
 import Eval from '../../../src/models/eval';
 import { ResultFailureReason } from '../../../src/types/index';
 import { filterTests } from '../../../src/util/eval/filterTests';
+import { topLevelResultMatchContext } from '../../../src/util/eval/filterTestsUtil';
 
 import type { TestCase, TestSuite } from '../../../src/types/index';
 
@@ -572,6 +573,243 @@ describe('filterTests', () => {
         expect.arrayContaining(['test1', 'test2', 'test3']),
       );
     });
+
+    it('deduplicates the same scoped test across failure types without dropping distinct metadata', async () => {
+      const tests = [
+        { vars: { id: 'shared' }, metadata: { category: 'X' } },
+        { vars: { id: 'shared' }, metadata: { category: 'Y' } },
+      ];
+      vi.mocked(Eval.findById).mockResolvedValue({
+        toEvaluateSummary: vi.fn().mockResolvedValue({
+          results: [
+            {
+              vars: { id: 'shared' },
+              success: false,
+              failureReason: ResultFailureReason.ASSERT,
+              testCase: tests[0],
+            },
+            {
+              vars: { id: 'shared' },
+              success: false,
+              failureReason: ResultFailureReason.ERROR,
+              testCase: tests[0],
+            },
+            {
+              vars: { id: 'shared' },
+              success: false,
+              failureReason: ResultFailureReason.ASSERT,
+              testCase: tests[1],
+            },
+          ],
+        }),
+      } as any);
+
+      const result = await filterTests(
+        { prompts: [], providers: [], tests },
+        {
+          failingOnly: 'eval-123',
+          errorsOnly: 'eval-123',
+          resultMatchContext: {
+            includesResult: () => true,
+            matchesTest: (stored, test) =>
+              stored.testCase?.metadata?.category === test.metadata?.category,
+          },
+        },
+      );
+      expect(result.map((test) => test.metadata?.category)).toEqual(['X', 'Y']);
+    });
+
+    it('keeps distinct scoped providers while deduplicating the same test across failure types', async () => {
+      const tests: TestCase[] = [
+        { vars: { id: 'shared' }, metadata: { category: 'selected' }, provider: 'provider-A' },
+        {
+          vars: { id: 'shared' },
+          metadata: { category: 'selected' },
+          provider: {
+            id: 'provider-B',
+            label: 'file://./relative-provider.js',
+            config: { apiKey: 'private-marker' },
+          },
+        },
+      ];
+      const testSuite: TestSuite = { prompts: [], providers: [], tests };
+      const storedResult = (test: TestCase, failureReason: ResultFailureReason) => ({
+        vars: { id: 'shared' },
+        success: false,
+        failureReason,
+        provider: { id: 'echo' },
+        testCase: {
+          vars: test.vars,
+          metadata: test.metadata,
+          provider:
+            test.provider === 'provider-A'
+              ? { id: 'provider-A' }
+              : { id: 'provider-B', label: 'file://./relative-provider.js' },
+        },
+      });
+      vi.mocked(Eval.findById).mockResolvedValue({
+        toEvaluateSummary: vi.fn().mockResolvedValue({
+          results: [
+            storedResult(tests[0], ResultFailureReason.ASSERT),
+            storedResult(tests[0], ResultFailureReason.ERROR),
+            storedResult(tests[1], ResultFailureReason.ERROR),
+          ],
+        }),
+      } as any);
+
+      const result = await filterTests(testSuite, {
+        metadataExact: 'category=selected',
+        failingOnly: 'eval-123',
+        errorsOnly: 'eval-123',
+        resultMatchContext: topLevelResultMatchContext(testSuite),
+      });
+
+      expect(result).toEqual(tests);
+    });
+
+    it('keeps distinct authored tests selected by provider allowlist in a failure union', async () => {
+      const tests: TestCase[] = [
+        {
+          vars: { id: 'shared' },
+          metadata: { role: 'common' },
+          providers: ['echo:A'],
+          assert: [{ type: 'equals', value: 'A' }],
+        },
+        {
+          vars: { id: 'shared' },
+          metadata: { role: 'common' },
+          providers: ['echo:B'],
+          assert: [{ type: 'equals', value: 'B' }],
+        },
+      ];
+      const testSuite: TestSuite = { prompts: [], providers: [], tests };
+      vi.mocked(Eval.findById).mockResolvedValue({
+        toEvaluateSummary: vi.fn().mockResolvedValue({
+          results: [
+            {
+              vars: { id: 'shared' },
+              success: false,
+              failureReason: ResultFailureReason.ASSERT,
+              provider: { id: 'echo:A' },
+              testCase: { vars: tests[0].vars, metadata: tests[0].metadata },
+            },
+            {
+              vars: { id: 'shared' },
+              success: false,
+              failureReason: ResultFailureReason.ERROR,
+              provider: { id: 'echo:A' },
+              testCase: { vars: tests[0].vars, metadata: tests[0].metadata },
+            },
+            {
+              vars: { id: 'shared' },
+              success: false,
+              failureReason: ResultFailureReason.ERROR,
+              provider: { id: 'echo:B' },
+              testCase: { vars: tests[1].vars, metadata: tests[1].metadata },
+            },
+          ],
+        }),
+      } as any);
+
+      const result = await filterTests(testSuite, {
+        metadataExact: 'role=common',
+        failingOnly: 'eval-123',
+        errorsOnly: 'eval-123',
+        resultMatchContext: topLevelResultMatchContext(testSuite),
+      });
+
+      expect(result).toEqual(tests);
+    });
+
+    it('keeps distinct extracted prompt selectors across a failure union', async () => {
+      const testSuite: TestSuite = { prompts: [], providers: [], tests: [] };
+      vi.mocked(Eval.findById).mockResolvedValue({
+        config: {},
+        toEvaluateSummary: vi.fn().mockResolvedValue({
+          results: [
+            {
+              vars: { id: 'shared' },
+              success: false,
+              failureReason: ResultFailureReason.ASSERT,
+              provider: { id: 'echo' },
+              prompt: { raw: 'rendered', label: 'alpha' },
+              testCase: {
+                vars: { id: 'shared' },
+                metadata: { role: 'common' },
+                prompts: ['alpha'],
+              },
+            },
+            {
+              vars: { id: 'shared' },
+              success: false,
+              failureReason: ResultFailureReason.ERROR,
+              provider: { id: 'echo' },
+              prompt: { raw: 'rendered', label: 'beta' },
+              testCase: { vars: { id: 'shared' }, metadata: { role: 'common' }, prompts: ['beta'] },
+            },
+          ],
+        }),
+      } as any);
+
+      const result = await filterTests(testSuite, {
+        metadataExact: 'role=common',
+        failingOnly: 'eval-123',
+        errorsOnly: 'eval-123',
+        resultMatchContext: topLevelResultMatchContext(testSuite),
+      });
+
+      expect(result.map((test) => test.prompts)).toEqual([['alpha'], ['beta']]);
+    });
+
+    it('keeps indistinguishable authored tests while collapsing one authored runtime copy across filters', async () => {
+      const tests: TestCase[] = [
+        {
+          vars: { id: 'shared' },
+          metadata: { role: 'common' },
+          assert: [{ type: 'equals', value: 'first' }],
+        },
+        {
+          vars: { id: 'shared' },
+          metadata: { role: 'common' },
+          assert: [{ type: 'equals', value: 'second' }],
+        },
+      ];
+      const testSuite: TestSuite = { prompts: [], providers: [], tests };
+      vi.mocked(Eval.findById).mockResolvedValue({
+        toEvaluateSummary: vi.fn().mockResolvedValue({
+          results: [
+            {
+              vars: { id: 'shared', sessionId: 'runtime-session' },
+              success: false,
+              failureReason: ResultFailureReason.ASSERT,
+              provider: { id: 'echo' },
+              testCase: { vars: tests[0].vars, metadata: tests[0].metadata },
+            },
+            {
+              vars: { id: 'shared', sessionId: 'runtime-session' },
+              success: false,
+              failureReason: ResultFailureReason.ERROR,
+              provider: { id: 'echo' },
+              testCase: { vars: tests[0].vars, metadata: tests[0].metadata },
+            },
+          ],
+        }),
+      } as any);
+
+      const result = await filterTests(testSuite, {
+        metadataExact: 'role=common',
+        failingOnly: 'eval-123',
+        errorsOnly: 'eval-123',
+        resultMatchContext: topLevelResultMatchContext(testSuite),
+      });
+
+      expect(result).toHaveLength(2);
+      expect(result.map((test) => test.assert)).toEqual(tests.map((test) => test.assert));
+      expect(result.map((test) => test.vars?.sessionId)).toEqual([
+        'runtime-session',
+        'runtime-session',
+      ]);
+    });
   });
 
   describe('pattern filter', () => {
@@ -949,5 +1187,182 @@ describe('filterTests', () => {
 
       expect(result).toEqual([selectedGeneratedTest]);
     });
+  });
+
+  describe('exact metadata filter', () => {
+    const exactMetadataSuite: TestSuite = {
+      prompts: [],
+      providers: [],
+      tests: [
+        { description: 'string-one', metadata: { id: '1', type: 'unit' } },
+        { description: 'number-ten', metadata: { id: 10, type: 'unit' } },
+        { description: 'array-values', metadata: { id: [1, 10], type: ['unit', 'slow'] } },
+        { description: 'string-null', metadata: { id: 'null', type: 'integration' } },
+        { description: 'null', metadata: { id: null, type: 'unit' } },
+        { description: 'missing', metadata: { type: 'unit' } },
+      ],
+    };
+
+    it('matches scalar values by exact stringification and array values by element', async () => {
+      const result = await filterTests(exactMetadataSuite, { metadataExact: 'id=1' });
+
+      expect(result.map((test) => test.description)).toEqual(['string-one', 'array-values']);
+    });
+
+    it('matches exact comma alternatives, repeated filters, and escaped commas', async () => {
+      const suite: TestSuite = {
+        prompts: [],
+        providers: [],
+        tests: [
+          { description: 'one', metadata: { id: 1, label: 'a,b' } },
+          { description: 'ten', metadata: { id: 10, label: 'a,b' } },
+          { description: 'other', metadata: { id: 2, label: 'a' } },
+        ],
+      };
+
+      const result = await filterTests(suite, {
+        metadataExact: ['id=1,10', 'label=a\\,b'],
+      });
+
+      expect(result.map((test) => test.description)).toEqual(['one', 'ten']);
+    });
+
+    it('intersects with the existing substring metadata filter', async () => {
+      const result = await filterTests(exactMetadataSuite, {
+        metadata: 'id=1',
+        metadataExact: 'id=1',
+      });
+
+      expect(result.map((test) => test.description)).toEqual(['string-one', 'array-values']);
+    });
+
+    it('skips null legacy metadata in mixed filters across keys and array elements', async () => {
+      const result = await filterTests(
+        {
+          prompts: [],
+          providers: [],
+          tests: [
+            { description: 'null scalar', metadata: { id: null, type: 'unit' } },
+            { description: 'null array element', metadata: { id: [null, 1], type: 'unit' } },
+          ],
+        },
+        { metadata: 'id=1', metadataExact: 'type=unit' },
+      );
+
+      expect(result.map((test) => test.description)).toEqual(['null array element']);
+    });
+
+    it('does not match null or missing values to the text null', async () => {
+      const result = await filterTests(exactMetadataSuite, { metadataExact: 'id=null' });
+
+      expect(result.map((test) => test.description)).toEqual(['string-null']);
+    });
+
+    it('does not expose values in invalid exact-filter errors', async () => {
+      const secret = 'qa-token-secret-sentinel';
+      let errorMessage = '';
+
+      try {
+        await filterTests(exactMetadataSuite, {
+          metadataExact: `apiKey=${secret},`,
+        });
+      } catch (error) {
+        errorMessage = error instanceof Error ? error.message : String(error);
+      }
+
+      expect(errorMessage).not.toContain(secret);
+      expect(errorMessage).toContain('--filter-metadata-exact');
+      expect(errorMessage).toContain('empty value');
+      expect(errorMessage).toContain('key=value');
+    });
+
+    it('uses inherited metadata unless the test explicitly overrides the key', async () => {
+      const suite: TestSuite = {
+        prompts: [],
+        providers: [],
+        tests: [
+          { description: 'inherits', metadata: { suite: 'test' } },
+          { description: 'overrides', metadata: { suite: 'test', category: 'slow' } },
+          { description: 'null override', metadata: { category: null } },
+        ],
+      };
+
+      const result = await filterTests(suite, {
+        metadataExact: 'category=fast',
+        inheritedMetadata: { category: 'fast', suite: 'default' },
+      });
+
+      expect(result.map((test) => test.description)).toEqual(['inherits']);
+    });
+
+    it('does not log inherited metadata or exact filter values', async () => {
+      const inheritedSecret = 'qa-inherited-secret-sentinel';
+      const filterSecret = 'qa-filter-secret-sentinel';
+      const debugSpy = vi.spyOn(logger, 'debug');
+
+      try {
+        await filterTests(
+          {
+            prompts: [],
+            providers: [],
+            tests: [{ description: 'secret metadata', metadata: { token: 'other' } }],
+          },
+          {
+            metadataExact: `token=${filterSecret}`,
+            inheritedMetadata: { credential: inheritedSecret, token: filterSecret },
+          },
+        );
+
+        const logged = debugSpy.mock.calls
+          .flatMap((call) => call.map((value) => String(value)))
+          .join('\n');
+        expect(logged).not.toContain(inheritedSecret);
+        expect(logged).not.toContain(filterSecret);
+      } finally {
+        debugSpy.mockRestore();
+      }
+    });
+
+    it('does not log inherited secrets when a legacy condition fails after an exact match', async () => {
+      const secret = 'qa-mixed-metadata-secret-sentinel';
+      const debugSpy = vi.spyOn(logger, 'debug');
+
+      try {
+        await filterTests(
+          {
+            prompts: [],
+            providers: [],
+            tests: [
+              {
+                metadata: {
+                  category: 'keep',
+                  role: 'different',
+                  apiKey: secret,
+                  Authorization: `Bearer ${secret}`,
+                },
+              },
+            ],
+          },
+          {
+            metadataExact: 'category=keep',
+            metadata: `role=${secret}`,
+          },
+        );
+
+        const logged = debugSpy.mock.calls.flatMap((call) => call.map(String)).join('\n');
+        expect(logged).not.toContain(secret);
+      } finally {
+        debugSpy.mockRestore();
+      }
+    });
+
+    it.each(['invalid', 'id=', 'id=,1', 'id=1,'])(
+      'rejects invalid exact filters: %s',
+      async (filter) => {
+        await expect(filterTests(exactMetadataSuite, { metadataExact: filter })).rejects.toThrow(
+          '--filter-metadata-exact',
+        );
+      },
+    );
   });
 });

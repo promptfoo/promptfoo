@@ -3110,6 +3110,19 @@
             }
           ]
         },
+        "filterMetadataExact": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          ]
+        },
         "filterPattern": {
           "type": "string"
         },

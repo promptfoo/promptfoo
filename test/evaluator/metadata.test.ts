@@ -11,6 +11,7 @@ import { FILE_METADATA_KEY } from '../../src/constants';
 import { evaluate } from '../../src/evaluator';
 import { runExtensionHook } from '../../src/evaluatorHelpers';
 import Eval from '../../src/models/eval';
+import { PROMPTFOO_METADATA_KEY } from '../../src/models/evalResult';
 import { type ApiProvider, type EvaluateSummaryV3, type TestSuite } from '../../src/types/index';
 import { mockApiProvider, toPrompt } from './helpers';
 import { describeEvaluator } from './lifecycle';
@@ -224,6 +225,7 @@ describeEvaluator('evaluator metadata', () => {
       testKey: 'testValue',
       responseKey: 'responseValue',
       [FILE_METADATA_KEY]: {},
+      [PROMPTFOO_METADATA_KEY]: { evalOrigin: 'top-level' },
     });
   });
 

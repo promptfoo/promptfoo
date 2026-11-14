@@ -17,10 +17,11 @@
 
 import logger from '../../logger';
 import { ResultFailureReason } from '../../types/index';
-import { deduplicateTestCases } from '../../util/comparison';
+import { deduplicateTestCases, filterRuntimeVars } from '../../util/comparison';
 import { filterByRange } from '../../util/filterRange';
 import { warnEmptyFilterRange } from '../../util/filterRangeWarn';
-import { filterTestsByResults } from './filterTestsUtil';
+import { providerToIdentifier } from '../provider';
+import { filterTestsByResults, type ResultMatchContext } from './filterTestsUtil';
 
 import type { TestCase, TestSuite } from '../../types/index';
 
@@ -51,6 +52,12 @@ export interface FilterOptions {
   firstN?: number | string;
   /** Metadata filters: comma-separated values use OR; separate filters use AND, even for the same key. */
   metadata?: string | string[];
+  /** Exact metadata filters: comma-separated values use OR; separate filters use AND. */
+  metadataExact?: string | string[];
+  /** Metadata inherited from defaults and scenario config when applying exact filters. */
+  inheritedMetadata?: TestCase['metadata'];
+  /** Restricts stored-result matching and extraction to the selected scenario variant. */
+  resultMatchContext?: ResultMatchContext;
   /** Regular expression pattern to filter tests by description */
   pattern?: string;
   /** Zero-based test index range in start:end format. End is exclusive. */
@@ -63,6 +70,34 @@ export interface FilterOptions {
 
 type Tests = NonNullable<TestSuite['tests']>;
 type TestFilterFn = (test: TestCase) => boolean;
+
+function deduplicateTestsWithMetadata(tests: Tests, context: ResultMatchContext): Tests {
+  const seenAuthored = new Set<TestCase>();
+  const seenExtracted = new Set<string>();
+  return tests.filter((test) => {
+    const authoredTest = context.authoredTestFor?.(test);
+    if (authoredTest) {
+      if (seenAuthored.has(authoredTest)) {
+        return false;
+      }
+      seenAuthored.add(authoredTest);
+      return true;
+    }
+    const key = JSON.stringify({
+      vars: filterRuntimeVars(test.vars),
+      metadata: test.metadata,
+      provider: providerToIdentifier(test.provider),
+      extractedIdentity: context.extractedIdentityFor?.(test),
+      prompts: test.prompts,
+      providers: test.providers,
+    });
+    if (seenExtracted.has(key)) {
+      return false;
+    }
+    seenExtracted.add(key);
+    return true;
+  });
+}
 
 /**
  * Splits a metadata filter value into its alternatives. Commas separate alternatives, and
@@ -97,6 +132,40 @@ function splitMetadataFilterValue(value: string): string[] {
   return alternatives;
 }
 
+function parseMetadataFilters(
+  filters: string[],
+  optionName: string,
+  includeInvalidFilterInError = true,
+) {
+  return filters.map((filter) => {
+    const [key, ...valueParts] = filter.split('=');
+    const value = valueParts.join('=');
+    if (!key || value === '') {
+      throw new Error(`${optionName} must be specified in key=value format`);
+    }
+    const values = splitMetadataFilterValue(value);
+    if (values.includes('')) {
+      const detail = includeInvalidFilterInError
+        ? ` in "${filter}"`
+        : '. Use key=value with non-empty values.';
+      throw new Error(`${optionName} has an empty value${detail}`);
+    }
+    return { key, values };
+  });
+}
+
+function stringifyMetadataScalar(value: unknown): string | undefined {
+  if (
+    value === null ||
+    value === undefined ||
+    typeof value === 'object' ||
+    typeof value === 'function'
+  ) {
+    return undefined;
+  }
+  return String(value);
+}
+
 function createSeededRandom(seed: number): () => number {
   const stringSeed = String(seed);
   let state = 2166136261;
@@ -123,6 +192,7 @@ async function filterFailingTests(
   testSuite: TestSuite,
   pathOrId: string,
   extractedTestFilter?: TestFilterFn,
+  resultMatchContext?: ResultMatchContext,
 ): Promise<Tests> {
   // Filter for all non-successful results (both assertion failures and errors)
   return filterTestsByResults(
@@ -130,6 +200,7 @@ async function filterFailingTests(
     pathOrId,
     (result) => !result.success,
     extractedTestFilter,
+    resultMatchContext,
   );
 }
 
@@ -143,6 +214,7 @@ async function filterFailingOnlyTests(
   testSuite: TestSuite,
   pathOrId: string,
   extractedTestFilter?: TestFilterFn,
+  resultMatchContext?: ResultMatchContext,
 ): Promise<Tests> {
   // Filter for assertion failures only, excluding errors
   return filterTestsByResults(
@@ -150,6 +222,7 @@ async function filterFailingOnlyTests(
     pathOrId,
     (result) => !result.success && result.failureReason !== ResultFailureReason.ERROR,
     extractedTestFilter,
+    resultMatchContext,
   );
 }
 
@@ -163,12 +236,14 @@ async function filterErrorTests(
   testSuite: TestSuite,
   pathOrId: string,
   extractedTestFilter?: TestFilterFn,
+  resultMatchContext?: ResultMatchContext,
 ): Promise<Tests> {
   return filterTestsByResults(
     testSuite,
     pathOrId,
     (result) => result.failureReason === ResultFailureReason.ERROR,
     extractedTestFilter,
+    resultMatchContext,
   );
 }
 
@@ -191,8 +266,14 @@ async function filterErrorTests(
 export async function filterTests(testSuite: TestSuite, options: FilterOptions): Promise<Tests> {
   let tests = testSuite.tests || [];
   let metadataFilter: TestFilterFn | undefined;
+  let exactMetadataFilter: TestFilterFn | undefined;
 
-  logger.debug(`Starting filterTests with options: ${JSON.stringify(options)}`);
+  const loggableOptions = { ...options };
+  delete loggableOptions.metadata;
+  delete loggableOptions.metadataExact;
+  delete loggableOptions.inheritedMetadata;
+  delete loggableOptions.resultMatchContext;
+  logger.debug('Starting filterTests with options', loggableOptions);
   logger.debug(`Initial test count: ${tests.length}`);
 
   if (Object.keys(options).length === 0) {
@@ -204,27 +285,13 @@ export async function filterTests(testSuite: TestSuite, options: FilterOptions):
     // Normalize to array for consistent handling
     const metadataFilters = Array.isArray(options.metadata) ? options.metadata : [options.metadata];
 
-    // Validate all filters first
-    const parsedFilters: Array<{ key: string; values: string[] }> = [];
-    for (const filter of metadataFilters) {
-      const [key, ...valueParts] = filter.split('=');
-      const value = valueParts.join('='); // Rejoin in case value contains '='
-      if (!key || value === '') {
-        throw new Error('--filter-metadata must be specified in key=value format');
-      }
-      // Values within each filter use OR; separate filters use AND below.
-      const values = splitMetadataFilterValue(value);
-      if (values.includes('')) {
-        throw new Error(`--filter-metadata has an empty value in "${filter}"`);
-      }
-      parsedFilters.push({ key, values });
-    }
+    const parsedFilters = parseMetadataFilters(metadataFilters, '--filter-metadata');
 
-    logger.debug(
-      `Filtering for metadata conditions (AND across filters, OR within each filter): ${metadataFilters.join('; ')}`,
-    );
+    logger.debug(`Filtering for ${parsedFilters.length} legacy metadata condition(s)`);
     logger.debug(`Before metadata filter: ${tests.length} tests`);
 
+    // Preserve legacy-only behavior; mixed mode skips nullish values as exact mode requires.
+    const skipNullLegacyValues = options.metadataExact !== undefined;
     metadataFilter = (test) => {
       if (!test.metadata) {
         logger.debug(`Test has no metadata: ${test.description || 'unnamed test'}`);
@@ -237,28 +304,76 @@ export async function filterTests(testSuite: TestSuite, options: FilterOptions):
         const matches = values.some((value) => {
           if (Array.isArray(testValue)) {
             // For array metadata, check if any value includes the search term
-            return testValue.some((v) => v.toString().includes(value));
+            return testValue.some((v) => {
+              if (skipNullLegacyValues && (v === null || v === undefined)) {
+                return false;
+              }
+              return v.toString().includes(value);
+            });
           }
           // For single value metadata, check if it includes the search term
-          return testValue !== undefined && testValue.toString().includes(value);
+          return (
+            testValue !== undefined &&
+            !(skipNullLegacyValues && testValue === null) &&
+            testValue.toString().includes(value)
+          );
         });
 
         if (!matches) {
-          logger.debug(
-            `Test "${test.description || 'unnamed test'}" metadata doesn't match. Expected ${key} to include one of [${values.join(', ')}], got ${JSON.stringify(test.metadata)}`,
-          );
+          logger.debug('Test did not match a legacy metadata condition');
           return false;
         }
       }
 
       return true;
     };
-    tests = tests.filter(metadataFilter);
-
-    logger.debug(`After metadata filter: ${tests.length} tests remain`);
   }
 
-  const resultFilterTestSuite = metadataFilter ? { ...testSuite, tests } : testSuite;
+  if (options.metadataExact !== undefined) {
+    const metadataFilters = Array.isArray(options.metadataExact)
+      ? options.metadataExact
+      : [options.metadataExact];
+    const parsedFilters = parseMetadataFilters(metadataFilters, '--filter-metadata-exact', false);
+    const inheritedMetadata = options.inheritedMetadata;
+
+    logger.debug(`Filtering for ${parsedFilters.length} exact metadata condition(s)`);
+
+    exactMetadataFilter = (test) => {
+      const effectiveMetadata = { ...inheritedMetadata, ...test.metadata };
+      for (const { key, values } of parsedFilters) {
+        const testValue = effectiveMetadata[key];
+        const candidateValues = Array.isArray(testValue) ? testValue : [testValue];
+        const matches = candidateValues.some((value) => {
+          const scalar = stringifyMetadataScalar(value);
+          return scalar !== undefined && values.includes(scalar);
+        });
+
+        if (!matches) {
+          logger.debug('Test did not match exact metadata conditions');
+          return false;
+        }
+      }
+      return true;
+    };
+  }
+
+  const combinedMetadataFilter =
+    metadataFilter || exactMetadataFilter
+      ? (test: TestCase) =>
+          (!exactMetadataFilter || exactMetadataFilter(test)) &&
+          (!metadataFilter || metadataFilter(test))
+      : undefined;
+  if (combinedMetadataFilter) {
+    tests = tests.filter(combinedMetadataFilter);
+    if (metadataFilter) {
+      logger.debug(`After metadata filter: ${tests.length} tests remain`);
+    }
+    if (exactMetadataFilter) {
+      logger.debug(`After exact metadata filter: ${tests.length} tests remain`);
+    }
+  }
+
+  const resultFilterTestSuite = combinedMetadataFilter ? { ...testSuite, tests } : testSuite;
 
   // Handle failing, failingOnly, and errorsOnly filters
   // - failing: all non-successful results (failures + errors)
@@ -272,16 +387,23 @@ export async function filterTests(testSuite: TestSuite, options: FilterOptions):
     const failingOnlyTests = await filterFailingOnlyTests(
       resultFilterTestSuite,
       options.failingOnly,
-      metadataFilter,
+      combinedMetadataFilter,
+      options.resultMatchContext,
     );
     const errorTests = await filterErrorTests(
       resultFilterTestSuite,
       options.errorsOnly,
-      metadataFilter,
+      combinedMetadataFilter,
+      options.resultMatchContext,
     );
 
     // Create a union of both sets, deduplicating by test identity
-    tests = deduplicateTestCases([...failingOnlyTests, ...errorTests]);
+    tests = options.resultMatchContext
+      ? deduplicateTestsWithMetadata(
+          [...failingOnlyTests, ...errorTests],
+          options.resultMatchContext,
+        )
+      : deduplicateTestCases([...failingOnlyTests, ...errorTests]);
 
     logger.debug(
       `Combined failingOnly (${failingOnlyTests.length}) and errors (${errorTests.length}) filters: ${tests.length} unique tests`,
@@ -294,7 +416,12 @@ export async function filterTests(testSuite: TestSuite, options: FilterOptions):
     }
   } else if (options.failing) {
     // --filter-failing includes both failures and errors
-    tests = await filterFailingTests(resultFilterTestSuite, options.failing, metadataFilter);
+    tests = await filterFailingTests(
+      resultFilterTestSuite,
+      options.failing,
+      combinedMetadataFilter,
+      options.resultMatchContext,
+    );
     if (tests.length === 0) {
       logNoTestsWarning('filter-failing', options.failing, 'no failures/errors');
     }
@@ -303,7 +430,8 @@ export async function filterTests(testSuite: TestSuite, options: FilterOptions):
     tests = await filterFailingOnlyTests(
       resultFilterTestSuite,
       options.failingOnly,
-      metadataFilter,
+      combinedMetadataFilter,
+      options.resultMatchContext,
     );
     if (tests.length === 0) {
       logNoTestsWarning(
@@ -313,7 +441,12 @@ export async function filterTests(testSuite: TestSuite, options: FilterOptions):
       );
     }
   } else if (options.errorsOnly) {
-    tests = await filterErrorTests(resultFilterTestSuite, options.errorsOnly, metadataFilter);
+    tests = await filterErrorTests(
+      resultFilterTestSuite,
+      options.errorsOnly,
+      combinedMetadataFilter,
+      options.resultMatchContext,
+    );
     if (tests.length === 0) {
       logNoTestsWarning('filter-errors-only', options.errorsOnly, 'no errors');
     }
