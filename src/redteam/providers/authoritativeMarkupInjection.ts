@@ -16,7 +16,7 @@ import {
   neverGenerateRemote,
 } from '../remoteGeneration';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
-import { throwIfTargetPromptExceedsMaxChars } from '../shared/promptLength';
+import { TargetPromptLengthError } from '../shared/promptLength';
 import { callTargetProvider, preserveSelectedError } from './shared';
 
 import type {
@@ -130,14 +130,20 @@ export default class AuthoritativeMarkupInjectionProvider implements ApiProvider
       prompt: renderedAttackerPrompt,
     });
 
-    // Call the target provider with the injected attack
-    throwIfTargetPromptExceedsMaxChars(renderedAttackerPrompt);
-    const targetResponse = await callTargetProvider(
-      targetProvider,
-      renderedAttackerPrompt,
-      context,
-      options,
-    );
+    let targetResponse: ProviderResponse;
+    try {
+      targetResponse = await callTargetProvider(
+        targetProvider,
+        renderedAttackerPrompt,
+        context,
+        options,
+      );
+    } catch (error) {
+      if (error instanceof TargetPromptLengthError) {
+        return { output: '', error: error.message, tokenUsage: totalTokenUsage };
+      }
+      throw error;
+    }
     accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
 
     logger.debug('[AuthoritativeMarkupInjection] Target response', {

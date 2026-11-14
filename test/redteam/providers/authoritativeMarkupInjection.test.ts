@@ -186,6 +186,28 @@ describe('AuthoritativeMarkupInjectionProvider', () => {
       });
     });
 
+    it('reports generation usage when a scoped cap blocks the target call', async () => {
+      mockFetchWithProxy.mockResolvedValueOnce({
+        json: async () => ({
+          message: { role: 'assistant', content: 'too long' },
+          tokenUsage: { prompt: 5, completion: 2, total: 7 },
+        }),
+      });
+      const provider = new AuthoritativeMarkupInjectionProvider({ injectVar: 'input' });
+      const context = createMockContext(mockTargetProvider);
+      context.test = { metadata: { pluginConfig: { maxCharsPerMessage: 5 } } };
+
+      const result = await provider.callApi('test prompt', context);
+
+      expect(result.error).toContain('maxCharsPerMessage=5');
+      expect(result.tokenUsage).toMatchObject({
+        total: 0,
+        numRequests: 0,
+        attacker: { prompt: 5, completion: 2, total: 7, numRequests: 1 },
+      });
+      expect(mockTargetProvider.callApi).not.toHaveBeenCalled();
+    });
+
     it('retains fresh attacker tokens when the target response is reused from cache', async () => {
       mockFetchWithProxy.mockResolvedValueOnce({
         json: async () => ({
