@@ -1,6 +1,8 @@
 import { createRequire } from 'node:module';
 import * as fs from 'fs';
+import * as path from 'path';
 
+import nunjucks from 'nunjucks';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   type AfterEachExtensionHookContext,
@@ -11,9 +13,13 @@ import {
   resolveVariables,
   runExtensionHook,
 } from '../src/evaluatorHelpers';
+import { getPrompt as getHeliconePrompt } from '../src/integrations/helicone';
+import { getPrompt as getLangfusePrompt } from '../src/integrations/langfuse';
+import { getPrompt as getPortkeyPrompt } from '../src/integrations/portkey';
 import logger from '../src/logger';
 import { AIStudioChatProvider } from '../src/providers/google/ai.studio';
 import { runPython } from '../src/python/pythonUtils';
+import { getNunjucksEngine } from '../src/util/templates';
 import { transform } from '../src/util/transform';
 import { createMockProvider } from './factories/provider';
 import { mockProcessEnv } from './util/utils';
@@ -124,6 +130,18 @@ vi.mock('../src/util/transform', () => ({
 
 vi.mock('../src/python/pythonUtils', () => ({
   runPython: vi.fn(),
+}));
+
+vi.mock('../src/integrations/helicone', () => ({
+  getPrompt: vi.fn(),
+}));
+
+vi.mock('../src/integrations/langfuse', () => ({
+  getPrompt: vi.fn(),
+}));
+
+vi.mock('../src/integrations/portkey', () => ({
+  getPrompt: vi.fn(),
 }));
 
 const mockApiProvider = createMockProvider();
@@ -726,6 +744,1094 @@ describe('evaluatorHelpers', () => {
         });
       },
     );
+
+    it('should leave placeholders inside raw blocks untouched', () => {
+      const variables = {
+        varOne: 'abc',
+        varThree: '{% raw %}{{varOne}}{% endraw %}',
+      };
+      expect(resolveVariables(variables)).toEqual({
+        varOne: 'abc',
+        varThree: '{% raw %}{{varOne}}{% endraw %}',
+      });
+    });
+
+    it('should leave placeholders nested in another expression untouched', () => {
+      const variables = {
+        varOne: 'abc',
+        varTwo: "{{ '{{varOne}}' }}",
+      };
+      expect(resolveVariables(variables)).toEqual({
+        varOne: 'abc',
+        varTwo: "{{ '{{varOne}}' }}",
+      });
+    });
+
+    it('should still substitute simple placeholders around protected spans', () => {
+      const variables = {
+        x: 'yes',
+        mixed: '{{x}} and {% raw %}{{x}}{% endraw %}',
+      };
+      expect(resolveVariables(variables)).toEqual({
+        x: 'yes',
+        mixed: 'yes and {% raw %}{{x}}{% endraw %}',
+      });
+    });
+
+    it('should leave an earlier raw-block occurrence untouched when the placeholder repeats', () => {
+      const variables = {
+        x: 'yes',
+        mixed: '{% raw %}{{x}}{% endraw %} and {{x}}',
+      };
+      expect(resolveVariables(variables)).toEqual({
+        x: 'yes',
+        mixed: '{% raw %}{{x}}{% endraw %} and yes',
+      });
+    });
+
+    it('should leave placeholders inside nested raw blocks untouched', () => {
+      // Nunjucks balances nested raw blocks: the outer block stays open until
+      // the matching endraw, so {{y}} here renders literally.
+      const variables = {
+        x: 'yes',
+        y: 'no',
+        nested: '{% raw %}{% raw %}{{x}}{% endraw %} {{y}}{% endraw %}',
+      };
+      expect(resolveVariables(variables)).toEqual({
+        x: 'yes',
+        y: 'no',
+        nested: '{% raw %}{% raw %}{{x}}{% endraw %} {{y}}{% endraw %}',
+      });
+    });
+
+    it('should protect an unterminated raw block through its last raw token', () => {
+      // parseRaw swallows everything through the last raw/endraw token even
+      // when the nesting never closes, so {{x}} stays literal while the
+      // trailing {{y}} parses normally.
+      const variables = {
+        x: 'yes',
+        y: 'no',
+        nested: '{% raw %}{% raw %}{{x}}{% endraw %} {{y}}',
+      };
+      expect(resolveVariables(variables)).toEqual({
+        x: 'yes',
+        y: 'no',
+        nested: '{% raw %}{% raw %}{{x}}{% endraw %} no',
+      });
+    });
+
+    it('should still resolve placeholders after a lone unclosed raw tag', () => {
+      // A {% raw %} with no further raw/endraw token is inert: Nunjucks
+      // renders what follows as a normal template.
+      const variables = {
+        x: 'yes',
+        v: '{% raw %}foo {{x}}',
+      };
+      expect(resolveVariables(variables)).toEqual({
+        x: 'yes',
+        v: '{% raw %}foo yes',
+      });
+    });
+
+    it.each([
+      ['balanced nested', '{% raw %}{% raw %}{{x}}{% endraw %} {{y}}{% endraw %}'],
+      ['unterminated nested', '{% raw %}{% raw %}{{x}}{% endraw %} {{y}}'],
+      ['lone unclosed', '{% raw %}foo {{x}}'],
+      ['balanced then unclosed', '{% raw %}{{x}}{% endraw %} {% raw %}{{y}}'],
+      ['quoted raw markers', "{{ '{% raw %}' }}{{x}}{{ '{% endraw %}' }}"],
+    ])('should render %s raw blocks exactly like Nunjucks does', async (_name, template) => {
+      const rendered = await renderPrompt(
+        toPrompt('{{v}}'),
+        { v: template, x: 'yes', y: 'no' },
+        {},
+      );
+      const engine = getNunjucksEngine();
+      expect(rendered).toBe(engine.renderString(template, { x: 'yes', y: 'no' }));
+    });
+
+    it('should leave quoted placeholders inside a concat expression untouched', () => {
+      // The first quoted pair opens and closes before the second starts; a
+      // lastIndexOf nesting check misses that and substitutes the second.
+      const variables = {
+        x: 'XVAL',
+        y: 'YVAL',
+        text: `{{ '{{x}}' ~ '{{y}}' }}`,
+      };
+      expect(resolveVariables(variables)).toEqual({
+        x: 'XVAL',
+        y: 'YVAL',
+        text: `{{ '{{x}}' ~ '{{y}}' }}`,
+      });
+    });
+
+    it('should respect whitespace-control dashes on raw tags', () => {
+      const variables = {
+        x: 'XVAL',
+        dashed: `{%- raw %}{{x}}{% endraw %}`,
+        bothDashed: `{%- raw -%}{{x}}{%- endraw %}`,
+      };
+      expect(resolveVariables(variables)).toEqual({
+        x: 'XVAL',
+        dashed: `{%- raw %}{{x}}{% endraw %}`,
+        bothDashed: `{%- raw -%}{{x}}{%- endraw %}`,
+      });
+    });
+
+    it('should substitute around a whitespace-controlled raw block', () => {
+      const variables = {
+        x: 'yes',
+        mixed: `{%- raw %}{{x}}{% endraw %} and {{x}}`,
+      };
+      expect(resolveVariables(variables)).toEqual({
+        x: 'yes',
+        mixed: `{%- raw %}{{x}}{% endraw %} and yes`,
+      });
+    });
+
+    it('should render a raw-carrying var to literal text in a JSON prompt', async () => {
+      const renderedPrompt = await renderPrompt(
+        toPrompt('{"text": "{{v}}"}'),
+        { v: '{% raw %}{{x}}{% endraw %}' },
+        {},
+      );
+      expect(renderedPrompt).toBe(JSON.stringify({ text: '{{x}}' }, null, 2));
+    });
+
+    it('should render a whitespace-controlled raw-carrying var to literal text', async () => {
+      // `{%- raw %}` is a valid Nunjucks raw opener. The pre-render only treats a
+      // value as protected when collectRawSpans sees a raw span; anchoring the
+      // scan on '{%' plus whitespace misses the dash form, so the value is
+      // passed through as data and the inner placeholder leaks. This is the
+      // render-level guard for the same dashed-openner case resolveVariables
+      // covers at the scanner level.
+      const renderedPrompt = await renderPrompt(
+        toPrompt('{"text": "{{v}}"}'),
+        { v: '{%- raw %}{{x}}{% endraw %}', x: 'XVAL' },
+        {},
+      );
+      expect(renderedPrompt).toBe(JSON.stringify({ text: '{{x}}' }, null, 2));
+    });
+
+    it('should render a concat-expression var exactly like Nunjucks in a JSON prompt', async () => {
+      const renderedPrompt = await renderPrompt(
+        toPrompt('{"text": "{{v}}"}'),
+        { v: `{{ '{{x}}' ~ '{{y}}' }}`, x: 'XVAL', y: 'YVAL' },
+        {},
+      );
+      expect(renderedPrompt).toBe(JSON.stringify({ text: '{{x}}{{y}}' }, null, 2));
+    });
+
+    it('should ignore render failures in a value shadowed by a local set binding', async () => {
+      const renderedPrompt = await renderPrompt(
+        toPrompt("{% set v = 'ok' %}{{v}}"),
+        { v: "{% set local = 'x' %}{{local | missing_filter}}" },
+        {},
+      );
+
+      expect(renderedPrompt).toBe('ok');
+    });
+
+    it.each(['env', 'range'])(
+      'should propagate errors from an explicit %s variable that shadows a global',
+      async (globalName) => {
+        await expect(
+          renderPrompt(toPrompt(`{{${globalName}}}`), { [globalName]: '{% unknown %}' }, {}),
+        ).rejects.toThrow('unknown block tag');
+      },
+    );
+
+    it.each([
+      ["{{ cycler('odd', 'even').next() }}", 'odd'],
+      ["{{ joiner(',')('a','b') }}", ''],
+    ])('should render the built-in global in %s as defined', async (template, expected) => {
+      const renderedPrompt = await renderPrompt(toPrompt('{{v}}'), { v: template }, {});
+
+      expect(renderedPrompt).toBe(expected);
+    });
+
+    it('should bind the implicit loop object in for-body dependencies', async () => {
+      const template = '{% for item in items %}{{ loop.index ~ ":" ~ item }}{% endfor %}';
+      const renderedPrompt = await renderPrompt(
+        toPrompt('{{v}}'),
+        { v: template, items: ['a', 'b'] },
+        {},
+      );
+
+      expect(renderedPrompt).toBe('1:a2:b');
+    });
+
+    it.each([
+      "{{ {'a': {'b': 1}} ~ '{% raw %}x{% endraw %}' }}",
+      "{{ {'a': {'b': 1}} ~ '{# note #}' }}",
+    ])('should track dictionary braces in protected-span scanners: %s', async (value) => {
+      const renderedPrompt = await renderPrompt(toPrompt('{"text":"{{v}}"}'), { v: value }, {});
+
+      expect(renderedPrompt).toBe(JSON.stringify({ text: value }, null, 2));
+    });
+
+    it('should collect distinct prompt references without reparsing once per symbol', async () => {
+      const parser = (nunjucks as unknown as { parser: { parse: (template: string) => unknown } })
+        .parser;
+      const parseSpy = vi.spyOn(parser, 'parse');
+      try {
+        const value = Array.from({ length: 32 }, (_, index) => `{{ external${index} }}`).join(' ');
+        await renderPrompt(toPrompt('{"text":"{{v}}"}'), { v: value }, {});
+
+        expect(parseSpy.mock.calls.length).toBeLessThan(12);
+      } finally {
+        parseSpy.mockRestore();
+      }
+    });
+
+    it('should keep the textual fallback linear after a parse failure', async () => {
+      const parser = (nunjucks as unknown as { parser: { parse: (template: string) => unknown } })
+        .parser;
+      const parseSpy = vi.spyOn(parser, 'parse');
+      try {
+        const references = Array.from({ length: 32 }, (_, index) => `{{ external${index} }}`).join(
+          ' ',
+        );
+        await renderPrompt(toPrompt('{"text":"{{v}}"}'), { v: `{{ broken ${references}` }, {});
+
+        expect(parseSpy.mock.calls.length).toBeLessThan(12);
+      } finally {
+        parseSpy.mockRestore();
+      }
+    });
+
+    it('should not clone the accumulated scope for every local assignment', async () => {
+      const OriginalSet = globalThis.Set;
+      let copiedElements = 0;
+      const CountingSet = class extends OriginalSet {
+        constructor(values?: any) {
+          super(values);
+          if (values) {
+            copiedElements += values.size ?? values.length ?? 0;
+          }
+        }
+      };
+      vi.stubGlobal('Set', CountingSet);
+      try {
+        const value = Array.from(
+          { length: 1000 },
+          (_, index) => `{% set local${index} = 'x' %}`,
+        ).join('');
+        await renderPrompt(toPrompt('{"text":"{{v}}"}'), { v: value }, {});
+
+        expect(copiedElements).toBeLessThan(5000);
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    });
+
+    it('should skip structural scans for template-free values in the full-render guard', async () => {
+      const OriginalInt32Array = globalThis.Int32Array;
+      let allocations = 0;
+      const CountingInt32Array = new Proxy(OriginalInt32Array, {
+        construct(target, args, newTarget) {
+          allocations++;
+          return Reflect.construct(target, args, newTarget);
+        },
+      });
+      vi.stubGlobal('Int32Array', CountingInt32Array);
+      try {
+        const value = 'a'.repeat(16 * 1024 * 1024);
+        const renderedPrompt = await renderPrompt(toPrompt('{{payload}}'), { payload: value }, {});
+
+        expect(renderedPrompt).toBe(value);
+        expect(allocations).toBe(0);
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    });
+
+    it('should not decode a literal nested inside another expression string', async () => {
+      const value = `{{ name ~ "{{ 'x' }}" }}`;
+      const renderedPrompt = await renderPrompt(
+        toPrompt('{"text": "{{v}}"}'),
+        { v: value, name: 'defined' },
+        {},
+      );
+
+      expect(renderedPrompt).toBe(JSON.stringify({ text: value }, null, 2));
+    });
+
+    it('should not start quote tracking on an apostrophe in plain text', async () => {
+      const renderedPrompt = await renderPrompt(
+        toPrompt('{"text": "{{v}}"}'),
+        { v: `don't {{ '{{' }} {{x}}`, x: 'yes' },
+        {},
+      );
+
+      expect(renderedPrompt).toBe(JSON.stringify({ text: "don't {{ yes" }, null, 2));
+    });
+
+    it('should account for dictionary braces before consuming an expression closer', async () => {
+      const value = "{{ {'outer': {'inner': 1}} ~ '{{' }} {{x}}";
+      const renderedPrompt = await renderPrompt(
+        toPrompt('{"text":"{{v}}"}'),
+        { v: value, x: 'yes' },
+        {},
+      );
+
+      expect(renderedPrompt).toBe(
+        JSON.stringify({ text: "{{ {'outer': {'inner': 1}} ~ '{{' }} yes" }, null, 2),
+      );
+    });
+
+    it('should render a raw-carrying var to literal text when JSON autoescape is disabled', async () => {
+      mockProcessEnv({ PROMPTFOO_DISABLE_JSON_AUTOESCAPE: 'true' });
+      const renderedPrompt = await renderPrompt(
+        toPrompt('{{v}}'),
+        { v: '{% raw %}{{x}}{% endraw %}' },
+        {},
+      );
+      expect(renderedPrompt).toBe('{{x}}');
+      mockProcessEnv({ PROMPTFOO_DISABLE_JSON_AUTOESCAPE: undefined });
+    });
+
+    it('should not pre-render a var whose unprotected references are undefined', async () => {
+      // x only appears inside the raw span, but y is genuinely referenced and
+      // undefined, so the value must pass through untouched.
+      const renderedPrompt = await renderPrompt(
+        toPrompt('{"text": "{{v}}"}'),
+        { v: '{% raw %}{{x}}{% endraw %} {{y}}' },
+        {},
+      );
+      expect(renderedPrompt).toBe(
+        JSON.stringify({ text: '{% raw %}{{x}}{% endraw %} {{y}}' }, null, 2),
+      );
+    });
+
+    it('should preserve a set target referenced by its own initializer when undefined', async () => {
+      const value = '{% set x = x %}{{x}}';
+      const renderedPrompt = await renderPrompt(toPrompt('{{v}}'), { v: value }, {});
+
+      expect(renderedPrompt).toBe(value);
+    });
+
+    it('should render a quoted literal to text even when its inner variable is undefined', async () => {
+      // x sits inside a quoted string in the expression, so it is not a real
+      // reference; treating it as an undefined dependency would skip the
+      // pre-render and leak the raw expression into the prompt.
+      const renderedPrompt = await renderPrompt(
+        toPrompt('{"text": "{{v}}"}'),
+        { v: "{{ '{{x}}' }}" },
+        {},
+      );
+      expect(renderedPrompt).toBe(JSON.stringify({ text: '{{x}}' }, null, 2));
+    });
+
+    it('should leave quoted placeholders inside block tags untouched', () => {
+      const variables = {
+        x: 'XVAL',
+        v: "{% set literal = '{{x}}' %}{{literal}}",
+      };
+      expect(resolveVariables(variables)).toEqual({
+        x: 'XVAL',
+        v: "{% set literal = '{{x}}' %}{{literal}}",
+      });
+    });
+
+    it('should render a block-tag quoted literal exactly like Nunjucks', async () => {
+      const template = "{% set literal = '{{x}}' %}{{literal}}";
+      const renderedPrompt = await renderPrompt(toPrompt('{{v}}'), { v: template, x: 'XVAL' }, {});
+      expect(renderedPrompt).toBe(getNunjucksEngine().renderString(template, { x: 'XVAL' }));
+    });
+
+    it('should keep file-backed runtime values as data in JSON prompts', async () => {
+      const restoreEnv = mockProcessEnv({ TEST_ENV_VAR: 'runtime-value-sentinel' });
+      try {
+        vi.spyOn(fs, 'readFileSync').mockReturnValueOnce('{{env.TEST_ENV_VAR}}');
+        const renderedPrompt = await renderPrompt(
+          toPrompt('{"text": "{{payload}}"}'),
+          { payload: 'file://runtime-value.txt' },
+          {},
+        );
+
+        expect(renderedPrompt).toBe(JSON.stringify({ text: '{{env.TEST_ENV_VAR}}' }, null, 2));
+        expect(renderedPrompt).not.toContain('runtime-value-sentinel');
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('should keep file-backed runtime values as data when JSON autoescape is disabled', async () => {
+      const restoreEnv = mockProcessEnv({
+        PROMPTFOO_DISABLE_JSON_AUTOESCAPE: 'true',
+        TEST_ENV_VAR: 'runtime-value-sentinel',
+      });
+      try {
+        vi.spyOn(fs, 'readFileSync').mockReturnValueOnce('{{env.TEST_ENV_VAR}}');
+        const renderedPrompt = await renderPrompt(
+          toPrompt('{{payload}}'),
+          { payload: 'file://runtime-value.txt' },
+          {},
+        );
+
+        expect(renderedPrompt).toBe('{{env.TEST_ENV_VAR}}');
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('should keep constructor calls as data beside protected literals in JSON prompts', async () => {
+      const payload = '{% raw %}x{% endraw %}{{ range.constructor("return 6 * 7")() }}';
+      const renderedPrompt = await renderPrompt(
+        toPrompt('{"text": "{{payload}}"}'),
+        { payload },
+        {},
+      );
+
+      expect(renderedPrompt).toBe(
+        JSON.stringify({ text: 'x{{ range.constructor("return 6 * 7")() }}' }, null, 2),
+      );
+      expect(renderedPrompt).not.toContain('42');
+    });
+
+    it('should ignore raw contents when finding placeholders after a raw block', async () => {
+      const renderedPrompt = await renderPrompt(
+        toPrompt('{"text": "{{v}}"}'),
+        { v: '{% raw %}{{{% endraw %} {{x}}', x: 'yes' },
+        {},
+      );
+
+      expect(renderedPrompt).toBe(JSON.stringify({ text: '{{ yes' }, null, 2));
+    });
+
+    it.each([
+      ['inside', "{% raw %}don't {{x}}{% endraw %}"],
+      ['before', "don't {% raw %}{{x}}{% endraw %}"],
+    ])('should treat apostrophes %s a raw body as literal text', async (_name, value) => {
+      const renderedPrompt = await renderPrompt(
+        toPrompt('{"text": "{{v}}"}'),
+        { v: value, x: 'yes' },
+        {},
+      );
+
+      expect(renderedPrompt).toBe(JSON.stringify({ text: "don't {{x}}" }, null, 2));
+    });
+
+    it('should not execute a set-bound constructor beside protected literals', async () => {
+      const payload =
+        '{% set range = [] %}{% raw %}x{% endraw %}{{ range.constructor("return 6 * 7")() }}';
+      const renderedPrompt = await renderPrompt(
+        toPrompt('{"text": "{{payload}}"}'),
+        { payload },
+        {},
+      );
+
+      expect(renderedPrompt).toBe(
+        JSON.stringify(
+          {
+            text: '{% set range = [] %}x{{ range.constructor("return 6 * 7")() }}',
+          },
+          null,
+          2,
+        ),
+      );
+      expect(renderedPrompt).not.toContain('42');
+    });
+
+    it('should ignore set RHS literals when collecting external dependencies', async () => {
+      const renderedPrompt = await renderPrompt(
+        toPrompt('{{v}}'),
+        { v: "{% set greeting = 'Hello' %}{{ greeting ~ name }}", name: 'Ada' },
+        {},
+      );
+
+      expect(renderedPrompt).toBe('HelloAda');
+    });
+
+    it('should preserve loop-local set dependencies', async () => {
+      const template = '{% for item in items %}{% set label = item %}{{ label ~ "!" }}{% endfor %}';
+      const renderedPrompt = await renderPrompt(
+        toPrompt('{{v}}'),
+        { v: template, items: ['a', 'b'] },
+        {},
+      );
+
+      expect(renderedPrompt).toBe('a!b!');
+    });
+
+    it('should ignore comment contents when computing nesting depth', async () => {
+      const template = '{# {{ #} {{x}}';
+      const renderedPrompt = await renderPrompt(
+        toPrompt('{"text": "{{v}}"}'),
+        { v: template, x: 'yes' },
+        {},
+      );
+
+      expect(renderedPrompt).toBe(
+        JSON.stringify({ text: getNunjucksEngine().renderString(template, { x: 'yes' }) }, null, 2),
+      );
+    });
+
+    it('should preserve comment markers inside raw and quoted literals', async () => {
+      const template = `{% raw %}{{x}}{# keep #}{% endraw %}{{ '{# keep #}' }}`;
+      const renderedPrompt = await renderPrompt(
+        toPrompt('{"text": "{{v}}"}'),
+        { v: template, x: 'ignored' },
+        {},
+      );
+
+      expect(renderedPrompt).toBe(JSON.stringify({ text: '{{x}}{# keep #}{# keep #}' }, null, 2));
+    });
+
+    it('should ignore set tags inside comments when collecting external dependencies', async () => {
+      const renderedPrompt = await renderPrompt(
+        toPrompt('{{v}}'),
+        { v: '{# {% set local = missing %} #}hello' },
+        {},
+      );
+
+      expect(renderedPrompt).toBe('hello');
+    });
+
+    it('should preserve whitespace-control dashes on set tags', async () => {
+      const template = "{% set greeting = 'Hello' -%} {{ greeting }}";
+      const renderedPrompt = await renderPrompt(toPrompt('{{v}}'), { v: template }, {});
+
+      expect(renderedPrompt).toBe(getNunjucksEngine().renderString(template, {}));
+    });
+
+    it('should decode raw spans without evaluating a surrounding set program', async () => {
+      const renderedPrompt = await renderPrompt(
+        toPrompt('{"text": "{{v}}"}'),
+        {
+          v: "{% set greeting = 'Hello' %}{% raw %}x{% endraw %}{{ greeting ~ name }}",
+          name: 'Ada',
+        },
+        {},
+      );
+
+      expect(renderedPrompt).toBe(
+        JSON.stringify({ text: "{% set greeting = 'Hello' %}x{{ greeting ~ name }}" }, null, 2),
+      );
+    });
+
+    it('should not evaluate an env reference just because a value also has protected syntax', async () => {
+      const restoreEnv = mockProcessEnv({ TEST_ENV_VAR: 'runtime-value-sentinel' });
+      try {
+        const renderedPrompt = await renderPrompt(
+          toPrompt('{"text": "{{payload}}"}'),
+          { payload: '{% raw %}{{x}}{% endraw %} {{env.TEST_ENV_VAR}}' },
+          {},
+        );
+
+        expect(renderedPrompt).toContain('{{env.TEST_ENV_VAR}}');
+        expect(renderedPrompt).not.toContain('runtime-value-sentinel');
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('should still render quoted environment placeholders as literals in JSON prompts', async () => {
+      const restoreEnv = mockProcessEnv({ TEST_ENV_VAR: 'runtime-value-sentinel' });
+      try {
+        const renderedPrompt = await renderPrompt(
+          toPrompt('{"text": "{{payload}}"}'),
+          { payload: "{{ '{{env.TEST_ENV_VAR}}' }}" },
+          {},
+        );
+
+        expect(renderedPrompt).toBe(JSON.stringify({ text: '{{env.TEST_ENV_VAR}}' }, null, 2));
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('should pass runtime values to third-party integrations without evaluating them', async () => {
+      const restoreEnv = mockProcessEnv({ TEST_ENV_VAR: 'runtime-value-sentinel' });
+      try {
+        vi.mocked(getPortkeyPrompt).mockResolvedValue({
+          model: 'gpt-4o',
+          n: 1,
+          top_p: 1,
+          max_tokens: 128,
+          temperature: 0.7,
+          presence_penalty: 0,
+          frequency_penalty: 0,
+          messages: [{ role: 'user', content: 'hi' }],
+        });
+        vi.mocked(getLangfusePrompt).mockResolvedValue('langfuse result');
+        vi.mocked(getHeliconePrompt).mockResolvedValue('helicone result');
+
+        const vars = () => ({ payload: '{{env.TEST_ENV_VAR}}' });
+        await renderPrompt(toPrompt('portkey://my-prompt'), vars(), {});
+        await renderPrompt(toPrompt('langfuse://my-prompt'), vars(), {});
+        await renderPrompt(toPrompt('helicone://my-prompt'), vars(), {});
+
+        expect(getPortkeyPrompt).toHaveBeenCalledWith(
+          'my-prompt',
+          expect.objectContaining({ payload: '{{env.TEST_ENV_VAR}}' }),
+        );
+        expect(getLangfusePrompt).toHaveBeenCalledWith(
+          'my-prompt',
+          expect.objectContaining({ payload: '{{env.TEST_ENV_VAR}}' }),
+          'text',
+          undefined,
+          undefined,
+        );
+        expect(getHeliconePrompt).toHaveBeenCalledWith(
+          'my-prompt',
+          expect.objectContaining({ payload: '{{env.TEST_ENV_VAR}}' }),
+          undefined,
+          undefined,
+        );
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('should not fail a JSON prompt over an unreferenced unparseable var', async () => {
+      // payload is never referenced by the prompt, so its invalid Nunjucks
+      // must not abort the eval; it simply stays unused.
+      const renderedPrompt = await renderPrompt(
+        toPrompt('{"text": "{{v}}"}'),
+        { v: 'hello', payload: '{% unknown %}' },
+        {},
+      );
+      expect(renderedPrompt).toBe(JSON.stringify({ text: 'hello' }, null, 2));
+    });
+
+    it('should fail a non-JSON prompt when a referenced var cannot render', async () => {
+      await expect(renderPrompt(toPrompt('{{v}}'), { v: '{% unknown %}' }, {})).rejects.toThrow(
+        'unknown block tag: unknown',
+      );
+    });
+
+    it('should surface render errors for vars used through expression reads', async () => {
+      await expect(
+        renderPrompt(toPrompt("{{ v ~ 'tail' }}"), { v: '{% unknown %}' }, {}),
+      ).rejects.toThrow('unknown block tag: unknown');
+    });
+
+    it('should surface render errors through transitive variable dependencies', async () => {
+      await expect(
+        renderPrompt(toPrompt('{{alias}}'), { alias: '{{v | safe}}', v: '{% unknown %}' }, {}),
+      ).rejects.toThrow('unknown block tag: unknown');
+    });
+
+    it('should bind the implicit caller in macro-body dependencies', async () => {
+      const template =
+        '{% macro m() %}{{ caller() ~ "!" }}{% endmacro %}{% call m() %}x{% endcall %}';
+      const renderedPrompt = await renderPrompt(toPrompt('{{v}}'), { v: template }, {});
+
+      expect(renderedPrompt).toBe('x!');
+    });
+
+    it('should preserve an unterminated comment and its literal-looking suffix as data', async () => {
+      const value = "{# {{ 'x' }}";
+      const renderedPrompt = await renderPrompt(toPrompt('{"text":"{{v}}"}'), { v: value }, {});
+
+      expect(renderedPrompt).toBe(JSON.stringify({ text: value }, null, 2));
+    });
+
+    it('should bound deep concatenation traversal without overflowing the stack', async () => {
+      const value = `{{ ${'a ~ '.repeat(12000)}a }}`;
+      const renderedPrompt = await renderPrompt(toPrompt('{"text":"{{v}}"}'), { v: value }, {});
+
+      expect(renderedPrompt).toBe(JSON.stringify({ text: value }, null, 2));
+    });
+
+    it.each([
+      ['addition', ' + '],
+      ['subtraction', ' - '],
+      ['multiplication', ' * '],
+      ['division', ' / '],
+      ['floor division', ' // '],
+      ['remainder', ' % '],
+      ['boolean and', ' and '],
+      ['boolean or', ' or '],
+    ])('should bound deep %s traversal without overflowing the stack', async (_label, operator) => {
+      const value = `{{ ${`a${operator}`.repeat(12000)}a }}`;
+      const renderedPrompt = await renderPrompt(toPrompt('{"text":"{{v}}"}'), { v: value }, {});
+
+      expect(renderedPrompt).toBe(JSON.stringify({ text: value }, null, 2));
+    });
+
+    it('should bound deep postfix lookup traversal without overflowing the stack', async () => {
+      const value = `{{ a${'.b'.repeat(6000)} }}`;
+      const renderedPrompt = await renderPrompt(toPrompt('{"text":"{{v}}"}'), { v: value }, {});
+
+      expect(renderedPrompt).toBe(JSON.stringify({ text: value }, null, 2));
+    });
+
+    it('should preserve render errors for referenced Unicode variable names', async () => {
+      await expect(
+        renderPrompt(toPrompt('{{ café }}'), { café: '{% unknown %}' }, {}),
+      ).rejects.toThrow('unknown block tag: unknown');
+    });
+
+    it('should render an or fallback when its left operand is missing', async () => {
+      const renderedPrompt = await renderPrompt(
+        toPrompt('{{v}}'),
+        { v: "{{ user or 'anonymous' }}" },
+        {},
+      );
+
+      expect(renderedPrompt).toBe('anonymous');
+    });
+
+    it('should apply an or fallback inside a parenthesized binary chain', async () => {
+      const renderedPrompt = await renderPrompt(
+        toPrompt('{{v}}'),
+        { v: "{{ (user or 'anonymous') ~ '!' }}" },
+        {},
+      );
+
+      expect(renderedPrompt).toBe('anonymous!');
+    });
+
+    it('should retain a required name that also has an or-fallback occurrence', async () => {
+      const value = "{{ user }} {{ user or 'anonymous' }}";
+      const renderedPrompt = await renderPrompt(toPrompt('{{v}}'), { v: value }, {});
+
+      expect(renderedPrompt).toBe(value);
+    });
+
+    it('should use complete Unicode names in the undefined-variable guard', async () => {
+      const renderedPrompt = await renderPrompt(
+        toPrompt('{{v}}'),
+        { v: '{{ café ~ "!" }}', café: 'hello' },
+        {},
+      );
+
+      expect(renderedPrompt).toBe('hello!');
+    });
+
+    it('should bound wide external-context traversal without argument spreading', async () => {
+      const value = '{{ 1 }}'.repeat(128000);
+      const renderedPrompt = await renderPrompt(toPrompt('{"text":"{{v}}"}'), { v: value }, {});
+
+      expect(renderedPrompt).toBe(JSON.stringify({ text: value }, null, 2));
+    });
+
+    it('should bind super in block-body dependencies', async () => {
+      const previousCwd = process.cwd();
+      try {
+        process.chdir(path.resolve('test/fixtures/nunjucks-include'));
+        const value = '{% extends "base.njk" %}{% block body %}{{ super() ~ "!" }}{% endblock %}';
+        const renderedPrompt = await renderPrompt(toPrompt('{{v}}'), { v: value }, {});
+
+        const parentOutput = getNunjucksEngine().render('base.njk');
+        expect(renderedPrompt).toBe(parentOutput.replace('B', 'B!'));
+      } finally {
+        process.chdir(previousCwd);
+      }
+    });
+
+    it('should avoid quadratic scope snapshots for sibling macros', async () => {
+      const OriginalSet = globalThis.Set;
+      let copiedElements = 0;
+      const CountingSet = class extends OriginalSet {
+        constructor(values?: any) {
+          super(values);
+          if (values) {
+            copiedElements += values.size ?? values.length ?? 0;
+          }
+        }
+      };
+      vi.stubGlobal('Set', CountingSet);
+      try {
+        const value = Array.from(
+          { length: 6000 },
+          (_, index) => `{% macro m${index}() %}x{% endmacro %}`,
+        ).join('');
+        const renderedPrompt = await renderPrompt(toPrompt('{"text":"{{v}}"}'), { v: value }, {});
+
+        expect(renderedPrompt).toHaveLength(JSON.stringify({ text: value }, null, 2).length);
+        expect(renderedPrompt).toContain('m5999');
+        expect(copiedElements).toBeLessThan(20000);
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    });
+
+    it.each([
+      ['include', '{% include "body.njk" %}'],
+      ['import', '{% import "body.njk" as body %}'],
+      ['from-import', '{% from "body.njk" import body %}'],
+      ['extends', '{% extends "body.njk" %}'],
+    ])(
+      'should preserve render errors for variables consumed by an external template %s',
+      async (_label, template) => {
+        const previousCwd = process.cwd();
+        try {
+          process.chdir(path.resolve('test/fixtures/nunjucks-include'));
+          await expect(
+            renderPrompt(toPrompt(template), { v: '{% unknown %}' }, {}),
+          ).rejects.toThrow('unknown block tag: unknown');
+        } finally {
+          process.chdir(previousCwd);
+        }
+      },
+    );
+
+    it('should preserve render errors for external templates reached through a variable', async () => {
+      const previousCwd = process.cwd();
+      try {
+        process.chdir(path.resolve('test/fixtures/nunjucks-include'));
+        await expect(
+          renderPrompt(
+            toPrompt('{{alias}}'),
+            { alias: '{% include "body.njk" %}', v: '{% unknown %}' },
+            {},
+          ),
+        ).rejects.toThrow('unknown block tag: unknown');
+      } finally {
+        process.chdir(previousCwd);
+      }
+    });
+
+    it('should append dependency names without hitting the argument-count limit', async () => {
+      const placeholders = Array.from({ length: 128000 }, (_, index) => `{{x${index}}}`);
+      const renderedPrompt = await renderPrompt(
+        toPrompt('{"text":"{{v}}"}'),
+        { v: `{% unknown %} ${placeholders.join(' ')}` },
+        {},
+      );
+
+      expect(renderedPrompt).toContain('{% unknown %}');
+      expect(renderedPrompt).toContain('{{x127999}}');
+    });
+
+    it.each([
+      ['{{ r/"/ }} {{x}}', '{{ r/"/ }} yes'],
+      ['{{ not r/"/ }} {{x}}', '{{ not r/"/ }} yes'],
+      ['{% if r/"/ %}ok{% endif %} {{x}}', '{% if r/"/ %}ok{% endif %} yes'],
+    ])(
+      'should handle regex literals before starting quote tracking: %s',
+      async (value, expected) => {
+        const renderedPrompt = await renderPrompt(
+          toPrompt('{"text":"{{v}}"}'),
+          { v: value, x: 'yes' },
+          {},
+        );
+
+        expect(renderedPrompt).toBe(JSON.stringify({ text: expected }, null, 2));
+      },
+    );
+
+    it('should bound regex keyword lookup to the adjacent token', async () => {
+      const entries = Array.from({ length: 8000 }, () => 'r/x/').join(', ');
+      const value = `{{ [${entries}] }} {{x}}`;
+      const originalSlice = String.prototype.slice;
+      let slicedCharacters = 0;
+      const sliceSpy = vi.spyOn(String.prototype, 'slice').mockImplementation(function (
+        this: string,
+        start?: number,
+        end?: number,
+      ) {
+        const result = originalSlice.call(this, start, end);
+        if (this.valueOf() === value && start === 0) {
+          slicedCharacters += result.length;
+        }
+        return result;
+      });
+      try {
+        const renderedPrompt = await renderPrompt(
+          toPrompt('{"text":"{{v}}"}'),
+          { v: value, x: 'yes' },
+          {},
+        );
+
+        expect(renderedPrompt).toBe(JSON.stringify({ text: `{{ [${entries}] }} yes` }, null, 2));
+        expect(slicedCharacters).toBeLessThan(100000);
+      } finally {
+        sliceSpy.mockRestore();
+      }
+    });
+
+    it('should append fallback set RHS identifiers without argument spreading', async () => {
+      const rhs = Array.from({ length: 128000 }, (_, index) => `identifier${index}`).join(' ');
+      const value = `{% raw %}x{% endraw %}{% set local = ${rhs} %}`;
+      const renderedPrompt = await renderPrompt(
+        toPrompt('{"text":"{{other}}"}'),
+        { unused: value, other: 'ok' },
+        {},
+      );
+
+      expect(renderedPrompt).toBe(JSON.stringify({ text: 'ok' }, null, 2));
+    });
+
+    it('should avoid rescanning failed regex literal suffixes', async () => {
+      const entries = 'r/['.repeat(16000);
+      const value = `{{ [${entries} }} {{x}}`;
+      const startedAt = performance.now();
+      const renderedPrompt = await renderPrompt(
+        toPrompt('{"text":"{{v}}"}'),
+        { v: value, x: 'yes' },
+        {},
+      );
+      const elapsed = performance.now() - startedAt;
+
+      expect(renderedPrompt).toBe(JSON.stringify({ text: `{{ [${entries} }} yes` }, null, 2));
+      expect(elapsed).toBeLessThan(1000);
+    });
+
+    it('should stop dependency expansion after falling back to all variables', async () => {
+      const vars: Record<string, string> = Object.fromEntries(
+        Array.from({ length: 4000 }, (_, index) => [`v${index}`, '{% unknown %}']),
+      );
+      const keysSpy = vi.spyOn(Object, 'keys');
+      try {
+        const renderedPrompt = await renderPrompt(toPrompt('{"text":"{{v0}}"}'), vars, {});
+        expect(renderedPrompt).toBe(JSON.stringify({ text: '{% unknown %}' }, null, 2));
+        const varsKeyReads = keysSpy.mock.calls.filter(([target]) => target === vars).length;
+        expect(varsKeyReads).toBeLessThan(20);
+      } finally {
+        keysSpy.mockRestore();
+      }
+    }, 30_000);
+
+    it('should avoid overlapping whitespace matching in the set fallback', async () => {
+      const value = '{% raw %}x{% endraw %}{% set local = ' + ' '.repeat(64000);
+      const startedAt = performance.now();
+      const renderedPrompt = await renderPrompt(
+        toPrompt('{"text":"{{other}}"}'),
+        { unused: value, other: 'ok' },
+        {},
+      );
+      const elapsed = performance.now() - startedAt;
+
+      expect(renderedPrompt).toBe(JSON.stringify({ text: 'ok' }, null, 2));
+      expect(elapsed).toBeLessThan(1000);
+    });
+
+    it('should keep fallback tag prefix scanning deterministic', async () => {
+      const value = `{% raw %}x{% endraw %}{%${' '.repeat(32000)}`;
+      const startedAt = performance.now();
+      const renderedPrompt = await renderPrompt(
+        toPrompt('{"text":"{{other}}"}'),
+        { unused: value, other: 'ok' },
+        {},
+      );
+      const elapsed = performance.now() - startedAt;
+
+      expect(renderedPrompt).toBe(JSON.stringify({ text: 'ok' }, null, 2));
+      expect(elapsed).toBeLessThan(1000);
+    });
+
+    it.each([
+      ['{{ r/[ }} {{ r/"/ }} {{x}}', '{{ r/[ }} {{ r/"/ }} yes'],
+      ['{{ [r/[ , r/"/] }} {{x}}', '{{ [r/[ , r/"/] }} yes'],
+    ])('should preserve a valid regex after a failed probe: %s', async (value, expected) => {
+      const renderedPrompt = await renderPrompt(
+        toPrompt('{"text":"{{v}}"}'),
+        { v: value, x: 'yes' },
+        {},
+      );
+
+      expect(renderedPrompt).toBe(JSON.stringify({ text: expected }, null, 2));
+    });
+
+    it('should honor escaped quotes in protected literal expressions', async () => {
+      const template = "{{ 'it\\'s' }} {{x}}";
+      const renderedPrompt = await renderPrompt(
+        toPrompt('{"text": "{{v}}"}'),
+        { v: template, x: 'yes' },
+        {},
+      );
+
+      expect(renderedPrompt).toBe(JSON.stringify({ text: "it's yes" }, null, 2));
+      expect(renderedPrompt).toBe(
+        JSON.stringify({ text: getNunjucksEngine().renderString(template, { x: 'yes' }) }, null, 2),
+      );
+    });
+
+    it('should ignore raw markers after escaped quotes in literal expressions', async () => {
+      const template = "{{ 'it\\'s {% raw %}' ~ name }}";
+      const renderedPrompt = await renderPrompt(
+        toPrompt('{"text": "{{v}}"}'),
+        { v: template, name: 'Ada' },
+        {},
+      );
+
+      expect(renderedPrompt).toBe(JSON.stringify({ text: template }, null, 2));
+    });
+
+    it('should exclude callable test names from set RHS dependencies', async () => {
+      const template = "{% set even = n is divisibleby(2) %}{{ 'even' if even else 'odd' }}";
+      const renderedPrompt = await renderPrompt(toPrompt('{{v}}'), { v: template, n: 4 }, {});
+
+      expect(renderedPrompt).toBe('even');
+    });
+
+    it('should check render failures against the prompt returned by a function', async () => {
+      const prompt = {
+        ...toPrompt('function source'),
+        function: async () => '{{v}}',
+      };
+      await expect(renderPrompt(prompt, { v: '{% unknown %}' }, {})).rejects.toThrow(
+        'unknown block tag: unknown',
+      );
+    });
+
+    it('should pass pre-rendered vars to third-party prompt integrations', async () => {
+      vi.mocked(getPortkeyPrompt).mockResolvedValue({
+        model: 'gpt-4o',
+        n: 1,
+        top_p: 1,
+        max_tokens: 128,
+        temperature: 0.7,
+        presence_penalty: 0,
+        frequency_penalty: 0,
+        messages: [{ role: 'user', content: 'hi' }],
+      });
+      vi.mocked(getLangfusePrompt).mockResolvedValue('langfuse result');
+      vi.mocked(getHeliconePrompt).mockResolvedValue('helicone result');
+
+      const vars = () => ({ v: '{% raw %}{{x}}{% endraw %}', x: 'ignored' });
+      await renderPrompt(toPrompt('portkey://my-prompt'), vars(), {});
+      await renderPrompt(toPrompt('langfuse://my-prompt'), vars(), {});
+      await renderPrompt(toPrompt('helicone://my-prompt'), vars(), {});
+
+      expect(getPortkeyPrompt).toHaveBeenCalledWith(
+        'my-prompt',
+        expect.objectContaining({ v: '{{x}}' }),
+      );
+      expect(getLangfusePrompt).toHaveBeenCalledWith(
+        'my-prompt',
+        expect.objectContaining({ v: '{{x}}' }),
+        'text',
+        undefined,
+        undefined,
+      );
+      expect(getHeliconePrompt).toHaveBeenCalledWith(
+        'my-prompt',
+        expect.objectContaining({ v: '{{x}}' }),
+        undefined,
+        undefined,
+      );
+    });
+
+    it('should preserve raw variables to integrations when templating is disabled', async () => {
+      const restoreEnv = mockProcessEnv({ PROMPTFOO_DISABLE_TEMPLATING: 'true' });
+      try {
+        vi.mocked(getPortkeyPrompt).mockResolvedValue({
+          model: 'gpt-4o',
+          n: 1,
+          top_p: 1,
+          max_tokens: 128,
+          temperature: 0.7,
+          presence_penalty: 0,
+          frequency_penalty: 0,
+          messages: [{ role: 'user', content: 'hi' }],
+        });
+        const rawValue = '{% raw %}{{x}}{% endraw %}';
+
+        await renderPrompt(toPrompt('portkey://my-prompt'), { v: rawValue }, {});
+
+        expect(getPortkeyPrompt).toHaveBeenCalledWith(
+          'my-prompt',
+          expect.objectContaining({ v: rawValue }),
+        );
+      } finally {
+        restoreEnv();
+      }
+    });
   });
 
   describe('runExtensionHook', () => {
@@ -2055,6 +3161,141 @@ describe('evaluatorHelpers', () => {
 
       expect(renderedPrompt).toContain(httpUrl);
       expect(fs.readFileSync).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('structural dependency guards', () => {
+    it('does not treat quoted raw markers as real spans that hide a missing dependency', async () => {
+      const value = "{{ '{% raw %}' }}{{missing}}{{ '{% endraw %}' }}";
+      expect(await renderPrompt(toPrompt('{{v}}'), { v: value })).toBe(value);
+    });
+
+    it('strips many unclosed comments without repeated tail scans', async () => {
+      const value = '{{ "ok" }}' + '{#'.repeat(64000);
+      const rendered = await renderPrompt(toPrompt('{"text":"{{v}}"}'), { v: value });
+      expect(JSON.parse(rendered).text).toBe('ok' + '{#'.repeat(64000));
+    }, 15000);
+
+    it('allows missing operands in defined and undefined tests', async () => {
+      expect(await renderPrompt(toPrompt('{{v}}'), { v: '{{ user is defined }}' })).toBe('false');
+      expect(await renderPrompt(toPrompt('{{v}}'), { v: '{{ user is undefined }}' })).toBe('true');
+    });
+
+    it('renders an existence-guarded inline fallback', async () => {
+      const rendered = await renderPrompt(toPrompt('{{v}}'), {
+        v: "{{ user if user is defined else 'anonymous' }}",
+      });
+      expect(rendered).toBe('anonymous');
+    });
+
+    it('protects verbatim bodies without nesting later placeholders', async () => {
+      const value = '{% verbatim %}{{% endverbatim %} {{x}}';
+      expect(await renderPrompt(toPrompt('{{v}}'), { v: value, x: 'yes' })).toBe('{ yes');
+    });
+
+    it('collects dependencies through deep function-call chains without overflowing', async () => {
+      const value = '{{ a' + '()'.repeat(6000) + ' }}';
+      const rendered = await renderPrompt(toPrompt('{"text":"{{v}}"}'), { v: value });
+      expect(JSON.parse(rendered).text).toBe(value);
+    }, 15000);
+
+    it('collects dependencies through alternating lookup and call chains without overflowing', async () => {
+      const value = '{{ a' + '.b()'.repeat(6000) + ' }}';
+      const rendered = await renderPrompt(toPrompt('{"text":"{{v}}"}'), { v: value });
+      expect(JSON.parse(rendered).text).toBe(value);
+    }, 15000);
+
+    it('bounds macro call-site analysis across a shared dependency DAG', async () => {
+      const value =
+        Array.from({ length: 26 }, (_, index) =>
+          index === 0
+            ? '{% macro m0() %}x{% endmacro %}'
+            : `{% macro m${index}() %}{{m${index - 1}()}}{{m${index - 1}()}}{% endmacro %}`,
+        ).join('') + '{{m25()}}';
+      const rendered = await renderPrompt(toPrompt('{"text":"{{v}}"}'), { v: value });
+      expect(JSON.parse(rendered).text).toBe(value);
+    }, 15000);
+
+    it('bounds deferred macro chains without expanding them quadratically', async () => {
+      const value = Array.from({ length: 1000 }, (_, index) =>
+        index === 0
+          ? '{% macro m0() %}x{% endmacro %}'
+          : `{% macro m${index}() %}{{m${index - 1}()}}{% endmacro %}`,
+      ).join('');
+      const rendered = await renderPrompt(toPrompt('{"text":"{{v}}"}'), { v: value });
+      expect(JSON.parse(rendered).text).toBe(value);
+    }, 15000);
+
+    it('retains deep dependencies beyond the macro expansion limit', async () => {
+      const value =
+        Array.from({ length: 1000 }, (_, index) =>
+          index === 0
+            ? '{% macro m0() %}{{missing}}{% endmacro %}'
+            : `{% macro m${index}() %}{{m${index - 1}()}}{% endmacro %}`,
+        ).join('') + '{{m999()}}';
+      expect(await renderPrompt(toPrompt('{{v}}'), { v: value })).toBe(value);
+    }, 15000);
+
+    it('does not leak caller macro locals into nested macro dependencies', async () => {
+      const value =
+        "{% macro b() %}{{y}}{% endmacro %}{% macro a(y='local') %}{{b()}}{% endmacro %}{{a()}}";
+      expect(await renderPrompt(toPrompt('{{v}}'), { v: value })).toBe(value);
+    });
+
+    it('resolves deferred macro reads against bindings present at each call', async () => {
+      const afterSet = "{% macro m() %}{{ s ~ '!' }}{% endmacro %}{% set s = 'a' %}{{ m() ~ '' }}";
+      expect(await renderPrompt(toPrompt('{{v}}'), { v: afterSet })).toBe('a!');
+
+      const beforeSet = '{% macro m() %}{{s}}{% endmacro %}{{m()}}{% set s = "a" %}';
+      expect(await renderPrompt(toPrompt('{{v}}'), { v: beforeSet })).toBe(beforeSet);
+
+      const defaultAfterSet = '{% macro m(x=s) %}{{x}}{% endmacro %}{% set s = "a" %}{{m()}}';
+      expect(await renderPrompt(toPrompt('{{v}}'), { v: defaultAfterSet })).toBe('a');
+    });
+
+    it('excludes macro defaults bypassed by supplied call arguments', async () => {
+      const supplied = "{% macro m(x=missing) %}{{ x ~ '!' }}{% endmacro %}{{ m(x='hello') ~ '' }}";
+      expect(await renderPrompt(toPrompt('{{v}}'), { v: supplied })).toBe('hello!');
+
+      const repeated = supplied + "{{ m(x='again') ~ '' }}";
+      expect(await renderPrompt(toPrompt('{{v}}'), { v: repeated })).toBe('hello!again!');
+
+      const laterMissing = supplied + "{{ m() ~ '' }}";
+      expect(await renderPrompt(toPrompt('{{v}}'), { v: laterMissing })).toBe(laterMissing);
+
+      const mixed =
+        "{% macro m(x=missing, y=alsoMissing) %}{{ x ~ y }}{% endmacro %}{{ m('a', y='b') }}";
+      expect(await renderPrompt(toPrompt('{{v}}'), { v: mixed })).toBe('ab');
+
+      const partial =
+        "{% macro m(x=missing, y=alsoMissing) %}{{ x ~ y }}{% endmacro %}{{ m('a') }}";
+      expect(await renderPrompt(toPrompt('{{v}}'), { v: partial })).toBe(partial);
+    });
+
+    it('carries bindings guaranteed by both conditional branches', async () => {
+      const bothBranches =
+        "{% if enabled %}{% set s='a' %}{% else %}{% set s='b' %}{% endif %}{{ s ~ '!' }}";
+      expect(await renderPrompt(toPrompt('{{v}}'), { v: bothBranches, enabled: true })).toBe('a!');
+      expect(await renderPrompt(toPrompt('{{v}}'), { v: bothBranches, enabled: false })).toBe('b!');
+
+      const oneBranch = "{% if enabled %}{% set s='a' %}{% endif %}{{ s ~ '!' }}";
+      expect(await renderPrompt(toPrompt('{{v}}'), { v: oneBranch, enabled: true })).toBe(
+        oneBranch,
+      );
+
+      const elif =
+        "{% if first %}{% set s='a' %}{% elif second %}{% set s='b' %}{% else %}{% set s='c' %}{% endif %}{{ s ~ '!' }}";
+      expect(
+        await renderPrompt(toPrompt('{{v}}'), {
+          v: elif,
+          first: false,
+          second: false,
+        }),
+      ).toBe('c!');
+
+      const existence =
+        "{% if user is defined %}{% set s='a' %}{% else %}{% set s='b' %}{% endif %}{{ s ~ '!' }}";
+      expect(await renderPrompt(toPrompt('{{v}}'), { v: existence })).toBe('b!');
     });
   });
 });

@@ -26,7 +26,15 @@ import { isAudioFile, isImageFile, isJavascriptFile, isVideoFile } from './util/
 import { renderVarsInObject, setLoadedFileMimeTypes } from './util/index';
 import invariant from './util/invariant';
 import { filterFiniteScores } from './util/numeric';
-import { extractVariablesFromTemplate, getNunjucksEngine } from './util/templates';
+import {
+  extractRequiredVariablesFromTemplate,
+  extractUnboundVariablesFromTemplate,
+  extractVariablesFromExpression,
+  extractVariablesFromTemplate,
+  getNunjucksEngine,
+  isNunjucksGlobal,
+  templateLoadsExternalContext,
+} from './util/templates';
 import { transform } from './util/transform';
 import { loadYaml } from './util/yamlLoad';
 
@@ -57,7 +65,6 @@ export function resolveVariables(
   varsResolvedFromSkipped?: Set<string>,
 ): Record<string, VarValue> {
   let resolved: boolean;
-  const regex = /\{\{\s*(\w+)\s*\}\}/; // Matches {{variableName}}, {{ variableName }}, etc.
 
   let iterations = 0;
   do {
@@ -71,15 +78,20 @@ export function resolveVariables(
         continue;
       }
       const value = variables[key] as string;
-      const match = regex.exec(value);
+      const match = firstUnprotectedPlaceholder(value);
       if (match) {
-        const [placeholder, varName] = match;
+        const { placeholder, varName, index } = match;
         if (variables[varName] === undefined) {
           // Do nothing - final nunjucks render will fail if necessary.
           // logger.warn(`Variable "${varName}" not found for substitution.`);
         } else {
-          // A replacer function keeps `$&`, `$'` and `` $` `` in the value literal.
-          variables[key] = value.replace(placeholder, () => variables[varName] as string);
+          // Splice at the reported index: replace() would hit an identical
+          // placeholder inside an earlier {% raw %} block, and string
+          // concatenation keeps `$&`-style sequences in the value literal.
+          variables[key] =
+            value.slice(0, index) +
+            (variables[varName] as string) +
+            value.slice(index + placeholder.length);
           if (skipResolveVars?.includes(varName) || varsResolvedFromSkipped?.has(varName)) {
             varsResolvedFromSkipped?.add(key);
           }
@@ -93,12 +105,682 @@ export function resolveVariables(
   return variables;
 }
 
+// Nunjucks tags accept a whitespace-control dash on either side
+// ({%- raw -%}), so the scan cannot anchor on '{%' followed by whitespace.
+const SIMPLE_PLACEHOLDER_REGEX = /\{\{\s*(\w+)\s*\}\}/g;
+// Matches dotted-path placeholders like {{user.name}} for the dependency scrub.
+// firstUnprotectedPlaceholder intentionally uses SIMPLE_PLACEHOLDER_REGEX
+// because its substitution only handles bare names; the scrub needs to see
+// every path form that extractVariablesFromTemplate would report.
+const PATH_PLACEHOLDER_REGEX = /\{\{\s*([\w.]+)\s*\}\}/g;
+// Only quoted string literals joined by Nunjucks' concatenation operator are
+// safe to render without treating the rest of a runtime value as source.
+const PROTECTED_LITERAL_EXPRESSION_REGEX =
+  /\{\{\s*(?:'(?:\\.|[^'\\])*'|"(?:\\.|[^"\\])*")(?:\s*~\s*(?:'(?:\\.|[^'\\])*'|"(?:\\.|[^"\\])*"))*\s*\}\}/;
+const QUOTE_CHARACTERS = new Set(['"', "'"]);
+const REGEX_PREFIX_KEYWORDS = new Set([
+  'if',
+  'elif',
+  'not',
+  'and',
+  'or',
+  'in',
+  'is',
+  'else',
+  'with',
+  'as',
+  'return',
+]);
+
+function advanceQuoteState(
+  ch: string,
+  quote: string | null,
+): { quote: string | null; escaped: boolean } {
+  if (quote) {
+    if (ch === '\\') {
+      return { quote, escaped: true };
+    }
+    return { quote: ch === quote ? null : quote, escaped: false };
+  }
+  return { quote: ch, escaped: false };
+}
+
+type RegexLiteralEndTable = {
+  normal: Int32Array;
+  characterClass: Int32Array;
+};
+
+type RegexScanState = {
+  table?: RegexLiteralEndTable;
+  failed?: boolean;
+};
+
+// For each suffix and initial lexical state, record where the first unescaped
+// slash outside a character class occurs. This is the same two-state scan as
+// the original forward loop, evaluated once rather than restarted per `r/`.
+function buildRegexLiteralEndTable(value: string): RegexLiteralEndTable {
+  const normal = new Int32Array(value.length + 1);
+  const characterClass = new Int32Array(value.length + 1);
+  normal[value.length] = -1;
+  characterClass[value.length] = -1;
+  for (let pos = value.length - 1; pos >= 0; pos--) {
+    const next = pos + 1;
+    const ch = value[pos];
+    if (ch === '\\') {
+      const afterEscape = pos + 2;
+      normal[pos] = afterEscape > value.length ? -1 : normal[afterEscape];
+      characterClass[pos] = afterEscape > value.length ? -1 : characterClass[afterEscape];
+    } else if (ch === '[') {
+      normal[pos] = characterClass[next];
+      characterClass[pos] = characterClass[next];
+    } else if (ch === ']') {
+      normal[pos] = normal[next];
+      characterClass[pos] = normal[next];
+    } else if (ch === '/') {
+      normal[pos] = next;
+      characterClass[pos] = characterClass[next];
+    } else {
+      normal[pos] = normal[next];
+      characterClass[pos] = characterClass[next];
+    }
+  }
+  return { normal, characterClass };
+}
+
+function regexLiteralEndAt(
+  value: string,
+  index: number,
+  inExpression: boolean,
+  scanState: RegexScanState,
+): number | null {
+  if (!inExpression || value[index] !== 'r' || value[index + 1] !== '/') {
+    return null;
+  }
+  let previous = index - 1;
+  while (previous >= 0 && /\s/.test(value[previous]!)) {
+    previous--;
+  }
+  // A regex prefix can begin an expression, follow an operator, or follow a
+  // keyword such as `not` or `if`, but not an identifier, literal, or closer.
+  // Only the adjacent identifier token can affect that decision. Copying and
+  // scanning the whole prefix here makes a regex-heavy array quadratic.
+  let previousKeyword: string | undefined;
+  if (previous >= 0 && /[A-Za-z]/.test(value[previous]!)) {
+    let keywordStart = previous;
+    while (keywordStart > 0 && /[A-Za-z0-9_]/.test(value[keywordStart - 1]!)) {
+      keywordStart--;
+    }
+    previousKeyword = value.slice(keywordStart, previous + 1);
+  }
+  if (
+    previous >= 0 &&
+    !'{[(=~|:,!&?<>+-*/%'.includes(value[previous]!) &&
+    !REGEX_PREFIX_KEYWORDS.has(previousKeyword ?? '')
+  ) {
+    return null;
+  }
+  if (scanState.failed) {
+    const table = (scanState.table ??= buildRegexLiteralEndTable(value));
+    const end = table.normal[index + 2];
+    return end === -1 ? null : end;
+  }
+  let inCharacterClass = false;
+  for (let end = index + 2; end < value.length; end++) {
+    const ch = value[end];
+    if (ch === '\\') {
+      end++;
+      continue;
+    }
+    if (ch === '[') {
+      inCharacterClass = true;
+    } else if (ch === ']') {
+      inCharacterClass = false;
+    } else if (ch === '/' && !inCharacterClass) {
+      return end + 1;
+    }
+  }
+  scanState.failed = true;
+  return null;
+}
+
+type ExpressionLiteralState = {
+  quote: string | null;
+  handled: boolean;
+  index: number;
+};
+
+function advanceExpressionLiteralState(
+  value: string,
+  index: number,
+  active: boolean,
+  inExpression: boolean,
+  quote: string | null,
+  regexScanState: RegexScanState,
+  depths?: Int32Array,
+  depth = 0,
+): ExpressionLiteralState {
+  if (!active) {
+    return { quote, handled: false, index };
+  }
+  if (inExpression && !quote) {
+    const regexEnd = regexLiteralEndAt(value, index, true, regexScanState);
+    if (regexEnd !== null) {
+      if (depths) {
+        for (let cursor = index + 1; cursor < regexEnd; cursor++) {
+          depths[cursor] = depth;
+        }
+      }
+      return { quote: null, handled: true, index: regexEnd - 1 };
+    }
+  }
+  if (quote || (inExpression && QUOTE_CHARACTERS.has(value[index]!))) {
+    const next = advanceQuoteState(value[index]!, quote);
+    if (next.escaped) {
+      if (depths) {
+        depths[index + 1] = depth;
+      }
+      return { quote: next.quote, handled: true, index: index + 1 };
+    }
+    return { quote: next.quote, handled: true, index };
+  }
+  return { quote, handled: false, index };
+}
+
+function advanceCommentState(
+  value: string,
+  index: number,
+  inComment: boolean,
+): { inComment: boolean; index: number } {
+  const two = value.slice(index, index + 2);
+  if (inComment) {
+    return { inComment: two !== '#}', index: two === '#}' ? index + 1 : index };
+  }
+  return { inComment: two === '{#', index: two === '{#' ? index + 1 : index };
+}
+
+function rawSpanEndAt(
+  index: number,
+  rawSpans: Array<[number, number]>,
+  rawIdx: number,
+): number | null {
+  if (rawIdx < rawSpans.length && index >= rawSpans[rawIdx][0]) {
+    return rawSpans[rawIdx][1] - 1;
+  }
+  return null;
+}
+
+function advanceNestingDepth(two: string, depth: number): { depth: number; skipNext: boolean } {
+  if (two === '{{' || two === '{%') {
+    return { depth: depth + 1, skipNext: true };
+  }
+  if ((two === '}}' || two === '%}') && depth > 0) {
+    return { depth: depth - 1, skipNext: true };
+  }
+  return { depth, skipNext: false };
+}
+
+function advanceBraceDepth(ch: string, two: string, depth: number): number | null {
+  // Dictionary/object braces are expression structure, not an output-tag
+  // closer. Quoted braces are handled before this helper is called.
+  if (ch === '{' && two !== '{{' && two !== '{%') {
+    return depth + 1;
+  }
+  if (ch === '}' && depth > 0) {
+    return depth - 1;
+  }
+  return null;
+}
+
+type ExpressionDelimiterState = {
+  inExpression: boolean;
+  braceDepth: number;
+  handled: boolean;
+  skipNext: boolean;
+};
+
+function advanceExpressionDelimiterState(
+  ch: string,
+  two: string,
+  inExpression: boolean,
+  braceDepth: number,
+): ExpressionDelimiterState {
+  if (inExpression) {
+    const nextBraceDepth = advanceBraceDepth(ch, two, braceDepth);
+    if (nextBraceDepth !== null) {
+      return { inExpression, braceDepth: nextBraceDepth, handled: true, skipNext: false };
+    }
+    if (braceDepth === 0 && (two === '}}' || two === '%}')) {
+      return { inExpression: false, braceDepth, handled: true, skipNext: true };
+    }
+    return { inExpression, braceDepth, handled: false, skipNext: false };
+  }
+  if (two === '{{' || two === '{%') {
+    return { inExpression: true, braceDepth: 0, handled: true, skipNext: true };
+  }
+  return { inExpression, braceDepth, handled: false, skipNext: false };
+}
+
+// Precompute nesting depth at every position in one forward scan.
+// Depth is the number of unclosed {{ or {% delimiters before each character.
+// A placeholder is nested (and must be left for the real render) when its
+// opening position has depth > 0. Delimiters inside quoted strings and raw
+// spans are literal text, not structure, so they do not affect depth.
+function computeNestingDepths(
+  value: string,
+  rawSpans: Array<[number, number]> = collectRawSpans(value),
+): Int32Array {
+  const depths = new Int32Array(value.length + 1);
+  let depth = 0;
+  let braceDepth = 0;
+  let quote: string | null = null;
+  let rawIdx = 0;
+  let inComment = false;
+  const regexScanState: RegexScanState = {};
+  for (let i = 0; i < value.length; i++) {
+    depths[i] = depth;
+    const rawEnd = rawSpanEndAt(i, rawSpans, rawIdx);
+    if (rawEnd !== null) {
+      i = rawEnd;
+      rawIdx++;
+      continue;
+    }
+    const ch = value[i];
+    const two = value.substring(i, i + 2);
+    if (depth === 0) {
+      const comment = advanceCommentState(value, i, inComment);
+      if (comment.inComment || inComment) {
+        i = comment.index;
+        inComment = comment.inComment;
+        continue;
+      }
+      inComment = false;
+    }
+    const literal = advanceExpressionLiteralState(
+      value,
+      i,
+      depth > 0,
+      depth > 0,
+      quote,
+      regexScanState,
+      depths,
+      depth,
+    );
+    if (literal.handled) {
+      quote = literal.quote;
+      i = literal.index;
+      continue;
+    }
+    if (depth > 0 && !quote) {
+      const nextBraceDepth = advanceBraceDepth(ch, two, braceDepth);
+      if (nextBraceDepth !== null) {
+        braceDepth = nextBraceDepth;
+        continue;
+      }
+    }
+    if (i + 1 < value.length) {
+      const next = advanceNestingDepth(two, depth);
+      depth = next.depth;
+      if (next.skipNext) {
+        depths[i + 1] = depth;
+        i++;
+      }
+    }
+  }
+  depths[value.length] = depth;
+  return depths;
+}
+
+// Regex substitution cannot see Nunjucks structure, so a placeholder inside a
+// {% raw %} block or nested in another {{ ... }} expression (say a quoted
+// string literal) must be left for the real render pass; replacing it here
+// would defeat the escape.
+function firstUnprotectedPlaceholder(
+  value: string,
+): { placeholder: string; varName: string; index: number } | null {
+  if (!value.includes('{{')) {
+    return null;
+  }
+  const rawSpans = collectRawSpans(value);
+  const depths = computeNestingDepths(value, rawSpans);
+  let spanIdx = 0;
+  for (const match of value.matchAll(SIMPLE_PLACEHOLDER_REGEX)) {
+    const start = match.index;
+    // Spans and matches are both ascending, so a moving index replaces the
+    // per-match rescan of the span array (quadratic on many raw blocks).
+    while (spanIdx < rawSpans.length && start >= rawSpans[spanIdx][1]) {
+      spanIdx++;
+    }
+    if (spanIdx < rawSpans.length && start >= rawSpans[spanIdx][0]) {
+      continue;
+    }
+    // Depth, not lastIndexOf: in `{{ '{{x}}' ~ '{{y}}' }}` the first quoted
+    // pair opens and closes before the second one starts, so comparing the
+    // last positions of '{{' and '}}' thinks the second is top-level. '{%'
+    // counts the same way: inside a {% set ... %} tag a '{{x}}' can only be
+    // a quoted literal, never a real placeholder.
+    if (depths[start] > 0) {
+      continue;
+    }
+    return { placeholder: match[0], varName: match[1]!, index: start };
+  }
+  return null;
+}
+
+// Mirror Nunjucks parseRaw: nested {% raw %} blocks are balanced, so a
+// non-greedy regex that stops at the first {% endraw %} under-covers. An
+// unterminated block still swallows everything through the last raw/endraw
+// token as literal text; content after that token parses normally.
+// Raw markers inside single- or double-quoted strings are literal text, not
+// real block tags, so they are ignored.
+function collectRawSpans(value: string): Array<[number, number]> {
+  const spans: Array<[number, number]> = [];
+  let depth = 0;
+  let spanStart = 0;
+  let lastTokenEnd = 0;
+  let braceDepth = 0;
+  let quote: string | null = null;
+  let inExpression = false;
+  let inComment = false;
+  const regexScanState: RegexScanState = {};
+  for (let i = 0; i < value.length; i++) {
+    const ch = value[i];
+    const two = value.slice(i, i + 2);
+    if (depth === 0 && !inExpression) {
+      const comment = advanceCommentState(value, i, inComment);
+      if (comment.inComment || inComment) {
+        i = comment.index;
+        inComment = comment.inComment;
+        continue;
+      }
+      inComment = false;
+    }
+    const literal = advanceExpressionLiteralState(
+      value,
+      i,
+      depth === 0,
+      inExpression,
+      quote,
+      regexScanState,
+    );
+    if (literal.handled) {
+      quote = literal.quote;
+      i = literal.index;
+      continue;
+    }
+    // Raw bodies are always literal. Quotes and comment delimiters only have
+    // syntactic meaning in real expressions, tags, or comments outside them.
+    const rawMatch = ch === '{' ? /^\{%-?\s*(raw|endraw)\s*-?%\}/.exec(value.slice(i)) : null;
+    if (rawMatch) {
+      const tokenEnd = i + rawMatch[0].length;
+      if (rawMatch[1] === 'raw') {
+        if (depth === 0) {
+          spanStart = i;
+        }
+        depth++;
+        lastTokenEnd = tokenEnd;
+      } else if (depth > 0) {
+        depth--;
+        lastTokenEnd = tokenEnd;
+        if (depth === 0) {
+          spans.push([spanStart, tokenEnd]);
+        }
+      }
+      i = tokenEnd - 1; // loop will i++
+      continue;
+    }
+    if (depth === 0 && !quote) {
+      const expression = advanceExpressionDelimiterState(ch, two, inExpression, braceDepth);
+      if (expression.handled) {
+        inExpression = expression.inExpression;
+        braceDepth = expression.braceDepth;
+        if (expression.skipNext) {
+          i++;
+        }
+        continue;
+      }
+    }
+  }
+  if (depth > 0) {
+    spans.push([spanStart, lastTokenEnd]);
+  }
+  return spans;
+}
+
+// Nunjucks comments produce no output, but only outside raw spans and quoted
+// expressions. Track them separately so decoding never renders surrounding data.
+function collectCommentSpans(value: string, includeUnterminated = false): Array<[number, number]> {
+  const spans: Array<[number, number]> = [];
+  const rawSpans = collectRawSpans(value);
+  let rawIdx = 0;
+  let commentStart: number | null = null;
+  let inExpression = false;
+  let braceDepth = 0;
+  let quote: string | null = null;
+  const regexScanState: RegexScanState = {};
+  for (let i = 0; i < value.length; i++) {
+    const rawEnd = rawSpanEndAt(i, rawSpans, rawIdx);
+    if (rawEnd !== null) {
+      i = rawEnd;
+      rawIdx++;
+      continue;
+    }
+    const ch = value[i];
+    const two = value.slice(i, i + 2);
+    if (commentStart !== null) {
+      if (two === '#}') {
+        spans.push([commentStart, i + 2]);
+        commentStart = null;
+        i++;
+      }
+      continue;
+    }
+    const literal = advanceExpressionLiteralState(
+      value,
+      i,
+      true,
+      inExpression,
+      quote,
+      regexScanState,
+    );
+    if (literal.handled) {
+      quote = literal.quote;
+      i = literal.index;
+      continue;
+    }
+    if (!quote) {
+      const expression = advanceExpressionDelimiterState(ch, two, inExpression, braceDepth);
+      if (expression.handled) {
+        inExpression = expression.inExpression;
+        braceDepth = expression.braceDepth;
+        if (expression.skipNext) {
+          i++;
+        }
+        continue;
+      }
+    }
+    if (!inExpression && two === '{#') {
+      commentStart = i;
+      i++;
+      continue;
+    }
+  }
+  if (includeUnterminated && commentStart !== null) {
+    spans.push([commentStart, value.length]);
+  }
+  return spans;
+}
+
+// Only the explicit escape forms need a separate value render on paths that
+// historically supplied variables as data. A plain {{...}} in a CSV or file
+// value is not, by itself, an opt-in to evaluate that value as template source.
+function hasProtectedLiteralSyntax(value: string): boolean {
+  if (!value.includes('{{') && !value.includes('{%') && !value.includes('{#')) {
+    return false;
+  }
+  return (
+    collectRawSpans(value).length > 0 ||
+    collectCommentSpans(value).length > 0 ||
+    PROTECTED_LITERAL_EXPRESSION_REGEX.test(value)
+  );
+}
+
+// Apply replacements in one forward pass. Besides avoiding repeated string
+// copies, the cursor also makes overlapping spans harmless: the outer span
+// already owns that part of the input.
+function mapSpans(
+  value: string,
+  spans: Array<[number, number]>,
+  replacementFor: (start: number, end: number) => string,
+): string {
+  const chunks: string[] = [];
+  let cursor = 0;
+  for (const [start, end] of spans) {
+    if (start < cursor) {
+      continue;
+    }
+    chunks.push(value.slice(cursor, start), replacementFor(start, end));
+    cursor = end;
+  }
+  chunks.push(value.slice(cursor));
+  return chunks.join('');
+}
+
+function rawSpanLiteralContent(value: string, start: number, end: number): string {
+  const span = value.slice(start, end);
+  const opener = /^\{%-?\s*raw\s*-?%\}/.exec(span);
+  if (!opener) {
+    return span;
+  }
+  let depth = 1;
+  for (let i = opener[0].length; i < span.length; i++) {
+    const token = /^\{%-?\s*(raw|endraw)\s*-?%\}/.exec(span.slice(i));
+    if (!token) {
+      continue;
+    }
+    if (token[1] === 'raw') {
+      depth++;
+    } else {
+      depth--;
+      if (depth === 0) {
+        return span.slice(opener[0].length, i);
+      }
+    }
+    i += token[0].length - 1;
+  }
+  return span.slice(opener[0].length);
+}
+
+function decodeProtectedLiteralFragments(
+  value: string,
+  renderLiteral: (template: string) => string,
+): string {
+  const rawSpans = collectRawSpans(value);
+  const rawStarts = new Set(rawSpans.map(([start]) => start));
+  const commentSpans = collectCommentSpans(value, true);
+  const commentStarts = new Set(commentSpans.map(([start]) => start));
+  const protectedSpans: Array<[number, number]> = [...rawSpans, ...commentSpans];
+  const nestingDepths = computeNestingDepths(value, rawSpans);
+  let rawIdx = 0;
+  for (const match of value.matchAll(new RegExp(PROTECTED_LITERAL_EXPRESSION_REGEX, 'g'))) {
+    if (nestingDepths[match.index] > 0) {
+      continue;
+    }
+    while (rawIdx < rawSpans.length && match.index >= rawSpans[rawIdx][1]) {
+      rawIdx++;
+    }
+    if (rawIdx < rawSpans.length && match.index >= rawSpans[rawIdx][0]) {
+      continue;
+    }
+    protectedSpans.push([match.index, match.index + match[0].length]);
+  }
+  protectedSpans.sort((left, right) => left[0] - right[0]);
+  return mapSpans(value, protectedSpans, (start, end) => {
+    if (commentStarts.has(start)) {
+      const comment = value.slice(start, end);
+      return comment.endsWith('#}') ? '' : comment;
+    }
+    return rawStarts.has(start)
+      ? rawSpanLiteralContent(value, start, end)
+      : renderLiteral(value.slice(start, end));
+  });
+}
+
+// Only the non-JSON fallback historically rendered every value as source.
+function shouldRenderAllVarTemplates(
+  promptRaw: string,
+  basePrompt: string,
+  jsonAutoescapeDisabled: boolean,
+): boolean {
+  if (/^(portkey|langfuse|helicone):\/\//.test(promptRaw) || jsonAutoescapeDisabled) {
+    return false;
+  }
+  try {
+    JSON.parse(basePrompt);
+    return false;
+  } catch {
+    return true;
+  }
+}
+
+function extractUnboundVariables(template: string): string[] {
+  const references = extractUnboundVariablesFromTemplate(template);
+  if (references) {
+    return references;
+  }
+  // Every candidate came from this same template. If parsing failed, the old
+  // conservative per-candidate check necessarily returned true for all of them;
+  // return the textual extraction directly instead of reparsing each candidate.
+  return extractVariablesFromTemplate(template).map(
+    (reference) => /^([A-Za-z_]\w*)/.exec(reference)?.[1] ?? reference,
+  );
+}
+
+function collectPromptReferencedVars(
+  basePrompt: string,
+  vars: Record<string, VarValue>,
+): Set<string> {
+  const referenced = new Set<string>();
+  // Includes/imports can read variables that never appear in the outer AST.
+  // Conservatively treat every supplied value as used rather than suppressing
+  // a render error in an unseen dependency.
+  if (templateLoadsExternalContext(basePrompt)) {
+    return new Set(Object.keys(vars));
+  }
+  const pending = extractUnboundVariables(basePrompt);
+  while (pending.length > 0) {
+    const reference = pending.pop()!;
+    // AST references are complete bare symbols. Textual fallback references
+    // were already reduced to their root by extractUnboundVariables.
+    const key = reference;
+    if (
+      !key ||
+      referenced.has(key) ||
+      (['env', 'range'].includes(key) && vars[key] === undefined)
+    ) {
+      continue;
+    }
+    referenced.add(key);
+    const value = vars[key];
+    if (typeof value !== 'string') {
+      continue;
+    }
+    if (templateLoadsExternalContext(value)) {
+      return new Set(Object.keys(vars));
+    }
+    for (const dependency of extractUnboundVariables(value)) {
+      pending.push(dependency);
+    }
+  }
+  return referenced;
+}
+
 // Utility: Detect partial/unclosed Nunjucks tags and wrap in {% raw %} if needed
 function autoWrapRawIfPartialNunjucks(prompt: string): string {
   // Detects any occurrence of an opening Nunjucks tag without a matching close
   // e.g. "{%" or "{{" not followed by a closing "%}" or "}}"
   const hasPartialTag = /({%[^%]*$|{{[^}]*$|{#[^#]*$)/m.test(prompt);
-  const alreadyWrapped = /{\%\s*raw\s*\%}/.test(prompt) && /{\%\s*endraw\s*\%}/.test(prompt);
+  const alreadyWrapped =
+    /{\%-?\s*raw\s*-?\%}/.test(prompt) && /{\%-?\s*endraw\s*-?\%}/.test(prompt);
   if (hasPartialTag && !alreadyWrapped) {
     return `{% raw %}${prompt}{% endraw %}`;
   }
@@ -106,10 +788,77 @@ function autoWrapRawIfPartialNunjucks(prompt: string): string {
 }
 
 function referencesUndefinedVariables(template: string, vars: Record<string, VarValue>): boolean {
-  return extractVariablesFromTemplate(template).some((variableName) => {
+  // Plain data needs no structural scan at all. This fast path is important for
+  // large file-backed values on the full-render path: allocating a depth entry
+  // per character would otherwise dominate both time and memory.
+  if (!template.includes('{{') && !template.includes('{%') && !template.includes('{#')) {
+    return false;
+  }
+  // Raw spans are literal text, not references: {% raw %}{{x}}{% endraw %}
+  // cannot count x as a dependency, or this guard would skip the very render
+  // pass that resolves the raw block.
+  const spans = collectRawSpans(template);
+  let scrubbed = mapSpans(template, spans, () => '');
+  scrubbed = scrubbed.replace(/\{#[\s\S]*?#\}/g, '');
+  // A quoted placeholder inside a surrounding expression or block tag is
+  // literal text too: {{ '{{x}}' }} renders to the text {{x}}, so x is not a
+  // dependency. The extractor below is regex-based and would report it, so
+  // scrub those occurrences first (same nesting notion as
+  // firstUnprotectedPlaceholder). Use PATH_PLACEHOLDER_REGEX so dotted paths
+  // like {{user.name}} are scrubbed too.
+  const nested: Array<[number, number]> = [];
+  const scrubbedDepths = computeNestingDepths(scrubbed);
+  for (const match of scrubbed.matchAll(PATH_PLACEHOLDER_REGEX)) {
+    if (scrubbedDepths[match.index] > 0) {
+      nested.push([match.index, match.index + match[0].length]);
+    }
+  }
+  scrubbed = mapSpans(scrubbed, nested, () => '');
+  const unboundReferences = extractRequiredVariablesFromTemplate(scrubbed);
+  if (unboundReferences) {
+    return unboundReferences.some(
+      (variableName) => !isNunjucksGlobal(variableName) && vars[variableName] === undefined,
+    );
+  }
+  // Parse-failure fallback. Keep the conservative regex/RHS analysis below for
+  // malformed templates; valid templates use the same scope walker as reference
+  // collection so a set target is bound only after its initializer is read.
+  // Names bound by {% set ... %} inside the template are local bindings, not
+  // external dependencies; the extractor has no notion of them. But the RHS
+  // of a set can reference external variables, so those still count.
+  const defined = new Set<string>();
+  for (const match of scrubbed.matchAll(
+    /\{%\s*(?:-\s*)?for\s+([A-Za-z_]\w*(?:\s*,\s*[A-Za-z_]\w*)*)\s+in\s+/g,
+  )) {
+    for (const name of match[1]!.split(/\s*,\s*/)) {
+      defined.add(name);
+    }
+  }
+  const setRhsVars: string[] = [];
+  for (const match of scrubbed.matchAll(/\{%\s*(?:-\s*)?set\s+([A-Za-z_]\w*)\s*=([^%]+)%\}/g)) {
+    defined.add(match[1]!);
+    // Parse the RHS once and collect real expression references from its AST.
+    // A parse failure keeps the previous conservative identifier fallback.
+    // The greedy [^%] boundary avoids the lazy-RHS/trailing-whitespace
+    // backtracking ambiguity; remove the optional whitespace-control dash here.
+    const rhsSource = (match[2] || '').trimEnd();
+    const rhs = (rhsSource.endsWith('-') ? rhsSource.slice(0, -1) : rhsSource).trimEnd();
+    const references = extractVariablesFromExpression(`{{ ${rhs} }}`);
+    for (const reference of references ?? rhs.match(/[A-Za-z_]\w*/g) ?? []) {
+      setRhsVars.push(reference);
+    }
+  }
+  // Also handle set without explicit RHS extraction (e.g. {% set local %}).
+  for (const match of scrubbed.matchAll(/\{%\s*(?:-\s*)?set\s+([A-Za-z_]\w*)\s*-?%\}/g)) {
+    defined.add(match[1]!);
+  }
+  return [...extractVariablesFromTemplate(scrubbed), ...setRhsVars].some((variableName) => {
     const rootVariableName = /^([A-Za-z_]\w*)/.exec(variableName)?.[1];
     return Boolean(
-      rootVariableName && rootVariableName !== 'env' && vars[rootVariableName] === undefined,
+      rootVariableName &&
+        !isNunjucksGlobal(rootVariableName) &&
+        !defined.has(rootVariableName) &&
+        vars[rootVariableName] === undefined,
     );
   });
 }
@@ -430,9 +1179,66 @@ export async function renderPrompt(
   // Resolve variable mappings
   const varsResolvedFromSkipped = new Set<string>();
   resolveVariables(vars, skipRenderVars, varsResolvedFromSkipped);
+  // The plain-text fallback already rendered every value before this pass was
+  // hoisted. JSON, no-autoescape, and integration paths supplied values as data,
+  // so they only pre-render the explicit literal escapes handled above.
+  const jsonAutoescapeDisabled = getEnvBool('PROMPTFOO_DISABLE_JSON_AUTOESCAPE');
+  const templatingDisabled = getEnvBool('PROMPTFOO_DISABLE_TEMPLATING');
+  const renderAllVarTemplates = shouldRenderAllVarTemplates(
+    prompt.raw,
+    basePrompt,
+    jsonAutoescapeDisabled,
+  );
+  // Determine which vars the resolved prompt actually references so render
+  // failures on unused values can be suppressed without hiding errors on used ones.
+  const promptReferencedVars = collectPromptReferencedVars(basePrompt, vars);
+  const renderedVars = Object.fromEntries(
+    Object.entries(vars).map(([key, value]) => {
+      if (
+        typeof value !== 'string' ||
+        skipRenderVars?.includes(key) ||
+        varsResolvedFromSkipped.has(key)
+      ) {
+        return [key, value];
+      }
+
+      if (!renderAllVarTemplates && (templatingDisabled || !hasProtectedLiteralSyntax(value))) {
+        return [key, value];
+      }
+
+      if (referencesUndefinedVariables(value, vars)) {
+        return [key, value];
+      }
+
+      // A value the prompt never references can still carry template-like
+      // payload (say {% unknown %}) that Nunjucks cannot parse. Leave it
+      // untouched instead of failing the eval. But if the prompt does
+      // reference this value, a render failure is a real error the caller
+      // must see rather than silently passing the raw template to the provider.
+      try {
+        if (!renderAllVarTemplates) {
+          return [
+            key,
+            decodeProtectedLiteralFragments(value, (fragment) =>
+              nunjucks.renderString(fragment, {}),
+            ),
+          ];
+        }
+        return [key, nunjucks.renderString(autoWrapRawIfPartialNunjucks(value), vars)];
+      } catch (renderError) {
+        if (promptReferencedVars.has(key)) {
+          throw renderError;
+        }
+        return [key, value];
+      }
+    }),
+  );
   // Third party integrations
   if (prompt.raw.startsWith('portkey://')) {
-    const portKeyResult = await getPortkeyPrompt(prompt.raw.slice('portkey://'.length), vars);
+    const portKeyResult = await getPortkeyPrompt(
+      prompt.raw.slice('portkey://'.length),
+      renderedVars,
+    );
     return JSON.stringify(portKeyResult.messages);
   } else if (prompt.raw.startsWith('langfuse://')) {
     const langfusePrompt = prompt.raw.slice('langfuse://'.length);
@@ -486,7 +1292,7 @@ export async function renderPrompt(
 
     const langfuseResult = await getLangfusePrompt(
       helper,
-      vars,
+      renderedVars,
       promptType,
       version === undefined || version === 'latest' ? undefined : Number(version),
       label,
@@ -498,44 +1304,24 @@ export async function renderPrompt(
     const [majorVersion, minorVersion] = version ? version.split('.') : [undefined, undefined];
     const heliconeResult = await getHeliconePrompt(
       id,
-      vars,
+      renderedVars,
       majorVersion === undefined ? undefined : Number(majorVersion),
       minorVersion === undefined ? undefined : Number(minorVersion),
     );
     return heliconeResult;
   }
-  // Render prompt
   try {
-    if (getEnvBool('PROMPTFOO_DISABLE_JSON_AUTOESCAPE')) {
+    if (jsonAutoescapeDisabled) {
       // Pre-process: auto-wrap in {% raw %} if partial Nunjucks tags detected
       basePrompt = autoWrapRawIfPartialNunjucks(basePrompt);
-      return nunjucks.renderString(basePrompt, vars);
+      return nunjucks.renderString(basePrompt, renderedVars);
     }
 
     const parsed = JSON.parse(basePrompt);
     // The _raw_ prompt is valid JSON. That means that the user likely wants to substitute vars _within_ the JSON itself.
     // Recursively walk the JSON structure. If we find a string, render it with nunjucks.
-    return JSON.stringify(renderVarsInObject(parsed, vars), null, 2);
+    return JSON.stringify(renderVarsInObject(parsed, renderedVars), null, 2);
   } catch {
-    // Vars values can be template strings, so we need to render them first:
-    const renderedVars = Object.fromEntries(
-      Object.entries(vars).map(([key, value]) => {
-        if (
-          typeof value !== 'string' ||
-          skipRenderVars?.includes(key) ||
-          varsResolvedFromSkipped.has(key)
-        ) {
-          return [key, value];
-        }
-
-        if (referencesUndefinedVariables(value, vars)) {
-          return [key, value];
-        }
-
-        return [key, nunjucks.renderString(autoWrapRawIfPartialNunjucks(value), vars)];
-      }),
-    );
-
     // Pre-process: auto-wrap in {% raw %} if partial Nunjucks tags detected
     basePrompt = autoWrapRawIfPartialNunjucks(basePrompt);
     // Note: Explicitly not using `renderVarsInObject` as it will re-call `renderString`; each call will

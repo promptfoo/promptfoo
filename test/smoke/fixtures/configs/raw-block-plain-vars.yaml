@@ -1,0 +1,14 @@
+description: 'Raw-protected var values with PROMPTFOO_DISABLE_JSON_AUTOESCAPE'
+providers:
+  - echo
+prompts:
+  - '{{v}}'
+tests:
+  - vars:
+      v: '{% raw %}{{x}}{% endraw %}'
+      x: ignored
+    assert:
+      - type: contains
+        value: '{% raw %}{{x}}{% endraw %}'
+      - type: not-contains
+        value: endraw

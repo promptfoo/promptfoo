@@ -5,6 +5,8 @@ import { getEnvString, getProcessEnv } from '../../src/envars';
 import { getEnvOverridesProvider, setEnvOverridesProvider } from '../../src/envOverrides';
 import {
   analyzeTemplateReference,
+  extractUnboundVariablesFromTemplate,
+  extractVariablesFromExpression,
   extractVariablesFromTemplate,
   extractVariablesFromTemplates,
   getNunjucksEngine,
@@ -72,6 +74,33 @@ describe('extractVariablesFromTemplate', () => {
     const template = 'This is a static template without variables.';
     expect(extractVariablesFromTemplate(template)).toEqual([]);
   });
+
+  it('should handle an unterminated if tag without quadratic backtracking', () => {
+    const template = `{% if ${'a'.repeat(64000)}`;
+    const started = performance.now();
+    expect(extractVariablesFromTemplate(template)).toEqual([]);
+    const elapsed = performance.now() - started;
+
+    expect(elapsed).toBeLessThan(250);
+  });
+
+  it('should handle many unterminated tags in one pass', () => {
+    const template = '{% if bad '.repeat(20000);
+    const started = performance.now();
+    expect(extractVariablesFromTemplate(template)).toEqual([]);
+    const elapsed = performance.now() - started;
+
+    expect(elapsed).toBeLessThan(250);
+  });
+
+  it('should not rescan rejected filter bodies for every nested opener', () => {
+    const template = '{{x|'.repeat(16000) + '}end}}';
+    const started = performance.now();
+    extractVariablesFromTemplate(template);
+    const elapsed = performance.now() - started;
+
+    expect(elapsed).toBeLessThan(250);
+  });
 });
 
 describe('extractVariablesFromTemplates', () => {
@@ -124,6 +153,7 @@ describe('templateReferencesVariable', () => {
     ['filter argument', '{{ input | default(_conversation) }}'],
     ['is test with call arg', '{{ foo is divisibleby(_conversation) }}'],
     ['is test function argument value', '{{ foo is _conversation(_conversation) }}'],
+    ['existence test operand', '{{ _conversation is defined }}'],
     ['bracket index lookup', '{{ obj[_conversation] }}'],
     ['array literal member', '{{ [_conversation, other] }}'],
     ['group expression', '{{ (_conversation) }}'],
@@ -302,6 +332,49 @@ describe('analyzeTemplateReference', () => {
       referenced: false,
       parsed: true,
     });
+  });
+
+  it('preserves macro dependencies through alias assignments', () => {
+    const template =
+      "{% macro m() %}{{ _conversation }}{% endmacro %}{% set saved=m %}{% set m='' %}{{ saved() }}";
+    expect(analyzeTemplateReference(template, '_conversation')).toEqual({
+      referenced: true,
+      parsed: true,
+    });
+  });
+});
+
+describe('extractVariablesFromExpression', () => {
+  it('parses once and collects only real expression references', () => {
+    const parser = (nunjucks as unknown as { parser: { parse: (template: string) => unknown } })
+      .parser;
+    const parseSpy = vi.spyOn(parser, 'parse');
+    try {
+      const references = extractVariablesFromExpression(
+        "{{ user.name ~ foo | length ~ {'key': bar} ~ 'Hello' ~ true }}",
+      );
+
+      expect(references).toEqual(['user', 'foo', 'bar']);
+      expect(parseSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      parseSpy.mockRestore();
+    }
+  });
+
+  it('preserves callee-before-argument reference order through nested calls', () => {
+    expect(extractUnboundVariablesFromTemplate('{{ outer(inner)(later) }}')).toEqual([
+      'outer',
+      'inner',
+      'later',
+    ]);
+  });
+
+  it('excludes callable test names from expression references', () => {
+    expect(extractVariablesFromExpression('{{ n is divisibleby(2) }}')).toEqual(['n']);
+  });
+
+  it('reports parse failure so callers can retain their conservative fallback', () => {
+    expect(extractVariablesFromExpression('{{ broken')).toBeUndefined();
   });
 });
 
