@@ -32,6 +32,16 @@ describe('JavaScript file graders with the real module loader', () => {
       functionName: 'grade',
     },
     {
+      name: 'CommonJS named method alongside a default export',
+      filename: 'grader.cjs',
+      source: `module.exports = {
+        expected: 'hello',
+        default() { return false; },
+        grade(output) { return output === this.expected; },
+      };`,
+      functionName: 'grade',
+    },
+    {
       name: 'ESM default-object named method',
       filename: 'grader.mjs',
       source: `export default {
@@ -110,19 +120,22 @@ describe('JavaScript file graders with the real module loader', () => {
     expect(await grade('hello', {})).toBe(true);
   });
 
-  it('keeps standalone named ESM exports unbound', async () => {
-    const filePath = path.join(directory, 'grader.mjs');
-    fs.writeFileSync(
-      filePath,
-      `export function grade(output) {
+  it.each(['', 'export default () => false;\n'])(
+    'keeps standalone named ESM exports unbound with default export %j',
+    async (defaultExport) => {
+      const filePath = path.join(directory, 'grader.mjs');
+      fs.writeFileSync(
+        filePath,
+        `${defaultExport}export function grade(output) {
         return this === undefined && output === 'hello';
       }`,
-    );
+      );
 
-    const grade = await resolveJavaScriptFileFunction(filePath, 'grade');
+      const grade = await resolveJavaScriptFileFunction(filePath, 'grade');
 
-    expect(await grade('hello', {})).toBe(true);
-  });
+      expect(await grade('hello', {})).toBe(true);
+    },
+  );
 
   it.each([
     { extension: 'cjs', functionName: undefined },
