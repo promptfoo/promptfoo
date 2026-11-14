@@ -898,7 +898,9 @@ export default class GoatProvider implements ApiProvider {
       transformDisplayVars: lastTransformDisplayVars,
     };
     return {
-      ...(lengthError && { error: lengthError.message }),
+      // A confirmed finding outranks the length error: the evaluator's error
+      // branch would skip grading the preserved failing verdict otherwise.
+      ...(lengthError && !flaggedTurn && { error: lengthError.message }),
       output: reported.output,
       prompt: reported.prompt,
       metadata: {

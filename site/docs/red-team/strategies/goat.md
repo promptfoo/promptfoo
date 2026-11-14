@@ -44,6 +44,8 @@ Each conversation turn follows a structured three-step reasoning process:
 
 This process is looped until we either achieve the goal or reach a maximum number of turns.
 
+If a message length cap (`maxCharsPerMessage`) is configured, GOAT also stops the entire conversation at the first generated turn that exceeds the cap, without sending that turn to the target. The run is reported with the stop reason `Message length limit exceeded` and a provider error, unless an earlier turn already confirmed a vulnerability, in which case the confirmed finding is preserved and reported instead of the error.
+
 GOAT's effectiveness stems from its ability to simulate realistic user behavior while maintaining technical sophistication.
 
 Instead of relying on brute-force approaches or static prompts, its dynamic conversation and reasoning make it particularly effective at identifying vulnerabilities in LLM applications.
