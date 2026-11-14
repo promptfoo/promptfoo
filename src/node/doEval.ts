@@ -1034,7 +1034,9 @@ export async function doEval(
     const configBasePath = resumeEval?.runtimeOptions?.configBasePath ?? _basePath;
     const normalizedConfigBasePath = path.resolve(configBasePath || process.cwd());
     varValuesFileCache ??= new Map();
-    options.expectedMatrixValuesFingerprint = resumeEval?.runtimeOptions?.matrixValuesFingerprint;
+    options.expectedMatrixValuesFingerprint = resumeEval
+      ? (resumeEval.runtimeOptions?.matrixValuesFingerprint ?? null)
+      : undefined;
     options.matrixValuesFingerprintError = resumeEval
       ? `The $values files used by evaluation ${resumeEval.id} have changed. Restore the original files before replaying this evaluation.`
       : undefined;

@@ -71,10 +71,10 @@ function getMatrixReplayOptions(
     ? resolvedBasePath
     : originalEval.runtimeOptions?.configBasePath || resolvedBasePath;
   return {
+    expectedMatrixValuesFingerprint: expectedFingerprint ?? null,
     ...(expectedFingerprint === undefined
       ? {}
       : {
-          expectedMatrixValuesFingerprint: expectedFingerprint,
           matrixValuesFingerprintError: `The $values files used by evaluation ${originalEval.id} have changed. Restore the original files before retrying this evaluation. Existing ERROR results were preserved.`,
         }),
     varValuesBasePath: varValuesBasePath || process.cwd(),

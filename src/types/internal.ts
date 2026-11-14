@@ -9,7 +9,8 @@ import type { TokenUsage } from './shared';
  */
 export type InternalEvaluateOptions = EvaluateOptions & {
   eventSource?: EventSource;
-  expectedMatrixValuesFingerprint?: string;
+  // Null means a replay whose saved evaluation has no matrix fingerprint.
+  expectedMatrixValuesFingerprint?: string | null;
   generationEventId?: string;
   generationTokenUsage?: TokenUsage;
   matrixValuesFingerprintError?: string;

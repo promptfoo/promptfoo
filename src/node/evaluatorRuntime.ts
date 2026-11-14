@@ -107,11 +107,16 @@ function prepareVarValuesSnapshot(
   basePath: string,
   cache: VarValuesFileCache,
   defaultDisableVarExpansion: boolean,
-  expectedFingerprint?: string,
+  expectedFingerprint?: string | null,
   fingerprintError?: string,
 ): string | undefined {
   const fingerprint = getVarValuesFingerprint(tests, basePath, cache, defaultDisableVarExpansion);
-  if (expectedFingerprint !== undefined && fingerprint !== expectedFingerprint) {
+  if (expectedFingerprint === null && fingerprint && !fingerprint.startsWith('disabled:')) {
+    throw new ConfigResolutionError(
+      'The saved evaluation has no matrix expansion fingerprint. Restore the original PROMPTFOO_DISABLE_VAR_EXPANSION setting or start a new evaluation. Existing results were preserved.',
+    );
+  }
+  if (typeof expectedFingerprint === 'string' && fingerprint !== expectedFingerprint) {
     if (
       fingerprint !== undefined &&
       expectedFingerprint.startsWith('disabled:') !== fingerprint.startsWith('disabled:')

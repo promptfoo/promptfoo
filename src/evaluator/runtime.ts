@@ -90,7 +90,7 @@ export interface EvaluatorRuntime<
     basePath: string,
     cache: VarValuesFileCache,
     defaultDisableVarExpansion: boolean,
-    expectedFingerprint?: string,
+    expectedFingerprint?: string | null,
     fingerprintError?: string,
   ): string | undefined;
 }
