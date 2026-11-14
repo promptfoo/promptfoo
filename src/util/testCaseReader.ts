@@ -67,6 +67,7 @@ function isRemoteTestCase(test: TestCaseWithVarsFile): boolean {
 export async function readTestFiles(
   pathOrGlobs: string | string[],
   basePath: string = cliState.basePath || '',
+  loadedKeys?: Set<string>,
 ): Promise<Record<string, string | string[] | object>> {
   if (typeof pathOrGlobs === 'string') {
     pathOrGlobs = [pathOrGlobs];
@@ -81,15 +82,32 @@ export async function readTestFiles(
     });
 
     for (const p of paths) {
-      const rawData = loadYaml(await fsPromises.readFile(p, 'utf-8')) as TestCase['vars'];
-      const authoredVars = resolveNestedVarsFileReferences(rawData, path.dirname(p));
-      const vars = Object.fromEntries(
-        Object.entries(authoredVars ?? {}).map(([key, value]) => [
-          key,
-          value && typeof value === 'object' ? value : maybeLoadConfigFromExternalFile(value),
-        ]),
-      );
-      Object.assign(ret, vars);
+      const rawData = loadYaml(await fsPromises.readFile(p, 'utf-8'));
+      // Preserve structured values and glob handling from the existing vars-file loader.
+      const seen = new WeakMap<object, unknown>();
+      for (const [key, value] of Object.entries(rawData ?? {})) {
+        // An external structured value is data through test expansion and replay.
+        // Directly authored scalar package references still use the normal renderer.
+        const loaded = mapVarsFileReferences(
+          value,
+          (ref) => maybeLoadConfigFromExternalFile(ref, undefined, path.dirname(p)),
+          seen,
+        );
+        if (
+          typeof value === 'object' ||
+          (typeof value === 'string' && value.startsWith('file://'))
+        ) {
+          loadedKeys?.add(key);
+        } else {
+          loadedKeys?.delete(key);
+        }
+        Object.defineProperty(ret, key, {
+          value: loaded,
+          enumerable: true,
+          writable: true,
+          configurable: true,
+        });
+      }
     }
   }
   return ret;
@@ -449,7 +467,14 @@ async function loadTestWithVars(
 ): Promise<TestCase> {
   const ret: TestCase = { ...testCase, vars: undefined };
   if (typeof testCase.vars === 'string' || Array.isArray(testCase.vars)) {
-    ret.vars = await readTestFiles(testCase.vars, testBasePath);
+    const keys = new Set<string>();
+    ret.vars = await readTestFiles(testCase.vars, testBasePath, keys);
+    if (keys.size > 0) {
+      ret.metadata = {
+        ...ret.metadata,
+        __promptfoo: { ...ret.metadata?.__promptfoo, varsFileKeys: [...keys] },
+      };
+    }
   } else {
     ret.vars = testCase.vars;
   }
@@ -479,23 +504,13 @@ export async function readTestConfig(
   );
 }
 
-function resolveVarsFileReferences(
+function mapVarsFileReferences(
   value: unknown,
-  basePath: string,
+  resolveReference: (reference: string) => unknown,
   seen = new WeakMap<object, unknown>(),
 ): unknown {
-  if (typeof value === 'string') {
-    if (!value.startsWith('file://')) {
-      return value;
-    }
-    const reference = renderEnvOnlyInObject(value);
-    const referencePath = reference.slice(7);
-    // file:///C:/... is the canonical Windows form. Preserve POSIX paths.
-    const localPath =
-      process.platform === 'win32' && /^\/[A-Za-z]:[\\/]/.test(referencePath)
-        ? referencePath.slice(1)
-        : referencePath;
-    return `file://${path.resolve(basePath, localPath)}`;
+  if (typeof value === 'string' && value.startsWith('file://')) {
+    return resolveReference(value);
   }
   if (!value || typeof value !== 'object') {
     return value;
@@ -507,7 +522,7 @@ function resolveVarsFileReferences(
     const result: unknown[] = [];
     seen.set(value, result);
     for (const item of value) {
-      result.push(resolveVarsFileReferences(item, basePath, seen));
+      result.push(mapVarsFileReferences(item, resolveReference, seen));
     }
     return result;
   }
@@ -519,7 +534,7 @@ function resolveVarsFileReferences(
   seen.set(value, result);
   for (const [key, item] of Object.entries(value)) {
     Object.defineProperty(result, key, {
-      value: resolveVarsFileReferences(item, basePath, seen),
+      value: mapVarsFileReferences(item, resolveReference, seen),
       writable: true,
       configurable: true,
       enumerable: true,
@@ -528,9 +543,21 @@ function resolveVarsFileReferences(
   return result;
 }
 
+function absoluteVarsFileReference(value: string, basePath: string): string {
+  const reference = renderEnvOnlyInObject(value);
+  const referencePath = reference.slice(7);
+  // file:///C:/... is the canonical Windows form. Preserve POSIX paths.
+  const localPath =
+    process.platform === 'win32' && /^\/[A-Za-z]:[\\/]/.test(referencePath)
+      ? referencePath.slice(1)
+      : referencePath;
+  return `file://${path.resolve(basePath, localPath)}`;
+}
+
 function resolveNestedVarsFileReferences(
   vars: TestCase['vars'],
   basePath: string,
+  preloaded: readonly string[] = [],
 ): TestCase['vars'] {
   if (!vars) {
     return vars;
@@ -539,8 +566,12 @@ function resolveNestedVarsFileReferences(
   return Object.fromEntries(
     Object.entries(vars).map(([key, value]) => [
       key,
-      value && typeof value === 'object' && key !== '_conversation'
-        ? resolveVarsFileReferences(value, basePath, seen)
+      value && typeof value === 'object' && key !== '_conversation' && !preloaded.includes(key)
+        ? mapVarsFileReferences(
+            value,
+            (reference) => absoluteVarsFileReference(reference, basePath),
+            seen,
+          )
         : value,
     ]),
   ) as TestCase['vars'];
@@ -572,9 +603,11 @@ async function readTestWithEnv(
     testCase = await loadTestWithVars(test, sourceBasePath);
   }
 
+  const preloaded = testCase.metadata?.__promptfoo?.varsFileKeys;
   testCase.vars = resolveNestedVarsFileReferences(
     testCase.vars,
     typeof test === 'string' ? effectiveBasePath : nestedBasePath,
+    Array.isArray(preloaded) ? preloaded : [],
   );
 
   const providerId =
@@ -599,9 +632,23 @@ async function readTestWithEnv(
   }
 
   if (!loadProviders) {
-    testCase.vars = resolveVarsFileReferences(testCase.vars, basePath) as TestCase['vars'];
+    if (testCase.vars) {
+      const seen = new WeakMap<object, unknown>();
+      testCase.vars = Object.fromEntries(
+        Object.entries(testCase.vars).map(([key, value]) => [
+          key,
+          Array.isArray(preloaded) && preloaded.includes(key)
+            ? value
+            : mapVarsFileReferences(
+                value,
+                (reference) => absoluteVarsFileReference(reference, basePath),
+                seen,
+              ),
+        ]),
+      ) as TestCase['vars'];
+    }
     if (typeof testCase.provider === 'string' && testCase.provider.startsWith('file://')) {
-      testCase.provider = resolveVarsFileReferences(testCase.provider, effectiveBasePath) as string;
+      testCase.provider = absoluteVarsFileReference(testCase.provider, effectiveBasePath);
     } else if (
       typeof testCase.provider === 'object' &&
       typeof testCase.provider.id === 'string' &&
@@ -609,7 +656,7 @@ async function readTestWithEnv(
     ) {
       testCase.provider = {
         ...testCase.provider,
-        id: resolveVarsFileReferences(testCase.provider.id, effectiveBasePath) as string,
+        id: absoluteVarsFileReference(testCase.provider.id, effectiveBasePath),
       };
     }
   }
@@ -1058,7 +1105,7 @@ function collectNestedFileReferences(
       if (!script.endsWith('.py') && !isJavascriptFile(script)) {
         return row;
       }
-      const resolvedId = resolveVarsFileReferences(id, varsBasePath);
+      const resolvedId = absoluteVarsFileReference(id, varsBasePath);
       return {
         ...row,
         provider: typeof provider === 'string' ? resolvedId : { ...provider, id: resolvedId },
