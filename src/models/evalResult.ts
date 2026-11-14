@@ -1,7 +1,4 @@
-import { isDeepStrictEqual } from 'node:util';
-
 import { and, eq, gte, inArray, lt, ne, notInArray } from 'drizzle-orm';
-import { extractBlobHashesFromValue } from '../blobs/blobRefs';
 import { extractAndStoreBinaryData, isBlobStorageEnabled } from '../blobs/extractor';
 import { getDb } from '../database/index';
 import { evalResultsTable } from '../database/tables';

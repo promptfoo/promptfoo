@@ -163,8 +163,7 @@ describe('evaluateOptions behavior', () => {
     );
     const latest = vi.spyOn(Eval, 'latest').mockResolvedValue(saved);
     const errors = vi.spyOn(retryModule, 'getRetryResultIds').mockResolvedValue(['failed-row']);
-    const replacements = vi.spyOn(retryModule, 'hasRetryReplacements').mockResolvedValue(true);
-    const remove = vi.spyOn(retryModule, 'deleteErrorResults').mockResolvedValue(undefined);
+    const replacements = vi.spyOn(retryModule, 'replaceRetryResults').mockResolvedValue(true);
     const metrics = vi.spyOn(retryModule, 'recalculatePromptMetrics').mockResolvedValue(undefined);
     try {
       await doEval(
@@ -182,7 +181,6 @@ describe('evaluateOptions behavior', () => {
       latest.mockRestore();
       errors.mockRestore();
       replacements.mockRestore();
-      remove.mockRestore();
       metrics.mockRestore();
     }
   });

@@ -5,7 +5,10 @@ import type Eval from '../models/eval';
 import type { CompletedPrompt, EvaluateResult } from '../types/index';
 
 export class EvalEvaluationStore implements EvaluationStore<Eval, EvalResult> {
-  constructor(readonly evaluation: Eval) {}
+  constructor(
+    readonly evaluation: Eval,
+    private readonly retryReplacementIds?: Set<string>,
+  ) {}
 
   get id() {
     return this.evaluation.id;
@@ -31,8 +34,9 @@ export class EvalEvaluationStore implements EvaluationStore<Eval, EvalResult> {
     return this.evaluation.resultPersistenceFailed;
   }
 
-  appendResult(result: EvaluateResult): Promise<void> {
-    return this.evaluation.addResult(result);
+  async appendResult(result: EvaluateResult): Promise<void> {
+    const id = await this.evaluation.addResult(result);
+    this.retryReplacementIds?.add(id);
   }
 
   appendPrompts(prompts: CompletedPrompt[]): Promise<void> {
@@ -58,8 +62,10 @@ export class EvalEvaluationStore implements EvaluationStore<Eval, EvalResult> {
     return this.evaluation.getResults();
   }
 
-  readResultsByTestIdx(testIdx: number): Promise<EvalResult[]> {
-    return this.evaluation.fetchResultsByTestIdx(testIdx);
+  async readResultsByTestIdx(testIdx: number): Promise<EvalResult[]> {
+    const rows = await this.evaluation.fetchResultsByTestIdx(testIdx);
+    const replacements = this.retryReplacementIds;
+    return replacements ? rows.filter((row) => replacements.has(row.id)) : rows;
   }
 
   recordFinalResult(result: EvaluateResult): void {

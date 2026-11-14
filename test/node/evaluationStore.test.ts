@@ -30,7 +30,7 @@ describe('EvalEvaluationStore', () => {
     const modelResult = { testIdx: 0 } as EvalResult;
     const completed = new Set(['0:0']);
 
-    const addResult = vi.spyOn(evaluation, 'addResult').mockResolvedValue(undefined);
+    const addResult = vi.spyOn(evaluation, 'addResult').mockResolvedValue('result-id');
     const addPrompts = vi.spyOn(evaluation, 'addPrompts').mockResolvedValue(undefined);
     const getCompletedIndexPairs = vi
       .spyOn(EvalResult, 'getCompletedIndexPairs')

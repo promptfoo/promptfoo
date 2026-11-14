@@ -6,9 +6,9 @@ import { evaluate } from '../../src/evaluator';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
 import {
-  deleteErrorResults,
   getRetryResultIds,
   recalculatePromptMetrics,
+  replaceRetryResults,
 } from '../../src/node/retry';
 import { ResultFailureReason } from '../../src/types/index';
 
@@ -83,8 +83,9 @@ it.each(['select-best', 'max-score'] as const)(
     cliState.resume = true;
     cliState.retryMode = true;
     cliState._retryErrorResultIds = selected;
-    await evaluate(suite, record, { cache: false, maxConcurrency: 1 });
-    await deleteErrorResults(selected);
+    const retryReplacementIds = new Set<string>();
+    await evaluate(suite, record, { cache: false, maxConcurrency: 1, retryReplacementIds });
+    expect(await replaceRetryResults(record.id, selected, retryReplacementIds)).toBe(true);
     await recalculatePromptMetrics(record);
 
     const retried = await record.fetchResultsByTestIdx(0);

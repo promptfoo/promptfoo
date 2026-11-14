@@ -13,6 +13,8 @@ export type InternalEvaluateOptions = EvaluateOptions & {
   pauseSignal?: AbortSignal;
   /** CLI recovery reuses saved columns; this is neither configurable nor persisted. */
   restorePromptColumns?: boolean;
+  /** IDs saved by the current retry, used to isolate grading and replacement. */
+  retryReplacementIds?: Set<string>;
   generationEventId?: string;
   generationTokenUsage?: TokenUsage;
 };

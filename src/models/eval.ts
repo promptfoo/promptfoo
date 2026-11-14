@@ -765,6 +765,7 @@ export default class Eval {
       // Notify watchers that new results are available, passing the eval ID
       notifyEvaluationChanged(this.id);
     }
+    return newResult.id;
   }
 
   recordFinalJsonlResult(result: EvaluateResult) {

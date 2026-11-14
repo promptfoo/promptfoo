@@ -1,9 +1,10 @@
 import chalk from 'chalk';
-import { and, eq, inArray, notInArray } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import cliState from '../cliState';
 import { getDb } from '../database/index';
 import { evalResultsTable } from '../database/tables';
 import { evaluate } from '../evaluator';
+import { getResultIndexKey } from '../evaluator/resultIndex';
 import logger from '../logger';
 import Eval from '../models/eval';
 import { notifyEvaluationChanged } from '../models/evalMutation';
@@ -23,7 +24,7 @@ import { getOutputFileFormat } from '../util/outputFormats';
 import { shouldShareResults } from '../util/sharing';
 import { accumulateGradingTokenUsage, accumulateResponseTokenUsage } from '../util/tokenUsageUtils';
 
-import type { PromptMetrics } from '../types/index';
+import type { GradingResult, PromptMetrics } from '../types/index';
 import type { InternalEvaluateOptions } from '../types/internal';
 
 export interface RetryCommandOptions {
@@ -176,14 +177,7 @@ export async function getRetryResultIds(evalId: string): Promise<string[]> {
       if (!comparisonTests.has(row.testIdx)) {
         return row.failureReason === ResultFailureReason.ERROR;
       }
-      const grading = row.gradingResult;
-      if (
-        grading?.comment ||
-        grading?.assertion?.type === HUMAN_ASSERTION_TYPE ||
-        grading?.componentResults?.some(
-          (result) => result?.assertion?.type === HUMAN_ASSERTION_TYPE,
-        )
-      ) {
+      if (hasManualGrading(row.gradingResult)) {
         throw new Error(
           'This comparison group has manual ratings or comments. Run a new eval to preserve them.',
         );
@@ -193,32 +187,81 @@ export async function getRetryResultIds(evalId: string): Promise<string[]> {
     .map((row) => row.id);
 }
 
-export async function hasRetryReplacements(evalId: string, resultIds: string[]): Promise<boolean> {
-  if (resultIds.length === 0) {
+function hasManualGrading(grading: GradingResult | null | undefined): boolean {
+  return Boolean(
+    grading?.comment ||
+      grading?.assertion?.type === HUMAN_ASSERTION_TYPE ||
+      grading?.componentResults?.some((result) => hasManualGrading(result)),
+  );
+}
+
+/**
+ * Validate the rows written by this attempt and delete originals in the same transaction.
+ * A manually edited original vetoes deleting any row in the selection.
+ */
+export async function replaceRetryResults(
+  evalId: string,
+  originalIds: string[],
+  replacementIds: ReadonlySet<string>,
+): Promise<boolean> {
+  if (originalIds.length === 0) {
     return true;
   }
-  const db = await getDb();
-  const originalRows = await db
-    .select({ testIdx: evalResultsTable.testIdx, promptIdx: evalResultsTable.promptIdx })
-    .from(evalResultsTable)
-    .where(and(eq(evalResultsTable.evalId, evalId), inArray(evalResultsTable.id, resultIds)))
-    .all();
-  if (originalRows.length !== resultIds.length) {
+  if (
+    replacementIds.size !== originalIds.length ||
+    originalIds.some((id) => replacementIds.has(id))
+  ) {
     return false;
   }
-  const replacementRows = await db
-    .select({ testIdx: evalResultsTable.testIdx, promptIdx: evalResultsTable.promptIdx })
-    .from(evalResultsTable)
-    .where(
-      and(
-        eq(evalResultsTable.evalId, evalId),
-        inArray(evalResultsTable.testIdx, [...new Set(originalRows.map((row) => row.testIdx))]),
-        notInArray(evalResultsTable.id, resultIds),
-      ),
-    )
-    .all();
-  const replacements = new Set(replacementRows.map((row) => `${row.testIdx}:${row.promptIdx}`));
-  return originalRows.every((row) => replacements.has(`${row.testIdx}:${row.promptIdx}`));
+
+  const db = await getDb();
+  const replaced = await db.transaction(async (tx) => {
+    const originalFilter = and(
+      eq(evalResultsTable.evalId, evalId),
+      inArray(evalResultsTable.id, originalIds),
+    );
+    const originalRows = await tx
+      .select({
+        testIdx: evalResultsTable.testIdx,
+        promptIdx: evalResultsTable.promptIdx,
+        gradingResult: evalResultsTable.gradingResult,
+      })
+      .from(evalResultsTable)
+      .where(originalFilter)
+      .all();
+    if (originalRows.length !== originalIds.length) {
+      return false;
+    }
+    if (originalRows.some((row) => hasManualGrading(row.gradingResult))) {
+      throw new Error(
+        'A selected result has a manual rating or comment. Original results were preserved.',
+      );
+    }
+
+    const replacementRows = await tx
+      .select({ testIdx: evalResultsTable.testIdx, promptIdx: evalResultsTable.promptIdx })
+      .from(evalResultsTable)
+      .where(
+        and(eq(evalResultsTable.evalId, evalId), inArray(evalResultsTable.id, [...replacementIds])),
+      )
+      .all();
+    const replacements = new Set(replacementRows.map(getResultIndexKey));
+    if (
+      replacementRows.length !== replacementIds.size ||
+      replacements.size !== originalRows.length ||
+      new Set(originalRows.map(getResultIndexKey)).size !== originalRows.length ||
+      !originalRows.every((row) => replacements.has(getResultIndexKey(row)))
+    ) {
+      return false;
+    }
+
+    await tx.delete(evalResultsTable).where(originalFilter).run();
+    return true;
+  });
+  if (replaced) {
+    notifyEvaluationChanged(evalId);
+  }
+  return replaced;
 }
 
 /**
@@ -446,9 +489,12 @@ async function retryWithConfig(
     cliState.maxConcurrency = effectiveMaxConcurrency;
   }
 
+  const retryReplacementIds = new Set<string>();
+
   // Set up evaluation options
   const evaluateOptions: InternalEvaluateOptions = {
     cache: false,
+    retryReplacementIds,
     maxConcurrency: effectiveDelay && effectiveDelay > 0 ? 1 : effectiveMaxConcurrency,
     delay: effectiveDelay,
     eventSource: 'cli',
@@ -465,16 +511,13 @@ async function retryWithConfig(
       await restoreJsonlOutputsAfterPersistenceFailure(jsonlOutputPaths, retriedEval);
       throw new Error('Retry results failed to persist. Existing ERROR rows were preserved.');
     }
-    if (!(await hasRetryReplacements(evalId, errorResultIds))) {
+    if (!(await replaceRetryResults(evalId, errorResultIds, retryReplacementIds))) {
       throw new Error(
         'Retry did not replace all selected results. Original results were preserved.',
       );
     }
 
-    let errorRowsDeleted = false;
     try {
-      await deleteErrorResults(errorResultIds);
-      errorRowsDeleted = true;
       await recalculatePromptMetrics(retriedEval);
     } catch (cleanupError) {
       // Cleanup failure is non-fatal - retry itself succeeded
@@ -483,19 +526,17 @@ async function retryWithConfig(
       });
     }
 
-    if (errorRowsDeleted) {
-      if (jsonlOutputPaths.length > 0) {
-        try {
-          await writeMultipleOutputs(jsonlOutputPaths, retriedEval, null);
-        } catch (outputError) {
-          logger.warn(
-            'Retry succeeded and the database is up to date, but rewriting JSONL output failed.',
-            {
-              error: outputError,
-              outputPaths: jsonlOutputPaths,
-            },
-          );
-        }
+    if (jsonlOutputPaths.length > 0) {
+      try {
+        await writeMultipleOutputs(jsonlOutputPaths, retriedEval, null);
+      } catch (outputError) {
+        logger.warn(
+          'Retry succeeded and the database is up to date, but rewriting JSONL output failed.',
+          {
+            error: outputError,
+            outputPaths: jsonlOutputPaths,
+          },
+        );
       }
     }
 

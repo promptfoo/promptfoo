@@ -37,10 +37,9 @@ import {
   showRedteamProviderLabelMissingWarning,
 } from '../../src/node/doEval';
 import {
-  deleteErrorResults,
   getRetryResultIds,
-  hasRetryReplacements,
   recalculatePromptMetrics,
+  replaceRetryResults,
 } from '../../src/node/retry';
 import { ClaudeCodeSDKProvider } from '../../src/providers/claude-agent-sdk';
 import { loadApiProvider } from '../../src/providers/index';
@@ -87,9 +86,8 @@ vi.mock('../../src/globalConfig/cloud', async (importOriginal) => {
 });
 vi.mock('../../src/migrate');
 vi.mock('../../src/node/retry', () => ({
-  deleteErrorResults: vi.fn(),
   getRetryResultIds: vi.fn(),
-  hasRetryReplacements: vi.fn(),
+  replaceRetryResults: vi.fn(),
   recalculatePromptMetrics: vi.fn(),
 }));
 vi.mock('../../src/providers');
@@ -225,8 +223,7 @@ describe('evalCommand', () => {
     vi.mocked(getAuthor).mockReturnValue(null);
     vi.mocked(promptForEmailUnverified).mockResolvedValue({ emailNeedsValidation: false });
     vi.mocked(checkEmailStatusAndMaybeExit).mockResolvedValue('ok');
-    vi.mocked(deleteErrorResults).mockResolvedValue(undefined);
-    vi.mocked(hasRetryReplacements).mockReset().mockResolvedValue(true);
+    vi.mocked(replaceRetryResults).mockReset().mockResolvedValue(true);
     vi.mocked(getRetryResultIds).mockResolvedValue([]);
     vi.mocked(recalculatePromptMetrics).mockResolvedValue(undefined);
   });
@@ -2167,7 +2164,11 @@ describe('evalCommand', () => {
         { filterProviders: 'selected-target' },
         latestEval.config,
       );
-      expect(deleteErrorResults).toHaveBeenCalledWith(['result-1', 'result-2']);
+      expect(replaceRetryResults).toHaveBeenCalledWith(
+        latestEval.id,
+        ['result-1', 'result-2'],
+        expect.any(Set),
+      );
       expect(recalculatePromptMetrics).toHaveBeenCalledWith(latestEval);
     } finally {
       latestSpy.mockRestore();
@@ -2394,13 +2395,13 @@ describe('evalCommand', () => {
       latestEval.resultPersistenceFailed = persistenceFailed;
       const latestSpy = vi.spyOn(Eval, 'latest').mockResolvedValueOnce(latestEval);
       vi.mocked(getRetryResultIds).mockResolvedValueOnce(['error', 'comparison-sibling']);
-      vi.mocked(hasRetryReplacements).mockResolvedValueOnce(false);
+      vi.mocked(replaceRetryResults).mockResolvedValueOnce(false);
       vi.mocked(evaluate).mockResolvedValueOnce(latestEval);
       try {
         await expect(
           doEval({ retryErrors: true }, defaultConfig, defaultConfigPath, {}),
         ).rejects.toThrow(message);
-        expect(deleteErrorResults).not.toHaveBeenCalled();
+        expect(replaceRetryResults).toHaveBeenCalledTimes(persistenceFailed ? 0 : 1);
         expect(recalculatePromptMetrics).not.toHaveBeenCalled();
         expect(cliState.retryMode).toBe(false);
         expect(cliState._retryErrorResultIds).toBeUndefined();
@@ -2429,7 +2430,7 @@ describe('evalCommand', () => {
       );
 
       expect(evaluate).not.toHaveBeenCalled();
-      expect(deleteErrorResults).not.toHaveBeenCalled();
+      expect(replaceRetryResults).not.toHaveBeenCalled();
       expect(recalculatePromptMetrics).not.toHaveBeenCalled();
       expect(cliState.resume).toBe(false);
       expect(cliState.retryMode).toBe(false);
@@ -2455,7 +2456,7 @@ describe('evalCommand', () => {
       // The pattern is validated before any config resolution happens.
       expect(resolveConfigs).not.toHaveBeenCalled();
       expect(evaluate).not.toHaveBeenCalled();
-      expect(deleteErrorResults).not.toHaveBeenCalled();
+      expect(replaceRetryResults).not.toHaveBeenCalled();
       expect(cliState.resume).toBe(false);
       expect(cliState.retryMode).toBe(false);
       expect(cliState._retryErrorResultIds).toBeUndefined();

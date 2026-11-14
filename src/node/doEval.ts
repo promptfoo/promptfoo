@@ -61,12 +61,7 @@ import { shouldShareResults } from '../util/sharing';
 import { resolveTestsWatchPaths } from '../util/testCaseReader';
 import { TokenUsageTracker } from '../util/tokenUsage';
 import { isUuid } from '../util/uuid';
-import {
-  deleteErrorResults,
-  getRetryResultIds,
-  hasRetryReplacements,
-  recalculatePromptMetrics,
-} from './retry';
+import { getRetryResultIds, recalculatePromptMetrics, replaceRetryResults } from './retry';
 import { notCloudEnabledShareInstructions } from './shareInstructions';
 import type { FSWatcher } from 'chokidar';
 import type { Command } from 'commander';
@@ -970,8 +965,10 @@ async function doEvalWithEnv(
         }
       }
 
+      const retryReplacementIds = retryErrorResultIds ? new Set<string>() : undefined;
       ret = await evaluate(testSuite, evalRecord, {
         ...options,
+        retryReplacementIds,
         restorePromptColumns: Boolean(resumeEval),
         filterRange: hasScenarios || resumeEval ? filterRange : undefined,
         abortSignal: evaluateOptions.abortSignal,
@@ -980,21 +977,19 @@ async function doEvalWithEnv(
       });
 
       // Delete original results only after their replacements are saved.
-      if (retryErrors && cliState._retryErrorResultIds && !paused) {
-        const errorResultIds = cliState._retryErrorResultIds;
+      if (retryErrorResultIds && retryReplacementIds && !paused) {
         if (ret.resultPersistenceFailed) {
           throw new Error('Retry results failed to persist. Original results were preserved.');
         }
-        if (!(await hasRetryReplacements(ret.id, errorResultIds))) {
+        if (!(await replaceRetryResults(ret.id, retryErrorResultIds, retryReplacementIds))) {
           throw new Error(
             'Retry did not replace all selected results. Original results were preserved.',
           );
         }
         try {
-          await deleteErrorResults(errorResultIds);
           await recalculatePromptMetrics(ret);
           logger.debug(
-            `Cleaned up ${errorResultIds.length} original results after successful retry`,
+            `Cleaned up ${retryErrorResultIds.length} original results after successful retry`,
           );
         } catch (cleanupError) {
           // Cleanup failure is non-fatal - retry itself succeeded

@@ -1,4 +1,5 @@
 import { evaluate as evaluateWithRuntime } from '../evaluator/engine';
+import { EvalEvaluationStore } from './evaluationStore';
 import { nodeEvaluatorRuntime } from './evaluatorRuntime';
 
 import type {
@@ -34,10 +35,18 @@ export function evaluate<
   options: InternalEvaluateOptions,
   runtime?: EvaluatorRuntime<TEvaluation, TResult>,
 ): Promise<TEvaluation> {
+  const retryReplacementIds = options.retryReplacementIds;
+  const defaultRuntime = retryReplacementIds
+    ? {
+        ...nodeEvaluatorRuntime,
+        createEvaluationStore: (evaluation: Eval) =>
+          new EvalEvaluationStore(evaluation, retryReplacementIds),
+      }
+    : nodeEvaluatorRuntime;
   return evaluateWithRuntime(
     testSuite,
     evalRecord,
     options,
-    runtime ?? (nodeEvaluatorRuntime as unknown as EvaluatorRuntime<TEvaluation, TResult>),
+    runtime ?? (defaultRuntime as unknown as EvaluatorRuntime<TEvaluation, TResult>),
   );
 }
