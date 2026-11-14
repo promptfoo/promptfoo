@@ -91,6 +91,24 @@ function spawnCli(
     reject: (error: Error) => void;
   }> = [];
 
+  let closedCode: number | null | undefined;
+  const exitBeforeMatchError = () =>
+    new Error(
+      `Process exited (code ${closedCode}) before matching pattern.\nSTDOUT: ${stdout}\nSTDERR: ${stderr}`,
+    );
+
+  // Attach before the caller can miss a fast exit. At close, all output has drained.
+  const exitPromise = new Promise<number>((resolve) => {
+    child.once('close', (code) => {
+      closedCode = code;
+      resolve(code ?? 1);
+      for (const waiter of outputWaiters) {
+        waiter.reject(exitBeforeMatchError());
+      }
+      outputWaiters.length = 0;
+    });
+  });
+
   const checkWaiters = () => {
     const combined = stdout + stderr;
     for (let i = outputWaiters.length - 1; i >= 0; i--) {
@@ -117,7 +135,7 @@ function spawnCli(
   });
 
   const sendSignal = (signal: NodeJS.Signals) => {
-    if (child.pid && !child.killed) {
+    if (child.pid && child.exitCode === null && child.signalCode === null) {
       child.kill(signal);
     }
   };
@@ -128,6 +146,9 @@ function spawnCli(
       typeof pattern === 'string' ? combined.includes(pattern) : pattern.test(combined);
     if (alreadyMatches) {
       return Promise.resolve(combined);
+    }
+    if (closedCode !== undefined) {
+      return Promise.reject(exitBeforeMatchError());
     }
 
     return new Promise((resolveWait, rejectWait) => {
@@ -151,47 +172,34 @@ function spawnCli(
       outputWaiters.push({
         pattern,
         resolve: wrappedResolve,
-        reject: rejectWait,
+        reject: (error) => {
+          clearTimeout(timer);
+          rejectWait(error);
+        },
       });
     });
   };
 
-  const waitForExit = (
+  const waitForExit = async (
     timeoutMs = 30000,
   ): Promise<{ stdout: string; stderr: string; exitCode: number }> => {
-    return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<never>((_resolve, reject) => {
+      timer = setTimeout(() => {
         reject(
           new Error(
             `Process did not exit within ${timeoutMs}ms.\nSTDOUT: ${stdout}\nSTDERR: ${stderr}`,
           ),
         );
       }, timeoutMs);
-
-      child.on('exit', (code) => {
-        clearTimeout(timer);
-        // Small delay to collect remaining output
-        setTimeout(() => {
-          resolve({ stdout, stderr, exitCode: code ?? 1 });
-        }, 100);
-      });
     });
+    try {
+      const exitCode = await Promise.race([exitPromise, timeout]);
+      return { stdout, stderr, exitCode };
+    } finally {
+      clearTimeout(timer);
+    }
   };
-
-  // Also handle exit for waiters
-  child.on('exit', (code) => {
-    // Small delay to let final output arrive
-    setTimeout(() => {
-      for (const waiter of outputWaiters) {
-        waiter.reject(
-          new Error(
-            `Process exited (code ${code}) before matching pattern.\nSTDOUT: ${stdout}\nSTDERR: ${stderr}`,
-          ),
-        );
-      }
-      outputWaiters.length = 0;
-    }, 200);
-  });
 
   return {
     sendSignal,
@@ -223,6 +231,21 @@ describe('Resume E2E Tests', () => {
   afterAll(() => {
     if (fs.existsSync(OUTPUT_DIR)) {
       fs.rmSync(OUTPUT_DIR, { recursive: true, force: true });
+    }
+  });
+
+  it('retains the exit result for callers that wait after the CLI has closed', async () => {
+    const cli = spawnCli(['--version']);
+    try {
+      const result = await cli.waitForExit();
+      expect(result.exitCode, result.stderr).toBe(0);
+      expect(await cli.waitForExit(100)).toEqual(result);
+      expect(await cli.waitForOutput(/\d+\.\d+\.\d+/)).toBe(result.stdout + result.stderr);
+      await expect(cli.waitForOutput('missing fixture marker', 100)).rejects.toThrow(
+        'Process exited (code 0) before matching pattern',
+      );
+    } finally {
+      cli.kill();
     }
   });
 
@@ -322,9 +345,9 @@ describe('Resume E2E Tests', () => {
       // Step 2: Resume the eval
       // Note: --resume reconstructs config from saved eval, so -o from current
       // invocation is NOT applied. We verify via stdout instead.
-      const { exitCode, stdout } = runCli(['eval', '--resume', evalId!, '--no-cache']);
+      const { exitCode, stdout, stderr } = runCli(['eval', '--resume', evalId!, '--no-cache']);
 
-      expect(exitCode).toBe(0);
+      expect(exitCode, `${stdout}\n${stderr}`).toBe(0);
 
       // Should mention resuming and skipping
       expect(stdout).toContain('Resuming');

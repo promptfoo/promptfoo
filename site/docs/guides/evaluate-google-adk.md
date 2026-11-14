@@ -23,24 +23,34 @@ source .venv/bin/activate
 python -m pip install -r requirements.txt
 
 export GOOGLE_API_KEY=your_google_api_key_here
+```
+
+Choose whether ADK model and tool spans store messages, arguments, and results. To run the tool-argument assertions, opt in with these settings in the example directory's `.env`:
+
+```text
+OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=SPAN_ONLY
+ADK_CAPTURE_MESSAGE_CONTENT_IN_SPANS=true
+```
+
+To suppress payload content on both schemas, use `NO_CONTENT` and `false`, respectively. Legacy ADK captures content by default and writes empty JSON to its payload attributes when disabled; telemetry v2 omits the attributes. The tool-argument assertions fail with capture off. The **exported trace can still contain sensitive text**: Promptfoo includes test variables and grader explanations, and model errors can include rejected input. Saved eval results also include model output.
+
+The commands below load `.env` from the current directory (`integration-google-adk`). If you run the same configs from the repository root, pass `--env-file examples/integration-google-adk/.env` to each eval. Shell values win for an implicit `.env` by default; an [explicit env file](/docs/usage/command-line/#multiple-environment-files) overrides them.
+
+```bash
 npx promptfoo@latest eval -c promptfooconfig.yaml --no-cache
 npx promptfoo@latest eval -c promptfooconfig.workflow.yaml --no-cache
 npx promptfoo@latest view
 ```
 
-The example defaults to `gemini-2.5-flash`. If you want to use another ADK-supported model, set `ADK_MODEL`. Provider-style model strings such as `openai/gpt-5.4-mini` require the optional LiteLLM adapter:
+The example defaults to `gemini-2.5-flash`. If you want to use another ADK-supported model, set `ADK_MODEL`. Provider-style model strings such as `openai/gpt-5.4-mini` require the optional LiteLLM adapter with its MCP dependencies:
 
 ```bash
-python -m pip install 'litellm>=1.101,<2'
+python -m pip install 'litellm[mcp]>=1.101,<2'
 export OPENAI_API_KEY=your_openai_api_key_here
 export ADK_MODEL=openai/gpt-5.4-mini
 ```
 
-If Promptfoo runs outside the activated virtual environment, set the interpreter explicitly:
-
-```bash
-PROMPTFOO_PYTHON=.venv/bin/python npx promptfoo@latest eval -c promptfooconfig.yaml --no-cache
-```
+If Promptfoo runs outside the activated virtual environment, prefix either eval command above with `PROMPTFOO_PYTHON=.venv/bin/python`.
 
 ## What The Example Covers
 
@@ -69,12 +79,14 @@ Pick the HTTP provider when the deployed HTTP contract itself is what you want t
 
 ADK 2.x emits OpenTelemetry spans such as:
 
-- `invocation`
+- `invocation` (legacy ADK) or `invoke_workflow <name>` (ADK 2.13 v2)
 - `invoke_agent weather_agent`
-- `call_llm`
+- `generate_content <model>`
 - `execute_tool get_weather`
 
-The example provider preserves Promptfoo's W3C `traceparent`, starts a small provider span beneath it, and exports ADK's child spans to Promptfoo's built-in OTLP receiver. ADK already records `gen_ai.tool.name` and tool-call arguments, so Promptfoo can normalize them into trajectory steps without a custom span translator.
+The example provider preserves Promptfoo's W3C `traceparent`, starts a small provider span beneath it, and exports ADK's child spans to Promptfoo's built-in OTLP receiver. On ADK 2.9.2 and 2.12, look for tool arguments in `gcp.vertex.agent.tool_call_args`. ADK 2.13’s v2 schema uses `gen_ai.tool.call.arguments` and drops `call_llm`. Use `generate_content <model>` to count model calls across these releases.
+
+ADK 2.13 defaults to telemetry v2. Tool names remain visible when content capture is off. Leave `PROMPTFOO_ENABLE_OTEL` off to avoid recording provider request and response bodies in separate Python worker spans.
 
 ```yaml
 assert:
@@ -103,11 +115,11 @@ After the eval, inspect the row in the Trace Timeline. The bundled conversationa
 
 - one Promptfoo provider span beneath the injected parent trace
 - `invoke_agent weather_agent` once per user turn
-- `call_llm` spans around the model hops
+- `generate_content <model>` spans around the model hops
 - `execute_tool get_weather`
 - `execute_tool save_trip_note`
 - `gen_ai.tool.name` on tool spans
-- serialized ADK tool arguments in `gcp.vertex.agent.tool_call_args`
+- serialized tool arguments in `gcp.vertex.agent.tool_call_args` (legacy ADK) or `gen_ai.tool.call.arguments` (ADK 2.13 v2)
 
 ## Sessions, State, Plugins, And Artifacts
 
