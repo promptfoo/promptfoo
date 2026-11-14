@@ -1,16 +1,20 @@
-import { PostHog } from 'posthog-node';
+import { createRequire } from 'node:module';
+
 import { CONSENT_ENDPOINT, EVENTS_ENDPOINT, R_ENDPOINT, VERSION } from './constants';
 import { POSTHOG_KEY } from './constants/build';
 import { getEnvBool, getEnvString, isCI } from './envars';
 import { getUserAuthInfo, getUserId } from './globalConfig/accounts';
 import logger from './logger';
 import { fetchWithProxy, fetchWithTimeout } from './util/fetch/index';
+import type { PostHog } from 'posthog-node';
 
 import type { EventProperties, TelemetryEventTypes } from './telemetryEvents';
 
 export { TELEMETRY_EVENTS, TelemetryEventSchema } from './telemetryEvents';
 
 export type { EventProperties, TelemetryEventTypes } from './telemetryEvents';
+
+const require = createRequire(import.meta.url);
 
 export function isTelemetryEnabled(): boolean {
   return !getEnvBool('PROMPTFOO_DISABLE_TELEMETRY');
@@ -26,6 +30,8 @@ function getPostHogClient(): PostHog | null {
 
   if (posthogClient === null && POSTHOG_KEY) {
     try {
+      // Keep capture synchronous without loading the SDK when telemetry is disabled.
+      const { PostHog } = require('posthog-node') as typeof import('posthog-node');
       posthogClient = new PostHog(POSTHOG_KEY, {
         host: EVENTS_ENDPOINT,
         fetch: fetchWithProxy,
@@ -64,7 +70,7 @@ export class Telemetry {
   }
 
   initialize(): void {
-    if (this.disabled || !this.isTelemetryEnabled()) {
+    if (this.disabled) {
       return;
     }
     if (this.id !== null) {
@@ -80,15 +86,14 @@ export class Telemetry {
   }
 
   private getPersonProperties(ciFlag: boolean) {
-    const personProperties = {
+    return {
       ...getUserAuthInfo(),
       isRunningInCi: ciFlag,
     };
-    return personProperties;
   }
 
   async identify() {
-    if (this.disabled || !this.isTelemetryEnabled() || getEnvBool('IS_TESTING')) {
+    if (this.disabled || getEnvBool('IS_TESTING')) {
       return;
     }
 
@@ -110,7 +115,7 @@ export class Telemetry {
   }
 
   get disabled() {
-    return getEnvBool('PROMPTFOO_DISABLE_TELEMETRY');
+    return !isTelemetryEnabled();
   }
 
   isTelemetryEnabled(): boolean {
@@ -118,7 +123,7 @@ export class Telemetry {
   }
 
   record(eventName: TelemetryEventTypes, properties: EventProperties): void {
-    if (this.disabled || !this.isTelemetryEnabled()) {
+    if (this.disabled) {
       return;
     }
     this.initialize();
@@ -126,7 +131,7 @@ export class Telemetry {
   }
 
   private sendEvent(eventName: TelemetryEventTypes, properties: EventProperties): void {
-    if (this.disabled || !this.isTelemetryEnabled()) {
+    if (this.disabled) {
       return;
     }
     const ciFlag = isCI();
@@ -160,8 +165,15 @@ export class Telemetry {
       }
     }
 
+    // Reporting is best-effort: keep its deadline active through response disposal
+    // so an unavailable endpoint or unread body cannot hold an embedded host open.
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), TELEMETRY_TIMEOUT_MS);
+    timeout.unref();
     fetchWithProxy(R_ENDPOINT, {
       method: 'POST',
+      signal: controller.signal,
+      disableTransientRetries: true,
       headers: {
         'Content-Type': 'application/json',
       },
@@ -174,9 +186,12 @@ export class Telemetry {
           ...propertiesWithMetadata,
         },
       }),
-    }).catch(() => {
-      // pass
-    });
+    })
+      .then((response) => response.body?.cancel())
+      .catch(() => {
+        // Reporting failures must not interrupt evaluation or process shutdown.
+      })
+      .finally(() => clearTimeout(timeout));
   }
 
   async shutdown(): Promise<void> {
@@ -185,7 +200,8 @@ export class Telemetry {
       return;
     }
 
-    const client = getPostHogClient();
+    // Shutdown must not construct a client that was never used.
+    const client = posthogClient;
     if (!client) {
       // No client to shut down - don't set the flag so future shutdowns work
       // if telemetry becomes enabled (e.g., in test harnesses)

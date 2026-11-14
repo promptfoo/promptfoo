@@ -18,13 +18,13 @@ The Codex Security provider runs the `@openai/codex-security` SDK directly as a 
 
 ## Installation and authentication
 
-Promptfoo declares the SDK as an optional dependency. If optional dependencies were omitted, install Promptfoo and the SDK together so they share the same installation:
+The SDK is installed separately when you use this provider. Install Promptfoo and the SDK together so they share the same installation:
 
 ```bash
-npm install promptfoo @openai/codex-security@^0.1.18
+npm install promptfoo @openai/codex-security@^0.2.0
 ```
 
-The provider requires `@openai/codex-security` version `0.1.18` or newer. Older SDK releases omit finding validation and can undercount deep-worker token usage and cost. Use Node.js `^22.22.0`, `^24.0.0`, or `^26.0.0` to satisfy both Promptfoo and the SDK. Promptfoo loads the SDK only from its own installation; it does not execute SDK packages found in the target repository or evaluation directory. For a global installation, install both packages together with `npm install -g promptfoo @openai/codex-security@^0.1.18`. Use an existing Codex/ChatGPT login, or set `OPENAI_API_KEY` or `CODEX_API_KEY` in the process environment before starting promptfoo. The native SDK does not support provider-scoped API keys or provider environment overrides; credentials must already be present in the Promptfoo process environment.
+Promptfoo supports Codex Security SDK versions from 0.2.0 through 0.8.x. The examples that measure file coverage use 0.2.x. To evaluate the current scan result format, install `@openai/codex-security@^0.8.0`. Use Node.js `^22.22.0`, `^24.0.0`, or `^26.0.0` to satisfy both Promptfoo and the SDK. Promptfoo loads the SDK only from its own installation; it does not execute SDK packages found in the target repository or evaluation directory. For a global installation, install both packages together with `npm install -g promptfoo @openai/codex-security@^0.2.0`. Use an existing Codex/ChatGPT login, or set `OPENAI_API_KEY` or `CODEX_API_KEY` in the process environment before starting promptfoo. The native SDK does not support provider-scoped API keys or provider environment overrides; credentials must already be present in the Promptfoo process environment.
 
 Codex Security access, Trusted Access, and model availability depend on the authenticated account and organization.
 
@@ -95,7 +95,7 @@ To start with the included intentionally vulnerable fixture:
 ```bash
 npx promptfoo@latest init --example openai-codex-security
 cd openai-codex-security
-npm install promptfoo @openai/codex-security@^0.1.18
+npm install promptfoo @openai/codex-security@^0.2.0
 npx promptfoo eval --no-cache
 ```
 
@@ -141,6 +141,8 @@ providers:
 
 Set `working_tree: true` to review uncommitted changes instead. `head_ref` cannot be combined with `working_tree`, and path-scoped scans cannot be combined with Git diff targets.
 
+SDK 0.7 and later require committed-ref scans to use a clean, full checkout at the requested head revision.
+
 ## Validate findings
 
 Pass a structured finding directly or load it from `finding_file`:
@@ -155,6 +157,8 @@ providers:
 ```
 
 Validation returns JSON containing `disposition`, `report`, `outputDir`, and `threadId`. If `finding` and `finding_file` are omitted, the provider uses a structured `finding` eval-row variable when available; otherwise, it uses the rendered prompt as the finding text.
+
+Starting with SDK 0.3, standalone validation is a source-only assessment in a read-only sandbox. Read the returned `report`; it does not reproduce the finding at runtime or write validation report files.
 
 :::warning
 
@@ -186,17 +190,21 @@ Managed Codex Security scans run with the access required by the security SDK. R
 
 ## Results, cost, and assertions
 
-Repository scans return `ScanResult.toJSON()` in `output`, including `manifest`, `findings`, `coverage`, artifact paths, and SDK cost data. Promptfoo also normalizes SDK-reported values into:
+Repository scans return `ScanResult.toJSON()` in `output`, including `manifest`, `findings`, artifact paths, and SDK cost data. SDK 0.2.x–0.7.x expose file coverage in `metadata.coverage` and `metadata.coveragePath`. Starting with 0.8.0, `metadata.review.excludedPaths` lists additional excluded paths. File-coverage metrics require an SDK that reports coverage. Promptfoo also normalizes SDK-reported values into:
 
 - `tokenUsage.prompt`, `tokenUsage.completion`, `tokenUsage.cached`, and `tokenUsage.total`.
 - `tokenUsage.completionDetails.reasoning`, `cacheReadInputTokens`, and `cacheCreationInputTokens` when reported.
 - `cost`, using the security SDK's `estimatedUsd` value.
-- `metadata.operation`, `metadata.mode`, `metadata.model`, `metadata.reasoningEffort`, `metadata.findingsCount`, `metadata.coverage`, artifact paths, warnings, SDK version, and plugin version.
+- `metadata.operation`, `metadata.mode`, `metadata.model`, `metadata.reasoningEffort`, `metadata.findingsCount`, artifact paths, warnings, SDK version, and plugin version.
 - `metadata.skillCalls` for native scan and finding-validation operation routing.
+
+`metadata.manifestPath` locates the saved scan manifest. In SDK 0.8, inspect `manifest.scan.status`, warnings, scope, and limitations alongside review exclusions. Exclusions alone do not establish complete coverage.
 
 Finding validation does not currently expose reliable token or cost totals, so the provider leaves those fields unset.
 
 Use [named assertion metrics](/docs/configuration/expected-outputs#assertion-properties) to compare finding recall, skill routing, scan coverage, latency, and spend in the web UI:
+
+The `CompleteCoverage` assertion below applies only to SDK versions that report `coverage.completeness`, including the 0.2.x version used by this example. Remove that assertion when evaluating SDK 0.8 and inspect its scan evidence instead.
 
 ```yaml
 tests:
@@ -236,12 +244,14 @@ tests:
         metric: ScanLatency
 ```
 
-`cost` assertions require a native scan that reports estimated spend; do not use them for finding validation when the SDK omits usage. Finding output and stored artifacts may include sensitive source-code excerpts; configure Promptfoo retention and sharing accordingly.
+`cost` assertions require a native scan that reports estimated spend; do not use them for finding validation when the SDK omits usage. Finding output and stored artifacts may include sensitive source-code excerpts. The provider retains credential masking for SDK diagnostic errors and warnings, but SDK 0.2.0 saves its own diagnostic artifacts without masking. Review artifacts before sharing and configure Promptfoo retention accordingly.
 
 ## Troubleshooting
 
-- **Zero findings with partial coverage:** Inspect `metadata.warnings`, `metadata.coverage.deferred`, and `coverage.json`. Discarded findings or malformed evidence references indicate an incomplete scan, not a clean repository.
-- **Deep scan cost appears too low:** Install SDK version `0.1.18` or newer. Earlier versions can omit independently launched discovery and deduplication workers from token and cost totals.
+- **Zero findings with partial coverage:** For legacy coverage SDKs, inspect `metadata.warnings`, `metadata.coverage.deferred`, and `coverage.json`. With SDK 0.8, inspect the saved manifest's scan status, warnings, scope, and limitations, plus `metadata.review`. Discarded findings or malformed evidence references indicate an incomplete scan, not a clean repository.
+- **Deep scan cost appears too low:** Install SDK version `^0.2.0`. SDKs before `0.1.18` can omit independently launched discovery and deduplication workers from token and cost totals.
+- **Sandbox preflight fails:** SDK 0.2.0 checks Unix sandbox support before paid model calls. Run scans in an environment that supports the Codex sandbox.
+- **Scan output parent rejected:** On Unix, SDK 0.8 requires a private output directory owned by the current user. Every ancestor must belong to that user or root and must not allow group or world writes unless it has the sticky bit. Choose a private location with trusted ancestors; a private leaf directory alone does not satisfy this check.
 - **SDK fails to load:** Install Promptfoo and the SDK together, and use Node.js `^22.22.0`, `^24.0.0`, or `^26.0.0`.
 - **Authentication or access fails:** Sign in with Codex or set `OPENAI_API_KEY` / `CODEX_API_KEY`; confirm that the account has the required Codex Security and Trusted Access permissions.
 - **Output directory is rejected:** Choose an artifact directory outside the target repository, and use a distinct directory for each provider or eval row.

@@ -3,7 +3,9 @@ import React, { useEffect, useMemo, useState } from 'react';
 import Head from '@docusaurus/Head';
 import Link from '@docusaurus/Link';
 import Layout from '@theme/Layout';
-import { EventCard, EventFilters, FeaturedEvent } from '../../components/Events';
+import EventCard from '../../components/Events/EventCard';
+import EventFilters from '../../components/Events/EventFilters';
+import FeaturedEvent from '../../components/Events/FeaturedEvent';
 import {
   type Event,
   events,
@@ -14,7 +16,7 @@ import {
 } from '../../data/events';
 import styles from './index.module.css';
 
-import type { FilterStatus, FilterYear } from '../../components/Events';
+import type { FilterStatus, FilterYear } from '../../components/Events/EventFilters';
 
 const MAX_ROLLOVER_TIMEOUT_MS = 2 ** 31 - 1;
 
@@ -69,49 +71,22 @@ export default function EventsPage(): React.ReactElement {
     return Array.from(years).sort((a, b) => b - a);
   }, []);
 
-  // Filter events based on selected filters
-  const filteredEvents = useMemo(() => {
-    let result: Event[];
-
-    // Apply status filter
-    if (statusFilter === 'upcoming') {
-      result = upcomingEvents;
-    } else if (statusFilter === 'past') {
-      result = pastEvents;
-    } else {
-      // Sort all events: upcoming first (by date asc), then past (by date desc)
-      result = [...upcomingEvents, ...pastEvents];
+  const eventsForYear = useMemo(() => {
+    if (yearFilter === 'all') {
+      return { upcoming: upcomingEvents, past: pastEvents };
     }
+    const matchesYear = (event: Event) => getEventYear(event.startDate) === yearFilter;
+    return { upcoming: upcomingEvents.filter(matchesYear), past: pastEvents.filter(matchesYear) };
+  }, [upcomingEvents, pastEvents, yearFilter]);
 
-    // Apply year filter
-    if (yearFilter !== 'all') {
-      result = result.filter((event) => getEventYear(event.startDate) === yearFilter);
-    }
-
-    return result;
-  }, [pastEvents, statusFilter, upcomingEvents, yearFilter]);
-
-  // Calculate event counts for filters
-  const eventCounts = useMemo(() => {
-    let allEvents = liveEvents;
-    let upcomingForYear = upcomingEvents;
-    let pastForYear = pastEvents;
-
-    // If year filter is applied, filter counts
-    if (yearFilter !== 'all') {
-      allEvents = liveEvents.filter((event) => getEventYear(event.startDate) === yearFilter);
-      upcomingForYear = upcomingEvents.filter(
-        (event) => getEventYear(event.startDate) === yearFilter,
-      );
-      pastForYear = pastEvents.filter((event) => getEventYear(event.startDate) === yearFilter);
-    }
-
-    return {
-      all: allEvents.length,
-      upcoming: upcomingForYear.length,
-      past: pastForYear.length,
-    };
-  }, [liveEvents, pastEvents, upcomingEvents, yearFilter]);
+  const { upcoming, past } = eventsForYear;
+  const filteredEvents =
+    statusFilter === 'all' ? [...upcoming, ...past] : eventsForYear[statusFilter];
+  const eventCounts = {
+    all: upcoming.length + past.length,
+    upcoming: upcoming.length,
+    past: past.length,
+  };
 
   return (
     <Layout

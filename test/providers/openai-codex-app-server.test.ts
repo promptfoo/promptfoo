@@ -1,4 +1,7 @@
 import { EventEmitter } from 'events';
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
 import { PassThrough } from 'stream';
 
 import { trace } from '@opentelemetry/api';
@@ -6,8 +9,53 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
 import logger from '../../src/logger';
 import { OpenAICodexAppServerProvider } from '../../src/providers/openai/codex-app-server';
+import { OpenInterpreterProvider } from '../../src/providers/openinterpreter';
 import { providerRegistry } from '../../src/providers/providerRegistry';
 import { mockProcessEnv } from '../util/utils';
+import { waitForMessage } from './appServerTestUtils';
+
+const createNoCleanupOptions = () => ({
+  config: {
+    thread_cleanup: 'none' as const,
+  },
+});
+
+const createTracedNoCleanupOptions = () => ({
+  config: {
+    deep_tracing: true,
+    thread_cleanup: 'none' as const,
+  },
+});
+
+const createPersistentNoCleanupOptions = () => ({
+  config: {
+    persist_threads: true,
+    thread_cleanup: 'none' as const,
+  },
+});
+
+const createSingleThreadPoolOptions = () => ({
+  config: {
+    persist_threads: true,
+    thread_pool_size: 1,
+    thread_cleanup: 'none' as const,
+  },
+});
+
+const createNetworkReadPermissionGrant = () => ({
+  network: { enabled: true },
+  fileSystem: {
+    read: ['/tmp/promptfoo-fixture'],
+    write: null,
+  },
+});
+
+const createTimeoutOptions = (requestTimeoutMs: number) => ({
+  config: {
+    request_timeout_ms: requestTimeoutMs,
+    thread_cleanup: 'none' as const,
+  },
+});
 
 const mocks = vi.hoisted(() => ({
   spawn: vi.fn(),
@@ -31,7 +79,11 @@ interface MockAppServer {
 }
 
 function createMockAppServer(
-  options: { configReadResult?: unknown; configReadError?: unknown } = {},
+  options: {
+    configReadResult?: unknown;
+    configReadError?: unknown;
+    autoCompleteThread?: string;
+  } = {},
 ): MockAppServer {
   const proc = new EventEmitter() as any;
   const stdout = new PassThrough();
@@ -65,6 +117,23 @@ function createMockAppServer(
           })}\n`,
         );
       });
+    } else if (options.autoCompleteThread && message.id !== undefined) {
+      queueMicrotask(() => {
+        const threadId = options.autoCompleteThread;
+        const turn = { id: 'turn_mock', status: 'completed', items: [], error: null };
+        const result =
+          message.method === 'turn/start'
+            ? { turn: { ...turn, status: 'inProgress' } }
+            : ['thread/start', 'thread/resume'].includes(message.method)
+              ? { thread: { id: threadId } }
+              : {};
+        stdout.write(`${JSON.stringify({ id: message.id, result })}\n`);
+        if (message.method === 'turn/start') {
+          stdout.write(
+            `${JSON.stringify({ method: 'turn/completed', params: { threadId, turn } })}\n`,
+          );
+        }
+      });
     }
     return true;
   }) as any;
@@ -94,18 +163,6 @@ function createMockAppServer(
         .filter(Boolean)
         .map((line) => JSON.parse(line)),
   };
-}
-
-async function waitForMessage(
-  server: MockAppServer,
-  predicate: (message: any) => boolean,
-): Promise<any> {
-  let found: any;
-  await vi.waitFor(() => {
-    found = server.messages().find(predicate);
-    expect(found).toBeTruthy();
-  });
-  return found;
 }
 
 async function flushMicrotasks(): Promise<void> {
@@ -205,6 +262,20 @@ describe('OpenAICodexAppServerProvider', () => {
     expect((provider as any).getAttributesForItem(item)).toMatchObject({
       'gen_ai.operation.name': 'execute_tool',
       'gen_ai.tool.name': expectedToolName,
+    });
+  });
+
+  it.each([false, true])('honors inherit_process_env=%s for file defaults', (inheritProcessEnv) => {
+    const provider = new OpenAICodexAppServerProvider({ config: {} });
+    cliState.withEnvFileOverrides({ PATH: 'file-path', PROMPTFOO_REVIEW_ENV_PROBE: 'file' }, () => {
+      const env = (provider as any).prepareEnvironment({ inherit_process_env: inheritProcessEnv });
+      expect(env.PATH).toBe('file-path');
+      expect(env.PROMPTFOO_REVIEW_ENV_PROBE).toBe(inheritProcessEnv ? 'file' : undefined);
+      const explicit = (provider as any).prepareEnvironment({
+        inherit_process_env: inheritProcessEnv,
+        cli_env: { PROMPTFOO_REVIEW_ENV_PROBE: 'explicit' },
+      });
+      expect(explicit.PROMPTFOO_REVIEW_ENV_PROBE).toBe('explicit');
     });
   });
 
@@ -535,6 +606,7 @@ describe('OpenAICodexAppServerProvider', () => {
       completion: 5,
       total: 15,
       cached: 2,
+      completionDetails: { reasoning: 0 },
     });
     expect(result.cost).toBeCloseTo(0.000191);
     expect(result.metadata?.codexAppServer).toMatchObject({
@@ -569,16 +641,308 @@ describe('OpenAICodexAppServerProvider', () => {
     );
   });
 
+  describe('on Windows', () => {
+    const originalPlatform = process.platform;
+    let npmBinDir: string;
+    let entrypoint: string;
+    let restoreEnvironment: () => void;
+
+    beforeEach(() => {
+      restoreEnvironment = mockProcessEnv(
+        Object.fromEntries(
+          Object.keys(process.env)
+            .filter((key) =>
+              ['PATH', 'NODEFAULTCURRENTDIRECTORYINEXEPATH'].includes(key.toUpperCase()),
+            )
+            .map((key) => [key, undefined]),
+        ),
+      );
+      npmBinDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo codex & npm-'));
+      entrypoint = path.join(npmBinDir, 'node_modules', '@openai', 'codex', 'bin', 'codex.js');
+      fs.mkdirSync(path.dirname(entrypoint), { recursive: true });
+      fs.writeFileSync(entrypoint, '');
+      fs.writeFileSync(path.join(npmBinDir, 'codex.cmd'), '');
+      Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
+    });
+
+    afterEach(() => {
+      restoreEnvironment();
+      Object.defineProperty(process, 'platform', { value: originalPlatform, configurable: true });
+      fs.rmSync(npmBinDir, { recursive: true, force: true });
+    });
+
+    async function getSpawnCall(config: Record<string, unknown>) {
+      mocks.spawn.mockImplementation(() => {
+        throw new Error('spawn stub');
+      });
+      await new OpenAICodexAppServerProvider({ config }).callApi('Hello');
+      return mocks.spawn.mock.calls[0];
+    }
+
+    it.each(['global', '.bin', '.BIN'])(
+      'runs a %s npm installation with Node',
+      async (directory) => {
+        const binDirectory =
+          directory === 'global' ? npmBinDir : path.join(npmBinDir, 'node_modules', directory);
+        fs.mkdirSync(binDirectory, { recursive: true });
+        fs.writeFileSync(path.join(binDirectory, 'codex.cmd'), '');
+
+        const [command, args, options] = await getSpawnCall({ cli_env: { PATH: binDirectory } });
+
+        expect(command).toBe(process.execPath);
+        expect(args).toEqual([entrypoint, 'app-server', '--listen', 'stdio://']);
+        expect(options).toEqual({
+          env: expect.objectContaining({ PATH: binDirectory }),
+          stdio: ['pipe', 'pipe', 'pipe'],
+        });
+      },
+    );
+
+    it('discovers npm through an inherited mixed-case PATH name', async () => {
+      mockProcessEnv({ PaTh: npmBinDir });
+
+      const [command, args] = await getSpawnCall({ inherit_process_env: true });
+
+      expect(command).toBe(process.execPath);
+      expect(args[0]).toBe(entrypoint);
+    });
+
+    it.each([
+      ['PATH', 'PaTh'],
+      ['PaTh', 'Path'],
+    ])('uses %s before %s when child PATH keys conflict', async (firstKey, laterKey) => {
+      const nativeBinDir = path.join(npmBinDir, 'native');
+      fs.mkdirSync(nativeBinDir);
+      fs.writeFileSync(path.join(nativeBinDir, 'codex.exe'), '');
+
+      const [command, args] = await getSpawnCall({
+        cli_env: { [laterKey]: nativeBinDir, [firstKey]: npmBinDir },
+      });
+
+      expect(command).toBe(process.execPath);
+      expect(args[0]).toBe(entrypoint);
+    });
+
+    it('falls back to parent PATH when a file env leaves child PATH absent', async () => {
+      mockProcessEnv({ PaTh: npmBinDir });
+
+      const [command, args, options] = await cliState.withEnvFileOverrides(
+        { PATH: undefined },
+        () => getSpawnCall({}),
+      );
+
+      expect(Object.keys(options.env).some((key) => key.toUpperCase() === 'PATH')).toBe(false);
+      expect(command).toBe(process.execPath);
+      expect(args[0]).toBe(entrypoint);
+    });
+
+    it('preserves an explicitly empty child PATH instead of using parent PATH', async () => {
+      mockProcessEnv({ PaTh: npmBinDir });
+
+      const [command] = await getSpawnCall({ cli_env: { PATH: '' } });
+
+      expect(command).toBe('codex');
+    });
+
+    it('passes shell metacharacters literally to Node without a shell', async () => {
+      const value = 'spaces & | < > ^ %PATH% "quotes"';
+      const [command, args, options] = await getSpawnCall({
+        cli_env: { PATH: npmBinDir },
+        cli_config: { model: value },
+      });
+
+      expect(command).toBe(process.execPath);
+      expect(args).toEqual([
+        entrypoint,
+        'app-server',
+        '--listen',
+        'stdio://',
+        '-c',
+        `model=${JSON.stringify(value)}`,
+      ]);
+      expect(options.shell).toBeUndefined();
+    });
+
+    it.each([
+      ['a bare Codex command', () => 'codex'],
+      ['a bare Codex shim', () => 'codex.cmd'],
+      ['a custom Codex wrapper', () => path.join(npmBinDir, 'codex.cmd')],
+      ['a bare interpreter command', () => 'interpreter'],
+      ['an interpreter wrapper', () => path.join(npmBinDir, 'interpreter.cmd')],
+      ['a native executable', () => path.join(npmBinDir, 'codex.exe')],
+    ])('preserves %s supplied as an explicit override', async (_label, getCommand) => {
+      // A custom wrapper can set environment variables before launching its adjacent npm package.
+      fs.writeFileSync(path.join(npmBinDir, 'codex.cmd'), '@set CUSTOM_CODEX_ENV=enabled');
+      const command = getCommand();
+
+      const [spawnCommand, args] = await getSpawnCall({
+        codex_path_override: command,
+        cli_env: { PATH: npmBinDir },
+      });
+
+      expect(spawnCommand).toBe(command);
+      expect(args).toEqual(['app-server', '--listen', 'stdio://']);
+    });
+
+    it('preserves the command when the npm entrypoint is missing', async () => {
+      fs.unlinkSync(entrypoint);
+
+      const [command] = await getSpawnCall({ cli_env: { PATH: npmBinDir } });
+
+      expect(command).toBe('codex');
+    });
+
+    it.each([
+      ['cwd', 'codex.exe'],
+      ['cwd', 'codex.com'],
+      ['earlier PATH', 'codex.exe'],
+      ['later PATH', 'codex.exe'],
+      ['relative PATH', 'codex.exe'],
+      ['quoted PATH', 'codex.exe'],
+    ])('preserves a native %s %s ahead of npm discovery', async (location, executable) => {
+      const cwd = process.cwd();
+      const nativeBinDir = path.join(npmBinDir, 'native');
+      fs.mkdirSync(nativeBinDir);
+      fs.writeFileSync(path.join(nativeBinDir, executable), '');
+      let searchPath = npmBinDir;
+      if (location === 'cwd') {
+        process.chdir(nativeBinDir);
+      } else {
+        if (location === 'relative PATH') {
+          process.chdir(npmBinDir);
+        }
+        const nativePath =
+          location === 'relative PATH'
+            ? 'native'
+            : location === 'quoted PATH'
+              ? `"${nativeBinDir}"`
+              : nativeBinDir;
+        searchPath =
+          location === 'earlier PATH'
+            ? [nativePath, npmBinDir].join(path.delimiter)
+            : [npmBinDir, nativePath].join(path.delimiter);
+      }
+      try {
+        const [command, args] = await getSpawnCall({
+          working_dir: cwd,
+          cli_env: { PATH: searchPath },
+        });
+
+        expect(command).toBe('codex');
+        expect(args).toEqual(['app-server', '--listen', 'stdio://']);
+      } finally {
+        process.chdir(cwd);
+      }
+    });
+
+    it.each([
+      ['NoDefaultCurrentDirectoryInExePath', ''],
+      ['NoDefaultCurrentDirectoryInExePath', '0'],
+      ['nodefaultcurrentdirectoryinexepath', '0'],
+    ])('honors the parent cwd opt-out %s=%j', async (key, value) => {
+      mockProcessEnv({ [key]: value });
+      const cwd = process.cwd();
+      const nativeBinDir = path.join(npmBinDir, 'native');
+      fs.mkdirSync(nativeBinDir);
+      fs.writeFileSync(path.join(nativeBinDir, 'codex.exe'), '');
+      process.chdir(nativeBinDir);
+      try {
+        const [command, args] = await getSpawnCall({
+          working_dir: cwd,
+          // Unquoted empty PATH entries must not reintroduce cwd searching.
+          cli_env: { PATH: `${path.delimiter}${npmBinDir}${path.delimiter}${path.delimiter}` },
+        });
+
+        expect(command).toBe(process.execPath);
+        expect(args[0]).toBe(entrypoint);
+      } finally {
+        process.chdir(cwd);
+      }
+    });
+
+    it.each(['.', '""', "''", 'drive-relative'])(
+      'preserves native cwd lookup explicitly requested by PATH entry %s',
+      async (directory) => {
+        mockProcessEnv({ NoDefaultCurrentDirectoryInExePath: '1' });
+        const cwd = process.cwd();
+        const nativeBinDir = path.join(npmBinDir, 'native');
+        fs.mkdirSync(nativeBinDir);
+        fs.writeFileSync(path.join(nativeBinDir, 'codex.exe'), '');
+        process.chdir(nativeBinDir);
+        try {
+          const pathEntry =
+            directory === 'drive-relative'
+              ? (path.parse(nativeBinDir).root.match(/^[a-z]:/i)?.[0] ?? '.')
+              : directory;
+          const [command] = await getSpawnCall({
+            working_dir: cwd,
+            cli_env: { PATH: [pathEntry, npmBinDir].join(path.delimiter) },
+          });
+
+          expect(command).toBe('codex');
+        } finally {
+          process.chdir(cwd);
+        }
+      },
+    );
+
+    it('does not use a child-only cwd opt-out to change parent executable lookup', async () => {
+      const cwd = process.cwd();
+      const nativeBinDir = path.join(npmBinDir, 'native');
+      fs.mkdirSync(nativeBinDir);
+      fs.writeFileSync(path.join(nativeBinDir, 'codex.exe'), '');
+      process.chdir(nativeBinDir);
+      try {
+        const [command, , options] = await getSpawnCall({
+          working_dir: cwd,
+          cli_env: { PATH: npmBinDir, NoDefaultCurrentDirectoryInExePath: '1' },
+        });
+
+        expect(command).toBe('codex');
+        expect(options.env.NoDefaultCurrentDirectoryInExePath).toBe('1');
+      } finally {
+        process.chdir(cwd);
+      }
+    });
+
+    it.each([
+      ['"', `native${path.delimiter}directory`],
+      ["'", `native${path.delimiter}directory`],
+      ["'", "O'Brien"],
+    ])(
+      'preserves native binaries in PATH entries quoted with %s and named %s',
+      async (quote, directory) => {
+        const nativeBinDir = path.join(npmBinDir, directory);
+        fs.mkdirSync(nativeBinDir);
+        fs.writeFileSync(path.join(nativeBinDir, 'codex.exe'), '');
+
+        const [command] = await getSpawnCall({
+          cli_env: { PATH: `${quote}${nativeBinDir}${quote}${path.delimiter}${npmBinDir}` },
+        });
+
+        expect(command).toBe('codex');
+      },
+    );
+
+    it('ignores relative PATH entries that would discover npm in the cwd', async () => {
+      const cwd = process.cwd();
+      process.chdir(npmBinDir);
+      try {
+        const [command] = await getSpawnCall({ working_dir: cwd, cli_env: { PATH: '.' } });
+
+        expect(command).toBe('codex');
+      } finally {
+        process.chdir(cwd);
+      }
+    });
+  });
+
   it('emits a protocol turn span with nested usage when no turn/started notification arrives', async () => {
     const spans = installSpanRecorder();
     const server = createMockAppServer();
     mocks.spawn.mockReturnValue(server.proc);
 
-    const provider = new OpenAICodexAppServerProvider({
-      config: {
-        thread_cleanup: 'none',
-      },
-    });
+    const provider = new OpenAICodexAppServerProvider(createNoCleanupOptions());
 
     const resultPromise = provider.callApi('Trace this app-server turn');
     const initialize = await waitForMessage(server, (message) => message.method === 'initialize');
@@ -645,9 +1009,7 @@ describe('OpenAICodexAppServerProvider', () => {
 
   it('does not reuse usage from an earlier protocol turn marker', () => {
     const spans = installSpanRecorder();
-    const provider = new OpenAICodexAppServerProvider({
-      config: { thread_cleanup: 'none' },
-    });
+    const provider = new OpenAICodexAppServerProvider(createNoCleanupOptions());
     const state = (provider as any).createTurnState('key', 'instance', 'thread', [], {}, {});
 
     (provider as any).startTurnSpan(state, 1);
@@ -671,9 +1033,7 @@ describe('OpenAICodexAppServerProvider', () => {
 
   it('preserves first-turn usage that arrived before the first turn/started', () => {
     const spans = installSpanRecorder();
-    const provider = new OpenAICodexAppServerProvider({
-      config: { thread_cleanup: 'none' },
-    });
+    const provider = new OpenAICodexAppServerProvider(createNoCleanupOptions());
     const state = (provider as any).createTurnState('key', 'instance', 'thread', [], {}, {});
 
     // Usage can arrive via `thread/tokenUsage/updated` before the first
@@ -700,11 +1060,7 @@ describe('OpenAICodexAppServerProvider', () => {
     const server = createMockAppServer();
     mocks.spawn.mockReturnValue(server.proc);
 
-    const provider = new OpenAICodexAppServerProvider({
-      config: {
-        thread_cleanup: 'none',
-      },
-    });
+    const provider = new OpenAICodexAppServerProvider(createNoCleanupOptions());
 
     const resultPromise = provider.callApi('Trace usage ordering');
     const initialize = await waitForMessage(server, (message) => message.method === 'initialize');
@@ -775,9 +1131,7 @@ describe('OpenAICodexAppServerProvider', () => {
 
   it('marks a force-closed turn span ERROR when a new turn starts before the prior ends', () => {
     const spans = installSpanRecorder();
-    const provider = new OpenAICodexAppServerProvider({
-      config: { thread_cleanup: 'none' },
-    });
+    const provider = new OpenAICodexAppServerProvider(createNoCleanupOptions());
     const state = (provider as any).createTurnState('key', 'instance', 'thread', [], {}, {});
 
     (provider as any).startTurnSpan(state, 1);
@@ -797,11 +1151,7 @@ describe('OpenAICodexAppServerProvider', () => {
     const server = createMockAppServer();
     mocks.spawn.mockReturnValue(server.proc);
 
-    const provider = new OpenAICodexAppServerProvider({
-      config: {
-        thread_cleanup: 'none',
-      },
-    });
+    const provider = new OpenAICodexAppServerProvider(createNoCleanupOptions());
 
     const resultPromise = provider.callApi('Return structured output');
 
@@ -1041,7 +1391,12 @@ describe('OpenAICodexAppServerProvider', () => {
           threadId: 'thr_bedrock_noleak',
           turnId: 'turn_bedrock_noleak',
           tokenUsage: {
-            last: { inputTokens: 2_000, cachedInputTokens: 500, outputTokens: 1_000 },
+            last: {
+              inputTokens: 2_000,
+              cachedInputTokens: 500,
+              cacheWriteInputTokens: 0,
+              outputTokens: 1_000,
+            },
           },
         },
       });
@@ -1365,13 +1720,7 @@ describe('OpenAICodexAppServerProvider', () => {
         },
       },
     };
-    const permissionGrant = {
-      network: { enabled: true },
-      fileSystem: {
-        read: ['/tmp/promptfoo-fixture'],
-        write: null,
-      },
-    };
+    const permissionGrant = createNetworkReadPermissionGrant();
     const elicitationResponse = {
       action: 'accept' as const,
       content: { project: 'promptfoo', severity: 'low' },
@@ -1434,10 +1783,7 @@ describe('OpenAICodexAppServerProvider', () => {
         turnId: 'turn_advanced_policy',
         itemId: 'perm_advanced_policy',
         reason: 'Needs fixture access',
-        permissions: {
-          network: { enabled: true },
-          fileSystem: { read: ['/tmp/promptfoo-fixture'], write: null },
-        },
+        permissions: createNetworkReadPermissionGrant(),
       },
     });
     const permissionsApproval = await waitForMessage(
@@ -2300,13 +2646,7 @@ describe('OpenAICodexAppServerProvider', () => {
     const server = createMockAppServer();
     mocks.spawn.mockReturnValue(server.proc);
 
-    const provider = new OpenAICodexAppServerProvider({
-      config: {
-        persist_threads: true,
-        thread_pool_size: 1,
-        thread_cleanup: 'none',
-      },
-    });
+    const provider = new OpenAICodexAppServerProvider(createSingleThreadPoolOptions());
 
     const firstResultPromise = provider.callApi('First cached prompt');
 
@@ -2389,12 +2729,7 @@ describe('OpenAICodexAppServerProvider', () => {
     const secondServer = createMockAppServer();
     mocks.spawn.mockReturnValueOnce(firstServer.proc).mockReturnValueOnce(secondServer.proc);
 
-    const provider = new OpenAICodexAppServerProvider({
-      config: {
-        persist_threads: true,
-        thread_cleanup: 'none',
-      },
-    });
+    const provider = new OpenAICodexAppServerProvider(createPersistentNoCleanupOptions());
 
     const firstResultPromise = provider.callApi('Reusable cached prompt');
     const firstInitialize = await waitForMessage(
@@ -2482,12 +2817,7 @@ describe('OpenAICodexAppServerProvider', () => {
     const secondServer = createMockAppServer();
     mocks.spawn.mockReturnValueOnce(firstServer.proc).mockReturnValueOnce(secondServer.proc);
 
-    const provider = new OpenAICodexAppServerProvider({
-      config: {
-        persist_threads: true,
-        thread_cleanup: 'none',
-      },
-    });
+    const provider = new OpenAICodexAppServerProvider(createPersistentNoCleanupOptions());
 
     const firstResultPromise = provider.callApi('Pending persistent thread');
     const firstInitialize = await waitForMessage(
@@ -2644,13 +2974,7 @@ describe('OpenAICodexAppServerProvider', () => {
     const server = createMockAppServer();
     mocks.spawn.mockReturnValue(server.proc);
 
-    const provider = new OpenAICodexAppServerProvider({
-      config: {
-        persist_threads: true,
-        thread_pool_size: 1,
-        thread_cleanup: 'none',
-      },
-    });
+    const provider = new OpenAICodexAppServerProvider(createSingleThreadPoolOptions());
 
     const firstResultPromise = provider.callApi('Active cached prompt one');
     const initialize = await waitForMessage(server, (message) => message.method === 'initialize');
@@ -2733,13 +3057,7 @@ describe('OpenAICodexAppServerProvider', () => {
     const server = createMockAppServer();
     mocks.spawn.mockReturnValue(server.proc);
 
-    const provider = new OpenAICodexAppServerProvider({
-      config: {
-        persist_threads: true,
-        thread_pool_size: 1,
-        thread_cleanup: 'none',
-      },
-    });
+    const provider = new OpenAICodexAppServerProvider(createSingleThreadPoolOptions());
 
     const firstResultPromise = provider.callApi('Concurrent cached prompt one');
     const secondResultPromise = provider.callApi('Concurrent cached prompt two');
@@ -2824,12 +3142,7 @@ describe('OpenAICodexAppServerProvider', () => {
     const server = createMockAppServer();
     mocks.spawn.mockReturnValue(server.proc);
 
-    const provider = new OpenAICodexAppServerProvider({
-      config: {
-        persist_threads: true,
-        thread_cleanup: 'none',
-      },
-    });
+    const provider = new OpenAICodexAppServerProvider(createPersistentNoCleanupOptions());
 
     const firstResultPromise = provider.callApi('Shared cached prompt');
     const secondResultPromise = provider.callApi('Shared cached prompt');
@@ -2909,12 +3222,7 @@ describe('OpenAICodexAppServerProvider', () => {
     mocks.spawn.mockReturnValue(server.proc);
     const abortController = new AbortController();
 
-    const provider = new OpenAICodexAppServerProvider({
-      config: {
-        persist_threads: true,
-        thread_cleanup: 'none',
-      },
-    });
+    const provider = new OpenAICodexAppServerProvider(createPersistentNoCleanupOptions());
 
     const firstResultPromise = provider.callApi('Shared aborted thread start', undefined, {
       abortSignal: abortController.signal,
@@ -3336,12 +3644,7 @@ describe('OpenAICodexAppServerProvider', () => {
     const abortController = new AbortController();
     const removeAbortListener = vi.spyOn(abortController.signal, 'removeEventListener');
 
-    const provider = new OpenAICodexAppServerProvider({
-      config: {
-        request_timeout_ms: 1,
-        thread_cleanup: 'none',
-      },
-    });
+    const provider = new OpenAICodexAppServerProvider(createTimeoutOptions(1));
 
     try {
       const resultPromise = provider.callApi('Timeout thread start', undefined, {
@@ -3378,12 +3681,7 @@ describe('OpenAICodexAppServerProvider', () => {
     const secondServer = createMockAppServer();
     mocks.spawn.mockReturnValueOnce(firstServer.proc).mockReturnValueOnce(secondServer.proc);
 
-    const provider = new OpenAICodexAppServerProvider({
-      config: {
-        request_timeout_ms: 1,
-        thread_cleanup: 'none',
-      },
-    });
+    const provider = new OpenAICodexAppServerProvider(createTimeoutOptions(1));
 
     try {
       const timedOutResultPromise = provider.callApi('Timeout before thread start completes');
@@ -3461,12 +3759,7 @@ describe('OpenAICodexAppServerProvider', () => {
     mocks.spawn.mockReturnValue(server.proc);
     const abortController = new AbortController();
 
-    const provider = new OpenAICodexAppServerProvider({
-      config: {
-        request_timeout_ms: 1_000,
-        thread_cleanup: 'none',
-      },
-    });
+    const provider = new OpenAICodexAppServerProvider(createTimeoutOptions(1_000));
 
     const activeResultPromise = provider.callApi('Active turn survives unrelated abort');
     const initialize = await waitForMessage(server, (message) => message.method === 'initialize');
@@ -3697,12 +3990,7 @@ describe('OpenAICodexAppServerProvider', () => {
     mocks.spawn.mockReturnValue(server.proc);
     const abortController = new AbortController();
 
-    const provider = new OpenAICodexAppServerProvider({
-      config: {
-        request_timeout_ms: 1_000,
-        thread_cleanup: 'none',
-      },
-    });
+    const provider = new OpenAICodexAppServerProvider(createTimeoutOptions(1_000));
 
     const abortedResultPromise = provider.callApi(
       'Abort before thread start completes',
@@ -3769,11 +4057,7 @@ describe('OpenAICodexAppServerProvider', () => {
     const secondServer = createMockAppServer();
     mocks.spawn.mockReturnValueOnce(firstServer.proc).mockReturnValueOnce(secondServer.proc);
 
-    const provider = new OpenAICodexAppServerProvider({
-      config: {
-        thread_cleanup: 'none',
-      },
-    });
+    const provider = new OpenAICodexAppServerProvider(createNoCleanupOptions());
 
     try {
       const firstResultPromise = provider.callApi('First attempt', {
@@ -4016,11 +4300,7 @@ describe('OpenAICodexAppServerProvider', () => {
     };
     attachedProvider.self = attachedProvider;
 
-    const provider = new OpenAICodexAppServerProvider({
-      config: {
-        thread_cleanup: 'none',
-      },
-    });
+    const provider = new OpenAICodexAppServerProvider(createNoCleanupOptions());
 
     const resultPromise = provider.callApi('Rendered config', {
       vars: {
@@ -4228,11 +4508,7 @@ describe('OpenAICodexAppServerProvider', () => {
     mocks.spawn.mockReturnValue(server.proc);
     const setTimeoutSpy = vi.spyOn(global, 'setTimeout');
 
-    const provider = new OpenAICodexAppServerProvider({
-      config: {
-        thread_cleanup: 'none',
-      },
-    });
+    const provider = new OpenAICodexAppServerProvider(createNoCleanupOptions());
 
     try {
       const firstResultPromise = provider.callApi('Reusable timeout prompt one', {
@@ -4313,11 +4589,7 @@ describe('OpenAICodexAppServerProvider', () => {
     const server = createMockAppServer();
     mocks.spawn.mockReturnValue(server.proc);
 
-    const provider = new OpenAICodexAppServerProvider({
-      config: {
-        thread_cleanup: 'none',
-      },
-    });
+    const provider = new OpenAICodexAppServerProvider(createNoCleanupOptions());
 
     const resultPromise = provider.callApi('Crash mid-turn');
 
@@ -4348,12 +4620,7 @@ describe('OpenAICodexAppServerProvider', () => {
     const secondServer = createMockAppServer();
     mocks.spawn.mockReturnValueOnce(firstServer.proc).mockReturnValueOnce(secondServer.proc);
 
-    const provider = new OpenAICodexAppServerProvider({
-      config: {
-        deep_tracing: true,
-        thread_cleanup: 'none',
-      },
-    });
+    const provider = new OpenAICodexAppServerProvider(createTracedNoCleanupOptions());
 
     const firstResultPromise = provider.callApi('Deep tracing crash first');
     const secondResultPromise = provider.callApi('Deep tracing crash second');
@@ -4428,11 +4695,7 @@ describe('OpenAICodexAppServerProvider', () => {
     const server = createMockAppServer();
     mocks.spawn.mockReturnValue(server.proc);
 
-    const provider = new OpenAICodexAppServerProvider({
-      config: {
-        thread_cleanup: 'none',
-      },
-    });
+    const provider = new OpenAICodexAppServerProvider(createNoCleanupOptions());
 
     const resultPromise = provider.callApi('Recover after retryable app-server error');
     const initialize = await waitForMessage(server, (message) => message.method === 'initialize');
@@ -4474,6 +4737,185 @@ describe('OpenAICodexAppServerProvider', () => {
     });
 
     await expect(resultPromise).resolves.toMatchObject({ output: 'Recovered' });
+  });
+
+  it.each(['opening brace', 'property name', 'property value'])(
+    'parses multiline JSON-RPC split after the %s',
+    async (splitAfter) => {
+      const server = createMockAppServer();
+      mocks.spawn.mockReturnValue(server.proc);
+      const provider = new OpenAICodexAppServerProvider({ config: { thread_cleanup: 'none' } });
+      const sendMultiline = (message: unknown) => {
+        for (const line of JSON.stringify(message, null, 2).split('\n')) {
+          server.stdout.write(`${line}\n`);
+        }
+      };
+
+      const resultPromise = provider.callApi('Read multiline protocol messages');
+      const initialize = await waitForMessage(server, (message) => message.method === 'initialize');
+      const initialResponse = JSON.stringify({ id: initialize.id, result: {} });
+      const splitIndex =
+        splitAfter === 'property name'
+          ? initialResponse.indexOf(':')
+          : splitAfter === 'property value'
+            ? initialResponse.indexOf(',')
+            : 1;
+      // A malformed complete line must not poison the next valid response.
+      server.stdout.write('{"id": }\n');
+      server.stdout.write(
+        `${initialResponse.slice(0, splitIndex)}\n${initialResponse.slice(splitIndex)}\n`,
+      );
+      const threadStart = await waitForMessage(
+        server,
+        (message) => message.method === 'thread/start',
+      );
+      sendMultiline({ id: threadStart.id, result: { thread: { id: 'thr_pretty' } } });
+      const turnStart = await waitForMessage(server, (message) => message.method === 'turn/start');
+      sendMultiline({
+        id: turnStart.id,
+        result: { turn: { id: 'turn_pretty', status: 'inProgress' } },
+      });
+      server.stdout.write('\n');
+      sendMultiline({
+        method: 'item/agentMessage/delta',
+        params: {
+          threadId: 'thr_pretty',
+          turnId: 'turn_pretty',
+          itemId: 'msg_pretty',
+          delta: 'line one\nline two',
+        },
+      });
+      server.send({
+        method: 'turn/completed',
+        params: {
+          threadId: 'thr_pretty',
+          turn: { id: 'turn_pretty', status: 'completed', items: [], error: null },
+        },
+      });
+
+      await expect(resultPromise).resolves.toMatchObject({ output: 'line one\nline two' });
+    },
+  );
+
+  it.each(
+    [
+      { label: 'complete malformed line', malformed: '{"id": }\n' },
+      { label: 'complete malformed multiline object', malformed: '{\n  "id": 1,\n}\n' },
+      { label: 'unfinished object', malformed: '{"id": 1\n' },
+      { label: 'unfinished string', malformed: '{"result":"unfinished\n' },
+    ].flatMap((input) =>
+      ['compact', 'multiline', 'indented-multiline', 'raw-newline'].map((format) => ({
+        ...input,
+        format,
+      })),
+    ),
+  )('recovers from $label before a $format response', async ({ malformed, format }) => {
+    const server = createMockAppServer();
+    mocks.spawn.mockReturnValue(server.proc);
+    const provider = new OpenAICodexAppServerProvider({ config: { thread_cleanup: 'none' } });
+    const resultPromise = provider.callApi('Recover after malformed multiline protocol output');
+    const initialize = await waitForMessageWithoutTimers(
+      server,
+      (message) => message.method === 'initialize',
+    );
+    server.stdout.write(malformed);
+    const response = { id: initialize.id, result: { message: 'line one\nline two' } };
+    const serialized = JSON.stringify(response, null, format.endsWith('multiline') ? 2 : undefined);
+    if (format === 'indented-multiline') {
+      server.stdout.write('  ');
+    }
+    server.stdout.write(
+      `${format === 'raw-newline' ? serialized.replace(JSON.stringify(response.result.message), '"line one\nline two"') : serialized}\n`,
+    );
+    const threadStart = await waitForMessageWithoutTimers(
+      server,
+      (message) => message.method === 'thread/start',
+    );
+    server.send({ id: threadStart.id, result: { thread: { id: 'thr_recovered' } } });
+    const turnStart = await waitForMessageWithoutTimers(
+      server,
+      (message) => message.method === 'turn/start',
+    );
+    server.send({
+      id: turnStart.id,
+      result: { turn: { id: 'turn_recovered', status: 'inProgress' } },
+    });
+    server.send({
+      method: 'item/agentMessage/delta',
+      params: {
+        threadId: 'thr_recovered',
+        turnId: 'turn_recovered',
+        itemId: 'msg_recovered',
+        delta: 'Recovered',
+      },
+    });
+    server.send({
+      method: 'turn/completed',
+      params: {
+        threadId: 'thr_recovered',
+        turn: { id: 'turn_recovered', status: 'completed', items: [], error: null },
+      },
+    });
+
+    await expect(resultPromise).resolves.toMatchObject({ output: 'Recovered' });
+  });
+
+  it('preserves structural whitespace when repairing raw newlines in JSON-RPC strings', async () => {
+    vi.useFakeTimers();
+    const server = createMockAppServer();
+    mocks.spawn.mockReturnValue(server.proc);
+    const provider = new OpenAICodexAppServerProvider({
+      config: { thread_cleanup: 'none', turn_timeout_ms: 1_000 },
+    });
+    const resultPromise = provider.callApi('Read combined multiline protocol output');
+    const initialize = await waitForMessageWithoutTimers(
+      server,
+      (message) => message.method === 'initialize',
+    );
+    server.send({ id: initialize.id, result: {} });
+    const threadStart = await waitForMessageWithoutTimers(
+      server,
+      (message) => message.method === 'thread/start',
+    );
+    server.send({ id: threadStart.id, result: { thread: { id: 'thr_combined' } } });
+    const turnStart = await waitForMessageWithoutTimers(
+      server,
+      (message) => message.method === 'turn/start',
+    );
+    server.send({
+      id: turnStart.id,
+      result: { turn: { id: 'turn_combined', status: 'inProgress' } },
+    });
+    const delta = [
+      'quote "one" and path C:\\folder\\',
+      '',
+      'next \\"quoted\\" and literal \\n',
+      'last',
+    ].join('\n');
+    const params = {
+      threadId: 'thr_combined',
+      turnId: 'turn_combined',
+      itemId: 'msg_combined',
+      delta,
+    };
+    const notification = JSON.stringify({ method: 'item/agentMessage/delta', params }, null, 2);
+    const rawString = `"${delta
+      .split('\n')
+      .map((line) => JSON.stringify(line).slice(1, -1))
+      .join('\n')}"`;
+    server.stdout.write('{"id": }\n');
+    server.stdout.write(`${notification.replace(JSON.stringify(delta), rawString)}\n`);
+    server.send({ method: 'item/agentMessage/delta', params: { ...params, delta: ' tail' } });
+    server.send({
+      method: 'turn/completed',
+      params: {
+        threadId: 'thr_combined',
+        turn: { id: 'turn_combined', status: 'completed', items: [], error: null },
+      },
+    });
+    await vi.advanceTimersByTimeAsync(1_000);
+
+    await expect(resultPromise).resolves.toMatchObject({ output: `${delta} tail` });
   });
 
   it('parses JSON-RPC notifications whose string payloads contain literal newlines', async () => {
@@ -4575,11 +5017,7 @@ describe('OpenAICodexAppServerProvider', () => {
     const server = createMockAppServer();
     mocks.spawn.mockReturnValue(server.proc);
 
-    const provider = new OpenAICodexAppServerProvider({
-      config: {
-        thread_cleanup: 'none',
-      },
-    });
+    const provider = new OpenAICodexAppServerProvider(createNoCleanupOptions());
 
     const resultPromise = provider.callApi('Run a command with delayed output');
 
@@ -4672,11 +5110,7 @@ describe('OpenAICodexAppServerProvider', () => {
     const server = createMockAppServer();
     mocks.spawn.mockReturnValue(server.proc);
 
-    const provider = new OpenAICodexAppServerProvider({
-      config: {
-        thread_cleanup: 'none',
-      },
-    });
+    const provider = new OpenAICodexAppServerProvider(createNoCleanupOptions());
 
     const resultPromise = provider.callApi('Run a command with late trailing output');
 
@@ -4760,11 +5194,7 @@ describe('OpenAICodexAppServerProvider', () => {
     const server = createMockAppServer();
     mocks.spawn.mockReturnValue(server.proc);
 
-    const provider = new OpenAICodexAppServerProvider({
-      config: {
-        thread_cleanup: 'none',
-      },
-    });
+    const provider = new OpenAICodexAppServerProvider(createNoCleanupOptions());
 
     const resultPromise = provider.callApi('Run a command with interleaved output');
 
@@ -4942,13 +5372,14 @@ describe('OpenAICodexAppServerProvider', () => {
           last: {
             inputTokens: 100,
             cachedInputTokens: 25,
+            cacheWriteInputTokens: 10,
             outputTokens: 50,
             reasoningOutputTokens: 12,
-            cacheWriteInputTokens: 10,
           },
           total: {
             inputTokens: 200,
             cachedInputTokens: 25,
+            cacheWriteInputTokens: 10,
             outputTokens: 75,
             reasoningOutputTokens: 12,
           },
@@ -4983,7 +5414,7 @@ describe('OpenAICodexAppServerProvider', () => {
       expect.arrayContaining([
         expect.objectContaining({
           type: 'command_execution',
-          aggregated_output: 'PROMPTFOO_SYNTHETIC_SECRET=synthetic-value',
+          aggregated_output: 'PROMPTFOO_SYNTHETIC_SECRET=%5BREDACTED%5D',
           exit_code: 0,
         }),
         expect.objectContaining({
@@ -5011,7 +5442,10 @@ describe('OpenAICodexAppServerProvider', () => {
       output_tokens: 50,
       reasoning_output_tokens: 12,
     });
-    expect(result.tokenUsage?.completionDetails?.cacheCreationInputTokens).toBe(10);
+    expect(result.tokenUsage?.completionDetails).toEqual({
+      reasoning: 12,
+      cacheCreationInputTokens: 10,
+    });
     expect(result.cost).toBeCloseTo(0.0033, 10);
   });
 
@@ -5019,11 +5453,7 @@ describe('OpenAICodexAppServerProvider', () => {
     const server = createMockAppServer();
     mocks.spawn.mockReturnValue(server.proc);
 
-    const provider = new OpenAICodexAppServerProvider({
-      config: {
-        thread_cleanup: 'none',
-      },
-    });
+    const provider = new OpenAICodexAppServerProvider(createNoCleanupOptions());
 
     const resultPromise = provider.callApi('Run a command with noisy output');
 
@@ -5138,11 +5568,7 @@ describe('OpenAICodexAppServerProvider', () => {
     const server = createMockAppServer();
     mocks.spawn.mockReturnValue(server.proc);
 
-    const provider = new OpenAICodexAppServerProvider({
-      config: {
-        thread_cleanup: 'none',
-      },
-    });
+    const provider = new OpenAICodexAppServerProvider(createNoCleanupOptions());
 
     const resultPromise = provider.callApi('Inspect command output');
 
@@ -5301,11 +5727,7 @@ describe('OpenAICodexAppServerProvider', () => {
     const server = createMockAppServer();
     mocks.spawn.mockReturnValue(server.proc);
 
-    const provider = new OpenAICodexAppServerProvider({
-      config: {
-        thread_cleanup: 'none',
-      },
-    });
+    const provider = new OpenAICodexAppServerProvider(createNoCleanupOptions());
 
     const resultPromise = provider.callApi('Use a repo skill');
 
@@ -5377,11 +5799,7 @@ describe('OpenAICodexAppServerProvider', () => {
     const server = createMockAppServer();
     mocks.spawn.mockReturnValue(server.proc);
 
-    const provider = new OpenAICodexAppServerProvider({
-      config: {
-        thread_cleanup: 'none',
-      },
-    });
+    const provider = new OpenAICodexAppServerProvider(createNoCleanupOptions());
 
     const resultPromise = provider.callApi('Try a repo skill');
 
@@ -5446,12 +5864,7 @@ describe('OpenAICodexAppServerProvider', () => {
     const server = createMockAppServer();
     mocks.spawn.mockReturnValue(server.proc);
 
-    const provider = new OpenAICodexAppServerProvider({
-      config: {
-        deep_tracing: true,
-        thread_cleanup: 'none',
-      },
-    });
+    const provider = new OpenAICodexAppServerProvider(createTracedNoCleanupOptions());
 
     const resultPromise = provider.callApi('Flush native spans');
     const initialize = await waitForMessage(server, (message) => message.method === 'initialize');
@@ -5503,9 +5916,7 @@ describe('OpenAICodexAppServerProvider', () => {
     mocks.spawn.mockReturnValue(server.proc);
     const warn = vi.spyOn(logger, 'warn').mockImplementation(() => logger);
 
-    const provider = new OpenAICodexAppServerProvider({
-      config: { deep_tracing: true, thread_cleanup: 'none' },
-    });
+    const provider = new OpenAICodexAppServerProvider(createTracedNoCleanupOptions());
     const resultPromise = provider.callApi('Inspect managed tracing');
     const initialize = await waitForMessage(server, (message) => message.method === 'initialize');
     server.send({ id: initialize.id, result: {} });
@@ -5553,9 +5964,7 @@ describe('OpenAICodexAppServerProvider', () => {
     });
     mocks.spawn.mockReturnValue(server.proc);
 
-    const provider = new OpenAICodexAppServerProvider({
-      config: { deep_tracing: true, thread_cleanup: 'none' },
-    });
+    const provider = new OpenAICodexAppServerProvider(createTracedNoCleanupOptions());
     const resultPromise = provider.callApi('Use legacy app-server');
     const initialize = await waitForMessage(server, (message) => message.method === 'initialize');
     server.send({ id: initialize.id, result: {} });
@@ -5596,9 +6005,7 @@ describe('OpenAICodexAppServerProvider', () => {
     mocks.spawn.mockReturnValue(server.proc);
     const warn = vi.spyOn(logger, 'warn').mockImplementation(() => logger);
 
-    const provider = new OpenAICodexAppServerProvider({
-      config: { deep_tracing: true, thread_cleanup: 'none' },
-    });
+    const provider = new OpenAICodexAppServerProvider(createTracedNoCleanupOptions());
     const resultPromise = provider.callApi('Inspect disabled managed tracing');
     const initialize = await waitForMessage(server, (message) => message.method === 'initialize');
     server.send({ id: initialize.id, result: {} });
@@ -5643,9 +6050,7 @@ describe('OpenAICodexAppServerProvider', () => {
     });
     mocks.spawn.mockReturnValue(server.proc);
 
-    const provider = new OpenAICodexAppServerProvider({
-      config: { deep_tracing: true, thread_cleanup: 'none' },
-    });
+    const provider = new OpenAICodexAppServerProvider(createTracedNoCleanupOptions());
     const resultPromise = provider.callApi('Wait for delayed exporter flush');
     const initialize = await waitForMessageWithoutTimers(
       server,
@@ -5697,12 +6102,7 @@ describe('OpenAICodexAppServerProvider', () => {
     });
     mocks.spawn.mockReturnValue(server.proc);
 
-    const provider = new OpenAICodexAppServerProvider({
-      config: {
-        deep_tracing: true,
-        thread_cleanup: 'none',
-      },
-    });
+    const provider = new OpenAICodexAppServerProvider(createTracedNoCleanupOptions());
 
     const resultPromise = provider.callApi('Escalate stalled shutdown');
     const initialize = await waitForMessageWithoutTimers(
@@ -5745,15 +6145,204 @@ describe('OpenAICodexAppServerProvider', () => {
     expect(server.proc.kill).toHaveBeenCalledWith('SIGKILL');
   });
 
+  it.each(['cleanup', 'shutdown', 'shutdownAll'] as const)(
+    'registers reused resources after %s',
+    async (method) => {
+      const provider = new OpenAICodexAppServerProvider({
+        config: { thread_cleanup: 'none' },
+      });
+      expect(providerRegistry.has(provider)).toBe(true);
+      await provider.cleanup();
+      await provider.cleanup();
+      expect(providerRegistry.has(provider)).toBe(false);
+
+      for (const prompt of ['First reuse', 'Second reuse']) {
+        const server = createMockAppServer({ autoCompleteThread: 'thr_reuse' });
+        mocks.spawn.mockReturnValue(server.proc);
+        expect((await provider.callApi(prompt)).error).toBeUndefined();
+        expect(providerRegistry.has(provider)).toBe(true);
+        if (method === 'shutdownAll') {
+          await providerRegistry.shutdownAll();
+        } else {
+          await provider[method]();
+        }
+        expect(providerRegistry.has(provider)).toBe(false);
+        expect(server.proc.kill).toHaveBeenCalledWith('SIGTERM');
+      }
+    },
+  );
+
+  it.each(
+    [
+      { name: 'Codex app-server', Provider: OpenAICodexAppServerProvider },
+      { name: 'OpenInterpreter', Provider: OpenInterpreterProvider },
+    ].flatMap((provider) =>
+      (['cleanup', 'shutdown', 'shutdownAll'] as const).map((method) => ({ ...provider, method })),
+    ),
+  )(
+    'keeps fresh $name resources registered while an older $method finishes',
+    async ({ Provider, method }) => {
+      vi.useFakeTimers();
+      const originalServer = createMockAppServer({ autoCompleteThread: 'thr_cleanup_overlap' });
+      const replacementServer = createMockAppServer({ autoCompleteThread: 'thr_cleanup_overlap' });
+      originalServer.proc.stdin.end = vi.fn(() => originalServer.proc.stdin);
+      originalServer.proc.kill = vi.fn(() => {
+        originalServer.proc.killed = true;
+        return true;
+      });
+      mocks.spawn
+        .mockReturnValueOnce(originalServer.proc)
+        .mockReturnValueOnce(replacementServer.proc);
+      const provider = new Provider({
+        config: {
+          working_dir: process.cwd(),
+          skip_git_repo_check: true,
+          thread_id: 'thr_cleanup_overlap',
+          thread_cleanup: 'none',
+          reuse_server: true,
+        },
+      });
+      const delegate =
+        provider instanceof OpenInterpreterProvider ? (provider as any).delegate : provider;
+
+      try {
+        expect((await provider.callApi('Original call')).error).toBeUndefined();
+        const cleanup =
+          method === 'shutdownAll' ? providerRegistry.shutdownAll() : provider[method]();
+        expect(originalServer.proc.exitCode).toBeNull();
+        expect(providerRegistry.has(provider)).toBe(false);
+
+        expect((await provider.callApi('Fresh call during cleanup')).error).toBeUndefined();
+        expect(mocks.spawn).toHaveBeenCalledTimes(2);
+        const interpreterHome =
+          delegate === provider
+            ? undefined
+            : mocks.spawn.mock.calls.at(-1)?.[2].env.INTERPRETER_HOME;
+        originalServer.proc.exitCode = 0;
+        originalServer.proc.emit('exit', 0, 'SIGTERM');
+        await cleanup;
+
+        expect.soft(providerRegistry.has(provider)).toBe(true);
+        expect(replacementServer.proc.exitCode).toBeNull();
+        if (interpreterHome) {
+          expect(fs.existsSync(interpreterHome)).toBe(true);
+          expect(providerRegistry.has(delegate)).toBe(false);
+        }
+
+        await providerRegistry.shutdownAll();
+        expect(replacementServer.proc.exitCode).toBe(0);
+        expect(delegate.connections.size).toBe(0);
+        expect(providerRegistry.has(provider)).toBe(false);
+        if (interpreterHome) {
+          expect(fs.existsSync(interpreterHome)).toBe(false);
+          expect(providerRegistry.has(delegate)).toBe(false);
+        }
+      } finally {
+        originalServer.proc.exitCode = 0;
+        originalServer.proc.emit('exit', 0, 'SIGTERM');
+        await provider.shutdown();
+      }
+    },
+  );
+
+  it.each([
+    { name: 'Codex app-server', Provider: OpenAICodexAppServerProvider, queued: true },
+    { name: 'Codex app-server', Provider: OpenAICodexAppServerProvider, queued: false },
+    { name: 'OpenInterpreter', Provider: OpenInterpreterProvider, queued: true },
+    { name: 'OpenInterpreter', Provider: OpenInterpreterProvider, queued: false },
+  ])(
+    'interrupts an accepted $name turn during cleanup without reopening its process (queued=$queued)',
+    async ({ Provider, queued }) => {
+      vi.useFakeTimers();
+      const originalServer = createMockAppServer();
+      const replacementServer = createMockAppServer({ autoCompleteThread: 'thr_cleanup_queue' });
+      originalServer.proc.stdin.end = vi.fn(() => originalServer.proc.stdin);
+      originalServer.proc.kill = vi.fn(() => {
+        originalServer.proc.killed = true;
+        return true;
+      });
+      mocks.spawn
+        .mockReturnValueOnce(originalServer.proc)
+        .mockReturnValueOnce(replacementServer.proc);
+      const provider = new Provider({
+        config: {
+          working_dir: process.cwd(),
+          skip_git_repo_check: true,
+          thread_id: 'thr_cleanup_queue',
+          thread_cleanup: 'none',
+          reuse_server: true,
+        },
+      });
+      const delegate =
+        provider instanceof OpenInterpreterProvider ? (provider as any).delegate : provider;
+
+      try {
+        const firstResultPromise = provider.callApi('Active turn');
+        const initialize = await waitForMessageWithoutTimers(
+          originalServer,
+          (message) => message.method === 'initialize',
+        );
+        originalServer.send({ id: initialize.id, result: {} });
+        const resume = await waitForMessageWithoutTimers(
+          originalServer,
+          (message) => message.method === 'thread/resume',
+        );
+        originalServer.send({ id: resume.id, result: { thread: { id: 'thr_cleanup_queue' } } });
+        const firstTurn = await waitForMessageWithoutTimers(
+          originalServer,
+          (message) => message.method === 'turn/start',
+        );
+        originalServer.send({
+          id: firstTurn.id,
+          result: { turn: { id: 'turn_cleanup_queue_1', status: 'inProgress' } },
+        });
+        const firstQueue = delegate.threadRunQueues.get('thread_id:thr_cleanup_queue');
+        const secondResultPromise = provider.callApi('Already queued turn');
+        if (queued) {
+          await flushMicrotasks();
+          expect(delegate.threadRunQueues.get('thread_id:thr_cleanup_queue')).not.toBe(firstQueue);
+        } else {
+          expect(delegate.threadRunQueues.get('thread_id:thr_cleanup_queue')).toBe(firstQueue);
+        }
+        expect(mocks.spawn).toHaveBeenCalledTimes(1);
+
+        const cleanupPromise = provider.cleanup();
+        expect((await firstResultPromise).error).toContain('cleanup interrupted active turn');
+        expect((await secondResultPromise).error).toContain('cleanup interrupted queued turn');
+        expect(mocks.spawn).toHaveBeenCalledTimes(1);
+        expect(originalServer.proc.exitCode).toBeNull();
+        originalServer.proc.exitCode = 0;
+        originalServer.proc.emit('exit', 0, 'SIGTERM');
+        await cleanupPromise;
+
+        expect(providerRegistry.has(provider)).toBe(false);
+        expect(delegate.connections.size).toBe(0);
+        if (delegate !== provider) {
+          expect(providerRegistry.has(delegate)).toBe(false);
+        }
+
+        expect((await provider.callApi('Fresh turn after cleanup')).error).toBeUndefined();
+        expect(mocks.spawn).toHaveBeenCalledTimes(2);
+        expect(providerRegistry.has(provider)).toBe(true);
+        if (delegate !== provider) {
+          expect(providerRegistry.has(delegate)).toBe(false);
+        }
+        await provider.cleanup();
+        expect(providerRegistry.has(provider)).toBe(false);
+        expect(replacementServer.proc.exitCode).toBe(0);
+      } finally {
+        originalServer.proc.exitCode = 0;
+        originalServer.proc.emit('exit', 0, 'SIGTERM');
+        await provider.shutdown();
+      }
+    },
+  );
+
   it('kills the app-server process during cleanup', async () => {
     const server = createMockAppServer();
     mocks.spawn.mockReturnValue(server.proc);
 
-    const provider = new OpenAICodexAppServerProvider({
-      config: {
-        thread_cleanup: 'none',
-      },
-    });
+    const provider = new OpenAICodexAppServerProvider(createNoCleanupOptions());
 
     const resultPromise = provider.callApi('Hello');
     const initialize = await waitForMessage(server, (message) => message.method === 'initialize');
@@ -5808,11 +6397,7 @@ describe('OpenAICodexAppServerProvider', () => {
     const server = createMockAppServer();
     mocks.spawn.mockReturnValue(server.proc);
 
-    const provider = new OpenAICodexAppServerProvider({
-      config: {
-        thread_cleanup: 'none',
-      },
-    });
+    const provider = new OpenAICodexAppServerProvider(createNoCleanupOptions());
 
     const resultPromise = provider.callApi('Hello');
     const initialize = await waitForMessage(server, (message) => message.method === 'initialize');
@@ -5840,9 +6425,7 @@ describe('OpenAICodexAppServerProvider', () => {
     const server = createMockAppServer();
     mocks.spawn.mockReturnValue(server.proc);
 
-    const provider = new OpenAICodexAppServerProvider({
-      config: { thread_cleanup: 'none' },
-    });
+    const provider = new OpenAICodexAppServerProvider(createNoCleanupOptions());
 
     const resultPromise = provider.callApi('Hello');
     const initialize = await waitForMessage(server, (message) => message.method === 'initialize');
@@ -5873,9 +6456,7 @@ describe('OpenAICodexAppServerProvider', () => {
     const server = createMockAppServer();
     mocks.spawn.mockReturnValue(server.proc);
 
-    const provider = new OpenAICodexAppServerProvider({
-      config: { thread_cleanup: 'none' },
-    });
+    const provider = new OpenAICodexAppServerProvider(createNoCleanupOptions());
 
     const resultPromise = provider.callApi('Hello');
     const initialize = await waitForMessage(server, (message) => message.method === 'initialize');
@@ -5894,9 +6475,7 @@ describe('OpenAICodexAppServerProvider', () => {
   });
 
   it('returns early when abort signal is already aborted before callApi starts', async () => {
-    const provider = new OpenAICodexAppServerProvider({
-      config: { thread_cleanup: 'none' },
-    });
+    const provider = new OpenAICodexAppServerProvider(createNoCleanupOptions());
 
     const controller = new AbortController();
     controller.abort();
@@ -6087,9 +6666,7 @@ describe('OpenAICodexAppServerProvider', () => {
     const server = createMockAppServer();
     mocks.spawn.mockReturnValue(server.proc);
 
-    const provider = new OpenAICodexAppServerProvider({
-      config: { thread_cleanup: 'none' },
-    });
+    const provider = new OpenAICodexAppServerProvider(createNoCleanupOptions());
 
     const resultPromise = provider.callApi('Hello');
     const initialize = await waitForMessage(server, (message) => message.method === 'initialize');
@@ -6264,47 +6841,63 @@ describe('OpenAICodexAppServerProvider', () => {
     await resultPromise;
   });
 
-  it('propagates base_url to spawn environment', async () => {
-    const server = createMockAppServer();
-    mocks.spawn.mockReturnValue(server.proc);
+  it.each(['thread/start', 'thread/resume'])(
+    'routes base_url through the native config key for %s',
+    async (threadMethod) => {
+      const server = createMockAppServer();
+      mocks.spawn.mockReturnValue(server.proc);
 
-    const provider = new OpenAICodexAppServerProvider({
-      config: {
-        apiKey: 'test-key',
-        base_url: 'https://custom.example.com/v1',
-        thread_cleanup: 'none',
-      },
-    });
+      const provider = new OpenAICodexAppServerProvider({
+        config: {
+          apiKey: 'test-key',
+          base_url: 'https://custom.example.com/v1',
+          cli_config: {
+            openai_base_url: 'https://raw.example.com/v1',
+            model_provider: 'openai',
+            model_reasoning_effort: 'low',
+          },
+          model_provider: 'tenant',
+          ...(threadMethod === 'thread/resume' ? { thread_id: 'thr_base' } : {}),
+          thread_cleanup: 'none',
+        },
+      });
 
-    const resultPromise = provider.callApi('Hello');
-    const initialize = await waitForMessage(server, (message) => message.method === 'initialize');
-    server.send({ id: initialize.id, result: {} });
+      const resultPromise = provider.callApi('Hello');
+      const initialize = await waitForMessage(server, (message) => message.method === 'initialize');
+      server.send({ id: initialize.id, result: {} });
 
-    const spawnEnv = mocks.spawn.mock.calls[0][2].env;
-    expect(spawnEnv.OPENAI_BASE_URL).toBe('https://custom.example.com/v1');
-    expect(spawnEnv.OPENAI_API_BASE_URL).toBe('https://custom.example.com/v1');
+      const spawnEnv = mocks.spawn.mock.calls[0][2].env;
+      expect(spawnEnv.OPENAI_BASE_URL).toBe('https://custom.example.com/v1');
+      expect(spawnEnv.OPENAI_API_BASE_URL).toBe('https://custom.example.com/v1');
 
-    const loginStart = await waitForMessage(
-      server,
-      (message) => message.method === 'account/login/start',
-    );
-    expect(loginStart.params).toEqual({ type: 'apiKey', apiKey: 'test-key' });
-    server.send({ id: loginStart.id, result: { type: 'apiKey' } });
+      const loginStart = await waitForMessage(
+        server,
+        (message) => message.method === 'account/login/start',
+      );
+      expect(loginStart.params).toEqual({ type: 'apiKey', apiKey: 'test-key' });
+      server.send({ id: loginStart.id, result: { type: 'apiKey' } });
 
-    const threadStart = await waitForMessage(
-      server,
-      (message) => message.method === 'thread/start',
-    );
-    server.send({ id: threadStart.id, result: { thread: { id: 'thr_base' } } });
-    const turnStart = await waitForMessage(server, (message) => message.method === 'turn/start');
-    server.send({
-      id: turnStart.id,
-      result: { turn: { id: 'turn_base', status: 'inProgress' } },
-    });
-    server.send({
-      method: 'turn/completed',
-      params: { threadId: 'thr_base', turnId: 'turn_base', turn: { id: 'turn_base' } },
-    });
-    await resultPromise;
-  });
+      const threadStart = await waitForMessage(
+        server,
+        (message) => message.method === threadMethod,
+      );
+      expect(threadStart.params.modelProvider).toBe('tenant');
+      expect(threadStart.params.config).toEqual({
+        openai_base_url: 'https://custom.example.com/v1',
+        model_provider: 'openai',
+        model_reasoning_effort: 'low',
+      });
+      server.send({ id: threadStart.id, result: { thread: { id: 'thr_base' } } });
+      const turnStart = await waitForMessage(server, (message) => message.method === 'turn/start');
+      server.send({
+        id: turnStart.id,
+        result: { turn: { id: 'turn_base', status: 'inProgress' } },
+      });
+      server.send({
+        method: 'turn/completed',
+        params: { threadId: 'thr_base', turnId: 'turn_base', turn: { id: 'turn_base' } },
+      });
+      await resultPromise;
+    },
+  );
 });

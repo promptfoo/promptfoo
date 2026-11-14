@@ -221,7 +221,7 @@ targets:
 However, the techniques demonstrated can be applied to any multi-modal model that supports image inputs. You can easily swap out the target model in the configuration files to use models from:
 
 - **OpenAI**: `openai:gpt-4.1-mini` and newer versions that support vision
-- **Anthropic**: Claude 3 models with vision capabilities
+- **Anthropic**: Claude Sonnet 5 and Opus 5 with vision capabilities
 - **Google**: Gemini models
 - **Other providers**: Any model that can process both text and image inputs
 

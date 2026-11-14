@@ -1,39 +1,23 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-
-# Learn more about building a configuration: https://promptfoo.dev/docs/configuration/guide
-
-description: 'Basic query demonstration'
+description: Compare Gemini 3.8 Live models
 
 prompts:
-  - Why is {{concept}}?
+  - 'Answer briefly: {{question}}'
 
 providers:
-  # Using Gemini 3.1 Flash Live Preview
-  - id: 'google:live:gemini-3.1-flash-live-preview'
-    config:
-      generationConfig:
-        response_modalities: ['audio']
-        outputAudioTranscription: {}
-      timeoutMs: 10000
+  - google:live:gemini-3.8-live
+  - google:live:gemini-3.8-live-extended-thinking
 
 defaultTest:
   assert:
     - type: icontains
-      value: salt
-      transform: output.text
-    - type: icontains-any
-      value:
-        - weathering
-        - erosion
-        - erodes
-        - eroded
-        - runoff
-        - rocks
-        - minerals
-        - rivers
-        - rain
+      value: '{{answer}}'
       transform: output.text
 
 tests:
   - vars:
-      concept: the sea salty
+      question: What is the capital of France?
+      answer: Paris
+  - vars:
+      question: Which planet is known as the Red Planet?
+      answer: Mars
