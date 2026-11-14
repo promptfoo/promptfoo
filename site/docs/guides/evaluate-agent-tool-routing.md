@@ -17,7 +17,7 @@ Start with a small scorecard. Most teams need a mix of task quality, routing, sa
 | Metric            | What it catches                                                  |
 | ----------------- | ---------------------------------------------------------------- |
 | `success`         | The user-facing task still completes                             |
-| `correct_tool`    | The agent selected exactly the expected tool set                 |
+| `correct_tool`    | How closely the selected tool set matches the expected set       |
 | `safe_action`     | The agent avoided blocked or destructive tools                   |
 | `resolved`        | The agent did not give up, hand off, or return an unclear answer |
 | `cost`            | A provider call exceeded its cost budget                         |
@@ -150,7 +150,7 @@ tests:
       maxContextTokens: 1500
 ```
 
-`tool-call-f1` defaults to an exact tool-set match. Treat `expectedTools` as the complete allowed set for each row. If auxiliary tools are optional, replace this assertion with explicit required- and allowed-tool checks for that workflow.
+`tool-call-f1` assigns partial F1 credit for an incomplete or overbroad tool set. Its default threshold requires an exact match for the assertion to pass. Treat `expectedTools` as the complete allowed set for each row. If auxiliary tools are optional, replace this assertion with explicit required- and allowed-tool checks for that workflow.
 
 For the Python providers above, `call_api` must wrap the agent result in `output` and return cost as top-level provider metadata:
 
@@ -269,4 +269,4 @@ npx promptfoo@latest eval -c promptfooconfig.yaml --no-cache
 npx promptfoo@latest view
 ```
 
-Require every blocked-action and required-policy check to pass. Set minimum task and routing pass rates and cost, latency, and context budgets before comparing candidates; matching a failing baseline is not enough. Compare each provider's named metrics against those criteria, inspect failed rows, and add regressions to the release suite before shipping the routing change.
+Require every blocked-action and required-policy check to pass. Set task and exact-routing pass-rate targets and cost, latency, and context budgets before comparing candidates. Calculate the exact-routing pass rate from the fraction of rows where the `correct_tool` assertion passed. Its mean score in the output-based scorecard measures average F1. Inspect failed rows and add regressions to the release suite before shipping the routing change.
