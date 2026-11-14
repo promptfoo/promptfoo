@@ -1072,7 +1072,8 @@ export const providerMap: ProviderFactory[] = [
     },
   },
   {
-    test: (providerPath: string) => providerPath.startsWith('minimax:video:'),
+    test: (providerPath: string) =>
+      providerPath === 'minimax:video' || providerPath.startsWith('minimax:video:'),
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,

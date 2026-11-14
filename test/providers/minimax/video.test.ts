@@ -132,6 +132,25 @@ describe('MiniMax H3 video provider', () => {
     });
   });
 
+  it('uses the scoped video endpoint ahead of the process environment', async () => {
+    vi.stubEnv('MINIMAX_VIDEO_API_BASE_URL', 'https://global.example/v2/video_generation');
+    mockSuccessfulRequest();
+    const provider = new MiniMaxVideoProvider('MiniMax-H3', {
+      env: { MINIMAX_VIDEO_API_BASE_URL: 'https://regional.example/v2/video_generation' },
+    });
+
+    expect((await provider.callApi('regional clip')).error).toBeUndefined();
+    expect(
+      vi
+        .mocked(fetch.fetchWithProxy)
+        .mock.calls.slice(0, 2)
+        .map(([url]) => url),
+    ).toEqual([
+      'https://regional.example/v2/video_generation',
+      'https://regional.example/v2/query/video_generation/task-1',
+    ]);
+  });
+
   it('serializes URL media as objects and defaults to adaptive framing', async () => {
     mockSuccessfulRequest();
     const provider = new MiniMaxVideoProvider('MiniMax-H3', {
@@ -146,6 +165,7 @@ describe('MiniMax H3 video provider', () => {
     expect(JSON.parse(String(request?.body))).toMatchObject({
       ratio: 'adaptive',
       content: [
+        { type: 'text', text: 'image' },
         {
           type: 'image_url',
           image_url: { url: 'https://example.test/frame.jpg' },
@@ -205,7 +225,7 @@ describe('MiniMax H3 video provider', () => {
     const provider = new MiniMaxVideoProvider('MiniMax-H3', {
       config: { resolution: '1080p' as '2K' },
     });
-    expect((await provider.callApi('prompt')).error).toContain('resolution must be 2K');
+    expect((await provider.callApi('prompt')).error).toContain('resolution must be 768P or 2K');
   });
 
   it.each([
@@ -215,6 +235,7 @@ describe('MiniMax H3 video provider', () => {
     { type: 'video_url' },
     { type: 'audio_url' },
     { type: 'text', text: 'prompt', role: 'unsupported' },
+    { type: 'image_url', image_url: 'https://example.test/file', role: 'reference_audio' },
   ])('rejects invalid content %#', async (item) => {
     const provider = new MiniMaxVideoProvider('MiniMax-H3', {
       config: { content: [item] as any },
@@ -241,7 +262,7 @@ describe('MiniMax H3 video provider', () => {
     vi.mocked(fetch.fetchWithProxy)
       .mockResolvedValueOnce(createResponse({ task_id: 'task-3' }))
       .mockResolvedValueOnce(
-        createResponse({ base_resp: { status_code: 1002, status_msg: 'query failed' } }),
+        createResponse({ base_resp: { status_code: 1001, status_msg: 'query failed' } }),
       );
     const statusError = await new MiniMaxVideoProvider('MiniMax-H3').callApi('prompt');
     expect(statusError.error).toBe('MiniMax video status error: query failed');
@@ -259,6 +280,56 @@ describe('MiniMax H3 video provider', () => {
       config: { max_poll_time_ms: 0 },
     });
     expect((await provider.callApi('prompt')).error).toContain('timed out');
+  });
+
+  it.each(['MiniMax-H3-Lite', 'MiniMax-H3-Max', 'MiniMax-H3-Highspeed'])(
+    'uses the supported default resolution for %s',
+    async (model) => {
+      mockSuccessfulRequest();
+      expect((await new MiniMaxVideoProvider(model).callApi('clip')).video?.resolution).toBe(
+        '768P',
+      );
+    },
+  );
+
+  it('rejects an invalid polling duration before submitting a paid job', async () => {
+    const provider = new MiniMaxVideoProvider('', { config: { max_poll_time_ms: 'invalid' } });
+    expect((await provider.callApi('clip')).error).toContain('milliseconds');
+    expect(fetch.fetchWithProxy).not.toHaveBeenCalled();
+  });
+
+  it('does not submit a cancelled request', async () => {
+    const signal = AbortSignal.abort();
+    await expect(
+      new MiniMaxVideoProvider().callApi('clip', undefined, { abortSignal: signal }),
+    ).rejects.toThrow();
+    expect(fetch.fetchWithProxy).not.toHaveBeenCalled();
+  });
+
+  it('treats a templated zero timeout as zero milliseconds', async () => {
+    vi.mocked(fetch.fetchWithProxy).mockResolvedValueOnce(createResponse({ task_id: 'existing' }));
+    const provider = new MiniMaxVideoProvider('', { config: { max_poll_time_ms: '0' } });
+    expect((await provider.callApi('clip')).error).toContain('timed out');
+    expect(fetch.fetchWithProxy).toHaveBeenCalledTimes(1);
+  });
+
+  it('reuses the submitted job when a status request is throttled', async () => {
+    const endpoint = 'https://cdn.hailuoai.com/clip.mp4';
+    vi.mocked(fetch.fetchWithProxy)
+      .mockResolvedValueOnce(createResponse({ task_id: 'paid' }))
+      .mockResolvedValueOnce(
+        createResponse({ base_resp: { status_code: 1002, status_msg: 'rate limit' } }),
+      )
+      .mockResolvedValueOnce(
+        createResponse({ task: { status: 'succeeded', content: { url: endpoint } } }),
+      )
+      .mockResolvedValueOnce(new Response('video'));
+    const provider = new MiniMaxVideoProvider('', { config: { poll_interval_ms: 1 } });
+    expect(provider.handlesOwnRetries).toBe(true);
+    expect((await provider.callApi('clip')).video?.id).toBe('paid');
+    const calls = vi.mocked(fetch.fetchWithProxy).mock.calls;
+    expect(calls.map(([, options]) => options?.method)).toEqual(['POST', 'GET', 'GET', 'GET']);
+    expect(calls[1]?.[0]).toBe(calls[2]?.[0]);
   });
 
   it('returns download and storage failures', async () => {

@@ -21,13 +21,13 @@ export interface MiniMaxVideoOptions {
   apiKey?: string;
   apiBaseUrl?: string;
   model?: string;
-  resolution?: '2K';
+  resolution?: '480P' | '768P' | '2K';
   ratio?: MiniMaxVideoRatio;
   duration?: number;
   content?: MiniMaxVideoContent[];
   aigc_watermark?: boolean;
-  poll_interval_ms?: number;
-  max_poll_time_ms?: number;
+  poll_interval_ms?: number | string;
+  max_poll_time_ms?: number | string;
   headers?: Record<string, string>;
 }
 
@@ -40,7 +40,7 @@ type MiniMaxVideoEnv = Record<string, string | undefined>;
 
 const DEFAULT_API_BASE_URL = 'https://api.minimax.io/v2/video_generation';
 const DEFAULT_MODEL = 'MiniMax-H3';
-const DEFAULT_RESOLUTION = '2K';
+const COMPACT_MODELS = new Set(['MiniMax-H3-Highspeed', 'MiniMax-H3-Lite', 'MiniMax-H3-Max']);
 const DEFAULT_DURATION = 6;
 const DEFAULT_POLL_INTERVAL_MS = 5000;
 const DEFAULT_MAX_POLL_TIME_MS = 600000;
@@ -139,10 +139,12 @@ function getApiKey(config: MiniMaxVideoOptions, env?: MiniMaxVideoEnv): string |
 }
 
 function normalizeContent(prompt: string, content?: MiniMaxVideoContent[]): MiniMaxVideoContent[] {
-  if (content?.length) {
-    return content;
+  if (!content?.length) {
+    return [{ type: 'text', text: prompt }];
   }
-  return [{ type: 'text', text: prompt }];
+  return content.some((item) => item?.type === 'text')
+    ? content
+    : [{ type: 'text', text: prompt }, ...content];
 }
 
 function getMediaUrl(reference?: MediaReference): string | undefined {
@@ -159,12 +161,19 @@ function formatContent(content: MiniMaxVideoContent[]) {
   });
 }
 
+const ALLOWED_ROLES: Record<MiniMaxVideoContent['type'], string[]> = {
+  text: [],
+  image_url: ['first_frame', 'last_frame', 'reference_image'],
+  video_url: ['reference_video'],
+  audio_url: ['reference_audio'],
+};
+
 function validateContent(content: MiniMaxVideoContent[]): string | undefined {
   for (const item of content) {
     if (!item || !['text', 'image_url', 'video_url', 'audio_url'].includes(item.type)) {
       return 'content items must use text, image_url, video_url, or audio_url types';
     }
-    if (item.type === 'text' && !item.text?.trim()) {
+    if (item.type === 'text' && (typeof item.text !== 'string' || !item.text.trim())) {
       return 'text content must not be empty';
     }
     if (item.type === 'image_url' && !getMediaUrl(item.image_url)) {
@@ -176,23 +185,16 @@ function validateContent(content: MiniMaxVideoContent[]): string | undefined {
     if (item.type === 'audio_url' && !getMediaUrl(item.audio_url)) {
       return 'audio_url content must include a URL';
     }
-    if (
-      item.role &&
-      ![
-        'first_frame',
-        'last_frame',
-        'reference_image',
-        'reference_video',
-        'reference_audio',
-      ].includes(item.role)
-    ) {
-      return `unsupported MiniMax video content role: ${item.role}`;
+    if (item.role && !ALLOWED_ROLES[item.type].includes(item.role)) {
+      return `unsupported MiniMax video content role for ${item.type}: ${item.role}`;
     }
   }
   return undefined;
 }
 
 export class MiniMaxVideoProvider {
+  // Submitting a job is billable. Poll throttles are handled against its existing task ID.
+  readonly handlesOwnRetries = true;
   modelName: string;
   config: MiniMaxVideoOptions;
   private providerId?: string;
@@ -217,7 +219,10 @@ export class MiniMaxVideoProvider {
 
   private getApiUrl(): string {
     const value =
-      this.config.apiBaseUrl || process.env.MINIMAX_VIDEO_API_BASE_URL || DEFAULT_API_BASE_URL;
+      this.config.apiBaseUrl ||
+      this.env?.MINIMAX_VIDEO_API_BASE_URL ||
+      process.env.MINIMAX_VIDEO_API_BASE_URL ||
+      DEFAULT_API_BASE_URL;
     return value.replace(/\/+$/, '');
   }
 
@@ -230,6 +235,7 @@ export class MiniMaxVideoProvider {
     options?: { abortSignal?: AbortSignal },
   ) {
     const signal = options?.abortSignal;
+    signal?.throwIfAborted();
     const apiKey = getApiKey(this.config, this.env);
     if (!apiKey) {
       return {
@@ -243,12 +249,29 @@ export class MiniMaxVideoProvider {
     };
     const model = config.model || this.modelName || DEFAULT_MODEL;
     const duration = config.duration ?? DEFAULT_DURATION;
-    if (!Number.isInteger(duration) || duration < 4 || duration > 15) {
-      return { error: 'MiniMax H3 duration must be an integer between 4 and 15 seconds.' };
+    const minimumDuration = model === 'MiniMax-H3-Max' ? 5 : 4;
+    if (!Number.isInteger(duration) || duration < minimumDuration || duration > 15) {
+      return {
+        error: `MiniMax H3 duration must be an integer between ${minimumDuration} and 15 seconds.`,
+      };
     }
-    const resolution = config.resolution || DEFAULT_RESOLUTION;
-    if (resolution !== '2K') {
-      return { error: 'MiniMax H3 resolution must be 2K.' };
+    const compact = COMPACT_MODELS.has(model);
+    const resolution = config.resolution ?? (compact ? '768P' : '2K');
+    const supportedResolutions = compact ? ['480P', '768P'] : ['768P', '2K'];
+    if (!supportedResolutions.includes(resolution)) {
+      return { error: `MiniMax ${model} resolution must be ${supportedResolutions.join(' or ')}.` };
+    }
+    const interval = Number(config.poll_interval_ms ?? DEFAULT_POLL_INTERVAL_MS);
+    const timeout = Number(config.max_poll_time_ms ?? DEFAULT_MAX_POLL_TIME_MS);
+    if (
+      !Number.isSafeInteger(interval) ||
+      interval < 0 ||
+      !Number.isSafeInteger(timeout) ||
+      timeout < 0
+    ) {
+      return {
+        error: 'MiniMax polling times must be finite, non-negative integers in milliseconds.',
+      };
     }
     const content = normalizeContent(prompt, config.content);
     const contentError = validateContent(content);
@@ -308,9 +331,9 @@ export class MiniMaxVideoProvider {
         '/query/video_generation',
       );
       queryUrl.pathname += `/${encodeURIComponent(taskId)}`;
-      const interval = config.poll_interval_ms ?? DEFAULT_POLL_INTERVAL_MS;
-      const timeout = config.max_poll_time_ms ?? DEFAULT_MAX_POLL_TIME_MS;
       const deadline = Date.now() + timeout;
+      const waitForPoll = (delay: number) =>
+        sleep(Math.min(delay, Math.max(0, deadline - Date.now())), undefined, { signal });
       let videoUrl: string | undefined;
       let taskStatus: string | undefined;
       for (
@@ -323,9 +346,21 @@ export class MiniMaxVideoProvider {
           method: 'GET',
           headers,
         });
+        if (poll.status === 429) {
+          await poll.body?.cancel();
+          await waitForPoll(Math.max(interval, 1000));
+          continue;
+        }
         const statusData = JSON.parse(
           await readBoundedText(poll, MAX_JOB_RESPONSE_BYTES, { requireStream: true }),
         );
+        if (
+          statusData?.base_resp?.status_code === 1002 ||
+          /rate limit/i.test(statusData?.base_resp?.status_msg ?? '')
+        ) {
+          await waitForPoll(Math.max(interval, 1000));
+          continue;
+        }
         if (
           !poll.ok ||
           (statusData?.base_resp?.status_code && statusData.base_resp.status_code !== 0)
@@ -348,7 +383,7 @@ export class MiniMaxVideoProvider {
         if (['fail', 'failed', 'error', 'cancelled'].includes(String(taskStatus).toLowerCase())) {
           return { error: `MiniMax video generation failed (status=${taskStatus}).` };
         }
-        await sleep(Math.min(interval, Math.max(0, deadline - Date.now())), undefined, { signal });
+        await waitForPoll(interval);
       }
       if (!videoUrl) {
         return { error: `MiniMax video generation timed out (status=${taskStatus || 'unknown'}).` };

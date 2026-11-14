@@ -95,6 +95,7 @@ export const ProviderEnvOverridesSchema = z.object({
   MISTRAL_API_HOST: z.string().optional(),
   MISTRAL_API_KEY: z.string().optional(),
   MINIMAX_API_KEY: z.string().optional(),
+  MINIMAX_VIDEO_API_BASE_URL: z.string().optional(),
   MOONSHOT_API_KEY: z.string().optional(),
   MLFLOW_GATEWAY_API_KEY: z.string().optional(),
   MLFLOW_GATEWAY_URL: z.string().optional(),
