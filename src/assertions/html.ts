@@ -1,4 +1,4 @@
-import { parse } from 'parse5';
+import { html, parse } from 'parse5';
 import type { DefaultTreeAdapterMap } from 'parse5';
 
 import type { AssertionParams, GradingResult } from '../types/index';
@@ -41,6 +41,9 @@ function hasSourceCodeLocation(element: HtmlElement): boolean {
 }
 
 function getChildNodes(node: HtmlNode): HtmlChildNode[] {
+  if ('content' in node) {
+    return node.content.childNodes;
+  }
   return 'childNodes' in node ? node.childNodes : [];
 }
 
@@ -254,6 +257,145 @@ const VALID_HTML_ELEMENTS = new Set([
   'template',
 ]);
 
+const VOID_HTML_ELEMENTS = new Set([
+  'area',
+  'base',
+  'br',
+  'col',
+  'embed',
+  'hr',
+  'img',
+  'input',
+  'link',
+  'meta',
+  'param',
+  'source',
+  'track',
+  'wbr',
+]);
+
+const OPTIONAL_END_TAG_ELEMENTS = new Set([
+  'html',
+  'head',
+  'body',
+  'li',
+  'dt',
+  'dd',
+  'p',
+  'rt',
+  'rp',
+  'optgroup',
+  'option',
+  'colgroup',
+  'caption',
+  'tbody',
+  'tfoot',
+  'tr',
+  'td',
+  'th',
+]);
+
+const siblingIndexesByParent = new WeakMap<HtmlParentNode, Map<HtmlChildNode, number>>();
+
+function getSiblingIndex(parent: HtmlParentNode, element: HtmlElement): number {
+  let siblingIndexes = siblingIndexesByParent.get(parent);
+  if (!siblingIndexes) {
+    siblingIndexes = new Map(parent.childNodes.map((node, index) => [node, index]));
+    siblingIndexesByParent.set(parent, siblingIndexes);
+  }
+  return siblingIndexes.get(element) ?? -1;
+}
+
+// These HTML parents require a closing paragraph tag even at the end of their contents.
+const EXPLICIT_PARAGRAPH_END_PARENTS = new Set([
+  'a',
+  'audio',
+  'del',
+  'ins',
+  'map',
+  'noscript',
+  'video',
+]);
+
+function requiresParagraphEndAtParentEnd(element: HtmlElement): boolean {
+  const parent = element.parentNode;
+  return (
+    !!parent &&
+    isElementNode(parent) &&
+    (EXPLICIT_PARAGRAPH_END_PARENTS.has(parent.tagName) || parent.tagName.includes('-'))
+  );
+}
+
+// parse5's adoption-agency recovery moves a paragraph out of its source
+// link and inserts a reconstructed link inside it, with no source location.
+function hasUnclosedParagraphInLink(element: HtmlElement, previous: HtmlNode | undefined): boolean {
+  const start = element.sourceCodeLocation?.startTag;
+  const link =
+    previous && isElementNode(previous) && previous.tagName === 'a'
+      ? previous.sourceCodeLocation
+      : undefined;
+  return Boolean(
+    start &&
+      link?.startTag &&
+      link.endTag &&
+      link.startTag.endOffset <= start.startOffset &&
+      link.endTag.startOffset >= start.endOffset &&
+      element.childNodes.some(
+        (child) => isElementNode(child) && child.tagName === 'a' && !hasSourceCodeLocation(child),
+      ),
+  );
+}
+
+function canOmitEndTag(element: HtmlElement, tagName: string): boolean {
+  if ((tagName === 'thead' || tagName === 'dt') && element.parentNode) {
+    const parent = element.parentNode;
+    const next = parent.childNodes[getSiblingIndex(parent, element) + 1];
+    if (!next || !isElementNode(next)) {
+      return false;
+    }
+    return tagName === 'dt'
+      ? next.tagName === 'dt' || next.tagName === 'dd'
+      : next.tagName === 'tbody' || next.tagName === 'tfoot';
+  }
+  if (tagName === 'p' && element.parentNode) {
+    const parent = element.parentNode;
+    const index = getSiblingIndex(parent, element);
+    if (index === parent.childNodes.length - 1 && requiresParagraphEndAtParentEnd(element)) {
+      return false;
+    }
+    const previous = parent.childNodes[index - 1];
+    if (hasUnclosedParagraphInLink(element, previous)) {
+      return false;
+    }
+  }
+  return OPTIONAL_END_TAG_ELEMENTS.has(tagName);
+}
+
+function hasSelfClosingStartTag(element: HtmlElement, input: string): boolean {
+  const location = element.sourceCodeLocation;
+  if (!location?.startTag) {
+    return false;
+  }
+  const slashOffset = location.startTag.endOffset - 2;
+  return (
+    input[slashOffset] === '/' &&
+    Object.values(location.attrs ?? {}).every((attr) => attr.endOffset <= slashOffset)
+  );
+}
+
+function isUnclosedElement(element: HtmlElement, input: string, inputLowercase: string): boolean {
+  const tagName = element.tagName.toLowerCase();
+  return (
+    hasSourceCodeLocation(element) &&
+    !element.sourceCodeLocation?.endTag &&
+    (element.namespaceURI === html.NS.HTML
+      ? !VOID_HTML_ELEMENTS.has(tagName) &&
+        (hasSelfClosingStartTag(element, input) || !canOmitEndTag(element, tagName)) &&
+        isUserProvidedElement(element, inputLowercase)
+      : !hasSelfClosingStartTag(element, input))
+  );
+}
+
 function validateHtml(htmlString: string): { isValid: boolean; reason: string } {
   const trimmed = htmlString.trim();
 
@@ -292,6 +434,17 @@ function validateHtml(htmlString: string): { isValid: boolean; reason: string } 
 
   if (!userProvidedElement) {
     return { isValid: false, reason: 'Output does not contain recognized HTML elements' };
+  }
+
+  const unclosedElement = findFirstElement(document, (element) =>
+    isUnclosedElement(element, trimmed, inputLowercase),
+  );
+
+  if (unclosedElement) {
+    return {
+      isValid: false,
+      reason: `Output contains an unclosed <${unclosedElement.tagName}> element`,
+    };
   }
 
   return { isValid: true, reason: 'Output is valid HTML' };

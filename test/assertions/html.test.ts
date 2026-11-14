@@ -372,6 +372,70 @@ describe('handleIsHtml', () => {
     });
   });
 
+  it('requires an explicit paragraph end at the end of del', () => {
+    const check = (outputString: string) =>
+      handleIsHtml({
+        ...defaultParams,
+        assertion: { type: 'is-html' },
+        inverse: false,
+        outputString,
+      }).pass;
+    expect(check('<del><p>x</del>')).toBe(false);
+    expect(check('<del><p>x</p></del>')).toBe(true);
+  });
+
+  it('should reject HTML with unclosed elements', () => {
+    const unclosedExamples = [
+      { input: '<div>Unclosed div', tag: 'div' },
+      { input: '<div><a href="/"><p>x</a></div>', tag: 'p' },
+      { input: '<div><svg><circle r=1/></svg></div>', tag: 'circle' },
+      { input: '<!DOCTYPE html><html><body><main><h1>Title</h1><p>Truncated', tag: 'main' },
+      { input: '<div><span>Missing span end tag</div>', tag: 'span' },
+      { input: '<div />', tag: 'div' },
+      { input: '<p />', tag: 'p' },
+      { input: '<body/>', tag: 'body' },
+      { input: '<dl><dt>a</dl>', tag: 'dt' },
+      { input: '<template><div>x</template>', tag: 'div' },
+      { input: '<table><thead><tr><th>x</th></tr></table>', tag: 'thead' },
+      { input: '<svg><circle cx="1"', tag: 'svg' },
+      { input: '<svg><g><circle r="1"/></svg>', tag: 'g' },
+      { input: '<math><mi>x</math>', tag: 'mi' },
+      { input: '<svg data=x/>', tag: 'svg' },
+      { input: '<table><thead><tbody></tbody><thead><tr><th>x</th></tr></table>', tag: 'thead' },
+    ];
+
+    unclosedExamples.forEach(({ input, tag }) => {
+      const params: AssertionParams = {
+        ...defaultParams,
+        assertion: { type: 'is-html' },
+        outputString: input,
+        inverse: false,
+      };
+
+      const result = handleIsHtml(params);
+      expect(result.pass).toBe(false);
+      expect(result.reason).toBe(`Output contains an unclosed <${tag}> element`);
+    });
+  });
+
+  it('should accept elements whose end tags HTML allows omitting', () => {
+    const fragments = [
+      '<p>First paragraph<p>Second paragraph',
+      '<p data-value=x/>',
+      '<div><a href="/"><p>x</p></a></div>',
+      '<div><p>x<a href="/">y</a></div>',
+      '<div><a href="/"><p>x<div>y</div></a></div>',
+      '<div><svg><circle r="1"/></svg></div>',
+      '<ul><li>One<li>Two</ul>',
+      '<table><tr><td>1<td>2</table>',
+      '<table><thead><tr><th>Head<tbody><tr><td>Body</table>',
+      '<table><thead><tbody></tbody><thead><tbody></tbody><thead><tfoot></table>',
+      '<dl><dt>Term<dd>Definition</dl>',
+    ];
+
+    fragments.forEach(verifyValidHtml);
+  });
+
   it('should accept bare elements that parse5 hoists into head', () => {
     // parse5 places top-level <script>, <style>, <title> into an auto-created
     // <head>. The walker should still find them as user-provided elements.
@@ -385,7 +449,13 @@ describe('handleIsHtml', () => {
   });
 
   it('should accept SVG and template wrappers', () => {
-    const fragments = ['<svg><circle /></svg>', '<template><div>x</div></template>'];
+    const fragments = [
+      '<svg><circle /></svg>',
+      '<svg><circle r="1"/></svg>',
+      '<svg><circle r="1" /></svg>',
+      '<svg viewBox="0 0 1 1"><path d="M0 0"/></svg>',
+      '<template><div>x</div></template>',
+    ];
 
     fragments.forEach(verifyValidHtml);
   });
@@ -454,8 +524,8 @@ describe('handleIsHtml', () => {
 
   it('should still accept body variants regardless of trailing chars', () => {
     // Control cases for the wrapper detection fix — body followed by `>`,
-    // whitespace, or `/` must continue to count as user-declared body.
-    const bodyVariants = ['<body>x</body>', '<body attr="val">x</body>', '<body/>'];
+    // or whitespace must continue to count as user-declared body.
+    const bodyVariants = ['<body>x</body>', '<body attr="val">x</body>'];
 
     bodyVariants.forEach((input) => {
       const params: AssertionParams = {
