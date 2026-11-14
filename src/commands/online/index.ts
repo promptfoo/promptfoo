@@ -10,13 +10,7 @@ export function onlineCommand(program: Command) {
   // The shipped and local entrypoints dispatch capture before loading the main CLI.
   // Register it here as well so help and direct main.js invocations remain consistent.
   configureCapture(online.command('capture')).action(async (payload, options) => {
-    await runCapture([
-      '--agent',
-      options.agent,
-      '--dir',
-      options.dir,
-      ...(payload === undefined ? [] : [payload]),
-    ]);
+    await runCapture({ agent: options.agent, dir: options.dir, payload });
   });
   online
     .command('watch')

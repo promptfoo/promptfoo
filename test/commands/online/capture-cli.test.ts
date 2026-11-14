@@ -87,9 +87,28 @@ describe('capture hook protocol', () => {
     expect(process.stderr.write).toHaveBeenCalledWith(expect.stringContaining('capture failed'));
   });
 
-  it('shows help without treating it as a failed hook', async () => {
-    await runCapture(['--help']);
-    expect(process.stdout.write).toHaveBeenCalledWith(expect.stringContaining('Usage:'));
-    expect(process.stderr.write).not.toHaveBeenCalled();
+  it.each([
+    ['--dir', 'ignored'],
+    ['--agent', 'invalid'],
+    ['--agent', 'generic', '--grep', 'private-secret'],
+    ['--agent', 'generic', payload, payload],
+  ])('rejects invalid capture arguments before reading stdin: %j', async (...argv) => {
+    const stdin = vi.spyOn(process, 'stdin', 'get');
+    await runCapture(argv);
+    expect(stdin).not.toHaveBeenCalled();
+    expect(process.stdout.write).toHaveBeenCalledExactlyOnceWith('{}\n');
+    expect(process.stderr.write).toHaveBeenCalledWith(expect.stringContaining('capture failed'));
+    expect(JSON.stringify(vi.mocked(process.stderr.write).mock.calls)).not.toContain(
+      'private-secret',
+    );
   });
+
+  it.each([['--help'], ['-vh'], ['--unknown', '-h']])(
+    'shows help without treating it as a failed hook: %j',
+    async (...argv) => {
+      await runCapture(argv);
+      expect(process.stdout.write).toHaveBeenCalledWith(expect.stringContaining('Usage:'));
+      expect(process.stderr.write).not.toHaveBeenCalled();
+    },
+  );
 });

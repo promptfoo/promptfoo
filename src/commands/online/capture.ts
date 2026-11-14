@@ -157,26 +157,36 @@ export function configureCapture(command: Command): Command {
     .argument('[payload]', 'Codex notify JSON argument; other hooks read stdin');
 }
 
-export async function runCapture(argv: string[]): Promise<void> {
+type CaptureOptions = { agent: string; dir: string; payload?: string };
+
+function parseCaptureArgs(argv: string[]): CaptureOptions | undefined {
   const command = configureCapture(new Command('promptfoo online capture')).exitOverride();
-  // stdout belongs to the hook protocol, including on errors. Never echo payloads.
   command.configureOutput({ writeErr: () => {} });
+  // Hook arguments belong to this command alone. No CLI action needs to run.
+  const { operands, unknown } = command.parseOptions(argv);
+  if (unknown.includes('-h') || unknown.includes('--help')) {
+    command.outputHelp();
+    return undefined;
+  }
+  if (unknown.length || operands.length > 1) {
+    throw new Error('Unexpected capture argument');
+  }
+  return { ...command.opts<CaptureOptions>(), payload: operands[0] };
+}
+
+export async function runCapture(args: string[] | CaptureOptions): Promise<void> {
   try {
-    command.parse(argv, { from: 'user' });
-    const options = command.opts<{ agent: string; dir: string }>();
-    const input = command.args[0] ?? (await readInput());
+    const options = Array.isArray(args) ? parseCaptureArgs(args) : args;
+    if (!options) {
+      return; // Help was displayed.
+    }
+    const agent = AgentSchema.parse(options.agent);
+    const input = options.payload ?? (await readInput());
     if (Buffer.byteLength(input) > MAX_EVENT_BYTES) {
       throw new Error('Hook input exceeds size limit');
     }
-    await captureEvent(
-      path.resolve(options.dir),
-      AgentSchema.parse(options.agent),
-      JSON.parse(input),
-    );
-  } catch (error) {
-    if ((error as { code?: string }).code === 'commander.helpDisplayed') {
-      return;
-    }
+    await captureEvent(path.resolve(options.dir), agent, JSON.parse(input));
+  } catch {
     process.stderr.write(
       'Promptfoo online capture failed; check hook fields and private queue permissions.\n',
     );

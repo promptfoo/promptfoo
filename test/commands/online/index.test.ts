@@ -33,9 +33,7 @@ describe('online commands', () => {
     async (payload) => {
       const args = ['capture', '--agent', 'codex', '--dir', '/private/queue'];
       await run([...args, ...(payload === undefined ? [] : [payload])]);
-      expect(runCapture).toHaveBeenCalledWith(
-        args.slice(1).concat(payload === undefined ? [] : [payload]),
-      );
+      expect(runCapture).toHaveBeenCalledWith({ agent: 'codex', dir: '/private/queue', payload });
     },
   );
 
