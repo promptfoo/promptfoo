@@ -92,5 +92,7 @@ export function normalizeFinishReason(raw?: string | null): string | undefined {
 
   // Normalize to lowercase for consistent mapping
   const key = trimmed.toLowerCase();
-  return Object.hasOwn(FINISH_REASON_MAP, key) ? FINISH_REASON_MAP[key] : key;
+  return Object.prototype.hasOwnProperty.call(FINISH_REASON_MAP, key)
+    ? FINISH_REASON_MAP[key]
+    : key;
 }
