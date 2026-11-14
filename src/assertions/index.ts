@@ -37,8 +37,7 @@ import {
   type TraceData,
   type VarValue,
 } from '../types/index';
-import { isJavascriptFile } from '../util/fileExtensions';
-import { parseFileUrl } from '../util/functions/loadFunction';
+import { isJavascriptFile, parseFileUrl } from '../util/fileExtensions';
 import invariant from '../util/invariant';
 import { getNunjucksEngine } from '../util/templates';
 import { sleep } from '../util/time';
