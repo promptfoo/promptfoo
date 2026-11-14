@@ -70,6 +70,7 @@ describe.each([
 
       expect(result).toEqual({
         error: `API error: 503 Service Unavailable\n${JSON.stringify(errorPayload)}`,
+        ...(type === OpenRouterProvider ? { latencyMs: expect.any(Number) } : {}),
         ...(hasHttpMetadata
           ? {
               metadata: {
