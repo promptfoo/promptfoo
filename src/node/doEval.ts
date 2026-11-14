@@ -9,7 +9,7 @@ import { z } from 'zod';
 import { disableCache } from '../cache';
 import cliState from '../cliState';
 import { DEFAULT_MAX_CONCURRENCY } from '../constants';
-import { getEnvBool, getEnvFloat, getEnvInt, isCI } from '../envars';
+import { getEnvBool, getEnvFloat, getEnvInt, getEnvString, isCI } from '../envars';
 import { clearCjsModuleCache } from '../esm';
 import { evaluate, PromptSuggestionsRejectedError } from '../evaluator';
 import { EvalRunError } from '../evaluator/errors';
@@ -48,6 +48,7 @@ import {
 } from '../util/eval/filterProviders';
 import { filterTests } from '../util/eval/filterTests';
 import { warnIfRedteamConfigHasNoTests } from '../util/eval/redteamWarning';
+import { getFailingRepeatGroups } from '../util/eval/repeatPassRate';
 import { generateEvalSummary } from '../util/eval/summary';
 import {
   printBorder,
@@ -174,6 +175,59 @@ function handleRecoverableWatchError(error: unknown): boolean {
     return true;
   }
   return false;
+}
+
+function getCliRepeatPassRateExitCode({
+  repeatStability,
+  failedTestExitCode,
+  isCliInvocation,
+  repeat,
+}: {
+  repeatStability: Awaited<ReturnType<Eval['getRepeatStability']>>;
+  failedTestExitCode: number;
+  isCliInvocation: boolean;
+  repeat: number;
+}): number | undefined {
+  const configuredThreshold = getEnvString('PROMPTFOO_TEST_REPEAT_PASS_RATE_THRESHOLD');
+  if (
+    !isCliInvocation ||
+    repeat <= 1 ||
+    configuredThreshold === undefined ||
+    configuredThreshold.trim() === ''
+  ) {
+    return;
+  }
+
+  const threshold = Number(configuredThreshold);
+  if (!Number.isFinite(threshold) || threshold < 0 || threshold > 100) {
+    logger.error(
+      chalk.red('PROMPTFOO_TEST_REPEAT_PASS_RATE_THRESHOLD must be a number from 0 to 100.'),
+    );
+    return 1;
+  }
+
+  const failing = getFailingRepeatGroups(repeatStability, threshold);
+  if (failing.length === 0) {
+    return;
+  }
+
+  logger.info(chalk.white('Per-test repeat pass rate check failed:'));
+  for (const group of failing) {
+    const groupPassRate = (group.passed * 100) / group.repetitions;
+    const label = [
+      group.description || group.repeatGroupId,
+      group.promptLabel,
+      group.provider.label ?? group.provider.id,
+    ]
+      .filter(Boolean)
+      .join(' / ');
+    logger.info(
+      chalk.white(
+        `  ${chalk.cyan(label)}: ${chalk.red.bold(groupPassRate.toFixed(2))}${chalk.red('%')} (${group.passed}/${group.repetitions}) is below threshold of ${chalk.red.bold(String(threshold))}${chalk.red('%')}`,
+      ),
+    );
+  }
+  return failedTestExitCode;
 }
 
 /**
@@ -1272,13 +1326,24 @@ async function doEvalWithEnv(
       }
     } else {
       const passRateThreshold = getEnvFloat('PROMPTFOO_PASS_RATE_THRESHOLD', 100);
-      const failedTestExitCode = getEnvInt('PROMPTFOO_FAILED_TEST_EXIT_CODE', 100);
-
+      const configuredExitCode = getEnvInt('PROMPTFOO_FAILED_TEST_EXIT_CODE', 100);
+      const failedTestExitCode = Number.isSafeInteger(configuredExitCode)
+        ? configuredExitCode
+        : 100;
+      const repeatExitCode = getCliRepeatPassRateExitCode({
+        repeatStability,
+        failedTestExitCode,
+        isCliInvocation,
+        repeat,
+      });
       const belowThreshold =
         passRate < (Number.isFinite(passRateThreshold) ? passRateThreshold : 100);
       // An eval stopped because its target is unavailable did not run every test, so it
       // fails whatever the tests before the stop did.
-      if (isCliInvocation && (belowThreshold || targetErrorStatus != null)) {
+      if (
+        isCliInvocation &&
+        (belowThreshold || targetErrorStatus != null || repeatExitCode !== undefined)
+      ) {
         if (belowThreshold && getEnvFloat('PROMPTFOO_PASS_RATE_THRESHOLD') !== undefined) {
           logger.info(
             chalk.white(
@@ -1286,10 +1351,10 @@ async function doEvalWithEnv(
             ),
           );
         }
-        process.exitCode = Number.isSafeInteger(failedTestExitCode) ? failedTestExitCode : 100;
+        process.exitCode = repeatExitCode ?? failedTestExitCode;
         // A run that failed its tests returns here, as it always has. A run stopped by its
         // target goes on to clean up its providers, as it did when it still exited with 0.
-        if (targetErrorStatus == null) {
+        if (belowThreshold && targetErrorStatus == null) {
           return ret;
         }
       }
