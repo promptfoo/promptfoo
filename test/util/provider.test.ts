@@ -13,23 +13,12 @@ import {
   providerToIdentifier,
   sanitizeProviderIdForLog,
 } from '../../src/util/provider';
-import {
-  canonicalizeProviderId,
-  isProviderConfigFileReference,
-  normalizeProviderRef,
-} from '../../src/util/providerRef';
+import { canonicalizeProviderId, normalizeProviderRef } from '../../src/util/providerRef';
 import { createMockProvider } from '../factories/provider';
 
 import type { ApiProvider } from '../../src/types/index';
 
 describe('normalizeProviderRef', () => {
-  it('identifies provider config file references without treating script providers as config', () => {
-    expect(isProviderConfigFileReference('file://providers.yaml')).toBe(true);
-    expect(isProviderConfigFileReference('file://providers.yml')).toBe(true);
-    expect(isProviderConfigFileReference('file://providers.json')).toBe(true);
-    expect(isProviderConfigFileReference('file://provider.js')).toBe(false);
-  });
-
   it('normalizes ProviderOptionsMap refs with explicit id overrides', () => {
     const descriptor = normalizeProviderRef({
       'openai:responses:gpt-5.4': {
@@ -123,22 +112,18 @@ describe('normalizeProviderRef', () => {
     });
   });
 
-  it('classifies string providers as named vs file based on extension', () => {
-    expect(normalizeProviderRef('openai:responses:gpt-5.4')).toMatchObject({
-      kind: 'named',
-      id: 'openai:responses:gpt-5.4',
-      loadProviderPath: 'openai:responses:gpt-5.4',
-    });
-    expect(normalizeProviderRef('file://providers.yaml')).toMatchObject({
-      kind: 'file',
-      id: 'file://providers.yaml',
-      loadProviderPath: 'file://providers.yaml',
-    });
-    expect(normalizeProviderRef('file://provider.js')).toMatchObject({
-      kind: 'named',
-      id: 'file://provider.js',
-      loadProviderPath: 'file://provider.js',
-    });
+  it.each([
+    ['file://.yaml', 'file'],
+    ['file://providers.yml', 'file'],
+    ['file://providers.json', 'file'],
+    ['file://provider.js', 'named'],
+    ['file://providers.YAML.bak', 'named'],
+    ['https://example.com/providers.YAML', 'named'],
+    ['FILE://providers.YAML', 'named'],
+    ['providers.YAML', 'named'],
+    ['openai:responses:gpt-5.4', 'named'],
+  ])('classifies %s as %s', (id, kind) => {
+    expect(normalizeProviderRef(id)).toEqual({ kind, id, loadProviderPath: id });
   });
 
   it('normalizes ProviderOptionsMap without nested id override (key becomes id)', () => {
