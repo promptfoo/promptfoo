@@ -101,7 +101,7 @@ docker build -f modelaudit/Dockerfile.full -t modelaudit:full ./modelaudit
 docker build -f modelaudit/Dockerfile.tensorflow -t modelaudit:tensorflow ./modelaudit
 
 # Scan a model in the current directory
-docker run --rm -v "$(pwd):/data" modelaudit scan /data/model.pkl
+docker run --rm -v "$(pwd):/data:ro" modelaudit scan /data/model.pkl
 ```
 
 ## Usage
