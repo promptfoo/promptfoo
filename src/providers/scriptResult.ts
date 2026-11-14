@@ -1,4 +1,6 @@
 import logger from '../logger';
+import { scriptInputDigest } from '../util/scriptInputDigest';
+import { getScriptCacheVars } from './scriptContext';
 
 import type { CallApiContextParams, ProviderOptions } from '../types/providers';
 
@@ -15,10 +17,50 @@ export function buildScriptArgs(
   prompt: string,
   optionsWithProcessedConfig: ProviderOptions,
   sanitizedContext: CallApiContextParams | undefined,
-) {
+): [string, ProviderOptions, CallApiContextParams?] {
   return apiType === 'call_api'
     ? [prompt, optionsWithProcessedConfig, sanitizedContext]
     : [prompt, optionsWithProcessedConfig];
+}
+
+/** Keep the worker's full context, except correlation IDs generated for this run. */
+function scriptCacheContext(context: CallApiContextParams | undefined) {
+  if (!context) {
+    return context;
+  }
+  const stable = { ...context };
+  const runId = context.vars?.__evalId;
+  const vars = getScriptCacheVars(context.vars);
+  if (vars) {
+    stable.vars = vars;
+  }
+  if (typeof runId === 'string') {
+    if (context.evaluationId === runId) {
+      delete stable.evaluationId;
+      if (context.test?.metadata?.tracingEnabled === true) {
+        delete stable.traceparent;
+      }
+    }
+    const metadata = context.test?.metadata;
+    if (context.test && metadata?.tracingEnabled === true && metadata.evaluationId === runId) {
+      const { evaluationId: _runId, ...authoredMetadata } = metadata;
+      stable.test = { ...context.test, metadata: authoredMetadata };
+    }
+  }
+  return stable;
+}
+
+/** Include source identity as well as the options actually delivered to the worker. */
+export function getScriptInputDigest(
+  path: string,
+  functionName: string,
+  sourceOptions: ProviderOptions | undefined,
+  args: ReturnType<typeof buildScriptArgs>,
+) {
+  const [prompt, options, context] = args;
+  const inputs: typeof args =
+    args.length === 3 ? [prompt, options, scriptCacheContext(context)] : args;
+  return scriptInputDigest({ path, functionName, sourceOptions, inputs });
 }
 
 function hasScriptResultProperty(

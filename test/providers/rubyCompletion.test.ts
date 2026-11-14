@@ -347,9 +347,7 @@ describe('RubyProvider', () => {
 
       const result = await provider.callApi('test prompt');
 
-      expect(mockCache.get).toHaveBeenCalledWith(
-        expect.stringContaining('ruby:script.rb:default:call_api:'),
-      );
+      expect(mockCache.get).toHaveBeenCalledWith(expect.stringMatching(/^ruby:v2:call_api:/));
       expect(mockRunRuby).not.toHaveBeenCalled();
       expect(result).toEqual({ output: 'cached result', cached: true });
     });
@@ -367,9 +365,40 @@ describe('RubyProvider', () => {
       await provider.callApi('test prompt');
 
       expect(mockCache.set).toHaveBeenCalledWith(
-        expect.stringContaining('ruby:script.rb:default:call_api:'),
+        expect.stringMatching(/^ruby:v2:call_api:/),
         '{"output":"new result"}',
       );
+    });
+
+    it('keeps the cache key stable across eval runs so a rerun hits the cache', async () => {
+      const provider = new RubyProvider('script.rb');
+      mockIsCacheEnabled.mockReturnValue(true);
+      const store = new Map<string, string>();
+      const mockCache = {
+        get: vi.fn((key: string) => Promise.resolve(store.get(key) ?? null)),
+        set: vi.fn((key: string, value: string) => {
+          store.set(key, value);
+          return Promise.resolve();
+        }),
+      };
+      mockGetCache.mockResolvedValue(mockCache as never);
+      mockRunRuby.mockResolvedValue({ output: 'fresh result' });
+
+      // The evaluator merges reserved __eval* runtime vars into context.vars;
+      // only __evalId differs between two runs of the same test.
+      const first = await provider.callApi('test prompt', {
+        vars: { name: 'world', __evalId: 'eval-first' },
+      } as any);
+      const second = await provider.callApi('test prompt', {
+        vars: { name: 'world', __evalId: 'eval-second' },
+      } as any);
+
+      expect(first).toEqual({ output: 'fresh result', cached: false });
+      expect(second).toEqual({ output: 'fresh result', cached: true });
+      expect(mockRunRuby).toHaveBeenCalledTimes(1);
+      for (const [key] of mockCache.get.mock.calls) {
+        expect(key).not.toContain('__evalId');
+      }
     });
 
     it('should properly transform token usage in cached results', async () => {
@@ -520,9 +549,7 @@ describe('RubyProvider', () => {
         cached: false,
       });
       expect(mockCache.set).toHaveBeenCalledWith(
-        expect.stringMatching(
-          /^ruby:script\.rb:default:call_api:[a-f0-9]{64}:test prompt:undefined:undefined$/,
-        ),
+        expect.stringMatching(/^ruby:v2:call_api:[a-f0-9]{64}:[a-f0-9]{64}$/),
         '{"output":"fresh result"}',
       );
     });
@@ -548,11 +575,7 @@ describe('RubyProvider', () => {
       const cacheSetCalls = mockCache.set.mock.calls;
       expect(cacheSetCalls).toHaveLength(2);
 
-      // The first call should contain 'default' in the cache key
-      expect(cacheSetCalls[0][0]).toContain(':default:');
-
-      // The second call should contain the custom function name
-      expect(cacheSetCalls[1][0]).toContain(':custom_function:');
+      expect(cacheSetCalls[0][0]).not.toBe(cacheSetCalls[1][0]);
     });
 
     it('should not apply cached metadata to embedding results', async () => {

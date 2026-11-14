@@ -2,6 +2,16 @@ import logger from '../logger';
 
 import type { CallApiContextParams } from '../types/index';
 
+// The eval ID is unique to each run. Keep stable step/repeat inputs in the identity.
+export function getScriptCacheVars(vars: CallApiContextParams['vars'] | undefined) {
+  if (!vars || !Object.prototype.hasOwnProperty.call(vars, '__evalId')) {
+    return vars;
+  }
+  const stableVars = { ...vars };
+  delete stableVars.__evalId;
+  return stableVars;
+}
+
 /**
  * Keys on `CallApiContextParams` that cannot be sent to a subprocess script
  * provider (Python, Ruby, etc.) because they are either non-serializable or
