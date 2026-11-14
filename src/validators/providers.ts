@@ -11,6 +11,11 @@ import type {
   ProviderLabel,
 } from '../types/providers';
 
+export const ProviderCatalogDataSchema = z.object({
+  providers: z.array(z.object({ id: z.string(), label: z.string() }).strict()),
+  hasCustomConfig: z.boolean(),
+});
+
 export const ProviderOptionsSchema = z.object({
   id: z.custom<ProviderId>().optional(),
   label: z.custom<ProviderLabel>().optional(),

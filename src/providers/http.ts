@@ -2584,6 +2584,7 @@ export class HttpProvider implements ApiProvider {
     const httpsAgent = await this.getHttpsAgent();
     const fetchOptions: any = {
       method: renderedConfig.method,
+      ...(options?.protectCatalogCredentials && { redirect: 'error' }),
       headers: renderedConfig.headers,
       ...(options?.abortSignal && { signal: options.abortSignal }),
       ...(method !== 'GET' &&
@@ -2741,10 +2742,12 @@ export class HttpProvider implements ApiProvider {
     logTransformedPrompt(transformedPrompt, prompt, parsedRequest.headers);
 
     const protocol = this.url.startsWith('https') || this.config.useHttps ? 'https' : 'http';
-    let url = new URL(
-      parsedRequest.url,
-      `${protocol}://${parsedRequest.headers['host']}`,
-    ).toString();
+    const origin = new URL(`${protocol}://${parsedRequest.headers.host}`);
+    const rawTarget = new URL(parsedRequest.url, origin);
+    if (options?.protectCatalogCredentials && rawTarget.origin !== origin.origin) {
+      return { error: 'The raw request target must use the configured host.' };
+    }
+    let url = rawTarget.toString();
 
     // Remove content-length header from raw request if the user added it, it will be added by fetch with the correct value
     delete parsedRequest.headers['content-length'];
@@ -2840,6 +2843,7 @@ export class HttpProvider implements ApiProvider {
 
     const fetchOptions: any = {
       method: parsedRequest.method,
+      ...(options?.protectCatalogCredentials && { redirect: 'error' }),
       headers: parsedRequest.headers,
       ...(options?.abortSignal && { signal: options.abortSignal }),
       ...(bodyContent && { body: bodyContent }),

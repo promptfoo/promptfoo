@@ -223,8 +223,10 @@ vi.mock('../../../src/node/testProvider', () => ({
   testProviderSession: mocks.testProviderSession,
 }));
 
-vi.mock('../../../src/server/config/serverConfig', () => ({
+vi.mock('../../../src/util/config/uiProviders', () => ({
   getAvailableProviders: mocks.getAvailableProviders,
+  getPublicProviderCatalog: () => [],
+  hasCustomProviderConfig: () => false,
 }));
 
 const HTTP_METHODS = ['get', 'post', 'put', 'patch', 'delete', 'head', 'options'] as const;
@@ -597,6 +599,12 @@ const smokeCases: SmokeCase[] = [
     method: 'get',
     openApiPath: '/api/providers/config-status',
     path: '/api/providers/config-status',
+    expectedStatus: 200,
+  },
+  {
+    method: 'get',
+    openApiPath: '/api/providers',
+    path: '/api/providers',
     expectedStatus: 200,
   },
   {

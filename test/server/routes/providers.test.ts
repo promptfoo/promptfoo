@@ -15,7 +15,7 @@ const createGeneratedChatConfig = () => ({
 // Mock dependencies
 vi.mock('../../../src/providers/index');
 vi.mock('../../../src/node/testProvider');
-vi.mock('../../../src/server/config/serverConfig');
+vi.mock('../../../src/util/config/uiProviders');
 vi.mock('../../../src/redteam/commands/discover');
 vi.mock('../../../src/redteam/remoteGeneration');
 vi.mock('../../../src/util/fetch/index');
@@ -33,7 +33,11 @@ import { testProviderConnectivity, testProviderSession } from '../../../src/node
 import { loadApiProvider } from '../../../src/providers/index';
 import { doTargetPurposeDiscovery } from '../../../src/redteam/commands/discover';
 import { neverGenerateRemote } from '../../../src/redteam/remoteGeneration';
-import { getAvailableProviders } from '../../../src/server/config/serverConfig';
+import {
+  getAvailableProviders,
+  getPublicProviderCatalog,
+  hasCustomProviderConfig,
+} from '../../../src/util/config/uiProviders';
 import { fetchWithProxy } from '../../../src/util/fetch/index';
 
 const mockedLoadApiProvider = vi.mocked(loadApiProvider);
@@ -49,6 +53,8 @@ describe('Providers Routes', () => {
 
   beforeEach(() => {
     vi.resetAllMocks();
+    vi.mocked(hasCustomProviderConfig).mockReturnValue(false);
+    vi.mocked(getPublicProviderCatalog).mockReturnValue([]);
     // Default to the non-cloud path so host-dependent assertions are deterministic
     // regardless of the machine's cloud-login state.
     vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
@@ -100,6 +106,53 @@ describe('Providers Routes', () => {
 
       expect(response.status).toBe(500);
       expect(response.body).toEqual({ error: 'Failed to load provider config status' });
+    });
+  });
+
+  describe('GET /providers', () => {
+    it('should return an empty catalog when no custom config exists', async () => {
+      mockedGetAvailableProviders.mockReturnValue([]);
+
+      const response = await api.get('/api/providers');
+
+      expect(response.status).toBe(200);
+      expect(response.body).toEqual({
+        success: true,
+        data: { providers: [], hasCustomConfig: false },
+      });
+    });
+
+    it('returns public references and labels', async () => {
+      vi.mocked(hasCustomProviderConfig).mockReturnValue(true);
+      const providers = [{ id: 'ui-catalog:entry', label: 'Internal Gateway' }];
+      vi.mocked(getPublicProviderCatalog).mockReturnValue(providers);
+
+      const response = await api.get('/api/providers');
+
+      expect(response.status).toBe(200);
+      expect(response.body).toEqual({
+        success: true,
+        data: { providers, hasCustomConfig: true },
+      });
+    });
+
+    it('keeps an empty or all-invalid catalog restricted', async () => {
+      vi.mocked(hasCustomProviderConfig).mockReturnValue(true);
+      mockedGetAvailableProviders.mockReturnValue([]);
+      const response = await api.get('/api/providers');
+      expect(response.status).toBe(200);
+      expect(response.body.data).toEqual({ providers: [], hasCustomConfig: true });
+    });
+
+    it('should return standardized 500 errors when catalog loading fails', async () => {
+      vi.mocked(getPublicProviderCatalog).mockImplementation(() => {
+        throw new Error('catalog unavailable');
+      });
+
+      const response = await api.get('/api/providers');
+
+      expect(response.status).toBe(500);
+      expect(response.body).toEqual({ error: 'Failed to load providers' });
     });
   });
 

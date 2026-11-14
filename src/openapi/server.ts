@@ -870,6 +870,18 @@ export function createServerOpenApiRegistry() {
   });
 
   register({
+    method: 'get',
+    path: '/api/providers',
+    operationId: 'getProviders',
+    tags: ['Providers'],
+    summary: 'Get configured provider catalog',
+    responses: {
+      200: jsonResponse(ProviderSchemas.Catalog.Response),
+      500: jsonResponse(ErrorResponseSchema, 'Server error'),
+    },
+  });
+
+  register({
     method: 'post',
     path: '/api/providers/test',
     operationId: 'testProvider',

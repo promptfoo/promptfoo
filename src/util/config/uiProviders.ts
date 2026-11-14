@@ -1,20 +1,27 @@
+import { createHash } from 'node:crypto';
 import { existsSync, readFileSync } from 'fs';
-import { homedir } from 'os';
 import { join } from 'path';
 
 import * as yaml from 'js-yaml';
-import { getEnvString } from '../../envars';
 import logger from '../../logger';
-import { loadYaml } from '../../util/yamlLoad';
-import { ProviderOptionsSchema } from '../../validators/providers';
+import { parseRateLimitHeaders } from '../../scheduler/headerParser';
+import { getProviderResponseHeaders, isProviderResponseRateLimited } from '../../scheduler/types';
+import { JsonProviderOptionsWithIdSchema } from '../../types/api/providers';
+import { BaseTokenUsageSchema } from '../../types/shared';
+import { isSafeCost } from '../numeric';
+import { UI_CATALOG_PROVIDER_PREFIX } from '../providerRef';
+import { loadYaml } from '../yamlLoad';
+import { getConfigDirectoryPath } from './manage';
 
-import type { ProviderOptions } from '../../types/providers';
+import type { ProviderOptions, ProviderResponse } from '../../types/providers';
 
 interface ServerConfig {
   providers?: (string | ProviderOptions)[];
 }
 
-let cachedConfig: ServerConfig | null = null;
+// Undefined is not loaded; null means no catalog existed when configuration was loaded.
+let cachedConfig: ServerConfig | null | undefined;
+let cachedCatalog: Map<string, ProviderOptions> | undefined;
 
 /**
  * Get the path to the UI providers config file
@@ -25,7 +32,7 @@ let cachedConfig: ServerConfig | null = null;
  */
 export function getServerConfigPath(): string | null {
   // Get config directory (default to ~/.promptfoo)
-  const configDir = getEnvString('PROMPTFOO_CONFIG_DIR') || join(homedir(), '.promptfoo');
+  const configDir = getConfigDirectoryPath();
 
   // Check for ui-providers.yaml, then the alternate .yml extension.
   for (const filename of ['ui-providers.yaml', 'ui-providers.yml']) {
@@ -45,8 +52,8 @@ export function getServerConfigPath(): string | null {
  * @returns Server configuration object
  */
 export function loadServerConfig(): ServerConfig {
-  if (cachedConfig) {
-    return cachedConfig;
+  if (cachedConfig !== undefined) {
+    return cachedConfig ?? {};
   }
 
   const configPath = getServerConfigPath();
@@ -81,8 +88,6 @@ export function loadServerConfig(): ServerConfig {
       if (err instanceof yaml.YAMLException) {
         logger.error('Invalid YAML syntax in ui-providers.yaml, using defaults', {
           configPath,
-          error: err,
-          yamlError: err.message,
           line: err.mark?.line,
           column: err.mark?.column,
         });
@@ -107,8 +112,13 @@ export function loadServerConfig(): ServerConfig {
   } else {
     logger.debug('No server config file found, using defaults');
   }
-  cachedConfig = {};
-  return cachedConfig;
+  cachedConfig = configPath ? {} : null;
+  return cachedConfig ?? {};
+}
+
+export function hasCustomProviderConfig(): boolean {
+  loadServerConfig();
+  return cachedConfig !== null;
 }
 
 /**
@@ -132,26 +142,20 @@ export function getAvailableProviders(): ProviderOptions[] {
     const normalized = typeof p === 'string' ? { id: p } : p;
 
     // Validate against schema
-    const result = ProviderOptionsSchema.safeParse(normalized);
+    const result = JsonProviderOptionsWithIdSchema.safeParse(normalized);
 
     if (!result.success) {
       logger.warn('Invalid provider configuration in ui-providers.yaml, skipping', {
         providerIndex: i,
-        provider: normalized,
-        validationErrors: result.error.issues,
+        invalidFields: result.error.issues.map(({ path }) => path.join('.')),
       });
       continue;
     }
 
-    // Ensure id is present (required for providers even though schema makes it optional)
-    if (!result.data.id) {
-      logger.warn('Provider missing required "id" field in ui-providers.yaml, skipping', {
-        providerIndex: i,
-        provider: normalized,
-      });
+    if (result.data.id.startsWith(UI_CATALOG_PROVIDER_PREFIX)) {
+      logger.warn('Ignoring a recursive ui-providers.yaml reference', { providerIndex: i });
       continue;
     }
-
     validatedProviders.push(result.data);
   }
 
@@ -164,4 +168,70 @@ export function getAvailableProviders(): ProviderOptions[] {
   }
 
   return validatedProviders;
+}
+
+function getProviderCatalog(): Map<string, ProviderOptions> {
+  if (cachedCatalog) {
+    return cachedCatalog;
+  }
+
+  const catalog = new Map<string, ProviderOptions>();
+  const duplicates = new Set<string>();
+  for (const [index, provider] of getAvailableProviders().entries()) {
+    const providerId = provider.id!;
+    // Only network hosts are public by default. Opaque IDs and local paths may contain secrets.
+    const url = URL.parse(providerId);
+    const displayId =
+      url && ['https:', 'http:', 'wss:', 'ws:'].includes(url.protocol) && url.hostname
+        ? `${url.protocol}//${url.hostname}`
+        : `Configured provider ${index + 1}`;
+    const key = createHash('sha256')
+      .update(JSON.stringify([providerId, provider.label]))
+      .digest('hex');
+    const id = `${UI_CATALOG_PROVIDER_PREFIX}${key}`;
+    if (catalog.has(id) || duplicates.has(id)) {
+      catalog.delete(id);
+      duplicates.add(id);
+      continue;
+    }
+    catalog.set(id, { ...provider, label: provider.label || displayId });
+  }
+  if (duplicates.size > 0) {
+    logger.warn('Give entries with the same provider ID distinct labels in ui-providers.yaml');
+  }
+  cachedCatalog = catalog;
+  return catalog;
+}
+
+export function getPublicProviderCatalog(): { id: string; label: string }[] {
+  return Array.from(getProviderCatalog(), ([id, provider]) => ({ id, label: provider.label! }));
+}
+
+export function getUiCatalogProvider(id: string): ProviderOptions | undefined {
+  return getProviderCatalog().get(id);
+}
+
+export function redactCatalogError(result: ProviderResponse, thrown?: Error): ProviderResponse {
+  const usage = BaseTokenUsageSchema.safeParse(result.tokenUsage);
+  const retryable = isProviderResponseRateLimited(result, thrown);
+  const headers = getProviderResponseHeaders(result);
+  const retryAfterMs = headers && parseRateLimitHeaders(headers).retryAfterMs;
+  return {
+    error: 'The configured catalog provider could not complete the request.',
+    ...(usage.success && { tokenUsage: usage.data }),
+    ...(isSafeCost(result.cost) && { cost: result.cost }),
+    ...(isSafeCost(result.incurredCost) && { incurredCost: result.incurredCost }),
+    ...(typeof result.cached === 'boolean' && { cached: result.cached }),
+    metadata: {
+      rateLimitRetryable: retryable,
+      ...(retryable && { rateLimitKind: 'rate_limit' }),
+      ...(retryable &&
+        retryAfterMs !== undefined && {
+          headers: { 'retry-after-ms': String(retryAfterMs) },
+        }),
+      ...(result.metadata?.retryableErrorKind === 'transient_availability' && {
+        retryableErrorKind: 'transient_availability',
+      }),
+    },
+  };
 }
