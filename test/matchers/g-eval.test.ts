@@ -273,6 +273,28 @@ describe('matchesGEval', () => {
     expect(provider.callApi).toHaveBeenCalledTimes(1);
   });
 
+  it('reads pretty-printed and fenced JSON from the grader', async () => {
+    vi.spyOn(DefaultGradingProvider, 'callApi')
+      .mockResolvedValueOnce({
+        output: '```json\n{\n  "steps": [\n    "Check clarity",\n    "Check tone"\n  ]\n}\n```',
+        tokenUsage: { total: 3, prompt: 1, completion: 2 },
+      })
+      .mockResolvedValueOnce({
+        output: '{\n  "score": 8,\n  "reason": "Clear and polite"\n}',
+        tokenUsage: { total: 3, prompt: 1, completion: 2 },
+      });
+
+    const result = await matchesGEval('Evaluate clarity', 'Test input', 'Test output', 0.7);
+
+    expect(result).toMatchObject({ pass: true, score: 0.8, reason: 'Clear and polite' });
+    expect(result.metadata?.graderError).toBeUndefined();
+    expect(DefaultGradingProvider.callApi).toHaveBeenNthCalledWith(
+      2,
+      expect.stringContaining('Check tone'),
+      expect.any(Object),
+    );
+  });
+
   it('should fail clearly when the evaluation steps shape is invalid', async () => {
     vi.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValueOnce({
       output: '{"steps":"Check clarity"}',
@@ -577,5 +599,18 @@ describe('matchesGEval', () => {
       completionDetails: expect.any(Object),
       numRequests: 0,
     });
+  });
+  it('selects usable grader JSON when an invalid candidate also appears', async () => {
+    const steps = ['{"steps":["Check accuracy"]}', '{"steps":[""]}'];
+    const grades = ['{"score":8,"reason":"Clear"}', '{"score":15,"reason":"Malformed"}'];
+    steps.reverse();
+    grades.reverse();
+    vi.spyOn(DefaultGradingProvider, 'callApi')
+      .mockResolvedValueOnce({ output: steps.join('\n') })
+      .mockResolvedValueOnce({ output: grades.join('\n') });
+
+    const result = await matchesGEval('Evaluate accuracy', 'Test input', 'Test output', 0.7);
+
+    expect(result).toMatchObject({ pass: true, score: 0.8, reason: 'Clear' });
   });
 });
