@@ -354,6 +354,20 @@ describe('CIGE agentic test case example', () => {
       expect(gradeCige(cige, transcript).namedScores).toMatchObject({ evidence: 1 });
     });
 
+    it('keeps each artifact without leaking a suffix when redacted names collide', () => {
+      const cige = loadCase('streaming-session.cige.yaml');
+      cige.guardrails.push({
+        rule: 'Hide artifact names and suffix separators',
+        enforce: { forbid_output_pattern: 'screenshot|connection_log|#' },
+      });
+      const { transcript } = runCige(cige);
+      expect(JSON.stringify(transcript)).not.toMatch(/screenshot|connection_log|#/);
+      expect(transcript.evidence['[REDACTED]']).toEqual([
+        expect.objectContaining({ bytes: 48213 }),
+        expect.arrayContaining([expect.objectContaining({ event: 'session_start' })]),
+      ]);
+    });
+
     it('does not credit inherited properties as evidence', () => {
       const cige = loadCase('streaming-session.cige.yaml');
       cige.intent.required_evidence = ['toString', 'constructor'];

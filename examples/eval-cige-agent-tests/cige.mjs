@@ -225,16 +225,19 @@ export function redact(value, enforced) {
       return node.map(walk);
     }
     if (isPlainObject(node)) {
-      const result = {};
+      // A generated disambiguation suffix can itself match a forbidden pattern.
+      // Collect colliding values under their shared redacted key.
+      const groups = new Map();
       for (const [key, item] of Object.entries(node)) {
-        let safeKey = redactText(key);
-        // Two keys can redact to the same text; keep both entries.
-        for (let n = 2; Object.hasOwn(result, safeKey); n += 1) {
-          safeKey = `${redactText(key)}#${n}`;
+        const safeKey = redactText(key);
+        if (!groups.has(safeKey)) {
+          groups.set(safeKey, []);
         }
-        result[safeKey] = walk(item);
+        groups.get(safeKey).push(walk(item));
       }
-      return result;
+      return Object.fromEntries(
+        Array.from(groups, ([key, items]) => [key, items.length === 1 ? items[0] : items]),
+      );
     }
     return node;
   };
