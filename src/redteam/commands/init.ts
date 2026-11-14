@@ -11,7 +11,7 @@ import dedent from 'dedent';
 import { getUserEmail, setUserEmail } from '../../globalConfig/accounts';
 import { readGlobalConfig, writeGlobalConfigPartial } from '../../globalConfig/globalConfig';
 import logger from '../../logger';
-import { GEMINI_TARGET_MODELS } from '../../providers/google/shared';
+import { GEMINI_TARGET_MODELS, getVertexModelDefaultRegion } from '../../providers/google/shared';
 import telemetry, { type EventProperties } from '../../telemetry';
 import { promptfooCommand } from '../../util/promptfooCommand';
 import { extractVariablesFromTemplate, getNunjucksEngine } from '../../util/templates';
@@ -169,6 +169,15 @@ async function getSystemPrompt(numVariablesRequired: number = 1): Promise<string
   }
 
   return prompt;
+}
+
+// Pin global so a regional VERTEX_REGION / GOOGLE_CLOUD_LOCATION cannot route a generated
+// target to an endpoint that does not serve it (e.g. global-only Gemini 3.1 Pro preview).
+function isGlobalVertexTarget(providerId: string): boolean {
+  return (
+    providerId.startsWith('vertex:') &&
+    getVertexModelDefaultRegion(providerId.slice('vertex:'.length)) === 'global'
+  );
 }
 
 export function renderRedteamConfig({
@@ -355,8 +364,8 @@ export async function redteamInit(directory: string | undefined) {
         })),
       ),
       {
-        name: 'Google Vertex Gemini 2.5 Pro',
-        value: 'vertex:gemini-2.5-pro',
+        name: 'Google Vertex Gemini 3.1 Pro',
+        value: 'vertex:gemini-3.1-pro-preview',
       },
     ];
 
@@ -375,9 +384,7 @@ export async function redteamInit(directory: string | undefined) {
         {
           id: selectedProvider,
           label,
-          ...(GEMINI_TARGET_MODELS.some(({ id }) => selectedProvider === `vertex:${id}`)
-            ? { config: { region: 'global' } }
-            : {}),
+          ...(isGlobalVertexTarget(selectedProvider) ? { config: { region: 'global' } } : {}),
         },
       ];
     }

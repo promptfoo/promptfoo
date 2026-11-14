@@ -9,6 +9,7 @@ import {
   withGenAISpan,
 } from '../../tracing/genaiTracer';
 import { fetchWithProxy } from '../../util/fetch/index';
+import { normalizeFinishReason } from '../../util/finishReason';
 import { loadYaml } from '../../util/yamlLoad';
 import {
   applyClaudeRegionalPremium,
@@ -351,15 +352,16 @@ export class VertexChatProvider extends GoogleGenericProvider {
           ? 'vertex:llama'
           : 'vertex:palm2';
 
-    // Set up tracing context
+    const llama = system === 'vertex:llama' ? this.getLlamaSamplingOptions() : undefined;
     const spanContext: GenAISpanContext = {
       system,
       operationName: 'chat',
       model: this.modelName,
       providerId: this.id(),
-      temperature: this.config.temperature,
-      topP: this.config.topP,
-      maxTokens: this.config.maxOutputTokens || this.config.max_tokens,
+      temperature: llama?.temperature ?? this.config.temperature,
+      topP: llama?.top_p ?? this.config.topP,
+      topK: llama?.top_k,
+      maxTokens: llama?.max_tokens ?? (this.config.maxOutputTokens || this.config.max_tokens),
       testIndex: context?.testIdx ?? (context?.test?.vars?.__testIdx as number | undefined),
       promptLabel: context?.prompt?.label,
       // W3C Trace Context for linking to evaluation trace
@@ -549,13 +551,17 @@ export class VertexChatProvider extends GoogleGenericProvider {
     }
 
     try {
-      const output = outputFromMessage(data as any, showThinking);
-
-      if (!output) {
+      // An empty completion is a valid answer that assertions can grade;
+      // only a response without a content array is malformed.
+      if (!Array.isArray(data?.content)) {
         return {
           error: `No output found in Claude API response: ${JSON.stringify(data)}`,
         };
       }
+
+      const output = outputFromMessage(data as any, showThinking);
+      // Says why an empty completion is empty (e.g. `length` when thinking used up max_tokens).
+      const finishReason = normalizeFinishReason(data.stop_reason);
 
       const tokenUsage: TokenUsage = {
         ...getTokenUsage(data, false),
@@ -588,6 +594,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
         cached: false,
         output,
         tokenUsage,
+        ...(finishReason && { finishReason }),
         cost: calculateAnthropicCost(
           pricingModelName,
           effectivePricingConfig,
@@ -1214,6 +1221,16 @@ export class VertexChatProvider extends GoogleGenericProvider {
     }
   }
 
+  private getLlamaSamplingOptions() {
+    const generationConfig = this.config.generationConfig;
+    return {
+      max_tokens: generationConfig?.maxOutputTokens ?? this.config.maxOutputTokens ?? 1024,
+      temperature: generationConfig?.temperature ?? this.config.temperature,
+      top_p: generationConfig?.topP ?? this.config.topP,
+      top_k: generationConfig?.topK ?? this.config.topK,
+    };
+  }
+
   async callLlamaApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     const region = this.getRegion();
     const regionError = getVertexLlamaRegionError(this.modelName, region);
@@ -1237,15 +1254,11 @@ export class VertexChatProvider extends GoogleGenericProvider {
       return { error: safetyRequestConfig.error };
     }
 
-    // Prepare the request body for Llama models
     const body = {
       model: getVertexLlamaWireId(this.modelName),
       messages,
-      max_tokens: this.config.maxOutputTokens || 1024,
       stream: false,
-      temperature: this.config.temperature,
-      top_p: this.config.topP,
-      top_k: this.config.topK,
+      ...this.getLlamaSamplingOptions(),
       ...safetyRequestConfig.bodyFields,
     };
 
@@ -1288,6 +1301,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
         message: {
           content: string;
         };
+        finish_reason?: string | null;
       }>;
       usage?: {
         total_tokens: number;
@@ -1342,13 +1356,10 @@ export class VertexChatProvider extends GoogleGenericProvider {
     }
 
     try {
-      // Extract the completion text from the response
-      let output = '';
-      if (data.choices && data.choices.length > 0) {
-        output = data.choices[0].message.content;
-      }
+      // Extract the completion text; an empty string is a valid completion.
+      const output = data?.choices?.[0]?.message?.content;
 
-      if (!output) {
+      if (typeof output !== 'string') {
         return {
           error: `No output found in Llama API response: ${JSON.stringify(data)}`,
         };
@@ -1362,10 +1373,12 @@ export class VertexChatProvider extends GoogleGenericProvider {
         numRequests: 1,
       };
 
+      const finishReason = normalizeFinishReason(data.choices?.[0]?.finish_reason);
       const response = {
         cached: false,
         output,
         tokenUsage,
+        ...(finishReason && { finishReason }),
       };
 
       if (cache && cacheKey) {
