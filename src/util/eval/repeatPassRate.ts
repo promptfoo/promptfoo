@@ -16,6 +16,6 @@ export function getFailingRepeatGroups(
     return [];
   }
   return summary.groups.filter(
-    (group) => group.repetitions > 0 && (group.passed / group.repetitions) * 100 < threshold,
+    (group) => group.repetitions > 0 && (group.passed * 100) / group.repetitions < threshold,
   );
 }

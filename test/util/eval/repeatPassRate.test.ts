@@ -38,6 +38,14 @@ describe('getFailingRepeatGroups', () => {
     expect(getFailingRepeatGroups(summary, 33)).toEqual([]);
   });
 
+  it('accepts a pass rate equal to the configured percentage', () => {
+    const summary = calculateRepeatStability(
+      Array.from({ length: 50 }, (_, i) => result('boundary', i, i < 29)),
+    );
+    expect(getFailingRepeatGroups(summary, 58)).toEqual([]);
+    expect(getFailingRepeatGroups(summary, 58.001)).toHaveLength(1);
+  });
+
   it('counts errored repetitions as not passing', () => {
     const summary = calculateRepeatStability([
       result('errors', 0, true),

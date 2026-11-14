@@ -177,17 +177,17 @@ function handleRecoverableWatchError(error: unknown): boolean {
   return false;
 }
 
-async function applyCliRepeatPassRateThreshold({
-  evalRecord,
+function getCliRepeatPassRateExitCode({
+  repeatStability,
   failedTestExitCode,
   isCliInvocation,
   repeat,
 }: {
-  evalRecord: Eval;
-  failedTestExitCode: number | undefined;
+  repeatStability: Awaited<ReturnType<Eval['getRepeatStability']>>;
+  failedTestExitCode: number;
   isCliInvocation: boolean;
   repeat: number;
-}): Promise<void> {
+}): number | undefined {
   const configuredThreshold = getEnvString('PROMPTFOO_TEST_REPEAT_PASS_RATE_THRESHOLD');
   if (
     !isCliInvocation ||
@@ -203,18 +203,17 @@ async function applyCliRepeatPassRateThreshold({
     logger.error(
       chalk.red('PROMPTFOO_TEST_REPEAT_PASS_RATE_THRESHOLD must be a number from 0 to 100.'),
     );
-    process.exitCode = 1;
-    return;
+    return 1;
   }
 
-  const failing = getFailingRepeatGroups(await evalRecord.getRepeatStability(), threshold);
+  const failing = getFailingRepeatGroups(repeatStability, threshold);
   if (failing.length === 0) {
     return;
   }
 
   logger.info(chalk.white('Per-test repeat pass rate check failed:'));
   for (const group of failing) {
-    const groupPassRate = (group.passed / group.repetitions) * 100;
+    const groupPassRate = (group.passed * 100) / group.repetitions;
     const label = [
       group.description || group.repeatGroupId,
       group.promptLabel,
@@ -228,7 +227,7 @@ async function applyCliRepeatPassRateThreshold({
       ),
     );
   }
-  process.exitCode = Number.isSafeInteger(failedTestExitCode) ? failedTestExitCode : 100;
+  return failedTestExitCode;
 }
 
 /**
@@ -1327,13 +1326,24 @@ async function doEvalWithEnv(
       }
     } else {
       const passRateThreshold = getEnvFloat('PROMPTFOO_PASS_RATE_THRESHOLD', 100);
-      const failedTestExitCode = getEnvInt('PROMPTFOO_FAILED_TEST_EXIT_CODE', 100);
-
+      const configuredExitCode = getEnvInt('PROMPTFOO_FAILED_TEST_EXIT_CODE', 100);
+      const failedTestExitCode = Number.isSafeInteger(configuredExitCode)
+        ? configuredExitCode
+        : 100;
+      const repeatExitCode = getCliRepeatPassRateExitCode({
+        repeatStability,
+        failedTestExitCode,
+        isCliInvocation,
+        repeat,
+      });
       const belowThreshold =
         passRate < (Number.isFinite(passRateThreshold) ? passRateThreshold : 100);
       // An eval stopped because its target is unavailable did not run every test, so it
       // fails whatever the tests before the stop did.
-      if (isCliInvocation && (belowThreshold || targetErrorStatus != null)) {
+      if (
+        isCliInvocation &&
+        (belowThreshold || targetErrorStatus != null || repeatExitCode !== undefined)
+      ) {
         if (belowThreshold && getEnvFloat('PROMPTFOO_PASS_RATE_THRESHOLD') !== undefined) {
           logger.info(
             chalk.white(
@@ -1341,20 +1351,13 @@ async function doEvalWithEnv(
             ),
           );
         }
-        process.exitCode = Number.isSafeInteger(failedTestExitCode) ? failedTestExitCode : 100;
+        process.exitCode = repeatExitCode ?? failedTestExitCode;
         // A run that failed its tests returns here, as it always has. A run stopped by its
         // target goes on to clean up its providers, as it did when it still exited with 0.
-        if (targetErrorStatus == null) {
+        if (belowThreshold && targetErrorStatus == null) {
           return ret;
         }
       }
-
-      await applyCliRepeatPassRateThreshold({
-        evalRecord,
-        failedTestExitCode,
-        isCliInvocation,
-        repeat,
-      });
     }
     if (testSuite.redteam) {
       showRedteamProviderLabelMissingWarning(testSuite);

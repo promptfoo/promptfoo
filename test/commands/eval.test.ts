@@ -402,10 +402,10 @@ describe('evalCommand', () => {
   });
 
   it.each(['-1', '101', 'not-a-number', '80oops'])(
-    'rejects invalid repeat pass-rate threshold %s without skipping cleanup',
+    'rejects invalid repeat pass-rate threshold %s even when the aggregate gate fails',
     async (threshold) => {
       const restoreEnv = mockProcessEnv({
-        PROMPTFOO_PASS_RATE_THRESHOLD: '0',
+        PROMPTFOO_PASS_RATE_THRESHOLD: '100',
         PROMPTFOO_TEST_REPEAT_PASS_RATE_THRESHOLD: threshold,
       });
       const previousExitCode = process.exitCode;
@@ -425,23 +425,29 @@ describe('evalCommand', () => {
           const result = {
             promptIdx: 0,
             testIdx: 0,
-            testCase: { description: 'passing repetitions' },
+            testCase: { description: 'failing repetitions' },
             promptId: 'prompt-1',
             provider: { id: 'echo' },
             prompt: { raw: 'test', label: 'test', id: 'prompt-1' },
             vars: {},
-            success: true,
-            score: 1,
+            success: false,
+            score: 0,
             latencyMs: 1,
             namedScores: {},
-            failureReason: ResultFailureReason.NONE,
+            failureReason: ResultFailureReason.ASSERT,
             repeatGroupId: 'test-0-vars-0',
             repeatIndex: 0,
           };
 
           await (evalRecord as Eval).addResult(result);
           await (evalRecord as Eval).addResult({ ...result, testIdx: 1, repeatIndex: 1 });
-          return evalRecord as Eval;
+          const record = evalRecord as Eval;
+          record.prompts = [
+            {
+              metrics: { testPassCount: 0, testFailCount: 2, testErrorCount: 0 },
+            } as (typeof record.prompts)[number],
+          ];
+          return record;
         });
 
         await doEval({ table: false, write: false, repeat: 2 }, defaultConfig, defaultConfigPath, {
