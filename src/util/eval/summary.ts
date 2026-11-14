@@ -1,5 +1,6 @@
 import chalk from 'chalk';
 import { formatDuration } from '../../util/formatDuration';
+import { getWilsonScoreInterval } from './repeatStability';
 
 import type { RepeatStabilitySummary, TokenUsage } from '../../types/index';
 import type { TokenUsageTracker } from '../../util/tokenUsage';
@@ -37,6 +38,8 @@ export interface EvalSummaryParams {
   errors: number;
   /** Number of test cases served from the response cache (shown only when > 0) */
   cacheHits?: number;
+  /** User opted into an interval for a single, independently sampled series. */
+  showPassRateInterval?: boolean;
   /** Duration of the evaluation in seconds */
   duration: number;
   /** Maximum concurrent API calls during evaluation */
@@ -324,11 +327,12 @@ function formatResultLine(
   icon: string | undefined,
   iconColor: (text: string) => string,
   totalTests: number,
+  details = formatResultPercentage(count, totalTests),
 ): string {
   const iconPart = icon ? `${iconColor(icon)} ` : '';
   return `  ${iconPart}${chalk.white.bold(count.toLocaleString())} ${chalk.white(
     label,
-  )} ${chalk.gray(`(${formatResultPercentage(count, totalTests)})`)}`;
+  )} ${chalk.gray(`(${details})`)}`;
 }
 
 function getResultsLines({
@@ -338,17 +342,36 @@ function getResultsLines({
   cacheHits,
   duration,
   maxConcurrency,
+  showPassRateInterval,
 }: Pick<
   EvalSummaryParams,
-  'successes' | 'failures' | 'errors' | 'cacheHits' | 'duration' | 'maxConcurrency'
+  | 'successes'
+  | 'failures'
+  | 'errors'
+  | 'cacheHits'
+  | 'duration'
+  | 'maxConcurrency'
+  | 'showPassRateInterval'
 >) {
   const totalTests = successes + failures + errors;
   const errorLabel = errors === 1 ? 'error' : 'errors';
+  const interval =
+    showPassRateInterval && !cacheHits ? getWilsonScoreInterval(successes, totalTests) : undefined;
+  const passDetails = interval
+    ? `${formatResultPercentage(successes, totalTests)}; 95% CI ${(interval.lower * 100).toFixed(1)}–${(interval.upper * 100).toFixed(1)}%`
+    : undefined;
 
   return [
     '',
     chalk.bold('Results:'),
-    formatResultLine(successes, 'passed', successes > 0 ? '✓' : undefined, chalk.green, totalTests),
+    formatResultLine(
+      successes,
+      'passed',
+      successes > 0 ? '✓' : undefined,
+      chalk.green,
+      totalTests,
+      passDetails,
+    ),
     formatResultLine(failures, 'failed', failures > 0 ? '✗' : undefined, chalk.red, totalTests),
     formatResultLine(errors, errorLabel, errors > 0 ? '✗' : undefined, chalk.red, totalTests),
     ...(cacheHits

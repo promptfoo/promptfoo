@@ -82,6 +82,7 @@ export const EvalCommandSchema = CommandLineOptionsSchema.extend({
   remote: z.boolean().optional(),
   noShare: z.boolean().optional(),
   retryErrors: z.boolean().optional(),
+  passRateCi: z.boolean().optional(),
   // CLI alias preserved for the existing --suggest-prompts <n> flag; canonical key is suggestionsCount.
   suggestPrompts: z.coerce.number().int().positive().max(MAX_SUGGESTIONS_COUNT).optional(),
   extension: z.array(z.string()).optional(),
@@ -1111,6 +1112,14 @@ async function doEvalWithEnv(
       cacheHits,
       duration,
       maxConcurrency,
+      // Pooled columns, repeats, and replayed results reuse test cases.
+      showPassRateInterval:
+        (cmdObj as EvalCommandOptions).passRateCi === true &&
+        !isRedteam &&
+        !resumeEval &&
+        evalRecord.prompts.length === 1 &&
+        repeat === 1 &&
+        !repeatStability,
       tracker,
       targetErrorStatus,
       repeatStability,

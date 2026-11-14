@@ -710,6 +710,39 @@ describe('generateEvalSummary', () => {
   });
 
   describe('pass rate and results', () => {
+    it.each([
+      {
+        showPassRateInterval: true,
+        cacheHits: 0,
+        expected: '17 passed (85.00%; 95% CI 64.0–94.8%)',
+      },
+      { showPassRateInterval: true, cacheHits: 18, expected: '17 passed (85.00%)' },
+      { showPassRateInterval: false, cacheHits: 0, expected: '17 passed (85.00%)' },
+    ])(
+      'formats a sampled pass rate with opt-in $showPassRateInterval and $cacheHits cache hits',
+      ({ showPassRateInterval, cacheHits, expected }) => {
+        const params: EvalSummaryParams = {
+          evalId: 'eval-sampled',
+          isRedteam: false,
+          writeToDatabase: false,
+          shareableUrl: null,
+          wantsToShare: false,
+          hasExplicitDisable: false,
+          cloudEnabled: false,
+          tokenUsage: { total: 0 },
+          successes: 17,
+          failures: 3,
+          errors: 0,
+          duration: 1000,
+          maxConcurrency: 1,
+          tracker: mockTracker,
+          showPassRateInterval,
+          cacheHits,
+        };
+        expect(stripAnsi(generateEvalSummary(params).join('\n'))).toContain(expected);
+      },
+    );
+
     it('should show percentages for each result line at 100% pass rate', () => {
       const params: EvalSummaryParams = {
         evalId: 'eval-100',
