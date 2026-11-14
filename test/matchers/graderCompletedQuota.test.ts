@@ -295,6 +295,7 @@ describe('completed quota from a configured local Chat grader', () => {
           ...grade,
           tokensUsed: { total: 5, prompt: 2, completion: 3, numRequests: 1 },
           metadata: {
+            gradingProvider: 'gpt-4o-mini',
             renderedGradingPrompt: 'Grade B answer against must satisfy the rubric.',
             http: { status: 200, statusText: 'OK', headers: responseHeaders },
           },

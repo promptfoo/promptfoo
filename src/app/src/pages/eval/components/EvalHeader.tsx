@@ -57,7 +57,16 @@ export default function EvalHeader({
 }: EvalHeaderProps) {
   const { showToast } = useToast();
 
-  const { evalId, author, config, totalResultsCount, stats, table, setAuthor } = useTableStore();
+  const {
+    evalId,
+    author,
+    config,
+    totalResultsCount,
+    stats,
+    table,
+    setAuthor,
+    accumulatedGradingProviders,
+  } = useTableStore();
 
   const { head } = table!;
 
@@ -95,6 +104,10 @@ export default function EvalHeader({
     () => new Set(head.prompts.map((p) => p.provider)).size,
     [head.prompts],
   );
+
+  // Evaluation-wide (accumulated across paginated fetches), not the current page alone.
+  // Default to [] so partial store mocks / pre-init state cannot crash the header.
+  const uniqueJudges = accumulatedGradingProviders ?? [];
 
   const probesCount = React.useMemo(() => {
     return head.prompts[0]?.metrics?.tokenUsage?.numRequests || totalResultsCount;
@@ -264,6 +277,16 @@ export default function EvalHeader({
                   <Chip label="PROVIDERS" interactive={false}>
                     {uniqueProviderCount}
                   </Chip>
+                  {uniqueJudges.length > 0 && (
+                    <div className="w-full max-w-full rounded-md px-1 py-0.5">
+                      <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                        Judges
+                      </div>
+                      <div className="whitespace-normal break-all font-mono text-xs">
+                        {uniqueJudges.join(', ')}
+                      </div>
+                    </div>
+                  )}
                   <Chip label="TESTS" interactive={false}>
                     {totalResultsCount}
                   </Chip>
@@ -306,6 +329,14 @@ export default function EvalHeader({
                 <span className="font-semibold text-gray-700">Providers:</span>{' '}
                 <span>{uniqueProviderCount}</span>
               </div>
+              {uniqueJudges.length > 0 && (
+                <div className="col-span-3">
+                  <span className="font-semibold text-gray-700">Judges:</span>{' '}
+                  <span className="whitespace-normal break-all font-mono text-xs">
+                    {uniqueJudges.join(', ')}
+                  </span>
+                </div>
+              )}
               <div>
                 <span className="font-semibold text-gray-700">Tests:</span>{' '}
                 <span>{totalResultsCount}</span>

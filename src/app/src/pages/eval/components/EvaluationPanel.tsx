@@ -9,6 +9,7 @@ import {
 import { cn } from '@app/lib/utils';
 import { Check, ChevronDown, CircleCheck, CircleX, Copy, CornerDownRight } from 'lucide-react';
 import { ellipsize } from '../../../../../util/text';
+import { getGradingProviderDisplay } from './utils';
 import type { Assertion, GradingResult } from '@promptfoo/types';
 
 const COPY_FEEDBACK_DURATION_MS = 2000;
@@ -263,6 +264,7 @@ function AssertionResults({ gradingResults }: { gradingResults?: GradingResult[]
 
   const assertionRows = buildAssertionRows(gradingResults);
   const hasMetrics = assertionRows.some(({ result }) => getMetric(result));
+  const hasJudges = assertionRows.some(({ result }) => getGradingProviderDisplay(result));
 
   const toggleExpand = (rowId: string) => {
     setExpandedValues((prev) => ({ ...prev, [rowId]: !prev[rowId] }));
@@ -294,6 +296,7 @@ function AssertionResults({ gradingResults }: { gradingResults?: GradingResult[]
             <th className="px-4 py-3 text-left font-semibold">Pass</th>
             <th className="px-4 py-3 text-left font-semibold">Score</th>
             <th className="px-4 py-3 text-left font-semibold">Type</th>
+            {hasJudges && <th className="px-4 py-3 text-left font-semibold">Judge</th>}
             <th className="px-4 py-3 text-left font-semibold">Value</th>
             <th className="px-4 py-3 text-left font-semibold">Reason</th>
           </tr>
@@ -313,6 +316,7 @@ function AssertionResults({ gradingResults }: { gradingResults?: GradingResult[]
             const hasChildren = getChildResults(result).length > 0;
             const assertionType = getAssertionType(result);
             const metric = getMetric(result);
+            const judge = getGradingProviderDisplay(result);
             const graderOutputs = getGraderOutputs(result);
             const indentationStyle = { paddingLeft: depth * ASSERTION_ROW_INDENT_PX };
 
@@ -348,6 +352,17 @@ function AssertionResults({ gradingResults }: { gradingResults?: GradingResult[]
                     </span>
                   </div>
                 </td>
+                {hasJudges && (
+                  <td className="px-4 py-3">
+                    {judge ? (
+                      <span className="font-mono text-xs text-muted-foreground break-all">
+                        {judge}
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground">-</span>
+                    )}
+                  </td>
+                )}
                 <td
                   className="relative px-4 py-3 whitespace-pre-wrap cursor-pointer max-w-md"
                   onClick={() => toggleExpand(rowId)}

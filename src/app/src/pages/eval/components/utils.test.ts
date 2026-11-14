@@ -589,3 +589,331 @@ describe('hashVarSchema', () => {
     expect(hashVarSchema(vars1)).not.toBe(hashVarSchema(vars2));
   });
 });
+
+describe('getGradingProviderDisplay', () => {
+  it('prefers metadata.gradingProvider over assertion.provider', async () => {
+    const { getGradingProviderDisplay } = await import('./utils');
+    expect(
+      getGradingProviderDisplay({
+        pass: true,
+        score: 1,
+        reason: 'ok',
+        assertion: { type: 'llm-rubric', provider: 'openai:ignored' },
+        metadata: { gradingProvider: 'openai:gpt-4.1-mini' },
+      }),
+    ).toBe('openai:gpt-4.1-mini');
+  });
+
+  it('formats assertion.provider objects with labels', async () => {
+    const { getGradingProviderDisplay } = await import('./utils');
+    expect(
+      getGradingProviderDisplay({
+        pass: true,
+        score: 1,
+        reason: 'ok',
+        assertion: {
+          type: 'llm-rubric',
+          provider: { id: 'openai:gpt-4o', label: 'Judge' },
+        },
+      }),
+    ).toBe('openai:gpt-4o (Judge)');
+  });
+});
+
+it('unwraps typed provider maps like { text: string }', async () => {
+  const { getGradingProviderDisplay } = await import('./utils');
+  expect(
+    getGradingProviderDisplay({
+      pass: true,
+      score: 1,
+      reason: 'ok',
+      assertion: {
+        type: 'llm-rubric',
+        provider: { text: 'litellm:judge' },
+      },
+    }),
+  ).toBe('litellm:judge');
+});
+
+it('unwraps nested typed provider maps like { text: { id } }', async () => {
+  const { getGradingProviderDisplay } = await import('./utils');
+  expect(
+    getGradingProviderDisplay({
+      pass: true,
+      score: 1,
+      reason: 'ok',
+      assertion: {
+        type: 'llm-rubric',
+        provider: { text: { id: 'openai:gpt-4o', label: 'Judge' } },
+      },
+    }),
+  ).toBe('openai:gpt-4o (Judge)');
+});
+
+it('does not treat similar embedding providers as judges', async () => {
+  const { getGradingProviderDisplay } = await import('./utils');
+  expect(
+    getGradingProviderDisplay({
+      pass: true,
+      score: 1,
+      reason: 'ok',
+      assertion: {
+        type: 'similar',
+        provider: 'openai:text-embedding-3-large',
+      },
+    }),
+  ).toBeUndefined();
+});
+
+it('still shows runtime gradingProvider metadata for non-judge assertion types', async () => {
+  const { getGradingProviderDisplay } = await import('./utils');
+  expect(
+    getGradingProviderDisplay({
+      pass: true,
+      score: 1,
+      reason: 'ok',
+      assertion: { type: 'similar', provider: 'openai:text-embedding-3-large' },
+      metadata: { gradingProvider: 'openai:gpt-4.1-mini' },
+    }),
+  ).toBe('openai:gpt-4.1-mini');
+});
+
+it('falls back to assertion.provider for conversation-relevance', async () => {
+  const { getGradingProviderDisplay } = await import('./utils');
+  expect(
+    getGradingProviderDisplay({
+      pass: true,
+      score: 1,
+      reason: 'ok',
+      assertion: {
+        type: 'conversation-relevance',
+        provider: 'openai:gpt-4.1-mini',
+      },
+    }),
+  ).toBe('openai:gpt-4.1-mini');
+});
+
+it('prefers metadata.searchProvider over assertion.provider for search-rubric', async () => {
+  const { getGradingProviderDisplay } = await import('./utils');
+  expect(
+    getGradingProviderDisplay({
+      pass: true,
+      score: 1,
+      reason: 'ok',
+      assertion: {
+        type: 'search-rubric',
+        provider: 'openai:gpt-4o',
+      },
+      metadata: { searchProvider: 'openai:gpt-4o-search-preview' },
+    }),
+  ).toBe('openai:gpt-4o-search-preview');
+});
+
+it('falls back to assertion.provider for search-rubric without searchProvider', async () => {
+  const { getGradingProviderDisplay } = await import('./utils');
+  expect(
+    getGradingProviderDisplay({
+      pass: true,
+      score: 1,
+      reason: 'ok',
+      assertion: {
+        type: 'search-rubric',
+        provider: 'openai:gpt-4o',
+      },
+    }),
+  ).toBe('openai:gpt-4o');
+});
+
+it.each(['pi', 'search-rubric'] as const)(
+  'omits the configured provider when it cannot identify the %s judge',
+  async (type) => {
+    const { getGradingProviderDisplay } = await import('./utils');
+    expect(
+      getGradingProviderDisplay({
+        pass: false,
+        score: 0,
+        reason: 'grader failed',
+        assertion: { type, provider: 'openai:gpt-4o' },
+        metadata: { graderError: true },
+      }),
+    ).toBeUndefined();
+  },
+);
+
+it('strips credentials from a stored raw search-rubric searchProvider URL', async () => {
+  const { getGradingProviderDisplay } = await import('./utils');
+  expect(
+    getGradingProviderDisplay({
+      pass: true,
+      score: 1,
+      reason: 'ok',
+      assertion: { type: 'search-rubric' },
+      metadata: {
+        searchProvider:
+          'https://judge:hunter2@api.perplexity.ai/chat/completions?api_key=sk-live-1234567890abcdef',
+      },
+    }),
+  ).toBe('https://api.perplexity.ai/chat/completions');
+});
+
+it('drops the ambiguous legacy suffix after a raw judge URL query', async () => {
+  const { getGradingProviderDisplay } = await import('./utils');
+  expect(
+    getGradingProviderDisplay({
+      pass: true,
+      score: 1,
+      reason: 'ok',
+      metadata: {
+        gradingProvider: 'https://judge:hunter2@judge.example.com/v1?token=abc (My judge)',
+      },
+    }),
+  ).toBe('https://judge.example.com/v1');
+});
+
+it.each([
+  ['https://u:p@judge.example/grade(v2)?token=fixture', 'https://judge.example/grade(v2)'],
+  ['id (https://judge.example/grade(v2)?token=fixture)', 'id (https://judge.example/grade(v2))'],
+  ['/token/abcdef1234567890/grade?token=fixture', '/token/%5BREDACTED%5D/grade'],
+])(
+  'sanitizes the complete endpoint in stored and configured judges',
+  async (provider, expected) => {
+    const { getGradingProviderDisplay } = await import('./utils');
+    const result = { pass: true, score: 1, reason: 'ok' };
+    expect(getGradingProviderDisplay({ ...result, metadata: { gradingProvider: provider } })).toBe(
+      expected,
+    );
+    expect(
+      getGradingProviderDisplay({ ...result, assertion: { type: 'llm-rubric', provider } }),
+    ).toBe(expected);
+  },
+);
+
+it('redacts a complete URL embedded in a label', async () => {
+  const { getGradingProviderDisplay } = await import('./utils');
+  const gradingProvider = 'see=https://u:p(w)@judge.example/grade(v2)?token=fixture';
+  expect(
+    getGradingProviderDisplay({
+      pass: true,
+      score: 1,
+      reason: 'ok',
+      metadata: { gradingProvider },
+    }),
+  ).toBe('see=https://judge.example/grade(v2)');
+});
+
+it('handles long labels and redacts malformed endpoints', async () => {
+  const { getGradingProviderDisplay } = await import('./utils');
+  const label = 'A'.repeat(100_000);
+  const display = (gradingProvider: string) =>
+    getGradingProviderDisplay({
+      pass: true,
+      reason: 'ok',
+      score: 1,
+      metadata: { gradingProvider },
+    });
+  expect(display(label)).toBe(label);
+  expect(display(label + '!https://[?token=fixture')).toBe('[REDACTED]');
+  expect(display('://u:p@judge.example')).toBe('[REDACTED]');
+  expect(display('https://synthetic user?x@judge.example')).toBe('[REDACTED]');
+  expect(display('https://one.example/https://u:p@two.example')).toBe('[REDACTED]');
+});
+
+it.each([
+  'https://judge.example/grade?api_key=first second',
+  'https://judge.example/grade?api_key=first (second)',
+  'https://judge.example/grade first second',
+  'Judge /grade?api_key=first second',
+])('does not expose legacy raw query continuations', async (gradingProvider) => {
+  const { getGradingProviderDisplay } = await import('./utils');
+  const result = { pass: true, score: 1, reason: 'ok' };
+  for (const display of [
+    getGradingProviderDisplay({ ...result, metadata: { gradingProvider } }),
+    getGradingProviderDisplay({
+      ...result,
+      assertion: { type: 'llm-rubric', provider: gradingProvider },
+    }),
+  ]) {
+    expect(display).toBeDefined();
+    expect(display).not.toMatch(/first|second/);
+  }
+});
+
+it('keeps the primary endpoint recognizable after composing sanitized fields', async () => {
+  const { getGradingProviderDisplay } = await import('./utils');
+  expect(
+    getGradingProviderDisplay({
+      pass: true,
+      score: 1,
+      reason: 'ok',
+      metadata: {
+        gradingProvider: 'https://judge.example/grade (Custom https://service.example/check)',
+      },
+    }),
+  ).toBe('https://judge.example/grade');
+});
+
+it('leaves provider ids without a URL unchanged', async () => {
+  const { getGradingProviderDisplay } = await import('./utils');
+  expect(
+    getGradingProviderDisplay({
+      pass: true,
+      score: 1,
+      reason: 'ok',
+      metadata: { gradingProvider: 'openai:gpt-4.1-mini (Judge)' },
+    }),
+  ).toBe('openai:gpt-4.1-mini (Judge)');
+});
+
+describe('collectUniqueGradingProviders', () => {
+  it('collects unique judges from nested componentResults', async () => {
+    const { collectUniqueGradingProviders } = await import('./utils');
+    const providers = collectUniqueGradingProviders({
+      head: { prompts: [], vars: [] },
+      body: [
+        {
+          outputs: [
+            {
+              id: '1',
+              pass: true,
+              score: 1,
+              text: 'out',
+              prompt: 'p',
+              cost: 0,
+              latencyMs: 1,
+              namedScores: {},
+              failureReason: 0 as any,
+              testCase: {},
+              gradingResult: {
+                pass: true,
+                score: 1,
+                reason: 'ok',
+                componentResults: [
+                  {
+                    pass: true,
+                    score: 1,
+                    reason: 'a',
+                    metadata: { gradingProvider: 'openai:a' },
+                  },
+                  {
+                    pass: true,
+                    score: 1,
+                    reason: 'b',
+                    metadata: { gradingProvider: 'openai:b' },
+                  },
+                  {
+                    pass: true,
+                    score: 1,
+                    reason: 'a-again',
+                    metadata: { gradingProvider: 'openai:a' },
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      ],
+    } as any);
+
+    expect(providers).toEqual(['openai:a', 'openai:b']);
+  });
+});

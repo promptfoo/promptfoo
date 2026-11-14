@@ -11,7 +11,7 @@ import {
 import { create } from 'zustand';
 import { persist, subscribeWithSelector } from 'zustand/middleware';
 import logger from '../../../../../logger';
-import { hasHumanRating } from './utils';
+import { collectUniqueGradingProviders, hasHumanRating } from './utils';
 import type { Policy, PolicyObject } from '@promptfoo/redteam/types';
 import type {
   EvalResultsFilterMode,
@@ -297,6 +297,15 @@ interface TableState {
    */
   stats: EvaluateStats | null;
 
+  /**
+   * Unique LLM-as-a-judge provider ids accumulated across paginated table
+   * fetches for the current eval. The visible `table` is only one page, so the
+   * EvalHeader Judges list reads this instead. Tradeoff: judges from pages the
+   * user has not visited yet are missing until those pages are fetched; this
+   * avoids a backend aggregate / extra full-results request.
+   */
+  accumulatedGradingProviders: string[];
+
   fetchEvalData: (id: string, options?: FetchEvalOptions) => Promise<EvalTableDTO | null>;
   isFetching: boolean;
   isStreaming: boolean;
@@ -529,7 +538,12 @@ const clearFilters = (prevState: TableState) => ({
 export const useTableStore = create<TableState>()(
   subscribeWithSelector((set, get) => ({
     evalId: null,
-    setEvalId: (evalId: string) => set(() => ({ evalId, filteredMetrics: null })),
+    setEvalId: (evalId: string) =>
+      set((state) => ({
+        evalId,
+        filteredMetrics: null,
+        ...(state.evalId === evalId ? {} : { accumulatedGradingProviders: [] }),
+      })),
 
     author: null,
     setAuthor: (author: string | null) => set(() => ({ author })),
@@ -544,12 +558,19 @@ export const useTableStore = create<TableState>()(
      * are not updated.
      */
     setTable: (table: EvaluateTable | null) => {
-      set((prevState) => ({
-        table,
-        highlightedResultsCount: computeHighlightCount(table),
-        userRatedResultsCount: computeUserRatedCount(table),
-        filters: prevState.filters,
-      }));
+      set((prevState) => {
+        const pageJudges = collectUniqueGradingProviders(table);
+        const accumulatedGradingProviders = Array.from(
+          new Set([...prevState.accumulatedGradingProviders, ...pageJudges]),
+        ).sort((a, b) => a.localeCompare(b));
+        return {
+          table,
+          highlightedResultsCount: computeHighlightCount(table),
+          userRatedResultsCount: computeUserRatedCount(table),
+          accumulatedGradingProviders,
+          filters: prevState.filters,
+        };
+      });
     },
 
     config: null,
@@ -565,6 +586,8 @@ export const useTableStore = create<TableState>()(
       set(() => ({ filteredMetrics: metrics })),
 
     stats: null,
+
+    accumulatedGradingProviders: [],
 
     highlightedResultsCount: 0,
     userRatedResultsCount: 0,
@@ -595,6 +618,8 @@ export const useTableStore = create<TableState>()(
         currentState.currentMetadataKeysRequest.abort();
       }
 
+      const switchingEval = !skipSettingEvalId && get().evalId !== id;
+
       set({
         isFetching: skipLoadingState ? get().isFetching : true,
         shouldHighlightSearchText: false,
@@ -607,6 +632,9 @@ export const useTableStore = create<TableState>()(
         metadataValuesLoading: {},
         metadataValuesError: {},
         currentMetadataValuesRequests: {},
+        // Reset judge aggregate when loading a different eval; keep it when
+        // paging/filtering within the same eval so Judges stay evaluation-wide.
+        ...(switchingEval ? { accumulatedGradingProviders: [] } : {}),
       });
 
       try {
@@ -655,32 +683,48 @@ export const useTableStore = create<TableState>()(
             extractPolicyIdToNameMap(data.config?.redteam?.plugins ?? []),
           ]);
 
-          set((prevState) => ({
-            table: data.table,
-            filteredResultsCount: data.filteredCount,
-            totalResultsCount: data.totalCount,
-            highlightedResultsCount: computeHighlightCount(data.table),
-            userRatedResultsCount: computeUserRatedCount(data.table),
-            config: data.config,
-            version: data.version,
-            author: data.author,
-            evalId: skipSettingEvalId ? get().evalId : id,
-            isFetching: skipLoadingState ? prevState.isFetching : false,
-            shouldHighlightSearchText: searchText !== '',
-            // Store filtered metrics from backend (null when no filters or feature disabled)
-            filteredMetrics: data.filteredMetrics || null,
-            // Store evaluation-level stats including durationMs
-            stats: data.stats || null,
-            filters: {
-              ...prevState.filters,
-              options: {
-                metric: computeAvailableMetrics(data.table),
-                metadata: [],
-                ...redteamOptions,
+          if (skipSettingEvalId && get().evalId !== id) {
+            return data;
+          }
+
+          set((prevState) => {
+            const nextEvalId = skipSettingEvalId ? prevState.evalId : id;
+            const pageJudges = collectUniqueGradingProviders(data.table);
+            const sameEval = prevState.evalId === nextEvalId;
+            const accumulatedGradingProviders = (
+              sameEval
+                ? Array.from(new Set([...prevState.accumulatedGradingProviders, ...pageJudges]))
+                : pageJudges
+            ).sort((a, b) => a.localeCompare(b));
+
+            return {
+              table: data.table,
+              filteredResultsCount: data.filteredCount,
+              totalResultsCount: data.totalCount,
+              highlightedResultsCount: computeHighlightCount(data.table),
+              userRatedResultsCount: computeUserRatedCount(data.table),
+              config: data.config,
+              version: data.version,
+              author: data.author,
+              evalId: nextEvalId,
+              isFetching: skipLoadingState ? prevState.isFetching : false,
+              shouldHighlightSearchText: searchText !== '',
+              // Store filtered metrics from backend (null when no filters or feature disabled)
+              filteredMetrics: data.filteredMetrics || null,
+              // Store evaluation-level stats including durationMs
+              stats: data.stats || null,
+              accumulatedGradingProviders,
+              filters: {
+                ...prevState.filters,
+                options: {
+                  metric: computeAvailableMetrics(data.table),
+                  metadata: [],
+                  ...redteamOptions,
+                },
+                policyIdToNameMap,
               },
-              policyIdToNameMap,
-            },
-          }));
+            };
+          });
 
           // Metadata keys will be fetched lazily when user opens metadata filter dropdown
 

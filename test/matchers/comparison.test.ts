@@ -63,7 +63,7 @@ describe('matchesSelectBest', () => {
 
     for (const gradingResult of result) {
       expect(gradingResult).toMatchObject({
-        metadata: { cachedResponse: true },
+        metadata: { cachedResponse: true, gradingProvider: provider.id() },
         tokensUsed: { total: 30, prompt: 18, completion: 12, cached: 30, numRequests: 1 },
       });
     }
@@ -84,7 +84,7 @@ describe('matchesSelectBest', () => {
     for (const gradingResult of result) {
       expect(gradingResult).toMatchObject({
         pass: false,
-        metadata: { cachedResponse: true },
+        metadata: { cachedResponse: true, gradingProvider: provider.id() },
         tokensUsed: { total: 30, cached: 30 },
       });
     }

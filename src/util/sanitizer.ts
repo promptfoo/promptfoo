@@ -1740,3 +1740,73 @@ export function sanitizeUrlForLogging(url: string): string {
     return unparseableUrlMightLeakSecret(url) || hasOpaquePath ? REDACTED : sanitized;
   }
 }
+
+/**
+ * A raw HTTP provider can return spaces and parentheses inside its credential.
+ * Treat the remainder of the string as part of the URL, including for older
+ * composite IDs whose label and query cannot be distinguished.
+ */
+function sanitizeJudgePart(part: string): string {
+  const separator = part.indexOf('://');
+  const pathStart = /(?:^|[\s(=])\//.exec(part);
+  let start: number;
+  if (separator >= 0) {
+    start = separator;
+    while (start > 0 && /[a-z0-9+.-]/i.test(part[start - 1])) {
+      start--;
+    }
+    if (!/[a-z]/i.test(part[start]) || (pathStart && pathStart.index < start)) {
+      return REDACTED;
+    }
+  } else {
+    if (!pathStart) {
+      return part;
+    }
+    start = pathStart.index + pathStart[0].length - 1;
+  }
+
+  const prefix = part.slice(0, start);
+  const wrapped = prefix.endsWith('(') && part.endsWith(')');
+  const value = part.slice(start, wrapped ? -1 : undefined);
+  const queryOrFragment = value.search(/[?#]/);
+  const beforeQuery = queryOrFragment < 0 ? value : value.slice(0, queryOrFragment);
+  const whitespace = beforeQuery.search(/\s/);
+  if (whitespace >= 0 && !beforeQuery.slice(whitespace).trimStart().startsWith('(')) {
+    // Raw userinfo and historical partially redacted credentials can contain spaces.
+    return REDACTED;
+  }
+  const endpoint = whitespace < 0 ? beforeQuery : beforeQuery.slice(0, whitespace);
+  if (
+    (whitespace >= 0 && beforeQuery.slice(whitespace).includes('@')) ||
+    (separator >= 0 && endpoint.includes('://', endpoint.indexOf('://') + 3))
+  ) {
+    // Ambiguous authorities may span whitespace or include another URL.
+    return REDACTED;
+  }
+
+  try {
+    const url = new URL(endpoint, DUMMY_BASE);
+    const authority =
+      separator >= 0
+        ? `${url.protocol}//${url.host}`
+        : value.startsWith('//')
+          ? `//${url.host}`
+          : '';
+    const path =
+      authority && url.pathname === '/' && !endpoint.endsWith('/')
+        ? ''
+        : sanitizeUrlForLogging(url.pathname);
+    return prefix + authority + path + (wrapped ? ')' : '');
+  } catch {
+    return REDACTED;
+  }
+}
+
+/** Sanitize structured provider fields before adding any display punctuation. */
+export function sanitizeGradingProviderDisplay(id: string, label?: string): string {
+  const safeId = sanitizeJudgePart(id);
+  const displayLabel = typeof label === 'string' ? label.trim() : '';
+  return displayLabel && displayLabel !== id
+    ? `${safeId} (${sanitizeJudgePart(displayLabel)})`
+    : safeId;
+}

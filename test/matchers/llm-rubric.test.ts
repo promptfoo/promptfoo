@@ -271,6 +271,7 @@ describe('matchesLlmRubric', () => {
     expect(result.metadata).toEqual({
       uploadId: 'upload-123',
       trace: { id: 'trace-456' },
+      gradingProvider: 'test-provider',
       renderedGradingPrompt: 'Grading prompt',
     });
   });
@@ -289,6 +290,7 @@ describe('matchesLlmRubric', () => {
 
     expect(result.metadata).toMatchObject({
       cachedResponse: true,
+      gradingProvider: 'test-provider',
       renderedGradingPrompt: 'Grading prompt',
     });
     expect(result.tokensUsed?.total).toBe(37);
@@ -309,6 +311,7 @@ describe('matchesLlmRubric', () => {
 
     expect(result.metadata).toEqual({
       uploadId: 'upload-123',
+      gradingProvider: 'test-provider',
       renderedGradingPrompt: 'Grading prompt',
     });
     expect(result.tokensUsed).toMatchObject({ total: 37, numRequests: 1 });
@@ -329,6 +332,7 @@ describe('matchesLlmRubric', () => {
 
     expect(result.metadata).toEqual({
       uploadId: 'upload-123',
+      gradingProvider: 'test-provider',
       renderedGradingPrompt: 'Grading prompt',
       cachedResponse: true,
     });
@@ -351,6 +355,30 @@ describe('matchesLlmRubric', () => {
 
     expect(result.metadata).toEqual({
       uploadId: 'upload-123',
+      gradingProvider: 'test-provider',
+      renderedGradingPrompt: 'Grading prompt',
+    });
+  });
+
+  it('should preserve gradingProvider when provider metadata uses the same key', async () => {
+    const result = await matchesLlmRubric('Expected output', 'Sample output', {
+      rubricPrompt: 'Grading prompt',
+      provider: createMockProvider({
+        id: 'openai:gpt-4.1-mini',
+        response: {
+          output: JSON.stringify({ pass: true, score: 1, reason: 'ok' }),
+          metadata: {
+            gradingProvider: 'spoofed:judge',
+            uploadId: 'upload-123',
+          },
+          tokenUsage: { total: 10, prompt: 5, completion: 5 },
+        },
+      }),
+    });
+
+    expect(result.metadata).toEqual({
+      uploadId: 'upload-123',
+      gradingProvider: 'openai:gpt-4.1-mini',
       renderedGradingPrompt: 'Grading prompt',
     });
   });
@@ -368,6 +396,7 @@ describe('matchesLlmRubric', () => {
     });
 
     expect(result.metadata).toEqual({
+      gradingProvider: 'test-provider',
       renderedGradingPrompt: 'Grading prompt',
     });
   });
@@ -390,6 +419,7 @@ describe('matchesLlmRubric', () => {
     expect(result.metadata).toEqual({
       uploadId: 'upload-123',
       trace: { id: 'trace-456' },
+      gradingProvider: 'test-provider',
       renderedGradingPrompt: 'Grading prompt',
     });
     expect(result.metadata).not.toHaveProperty('self');
@@ -438,6 +468,7 @@ describe('matchesLlmRubric', () => {
       }),
     );
     expect(result.metadata).toEqual({
+      gradingProvider: 'test-provider',
       renderedGradingPrompt: 'Grade this output: Generated image',
       renderedGradingPromptImages: 1,
     });
@@ -475,6 +506,7 @@ describe('matchesLlmRubric', () => {
       text: 'Grade this output: [Image output attached. Inspect the attached image directly for visual grading.]',
     });
     expect(result.metadata).toEqual({
+      gradingProvider: 'test-provider',
       renderedGradingPrompt:
         'Grade this output: [Image output attached. Inspect the attached image directly for visual grading.]',
       renderedGradingPromptImages: 1,
@@ -998,6 +1030,7 @@ describe('matchesLlmRubric', () => {
       expect.any(Object),
     );
     expect(result.metadata).toEqual({
+      gradingProvider: 'test-provider',
       renderedGradingPrompt: 'Grade this output: Generated output',
     });
   });
@@ -1325,7 +1358,7 @@ describe('matchesLlmRubric', () => {
       score: 0,
       reason:
         'llm-rubric produced malformed response - output must be string or object. Output: 42',
-      metadata: { graderError: true },
+      metadata: { graderError: true, gradingProvider: 'test-provider' },
       tokensUsed: {
         total: 10,
         prompt: 5,
@@ -1349,7 +1382,7 @@ describe('matchesLlmRubric', () => {
       pass: false,
       score: 0,
       reason: 'No output',
-      metadata: { graderError: true },
+      metadata: { graderError: true, gradingProvider: 'test-provider' },
       tokensUsed: {
         total: 10,
         prompt: 5,
@@ -1376,7 +1409,7 @@ describe('matchesLlmRubric', () => {
     expect(result).toMatchObject({
       pass: false,
       reason: 'No output',
-      metadata: { graderError: true, cachedResponse: true },
+      metadata: { graderError: true, cachedResponse: true, gradingProvider: 'test-provider' },
       tokensUsed: { total: 37, prompt: 23, completion: 14, numRequests: 1 },
     });
   });
@@ -1390,7 +1423,7 @@ describe('matchesLlmRubric', () => {
     expect(result).toMatchObject({
       pass: false,
       reason: 'No output',
-      metadata: { graderError: true },
+      metadata: { graderError: true, gradingProvider: 'test-provider' },
       tokensUsed: { total: 0, numRequests: 1 },
     });
   });
@@ -1413,7 +1446,7 @@ describe('matchesLlmRubric', () => {
       score: 0,
       reason:
         'llm-rubric produced malformed response - output must be string or object. Output: [{"pass":false,"score":0,"reason":"bad"}]',
-      metadata: { graderError: true },
+      metadata: { graderError: true, gradingProvider: 'test-provider' },
       tokensUsed: {
         total: 10,
         prompt: 5,
@@ -1442,7 +1475,7 @@ describe('matchesLlmRubric', () => {
       pass: false,
       score: 0,
       reason: expect.stringContaining('Could not extract JSON from llm-rubric response'),
-      metadata: { graderError: true },
+      metadata: { graderError: true, gradingProvider: 'test-provider' },
       tokensUsed: {
         total: 10,
         prompt: 5,
@@ -1468,7 +1501,7 @@ describe('matchesLlmRubric', () => {
 
     expect(result).toMatchObject({
       pass: false,
-      metadata: { graderError: true, cachedResponse: true },
+      metadata: { graderError: true, cachedResponse: true, gradingProvider: 'test-provider' },
       tokensUsed: { total: 37, prompt: 23, completion: 14, numRequests: 1 },
     });
   });
@@ -1490,7 +1523,7 @@ describe('matchesLlmRubric', () => {
       pass: false,
       score: 0,
       reason: 'Could not extract JSON from llm-rubric response',
-      metadata: { graderError: true },
+      metadata: { graderError: true, gradingProvider: 'test-provider' },
       tokensUsed: {
         total: 10,
         prompt: 5,
@@ -1519,7 +1552,7 @@ describe('matchesLlmRubric', () => {
       pass: false,
       score: 0,
       reason: 'Could not extract JSON from llm-rubric response',
-      metadata: { graderError: true },
+      metadata: { graderError: true, gradingProvider: 'test-provider' },
       tokensUsed: {
         total: 10,
         prompt: 5,
@@ -1549,7 +1582,7 @@ describe('matchesLlmRubric', () => {
       pass: false,
       score: 0,
       reason: 'Could not extract JSON from llm-rubric response',
-      metadata: { graderError: true },
+      metadata: { graderError: true, gradingProvider: 'test-provider' },
       tokensUsed: {
         total: 10,
         prompt: 5,
@@ -1578,7 +1611,7 @@ describe('matchesLlmRubric', () => {
       pass: false,
       score: 0,
       reason: 'Could not extract JSON from llm-rubric response',
-      metadata: { graderError: true },
+      metadata: { graderError: true, gradingProvider: 'test-provider' },
       tokensUsed: {
         total: 10,
         prompt: 5,
@@ -1607,7 +1640,7 @@ describe('matchesLlmRubric', () => {
       pass: false,
       score: 0,
       reason: 'Could not extract JSON from llm-rubric response',
-      metadata: { graderError: true },
+      metadata: { graderError: true, gradingProvider: 'test-provider' },
       tokensUsed: {
         total: 10,
         prompt: 5,
@@ -2829,7 +2862,7 @@ describe('matchesLlmRubric missing-verdict fail-closed semantics', () => {
       expect(result).toMatchObject({
         pass: false,
         score: 0,
-        metadata: { graderError: true },
+        metadata: { graderError: true, gradingProvider: 'test-provider' },
         tokensUsed: { total: 10, prompt: 5, completion: 5 },
       });
     },

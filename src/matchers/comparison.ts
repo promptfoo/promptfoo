@@ -3,7 +3,12 @@ import { getDefaultProviders } from '../providers/defaults';
 import invariant from '../util/invariant';
 import { callProviderWithContext, getAndCheckProvider } from './providers';
 import { loadRubricPrompt, renderLlmRubricPrompt } from './rubric';
-import { fail, normalizeMatcherTokenUsage, tryParse } from './shared';
+import {
+  fail,
+  formatResolvedGradingProvider,
+  normalizeMatcherTokenUsage,
+  tryParse,
+} from './shared';
 
 import type {
   Assertion,
@@ -58,11 +63,14 @@ export async function matchesSelectBest(
         }
       : resp.tokenUsage,
   );
-  const cacheMetadata = resp.cached ? { metadata: { cachedResponse: true } } : {};
+  const metadata = {
+    gradingProvider: formatResolvedGradingProvider(textProvider),
+    ...(resp.cached ? { cachedResponse: true } : {}),
+  };
   const failureResults = (reason: () => string) =>
     Array.from({ length: outputs.length }, () => ({
       ...fail(reason(), tokensUsed),
-      ...cacheMetadata,
+      metadata: { ...metadata },
     }));
   if (resp.error || !resp.output) {
     return failureResults(() => resp.error || 'No output');
@@ -86,7 +94,7 @@ export async function matchesSelectBest(
         ? `Output selected as the best: ${criteria}`
         : `Output not selected: ${criteria}`,
       tokensUsed,
-      ...cacheMetadata,
+      metadata: { ...metadata },
     };
   });
 }
