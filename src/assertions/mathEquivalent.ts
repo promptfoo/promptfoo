@@ -799,19 +799,23 @@ function stripThinkingBlocks(text: string): string {
   // Scan each tag once. Repeated unclosed opening tags must not restart a
   // search for a closing tag at every position. An unfinished block is hidden.
   const visible: string[] = [];
-  let hiddenTag: string | undefined;
+  const hiddenTags: string[] = [];
   let start = 0;
   for (const tag of text.matchAll(/<(\/?)(think(?:ing)?)>/gi)) {
     const name = tag[2].toLowerCase();
-    if (!hiddenTag && !tag[1]) {
-      visible.push(text.slice(start, tag.index));
-      hiddenTag = name;
-    } else if (hiddenTag === name && tag[1]) {
-      start = tag.index + tag[0].length;
-      hiddenTag = undefined;
+    if (!tag[1]) {
+      if (hiddenTags.length === 0) {
+        visible.push(text.slice(start, tag.index));
+      }
+      hiddenTags.push(name);
+    } else if (hiddenTags.at(-1) === name) {
+      hiddenTags.pop();
+      if (hiddenTags.length === 0) {
+        start = tag.index + tag[0].length;
+      }
     }
   }
-  if (!hiddenTag) {
+  if (hiddenTags.length === 0) {
     visible.push(text.slice(start));
   }
 

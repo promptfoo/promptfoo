@@ -315,6 +315,11 @@ describe('cleanMathText', async () => {
     expect(cleanMathText('42\n' + 'Thinking: hidden\n'.repeat(8_000))).toBe('42');
   });
 
+  it('keeps nested reasoning hidden until its outer closing tag', () => {
+    expect(cleanMathText('<think>outer<thinking>inner</thinking>hidden 7</think>42')).toBe('42');
+    expect(cleanMathText('<think><think>inner</think>hidden 7</think>42')).toBe('42');
+  });
+
   it('strips Bedrock <thinking> blocks', async () => {
     expect(cleanMathText('<thinking>\n$$2$$\n</thinking>\n\n0.5')).toBe('0.5');
   });
