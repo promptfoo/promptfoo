@@ -224,10 +224,15 @@ function getPrimaryRenderedImageSrc(text: string, inlineImageSrc?: string): stri
   }
 
   if (isImageLikeDataUri(text)) {
-    return inlineImageSrc || text;
+    return inlineImageSrc || trimmed;
   }
 
-  if (inlineImageSrc && !trimmed.startsWith('data:')) {
+  // A blob hash ends before whitespace. Storage keys can contain spaces.
+  // Let the embedded-image path split trailing diagnostics from the reference.
+  const hasTrailingText =
+    (trimmed.startsWith('promptfoo://blob/') && /\s/.test(trimmed)) ||
+    (trimmed.startsWith('storageRef:') && /[\r\n]/.test(trimmed));
+  if (inlineImageSrc && !trimmed.startsWith('data:') && !hasTrailingText) {
     return inlineImageSrc;
   }
 
@@ -242,7 +247,9 @@ function getEmbeddedImageSource(text: string): { src: string; remainingText: str
     return undefined;
   }
 
-  const match = text.match(EMBEDDED_IMAGE_SOURCE_REGEX);
+  // A leading storage key can contain spaces. A newline separates it from the diagnostic.
+  const match =
+    text.match(/^(storageRef:[^\r\n]+)[\r\n]/) ?? text.match(EMBEDDED_IMAGE_SOURCE_REGEX);
   const candidate = match?.[1];
   if (!candidate || match.index === undefined) {
     return undefined;

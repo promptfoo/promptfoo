@@ -855,6 +855,36 @@ describe('EvalOutputCell', () => {
     expect(renderedSources).toEqual([dataUri, 'https://example.com/secondary-inline.png']);
   });
 
+  it.each([
+    ['storageRef:/image/123456789abc.png', '\n', '/api/media/image/123456789abc.png'],
+    ['storageRef:/image/my file.png', '\n', '/api/media/image/my file.png'],
+    [`promptfoo://blob/${'a'.repeat(64)}`, '\n', `/api/blobs/${'a'.repeat(64)}`],
+    [`promptfoo://blob/${'a'.repeat(64)}`, ' ', `/api/blobs/${'a'.repeat(64)}`],
+  ])(
+    'retains diagnostics after a leading media reference %s',
+    (source, separator, expectedPath) => {
+      const { container } = renderWithProviders(
+        <EvalOutputCell
+          {...defaultProps}
+          output={{ ...defaultProps.output, text: `${source}${separator}Assertion details` }}
+        />,
+      );
+      expect(container.querySelector('img')?.getAttribute('src')).toMatch(expectedPath);
+      expect(screen.getByText('Assertion details')).toBeInTheDocument();
+    },
+  );
+
+  it('uses the local data URL for a whitespace-prefixed inline image', () => {
+    const source = 'data:image/png;base64,AA==';
+    const { container } = renderWithProviders(
+      <EvalOutputCell
+        {...defaultProps}
+        output={{ ...defaultProps.output, text: `\u00a0${source}` }}
+      />,
+    );
+    expect(container.querySelector('img')?.getAttribute('src')).toBe(source);
+  });
+
   it('deduplicates an embedded image from structured images without losing surrounding text', () => {
     const dataUri = 'data:image/png;base64,aGVsbG8=';
     const props: MockEvalOutputCellProps = {
