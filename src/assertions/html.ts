@@ -137,8 +137,7 @@ const OPTIONAL_END_TAG_RULES: Record<
   p: (nextElement, hasMoreContent) =>
     (nextElement !== undefined && BLOCK_ELEMENTS_AFTER_P.has(nextElement)) || !hasMoreContent,
   li: (nextElement, hasMoreContent) => nextElement === 'li' || !hasMoreContent,
-  dt: (nextElement, hasMoreContent) =>
-    nextElement === 'dt' || nextElement === 'dd' || !hasMoreContent,
+  dt: (nextElement) => nextElement === 'dt' || nextElement === 'dd',
   dd: (nextElement, hasMoreContent) =>
     nextElement === 'dd' || nextElement === 'dt' || !hasMoreContent,
   rt: (nextElement, hasMoreContent) =>
@@ -209,6 +208,26 @@ function getFollowingContext(element: HtmlElement): FollowingContext {
   );
 }
 
+// These HTML parents require a closing paragraph tag even at the end of their contents.
+const EXPLICIT_PARAGRAPH_END_PARENTS = new Set([
+  'a',
+  'audio',
+  'del',
+  'ins',
+  'map',
+  'noscript',
+  'video',
+]);
+
+function requiresParagraphEndAtParentEnd(element: HtmlElement): boolean {
+  const parent = element.parentNode;
+  return (
+    !!parent &&
+    isElementNode(parent) &&
+    (EXPLICIT_PARAGRAPH_END_PARENTS.has(parent.tagName) || parent.tagName.includes('-'))
+  );
+}
+
 // parse5's adoption-agency recovery moves a paragraph out of its source
 // link and inserts a reconstructed link inside it, with no source location.
 function hasUnclosedParagraphInLink(element: HtmlElement, previous: HtmlNode | undefined): boolean {
@@ -275,7 +294,11 @@ function isUnclosedElement(element: HtmlElement, input: string): boolean {
     : undefined;
   if (rule) {
     const { nextElement, hasMoreContent, previous } = getFollowingContext(element);
-    if (tagName === 'p' && hasUnclosedParagraphInLink(element, previous)) {
+    if (
+      tagName === 'p' &&
+      ((!hasMoreContent && requiresParagraphEndAtParentEnd(element)) ||
+        hasUnclosedParagraphInLink(element, previous))
+    ) {
       return true;
     }
     return !rule(nextElement, hasMoreContent);

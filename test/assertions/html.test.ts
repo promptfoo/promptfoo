@@ -492,7 +492,9 @@ describe('handleIsHtml', () => {
       ['<ul><li>a</li><li>b</li></ul>', true, 'explicit li'],
       // dt/dd: omissible before dt/dd or at end of parent.
       ['<dl><dt>a<dd>b</dl>', true, 'dt before dd'],
-      ['<dl><dt>a</dl>', true, 'dt at end of parent'],
+      ['<dl><dt>a</dl>', false, 'final dt requires an explicit end tag'],
+      ['<del><p>x</del>', false, 'p at end of del'],
+      ['<del><p>x</p></del>', true, 'explicit p at end of del'],
       ['<dl><dt>a</dt><dd>b</dd></dl>', true, 'explicit dt/dd'],
       // rt/rp: omissible before rt/rp or at end of parent.
       ['<ruby>x<rt>a<rp>b</ruby>', true, 'rt before rp'],
