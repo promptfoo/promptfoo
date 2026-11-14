@@ -24,12 +24,13 @@ const SCALE_MULTIPLIERS: Record<string, number> = {
 
 /**
  * Matches one number token, for example `$416.2 billion`, `416,161 million`, `$416.16B`,
- * `(1,234)`, `-3.5` or `4.16161e11`. A token must not start in the middle of a word, so `FY2025`
- * and `Q3` are ignored. Spelled-out scale words may follow a space; abbreviations (K/M/B/T) must
- * be attached to the number, and `bn`/`mn` may follow a space.
+ * `(1,234)`, `( $42 )`, `($1.2) billion`, `-3.5` or `4.16161e11`. A token must not start in the
+ * middle of a word, so `FY2025` and `Q3` are ignored. Spelled-out scale words may follow any run of
+ * spaces or tabs, including after accounting parentheses; abbreviations (K/M/B/T) must be attached
+ * to the number, and `bn`/`mn` may follow whitespace.
  */
 const NUMBER_TOKEN_REGEX =
-  /(?<![\p{L}\p{N}_.])(\()?([-−])?([$€£¥])?([-−])?((?:\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?|\.\d+)(?:e[-+]?\d+)?)(?:(?:\s?(thousand|million|billion|trillion|bn|mn)s?\b)|([kmbt])(?![\p{L}\p{N}_]))?([ \t]?(?:%|percent\b|per cent\b))?(\))?/giu;
+  /(?<![\p{L}\p{N}_.])(?:(\()[ \t]*)?([-−])?([$€£¥])?([-−])?((?:\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?|\.\d+)(?:e[-+]?\d+)?)(?:(?:[^\S\r\n]*(thousand|million|billion|trillion|bn|mn)s?\b)|([kmbt])(?![\p{L}\p{N}_]))?([ \t]?(?:%|percent\b|per cent\b))?(?:[ \t]*(\)))?(?:[^\S\r\n]*(thousand|million|billion|trillion|bn|mn)s?\b)?/giu;
 
 /**
  * A `Final answer` heading line: `Final answer: 42`, `**Final answer:** 42`, `Final answer - 42`
@@ -73,9 +74,13 @@ export function extractNumberTokens(text: string): NumberToken[] {
       scaleSuffix,
       percentage,
       closeParen,
+      scaleAfterParen,
     ] = match;
     let value = Number.parseFloat(digits.replace(/,/g, ''));
-    const scale = (scaleWord ?? scaleSuffix)?.toLowerCase();
+    // A scale word after the closing parenthesis (`($1.2) billion`) only belongs to an accounting
+    // negative; otherwise it is ignored, as before.
+    const outerScale = openParen && closeParen ? scaleAfterParen : undefined;
+    const scale = (scaleWord ?? scaleSuffix ?? outerScale)?.toLowerCase();
     if (scale) {
       value *= SCALE_MULTIPLIERS[scale];
     }
@@ -114,7 +119,9 @@ export function extractNumbers(text: string): number[] {
  * Returns the text that holds the stated answer: the content of the last `Final answer` heading
  * line (or the block under a bare heading) when the output has one, otherwise the whole output.
  */
-export function getStatedAnswerText(text: string): string {
+export function getStatedAnswerText(rawText: string): string {
+  // Strip paired emphasis first so `**Final answer: $416.2** billion` keeps its unit.
+  const text = rawText.replace(INLINE_EMPHASIS_REGEX, '$2');
   const finalAnswers = [...text.matchAll(FINAL_ANSWER_REGEX)];
   if (finalAnswers.length === 0) {
     return text;

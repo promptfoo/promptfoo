@@ -308,6 +308,46 @@ describe('handleNumericMatch', () => {
     });
   });
 
+  describe('formatting edge cases (Codex review)', () => {
+    it.each([
+      ['Net loss: ($1.2) billion', -1.2e9],
+      ['Net loss: ( $42 )', -42],
+      ['Net loss: ( $1.2 ) billion', -1.2e9],
+      ['$416.2  billion', 416.2e9],
+      ['$416.2\tbillion', 416.2e9],
+    ])('extracts %s', (text, expected) => {
+      expect(extractNumbers(text)).toEqual([expected]);
+    });
+
+    it('keeps the scale outside accounting parentheses', () => {
+      expect(runNumericMatch('Net loss: ($1.2) billion', -1_200_000_000).pass).toBe(true);
+      expect(runNumericMatch('Net loss: ($1.2) billion', -1.2).pass).toBe(false);
+    });
+
+    it('keeps the sign of padded accounting negatives', () => {
+      expect(runNumericMatch('Net loss: ( $42 )', -42).pass).toBe(true);
+      expect(runNumericMatch('Net loss: ( $42 )', 42).pass).toBe(false);
+    });
+
+    it('consumes a whitespace run before a magnitude word', () => {
+      expect(runNumericMatch('Final answer: $416.2  billion', 416_200_000_000).pass).toBe(true);
+      expect(runNumericMatch('Final answer: $416.2  billion', 416.2).pass).toBe(false);
+    });
+
+    it.each(['**Final answer: $416.2** billion', 'Final answer **$416.2** billion'])(
+      'keeps the unit when emphasis wraps part of the heading: %s',
+      (output) => {
+        expect(getStatedAnswerText(output).trim()).toBe('$416.2 billion');
+        expect(runNumericMatch(output, 416_200_000_000).pass).toBe(true);
+        expect(runNumericMatch(output, 416.2).pass).toBe(false);
+      },
+    );
+
+    it('does not move a scale word onto a number outside parentheses', () => {
+      expect(extractNumbers('(see note 4) billion')).toEqual([4]);
+    });
+  });
+
   it('rejects expected values that overflow when scaled', () => {
     expect(() => runNumericMatch('1', `${'9'.repeat(300)} trillion`)).toThrow('overflows');
   });
