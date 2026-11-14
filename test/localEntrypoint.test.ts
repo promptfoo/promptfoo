@@ -43,6 +43,19 @@ describe('localEntrypoint', () => {
     expect(process.argv[1]).toBe(expectedMainPath);
   });
 
+  it.each(['evals', 'prompts', 'datasets'])(
+    'routes startup and shutdown logs to stderr for list %s --json',
+    async (resource) => {
+      restoreEnv = mockProcessEnv({ LOG_LEVEL: 'debug', PROMPTFOO_LOG_TO_STDERR: undefined });
+      process.argv = ['node', '/tmp/localEntrypoint.ts', 'list', resource, '--json'];
+
+      await import('../src/localEntrypoint');
+
+      expect(process.env.LOG_LEVEL).toBe('debug');
+      expect(process.env.PROMPTFOO_LOG_TO_STDERR).toBe('true');
+    },
+  );
+
   it('preserves the caller log level for non-structured commands', async () => {
     restoreEnv = mockProcessEnv({ LOG_LEVEL: 'debug', PROMPTFOO_LOG_TO_STDERR: undefined });
     process.argv = ['node', '/tmp/localEntrypoint.ts', 'eval', '--verbose'];

@@ -1,3 +1,4 @@
+import { type Command, Option } from 'commander';
 import logger from '../logger';
 import Eval, { EvalQueries } from '../models/eval';
 import { wrapTable } from '../table';
@@ -5,7 +6,17 @@ import { sha256 } from '../util/createHash';
 import { getPrompts, getTestCases } from '../util/database';
 import { printBorder, setupEnv } from '../util/index';
 import { printResourceHint } from './show';
-import type { Command } from 'commander';
+
+type ListOptions = {
+  envPath?: string;
+  n?: string;
+  idsOnly?: boolean;
+  json?: boolean;
+};
+
+function writeJson(records: unknown[]): void {
+  process.stdout.write(`${JSON.stringify(records, null, 2)}\n`);
+}
 
 export function listCommand(program: Command) {
   const listCommand = program.command('list').description('List various resources');
@@ -16,7 +27,8 @@ export function listCommand(program: Command) {
     .option('--env-file, --env-path <path>', 'Path to .env file')
     .option('-n <limit>', 'Number of evaluations to display')
     .option('--ids-only', 'Only show evaluation IDs')
-    .action(async (cmdObj: { envPath?: string; n?: string; idsOnly?: boolean }) => {
+    .addOption(new Option('--json', 'Output records as JSON').conflicts('idsOnly'))
+    .action(async (cmdObj: ListOptions) => {
       setupEnv(cmdObj.envPath);
 
       // For --ids-only, fetch all at once (typically used in scripts)
@@ -28,6 +40,20 @@ export function listCommand(program: Command) {
 
       const evals = await Eval.getMany(Number(cmdObj.n) || undefined);
       const vars = await EvalQueries.getVarsFromEvals(evals);
+
+      if (cmdObj.json) {
+        writeJson(
+          evals
+            .sort((a, b) => a.createdAt - b.createdAt)
+            .map((evl) => ({
+              id: evl.id,
+              description: evl.config.description || '',
+              promptIds: evl.getPrompts().map((prompt) => sha256(prompt.raw)),
+              vars: vars[evl.id] || [],
+            })),
+        );
+        return;
+      }
 
       const tableData = evals
         .sort((a, b) => a.createdAt - b.createdAt)
@@ -62,12 +88,25 @@ export function listCommand(program: Command) {
     .option('--env-file, --env-path <path>', 'Path to .env file')
     .option('-n <limit>', 'Number of prompts to display')
     .option('--ids-only', 'Only show prompt IDs')
-    .action(async (cmdObj: { envPath?: string; n?: string; idsOnly?: boolean }) => {
+    .addOption(new Option('--json', 'Output records as JSON').conflicts('idsOnly'))
+    .action(async (cmdObj: ListOptions) => {
       setupEnv(cmdObj.envPath);
 
       const prompts = (await getPrompts(Number(cmdObj.n) || undefined)).sort((a, b) =>
         a.recentEvalId.localeCompare(b.recentEvalId),
       );
+
+      if (cmdObj.json) {
+        writeJson(
+          prompts.map((prompt) => ({
+            id: prompt.id,
+            raw: prompt.prompt.raw,
+            evalCount: prompt.count,
+            recentEvalId: prompt.recentEvalId,
+          })),
+        );
+        return;
+      }
 
       if (cmdObj.idsOnly) {
         prompts.forEach((prompt) => logger.info(prompt.id));
@@ -100,12 +139,29 @@ export function listCommand(program: Command) {
     .option('--env-file, --env-path <path>', 'Path to .env file')
     .option('-n <limit>', 'Number of datasets to display')
     .option('--ids-only', 'Only show dataset IDs')
-    .action(async (cmdObj: { envPath?: string; n?: string; idsOnly?: boolean }) => {
+    .addOption(new Option('--json', 'Output records as JSON').conflicts('idsOnly'))
+    .action(async (cmdObj: ListOptions) => {
       setupEnv(cmdObj.envPath);
 
       const datasets = (await getTestCases(Number(cmdObj.n) || undefined)).sort((a, b) =>
         b.recentEvalId.localeCompare(a.recentEvalId),
       );
+
+      if (cmdObj.json) {
+        writeJson(
+          datasets.map((dataset) => ({
+            id: dataset.id,
+            bestPromptId:
+              [...dataset.prompts].sort(
+                (a, b) => (b.prompt.metrics?.score || 0) - (a.prompt.metrics?.score || 0),
+              )[0]?.id ?? null,
+            evalCount: dataset.count,
+            promptIds: dataset.prompts.map((prompt) => prompt.id),
+            recentEvalId: dataset.recentEvalId,
+          })),
+        );
+        return;
+      }
 
       if (cmdObj.idsOnly) {
         datasets.forEach((dataset) => logger.info(dataset.id));
