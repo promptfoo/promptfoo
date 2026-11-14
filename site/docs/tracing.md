@@ -108,6 +108,8 @@ Grading spans describe each assertion with `gen_ai.evaluation.name`,
 reason, `gen_ai.evaluation.explanation` records a sanitized, shortened version. Any model call used
 by the grader appears in a child span. See [`is-refusal`](/docs/configuration/expected-outputs/deterministic/#is-refusal) for how provider-reported refusals and output transforms affect grading.
 
+If a grader cannot return a verdict, the evaluation counts the affected row as an error, even when the test has a passing aggregate score. For `select-best`, a grader outage affects every candidate in that comparison.
+
 ### Example Trace Output
 
 When calling OpenAI's GPT-6 Luna through Chat Completions with `reasoning_effort: none`:
