@@ -5,7 +5,6 @@ import Clone from 'rfdc';
 import cliState from '../cliState';
 import { importModule } from '../esm';
 import { type Assertion, type AssertionSet, isApiProvider, type TestCase } from '../types/index';
-import { GRADING_PROVIDER_TYPE_KEYS, isProviderTypeMap } from '../util/gradingProvider';
 import { loadYaml } from '../util/yamlLoad';
 
 const clone = Clone();
@@ -19,18 +18,18 @@ function cloneAssertion(assertion: Assertion | AssertionSet): Assertion | Assert
       assert: assertion.assert.map((entry) => cloneAssertion(entry)),
     };
   }
-  if (isApiProvider(assertion.provider)) {
-    return { ...clone({ ...assertion, provider: undefined }), provider: assertion.provider };
-  }
-  if (isProviderTypeMap(assertion.provider)) {
-    const provider = { ...assertion.provider };
-    for (const key of GRADING_PROVIDER_TYPE_KEYS) {
-      const entry = provider[key];
-      if (entry && !isApiProvider(entry)) {
-        provider[key] = clone(entry);
-      }
-    }
+  const provider = assertion.provider;
+  if (isApiProvider(provider)) {
     return { ...clone({ ...assertion, provider: undefined }), provider };
+  }
+  if (provider && typeof provider === 'object' && Object.values(provider).some(isApiProvider)) {
+    const clonedProvider = Object.fromEntries(
+      Object.entries(provider).map(([key, entry]) => [
+        key,
+        isApiProvider(entry) ? entry : clone(entry),
+      ]),
+    );
+    return { ...clone({ ...assertion, provider: undefined }), provider: clonedProvider };
   }
   return clone(assertion);
 }
