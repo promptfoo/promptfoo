@@ -18,13 +18,13 @@ describe.each([
   ['Node.js', parseCsv],
   ['browser', parseBrowserCsv],
 ] as const)('%s CSV parsing', (_name, parse) => {
-  it.each(['first,last', 'quoted"name', 'line\nbreak', 'carriage\rreturn'])(
+  it.each(['first,last', 'quoted"name', 'line\nbreak', 'carriage\rreturn', '\uFEFFfirst'])(
     'round-trips CSV header %j',
     (name) => {
       const vars = [{ [name]: 'Ada', ordinary: 'control' }];
       const csv = serializeObjectArrayAsCSV(vars);
 
-      expect(parse(csv, { columns: true })).toEqual(vars);
+      expect(parse(csv, { columns: true, bom: true })).toEqual(vars);
     },
   );
 
