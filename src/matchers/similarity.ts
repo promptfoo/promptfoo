@@ -193,6 +193,10 @@ export async function matchesSimilarity(
   metric: SimilarityMetric = 'cosine',
   callContext?: CallApiContextParams,
 ): Promise<Omit<GradingResult, 'assertion'>> {
+  if (!Number.isFinite(threshold)) {
+    return fail(`Invalid similarity threshold: ${threshold}`);
+  }
+
   if (
     metric === 'cosine' &&
     cliState.config?.redteam &&
@@ -232,10 +236,6 @@ export async function matchesSimilarity(
 
   if (typeof similarity !== 'number') {
     return similarity;
-  }
-
-  if (!Number.isFinite(similarity)) {
-    return fail(`Invalid similarity score: ${similarity}`, tokensUsed);
   }
 
   return buildSimilarityResult(similarity, threshold, inverse, metric, tokensUsed);

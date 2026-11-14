@@ -112,6 +112,22 @@ describe('matchesSimilarity', () => {
     },
   );
 
+  it.each([NaN, Infinity, -Infinity])(
+    'rejects a non-finite threshold %s before calling a provider',
+    async (threshold) => {
+      for (const inverse of [false, true]) {
+        await expect(
+          matchesSimilarity('Expected output', 'Sample output', threshold, inverse),
+        ).resolves.toMatchObject({
+          pass: false,
+          score: 0,
+          reason: `Invalid similarity threshold: ${threshold}`,
+        });
+      }
+      expect(DefaultEmbeddingProvider.callEmbeddingApi).not.toHaveBeenCalled();
+    },
+  );
+
   it('should pass when similarity is above the threshold', async () => {
     const expected = 'Expected output';
     const output = 'Sample output';
