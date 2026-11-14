@@ -128,6 +128,13 @@ describe('setupEnvFilesFromArgv', () => {
 });
 
 describe('shouldSkipDefaultConfigLoading', () => {
+  it('uses only the explicitly selected grading config for online workers', () => {
+    expect(shouldSkipDefaultConfigLoading(['online', 'watch', '-c', 'grading.yaml'])).toBe(true);
+    expect(shouldSkipDefaultConfigLoading(['--env-file', 'judge.env', 'online', 'watch'])).toBe(
+      true,
+    );
+  });
+
   beforeEach(async () => {
     await loadMainModule();
   });

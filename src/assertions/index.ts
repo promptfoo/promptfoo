@@ -553,8 +553,11 @@ async function runAssertionInternal({
           `Custom function threw error: ${(error as Error)?.message ?? String(error)}`,
         );
       }
-    } else {
-      // It's a normal string value
+    } else if (
+      !test.options?.literalVars?.length ||
+      !['javascript', 'python', 'ruby'].includes(getAssertionBaseType(assertion))
+    ) {
+      // Scripts with runtime text receive variables through their context.
       renderedValue = nunjucks.renderString(renderedValue, resolvedVars);
     }
   } else if (renderedValue && Array.isArray(renderedValue)) {

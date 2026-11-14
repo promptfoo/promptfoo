@@ -1,0 +1,13 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Online Agent reply checks
+# These keep the config usable with ordinary eval tooling.
+# The online worker replaces both with the captured request and response.
+prompts:
+  - '{{input}}'
+providers:
+  - echo
+defaultTest:
+  assert:
+    - type: javascript
+      value: output.trim().length > 0
+      metric: NonEmptyReply
