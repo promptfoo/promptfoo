@@ -197,6 +197,7 @@ describe('evaluator defaultTest merging', () => {
         prompts: [toPrompt('Test prompt {{text}}')],
         providers: [mockApiProvider],
         defaultTest: { provider },
+        env: { OPENAI_ORGANIZATION: basePath },
         tests: [{ vars: { text: 'one' } }],
       };
       const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
@@ -206,6 +207,7 @@ describe('evaluator defaultTest merging', () => {
       ([providerId]) => providerId === 'echo',
     );
     expect(echoLoads.map(([, options]) => options.basePath)).toEqual(basePaths);
+    expect(echoLoads.map(([, options]) => options.env?.OPENAI_ORGANIZATION)).toEqual(basePaths);
   });
 });
 

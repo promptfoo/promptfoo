@@ -1212,6 +1212,7 @@ async function prepareTestCaseForEval(
     defaultTest,
     testCase,
     defaultTestProviderCache,
+    testSuite.env,
   );
   testCase.assertScoringFunction =
     testCase.assertScoringFunction || defaultTest?.assertScoringFunction;
@@ -1230,6 +1231,7 @@ async function resolveDefaultTestProvider(
   defaultTest: ReturnType<typeof getDefaultTest>,
   testCase: AtomicTestCase,
   defaultTestProviderCache: WeakMap<object, ApiProvider>,
+  env: TestSuite['env'],
 ) {
   if (testCase.provider || !defaultTest?.provider) {
     return testCase.provider;
@@ -1247,6 +1249,7 @@ async function resolveDefaultTestProvider(
       const { loadApiProvider } = await import('../providers');
       provider = await loadApiProvider(providerId, {
         options: defaultProvider as ProviderOptions,
+        env,
         // Resolve relative file:// references against the config directory.
         basePath: cliState.basePath,
       });

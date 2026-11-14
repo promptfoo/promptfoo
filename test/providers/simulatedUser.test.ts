@@ -1,5 +1,6 @@
 import dedent from 'dedent';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { providerRegistry } from '../../src/providers/providerRegistry';
 import { SimulatedUser } from '../../src/providers/simulatedUser';
 import * as timeUtils from '../../src/util/time';
 import {
@@ -165,6 +166,25 @@ describe('SimulatedUser', () => {
       expect(result.tokenUsage?.numRequests).toBe(1);
     });
 
+    it('releases the owned custom provider after both calls in an evaluation', async () => {
+      const cleanup = vi.fn();
+      mockLoadApiProvider.mockResolvedValue({
+        id: () => 'nested',
+        callApi: async () => ({ output: '###STOP###' }),
+        cleanup,
+      });
+      const simulator = new SimulatedUser({ config: { userProvider: 'nested' } });
+      const context = { originalProvider, vars: {}, prompt: { raw: 'prompt', label: 'test' } };
+      await providerRegistry.withEvaluation(async () => {
+        await Promise.all([
+          simulator.callApi('prompt', context),
+          simulator.callApi('prompt', context),
+        ]);
+        expect(cleanup).not.toHaveBeenCalled();
+      });
+      expect(cleanup).toHaveBeenCalledOnce();
+    });
+
     it('should send a kickoff user message on the first turn so the history is never empty', async () => {
       const customUserProvider = createMockProvider({
         id: 'custom-user-provider',
@@ -197,14 +217,15 @@ describe('SimulatedUser', () => {
       expect(firstPrompt[1].role).toBe('user');
       expect(firstPrompt[1].content).toContain('conversation has not started');
 
-      // Later turns: real flipped history replaces the kickoff message.
+      // Strict chat APIs also require a user-first history on later turns.
       const secondPrompt = JSON.parse(mockCustomUserProviderCallApi.mock.calls[1][0]);
       expect(secondPrompt.map((m: { role: string }) => m.role)).toEqual([
         'system',
+        'user',
         'assistant',
         'user',
       ]);
-      expect(JSON.stringify(secondPrompt)).not.toContain('conversation has not started');
+      expect(secondPrompt[1]).toEqual(firstPrompt[1]);
     });
 
     it('should include custom provider system instructions even when rendered instructions are empty', async () => {

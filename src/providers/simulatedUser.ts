@@ -10,6 +10,7 @@ import { sleep } from '../util/time';
 import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
 import { transform } from '../util/transform';
 import { PromptfooSimulatedUserProvider } from './promptfoo';
+import { providerRegistry } from './providerRegistry';
 
 import type {
   ApiProvider,
@@ -37,9 +38,7 @@ const DEFAULT_CUSTOM_USER_PROVIDER_INSTRUCTIONS = dedent`
   {{instructions}}
 `;
 
-// Sent as the sole conversation message on the first turn. Some chat APIs
-// (e.g. Anthropic) hoist the system prompt into a dedicated parameter and
-// reject an empty messages array, so the history must never be empty.
+// Seed the custom model’s conversation when its flipped history needs a first user turn.
 const CUSTOM_USER_PROVIDER_KICKOFF_MESSAGE =
   'The conversation has not started yet. Send your first message as the user.';
 
@@ -255,12 +254,11 @@ export class SimulatedUser implements ApiProvider {
       };
     });
 
-    const conversationMessages =
-      flippedMessages.length > 0
-        ? flippedMessages
-        : [{ role: 'user', content: CUSTOM_USER_PROVIDER_KICKOFF_MESSAGE }];
+    if (systemMessage && flippedMessages[0]?.role !== 'user') {
+      flippedMessages.unshift({ role: 'user', content: CUSTOM_USER_PROVIDER_KICKOFF_MESSAGE });
+    }
     const userPrompt = systemMessage
-      ? [{ role: 'system', content: systemMessage }, ...conversationMessages]
+      ? [{ role: 'system', content: systemMessage }, ...flippedMessages]
       : flippedMessages;
     const userPromptString = JSON.stringify(userPrompt);
     const userContext = (() => {
@@ -287,7 +285,10 @@ export class SimulatedUser implements ApiProvider {
       };
     })();
 
-    const response = await userProvider.callApi(userPromptString, userContext, callApiOptions);
+    const call = () => userProvider.callApi(userPromptString, userContext, callApiOptions);
+    const response = systemMessage
+      ? await providerRegistry.withProvider(userProvider, call, callApiOptions?.abortSignal)
+      : await call();
 
     // Nested calls bypass the evaluator's delay handling; mirror it here,
     // including skipping the sleep for cached responses.
@@ -458,6 +459,10 @@ export class SimulatedUser implements ApiProvider {
     const instructions = getNunjucksEngine().renderString(this.rawInstructions, context?.vars);
 
     const { provider: userProvider, systemMessage } = await this.createUserProvider(instructions);
+
+    if (this.userProvider) {
+      await providerRegistry.cleanupWhenIdle([userProvider], callApiOptions?.abortSignal);
+    }
 
     logger.debug(`[SimulatedUser] Formatted user instructions: ${instructions}`);
 
