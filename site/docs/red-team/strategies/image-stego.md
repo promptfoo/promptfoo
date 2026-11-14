@@ -16,6 +16,8 @@ The `image-stego` strategy encodes prompt text into the least significant bits (
 4. Writes the framed payload bits MSB-first into the least significant bit of each channel (`RGBA` or `RGB`), changing any channel value by at most `1`
 5. Encodes the image as a lossless PNG in base64 and sets `metadata.strategyId = 'image-stego'` and `metadata.originalText`
 
+Carriers are limited to 4,194,304 pixels (16 MiB of raw RGBA data). The limit applies to generated and decoded images.
+
 A companion `decodeLsbPng` helper is exported from `src/redteam/strategies/lsbStego.ts` for test verification.
 
 ## Implementation

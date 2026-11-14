@@ -14,6 +14,8 @@ export const DEFAULT_LSB_DELIMITER = '====EOF====';
 export const DEFAULT_MIN_DIMENSIONS: [number, number] = [64, 64];
 export const DEFAULT_BACKGROUND_COLOR: [number, number, number, number] = [240, 244, 248, 255];
 
+// Keep the raw carrier within 16 MiB even in RGBA mode.
+const MAX_CARRIER_PIXELS = 4 * 1024 * 1024;
 const DATA_URI_PREFIX = 'data:image/png;base64,';
 
 export interface LsbStegoConfig {
@@ -131,6 +133,9 @@ function createCarrierRawBuffer(
   }
 
   const totalPixels = width * height;
+  if (totalPixels > MAX_CARRIER_PIXELS) {
+    throw new Error(`Carrier exceeds the ${MAX_CARRIER_PIXELS}-pixel limit.`);
+  }
   const buffer = Buffer.allocUnsafe(totalPixels * channelsPerPixel);
   const [r, g, b, a] = options.backgroundColor;
 
@@ -270,7 +275,7 @@ export async function decodeLsbPng(
     throw new Error('Please install sharp to use image-based strategies: npm install sharp');
   }
 
-  let pipeline = sharpModule.default(pngBuffer);
+  let pipeline = sharpModule.default(pngBuffer, { limitInputPixels: MAX_CARRIER_PIXELS });
   pipeline = channels === 'RGBA' ? pipeline.ensureAlpha() : pipeline.removeAlpha();
   const rawBytes: Buffer = await pipeline.raw().toBuffer();
 

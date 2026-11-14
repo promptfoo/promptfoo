@@ -111,6 +111,15 @@ describe('LSB image stego strategy', () => {
       expect(await decodeLsbPng(result.base64)).toBe(prompt);
     });
 
+    it.each(['minDimensions', 'carrierDimensions'])(
+      'rejects oversized %s before allocation',
+      async (key) => {
+        await expect(encodeLsbPng('fixture', { [key]: [2048, 2049] })).rejects.toThrow(
+          /pixel limit/,
+        );
+      },
+    );
+
     it('auto-scales dimensions when payload exceeds minDimensions', async () => {
       const longPrompt = 'Auto-scaling synthetic carrier check! '.repeat(20);
       const result = await encodeLsbPng(longPrompt, {
