@@ -9,9 +9,7 @@ import type { ApiProvider, GradingResult, TokenUsage } from '../types/index';
  * secrets never land in persisted `metadata.gradingProvider`.
  */
 export function formatResolvedGradingProvider(provider: ApiProvider): string {
-  const id = provider.id();
-  const label = typeof provider.label === 'string' ? provider.label.trim() : '';
-  return sanitizeGradingProviderDisplay(label && label !== id ? `${id} (${label})` : id);
+  return sanitizeGradingProviderDisplay(provider.id(), provider.label);
 }
 
 /**
@@ -30,12 +28,9 @@ export function formatSanitizedProviderId(provider: ApiProvider): string {
  */
 export function attachGradingProvider<T extends Omit<GradingResult, 'assertion'>>(
   result: T,
-  provider: ApiProvider | string,
+  provider: ApiProvider,
 ): T & { metadata: NonNullable<GradingResult['metadata']> } {
-  const gradingProvider =
-    typeof provider === 'string'
-      ? sanitizeGradingProviderDisplay(provider)
-      : formatResolvedGradingProvider(provider);
+  const gradingProvider = formatResolvedGradingProvider(provider);
   return {
     ...result,
     metadata: {

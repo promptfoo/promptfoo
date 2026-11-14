@@ -244,7 +244,7 @@ function getAssertionBaseType(type: string | undefined): string | undefined {
  */
 function formatConfiguredProvider(configured: unknown): string | undefined {
   if (typeof configured === 'string' && configured.trim()) {
-    return configured.trim();
+    return sanitizeGradingProviderDisplay(configured.trim());
   }
 
   if (!configured || typeof configured !== 'object' || Array.isArray(configured)) {
@@ -261,9 +261,7 @@ function formatConfiguredProvider(configured: unknown): string | undefined {
   const id = record.id;
   if (typeof id === 'string' && id.trim()) {
     const label = record.label;
-    return typeof label === 'string' && label.trim() && label.trim() !== id.trim()
-      ? `${id.trim()} (${label.trim()})`
-      : id.trim();
+    return sanitizeGradingProviderDisplay(id.trim(), typeof label === 'string' ? label : undefined);
   }
 
   return undefined;
@@ -278,16 +276,9 @@ function formatConfiguredProvider(configured: unknown): string | undefined {
 export function getGradingProviderDisplay(
   result: GradingResult | null | undefined,
 ): string | undefined {
-  const display = resolveGradingProviderDisplay(result);
-  return display === undefined ? undefined : sanitizeGradingProviderDisplay(display);
-}
-
-function resolveGradingProviderDisplay(
-  result: GradingResult | null | undefined,
-): string | undefined {
   const fromMeta = result?.metadata?.gradingProvider;
   if (typeof fromMeta === 'string' && fromMeta.trim()) {
-    return fromMeta.trim();
+    return sanitizeGradingProviderDisplay(fromMeta.trim());
   }
 
   const baseType = getAssertionBaseType(result?.assertion?.type);
@@ -300,7 +291,7 @@ function resolveGradingProviderDisplay(
   if (baseType === 'search-rubric') {
     const fromSearch = result?.metadata?.searchProvider;
     if (typeof fromSearch === 'string' && fromSearch.trim()) {
-      return fromSearch.trim();
+      return sanitizeGradingProviderDisplay(fromSearch.trim());
     }
     if (result?.metadata?.graderError) {
       return undefined;

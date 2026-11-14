@@ -218,6 +218,17 @@ describe('formatResolvedGradingProvider', () => {
     expect(result.metadata.gradingProvider).not.toContain('label-token');
   });
 
+  it('sanitizes the complete raw id and label before composing them', () => {
+    const provider = {
+      id: () => 'https://judge.example/grade?api_key=first (second)',
+      label: 'Judge https://service.example/check?key=alpha beta',
+      callApi: async () => ({ output: '' }),
+    } as ApiProvider;
+    expect(formatResolvedGradingProvider(provider)).toBe(
+      'https://judge.example/grade (Judge https://service.example/check)',
+    );
+  });
+
   it('leaves ordinary provider ids unchanged', () => {
     const provider = {
       id: () => 'openai:gpt-4.1-mini',

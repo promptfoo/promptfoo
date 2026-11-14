@@ -756,7 +756,7 @@ it('strips credentials from a stored raw search-rubric searchProvider URL', asyn
   ).toBe('https://api.perplexity.ai/chat/completions');
 });
 
-it('strips credentials from a judge URL that has a label', async () => {
+it('drops the ambiguous legacy suffix after a raw judge URL query', async () => {
   const { getGradingProviderDisplay } = await import('./utils');
   expect(
     getGradingProviderDisplay({
@@ -767,7 +767,7 @@ it('strips credentials from a judge URL that has a label', async () => {
         gradingProvider: 'https://judge:hunter2@judge.example.com/v1?token=abc (My judge)',
       },
     }),
-  ).toBe('https://judge.example.com/v1 (My judge)');
+  ).toBe('https://judge.example.com/v1');
 });
 
 it.each([
@@ -814,7 +814,42 @@ it('handles long labels and redacts malformed endpoints', async () => {
   expect(display(label)).toBe(label);
   expect(display(label + '!https://[?token=fixture')).toBe('[REDACTED]');
   expect(display('://u:p@judge.example')).toBe('[REDACTED]');
+  expect(display('https://synthetic user?x@judge.example')).toBe('[REDACTED]');
   expect(display('https://one.example/https://u:p@two.example')).toBe('[REDACTED]');
+});
+
+it.each([
+  'https://judge.example/grade?api_key=first second',
+  'https://judge.example/grade?api_key=first (second)',
+  'https://judge.example/grade first second',
+  'Judge /grade?api_key=first second',
+])('does not expose legacy raw query continuations', async (gradingProvider) => {
+  const { getGradingProviderDisplay } = await import('./utils');
+  const result = { pass: true, score: 1, reason: 'ok' };
+  for (const display of [
+    getGradingProviderDisplay({ ...result, metadata: { gradingProvider } }),
+    getGradingProviderDisplay({
+      ...result,
+      assertion: { type: 'llm-rubric', provider: gradingProvider },
+    }),
+  ]) {
+    expect(display).toBeDefined();
+    expect(display).not.toMatch(/first|second/);
+  }
+});
+
+it('keeps the primary endpoint recognizable after composing sanitized fields', async () => {
+  const { getGradingProviderDisplay } = await import('./utils');
+  expect(
+    getGradingProviderDisplay({
+      pass: true,
+      score: 1,
+      reason: 'ok',
+      metadata: {
+        gradingProvider: 'https://judge.example/grade (Custom https://service.example/check)',
+      },
+    }),
+  ).toBe('https://judge.example/grade');
 });
 
 it('leaves provider ids without a URL unchanged', async () => {

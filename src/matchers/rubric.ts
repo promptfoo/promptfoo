@@ -921,7 +921,6 @@ export async function runJsonGradingPrompt({
     imageCount,
     audioAttached,
   } = await buildGradingProviderPrompt(renderedPrompt, images, finalProvider, audio);
-  const gradingProviderId = formatResolvedGradingProvider(finalProvider);
   const resp = await callProviderWithContext(
     finalProvider,
     providerPrompt,
@@ -936,12 +935,12 @@ export async function runJsonGradingPrompt({
     }
     return attachGradingProvider(
       graderFailureFromResponse(resp.error || 'No output', resp),
-      gradingProviderId,
+      finalProvider,
     );
   }
   const { parsed, failure } = parseJsonGradingResponse(label, resp);
   if (!parsed) {
-    return attachGradingProvider(failure as Omit<GradingResult, 'assertion'>, gradingProviderId);
+    return attachGradingProvider(failure as Omit<GradingResult, 'assertion'>, finalProvider);
   }
 
   const threshold =
@@ -954,7 +953,7 @@ export async function runJsonGradingPrompt({
         'Grader response contained neither a pass verdict nor a finite numeric score',
         resp,
       ),
-      gradingProviderId,
+      finalProvider,
     );
   }
   const { pass, score } = verdict;
@@ -987,7 +986,7 @@ export async function runJsonGradingPrompt({
     metadata: {
       ...trustedResponseMetadata,
       renderedGradingPrompt: renderedPrompt,
-      gradingProvider: gradingProviderId,
+      gradingProvider: formatResolvedGradingProvider(finalProvider),
       ...(imageCount > 0 ? { renderedGradingPromptImages: imageCount } : {}),
       ...(audioAttached ? { renderedGradingPromptAudio: true } : {}),
       ...(resp.cached ? { cachedResponse: true } : {}),
