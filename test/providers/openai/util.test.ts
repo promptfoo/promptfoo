@@ -24,6 +24,7 @@ import {
   validateChatCompletionMessage,
   validateFunctionCall,
 } from '../../../src/providers/openai/util';
+import { isProviderResponseRateLimited } from '../../../src/scheduler/types';
 
 vi.mock('../../../src/cache');
 
@@ -101,6 +102,7 @@ const retiredChatModelIds = [
   'gpt-4o-audio-preview-2024-12-17',
   'gpt-4o-audio-preview-2025-06-03',
   'gpt-4o-mini-audio-preview',
+  'gpt-4o-mini-audio-preview-2024-12-17',
   'gpt-5-chat-latest',
   'codex-mini-latest',
   'gpt-5.1-chat-latest',
@@ -127,6 +129,7 @@ const otherRetiredModelIds = [
   'gpt-4o-realtime-preview-2024-12-17',
   'gpt-4o-realtime-preview-2025-06-03',
   'gpt-4o-mini-realtime-preview',
+  'gpt-4o-mini-realtime-preview-2024-12-17',
   'gpt-realtime-mini-2025-10-06',
   'text-moderation-007',
   'text-moderation-latest',
@@ -156,6 +159,19 @@ describe('failApiCall', () => {
     expect(result).toEqual({
       error: `API error: invalid_request_error 400 Bad request`,
     });
+  });
+
+  it.each([
+    ['requests', true],
+    ['insufficient_quota', false],
+  ] as const)('preserves the SDK rate-limit classification for %s', (type, retryable) => {
+    const error = new OpenAI.APIError(
+      429,
+      { type, message: 'Please try later' },
+      undefined,
+      new Headers(),
+    );
+    expect(isProviderResponseRateLimited(failApiCall(error), undefined)).toBe(retryable);
   });
 
   it('should format generic errors', () => {
@@ -978,8 +994,6 @@ describe('calculateOpenAICost', () => {
     'gpt-5.2-pro',
     'gpt-5.2-pro-2025-12-11',
     'gpt-5.3-codex',
-    'o1-pro',
-    'o1-pro-2025-03-19',
     'o3-pro',
     'o3-pro-2025-06-10',
   ])('should keep active Responses-only model %s out of Chat Completions routing', (model) => {
@@ -991,11 +1005,6 @@ describe('calculateOpenAICost', () => {
     expect(OPENAI_CHAT_MODELS.some((model) => model.id === 'gpt-audio-1.5')).toBe(true);
     expect(OPENAI_REALTIME_MODELS.some((model) => model.id === 'gpt-realtime-1.5')).toBe(true);
     expect(OPENAI_REALTIME_MODELS.some((model) => model.id === 'gpt-realtime-2')).toBe(true);
-    expect(
-      OPENAI_REALTIME_MODELS.some(
-        (model) => model.id === 'gpt-4o-mini-realtime-preview-2024-12-17',
-      ),
-    ).toBe(true);
   });
 
   it('excludes retired audio and realtime previews while retaining historical billing', () => {
@@ -1011,12 +1020,8 @@ describe('calculateOpenAICost', () => {
     }
   });
 
-  it.each([
-    'gpt-4o-mini-audio-preview-2024-12-17',
-    'gpt-4o-mini-search-preview',
-    'gpt-4o-search-preview',
-    'gpt-5-chat',
-  ])('keeps legacy discovery exclusion %s separate from confirmed shutdowns', (model) => {
+  it('keeps the legacy gpt-5-chat discovery exclusion separate from confirmed shutdowns', () => {
+    const model = 'gpt-5-chat';
     expect(OPENAI_CHAT_MODELS.some((candidate) => candidate.id === model)).toBe(false);
     expect(OPENAI_RESPONSES_ONLY_MODELS.some((candidate) => candidate.id === model)).toBe(false);
     expect(RETIRED_OPENAI_MODEL_IDS.has(model)).toBe(false);
@@ -1231,8 +1236,7 @@ describe('calculateOpenAICost', () => {
     ['davinci-002', 2, 2],
     ['gpt-3.5-turbo-instruct', 1.5, 2],
     ['gpt-3.5-turbo-instruct-0914', 1.5, 2],
-  ])('should recognize and price legacy Completions model %s', (model, inputRate, outputRate) => {
-    expect(OPENAI_COMPLETION_MODELS.some((candidate) => candidate.id === model)).toBe(true);
+  ])('should retain pricing for legacy Completions model %s', (model, inputRate, outputRate) => {
     expect(OPENAI_CHAT_MODELS.some((candidate) => candidate.id === model)).toBe(false);
     expect(calculateOpenAICost(model, {}, 1000, 500)).toBeCloseTo(
       (1000 * inputRate + 500 * outputRate) / 1e6,
@@ -1597,13 +1601,6 @@ describe('OpenAI model catalogs', () => {
     'o3-deep-research-2025-06-26',
     'o4-mini-deep-research',
     'o4-mini-deep-research-2025-06-26',
-  ])('does not advertise retired or legacy model %s', (model) => {
-    expect(activeModels).not.toContain(model);
-    // Removing suggestions must not erase historical cost estimates.
-    expect(calculateOpenAICost(model, {}, 1000, 500)).toBeGreaterThan(0);
-  });
-
-  it.each([
     'gpt-3.5-turbo',
     'gpt-3.5-turbo-1106',
     'gpt-3.5-turbo-instruct',
@@ -1617,6 +1614,13 @@ describe('OpenAI model catalogs', () => {
     'o1-pro',
     'o3-mini',
     'o4-mini',
+  ])('does not advertise retired or legacy model %s', (model) => {
+    expect(activeModels).not.toContain(model);
+    // Removing suggestions must not erase historical cost estimates.
+    expect(calculateOpenAICost(model, {}, 1000, 500)).toBeGreaterThan(0);
+  });
+
+  it.each([
     'gpt-5-2025-08-07',
     'gpt-audio-mini',
     'gpt-audio-mini-2025-12-15',

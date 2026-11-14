@@ -12,7 +12,10 @@ const checkOnly = args.includes('--check');
 const outputPath = args.find((arg) => arg !== '--check') ?? DEFAULT_OUTPUT_PATH;
 const absoluteOutputPath = path.resolve(outputPath);
 const biomePath = require.resolve('@biomejs/biome/bin/biome');
-const unformattedSpec = `${JSON.stringify(createServerOpenApiDocument(), null, 2)}\n`;
+const document = createServerOpenApiDocument();
+// Keep the website snapshot stable across package releases.
+document.info.version = 'latest';
+const unformattedSpec = JSON.stringify(document);
 const renderedSpec = execFileSync(
   process.execPath,
   [biomePath, 'format', '--stdin-file-path', absoluteOutputPath],
