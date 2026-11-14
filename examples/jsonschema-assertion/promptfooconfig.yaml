@@ -1,0 +1,45 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Extract sentiment and keywords from customer feedback as JSON
+
+prompts:
+  - |
+    You are a customer support analyst. Given customer feedback, extract
+    sentiment and up to three keywords. Reply ONLY with valid JSON matching
+    this schema:
+    {
+      "type": "object",
+      "properties": {
+        "sentiment": { "enum": ["positive", "negative", "neutral"] },
+        "keywords":  { "type": "array", "items": { "type": "string" }, "maxItems": 3 }
+      },
+      "required": ["sentiment", "keywords"],
+      "additionalProperties": false
+    }
+
+    Customer feedback:
+    {{ feedback }}
+
+providers:
+  - id: 'openai:gpt-6-sol'
+    label: 'gpt-6-sol'
+
+defaultTest:
+  assert:
+    - type: is-json
+      value:
+        type: object
+        properties:
+          sentiment:
+            enum: ['positive', 'negative', 'neutral']
+          keywords:
+            type: array
+            items: { type: string }
+            maxItems: 3
+        required: ['sentiment', 'keywords']
+        additionalProperties: false
+
+tests:
+  - vars:
+      feedback: 'The product was exactly what I needed, shipping was fast.'
+  - vars:
+      feedback: 'Terrible experience - broken on arrival, support never replied.'
