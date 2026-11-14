@@ -918,8 +918,10 @@ export async function runCompareAssertion(
   // The matcher needs options and vars, not the assertion list. A runtime assertion can
   // contain a provider with a circular SDK client, which getFinalTest cannot deep-clone.
   test = getFinalTest({ ...test, assert: undefined }, assertion);
+  // Render test vars into the criteria, as every other assertion value is rendered.
+  const criteria = nunjucks.renderString(assertion.value, test.vars || {});
   const comparisonResults = await matchesSelectBest(
-    assertion.value,
+    criteria,
     outputs,
     test.options,
     test.vars,
