@@ -357,7 +357,14 @@ function getResultsLines({
   repeatCount = 1,
 }: Pick<
   EvalSummaryParams,
-  'successes' | 'failures' | 'errors' | 'cacheHits' | 'duration' | 'maxConcurrency' | 'columnCount' | 'repeatCount'
+  | 'successes'
+  | 'failures'
+  | 'errors'
+  | 'cacheHits'
+  | 'duration'
+  | 'maxConcurrency'
+  | 'columnCount'
+  | 'repeatCount'
 >) {
   const totalTests = successes + failures + errors;
   const errorLabel = errors === 1 ? 'error' : 'errors';
