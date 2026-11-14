@@ -380,6 +380,21 @@ describe('ScriptCompletionProvider', () => {
     expect(execFile).not.toHaveBeenCalled();
   });
 
+  it('bypasses the persistent cache for provider environment overrides', async () => {
+    vi.mocked(cacheModule.isCacheEnabled).mockReturnValue(true);
+    vi.mocked(execFile).mockImplementation(function (_cmd, _args, _options, callback) {
+      (callback as (error: Error | null, stdout: string, stderr: string) => void)(null, 'ok', '');
+      return {} as any;
+    });
+    const scoped = new ScriptCompletionProvider('node script.js', {
+      config: {},
+      env: { OPENAI_API_KEY: 'synthetic-fixture' },
+    });
+
+    expect((await scoped.callApi('test prompt')).output).toBe('ok');
+    expect(cacheModule.getCache).not.toHaveBeenCalled();
+  });
+
   it('should not reuse output cached under the unversioned key', async () => {
     const staleKey = 'exec:node script.js:mock hash:mock hash:test prompt:undefined';
     const mockCache = {

@@ -108,14 +108,18 @@ export class ScriptCompletionProvider implements ApiProvider {
 
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     const scriptParts = parseScriptParts(this.scriptPath);
-    const fileHashes = isCacheEnabled()
-      ? getFileHashes(scriptParts, this.options?.config.basePath)
-      : [];
+    // Provider env overrides can carry credentials. The child sees them through
+    // options, so removing them from a shared cache key could replay another result.
+    const cacheable = isCacheEnabled() && Object.keys(this.options?.env ?? {}).length === 0;
+    const fileHashes = cacheable ? getFileHashes(scriptParts, this.options?.config.basePath) : [];
 
-    const cacheKey = `exec:${EXEC_CACHE_VERSION}:${this.scriptPath}:${fileHashes.join(':')}:${prompt}:${JSON.stringify(this.options)}`;
+    const cacheKey =
+      fileHashes.length > 0
+        ? `exec:${EXEC_CACHE_VERSION}:${this.scriptPath}:${fileHashes.join(':')}:${prompt}:${JSON.stringify(this.options)}`
+        : undefined;
 
     let cachedResult;
-    if (fileHashes.length > 0 && isCacheEnabled()) {
+    if (cacheKey && isCacheEnabled()) {
       const cache = await getCache();
       cachedResult = await cache.get(cacheKey);
 
@@ -161,7 +165,7 @@ export class ScriptCompletionProvider implements ApiProvider {
         }
         logger.debug(`Output from script ${this.scriptPath}: ${standardOutput}`);
         const result = { output: standardOutput };
-        if (fileHashes.length > 0 && isCacheEnabled()) {
+        if (cacheKey && isCacheEnabled()) {
           const cache = await getCache();
           await cache.set(cacheKey, JSON.stringify(result));
         }
