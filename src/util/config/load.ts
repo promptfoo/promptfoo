@@ -188,7 +188,7 @@ export function resolveCliProvidersWithConfig(
 // These fields carry schemas owned by the provider. Their nested references use
 // the schema's root and must also be excluded during external resolution.
 const PROVIDER_SCHEMA_PATH =
-  /^#\/providers\/\d+\/(?:[^/]+\/)?config\/(?:response_format\/json_schema\/schema|text\/format\/schema|output_format\/schema|output_config\/format\/schema|output_schema|outputSchema|responseSchema|generationConfig\/response_schema|format\/schema)$/;
+  /^#\/providers\/\d+\/(?:[^/]+\/)?config\/(?:response_format\/json_schema\/schema|text\/format\/schema|output_format\/schema|output_config\/format\/schema|output_schema|outputSchema|responseSchema|generationConfig\/response_schema|format\/schema|agent\/outputType\/schema)$/;
 
 function isStandaloneProviderSchema(path: string, value: unknown, config: UnifiedConfig): boolean {
   if (

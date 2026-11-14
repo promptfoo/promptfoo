@@ -34,6 +34,12 @@ it('keeps inline provider schema references and resolves ordinary config referen
         config: { response_format: { type: 'json_schema', json_schema: { schema } } },
       },
       { 'openai:codex-sdk': { config: { output_schema: schema } } },
+      {
+        id: 'openai:agents:fixture',
+        config: {
+          agent: { outputType: { type: 'json_schema', name: 'fixture', strict: true, schema } },
+        },
+      },
       { 'openai:codex-sdk': { config: { output_schema: { $ref: '#/definitions/itemSchema' } } } },
     ],
   };
@@ -42,6 +48,7 @@ it('keeps inline provider schema references and resolves ordinary config referen
   expect(resolved.providers).toEqual([
     config.providers[0],
     config.providers[1],
+    config.providers[2],
     { 'openai:codex-sdk': { config: { output_schema: { type: 'string' } } } },
   ]);
   expect(schema.properties.item).toEqual({ $ref: '#/$defs/Item' });
