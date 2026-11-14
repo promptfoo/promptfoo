@@ -92,6 +92,31 @@ describe.each([
 });
 
 describe('handleIsJson', () => {
+  it('reuses an identical schema ID across outputs and rejects conflicting definitions', () => {
+    resetAjv();
+    const schema = { $id: 'https://example.test/row-schema', ...createNameSchema() };
+    const params = makeParams({
+      assertion: { type: 'is-json' },
+      renderedValue: 'file://schema.json',
+      valueFromScript: schema,
+      outputString: 'not JSON',
+    });
+    expect(handleIsJson(params).pass).toBe(false);
+    expect(
+      handleContainsJson({
+        ...params,
+        valueFromScript: structuredClone(schema),
+        outputString: '{"name":"fixture"}',
+      }).pass,
+    ).toBe(true);
+    expect(() =>
+      handleIsJson({
+        ...params,
+        valueFromScript: { ...schema, required: ['other'] },
+      }),
+    ).toThrow('already exists');
+  });
+
   it('passes for valid JSON with no schema', () => {
     const result = handleIsJson(
       makeParams({

@@ -1,3 +1,5 @@
+import { isDeepStrictEqual } from 'node:util';
+
 import invariant from '../util/invariant';
 import { extractJsonObjects, getAjv } from '../util/json';
 import { loadYaml } from '../util/yamlLoad';
@@ -18,27 +20,52 @@ function compileSchema(
   if (renderedValue === undefined) {
     return undefined;
   }
+  let schema: object | boolean;
   if (typeof renderedValue === 'string') {
     if (renderedValue.startsWith('file://')) {
       // Reference the JSON schema from external file
-      const schema = valueFromScript;
       invariant(
-        schema !== undefined && schema !== null,
+        valueFromScript !== undefined && valueFromScript !== null,
         `${assertionType} references a file that does not export a JSON schema`,
       );
-      return getAjv().compile(schema as object | boolean);
+      schema = valueFromScript as object | boolean;
+    } else {
+      // An empty, whitespace-only, or comment-only document supplies no schema.
+      const parsed = loadYaml(renderedValue) as object | boolean | undefined;
+      if (parsed === undefined) {
+        return undefined;
+      }
+      schema = parsed;
     }
-    // An empty, whitespace-only, or comment-only document supplies no schema
-    const scheme = loadYaml(renderedValue) as object | undefined;
-    return scheme === undefined ? undefined : getAjv().compile(scheme);
-  }
-  if (
+  } else if (
     typeof renderedValue === 'boolean' ||
     (renderedValue !== null && typeof renderedValue === 'object')
   ) {
-    return getAjv().compile(renderedValue);
+    schema = renderedValue;
+  } else {
+    throw new Error(`${assertionType} assertion must have a string, object, or boolean value`);
   }
-  throw new Error(`${assertionType} assertion must have a string, object, or boolean value`);
+
+  const ajv = getAjv();
+  // Reading the same YAML or file schema in another row produces a new object.
+  // Ajv caches by object identity and rejects a second registration of its $id.
+  if (
+    schema &&
+    typeof schema === 'object' &&
+    '$id' in schema &&
+    typeof schema.$id === 'string' &&
+    schema.$id
+  ) {
+    const existing = ajv.getSchema(schema.$id);
+    if (existing) {
+      invariant(
+        isDeepStrictEqual(existing.schema, schema),
+        `Conflicting JSON schema already exists for ${schema.$id}`,
+      );
+      return existing;
+    }
+  }
+  return ajv.compile(schema);
 }
 
 export function handleIsJson({
