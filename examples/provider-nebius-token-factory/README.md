@@ -25,4 +25,4 @@ The config uses `openai:chat:openai/gpt-oss-120b` with `apiBaseUrl` set to `http
 
 This recipe uses the stateless Chat Completions endpoint. It does not configure promptfoo's OpenAI Responses provider or rely on persisted response state.
 
-The sample model is listed in the public Token Factory catalog as of November 12, 2026. These assertions are smoke checks of response shape, not a coding-correctness benchmark. No authenticated evaluation was run for this refresh.
+See the [Nebius provider guide](https://www.promptfoo.dev/docs/providers/nebius/) for a complete configuration. These assertions are smoke checks of response shape, not a coding-correctness benchmark.

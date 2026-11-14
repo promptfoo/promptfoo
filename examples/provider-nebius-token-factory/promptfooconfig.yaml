@@ -12,6 +12,7 @@ providers:
       headers:
         OpenAI-Organization: ''
       apiKeyEnvar: NEBIUS_API_KEY
+      showThinking: false
       max_tokens: 512
       temperature: 0
 
