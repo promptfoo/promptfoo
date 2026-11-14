@@ -177,20 +177,14 @@ function getProviderCatalog(): Map<string, ProviderOptions> {
 
   const catalog = new Map<string, ProviderOptions>();
   const duplicates = new Set<string>();
-  for (const provider of getAvailableProviders()) {
+  for (const [index, provider] of getAvailableProviders().entries()) {
     const providerId = provider.id!;
-    // A configured URL or script path can contain credentials. Treat an explicit
-    // label as public, and derive the default display name without URL details.
+    // Only network hosts are public by default. Opaque IDs and local paths may contain secrets.
     const url = URL.parse(providerId);
-    const protocol = url?.protocol ?? '';
-    const carriesLocation =
-      providerId.includes('://') ||
-      /^(https?|wss?|file|exec|script|shell|python|ruby|javascript|go):$/i.test(protocol);
-    const displayId = carriesLocation
-      ? url?.hostname
-        ? `${protocol}//${url.hostname}`
-        : 'Configured provider'
-      : providerId;
+    const displayId =
+      url && ['https:', 'http:', 'wss:', 'ws:'].includes(url.protocol) && url.hostname
+        ? `${url.protocol}//${url.hostname}`
+        : `Configured provider ${index + 1}`;
     const key = createHash('sha256')
       .update(JSON.stringify([providerId, provider.label]))
       .digest('hex');

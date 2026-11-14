@@ -135,6 +135,36 @@ describe('getAvailableProviders configured provider catalog', () => {
     expect(new Set(entries.map(({ id }) => id)).size).toBe(3);
   });
 
+  it('uses public labels for opaque IDs and local paths without exposing their contents', async () => {
+    await loadWith({
+      providers: [
+        'DaTa:text/plain,fixture-private',
+        'vbscript:fixture-private',
+        'private:fixture-user:fixture-private',
+        'file:///fixture-private.py',
+        './fixture-private.js',
+        'wss://user:fixture-private@socket.test/path',
+        'openai:gpt-4o-mini',
+        { id: 'openai:gpt-4o-mini', label: 'Team model' },
+      ],
+    });
+    const catalog = await import('../../../src/util/config/uiProviders');
+    const entries = catalog.getPublicProviderCatalog();
+    expect(entries.map(({ label }) => label)).toEqual([
+      'Configured provider 1',
+      'Configured provider 2',
+      'Configured provider 3',
+      'Configured provider 4',
+      'Configured provider 5',
+      'wss://socket.test',
+      'Configured provider 7',
+      'Team model',
+    ]);
+    expect(JSON.stringify(entries)).not.toContain('fixture-private');
+    expect(catalog.getUiCatalogProvider(entries[0].id)?.id).toBe('DaTa:text/plain,fixture-private');
+    expect(catalog.getUiCatalogProvider(entries[6].id)?.id).toBe('openai:gpt-4o-mini');
+  });
+
   it('skips entries with labels the UI cannot render', async () => {
     const providers = await loadWith({
       providers: [{ id: 'openai:gpt-4o-mini', label: { name: 'Internal' } }],

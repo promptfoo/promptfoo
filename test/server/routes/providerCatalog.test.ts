@@ -96,6 +96,8 @@ describe('UI provider catalog credentials', () => {
             },
           },
           { id: 'file://' + fixtureModule, label: 'Metered fixture', config: { maxRetries: '0' } },
+          'data:text/plain,fixture-private-catalog-payload',
+          'vbscript:fixture-private-catalog-payload',
         ],
       }),
     );
@@ -144,9 +146,12 @@ describe('UI provider catalog credentials', () => {
         { id: expect.stringMatching(/^ui-catalog:/), label: 'Catalog Fixture' },
         { id: expect.stringMatching(/^ui-catalog:/), label: 'Raw Catalog Fixture' },
         { id: expect.stringMatching(/^ui-catalog:/), label: 'Metered fixture' },
+        { id: expect.stringMatching(/^ui-catalog:/), label: 'Configured provider 4' },
+        { id: expect.stringMatching(/^ui-catalog:/), label: 'Configured provider 5' },
       ],
     });
     expect(catalog.text).not.toContain(authorization);
+    expect(catalog.text).not.toContain('fixture-private-catalog-payload');
     expect(catalog.text).not.toContain(tenantHeader);
 
     const job = await api
