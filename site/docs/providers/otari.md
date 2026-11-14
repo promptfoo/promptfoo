@@ -20,7 +20,7 @@ providers:
       omitDefaults: true
 ```
 
-This uses the hosted gateway at `https://api.otari.ai/api/v1` unless `OTARI_BASE_URL` is set. `omitDefaults: true` stops Promptfoo from adding its default `temperature` and output limit, which models such as GPT-6.1 Sol reject; Promptfoo cannot recognize the model behind an Otari ID like `openai:gpt-6.1-sol`. For a self-hosted gateway, set `OTARI_BASE_URL` to `https://<your-host>/api/v1`. The key in `OTARI_API_KEY` is sent as `Authorization: Bearer <key>`. The empty `OpenAI-Organization` header overrides any inherited `OPENAI_ORGANIZATION` value.
+The default endpoint is Otari’s US gateway. For an EU account, set `OTARI_BASE_URL=https://eu.api.otari.ai/api/v1` as shown in the [Otari quickstart](https://docs.otari.ai/getting-started/quickstart). `omitDefaults: true` stops Promptfoo from adding its default `temperature` and output limit, which models such as GPT-6.1 Sol reject; Promptfoo cannot recognize the model behind an Otari ID like `openai:gpt-6.1-sol`. For a self-hosted gateway, set `OTARI_BASE_URL` to `https://<your-host>/api/v1`. The key in `OTARI_API_KEY` is sent as `Authorization: Bearer <key>`. The empty `OpenAI-Organization` header overrides any inherited `OPENAI_ORGANIZATION` value.
 
 Everything after `openai:chat:` is passed to Otari unchanged as the model ID:
 
