@@ -9,6 +9,7 @@ import {
   withGenAISpan,
 } from '../../tracing/genaiTracer';
 import { fetchWithProxy } from '../../util/fetch/index';
+import { normalizeFinishReason } from '../../util/finishReason';
 import { loadYaml } from '../../util/yamlLoad';
 import {
   applyClaudeRegionalPremium,
@@ -26,7 +27,6 @@ import {
 import { resolveProviderEnv } from '../env';
 import {
   getRequestTimeoutMs,
-  normalizeFinishReason,
   parseChatPrompt,
   shouldBustProviderCache,
   waitForPromiseWithAbort,
