@@ -130,25 +130,28 @@ describe('OpenAI Provider', () => {
       },
     );
 
-    it.each([undefined, null, {}])(
-      'handles missing token log probabilities: %j',
-      async (logprobs) => {
-        mockFetchWithCache.mockResolvedValue({
-          ...mockResponse,
-          data: {
-            ...mockResponse.data,
-            choices: [{ text: 'Test output', logprobs }],
-          },
-        });
-        const provider = new OpenAiCompletionProvider('ft:babbage-002:company::model');
+    it.each([
+      undefined,
+      null,
+      {},
+      { token_logprobs: '-0.5' },
+      { token_logprobs: [-0.2, Infinity] },
+    ])('handles missing or malformed token log probabilities: %j', async (logprobs) => {
+      mockFetchWithCache.mockResolvedValue({
+        ...mockResponse,
+        data: {
+          ...mockResponse.data,
+          choices: [{ text: 'Test output', logprobs }],
+        },
+      });
+      const provider = new OpenAiCompletionProvider('ft:babbage-002:company::model');
 
-        const result = await provider.callApi('Test prompt');
+      const result = await provider.callApi('Test prompt');
 
-        expect(result.output).toBe('Test output');
-        expect(result.logProbs).toBeUndefined();
-        expect(result.error).toBeUndefined();
-      },
-    );
+      expect(result.output).toBe('Test output');
+      expect(result.logProbs).toBeUndefined();
+      expect(result.error).toBeUndefined();
+    });
 
     it('skips null token log probabilities, such as the first echoed prompt token', async () => {
       mockFetchWithCache.mockResolvedValue({
@@ -156,7 +159,10 @@ describe('OpenAI Provider', () => {
         data: {
           ...mockResponse.data,
           choices: [
-            { text: 'Test prompt Test output', logprobs: { token_logprobs: [null, -0.2, -0.3] } },
+            {
+              text: 'Test prompt Test output',
+              logprobs: { token_logprobs: [null, -0.2, -0.3] },
+            },
           ],
         },
       });

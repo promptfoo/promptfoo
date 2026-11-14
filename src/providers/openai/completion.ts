@@ -180,15 +180,19 @@ export class OpenAiCompletionProvider extends OpenAiGenericProvider {
         passthrough: { model: body.model },
       });
       const billingLookupModel = normalizeOpenAiBillingModelName(billingModelName);
+      const tokenLogProbs: unknown = data.choices[0].logprobs?.token_logprobs;
       return {
         output: data.choices[0].text,
         tokenUsage: getTokenUsage(data, cached),
         cached,
         latencyMs,
-        // With `echo`, the first prompt token has no log probability (`null`).
-        logProbs: data.choices[0].logprobs?.token_logprobs?.filter(
-          (logProb: number | null): logProb is number => typeof logProb === 'number',
-        ),
+        // Compatible servers may omit or mis-shape this optional metadata.
+        // With echo, the first prompt token is represented as null.
+        logProbs:
+          Array.isArray(tokenLogProbs) &&
+          tokenLogProbs.every((value) => value === null || Number.isFinite(value))
+            ? tokenLogProbs.filter((value): value is number => value !== null)
+            : undefined,
         cost: calculateOpenAIUsageCost(billingLookupModel, this.config, data.usage, {
           cachedResponse: cached,
           serviceTier: data.service_tier ?? body.service_tier,
