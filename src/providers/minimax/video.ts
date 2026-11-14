@@ -1,13 +1,19 @@
 /** MiniMax H3 video generation provider. */
-import { fetchWithProviderProxy } from '../fetch';
+import { setTimeout as sleep } from 'node:timers/promises';
+
+import { fetchWithProviderProxy, readBoundedText } from '../fetch';
 import { buildStorageRefUrl, formatVideoOutput, storeVideoContent } from '../video';
+
+const VIDEO_RATIOS = ['adaptive', '21:9', '16:9', '4:3', '1:1', '3:4', '9:16'] as const;
+type MiniMaxVideoRatio = (typeof VIDEO_RATIOS)[number];
+type MediaReference = string | { url: string };
 
 export type MiniMaxVideoContent = {
   type: 'text' | 'image_url' | 'video_url' | 'audio_url';
   text?: string;
-  image_url?: string;
-  video_url?: string;
-  audio_url?: string;
+  image_url?: MediaReference;
+  video_url?: MediaReference;
+  audio_url?: MediaReference;
   role?: 'first_frame' | 'last_frame' | 'reference_image' | 'reference_video' | 'reference_audio';
 };
 
@@ -16,6 +22,7 @@ export interface MiniMaxVideoOptions {
   apiBaseUrl?: string;
   model?: string;
   resolution?: '2K';
+  ratio?: MiniMaxVideoRatio;
   duration?: number;
   content?: MiniMaxVideoContent[];
   aigc_watermark?: boolean;
@@ -38,6 +45,95 @@ const DEFAULT_DURATION = 6;
 const DEFAULT_POLL_INTERVAL_MS = 5000;
 const DEFAULT_MAX_POLL_TIME_MS = 600000;
 
+const VIDEO_CDN_ORIGIN = 'https://cdn.hailuoai.com';
+const MAX_VIDEO_BYTES = 128 * 1024 * 1024;
+const MAX_JOB_RESPONSE_BYTES = 64 * 1024;
+const API_REQUEST_TIMEOUT_MS = 30_000;
+const VIDEO_DOWNLOAD_TIMEOUT_MS = 120_000;
+
+function requestOptions(timeoutMs: number, signal?: AbortSignal) {
+  const timeout = AbortSignal.timeout(timeoutMs);
+  return {
+    signal: signal ? AbortSignal.any([timeout, signal]) : timeout,
+    redirect: 'error' as const,
+    skipCloudAuthInjection: true,
+    disableTransientRetries: true,
+  };
+}
+
+async function downloadVideo(videoUrl: string, apiUrl: string, signal?: AbortSignal) {
+  const url = URL.parse(videoUrl);
+  const apiOrigin = new URL(apiUrl).origin;
+  if (
+    !url ||
+    !['http:', 'https:'].includes(url.protocol) ||
+    url.username ||
+    url.password ||
+    (url.origin !== VIDEO_CDN_ORIGIN && url.origin !== apiOrigin)
+  ) {
+    throw new Error('MiniMax video download URL does not use an allowed origin.');
+  }
+
+  let response: Response;
+  try {
+    response = await fetchWithProviderProxy(url.href, {
+      ...requestOptions(VIDEO_DOWNLOAD_TIMEOUT_MS, signal),
+      method: 'GET',
+      headers: { 'x-promptfoo-silent': 'true' },
+    });
+  } catch {
+    signal?.throwIfAborted();
+    // Fetch errors can include signed CDN URLs.
+    throw new Error('MiniMax video download request failed.');
+  }
+  if (!response.ok) {
+    await response.body?.cancel();
+    throw new Error(`MiniMax video download failed: ${response.status}`);
+  }
+
+  const sizeError = 'MiniMax video download exceeds the 128 MiB size limit.';
+  if (Number(response.headers.get('content-length')) > MAX_VIDEO_BYTES) {
+    await response.body?.cancel();
+    throw new Error(sizeError);
+  }
+  if (!response.body) {
+    throw new Error('MiniMax video download returned no body.');
+  }
+
+  // Keep an explicit byte limit even if the response omits Content-Length or uses compression.
+  const reader = response.body.getReader();
+  let buffer = Buffer.alloc(64 * 1024);
+  let bytes = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read().catch(() => {
+        signal?.throwIfAborted();
+        throw new Error('MiniMax video download could not be read.');
+      });
+      if (done) {
+        if (!bytes) {
+          throw new Error('MiniMax video download returned no bytes.');
+        }
+        return buffer.subarray(0, bytes);
+      }
+      const nextSize = bytes + value.byteLength;
+      if (nextSize > MAX_VIDEO_BYTES) {
+        throw new Error(sizeError);
+      }
+      if (nextSize > buffer.length) {
+        const next = Buffer.alloc(Math.min(MAX_VIDEO_BYTES, Math.max(nextSize, buffer.length * 2)));
+        buffer.copy(next, 0, 0, bytes);
+        buffer = next;
+      }
+      buffer.set(value, bytes);
+      bytes = nextSize;
+    }
+  } finally {
+    await reader.cancel().catch(() => {});
+    reader.releaseLock();
+  }
+}
+
 function getApiKey(config: MiniMaxVideoOptions, env?: MiniMaxVideoEnv): string | undefined {
   return config.apiKey || env?.MINIMAX_API_KEY || process.env.MINIMAX_API_KEY;
 }
@@ -49,6 +145,20 @@ function normalizeContent(prompt: string, content?: MiniMaxVideoContent[]): Mini
   return [{ type: 'text', text: prompt }];
 }
 
+function getMediaUrl(reference?: MediaReference): string | undefined {
+  const url = typeof reference === 'string' ? reference : reference?.url;
+  return typeof url === 'string' && url.trim() ? url : undefined;
+}
+
+function formatContent(content: MiniMaxVideoContent[]) {
+  return content.map((item) => {
+    if (item.type === 'text') {
+      return item;
+    }
+    return { ...item, [item.type]: { url: getMediaUrl(item[item.type]) } };
+  });
+}
+
 function validateContent(content: MiniMaxVideoContent[]): string | undefined {
   for (const item of content) {
     if (!item || !['text', 'image_url', 'video_url', 'audio_url'].includes(item.type)) {
@@ -57,13 +167,13 @@ function validateContent(content: MiniMaxVideoContent[]): string | undefined {
     if (item.type === 'text' && !item.text?.trim()) {
       return 'text content must not be empty';
     }
-    if (item.type === 'image_url' && !item.image_url) {
+    if (item.type === 'image_url' && !getMediaUrl(item.image_url)) {
       return 'image_url content must include a URL';
     }
-    if (item.type === 'video_url' && !item.video_url) {
+    if (item.type === 'video_url' && !getMediaUrl(item.video_url)) {
       return 'video_url content must include a URL';
     }
-    if (item.type === 'audio_url' && !item.audio_url) {
+    if (item.type === 'audio_url' && !getMediaUrl(item.audio_url)) {
       return 'audio_url content must include a URL';
     }
     if (
@@ -114,7 +224,12 @@ export class MiniMaxVideoProvider {
   // The provider lifecycle (submit, poll, download, store) is intentionally
   // kept together so every failure maps to a provider error.
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: provider lifecycle intentionally stays together
-  async callApi(prompt: string, context?: MiniMaxVideoContext) {
+  async callApi(
+    prompt: string,
+    context?: MiniMaxVideoContext,
+    options?: { abortSignal?: AbortSignal },
+  ) {
+    const signal = options?.abortSignal;
     const apiKey = getApiKey(this.config, this.env);
     if (!apiKey) {
       return {
@@ -140,23 +255,41 @@ export class MiniMaxVideoProvider {
     if (contentError) {
       return { error: contentError };
     }
-    const body: Record<string, unknown> = { model, content, resolution, duration };
+    const requiresConcreteRatio =
+      model === 'MiniMax-H3-Lite' || content.every((item) => item.type === 'text');
+    const ratio = config.ratio ?? (requiresConcreteRatio ? '16:9' : 'adaptive');
+    if (!VIDEO_RATIOS.includes(ratio) || (ratio === 'adaptive' && requiresConcreteRatio)) {
+      return { error: 'MiniMax video requires a supported, concrete aspect ratio for this input.' };
+    }
+    const body: Record<string, unknown> = {
+      model,
+      content: formatContent(content),
+      resolution,
+      duration,
+      ratio,
+    };
     if (config.aigc_watermark !== undefined) {
       body.aigc_watermark = config.aigc_watermark;
     }
-    const headers = {
+    const headers = new Headers({
       'Content-Type': 'application/json',
       Authorization: `Bearer ${apiKey}`,
       ...config.headers,
-    };
+    });
+    // The shared transport otherwise clones and reads response bodies for logging.
+    headers.set('x-promptfoo-silent', 'true');
     const started = Date.now();
     try {
-      const response = await fetchWithProviderProxy(this.getApiUrl(), {
+      const apiUrl = this.getApiUrl();
+      const response = await fetchWithProviderProxy(apiUrl, {
+        ...requestOptions(API_REQUEST_TIMEOUT_MS, signal),
         method: 'POST',
         headers,
         body: JSON.stringify(body),
       });
-      const data = (await response.json().catch(() => ({}))) as any;
+      const data = JSON.parse(
+        await readBoundedText(response, MAX_JOB_RESPONSE_BYTES, { requireStream: true }),
+      );
       if (
         !response.ok ||
         (data?.base_resp?.status_code !== undefined && data.base_resp.status_code !== 0)
@@ -166,18 +299,33 @@ export class MiniMaxVideoProvider {
         };
       }
       const taskId = data?.task_id;
-      if (!taskId) {
+      if (typeof taskId !== 'string' || !taskId || taskId === '.' || taskId === '..') {
         return { error: 'MiniMax video response did not include task_id.' };
       }
-      const queryUrl = `${this.getApiUrl().replace('/video_generation', '/query/video_generation')}?task_id=${encodeURIComponent(taskId)}`;
+      const queryUrl = new URL(apiUrl);
+      queryUrl.pathname = queryUrl.pathname.replace(
+        /\/video_generation$/,
+        '/query/video_generation',
+      );
+      queryUrl.pathname += `/${encodeURIComponent(taskId)}`;
       const interval = config.poll_interval_ms ?? DEFAULT_POLL_INTERVAL_MS;
       const timeout = config.max_poll_time_ms ?? DEFAULT_MAX_POLL_TIME_MS;
       const deadline = Date.now() + timeout;
       let videoUrl: string | undefined;
       let taskStatus: string | undefined;
-      while (Date.now() < deadline) {
-        const poll = await fetchWithProviderProxy(queryUrl, { method: 'GET', headers });
-        const statusData = (await poll.json().catch(() => ({}))) as any;
+      for (
+        let remaining = deadline - Date.now();
+        remaining > 0;
+        remaining = deadline - Date.now()
+      ) {
+        const poll = await fetchWithProviderProxy(queryUrl.href, {
+          ...requestOptions(Math.min(API_REQUEST_TIMEOUT_MS, remaining), signal),
+          method: 'GET',
+          headers,
+        });
+        const statusData = JSON.parse(
+          await readBoundedText(poll, MAX_JOB_RESPONSE_BYTES, { requireStream: true }),
+        );
         if (
           !poll.ok ||
           (statusData?.base_resp?.status_code && statusData.base_resp.status_code !== 0)
@@ -189,24 +337,31 @@ export class MiniMaxVideoProvider {
         const task = statusData?.task || statusData?.data?.task || statusData?.data;
         taskStatus = task?.status;
         const candidateUrl = task?.content?.url || task?.content?.video_url || task?.video_url;
-        if (typeof candidateUrl === 'string' && candidateUrl && ['Success', 'success', 'completed', '2'].includes(String(taskStatus))) {
+        if (
+          typeof candidateUrl === 'string' &&
+          candidateUrl &&
+          ['succeeded', 'success', 'completed', '2'].includes(String(taskStatus).toLowerCase())
+        ) {
           videoUrl = candidateUrl;
           break;
         }
-        if (['Fail', 'Failed', 'failed', 'error'].includes(String(taskStatus))) {
+        if (['fail', 'failed', 'error', 'cancelled'].includes(String(taskStatus).toLowerCase())) {
           return { error: `MiniMax video generation failed (status=${taskStatus}).` };
         }
-        await new Promise((resolve) => setTimeout(resolve, interval));
+        await sleep(Math.min(interval, Math.max(0, deadline - Date.now())), undefined, { signal });
       }
       if (!videoUrl) {
         return { error: `MiniMax video generation timed out (status=${taskStatus || 'unknown'}).` };
       }
-      const download = await fetchWithProviderProxy(videoUrl, { method: 'GET' });
-      if (!download.ok) {
-        return { error: `MiniMax video download failed: ${download.status}` };
+      let video: Buffer;
+      try {
+        video = await downloadVideo(videoUrl, apiUrl, signal);
+      } catch (err) {
+        signal?.throwIfAborted();
+        return { error: err instanceof Error ? err.message : 'MiniMax video download failed.' };
       }
       const { storageRef, error } = await storeVideoContent(
-        Buffer.from(await download.arrayBuffer()),
+        video,
         { contentType: 'video/mp4', mediaType: 'video', evalId: context?.evaluationId },
         'MiniMax Video',
       );
@@ -229,6 +384,7 @@ export class MiniMaxVideoProvider {
         metadata: { taskId, status: taskStatus, model, resolution, duration },
       };
     } catch (err) {
+      signal?.throwIfAborted();
       return { error: `MiniMax video request failed: ${String(err)}` };
     }
   }

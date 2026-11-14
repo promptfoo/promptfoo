@@ -6,7 +6,10 @@ import {
 import * as videoUtils from '../../../src/providers/video/utils';
 import * as fetch from '../../../src/util/fetch/index';
 
-vi.mock('../../../src/util/fetch/index');
+vi.mock('../../../src/util/fetch/index', async (importOriginal) => ({
+  ...(await importOriginal<typeof fetch>()),
+  fetchWithProxy: vi.fn(),
+}));
 vi.mock('../../../src/providers/video/utils', async (importOriginal) => {
   const actual = await importOriginal<typeof videoUtils>();
   return {
@@ -25,7 +28,7 @@ const mockSuccessfulRequest = (downloadStatus = 200) => {
     .mockResolvedValueOnce(createResponse({ task_id: 'task-1', base_resp: { status_code: 0 } }))
     .mockResolvedValueOnce(
       createResponse({
-        task: { status: 'Success', content: { url: 'https://cdn.example/video.mp4' } },
+        task: { status: 'succeeded', content: { url: 'https://cdn.hailuoai.com/video.mp4' } },
         base_resp: { status_code: 0 },
       }),
     )
@@ -81,12 +84,12 @@ describe('MiniMax H3 video provider', () => {
       model: 'MiniMax-H3',
       resolution: '2K',
     });
-    expect(result.metadata).toMatchObject({ taskId: 'task-1', status: 'Success' });
+    expect(result.metadata).toMatchObject({ taskId: 'task-1', status: 'succeeded' });
     expect(vi.mocked(fetch.fetchWithProxy).mock.calls[0]?.[0]).toBe(
       'https://api.minimax.io/v2/video_generation',
     );
     expect(vi.mocked(fetch.fetchWithProxy).mock.calls[1]?.[0]).toBe(
-      'https://api.minimax.io/v2/query/video_generation?task_id=task-1',
+      'https://api.minimax.io/v2/query/video_generation/task-1',
     );
     const body = JSON.parse(String(vi.mocked(fetch.fetchWithProxy).mock.calls[0]?.[1]?.body));
     expect(body).toEqual({
@@ -94,6 +97,7 @@ describe('MiniMax H3 video provider', () => {
       content: [{ type: 'text', text: 'A cinematic city' }],
       resolution: '2K',
       duration: 8,
+      ratio: '16:9',
       aigc_watermark: true,
     });
     expect(videoUtils.storeVideoContent).toHaveBeenCalledWith(
@@ -109,17 +113,17 @@ describe('MiniMax H3 video provider', () => {
       config: {
         apiKey: 'configured-key',
         apiBaseUrl: 'https://api.example.cn/v2/video_generation/',
-        headers: { 'X-Test': 'yes' },
+        headers: { 'X-Test': 'yes', 'X-Promptfoo-Silent': 'false' },
       },
     });
     await provider.callApi('A mountain lake');
 
     const [url, options] = vi.mocked(fetch.fetchWithProxy).mock.calls[0]!;
     expect(url).toBe('https://api.example.cn/v2/video_generation');
-    expect(options?.headers).toMatchObject({
-      Authorization: 'Bearer configured-key',
-      'X-Test': 'yes',
-    });
+    const headers = new Headers(options?.headers);
+    expect(headers.get('authorization')).toBe('Bearer configured-key');
+    expect(headers.get('x-test')).toBe('yes');
+    expect(headers.get('x-promptfoo-silent')).toBe('true');
     expect(JSON.parse(String(options?.body))).toMatchObject({
       model: 'MiniMax-H3',
       content: [{ type: 'text', text: 'A mountain lake' }],
@@ -128,12 +132,51 @@ describe('MiniMax H3 video provider', () => {
     });
   });
 
+  it('serializes URL media as objects and defaults to adaptive framing', async () => {
+    mockSuccessfulRequest();
+    const provider = new MiniMaxVideoProvider('MiniMax-H3', {
+      config: {
+        content: [
+          { type: 'image_url', image_url: 'https://example.test/frame.jpg', role: 'first_frame' },
+        ],
+      },
+    });
+    expect((await provider.callApi('image')).error).toBeUndefined();
+    const request = vi.mocked(fetch.fetchWithProxy).mock.calls[0]?.[1];
+    expect(JSON.parse(String(request?.body))).toMatchObject({
+      ratio: 'adaptive',
+      content: [
+        {
+          type: 'image_url',
+          image_url: { url: 'https://example.test/frame.jpg' },
+          role: 'first_frame',
+        },
+      ],
+    });
+  });
+
+  it('rejects adaptive aspect ratio for text-only requests', async () => {
+    const provider = new MiniMaxVideoProvider('MiniMax-H3', { config: { ratio: 'adaptive' } });
+    expect((await provider.callApi('text')).error).toContain('concrete aspect ratio');
+    expect(fetch.fetchWithProxy).not.toHaveBeenCalled();
+  });
+
+  it('stops polling on a cancelled task', async () => {
+    vi.mocked(fetch.fetchWithProxy)
+      .mockResolvedValueOnce(createResponse({ task_id: 'task-5' }))
+      .mockResolvedValueOnce(createResponse({ task: { status: 'cancelled' } }));
+    expect((await new MiniMaxVideoProvider().callApi('text')).error).toContain('status=cancelled');
+    expect(fetch.fetchWithProxy).toHaveBeenCalledTimes(2);
+  });
+
   it('polls pending tasks until a nested task succeeds', async () => {
     vi.mocked(fetch.fetchWithProxy)
       .mockResolvedValueOnce(createResponse({ task_id: 'task-2' }))
       .mockResolvedValueOnce(createResponse({ data: { status: 'processing' } }))
       .mockResolvedValueOnce(
-        createResponse({ data: { task: { status: '2', video_url: 'https://cdn.example/v.mp4' } } }),
+        createResponse({
+          data: { task: { status: '2', video_url: 'https://cdn.hailuoai.com/v.mp4' } },
+        }),
       )
       .mockResolvedValueOnce(new Response(Buffer.from('video'), { status: 200 }));
     const provider = new MiniMaxVideoProvider('MiniMax-H3', {
@@ -227,6 +270,59 @@ describe('MiniMax H3 video provider', () => {
     vi.mocked(videoUtils.storeVideoContent).mockResolvedValueOnce({ error: 'storage unavailable' });
     const storageError = await new MiniMaxVideoProvider('MiniMax-H3').callApi('prompt');
     expect(storageError.error).toBe('storage unavailable');
+  });
+
+  it.each([
+    'http://127.0.0.1/internal',
+    'https://cdn.hailuoai.com.evil.test/video.mp4',
+    'https://cdn.hailuoai.com:444/video.mp4',
+    'https://user:password@cdn.hailuoai.com/video.mp4',
+    'file:///tmp/video.mp4',
+  ])('rejects an unsafe download destination %s without fetching it', async (url) => {
+    vi.mocked(fetch.fetchWithProxy)
+      .mockResolvedValueOnce(createResponse({ task_id: 'task-1' }))
+      .mockResolvedValueOnce(createResponse({ task: { status: 'succeeded', content: { url } } }));
+    const result = await new MiniMaxVideoProvider().callApi('prompt');
+    expect(result.error).toContain('allowed origin');
+    expect(fetch.fetchWithProxy).toHaveBeenCalledTimes(2);
+    expect(videoUtils.storeVideoContent).not.toHaveBeenCalled();
+  });
+
+  it('does not forward the API key or follow redirects when downloading', async () => {
+    mockSuccessfulRequest(302);
+    const result = await new MiniMaxVideoProvider().callApi('prompt');
+    expect(result.error).toContain('302');
+    expect(fetch.fetchWithProxy).toHaveBeenNthCalledWith(
+      3,
+      expect.stringContaining('https://cdn.hailuoai.com/'),
+      expect.objectContaining({
+        redirect: 'error',
+        skipCloudAuthInjection: true,
+        signal: expect.any(AbortSignal),
+        headers: { 'x-promptfoo-silent': 'true' },
+      }),
+    );
+  });
+
+  it.each([true, false])('rejects oversized content (declared length: %s)', async (declared) => {
+    const cancel = vi.fn();
+    const chunk = new Uint8Array(1024 * 1024);
+    const oversized = new Response(
+      new ReadableStream({ pull: (controller) => controller.enqueue(chunk), cancel }),
+      { headers: declared ? { 'content-length': String(129 * chunk.byteLength) } : {} },
+    );
+    vi.mocked(fetch.fetchWithProxy)
+      .mockResolvedValueOnce(createResponse({ task_id: 'task-1' }))
+      .mockResolvedValueOnce(
+        createResponse({
+          task: { status: 'succeeded', content: { url: 'https://cdn.hailuoai.com/video.mp4' } },
+        }),
+      )
+      .mockResolvedValueOnce(oversized);
+    const result = await new MiniMaxVideoProvider().callApi('prompt');
+    expect(result.error).toContain('128 MiB');
+    expect(cancel).toHaveBeenCalled();
+    expect(videoUtils.storeVideoContent).not.toHaveBeenCalled();
   });
 
   it('converts thrown request errors to provider errors', async () => {
