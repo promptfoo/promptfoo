@@ -887,6 +887,77 @@ describe('shared redteam provider utilities', () => {
       expect(mockProvider.callApi).not.toHaveBeenCalled();
     });
 
+    it('prefers the layered attack provider config over the plugin-scoped cap on direct target calls', async () => {
+      const previousConfig = cliState.config;
+      // No global cap for this case, regardless of test order.
+      setCliStateConfig(undefined);
+      try {
+        const mockProvider = createMockProvider({
+          response: {
+            output: 'ok',
+            tokenUsage: { numRequests: 1 },
+          },
+        });
+        // A layer step configures GOAT with maxCharsPerMessage 100; addLayerTestCases
+        // stores that step cap in test.provider.config, while metadata holds the
+        // outer layer config (no cap) and the plugin cap of 5.
+        const context = {
+          prompt: { raw: '', label: '' },
+          vars: {},
+          test: {
+            provider: {
+              id: 'promptfoo:redteam:goat',
+              config: { maxCharsPerMessage: 100, injectVar: 'goal' },
+            },
+            metadata: {
+              strategyConfig: { steps: [{ id: 'goat', config: { maxCharsPerMessage: 100 } }] },
+              pluginConfig: { maxCharsPerMessage: 5 },
+            },
+          },
+        } as unknown as CallApiContextParams;
+
+        const result = await callTargetProvider(mockProvider, 'too long', context);
+        expect(mockProvider.callApi).toHaveBeenCalledWith('too long', context, undefined);
+        expect(result.output).toBe('ok');
+
+        // The provider cap is the effective limit, not a bypass: a prompt over
+        // 100 characters is still rejected at the step cap.
+        expect(() => callTargetProvider(mockProvider, 'x'.repeat(101), context)).toThrow(
+          'Target prompt message at prompt exceeds maxCharsPerMessage=100: 101 characters.',
+        );
+      } finally {
+        setCliStateConfig(previousConfig);
+      }
+    });
+
+    it('keeps the global message limit when the layered attack provider config would allow a longer message', async () => {
+      const previousConfig = cliState.config;
+      setCliStateConfig({ redteam: { maxCharsPerMessage: 3 } });
+      try {
+        const target = createMockProvider({ response: { output: 'ok' } });
+        const context = {
+          prompt: { raw: '', label: '' },
+          vars: {},
+          test: {
+            provider: {
+              id: 'promptfoo:redteam:goat',
+              config: { maxCharsPerMessage: 100, injectVar: 'goal' },
+            },
+            metadata: {
+              strategyConfig: { steps: [{ id: 'goat', config: { maxCharsPerMessage: 100 } }] },
+              pluginConfig: { maxCharsPerMessage: 5 },
+            },
+          },
+        } as unknown as CallApiContextParams;
+        const result = await getTargetResponse(target, 'four', context);
+        expect(result.error).toContain('maxCharsPerMessage=3');
+        expect(result.tokenUsage?.numRequests).toBe(0);
+        expect(target.callApi).not.toHaveBeenCalled();
+      } finally {
+        setCliStateConfig(previousConfig);
+      }
+    });
+
     it('passes direct target calls at exactly the plugin-scoped maxCharsPerMessage through unchanged', async () => {
       const mockProvider = createMockProvider({
         response: {

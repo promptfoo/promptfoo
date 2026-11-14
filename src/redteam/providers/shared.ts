@@ -502,7 +502,18 @@ export function isConversationEndedResponse(
 }
 
 function getTargetPromptMaxCharsPerMessage(context?: CallApiContextParams): number | undefined {
+  // Layered attack providers (for example GOAT via the layer strategy) store
+  // their step limit in the test provider config, where the metadata-only
+  // strategy and plugin configs cannot see it. Resolve in the same order
+  // GoatProvider.callApi uses, so this boundary agrees with the caller
+  // instead of re-blocking attacks the caller already allowed. The call
+  // context type omits the provider field, so read it through a narrow cast;
+  // at runtime the full test case is carried through.
+  const providerLimit = (
+    context?.test as { provider?: { config?: { maxCharsPerMessage?: unknown } } } | undefined
+  )?.provider?.config?.maxCharsPerMessage;
   const configuredLimit =
+    providerLimit ??
     (context?.test?.metadata?.strategyConfig as { maxCharsPerMessage?: unknown } | undefined)
       ?.maxCharsPerMessage ??
     (context?.test?.metadata?.pluginConfig as { maxCharsPerMessage?: unknown } | undefined)
@@ -530,7 +541,7 @@ export function callTargetProvider(
   options?: CallApiOptionsParams,
 ): Promise<ProviderResponse> {
   // Enforce the request-scoped cap here, before tracing and rate-limit scheduling,
-  // so strategies that call the target directly get the same plugin- and
+  // so strategies that call the target directly get the same provider-, plugin- and
   // strategy-scoped check as the getTargetResponse path, bounded by the global cap.
   throwIfTargetPromptExceedsMaxChars(targetPrompt, getTargetPromptMaxCharsPerMessage(context));
   const executionContext = getProviderCallExecutionContext();
