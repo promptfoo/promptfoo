@@ -64,6 +64,7 @@ describe('retry configured test selection', () => {
       defaultTest?: UnifiedConfig['defaultTest'];
       metadata?: UnifiedConfig['metadata'];
       discover?: boolean;
+      recordGeneration?: boolean;
     } = {},
   ) {
     const readyPath = path.join(tempDir, 'ready');
@@ -126,7 +127,10 @@ describe('retry configured test selection', () => {
       },
       defaults?.defaultConfig ?? {},
       defaults?.defaultConfigPath,
-      { showProgressBar: false },
+      {
+        showProgressBar: false,
+        ...(initialConfig.recordGeneration && { generationTokenUsage: { total: 8 } }),
+      },
     );
     const initial = (await record.toEvaluateSummary()).results;
     expect(initial.length).toBeGreaterThan(0);
@@ -363,6 +367,41 @@ describe('retry configured test selection', () => {
       ).toHaveLength(fixture.initial.length);
     },
   );
+
+  it('protects inherited metadata without defaultTest and accepts an equivalent retry', async () => {
+    const fixture = await initialEval(
+      'top-level',
+      {},
+      {},
+      { metadata: { source: 'saved' }, discover: true, recordGeneration: true },
+    );
+    expect(fixture.record.config.defaultTest).toBeUndefined();
+    expect(fixture.record.config.metadata?.generationAccounting).toBeDefined();
+    const errors = await getErrorResultIds(fixture.record.id);
+    fs.writeFileSync(
+      fixture.configPath,
+      JSON.stringify({ ...fixture.config, metadata: { source: 'changed' } }),
+    );
+    await expect(retryCommand(fixture.record.id, { config: fixture.configPath })).rejects.toThrow(
+      /saved test layout.*ERROR results were preserved/,
+    );
+    expect(await getErrorResultIds(fixture.record.id)).toEqual(errors);
+
+    fs.writeFileSync(
+      fixture.configPath,
+      JSON.stringify({
+        ...fixture.config,
+        metadata: { source: 'saved', generationAccounting: { unexpected: true } },
+      }),
+    );
+    await expect(retryCommand(fixture.record.id, { config: fixture.configPath })).rejects.toThrow(
+      /saved test layout.*ERROR results were preserved/,
+    );
+    expect(await getErrorResultIds(fixture.record.id)).toEqual(errors);
+
+    fs.writeFileSync(fixture.configPath, JSON.stringify(fixture.config));
+    await assertRetryMatchesInitial(fixture, true);
+  });
 
   it('preserves ERROR rows when explicit loading changes inherited default metadata', async () => {
     const fixture = await initialEval(

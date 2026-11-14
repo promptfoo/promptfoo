@@ -97,16 +97,23 @@ function normalizeRetryLayout(value: unknown, ancestors = new Set<object>()): un
   }
 }
 
-function normalizeRetryDefaultTest(value: unknown, metadata: unknown): unknown {
-  if (value === undefined) {
-    return value;
-  }
-  const normalized = normalizeRetryLayout(value);
+function normalizeRetryDefaultTest(
+  value: unknown,
+  metadata: unknown,
+  fromSavedEval: boolean,
+): unknown {
+  const normalized = normalizeRetryLayout(value === undefined ? {} : value);
   if (!normalized || typeof normalized !== 'object' || Array.isArray(normalized)) {
     return normalized;
   }
+  // With no authored default metadata, resolveConfigs passes the top-level metadata to tests.
+  // doEval adds generationAccounting to the saved config after resolving those tests.
+  const inherited = normalizeRetryLayout(metadata ?? {});
+  if (fromSavedEval && inherited && typeof inherited === 'object') {
+    Reflect.deleteProperty(inherited, 'generationAccounting');
+  }
   // Explicit config loading fills these fields; auto-discovery may leave them absent.
-  return { vars: {}, assert: [], options: {}, metadata: metadata ?? {}, ...normalized };
+  return { vars: {}, assert: [], options: {}, metadata: inherited, ...normalized };
 }
 
 function hasRelativeFileReference(value: unknown): boolean {
@@ -125,11 +132,15 @@ function assertRetryLayoutMatched(
   filterRange: string | undefined,
 ): void {
   const savedRange = originalEval.runtimeOptions?.filterRange;
-  const layout = (savedConfig: Partial<UnifiedConfig>, range: string | undefined) =>
+  const layout = (
+    config: Partial<UnifiedConfig>,
+    range: string | undefined,
+    fromSavedEval: boolean,
+  ) =>
     normalizeRetryLayout({
-      tests: savedConfig.tests,
-      scenarios: savedConfig.scenarios,
-      defaultTest: normalizeRetryDefaultTest(savedConfig.defaultTest, savedConfig.metadata),
+      tests: config.tests,
+      scenarios: config.scenarios,
+      defaultTest: normalizeRetryDefaultTest(config.defaultTest, config.metadata, fromSavedEval),
       filterRange: range,
     });
   let matches = false;
@@ -139,8 +150,9 @@ function assertRetryLayoutMatched(
       typeof savedRange === 'string'
         ? savedRange
         : originalEval.config.evaluateOptions?.filterRange,
+      true,
     );
-    const override = layout(config, filterRange);
+    const override = layout(config, filterRange, false);
     const usesRelativeFiles =
       hasRelativeFileReference(original) || hasRelativeFileReference(override);
     const originalBase = originalEval.config.basePath;
