@@ -110,7 +110,6 @@ function projectEvalResult(result: EvalResult | EvaluateResult) {
     gradingResult: projected.gradingResult,
     latencyMs: projected.latencyMs,
     prompt: projected.prompt,
-    promptId: projected.promptId,
     promptIdx: projected.promptIdx,
     provider: projected.provider,
     score: projected.score,
@@ -142,15 +141,14 @@ async function* iterateJunitProjectedResults(
 async function buildJunitSuites(evalRecord: Eval): Promise<JunitSuite[]> {
   const suites = new Map<
     string,
-    JunitSuite & { providerKey: string; rawName: string; promptKey: string; promptIdx: number }
+    JunitSuite & { providerKey: string; rawName: string; promptIdx: number }
   >();
   const providersByDisplayName = new Map<string, Set<string>>();
 
   for await (const result of iterateJunitProjectedResults(evalRecord)) {
     const { provider } = result;
     const providerKey = JSON.stringify([provider.id ?? '', provider.label ?? '']);
-    const promptKey = `prompt-index:${result.promptIdx}`;
-    const key = JSON.stringify([providerKey, promptKey]);
+    const key = JSON.stringify([providerKey, result.promptIdx]);
     let suite = suites.get(key);
     if (!suite) {
       const rawName = provider.label || provider.id || '';
@@ -161,7 +159,6 @@ async function buildJunitSuites(evalRecord: Eval): Promise<JunitSuite[]> {
       suite = {
         providerKey,
         rawName,
-        promptKey,
         promptIdx: result.promptIdx,
         // The prompt ordinal and any collision suffix are added after grouping the results.
         displayName,
@@ -172,7 +169,6 @@ async function buildJunitSuites(evalRecord: Eval): Promise<JunitSuite[]> {
       };
       suites.set(key, suite);
     }
-    suite.promptIdx = Math.min(suite.promptIdx, result.promptIdx);
 
     suite.testcases.push({
       testcase: buildJunitTestCase(result),
@@ -190,9 +186,7 @@ async function buildJunitSuites(evalRecord: Eval): Promise<JunitSuite[]> {
 
   // Finalize names after collecting collisions, without reading stored results again.
   const promptCountsByProvider = new Map<string, number>();
-  const orderedSuites = [...suites.values()].sort(
-    (a, b) => a.promptIdx - b.promptIdx || a.promptKey.localeCompare(b.promptKey),
-  );
+  const orderedSuites = [...suites.values()].sort((a, b) => a.promptIdx - b.promptIdx);
   for (const suite of orderedSuites) {
     const baseName = suite.displayName;
     const collision = (providersByDisplayName.get(baseName)?.size ?? 0) > 1;
