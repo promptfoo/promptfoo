@@ -7,46 +7,38 @@
  * request path, ensuring identical model options, decoding parameters, and endpoint routing.
  */
 
+import { createRequire } from 'node:module';
+
 const DEFAULT_EJENTUM_URL = 'https://api.ejentum.com/logicv1/';
 
-let loadApiProviderFn;
-
-async function getLoadApiProvider() {
-  if (loadApiProviderFn) {
-    return loadApiProviderFn;
+async function loadDelegatedProvider(id, options) {
+  let runtime;
+  try {
+    runtime = await import('promptfoo');
+  } catch {
+    // An init --example directory can sit outside the npx/global CLI's package.
+    const cliRequire = createRequire(process.argv[1]);
+    let installedLibrary;
+    try {
+      installedLibrary = cliRequire.resolve('promptfoo');
+    } catch {
+      // In the source checkout, the public library may not have been built yet.
+      runtime = await import('../../src/providers/index.js');
+    }
+    if (installedLibrary) runtime = cliRequire(installedLibrary);
   }
-  try {
-    const pf = await import('promptfoo');
-    loadApiProviderFn = pf.loadApiProvider || pf.default?.loadApiProvider;
-    if (loadApiProviderFn) {
-      return loadApiProviderFn;
-    }
-  } catch {}
-  try {
-    const pf = await import('../../src/providers/index.js');
-    loadApiProviderFn = pf.loadApiProvider;
-    if (loadApiProviderFn) {
-      return loadApiProviderFn;
-    }
-  } catch {}
-  try {
-    const pf = await import('../../dist/src/providers/index.js');
-    loadApiProviderFn = pf.loadApiProvider;
-    if (loadApiProviderFn) {
-      return loadApiProviderFn;
-    }
-  } catch {}
-  throw new Error('Unable to resolve Promptfoo loadApiProvider.');
+  const delegate = await runtime.loadApiProvider(id, options);
+  // The CLI and library can be different builds. A function provider binds the
+  // call to the library's environment scope without mutating process.env.
+  const [scoped] = await runtime.loadApiProviders(delegate.callApi.bind(delegate), {
+    env: options.options.env,
+  });
+  return { callApi: scoped.callApi, cleanup: delegate.cleanup?.bind(delegate) };
 }
 
 function getEjentumKey(config, env = {}) {
-  const customEnvar = config.ejentumApiKeyEnvar;
-  return (
-    config.ejentumApiKey ||
-    (customEnvar ? env[customEnvar] || process.env[customEnvar] : undefined) ||
-    env.EJENTUM_API_KEY ||
-    process.env.EJENTUM_API_KEY
-  );
+  const name = config.ejentumApiKeyEnvar || 'EJENTUM_API_KEY';
+  return config.ejentumApiKey || (env[name] ?? process.env[name]);
 }
 
 function getRequestTimeoutMs(config, env = {}) {
@@ -78,9 +70,16 @@ async function fetchScaffold(url, key, prompt, mode, timeoutMs) {
     const response = await fetch(url, fetchOptions);
     if (!response.ok) {
       await response.body?.cancel().catch(() => undefined);
-      return {
-        error: `Ejentum API returned HTTP ${response.status}`,
-      };
+      const error = `Ejentum API returned HTTP ${response.status}`;
+      if (response.status === 429) {
+        const headers = {};
+        for (const name of ['retry-after', 'retry-after-ms']) {
+          const value = response.headers.get(name);
+          if (value !== null) headers[name] = value;
+        }
+        return { error, metadata: { http: { status: 429, headers } } };
+      }
+      return { error };
     }
     const data = await response.json();
     const scaffold =
@@ -101,6 +100,12 @@ function formatAugmentedPrompt(prompt, scaffold) {
     `[COGNITIVE SCAFFOLD]\n${scaffold}\n[END SCAFFOLD]`;
 
   const trimmed = typeof prompt === 'string' ? prompt.trim() : '';
+  if (trimmed.startsWith('- role:')) {
+    // Keep YAML parsing (including aliases and multiline content) in the
+    // native provider, which already accepts a sequence starting with - role:.
+    const indent = prompt.match(/^([ ]*)- role:/m)[1];
+    return `${indent}- role: system\n${indent}  content: ${JSON.stringify(scaffoldInstruction)}\n${prompt}`;
+  }
   if (trimmed.startsWith('[')) {
     try {
       const parsed = JSON.parse(trimmed);
@@ -150,7 +155,7 @@ class EjentumAugmentedProvider {
     const providerPath = model.startsWith('openai:') ? model : `openai:chat:${model}`;
 
     this.initPromise = (async () => {
-      const loadApiProvider = this.loadApiProvider || (await getLoadApiProvider());
+      const loadApiProvider = this.loadApiProvider || loadDelegatedProvider;
       const provider = await loadApiProvider(providerPath, {
         options: {
           config: forwardedConfig,
@@ -179,12 +184,12 @@ class EjentumAugmentedProvider {
     }
   }
 
-  async callApi(prompt, context) {
+  async callApi(prompt, context, ...options) {
     const config = { ...this.config, ...(context?.prompt?.config || {}) };
     const ejentumKey = getEjentumKey(config, this.env);
     if (!ejentumKey) {
       return {
-        error: 'EJENTUM_API_KEY is not set. Get a key at https://ejentum.com/account',
+        error: `${config.ejentumApiKeyEnvar || 'EJENTUM_API_KEY'} is not set. Get a key at https://ejentum.com/account`,
       };
     }
 
@@ -208,7 +213,10 @@ class EjentumAugmentedProvider {
 
     // 3. Delegate to Promptfoo's maintained OpenAI provider
     const provider = await this.getUnderlyingProvider();
-    return provider.callApi(augmentedPrompt, context);
+    const response = await provider.callApi(augmentedPrompt, context, ...options);
+    // The evaluator times the complete call; the delegate only timed OpenAI.
+    const { latencyMs: _modelLatency, ...result } = response;
+    return result;
   }
 }
 
