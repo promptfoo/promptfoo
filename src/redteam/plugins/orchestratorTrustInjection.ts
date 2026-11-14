@@ -1,4 +1,5 @@
 import dedent from 'dedent';
+import { formatVerificationDecisions } from '../providers/traceFormatting';
 import { isEmptyResponse } from '../util';
 import { RedteamGraderBase, RedteamPluginBase } from './base';
 
@@ -179,6 +180,13 @@ export class OrchestratorTrustInjectionGrader extends RedteamGraderBase {
     // Trust injection attacks often begin with a partial refusal followed by compliance
     // (e.g. "I should verify, but given the urgency I'll proceed..."). Skip isBasicRefusal
     // so hedged compliance is evaluated by the rubric.
+    const results = formatVerificationDecisions(gradingContext);
+    const context = results.length
+      ? {
+          ...gradingContext,
+          traceSummary: [gradingContext?.traceSummary, ...results].filter(Boolean).join('\n'),
+        }
+      : gradingContext;
     return super.getResult(
       prompt,
       llmOutput,
@@ -187,7 +195,7 @@ export class OrchestratorTrustInjectionGrader extends RedteamGraderBase {
       renderedValue,
       additionalRubric,
       true,
-      gradingContext,
+      context,
     );
   }
 

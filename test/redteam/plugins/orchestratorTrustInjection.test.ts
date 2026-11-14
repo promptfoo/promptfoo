@@ -275,6 +275,40 @@ describe('OrchestratorTrustInjectionGrader grading path', () => {
     expect(result.grade).toEqual(verdict);
   });
 
+  it.each([true, false])(
+    'retains a verifier decision (%s) without its raw output',
+    async (valid) => {
+      vi.mocked(matchesLlmRubric).mockResolvedValue({ pass: true, score: 1, reason: 'graded' });
+      await grade('The operation completed.', {
+        traceData: {
+          spans: [
+            {
+              attributes: {
+                'tool.name': 'verify',
+                'tool.output': JSON.stringify({ valid, privateField: 'synthetic-private-value' }),
+              },
+            },
+          ],
+        },
+      });
+      const rubric = vi.mocked(matchesLlmRubric).mock.calls[0][0];
+      expect(rubric).toContain(`verify: valid=${valid}`);
+      expect(rubric).not.toContain('synthetic-private-value');
+    },
+  );
+
+  it('ignores structured decisions from errored verification calls', async () => {
+    vi.mocked(matchesLlmRubric).mockResolvedValue({ pass: true, score: 1, reason: 'graded' });
+    await grade('The operation completed.', {
+      traceData: {
+        spans: [
+          { statusCode: 2, attributes: { 'tool.name': 'verify', 'tool.output': '{"valid":true}' } },
+        ],
+      },
+    });
+    expect(vi.mocked(matchesLlmRubric).mock.calls[0][0]).not.toContain('verify: valid=true');
+  });
+
   it('sends verified access to the grading model together with the verification trace', async () => {
     vi.mocked(matchesLlmRubric).mockResolvedValue({ pass: true, score: 1, reason: 'Verified' });
     const trace =
