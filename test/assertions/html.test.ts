@@ -503,6 +503,8 @@ describe('handleIsHtml', () => {
       ['<select><option>a<option>b</select>', true, 'option before option'],
       ['<select><optgroup><option>a</select>', true, 'option/optgroup at end'],
       ['<select><option>a</option></select>', true, 'explicit option'],
+      ['<select><option>a<hr><option>b</select>', true, 'option before hr'],
+      ['<select><optgroup><option>a</optgroup><hr></select>', true, 'optgroup before hr'],
       // thead: omissible only before tbody/tfoot.
       ['<table><thead><tr><th>x</th><tbody><tr><td>y</td></table>', true, 'thead before tbody'],
       ['<table><thead><tr><th>x</th></tr></table>', false, 'thead at end of table'],

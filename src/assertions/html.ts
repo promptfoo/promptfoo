@@ -144,9 +144,13 @@ const OPTIONAL_END_TAG_RULES: Record<
     nextElement === 'rt' || nextElement === 'rp' || !hasMoreContent,
   rp: (nextElement, hasMoreContent) =>
     nextElement === 'rp' || nextElement === 'rt' || !hasMoreContent,
-  optgroup: (nextElement, hasMoreContent) => nextElement === 'optgroup' || !hasMoreContent,
+  optgroup: (nextElement, hasMoreContent) =>
+    nextElement === 'optgroup' || nextElement === 'hr' || !hasMoreContent,
   option: (nextElement, hasMoreContent) =>
-    nextElement === 'option' || nextElement === 'optgroup' || !hasMoreContent,
+    nextElement === 'option' ||
+    nextElement === 'optgroup' ||
+    nextElement === 'hr' ||
+    !hasMoreContent,
   colgroup: (nextElement, hasMoreContent) => !hasMoreContent || nextElement !== undefined,
   caption: (nextElement, hasMoreContent) => !hasMoreContent || nextElement !== undefined,
   thead: (nextElement) => nextElement === 'tbody' || nextElement === 'tfoot',
