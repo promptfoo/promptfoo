@@ -12,7 +12,7 @@ import { getDefaultProviders } from '../providers/defaults';
 import { doRemoteGrading } from '../remoteGrading';
 import { doRemoteScoringWithPi } from '../remoteScoring';
 import invariant from '../util/invariant';
-import { extractFirstJsonObject } from '../util/json';
+import { extractJsonObjectsWithMeta, selectVerdictObject } from '../util/json';
 import { accumulateTokenUsage } from '../util/tokenUsageUtils';
 import {
   callProviderWithContext,
@@ -86,31 +86,30 @@ function buildFactualityResult(
 function parseFactualityJsonResponse(
   responseText: string,
 ): { option: string; reason: string } | undefined {
-  try {
-    const jsonData = extractFirstJsonObject<{ category?: string; reason?: string }>(responseText);
-    if (!jsonData?.category || typeof jsonData.category !== 'string') {
-      return undefined;
-    }
-
-    const option = jsonData.category.trim().toUpperCase();
-    if (!/^[A-E]$/.test(option)) {
-      throw new Error(`Invalid category value: ${option}`);
-    }
-
-    return {
-      option,
-      reason:
-        jsonData.reason?.trim() ||
-        `Category ${option}: ${FACTUALITY_CATEGORY_DESCRIPTIONS[option]}`,
-    };
-  } catch (err) {
-    const error = err as Error;
-    if (error.message.startsWith('Invalid category value:')) {
-      throw error;
-    }
-    logger.debug(`JSON parsing failed: ${error.message}`);
+  const entries = extractJsonObjectsWithMeta(responseText);
+  // A balanced example without a top-level category is not a factuality verdict.
+  if (!entries.some(({ object, autoClosed }) => autoClosed || 'category' in object)) {
     return undefined;
   }
+  const verdict = selectVerdictObject<{ category?: unknown; reason?: unknown }>(entries, [
+    'category',
+  ]);
+  if (!verdict) {
+    throw new Error('Factuality checker returned ambiguous verdict JSON (conflicting objects)');
+  }
+  if (!Object.prototype.hasOwnProperty.call(verdict, 'category')) {
+    return undefined;
+  }
+  const option = typeof verdict.category === 'string' ? verdict.category.trim().toUpperCase() : '';
+  if (!/^[A-E]$/.test(option)) {
+    throw new Error(`Invalid category value: ${option}`);
+  }
+  return {
+    option,
+    reason:
+      (typeof verdict.reason === 'string' && verdict.reason.trim()) ||
+      `Category ${option}: ${FACTUALITY_CATEGORY_DESCRIPTIONS[option]}`,
+  };
 }
 
 function parseLegacyFactualityResponse(responseText: string): { option: string; reason: string } {

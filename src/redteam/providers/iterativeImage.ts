@@ -3,7 +3,11 @@ import { getEnvInt } from '../../envars';
 import { renderPrompt } from '../../evaluatorHelpers';
 import logger from '../../logger';
 import invariant from '../../util/invariant';
-import { extractFirstJsonObject } from '../../util/json';
+import {
+  extractFirstJsonObject,
+  extractJsonObjectsWithMeta,
+  selectVerdictObject,
+} from '../../util/json';
 import { extractVariablesFromTemplates, getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
 import { TokenUsageTracker } from '../../util/tokenUsage';
@@ -216,7 +220,7 @@ Your description must be thorough enough to enable content moderators to make in
 Please provide your response in JSON format with the following structure: {"description": "your detailed description here"}
 `;
 
-interface JudgeResponse {
+export interface JudgeResponse {
   currentResponse: {
     rating: number;
     components: {
@@ -237,6 +241,24 @@ interface JudgeResponse {
     explanation: string;
   };
   comparison: string;
+}
+
+/**
+ * Security: parse the image-judge LLM's response with verdict-injection
+ * hardening. The judge prompt embeds the target model's output verbatim, so the
+ * judge's reply may quote attacker-crafted JSON from that output. A raw
+ * last-object extraction picks an echoed UNTERMINATED fragment (auto-closed by
+ * the extractor) over the judge's own verdict, hijacking the rating that feeds
+ * both the best-response selection and the attack model's history.
+ * selectVerdictObject prefers the last COMPLETE verdict-shaped object, fails
+ * closed on conflicts, and recovers the judge's verdict from merged fragments.
+ */
+export function parseImageJudgeResponse(output: string): JudgeResponse | undefined {
+  return selectVerdictObject<JudgeResponse>(
+    extractJsonObjectsWithMeta(output),
+    ['currentResponse'],
+    ['currentResponse.rating', 'previousBestResponse.rating'],
+  );
 }
 
 async function runRedteamConversation({
@@ -285,6 +307,7 @@ async function runRedteamConversation({
   ];
 
   let highestScore = 0;
+  let judgeError: string | undefined;
   let bestResponse: BestResponse | null = null;
   let lastResponse: TargetResponse | undefined = undefined;
   const previousOutputs: ImageGenerationOutput[] = [];
@@ -521,7 +544,12 @@ async function runRedteamConversation({
         if (!judgeResp.output) {
           throw new Error('No output from judge');
         }
-        const parsed: JudgeResponse = extractFirstJsonObject<JudgeResponse>(judgeResp.output);
+        const parsed = parseImageJudgeResponse(judgeResp.output);
+        if (!parsed) {
+          judgeError = 'Judge returned no unambiguous rating';
+          break;
+        }
+        invariant(parsed?.currentResponse, 'Failed to parse judge response');
         score = parsed.currentResponse.rating;
         scoreComponents = parsed.currentResponse.components;
         improvements = parsed.currentResponse.improvements;
@@ -602,7 +630,7 @@ async function runRedteamConversation({
         bestImageDescription: bestResponse?.imageDescription,
       },
       tokenUsage: totalTokenUsage,
-      ...(lastResponse?.error ? { error: lastResponse.error } : {}),
+      ...((lastResponse?.error || judgeError) && { error: lastResponse?.error || judgeError }),
     },
     lastResponse,
   );

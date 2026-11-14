@@ -25,7 +25,11 @@ import {
 import { Strategies } from '../../strategies';
 import { getSessionId } from '../../util';
 import { MemorySystem } from '../conversationMemory';
-import { getEvalScore, getRefusalScore } from '../conversationScoring';
+import {
+  AmbiguousConversationScoreError,
+  getEvalScore,
+  getRefusalScore,
+} from '../conversationScoring';
 import { getGoalRubric } from '../prompts';
 import {
   accumulateGraderResult,
@@ -302,6 +306,7 @@ export class CustomProvider implements ApiProvider {
     let lastResponse: TargetResponse = { output: '' };
     let hasTargetResponse = false;
     let lastAttemptError: string | undefined;
+    let judgeError: string | undefined;
     let lastResponseMessages: Message[] = [];
     let lastFinalAttackPrompt: string | undefined;
     let evalFlag = false;
@@ -690,6 +695,10 @@ export class CustomProvider implements ApiProvider {
           logger.debug('[Custom] Operation aborted');
           throw error;
         }
+        if (error instanceof AmbiguousConversationScoreError) {
+          judgeError = error.message;
+          break;
+        }
         lastAttemptError = error instanceof Error ? error.message : String(error);
         logger.error(`[Custom] Error Running custom step: ${error}`);
       }
@@ -728,6 +737,7 @@ export class CustomProvider implements ApiProvider {
       lastResponse.error && (typeof lastResponse.error === 'string' ? lastResponse.error : 'Error');
     const error =
       targetError ||
+      judgeError ||
       (hasTargetResponse ? undefined : lastAttemptError || 'No target request was completed.');
     return preserveSelectedError(
       {

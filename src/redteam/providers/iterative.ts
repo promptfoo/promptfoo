@@ -10,7 +10,11 @@ import {
   type TraceContextData,
 } from '../../tracing/traceContext';
 import invariant from '../../util/invariant';
-import { extractFirstJsonObject } from '../../util/json';
+import {
+  extractFirstJsonObject,
+  extractJsonObjectsWithMeta,
+  selectVerdictObject,
+} from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
 import { TokenUsageTracker } from '../../util/tokenUsage';
@@ -80,6 +84,29 @@ import type {
 import type { RedteamGradingContext } from '../grading/types';
 
 // Based on: https://arxiv.org/abs/2312.02119
+
+export type IterativeJudgeResponse = {
+  currentResponse?: { rating?: number | string; explanation?: string };
+  previousBestResponse?: { rating?: number | string; explanation?: string };
+};
+
+/**
+ * Security: parse the judge LLM's rating response with verdict-injection
+ * hardening. The judge prompt embeds the target model's output verbatim, so the
+ * judge's reply may quote attacker-crafted JSON from that output. A raw
+ * last-object extraction picks an echoed UNTERMINATED fragment (auto-closed by
+ * the extractor) over the judge's own verdict, hijacking the rating.
+ * selectVerdictObject prefers the last COMPLETE verdict-shaped object, fails
+ * closed on conflicting complete verdicts, and recovers the judge's verdict
+ * from merged fragments.
+ */
+export function parseIterativeJudgeResponse(output: string): IterativeJudgeResponse | undefined {
+  return selectVerdictObject<IterativeJudgeResponse>(
+    extractJsonObjectsWithMeta(output),
+    ['currentResponse'],
+    ['currentResponse.rating', 'previousBestResponse.rating'],
+  );
+}
 
 // Function to generate goal-specific evaluation rubric
 const getIterativeGoalRubric = (goal: string | undefined): string => {
@@ -215,6 +242,7 @@ export async function runRedteamConversation({
   ];
 
   let highestScore = 0;
+  let judgeError: string | undefined;
   let bestResponse = '';
   let finalIteration = numIterations;
   let bestInjectVar: string | undefined = undefined;
@@ -759,12 +787,14 @@ export async function runRedteamConversation({
     try {
       const parsed =
         typeof judgeResp.output === 'string'
-          ? extractFirstJsonObject<{
-              currentResponse?: { rating?: number | string; explanation?: string };
-              previousBestResponse?: { rating?: number | string; explanation?: string };
-            }>(judgeResp.output)
+          ? parseIterativeJudgeResponse(judgeResp.output)
           : (judgeResp.output as any);
 
+      if (typeof judgeResp.output === 'string' && !parsed) {
+        judgeError = 'Judge returned no unambiguous rating';
+        stopReason = 'Grader failed';
+        break;
+      }
       // Safely extract numeric ratings; treat 0 as valid
       let parsedCurrent = parsed?.currentResponse?.rating as number | string | undefined;
       if (typeof parsedCurrent === 'string') {
@@ -872,7 +902,7 @@ export async function runRedteamConversation({
   return preserveSelectedError(
     {
       output: bestInjectVar === undefined ? lastResponse?.output || '' : bestResponse,
-      ...(lastResponse?.error ? { error: lastResponse.error } : {}),
+      ...((lastResponse?.error || judgeError) && { error: lastResponse?.error || judgeError }),
       prompt: bestInjectVar ?? lastInjectVar,
       metadata: {
         finalIteration,
