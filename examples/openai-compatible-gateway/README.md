@@ -38,3 +38,45 @@ Point Promptfoo's built-in OpenAI provider at any OpenAI-compatible Chat Complet
 - Uses the OpenAI Chat Completions API shape only.
 
 See the [connection settings](https://www.promptfoo.dev/docs/providers/openai/#connection-settings) section of the OpenAI provider documentation for the full list of base URL and credential options.
+
+## IteraCompute
+
+Save this classification example as `promptfooconfig.iteracompute.yaml`. Keep the `z-ai/` prefix in the model ID. `showThinking: false` keeps reasoning text out of the exact-match assertions.
+
+```yaml
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+
+description: Classify support requests with IteraCompute
+
+prompts:
+  - 'Classify this support request as BILLING or TECHNICAL. Reply with only the label. Request: {{request}}'
+
+providers:
+  - id: openai:chat:z-ai/glm-5.3-flash
+    config:
+      apiBaseUrl: https://api.iteracompute.com/v1
+      apiKeyEnvar: ITERACOMPUTE_API_KEY
+      omitDefaults: true
+      showThinking: false
+
+tests:
+  - vars:
+      request: I was charged twice for my subscription.
+    assert:
+      - type: equals
+        value: BILLING
+  - vars:
+      request: The app crashes whenever I upload a file.
+    assert:
+      - type: equals
+        value: TECHNICAL
+```
+
+Set your IteraCompute API key and run the example.
+
+```bash
+export ITERACOMPUTE_API_KEY=your_iteracompute_api_key
+npx promptfoo@latest eval -c promptfooconfig.iteracompute.yaml
+```
+
+Live compatibility with the IteraCompute endpoint is unverified.
