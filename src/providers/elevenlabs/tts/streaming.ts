@@ -154,6 +154,17 @@ export async function handleStreamingTTS(
       }
     });
 
+    // The server closes the socket after the final output, or with an error code if it
+    // rejects the stream.
+    client.onClose((code, reason) => {
+      if (code === 1000) {
+        logger.debug('[ElevenLabs Streaming] Stream complete (socket closed)');
+        settle();
+      } else {
+        settle(new Error(`WebSocket closed with code ${code}${reason ? `: ${reason}` : ''}`));
+      }
+    });
+
     // Send the text for generation
     try {
       // Start before sending so synchronous messages can replace or clear the timer.

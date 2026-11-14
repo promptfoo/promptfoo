@@ -20,6 +20,7 @@ export class ElevenLabsWebSocketClient {
   private ws: WebSocket | null = null;
   private keepAliveTimer: NodeJS.Timeout | null = null;
   private messageHandler: ((data: Buffer) => void) | null = null;
+  private closeHandler: ((code: number, reason: Buffer) => void) | null = null;
 
   constructor(config: WebSocketClientConfig) {
     this.apiKey = config.apiKey;
@@ -113,29 +114,24 @@ export class ElevenLabsWebSocketClient {
       try {
         const parsed = JSON.parse(data.toString());
 
+        if (parsed.error) {
+          callback({ type: 'error', data: parsed.error });
+          return;
+        }
+
         if (parsed.audio) {
-          callback({
-            type: 'audio',
-            data: parsed.audio, // Base64 encoded audio chunk
-          });
-        } else if (parsed.alignment) {
-          callback({
-            type: 'alignment',
-            data: parsed.alignment, // Word-level timestamps
-          });
-        } else if (parsed.error) {
-          callback({
-            type: 'error',
-            data: parsed.error,
-          });
-        } else {
+          callback({ type: 'audio', data: parsed.audio });
+        }
+        if (parsed.alignment) {
+          callback({ type: 'alignment', data: parsed.alignment });
+        }
+        if (parsed.isFinal) {
+          callback({ type: 'flush' });
+        } else if (!parsed.audio && !parsed.alignment) {
           logger.debug('[ElevenLabs WebSocket] Received unknown message type', {
             keys: Object.keys(parsed),
           });
-          callback({
-            type: 'unknown',
-            data: parsed,
-          });
+          callback({ type: 'unknown', data: parsed });
         }
       } catch (error) {
         logger.error('[ElevenLabs WebSocket] Failed to parse message', { error });
@@ -143,6 +139,19 @@ export class ElevenLabsWebSocketClient {
     };
 
     this.ws.on('message', this.messageHandler);
+  }
+
+  onClose(callback: (code: number, reason: string) => void): void {
+    if (!this.ws) {
+      throw new Error('WebSocket not initialized');
+    }
+
+    if (this.closeHandler) {
+      this.ws.removeListener('close', this.closeHandler);
+    }
+
+    this.closeHandler = (code: number, reason: Buffer) => callback(code, reason.toString());
+    this.ws.on('close', this.closeHandler);
   }
 
   close(): void {
@@ -153,6 +162,10 @@ export class ElevenLabsWebSocketClient {
       if (this.messageHandler) {
         this.ws.removeListener('message', this.messageHandler);
         this.messageHandler = null;
+      }
+      if (this.closeHandler) {
+        this.ws.removeListener('close', this.closeHandler);
+        this.closeHandler = null;
       }
       this.ws.close();
       this.ws = null;
