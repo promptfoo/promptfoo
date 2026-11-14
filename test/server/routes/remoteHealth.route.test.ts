@@ -74,6 +74,28 @@ describe('Remote Health Route', () => {
     }
   });
 
+  it('preserves static cache headers and conditional requests on normal client routes', async () => {
+    const restore = mockProcessEnv({ PROMPTFOO_NO_NETWORK: undefined });
+    try {
+      const server = request(createApp());
+      const entry = await server.get('/index.html');
+      const nested = await server.get('/eval/recent?tab=results');
+      expect(nested.status).toBe(200);
+      expect(nested.text).toBe(entry.text);
+      expect(nested.headers.etag).toBeTruthy();
+      expect(nested.headers.etag).toBe(entry.headers.etag);
+      expect(nested.headers['cache-control']).toBe(entry.headers['cache-control']);
+      const head = await server.head('/eval/recent');
+      expect(head.status).toBe(200);
+      expect(Number(head.headers['content-length'])).toBe(Buffer.byteLength(entry.text));
+      expect(head.text).toBeUndefined();
+      const fresh = await server.get('/eval/recent').set('If-None-Match', entry.headers.etag);
+      expect(fresh.status).toBe(304);
+    } finally {
+      restore();
+    }
+  });
+
   it('checks upstream health when no-network mode is off', async () => {
     const restoreEnv = mockProcessEnv({
       PROMPTFOO_NO_NETWORK: undefined,

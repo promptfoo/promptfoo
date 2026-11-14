@@ -406,20 +406,24 @@ export function createApp() {
       next();
     });
   }
-  app.use(
-    express.static(staticDir, {
-      dotfiles: 'allow',
-      index: noNetworkIndex === undefined ? 'index.html' : false,
-    }),
-  );
+  const serveStatic = express.static(staticDir, {
+    dotfiles: 'allow',
+    index: noNetworkIndex === undefined ? 'index.html' : false,
+  });
+  app.use(serveStatic);
 
-  // Handle client routing after static assets.
-  app.get('/*splat', (_req: Request, res: Response): void => {
-    if (noNetworkIndex === undefined) {
-      res.sendFile('index.html', { root: staticDir, dotfiles: 'allow' });
-    } else {
+  // Use the same static-file handling and cache validators for client-side routes.
+  app.get('/*splat', (req, res, next) => {
+    if (noNetworkIndex !== undefined) {
       serveNoNetworkIndex(res);
+      return;
     }
+    const originalUrl = req.url;
+    req.url = '/index.html';
+    serveStatic(req, res, (err) => {
+      req.url = originalUrl;
+      next(err ?? Object.assign(new Error('Web UI entry page not found'), { status: 404 }));
+    });
   });
   app.use(defaultErrorHandler);
   return app;
