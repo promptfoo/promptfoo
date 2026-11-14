@@ -808,7 +808,7 @@ function stripThinkingBlocks(text: string): string {
         visible.push(text.slice(start, tag.index));
       }
       hiddenTags.push(name);
-    } else if (hiddenTags.at(-1) === name) {
+    } else if (hiddenTags[hiddenTags.length - 1] === name) {
       hiddenTags.pop();
       if (hiddenTags.length === 0) {
         start = tag.index + tag[0].length;
