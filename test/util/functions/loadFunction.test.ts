@@ -281,6 +281,13 @@ describe('loadFunction', () => {
 });
 
 describe('parseFileUrl', () => {
+  it('keeps extension-like colon sequences in directory components', () => {
+    expect(parseFileUrl('file://cache.py:backup/grader.js:fn')).toEqual({
+      filePath: 'cache.py:backup/grader.js',
+      functionName: 'fn',
+    });
+  });
+
   it('should parse file URL with function name', () => {
     const result = parseFileUrl('file:///path/to/file.js:functionName');
     expect(result).toEqual({

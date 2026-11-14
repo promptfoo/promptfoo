@@ -134,10 +134,15 @@ export function parseFileUrl(fileUrl: string): { filePath: string; functionName?
   }
 
   const urlWithoutProtocol = fileUrl.slice('file://'.length);
-  const functionSeparator = CALLABLE_FILE_EXTENSION_PATTERN.exec(urlWithoutProtocol);
+  const filenameStart =
+    Math.max(urlWithoutProtocol.lastIndexOf('/'), urlWithoutProtocol.lastIndexOf('\\')) + 1;
+  const functionSeparator = CALLABLE_FILE_EXTENSION_PATTERN.exec(
+    urlWithoutProtocol.slice(filenameStart),
+  );
 
   if (functionSeparator?.index !== undefined) {
-    const separatorIndex = functionSeparator.index + functionSeparator[0].length - 1;
+    const separatorIndex =
+      filenameStart + functionSeparator.index + functionSeparator[0].length - 1;
     return {
       filePath: normalizeFilePath(urlWithoutProtocol.slice(0, separatorIndex)),
       functionName: urlWithoutProtocol.slice(separatorIndex + 1),

@@ -1185,7 +1185,7 @@ describe('combineConfigs', () => {
       ],
       scenarios: [
         {
-          config: [],
+          config: [{ assert: [{ value: 'file://assertions/scenario.yaml' }] }],
           tests: [
             {
               vars: { prefix },
@@ -1229,6 +1229,9 @@ describe('combineConfigs', () => {
       'first-default',
       'second-default',
     ]);
+    expect(
+      (result.scenarios as any[]).map((scenario) => scenario.config[0].assert[0].value),
+    ).toEqual(['first-scenario', 'second-scenario']);
     expect(
       (result.scenarios as any[]).map((scenario) => scenario.tests[0].assert[0].value),
     ).toEqual(['first-scenario', 'second-scenario']);

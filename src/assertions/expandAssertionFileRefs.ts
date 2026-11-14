@@ -2,10 +2,10 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 import cliState from '../cliState';
-import { parseFileUrl } from '../util/functions/loadFunction';
+import { parseConfigFileUrl } from '../util/fileReference';
 import { loadYaml } from '../util/yamlLoad';
 
-import type { AssertionOrSet } from '../types';
+import type { AssertionOrSet, Scenario } from '../types';
 
 const MAX_DEPTH = 16;
 const ASSERTION_FILE_EXTENSIONS = new Set(['.yaml', '.yml', '.json']);
@@ -41,7 +41,7 @@ function isAssertionFileInclude(item: unknown): item is { value: string } {
   if (!isFileRef(obj.value)) {
     return false;
   }
-  const { filePath } = parseFileUrl(obj.value);
+  const { filePath } = parseConfigFileUrl(obj.value);
   return hasAssertionFileExtension(filePath);
 }
 
@@ -63,9 +63,9 @@ function absolutizeFileRefs(
     if (!isFileRef(value)) {
       return value;
     }
-    const { filePath, functionName } = parseFileUrl(value);
+    const { filePath, functionName, rendered } = parseConfigFileUrl(value);
     if (path.isAbsolute(filePath)) {
-      return value;
+      return rendered;
     }
     const absolutePath = path.resolve(baseDir, filePath);
     return functionName ? `file://${absolutePath}:${functionName}` : `file://${absolutePath}`;
@@ -93,7 +93,7 @@ function absolutizeFileRefs(
 }
 
 function resolveAssertionFilePath(fileRef: string, baseDir: string): string {
-  const { filePath } = parseFileUrl(fileRef);
+  const { filePath } = parseConfigFileUrl(fileRef);
   return path.resolve(baseDir, filePath);
 }
 
@@ -192,7 +192,7 @@ export async function expandAssertionFileRefs(
 
       const loaded = loadAssertionFile(resolvedPath);
       if (loaded == null) {
-        continue;
+        throw new Error(`Assertion file ${resolvedPath} contains no assertions`);
       }
 
       const loadedList = Array.isArray(loaded) ? loaded : [loaded];
@@ -222,4 +222,35 @@ export async function expandAssertionFileRefs(
   }
 
   return expanded;
+}
+
+export async function expandInlineAssertionIncludes<T>(value: T, baseDir?: string): Promise<T> {
+  if (!value || typeof value !== 'object') {
+    return value;
+  }
+  const assertions = (value as { assert?: unknown }).assert;
+  if (!Array.isArray(assertions)) {
+    return value;
+  }
+  const assert = await expandAssertionFileRefs(assertions as AssertionOrSet[], { baseDir });
+  return (assert ? { ...value, assert } : value) as T;
+}
+
+export async function expandScenarioAssertionIncludes(
+  scenario: Scenario,
+  baseDir?: string,
+): Promise<Scenario> {
+  return {
+    ...scenario,
+    ...(Array.isArray(scenario.config) && {
+      config: await Promise.all(
+        scenario.config.map((row) => expandInlineAssertionIncludes(row, baseDir)),
+      ),
+    }),
+    ...(Array.isArray(scenario.tests) && {
+      tests: await Promise.all(
+        scenario.tests.map((row) => expandInlineAssertionIncludes(row, baseDir)),
+      ),
+    }),
+  };
 }

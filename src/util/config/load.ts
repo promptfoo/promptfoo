@@ -8,7 +8,11 @@ import dedent from 'dedent';
 import { globSync } from 'glob';
 import Clone from 'rfdc';
 import { z } from 'zod';
-import { expandAssertionFileRefs } from '../../assertions/expandAssertionFileRefs';
+import {
+  expandAssertionFileRefs,
+  expandInlineAssertionIncludes,
+  expandScenarioAssertionIncludes,
+} from '../../assertions/expandAssertionFileRefs';
 import { readAssertions } from '../../assertions/index';
 import { validateAssertions } from '../../assertions/validateAssertions';
 import cliState from '../../cliState';
@@ -19,7 +23,6 @@ import { readPrompts } from '../../prompts/index';
 import { loadApiProviders, resolveProviderConfigs } from '../../providers/index';
 import telemetry from '../../telemetry';
 import {
-  type AssertionOrSet,
   type CommandLineOptions,
   CommandLineOptionsSchema,
   EvaluateOptionsSchema,
@@ -548,18 +551,6 @@ function providerDedupeKey(provider: unknown, functionIds: Map<Function, number>
   }
 }
 
-async function expandInlineAssertionIncludes<T>(value: T, baseDir: string): Promise<T> {
-  if (!value || typeof value !== 'object') {
-    return value;
-  }
-  const assertions = (value as { assert?: unknown }).assert;
-  if (!Array.isArray(assertions)) {
-    return value;
-  }
-  const assert = await expandAssertionFileRefs(assertions as AssertionOrSet[], { baseDir });
-  return (assert ? { ...value, assert } : value) as T;
-}
-
 async function expandConfigInlineAssertionIncludes(
   config: UnifiedConfig,
   baseDir: string,
@@ -571,23 +562,7 @@ async function expandConfigInlineAssertionIncludes(
     config.defaultTest && typeof config.defaultTest === 'object'
       ? await expandInlineAssertionIncludes(config.defaultTest, baseDir)
       : config.defaultTest;
-  const scenarios = Array.isArray(config.scenarios)
-    ? await Promise.all(
-        config.scenarios.map(async (scenario) => {
-          if (typeof scenario === 'string' || !Array.isArray(scenario.tests)) {
-            return scenario;
-          }
-          return {
-            ...scenario,
-            tests: await Promise.all(
-              scenario.tests.map((test) => expandInlineAssertionIncludes(test, baseDir)),
-            ),
-          };
-        }),
-      )
-    : config.scenarios;
-
-  return { ...config, tests, defaultTest, scenarios };
+  return { ...config, tests, defaultTest };
 }
 
 /** Reads config files and resolves their tests using the combined environment. */
@@ -620,6 +595,7 @@ async function readTestSources(
 /** Combines declarative config and keeps each test source's directory for loading and watch. */
 async function prepareCombinedConfig(
   configPaths: string[],
+  skipConfiguredTests = false,
 ): Promise<{ config: UnifiedConfig; testSources: TestSource[]; promptBasePaths: string[] }> {
   const configSources: { config: UnifiedConfig; basePath: string }[] = [];
   for (const configPath of configPaths) {
@@ -638,14 +614,20 @@ async function prepareCombinedConfig(
       const config = await readConfig(globPath);
       const basePath = config.basePath ?? path.dirname(globPath);
       configSources.push({
-        config: await expandConfigInlineAssertionIncludes(config, basePath),
+        config,
         basePath,
       });
     }
   }
 
+  const combinedEnv = configSources.reduce((env, { config }) => ({ ...env, ...config.env }), {});
+  for (const source of configSources) {
+    const config = skipConfiguredTests ? { ...source.config, tests: undefined } : source.config;
+    source.config = await cliState.withEnv(combinedEnv, () =>
+      expandConfigInlineAssertionIncludes(config, source.basePath),
+    );
+  }
   const configs = configSources.map(({ config }) => config);
-  const combinedEnv = configs.reduce((env, config) => ({ ...env, ...config.env }), {});
   const providers: UnifiedConfig['providers'] = [];
   const seenProviders = new Set<unknown>();
   const functionIds = new Map<Function, number>();
@@ -857,7 +839,17 @@ async function prepareCombinedConfig(
               cliState.withEnv(combinedEnv, () => maybeLoadFromExternalFile(source)),
             )
           : source;
-      for (const scenario of [loaded].flat()) {
+      for (const entry of [loaded].flat()) {
+        const scenarioDir =
+          typeof source === 'string' && source.startsWith('file://')
+            ? path.dirname(resolveConfigPath(basePath, source).slice(7))
+            : basePath;
+        const scenario =
+          typeof entry === 'object' && entry
+            ? await cliState.withEnv(combinedEnv, () =>
+                expandScenarioAssertionIncludes(entry, scenarioDir),
+              )
+            : entry;
         scenarios.push(
           typeof scenario === 'object' && scenario?.tests
             ? {
@@ -977,7 +969,10 @@ export async function resolveConfigs(
   const configPaths = cmdObj.config;
   let promptReferenceSources: PromptReferenceSource[] = [];
   if (configPaths) {
-    const prepared = await prepareCombinedConfig(configPaths);
+    const prepared = await prepareCombinedConfig(
+      configPaths,
+      Boolean(cmdObj.tests || cmdObj.vars || cmdObj.assertions),
+    );
     fileConfig = prepared.config;
     promptBasePaths = prepared.promptBasePaths;
     testSources = cmdObj.tests || cmdObj.vars || cmdObj.assertions ? [] : prepared.testSources;

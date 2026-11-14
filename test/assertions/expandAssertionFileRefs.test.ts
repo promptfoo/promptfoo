@@ -53,6 +53,23 @@ describe('expandAssertionFileRefs', () => {
     expect(out?.[1]).toMatchObject({ type: 'contains', value: 'hello' });
   });
 
+  it('renders scoped environment paths in nested assertion includes', async () => {
+    writeFixture('outer.yaml', '- value: file://{{ env.CHECKS_DIR }}/inner.json');
+    writeFixture('checks/inner.json', '[{"type":"contains","value":"expected"}]');
+    const input = [{ value: 'file://outer.yaml' }] as AssertionOrSet[];
+    const result = await cliState.withEnv({ CHECKS_DIR: 'checks' }, () =>
+      expandAssertionFileRefs(input),
+    );
+    expect(result).toEqual([{ type: 'contains', value: 'expected' }]);
+  });
+
+  it('rejects an empty assertion document instead of dropping the check', async () => {
+    writeFixture('assertions/empty.yaml', '# missing assertions\n');
+    const input = [{ value: 'file://assertions/empty.yaml' }] as AssertionOrSet[];
+
+    await expect(expandAssertionFileRefs(input)).rejects.toThrow('contains no assertions');
+  });
+
   it('rejects circular YAML values in included assertions', async () => {
     writeFixture('assertions/cyclic.yaml', '- type: is-json\n  value: &loop { nested: *loop }\n');
     const input = [{ value: 'file://assertions/cyclic.yaml' }] as AssertionOrSet[];

@@ -1,6 +1,9 @@
 import * as path from 'path';
 
-import { expandAssertionFileRefs } from './assertions/expandAssertionFileRefs';
+import {
+  expandInlineAssertionIncludes,
+  expandScenarioAssertionIncludes,
+} from './assertions/expandAssertionFileRefs';
 import * as cache from './cache';
 import cliState from './cliState';
 import { evaluate as doEvaluate } from './evaluator';
@@ -234,20 +237,23 @@ async function createRuntimeTestSuite(
     defaultTest = await maybeLoadFromExternalFile(testSuiteConfig.defaultTest);
   }
 
-  if (defaultTest && typeof defaultTest === 'object' && (defaultTest as Partial<TestCase>).assert) {
-    const defaultTestObject = defaultTest as Partial<TestCase>;
-    const expandedDefaultAssertions = await expandAssertionFileRefs(defaultTestObject.assert, {
-      baseDir: defaultTestBaseDir,
-    });
-    if (expandedDefaultAssertions) {
-      defaultTestObject.assert = expandedDefaultAssertions;
-    }
-  }
+  defaultTest = await expandInlineAssertionIncludes(
+    defaultTest,
+    defaultTestBaseDir ?? testSuiteConfig.basePath,
+  );
 
   return {
     ...testSuiteConfig,
     defaultTest: defaultTest as TestSuite['defaultTest'],
-    scenarios: testSuiteConfig.scenarios as Scenario[],
+    scenarios:
+      testSuiteConfig.scenarios &&
+      (await Promise.all(
+        (testSuiteConfig.scenarios as Scenario[]).map((scenario) =>
+          typeof scenario === 'object' && scenario
+            ? expandScenarioAssertionIncludes(scenario, testSuiteConfig.basePath)
+            : scenario,
+        ),
+      )),
     providers: loadedProviders,
     tests: await readTests(testSuiteConfig.tests, testSuiteConfig.basePath, testSuiteConfig.env),
     nunjucksFilters: await readFilters(
