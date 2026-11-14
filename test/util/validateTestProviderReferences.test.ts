@@ -52,6 +52,26 @@ describe('validateTestProviderReferences', () => {
     );
   });
 
+  it('scrubs secrets from invalid references and all available provider descriptions', () => {
+    const secret = 'canary-hidden';
+    const references = [
+      createProvider(`webhook:https://discord.com/api/webhooks/1234/${secret}`),
+      createProvider(`webhook:https://hooks.slack.com/services/T000/B000/${secret}`),
+      createProvider(
+        `exec:python provider.py --password=${secret}`,
+        `https://gateway.example/?token=${secret}`,
+      ),
+      createProvider(`n8n:https://example.org/webhook/%ZZ${secret}/tail`),
+    ];
+    const validate = () =>
+      validateTestProviderReferences(
+        [{ providers: [`https://unknown.example/?api_key=${secret}`] }],
+        references,
+      );
+    expect(validate).toThrow(/does not exist.*Available providers/);
+    expect(validate).not.toThrow(new RegExp(secret));
+  });
+
   it('throws for invalid provider reference with description', () => {
     const tests: TestCase[] = [
       { description: 'My test case', vars: { foo: 'bar' }, providers: ['nonexistent'] },

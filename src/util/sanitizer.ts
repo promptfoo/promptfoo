@@ -1704,10 +1704,21 @@ export function sanitizeUrlForLogging(url: string): string {
   try {
     const isPathOnly = sanitized.startsWith('/') && !sanitized.startsWith('//');
     const parsed = isPathOnly ? new URL(sanitized, DUMMY_BASE) : new URL(sanitized);
+    const slackHost =
+      parsed.hostname === 'hooks.slack.com' || parsed.hostname === 'hooks.slack-gov.com';
+    const discordHost = /(?:^|\.)discord(?:app)?\.com$/i.test(parsed.hostname);
+    let webhookPath = false;
     const sanitizedPathname = parsed.pathname
       .split('/')
       .map((segment, index, segments) => {
         const previous = decodeFormComponent(segments[index - 1] ?? '') ?? '';
+        webhookPath ||=
+          /^webhook(?:-test)?$/i.test(previous) ||
+          (slackHost && /^services$/i.test(previous)) ||
+          (discordHost && /^webhooks$/i.test(previous));
+        if (webhookPath) {
+          return segment ? '%5BREDACTED%5D' : segment;
+        }
         try {
           const decoded = decodeURIComponent(segment);
           // Credential routes can also contain ordinary words such as /auth/proxy.
@@ -1716,13 +1727,7 @@ export function sanitizeUrlForLogging(url: string): string {
             /^[a-z0-9._~+-]{12,}$/i.test(decoded) &&
             /[a-z]/i.test(decoded) &&
             /[0-9]/.test(decoded);
-          // Webhook routes use their path as a bearer credential, including short
-          // human-chosen paths that do not resemble a random token.
-          const webhookPath = segments
-            .slice(0, index)
-            .some((part) => /^webhook(?:-test)?$/i.test(decodeFormComponent(part) ?? part));
-          return webhookPath ||
-            opaqueValue ||
+          return opaqueValue ||
             OPAQUE_CREDENTIAL_PATH_SEGMENT.test(decoded) ||
             looksLikeSecret(decoded)
             ? '%5BREDACTED%5D'

@@ -1,4 +1,4 @@
-import { doesProviderRefMatch, getProviderDescription } from './provider';
+import { doesProviderRefMatch, formatProviderReference, getProviderDescription } from './provider';
 
 import type { Scenario, TestCase } from '../types/index';
 import type { ApiProvider } from '../types/providers';
@@ -21,7 +21,7 @@ function validateProviderRef(
   if (!providers.some((p) => doesProviderRefMatch(ref, p))) {
     const available = providers.map(getProviderDescription).join(', ');
     throw new ProviderReferenceValidationError(
-      `${context} references provider "${ref}" which does not exist. Available providers: ${available}`,
+      `${context} references provider "${formatProviderReference(ref)}" which does not exist. Available providers: ${available}`,
     );
   }
 }

@@ -47,6 +47,15 @@ export function getProviderIdentifier(provider: ApiProvider): string {
   return provider.label || provider.id();
 }
 
+/** Format provider references for diagnostics without disclosing command arguments or URL credentials. */
+export function formatProviderReference(ref: string): string {
+  if (/^exec:/i.test(ref)) {
+    return 'exec:[REDACTED]';
+  }
+  const urlIndex = ref.search(/(?:https?|wss?):\/\//i);
+  return urlIndex >= 0 ? ref.slice(0, urlIndex) + sanitizeUrlForLogging(ref.slice(urlIndex)) : ref;
+}
+
 /**
  * Gets a descriptive identifier string for a provider, showing both label and ID when both exist.
  * Useful for error messages to help users debug provider reference issues.
@@ -54,13 +63,9 @@ export function getProviderIdentifier(provider: ApiProvider): string {
 export function getProviderDescription(provider: Pick<ApiProvider, 'id' | 'label'>): string {
   const label = provider.label;
   const id = provider.id();
-  // URLs can follow a provider prefix (for example n8n:https://...). Preserve the
-  // prefix while redacting credentials from the URL used in diagnostic output.
-  const urlIndex = id.search(/(?:https?|wss?):\/\//i);
-  const displayId =
-    urlIndex >= 0 ? id.slice(0, urlIndex) + sanitizeUrlForLogging(id.slice(urlIndex)) : id;
+  const displayId = formatProviderReference(id);
   if (label && label !== id) {
-    return `${label} (${displayId})`;
+    return `${formatProviderReference(label)} (${displayId})`;
   }
   return displayId;
 }
