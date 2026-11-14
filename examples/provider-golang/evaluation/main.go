@@ -1,7 +1,7 @@
-// Package main implements a promptfoo provider that uses OpenAI's API with reasoning effort control.
+// Package evaluation implements a promptfoo provider that uses OpenAI's API with reasoning effort control.
 // It provides a CallApi function that can be used by promptfoo to generate responses
 // with configurable reasoning levels.
-package main
+package evaluation
 
 import (
 	"fmt"

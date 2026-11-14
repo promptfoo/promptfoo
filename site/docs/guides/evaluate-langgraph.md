@@ -49,8 +49,8 @@ npx promptfoo eval
 
 Before starting, make sure you have:
 
-- Python 3.9-3.12 tested
-- Node.js v22 LTS or newer
+- Python 3.10-3.12 tested
+- Node.js `>=22.22.0` (Node.js 24 LTS recommended)
 - OpenAI API access (for GPT-5-mini and other OpenAI models)
 - An OpenAI API key
 
@@ -84,7 +84,7 @@ And check npm (Node package manager):
 npm -v
 ```
 
-You should see something like `v22.x.x` for Node and `10.x.x` for npm. Node.js v22 LTS or newer is recommended for security and performance.
+You should see Node.js `v22.22.0` or newer. Node.js 24 LTS is recommended for security and performance.
 
 **Why do we need these?**
 
@@ -114,22 +114,21 @@ Now it's time to set up the key Python packages and the promptfoo CLI.
 In your project folder, run:
 
 ```bash
-pip install langgraph langchain langchain-openai python-dotenv
+python3 -m pip install 'langgraph>=1.2.11,<2' 'langchain-openai>=1.6.2,<2' 'pydantic>=2.13.5,<3'
 npm install -g promptfoo
 ```
 
 What are these?
 
 - `langgraph`: the framework for building multi-agent workflows.
-- `langchain`: the underlying language model toolkit.
-- `langchain-openai`: OpenAI integration for LangChain (v0.3+ compatible).
-- `python-dotenv`: to securely load API keys.
+- `langchain-openai`: OpenAI integration for LangChain.
+- `pydantic`: the state schema used by the graph.
 - `promptfoo`: CLI for testing + red teaming.
 
 Check everything installed:
 
 ```bash
-python3 -c "import langgraph, langchain, dotenv ; print('✅ Python libs ready')"
+python3 -c "import langgraph, langchain_openai, pydantic ; print('✅ Python libs ready')"
 npx promptfoo --version
 ```
 
@@ -156,14 +155,10 @@ In this step, we'll define how our LangGraph research agent works, connect it to
 Inside your project folder, create a file called `agent.py` and add:
 
 ```python
-import os
 import asyncio
 from pydantic import BaseModel
 from langchain_openai import ChatOpenAI
 from langgraph.graph import StateGraph
-
-# Load the OpenAI API key from environment variable
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 # Define the data structure (state) passed between nodes in the graph
 class ResearchState(BaseModel):
@@ -172,9 +167,9 @@ class ResearchState(BaseModel):
     summary: str = ""     # Final summarized result
 
 # Function to create and return the research agent graph
-def get_research_agent(model="gpt-5-mini"):
-    # Initialize the OpenAI LLM with the specified model and API key
-    llm = ChatOpenAI(model=model, api_key=OPENAI_API_KEY)
+def get_research_agent(model="gpt-4o", base_url=None):
+    # ChatOpenAI reads OPENAI_API_KEY from the environment when initialized
+    llm = ChatOpenAI(model=model, base_url=base_url)
 
     # Create a stateful graph with ResearchState as the shared state type
     graph = StateGraph(ResearchState)
@@ -189,7 +184,7 @@ def get_research_agent(model="gpt-5-mini"):
     def summarize_info(state: ResearchState) -> ResearchState:
         prompt = f"Summarize the following:\n{state.raw_info}"
         response = llm.invoke(prompt)  # Call the LLM to get the summary
-        return ResearchState(query=state.query, raw_info=state.raw_info, summary=response.content)
+        return ResearchState(query=state.query, raw_info=state.raw_info, summary=response.text)
 
     # Node 3: Format the final summary for output
     def output_summary(state: ResearchState) -> ResearchState:
@@ -213,9 +208,9 @@ def get_research_agent(model="gpt-5-mini"):
     return graph.compile()
 
 # Function to run the research agent with a given query prompt
-def run_research_agent(prompt):
+def run_research_agent(prompt, model="gpt-4o", base_url=None):
     # Get the compiled graph application
-    app = get_research_agent()
+    app = get_research_agent(model=model, base_url=base_url)
     # Run the asynchronous invocation and get the result
     result = asyncio.run(app.ainvoke(ResearchState(query=prompt)))
     return result
@@ -235,7 +230,7 @@ def call_api(prompt, options, context):
 
     Args:
         prompt (str): The research query or question.
-        options (dict): Additional options for future extension (currently unused).
+        options (dict): Provider configuration, including model and apiBaseUrl.
         context (dict): Contextual information (currently unused).
 
     Returns:
@@ -243,12 +238,17 @@ def call_api(prompt, options, context):
     """
     try:
         # Run the research agent and get the result
-        result = run_research_agent(prompt)
+        config = options.get("config", {})
+        result = run_research_agent(
+            prompt,
+            model=config.get("model", "gpt-4o"),
+            base_url=config.get("apiBaseUrl"),
+        )
         # Wrap and return the result inside a dictionary
         return {"output": result}
     except Exception as e:
-        # Handle any exceptions and return an error summary
-        return {"output": {"summary": f"Error: {str(e)}"}}
+        # Handle any exceptions and return a provider error
+        return {"error": str(e)}
 
 # If this file is run directly, execute a simple test
 if __name__ == "__main__":

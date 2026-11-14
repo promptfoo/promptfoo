@@ -1,0 +1,34 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Bedrock Mantle Chat Completions endpoint (bedrock:mantle:<id>)'
+
+# Set AWS_BEARER_TOKEN_BEDROCK or configure AWS credentials for the selected region.
+# List its Mantle models at https://bedrock-mantle.<region>.api.aws/v1/models.
+
+prompts:
+  - 'Answer in one short sentence: {{question}}'
+
+providers:
+  - id: bedrock:mantle:zai.glm-5
+    label: GLM 5 (mantle)
+    config:
+      region: us-west-2
+      max_tokens: 1024
+
+  - id: bedrock:mantle:deepseek.v3.2
+    label: DeepSeek V3.2 (mantle)
+    config:
+      region: us-west-2
+      max_tokens: 1024
+
+tests:
+  - vars:
+      question: What is the capital of France?
+    assert:
+      - type: icontains
+        value: Paris
+
+  - vars:
+      question: What is 12 + 30?
+    assert:
+      - type: contains
+        value: '42'

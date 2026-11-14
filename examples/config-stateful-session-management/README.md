@@ -11,7 +11,7 @@ cd config-stateful-session-management
 
 ## Requirements
 
-- Node.js 20+
+- Node.js >=22.22.0 (Node.js 24 LTS recommended)
 - An OpenAI API key in `OPENAI_API_KEY`
 
 ## Setup

@@ -2,22 +2,19 @@ import React, { useCallback, useId, useMemo } from 'react';
 
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import useCloudConfig from '@app/hooks/useCloudConfig';
-import { useEvalOperations } from '@app/hooks/useEvalOperations';
+import { useCopyFeedback } from '@app/hooks/useCopyFeedback';
 import { useShiftKey } from '@app/hooks/useShiftKey';
 import { formatDuration } from '@app/utils/date';
+import { fetchTraces, replayEvaluation } from '@app/utils/evalOperations';
 import {
   normalizeMediaText,
   resolveAudioSource,
   resolveImageSource,
   resolveVideoSource,
 } from '@app/utils/media';
-import { getActualPrompt } from '@app/utils/providerResponse';
-import {
-  type EvaluateTableOutput,
-  type GradingResult,
-  type ImageOutput,
-  ResultFailureReason,
-} from '@promptfoo/types';
+import { type EvaluateTableOutput, type GradingResult, type ImageOutput } from '@promptfoo/types';
+import { ResultFailureReason } from '@promptfoo/types/results';
+import { getActualPrompt } from '@promptfoo/util/providerResponse';
 import { diffJson, diffSentences, diffWords } from 'diff';
 import {
   Check,
@@ -29,6 +26,7 @@ import {
   Star,
   ThumbsDown,
   ThumbsUp,
+  X,
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import logger from '../../../../../logger';
@@ -106,7 +104,8 @@ export function isImageProvider(provider: string | undefined): boolean {
  * - 'openai:video:sora-2' (OpenAI Sora)
  * - 'openai:video:sora-2-pro' (OpenAI Sora Pro)
  * - 'google:video:veo-3.1-generate-preview' (Google Veo)
- * - 'google:video:veo-2-generate' (Google Veo 2)
+ * - 'vertex:video:veo-3.1-generate-001' (Google Veo on Vertex AI)
+ * - 'google:video:veo-3.1-fast-generate-preview' (Google Veo Fast)
  * Used to skip truncation for video content.
  */
 export function isVideoProvider(provider: string | undefined): boolean {
@@ -1030,6 +1029,7 @@ function renderOutputActions({
   copied,
   linked,
   isHighlighted,
+  isRedteam,
   activeRating,
   openPrompt,
   output,
@@ -1041,8 +1041,6 @@ function renderOutputActions({
   cloudConfig,
   addFilter,
   resetFilters,
-  replayEvaluation,
-  fetchTraces,
   handleCopy,
   handleToggleHighlight,
   handleRowShareLink,
@@ -1057,6 +1055,7 @@ function renderOutputActions({
   copied: boolean;
   linked: boolean;
   isHighlighted: boolean;
+  isRedteam: boolean;
   activeRating: boolean | null;
   openPrompt: boolean;
   output: EvaluateTableOutput;
@@ -1068,8 +1067,6 @@ function renderOutputActions({
   cloudConfig: ReturnType<typeof useCloudConfig>['data'];
   addFilter: ReturnType<typeof useTableStore.getState>['addFilter'];
   resetFilters: ReturnType<typeof useTableStore.getState>['resetFilters'];
-  replayEvaluation: ReturnType<typeof useEvalOperations>['replayEvaluation'];
-  fetchTraces: ReturnType<typeof useEvalOperations>['fetchTraces'];
   handleCopy: () => void;
   handleToggleHighlight: () => void;
   handleRowShareLink: () => void;
@@ -1080,6 +1077,9 @@ function renderOutputActions({
   handlePromptClose: () => void;
   setActionsHovered: (hovered: boolean) => void;
 }): React.ReactNode {
+  const passActionLabel = isRedteam ? 'Mark as safe' : 'Mark test passed';
+  const failActionLabel = isRedteam ? 'Mark as vulnerable' : 'Mark test failed';
+
   return (
     <div
       className="cell-actions"
@@ -1142,15 +1142,19 @@ function renderOutputActions({
             className={`action p-1 rounded hover:bg-muted transition-colors ${activeRating === true ? 'active text-emerald-600 dark:text-emerald-400' : ''}`}
             onClick={() => handleRating(true)}
             aria-pressed={activeRating === true}
-            aria-label="Mark test passed"
+            aria-label={passActionLabel}
           >
-            <ThumbsUp
-              className={`size-4 ${activeRating === true ? 'stroke-emerald-700 dark:stroke-emerald-300' : ''}`}
-              fill={activeRating === true ? 'currentColor' : 'none'}
-            />
+            {isRedteam ? (
+              <Check className="size-4" />
+            ) : (
+              <ThumbsUp
+                className={`size-4 ${activeRating === true ? 'stroke-emerald-700 dark:stroke-emerald-300' : ''}`}
+                fill={activeRating === true ? 'currentColor' : 'none'}
+              />
+            )}
           </button>
         </TooltipTrigger>
-        <TooltipContent>Mark test passed (score 1.0)</TooltipContent>
+        <TooltipContent>{passActionLabel} (score 1.0)</TooltipContent>
       </Tooltip>
       <Tooltip disableHoverableContent>
         <TooltipTrigger asChild>
@@ -1159,15 +1163,19 @@ function renderOutputActions({
             className={`action p-1 rounded hover:bg-muted transition-colors ${activeRating === false ? 'active text-red-600 dark:text-red-400' : ''}`}
             onClick={() => handleRating(false)}
             aria-pressed={activeRating === false}
-            aria-label="Mark test failed"
+            aria-label={failActionLabel}
           >
-            <ThumbsDown
-              className={`size-4 ${activeRating === false ? 'stroke-red-700 dark:stroke-red-300' : ''}`}
-              fill={activeRating === false ? 'currentColor' : 'none'}
-            />
+            {isRedteam ? (
+              <X className="size-4" />
+            ) : (
+              <ThumbsDown
+                className={`size-4 ${activeRating === false ? 'stroke-red-700 dark:stroke-red-300' : ''}`}
+                fill={activeRating === false ? 'currentColor' : 'none'}
+              />
+            )}
           </button>
         </TooltipTrigger>
-        <TooltipContent>Mark test failed (score 0.0)</TooltipContent>
+        <TooltipContent>{failActionLabel} (score 0.0)</TooltipContent>
       </Tooltip>
       <Tooltip disableHoverableContent>
         <TooltipTrigger asChild>
@@ -1245,6 +1253,7 @@ export interface EvalOutputCellProps {
   rowPositionIndex?: number;
   promptIndex: number;
   showStats: boolean;
+  isRedteam?: boolean;
   onRating: (isPass?: boolean | null, score?: number, comment?: string) => void;
   evaluationId?: string;
   testCaseId?: string;
@@ -1279,6 +1288,7 @@ function EvalOutputCell({
   showDiffs,
   searchText,
   showStats,
+  isRedteam = false,
   evaluationId,
   testCaseId,
 }: EvalOutputCellProps & {
@@ -1300,7 +1310,6 @@ function EvalOutputCell({
 
   const { shouldHighlightSearchText, addFilter, resetFilters } = useTableStore();
   const { data: cloudConfig } = useCloudConfig();
-  const { replayEvaluation, fetchTraces } = useEvalOperations();
 
   const [openPrompt, setOpen] = React.useState(false);
   const locationHash = useEvalDetailsHash();
@@ -1461,55 +1470,15 @@ function EvalOutputCell({
     setScoreDialogOpen(false);
   };
 
-  const [linked, setLinked] = React.useState(false);
-  const [copied, setCopied] = React.useState(false);
+  const [linked, showLinked] = useCopyFeedback(3000);
+  const [copied, showCopied] = useCopyFeedback(3000);
   const isMountedRef = React.useRef(true);
-  const linkedResetTimeoutRef = React.useRef<ReturnType<typeof globalThis.setTimeout> | null>(null);
-  const copiedResetTimeoutRef = React.useRef<ReturnType<typeof globalThis.setTimeout> | null>(null);
-
-  const clearLinkedResetTimeout = useCallback(() => {
-    if (linkedResetTimeoutRef.current !== null) {
-      globalThis.clearTimeout(linkedResetTimeoutRef.current);
-      linkedResetTimeoutRef.current = null;
-    }
-  }, []);
-
-  const clearCopiedResetTimeout = useCallback(() => {
-    if (copiedResetTimeoutRef.current !== null) {
-      globalThis.clearTimeout(copiedResetTimeoutRef.current);
-      copiedResetTimeoutRef.current = null;
-    }
-  }, []);
-
   React.useEffect(() => {
     isMountedRef.current = true;
-
     return () => {
       isMountedRef.current = false;
-      clearLinkedResetTimeout();
-      clearCopiedResetTimeout();
     };
-  }, [clearLinkedResetTimeout, clearCopiedResetTimeout]);
-
-  const scheduleLinkedReset = useCallback(() => {
-    clearLinkedResetTimeout();
-    linkedResetTimeoutRef.current = globalThis.setTimeout(() => {
-      linkedResetTimeoutRef.current = null;
-      if (isMountedRef.current) {
-        setLinked(false);
-      }
-    }, 3000);
-  }, [clearLinkedResetTimeout]);
-
-  const scheduleCopiedReset = useCallback(() => {
-    clearCopiedResetTimeout();
-    copiedResetTimeoutRef.current = globalThis.setTimeout(() => {
-      copiedResetTimeoutRef.current = null;
-      if (isMountedRef.current) {
-        setCopied(false);
-      }
-    }, 3000);
-  }, [clearCopiedResetTimeout]);
+  }, []);
 
   const handleRowShareLink = () => {
     const url = new URL(window.location.href);
@@ -1520,13 +1489,7 @@ function EvalOutputCell({
 
     navigator.clipboard
       .writeText(url.toString())
-      .then(() => {
-        if (!isMountedRef.current) {
-          return;
-        }
-        setLinked(true);
-        scheduleLinkedReset();
-      })
+      .then(showLinked)
       .catch((error) => {
         if (!isMountedRef.current) {
           return;
@@ -1538,13 +1501,7 @@ function EvalOutputCell({
   const handleCopy = () => {
     navigator.clipboard
       .writeText(text)
-      .then(() => {
-        if (!isMountedRef.current) {
-          return;
-        }
-        setCopied(true);
-        scheduleCopiedReset();
-      })
+      .then(showCopied)
       .catch((error) => {
         if (!isMountedRef.current) {
           return;
@@ -1604,7 +1561,10 @@ function EvalOutputCell({
         <TruncatedText
           text={node || normalizedText}
           maxLength={
-            renderMarkdown && (isImageProvider(output.provider) || isVideoProvider(output.provider))
+            renderMarkdown &&
+            (output.images?.length ||
+              isImageProvider(output.provider) ||
+              isVideoProvider(output.provider))
               ? 0
               : maxTextLength
           }
@@ -1627,6 +1587,7 @@ function EvalOutputCell({
         copied,
         linked,
         isHighlighted: commentIsHighlighted,
+        isRedteam,
         activeRating,
         openPrompt,
         output,
@@ -1638,8 +1599,6 @@ function EvalOutputCell({
         cloudConfig,
         addFilter,
         resetFilters,
-        replayEvaluation,
-        fetchTraces,
         handleCopy,
         handleToggleHighlight,
         handleRowShareLink,

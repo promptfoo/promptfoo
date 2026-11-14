@@ -338,7 +338,7 @@ See `test/AGENTS.md` for testing patterns.
 ## Project Conventions
 
 - **ESM modules** (type: "module" in package.json)
-- **Node.js ^20.20.0 || >=22.22.0** - Before `npm`/`vite`/`vitest`, run `source ~/.nvm/nvm.sh && nvm use` so `node -v` matches `.nvmrc`. If you're using npm, upgrade to `npm@11` so the repo's release-age policy is applied consistently. `.npmrc` sets `engine-strict=true`
+- **Node.js >=22.22.0** - Before `npm`/`vite`/`vitest`, run `source ~/.nvm/nvm.sh && nvm use` so `node -v` matches `.nvmrc`. If you're using npm, upgrade to `npm@11` so the repo's release-age policy is applied consistently. `.npmrc` sets `engine-strict=true`
 - **Alternative package managers** (pnpm, yarn) are supported
 - **File structure:** core logic in `src/`, tests in `test/`
 - **Examples** belong in `examples/` with clear README.md
@@ -354,6 +354,18 @@ See `test/AGENTS.md` for testing patterns.
 - **Reuse patterns** from similar files in the codebase
 - **Test both success and error cases** for all functionality
 - **Document provider configurations** following examples in existing code
+
+## Knip (dead-code CI check)
+
+CI runs a full Knip audit (`npm run knip -- --no-progress --reporter github-actions`) in the Style Check job. It fails the build on unused files, exports, and dependencies, and annotates the offending lines on the PR.
+
+When it fails on your PR:
+
+- **Actually dead?** Delete the code. That's the point of the check.
+- **Loaded by convention or path string** (worker, browser replacement, fixture)? Add an `entry` in `knip.jsonc` with a comment stating the loading mechanism.
+- **Consumed by promptfoo-cloud?** The cloud repo compiles `@promptfoo/*` directly from this repo's `src/`, so an export can be load-bearing with zero references here. Add it to the appropriate allowlist in `knip.jsonc` with a comment naming the consuming cloud path.
+
+Every allowlist entry in `knip.jsonc` must have a comment explaining why it exists — never remove an entry (or a "dead" export it protects) without checking its stated consumer first. Config-drift hints are not enforced in CI; maintainers can audit them periodically with `npm run knip -- --treat-config-hints-as-errors`.
 
 ## Adversarial and Redteam Bias
 

@@ -17,11 +17,13 @@ assert:
     threshold: 0.7 # Score between 0 and 1
 ```
 
+If `threshold` is omitted, it defaults to `0.5`.
+
 ### How it works
 
 The answer relevance checker:
 
-1. Uses an LLM to generate potential questions that the output could be answering
+1. Uses three independent LLM calls to generate potential questions that the output could be answering. Each sample is cached separately and reused on later runs. Deterministic graders can return the same question for multiple samples.
 2. Compares these questions with the original query using embedding similarity
 3. Calculates a relevance score based on the similarity scores
 
@@ -72,8 +74,8 @@ assert:
   - type: answer-relevance
     threshold: 0.8
     provider:
-      text: anthropic:claude-2
-      embedding: cohere:embed-english-v3.0
+      text: anthropic:claude-sonnet-5
+      embedding: cohere:embedding:embed-english-v3.0
 ```
 
 ### Customizing the Prompt

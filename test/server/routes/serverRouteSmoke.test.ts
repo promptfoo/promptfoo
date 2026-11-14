@@ -2,10 +2,8 @@ import { IncomingMessage, ServerResponse } from 'node:http';
 import { Duplex } from 'node:stream';
 
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import {
-  createServerOpenApiDocument,
-  SERVER_OPENAPI_ROUTE_COUNT,
-} from '../../../src/openapi/server';
+import { globalLogCallback, setLogCallback } from '../../../src/logger';
+import { createServerOpenApiDocument } from '../../../src/openapi/server';
 import { createApp } from '../../../src/server/server';
 import { promptCacheService } from '../../../src/server/services/promptCacheService';
 import type { Express } from 'express';
@@ -44,7 +42,6 @@ const mocks = vi.hoisted(() => ({
   fetchWithProxy: vi.fn(),
   getAvailableProviders: vi.fn(),
   getBlobByHash: vi.fn(),
-  getBlobUrl: vi.fn(),
   getDb: vi.fn(),
   getEnvBool: vi.fn(),
   getEnvFloat: vi.fn(),
@@ -91,7 +88,6 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('../../../src/blobs', () => ({
   getBlobByHash: mocks.getBlobByHash,
-  getBlobUrl: mocks.getBlobUrl,
 }));
 
 vi.mock('../../../src/blobs/extractor', () => ({
@@ -117,6 +113,7 @@ vi.mock('../../../src/envars', () => ({
   getEvalTimeoutMs: vi.fn(() => 0),
   getMaxEvalTimeMs: vi.fn(() => 0),
   getEnvString: mocks.getEnvString,
+  getEnvOverrides: vi.fn(),
   isCI: vi.fn(() => false),
   isNonInteractive: vi.fn(() => true),
 }));
@@ -364,6 +361,12 @@ const validUuid = '00000000-0000-4000-8000-000000000000';
 const validMediaFilename = 'abcdef123456.mp3';
 
 const smokeCases: SmokeCase[] = [
+  {
+    method: 'get',
+    openApiPath: '/api/openapi.json',
+    path: '/api/openapi.json',
+    expectedStatus: 200,
+  },
   { method: 'get', openApiPath: '/health', path: '/health', expectedStatus: 200 },
   {
     method: 'get',
@@ -852,12 +855,18 @@ describe('server route end-to-end smoke coverage', { concurrent: false }, () => 
     vi.resetAllMocks();
   });
 
+  it('serves the published routes with the installed version and request origin', async () => {
+    const endpoint = smokeCases.find((entry) => entry.path === '/api/openapi.json')!;
+    const response = await sendRequest(createApp(), endpoint);
+    expect(response.status).toBe(200);
+    const expected = createServerOpenApiDocument();
+    expect(JSON.parse(response.text)).toEqual({ ...expected, servers: [{ url: '/' }] });
+  });
+
   it('has one smoke case for every generated OpenAPI route', () => {
     const smokeKeys = smokeCases.map(routeKey).sort();
     const documentedKeys = documentedRouteKeys().sort();
 
-    expect(smokeCases).toHaveLength(SERVER_OPENAPI_ROUTE_COUNT);
-    expect(new Set(smokeKeys).size).toBe(SERVER_OPENAPI_ROUTE_COUNT);
     expect(smokeKeys).toEqual(documentedKeys);
   });
 
@@ -873,6 +882,41 @@ describe('server route end-to-end smoke coverage', { concurrent: false }, () => 
 
     if (response.status !== 204) {
       expect(response.headers['content-type']).toContain('application/json');
+    }
+  });
+
+  it('handles malformed JSON before route dispatch and keeps the app healthy', async () => {
+    const canary = 'malformed-request-body-canary';
+    const environment = app.get('env');
+    const previousLogCallback = globalLogCallback;
+    const messages: string[] = [];
+    setLogCallback((message) => messages.push(message));
+    app.set('env', 'production');
+    try {
+      const response = await sendRequest(app, {
+        method: 'post',
+        openApiPath: '/api/telemetry',
+        path: '/api/telemetry',
+        rawJsonBody: `{"payloadNote":"${canary}","padding":"${'x'.repeat(512)}","broken":}`,
+        expectedStatus: 400,
+      });
+      expect(response.status).toBe(400);
+      expect(response.headers['content-type']).toContain('application/json');
+      expect(response.body).toEqual({ error: 'Bad Request' });
+      expect(response.text).not.toContain(canary);
+      expect(mocks.telemetry.record).not.toHaveBeenCalled();
+      const healthy = await sendRequest(app, {
+        method: 'get',
+        openApiPath: '/health',
+        path: '/health',
+        expectedStatus: 200,
+      });
+      expect(healthy.status).toBe(200);
+      expect(messages.join('\n')).toContain('SyntaxError');
+      expect(messages.join('\n')).not.toContain(canary);
+    } finally {
+      app.set('env', environment);
+      setLogCallback(previousLogCallback);
     }
   });
 });

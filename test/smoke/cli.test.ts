@@ -13,6 +13,7 @@ import * as path from 'path';
 
 import { Server as SocketIOServer } from 'socket.io';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { spoofedNodeVersionEnv } from '../util/utils';
 
 // Path to the built CLI binaries
 const CLI_PATH = path.resolve(__dirname, '../../dist/src/main.js');
@@ -45,9 +46,9 @@ function runCli(
  */
 function runEntrypoint(
   args: string[],
-  options: { cwd?: string; env?: NodeJS.ProcessEnv } = {},
+  options: { cwd?: string; env?: NodeJS.ProcessEnv; nodeExecutable?: string } = {},
 ): { stdout: string; stderr: string; exitCode: number } {
-  const result = spawnSync('node', [ENTRYPOINT_PATH, ...args], {
+  const result = spawnSync(options.nodeExecutable ?? process.execPath, [ENTRYPOINT_PATH, ...args], {
     cwd: options.cwd || ROOT_DIR,
     encoding: 'utf-8',
     env: { ...process.env, ...options.env, NO_COLOR: '1' },
@@ -59,6 +60,46 @@ function runEntrypoint(
     stderr: result.stderr || '',
     exitCode: result.status ?? 1,
   };
+}
+
+/**
+ * Versions CI installs a real executable for. The workflow records each `process.execPath`
+ * into these variables; anything absent here has no real binary worth installing and is
+ * exercised with a spoofed `process.version` instead.
+ */
+const CI_NODE_EXECUTABLE_VARS: Record<string, string> = {
+  'v20.20.0': 'PROMPTFOO_NODE20_BIN',
+  'v22.22.0': 'PROMPTFOO_MIN_NODE_BIN',
+};
+
+function runEntrypointWithNodeVersion(version: string) {
+  const variable = CI_NODE_EXECUTABLE_VARS[version];
+  const nodeExecutable = variable ? process.env[variable] : undefined;
+
+  if (variable && process.env.GITHUB_ACTIONS === 'true') {
+    // Fail loudly rather than silently degrading to the spoofed path, which would leave the
+    // real runtime boundary untested while still reporting green.
+    expect(
+      nodeExecutable,
+      `CI must provide an actual Node.js executable through ${variable}`,
+    ).toBeTruthy();
+  }
+
+  if (nodeExecutable) {
+    const actualVersion = spawnSync(nodeExecutable, ['--version'], {
+      cwd: ROOT_DIR,
+      encoding: 'utf-8',
+      env: process.env,
+      timeout: 30000,
+    });
+
+    expect(actualVersion.status, actualVersion.error?.message || actualVersion.stderr).toBe(0);
+    expect(actualVersion.stdout.trim()).toBe(version);
+
+    return runEntrypoint(['--version'], { nodeExecutable });
+  }
+
+  return runEntrypoint(['--version'], { env: spoofedNodeVersionEnv(version) });
 }
 
 function runEntrypointAsync(
@@ -297,6 +338,25 @@ describe('CLI Smoke Tests', () => {
       expect(entrypointResult.exitCode).toBe(mainResult.exitCode);
       expect(entrypointResult.stdout.trim()).toBe(mainResult.stdout.trim());
     });
+
+    it.each(['v20.20.0', 'v22.21.9'])(
+      '1.7.5 - shipped runtime guard rejects unsupported Node.js %s',
+      (version) => {
+        const { stderr, exitCode } = runEntrypointWithNodeVersion(version);
+
+        expect(exitCode).toBe(1);
+        expect(stderr).toContain(`Detected: ${version}`);
+        expect(stderr).toContain('Required: >=22.22.0');
+        expect(stderr).toContain('Install a supported Node.js version and try again.');
+      },
+    );
+
+    it('1.7.6 - shipped runtime guard accepts the minimum supported Node.js version', () => {
+      const { stdout, exitCode } = runEntrypointWithNodeVersion('v22.22.0');
+
+      expect(exitCode).toBe(0);
+      expect(stdout).toMatch(/\d+\.\d+\.\d+(-[\w.]+)?/);
+    });
   });
 
   describe('1.8 Code Scan Structured Output', () => {
@@ -372,37 +432,40 @@ describe('CLI Smoke Tests', () => {
           });
         },
       ],
-    ])('1.8.%# - keeps %s stdout machine-readable under --verbose and LOG_LEVEL=debug', async (_label, outputArgs, assertPayload) => {
-      const { stdout, stderr, exitCode } = await runEntrypointAsync(
-        [
-          'code-scans',
-          'run',
-          repoDir,
-          '--diffs-only',
-          '--api-host',
-          apiHost,
-          '--base',
-          'main',
-          '--compare',
-          'HEAD',
-          ...outputArgs,
-          '--verbose',
-        ],
-        {
-          env: {
-            LOG_LEVEL: 'debug',
-            NODE_NO_WARNINGS: '1',
-            PROMPTFOO_DISABLE_UPDATE: 'true',
+    ])(
+      '1.8.%# - keeps %s stdout machine-readable under --verbose and LOG_LEVEL=debug',
+      async (_label, outputArgs, assertPayload) => {
+        const { stdout, stderr, exitCode } = await runEntrypointAsync(
+          [
+            'code-scans',
+            'run',
+            repoDir,
+            '--diffs-only',
+            '--api-host',
+            apiHost,
+            '--base',
+            'main',
+            '--compare',
+            'HEAD',
+            ...outputArgs,
+            '--verbose',
+          ],
+          {
+            env: {
+              LOG_LEVEL: 'debug',
+              NODE_NO_WARNINGS: '1',
+              PROMPTFOO_DISABLE_UPDATE: 'true',
+            },
           },
-        },
-      );
+        );
 
-      expect(exitCode).toBe(0);
-      expect(stderr).toBe('');
+        expect(exitCode).toBe(0);
+        expect(stderr).toBe('');
 
-      const payload = JSON.parse(stdout) as Record<string, unknown>;
-      assertPayload(payload);
-    });
+        const payload = JSON.parse(stdout) as Record<string, unknown>;
+        assertPayload(payload);
+      },
+    );
 
     it('1.8.2 - keeps structured config failures off stdout', async () => {
       const missingConfigPath = path.join(repoDir, 'definitely-missing-code-scan-config.yaml');

@@ -34,7 +34,7 @@ npx promptfoo@latest redteam run
 ## Prerequisites
 
 - Python 3.10+
-- Node.js 20+ (for filesystem MCP server)
+- Node.js >=22.22.0 (Node.js 24 LTS recommended) (for the filesystem MCP server)
 - [uv](https://docs.astral.sh/uv/) package manager
 - Anthropic API key
 
@@ -74,6 +74,30 @@ The chatbot connects to three MCP servers:
 - **SQLite MCP**: Database queries for products, orders, users
 - **Filesystem MCP**: Reading policy documents
 - **Fetch MCP**: External API calls (shipping tracking, weather, promotions)
+
+The application uses MCP SDK 2. The archived SQLite reference server still requires
+MCP SDK 1, so its `uvx` environment pins a compatible server release and SDK range:
+
+```bash
+uvx --with 'mcp>=1.30,<2' mcp-server-sqlite==2025.4.25 --db-path data/swag_store.db
+```
+
+The app launches this command automatically. Pydantic is a direct dependency for
+the API models. Anthropic and MCP install their own HTTP transport; plain Uvicorn
+is sufficient for this HTTP demo.
+
+To test tool discovery and queries through the actual SQLite MCP server without
+an API key, run:
+
+```bash
+uv run python -m unittest discover -s tests -v
+```
+
+Repository CI runs these checks on Linux with Python 3.10 and 3.14, and on Windows
+with Python 3.14. This example retains a dedicated workflow because the shared
+Examples runner currently installs `requirements.txt` projects on Ubuntu; the API
+example installs its `pyproject.toml` and the `uvx` launcher, including Windows MCP
+subprocess coverage.
 
 ## Demo Users
 
@@ -165,7 +189,7 @@ Visit http://localhost:8000 in your browser for the chat interface.
 ### Auth
 
 - `POST /auth/login` - Get JWT token
-- `GET /auth/demo-users` - List available demo users
+- `GET /auth/demo-credentials` - List available demo users
 
 ### Mock Services
 
@@ -206,7 +230,7 @@ uv run python scripts/seed_database.py
 
 ```bash
 # Verify API key is set
-grep ANTHROPIC_API_KEY .env
+uv run python -c "from app.config import ANTHROPIC_API_KEY; print('ANTHROPIC_API_KEY is set' if ANTHROPIC_API_KEY else 'ANTHROPIC_API_KEY is missing')"
 ```
 
 ## License

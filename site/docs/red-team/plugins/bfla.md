@@ -5,7 +5,7 @@ description: Red team function-level authorization controls by simulating unauth
 
 # Broken Function Level Authorization (BFLA) Plugin
 
-Use the BFLA plugin to test whether an agent performs privileged functions for users who should not be allowed to invoke them ([OWASP API 5](https://owasp.org/www-project-api-security/)). It is most relevant for tool-using systems that can trigger workflows, mutate records, or call business-critical APIs.
+Use the BFLA plugin to test whether an agent performs privileged functions for users who should not be allowed to invoke them ([OWASP API5:2023](https://api-security.owasp.org/editions/2023/en/0xa5-broken-function-level-authorization/)). It is most relevant for tool-using systems that can trigger workflows, mutate records, or call business-critical APIs.
 
 ## Purpose
 

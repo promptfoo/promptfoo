@@ -1,7 +1,23 @@
 import invariant from '../util/invariant';
-import { getNGrams } from './ngrams';
+import { countNGrams, getNGrams } from './ngrams';
 
 import type { AssertionParams, GradingResult } from '../types/index';
+
+function tokenizeForGleu(text: string): string[] {
+  const words = text
+    .toLowerCase()
+    .trim()
+    .split(/\s+/)
+    .map((word) => {
+      let end = word.length;
+      while (end > 0 && word[end - 1] === '.') {
+        end--;
+      }
+      return word.slice(0, end);
+    });
+
+  return words.some(Boolean) ? words : [];
+}
 
 /**
  * Calculates the Google-BLEU (GLEU) score for a candidate string against reference strings.
@@ -23,7 +39,8 @@ import type { AssertionParams, GradingResult } from '../types/index';
  * Implementation details:
  * - n-grams from n=1 to n=4 are considered by default
  * - The calculation is case-insensitive
- * - Identical strings will always receive a score of 1
+ * - Identical strings with at least one normalized token will always receive a score of 1
+ * - Text that is empty after normalization has no n-grams and scores 0
  * - If there are no n-grams in common, the score will be 0
  *
  * @param candidate - The string to evaluate
@@ -31,7 +48,7 @@ import type { AssertionParams, GradingResult } from '../types/index';
  * @param minN - Minimum n-gram length to consider (default: 1)
  * @param maxN - Maximum n-gram length to consider (default: 4)
  * @returns GLEU score between 0 and 1, where higher scores indicate better matches
- * @throws When candidate or references are invalid
+ * @throws When the candidate is null/undefined or there are no references
  */
 export function calculateGleuScore(
   candidate: string,
@@ -39,23 +56,18 @@ export function calculateGleuScore(
   minN: number = 1,
   maxN: number = 4,
 ): number {
-  if (!candidate || references.length === 0) {
+  if (candidate == null || references.length === 0) {
     throw new Error('Invalid inputs');
   }
 
-  const candidateWords = candidate
-    .toLowerCase()
-    .trim()
-    .split(/\s+/)
-    .map((word) => word.replace(/\.+$/, ''));
+  const candidateWords = tokenizeForGleu(candidate);
+  if (candidateWords.length === 0) {
+    return 0;
+  }
 
   // For each reference, calculate a GLEU score and later take the maximum
   const referenceScores = references.map((reference) => {
-    const referenceWords = reference
-      .toLowerCase()
-      .trim()
-      .split(/\s+/)
-      .map((word) => word.replace(/\.+$/, ''));
+    const referenceWords = tokenizeForGleu(reference);
 
     // For identical strings, return 1 directly
     if (
@@ -65,10 +77,8 @@ export function calculateGleuScore(
       return 1;
     }
 
-    // Initialize counters for all n-grams
     let matchCount = 0;
-    let candidateTotal = 0;
-    let referenceTotal = 0;
+    let longerTextTotal = 0;
 
     // Consider all n-gram orders from minN to maxN
     for (let n = minN; n <= maxN; n++) {
@@ -78,18 +88,11 @@ export function calculateGleuScore(
 
       // For brevity in calculations, we'll process based on the unique n-grams
       // and their occurrence counts in each text
-      const candidateNGramCounts = new Map<string, number>();
-      const referenceNGramCounts = new Map<string, number>();
-
       // Count occurrences of each n-gram in candidate
-      for (const gram of candidateNGrams) {
-        candidateNGramCounts.set(gram, (candidateNGramCounts.get(gram) || 0) + 1);
-      }
+      const candidateNGramCounts = countNGrams(candidateNGrams);
 
       // Count occurrences of each n-gram in reference
-      for (const gram of referenceNGrams) {
-        referenceNGramCounts.set(gram, (referenceNGramCounts.get(gram) || 0) + 1);
-      }
+      const referenceNGramCounts = countNGrams(referenceNGrams);
 
       // Calculate matching n-grams - we'll count each n-gram match the minimum number
       // of times it appears in both the candidate and reference
@@ -99,22 +102,12 @@ export function calculateGleuScore(
         matchCount += Math.min(candidateCount, referenceCount);
       }
 
-      // Update total n-gram counts
-      candidateTotal += candidateNGrams.length;
-      referenceTotal += referenceNGrams.length;
+      // The longer text has at least as many n-grams at every order.
+      longerTextTotal += Math.max(candidateNGrams.length, referenceNGrams.length);
     }
 
-    // If either text has no n-grams of the specified lengths, return 0
-    if (candidateTotal === 0 || referenceTotal === 0) {
-      return 0;
-    }
-
-    // Calculate precision and recall
-    const precision = matchCount / candidateTotal;
-    const recall = matchCount / referenceTotal;
-
-    // GLEU is the minimum of precision and recall
-    return Math.min(precision, recall);
+    // The minimum of precision and recall uses the larger denominator.
+    return longerTextTotal === 0 ? 0 : matchCount / longerTextTotal;
   });
 
   // Return the maximum score across all references
@@ -168,7 +161,7 @@ export function handleGleuScore({
     score: inverse ? 1 - score : score,
     reason: pass
       ? 'Assertion passed'
-      : `GLEU score ${score.toFixed(4)} is ${inverse ? 'greater' : 'less'} than threshold ${threshold}`,
+      : `GLEU score ${score.toFixed(4)} is ${inverse ? 'greater than or equal to' : 'less than'} threshold ${threshold}`,
     assertion,
   };
 }

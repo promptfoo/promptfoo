@@ -7,8 +7,8 @@
 import fs from 'fs';
 import path from 'path';
 
-import yaml from 'js-yaml';
 import { ConfigLoadError, validateSeverity } from '../../types/codeScan';
+import { loadYaml } from '../../util/yamlLoad';
 import { type Config, ConfigSchema, DEFAULT_CONFIG } from './schema';
 
 /**
@@ -36,7 +36,7 @@ export function loadConfig(configPath: string): Config {
   // Parse YAML
   let rawConfig: unknown;
   try {
-    rawConfig = yaml.load(fileContents);
+    rawConfig = loadYaml(fileContents);
   } catch (error) {
     throw new ConfigLoadError(
       `Failed to parse YAML: ${error instanceof Error ? error.message : String(error)}`,
@@ -169,22 +169,4 @@ export function resolveGuidance(options: GuidanceOptions, config: Config): strin
 
   // Config loader already read guidanceFile and populated guidance field
   return config.guidance;
-}
-
-/**
- * Options for resolving API host
- */
-export interface ApiHostOptions {
-  apiHost?: string;
-}
-
-/**
- * Resolve API host from options or config
- *
- * @param options - Options that may contain API host
- * @param config - Configuration that may contain API host
- * @returns API host URL
- */
-export function resolveApiHost(options: ApiHostOptions, config: Config): string {
-  return options.apiHost || config.apiHost || 'https://api.promptfoo.app';
 }

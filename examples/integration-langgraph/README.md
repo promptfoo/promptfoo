@@ -15,26 +15,25 @@ This example requires the following environment variables:
 
 - `OPENAI_API_KEY` – Your OpenAI API key (required by LangGraph to use ChatOpenAI)
 
-You can set this in a `.env` file or directly in your environment.
+Export the key in your environment, or pass `--env-file .env` to Promptfoo.
 
 ## Prerequisites
 
-- Python 3.9-3.12 tested
-- Node.js v22 LTS or newer
-- OpenAI API access (for GPT-4o, GPT-4o-mini, and OpenAI's forthcoming o3 mini once released)
+- Python 3.10 or newer
+- Node.js >=22.22.0 (Node.js 24 LTS recommended)
+- OpenAI API access for GPT-4o, the model selected by this example
 - An OpenAI API key
 
 Install Python packages:
 
 ```bash
-pip install -r requirements.txt
+python3 -m pip install -r requirements.txt
 ```
 
-Or install individually:
-
-```bash
-pip install langgraph langchain langchain-openai python-dotenv
-```
+Only LangGraph, its OpenAI integration, and directly imported Pydantic are
+required. The umbrella LangChain package and python-dotenv are unnecessary.
+Keep your virtual environment active when running Promptfoo, or set
+`PROMPTFOO_PYTHON` to its Python executable.
 
 Install promptfoo CLI:
 
@@ -55,7 +54,7 @@ npm install -g promptfoo
 Run the evaluation:
 
 ```bash
-npx promptfoo eval
+npx promptfoo eval --no-cache -o results.json
 ```
 
 Explore results in browser:
@@ -65,3 +64,15 @@ npx promptfoo view
 ```
 
 ---
+
+## Provider options and local checks
+
+Set `providers[0].config.model` to select another model, or `apiBaseUrl` to use an
+OpenAI-compatible endpoint. Failed model requests are reported as provider errors.
+
+```bash
+python3 -m unittest discover -s . -p '*_test.py'
+```
+
+These tests execute the real graph with a deterministic local model response. A
+live evaluation still requires an API key and model access.

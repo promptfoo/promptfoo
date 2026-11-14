@@ -12,6 +12,8 @@ import {
   runExtensionHook,
 } from '../src/evaluatorHelpers';
 import logger from '../src/logger';
+import { AIStudioChatProvider } from '../src/providers/google/ai.studio';
+import { runPython } from '../src/python/pythonUtils';
 import { transform } from '../src/util/transform';
 import { createMockProvider } from './factories/provider';
 import { mockProcessEnv } from './util/utils';
@@ -120,6 +122,10 @@ vi.mock('../src/util/transform', () => ({
   transform: vi.fn(),
 }));
 
+vi.mock('../src/python/pythonUtils', () => ({
+  runPython: vi.fn(),
+}));
+
 const mockApiProvider = createMockProvider();
 
 function toPrompt(text: string): Prompt {
@@ -138,6 +144,7 @@ describe('evaluatorHelpers', () => {
    */
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(runPython).mockReset();
     dynamicModuleMocks.clear();
     mockPathResolve.mockReset();
     mockPathResolve.mockImplementation((...paths: string[]) => actualPathResolve(...paths));
@@ -194,6 +201,15 @@ describe('evaluatorHelpers', () => {
         {},
       );
       expect(renderedPrompt).toBe('Test value1');
+    });
+
+    it('should not corrupt dollar-sign sequences when pre-resolving nested variables', async () => {
+      const renderedPrompt = await renderPrompt(
+        toPrompt('Say {{greeting}}'),
+        { greeting: 'Cost is {{price}}', price: 'only $`5' },
+        {},
+      );
+      expect(renderedPrompt).toBe('Say Cost is only $`5');
     });
 
     it('should handle complex variable substitutions in non-JSON prompts', async () => {
@@ -317,6 +333,15 @@ describe('evaluatorHelpers', () => {
       expect(renderedPrompt).toBe('Test prompt with Dynamic value for var1 and var2 and var3');
     });
 
+    it('should accept an empty string from an external JavaScript variable', async () => {
+      const prompt = toPrompt('before{{ var1 }}after');
+      const vars = { var1: 'file:///path/to/empty.js' };
+
+      mockDynamicModule('/path/to/empty.js', () => ({ output: '' }));
+
+      await expect(renderPrompt(prompt, vars, {})).resolves.toBe('beforeafter');
+    });
+
     it('should load external js package in renderPrompt and execute the exported function', async () => {
       const prompt = toPrompt('Test prompt with {{ var1 }}');
       const vars = {
@@ -337,6 +362,63 @@ describe('evaluatorHelpers', () => {
       const renderedPrompt = await renderPrompt(prompt, vars, evaluateOptions);
       expect(renderedPrompt).toBe('Test prompt with Dynamic value for var1');
     });
+
+    it('should accept an empty string from a package variable', async () => {
+      const prompt = toPrompt('before{{ var1 }}after');
+      const vars = { var1: 'package:@promptfoo/fake:emptyVariable' };
+
+      const require = createRequire('');
+      vi.mocked(require.resolve).mockReturnValueOnce('/node_modules/@promptfoo/fake/index.js');
+      mockDynamicModule('/node_modules/@promptfoo/fake/index.js', {
+        emptyVariable: () => ({ output: '' }),
+      });
+
+      await expect(renderPrompt(prompt, vars, {})).resolves.toBe('beforeafter');
+    });
+
+    it('should accept an empty string from an external Python variable', async () => {
+      const prompt = toPrompt('before{{ var1 }}after');
+      const vars = { var1: 'file:///path/to/empty.py' };
+
+      vi.mocked(runPython).mockResolvedValueOnce({ output: '' });
+
+      await expect(renderPrompt(prompt, vars, {})).resolves.toBe('beforeafter');
+    });
+
+    it.each([undefined, null, false, 0, 1, [], {}])(
+      'rejects non-string JavaScript variable output %j',
+      async (output) => {
+        mockDynamicModule('/path/to/variable.js', () => ({ output }));
+
+        await expect(
+          renderPrompt(toPrompt('{{ var1 }}'), { var1: 'file:///path/to/variable.js' }, {}),
+        ).rejects.toThrow('to return { output: string }');
+      },
+    );
+
+    it.each([undefined, null, false, 0, 1, [], {}])(
+      'rejects non-string package variable output %j',
+      async (output) => {
+        mockDynamicModule('/node_modules/@promptfoo/fake/index.js', {
+          variable: () => ({ output }),
+        });
+
+        await expect(
+          renderPrompt(toPrompt('{{ var1 }}'), { var1: 'package:@promptfoo/fake:variable' }, {}),
+        ).rejects.toThrow('to return { output: string }');
+      },
+    );
+
+    it.each([undefined, null, false, 0, 1, [], {}])(
+      'rejects non-string Python variable output %j',
+      async (output) => {
+        vi.mocked(runPython).mockResolvedValueOnce({ output });
+
+        await expect(
+          renderPrompt(toPrompt('{{ var1 }}'), { var1: 'file:///path/to/variable.py' }, {}),
+        ).rejects.toThrow(output == null ? 'did not return any output' : 'must be a string');
+      },
+    );
 
     it('should throw a clear error when a package variable does not export a function', async () => {
       const prompt = toPrompt('Test prompt with {{ var1 }}');
@@ -633,6 +715,17 @@ describe('evaluatorHelpers', () => {
       };
       expect(resolveVariables(variables)).toEqual(expected);
     });
+
+    it.each(['ordinary text', '$$', '$&', '$`', "$'"])(
+      'should insert %s literally into repeated placeholders',
+      (price) => {
+        const variables = { greeting: 'Say {{price}} then {{price}}!', price };
+        expect(resolveVariables(variables)).toEqual({
+          greeting: `Say ${price} then ${price}!`,
+          price,
+        });
+      },
+    );
   });
 
   describe('runExtensionHook', () => {
@@ -1591,11 +1684,18 @@ describe('evaluatorHelpers', () => {
       });
     });
 
+    it('preserves Ogg video metadata for existing evaluations', () => {
+      expect(collectFileMetadata({ clip: 'file://clip.ogg' })).toEqual({
+        clip: { path: 'file://clip.ogg', type: 'video', format: 'ogg' },
+      });
+    });
+
     it('should identify video files correctly', () => {
       const vars = {
         video1: 'file://path/to/video.mp4',
         video2: 'file://path/to/video.webm',
         video3: 'file://path/to/video.mkv',
+        video4: 'file://path/to/video.ogg',
         text: 'This is not a file',
       };
 
@@ -1617,6 +1717,11 @@ describe('evaluatorHelpers', () => {
           type: 'video',
           format: 'mkv',
         },
+        video4: {
+          path: 'file://path/to/video.ogg',
+          type: 'video',
+          format: 'ogg',
+        },
       });
     });
 
@@ -1624,6 +1729,7 @@ describe('evaluatorHelpers', () => {
       const vars = {
         audio1: 'file://path/to/audio.mp3',
         audio2: 'file://path/to/audio.wav',
+        audio3: 'file://path/to/audio.flac',
         text: 'This is not a file',
       };
 
@@ -1639,6 +1745,11 @@ describe('evaluatorHelpers', () => {
           path: 'file://path/to/audio.wav',
           type: 'audio',
           format: 'wav',
+        },
+        audio3: {
+          path: 'file://path/to/audio.flac',
+          type: 'audio',
+          format: 'flac',
         },
       });
     });
@@ -1768,6 +1879,21 @@ describe('evaluatorHelpers', () => {
       ); // base64 of SVG content
     });
 
+    it.each([
+      ['heic', 'image/heic'],
+      ['heif', 'image/heif'],
+      ['avif', 'image/avif'],
+      ['tif', 'image/tiff'],
+      ['tiff', 'image/tiff'],
+    ])('should generate a data URL for %s images', async (extension, mimeType) => {
+      const prompt = toPrompt('Test prompt with image: {{image}}');
+      const renderedPrompt = await renderPrompt(prompt, {
+        image: `file://test-image.${extension}`,
+      });
+
+      expect(renderedPrompt).toContain(`data:${mimeType};base64,`);
+    });
+
     it('should handle case-insensitive file extensions', async () => {
       const prompt = toPrompt('Test prompt with image: {{image}}');
       const renderedPrompt = await renderPrompt(prompt, {
@@ -1794,34 +1920,86 @@ describe('evaluatorHelpers', () => {
       expect(renderedPrompt).toContain('data:image/png;base64,');
     });
 
-    it('should maintain existing behavior for video files (raw base64)', async () => {
-      vi.spyOn(fs, 'readFileSync').mockImplementation(() => {
-        return Buffer.from('test-video-content');
-      });
+    it.each(['mp4', 'mpeg', 'mpg', 'mov', 'avi', 'flv', 'webm', 'wmv', '3gp', '3gpp'])(
+      'should load %s video files as raw base64',
+      async (extension) => {
+        vi.spyOn(fs, 'readFileSync').mockImplementation(() => {
+          return Buffer.from('test-video-content');
+        });
 
-      const prompt = toPrompt('Test prompt with video: {{video}}');
-      const renderedPrompt = await renderPrompt(prompt, {
-        video: 'file://test-video.mp4',
-      });
+        const prompt = toPrompt('Test prompt with video: {{video}}');
+        const renderedPrompt = await renderPrompt(prompt, {
+          video: `file://test-video.${extension}`,
+        });
 
-      // Should NOT have data: prefix for videos
-      expect(renderedPrompt).not.toContain('data:video');
-      expect(renderedPrompt).toContain('dGVzdC12aWRlby1jb250ZW50'); // base64 of 'test-video-content'
-    });
+        // Should NOT have data: prefix for videos
+        expect(renderedPrompt).not.toContain('data:video');
+        expect(renderedPrompt).toContain('dGVzdC12aWRlby1jb250ZW50'); // base64 of 'test-video-content'
+      },
+    );
 
-    it('should maintain existing behavior for audio files (raw base64)', async () => {
-      vi.spyOn(fs, 'readFileSync').mockImplementation(() => {
-        return Buffer.from('test-audio-content');
-      });
+    it.each(['mp3', 'wav', 'm4a', 'aif', 'aiff', 'aifc', 'aac', 'ogg', 'flac'])(
+      'should load %s audio files as raw base64',
+      async (extension) => {
+        vi.spyOn(fs, 'readFileSync').mockImplementation(() => {
+          return Buffer.from('test-audio-content');
+        });
 
-      const prompt = toPrompt('Test prompt with audio: {{audio}}');
-      const renderedPrompt = await renderPrompt(prompt, {
-        audio: 'file://test-audio.mp3',
-      });
+        const prompt = toPrompt('Test prompt with audio: {{audio}}');
+        const renderedPrompt = await renderPrompt(prompt, {
+          audio: `file://test-audio.${extension}`,
+        });
 
-      // Should NOT have data: prefix for audio
-      expect(renderedPrompt).not.toContain('data:audio');
-      expect(renderedPrompt).toContain('dGVzdC1hdWRpby1jb250ZW50'); // base64 of 'test-audio-content'
+        // Should NOT have data: prefix for audio
+        expect(renderedPrompt).not.toContain('data:audio');
+        expect(renderedPrompt).toContain('dGVzdC1hdWRpby1jb250ZW50'); // base64 of 'test-audio-content'
+      },
+    );
+
+    it.each(['m4a', 'M4A', 'M4a'])(
+      'should preserve raw audio data in native templates for .%s',
+      async (extension) => {
+        vi.spyOn(fs, 'readFileSync').mockImplementation(() => {
+          return Buffer.from('test-audio-content');
+        });
+
+        const prompt = toPrompt(
+          '[{"role":"user","parts":[{"inlineData":{"mimeType":"audio/mp4","data":"{{audio}}"}}]}]',
+        );
+        const renderedPrompt = await renderPrompt(prompt, {
+          audio: `file://test-audio.${extension}`,
+        });
+
+        expect(JSON.parse(renderedPrompt)[0].parts[0].inlineData).toEqual({
+          mimeType: 'audio/mp4',
+          data: 'dGVzdC1hdWRpby1jb250ZW50',
+        });
+      },
+    );
+
+    it.each(['https://example.com/api', 'file://custom-provider.js', 'openai:gpt-5.6'])(
+      'keeps M4A variables as raw base64 for %s',
+      async (id) => {
+        vi.spyOn(fs, 'readFileSync').mockReturnValue(Buffer.from('test-audio-content'));
+        const rendered = await renderPrompt(
+          toPrompt('{{audio}}'),
+          { audio: 'file://test-audio.m4a' },
+          undefined,
+          createMockProvider({ id }),
+        );
+        expect(rendered).toBe('dGVzdC1hdWRpby1jb250ZW50');
+      },
+    );
+
+    it('keeps M4A variables as raw base64 for non-Gemini Google models', async () => {
+      vi.spyOn(fs, 'readFileSync').mockReturnValue(Buffer.from('test-audio-content'));
+      const rendered = await renderPrompt(
+        toPrompt('{{audio}}'),
+        { audio: 'file://test-audio.m4a' },
+        undefined,
+        new AIStudioChatProvider('chat-bison'),
+      );
+      expect(rendered).toBe('dGVzdC1hdWRpby1jb250ZW50');
     });
 
     it('should handle Azure Vision prompt structure correctly', async () => {
