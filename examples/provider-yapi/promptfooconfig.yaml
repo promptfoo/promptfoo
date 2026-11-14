@@ -1,0 +1,49 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+
+description: Compare models available through the Y-API gateway on a set of geography questions
+
+prompts:
+  - What is the capital of {{country}}?
+
+providers:
+  - id: openai:chat:deepseek/deepseek-v4-pro
+    config:
+      apiBaseUrl: https://api.y-api.bestvirtualgoods.com/v1
+      apiKeyEnvar: Y_API_API_KEY
+      headers:
+        OpenAI-Organization: ''
+      max_tokens: 1024
+      showThinking: false
+  - id: openai:chat:qwen/qwen3.8-flash
+    config:
+      apiBaseUrl: https://api.y-api.bestvirtualgoods.com/v1
+      apiKeyEnvar: Y_API_API_KEY
+      headers:
+        OpenAI-Organization: ''
+      max_tokens: 1024
+      showThinking: false
+  - id: openai:chat:anthropic/claude-sonnet-5
+    config:
+      apiBaseUrl: https://api.y-api.bestvirtualgoods.com/v1
+      apiKeyEnvar: Y_API_API_KEY
+      headers:
+        OpenAI-Organization: ''
+      max_tokens: 1024
+      showThinking: false
+
+tests:
+  - vars:
+      country: France
+    assert:
+      - type: icontains
+        value: Paris
+  - vars:
+      country: Germany
+    assert:
+      - type: icontains
+        value: Berlin
+  - vars:
+      country: Italy
+    assert:
+      - type: icontains
+        value: Rome

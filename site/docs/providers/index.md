@@ -122,6 +122,8 @@ providers:
 | [WatsonX](./watsonx.md)                                 | IBM's WatsonX                                                    | `watsonx:ibm/granite-4-h-small`                                                                                       |
 | [X.AI](./xai.md)                                        | X.AI's models (text, image, video, voice)                        | `xai:grok-4.3`, `xai:image:grok-imagine-image`, `xai:video:grok-imagine-video`, `xai:voice:grok-voice-think-fast-2.0` |
 
+Y-API uses the [OpenAI-compatible chat configuration](./yapi.md).
+
 ## Provider Syntax
 
 Providers are specified using various syntax options:
