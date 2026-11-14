@@ -65,8 +65,8 @@ describe('AssertionsResult', () => {
         weight: 2,
       });
 
-      expect(assertionsResult['totalScore']).toBe(1.6); // 0.8 * 2
-      expect(assertionsResult['totalWeight']).toBe(2);
+      expect(assertionsResult['totalScore'].total).toBe(1.6); // 0.8 * 2
+      expect(assertionsResult['totalWeight'].total).toBe(2);
       expect(assertionsResult['tokensUsed']).toEqual({
         total: 100,
         prompt: 50,
@@ -657,6 +657,25 @@ describe('AssertionsResult', () => {
       expect(result.pass).toBe(true);
       expect(result.score).toBe(0.7);
       expect(result.reason).toBe('Aggregate score 0.70 ≥ 0.7 threshold');
+    });
+
+    it.each([
+      { score: 0.1, weight: 1, threshold: 0.1, pass: true },
+      { score: 0.1, weight: 0.01, threshold: 0.1, pass: true },
+      { score: 0.1, weight: 1, threshold: 0.100000000000001, pass: false },
+    ])('preserves the cutoff across many weighted results: %o', async (sample) => {
+      const aggregate = new AssertionsResult({ threshold: sample.threshold });
+      for (let index = 0; index < 50; index++) {
+        aggregate.addResult({
+          index,
+          result: { pass: true, score: sample.score, reason: 'Scored' },
+          weight: sample.weight,
+        });
+      }
+      expect(await aggregate.testResult()).toMatchObject({
+        score: sample.score,
+        pass: sample.pass,
+      });
     });
 
     it.each([
