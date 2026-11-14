@@ -1,8 +1,17 @@
 import { isApiProvider, isProviderOptions, type TestCase } from '../types';
 import { canonicalizeProviderId, normalizeProviderRef } from './providerRef';
-import { sanitizeUrl } from './sanitizer';
+import { looksLikeSecret, REDACTED, sanitizeUrl } from './sanitizer';
 
 import type { ApiProvider } from '../types/providers';
+
+export interface ProviderIdentity {
+  id: string | ApiProvider['id'];
+  label?: string;
+}
+
+function readProviderId(provider: ProviderIdentity): string {
+  return typeof provider.id === 'string' ? provider.id : provider.id();
+}
 
 export function providerToIdentifier(
   provider: TestCase['provider'] | { id?: string; label?: string } | undefined,
@@ -51,13 +60,29 @@ export function getProviderIdentifier(provider: ApiProvider): string {
  * Gets a descriptive identifier string for a provider, showing both label and ID when both exist.
  * Useful for error messages to help users debug provider reference issues.
  */
-export function getProviderDescription(provider: ApiProvider): string {
+export function getProviderDescription(provider: ProviderIdentity): string {
   const label = provider.label;
-  const id = provider.id();
-  if (label && label !== id) {
-    return `${label} (${id})`;
+  const id = readProviderId(provider);
+  return label && label !== id ? `${label} (${id})` : id;
+}
+
+/** Reference errors only need the origin of HTTP endpoints, including webhook-prefixed URLs. */
+export function getProviderDescriptionForLog(provider: ProviderIdentity | string): string {
+  function display(ref: string): string {
+    const endpoint = ref.match(/(?:https?|wss?):\/\/.*/i)?.[0];
+    if (endpoint) {
+      return URL.parse(endpoint)?.origin ?? REDACTED;
+    }
+    return ref.startsWith('exec:') || looksLikeSecret(ref)
+      ? REDACTED
+      : sanitizeProviderIdForLog(ref);
   }
-  return id;
+  return typeof provider === 'string'
+    ? display(provider)
+    : getProviderDescription({
+        id: display(readProviderId(provider)),
+        label: provider.label && display(provider.label),
+      });
 }
 
 export function sanitizeProviderIdForLog(providerId: string): string {
@@ -76,9 +101,9 @@ export function sanitizeProviderIdForLog(providerId: string): string {
  * Checks if a provider reference matches a given provider.
  * Supports exact matching and wildcard patterns.
  */
-export function doesProviderRefMatch(ref: string, provider: ApiProvider): boolean {
+export function doesProviderRefMatch(ref: string, provider: ProviderIdentity): boolean {
   const label = provider.label;
-  const id = provider.id();
+  const id = readProviderId(provider);
 
   // Canonicalize the reference for file/exec providers
   const canonicalRef = canonicalizeProviderId(ref);

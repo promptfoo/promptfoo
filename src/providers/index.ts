@@ -16,6 +16,7 @@ import {
   isProviderConfigFileReference,
   loadProviderConfigsFromFile,
   normalizeProviderRef,
+  type ProviderRefDescriptor,
   readProviderConfigFile,
 } from '../util/providerRef';
 import { renderEnvOnlyInObject } from '../util/render';
@@ -81,6 +82,21 @@ function describeInvalidProvider(provider: unknown): string {
     logger.debug('Failed to sanitize invalid provider for error message', { error: err });
     return Object.prototype.toString.call(provider);
   }
+}
+
+/** Render the same identity the loader uses without constructing an excluded provider. */
+export function renderProviderIdentity(ref: ProviderRefDescriptor, env?: EnvOverrides) {
+  if (!('loadProviderPath' in ref) || !(ref.id.includes('{{') || ref.label?.includes('{{'))) {
+    return ref;
+  }
+  const templateEnv = mergeProviderEnv(
+    { id: ref.loadProviderPath, preserveAliases: true },
+    env,
+    'loadOptions' in ref ? ref.loadOptions.env : undefined,
+  );
+  return cliState.withEnv(templateEnv, () =>
+    renderEnvOnlyInObject({ id: ref.id, label: ref.label }, templateEnv),
+  );
 }
 
 // NOTE: loadApiProvider only accepts string paths. Callers use normalizeProviderRef
