@@ -17,6 +17,7 @@ import { cn } from '@app/lib/utils';
 import { useStore } from '@app/stores/evalConfig';
 import { callApi } from '@app/utils/api';
 import { loadYaml } from '@promptfoo/util/yamlLoad';
+import { ProviderCatalogDataSchema } from '@promptfoo/validators/providers';
 import { Check, Upload } from 'lucide-react';
 import { ErrorBoundary } from 'react-error-boundary';
 import ConfigureEnvButton from './ConfigureEnvButton';
@@ -108,10 +109,14 @@ const EvaluateTestSuiteCreator = () => {
         if (!response.ok) {
           throw new Error(`HTTP ${response.status}`);
         }
-        const data = await response.json();
-        const payload = data?.data;
+        const body = await response.json();
+        const result = ProviderCatalogDataSchema.safeParse(body?.data);
+        if (body?.success !== true || !result.success) {
+          throw new Error('Invalid provider catalog response');
+        }
+        const payload = result.data;
         if (isMounted) {
-          setAvailableProviders(payload?.hasCustomConfig ? (payload.providers ?? []) : null);
+          setAvailableProviders(payload.hasCustomConfig ? payload.providers : null);
         }
       } catch (err) {
         console.error('Failed to fetch provider config status:', err);

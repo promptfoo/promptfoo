@@ -78,7 +78,8 @@ vi.mock('@app/utils/api', () => ({
   callApi: vi.fn(() =>
     Promise.resolve({
       ok: true,
-      json: () => Promise.resolve({ hasCustomConfig: false }),
+      json: () =>
+        Promise.resolve({ success: true, data: { hasCustomConfig: false, providers: [] } }),
     }),
   ),
 }));
@@ -519,10 +520,14 @@ describe('EvaluateTestSuiteCreator', () => {
     expect(testCasesSection).toHaveTextContent('Vars: nestedVar, complete, validVar');
   });
 
-  it('should gracefully handle a missing hasCustomConfig property in the /providers response', async () => {
+  it.each([
+    {},
+    { success: false },
+    { success: true, data: { hasCustomConfig: true, providers: [{}] } },
+  ])('keeps the picker restricted for an invalid HTTP 200 catalog: %j', async (body) => {
     vi.mocked(callApi).mockResolvedValueOnce({
       ok: true,
-      json: async () => ({}),
+      json: async () => body,
     } as Response);
 
     render(<EvaluateTestSuiteCreator />);
@@ -531,10 +536,14 @@ describe('EvaluateTestSuiteCreator', () => {
       expect(callApi).toHaveBeenCalledWith('/providers');
     });
 
-    expect(showToastMock).not.toHaveBeenCalled();
-
-    const configureEnvButton = screen.getByTestId('mock-configure-env-button');
-    expect(configureEnvButton).toBeInTheDocument();
+    await waitFor(() =>
+      expect(showToastMock).toHaveBeenCalledWith(
+        expect.stringContaining('Invalid provider catalog response'),
+        'error',
+      ),
+    );
+    expect(screen.queryByTestId('mock-configure-env-button')).toBeNull();
+    expect(screen.getByTestId('mock-available-providers')).toHaveTextContent('0 catalog');
   });
 
   it('should show the ConfigureEnvButton when the server responds with { hasCustomConfig: false }', async () => {
@@ -551,7 +560,7 @@ describe('EvaluateTestSuiteCreator', () => {
       json: async () => ({
         success: true,
         data: {
-          providers: [{ id: 'openai:gpt-4o-mini' }],
+          providers: [{ id: 'ui-catalog:fixture', label: 'Fixture' }],
           hasCustomConfig: true,
         },
       }),

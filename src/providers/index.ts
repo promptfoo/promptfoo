@@ -3,7 +3,7 @@ import dedent from 'dedent';
 import cliState from '../cliState';
 import { getExplicitProviderEnv, setExplicitProviderEnv } from '../envOverrides';
 import logger from '../logger';
-import { isApiProvider, UI_CATALOG_PROVIDER_PREFIX } from '../types/providers';
+import { isApiProvider } from '../types/providers';
 import {
   getCloudDatabaseId,
   getProviderFromCloud,
@@ -17,6 +17,7 @@ import {
   loadProviderConfigsFromFile,
   normalizeProviderRef,
   readProviderConfigFile,
+  UI_CATALOG_PROVIDER_PREFIX,
 } from '../util/providerRef';
 import { renderEnvOnlyInObject } from '../util/render';
 import { sanitizeObject } from '../util/sanitizer';
@@ -31,6 +32,7 @@ import type {
   ProviderConfig,
   ProviderFunction,
   ProviderOptions,
+  ProviderResponse,
   ProvidersConfig,
 } from '../types/providers';
 
@@ -111,7 +113,7 @@ async function createUiCatalogProvider(
   reference: string,
   promptSelectors?: string[],
 ): Promise<ApiProvider> {
-  const { getUiCatalogProvider } = await import('../util/config/uiProviders');
+  const { getUiCatalogProvider, redactCatalogError } = await import('../util/config/uiProviders');
   const selected = getUiCatalogProvider(reference);
   if (!selected?.id) {
     throw new Error('Unknown configured provider. Select it again from the provider catalog.');
@@ -124,17 +126,16 @@ async function createUiCatalogProvider(
   }).catch(() => {
     throw new Error('Could not initialize the selected provider catalog entry.');
   });
-  const hiddenError = 'The configured catalog provider could not complete the request.';
-  async function callWithCatalogEnv<T extends { error?: string }>(
+  async function callWithCatalogEnv<T extends ProviderResponse>(
     invoke: () => Promise<T>,
     signal?: AbortSignal,
-  ): Promise<T | { error: string }> {
+  ): Promise<T | ProviderResponse> {
     try {
       const result = await cliState.withEnv(selected?.env ?? {}, invoke);
-      return result.error ? { error: hiddenError } : result;
-    } catch {
+      return result.error ? redactCatalogError(result) : result;
+    } catch (error) {
       signal?.throwIfAborted();
-      return { error: hiddenError };
+      return redactCatalogError({}, error instanceof Error ? error : undefined);
     }
   }
 
@@ -142,8 +143,18 @@ async function createUiCatalogProvider(
   const classify = provider.callClassificationApi?.bind(provider);
   const similarity = (provider as Partial<ApiSimilarityProvider>).callSimilarityApi?.bind(provider);
   const moderate = (provider as Partial<ApiModerationProvider>).callModerationApi?.bind(provider);
+  const rawRetries: unknown = provider.config?.maxRetries;
+  const maxRetries =
+    typeof rawRetries === 'string' && /^\d+$/.test(rawRetries.trim())
+      ? Number(rawRetries)
+      : rawRetries;
   return {
     id: () => reference,
+    ...(typeof maxRetries === 'number' &&
+      Number.isSafeInteger(maxRetries) &&
+      maxRetries >= 0 && {
+        config: { maxRetries },
+      }),
     label: selected.label,
     prompts: promptSelectors ?? provider.prompts,
     transform: provider.transform,

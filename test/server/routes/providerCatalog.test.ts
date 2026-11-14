@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 
 import { afterAll, describe, expect, it, vi } from 'vitest';
+import { loadApiProvider } from '../../../src/providers';
 import { createApp } from '../../../src/server/server';
 import { setConfigDirectoryPath } from '../../../src/util/config/manage';
 import { setupTestServer } from '../../util/testServer';
@@ -45,6 +46,20 @@ describe('UI provider catalog credentials', () => {
     redirectedHost = `127.0.0.1:${sinkAddress.port}`;
     directory = await mkdtemp(path.join(tmpdir(), 'provider-catalog-'));
     setConfigDirectoryPath(directory);
+    const fixtureModule = path.join(directory, 'fixture.cjs');
+    await writeFile(
+      fixtureModule,
+      `module.exports = class {
+      constructor(options) { this.config = options.config; }
+      id() { return 'fixture'; }
+      async callApi() { return {
+        error: 'synthetic-secret', tokenUsage: { total: 9, secret: 'synthetic-secret' },
+        cost: 0.25, incurredCost: 0.125, cached: false,
+        metadata: { http: { status: 429, headers: { 'retry-after': '2', authorization: 'synthetic-secret' } } },
+        raw: 'synthetic-secret'
+      }; }
+    }`,
+    );
     // JSON syntax is also valid YAML.
     await writeFile(
       path.join(directory, 'ui-providers.yaml'),
@@ -80,10 +95,22 @@ describe('UI provider catalog credentials', () => {
               ].join('\r\n'),
             },
           },
+          { id: 'file://' + fixtureModule, label: 'Metered fixture', config: { maxRetries: '0' } },
         ],
       }),
     );
   });
+
+  function waitForJob(id: string, expected: 'complete' | 'error') {
+    return vi.waitFor(
+      async () => {
+        const response = await api.get(`/api/eval/job/${id}`).expect(200);
+        expect(response.body.status, response.text).toBe(expected);
+        return response;
+      },
+      { timeout: 25_000 },
+    );
+  }
 
   afterAll(async () => {
     setConfigDirectoryPath(undefined);
@@ -107,10 +134,7 @@ describe('UI provider catalog credentials', () => {
         sharing: false,
       })
       .expect(200);
-    await vi.waitFor(async () => {
-      const response = await api.get(`/api/eval/job/${first.body.id}`).expect(200);
-      expect(response.body.status).toBe('error');
-    });
+    await waitForJob(first.body.id, 'error');
 
     const catalog = await api.get('/api/providers').expect(200);
     const [reference] = catalog.body.data.providers;
@@ -119,6 +143,7 @@ describe('UI provider catalog credentials', () => {
       providers: [
         { id: expect.stringMatching(/^ui-catalog:/), label: 'Catalog Fixture' },
         { id: expect.stringMatching(/^ui-catalog:/), label: 'Raw Catalog Fixture' },
+        { id: expect.stringMatching(/^ui-catalog:/), label: 'Metered fixture' },
       ],
     });
     expect(catalog.text).not.toContain(authorization);
@@ -141,14 +166,7 @@ describe('UI provider catalog credentials', () => {
       })
       .expect(200);
 
-    const result = await vi.waitFor(
-      async () => {
-        const response = await api.get(`/api/eval/job/${job.body.id}`).expect(200);
-        expect(response.body.status, response.text).toBe('complete');
-        return response;
-      },
-      { timeout: 25_000 },
-    );
+    const result = await waitForJob(job.body.id, 'complete');
     expect(requests).toEqual([{ path: '/configured', auth: authorization, tenant: tenantHeader }]);
     expect(result.text).not.toContain(authorization);
     expect(result.text).not.toContain(tenantHeader);
@@ -176,11 +194,7 @@ describe('UI provider catalog credentials', () => {
         sharing: false,
       })
       .expect(200);
-    const rejected = await vi.waitFor(async () => {
-      const response = await api.get(`/api/eval/job/${malformed.body.id}`).expect(200);
-      expect(response.body.status).toBe('complete');
-      return response;
-    });
+    const rejected = await waitForJob(malformed.body.id, 'complete');
     expect(rejected.text).toContain(
       'The configured catalog provider could not complete the request.',
     );
@@ -198,16 +212,31 @@ describe('UI provider catalog credentials', () => {
         sharing: false,
       })
       .expect(200);
-    const rawResult = await vi.waitFor(async () => {
-      const response = await api.get(`/api/eval/job/${rawJob.body.id}`).expect(200);
-      expect(response.body.status).toBe('complete');
-      return response;
-    });
+    const rawResult = await waitForJob(rawJob.body.id, 'complete');
     expect(requests).toContainEqual({ path: '/same-host', auth: authorization, tenant: undefined });
     expect(redirectedRequests).toEqual([]);
     expect(rawResult.text).toContain(
       'The configured catalog provider could not complete the request.',
     );
     expect(rawResult.text).not.toContain(authorization);
-  }, 35_000);
+  });
+
+  it('preserves safe failure accounting and retry settings for catalog calls', async () => {
+    const catalog = await api.get('/api/providers').expect(200);
+    const provider = await loadApiProvider(catalog.body.data.providers[2].id);
+    expect(provider.config).toEqual({ maxRetries: 0 });
+    const response = await provider.callApi('synthetic prompt');
+    expect(response).toEqual({
+      error: 'The configured catalog provider could not complete the request.',
+      tokenUsage: { total: 9 },
+      cost: 0.25,
+      incurredCost: 0.125,
+      cached: false,
+      metadata: {
+        rateLimitRetryable: true,
+        rateLimitKind: 'rate_limit',
+        headers: { 'retry-after-ms': '2000' },
+      },
+    });
+  });
 });

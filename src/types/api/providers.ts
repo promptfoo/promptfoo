@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { ProviderOptionsSchema } from '../../validators/providers';
+import { ProviderCatalogDataSchema, ProviderOptionsSchema } from '../../validators/providers';
 import { BaseTokenUsageSchema } from '../shared';
 import { ErrorResponseSchema, JsonObjectSchema } from './common';
 
@@ -108,10 +108,7 @@ export const ConfigStatusResponseSchema = z.union([
 export const CatalogResponseSchema = z.union([
   z.object({
     success: z.literal(true),
-    data: z.object({
-      providers: z.array(z.object({ id: z.string(), label: z.string() }).strict()),
-      hasCustomConfig: z.boolean(),
-    }),
+    data: ProviderCatalogDataSchema,
   }),
   ErrorResponseSchema,
 ]);

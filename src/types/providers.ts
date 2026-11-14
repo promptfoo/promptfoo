@@ -26,7 +26,6 @@ export type {
 } from '../contracts/providers';
 export type { TokenUsage } from './shared';
 export type ProviderId = string;
-export const UI_CATALOG_PROVIDER_PREFIX = 'ui-catalog:';
 export type ProviderLabel = string;
 export type ProviderFunction = ApiProvider['callApi'];
 export type ProviderOptionsMap = Record<ProviderId, ProviderOptions>;

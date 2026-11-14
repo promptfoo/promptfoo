@@ -4,12 +4,16 @@ import { join } from 'path';
 
 import * as yaml from 'js-yaml';
 import logger from '../../logger';
+import { parseRateLimitHeaders } from '../../scheduler/headerParser';
+import { getProviderResponseHeaders, isProviderResponseRateLimited } from '../../scheduler/types';
 import { JsonProviderOptionsWithIdSchema } from '../../types/api/providers';
-import { UI_CATALOG_PROVIDER_PREFIX } from '../../types/providers';
+import { BaseTokenUsageSchema } from '../../types/shared';
+import { isSafeCost } from '../numeric';
+import { UI_CATALOG_PROVIDER_PREFIX } from '../providerRef';
 import { loadYaml } from '../yamlLoad';
 import { getConfigDirectoryPath } from './manage';
 
-import type { ProviderOptions } from '../../types/providers';
+import type { ProviderOptions, ProviderResponse } from '../../types/providers';
 
 interface ServerConfig {
   providers?: (string | ProviderOptions)[];
@@ -211,4 +215,29 @@ export function getPublicProviderCatalog(): { id: string; label: string }[] {
 
 export function getUiCatalogProvider(id: string): ProviderOptions | undefined {
   return getProviderCatalog().get(id);
+}
+
+export function redactCatalogError(result: ProviderResponse, thrown?: Error): ProviderResponse {
+  const usage = BaseTokenUsageSchema.safeParse(result.tokenUsage);
+  const retryable = isProviderResponseRateLimited(result, thrown);
+  const headers = getProviderResponseHeaders(result);
+  const retryAfterMs = headers && parseRateLimitHeaders(headers).retryAfterMs;
+  return {
+    error: 'The configured catalog provider could not complete the request.',
+    ...(usage.success && { tokenUsage: usage.data }),
+    ...(isSafeCost(result.cost) && { cost: result.cost }),
+    ...(isSafeCost(result.incurredCost) && { incurredCost: result.incurredCost }),
+    ...(typeof result.cached === 'boolean' && { cached: result.cached }),
+    metadata: {
+      rateLimitRetryable: retryable,
+      ...(retryable && { rateLimitKind: 'rate_limit' }),
+      ...(retryable &&
+        retryAfterMs !== undefined && {
+          headers: { 'retry-after-ms': String(retryAfterMs) },
+        }),
+      ...(result.metadata?.retryableErrorKind === 'transient_availability' && {
+        retryableErrorKind: 'transient_availability',
+      }),
+    },
+  };
 }
