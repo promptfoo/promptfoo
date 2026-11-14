@@ -106,7 +106,7 @@ describe('nodeEvaluatorRuntime', () => {
     ]);
   });
 
-  it('ignores matrix references when variable expansion is disabled', () => {
+  it('avoids reading disabled matrix files and records the environment mode', () => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-matrix-fingerprint-'));
     tempDirs.push(tempDir);
 
@@ -134,10 +134,11 @@ describe('nodeEvaluatorRuntime', () => {
     try {
       expect(
         getVarValuesFingerprint(
-          [{ vars: { language: { $values: 'file://missing.yaml' } } }],
+          [{ vars: { language: ['English', { $values: 'file://missing.yaml' }] } }],
           tempDir,
         ),
-      ).toBeUndefined();
+      ).toMatch(/^disabled:/);
+      expect(getVarValuesFingerprint([{ vars: { language: 'English' } }], tempDir)).toBeUndefined();
     } finally {
       restoreEnvironment();
     }

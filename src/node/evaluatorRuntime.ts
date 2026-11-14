@@ -29,6 +29,7 @@ function getVarValuesFingerprintEntries(
   basePath: string,
   cache: VarValuesFileCache,
   location: string,
+  includeValues: boolean,
 ): unknown[][] {
   if (Array.isArray(value)) {
     return value.flatMap((item, index) => {
@@ -41,6 +42,7 @@ function getVarValuesFingerprintEntries(
         basePath,
         cache,
         `${location}[${index}]`,
+        includeValues,
       );
     });
   }
@@ -50,6 +52,9 @@ function getVarValuesFingerprintEntries(
   const reference = (value as Record<string, unknown>).$values;
   if (typeof reference !== 'string' || !reference.startsWith('file://')) {
     return [];
+  }
+  if (!includeValues) {
+    return [[location, reference]];
   }
   const { filePath: referencedPath } = parseFileUrl(reference);
   const resolvedPath = path.isAbsolute(referencedPath)
@@ -70,9 +75,7 @@ export function getVarValuesFingerprint(
   cache: VarValuesFileCache = new Map(),
   defaultDisableVarExpansion = false,
 ): string | undefined {
-  if (getEnvBool('PROMPTFOO_DISABLE_VAR_EXPANSION')) {
-    return undefined;
-  }
+  const expansionDisabled = getEnvBool('PROMPTFOO_DISABLE_VAR_EXPANSION');
   const entries = tests.flatMap((testCase, testIndex) => {
     if ((testCase.options?.disableVarExpansion ?? defaultDisableVarExpansion) === true) {
       return [];
@@ -88,13 +91,15 @@ export function getVarValuesFingerprint(
         basePath,
         cache,
         `${testIndex}:${varIndex}:${varName}`,
+        !expansionDisabled,
       ),
     );
   });
   if (entries.length === 0) {
     return undefined;
   }
-  return sha256(JSON.stringify(entries));
+  const fingerprint = sha256(JSON.stringify(entries));
+  return expansionDisabled ? `disabled:${fingerprint}` : fingerprint;
 }
 
 function prepareVarValuesSnapshot(
@@ -107,6 +112,14 @@ function prepareVarValuesSnapshot(
 ): string | undefined {
   const fingerprint = getVarValuesFingerprint(tests, basePath, cache, defaultDisableVarExpansion);
   if (expectedFingerprint !== undefined && fingerprint !== expectedFingerprint) {
+    if (
+      fingerprint !== undefined &&
+      expectedFingerprint.startsWith('disabled:') !== fingerprint.startsWith('disabled:')
+    ) {
+      throw new ConfigResolutionError(
+        'Matrix expansion mode changed. Restore the original PROMPTFOO_DISABLE_VAR_EXPANSION setting before replaying this evaluation. Existing results were preserved.',
+      );
+    }
     throw new ConfigResolutionError(
       fingerprintError ||
         'The $values files used by this evaluation have changed. Restore the original files before replaying it.',
