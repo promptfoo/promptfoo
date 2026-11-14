@@ -1,6 +1,7 @@
 import { execFile } from 'child_process';
 import crypto from 'crypto';
 import fs from 'fs';
+import path from 'path';
 
 import { getCache, isCacheEnabled } from '../cache';
 import { getProcessEnv } from '../envars';
@@ -66,7 +67,20 @@ export function parseScriptParts(scriptPath: string): string[] {
   return parts;
 }
 
-export function getFileHashes(scriptParts: string[]): string[] {
+export function getFileHashes(scriptParts: string[], cwd = process.cwd()): string[] {
+  // An attached option may refer to a changing file, including credentials.
+  // Skip caching these commands without reading the attached file.
+  for (const part of scriptParts) {
+    const equals = part.indexOf('=');
+    if (
+      equals > 0 &&
+      equals < part.length - 1 &&
+      fs.existsSync(path.resolve(cwd, part.slice(equals + 1)))
+    ) {
+      return [];
+    }
+  }
+
   const fileHashes: string[] = [];
 
   for (const part of scriptParts) {
@@ -94,11 +108,9 @@ export class ScriptCompletionProvider implements ApiProvider {
 
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     const scriptParts = parseScriptParts(this.scriptPath);
-    const fileHashes = getFileHashes(scriptParts);
-
-    if (fileHashes.length === 0) {
-      logger.warn(`Could not find any valid files in the command: ${this.scriptPath}`);
-    }
+    const fileHashes = isCacheEnabled()
+      ? getFileHashes(scriptParts, this.options?.config.basePath)
+      : [];
 
     const cacheKey = `exec:${EXEC_CACHE_VERSION}:${this.scriptPath}:${fileHashes.join(':')}:${prompt}:${JSON.stringify(this.options)}`;
 
@@ -111,10 +123,6 @@ export class ScriptCompletionProvider implements ApiProvider {
         logger.debug(`Returning cached result for script ${this.scriptPath}: ${cachedResult}`);
         return { ...JSON.parse(cachedResult as string), cached: true };
       }
-    } else if (fileHashes.length === 0 && isCacheEnabled()) {
-      logger.warn(
-        `Could not hash any files for command ${this.scriptPath}, caching will not be used`,
-      );
     }
 
     return new Promise<ProviderResponse>((resolve, reject) => {

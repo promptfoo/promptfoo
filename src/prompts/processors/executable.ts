@@ -45,7 +45,7 @@ export const executablePromptFunction = async (
   };
 
   const scriptParts = parseScriptParts(scriptPath);
-  const fileHashes = getFileHashes(scriptParts);
+  const fileHashes = isCacheEnabled() ? getFileHashes(scriptParts, context.config?.basePath) : [];
 
   const cacheKey = `exec-prompt:${EXEC_CACHE_VERSION}:${scriptPath}:${fileHashes.join(':')}:${safeJsonStringify(transformedContext)}`;
 

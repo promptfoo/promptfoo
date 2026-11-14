@@ -189,6 +189,16 @@ describe('getFileHashes', () => {
     expect(createHashMock).toHaveBeenCalledTimes(2);
   });
 
+  it('skips caching when an attached argument is a file in the child working directory', () => {
+    const cwd = path.resolve('fixture-directory');
+    const attached = path.join(cwd, 'input file.txt');
+    existsSyncMock.mockImplementation((candidate) => candidate === attached);
+
+    expect(getFileHashes(['node', 'script.js', '--fixture=input file.txt'], cwd)).toEqual([]);
+    expect(existsSyncMock).toHaveBeenCalledWith(attached);
+    expect(readFileSyncMock).not.toHaveBeenCalled();
+  });
+
   it('should return an empty array for non-existent files', () => {
     const scriptParts = ['nonexistent1.js', 'nonexistent2.js'];
     existsSyncMock.mockReturnValue(false);
