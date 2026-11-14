@@ -4,6 +4,7 @@ import type {
 } from '../../contracts/providerConfig/azure';
 import type { EnvOverrides } from '../../types/env';
 import type { MCPConfig } from '../mcp/types';
+import type { DecisionGradingLevel, DecisionQuestion } from '../openai/decisionsProtocol';
 import type { AssistantFunctionCallback } from '../openai/types';
 
 /**
@@ -165,6 +166,38 @@ export interface AzureResponsesOptions extends Omit<AzureChatResponsesOptions, '
   service_tier?: 'auto' | 'default' | 'flex' | 'priority' | null;
 }
 
+/**
+ * Options specific to the Azure Decisions provider.
+ */
+export interface AzureDecisionsOptions
+  extends Pick<
+    AzureCompletionOptions,
+    | 'apiHost'
+    | 'apiBaseUrl'
+    | 'apiKey'
+    | 'apiKeyEnvar'
+    | 'headers'
+    | 'azureClientId'
+    | 'azureClientSecret'
+    | 'azureTenantId'
+    | 'azureAuthorityHost'
+    | 'azureTokenScope'
+  > {
+  questions?: DecisionQuestion[];
+  safety_identifier?: string | null;
+  /** llm-rubric: minimum normalized score to pass. */
+  threshold?: number;
+  /** llm-rubric: ordered score levels, low to high. Omit for a predicate. */
+  levels?: DecisionGradingLevel[];
+  /** classifier: what to decide and the possible string labels. */
+  instructions?: string;
+  labels?: string[] | Record<string, string | null>;
+  maxRetries?: number;
+  cost?: number;
+  inputCost?: number;
+  outputCost?: number;
+}
+
 export interface AzureModelCost {
   id: string;
   cost: {
@@ -241,7 +274,10 @@ export type AzureAssistantOptions = AzureCompletionOptions & {
 };
 
 export interface AzureProviderOptions<
-  TConfig extends AzureCompletionOptions | AzureResponsesOptions = AzureCompletionOptions,
+  TConfig extends
+    | AzureCompletionOptions
+    | AzureResponsesOptions
+    | AzureDecisionsOptions = AzureCompletionOptions,
 > {
   config?: TConfig;
   id?: string;

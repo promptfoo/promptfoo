@@ -618,12 +618,6 @@ export const providerMap: ProviderFactory[] = [
       const modelType = splits[1];
       const deploymentName = modelNameFromProviderPath(providerPath, 2);
 
-      if (modelType === 'decisions') {
-        throw new Error(
-          'The Decisions API is available through openai:decisions:<model name>, not the Azure provider.',
-        );
-      }
-
       // Azure model types that have no sensible default deployment must name one in
       // the provider path (`azure:<type>:<name>`). Without this, the registry would
       // build a provider with an undefined deployment that fails later with an opaque
@@ -636,6 +630,11 @@ export const providerMap: ProviderFactory[] = [
         }
       };
 
+      if (modelType === 'decisions') {
+        requirePathSegment('decisions', 'a deployment name', 'deployment name');
+        const { AzureDecisionsProvider } = await import('./azure/decisions');
+        return new AzureDecisionsProvider(deploymentName, providerOptions);
+      }
       if (modelType === 'moderation') {
         if (providerPath.startsWith('azureopenai:')) {
           throw new Error(
@@ -716,7 +715,7 @@ export const providerMap: ProviderFactory[] = [
         return new AzureVideoProvider(deploymentName || 'sora', providerOptions);
       }
       throw new Error(
-        `Unknown Azure model type: ${modelType}. Use one of the following providers: azure:chat:<model name>, azure:assistant:<assistant id>, azure:completion:<model name>, azure:image:<deployment name>, azure:moderation:<model name>, azure:realtime:<deployment name>, azure:responses:<model name>, azure:video:<deployment name>`,
+        `Unknown Azure model type: ${modelType}. Use one of the following providers: azure:chat:<model name>, azure:assistant:<assistant id>, azure:completion:<model name>, azure:decisions:<deployment name>, azure:image:<deployment name>, azure:moderation:<model name>, azure:realtime:<deployment name>, azure:responses:<model name>, azure:video:<deployment name>`,
       );
     },
   },
