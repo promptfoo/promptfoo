@@ -342,7 +342,7 @@ describe('local media blob adapter', () => {
       expect(response.headers['content-type']).toBe('application/octet-stream');
       expect(response.headers['content-disposition']).toBe('attachment');
       expect(response.headers['content-length']).toBe(String(payload.length));
-      expect(response.headers['cache-control']).toBe('no-store');
+      expect(response.headers['cache-control']).toBe('private, no-store');
       expect(response.body).toEqual(payload);
 
       await provider.store(payload, metadata);
