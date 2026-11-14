@@ -453,6 +453,9 @@
         "MINIMAX_API_KEY": {
           "type": "string"
         },
+        "MINIMAX_VIDEO_API_BASE_URL": {
+          "type": "string"
+        },
         "MOONSHOT_API_KEY": {
           "type": "string"
         },

@@ -98,6 +98,22 @@ tests:
         value: 'Paris'
 ```
 
+## Generate a video
+
+Use `minimax:video` for MiniMax H3, or select a variant such as `minimax:video:MiniMax-H3-Lite`. Each eval submits a paid generation, polls its task, and saves the resulting MP4 as a media artifact. Set `MINIMAX_API_KEY` as described above. For a regional installation, set `MINIMAX_VIDEO_API_BASE_URL` to the full video generation endpoint.
+
+```yaml
+providers:
+  - id: minimax:video
+    config:
+      duration: 6
+      ratio: '16:9'
+```
+
+Text prompts use a concrete ratio. For image-to-video, supply `content` with an `image_url` item and a `first_frame` or `last_frame` role. Reference inputs use `reference_image`, `reference_video`, or `reference_audio` with their corresponding media types. The eval prompt supplies the text when the content list contains only media.
+
+The base model supports `768P` and `2K`. Highspeed, Lite, and Max support `480P` and `768P`. Set `poll_interval_ms` and `max_poll_time_ms` in milliseconds to control polling. See the [generation request reference](https://platform.minimax.io/docs/api-reference/video-generation-v2-create) for model-specific input limits.
+
 ## API Documentation
 
 - [OpenAI Compatible API](https://platform.minimax.io/docs/api-reference/text-openai-api)
