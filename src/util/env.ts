@@ -10,6 +10,16 @@ interface SetupEnvOptions {
   processEnv?: NodeJS.ProcessEnv;
 }
 
+let explicitCliEnvPath: string | string[] | undefined;
+
+export function getExplicitCliEnvPath(): string | string[] | undefined {
+  return explicitCliEnvPath;
+}
+
+export function setExplicitCliEnvPath(envPath: string | string[] | undefined): void {
+  explicitCliEnvPath = envPath;
+}
+
 /**
  * Load environment variables from .env file(s).
  * @param envPath - Single path, array of paths, or undefined for default .env loading.

@@ -16,3 +16,10 @@ export class PromptSuggestionsRejectedError extends Error {
     this.name = 'PromptSuggestionsRejectedError';
   }
 }
+
+export class StrictConfigError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'StrictConfigError';
+  }
+}

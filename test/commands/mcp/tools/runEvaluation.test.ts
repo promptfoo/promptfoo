@@ -282,6 +282,55 @@ describe('runEvaluation tool', () => {
   });
 
   describe('promptFilter validation', () => {
+    it('should snapshot strict config for filtered evaluations', async () => {
+      const { resolveConfigs } = await import('../../../../src/util/config/load');
+      vi.mocked(resolveConfigs).mockResolvedValueOnce({
+        config: { env: { PROMPTFOO_STRICT_CONFIG: 'true' } },
+        strictConfigEnabled: true,
+        testSuite: {
+          prompts: [{ label: 'test-prompt', raw: 'test' }],
+          providers: [{ id: 'test-provider' }],
+          tests: [{ vars: { input: 'test' } }],
+        },
+      } as any);
+
+      const Eval = (await import('../../../../src/models/eval')).default;
+      vi.spyOn(Eval, 'create').mockResolvedValueOnce({ id: 'filtered-eval-record' } as any);
+
+      const evaluator = await import('../../../../src/evaluator');
+      const evaluate = vi.spyOn(evaluator, 'evaluate').mockResolvedValueOnce({
+        id: 'filtered-eval-123',
+        toEvaluateSummary: vi.fn().mockResolvedValue({
+          version: 3,
+          stats: { successes: 1, failures: 0, errors: 0 },
+          results: [],
+          prompts: [],
+        }),
+      } as any);
+
+      const { registerRunEvaluationTool } = await import(
+        '../../../../src/commands/mcp/tools/runEvaluation'
+      );
+      let toolHandler: any;
+      registerRunEvaluationTool({
+        tool: vi.fn((_name, _schema, handler) => {
+          toolHandler = handler;
+        }),
+      } as any);
+
+      const result = await toolHandler({
+        configPath: 'test.yaml',
+        testCaseIndices: 0,
+      });
+
+      expect(result.isError).toBeFalsy();
+      expect(evaluate).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.anything(),
+        expect.objectContaining({ strictConfigEnabled: true }),
+      );
+    });
+
     it('should error on mixed numeric and non-numeric filters', async () => {
       const { handler: toolHandler } = await getRunEvaluationTool();
 

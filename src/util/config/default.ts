@@ -9,6 +9,7 @@ import type { UnifiedConfig } from '../../types/index';
 export async function loadDefaultConfig(
   dir?: string,
   configName: string = 'promptfooconfig',
+  options: { deferUnknownKeyValidation?: boolean } = {},
 ): Promise<{
   defaultConfig: Partial<UnifiedConfig>;
   defaultConfigPath: string | undefined;
@@ -17,7 +18,9 @@ export async function loadDefaultConfig(
 
   for (const ext of DEFAULT_CONFIG_EXTENSIONS) {
     const configPath = path.join(dir, `${configName}.${ext}`);
-    const defaultConfig = await maybeReadConfig(configPath);
+    const defaultConfig = options.deferUnknownKeyValidation
+      ? await maybeReadConfig(configPath, true)
+      : await maybeReadConfig(configPath);
     if (defaultConfig) {
       return { defaultConfig, defaultConfigPath: configPath };
     }

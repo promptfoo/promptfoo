@@ -195,6 +195,7 @@ vi.mock('../../../src/util/config/load', async (importOriginal) => {
     combineConfigs: vi.fn(),
     resolveConfigs: vi.fn(),
     readConfig: vi.fn(),
+    validateUnknownConfigKeysForConfigPaths: vi.fn(),
   };
 });
 
@@ -347,6 +348,10 @@ describe('doGenerateRedteam', () => {
     });
   });
 
+  afterEach(() => {
+    vi.mocked(configModule.resolveConfigs).mockReset();
+  });
+
   it('should generate redteam tests and write to output file', async () => {
     vi.mocked(configModule.combineConfigs).mockResolvedValue([
       {
@@ -407,6 +412,46 @@ describe('doGenerateRedteam', () => {
     );
   });
 
+  it('preserves the common envPath option as an explicit config override', async () => {
+    const envPath = ['cli.env'];
+
+    await doGenerateRedteam({
+      output: 'output.yaml',
+      config: 'config.yaml',
+      cache: true,
+      defaultConfig: {},
+      envPath,
+      write: false,
+    });
+
+    expect(configModule.resolveConfigs).toHaveBeenCalledWith(
+      expect.objectContaining({ envPath }),
+      {},
+    );
+  });
+
+  it.each([{ envFile: [] }, { envFile: [''] }, { envFile: [' ', ','] }])(
+    'preserves a forwarded envPath when the local envFile value is effectively empty: $envFile',
+    async ({ envFile }) => {
+      const envPath = ['cli.env'];
+
+      await doGenerateRedteam({
+        output: 'output.yaml',
+        config: 'config.yaml',
+        cache: true,
+        defaultConfig: {},
+        envFile,
+        envPath,
+        write: false,
+      });
+
+      expect(configModule.resolveConfigs).toHaveBeenCalledWith(
+        expect.objectContaining({ envPath }),
+        {},
+      );
+    },
+  );
+
   it.each([
     ['adding a filter', {}, { filterProviders: 'team-a' }],
     ['filterProviders value', { filterProviders: 'team-a' }, { filterProviders: 'team-b' }],
@@ -449,6 +494,11 @@ describe('doGenerateRedteam', () => {
       vi.clearAllMocks();
       await doGenerateRedteam(options);
 
+      expect(configModule.validateUnknownConfigKeysForConfigPaths).toHaveBeenCalledWith(
+        [configPath],
+        options.envFile,
+      );
+      expect(configModule.resolveConfigs).not.toHaveBeenCalled();
       expect(synthesize).not.toHaveBeenCalled();
       expect(logger.warn).toHaveBeenCalledWith(
         'No changes detected in redteam configuration. Skipping generation (use --force to generate anyway)',
