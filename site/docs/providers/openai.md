@@ -363,7 +363,7 @@ Built-in OpenAI API requests include `X-OpenAI-Originator: promptfoo`. Override 
 
 ### OpenAI-compatible endpoints
 
-For OpenAI-compatible services, keep the `openai:chat` provider and set `apiBaseUrl` and an explicit `apiKey`. For example, [Modelsell](https://modelsell.com/) can be configured without a dedicated provider:
+For OpenAI-compatible services, keep the `openai:chat` provider and set `apiBaseUrl` and `apiKeyEnvar`. For example, [Modelsell](https://modelsell.com/) can be configured without a dedicated provider:
 
 ```yaml
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
@@ -371,14 +371,16 @@ providers:
   - id: "openai:chat:{{ env.MODELSELL_MODEL | default('missing-modelsell-model', true) }}"
     config:
       apiBaseUrl: https://modelsell.com/v1
-      apiKey: "{{ env.MODELSELL_API_KEY | default('missing-modelsell-api-key', true) }}"
+      apiKeyEnvar: MODELSELL_API_KEY
+      headers:
+        OpenAI-Organization: ""
 ```
 
-The fallback values make missing or blank Modelsell settings fail predictably instead of selecting Promptfoo's default OpenAI model or causing the generic provider to reuse `OPENAI_API_KEY`. Create a [Modelsell API key](https://modelsell.com/console/token), then set `MODELSELL_MODEL` to an exact model ID returned by the authenticated [`GET /v1/models`](https://modelsell.com/docs/api-reference/%E8%B4%A6%E6%88%B7%E7%AE%A1%E7%90%86/listModels) endpoint. The available catalog can vary by account, so avoid hard-coding a model ID in shared configs.
+Create a [Modelsell API key](https://modelsell.com/console/token), then set `MODELSELL_MODEL` to an exact model ID returned by the authenticated [`GET /v1/models`](https://modelsell.com/docs/api-reference/%E8%B4%A6%E6%88%B7%E7%AE%A1%E7%90%86/listModels) endpoint. The available catalog can vary by account, so avoid hard-coding a model ID in shared configs.
 
 :::warning
 
-Run Modelsell evals with `OPENAI_ORGANIZATION` unset. The generic OpenAI provider forwards this variable to custom endpoints, where it can disclose your OpenAI organization identifier.
+If `MODELSELL_API_KEY` is missing or empty, the provider stops with a missing-key error. The empty `OpenAI-Organization` header suppresses any inherited organization identifier.
 
 :::
 
