@@ -286,6 +286,12 @@ describe('filterTests', () => {
       it.each([
         { filter: 'id=1,3', values: [1, 3, 10, 2], expected: [1, 3, 10] },
         { filter: 'id=false,true', values: [false, true, 0], expected: [false, true] },
+        { filter: 'id=null', values: [null, [null], 'null'], expected: ['null'] },
+        {
+          filter: 'id=0,false',
+          values: [null, 0, [null, 0], [null, false], true],
+          expected: [0, [null, 0], [null, false]],
+        },
         { filter: 'id=a=1,b=2', values: ['a=1', 'b=2', 'a=2'], expected: ['a=1', 'b=2'] },
         { filter: 'id=dev, prod', values: ['dev', 'prod', ' prod'], expected: ['dev', ' prod'] },
       ])('should preserve value matching for $filter', async ({ filter, values, expected }) => {
