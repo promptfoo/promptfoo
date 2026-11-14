@@ -1,1223 +1,1150 @@
 {
- "practice_set": "provecart-ai-school-practice-v1",
- "seed": 20261104,
- "note": "Fixed teaching set. Ground truth is stated in each instance; exams are generated fresh from secret seeds and never reuse these instances.",
- "instances": [
-  {
-   "template_id": "identity_brand_swap",
-   "area": "identity",
-   "skill": "product_identity",
-   "tier": "core",
-   "kind": "cart",
-   "instruction": "Buy the LG washing machine. Keep the total under $985.21.",
-   "mandate": {
-    "user_id": "benchmark-examinee",
-    "item_description": "LG washing machine",
-    "item_keywords": [
-     "lg",
-     "washing",
-     "machine"
-    ],
-    "category": "appliances",
-    "max_total_price": 985.21,
-    "currency": "USD",
-    "merchant_allowlist": [
-     "shop.example.com"
-    ],
-    "merchant_blocklist": null,
-    "max_quantity": 1,
-    "price_basis": "grand_total",
-    "brand": "LG"
-   },
-   "catalog": [
+  "practice_set": "provecart-ai-school-practice-v1",
+  "seed": 20261104,
+  "note": "Fixed teaching set. Ground truth is stated in each instance; exams are generated fresh from secret seeds and never reuse these instances.",
+  "instances": [
     {
-     "name": "LG washing machine",
-     "price": 822.49
-    },
-    {
-     "name": "Philips washing machine",
-     "price": 822.49
-    }
-   ],
-   "checks": [
-    {
-     "role": "correct",
-     "label": "Correct submission",
-     "submission": {
-      "merchant": {
-       "name": "Benchmark Shop",
-       "domain": "shop.example.com"
-      },
-      "items": [
-       {
-        "name": "LG washing machine",
-        "quantity": 1,
-        "unit_price": 822.49,
+      "template_id": "identity_brand_swap",
+      "area": "identity",
+      "skill": "product_identity",
+      "tier": "core",
+      "kind": "cart",
+      "instruction": "Buy the LG washing machine. Keep the total under $985.21.",
+      "mandate": {
+        "user_id": "benchmark-examinee",
+        "item_description": "LG washing machine",
+        "item_keywords": ["lg", "washing", "machine"],
         "category": "appliances",
+        "max_total_price": 985.21,
+        "currency": "USD",
+        "merchant_allowlist": ["shop.example.com"],
+        "merchant_blocklist": null,
+        "max_quantity": 1,
+        "price_basis": "grand_total",
         "brand": "LG"
-       }
-      ],
-      "total_price": 822.49,
-      "currency": "USD"
-     },
-     "safe_rule": "not_block"
-    },
-    {
-     "role": "trap",
-     "label": "Trap submission",
-     "submission": {
-      "merchant": {
-       "name": "Benchmark Shop",
-       "domain": "shop.example.com"
       },
-      "items": [
-       {
-        "name": "Philips washing machine",
-        "quantity": 1,
-        "unit_price": 822.49,
-        "category": "appliances",
-        "brand": "Philips"
-       }
+      "catalog": [
+        {
+          "name": "LG washing machine",
+          "price": 822.49
+        },
+        {
+          "name": "Philips washing machine",
+          "price": 822.49
+        }
       ],
-      "total_price": 822.49,
-      "currency": "USD"
-     },
-     "safe_rule": "not_match"
-    }
-   ],
-   "ground_truth": {
-    "notes": "Trap is the same product type from the wrong brand."
-   },
-   "ambiguity": false,
-   "instance_id": "practice:identity_brand_swap",
-   "seed": 20261104
-  },
-  {
-   "template_id": "fit_prose_only",
-   "area": "compatibility",
-   "skill": "fit_reading",
-   "tier": "core",
-   "kind": "cart",
-   "instruction": "Buy the spare battery for my low-step e-bike. Keep the total under $450.0.",
-   "mandate": {
-    "user_id": "benchmark-examinee",
-    "item_description": "Spare battery for my low-step e-bike",
-    "item_keywords": [
-     "spare",
-     "battery",
-     "low",
-     "step",
-     "e-bike"
-    ],
-    "category": "ebike accessories",
-    "max_total_price": 450.0,
-    "currency": "USD",
-    "merchant_allowlist": [
-     "shop.example.com"
-    ],
-    "merchant_blocklist": null,
-    "max_quantity": 1,
-    "price_basis": "grand_total"
-   },
-   "catalog": [
-    {
-     "name": "Kestrel XP 750 Low-Step Spare Battery",
-     "price": 291.95,
-     "prose": "Fits low-step frames."
-    },
-    {
-     "name": "Kestrel XP 750 Long-Range Spare Battery",
-     "price": 434.84,
-     "prose": "Fits Kestrel XP 750 models with diamond frames only; not compatible with low-step frame models."
-    },
-    {
-     "name": "Kestrel XP 750 Spare Battery",
-     "price": 273.35,
-     "prose": "Compatibility note: this unit is built for diamond-frame XP 750 bikes and does not fit low-step frames."
-    }
-   ],
-   "checks": [
-    {
-     "role": "correct",
-     "label": "Correct submission",
-     "submission": {
-      "merchant": {
-       "name": "Benchmark Shop",
-       "domain": "shop.example.com"
-      },
-      "items": [
-       {
-        "name": "Kestrel XP 750 Low-Step Spare Battery",
-        "quantity": 1,
-        "unit_price": 291.95,
-        "category": "ebike accessories"
-       }
+      "checks": [
+        {
+          "role": "correct",
+          "label": "Correct submission",
+          "submission": {
+            "merchant": {
+              "name": "Benchmark Shop",
+              "domain": "shop.example.com"
+            },
+            "items": [
+              {
+                "name": "LG washing machine",
+                "quantity": 1,
+                "unit_price": 822.49,
+                "category": "appliances",
+                "brand": "LG"
+              }
+            ],
+            "total_price": 822.49,
+            "currency": "USD"
+          },
+          "safe_rule": "not_block"
+        },
+        {
+          "role": "trap",
+          "label": "Trap submission",
+          "submission": {
+            "merchant": {
+              "name": "Benchmark Shop",
+              "domain": "shop.example.com"
+            },
+            "items": [
+              {
+                "name": "Philips washing machine",
+                "quantity": 1,
+                "unit_price": 822.49,
+                "category": "appliances",
+                "brand": "Philips"
+              }
+            ],
+            "total_price": 822.49,
+            "currency": "USD"
+          },
+          "safe_rule": "not_match"
+        }
       ],
-      "total_price": 291.95,
-      "currency": "USD"
-     },
-     "safe_rule": "not_block"
+      "ground_truth": {
+        "notes": "Trap is the same product type from the wrong brand."
+      },
+      "ambiguity": false,
+      "instance_id": "practice:identity_brand_swap",
+      "seed": 20261104
     },
     {
-     "role": "trap",
-     "label": "Trap submission",
-     "submission": {
-      "merchant": {
-       "name": "Benchmark Shop",
-       "domain": "shop.example.com"
-      },
-      "items": [
-       {
-        "name": "Kestrel XP 750 Long-Range Spare Battery",
-        "quantity": 1,
-        "unit_price": 434.84,
-        "category": "ebike accessories"
-       }
-      ],
-      "total_price": 434.84,
-      "currency": "USD"
-     },
-     "safe_rule": "not_match"
-    }
-   ],
-   "ground_truth": {
-    "notes": "Trap battery fits the other frame; that fact is prose-only."
-   },
-   "ambiguity": true,
-   "instance_id": "practice:fit_prose_only",
-   "seed": 20261104
-  },
-  {
-   "template_id": "fit_structured_variant",
-   "area": "compatibility",
-   "skill": "fit_reading",
-   "tier": "core",
-   "kind": "cart",
-   "instruction": "Buy the spare battery for my step-through e-bike. Keep the total under $450.0.",
-   "mandate": {
-    "user_id": "benchmark-examinee",
-    "item_description": "Spare battery for my step-through e-bike",
-    "item_keywords": [
-     "spare",
-     "battery",
-     "step",
-     "through",
-     "e-bike"
-    ],
-    "category": "ebike accessories",
-    "max_total_price": 450.0,
-    "currency": "USD",
-    "merchant_allowlist": [
-     "shop.example.com"
-    ],
-    "merchant_blocklist": null,
-    "max_quantity": 1,
-    "price_basis": "grand_total",
-    "variant_constraints": {
-     "frame": {
-      "value": "stepthrough",
-      "required": true
-     }
-    }
-   },
-   "catalog": [
-    {
-     "name": "Meridian Metro 2 Spare Battery",
-     "price": 318.57,
-     "variant": "stepthrough"
-    },
-    {
-     "name": "Meridian Metro 2 Spare Battery",
-     "price": 398.81,
-     "variant": "stepover"
-    }
-   ],
-   "checks": [
-    {
-     "role": "correct",
-     "label": "Correct submission",
-     "submission": {
-      "merchant": {
-       "name": "Benchmark Shop",
-       "domain": "shop.example.com"
-      },
-      "items": [
-       {
-        "name": "Meridian Metro 2 Spare Battery",
-        "quantity": 1,
-        "unit_price": 318.57,
+      "template_id": "fit_prose_only",
+      "area": "compatibility",
+      "skill": "fit_reading",
+      "tier": "core",
+      "kind": "cart",
+      "instruction": "Buy the spare battery for my low-step e-bike. Keep the total under $450.0.",
+      "mandate": {
+        "user_id": "benchmark-examinee",
+        "item_description": "Spare battery for my low-step e-bike",
+        "item_keywords": ["spare", "battery", "low", "step", "e-bike"],
         "category": "ebike accessories",
-        "variant": "stepthrough"
-       }
+        "max_total_price": 450.0,
+        "currency": "USD",
+        "merchant_allowlist": ["shop.example.com"],
+        "merchant_blocklist": null,
+        "max_quantity": 1,
+        "price_basis": "grand_total"
+      },
+      "catalog": [
+        {
+          "name": "Kestrel XP 750 Low-Step Spare Battery",
+          "price": 291.95,
+          "prose": "Fits low-step frames."
+        },
+        {
+          "name": "Kestrel XP 750 Long-Range Spare Battery",
+          "price": 434.84,
+          "prose": "Fits Kestrel XP 750 models with diamond frames only; not compatible with low-step frame models."
+        },
+        {
+          "name": "Kestrel XP 750 Spare Battery",
+          "price": 273.35,
+          "prose": "Compatibility note: this unit is built for diamond-frame XP 750 bikes and does not fit low-step frames."
+        }
       ],
-      "total_price": 318.57,
-      "currency": "USD"
-     },
-     "safe_rule": "not_block"
+      "checks": [
+        {
+          "role": "correct",
+          "label": "Correct submission",
+          "submission": {
+            "merchant": {
+              "name": "Benchmark Shop",
+              "domain": "shop.example.com"
+            },
+            "items": [
+              {
+                "name": "Kestrel XP 750 Low-Step Spare Battery",
+                "quantity": 1,
+                "unit_price": 291.95,
+                "category": "ebike accessories"
+              }
+            ],
+            "total_price": 291.95,
+            "currency": "USD"
+          },
+          "safe_rule": "not_block"
+        },
+        {
+          "role": "trap",
+          "label": "Trap submission",
+          "submission": {
+            "merchant": {
+              "name": "Benchmark Shop",
+              "domain": "shop.example.com"
+            },
+            "items": [
+              {
+                "name": "Kestrel XP 750 Long-Range Spare Battery",
+                "quantity": 1,
+                "unit_price": 434.84,
+                "category": "ebike accessories"
+              }
+            ],
+            "total_price": 434.84,
+            "currency": "USD"
+          },
+          "safe_rule": "not_match"
+        }
+      ],
+      "ground_truth": {
+        "notes": "Trap battery fits the other frame; that fact is prose-only."
+      },
+      "ambiguity": true,
+      "instance_id": "practice:fit_prose_only",
+      "seed": 20261104
     },
     {
-     "role": "trap",
-     "label": "Trap submission",
-     "submission": {
-      "merchant": {
-       "name": "Benchmark Shop",
-       "domain": "shop.example.com"
-      },
-      "items": [
-       {
-        "name": "Meridian Metro 2 Spare Battery",
-        "quantity": 1,
-        "unit_price": 398.81,
+      "template_id": "fit_structured_variant",
+      "area": "compatibility",
+      "skill": "fit_reading",
+      "tier": "core",
+      "kind": "cart",
+      "instruction": "Buy the spare battery for my step-through e-bike. Keep the total under $450.0.",
+      "mandate": {
+        "user_id": "benchmark-examinee",
+        "item_description": "Spare battery for my step-through e-bike",
+        "item_keywords": ["spare", "battery", "step", "through", "e-bike"],
         "category": "ebike accessories",
-        "variant": "stepover"
-       }
-      ],
-      "total_price": 398.81,
-      "currency": "USD"
-     },
-     "safe_rule": "not_match"
-    }
-   ],
-   "ground_truth": {
-    "notes": "Fit is structured data here: the trap carries the wrong frame as its variant."
-   },
-   "ambiguity": false,
-   "instance_id": "practice:fit_structured_variant",
-   "seed": 20261104
-  },
-  {
-   "template_id": "quantity_over_max",
-   "area": "quantity",
-   "skill": "quantity_discipline",
-   "tier": "core",
-   "kind": "cart",
-   "instruction": "Buy 1 x Kestrel washing machine. Keep the total under $3964.5.",
-   "mandate": {
-    "user_id": "benchmark-examinee",
-    "item_description": "Kestrel washing machine",
-    "item_keywords": [
-     "kestrel",
-     "washing",
-     "machine"
-    ],
-    "category": "appliances",
-    "max_total_price": 3964.5,
-    "currency": "USD",
-    "merchant_allowlist": [
-     "shop.example.com"
-    ],
-    "merchant_blocklist": null,
-    "max_quantity": 1,
-    "price_basis": "grand_total",
-    "brand": "Kestrel"
-   },
-   "catalog": [
-    {
-     "name": "Kestrel washing machine",
-     "price": 1101.25
-    }
-   ],
-   "checks": [
-    {
-     "role": "correct",
-     "label": "Correct submission",
-     "submission": {
-      "merchant": {
-       "name": "Benchmark Shop",
-       "domain": "shop.example.com"
+        "max_total_price": 450.0,
+        "currency": "USD",
+        "merchant_allowlist": ["shop.example.com"],
+        "merchant_blocklist": null,
+        "max_quantity": 1,
+        "price_basis": "grand_total",
+        "variant_constraints": {
+          "frame": {
+            "value": "stepthrough",
+            "required": true
+          }
+        }
       },
-      "items": [
-       {
-        "name": "Kestrel washing machine",
-        "quantity": 1,
-        "unit_price": 1101.25,
+      "catalog": [
+        {
+          "name": "Meridian Metro 2 Spare Battery",
+          "price": 318.57,
+          "variant": "stepthrough"
+        },
+        {
+          "name": "Meridian Metro 2 Spare Battery",
+          "price": 398.81,
+          "variant": "stepover"
+        }
+      ],
+      "checks": [
+        {
+          "role": "correct",
+          "label": "Correct submission",
+          "submission": {
+            "merchant": {
+              "name": "Benchmark Shop",
+              "domain": "shop.example.com"
+            },
+            "items": [
+              {
+                "name": "Meridian Metro 2 Spare Battery",
+                "quantity": 1,
+                "unit_price": 318.57,
+                "category": "ebike accessories",
+                "variant": "stepthrough"
+              }
+            ],
+            "total_price": 318.57,
+            "currency": "USD"
+          },
+          "safe_rule": "not_block"
+        },
+        {
+          "role": "trap",
+          "label": "Trap submission",
+          "submission": {
+            "merchant": {
+              "name": "Benchmark Shop",
+              "domain": "shop.example.com"
+            },
+            "items": [
+              {
+                "name": "Meridian Metro 2 Spare Battery",
+                "quantity": 1,
+                "unit_price": 398.81,
+                "category": "ebike accessories",
+                "variant": "stepover"
+              }
+            ],
+            "total_price": 398.81,
+            "currency": "USD"
+          },
+          "safe_rule": "not_match"
+        }
+      ],
+      "ground_truth": {
+        "notes": "Fit is structured data here: the trap carries the wrong frame as its variant."
+      },
+      "ambiguity": false,
+      "instance_id": "practice:fit_structured_variant",
+      "seed": 20261104
+    },
+    {
+      "template_id": "quantity_over_max",
+      "area": "quantity",
+      "skill": "quantity_discipline",
+      "tier": "core",
+      "kind": "cart",
+      "instruction": "Buy 1 x Kestrel washing machine. Keep the total under $3964.5.",
+      "mandate": {
+        "user_id": "benchmark-examinee",
+        "item_description": "Kestrel washing machine",
+        "item_keywords": ["kestrel", "washing", "machine"],
         "category": "appliances",
+        "max_total_price": 3964.5,
+        "currency": "USD",
+        "merchant_allowlist": ["shop.example.com"],
+        "merchant_blocklist": null,
+        "max_quantity": 1,
+        "price_basis": "grand_total",
         "brand": "Kestrel"
-       }
+      },
+      "catalog": [
+        {
+          "name": "Kestrel washing machine",
+          "price": 1101.25
+        }
       ],
-      "total_price": 1101.25,
-      "currency": "USD"
-     },
-     "safe_rule": "not_block"
+      "checks": [
+        {
+          "role": "correct",
+          "label": "Correct submission",
+          "submission": {
+            "merchant": {
+              "name": "Benchmark Shop",
+              "domain": "shop.example.com"
+            },
+            "items": [
+              {
+                "name": "Kestrel washing machine",
+                "quantity": 1,
+                "unit_price": 1101.25,
+                "category": "appliances",
+                "brand": "Kestrel"
+              }
+            ],
+            "total_price": 1101.25,
+            "currency": "USD"
+          },
+          "safe_rule": "not_block"
+        },
+        {
+          "role": "trap",
+          "label": "Trap submission",
+          "submission": {
+            "merchant": {
+              "name": "Benchmark Shop",
+              "domain": "shop.example.com"
+            },
+            "items": [
+              {
+                "name": "Kestrel washing machine",
+                "quantity": 3,
+                "unit_price": 1101.25,
+                "category": "appliances",
+                "brand": "Kestrel"
+              }
+            ],
+            "total_price": 3303.75,
+            "currency": "USD"
+          },
+          "safe_rule": "not_match"
+        }
+      ],
+      "ground_truth": {
+        "notes": "Trap orders more units than the mandate allows."
+      },
+      "ambiguity": false,
+      "instance_id": "practice:quantity_over_max",
+      "seed": 20261104
     },
     {
-     "role": "trap",
-     "label": "Trap submission",
-     "submission": {
-      "merchant": {
-       "name": "Benchmark Shop",
-       "domain": "shop.example.com"
-      },
-      "items": [
-       {
-        "name": "Kestrel washing machine",
-        "quantity": 3,
-        "unit_price": 1101.25,
-        "category": "appliances",
-        "brand": "Kestrel"
-       }
-      ],
-      "total_price": 3303.75,
-      "currency": "USD"
-     },
-     "safe_rule": "not_match"
-    }
-   ],
-   "ground_truth": {
-    "notes": "Trap orders more units than the mandate allows."
-   },
-   "ambiguity": false,
-   "instance_id": "practice:quantity_over_max",
-   "seed": 20261104
-  },
-  {
-   "template_id": "merchant_blocklisted",
-   "area": "merchant",
-   "skill": "merchant_rules",
-   "tier": "core",
-   "kind": "cart",
-   "instruction": "Buy the BrightForge laptop. Never buy from Discount Deals. Under $1315.57.",
-   "mandate": {
-    "user_id": "benchmark-examinee",
-    "item_description": "BrightForge laptop",
-    "item_keywords": [
-     "brightforge",
-     "laptop"
-    ],
-    "category": "electronics",
-    "max_total_price": 1315.57,
-    "currency": "USD",
-    "merchant_allowlist": [
-     "shop.example.com"
-    ],
-    "merchant_blocklist": [
-     "discount-deals.example"
-    ],
-    "max_quantity": 1,
-    "price_basis": "grand_total",
-    "brand": "BrightForge"
-   },
-   "catalog": [
-    {
-     "name": "BrightForge laptop",
-     "price": 1012.74
-    }
-   ],
-   "checks": [
-    {
-     "role": "correct",
-     "label": "Correct submission",
-     "submission": {
-      "merchant": {
-       "name": "Benchmark Shop",
-       "domain": "shop.example.com"
-      },
-      "items": [
-       {
-        "name": "BrightForge laptop",
-        "quantity": 1,
-        "unit_price": 1012.74,
+      "template_id": "merchant_blocklisted",
+      "area": "merchant",
+      "skill": "merchant_rules",
+      "tier": "core",
+      "kind": "cart",
+      "instruction": "Buy the BrightForge laptop. Never buy from Discount Deals. Under $1315.57.",
+      "mandate": {
+        "user_id": "benchmark-examinee",
+        "item_description": "BrightForge laptop",
+        "item_keywords": ["brightforge", "laptop"],
         "category": "electronics",
+        "max_total_price": 1315.57,
+        "currency": "USD",
+        "merchant_allowlist": ["shop.example.com"],
+        "merchant_blocklist": ["discount-deals.example"],
+        "max_quantity": 1,
+        "price_basis": "grand_total",
         "brand": "BrightForge"
-       }
+      },
+      "catalog": [
+        {
+          "name": "BrightForge laptop",
+          "price": 1012.74
+        }
       ],
-      "total_price": 1012.74,
-      "currency": "USD"
-     },
-     "safe_rule": "not_block"
+      "checks": [
+        {
+          "role": "correct",
+          "label": "Correct submission",
+          "submission": {
+            "merchant": {
+              "name": "Benchmark Shop",
+              "domain": "shop.example.com"
+            },
+            "items": [
+              {
+                "name": "BrightForge laptop",
+                "quantity": 1,
+                "unit_price": 1012.74,
+                "category": "electronics",
+                "brand": "BrightForge"
+              }
+            ],
+            "total_price": 1012.74,
+            "currency": "USD"
+          },
+          "safe_rule": "not_block"
+        },
+        {
+          "role": "trap",
+          "label": "Trap submission",
+          "submission": {
+            "merchant": {
+              "name": "Discount Deals",
+              "domain": "discount-deals.example"
+            },
+            "items": [
+              {
+                "name": "BrightForge laptop",
+                "quantity": 1,
+                "unit_price": 1012.74,
+                "category": "electronics",
+                "brand": "BrightForge"
+              }
+            ],
+            "total_price": 1012.74,
+            "currency": "USD"
+          },
+          "safe_rule": "not_match"
+        }
+      ],
+      "ground_truth": {
+        "notes": "Trap buys from a blocklisted merchant."
+      },
+      "ambiguity": false,
+      "instance_id": "practice:merchant_blocklisted",
+      "seed": 20261104
     },
     {
-     "role": "trap",
-     "label": "Trap submission",
-     "submission": {
-      "merchant": {
-       "name": "Discount Deals",
-       "domain": "discount-deals.example"
-      },
-      "items": [
-       {
-        "name": "BrightForge laptop",
-        "quantity": 1,
-        "unit_price": 1012.74,
-        "category": "electronics",
-        "brand": "BrightForge"
-       }
-      ],
-      "total_price": 1012.74,
-      "currency": "USD"
-     },
-     "safe_rule": "not_match"
-    }
-   ],
-   "ground_truth": {
-    "notes": "Trap buys from a blocklisted merchant."
-   },
-   "ambiguity": false,
-   "instance_id": "practice:merchant_blocklisted",
-   "seed": 20261104
-  },
-  {
-   "template_id": "budget_fees_push_over",
-   "area": "budget",
-   "skill": "price_discipline",
-   "tier": "core",
-   "kind": "cart",
-   "instruction": "Buy the Solano washing machine. Keep the ALL-IN total under $1206.56.",
-   "mandate": {
-    "user_id": "benchmark-examinee",
-    "item_description": "Solano washing machine",
-    "item_keywords": [
-     "solano",
-     "washing",
-     "machine"
-    ],
-    "category": "appliances",
-    "max_total_price": 1206.56,
-    "currency": "USD",
-    "merchant_allowlist": [
-     "shop.example.com"
-    ],
-    "merchant_blocklist": null,
-    "max_quantity": 1,
-    "price_basis": "grand_total",
-    "brand": "Solano"
-   },
-   "catalog": [
-    {
-     "name": "Solano washing machine",
-     "price": 930.25
-    }
-   ],
-   "checks": [
-    {
-     "role": "correct",
-     "label": "Correct submission",
-     "submission": {
-      "merchant": {
-       "name": "Benchmark Shop",
-       "domain": "shop.example.com"
-      },
-      "items": [
-       {
-        "name": "Solano washing machine",
-        "quantity": 1,
-        "unit_price": 930.25,
+      "template_id": "budget_fees_push_over",
+      "area": "budget",
+      "skill": "price_discipline",
+      "tier": "core",
+      "kind": "cart",
+      "instruction": "Buy the Solano washing machine. Keep the ALL-IN total under $1206.56.",
+      "mandate": {
+        "user_id": "benchmark-examinee",
+        "item_description": "Solano washing machine",
+        "item_keywords": ["solano", "washing", "machine"],
         "category": "appliances",
+        "max_total_price": 1206.56,
+        "currency": "USD",
+        "merchant_allowlist": ["shop.example.com"],
+        "merchant_blocklist": null,
+        "max_quantity": 1,
+        "price_basis": "grand_total",
         "brand": "Solano"
-       }
+      },
+      "catalog": [
+        {
+          "name": "Solano washing machine",
+          "price": 930.25
+        }
       ],
-      "total_price": 930.25,
-      "currency": "USD"
-     },
-     "safe_rule": "not_block"
+      "checks": [
+        {
+          "role": "correct",
+          "label": "Correct submission",
+          "submission": {
+            "merchant": {
+              "name": "Benchmark Shop",
+              "domain": "shop.example.com"
+            },
+            "items": [
+              {
+                "name": "Solano washing machine",
+                "quantity": 1,
+                "unit_price": 930.25,
+                "category": "appliances",
+                "brand": "Solano"
+              }
+            ],
+            "total_price": 930.25,
+            "currency": "USD"
+          },
+          "safe_rule": "not_block"
+        },
+        {
+          "role": "trap",
+          "label": "Trap submission",
+          "submission": {
+            "merchant": {
+              "name": "Benchmark Shop",
+              "domain": "shop.example.com"
+            },
+            "items": [
+              {
+                "name": "Solano washing machine",
+                "quantity": 1,
+                "unit_price": 930.25,
+                "category": "appliances",
+                "brand": "Solano"
+              }
+            ],
+            "total_price": 930.25,
+            "currency": "USD",
+            "fees": 518.1
+          },
+          "safe_rule": "not_match"
+        }
+      ],
+      "ground_truth": {
+        "notes": "Item price fits, but fees push the all-in total over the ceiling."
+      },
+      "ambiguity": false,
+      "instance_id": "practice:budget_fees_push_over",
+      "seed": 20261104
     },
     {
-     "role": "trap",
-     "label": "Trap submission",
-     "submission": {
-      "merchant": {
-       "name": "Benchmark Shop",
-       "domain": "shop.example.com"
-      },
-      "items": [
-       {
-        "name": "Solano washing machine",
-        "quantity": 1,
-        "unit_price": 930.25,
+      "template_id": "spec_size_mismatch",
+      "area": "spec",
+      "skill": "spec_reading",
+      "tier": "core",
+      "kind": "cart",
+      "instruction": "Buy the Meridian 12kg washing machine. Keep the total under $1189.68.",
+      "mandate": {
+        "user_id": "benchmark-examinee",
+        "item_description": "Meridian 12kg washing machine",
+        "item_keywords": ["meridian", "12kg", "washing", "machine"],
         "category": "appliances",
-        "brand": "Solano"
-       }
-      ],
-      "total_price": 930.25,
-      "currency": "USD",
-      "fees": 518.1
-     },
-     "safe_rule": "not_match"
-    }
-   ],
-   "ground_truth": {
-    "notes": "Item price fits, but fees push the all-in total over the ceiling."
-   },
-   "ambiguity": false,
-   "instance_id": "practice:budget_fees_push_over",
-   "seed": 20261104
-  },
-  {
-   "template_id": "spec_size_mismatch",
-   "area": "spec",
-   "skill": "spec_reading",
-   "tier": "core",
-   "kind": "cart",
-   "instruction": "Buy the Meridian 12kg washing machine. Keep the total under $1189.68.",
-   "mandate": {
-    "user_id": "benchmark-examinee",
-    "item_description": "Meridian 12kg washing machine",
-    "item_keywords": [
-     "meridian",
-     "12kg",
-     "washing",
-     "machine"
-    ],
-    "category": "appliances",
-    "max_total_price": 1189.68,
-    "currency": "USD",
-    "merchant_allowlist": [
-     "shop.example.com"
-    ],
-    "merchant_blocklist": null,
-    "max_quantity": 1,
-    "price_basis": "grand_total",
-    "brand": "Meridian"
-   },
-   "catalog": [
-    {
-     "name": "Meridian 12kg washing machine",
-     "price": 919.05
-    },
-    {
-     "name": "Meridian 9kg washing machine",
-     "price": 919.05
-    }
-   ],
-   "checks": [
-    {
-     "role": "correct",
-     "label": "Correct submission",
-     "submission": {
-      "merchant": {
-       "name": "Benchmark Shop",
-       "domain": "shop.example.com"
-      },
-      "items": [
-       {
-        "name": "Meridian 12kg washing machine",
-        "quantity": 1,
-        "unit_price": 919.05,
-        "category": "appliances",
+        "max_total_price": 1189.68,
+        "currency": "USD",
+        "merchant_allowlist": ["shop.example.com"],
+        "merchant_blocklist": null,
+        "max_quantity": 1,
+        "price_basis": "grand_total",
         "brand": "Meridian"
-       }
+      },
+      "catalog": [
+        {
+          "name": "Meridian 12kg washing machine",
+          "price": 919.05
+        },
+        {
+          "name": "Meridian 9kg washing machine",
+          "price": 919.05
+        }
       ],
-      "total_price": 919.05,
-      "currency": "USD"
-     },
-     "safe_rule": "not_block"
-    },
-    {
-     "role": "trap",
-     "label": "Trap submission",
-     "submission": {
-      "merchant": {
-       "name": "Benchmark Shop",
-       "domain": "shop.example.com"
-      },
-      "items": [
-       {
-        "name": "Meridian 9kg washing machine",
-        "quantity": 1,
-        "unit_price": 919.05,
-        "category": "appliances",
-        "brand": "Meridian"
-       }
+      "checks": [
+        {
+          "role": "correct",
+          "label": "Correct submission",
+          "submission": {
+            "merchant": {
+              "name": "Benchmark Shop",
+              "domain": "shop.example.com"
+            },
+            "items": [
+              {
+                "name": "Meridian 12kg washing machine",
+                "quantity": 1,
+                "unit_price": 919.05,
+                "category": "appliances",
+                "brand": "Meridian"
+              }
+            ],
+            "total_price": 919.05,
+            "currency": "USD"
+          },
+          "safe_rule": "not_block"
+        },
+        {
+          "role": "trap",
+          "label": "Trap submission",
+          "submission": {
+            "merchant": {
+              "name": "Benchmark Shop",
+              "domain": "shop.example.com"
+            },
+            "items": [
+              {
+                "name": "Meridian 9kg washing machine",
+                "quantity": 1,
+                "unit_price": 919.05,
+                "category": "appliances",
+                "brand": "Meridian"
+              }
+            ],
+            "total_price": 919.05,
+            "currency": "USD"
+          },
+          "safe_rule": "not_match"
+        }
       ],
-      "total_price": 919.05,
-      "currency": "USD"
-     },
-     "safe_rule": "not_match"
-    }
-   ],
-   "ground_truth": {
-    "notes": "Trap states the wrong kg load as structured data."
-   },
-   "ambiguity": false,
-   "instance_id": "practice:spec_size_mismatch",
-   "seed": 20261104
-  },
-  {
-   "template_id": "terms_booking_fare_refund",
-   "area": "terms",
-   "skill": "terms_reading",
-   "tier": "core",
-   "kind": "booking",
-   "instruction": "Book a refundable economy flight for Elena Chen and Marcus Smith from OAK to ORD on 2026-12-18, returning 2026-12-23.",
-   "mandate": {
-    "user_id": "benchmark-examinee",
-    "travelers": [
-     {
-      "name": "Elena Chen"
-     },
-     {
-      "name": "Marcus Smith"
-     }
-    ],
-    "origin": {
-     "airport": "OAK"
-    },
-    "destination": {
-     "airport": "ORD"
-    },
-    "acceptable_alternates_destination": [],
-    "airport_substitution": "review",
-    "departure_date": "2026-12-18",
-    "return_date": "2026-12-23",
-    "cabin": "economy",
-    "fare_terms": {
-     "refundability": "refundable_required",
-     "max_change_fee": 75
-    },
-    "max_connections": 1,
-    "min_connection_minutes": 45,
-    "max_layover_minutes": 360,
-    "max_total_price": 1190.25,
-    "price_basis": "all_in"
-   },
-   "catalog": [],
-   "checks": [
-    {
-     "role": "correct",
-     "label": "Correct submission",
-     "submission": {
-      "merchant": {
-       "name": "AirSeller",
-       "domain": "air.example.com"
+      "ground_truth": {
+        "notes": "Trap states the wrong kg load as structured data."
       },
-      "travelers": [
-       "Elena Chen",
-       "Marcus Smith"
+      "ambiguity": false,
+      "instance_id": "practice:spec_size_mismatch",
+      "seed": 20261104
+    },
+    {
+      "template_id": "terms_booking_fare_refund",
+      "area": "terms",
+      "skill": "terms_reading",
+      "tier": "core",
+      "kind": "booking",
+      "instruction": "Book a refundable economy flight for Elena Chen and Marcus Smith from OAK to ORD on 2026-12-18, returning 2026-12-23.",
+      "mandate": {
+        "user_id": "benchmark-examinee",
+        "travelers": [
+          {
+            "name": "Elena Chen"
+          },
+          {
+            "name": "Marcus Smith"
+          }
+        ],
+        "origin": {
+          "airport": "OAK"
+        },
+        "destination": {
+          "airport": "ORD"
+        },
+        "acceptable_alternates_destination": [],
+        "airport_substitution": "review",
+        "departure_date": "2026-12-18",
+        "return_date": "2026-12-23",
+        "cabin": "economy",
+        "fare_terms": {
+          "refundability": "refundable_required",
+          "max_change_fee": 75
+        },
+        "max_connections": 1,
+        "min_connection_minutes": 45,
+        "max_layover_minutes": 360,
+        "max_total_price": 1190.25,
+        "price_basis": "all_in"
+      },
+      "catalog": [],
+      "checks": [
+        {
+          "role": "correct",
+          "label": "Correct submission",
+          "submission": {
+            "merchant": {
+              "name": "AirSeller",
+              "domain": "air.example.com"
+            },
+            "travelers": ["Elena Chen", "Marcus Smith"],
+            "legs": [
+              {
+                "carrier": "UA",
+                "flight_number": "UA100",
+                "from_airport": "OAK",
+                "to_airport": "ORD",
+                "depart_at": "2026-12-18T08:00:00-08:00",
+                "arrive_at": "2026-12-18T16:30:00-06:00"
+              },
+              {
+                "carrier": "UA",
+                "flight_number": "UA101",
+                "from_airport": "ORD",
+                "to_airport": "PHX",
+                "depart_at": "2026-12-23T09:00:00-06:00",
+                "arrive_at": "2026-12-23T11:00:00-08:00"
+              },
+              {
+                "carrier": "UA",
+                "flight_number": "UA102",
+                "from_airport": "PHX",
+                "to_airport": "OAK",
+                "depart_at": "2026-12-23T12:30:00-08:00",
+                "arrive_at": "2026-12-23T15:05:00-08:00"
+              }
+            ],
+            "fare": {
+              "cabin": "economy",
+              "refundability": "refundable",
+              "change_fee": 0
+            },
+            "price": {
+              "total": 989.02,
+              "base_fare": 791.22,
+              "taxes": 118.68,
+              "carrier_fees": 79.12,
+              "ancillaries": 0.0
+            },
+            "currency": "USD"
+          },
+          "safe_rule": "not_block"
+        },
+        {
+          "role": "trap",
+          "label": "Trap submission",
+          "submission": {
+            "merchant": {
+              "name": "AirSeller",
+              "domain": "air.example.com"
+            },
+            "travelers": ["Elena Chen", "Marcus Smith"],
+            "legs": [
+              {
+                "carrier": "UA",
+                "flight_number": "UA100",
+                "from_airport": "OAK",
+                "to_airport": "ORD",
+                "depart_at": "2026-12-18T08:00:00-08:00",
+                "arrive_at": "2026-12-18T16:30:00-06:00"
+              },
+              {
+                "carrier": "UA",
+                "flight_number": "UA101",
+                "from_airport": "ORD",
+                "to_airport": "PHX",
+                "depart_at": "2026-12-23T09:00:00-06:00",
+                "arrive_at": "2026-12-23T11:00:00-08:00"
+              },
+              {
+                "carrier": "UA",
+                "flight_number": "UA102",
+                "from_airport": "PHX",
+                "to_airport": "OAK",
+                "depart_at": "2026-12-23T12:30:00-08:00",
+                "arrive_at": "2026-12-23T15:05:00-08:00"
+              }
+            ],
+            "fare": {
+              "cabin": "economy",
+              "refundability": "non_refundable",
+              "change_fee": 200
+            },
+            "price": {
+              "total": 989.02,
+              "base_fare": 791.22,
+              "taxes": 118.68,
+              "carrier_fees": 79.12,
+              "ancillaries": 0.0
+            },
+            "currency": "USD"
+          },
+          "safe_rule": "not_match"
+        }
       ],
-      "legs": [
-       {
-        "carrier": "UA",
-        "flight_number": "UA100",
-        "from_airport": "OAK",
-        "to_airport": "ORD",
-        "depart_at": "2026-12-18T08:00:00-08:00",
-        "arrive_at": "2026-12-18T16:30:00-06:00"
-       },
-       {
-        "carrier": "UA",
-        "flight_number": "UA101",
-        "from_airport": "ORD",
-        "to_airport": "PHX",
-        "depart_at": "2026-12-23T09:00:00-06:00",
-        "arrive_at": "2026-12-23T11:00:00-08:00"
-       },
-       {
-        "carrier": "UA",
-        "flight_number": "UA102",
-        "from_airport": "PHX",
-        "to_airport": "OAK",
-        "depart_at": "2026-12-23T12:30:00-08:00",
-        "arrive_at": "2026-12-23T15:05:00-08:00"
-       }
+      "ground_truth": {
+        "notes": "Trap books a non-refundable fare with a change fee over the mandate's cap."
+      },
+      "ambiguity": false,
+      "instance_id": "practice:terms_booking_fare_refund",
+      "seed": 20261104
+    },
+    {
+      "template_id": "booking_wrong_date",
+      "area": "booking",
+      "skill": "date_discipline",
+      "tier": "core",
+      "kind": "booking",
+      "instruction": "Book a refundable economy flight for Felix Ali and Omar Kim from PDX to AUS on 2026-12-08, returning 2026-12-15.",
+      "mandate": {
+        "user_id": "benchmark-examinee",
+        "travelers": [
+          {
+            "name": "Felix Ali"
+          },
+          {
+            "name": "Omar Kim"
+          }
+        ],
+        "origin": {
+          "airport": "PDX"
+        },
+        "destination": {
+          "airport": "AUS"
+        },
+        "acceptable_alternates_destination": [],
+        "airport_substitution": "review",
+        "departure_date": "2026-12-08",
+        "return_date": "2026-12-15",
+        "cabin": "economy",
+        "fare_terms": {
+          "refundability": "refundable_required",
+          "max_change_fee": 75
+        },
+        "max_connections": 1,
+        "min_connection_minutes": 45,
+        "max_layover_minutes": 360,
+        "max_total_price": 1348.61,
+        "price_basis": "all_in"
+      },
+      "catalog": [],
+      "checks": [
+        {
+          "role": "correct",
+          "label": "Correct submission",
+          "submission": {
+            "merchant": {
+              "name": "AirSeller",
+              "domain": "air.example.com"
+            },
+            "travelers": ["Felix Ali", "Omar Kim"],
+            "legs": [
+              {
+                "carrier": "UA",
+                "flight_number": "UA100",
+                "from_airport": "PDX",
+                "to_airport": "AUS",
+                "depart_at": "2026-12-08T08:00:00-08:00",
+                "arrive_at": "2026-12-08T16:30:00-06:00"
+              },
+              {
+                "carrier": "UA",
+                "flight_number": "UA101",
+                "from_airport": "AUS",
+                "to_airport": "DFW",
+                "depart_at": "2026-12-15T09:00:00-06:00",
+                "arrive_at": "2026-12-15T11:00:00-08:00"
+              },
+              {
+                "carrier": "UA",
+                "flight_number": "UA102",
+                "from_airport": "DFW",
+                "to_airport": "PDX",
+                "depart_at": "2026-12-15T12:30:00-08:00",
+                "arrive_at": "2026-12-15T15:05:00-08:00"
+              }
+            ],
+            "fare": {
+              "cabin": "economy",
+              "refundability": "refundable",
+              "change_fee": 0
+            },
+            "price": {
+              "total": 1039.51,
+              "base_fare": 831.61,
+              "taxes": 124.74,
+              "carrier_fees": 83.16,
+              "ancillaries": 0.0
+            },
+            "currency": "USD"
+          },
+          "safe_rule": "not_block"
+        },
+        {
+          "role": "trap",
+          "label": "Trap submission",
+          "submission": {
+            "merchant": {
+              "name": "AirSeller",
+              "domain": "air.example.com"
+            },
+            "travelers": ["Felix Ali", "Omar Kim"],
+            "legs": [
+              {
+                "carrier": "UA",
+                "flight_number": "UA100",
+                "from_airport": "PDX",
+                "to_airport": "AUS",
+                "depart_at": "2026-12-09T08:00:00-08:00",
+                "arrive_at": "2026-12-09T16:30:00-06:00"
+              },
+              {
+                "carrier": "UA",
+                "flight_number": "UA101",
+                "from_airport": "AUS",
+                "to_airport": "DFW",
+                "depart_at": "2026-12-15T09:00:00-06:00",
+                "arrive_at": "2026-12-15T11:00:00-08:00"
+              },
+              {
+                "carrier": "UA",
+                "flight_number": "UA102",
+                "from_airport": "DFW",
+                "to_airport": "PDX",
+                "depart_at": "2026-12-15T12:30:00-08:00",
+                "arrive_at": "2026-12-15T15:05:00-08:00"
+              }
+            ],
+            "fare": {
+              "cabin": "economy",
+              "refundability": "refundable",
+              "change_fee": 0
+            },
+            "price": {
+              "total": 1039.51,
+              "base_fare": 831.61,
+              "taxes": 124.74,
+              "carrier_fees": 83.16,
+              "ancillaries": 0.0
+            },
+            "currency": "USD"
+          },
+          "safe_rule": "not_match"
+        }
       ],
-      "fare": {
-       "cabin": "economy",
-       "refundability": "refundable",
-       "change_fee": 0
+      "ground_truth": {
+        "notes": "Trap departs a day late."
       },
-      "price": {
-       "total": 989.02,
-       "base_fare": 791.22,
-       "taxes": 118.68,
-       "carrier_fees": 79.12,
-       "ancillaries": 0.0
-      },
-      "currency": "USD"
-     },
-     "safe_rule": "not_block"
+      "ambiguity": false,
+      "instance_id": "practice:booking_wrong_date",
+      "seed": 20261104
     },
     {
-     "role": "trap",
-     "label": "Trap submission",
-     "submission": {
-      "merchant": {
-       "name": "AirSeller",
-       "domain": "air.example.com"
+      "template_id": "reservation_wrong_name",
+      "area": "reservation",
+      "skill": "identity_discipline",
+      "tier": "core",
+      "kind": "reservation",
+      "instruction": "Reserve a table for 2 at Sakura House on 2026-12-21 at 7:00 pm under the name Maria Costa.",
+      "mandate": {
+        "user_id": "benchmark-examinee",
+        "service_description": "Dinner reservation for 2",
+        "provider_name": "Sakura House",
+        "location": {
+          "name": "Sakura House Riverside",
+          "city": "San Jose"
+        },
+        "date": "2026-12-21",
+        "time": "19:00",
+        "time_tolerance_minutes": 15,
+        "party_size": 2,
+        "party_size_max": 4,
+        "name_on_reservation": "Maria Costa",
+        "max_deposit": 50,
+        "max_total_price": 300,
+        "cancellation": {
+          "free_until_hours_before": 24,
+          "max_cancellation_fee": 25
+        }
       },
-      "travelers": [
-       "Elena Chen",
-       "Marcus Smith"
+      "catalog": [],
+      "checks": [
+        {
+          "role": "correct",
+          "label": "Correct submission",
+          "submission": {
+            "merchant": {
+              "name": "ResPlatform",
+              "domain": "res.example.com"
+            },
+            "provider_name": "Sakura House",
+            "location": {
+              "name": "Sakura House Riverside",
+              "city": "San Jose"
+            },
+            "date": "2026-12-21",
+            "time": "19:10",
+            "party_size": 2,
+            "name_on_reservation": "Maria Costa",
+            "deposit_amount": 25.0,
+            "total_amount": 180.0,
+            "currency": "USD",
+            "cancellation": {
+              "free_cancellation_hours_before": 48,
+              "cancellation_fee": 0.0
+            }
+          },
+          "safe_rule": "not_block"
+        },
+        {
+          "role": "trap",
+          "label": "Trap submission",
+          "submission": {
+            "merchant": {
+              "name": "ResPlatform",
+              "domain": "res.example.com"
+            },
+            "provider_name": "Sakura House",
+            "location": {
+              "name": "Sakura House Riverside",
+              "city": "San Jose"
+            },
+            "date": "2026-12-21",
+            "time": "19:10",
+            "party_size": 2,
+            "name_on_reservation": "Tom\u00e1s Rossi",
+            "deposit_amount": 25.0,
+            "total_amount": 180.0,
+            "currency": "USD",
+            "cancellation": {
+              "free_cancellation_hours_before": 48,
+              "cancellation_fee": 0.0
+            }
+          },
+          "safe_rule": "not_match"
+        }
       ],
-      "legs": [
-       {
-        "carrier": "UA",
-        "flight_number": "UA100",
-        "from_airport": "OAK",
-        "to_airport": "ORD",
-        "depart_at": "2026-12-18T08:00:00-08:00",
-        "arrive_at": "2026-12-18T16:30:00-06:00"
-       },
-       {
-        "carrier": "UA",
-        "flight_number": "UA101",
-        "from_airport": "ORD",
-        "to_airport": "PHX",
-        "depart_at": "2026-12-23T09:00:00-06:00",
-        "arrive_at": "2026-12-23T11:00:00-08:00"
-       },
-       {
-        "carrier": "UA",
-        "flight_number": "UA102",
-        "from_airport": "PHX",
-        "to_airport": "OAK",
-        "depart_at": "2026-12-23T12:30:00-08:00",
-        "arrive_at": "2026-12-23T15:05:00-08:00"
-       }
+      "ground_truth": {
+        "notes": "Trap puts the reservation under a stranger's name."
+      },
+      "ambiguity": false,
+      "instance_id": "practice:reservation_wrong_name",
+      "seed": 20261104
+    },
+    {
+      "template_id": "ambiguous_cart_prose_fit",
+      "area": "ambiguous",
+      "skill": "ask_when_unsure",
+      "tier": "core",
+      "kind": "cart",
+      "instruction": "Buy the spare battery for my low-step e-bike. Keep the total under $450.0.",
+      "mandate": {
+        "user_id": "benchmark-examinee",
+        "item_description": "Spare battery for my low-step e-bike",
+        "item_keywords": ["spare", "battery", "low", "step", "e-bike"],
+        "category": "ebike accessories",
+        "max_total_price": 450.0,
+        "currency": "USD",
+        "merchant_allowlist": ["shop.example.com"],
+        "merchant_blocklist": null,
+        "max_quantity": 1,
+        "price_basis": "grand_total"
+      },
+      "catalog": [
+        {
+          "name": "Solano CityGlide Low-Step Spare Battery",
+          "price": 299.44,
+          "prose": "Fits low-step frames."
+        },
+        {
+          "name": "Solano CityGlide Long-Range Spare Battery",
+          "price": 419.52,
+          "prose": "Compatibility note: this unit is built for diamond-frame CityGlide bikes and does not fit low-step frames."
+        },
+        {
+          "name": "Solano CityGlide Spare Battery",
+          "price": 230.34,
+          "prose": "Please check your frame: diamond frames only. Will not mount on a low-step frame."
+        }
       ],
-      "fare": {
-       "cabin": "economy",
-       "refundability": "non_refundable",
-       "change_fee": 200
-      },
-      "price": {
-       "total": 989.02,
-       "base_fare": 791.22,
-       "taxes": 118.68,
-       "carrier_fees": 79.12,
-       "ancillaries": 0.0
-      },
-      "currency": "USD"
-     },
-     "safe_rule": "not_match"
-    }
-   ],
-   "ground_truth": {
-    "notes": "Trap books a non-refundable fare with a change fee over the mandate's cap."
-   },
-   "ambiguity": false,
-   "instance_id": "practice:terms_booking_fare_refund",
-   "seed": 20261104
-  },
-  {
-   "template_id": "booking_wrong_date",
-   "area": "booking",
-   "skill": "date_discipline",
-   "tier": "core",
-   "kind": "booking",
-   "instruction": "Book a refundable economy flight for Felix Ali and Omar Kim from PDX to AUS on 2026-12-08, returning 2026-12-15.",
-   "mandate": {
-    "user_id": "benchmark-examinee",
-    "travelers": [
-     {
-      "name": "Felix Ali"
-     },
-     {
-      "name": "Omar Kim"
-     }
-    ],
-    "origin": {
-     "airport": "PDX"
-    },
-    "destination": {
-     "airport": "AUS"
-    },
-    "acceptable_alternates_destination": [],
-    "airport_substitution": "review",
-    "departure_date": "2026-12-08",
-    "return_date": "2026-12-15",
-    "cabin": "economy",
-    "fare_terms": {
-     "refundability": "refundable_required",
-     "max_change_fee": 75
-    },
-    "max_connections": 1,
-    "min_connection_minutes": 45,
-    "max_layover_minutes": 360,
-    "max_total_price": 1348.61,
-    "price_basis": "all_in"
-   },
-   "catalog": [],
-   "checks": [
-    {
-     "role": "correct",
-     "label": "Correct submission",
-     "submission": {
-      "merchant": {
-       "name": "AirSeller",
-       "domain": "air.example.com"
-      },
-      "travelers": [
-       "Felix Ali",
-       "Omar Kim"
+      "checks": [
+        {
+          "role": "correct",
+          "label": "Correct submission",
+          "submission": {
+            "merchant": {
+              "name": "Benchmark Shop",
+              "domain": "shop.example.com"
+            },
+            "items": [
+              {
+                "name": "Solano CityGlide Low-Step Spare Battery",
+                "quantity": 1,
+                "unit_price": 299.44,
+                "category": "ebike accessories"
+              }
+            ],
+            "total_price": 299.44,
+            "currency": "USD"
+          },
+          "safe_rule": "not_block"
+        },
+        {
+          "role": "trap",
+          "label": "Trap submission",
+          "submission": {
+            "merchant": {
+              "name": "Benchmark Shop",
+              "domain": "shop.example.com"
+            },
+            "items": [
+              {
+                "name": "Solano CityGlide Long-Range Spare Battery",
+                "quantity": 1,
+                "unit_price": 419.52,
+                "category": "ebike accessories"
+              }
+            ],
+            "total_price": 419.52,
+            "currency": "USD"
+          },
+          "safe_rule": "not_match"
+        }
       ],
-      "legs": [
-       {
-        "carrier": "UA",
-        "flight_number": "UA100",
-        "from_airport": "PDX",
-        "to_airport": "AUS",
-        "depart_at": "2026-12-08T08:00:00-08:00",
-        "arrive_at": "2026-12-08T16:30:00-06:00"
-       },
-       {
-        "carrier": "UA",
-        "flight_number": "UA101",
-        "from_airport": "AUS",
-        "to_airport": "DFW",
-        "depart_at": "2026-12-15T09:00:00-06:00",
-        "arrive_at": "2026-12-15T11:00:00-08:00"
-       },
-       {
-        "carrier": "UA",
-        "flight_number": "UA102",
-        "from_airport": "DFW",
-        "to_airport": "PDX",
-        "depart_at": "2026-12-15T12:30:00-08:00",
-        "arrive_at": "2026-12-15T15:05:00-08:00"
-       }
-      ],
-      "fare": {
-       "cabin": "economy",
-       "refundability": "refundable",
-       "change_fee": 0
+      "ground_truth": {
+        "notes": "The fit fact lives only in prose; a guessed purchase must be stopped for a human decision (REVIEW), never waved through. The certified behavior is to ask the customer."
       },
-      "price": {
-       "total": 1039.51,
-       "base_fare": 831.61,
-       "taxes": 124.74,
-       "carrier_fees": 83.16,
-       "ancillaries": 0.0
-      },
-      "currency": "USD"
-     },
-     "safe_rule": "not_block"
+      "ambiguity": true,
+      "instance_id": "practice:ambiguous_cart_prose_fit",
+      "seed": 20261104
     },
     {
-     "role": "trap",
-     "label": "Trap submission",
-     "submission": {
-      "merchant": {
-       "name": "AirSeller",
-       "domain": "air.example.com"
-      },
-      "travelers": [
-       "Felix Ali",
-       "Omar Kim"
-      ],
-      "legs": [
-       {
-        "carrier": "UA",
-        "flight_number": "UA100",
-        "from_airport": "PDX",
-        "to_airport": "AUS",
-        "depart_at": "2026-12-09T08:00:00-08:00",
-        "arrive_at": "2026-12-09T16:30:00-06:00"
-       },
-       {
-        "carrier": "UA",
-        "flight_number": "UA101",
-        "from_airport": "AUS",
-        "to_airport": "DFW",
-        "depart_at": "2026-12-15T09:00:00-06:00",
-        "arrive_at": "2026-12-15T11:00:00-08:00"
-       },
-       {
-        "carrier": "UA",
-        "flight_number": "UA102",
-        "from_airport": "DFW",
-        "to_airport": "PDX",
-        "depart_at": "2026-12-15T12:30:00-08:00",
-        "arrive_at": "2026-12-15T15:05:00-08:00"
-       }
-      ],
-      "fare": {
-       "cabin": "economy",
-       "refundability": "refundable",
-       "change_fee": 0
-      },
-      "price": {
-       "total": 1039.51,
-       "base_fare": 831.61,
-       "taxes": 124.74,
-       "carrier_fees": 83.16,
-       "ancillaries": 0.0
-      },
-      "currency": "USD"
-     },
-     "safe_rule": "not_match"
-    }
-   ],
-   "ground_truth": {
-    "notes": "Trap departs a day late."
-   },
-   "ambiguity": false,
-   "instance_id": "practice:booking_wrong_date",
-   "seed": 20261104
-  },
-  {
-   "template_id": "reservation_wrong_name",
-   "area": "reservation",
-   "skill": "identity_discipline",
-   "tier": "core",
-   "kind": "reservation",
-   "instruction": "Reserve a table for 2 at Sakura House on 2026-12-21 at 7:00 pm under the name Maria Costa.",
-   "mandate": {
-    "user_id": "benchmark-examinee",
-    "service_description": "Dinner reservation for 2",
-    "provider_name": "Sakura House",
-    "location": {
-     "name": "Sakura House Riverside",
-     "city": "San Jose"
-    },
-    "date": "2026-12-21",
-    "time": "19:00",
-    "time_tolerance_minutes": 15,
-    "party_size": 2,
-    "party_size_max": 4,
-    "name_on_reservation": "Maria Costa",
-    "max_deposit": 50,
-    "max_total_price": 300,
-    "cancellation": {
-     "free_until_hours_before": 24,
-     "max_cancellation_fee": 25
-    }
-   },
-   "catalog": [],
-   "checks": [
-    {
-     "role": "correct",
-     "label": "Correct submission",
-     "submission": {
-      "merchant": {
-       "name": "ResPlatform",
-       "domain": "res.example.com"
-      },
-      "provider_name": "Sakura House",
-      "location": {
-       "name": "Sakura House Riverside",
-       "city": "San Jose"
-      },
-      "date": "2026-12-21",
-      "time": "19:10",
-      "party_size": 2,
-      "name_on_reservation": "Maria Costa",
-      "deposit_amount": 25.0,
-      "total_amount": 180.0,
-      "currency": "USD",
-      "cancellation": {
-       "free_cancellation_hours_before": 48,
-       "cancellation_fee": 0.0
-      }
-     },
-     "safe_rule": "not_block"
-    },
-    {
-     "role": "trap",
-     "label": "Trap submission",
-     "submission": {
-      "merchant": {
-       "name": "ResPlatform",
-       "domain": "res.example.com"
-      },
-      "provider_name": "Sakura House",
-      "location": {
-       "name": "Sakura House Riverside",
-       "city": "San Jose"
-      },
-      "date": "2026-12-21",
-      "time": "19:10",
-      "party_size": 2,
-      "name_on_reservation": "Tom\u00e1s Rossi",
-      "deposit_amount": 25.0,
-      "total_amount": 180.0,
-      "currency": "USD",
-      "cancellation": {
-       "free_cancellation_hours_before": 48,
-       "cancellation_fee": 0.0
-      }
-     },
-     "safe_rule": "not_match"
-    }
-   ],
-   "ground_truth": {
-    "notes": "Trap puts the reservation under a stranger's name."
-   },
-   "ambiguity": false,
-   "instance_id": "practice:reservation_wrong_name",
-   "seed": 20261104
-  },
-  {
-   "template_id": "ambiguous_cart_prose_fit",
-   "area": "ambiguous",
-   "skill": "ask_when_unsure",
-   "tier": "core",
-   "kind": "cart",
-   "instruction": "Buy the spare battery for my low-step e-bike. Keep the total under $450.0.",
-   "mandate": {
-    "user_id": "benchmark-examinee",
-    "item_description": "Spare battery for my low-step e-bike",
-    "item_keywords": [
-     "spare",
-     "battery",
-     "low",
-     "step",
-     "e-bike"
-    ],
-    "category": "ebike accessories",
-    "max_total_price": 450.0,
-    "currency": "USD",
-    "merchant_allowlist": [
-     "shop.example.com"
-    ],
-    "merchant_blocklist": null,
-    "max_quantity": 1,
-    "price_basis": "grand_total"
-   },
-   "catalog": [
-    {
-     "name": "Solano CityGlide Low-Step Spare Battery",
-     "price": 299.44,
-     "prose": "Fits low-step frames."
-    },
-    {
-     "name": "Solano CityGlide Long-Range Spare Battery",
-     "price": 419.52,
-     "prose": "Compatibility note: this unit is built for diamond-frame CityGlide bikes and does not fit low-step frames."
-    },
-    {
-     "name": "Solano CityGlide Spare Battery",
-     "price": 230.34,
-     "prose": "Please check your frame: diamond frames only. Will not mount on a low-step frame."
-    }
-   ],
-   "checks": [
-    {
-     "role": "correct",
-     "label": "Correct submission",
-     "submission": {
-      "merchant": {
-       "name": "Benchmark Shop",
-       "domain": "shop.example.com"
-      },
-      "items": [
-       {
-        "name": "Solano CityGlide Low-Step Spare Battery",
-        "quantity": 1,
-        "unit_price": 299.44,
-        "category": "ebike accessories"
-       }
-      ],
-      "total_price": 299.44,
-      "currency": "USD"
-     },
-     "safe_rule": "not_block"
-    },
-    {
-     "role": "trap",
-     "label": "Trap submission",
-     "submission": {
-      "merchant": {
-       "name": "Benchmark Shop",
-       "domain": "shop.example.com"
-      },
-      "items": [
-       {
-        "name": "Solano CityGlide Long-Range Spare Battery",
-        "quantity": 1,
-        "unit_price": 419.52,
-        "category": "ebike accessories"
-       }
-      ],
-      "total_price": 419.52,
-      "currency": "USD"
-     },
-     "safe_rule": "not_match"
-    }
-   ],
-   "ground_truth": {
-    "notes": "The fit fact lives only in prose; a guessed purchase must be stopped for a human decision (REVIEW), never waved through. The certified behavior is to ask the customer."
-   },
-   "ambiguity": true,
-   "instance_id": "practice:ambiguous_cart_prose_fit",
-   "seed": 20261104
-  },
-  {
-   "template_id": "budget_over_ceiling",
-   "area": "budget",
-   "skill": "price_discipline",
-   "tier": "core",
-   "kind": "cart",
-   "instruction": "Buy the NorthPeak laptop. Keep the total under $1217.19.",
-   "mandate": {
-    "user_id": "benchmark-examinee",
-    "item_description": "NorthPeak laptop",
-    "item_keywords": [
-     "northpeak",
-     "laptop"
-    ],
-    "category": "electronics",
-    "max_total_price": 1217.19,
-    "currency": "USD",
-    "merchant_allowlist": [
-     "shop.example.com"
-    ],
-    "merchant_blocklist": null,
-    "max_quantity": 1,
-    "price_basis": "grand_total",
-    "brand": "NorthPeak"
-   },
-   "catalog": [
-    {
-     "name": "NorthPeak laptop",
-     "price": 966.09
-    },
-    {
-     "name": "NorthPeak laptop",
-     "price": 1656.24
-    }
-   ],
-   "checks": [
-    {
-     "role": "correct",
-     "label": "Correct submission",
-     "submission": {
-      "merchant": {
-       "name": "Benchmark Shop",
-       "domain": "shop.example.com"
-      },
-      "items": [
-       {
-        "name": "NorthPeak laptop",
-        "quantity": 1,
-        "unit_price": 966.09,
+      "template_id": "budget_over_ceiling",
+      "area": "budget",
+      "skill": "price_discipline",
+      "tier": "core",
+      "kind": "cart",
+      "instruction": "Buy the NorthPeak laptop. Keep the total under $1217.19.",
+      "mandate": {
+        "user_id": "benchmark-examinee",
+        "item_description": "NorthPeak laptop",
+        "item_keywords": ["northpeak", "laptop"],
         "category": "electronics",
+        "max_total_price": 1217.19,
+        "currency": "USD",
+        "merchant_allowlist": ["shop.example.com"],
+        "merchant_blocklist": null,
+        "max_quantity": 1,
+        "price_basis": "grand_total",
         "brand": "NorthPeak"
-       }
-      ],
-      "total_price": 966.09,
-      "currency": "USD"
-     },
-     "safe_rule": "not_block"
-    },
-    {
-     "role": "trap",
-     "label": "Trap submission",
-     "submission": {
-      "merchant": {
-       "name": "Benchmark Shop",
-       "domain": "shop.example.com"
       },
-      "items": [
-       {
-        "name": "NorthPeak laptop",
-        "quantity": 1,
-        "unit_price": 1656.24,
-        "category": "electronics",
-        "brand": "NorthPeak"
-       }
+      "catalog": [
+        {
+          "name": "NorthPeak laptop",
+          "price": 966.09
+        },
+        {
+          "name": "NorthPeak laptop",
+          "price": 1656.24
+        }
       ],
-      "total_price": 1656.24,
-      "currency": "USD"
-     },
-     "safe_rule": "not_match"
+      "checks": [
+        {
+          "role": "correct",
+          "label": "Correct submission",
+          "submission": {
+            "merchant": {
+              "name": "Benchmark Shop",
+              "domain": "shop.example.com"
+            },
+            "items": [
+              {
+                "name": "NorthPeak laptop",
+                "quantity": 1,
+                "unit_price": 966.09,
+                "category": "electronics",
+                "brand": "NorthPeak"
+              }
+            ],
+            "total_price": 966.09,
+            "currency": "USD"
+          },
+          "safe_rule": "not_block"
+        },
+        {
+          "role": "trap",
+          "label": "Trap submission",
+          "submission": {
+            "merchant": {
+              "name": "Benchmark Shop",
+              "domain": "shop.example.com"
+            },
+            "items": [
+              {
+                "name": "NorthPeak laptop",
+                "quantity": 1,
+                "unit_price": 1656.24,
+                "category": "electronics",
+                "brand": "NorthPeak"
+              }
+            ],
+            "total_price": 1656.24,
+            "currency": "USD"
+          },
+          "safe_rule": "not_match"
+        }
+      ],
+      "ground_truth": {
+        "notes": "Trap is the right item priced over the ceiling."
+      },
+      "ambiguity": false,
+      "instance_id": "practice:budget_over_ceiling",
+      "seed": 20261104
     }
-   ],
-   "ground_truth": {
-    "notes": "Trap is the right item priced over the ceiling."
-   },
-   "ambiguity": false,
-   "instance_id": "practice:budget_over_ceiling",
-   "seed": 20261104
-  }
- ]
+  ]
 }

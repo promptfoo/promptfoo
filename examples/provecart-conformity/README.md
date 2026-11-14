@@ -54,8 +54,8 @@ carries no signal.
 - `assert.py` — Promptfoo python assertion wrapping the oracle
 - `oracle.py` — the deterministic scorer (framework-free)
 - `agent_provider.py` — replaceable provider stub
-- `practice-set.json` — the public practice set, byte-identical to
-  https://provecart.com/practice-set.json
+- `practice-set.json` — the pinned v1 practice set used by these 12 cases. ProveCart publishes
+  the current practice set at https://provecart.com/practice-set.json.
 
 ## Going further
 
