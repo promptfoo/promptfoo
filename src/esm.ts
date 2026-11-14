@@ -287,11 +287,11 @@ export async function importModule(
       }
 
       // Default unwrapping can hide a sibling method or a standalone named ESM export.
-      const owner = importedModule.default;
-      return (
-        (owner == null ? undefined : getNamedExport(owner, functionName, true)) ??
-        getNamedExport(importedModule, functionName)
-      );
+      const owner = importedModule.default ?? {};
+      const siblingExport = Object.prototype.hasOwnProperty.call(owner, functionName)
+        ? getNamedExport(owner, functionName, true)
+        : undefined;
+      return siblingExport ?? getNamedExport(importedModule, functionName);
     }
     return bindDefaultExport(mod, importedModule?.default, bindToModule);
   } catch (err) {
