@@ -16,6 +16,82 @@ afterEach(() => {
   syncBuiltinESMExports();
 });
 
+it('keeps inline provider schema references and resolves ordinary config references', async () => {
+  const schema = {
+    type: 'object',
+    properties: {
+      item: { $ref: '#/$defs/Item' },
+      remote: { $ref: 'https://schema.invalid/item.json' },
+    },
+    $defs: { Item: { type: 'string' } },
+  };
+  const config = {
+    definitions: { prompt: 'Shared prompt', itemSchema: { type: 'string' } },
+    prompts: [{ $ref: '#/definitions/prompt' }],
+    providers: [
+      {
+        id: 'openai:chat:gpt-5-mini',
+        config: { response_format: { type: 'json_schema', json_schema: { schema } } },
+      },
+      { 'openai:codex-sdk': { config: { output_schema: schema } } },
+      {
+        id: 'openai:agents:fixture',
+        config: {
+          agent: { outputType: { type: 'json_schema', name: 'fixture', strict: true, schema } },
+        },
+      },
+      { 'openai:codex-sdk': { config: { output_schema: { $ref: '#/definitions/itemSchema' } } } },
+    ],
+  };
+  const resolved = await dereferenceConfig(config as unknown as UnifiedConfig);
+  expect(resolved.prompts).toEqual(['Shared prompt']);
+  expect(resolved.providers).toEqual([
+    config.providers[0],
+    config.providers[1],
+    config.providers[2],
+    { 'openai:codex-sdk': { config: { output_schema: { type: 'string' } } } },
+  ]);
+  expect(schema.properties.item).toEqual({ $ref: '#/$defs/Item' });
+  expect(schema.properties.remote).toEqual({ $ref: 'https://schema.invalid/item.json' });
+});
+
+it('resolves annotated config references while keeping local schema roots intact', async () => {
+  const local = { $ref: '#/$defs/Item', $defs: { Item: { type: 'string' } } };
+  const rawConfig = {
+    definitions: { status: { type: 'string', enum: ['ok'] } },
+    providers: [
+      {
+        id: 'openai:chat:model',
+        config: {
+          response_format: {
+            json_schema: { schema: { $ref: '#/definitions/status', description: 'Status' } },
+          },
+        },
+      },
+      { id: 'google:fixture', config: { generationConfig: { response_schema: local } } },
+      { id: 'opencode:sdk', config: { format: { type: 'json_schema', schema: local } } },
+    ],
+  };
+  const result = await dereferenceConfig(rawConfig as unknown as UnifiedConfig);
+  expect(result.providers).toMatchObject([
+    {
+      config: {
+        response_format: {
+          json_schema: {
+            schema: {
+              type: 'string',
+              enum: ['ok'],
+              description: 'Status',
+            },
+          },
+        },
+      },
+    },
+    { config: { generationConfig: { response_schema: { $ref: '#/$defs/Item' } } } },
+    { config: { format: { schema: { $ref: '#/$defs/Item' } } } },
+  ]);
+});
+
 describe('dereferenceConfig local references', () => {
   it('resolves an own property without reading inherited properties', async () => {
     const definitions = Object.assign(Object.create({ inherited: 'inherited prompt' }), {
