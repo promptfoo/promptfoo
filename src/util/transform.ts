@@ -73,18 +73,11 @@ async function getJavascriptTransformFunction(
   filePath: string,
   functionName?: string,
 ): Promise<Function> {
-  const requiredModule = await importModule(filePath);
+  const requiredModule = await importModule(filePath, functionName);
 
-  // Validate that functionName is an own property to prevent prototype pollution attacks
-  if (
-    functionName &&
-    Object.prototype.hasOwnProperty.call(requiredModule, functionName) &&
-    typeof requiredModule[functionName] === 'function'
-  ) {
-    return requiredModule[functionName];
-  } else if (typeof requiredModule === 'function') {
+  if (typeof requiredModule === 'function') {
     return requiredModule;
-  } else if (requiredModule.default && typeof requiredModule.default === 'function') {
+  } else if (!functionName && typeof requiredModule?.default === 'function') {
     return requiredModule.default;
   }
   throw new Error(
