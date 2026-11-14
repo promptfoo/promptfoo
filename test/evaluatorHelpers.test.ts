@@ -528,6 +528,20 @@ describe('evaluatorHelpers', () => {
       expect(renderedPrompt).toBe('{{ myVar }}');
     });
 
+    it.each(['raw', 'verbatim'])(
+      'preserves nested %s blocks through variable resolution',
+      async (tag) => {
+        const nested = `{% ${tag} %}{{ name }}{% end${tag} %} {{ name }}`;
+        const template = `{% ${tag} %}${nested}{% end${tag} %} {{ name }}`;
+        const rendered = await renderPrompt(
+          toPrompt('{{ template }}'),
+          { name: 'Alice', template },
+          {},
+        );
+        expect(rendered).toBe(`${nested} Alice`);
+      },
+    );
+
     it('should respect Nunjucks escaped strings inside test variables', async () => {
       const prompt = toPrompt('{{ template }}');
       const renderedPrompt = await renderPrompt(

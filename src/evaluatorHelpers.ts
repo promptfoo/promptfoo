@@ -102,23 +102,37 @@ export function resolveVariables(
  * introducing placeholders that could collide with variable contents.
  */
 function maskNunjucksBlocks(value: string): string {
-  // Only raw blocks, comments, and quoted expressions are masked.
   if (!/['"]|\{[%#]/.test(value)) {
     return value;
   }
-  // An expression cannot contain an unquoted `{{`, so a failed match stops at the next one
-  // instead of rescanning the rest of the value.
-  const pattern =
-    /\{%-?\s*raw\s*-?%\}[\s\S]*?\{%-?\s*endraw\s*-?%\}|\{#[\s\S]*?#\}|\{\{(?:[^'"{]|\{(?!\{)|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')*?\}\}/g;
 
-  return value.replace(pattern, (block) => {
-    // Plain variable references still need resolution. Expressions with quoted
-    // literals are left intact for Nunjucks, including literals after operators.
-    if (block.startsWith('{{') && !/['"]/.test(block)) {
-      return block;
+  const tokens =
+    /\{%-?\s*(raw|verbatim)\s*-?%\}|\{#|\{\{(?:[^'"{]|\{(?!\{)|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')*?\}\}/g;
+  const rawTags = /\{%-?\s*(end)?(raw|verbatim)\s*-?%\}/g;
+  const pieces: string[] = [];
+  let cursor = 0;
+  for (let match = tokens.exec(value); match; match = tokens.exec(value)) {
+    if (match[1]) {
+      const kind = match[1];
+      rawTags.lastIndex = tokens.lastIndex;
+      let depth = 1;
+      let tag: RegExpExecArray | null;
+      while (depth && (tag = rawTags.exec(value))) {
+        if (tag[2] === kind) {
+          depth += tag[1] ? -1 : 1;
+        }
+      }
+      tokens.lastIndex = depth ? value.length : rawTags.lastIndex;
+    } else if (match[0] === '{#') {
+      const end = value.indexOf('#}', tokens.lastIndex);
+      tokens.lastIndex = end === -1 ? value.length : end + 2;
+    } else if (!/['"]/.test(match[0])) {
+      continue;
     }
-    return ' '.repeat(block.length);
-  });
+    pieces.push(value.slice(cursor, match.index), ' '.repeat(tokens.lastIndex - match.index));
+    cursor = tokens.lastIndex;
+  }
+  return pieces.length ? pieces.join('') + value.slice(cursor) : value;
 }
 
 // Utility: Detect partial/unclosed Nunjucks tags and wrap in {% raw %} if needed
