@@ -153,6 +153,7 @@ describe('redteamTestCaseGenerationService', () => {
         result: {
           generatedQuestion: 'first question',
           observation: 'x'.repeat(700),
+          reasoning: 'private intermediate trace',
           strategyVector: 'gradual-escalation',
         },
       });
@@ -179,6 +180,9 @@ describe('redteamTestCaseGenerationService', () => {
       const first = await generateMultiTurnPrompt(params);
       const state = ReactPreviewStateSchema.parse(first.metadata.reactPreviewState);
       expect(state.observation).toHaveLength(512);
+      expect(first.metadata).not.toHaveProperty('observation');
+      expect(first.metadata).not.toHaveProperty('reasoning');
+      expect(first.metadata).not.toHaveProperty('strategyVector');
       await generateMultiTurnPrompt({
         ...params,
         turn: 1,

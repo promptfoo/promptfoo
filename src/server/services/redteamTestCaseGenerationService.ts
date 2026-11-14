@@ -552,7 +552,6 @@ async function handleCrescendoLikeStrategy(
           rationaleBehindJailbreak?: string;
           lastResponseSummary?: string;
           observation?: string;
-          reasoning?: string;
           strategyVector?: string;
         }>(rawResult)
       : Array.isArray(rawResult) && rawResult.length > 0
@@ -585,12 +584,7 @@ async function handleCrescendoLikeStrategy(
       goal: ctx.effectiveGoal,
       rationaleBehindJailbreak: parsedResult?.rationaleBehindJailbreak,
       lastResponseSummary: parsedResult?.lastResponseSummary,
-      ...(isReactCrescendo && {
-        observation: parsedResult?.observation,
-        reasoning: parsedResult?.reasoning,
-        strategyVector: parsedResult?.strategyVector,
-        ...(previewState?.success && { reactPreviewState: previewState.data }),
-      }),
+      ...(previewState?.success && { reactPreviewState: previewState.data }),
       providerTokenUsage: data?.tokenUsage,
     },
   };
