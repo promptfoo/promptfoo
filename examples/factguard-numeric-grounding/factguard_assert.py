@@ -66,6 +66,8 @@ def get_assert(output: Any, context: dict[str, Any]) -> dict[str, Any]:
         }
 
     fail_under = float(config.get("fail_under", 1.0))
+    if not 0 <= fail_under <= 1:
+        raise ValueError("fail_under must be between 0 and 1")
     checker = Checker(
         data,
         aliases=config.get("aliases"),

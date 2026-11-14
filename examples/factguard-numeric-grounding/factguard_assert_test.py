@@ -53,6 +53,11 @@ class FactguardAssertTest(unittest.TestCase):
         self.assertTrue(result["pass"], result["reason"])
         self.assertEqual(result["score"], 0.5)
 
+    def test_rejects_invalid_minimum_scores(self):
+        for threshold in (-0.1, 1.1, float("nan")):
+            with self.subTest(threshold=threshold), self.assertRaisesRegex(ValueError, "fail_under"):
+                get_assert(WRONG_ROW, context({"source": SOURCE}, {"fail_under": threshold}))
+
     def test_output_without_numbers_scores_one(self):
         result = get_assert("Sales were steady.", context({"source": SOURCE}))
         self.assertTrue(result["pass"])

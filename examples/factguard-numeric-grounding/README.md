@@ -30,7 +30,7 @@ Two of the three tests fail on purpose, so the eval reports two failures. Read t
 
 ## Reading results
 
-The score is the share of numeric claims the data supports: grounded claims divided by all numeric claims. An output with no numbers scores 1.0. There are no weights. By default the assertion passes only at 1.0, so any flagged number fails the test. Set `fail_under` to accept a lower share.
+The score is the share of numeric claims the data supports: grounded claims divided by all numeric claims. An output with no numbers scores 1.0. There are no weights. By default the assertion passes only at 1.0, so any flagged number fails the test. Set `fail_under` to a value between 0 and 1 to accept a lower share.
 
 A claim counts as grounded when:
 
