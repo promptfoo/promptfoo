@@ -377,7 +377,7 @@ When configured correctly, your self-hosted server handles requests like:
 
 ### Restrict provider setup requests
 
-Set `PROMPTFOO_BLOCK_PRIVATE_RANGES=true` on the server to validate destinations supplied to the provider connectivity, discovery, and session test endpoints. These endpoints reject private, loopback, link-local, and unresolvable targets. The guard also checks redirects where the provider uses Promptfoo's guarded fetch transport. This setting leaves normal evaluation traffic, including local model servers, available.
+Set `PROMPTFOO_BLOCK_PRIVATE_RANGES=true` on the server to validate destinations supplied to the provider connectivity, discovery, and session test endpoints. These endpoints reject private, loopback, link-local, and unresolvable targets. For providers using Promptfoo's guarded fetch transport, the server also checks the effective request URL and each redirect before dispatch. Guarded HTTP provider requests support simple dotted session selectors such as `data.body.sessionId`. They refuse executable session selectors and file-backed authentication. This setting leaves normal evaluation traffic, including local model servers, available.
 
 Hostname validation happens before the connection. A DNS answer can change before the transport dials, so enforce destination restrictions at the egress proxy or network boundary if callers can supply untrusted provider configurations.
 
