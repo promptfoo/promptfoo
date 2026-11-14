@@ -1258,6 +1258,7 @@ const SENSITIVE_PROVIDER_EVIDENCE_FIELDS = new Set([
   'clientsecret',
 ]);
 const EMBEDDED_PROVIDER_CREDENTIAL_PATTERNS: Array<[RegExp, string]> = [
+  [/\b((?:proxy-)?authorization[ \t]*:[ \t]*)basic[ \t]+[A-Za-z0-9+/=_-]+/gi, '$1[REDACTED]'],
   [/\b(Bearer\s+)[A-Za-z0-9._~+/=-]{8,}/gi, '$1[REDACTED]'],
   [/\bsk-(?:proj-)?[A-Za-z0-9_-]{8,}\b/g, '[REDACTED]'],
   [/\bAKIA[0-9A-Z]{16}\b/g, '[REDACTED]'],

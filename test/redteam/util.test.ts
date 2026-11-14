@@ -1311,6 +1311,23 @@ describe('isBasicRefusal', () => {
     }
   });
 
+  it('redacts credentials after a Basic scheme in plain-text HTTP headers', () => {
+    const trace = [
+      'Authorization: Basic dXNlcjpwYXNz',
+      'PROXY-AUTHORIZATION: basic b3RoZXI6cGFzcw==',
+      'The Basic plan includes support.',
+    ].join('\n');
+
+    const evidence = getProviderResponseGradingEvidence({
+      raw: { items: [{ type: 'command_execution', aggregated_output: trace }] },
+    });
+    expect(JSON.stringify(evidence)).not.toMatch(/dXNlcjpwYXNz|b3RoZXI6cGFzcw/);
+    expect(JSON.stringify(evidence)).toContain('The Basic plan includes support.');
+    expect(sanitizeRedteamGradingEvidenceText(trace)).toBe(
+      'Authorization: [REDACTED]\nPROXY-AUTHORIZATION: [REDACTED]\nThe Basic plan includes support.',
+    );
+  });
+
   it('ignores unknown provider event types that collide with inherited names', () => {
     const raw = { items: [{ type: 'constructor' }, { type: 'toString' }] };
     expect(getProviderResponseGradingEvidence({ raw, output: 'hello' })).toEqual([]);
