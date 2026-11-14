@@ -65,7 +65,7 @@ def get_assert(output, context):
             errors.append(f"{field}: expected a numeric value.")
             continue
 
-        if not math.isfinite(value):
+        if isinstance(value, float) and not math.isfinite(value):
             errors.append(f"{field}: value must be finite.")
             continue
 
