@@ -17,6 +17,6 @@ npx promptfoo@latest eval
 
 With a trial key, add `--max-concurrency 1`; trial accounts run one request at a time.
 
-Both models use `max_tokens: 2048` and low reasoning effort. Reasoning tokens count toward the limit; increase it if a model runs out before answering. `showThinking: false` keeps reasoning out of the graded answer.
+Both models use `max_tokens: 2048` and low reasoning effort. Reasoning tokens count toward the limit; increase it if a model runs out before answering. `showThinking: false` keeps the separate `reasoning_content` field out of the graded answer, but not reasoning a model writes into `content` itself.
 
 The abliterated model has refusal behavior removed; review its outputs before using it in an application. For current model IDs, see the [models reference](https://abliteratedllm.dev/docs/models). See the [provider guide](https://www.promptfoo.dev/docs/providers/abliteratedllm/) for configuration details.

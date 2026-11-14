@@ -42,7 +42,7 @@ providers:
 - `omitDefaults: true` omits promptfoo's default output limit and temperature. Explicit settings and `OPENAI_MAX_TOKENS` / `OPENAI_TEMPERATURE` still apply.
 - Use `max_tokens` to cap output, including reasoning tokens. Every AbliteratedLLM model reasons; increase the limit if reasoning consumes the budget before an answer appears.
 - Put `reasoning_effort` (`low`, `medium`, or `high`) under `passthrough` to send it to AbliteratedLLM regardless of model-name detection.
-- `showThinking: false` excludes reasoning text from the answer used by assertions.
+- `showThinking: false` stops the separate `reasoning_content` field from being prepended to the answer used by assertions. It doesn't remove reasoning that a model writes into `content` itself, which the abliterated model sometimes does at low effort. Use assertions that check the final answer, not just a substring.
 - Trial accounts run one request at a time and cap output at 4,096 tokens. Use `--max-concurrency 1` with a trial key. See [rate limits](https://abliteratedllm.dev/docs/rate-limits).
 
 Check the [models reference](https://abliteratedllm.dev/docs/models) or `GET https://api.abliteratedllm.dev/v1/models`, which needs no API key, for current model IDs, context limits, and input modalities. See [pricing](https://abliteratedllm.dev/pricing) for current rates.
