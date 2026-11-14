@@ -29,6 +29,13 @@ describe('predefinedTargets', () => {
     );
   });
 
+  it('resolves saved Vertex Gemini 2.5 Pro targets without offering the retired model', () => {
+    expect(predefinedTargets.map((target) => target.value)).not.toContain('vertex:gemini-2.5-pro');
+    expect(findPredefinedTarget('vertex:gemini-2.5-pro')?.label).toBe(
+      'Google Vertex AI Gemini 2.5 Pro',
+    );
+  });
+
   it('offers the Sonnet 4.5 alias while preserving the dated preset for saved configurations', () => {
     expect(predefinedTargets).toContainEqual({
       value: 'claude-sonnet-4-5',
