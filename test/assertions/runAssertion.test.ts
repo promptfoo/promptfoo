@@ -3610,6 +3610,28 @@ describe('runAssertion', () => {
       expect(result.pass).toBe(true);
     });
 
+    it('should preserve template text in non-model-graded file references', async () => {
+      const assertion: Assertion = {
+        type: 'equals',
+        value: 'file://expected_output.txt',
+      };
+
+      vi.mocked(fs.readFileSync).mockReturnValue('Expected {{topic}}');
+      vi.mocked(path.resolve).mockReturnValue('/base/path/expected_output.txt');
+      vi.mocked(path.extname).mockReturnValue('.txt');
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion,
+        test: { vars: { topic: 'capybaras' } } as AtomicTestCase,
+        providerResponse: { output: 'Expected {{topic}}' },
+      });
+
+      expect(result.pass).toBe(true);
+      expect(result.metadata?.renderedAssertionValue).toBe('Expected {{topic}}');
+    });
+
     it('should handle file references in array values', async () => {
       const assertion: Assertion = {
         type: 'contains-any',
@@ -3677,6 +3699,79 @@ describe('runAssertion', () => {
 
       expect(fs.readFileSync).toHaveBeenCalledWith('/base/path/schema.json', 'utf8');
       expect(result.pass).toBe(true);
+    });
+
+    it.each([
+      { type: 'g-eval', array: false },
+      { type: 'not-g-eval', array: false },
+      { type: 'g-eval', array: true },
+      { type: 'not-g-eval', array: true },
+      { type: 'pi', array: false },
+    ])('renders file criteria for $type (array=$array)', async ({ type, array }) => {
+      const matchers = await import('../../src/matchers/llmGrading');
+      const matcher = type.endsWith('g-eval') ? 'matchesGEval' : 'matchesPiScore';
+      const spy = vi.spyOn(matchers, matcher).mockResolvedValue({
+        pass: true,
+        score: 1,
+        reason: 'graded',
+      });
+      vi.mocked(fs.readFileSync).mockReturnValue('Judge {{topic}}');
+      vi.mocked(path.resolve).mockReturnValue('/base/path/criteria.txt');
+      vi.mocked(path.extname).mockReturnValue('.txt');
+      try {
+        await runAssertion({
+          prompt: 'Question',
+          assertion: {
+            type: type as Assertion['type'],
+            value: array ? ['file://criteria.txt'] : 'file://criteria.txt',
+          },
+          test: { vars: { topic: 'capybaras' } },
+          providerResponse: { output: 'candidate' },
+          provider: createMockProvider(),
+        });
+        expect(spy).toHaveBeenCalledTimes(1);
+        expect(spy.mock.calls[0][0]).toBe('Judge capybaras');
+      } finally {
+        spy.mockRestore();
+      }
+    });
+
+    it('should render llm-rubric file references before calling the grader', async () => {
+      const capturedPrompt = vi.fn<ApiProvider['callApi']>(async () => ({
+        output: JSON.stringify({ pass: true, score: 1, reason: 'graded' }),
+      }));
+      const capturingGrader = createMockProvider({
+        id: 'capturing-grader',
+        callApi: capturedPrompt,
+      });
+
+      const assertion: Assertion = {
+        type: 'llm-rubric',
+        value: 'file://rubric.txt',
+        provider: capturingGrader,
+      };
+
+      vi.mocked(fs.readFileSync).mockReturnValue(
+        'Fail unless the output mentions "{{topic}}". Start your reason with: GOT=[{{topic}}]',
+      );
+      vi.mocked(path.resolve).mockReturnValue('/base/path/rubric.txt');
+      vi.mocked(path.extname).mockReturnValue('.txt');
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        assertion,
+        test: { vars: { topic: 'capybaras' } } as AtomicTestCase,
+        providerResponse: { output: 'static model output' },
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      });
+
+      const gradingPrompt = capturedPrompt.mock.calls[0]?.[0] as string;
+      expect(gradingPrompt).toContain('GOT=[capybaras]');
+      expect(gradingPrompt).not.toContain('{{topic}}');
+
+      expect(result.metadata?.renderedAssertionValue).toBe(
+        'Fail unless the output mentions "capybaras". Start your reason with: GOT=[capybaras]',
+      );
     });
   });
 
