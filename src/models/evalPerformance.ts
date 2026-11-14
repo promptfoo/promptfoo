@@ -21,9 +21,47 @@ interface CountCacheEntry {
   timestamp: number;
 }
 
+interface CountQueryState {
+  invalidated: boolean;
+}
+
 // Simple in-memory cache for counts with 5-minute TTL
 const countCache = new Map<string, CountCacheEntry>();
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+const activeCountQueries = new Map<string, Set<CountQueryState>>();
+
+function beginCountQuery(evalId: string): CountQueryState {
+  const query = { invalidated: false };
+  const activeQueries = activeCountQueries.get(evalId);
+  if (activeQueries) {
+    activeQueries.add(query);
+  } else {
+    activeCountQueries.set(evalId, new Set([query]));
+  }
+  return query;
+}
+
+function finishCountQuery(evalId: string, query: CountQueryState): void {
+  const activeQueries = activeCountQueries.get(evalId);
+  activeQueries?.delete(query);
+  if (activeQueries?.size === 0) {
+    activeCountQueries.delete(evalId);
+  }
+}
+
+function invalidateCountQueries(evalId?: string): void {
+  if (evalId) {
+    for (const query of activeCountQueries.get(evalId) ?? []) {
+      query.invalidated = true;
+    }
+    return;
+  }
+  for (const queries of activeCountQueries.values()) {
+    for (const query of queries) {
+      query.invalidated = true;
+    }
+  }
+}
 
 async function getResultCount(evalId: string, distinct: boolean): Promise<number> {
   const cacheKey = `${distinct ? 'distinct' : 'total'}:${evalId}`;
@@ -36,28 +74,34 @@ async function getResultCount(evalId: string, distinct: boolean): Promise<number
     return cached.count;
   }
 
-  const db = await getDb();
-  const start = Date.now();
+  const query = beginCountQuery(evalId);
+  try {
+    const db = await getDb();
+    const start = Date.now();
 
-  // Count distinct test indices (unique test cases) - this is what the UI shows as "results"
-  // Count all result rows - use this when iterating over all results
-  const result = await db
-    .select({ count: distinct ? sql<number>`COUNT(DISTINCT test_idx)` : sql<number>`COUNT(*)` })
-    .from(evalResultsTable)
-    .where(sql`eval_id = ${evalId}`)
-    .all();
+    // Count distinct test indices (unique test cases) - this is what the UI shows as "results"
+    // Count all result rows - use this when iterating over all results
+    const result = await db
+      .select({ count: distinct ? sql<number>`COUNT(DISTINCT test_idx)` : sql<number>`COUNT(*)` })
+      .from(evalResultsTable)
+      .where(sql`eval_id = ${evalId}`)
+      .all();
 
-  const count = Number(result[0]?.count ?? 0);
-  const duration = Date.now() - start;
+    const count = Number(result[0]?.count ?? 0);
+    const duration = Date.now() - start;
 
-  logger.debug(
-    `${distinct ? 'Distinct count' : 'Total row count'} query for eval ${evalId}: ${count} in ${duration}ms`,
-  );
+    logger.debug(
+      `${distinct ? 'Distinct count' : 'Total row count'} query for eval ${evalId}: ${count} in ${duration}ms`,
+    );
 
-  // Cache the result
-  countCache.set(cacheKey, { count, timestamp: Date.now() });
+    if (!query.invalidated) {
+      countCache.set(cacheKey, { count, timestamp: Date.now() });
+    }
 
-  return count;
+    return count;
+  } finally {
+    finishCountQuery(evalId, query);
+  }
 }
 
 /**
@@ -83,6 +127,7 @@ export function getTotalResultRowCount(evalId: string): Promise<number> {
 }
 
 export function clearCountCache(evalId?: string) {
+  invalidateCountQueries(evalId);
   if (evalId) {
     countCache.delete(`distinct:${evalId}`);
     countCache.delete(`total:${evalId}`);
