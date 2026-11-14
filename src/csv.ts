@@ -7,8 +7,6 @@ import { parseCommaSeparatedValues } from './validation/parseCommaSeparatedValue
 
 import type { Assertion, AssertionType, BaseAssertionTypes, CsvRow, TestCase } from './types/index';
 
-const DEFAULT_SEMANTIC_SIMILARITY_THRESHOLD = 0.8;
-
 let _assertionRegex: RegExp | null = null;
 function getAssertionRegex(): RegExp {
   if (!_assertionRegex) {
@@ -112,29 +110,6 @@ export function assertionFromString(expected: string): Assertion {
       return {
         type: fullType as AssertionType,
         value,
-      };
-    } else if (
-      type === 'answer-relevance' ||
-      type === 'classifier' ||
-      type === 'context-faithfulness' ||
-      type === 'context-recall' ||
-      type === 'context-relevance' ||
-      type === 'cost' ||
-      type === 'latency' ||
-      type === 'levenshtein' ||
-      type === 'perplexity-score' ||
-      type === 'perplexity' ||
-      type === 'rouge-l' ||
-      type === 'rouge-n' ||
-      type === 'rouge-s' ||
-      type === 'similar' ||
-      type === 'starts-with'
-    ) {
-      const defaultThreshold = type === 'similar' ? DEFAULT_SEMANTIC_SIMILARITY_THRESHOLD : 0.75;
-      return {
-        type: fullType as AssertionType,
-        value: value?.trim?.(),
-        threshold: threshold ?? defaultThreshold,
       };
     } else {
       // Keep an explicit `type(threshold):value` threshold (e.g. llm-rubric, bleu,
