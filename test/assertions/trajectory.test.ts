@@ -814,6 +814,63 @@ describe('trajectory assertions', () => {
       });
     });
 
+    it('supports maximum-only count matching when max is 0 (issue #12404)', () => {
+      const params: AssertionParams = {
+        ...defaultParams,
+        baseType: 'trajectory:tool-used',
+        assertion: {
+          type: 'trajectory:tool-used',
+          value: { name: 'missing_tool', max: 0 },
+        },
+        renderedValue: { name: 'missing_tool', max: 0 },
+      };
+
+      const result = handleTrajectoryToolUsed(params);
+      expect(result).toEqual({
+        pass: true,
+        score: 1,
+        reason: 'Matched tool "missing_tool" 0 time(s) (expected 0-0)',
+        assertion: params.assertion,
+      });
+    });
+
+    it('does not treat a malformed minimum as a max-only budget', () => {
+      const value = { name: 'missing_tool', min: 'invalid', max: 0 };
+      const result = handleTrajectoryToolUsed({
+        ...defaultParams,
+        baseType: 'trajectory:tool-used',
+        assertion: { type: 'trajectory:tool-used', value },
+        renderedValue: value,
+      });
+
+      expect(result).toMatchObject({
+        pass: false,
+        score: 0,
+        reason: 'Matched tool "missing_tool" 0 time(s) (expected 1-0)',
+      });
+    });
+
+    it('fails maximum-only count matching when tool calls exceed max', () => {
+      const params: AssertionParams = {
+        ...defaultParams,
+        baseType: 'trajectory:tool-used',
+        assertion: {
+          type: 'trajectory:tool-used',
+          value: { name: 'search_orders', max: 0 },
+        },
+        renderedValue: { name: 'search_orders', max: 0 },
+      };
+
+      const result = handleTrajectoryToolUsed(params);
+      expect(result).toEqual({
+        pass: false,
+        score: 0,
+        reason:
+          'Matched tool "search_orders" 1 time(s) (expected 0-0). Matches: tool:search_orders',
+        assertion: params.assertion,
+      });
+    });
+
     it('supports inverse assertions', () => {
       const params: AssertionParams = {
         ...defaultParams,
