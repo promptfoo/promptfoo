@@ -490,9 +490,6 @@ type EnvVars = {
 
   // QuiverAI
   QUIVERAI_API_KEY?: string;
-
-  // Y-API
-  Y_API_API_KEY?: string;
 } & EnvOverrides;
 
 // Allow string access to any key for environment variables not explicitly listed

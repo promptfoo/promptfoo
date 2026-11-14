@@ -6,9 +6,30 @@ prompts:
   - What is the capital of {{country}}?
 
 providers:
-  - y-api:deepseek/deepseek-v4-pro
-  - y-api:qwen/qwen3.8-flash
-  - y-api:anthropic/claude-sonnet-5
+  - id: openai:chat:deepseek/deepseek-v4-pro
+    config:
+      apiBaseUrl: https://api.y-api.bestvirtualgoods.com/v1
+      apiKeyEnvar: Y_API_API_KEY
+      headers:
+        OpenAI-Organization: ''
+      max_tokens: 1024
+      showThinking: false
+  - id: openai:chat:qwen/qwen3.8-flash
+    config:
+      apiBaseUrl: https://api.y-api.bestvirtualgoods.com/v1
+      apiKeyEnvar: Y_API_API_KEY
+      headers:
+        OpenAI-Organization: ''
+      max_tokens: 1024
+      showThinking: false
+  - id: openai:chat:anthropic/claude-sonnet-5
+    config:
+      apiBaseUrl: https://api.y-api.bestvirtualgoods.com/v1
+      apiKeyEnvar: Y_API_API_KEY
+      headers:
+        OpenAI-Organization: ''
+      max_tokens: 1024
+      showThinking: false
 
 tests:
   - vars:
