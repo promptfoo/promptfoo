@@ -13,6 +13,24 @@ After [running an eval](/docs/getting-started), view results in your browser:
 npx promptfoo@latest view
 ```
 
+Open a specific stored eval directly:
+
+```sh
+npx promptfoo@latest view --id "eval-pmq-2026-08-07T18:45:13"
+```
+
+Browsers normalize the dot segments `.` and `..`, so `view --id` cannot open evals with
+those exact IDs. Use `promptfoo export eval` to read them.
+
+Export a stored eval in another supported format without re-running it:
+
+```sh
+npx promptfoo@latest export eval "eval-pmq-2026-08-07T18:45:13" \
+  --output report.html
+```
+
+The output format is inferred from the file extension.
+
 See [`promptfoo view`](/docs/usage/command-line#promptfoo-view) for CLI options.
 
 ![promptfoo web viewer](/img/docs/web-ui-viewer.png)

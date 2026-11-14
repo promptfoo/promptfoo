@@ -46,6 +46,45 @@ describe('viewCommand', () => {
     expect(startServer).toHaveBeenCalledWith(3001, BrowserBehavior.ASK);
   });
 
+  it('should open a specific eval when --id is provided', async () => {
+    viewCommand(program);
+    const viewCmd = program.commands[0];
+
+    await viewCmd.parseAsync(['node', 'test', '--id', 'eval-pmq-2026-08-07T18:45:13', '--yes']);
+
+    expect(startServer).toHaveBeenCalledWith(
+      getDefaultPort(),
+      BrowserBehavior.OPEN,
+      '/eval/eval-pmq-2026-08-07T18%3A45%3A13',
+    );
+  });
+
+  it('should preserve the confirmation prompt when --id is provided', async () => {
+    viewCommand(program);
+    const viewCmd = program.commands[0];
+
+    await viewCmd.parseAsync(['node', 'test', '--id', 'eval-123']);
+
+    expect(startServer).toHaveBeenCalledWith(
+      getDefaultPort(),
+      BrowserBehavior.ASK,
+      '/eval/eval-123',
+    );
+  });
+
+  it('should preserve no-open behavior when --id is provided with --no', async () => {
+    viewCommand(program);
+    const viewCmd = program.commands[0];
+
+    await viewCmd.parseAsync(['node', 'test', '--id', 'eval-123', '--no']);
+
+    expect(startServer).toHaveBeenCalledWith(
+      getDefaultPort(),
+      BrowserBehavior.SKIP,
+      '/eval/eval-123',
+    );
+  });
+
   it('should handle directory parameter and set config directory', async () => {
     viewCommand(program);
     const viewCmd = program.commands[0];

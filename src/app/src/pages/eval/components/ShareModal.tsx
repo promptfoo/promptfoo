@@ -46,7 +46,9 @@ const ShareModal = ({ open, onClose, evalId, onShare }: ShareModalProps) => {
       }
 
       try {
-        const response = await callApi(`/results/share/check-domain?id=${evalId}`);
+        const response = await callApi(
+          `/results/share/check-domain?id=${encodeURIComponent(evalId)}`,
+        );
         const data = (await response.json()) as {
           domain: string;
           isCloudEnabled: boolean;

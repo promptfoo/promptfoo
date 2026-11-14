@@ -99,6 +99,18 @@ describe('RiskCategoryDrawer Component Navigation', () => {
     expect(window.open).not.toHaveBeenCalled();
   });
 
+  it('should encode reserved characters in the eval route when viewing all logs', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<RiskCategoryDrawer {...defaultProps} evalId="imported/eval?#1" />);
+
+    await user.click(screen.getByText('View All Logs'));
+
+    const expectedUrl =
+      '/eval/imported%2Feval%3F%231?filter=%5B%7B%22type%22%3A%22plugin%22%2C%22operator%22%3A%22equals%22%2C%22value%22%3A%22bola%22%7D%5D';
+    expect(mockNavigate).toHaveBeenCalledWith(expectedUrl);
+    expect(window.open).not.toHaveBeenCalled();
+  });
+
   it('should open in new tab when ctrl/cmd clicking View All Logs button', async () => {
     const user = userEvent.setup();
     renderWithProviders(<RiskCategoryDrawer {...defaultProps} />);

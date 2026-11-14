@@ -355,6 +355,16 @@ describe('Server Utilities', () => {
       expect(readlineUtils.promptYesNo).toHaveBeenCalledWith('Open login page in browser?', true);
       expect(opener).toHaveBeenCalledWith(authUrl, {}, expect.any(Function));
     });
+
+    it('should open browser with a custom path', async () => {
+      await openBrowser(BrowserBehavior.OPEN, 5000, '/eval/eval-123');
+
+      expect(opener).toHaveBeenCalledWith(
+        'http://localhost:5000/eval/eval-123',
+        {},
+        expect.any(Function),
+      );
+    });
   });
 
   describe('checkServerFeatureSupport', () => {
