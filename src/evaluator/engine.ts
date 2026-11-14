@@ -71,7 +71,6 @@ import { loadFunction, parseFileUrl } from '../util/functions/loadFunction';
 import {
   buildConfiguredProviderMap,
   isProviderTypeMap,
-  markExplicitGraderProvider,
   normalizeGraderProvider,
   resolveConfiguredProviderReference,
 } from '../util/gradingProvider';
@@ -990,10 +989,7 @@ function resolveRuntimeGradingProviderReferences(
   if (testCase.options?.provider) {
     const provider = resolveConfiguredProviderReference(testCase.options.provider, providerMap);
     if (provider !== testCase.options.provider) {
-      testCase.options = markExplicitGraderProvider(
-        { ...testCase.options, provider },
-        testCase.options,
-      );
+      testCase.options = { ...testCase.options, provider };
     }
   }
 
@@ -1068,16 +1064,11 @@ function mergeScenarioTest(
       ...data.vars,
       ...test.vars,
     },
-    options: markExplicitGraderProvider(
-      {
-        ...normalizeGraderProvider(defaultTest?.options, 'defaultTest.options'),
-        ...normalizeGraderProvider(data.options, 'scenario.config.options'),
-        ...normalizeGraderProvider(test.options, 'scenario.tests.options'),
-      },
-      defaultTest?.options,
-      data.options,
-      test.options,
-    ),
+    options: {
+      ...normalizeGraderProvider(defaultTest?.options, 'defaultTest.options'),
+      ...normalizeGraderProvider(data.options, 'scenario.config.options'),
+      ...normalizeGraderProvider(test.options, 'scenario.tests.options'),
+    },
     assert: [...(data.assert || []), ...(test.assert || [])],
     metadata: mergedMetadata,
   } as AtomicTestCase;
@@ -1206,14 +1197,10 @@ async function prepareTestCaseForEval(
     ...(testCase.assert || []),
   ];
   testCase.threshold = testCase.threshold ?? defaultTest?.threshold;
-  testCase.options = markExplicitGraderProvider(
-    {
-      ...normalizeGraderProvider(defaultTest?.options, 'defaultTest.options'),
-      ...normalizeGraderProvider(testCase.options, 'test.options'),
-    },
-    defaultTest?.options,
-    testCase.options,
-  );
+  testCase.options = {
+    ...normalizeGraderProvider(defaultTest?.options, 'defaultTest.options'),
+    ...normalizeGraderProvider(testCase.options, 'test.options'),
+  };
   testCase.metadata = {
     ...(defaultTest?.metadata || {}),
     ...testCase.metadata,
@@ -1533,10 +1520,7 @@ function createRunEvalTest(
 ): AtomicTestCase {
   const globalGraderExamples = testSuite.redteam?.graderExamples;
   const testOptions = globalGraderExamples
-    ? markExplicitGraderProvider(
-        { ...testCase.options, redteamGraderExamples: globalGraderExamples },
-        testCase.options,
-      )
+    ? { ...testCase.options, redteamGraderExamples: globalGraderExamples }
     : testCase.options;
   const baseTest = {
     ...testCase,

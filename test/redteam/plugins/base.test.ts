@@ -1,5 +1,6 @@
 import dedent from 'dedent';
 import { afterEach, beforeEach, describe, expect, it, Mock, MockInstance, vi } from 'vitest';
+import { runAssertions } from '../../../src/assertions/index';
 import cliState from '../../../src/cliState';
 import * as esm from '../../../src/esm';
 import { matchesLlmRubric } from '../../../src/matchers/llmGrading';
@@ -12,10 +13,6 @@ import {
 import { RealEstateAccessibilityDiscriminationPluginGrader } from '../../../src/redteam/plugins/realestate/accessibilityDiscrimination';
 import { setRedteamProviderLoader } from '../../../src/redteam/providers/shared';
 import { maybeLoadFromExternalFile, maybeLoadToolsFromExternalFile } from '../../../src/util/file';
-import {
-  markExplicitGraderProvider,
-  normalizeGraderProvider,
-} from '../../../src/util/gradingProvider';
 import * as packageVersion from '../../../src/util/packageVersion';
 import { createMockProvider, createProviderResponse } from '../../factories/provider';
 
@@ -1398,42 +1395,44 @@ describe('RedteamGraderBase', () => {
     expect(result.rubric).toContain('Current timestamp:');
   });
 
-  it('uses a per-test graderProvider over the suite default when grading redteam cases', async () => {
-    const perTestGrader = createMockProvider({ id: 'per-test-grader' });
-    const loadProvider = vi.fn().mockResolvedValue([perTestGrader]);
-    const restoreLoader = setRedteamProviderLoader(loadProvider);
-    const rawOptions = { graderProvider: 'per-test-grader' };
-    const normalizedOptions = normalizeGraderProvider(rawOptions, 'test.options');
-    const preparedOptions = markExplicitGraderProvider({ ...normalizedOptions }, rawOptions);
-    cliState.config = {
-      defaultTest: { options: { provider: 'suite-grader' } },
-    };
-    vi.mocked(matchesLlmRubric).mockResolvedValue({
-      pass: true,
-      score: 1,
-      reason: 'Test passed',
-    });
+  it.each([
+    ['graderProvider', 'per-test-grader'],
+    ['provider', 'per-test-grader'],
+    ['graderProvider', { text: 'per-test-grader' }],
+    ['provider', { text: 'per-test-grader' }],
+  ] as const)(
+    'uses the authored %s grading option %j over the suite default',
+    async (key, value) => {
+      const perTestGrader = createMockProvider({ id: 'per-test-grader' });
+      const loadProvider = vi.fn().mockResolvedValue([perTestGrader]);
+      const restoreLoader = setRedteamProviderLoader(loadProvider);
+      cliState.config = { defaultTest: { options: { provider: 'suite-grader' } } };
+      vi.mocked(matchesLlmRubric).mockResolvedValue({
+        pass: true,
+        score: 1,
+        reason: 'Test passed',
+      });
 
-    try {
-      await grader.getResult(
-        'test prompt',
-        'test output',
-        {
-          ...mockTest,
-          options: preparedOptions,
-        } as AtomicTestCase,
-        undefined,
-        undefined,
-      );
-
-      expect(loadProvider).toHaveBeenCalledWith(['per-test-grader']);
-      const grading = vi.mocked(matchesLlmRubric).mock.calls[0][2];
-      expect(grading?.provider?.id()).toBe('per-test-grader');
-    } finally {
-      restoreLoader();
-      cliState.config = {};
-    }
-  });
+      try {
+        const result = await runAssertions({
+          prompt: 'test prompt',
+          provider: createMockProvider({ id: 'target' }),
+          providerResponse: { output: 'test output' },
+          test: {
+            ...mockTest,
+            options: { [key]: value },
+            assert: [{ type: 'promptfoo:redteam:competitors' }],
+          },
+        });
+        expect(result.pass).toBe(true);
+        expect(loadProvider).toHaveBeenCalledWith(['per-test-grader']);
+        expect(vi.mocked(matchesLlmRubric).mock.calls[0][2]?.provider).toBe(perTestGrader);
+      } finally {
+        restoreLoader();
+        cliState.config = {};
+      }
+    },
+  );
 
   it('should pass only image output context to multimodal graders', async () => {
     const mockResult: GradingResult = {

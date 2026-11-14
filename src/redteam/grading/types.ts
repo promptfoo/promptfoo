@@ -10,6 +10,8 @@ import type { RedteamHistoryEntry } from '../types';
  * between redteam providers and plugin base classes.
  */
 export interface RedteamGradingContext {
+  /** Evaluator and strategy dispatch supply the authored grading options for this test. */
+  useTestGradingProvider?: boolean;
   providerResponse?: ProviderResponse;
   imageOutputs?: ImageOutput[];
   traceData?: TraceData | null;

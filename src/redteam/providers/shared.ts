@@ -21,6 +21,7 @@ import {
   type ApiProvider,
   type Assertion,
   type AssertionOrSet,
+  type AssertionValue,
   type AtomicTestCase,
   type CallApiContextParams,
   type CallApiOptionsParams,
@@ -61,6 +62,7 @@ import { ATTACKER_MODEL, ATTACKER_MODEL_SMALL, TEMPERATURE } from './constants';
 
 import type { TraceContextData } from '../../tracing/traceContext';
 import type { TransformContext, TransformFunction } from '../../types/transform';
+import type { RedteamGradingContext } from '../grading/types';
 import type { RedteamHistoryEntry } from '../types';
 
 export const BLOCKING_QUESTION_ANALYSIS_FEATURE_FLAG_TIMESTAMP = '2025-06-16T14:49:11-07:00';
@@ -172,6 +174,12 @@ async function loadRedteamProvider({
   return ret;
 }
 
+export function getTextGradingProvider(
+  grading: NonNullable<AtomicTestCase['options']>['provider'],
+): RedteamFileConfig['provider'] {
+  return isProviderTypeMap(grading) ? grading.text : grading;
+}
+
 class RedteamProviderManager {
   private provider: ApiProvider | undefined;
   private providerSpec: LoadableRedteamProvider | undefined;
@@ -236,7 +244,7 @@ class RedteamProviderManager {
       'Specify only one of defaultTest.options.provider or defaultTest.options.graderProvider',
     );
     const grading = options?.graderProvider ?? options?.provider;
-    const textProvider = isProviderTypeMap(grading) ? grading.text : grading;
+    const textProvider = getTextGradingProvider(grading);
     return gradingFirst ? (textProvider ?? test.provider) : (test.provider ?? textProvider);
   }
 
@@ -700,24 +708,35 @@ export async function getTargetResponse(
   };
 }
 
-interface TraceableRedteamGrader<TResult, TArgs extends unknown[]> {
+type GraderArgs = [
+  provider: ApiProvider | undefined,
+  renderedValue: AssertionValue | undefined,
+  additionalRubric?: string,
+  skipRefusalCheck?: boolean,
+  gradingContext?: RedteamGradingContext,
+];
+
+interface TraceableRedteamGrader<TResult> {
   id: string;
   getResult: (
     prompt: string,
     output: string,
     test: AtomicTestCase,
-    ...args: TArgs
+    ...args: GraderArgs
   ) => Promise<TResult>;
 }
 
 /** Trace every strategy grader at one boundary, including graders with custom getResult methods. */
-export function runRedteamGrader<TResult, TArgs extends unknown[]>(
-  grader: TraceableRedteamGrader<TResult, TArgs>,
+export function runRedteamGrader<TResult>(
+  grader: TraceableRedteamGrader<TResult>,
   prompt: string,
   output: string,
   test: AtomicTestCase,
-  ...args: TArgs
+  ...args: GraderArgs
 ): Promise<TResult> {
+  if (test.options?.provider !== undefined || test.options?.graderProvider !== undefined) {
+    args[4] = { ...args[4], useTestGradingProvider: true };
+  }
   const invoke = () => grader.getResult(prompt, output, test, ...args);
   const tracingContext = getProviderCallTracingContext();
   if (!tracingContext) {

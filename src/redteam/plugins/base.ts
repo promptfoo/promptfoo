@@ -4,15 +4,13 @@ import logger from '../../logger';
 import { matchesLlmRubric } from '../../matchers/llmGrading';
 import { isMcpToolNameFilter } from '../../providers/mcp/util';
 import { loadOpenAiAgentsModule } from '../../providers/openai/agents-availability';
-import { isProviderTypeMap } from '../../types/providers';
 import { retryWithDeduplication, sampleArray } from '../../util/generation';
-import { getExplicitGraderProvider } from '../../util/gradingProvider';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import invariant from '../../util/invariant';
 import { extractVariablesFromTemplate, getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
 import { materializeInputVariablesWithMetadata } from '../inputVariables';
-import { redteamProviderManager } from '../providers/shared';
+import { getTextGradingProvider, redteamProviderManager } from '../providers/shared';
 import {
   getGeneratedPromptOverLimit,
   getMaxCharsPerMessageModifierValue,
@@ -33,7 +31,6 @@ import type {
   AtomicTestCase,
   GradingResult,
   PluginConfig,
-  RedteamFileConfig,
   ResultSuggestion,
   TestCase,
 } from '../../types/index';
@@ -470,6 +467,7 @@ export abstract class RedteamGraderBase {
     const {
       providerResponse: gradingProviderResponse,
       imageOutputs,
+      useTestGradingProvider,
       ...templateGradingContext
     } = gradingContext ?? {};
 
@@ -577,10 +575,11 @@ export abstract class RedteamGraderBase {
       typeof cliState.config?.defaultTest === 'object'
         ? (cliState.config.defaultTest as TestCase)
         : undefined;
-    const testGrader = getExplicitGraderProvider(test.options);
-    const testGraderProvider = (isProviderTypeMap(testGrader) ? testGrader.text : testGrader) as
-      | RedteamFileConfig['provider']
-      | undefined;
+    const testGraderProvider = getTextGradingProvider(
+      useTestGradingProvider
+        ? (test.options?.provider ?? test.options?.graderProvider)
+        : test.options?.graderProvider,
+    );
     const hasConfiguredGradingProvider = Boolean(
       testGraderProvider ||
         cliState.config?.redteam?.provider ||

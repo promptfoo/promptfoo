@@ -55,6 +55,8 @@ defaultTest:
     graderProvider: 'ollama:chat:llama3.3:70b'
 ```
 
+Set `options.graderProvider` or `options.provider` on an individual test to override the default for that test. A scenario can also set a grader in `config[].options`. A test-level setting takes precedence over the scenario setting. When using a provider type map, the red-team grader uses its `text` entry.
+
 In this example, we can override the default grader to use Azure OpenAI:
 
 ```yaml
