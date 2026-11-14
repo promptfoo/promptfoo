@@ -1044,6 +1044,11 @@ describe('evaluatorHelpers', () => {
   });
 
   describe('resolveVariables', () => {
+    it('bounds self-referential aliases containing multiple placeholders', () => {
+      const vars = { self: '{{self}}{{self}}' };
+      expect(resolveVariables(vars).self).toBe('{{self}}'.repeat(33));
+    });
+
     it('should replace placeholders with corresponding variable values', () => {
       const variables = {
         final: '{{ my_greeting }}, {{name}}!',
