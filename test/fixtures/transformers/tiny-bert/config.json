@@ -1,0 +1,9 @@
+{
+  "model_type": "bert",
+  "hidden_size": 1,
+  "num_attention_heads": 1,
+  "num_hidden_layers": 1,
+  "intermediate_size": 4,
+  "vocab_size": 7,
+  "max_position_embeddings": 128
+}

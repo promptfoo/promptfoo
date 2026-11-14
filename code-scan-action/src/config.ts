@@ -21,27 +21,23 @@ export function generateConfigFile(minimumSeverity: string, guidance?: string): 
   // Validate severity input (throws ZodError if invalid)
   const validatedSeverity = validateSeverity(minimumSeverity);
 
-  const config: ScanConfig = {
+  // Validate the entire config object for additional safety
+  const validatedConfig = ScanConfigSchema.parse({
     minimumSeverity: validatedSeverity,
     diffsOnly: false, // Always enable full repo exploration for GitHub Actions (never diffs-only)
     guidance,
-  };
-
-  // Validate the entire config object for additional safety
-  const validatedConfig = ScanConfigSchema.parse(config);
+  } satisfies ScanConfig);
 
   // Create temp file
-  const tempDir = os.tmpdir();
-  const configPath = path.join(tempDir, `code-scan-config-${randomUUID()}.yaml`);
+  const configPath = path.join(os.tmpdir(), `code-scan-config-${randomUUID()}.yaml`);
 
   // Write YAML
   let yamlContent = `minimumSeverity: ${validatedConfig.minimumSeverity}\ndiffsOnly: ${validatedConfig.diffsOnly}\n`;
   if (guidance) {
     // Properly escape YAML string using literal block scalar
-    const guidanceYaml = guidance.includes('\n')
+    yamlContent += guidance.includes('\n')
       ? `guidance: |\n  ${guidance.split('\n').join('\n  ')}\n`
       : `guidance: ${JSON.stringify(guidance)}\n`;
-    yamlContent += guidanceYaml;
   }
 
   fs.writeFileSync(configPath, yamlContent, 'utf8');

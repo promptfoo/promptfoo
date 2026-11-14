@@ -6,7 +6,8 @@ import { sha256 } from '../../util/createHash';
 import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { isSamplingParamsDeprecatedClaudeModel } from '../anthropic/util';
 import { AwsBedrockGenericProvider } from './base';
-import { createBedrockRequestHandler, hasProxyEnv } from './util';
+import { assertBedrockModelIsAvailable } from './index';
+import { createBedrockRequestHandler, hasProxyEnv, INFERENCE_PROFILE_PREFIX } from './util';
 import type {
   BedrockAgentRuntimeClient,
   RetrieveAndGenerateCommandInput,
@@ -81,6 +82,7 @@ export class AwsBedrockKnowledgeBaseProvider
     options: { config?: BedrockKnowledgeBaseOptions; id?: string; env?: EnvOverrides } = {},
   ) {
     super(modelName, options);
+    assertBedrockModelIsAvailable(options.config?.modelArn || modelName);
 
     // Ensure we have a knowledgeBaseId
     if (!options.config?.knowledgeBaseId) {
@@ -106,6 +108,7 @@ export class AwsBedrockKnowledgeBaseProvider
   }
 
   async getKnowledgeBaseClient() {
+    this.checkAgentRuntimeCacheIdentity();
     if (!this.knowledgeBaseClient) {
       // client-bedrock-agent-runtime already defaults to HTTP/1.1, so we only
       // need a custom handler for proxy or API key authentication.
@@ -116,6 +119,9 @@ export class AwsBedrockKnowledgeBaseProvider
       try {
         const { BedrockAgentRuntimeClient } = await import('@aws-sdk/client-bedrock-agent-runtime');
         const credentials = await this.getCredentials();
+        if (credentials) {
+          this.allowSharedAgentRuntimeCache = false;
+        }
         const client = new BedrockAgentRuntimeClient({
           region: this.getRegion(),
           maxAttempts: getEnvInt('AWS_BEDROCK_MAX_RETRIES', 10),
@@ -183,7 +189,7 @@ export class AwsBedrockKnowledgeBaseProvider
     if (!modelArn) {
       if (/^arn:aws(?:-[^:]+)?:bedrock:/.test(this.modelName)) {
         modelArn = this.modelName; // Already has full ARN format
-      } else if (/^(?:us|eu|apac|global|jp|au)\./.test(this.modelName)) {
+      } else if (INFERENCE_PROFILE_PREFIX.test(this.modelName)) {
         // Preserve system-defined inference profile IDs instead of wrapping them
         // in a foundation-model ARN.
         modelArn = this.modelName;
@@ -225,9 +231,9 @@ export class AwsBedrockKnowledgeBaseProvider
       hasRetrievalConfiguration: Boolean(knowledgeBaseConfiguration.retrievalConfiguration),
     });
 
-    const cache = await getCache();
+    const cache = this.allowSharedAgentRuntimeCache ? await getCache() : undefined;
 
-    const sensitiveKeys = ['accessKeyId', 'secretAccessKey', 'sessionToken'];
+    const sensitiveKeys = ['accessKeyId', 'apiKey', 'secretAccessKey', 'sessionToken'];
     const cacheConfig = {
       region: this.getRegion(),
       modelName: this.modelName,
@@ -237,15 +243,15 @@ export class AwsBedrockKnowledgeBaseProvider
     };
 
     const configStr = JSON.stringify(cacheConfig, Object.keys(cacheConfig).sort());
-    // Earlier cached results did not apply configured generation parameters.
-    const cacheKey = `bedrock-kb:v2:${this.kbConfig.knowledgeBaseId}:${modelArn}:${this.getRegion()}:${sha256(
+    // Older entries may contain responses from explicitly credentialed clients.
+    const cacheKey = `bedrock-kb:v3:${this.kbConfig.knowledgeBaseId}:${modelArn}:${this.getRegion()}:${sha256(
       JSON.stringify({
         configStr,
         prompt,
       }),
     )}`;
 
-    if (isCacheEnabled()) {
+    if (cache && isCacheEnabled()) {
       const cachedResponse = await cache.get(cacheKey);
       if (cachedResponse) {
         logger.debug('Returning cached Bedrock Knowledge Base response');
@@ -281,7 +287,7 @@ export class AwsBedrockKnowledgeBaseProvider
         citations = response.citations;
       }
 
-      if (isCacheEnabled()) {
+      if (cache && isCacheEnabled()) {
         try {
           await cache.set(
             cacheKey,

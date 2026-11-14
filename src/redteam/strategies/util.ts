@@ -1,40 +1,7 @@
 import { isProviderOptions, type TestCaseWithPlugin } from '../../types/index';
-import { pluginConfigMatchesStrategyTargets } from '../sharedFrontend';
+import { STRATEGY_EXEMPT_PLUGINS } from '../constants';
 
 import type { RedteamStrategyObject } from '../types';
-
-export { pluginConfigMatchesStrategy, pluginConfigMatchesStrategyTargets } from '../sharedFrontend';
-
-export function getStrategyDeduplicationKey(strategy: RedteamStrategyObject): string {
-  if (strategy.id === 'layer' && strategy.config) {
-    if (typeof strategy.config.label === 'string' && strategy.config.label.trim()) {
-      return `layer/${strategy.config.label}`;
-    }
-    if (Array.isArray(strategy.config.steps)) {
-      const steps = (strategy.config.steps as Array<string | { id?: string }>).map((step) =>
-        typeof step === 'string' ? step : (step?.id ?? 'unknown'),
-      );
-      return `layer:${steps.join('->')}`;
-    }
-  }
-  return strategy.id;
-}
-
-export function deduplicateStrategies<T extends RedteamStrategyObject>(
-  strategies: readonly T[],
-  onDuplicate?: (key: string) => void,
-): T[] {
-  const seen = new Set<string>();
-  return strategies.filter((strategy) => {
-    const key = getStrategyDeduplicationKey(strategy);
-    if (seen.has(key)) {
-      onDuplicate?.(key);
-      return false;
-    }
-    seen.add(key);
-    return true;
-  });
-}
 
 /**
  * Determines whether a strategy should be applied to a test case based on plugin targeting rules.
@@ -50,11 +17,7 @@ export function pluginMatchesStrategyTargets(
   targetPlugins?: NonNullable<RedteamStrategyObject['config']>['plugins'],
 ): boolean {
   const pluginId = testCase.metadata?.pluginId;
-  const pluginConfig = testCase.metadata?.pluginConfig;
-  if (
-    !pluginId ||
-    !pluginConfigMatchesStrategyTargets(pluginId, pluginConfig, strategyId, targetPlugins)
-  ) {
+  if (STRATEGY_EXEMPT_PLUGINS.includes(pluginId as any)) {
     return false;
   }
   if (isProviderOptions(testCase.provider) && testCase.provider?.id === 'sequence') {
@@ -62,5 +25,23 @@ export function pluginMatchesStrategyTargets(
     return false;
   }
 
-  return true;
+  // Check if this strategy is excluded for this plugin
+  const excludedStrategies = testCase.metadata?.pluginConfig?.excludeStrategies as
+    | string[]
+    | undefined;
+  if (Array.isArray(excludedStrategies) && excludedStrategies.includes(strategyId)) {
+    return false;
+  }
+
+  if (!targetPlugins || targetPlugins.length === 0) {
+    return true; // If no targets specified, strategy applies to all plugins
+  }
+
+  return targetPlugins.some(
+    (target) =>
+      // Direct match
+      target === pluginId ||
+      // Category match (e.g. 'harmful' matches 'harmful:hate')
+      (pluginId || '').startsWith(`${target}:`),
+  );
 }

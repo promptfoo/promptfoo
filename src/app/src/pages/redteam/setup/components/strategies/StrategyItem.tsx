@@ -11,7 +11,6 @@ import {
   CONFIGURABLE_STRATEGIES_SET,
   DEFAULT_STRATEGIES_SET,
   MULTI_MODAL_STRATEGIES_SET,
-  STRATEGIES_REQUIRING_REMOTE_SET,
 } from '@promptfoo/redteam/constants';
 import { Lock, Settings } from 'lucide-react';
 import { TestCaseGenerateButton } from './../TestCaseDialog';
@@ -35,7 +34,6 @@ interface StrategyItemProps {
   isRemoteGenerationDisabled: boolean;
   isAuthGated?: boolean;
   isConfigured?: boolean;
-  testCaseGenerationDisabledReason?: string;
 }
 
 export function StrategyItem({
@@ -47,27 +45,20 @@ export function StrategyItem({
   isRemoteGenerationDisabled,
   isAuthGated = false,
   isConfigured = true,
-  testCaseGenerationDisabledReason,
 }: StrategyItemProps) {
-  const {
-    handleTestCaseGeneration,
-    isGenerating,
-    isCurrentStrategy,
-    isTestCaseGenerationAvailable,
-  } = useStrategyTestGeneration({ strategyId: strategy.id });
+  const { handleTestCaseGeneration, isGenerating, isCurrentStrategy } = useStrategyTestGeneration({
+    strategyId: strategy.id,
+  });
 
   const requiresConfig = isSelected && !isConfigured;
 
   const hasSettingsButton =
     requiresConfig || (isSelected && CONFIGURABLE_STRATEGIES_SET.has(strategy.id));
 
-  const isTestCaseGenerationDisabled =
-    Boolean(testCaseGenerationDisabledReason) ||
-    !isTestCaseGenerationAvailable ||
-    STRATEGIES_WITHOUT_TEST_CASE_GENERATION_SET.has(
-      // biome-ignore lint/suspicious/noExplicitAny: TypeScript cannot narrow Strategy type to subset expected by Set
-      strategy.id as any,
-    );
+  const isTestCaseGenerationDisabled = STRATEGIES_WITHOUT_TEST_CASE_GENERATION_SET.has(
+    // biome-ignore lint/suspicious/noExplicitAny: TypeScript cannot narrow Strategy type to subset expected by Set
+    strategy.id as any,
+  );
 
   // Compute tooltip titles - simple derived values, no memoization needed
   const tooltipTitle = useMemo(() => {
@@ -76,24 +67,11 @@ export function StrategyItem({
         strategy.id === 'custom' ? 'Strategy text is required' : 'Configuration is required';
       return `Configuration required: ${reason}. Click the settings icon to configure.`;
     }
-    if (testCaseGenerationDisabledReason) {
-      return testCaseGenerationDisabledReason;
-    }
-    if (!isTestCaseGenerationAvailable) {
-      return 'No configured plugins are compatible with this strategy.';
-    }
     if (isTestCaseGenerationDisabled) {
       return `Test case generation is not available for ${strategy.name} strategy.`;
     }
     return `Generate an example test case using the ${strategy.name} Strategy.`;
-  }, [
-    requiresConfig,
-    strategy.id,
-    strategy.name,
-    isTestCaseGenerationDisabled,
-    isTestCaseGenerationAvailable,
-    testCaseGenerationDisabledReason,
-  ]);
+  }, [requiresConfig, strategy.id, strategy.name, isTestCaseGenerationDisabled]);
 
   const settingsTooltipTitle = requiresConfig ? tooltipTitle : `Configure ${strategy.name}`;
 
@@ -154,22 +132,20 @@ export function StrategyItem({
                   Multi-modal
                 </Badge>
               )}
-              {isDisabled &&
-                isRemoteGenerationDisabled &&
-                STRATEGIES_REQUIRING_REMOTE_SET.has(strategy.id) && (
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <span className="pointer-events-auto rounded border border-destructive/30 bg-destructive/10 px-1 py-0.5 text-[0.7rem] font-medium text-destructive">
-                        Remote generation required
-                      </span>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      This strategy requires remote generation. Unset
-                      PROMPTFOO_DISABLE_REMOTE_GENERATION or
-                      PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION to enable.
-                    </TooltipContent>
-                  </Tooltip>
-                )}
+              {isDisabled && isRemoteGenerationDisabled && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="pointer-events-auto rounded border border-destructive/30 bg-destructive/10 px-1 py-0.5 text-[0.7rem] font-medium text-destructive">
+                      Remote generation required
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    This strategy requires remote generation. Unset
+                    PROMPTFOO_DISABLE_REMOTE_GENERATION or
+                    PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION to enable.
+                  </TooltipContent>
+                </Tooltip>
+              )}
               {isDisabled && isAuthGated && (
                 <Tooltip>
                   <TooltipTrigger asChild>

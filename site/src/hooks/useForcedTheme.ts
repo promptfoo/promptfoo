@@ -1,12 +1,10 @@
-import { useEffect, useRef } from 'react';
+import { useEffect } from 'react';
 
 type ThemeMode = 'light' | 'dark';
 
 export function useForcedTheme(theme: ThemeMode) {
-  const previousThemeRef = useRef<string | null>(null);
-
   useEffect(() => {
-    previousThemeRef.current = document.documentElement.getAttribute('data-theme');
+    const previousTheme = document.documentElement.getAttribute('data-theme');
     document.documentElement.setAttribute('data-theme', theme);
 
     // Re-enforce if something (e.g. system preference change) overrides the theme
@@ -22,8 +20,8 @@ export function useForcedTheme(theme: ThemeMode) {
 
     return () => {
       observer.disconnect();
-      if (previousThemeRef.current) {
-        document.documentElement.setAttribute('data-theme', previousThemeRef.current);
+      if (previousTheme) {
+        document.documentElement.setAttribute('data-theme', previousTheme);
       } else {
         document.documentElement.removeAttribute('data-theme');
       }

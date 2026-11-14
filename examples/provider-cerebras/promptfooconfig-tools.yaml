@@ -1,12 +1,16 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: Function calling with Llama 4 for mathematical problem solving
+description: Validate calculator function calls from GPT OSS
 prompts:
   - file://tool_prompts.txt
 providers:
-  - id: cerebras:llama-4-scout-17b-16e-instruct
+  - id: cerebras:gpt-oss-120b
     config:
       temperature: 0.7
       max_completion_tokens: 1024
+      tool_choice:
+        type: function
+        function:
+          name: calculate
       tools:
         - type: 'function'
           function:
@@ -19,31 +23,22 @@ providers:
                   type: 'string'
                   description: 'The mathematical expression to evaluate'
               required: ['expression']
+              additionalProperties: false
             strict: true
+defaultTest:
+  assert:
+    - type: javascript
+      value: |
+        const calls = Array.isArray(output) ? output : output.tool_calls;
+        return calls?.length === 1 &&
+          calls[0].type === 'function' &&
+          calls[0].function.name === 'calculate' &&
+          JSON.parse(calls[0].function.arguments).expression === context.vars.expression;
+
 tests:
   - vars:
-      problem: '15 × 7'
-      explanation: 'the product of fifteen and seven'
-    assert:
-      - type: contains
-        value: '105'
-      - type: contains-any
-        value: ['multiply', 'multiplication', 'multiplying', 'product']
+      expression: '15 * 7'
   - vars:
-      problem: '(42 × 3) ÷ 6'
-      explanation: 'forty-two times three, divided by six'
-    assert:
-      - type: contains
-        value: '21'
-      - type: contains-any
-        value: ['order of operations', 'PEMDAS', 'parentheses', 'brackets']
+      expression: '(42 * 3) / 6'
   - vars:
-      problem: '√(144) + 25²'
-      explanation: 'the square root of one hundred forty-four plus twenty-five squared'
-    assert:
-      - type: contains
-        value: '637'
-      - type: contains-any
-        value: ['square root', 'exponent', 'power', 'squared']
-outputs:
-  - type: text
+      expression: 'sqrt(144) + 25 ** 2'

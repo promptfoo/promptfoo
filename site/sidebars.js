@@ -165,6 +165,7 @@ const redTeamSidebar = [
         label: 'Single-Turn',
         collapsed: true,
         items: [
+          'red-team/strategies/arabic-presentation-forms',
           'red-team/strategies/base64',
           'red-team/strategies/basic',
           'red-team/strategies/best-of-n',
@@ -177,8 +178,8 @@ const redTeamSidebar = [
           'red-team/strategies/likert',
           'red-team/strategies/math-prompt',
           'red-team/strategies/other-encodings',
-          'red-team/strategies/posterior',
           'red-team/strategies/rot13',
+          'red-team/strategies/posterior',
         ],
       },
       {
@@ -349,6 +350,11 @@ const sidebars = {
     {
       type: 'doc',
       id: 'installation',
+    },
+    {
+      type: 'link',
+      label: 'Local Server API',
+      href: '/docs/local-server-api-reference/',
     },
     {
       type: 'category',
@@ -540,6 +546,7 @@ const sidebars = {
       items: [
         { type: 'doc', id: 'enterprise/index' },
         { type: 'doc', id: 'enterprise/authentication' },
+        { type: 'doc', id: 'enterprise/sso' },
         { type: 'doc', id: 'enterprise/service-accounts' },
         { type: 'doc', id: 'enterprise/teams' },
         { type: 'doc', id: 'enterprise/red-teams' },
@@ -558,10 +565,6 @@ const sidebars = {
     {
       type: 'doc',
       id: 'contributing',
-    },
-    {
-      type: 'doc',
-      id: 'write-for-promptfoo',
     },
     {
       type: 'doc',

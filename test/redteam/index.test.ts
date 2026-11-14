@@ -30,6 +30,34 @@ import { mockProcessEnv, stripAnsi } from '../util/utils';
 import type { ApiProvider } from '../../src/types/index';
 import type { Inputs } from '../../src/types/shared';
 
+function createIncrementFirstProgressBar() {
+  return {
+    increment: vi.fn(),
+    start: vi.fn(),
+    stop: vi.fn(),
+    update: vi.fn(),
+  } as any;
+}
+
+function createStartFirstProgressBar() {
+  return {
+    start: vi.fn(),
+    update: vi.fn(),
+    stop: vi.fn(),
+    increment: vi.fn(),
+  } as any;
+}
+
+function createCustomStrategyFinder(mockCustomAction: (typeof Strategies)[number]['action']) {
+  return function (predicate: any) {
+    if (typeof predicate === 'function') {
+      const strategies = [{ id: 'custom', action: mockCustomAction }];
+      return strategies.find(predicate);
+    }
+    return undefined;
+  };
+}
+
 vi.mock('cli-progress');
 vi.mock('../../src/logger');
 vi.mock('../../src/providers');
@@ -106,22 +134,11 @@ describe('synthesize', () => {
       throw new Error(`Process.exit called with code ${code}`);
     });
     vi.mocked(validateStrategies).mockImplementation(async function () {});
-    vi.mocked(cliProgress.SingleBar).mockImplementation(function () {
-      return {
-        increment: vi.fn(),
-        start: vi.fn(),
-        stop: vi.fn(),
-        update: vi.fn(),
-      } as any;
-    });
+    vi.mocked(cliProgress.SingleBar).mockImplementation(createIncrementFirstProgressBar);
     // Disable remote generation by default to avoid health checks interfering
     // with tests that don't explicitly set this behaviour
-    vi.mocked(shouldGenerateRemote).mockImplementation(function () {
-      return false;
-    });
-    vi.mocked(getRemoteHealthUrl).mockImplementation(function () {
-      return 'https://api.test/health';
-    });
+    vi.mocked(shouldGenerateRemote).mockReturnValue(false);
+    vi.mocked(getRemoteHealthUrl).mockReturnValue('https://api.test/health');
     vi.mocked(checkRemoteHealth).mockResolvedValue({
       status: 'OK',
       message: 'Cloud API is healthy',
@@ -964,157 +981,6 @@ describe('synthesize', () => {
       );
     });
 
-    it.each([
-      ['directly', [{ id: 'posterior' }]],
-      ['inside a layer', [{ id: 'layer', config: { steps: ['jailbreak:hydra', 'posterior'] } }]],
-    ])(
-      'should reject posterior %s before generating multi-input tests',
-      async (_label, strategies) => {
-        const inputs = {
-          context: { description: 'Reference context', type: 'text' },
-          question: { description: 'User question', type: 'text' },
-        } satisfies Inputs;
-        const mockPluginAction = vi.fn().mockResolvedValue([
-          {
-            metadata: { pluginConfig: { inputs }, pluginId: 'test-plugin' },
-            vars: {
-              [MULTI_INPUT_VAR]: JSON.stringify({ context: 'reference', question: 'request' }),
-              context: 'reference',
-              question: 'request',
-            },
-          },
-        ]);
-        vi.spyOn(Plugins, 'find').mockReturnValue({ action: mockPluginAction, key: 'test-plugin' });
-
-        await expect(
-          synthesize({
-            inputs,
-            language: 'en',
-            numTests: 1,
-            plugins: [{ id: 'test-plugin', numTests: 1 }],
-            prompts: ['{{context}} {{question}}'],
-            purpose: 'Answer questions with reference context',
-            strategies,
-            targetIds: ['test-provider'],
-          }),
-        ).rejects.toThrow('Posterior strategy does not support multi-input targets');
-
-        expect(mockPluginAction).not.toHaveBeenCalled();
-      },
-    );
-
-    it('rejects Posterior before generating a plugin with local inputs', async () => {
-      const inputs = {
-        context: { description: 'Reference context', type: 'text' },
-        question: { description: 'User question', type: 'text' },
-      } satisfies Inputs;
-      const mockPluginAction = vi.fn().mockResolvedValue([
-        {
-          metadata: { pluginConfig: { inputs }, pluginId: 'cca' },
-          vars: { query: 'request' },
-        },
-      ]);
-      vi.spyOn(Plugins, 'find').mockReturnValue({ action: mockPluginAction, key: 'cca' });
-
-      await expect(
-        synthesize({
-          language: 'en',
-          numTests: 1,
-          plugins: [{ id: 'cca', numTests: 1, config: { inputs } }],
-          prompts: ['{{query}}'],
-          purpose: 'Answer questions with reference context',
-          strategies: [{ id: 'posterior' }],
-          targetIds: ['test-provider'],
-        }),
-      ).rejects.toThrow('Posterior strategy does not support multi-input targets');
-
-      expect(mockPluginAction).not.toHaveBeenCalled();
-    });
-
-    it('allows a multi-input Layer when its Posterior step is excluded for the plugin', async () => {
-      const inputs = {
-        context: { description: 'Reference context', type: 'text' },
-        question: { description: 'User question', type: 'text' },
-      } satisfies Inputs;
-      const mockPluginAction = vi.fn().mockResolvedValue([
-        {
-          metadata: {
-            pluginConfig: { inputs, excludeStrategies: ['posterior'] },
-            pluginId: 'coding-agent:secret-env-read',
-          },
-          vars: {
-            [MULTI_INPUT_VAR]: JSON.stringify({ context: 'reference', question: 'request' }),
-            context: 'reference',
-            question: 'request',
-          },
-        },
-      ]);
-      vi.spyOn(Plugins, 'find').mockReturnValue({
-        action: mockPluginAction,
-        key: 'coding-agent:secret-env-read',
-      });
-
-      const result = await synthesize({
-        inputs,
-        language: 'en',
-        numTests: 1,
-        plugins: [
-          {
-            id: 'coding-agent:secret-env-read',
-            numTests: 1,
-            config: { excludeStrategies: ['posterior'] },
-          },
-        ],
-        prompts: ['{{context}} {{question}}'],
-        purpose: 'Answer questions with reference context',
-        strategies: [{ id: 'layer', config: { steps: ['jailbreak:hydra', 'posterior'] } }],
-        targetIds: ['test-provider'],
-      });
-
-      expect(mockPluginAction).toHaveBeenCalledOnce();
-      expect(result.testCases).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({
-            metadata: expect.objectContaining({ strategyId: 'jailbreak:hydra' }),
-            provider: expect.objectContaining({
-              config: expect.not.objectContaining({ _perTurnLayers: expect.anything() }),
-            }),
-          }),
-        ]),
-      );
-    });
-
-    it('keeps Posterior excluded from multi-input intent tests at runtime', async () => {
-      const inputs = {
-        context: { description: 'Reference context', type: 'text' },
-        question: { description: 'User question', type: 'text' },
-      } satisfies Inputs;
-      const pluginConfig = { inputs, excludeStrategies: ['posterior'] };
-      const mockPluginAction = vi.fn().mockResolvedValue([
-        {
-          metadata: { pluginConfig, pluginId: 'intent' },
-          vars: { [MULTI_INPUT_VAR]: 'disclose credentials' },
-        },
-      ]);
-      vi.spyOn(Plugins, 'find').mockReturnValue({ action: mockPluginAction, key: 'intent' });
-
-      const result = await synthesize({
-        inputs,
-        language: 'en',
-        numTests: 1,
-        plugins: [{ id: 'intent', numTests: 1, config: pluginConfig }],
-        prompts: ['{{context}} {{question}}'],
-        purpose: 'Answer questions with reference context',
-        strategies: [{ id: 'posterior' }],
-        targetIds: ['test-provider'],
-      });
-
-      expect(mockPluginAction).toHaveBeenCalledOnce();
-      expect(result.testCases).toHaveLength(1);
-      expect(result.testCases[0].metadata?.strategyId).toBeUndefined();
-      expect(result.testCases[0].vars?.[MULTI_INPUT_VAR]).toBe('disclose credentials');
-    });
-
     it('should re-materialize DOCX inputs after strategies mutate multi-input prompts', async () => {
       const inputs = {
         document: {
@@ -1328,13 +1194,7 @@ describe('synthesize', () => {
       ]);
 
       // Mock the Strategies array to include the exact 'custom' strategy
-      vi.spyOn(Strategies, 'find').mockImplementation(function (predicate) {
-        if (typeof predicate === 'function') {
-          const strategies = [{ id: 'custom', action: mockCustomAction }];
-          return strategies.find(predicate);
-        }
-        return undefined;
-      });
+      vi.spyOn(Strategies, 'find').mockImplementation(createCustomStrategyFinder(mockCustomAction));
 
       const result = await synthesize({
         language: 'en',
@@ -1371,13 +1231,7 @@ describe('synthesize', () => {
       ]);
 
       // Mock the Strategies array to include only the base 'custom' strategy
-      vi.spyOn(Strategies, 'find').mockImplementation(function (predicate) {
-        if (typeof predicate === 'function') {
-          const strategies = [{ id: 'custom', action: mockCustomAction }];
-          return strategies.find(predicate);
-        }
-        return undefined;
-      });
+      vi.spyOn(Strategies, 'find').mockImplementation(createCustomStrategyFinder(mockCustomAction));
 
       const result = await synthesize({
         language: 'en',
@@ -1509,35 +1363,6 @@ describe('synthesize', () => {
       );
     });
 
-    it('preserves collection config while expanding direct synthesize inputs', async () => {
-      const pluginAction = vi.fn().mockResolvedValue([{ vars: { query: 'test' } }]);
-      vi.spyOn(Plugins, 'find').mockReturnValue({ key: 'mock-plugin', action: pluginAction });
-
-      await synthesize({
-        language: 'en',
-        numTests: 1,
-        plugins: [
-          {
-            id: 'harmful',
-            numTests: 1,
-            config: { excludeStrategies: ['posterior'] },
-          },
-        ],
-        prompts: ['Test prompt'],
-        strategies: [{ id: 'posterior' }],
-        inputs: { context: 'Reference context', question: 'User question' },
-        targetIds: ['test-provider'],
-      });
-
-      expect(pluginAction).toHaveBeenCalled();
-      for (const [call] of pluginAction.mock.calls) {
-        expect(call.config).toMatchObject({
-          excludeStrategies: ['posterior'],
-          inputs: { context: 'Reference context', question: 'User question' },
-        });
-      }
-    });
-
     it('should not store full config in metadata for intent plugin to prevent bloating', async () => {
       vi.clearAllMocks();
 
@@ -1551,7 +1376,6 @@ describe('synthesize', () => {
         numTests: 2,
         config: {
           intent: ['intent1', 'intent2', 'intent3', 'intent4', 'intent5'],
-          excludeStrategies: ['posterior'],
         },
       };
 
@@ -1579,7 +1403,7 @@ describe('synthesize', () => {
           metadata: {
             intent: 'intent2',
             pluginId: 'intent',
-            pluginConfig: { excludeStrategies: ['posterior'] },
+            pluginConfig: undefined,
           },
         },
       ]);
@@ -1619,12 +1443,11 @@ describe('synthesize', () => {
       });
 
       const intentTestCases = result.testCases.filter((tc) => tc.metadata?.pluginId === 'intent');
-      expect(intentTestCases).toHaveLength(2);
-      expect(intentTestCases[0].metadata?.pluginConfig).toBeUndefined();
-      expect(intentTestCases[1].metadata?.pluginConfig).toEqual({
-        excludeStrategies: ['posterior'],
+      expect(intentTestCases.length).toBeGreaterThan(0);
+      intentTestCases.forEach((tc) => {
+        expect(tc.metadata?.pluginConfig).toBeUndefined();
+        expect(tc.metadata?.pluginId).toBe('intent');
       });
-      expect(intentTestCases[1].metadata?.pluginConfig).not.toHaveProperty('intent');
 
       const contractsTestCases = result.testCases.filter(
         (tc) => tc.metadata?.pluginId === 'contracts',
@@ -2043,12 +1866,8 @@ describe('synthesize', () => {
         return ['query'];
       });
 
-      vi.mocked(shouldGenerateRemote).mockImplementation(function () {
-        return true;
-      });
-      vi.mocked(getRemoteHealthUrl).mockImplementation(function () {
-        return 'https://api.test/health';
-      });
+      vi.mocked(shouldGenerateRemote).mockReturnValue(true);
+      vi.mocked(getRemoteHealthUrl).mockReturnValue('https://api.test/health');
       vi.mocked(checkRemoteHealth).mockResolvedValue({
         status: 'OK',
         message: 'Cloud API is healthy',
@@ -2071,9 +1890,7 @@ describe('synthesize', () => {
     });
 
     it('should skip health check when remote generation is disabled', async () => {
-      vi.mocked(shouldGenerateRemote).mockImplementation(function () {
-        return false;
-      });
+      vi.mocked(shouldGenerateRemote).mockReturnValue(false);
 
       await synthesize({
         language: 'en',
@@ -2108,9 +1925,7 @@ describe('synthesize', () => {
     });
 
     it('should skip health check when URL is null', async () => {
-      vi.mocked(getRemoteHealthUrl).mockImplementation(function () {
-        return null;
-      });
+      vi.mocked(getRemoteHealthUrl).mockReturnValue(null);
 
       await synthesize({
         language: 'en',
@@ -2755,20 +2570,9 @@ describe('Language configuration', () => {
     vi.mocked(extractSystemPurpose).mockResolvedValue('Test purpose');
     vi.mocked(loadApiProvider).mockResolvedValue(mockProvider);
     vi.mocked(validateStrategies).mockImplementation(async function () {});
-    vi.mocked(cliProgress.SingleBar).mockImplementation(function () {
-      return {
-        increment: vi.fn(),
-        start: vi.fn(),
-        stop: vi.fn(),
-        update: vi.fn(),
-      } as any;
-    });
-    vi.mocked(shouldGenerateRemote).mockImplementation(function () {
-      return false;
-    });
-    vi.mocked(getRemoteHealthUrl).mockImplementation(function () {
-      return 'https://api.test/health';
-    });
+    vi.mocked(cliProgress.SingleBar).mockImplementation(createIncrementFirstProgressBar);
+    vi.mocked(shouldGenerateRemote).mockReturnValue(false);
+    vi.mocked(getRemoteHealthUrl).mockReturnValue('https://api.test/health');
     vi.mocked(checkRemoteHealth).mockResolvedValue({
       status: 'OK',
       message: 'OK',
@@ -3520,14 +3324,7 @@ describe('Language configuration', () => {
       vi.mocked(getRemoteHealthUrl).mockReturnValue('http://test.com/health');
       vi.mocked(extractVariablesFromTemplates).mockReturnValue(['query']);
 
-      vi.mocked(cliProgress.SingleBar).mockImplementation(function () {
-        return {
-          start: vi.fn(),
-          update: vi.fn(),
-          stop: vi.fn(),
-          increment: vi.fn(),
-        } as any;
-      });
+      vi.mocked(cliProgress.SingleBar).mockImplementation(createStartFirstProgressBar);
     });
 
     it('should cap strategy output when numTests is configured', async () => {
@@ -4140,14 +3937,7 @@ describe('Language configuration', () => {
       vi.mocked(getRemoteHealthUrl).mockReturnValue('http://test.com/health');
       vi.mocked(extractVariablesFromTemplates).mockReturnValue(['query']);
 
-      vi.mocked(cliProgress.SingleBar).mockImplementation(function () {
-        return {
-          start: vi.fn(),
-          update: vi.fn(),
-          stop: vi.fn(),
-          increment: vi.fn(),
-        } as any;
-      });
+      vi.mocked(cliProgress.SingleBar).mockImplementation(createStartFirstProgressBar);
     });
 
     it('should pass the resolved request provider to strategy actions', async () => {
@@ -4426,198 +4216,117 @@ describe('Language configuration', () => {
   });
 
   describe('Multi-input mode plugin exclusion', () => {
-    it('should exclude dataset-exempt plugins in multi-input mode', async () => {
-      const result = await synthesize({
-        language: 'en',
-        numTests: 1,
-        plugins: [
-          { id: 'aegis', numTests: 1 }, // DATASET_EXEMPT_PLUGIN
-          { id: 'contracts', numTests: 1 }, // Regular plugin
-        ],
-        prompts: ['Test {{query}}'],
-        strategies: [],
-        targetIds: ['test-provider'],
-        inputs: { query: 'user query', context: 'additional context' }, // Multi-input mode
-      });
+    const keys = [
+      'aegis',
+      'cca',
+      'cross-session-leak',
+      'contracts',
+      'special-token-injection',
+      'system-prompt-override',
+      'ascii-smuggling',
+    ];
+    const registry = keys.map((key) => ({
+      key,
+      action: vi.fn<(typeof Plugins)[number]['action']>(),
+    }));
 
-      // aegis should be excluded, contracts should remain
-      // Result should only contain test cases from contracts
-      expect(result.testCases.length).toBeGreaterThanOrEqual(0);
-
-      // Check that logger.info was called with skipping message
-      const skipMessage = vi
-        .mocked(logger.info)
-        .mock.calls.map(([arg]) => arg)
-        .find((arg): arg is string => typeof arg === 'string' && arg.includes('Skipping'));
-
-      expect(skipMessage).toBeDefined();
-      expect(skipMessage).toContain('aegis');
+    beforeEach(() => {
+      for (const plugin of registry) {
+        plugin.action.mockReset();
+        plugin.action.mockImplementation(async ({ injectVar, config }) => [
+          {
+            vars: {
+              [injectVar]: config?.inputs
+                ? JSON.stringify({
+                    query: `${plugin.key} attack`,
+                    context: `${plugin.key} context`,
+                  })
+                : `${plugin.key} attack`,
+            },
+          },
+        ]);
+      }
+      vi.spyOn(Plugins, 'find').mockImplementation((predicate) => registry.find(predicate));
     });
 
-    it('should exclude multi-input excluded plugins in multi-input mode', async () => {
-      const result = await synthesize({
-        language: 'en',
-        numTests: 1,
-        plugins: [
-          { id: 'cca', numTests: 1 }, // MULTI_INPUT_EXCLUDED_PLUGIN
-          { id: 'cross-session-leak', numTests: 1 }, // MULTI_INPUT_EXCLUDED_PLUGIN
-          { id: 'contracts', numTests: 1 }, // Regular plugin
-        ],
-        prompts: ['Test {{query}}'],
-        strategies: [],
-        targetIds: ['test-provider'],
-        inputs: { query: 'user query', context: 'additional context' }, // Multi-input mode
-      });
-
-      // cca and cross-session-leak should be excluded
-      expect(result.testCases.length).toBeGreaterThanOrEqual(0);
-
-      // Check that logger.info was called with skipping message
-      const skipMessage = vi
-        .mocked(logger.info)
-        .mock.calls.map(([arg]) => arg)
-        .find((arg): arg is string => typeof arg === 'string' && arg.includes('Skipping'));
-
-      expect(skipMessage).toBeDefined();
-      expect(skipMessage).toContain('cca');
-      expect(skipMessage).toContain('cross-session-leak');
+    afterEach(() => {
+      vi.mocked(Plugins.find).mockRestore();
     });
 
-    it('should exclude unsupported plugins after collection expansion', async () => {
-      vi.spyOn(Plugins, 'find').mockReturnValue({
-        key: 'mock-plugin',
-        action: vi.fn().mockResolvedValue([{ vars: { query: 'test' } }]),
-      });
-
-      const result = await synthesize({
-        language: 'en',
-        numTests: 1,
-        plugins: [{ id: 'foundation', numTests: 1 }],
-        prompts: ['Test {{query}}'],
-        strategies: [{ id: 'posterior', config: { plugins: ['beavertails'] } }],
-        targetIds: ['test-provider'],
+    it.each([
+      {
+        name: 'dataset plugins',
+        requested: ['aegis', 'contracts'],
         inputs: { query: 'user query', context: 'additional context' },
+        retained: ['contracts'],
+      },
+      {
+        name: 'plugins without multi-input support',
+        requested: ['cca', 'cross-session-leak', 'contracts'],
+        inputs: { query: 'user query', context: 'additional context' },
+        retained: ['contracts'],
+      },
+      {
+        name: 'empty inputs',
+        requested: ['cca', 'contracts'],
+        inputs: {} as Inputs,
+        retained: ['cca', 'contracts'],
+      },
+      {
+        name: 'undefined inputs',
+        requested: ['cca', 'contracts'],
+        inputs: undefined,
+        retained: ['cca', 'contracts'],
+      },
+      {
+        name: 'supported multi-input plugins',
+        requested: [
+          'cca',
+          'cross-session-leak',
+          'special-token-injection',
+          'system-prompt-override',
+          'ascii-smuggling',
+          'contracts',
+        ],
+        inputs: { query: 'user query', context: 'additional context' },
+        retained: [
+          'special-token-injection',
+          'system-prompt-override',
+          'ascii-smuggling',
+          'contracts',
+        ],
+      },
+    ])('runs only retained actions for $name', async ({ requested, inputs, retained }) => {
+      const result = await synthesize({
+        language: 'en',
+        numTests: 1,
+        plugins: requested.map((id) => ({ id, numTests: 1 })),
+        prompts: ['Test {{query}}'],
+        strategies: [],
+        targetIds: ['test-provider'],
+        inputs,
       });
 
-      expect(result.testCases).not.toContainEqual(
-        expect.objectContaining({
-          metadata: expect.objectContaining({ pluginId: 'beavertails' }),
-        }),
+      expect(result.testCases.map((test) => test.metadata?.pluginId).sort()).toEqual(
+        [...retained].sort(),
       );
-      expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('beavertails'));
-    });
-
-    it('should NOT exclude plugins when inputs is empty object', async () => {
-      const result = await synthesize({
-        language: 'en',
-        numTests: 1,
-        plugins: [
-          { id: 'cca', numTests: 1 }, // Would be excluded in multi-input mode
-          { id: 'contracts', numTests: 1 },
-        ],
-        prompts: ['Test {{query}}'],
-        strategies: [],
-        targetIds: ['test-provider'],
-        inputs: {}, // Empty inputs - not multi-input mode
-      });
-
-      // No plugins should be excluded
-      expect(result.testCases.length).toBeGreaterThanOrEqual(0);
-
-      // Should NOT have skipping message for cca
-      const skipMessage = vi
-        .mocked(logger.info)
-        .mock.calls.map(([arg]) => arg)
-        .find(
-          (arg): arg is string =>
-            typeof arg === 'string' && arg.includes('Skipping') && arg.includes('cca'),
-        );
-
-      expect(skipMessage).toBeUndefined();
-    });
-
-    it('should NOT exclude plugins when inputs is undefined', async () => {
-      const result = await synthesize({
-        language: 'en',
-        numTests: 1,
-        plugins: [
-          { id: 'cca', numTests: 1 }, // Would be excluded in multi-input mode
-          { id: 'contracts', numTests: 1 },
-        ],
-        prompts: ['Test {{query}}'],
-        strategies: [],
-        targetIds: ['test-provider'],
-        // No inputs - not multi-input mode
-      });
-
-      // No plugins should be excluded
-      expect(result.testCases.length).toBeGreaterThanOrEqual(0);
-
-      // Should NOT have skipping message for cca
-      const skipMessage = vi
-        .mocked(logger.info)
-        .mock.calls.map(([arg]) => arg)
-        .find(
-          (arg): arg is string =>
-            typeof arg === 'string' && arg.includes('Skipping') && arg.includes('cca'),
-        );
-
-      expect(skipMessage).toBeUndefined();
-    });
-
-    it('should log info about using multi-input mode', async () => {
-      await synthesize({
-        language: 'en',
-        numTests: 1,
-        plugins: [{ id: 'contracts', numTests: 1 }],
-        prompts: ['Test {{query}}'],
-        strategies: [],
-        targetIds: ['test-provider'],
-        inputs: { query: 'user query', context: 'additional context' },
-      });
-
-      // Check that logger.info was called with multi-input mode message
-      const multiInputMessage = vi
-        .mocked(logger.info)
-        .mock.calls.map(([arg]) => arg)
-        .find((arg): arg is string => typeof arg === 'string' && arg.includes('multi-input mode'));
-
-      expect(multiInputMessage).toBeDefined();
-      expect(multiInputMessage).toContain('2 variables');
-      expect(multiInputMessage).toContain('query');
-      expect(multiInputMessage).toContain('context');
-    });
-
-    it('should exclude only plugins that still do not support multi-input mode', async () => {
-      await synthesize({
-        language: 'en',
-        numTests: 1,
-        plugins: [
-          { id: 'cca', numTests: 1 },
-          { id: 'cross-session-leak', numTests: 1 },
-          { id: 'special-token-injection', numTests: 1 },
-          { id: 'system-prompt-override', numTests: 1 },
-          { id: 'ascii-smuggling', numTests: 1 },
-          { id: 'contracts', numTests: 1 }, // Regular plugin - should NOT be excluded
-        ],
-        prompts: ['Test {{query}}'],
-        strategies: [],
-        targetIds: ['test-provider'],
-        inputs: { query: 'user query', context: 'additional context' },
-      });
-
-      // Check that only the explicit non-dataset exclusions are in the skip message.
-      const skipMessage = vi
-        .mocked(logger.info)
-        .mock.calls.map(([arg]) => arg)
-        .find((arg): arg is string => typeof arg === 'string' && arg.includes('Skipping 2 plugin'));
-
-      expect(skipMessage).toBeDefined();
-      expect(skipMessage).toContain('cca');
-      expect(skipMessage).toContain('cross-session-leak');
-      expect(skipMessage).not.toContain('special-token-injection');
-      expect(skipMessage).not.toContain('system-prompt-override');
-      expect(skipMessage).not.toContain('ascii-smuggling');
+      for (const plugin of registry) {
+        expect(plugin.action).toHaveBeenCalledTimes(retained.includes(plugin.key) ? 1 : 0);
+      }
+      const messages = vi.mocked(logger.info).mock.calls.map(([message]) => String(message));
+      const removed = requested.filter((id) => !retained.includes(id));
+      const skipMessage = messages.find((message) => message.includes('Skipping'));
+      if (removed.length) {
+        expect(skipMessage).toBeDefined();
+        for (const id of removed) {
+          expect(skipMessage).toContain(id);
+        }
+      } else {
+        expect(skipMessage).toBeUndefined();
+      }
+      if (inputs && Object.keys(inputs).length) {
+        expect(messages).toContain('Using multi-input mode with 2 variables: query, context');
+      }
     });
   });
 });

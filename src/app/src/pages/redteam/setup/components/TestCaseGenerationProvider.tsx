@@ -19,7 +19,7 @@ import {
 } from '@promptfoo/redteam/constants';
 import { useRedTeamTargetConfigValidation } from '../hooks/useRedTeamTargetConfigValidation';
 import { type Config } from '../types';
-import { isPluginCompatibleWithStrategy } from './strategies/utils';
+import { normalizeLocalProviders } from './Targets/helpers';
 import { TestCaseDialog } from './TestCaseDialog';
 import type { ConversationMessage } from '@promptfoo/redteam/types';
 
@@ -147,7 +147,7 @@ async function callTestGenerationApi(
       plugin: pluginWithLanguage,
       strategy,
       config: { applicationDefinition: { purpose } },
-      provider,
+      provider: normalizeLocalProviders(provider, { forRuntime: true }),
       history,
       turn,
       maxTurns,
@@ -171,7 +171,7 @@ async function callTestExecutionApi(
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      providerOptions: target,
+      providerOptions: normalizeLocalProviders(target, { forRuntime: true }),
       prompt,
     }),
     signal: AbortSignal.any([AbortSignal.timeout(TEST_EXECUTION_TIMEOUT), abortController.signal]),
@@ -240,17 +240,14 @@ export const TestCaseGenerationProvider: React.FC<{
 
   // Compute available plugins from config
   const availablePlugins = useMemo(() => {
-    const configuredPlugins = redTeamConfig.plugins ?? [];
-    const previewPlugins = configuredPlugins.length > 0 ? configuredPlugins : [DEFAULT_PLUGIN];
-    const compatiblePlugins = strategy
-      ? previewPlugins.filter((plugin) =>
-          isPluginCompatibleWithStrategy(plugin, strategy.id, strategy.config),
-        )
-      : previewPlugins;
-    return compatiblePlugins
-      .map((plugin) => (typeof plugin === 'string' ? plugin : plugin.id))
-      .filter(Boolean);
-  }, [redTeamConfig.plugins, strategy]);
+    const plugins =
+      redTeamConfig.plugins?.map((p) => (typeof p === 'string' ? p : p.id)).filter(Boolean) ?? [];
+    // If no plugins are configured, provide a default
+    if (plugins.length === 0) {
+      return [DEFAULT_PLUGIN];
+    }
+    return plugins;
+  }, [redTeamConfig.plugins]);
 
   // ===================================================================
   // Refs
@@ -347,7 +344,7 @@ export const TestCaseGenerationProvider: React.FC<{
         setStrategy(null);
         setIsGenerating(false);
 
-        onErrorRef.current?.(error as Error);
+        onErrorRef.current?.(error instanceof Error ? error : new Error(errorMessage));
       }
     },
     [
@@ -417,14 +414,16 @@ export const TestCaseGenerationProvider: React.FC<{
         }
 
         console.error('Failed to run test against target:', error);
+        const errorMessage =
+          error instanceof Error ? error.message : 'Failed to run test against target';
         setTargetResponses((prev) => [
           ...prev,
           {
             output: null,
-            error: error instanceof Error ? error.message : 'Failed to run test against target',
+            error: errorMessage,
           },
         ]);
-        onErrorRef.current?.(error as Error);
+        onErrorRef.current?.(error instanceof Error ? error : new Error(errorMessage));
       } finally {
         setIsRunningTest(false);
       }
@@ -627,14 +626,10 @@ export const TestCaseGenerationProvider: React.FC<{
         setTestCaseBatch([]);
         setBatchIndex(0);
 
-        // Look up the same compatible plugin entry that made this ID available.
-        const pluginFromConfig = redTeamConfig.plugins?.find((candidate) => {
-          const candidateId = typeof candidate === 'string' ? candidate : candidate.id;
-          return (
-            candidateId === newPluginId &&
-            isPluginCompatibleWithStrategy(candidate, strategy!.id, strategy!.config)
-          );
-        });
+        // Look up the plugin config from redTeamConfig.plugins
+        const pluginFromConfig = redTeamConfig.plugins?.find((p) =>
+          typeof p === 'string' ? p === newPluginId : p.id === newPluginId,
+        );
         const pluginConfig =
           typeof pluginFromConfig === 'object' ? (pluginFromConfig.config ?? {}) : {};
 
@@ -745,7 +740,7 @@ export const TestCaseGenerationProvider: React.FC<{
             setStrategy(null);
             setIsGenerating(false);
 
-            onErrorRef.current?.(error as Error);
+            onErrorRef.current?.(error instanceof Error ? error : new Error(errorMessage));
           });
       } else {
         // Multi-turn or subsequent turns: use single generation

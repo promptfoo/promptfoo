@@ -1,7 +1,12 @@
 import dedent from 'dedent';
 import { describe, expect, it, vi } from 'vitest';
 import { loadApiProvider } from '../../src/providers/index';
-import { generatePersonasPrompt, synthesize, testCasesPrompt } from '../../src/testCase/synthesis';
+import {
+  extractPersonas,
+  generatePersonasPrompt,
+  synthesize,
+  testCasesPrompt,
+} from '../../src/testCase/synthesis';
 import { createMockProvider } from '../factories/provider';
 
 import type { ApiProvider, TestCase } from '../../src/types/index';
@@ -34,6 +39,148 @@ describe('synthesize', () => {
 
     expect(result).toHaveLength(2);
     expect(result).toEqual([{ var1: 'value1' }, { var2: 'value2' }]);
+  });
+
+  it.each([
+    { output: '{"error": "rate limited", "status": 429}' },
+    { output: '{"vars": [null]}' },
+    { output: '{"vars": ["not variables"]}' },
+    { error: 'provider unavailable' },
+  ])('rejects malformed generated test variables: %j', async (response) => {
+    const mockProvider = createMockProvider({
+      id: 'mock-provider',
+      callApi: vi
+        .fn<ApiProvider['callApi']>()
+        .mockResolvedValueOnce({ output: '{"personas": ["A customer"]}' })
+        .mockResolvedValue(response),
+    });
+    vi.mocked(loadApiProvider).mockResolvedValue(mockProvider);
+    await expect(
+      synthesize({
+        provider: 'mock-provider',
+        prompts: ['Answer {{question}}'],
+        tests: [],
+        numPersonas: 1,
+        numTestCasesPerPersona: 1,
+      }),
+    ).rejects.toThrow(/vars/);
+  });
+
+  it.each([{ personas: 'Persona 1' }, { personas: [null] }])(
+    'rejects unusable personas before generating cases: %j',
+    async (output) => {
+      const mockProvider = createMockProvider({ response: { output } });
+      vi.mocked(loadApiProvider).mockResolvedValue(mockProvider);
+      await expect(
+        synthesize({ provider: 'mock-provider', prompts: ['Test prompt'], tests: [] }),
+      ).rejects.toThrow('Expected at least one user persona in the response');
+      expect(mockProvider.callApi).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it('should handle persona responses formatted as an array of objects', async () => {
+    let i = 0;
+    const mockProvider = createMockProvider({
+      id: 'mock-provider',
+      callApi: vi.fn<ApiProvider['callApi']>().mockImplementation(() => {
+        if (i === 0) {
+          i++;
+          return Promise.resolve({
+            output: JSON.stringify([
+              { persona: 'Software Engineer', description: 'Builds backend systems' },
+              { name: 'Product Manager', description: 'Plans features' },
+            ]),
+          });
+        }
+        return Promise.resolve({ output: '{"vars": [{"var1": "value1"}, {"var2": "value2"}]}' });
+      }),
+    });
+    vi.mocked(loadApiProvider).mockResolvedValue(mockProvider);
+    const result = await synthesize({
+      provider: 'mock-provider',
+      prompts: ['Test prompt'],
+      tests: [],
+      numPersonas: 2,
+      numTestCasesPerPersona: 1,
+    });
+
+    expect(result).toHaveLength(2);
+    expect(result).toEqual([{ var1: 'value1' }, { var2: 'value2' }]);
+  });
+
+  it('should handle persona responses with alternative keys like user_personas', async () => {
+    let i = 0;
+    const mockProvider = createMockProvider({
+      id: 'mock-provider',
+      callApi: vi.fn<ApiProvider['callApi']>().mockImplementation(() => {
+        if (i === 0) {
+          i++;
+          return Promise.resolve({
+            output: '{"user_personas": ["Data Scientist", "ML Engineer"]}',
+          });
+        }
+        i++;
+        return Promise.resolve({ output: `{"vars": [{"var1": "val${i}"}]}` });
+      }),
+    });
+    vi.mocked(loadApiProvider).mockResolvedValue(mockProvider);
+    const result = await synthesize({
+      provider: 'mock-provider',
+      prompts: ['Test prompt'],
+      tests: [],
+      numPersonas: 2,
+      numTestCasesPerPersona: 1,
+    });
+
+    expect(result).toHaveLength(2);
+  });
+
+  it('should throw an informative invariant error when persona output contains no valid personas', async () => {
+    const mockProvider = createMockProvider({
+      id: 'mock-provider',
+      callApi: vi.fn<ApiProvider['callApi']>().mockResolvedValue({
+        output: '{"invalid": true}',
+      }),
+    });
+    vi.mocked(loadApiProvider).mockResolvedValue(mockProvider);
+
+    await expect(
+      synthesize({
+        provider: 'mock-provider',
+        prompts: ['Test prompt'],
+        tests: [],
+        numPersonas: 2,
+        numTestCasesPerPersona: 1,
+      }),
+    ).rejects.toThrow(/Expected at least one user persona in the response/);
+  });
+
+  it('should find the personas object even when it is not the first JSON object in the response', async () => {
+    let i = 0;
+    const mockProvider = createMockProvider({
+      id: 'mock-provider',
+      callApi: vi.fn<ApiProvider['callApi']>().mockImplementation(() => {
+        if (i === 0) {
+          i++;
+          // A leading, non-persona JSON object precedes the real one.
+          return Promise.resolve({
+            output: '{"note": "here are the personas"}\n{"personas": ["Persona 1"]}',
+          });
+        }
+        return Promise.resolve({ output: '{"vars": [{"var1": "value1"}]}' });
+      }),
+    });
+    vi.mocked(loadApiProvider).mockResolvedValue(mockProvider);
+
+    const result = await synthesize({
+      provider: 'mock-provider',
+      prompts: ['Test prompt'],
+      tests: [],
+      numPersonas: 1,
+      numTestCasesPerPersona: 1,
+    });
+
+    expect(result).toEqual([{ var1: 'value1' }]);
   });
 });
 
@@ -165,5 +312,58 @@ describe('testCasesPrompt', () => {
 
       Your response should contain a JSON map of variable names to values, of the form {vars: {country: string, city: string}[]}
     `);
+  });
+});
+
+describe('extractPersonas', () => {
+  it('should extract personas from standard {personas: string[]} format', () => {
+    const input = '{"personas": ["Traveler", "Tour Guide"]}';
+    expect(extractPersonas(input)).toEqual(['Traveler', 'Tour Guide']);
+  });
+
+  it('should extract personas from an array of persona objects', () => {
+    const input = JSON.stringify([
+      { persona: 'Software Engineer', description: 'Writes code' },
+      { persona: 'QA Analyst', description: 'Tests software' },
+    ]);
+    expect(extractPersonas(input)).toEqual(['Software Engineer', 'QA Analyst']);
+  });
+
+  it('should extract personas from an array of objects with name property', () => {
+    const input = JSON.stringify([
+      { name: 'Teacher', bio: 'Educator' },
+      { name: 'Student', bio: 'Learner' },
+    ]);
+    expect(extractPersonas(input)).toEqual(['Teacher', 'Student']);
+  });
+
+  it('should extract personas from an object with user_personas key', () => {
+    const input = '{"user_personas": ["Doctor", "Nurse"]}';
+    expect(extractPersonas(input)).toEqual(['Doctor', 'Nurse']);
+  });
+
+  it('should extract personas from an object with personas as objects', () => {
+    const input = '{"personas": [{"persona": "Chef"}, {"name": "Waiter"}]}';
+    expect(extractPersonas(input)).toEqual(['Chef', 'Waiter']);
+  });
+
+  it('should extract personas from raw string array', () => {
+    const input = '["Pilot", "Flight Attendant"]';
+    expect(extractPersonas(input)).toEqual(['Pilot', 'Flight Attendant']);
+  });
+
+  it('should extract personas when wrapped in Markdown code blocks', () => {
+    const input = '```json\n{"personas": ["Researcher", "Scientist"]}\n```';
+    expect(extractPersonas(input)).toEqual(['Researcher', 'Scientist']);
+  });
+
+  it('should extract raw persona arrays wrapped in Markdown code blocks', () => {
+    const input = '```json\n["Researcher", "Scientist"]\n```';
+    expect(extractPersonas(input)).toEqual(['Researcher', 'Scientist']);
+  });
+
+  it('should return empty array for unparseable or invalid content', () => {
+    expect(extractPersonas('No JSON here')).toEqual([]);
+    expect(extractPersonas('{"unrelated": 123}')).toEqual([]);
   });
 });

@@ -16,6 +16,8 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   aegis: "Tests content safety handling using NVIDIA's Aegis dataset",
   'ascii-smuggling': 'Tests vulnerability to Unicode tag-based instruction smuggling attacks',
   audio: 'Tests handling of audio content',
+  'arabic-presentation-forms':
+    'Tests handling of Arabic presentation-forms encoding and Unicode normalization in content filters',
   'authoritative-markup-injection': 'Tests vulnerability to authoritative markup injection attacks',
   layer: 'Applies multiple strategies in a defined order',
   base64: 'Tests handling of Base64-encoded malicious payloads',
@@ -175,8 +177,6 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'pii:session': 'Tests for PII exposure in session data',
   'pii:social': 'Tests for PII exposure via social engineering',
   piglatin: 'Tests handling of content translated to Pig Latin to potentially bypass filters',
-  posterior:
-    'Tests whether reframing a harmful request as a safety-classification example induces the target to author the unsafe content',
   camelcase: 'Tests handling of text transformed into camelCase to potentially bypass filters',
   emoji: 'Tests handling of text hidden using emoji variation selectors',
   pliny: 'Tests handling of Pliny prompt injections',
@@ -195,6 +195,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   religion: 'Tests handling of religious content and bias',
   retry:
     'Automatically incorporates previously failed test cases to build a regression testing suite',
+  posterior: 'Tests handling of classifier-framed evaluation prompts',
   rot13: 'Tests handling of ROT13-encoded malicious content',
   'shell-injection': 'Tests for command injection vulnerabilities',
   'special-token-injection':
@@ -273,6 +274,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   aegis: 'Aegis Dataset',
   'ascii-smuggling': 'ASCII Smuggling',
   audio: 'Audio Content',
+  'arabic-presentation-forms': 'Arabic Presentation Forms',
   'authoritative-markup-injection': 'Authoritative Markup Injection',
   base64: 'Base64 Payload Encoding',
   basic: 'Baseline Testing',
@@ -427,7 +429,6 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'pharmacy:dosage-calculation': 'Dosage Calculation',
   'pharmacy:drug-interaction': 'Drug Interaction Detection',
   piglatin: 'Pig Latin Encoding',
-  posterior: 'Posterior Attack',
   pii: 'PII Protection Suite',
   'pii:api-db': 'PII via API/Database',
   'pii:direct': 'PII via Direct Exposure',
@@ -447,6 +448,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'mischievous-user': 'Mischievous User',
   religion: 'Religious Bias',
   retry: 'Regression Testing',
+  posterior: 'Posterior',
   rot13: 'ROT13 Payload Encoding',
   'shell-injection': 'Command Injection',
   'special-token-injection': 'Special Token Injection',
@@ -1276,6 +1278,8 @@ export const pluginDescriptions: Record<Plugin, string> = {
 
 export const strategyDescriptions: Record<Strategy, string> = {
   audio: 'Tests detection and handling of audio-based malicious payloads',
+  'arabic-presentation-forms':
+    'Tests detection and handling of Arabic text using isolated Unicode presentation forms',
   'authoritative-markup-injection':
     'Tests detection and handling of authoritative markup injection attacks',
   base64: 'Tests detection and handling of Base64-encoded malicious payloads',
@@ -1316,19 +1320,19 @@ export const strategyDescriptions: Record<Strategy, string> = {
   'other-encodings':
     'Collection of alternative text transformation strategies for testing evasion techniques',
   piglatin: 'Tests detection and handling of text transformed into Pig Latin',
-  posterior:
-    'Reframes a harmful request as a safety-classification task so the target authors the unsafe example itself',
   'jailbreak-templates':
     'Tests LLM resistance to known jailbreak techniques (DAN, Skeleton Key, etc.) using static templates',
   'prompt-injection':
     '[DEPRECATED] Use jailbreak-templates instead. Tests direct prompt injection vulnerability detection',
   retry: 'Automatically incorporates previously failed test cases to prevent regression',
+  posterior: 'Tests handling of classifier-framed evaluation prompts',
   rot13: 'Assesses handling of ROT13-encoded malicious payloads',
   video: 'Tests detection and handling of video-based malicious payloads',
 };
 
 export const strategyDisplayNames: Record<Strategy, string> = {
   audio: 'Audio',
+  'arabic-presentation-forms': 'Arabic Presentation Forms',
   'authoritative-markup-injection': 'Authoritative Markup Injection',
   base64: 'Base64 Encoding',
   basic: 'Basic',
@@ -1360,10 +1364,10 @@ export const strategyDisplayNames: Record<Strategy, string> = {
   multilingual: 'Cross-Language Attack [DEPRECATED]',
   'other-encodings': 'Collection of Text Encodings',
   piglatin: 'Pig Latin',
-  posterior: 'Posterior Attack',
   'jailbreak-templates': 'Jailbreak Templates',
   'prompt-injection': 'Prompt Injection [DEPRECATED]',
   retry: 'Regression Testing',
+  posterior: 'Posterior',
   rot13: 'ROT13 Encoding',
   video: 'Video',
 };

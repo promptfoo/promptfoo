@@ -1,117 +1,12 @@
-import {
-  configuredPluginHasApplicablePosteriorForMultiInput,
-  getEffectiveStrategiesForCompatibility,
-  isSequenceOnlyIntentPlugin,
-  pluginConfigMatchesStrategy,
-  REDTEAM_DEFAULTS,
-} from '@promptfoo/redteam/sharedFrontend';
+import { normalizeRedteamConfigForPreview } from '@promptfoo/presentation/redteamConfig';
+import { REDTEAM_DEFAULTS } from '@promptfoo/redteam/constants';
 import type { Strategy } from '@promptfoo/redteam/constants';
-import type {
-  RedteamPlugin,
-  RedteamStrategy,
-  RedteamStrategyObject,
-} from '@promptfoo/redteam/types';
+import type { RedteamStrategy } from '@promptfoo/redteam/types';
 
 import type { Config } from '../../types';
 
 export function getStrategyId(strategy: RedteamStrategy): string {
   return typeof strategy === 'string' ? strategy : strategy.id;
-}
-
-export function isPluginCompatibleWithStrategy(
-  plugin: string | { id: string; config?: unknown },
-  strategyId: string,
-  strategyConfig?: RedteamStrategyObject['config'],
-): boolean {
-  if (strategyId === 'basic' || strategyId === 'default') {
-    return true;
-  }
-  const pluginId = typeof plugin === 'string' ? plugin : plugin.id;
-  const pluginConfig = typeof plugin === 'string' ? undefined : plugin.config;
-  if (isSequenceOnlyIntentPlugin(pluginId, pluginConfig)) {
-    return false;
-  }
-  return pluginConfigMatchesStrategy(pluginId, pluginConfig, {
-    id: strategyId as Strategy,
-    config: strategyConfig,
-  });
-}
-
-function containsPosteriorStrategy(strategy: unknown, visited: Set<object>): boolean {
-  const pending = [strategy];
-  while (pending.length > 0) {
-    const current = pending.pop();
-    if (current === 'posterior') {
-      return true;
-    }
-    if (!current || typeof current !== 'object' || Array.isArray(current)) {
-      continue;
-    }
-    if (visited.has(current)) {
-      continue;
-    }
-    visited.add(current);
-
-    const { config, id } = current as { config?: Record<string, unknown>; id?: unknown };
-    if (id === 'posterior') {
-      return true;
-    }
-    if (id === 'layer' && Array.isArray(config?.steps)) {
-      for (let i = config.steps.length - 1; i >= 0; i--) {
-        pending.push(config.steps[i]);
-      }
-    }
-  }
-  return false;
-}
-
-export function hasAnyPosteriorStrategy(strategies: readonly RedteamStrategy[]): boolean {
-  const visited = new Set<object>();
-  return getEffectiveStrategiesForCompatibility(strategies).some((strategy) =>
-    containsPosteriorStrategy(strategy, visited),
-  );
-}
-
-function hasFileBackedCompatibilityConfig(pluginId: string, pluginConfig: unknown): boolean {
-  if (!pluginConfig || typeof pluginConfig !== 'object' || Array.isArray(pluginConfig)) {
-    return false;
-  }
-  const compatibilityKeys = [
-    'excludeStrategies',
-    'inputs',
-    ...(pluginId === 'intent' || pluginId === 'promptfoo:redteam:intent' ? ['intent'] : []),
-  ];
-  return compatibilityKeys.some((key) => {
-    const value = (pluginConfig as Record<string, unknown>)[key];
-    return typeof value === 'string' && value.startsWith('file://');
-  });
-}
-
-export function hasPosteriorStrategy(
-  strategies: readonly RedteamStrategy[],
-  plugins?: readonly RedteamPlugin[],
-  options: { includeDisabledStrategies?: boolean; pluginsUseTargetInputs?: boolean } = {},
-): boolean {
-  const visited = new Set<object>();
-  const effectiveStrategies = getEffectiveStrategiesForCompatibility(strategies).filter(
-    (strategy) => options.includeDisabledStrategies || strategy.config?.numTests !== 0,
-  );
-  if (!plugins || plugins.length === 0) {
-    return effectiveStrategies.some((strategy) => containsPosteriorStrategy(strategy, visited));
-  }
-
-  const normalizedPlugins = plugins.map((plugin) =>
-    typeof plugin === 'string' ? { id: plugin, config: undefined } : plugin,
-  );
-  return effectiveStrategies.some((strategy) =>
-    normalizedPlugins.some((plugin) =>
-      hasFileBackedCompatibilityConfig(plugin.id, plugin.config)
-        ? false
-        : configuredPluginHasApplicablePosteriorForMultiInput(plugin.id, plugin.config, strategy, {
-            pluginsUseTargetInputs: options.pluginsUseTargetInputs,
-          }),
-    ),
-  );
 }
 
 // Strategies that require configuration before they can be used
@@ -167,10 +62,11 @@ export function isStrategyConfigured(strategyId: string, strategy: RedteamStrate
 }
 
 const STRATEGY_PROBE_MULTIPLIER: Record<Strategy, number> = {
+  'arabic-presentation-forms': 1,
   audio: 1,
   'authoritative-markup-injection': 1,
   base64: 1,
-  basic: 1,
+  basic: 0, // The base cases are counted separately below.
   'best-of-n': 1,
   camelcase: 1,
   citation: 1,
@@ -200,34 +96,53 @@ const STRATEGY_PROBE_MULTIPLIER: Record<Strategy, number> = {
   'other-encodings': 1,
   emoji: 1,
   piglatin: 1,
-  posterior: 1,
   'prompt-injection': 1,
   retry: 1,
+  posterior: 1,
   rot13: 1,
   video: 1,
 };
 
 export function getEstimatedProbes(config: Config) {
-  const numTests = config.numTests ?? 5;
-  const baseProbes = numTests * config.plugins.length;
+  const { numTests, plugins, strategies, language } = normalizeRedteamConfigForPreview(config);
+  const pluginCounts = new Map<string, number>();
+  for (const entry of plugins) {
+    const plugin = typeof entry === 'string' ? { id: entry } : entry;
+    const severity = 'severity' in plugin ? plugin.severity : undefined;
+    // Match config deduplication: the last count wins for the same options and severity.
+    const key = `${plugin.id}:${JSON.stringify(plugin.config)}:${severity || ''}`;
+    const pluginNumTests =
+      typeof entry === 'object' && 'numTests' in entry ? entry.numTests : undefined;
+    // Imported lists are preserved during export, including blank entries. Match
+    // runtime's top-level count; the browser cannot resolve external file lists.
+    const intent = plugin.config?.intent;
+    const intentCount = Array.isArray(intent) ? intent.length : intent ? 1 : 0;
+    const count = plugin.id === 'intent' ? intentCount : pluginNumTests || numTests;
+    const pluginLanguage = plugin.config?.language ?? language;
+    const numLanguages = Array.isArray(pluginLanguage) ? pluginLanguage.length : 1;
+    pluginCounts.set(key, count * numLanguages);
+  }
+  const baseProbes = Array.from(pluginCounts.values()).reduce((total, count) => total + count, 0);
 
   // Calculate total multiplier for all active strategies
-  const strategyMultiplier = config.strategies.reduce((total, strategy) => {
+  const strategyMultiplier = strategies.reduce((total, strategy) => {
     const strategyId: Strategy =
       typeof strategy === 'string' ? (strategy as Strategy) : (strategy.id as Strategy);
-    return total + STRATEGY_PROBE_MULTIPLIER[strategyId];
+    return strategyId === 'retry' ? total : total + STRATEGY_PROBE_MULTIPLIER[strategyId];
   }, 0);
 
-  // Get number of languages from global language config
-  const numLanguages = Array.isArray(config.language)
-    ? config.language.length
-    : config.language
-      ? 1
-      : 1;
-
-  const strategyProbes = strategyMultiplier * baseProbes;
-
-  return (baseProbes + strategyProbes) * numLanguages;
+  const basicStrategy = strategies.find((strategy) => getStrategyId(strategy) === 'basic');
+  const includeBasicTests =
+    typeof basicStrategy === 'object' ? (basicStrategy.config?.enabled ?? true) : true;
+  const basicProbes = includeBasicTests ? baseProbes : 0;
+  // Runtime applies retry to the enabled base cases before adding other strategies.
+  const retryStrategy = strategies.find((strategy) => getStrategyId(strategy) === 'retry');
+  const retryProbes = retryStrategy
+    ? typeof retryStrategy === 'object' && typeof retryStrategy.config?.numTests === 'number'
+      ? retryStrategy.config.numTests
+      : basicProbes
+    : 0;
+  return basicProbes + retryProbes + baseProbes * strategyMultiplier;
 }
 
 export function getEstimatedDuration(config: Config): string {

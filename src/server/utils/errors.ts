@@ -5,23 +5,6 @@ import type { Response } from 'express';
 
 const MAX_CAUSE_DEPTH = 4;
 
-/**
- * Build a logger-safe context object from an unknown error value.
- *
- * Most logger paths serialize context with `JSON.stringify`-equivalent
- * routines, which drop `name`/`message`/`stack` from `Error` instances
- * because those properties are non-enumerable. Extract them explicitly so
- * stack traces survive logging.
- *
- * Walk `cause` chains so a wrapped error doesn't re-introduce the same
- * non-enumerable-fields bug at the next level. A depth cap prevents
- * runaway cycles (`err.cause = err`) from blowing the stack or making
- * the logger payload pathological.
- */
-function toLogContext(error: unknown): Record<string, unknown> {
-  return { error: serializeError(error, 0, new Set()) };
-}
-
 function serializeError(value: unknown, depth: number, seen: Set<unknown>): unknown {
   if (!(value instanceof Error)) {
     return value;
@@ -80,7 +63,20 @@ export function sendError(
   internalError?: unknown,
 ): void {
   if (internalError !== undefined) {
-    logger.error(publicMessage, toLogContext(internalError));
+    /**
+     * Build a logger-safe context object from an unknown error value.
+     *
+     * Most logger paths serialize context with `JSON.stringify`-equivalent
+     * routines, which drop `name`/`message`/`stack` from `Error` instances
+     * because those properties are non-enumerable. Extract them explicitly so
+     * stack traces survive logging.
+     *
+     * Walk `cause` chains so a wrapped error doesn't re-introduce the same
+     * non-enumerable-fields bug at the next level. A depth cap prevents
+     * runaway cycles (`err.cause = err`) from blowing the stack or making
+     * the logger payload pathological.
+     */
+    logger.error(publicMessage, { error: serializeError(internalError, 0, new Set()) });
   }
   safeRespond(res, status, { error: publicMessage });
 }

@@ -1,4 +1,5 @@
 import * as fs from 'fs';
+import * as fsPromises from 'fs/promises';
 import * as path from 'path';
 
 import { globSync } from 'glob';
@@ -20,7 +21,6 @@ import {
   readConfig,
   resolveCliProvidersWithConfig,
   resolveConfigs,
-  withResolveConfigsHooks,
 } from '../../../src/util/config/load';
 import { maybeLoadFromExternalFile } from '../../../src/util/file';
 import { isRunningUnderNpx } from '../../../src/util/promptfooCommand';
@@ -69,7 +69,8 @@ vi.mock('path', async () => {
   };
 });
 
-vi.mock('glob', () => ({
+vi.mock('glob', async (importOriginal) => ({
+  escape: (await importOriginal<typeof import('glob')>()).escape,
   globSync: vi.fn(),
   hasMagic: vi.fn((pattern: string | string[]) => {
     const p = Array.isArray(pattern) ? pattern.join('') : pattern;
@@ -92,6 +93,7 @@ vi.mock('../../../src/envars', async () => {
 });
 
 vi.mock('../../../src/esm', () => ({
+  ensureTypescriptLoader: vi.fn(),
   importModule: vi.fn(),
 }));
 
@@ -141,18 +143,18 @@ vi.mock('../../../src/util/file', async () => {
   };
 });
 
-vi.mock('../../../src/util/testCaseReader', () => ({
-  readTest: vi.fn().mockImplementation(async (test) => test),
-  readTests: vi.fn().mockImplementation(async (tests) => {
-    if (!tests) {
-      return [];
-    }
-    if (Array.isArray(tests)) {
-      return tests;
-    }
-    return [];
-  }),
-}));
+vi.mock('../../../src/util/testCaseReader', async (importOriginal) => {
+  const readRows = vi.fn(async (tests) => (Array.isArray(tests) ? tests : []));
+  return {
+    isRemoteTestsReference: (
+      await importOriginal<typeof import('../../../src/util/testCaseReader')>()
+    ).isRemoteTestsReference,
+    readTest: vi.fn(async (test) => test),
+    readTestConfig: vi.fn(async (test) => test),
+    readTests: readRows,
+    readTestConfigs: readRows,
+  };
+});
 
 vi.mock('../../../src/providers', async () => {
   const actual =
@@ -208,7 +210,6 @@ vi.mock('../../../src/prompts', () => ({
     }
     return [];
   }),
-  readProviderPromptMap: vi.fn().mockReturnValue({}),
 }));
 
 vi.mock('../../../src/assertions', () => ({
@@ -218,6 +219,7 @@ vi.mock('../../../src/assertions', () => ({
 // Global setup for all tests - set default mock implementation for $RefParser
 beforeEach(() => {
   mockDereference.mockImplementation((config: object) => Promise.resolve(config));
+  vi.mocked(readTests).mockReset();
 });
 
 describe('combineConfigs', () => {
@@ -312,6 +314,7 @@ describe('combineConfigs', () => {
     );
 
     expect(config1Result).toEqual({
+      basePath: '.',
       description: 'test1',
       tags: { tag1: 'value1' },
       providers: ['provider1'],
@@ -348,6 +351,7 @@ describe('combineConfigs', () => {
     );
 
     expect(config2Result).toEqual({
+      basePath: '.',
       description: 'test2',
       tags: {},
       providers: ['provider2'],
@@ -389,6 +393,7 @@ describe('combineConfigs', () => {
 
     expect(fs.readFileSync).toHaveBeenCalledTimes(4);
     expect(result).toEqual({
+      basePath: '.',
       description: 'test1, test2',
       tags: { tag1: 'value1' },
       providers: ['provider1', 'provider2'],
@@ -1076,7 +1081,7 @@ describe('combineConfigs', () => {
     expect(result.sharing).toBeUndefined();
   });
 
-  it('should load defaultTest from external file when string starts with file://', async () => {
+  it('resolves a relative defaultTest file reference without loading it', async () => {
     const externalDefaultTest = {
       assert: [{ type: 'equals', value: 'test' }],
       vars: { foo: 'bar' },
@@ -1098,8 +1103,8 @@ describe('combineConfigs', () => {
 
     const result = await combineConfigs(['config.json']);
 
-    // combineConfigs should preserve the string reference, not load it
-    expect(result.defaultTest).toBe('file://path/to/defaultTest.yaml');
+    expect(result.defaultTest).toBe(`file://${path.resolve('path/to/defaultTest.yaml')}`);
+    expect(maybeLoadFromExternalFile).not.toHaveBeenCalled();
   });
 
   it('should preserve string defaultTest when combining configs with file:// reference', async () => {
@@ -1124,7 +1129,7 @@ describe('combineConfigs', () => {
     const result = await combineConfigs(['config1.json', 'config2.json']);
 
     // Should preserve the file:// reference from the second config
-    expect(result.defaultTest).toBe('file://external/defaultTest.yaml');
+    expect(result.defaultTest).toBe(`file://${path.resolve('external/defaultTest.yaml')}`);
   });
 
   it('should merge inline defaultTest objects when combining configs', async () => {
@@ -1561,7 +1566,7 @@ describe('resolveConfigs', () => {
 
     await resolveConfigs(cmdObj, defaultConfig);
 
-    expect(cliState.basePath).toBe(path.dirname('config.json'));
+    expect(cliState.basePath).toBe(path.resolve(path.dirname('config.json')));
   });
 
   it('should include YAML location when an inline test references a missing prompt', async () => {
@@ -1630,9 +1635,9 @@ describe('resolveConfigs', () => {
       }),
     );
 
-    vi.mocked(maybeLoadFromExternalFile)
-      .mockResolvedValueOnce(scenarios)
-      .mockResolvedValueOnce(externalTests);
+    vi.mocked(maybeLoadFromExternalFile).mockImplementation(async (value) =>
+      typeof value === 'string' ? scenarios : value,
+    );
 
     vi.mocked(readTests).mockResolvedValue(externalTests);
 
@@ -1656,8 +1661,12 @@ describe('resolveConfigs', () => {
 
     const { testSuite } = await resolveConfigs(cmdObj, defaultConfig);
 
-    expect(maybeLoadFromExternalFile).toHaveBeenCalledWith(['file://scenarios.yaml']);
-    expect(maybeLoadFromExternalFile).toHaveBeenCalledWith('file://tests.yaml');
+    expect(maybeLoadFromExternalFile).toHaveBeenCalledWith('file://scenarios.yaml');
+    expect(readTests).toHaveBeenCalledWith(
+      [`file://${path.resolve('/mock/cwd/tests.yaml')}`],
+      path.resolve('.'),
+      {},
+    );
 
     expect(testSuite).toMatchObject({
       prompts: [
@@ -1751,7 +1760,7 @@ describe('resolveConfigs', () => {
     expect(selectedPositions?.[1]).not.toEqual(selectedPositions?.[2]);
   });
 
-  it('should not mutate reused default config scenarios when sampling', async () => {
+  it('keeps runtime scenarios separate from reused default config scenarios', async () => {
     const originalPositions = ['0', '1', '2', '3'];
     const scenarios: Scenario[] = [
       {
@@ -1784,6 +1793,13 @@ describe('resolveConfigs', () => {
     const second = await resolveConfigs({ filterSample: 4, filterSampleSeed: 1 }, defaultConfig);
     expect([...(selectedPositions(second) ?? [])].sort()).toEqual(originalPositions);
     expect(defaultPositions()).toEqual(originalPositions);
+
+    const authoredEmpty: Scenario[] = [];
+    const empty = await resolveConfigs({}, { ...defaultConfig, scenarios: authoredEmpty });
+    expect(empty.testSuite.scenarios).toEqual([]);
+    empty.testSuite.scenarios!.push(scenarios[0]);
+    expect(authoredEmpty).toEqual([]);
+    expect(empty.config.scenarios).toEqual([]);
   });
 
   it('should throw without logging when no config file, no prompts, no providers, and not in CI', async () => {
@@ -2124,98 +2140,6 @@ describe('resolveConfigs', () => {
         config: ollamaConfig,
       });
     });
-  });
-
-  it('runs provider preflight after filtering and before provider construction', async () => {
-    const beforeProviderLoad = vi.fn(async ({ providers }) => {
-      expect(loadApiProviders).not.toHaveBeenCalled();
-      expect(providers).toEqual([{ id: 'echo', label: 'selected' }]);
-    });
-
-    const resolved = await resolveConfigs(
-      { filterTargets: 'selected' },
-      withResolveConfigsHooks(
-        {
-          prompts: ['{{prompt}}'],
-          providers: [
-            { id: 'echo', label: 'selected' },
-            { id: 'echo', label: 'excluded' },
-          ],
-        },
-        { beforeProviderLoad },
-      ),
-    );
-
-    expect(beforeProviderLoad).toHaveBeenCalledOnce();
-    expect(loadApiProviders).toHaveBeenCalledOnce();
-    expect(resolved.config.providers).toEqual([{ id: 'echo', label: 'selected' }]);
-  });
-
-  it.each([
-    { label: 'configured filter', commandOptions: {}, expectedLabel: 'selected' },
-    {
-      label: 'explicit override',
-      commandOptions: { filterTargets: 'excluded' },
-      expectedLabel: 'excluded',
-    },
-  ])('applies $label before provider construction', async ({ commandOptions, expectedLabel }) => {
-    const beforeProviderLoad = vi.fn(async ({ providers }) => {
-      expect(loadApiProviders).not.toHaveBeenCalled();
-      expect(providers).toEqual([{ id: 'echo', label: expectedLabel }]);
-    });
-
-    await resolveConfigs(
-      commandOptions,
-      withResolveConfigsHooks(
-        {
-          prompts: ['{{prompt}}'],
-          providers: [
-            { id: 'echo', label: 'selected' },
-            { id: 'echo', label: 'excluded' },
-          ],
-          commandLineOptions: { filterProviders: 'selected' },
-        },
-        { beforeProviderLoad },
-      ),
-    );
-
-    expect(beforeProviderLoad).toHaveBeenCalledOnce();
-    expect(loadApiProviders).toHaveBeenCalledOnce();
-  });
-
-  it('does not construct providers when provider preflight rejects', async () => {
-    const originalBasePath = cliState.basePath;
-    const originalConfig = cliState.config;
-    const originalSelectedProviderConfigs = cliState.selectedProviderConfigs;
-    const previousConfig = { env: { PREVIOUS_CONFIG: 'preserved' } };
-    const previousSelectedProviderConfigs = ['previous-provider'];
-    cliState.basePath = '/previous/base';
-    cliState.config = previousConfig;
-    cliState.selectedProviderConfigs = previousSelectedProviderConfigs;
-    const beforeProviderLoad = vi.fn(async () => {
-      throw new Error('preflight rejected');
-    });
-
-    try {
-      await expect(
-        resolveConfigs(
-          {},
-          withResolveConfigsHooks(
-            { prompts: ['{{prompt}}'], providers: ['echo'] },
-            { beforeProviderLoad },
-          ),
-        ),
-      ).rejects.toThrow('preflight rejected');
-
-      expect(loadApiProviders).not.toHaveBeenCalled();
-      expect(cliState.basePath).toBe('/previous/base');
-      expect(cliState.config).toBe(previousConfig);
-      expect(cliState.selectedProviderConfigs).toBe(previousSelectedProviderConfigs);
-    } finally {
-      cliState.basePath = originalBasePath;
-      cliState.config = originalConfig;
-      cliState.selectedProviderConfigs = originalSelectedProviderConfigs;
-    }
   });
 });
 
@@ -2589,6 +2513,7 @@ describe('readConfig', () => {
 
 describe('maybeReadConfig', () => {
   beforeEach(async () => {
+    vi.mocked(fsPromises.access).mockReset().mockResolvedValue(undefined);
     vi.clearAllMocks();
     vi.restoreAllMocks();
 
@@ -2597,6 +2522,26 @@ describe('maybeReadConfig', () => {
 
     mockDereference.mockReset();
     mockDereference.mockImplementation((config: object) => Promise.resolve(config));
+  });
+
+  it.each(['EACCES', 'EPERM'])(
+    'preserves %s while checking optional config presence',
+    async (code) => {
+      const error = Object.assign(new Error('Permission denied'), { code });
+      vi.mocked(fsPromises.access).mockRejectedValueOnce(error);
+
+      await expect(maybeReadConfig('config.js')).rejects.toBe(error);
+      expect(importModule).not.toHaveBeenCalled();
+    },
+  );
+
+  it('does not import a missing executable config', async () => {
+    vi.mocked(fsPromises.access).mockRejectedValueOnce(
+      Object.assign(new Error('Missing'), { code: 'ENOENT' }),
+    );
+
+    expect(await maybeReadConfig('missing.js')).toBeUndefined();
+    expect(importModule).not.toHaveBeenCalled();
   });
 
   it('should return undefined for ENOENT error', async () => {
@@ -2684,7 +2629,9 @@ describe('resolveConfigs with external defaultTest', () => {
 
     const result = await resolveConfigs({ config: ['config.json'] }, {});
 
-    expect(maybeLoadFromExternalFile).toHaveBeenCalledWith('file://shared/defaultTest.yaml');
+    expect(maybeLoadFromExternalFile).toHaveBeenCalledWith(
+      `file://${path.resolve('shared/defaultTest.yaml')}`,
+    );
     expect(result.testSuite.defaultTest).toEqual(
       expect.objectContaining({
         assert: externalDefaultTest.assert,

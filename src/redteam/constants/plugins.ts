@@ -391,9 +391,10 @@ export const AGENTIC_EXEMPT_PLUGINS = [
   'agentic:memory-poisoning',
 ] as const;
 
-// Strategies that alter direct prompt text or semantics and break deterministic canary/receipt matching.
+// Encoding strategies that mangle prompt text and break deterministic canary/receipt matching.
 // Coding-agent plugins exclude these but allow multi-turn strategies (meta, hydra, goblin, goat, crescendo).
 export const CANARY_BREAKING_STRATEGY_IDS = [
+  'arabic-presentation-forms',
   'base64',
   'hex',
   'homoglyph',
@@ -401,7 +402,6 @@ export const CANARY_BREAKING_STRATEGY_IDS = [
   'rot13',
   'multilingual',
   'math-prompt',
-  'posterior',
   'jailbreak:composite',
 ] as const;
 

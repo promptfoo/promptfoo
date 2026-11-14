@@ -15,7 +15,7 @@ IBM BAM (Big AI Models) API was sunset in March 2025. The service is no longer a
 
 IBM has consolidated their generative AI offerings into watsonx.ai, which provides:
 
-- Latest Granite 3.x, Llama 4.x, and Mistral models
+- Granite 3.x, Llama 4.x, and Mistral models
 - Enterprise-grade reliability and support
 - Enhanced security and compliance features
 
