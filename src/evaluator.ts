@@ -21,6 +21,8 @@ import { getEnvBool, getEnvInt, getEvalTimeoutMs, getMaxEvalTimeMs, isCI } from 
 import {
   getStructuredVarSources,
   markStructuredVarSources,
+  markVarCombination,
+  materializedSources,
   mergeStructuredVarSources,
 } from './evaluator/structuredVarSources';
 import { collectFileMetadata, renderPrompt, runExtensionHook } from './evaluatorHelpers';
@@ -1956,7 +1958,7 @@ export function formatVarsForDisplay(
 
 export function generateVarCombinations(
   vars: Record<string, string | string[] | unknown>,
-  loadedRoots = new Set<string>(),
+  sources?: Record<string, unknown>,
 ): Record<string, VarValue>[] {
   const keys = Object.keys(vars);
   const combinations: Record<string, VarValue>[] = [{}];
@@ -1964,7 +1966,11 @@ export function generateVarCombinations(
   for (const key of keys) {
     let values: Array<string | object> = [];
 
-    if (!loadedRoots.has(key) && typeof vars[key] === 'string' && vars[key].startsWith('file://')) {
+    if (
+      sources?.[key] !== true &&
+      typeof vars[key] === 'string' &&
+      vars[key].startsWith('file://')
+    ) {
       const filePath = vars[key].slice('file://'.length);
 
       // For glob patterns, we need to resolve the base directory and use relative patterns
@@ -1993,8 +1999,18 @@ export function generateVarCombinations(
     const newCombinations: Record<string, VarValue>[] = [];
 
     for (const combination of combinations) {
-      for (const value of values) {
-        newCombinations.push({ ...combination, [key]: value });
+      for (const [index, value] of values.entries()) {
+        const row = { ...combination, [key]: value };
+        if (sources) {
+          markVarCombination(
+            row,
+            combination,
+            key,
+            Object.getOwnPropertyDescriptor(sources, key)?.value,
+            values === vars[key] ? index : undefined,
+          );
+        }
+        newCombinations.push(row);
       }
     }
 
@@ -2686,14 +2702,7 @@ function appendRunEvalOptionsForTestCase({
   const varCombinations =
     getEnvBool('PROMPTFOO_DISABLE_VAR_EXPANSION') || testCase.options?.disableVarExpansion
       ? [testCase.vars]
-      : generateVarCombinations(
-          testCase.vars || {},
-          new Set(
-            Object.entries(getStructuredVarSources(testCase) ?? {})
-              .filter(([, source]) => source === true)
-              .map(([key]) => key),
-          ),
-        );
+      : generateVarCombinations(testCase.vars || {}, getStructuredVarSources(testCase));
 
   const globalRepeat = normalizeRepeatCount(options.repeat);
   const testRepeat = normalizeRepeatCount(testCase.options?.repeat, globalRepeat);
@@ -2927,8 +2936,18 @@ function createRunEvalTest(
   const testOptions = globalGraderExamples
     ? { ...testCase.options, redteamGraderExamples: globalGraderExamples }
     : testCase.options;
+  const sources = materializedSources(vars);
   const baseTest = {
     ...testCase,
+    ...(sources && {
+      metadata: {
+        ...testCase.metadata,
+        __promptfoo: {
+          ...testCase.metadata?.__promptfoo,
+          structuredVarSources: sources,
+        },
+      },
+    }),
     vars,
     options: testOptions,
   };

@@ -4,7 +4,8 @@ import path from 'node:path';
 
 import { expect, it } from 'vitest';
 import cliState from '../../src/cliState';
-import { runEval } from '../../src/evaluator';
+import { generateVarCombinations, runEval } from '../../src/evaluator';
+import { getStructuredVarSources } from '../../src/evaluator/structuredVarSources';
 import { renderPrompt } from '../../src/evaluatorHelpers';
 import { readTest } from '../../src/util/testCaseReader';
 
@@ -54,6 +55,27 @@ it('keeps file references from structured data literal alongside authored refere
     expect(row.response?.output).toEqual([
       'first hop|first hop|file://value.txt|file://value.txt',
       'first hop|first hop|file://value.txt|file://value.txt',
+    ]);
+  } finally {
+    cliState.basePath = basePath;
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+it('selects the origin of each expanded array entry by index', async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'promptfoo-choice-'));
+  const basePath = cliState.basePath;
+  try {
+    cliState.basePath = dir;
+    await writeFile(path.join(dir, 'first.txt'), 'authored');
+    await writeFile(path.join(dir, 'choice.json'), JSON.stringify('file://first.txt'));
+    await writeFile(path.join(dir, 'vars.yaml'), 'choice: [file://choice.json, file://first.txt]');
+    const test = await readTest({ vars: 'vars.yaml' }, dir);
+    const rows = generateVarCombinations(test.vars ?? {}, getStructuredVarSources(test));
+    const prompt = { raw: '{{choice}}', label: 'choice' };
+    expect(await Promise.all(rows.map((vars) => renderPrompt(prompt, vars)))).toEqual([
+      'file://first.txt',
+      'authored',
     ]);
   } finally {
     cliState.basePath = basePath;

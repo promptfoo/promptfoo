@@ -18,9 +18,43 @@ export function getStructuredVarSources(test?: SourceLayer): Sources | undefined
 }
 
 // Ordinary strategy spreads retain this symbol. It adds no prompt variable or JSON field.
+export function materializedSources(vars: MarkedVars | undefined) {
+  return vars?.[structuredVarSources];
+}
+
+// A string array expands by index. Resolve the selected source slot separately
+// for each row, even when an authored URI equals one returned as data.
+export function markVarCombination(
+  row: MarkedVars,
+  previous: MarkedVars,
+  key: string,
+  source: unknown,
+  index?: number,
+) {
+  let selected = source;
+  if (index !== undefined && Array.isArray(source) && Array.isArray(source[0])) {
+    const child = source[0].find(
+      (edge: unknown) => Array.isArray(edge) && edge[0] === String(index),
+    )?.[1];
+    selected = child === true ? true : undefined;
+    if (Number.isInteger(child) && Array.isArray(source[child])) {
+      selected = { nodes: source, rootIndex: child };
+    }
+  }
+  const next = { ...materializedSources(previous) };
+  if (selected !== undefined) {
+    Object.defineProperty(next, key, { value: selected, enumerable: true });
+  }
+  markStructuredVarSources(row, next);
+}
+
 export function markStructuredVarSources(vars: MarkedVars, sources?: Sources) {
   if (sources) {
-    Object.defineProperty(vars, structuredVarSources, { value: sources, enumerable: true });
+    Object.defineProperty(vars, structuredVarSources, {
+      value: sources,
+      enumerable: true,
+      configurable: true,
+    });
   }
 }
 
@@ -36,10 +70,15 @@ export function structuredVarSlots(vars: MarkedVars) {
       mark(vars, root);
       continue;
     }
-    if (!Array.isArray(graph)) {
-      continue;
+    const nodes = Array.isArray(graph)
+      ? graph
+      : graph && Object.getOwnPropertyDescriptor(graph, 'nodes')?.value;
+    const index = Array.isArray(graph)
+      ? 0
+      : graph && Object.getOwnPropertyDescriptor(graph, 'rootIndex')?.value;
+    if (Array.isArray(nodes) && Number.isInteger(index) && index >= 0 && index < nodes.length) {
+      markDescendantSlots(vars, root, nodes, index, mark);
     }
-    markDescendantSlots(vars, root, graph, mark);
   }
   return slots;
 }
@@ -48,9 +87,12 @@ function markDescendantSlots(
   vars: MarkedVars,
   root: string,
   graph: unknown[],
+  rootIndex: number,
   mark: (parent: object, key: string) => void,
 ) {
-  const pending: [unknown, number][] = [[Object.getOwnPropertyDescriptor(vars, root)?.value, 0]];
+  const pending: [unknown, number][] = [
+    [Object.getOwnPropertyDescriptor(vars, root)?.value, rootIndex],
+  ];
   const seen = new WeakMap<object, Set<number>>();
   while (pending.length) {
     const [parent, index] = pending.pop()!;
