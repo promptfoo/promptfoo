@@ -274,12 +274,9 @@ describe('JSON export with improved error handling', () => {
 
     it('should handle coded oversized-string errors with helpful message', async () => {
       mockEval.toEvaluateSummary.mockRejectedValueOnce(
-        Object.assign(
-          new RangeError('Cannot create a string longer than the maximum allowed length'),
-          {
-            code: 'ERR_STRING_TOO_LONG',
-          },
-        ),
+        Object.assign(new Error('Cannot create a string longer than the maximum allowed length'), {
+          code: 'ERR_STRING_TOO_LONG',
+        }),
       );
 
       await expect(writeOutput(tempFilePath, mockEval, null)).rejects.toThrow(

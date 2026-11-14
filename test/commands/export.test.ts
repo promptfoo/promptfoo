@@ -202,7 +202,7 @@ describe('exportCommand', () => {
 
   it('should show specific command for coded oversized-string errors', async () => {
     const error = Object.assign(
-      new RangeError('Cannot create a string longer than the maximum allowed length'),
+      new Error('Cannot create a string longer than the maximum allowed length'),
       { code: 'ERR_STRING_TOO_LONG' },
     );
     mockEval.toEvaluateSummary.mockRejectedValue(error);

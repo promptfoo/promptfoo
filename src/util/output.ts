@@ -496,21 +496,19 @@ async function exportBlobAssets(
   return assets;
 }
 
+export function isStringSizeError(error: unknown): error is Error {
+  return (
+    error instanceof Error &&
+    ((error as NodeJS.ErrnoException).code === 'ERR_STRING_TOO_LONG' ||
+      (error instanceof RangeError &&
+        /Invalid string length|Cannot create a string longer than/i.test(error.message)))
+  );
+}
+
 /**
  * JSON writer with improved error handling for large datasets.
  * Provides helpful error messages when memory limits are exceeded.
  */
-export function isStringSizeError(error: unknown): error is RangeError {
-  if (!(error instanceof RangeError)) {
-    return false;
-  }
-
-  return (
-    (error as NodeJS.ErrnoException).code === 'ERR_STRING_TOO_LONG' ||
-    /Invalid string length|Cannot create a string longer than/i.test(error.message)
-  );
-}
-
 async function writeJsonOutputSafely(
   outputPath: string,
   evalRecord: Eval,
