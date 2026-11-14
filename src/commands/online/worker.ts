@@ -65,6 +65,7 @@ export async function runOnlineWorker(options: {
     // Receipts are immutable for this worker run. Avoid reopening all retained history
     // on every idle poll; a restart checks disk again and enables explicit error retries.
     const processed = new Set<string>();
+    let gradingErrors = 0;
     logger.info(`Watching online Agent events in ${directory}`);
     do {
       const files = (await fs.readdir(events)).filter((file) => /^[a-f0-9]{64}\.json$/.test(file));
@@ -87,6 +88,12 @@ export async function runOnlineWorker(options: {
             throw new Error('Online event content does not match its filename');
           }
           const result = await evaluateTurn(turn, id, config, reports, options.signal);
+          if (options.signal?.aborted) {
+            return;
+          }
+          if (result.stats.errors > 0) {
+            gradingErrors++;
+          }
           await writeJson(
             receiptPath,
             {
@@ -104,6 +111,7 @@ export async function runOnlineWorker(options: {
           if (options.signal?.aborted) {
             return;
           }
+          gradingErrors++;
           // Do not log the event or arbitrary provider error messages containing conversation data.
           await writeJson(
             receiptPath,
@@ -115,6 +123,11 @@ export async function runOnlineWorker(options: {
           );
         }
         processed.add(file);
+      }
+      if (options.once && gradingErrors > 0) {
+        throw new Error(
+          `Online grading failed for ${gradingErrors} event(s); see the queue receipts`,
+        );
       }
       if (options.once || options.signal?.aborted) {
         return;

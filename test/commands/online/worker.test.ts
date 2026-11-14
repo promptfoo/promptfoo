@@ -93,7 +93,7 @@ describe('online worker', () => {
   it('records failures without leaking provider details and retries only on request', async () => {
     const id = await queue();
     vi.mocked(evaluateTurn).mockRejectedValueOnce(new Error('secret in judge failure'));
-    await runOnlineWorker(options());
+    await expect(runOnlineWorker(options())).rejects.toThrow('Online grading failed');
     const receipt = await readJson(path.join(directory, 'results', `${id}.json`));
     expect(receipt).toMatchObject({ status: 'error' });
     expect(JSON.stringify(receipt)).not.toContain('secret');
@@ -127,7 +127,7 @@ describe('online worker', () => {
     const event = (await readJson(file)) as object;
     await fs.writeFile(file, JSON.stringify({ ...event, output: 'changed' }));
     await fs.writeFile(path.join(directory, 'events', 'unpublished.tmp'), 'partial');
-    await runOnlineWorker(options());
+    await expect(runOnlineWorker(options())).rejects.toThrow('Online grading failed');
     expect(evaluateTurn).not.toHaveBeenCalled();
     expect(await readJson(path.join(directory, 'results', `${id}.json`))).toMatchObject({
       status: 'error',
@@ -143,18 +143,39 @@ describe('online worker', () => {
     expect(await fs.readdir(directory)).not.toContain('worker.lock');
   });
 
-  it('retains interrupted work for a later run and handles shutdown', async () => {
+  it('reports provider errors in one-shot mode after saving the receipt', async () => {
     const id = await queue();
-    const controller = new AbortController();
-    vi.mocked(evaluateTurn).mockImplementationOnce(async () => {
-      controller.abort();
-      throw new Error('aborted');
+    vi.mocked(evaluateTurn).mockResolvedValueOnce({
+      evalId: 'eval-error',
+      stats: { successes: 0, failures: 0, errors: 1, tokenUsage: createEmptyTokenUsage() },
     });
-    await runOnlineWorker({ ...options(), signal: controller.signal });
-    await expect(fs.stat(path.join(directory, 'results', `${id}.json`))).rejects.toThrow();
-    await runOnlineWorker(options());
-    expect(evaluateTurn).toHaveBeenCalledTimes(2);
+    await expect(runOnlineWorker(options())).rejects.toThrow('Online grading failed');
+    expect(await readJson(path.join(directory, 'results', `${id}.json`))).toMatchObject({
+      status: 'error',
+    });
   });
+
+  it.each([true, false])(
+    'leaves cancelled work pending when the evaluator rejects: %s',
+    async (reject) => {
+      const id = await queue();
+      const controller = new AbortController();
+      vi.mocked(evaluateTurn).mockImplementationOnce(async () => {
+        controller.abort();
+        if (reject) {
+          throw new Error('aborted');
+        }
+        return {
+          evalId: 'partial',
+          stats: { successes: 0, failures: 0, errors: 0, tokenUsage: createEmptyTokenUsage() },
+        };
+      });
+      await runOnlineWorker({ ...options(), signal: controller.signal });
+      await expect(fs.stat(path.join(directory, 'results', `${id}.json`))).rejects.toThrow();
+      await runOnlineWorker(options());
+      expect(evaluateTurn).toHaveBeenCalledTimes(2);
+    },
+  );
 
   it('watches new arrivals and exits on abort without leaving the lock', async () => {
     const controller = new AbortController();
