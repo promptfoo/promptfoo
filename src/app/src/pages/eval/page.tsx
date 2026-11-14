@@ -8,7 +8,7 @@ function getRouteEvalId(pathname: string, routeParam?: string): string | undefin
   }
   // React Router turns both an encoded slash and literal "%2F" into "/".
   // Read the original segment to distinguish the two stored IDs.
-  const segment = pathname.split('/').filter(Boolean).at(-1);
+  const segment = pathname.split('/').filter(Boolean).pop();
   try {
     return segment ? decodeURIComponent(segment) : routeParam;
   } catch {
