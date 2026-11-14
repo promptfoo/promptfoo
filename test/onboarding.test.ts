@@ -1,4 +1,5 @@
 import { rm } from 'fs/promises';
+import path from 'path';
 
 import { AbortPromptError, ExitPromptError } from '@inquirer/core';
 import * as yaml from 'js-yaml';
@@ -446,4 +447,24 @@ describe('initializeProject', () => {
     );
     expect(messages.some((msg) => msg.includes('undefined'))).toBe(false);
   });
+
+  it.each(['my-project', './my-project', path.resolve('my-project')])(
+    'writes the project to the requested directory %s',
+    async (directory) => {
+      const info = vi.spyOn(logger, 'info').mockImplementation(() => logger);
+      await initializeProject(directory, false);
+
+      const target = path.resolve('my-project');
+      expect(mockFs.mkdirSync).toHaveBeenCalledWith(target, { recursive: true });
+      for (const file of ['promptfooconfig.yaml', 'README.md']) {
+        expect(mockFs.writeFileSync).toHaveBeenCalledWith(
+          path.join(target, file),
+          expect.any(String),
+        );
+      }
+      expect(info).toHaveBeenCalledWith(
+        expect.stringContaining(`Wrote promptfooconfig.yaml to ${directory}\n`),
+      );
+    },
+  );
 });
