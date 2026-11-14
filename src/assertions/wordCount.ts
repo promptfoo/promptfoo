@@ -183,7 +183,10 @@ export const handleCharacterCount = ({
 
   invariant(value != null, '"character-count" assertion must have a value');
 
-  const characterCount = Array.from(outputString).length;
+  let characterCount = 0;
+  for (const _codePoint of outputString) {
+    characterCount++;
+  }
   const evaluation = evaluateCount(value, characterCount);
   const pass = inverse ? !evaluation.matches : evaluation.matches;
   const reason = pass

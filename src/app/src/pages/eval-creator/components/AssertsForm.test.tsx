@@ -1,6 +1,6 @@
 import React from 'react';
 
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import AssertsForm from './AssertsForm';
@@ -121,16 +121,17 @@ describe('AssertsForm', () => {
     initialValues = [{ type: 'character-count', value: { min: 1, max: 3 } }];
     renderComponent(<AssertsForm onAdd={onAdd} initialValues={initialValues} />);
 
-    const valueInput = screen.getByRole('textbox', { name: 'Value' });
+    const valueInput = screen.getByLabelText('Value');
     expect(valueInput).toHaveValue('{"min":1,"max":3}');
-
-    await user.click(valueInput);
-    await user.keyboard('{Control>}a{/Control}');
-    await user.paste('{"min":2,"max":4}');
-
+    fireEvent.change(valueInput, { target: { value: '{"min":2,"max":4}' } });
     expect(onAdd).toHaveBeenLastCalledWith([
       { type: 'character-count', value: { min: 2, max: 4 } },
     ]);
+
+    await user.click(screen.getByLabelText('Type'));
+    await user.click(screen.getByText('equals', { exact: true }));
+    expect(valueInput).toHaveValue('{"min":2,"max":4}');
+    expect(onAdd).toHaveBeenLastCalledWith([{ type: 'equals', value: '{"min":2,"max":4}' }]);
   });
 
   it.each(['rouge-l', 'rouge-s', 'not-rouge-l', 'not-rouge-s'] as const)(

@@ -213,8 +213,13 @@ const AssertsForm = ({ onAdd, initialValues }: AssertsFormProps) => {
                 <Select
                   value={assert.type}
                   onValueChange={(newValue) => {
+                    const type = newValue as AssertionType;
+                    const leavingCount =
+                      CHARACTER_COUNT_ASSERTION_TYPES.has(assert.type) &&
+                      !CHARACTER_COUNT_ASSERTION_TYPES.has(type);
+                    const value = leavingCount ? formatAssertionValue(assert) : assert.value;
                     const newAsserts = asserts.map((a, i) =>
-                      i === index ? { ...a, type: newValue as AssertionType } : a,
+                      i === index ? { ...a, type, value } : a,
                     );
                     setAsserts(newAsserts);
                     onAdd(newAsserts);
