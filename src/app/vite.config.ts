@@ -24,6 +24,10 @@ const maxForks = process.env.CI
   : Math.max(cpuCount - 2, 2); // Leave headroom for system locally
 
 const API_PORT = process.env.API_PORT || '15500';
+// Match parseEnvBool in src/envars.ts without loading its backend .env machinery into the build.
+const noNetwork = ['1', 'true', 'yes', 'yup', 'yeppers'].includes(
+  (process.env.PROMPTFOO_NO_NETWORK ?? '').toLowerCase(),
+);
 
 const ignoredTestConsolePatterns = [
   /^Warning: .*not wrapped in act/,
@@ -178,9 +182,7 @@ export default {
     'import.meta.env.VITE_PROMPTFOO_DISABLE_TELEMETRY': JSON.stringify(
       process.env.PROMPTFOO_DISABLE_TELEMETRY || 'false',
     ),
-    'import.meta.env.VITE_PROMPTFOO_NO_NETWORK': JSON.stringify(
-      process.env.PROMPTFOO_NO_NETWORK || 'false',
-    ),
+    'import.meta.env.VITE_PROMPTFOO_NO_NETWORK': JSON.stringify(String(noNetwork)),
     'import.meta.env.VITE_POSTHOG_KEY': JSON.stringify(process.env.PROMPTFOO_POSTHOG_KEY || ''),
     'import.meta.env.VITE_POSTHOG_HOST': JSON.stringify(
       process.env.PROMPTFOO_POSTHOG_HOST || 'https://a.promptfoo.app',
