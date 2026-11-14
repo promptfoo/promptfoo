@@ -121,6 +121,7 @@ describe('handlePiScorer', () => {
       },
     };
 
+    vi.mocked(matchesPiScore).mockResolvedValue({ pass: true, score: 1, reason: 'Pi Scorer' });
     await handlePiScorer(params);
 
     expect(matchesPiScore).toHaveBeenCalledWith('test question', 'test prompt', 'test output', {
