@@ -209,7 +209,7 @@ describe('METEOR score calculation', () => {
       const result = await handleMeteorAssertion(params as any);
       expect(result.pass).toBe(false);
       expect(result.score).toBeLessThan(0.5);
-      expect(result.reason).toMatch(/METEOR score \d+\.\d+ did not meet threshold 0\.5/);
+      expect(result.reason).toMatch(/METEOR score \d+\.\d+ is less than threshold 0\.5/);
     });
 
     it('should properly extract parameters from assertion', async () => {
