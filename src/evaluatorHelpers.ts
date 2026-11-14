@@ -58,7 +58,7 @@ export function resolveVariables(
   varsResolvedFromSkipped?: Set<string>,
 ): Record<string, VarValue> {
   let resolved: boolean;
-  const regex = /\{\{\s*(\w+)\s*\}\}/g; // Matches {{variableName}}, {{ variableName }}, etc.
+  const regex = /\{\{\s*(\w+)\s*\}\}/; // Matches {{variableName}}, {{ variableName }}, etc.
 
   let iterations = 0;
   do {
@@ -72,20 +72,25 @@ export function resolveVariables(
         continue;
       }
       const value = variables[key] as string;
-      let replaced = false;
-      variables[key] = value.replace(regex, (placeholder, varName: string) => {
-        if (variables[varName] === undefined) {
-          return placeholder;
-        }
-        replaced = true;
-        if (skipResolveVars?.includes(varName) || varsResolvedFromSkipped?.has(varName)) {
-          varsResolvedFromSkipped?.add(key);
-        }
-        return String(variables[varName]);
-      });
-      if (replaced) {
-        resolved = false;
+      const match = regex.exec(value);
+      if (!match || variables[match[1]] === undefined) {
+        continue;
       }
+      const [, source] = match;
+      const protectedSource =
+        skipResolveVars?.includes(source) || varsResolvedFromSkipped?.has(source);
+      if (protectedSource) {
+        // Render the remaining authored placeholders together before marking the alias as data.
+        // A replacement callback never scans placeholders supplied by the provider.
+        variables[key] = value.replace(/\{\{\s*(\w+)\s*\}\}/g, (placeholder, name: string) =>
+          variables[name] === undefined ? placeholder : String(variables[name]),
+        );
+        varsResolvedFromSkipped?.add(key);
+      } else {
+        // Replace one ordinary reference per pass; replacing all can expand recursive aliases exponentially.
+        variables[key] = value.replace(match[0], () => String(variables[source]));
+      }
+      resolved = false;
     }
     iterations++;
   } while (!resolved && iterations < 5);
