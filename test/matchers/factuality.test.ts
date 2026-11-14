@@ -210,6 +210,24 @@ describe('matchesFactuality', () => {
     });
   });
 
+  it.each([1, {}])(
+    'falls back to legacy grading for a malformed JSON reason: %j',
+    async (reason) => {
+      const malformed = JSON.stringify({ category: 'A', reason });
+      vi.spyOn(DefaultGradingProvider, 'callApi')
+        .mockResolvedValueOnce({ output: malformed })
+        .mockResolvedValueOnce({ output: `${malformed}\n(A) Valid legacy verdict` });
+      expect(await matchesFactuality('Input', 'Expected', 'Answer', {})).toMatchObject({
+        pass: false,
+        reason: 'Factuality checker output did not match expected format',
+        metadata: { graderError: true },
+      });
+      const fallback = await matchesFactuality('Input', 'Expected', 'Answer', {});
+      expect(fallback).toMatchObject({ pass: true, score: 1, reason: 'Valid legacy verdict' });
+      expect(fallback.metadata?.graderError).toBeUndefined();
+    },
+  );
+
   it('should fail when JSON has invalid category', async () => {
     const input = 'Input text';
     const expected = 'Expected output';
@@ -226,7 +244,7 @@ describe('matchesFactuality', () => {
     await expect(matchesFactuality(input, expected, output, grading)).resolves.toEqual({
       pass: false,
       score: 0,
-      reason: 'Invalid category value: Z',
+      reason: 'Factuality grader returned an invalid category',
       tokensUsed: expect.objectContaining({
         total: expect.any(Number),
         prompt: expect.any(Number),
@@ -273,8 +291,7 @@ describe('matchesFactuality', () => {
     ).resolves.toEqual({
       pass: false,
       score: 0,
-      reason:
-        'Factuality checker output did not match expected format: I am not able to grade this submission.',
+      reason: 'Factuality checker output did not match expected format',
       tokensUsed: expect.objectContaining({
         total: expect.any(Number),
         prompt: expect.any(Number),
@@ -282,6 +299,17 @@ describe('matchesFactuality', () => {
       }),
       metadata: { graderError: true },
     });
+  });
+
+  it.each([
+    'sensitive judge content',
+    '{"category":"sensitive judge content"}',
+    { category: 'sensitive judge content' },
+  ])('keeps malformed grader payloads out of failure reasons: %j', async (output) => {
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValue({ output });
+    const result = await matchesFactuality('Input', 'Expected', 'Answer', {});
+    expect(result).toMatchObject({ pass: false, score: 0, metadata: { graderError: true } });
+    expect(result.reason).not.toContain('sensitive judge content');
   });
 
   it('should use custom prompt override when provided', async () => {

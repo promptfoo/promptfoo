@@ -273,14 +273,22 @@ export class AssertionsResult {
 
     // Zero-weight assertions collect measurements without affecting the aggregate score.
     const metricWeight = weight === 0 ? 1 : weight;
-    if (metric) {
+    const hasUnavailableGrade =
+      result.metadata?.graderError === true ||
+      result.componentResults?.some(
+        (component) =>
+          component.metadata?.graderError === true &&
+          component.assertion?.weight !== 0 &&
+          component.metadata.assertionSet?.weight !== 0,
+      );
+    if (metric && !hasUnavailableGrade) {
       this.namedScores[metric] = (this.namedScores[metric] ?? 0) + result.score * metricWeight;
       this.namedScoreWeights[metric] = (this.namedScoreWeights[metric] ?? 0) + metricWeight;
     }
 
-    if (result.namedScores) {
+    if (result.namedScores && (!hasUnavailableGrade || result.componentResults?.length)) {
       Object.entries(result.namedScores).forEach(([metricName, score]) => {
-        if (metricName !== metric) {
+        if (metricName !== metric || hasUnavailableGrade) {
           const incomingWeight =
             result.namedScoreWeights &&
             Object.prototype.hasOwnProperty.call(result.namedScoreWeights, metricName)
@@ -300,13 +308,16 @@ export class AssertionsResult {
       accumulateNormalizedAssertionTokenUsage(this.tokensUsed, tokensUsed);
     }
 
-    if (result.pass) {
+    if (result.pass || weight === 0) {
       return;
     }
 
     this.failedReason = result.reason;
 
-    if (getEnvBool('PROMPTFOO_SHORT_CIRCUIT_TEST_FAILURES')) {
+    if (
+      getEnvBool('PROMPTFOO_SHORT_CIRCUIT_TEST_FAILURES') &&
+      this._parentAssertionSet?.assertionSet.weight !== 0
+    ) {
       throw new Error(result.reason);
     }
   }
@@ -362,6 +373,15 @@ export class AssertionsResult {
     const cachedResponse =
       this.componentResults.length > 0 &&
       this.componentResults.every((result) => result.metadata?.cachedResponse === true);
+
+    // Ignore passed sets and zero-weight measurements. Comparison slots can be sparse.
+    const failedGrader = this.componentResults.find(
+      (result) =>
+        result?.pass === false &&
+        result.metadata?.graderError === true &&
+        result.assertion?.weight !== 0 &&
+        result.metadata.assertionSet?.weight !== 0,
+    );
 
     this.result = {
       pass,
@@ -427,7 +447,7 @@ export class AssertionsResult {
       this.result.reason = 'Assertion aggregation error: unable to read scores or weights';
       this.result.namedScores = {};
       this.result.namedScoreWeights = {};
-      return this.result;
+      metricEntries = { namedScores: [], namedScoreWeights: [] };
     }
 
     const invalidMetrics = new Set<string>();
@@ -448,6 +468,14 @@ export class AssertionsResult {
             metricEntries[field].filter(([metric]) => !invalidMetrics.has(metric)),
           );
         }
+      }
+    }
+
+    // Custom scoring may change the preliminary pass/fail state or metadata.
+    if (!this.result.pass && failedGrader) {
+      this.result.metadata = { ...this.result.metadata, graderError: true as const };
+      if (!scoringFunction) {
+        this.result.reason = failedGrader.reason || 'Grader failed to produce a verdict';
       }
     }
 

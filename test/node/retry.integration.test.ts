@@ -7,19 +7,24 @@ import { eq } from 'drizzle-orm';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDb } from '../../src/database/index';
 import { updateSignalFile } from '../../src/database/signal';
-import { evalResultsTable } from '../../src/database/tables';
-import logger from '../../src/logger';
+import { evalResultsTable, evalsTable } from '../../src/database/tables';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
 import { getTotalResultRowCount } from '../../src/models/evalPerformance';
+import EvalResult from '../../src/models/evalResult';
 import {
   deleteErrorResults,
   getErrorResultIds,
+  getRetryResultIds,
   recalculatePromptMetrics,
+  replaceRetryResults,
   retryCommand,
 } from '../../src/node/retry';
+import { HUMAN_ASSERTION_TYPE } from '../../src/providers/constants';
+import { EchoProvider } from '../../src/providers/echo';
 import { ResultFailureReason } from '../../src/types/index';
 import { shouldShareResults } from '../../src/util/sharing';
+import { createEvaluateResult } from '../factories/eval';
 
 vi.mock('../../src/database/signal', async () => {
   const actual = await vi.importActual('../../src/database/signal');
@@ -144,10 +149,281 @@ describe('retry command', () => {
 
       const errorIds = await getErrorResultIds(emptyEval.id);
       expect(errorIds).toHaveLength(0);
+      expect(await getRetryResultIds(emptyEval.id)).toEqual([]);
+      expect(await replaceRetryResults(emptyEval, { originalIds: new Set(), rows: [] })).toBe(true);
     });
   });
 
+  it.each(['select-best', 'max-score'] as const)(
+    'retries the complete %s group without including unrelated results',
+    async (type) => {
+      const evalRecord = await Eval.create({}, [], { id: uniqueEvalId() });
+      const db = await getDb();
+      const rows = [
+        { id: 'comparison-pass', testIdx: 0, promptIdx: 0, testCase: { assert: [{ type }] } },
+        {
+          id: 'comparison-error',
+          testIdx: 0,
+          promptIdx: 1,
+          failureReason: ResultFailureReason.ERROR,
+        },
+        {
+          id: 'comparison-fail',
+          testIdx: 0,
+          promptIdx: 2,
+          failureReason: ResultFailureReason.ASSERT,
+        },
+        { id: 'ordinary-pass', testIdx: 1, promptIdx: 0 },
+        {
+          id: 'ordinary-error',
+          testIdx: 1,
+          promptIdx: 1,
+          failureReason: ResultFailureReason.ERROR,
+        },
+        {
+          id: 'completed-comparison',
+          testIdx: 2,
+          promptIdx: 0,
+          failureReason: ResultFailureReason.ASSERT,
+          testCase: { assert: [{ type }] },
+        },
+      ].map((row) => ({
+        ...createEvaluateResult({
+          ...row,
+          success: !row.failureReason,
+          score: row.failureReason ? 0 : 1,
+        }),
+        id: `${evalRecord.id}-${row.id}`,
+        evalId: evalRecord.id,
+      }));
+      await db.insert(evalResultsTable).values(rows);
+
+      const selectedIds = await getRetryResultIds(evalRecord.id);
+      expect(selectedIds.sort()).toEqual(
+        ['comparison-pass', 'comparison-error', 'comparison-fail', 'ordinary-error']
+          .map((id) => `${evalRecord.id}-${id}`)
+          .sort(),
+      );
+      expect((await getErrorResultIds(evalRecord.id)).sort()).toEqual(
+        ['comparison-error', 'ordinary-error'].map((id) => `${evalRecord.id}-${id}`).sort(),
+      );
+      const stage = { originalIds: new Set(selectedIds), rows: [] as EvalResult[] };
+      expect(await replaceRetryResults(evalRecord, stage)).toBe(false);
+      const stageSuccessfulRows = (originals: typeof rows) => {
+        for (const row of originals) {
+          stage.rows.push(
+            new EvalResult({
+              ...row,
+              id: `${row.id}-replacement`,
+              response: row.response ?? null,
+              gradingResult: row.gradingResult ?? null,
+              success: true,
+              score: 1,
+              failureReason: ResultFailureReason.NONE,
+            }),
+          );
+        }
+      };
+      stageSuccessfulRows(rows.filter((row) => row.failureReason === ResultFailureReason.ERROR));
+      expect(await replaceRetryResults(evalRecord, stage)).toBe(false);
+      stageSuccessfulRows(
+        rows.filter((row) => row.testIdx === 0 && row.failureReason !== ResultFailureReason.ERROR),
+      );
+      expect(await replaceRetryResults(evalRecord, stage)).toBe(true);
+    },
+  );
+
   describe('retryCommand', () => {
+    it.each([
+      {
+        name: 'top-level human rating',
+        type: 'select-best' as const,
+        legacyError: false,
+        grading: {
+          pass: true,
+          score: 1,
+          reason: 'Approved',
+          assertion: { type: HUMAN_ASSERTION_TYPE },
+        },
+      },
+      {
+        name: 'child human rating on a legacy error',
+        type: 'max-score' as const,
+        legacyError: true,
+        grading: {
+          pass: true,
+          score: 1,
+          reason: 'Approved',
+          componentResults: [
+            {
+              pass: true,
+              score: 1,
+              reason: 'Human approval',
+              assertion: { type: HUMAN_ASSERTION_TYPE },
+            },
+          ],
+        },
+      },
+      {
+        name: 'comment-only annotation',
+        type: 'select-best' as const,
+        legacyError: false,
+        grading: { pass: true, score: 1, reason: 'Passed', comment: 'Keep this review note' },
+      },
+    ])(
+      'preserves $name before retrying a comparison group',
+      async ({ type, legacyError, grading }) => {
+        const prompts = [
+          { raw: 'first', label: 'first' },
+          { raw: 'second', label: 'second' },
+        ];
+        const testCase = { assert: [{ type, value: 'Choose the better response' }] };
+        const evalRecord = await Eval.create(
+          { prompts: ['first', 'second'], providers: ['echo'], tests: [testCase] },
+          prompts,
+          { id: uniqueEvalId() },
+        );
+        const db = await getDb();
+        await db.insert(evalResultsTable).values(
+          prompts.map((prompt, promptIdx) => ({
+            ...createEvaluateResult(),
+            id: `${evalRecord.id}-${promptIdx}`,
+            evalId: evalRecord.id,
+            testIdx: 0,
+            promptIdx,
+            prompt,
+            testCase,
+            provider: { id: 'echo' },
+            response: { output: prompt.raw },
+            success: promptIdx === 1 && !legacyError,
+            score: promptIdx === 1 ? grading.score : 0,
+            failureReason:
+              promptIdx === 0 || legacyError ? ResultFailureReason.ERROR : ResultFailureReason.NONE,
+            gradingResult: promptIdx === 1 ? grading : undefined,
+          })),
+        );
+        const original = await db
+          .select()
+          .from(evalResultsTable)
+          .where(eq(evalResultsTable.evalId, evalRecord.id));
+        const targetCall = vi.spyOn(EchoProvider.prototype, 'callApi');
+        try {
+          await expect(retryCommand(evalRecord.id, {})).rejects.toThrow(
+            'This comparison group has manual ratings or comments. Run a new eval to preserve them.',
+          );
+          expect(targetCall).not.toHaveBeenCalled();
+          const saved = await db
+            .select()
+            .from(evalResultsTable)
+            .where(eq(evalResultsTable.evalId, evalRecord.id));
+          expect(saved).toEqual(original);
+        } finally {
+          targetCall.mockRestore();
+        }
+      },
+    );
+
+    it.each(['other attempt', 'manual rating'])(
+      'preserves original comparison rows during a retry racing a %s',
+      async (race) => {
+        const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-partial-retry-'));
+        const configPath = path.join(directory, 'promptfooconfig.json');
+        const prompts = [
+          { raw: 'first', label: 'first' },
+          { raw: 'second', label: 'second' },
+        ];
+        const testCase = {
+          assert: [{ type: 'equals' as const, value: 'second' }, { type: 'max-score' as const }],
+        };
+        const evalRecord = await Eval.create(
+          { prompts: ['first', 'second'], providers: ['echo'], tests: [testCase] },
+          prompts,
+          { id: uniqueEvalId() },
+        );
+        const db = await getDb();
+        const ids = prompts.map((_prompt, index) => `${evalRecord.id}-original-${index}`);
+        const originals = prompts.map((prompt, promptIdx) => ({
+          ...createEvaluateResult(),
+          id: ids[promptIdx],
+          evalId: evalRecord.id,
+          testIdx: 0,
+          promptIdx,
+          prompt,
+          testCase,
+          provider: { id: 'echo' },
+          response: { output: prompt.raw },
+          success: promptIdx === 1,
+          score: promptIdx === 1 ? 1 : 0,
+          failureReason: promptIdx === 1 ? ResultFailureReason.NONE : ResultFailureReason.ERROR,
+        }));
+        await db.insert(evalResultsTable).values(originals);
+        const readSavedRow = (id: string) =>
+          db.select().from(evalResultsTable).where(eq(evalResultsTable.id, id)).get();
+        const expected = await Promise.all(ids.map(readSavedRow));
+        const readEvaluation = () =>
+          db.select().from(evalsTable).where(eq(evalsTable.id, evalRecord.id)).get();
+        const expectedEval = await readEvaluation();
+        let expectedHistorical: Awaited<ReturnType<typeof readSavedRow>>;
+        fs.writeFileSync(
+          configPath,
+          JSON.stringify({
+            prompts: race === 'other attempt' ? ['first'] : ['first', 'second'],
+            providers: ['echo'],
+            tests: race === 'other attempt' ? [{ vars: {} }] : [testCase],
+          }),
+        );
+        const historical = { ...originals[1], id: `${evalRecord.id}-other-attempt`, score: 9 };
+        const manualGrading = {
+          pass: true,
+          score: 1,
+          reason: 'User approved during retry',
+          comment: 'Keep this rating',
+          assertion: { type: HUMAN_ASSERTION_TYPE },
+        };
+        const callApi = EchoProvider.prototype.callApi;
+        const targetCall = vi
+          .spyOn(EchoProvider.prototype, 'callApi')
+          .mockImplementationOnce(async function (this: EchoProvider, prompt) {
+            await db.insert(evalResultsTable).values(historical);
+            expectedHistorical = await readSavedRow(historical.id);
+            if (race === 'manual rating') {
+              await db
+                .update(evalResultsTable)
+                .set({ gradingResult: manualGrading })
+                .where(eq(evalResultsTable.id, ids[1]));
+            }
+            return callApi.call(this, prompt);
+          });
+        try {
+          await expect(
+            retryCommand(evalRecord.id, { config: configPath, maxConcurrency: 1 }),
+          ).rejects.toThrow(
+            race === 'other attempt'
+              ? 'Retry did not replace all selected results'
+              : 'A selected result has a manual rating or comment',
+          );
+          expect(await readSavedRow(ids[0])).toEqual(expected[0]);
+          expect(await readSavedRow(ids[1])).toEqual(
+            race === 'manual rating'
+              ? { ...expected[1], gradingResult: manualGrading }
+              : expected[1],
+          );
+          expect(await readEvaluation()).toEqual(expectedEval);
+          expect(
+            await db
+              .select()
+              .from(evalResultsTable)
+              .where(eq(evalResultsTable.evalId, evalRecord.id)),
+          ).toHaveLength(3);
+          expect(expectedHistorical).toBeDefined();
+          expect(await readSavedRow(historical.id)).toEqual(expectedHistorical);
+        } finally {
+          targetCall.mockRestore();
+          fs.rmSync(directory, { recursive: true, force: true });
+        }
+      },
+    );
+
     it('preserves persisted errors when an override config no longer matches the stored provider filter', async () => {
       const artifactId = randomUUID();
       const configPath = path.join(os.tmpdir(), `promptfoo-retry-filter-${artifactId}.yaml`);
@@ -264,18 +540,9 @@ describe('retry command', () => {
           '      name: World',
         ].join('\n'),
       );
-      const originalAddPrompts = Eval.prototype.addPrompts;
-      let addPromptsCalls = 0;
-      vi.spyOn(Eval.prototype, 'addPrompts').mockImplementation(async function (
-        this: Eval,
-        prompts,
-      ) {
-        addPromptsCalls += 1;
-        if (addPromptsCalls === 4) {
-          throw new Error('simulated prompt metric save failure');
-        }
-        return originalAddPrompts.call(this, prompts);
-      });
+      const saveMetrics = vi
+        .spyOn(Eval.prototype, 'addPrompts')
+        .mockRejectedValueOnce(new Error('simulated prompt metric save failure'));
 
       try {
         await retryCommand(evalRecord.id, { config: configPath });
@@ -296,7 +563,7 @@ describe('retry command', () => {
         expect(JSON.stringify(rows)).not.toContain(staleResultId);
         expect(JSON.stringify(rows)).not.toContain('stale error');
         expect(fs.existsSync(jsonOutputPath)).toBe(false);
-        expect(addPromptsCalls).toBe(4);
+        expect(saveMetrics).toHaveBeenCalledOnce();
 
         const persistedRows = await db
           .select()
@@ -364,8 +631,8 @@ describe('retry command', () => {
           '      name: World',
         ].join('\n'),
       );
-      const addResultSpy = vi
-        .spyOn(Eval.prototype, 'addResult')
+      const stageResultSpy = vi
+        .spyOn(EvalResult, 'createFromEvaluateResult')
         .mockRejectedValueOnce(new Error('simulated result persistence failure'));
 
       try {
@@ -373,7 +640,7 @@ describe('retry command', () => {
           'Retry results failed to persist. Existing ERROR rows were preserved.',
         );
 
-        expect(addResultSpy).toHaveBeenCalledTimes(1);
+        expect(stageResultSpy).toHaveBeenCalledTimes(1);
         expect(await getErrorResultIds(evalRecord.id)).toEqual([staleResultId]);
         const artifactRows = fs
           .readFileSync(jsonlOutputPath, 'utf8')
@@ -394,7 +661,7 @@ describe('retry command', () => {
       }
     });
 
-    it('rewrites JSONL from the partially persisted database state when retry persistence fails', async () => {
+    it('rolls back an inserted replacement and leaves JSONL unchanged when the next insert fails', async () => {
       const artifactId = randomUUID();
       const jsonlOutputPath = path.join(os.tmpdir(), `promptfoo-retry-${artifactId}.jsonl`);
       const configPath = path.join(os.tmpdir(), `promptfoo-retry-${artifactId}.yaml`);
@@ -446,17 +713,17 @@ describe('retry command', () => {
           '      name: Mars',
         ].join('\n'),
       );
-      const originalAddResult = Eval.prototype.addResult;
-      vi.spyOn(Eval.prototype, 'addResult')
-        .mockImplementationOnce(function (this: Eval, result) {
-          return originalAddResult.call(this, result);
+      const saveReplacement = EvalResult.prototype.saveRetryReplacement;
+      vi.spyOn(EvalResult.prototype, 'saveRetryReplacement')
+        .mockImplementationOnce(function (this: EvalResult, tx) {
+          return saveReplacement.call(this, tx);
         })
         .mockRejectedValueOnce(new Error('simulated result persistence failure'));
 
       try {
         await expect(
           retryCommand(evalRecord.id, { config: configPath, maxConcurrency: 1 }),
-        ).rejects.toThrow('Retry results failed to persist. Existing ERROR rows were preserved.');
+        ).rejects.toThrow('simulated result persistence failure');
 
         const persistedRows = await db
           .select()
@@ -470,79 +737,8 @@ describe('retry command', () => {
         expect(artifactRows.map((row) => row.id).sort()).toEqual(
           persistedRows.map((row) => row.id).sort(),
         );
-        expect(artifactRows).toHaveLength(3);
-      } finally {
-        fs.rmSync(jsonlOutputPath, { force: true });
-        fs.rmSync(configPath, { force: true });
-      }
-    });
-
-    it('keeps the persistence error primary when restoring JSONL output also fails', async () => {
-      const artifactId = randomUUID();
-      const jsonlOutputPath = path.join(os.tmpdir(), `promptfoo-retry-${artifactId}.jsonl`);
-      const configPath = path.join(os.tmpdir(), `promptfoo-retry-${artifactId}.yaml`);
-      const prompt = { raw: 'Hello {{name}}', label: 'Hello {{name}}' };
-      const evalRecord = await Eval.create(
-        {
-          outputPath: jsonlOutputPath,
-          prompts: [prompt.raw],
-          providers: ['echo'],
-          tests: [{ vars: { name: 'World' } }],
-        },
-        [prompt],
-        { id: uniqueEvalId() },
-      );
-      const db = await getDb();
-      const staleResultId = `${evalRecord.id}-stale-error`;
-      await db.insert(evalResultsTable).values({
-        id: staleResultId,
-        evalId: evalRecord.id,
-        promptIdx: 0,
-        testIdx: 0,
-        prompt,
-        testCase: { vars: { name: 'World' } },
-        provider: { id: 'echo' },
-        response: { output: 'stale error' },
-        error: 'stale error',
-        success: false,
-        score: 0,
-        failureReason: ResultFailureReason.ERROR,
-        namedScores: {},
-      });
-      fs.writeFileSync(jsonlOutputPath, `${JSON.stringify({ id: staleResultId })}\n`);
-      fs.writeFileSync(
-        configPath,
-        [
-          'providers:',
-          '  - echo',
-          'prompts:',
-          `  - "${prompt.raw}"`,
-          'tests:',
-          '  - vars:',
-          '      name: World',
-        ].join('\n'),
-      );
-      vi.spyOn(Eval.prototype, 'addResult').mockRejectedValueOnce(
-        new Error('simulated result persistence failure'),
-      );
-      vi.spyOn(Eval.prototype, 'fetchResultsBatched').mockImplementationOnce(async function* () {
-        throw new Error('simulated artifact restore failure');
-      });
-      const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => logger);
-
-      try {
-        await expect(retryCommand(evalRecord.id, { config: configPath })).rejects.toThrow(
-          'Retry results failed to persist. Existing ERROR rows were preserved.',
-        );
-        expect(warnSpy).toHaveBeenCalledWith(
-          'Retry results failed to persist, and restoring JSONL output failed.',
-          expect.objectContaining({
-            error: expect.objectContaining({
-              errors: [expect.objectContaining({ message: 'simulated artifact restore failure' })],
-            }),
-            jsonlOutputPaths: [jsonlOutputPath],
-          }),
-        );
+        expect(artifactRows).toHaveLength(2);
+        expect(await getErrorResultIds(evalRecord.id)).toEqual(staleResultIds);
       } finally {
         fs.rmSync(jsonlOutputPath, { force: true });
         fs.rmSync(configPath, { force: true });

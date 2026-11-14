@@ -100,6 +100,21 @@ describe('InMemoryEvaluationStore', () => {
     expect(evaluation.finalResults).toEqual([replacement, other]);
   });
 
+  it('reruns selected comparison siblings while ordinary resume keeps them complete', async () => {
+    const store = new InMemoryEvaluationStore(
+      createEvaluation({
+        results: [
+          createEvaluateResult({ id: 'winner', testIdx: 0, promptIdx: 0 }),
+          createEvaluateResult({ id: 'other', testIdx: 1, promptIdx: 0 }),
+        ],
+      }),
+    );
+    expect(await store.readCompletedIndexPairs()).toEqual(new Set(['0:0', '1:0']));
+    expect(await store.readCompletedIndexPairs({ excludeResultIds: ['winner'] })).toEqual(
+      new Set(['1:0']),
+    );
+  });
+
   it('tracks persistence failures by index and preserves result mutations across reads', async () => {
     const first = createEvaluateResult({ testIdx: 2, promptIdx: 0, score: 1 });
     const otherTest = createEvaluateResult({ testIdx: 3, promptIdx: 0 });

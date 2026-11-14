@@ -1,11 +1,17 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { HUMAN_ASSERTION_TYPE } from '../../constants';
+import { getDb } from '../../database/index';
 import { getUserEmail, setUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import Eval, { EvalQueries } from '../../models/eval';
+import { notifyEvaluationChanged } from '../../models/evalMutation';
 import EvalResult from '../../models/evalResult';
 import { evaluateWithSource } from '../../node';
+import {
+  applyManualRating,
+  applySubmittedGrade,
+  updateManualRatingMetrics,
+} from '../../presentation/manualRating';
 import { EvalSchemas } from '../../types/api/eval';
 import { deleteEval, deleteEvals, updateResult, writeResultsToDatabase } from '../../util/database';
 import {
@@ -725,78 +731,59 @@ evalRouter.post(
       const { evalId, id } = paramsResult.data;
       // Double-cast needed: Zod's .passthrough() adds index signature that doesn't overlap with GradingResult
       const gradingResult = bodyResult.data as unknown as GradingResult;
-      const result = await EvalResult.findById(id);
-      if (!result || result.evalId !== evalId) {
-        res.status(404).json({ error: 'Result not found' });
-        return;
-      }
-
-      const eval_ = await Eval.findById(evalId);
-      if (!eval_) {
-        res.status(404).json({ error: 'Eval not found' });
-        return;
-      }
-
-      // Capture the current state before we change it
-      const hasExistingManualOverride = Boolean(
-        result.gradingResult?.componentResults?.some(
-          (r) => r.assertion?.type === HUMAN_ASSERTION_TYPE,
-        ),
-      );
-      const successChanged = result.success !== gradingResult.pass;
-      const scoreChange = gradingResult.score - result.score;
-
-      // Update the result
-      result.gradingResult = gradingResult;
-      result.success = gradingResult.pass;
-      result.score = gradingResult.score;
-
-      // Update the prompt metrics
-      const prompt = eval_.prompts[result.promptIdx];
-      invariant(prompt, 'Prompt not found');
-      if (!prompt.metrics) {
-        logger.error(
-          `[${id}] This is not normal. Prompt metrics not found for prompt ${result.promptIdx}`,
-        );
-
-        res.status(400).json({ error: 'Prompt metrics not found' });
-        return;
-      }
-
-      if (successChanged) {
-        if (result.success) {
-          // Result changed from fail to pass
-          prompt.metrics.testPassCount += 1;
-          prompt.metrics.testFailCount -= 1;
-          prompt.metrics.assertPassCount += 1;
-          prompt.metrics.score += scoreChange;
-          if (hasExistingManualOverride) {
-            // If there was an existing manual override, we need to decrement the assertFailCount because it changed from fail to pass
-            prompt.metrics.assertFailCount -= 1;
-          }
-        } else {
-          prompt.metrics.testPassCount -= 1;
-          prompt.metrics.testFailCount += 1;
-          prompt.metrics.assertFailCount += 1;
-          prompt.metrics.score += scoreChange;
-          if (hasExistingManualOverride) {
-            // If there was an existing manual override, we need to decrement the assertPassCount because it changed from pass to fail
-            prompt.metrics.assertPassCount -= 1;
-          }
+      const db = await getDb();
+      const updated = await db.transaction(async (tx) => {
+        // A retry may replace this row. Read it and its prompt metrics in the same transaction.
+        const result = await EvalResult.findById(id, tx);
+        if (!result || result.evalId !== evalId) {
+          return { status: 404, message: 'Result not found' };
         }
-      } else if (!hasExistingManualOverride) {
-        // Nothing changed, so the user just added an assertion
-        if (result.success) {
-          prompt.metrics.assertPassCount += 1;
-        } else {
-          prompt.metrics.assertFailCount += 1;
+
+        const eval_ = await Eval.findById(evalId, tx);
+        if (!eval_) {
+          return { status: 404, message: 'Eval not found' };
         }
+
+        const previous = {
+          pass: result.success,
+          score: result.score,
+          failureReason: result.failureReason,
+          error: result.error,
+          gradingResult: result.gradingResult,
+        };
+        const action = bodyResult.data.action;
+        const rated = action
+          ? applyManualRating(previous, {
+              action,
+              pass: gradingResult.pass,
+              score: gradingResult.score,
+              comment: gradingResult.comment,
+            })
+          : applySubmittedGrade(previous, gradingResult);
+
+        const prompt = eval_.prompts[result.promptIdx];
+        invariant(prompt, 'Prompt not found');
+        if (!prompt.metrics) {
+          return { status: 400, message: 'Prompt metrics not found' };
+        }
+
+        result.gradingResult = rated.gradingResult;
+        result.success = rated.pass;
+        result.score = rated.score;
+        result.failureReason = rated.failureReason;
+        result.error = rated.error ?? null;
+        prompt.metrics = updateManualRatingMetrics(prompt.metrics, previous, rated);
+
+        await result.save(tx);
+        await eval_.save(tx);
+        return result;
+      });
+      if ('status' in updated) {
+        res.status(updated.status).json({ error: updated.message });
+        return;
       }
-
-      await result.save();
-      await eval_.save();
-
-      res.json(EvalSchemas.SubmitRating.Response.parse(result));
+      notifyEvaluationChanged(evalId);
+      res.json(EvalSchemas.SubmitRating.Response.parse(updated));
     } catch (error) {
       sendError(res, 500, 'Failed to submit rating', error);
     }

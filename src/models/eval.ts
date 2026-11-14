@@ -241,8 +241,11 @@ export class EvalQueries {
     return vars;
   }
 
-  static async getVarsFromEval(evalId: string) {
-    const db = await getDb();
+  static async getVarsFromEval(
+    evalId: string,
+    transaction?: Pick<Awaited<ReturnType<typeof getDb>>, 'all'>,
+  ) {
+    const db = transaction ?? (await getDb());
 
     // Use parameterized query to prevent SQL injection
     const query = sql`
@@ -261,8 +264,12 @@ export class EvalQueries {
     return vars;
   }
 
-  static async setVars(evalId: string, vars: string[]) {
-    const db = await getDb();
+  static async setVars(
+    evalId: string,
+    vars: string[],
+    transaction?: Pick<Awaited<ReturnType<typeof getDb>>, 'update'>,
+  ) {
+    const db = transaction ?? (await getDb());
     try {
       await db.update(evalsTable).set({ vars }).where(eq(evalsTable.id, evalId)).run();
     } catch (e) {
@@ -419,8 +426,11 @@ export default class Eval {
     return await Eval.findById(db_results[0].id);
   }
 
-  static async findById(id: string) {
-    const db = await getDb();
+  static async findById(
+    id: string,
+    transaction?: Pick<Awaited<ReturnType<typeof getDb>>, 'all' | 'select' | 'update'>,
+  ) {
+    const db = transaction ?? (await getDb());
 
     const evalData = await db.select().from(evalsTable).where(eq(evalsTable.id, id)).all();
 
@@ -477,9 +487,9 @@ export default class Eval {
 
     // backfill vars
     if (!eval_.vars || eval_.vars.length === 0) {
-      const vars = await EvalQueries.getVarsFromEval(id);
+      const vars = await EvalQueries.getVarsFromEval(id, db);
       evalInstance.setVars(vars);
-      await EvalQueries.setVars(id, vars);
+      await EvalQueries.setVars(id, vars, db);
     }
 
     return evalInstance;
@@ -657,8 +667,8 @@ export default class Eval {
     this.oldResults.table = table;
   }
 
-  async save() {
-    const db = await getDb();
+  async save(transaction?: Pick<Awaited<ReturnType<typeof getDb>>, 'update'>) {
+    const db = transaction ?? (await getDb());
     const updateObj: Record<string, unknown> = {
       config: sanitizeTracingConfigForPersistence(this.config),
       isRedteam: this.config.redteam !== undefined,
@@ -694,7 +704,9 @@ export default class Eval {
       updateObj.results = expr;
     }
     await db.update(evalsTable).set(updateObj).where(eq(evalsTable.id, this.id)).run();
-    notifyEvaluationChanged(this.id);
+    if (!transaction) {
+      notifyEvaluationChanged(this.id);
+    }
     this.persisted = true;
   }
 
