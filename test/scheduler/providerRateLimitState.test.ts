@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ProviderRateLimitState } from '../../src/scheduler/providerRateLimitState';
 import { isProviderResponseRateLimited } from '../../src/scheduler/types';
+import { createDeferred } from '../util/utils';
 
 // Fast retry policy for tests - minimal delays
 const FAST_RETRY_POLICY = {
@@ -834,16 +835,16 @@ describe('ProviderRateLimitState', () => {
 
   describe('Proactive throttling', () => {
     it('lowers the cap before restoring quota to waiting callers', async () => {
-      const started = Promise.withResolvers<void>();
-      const restore = Promise.withResolvers<void>();
-      const finish = Promise.withResolvers<void>();
+      const started = createDeferred<void>();
+      const restore = createDeferred<void>();
+      const finish = createDeferred<void>();
       const active = state.executeWithRetry(
         'active',
         async (observe) => {
-          observe({ 'x-ratelimit-remaining-requests': '0', 'x-ratelimit-reset-requests': '60s' });
+          observe?.({ 'x-ratelimit-remaining-requests': '0', 'x-ratelimit-reset-requests': '60s' });
           started.resolve();
           await restore.promise;
-          observe({ 'x-ratelimit-remaining-requests': '1', 'x-ratelimit-limit-requests': '100' });
+          observe?.({ 'x-ratelimit-remaining-requests': '1', 'x-ratelimit-limit-requests': '100' });
           expect(state.getMetrics()).toMatchObject({
             maxConcurrency: 1,
             activeRequests: 1,
