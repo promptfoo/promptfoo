@@ -2,6 +2,7 @@ import { EventEmitter } from 'node:events';
 import http from 'node:http';
 
 import { Server as SocketIOServer } from 'socket.io';
+import { io as createSocketIoClient } from 'socket.io-client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Mock dependencies before importing the module
@@ -755,6 +756,85 @@ describe('server', () => {
         }),
       );
     });
+
+    it.each(['normal', 'before transport cleanup', 'after one transport closes'] as const)(
+      'closes real WebSocket transports on shutdown: %s',
+      async (failurePoint) => {
+        http.createServer = originalCreateServer;
+        const createServer = vi.spyOn(http, 'createServer');
+        const closeError = new Error('Engine.IO close failed');
+        const originalClose = SocketIOServer.prototype.close;
+        let closingIo: SocketIOServer | undefined;
+        vi.spyOn(SocketIOServer.prototype, 'close').mockImplementation(function (
+          this: SocketIOServer,
+          callback,
+        ) {
+          closingIo = this;
+          const firstConnection = this.sockets.sockets.values().next().value?.conn;
+          if (failurePoint !== 'normal') {
+            vi.spyOn(this.engine, 'close').mockImplementationOnce(() => {
+              if (failurePoint === 'after one transport closes') {
+                expect(firstConnection).toBeDefined();
+                firstConnection!.close(true);
+              }
+              throw closeError;
+            });
+          }
+          return originalClose.call(this, callback);
+        });
+
+        const outcome = startServer(0).then(
+          () => undefined,
+          (error: unknown) => error,
+        );
+        const server = createServer.mock.results[0].value as http.Server;
+        const serverClosed = new Promise<void>((resolve) => server.once('close', resolve));
+        const clients: ReturnType<typeof createSocketIoClient>[] = [];
+        let shutdownStarted = false;
+        try {
+          await vi.waitFor(() => expect(server.listening).toBe(true));
+          const address = server.address() as { port: number };
+          for (let i = 0; i < 2; i++) {
+            const client = createSocketIoClient(`http://127.0.0.1:${address.port}`, {
+              transports: ['websocket'],
+              reconnection: false,
+            });
+            clients.push(client);
+            await new Promise<void>((resolve, reject) => {
+              client.once('connect', resolve);
+              client.once('connect_error', reject);
+            });
+          }
+          shutdownStarted = true;
+          triggerSignal('SIGTERM');
+          await vi.waitFor(() =>
+            expect(clients.map((client) => client.io.engine.readyState)).toEqual([
+              'closed',
+              'closed',
+            ]),
+          );
+          await serverClosed;
+          expect(closingIo?.engine.clientsCount).toBe(0);
+          if (failurePoint === 'normal') {
+            expect(await outcome).toBeUndefined();
+          } else {
+            expect(await outcome).toMatchObject({
+              name: 'ServerError',
+              code: 'ESHUTDOWN',
+              phase: 'runtime',
+              cause: expect.objectContaining({ cause: closeError }),
+            });
+          }
+        } finally {
+          clients.forEach((client) => client.disconnect());
+          if (!shutdownStarted) {
+            triggerSignal('SIGTERM');
+          }
+          await serverClosed;
+          await outcome;
+        }
+      },
+    );
 
     it('should retain the shutdown timeout when Socket.IO rejects and HTTP close hangs', async () => {
       vi.spyOn(SocketIOServer.prototype, 'close').mockRejectedValueOnce(new Error('Close failed'));
