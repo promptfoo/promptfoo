@@ -105,7 +105,12 @@ class BlandApiError extends Error {
  * assistant messages are skipped because the agent produces its own replies.
  */
 export function getUserTurns(prompt: string): string[] {
-  const parsed = parseChatPrompt<unknown>(prompt, null);
+  let parsed: unknown;
+  try {
+    parsed = parseChatPrompt<unknown>(prompt, null);
+  } catch {
+    return [prompt];
+  }
   if (
     Array.isArray(parsed) &&
     parsed.length > 0 &&
@@ -204,7 +209,10 @@ export class BlandProvider implements ApiProvider {
    * `sessionId` to a client-side UUID for correlation, and treating that as a Bland chat
    * ID would skip creating the chat.
    */
-  private readonly openedChats = new Map<string, BlandTurn[]>();
+  private readonly openedChats = new Map<
+    string,
+    { evaluationId?: string; last?: BlandTurnData; transcript: BlandTurn[] }
+  >();
 
   constructor(
     targetType: BlandTargetType,
@@ -373,7 +381,6 @@ export class BlandProvider implements ApiProvider {
     if (!data?.chat_id) {
       throw new Error('Bland did not return a chat_id for the new chat');
     }
-    this.openedChats.set(data.chat_id, []);
     return data.chat_id;
   }
 
@@ -476,25 +483,18 @@ export class BlandProvider implements ApiProvider {
     }
 
     const sessionId = context?.vars?.sessionId;
-    const existingSession =
-      typeof sessionId === 'string' && this.openedChats.has(sessionId) ? sessionId : undefined;
-    // A continued chat already holds the earlier turns, so only the newest user turn is
-    // sent. Stateful strategies may still pass a rendered chat template here.
-    const turns = existingSession ? getUserTurns(prompt).slice(-1) : getUserTurns(prompt);
-
-    // Continuations extend the chat's transcript so metadata always covers the whole
-    // conversation, greeting included.
-    const transcript: BlandTurn[] = existingSession
-      ? [...(this.openedChats.get(existingSession) ?? [])]
-      : [];
-    const state: { chatId?: string; last?: BlandTurnData } = { chatId: existingSession };
+    const previous = typeof sessionId === 'string' ? this.openedChats.get(sessionId) : undefined;
+    const chat = previous?.evaluationId === context?.evaluationId ? previous : undefined;
+    const turns = chat ? getUserTurns(prompt).slice(-1) : getUserTurns(prompt);
+    const transcript = [...(chat?.transcript ?? [])];
+    const state: { chatId?: string; last?: BlandTurnData } = {
+      chatId: chat ? String(sessionId) : undefined,
+      last: chat?.last,
+    };
 
     try {
       await this.converse(state, turns, transcript, apiKey, context, callOptions);
     } catch (err) {
-      if (state.chatId && this.openedChats.has(state.chatId)) {
-        this.openedChats.set(state.chatId, transcript);
-      }
       if (
         callOptions?.abortSignal?.aborted ||
         (err instanceof Error && err.name === 'AbortError')
@@ -511,12 +511,19 @@ export class BlandProvider implements ApiProvider {
       return preserveResponseHeadersObserverError(callOptions?.onResponseHeaders, err, {
         error: message,
         ...(state.chatId && { sessionId: state.chatId }),
-        metadata: { bland: { chatId: state.chatId, transcript } },
+        metadata: {
+          bland: { chatId: state.chatId, transcript },
+          ...(err instanceof BlandApiError && err.status === 429 && { rateLimitRetryable: false }),
+        },
       });
-    }
-
-    if (state.chatId) {
-      this.openedChats.set(state.chatId, transcript);
+    } finally {
+      if (state.chatId) {
+        this.openedChats.set(state.chatId, {
+          evaluationId: context?.evaluationId,
+          last: state.last,
+          transcript,
+        });
+      }
     }
     // Not cached: a response carries a live chat ID that stateful callers continue, and
     // every conversation runs the agent's real tools and webhooks.

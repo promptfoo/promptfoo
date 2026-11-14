@@ -334,6 +334,20 @@ describe('BlandProvider', () => {
       expect((first.metadata as any).bland.transcript).toHaveLength(2);
     });
 
+    it('isolates an overlapping evaluation even when it receives a live chat ID', async () => {
+      const api = fakeBland(echo);
+      const provider = createBlandProvider('bland:agent:a');
+      const ctx = { vars: {}, prompt: { raw: 'p', label: 'p' } };
+      const first = await provider.callApi('first', { ...ctx, evaluationId: 'A' });
+      const other = await provider.callApi('second', {
+        ...ctx,
+        evaluationId: 'B',
+        vars: { sessionId: first.sessionId! },
+      });
+      expect(other.sessionId).not.toBe(first.sessionId);
+      expect(api.requests.filter((r) => r.url.endsWith('/create'))).toHaveLength(2);
+    });
+
     it('does not continue chats from an earlier evaluation after cleanup', async () => {
       const api = fakeBland(echo);
       const provider = createBlandProvider('bland:agent:a');
@@ -363,6 +377,7 @@ describe('BlandProvider', () => {
   describe('getUserTurns', () => {
     it('treats plain text and non-chat JSON as a single turn', () => {
       expect(getUserTurns('hello')).toEqual(['hello']);
+      expect(getUserTurns("{'appointment': 'Tuesday'}")).toEqual(["{'appointment': 'Tuesday'}"]);
       expect(getUserTurns('{"a":1}')).toEqual(['{"a":1}']);
       expect(getUserTurns('[1, 2]')).toEqual(['[1, 2]']);
     });
@@ -514,6 +529,7 @@ describe('BlandProvider', () => {
         const result = await pending;
 
         expect(result.error).toMatch(/Bland API 429/);
+        expect(result.metadata?.rateLimitRetryable).toBe(false);
         // Every 429, including the last one, reaches the scheduler.
         expect(onResponseHeaders).toHaveBeenCalledTimes(limited);
         // Retried responses are cancelled; the last one is read for the error message.
