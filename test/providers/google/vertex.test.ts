@@ -9,6 +9,7 @@ import logger from '../../../src/logger';
 import { GoogleAuthManager } from '../../../src/providers/google/auth';
 import * as vertexUtil from '../../../src/providers/google/util';
 import { VertexChatProvider, VertexEmbeddingProvider } from '../../../src/providers/google/vertex';
+import * as genaiTracer from '../../../src/tracing/genaiTracer';
 import { fetchWithProxy } from '../../../src/util/fetch';
 import { mockProcessEnv } from '../../util/utils';
 import type { JSONClient } from 'google-auth-library/build/src/auth/googleauth';
@@ -3504,6 +3505,41 @@ describe('VertexChatProvider.callLlamaApi', () => {
       }),
     );
   });
+
+  it.each([
+    { nested: 64, topLevel: 250, expected: 64 },
+    { nested: 0, topLevel: 250, expected: 0 },
+    { nested: undefined, topLevel: 0, expected: 0 },
+  ])(
+    'sends and traces the effective Llama sampling options ($nested, $topLevel)',
+    async ({ nested, topLevel, expected }) => {
+      using span = vi.spyOn(genaiTracer, 'withGenAISpan');
+      const request = mockVertexRequest({ choices: [{ message: { content: 'ok' } }] });
+      provider = new VertexChatProvider('llama-4-scout-17b-16e-instruct-maas', {
+        config: {
+          region: 'us-east5',
+          temperature: 0.7,
+          maxOutputTokens: topLevel,
+          generationConfig: { maxOutputTokens: nested, temperature: 0.2, topP: 0.9, topK: 40 },
+        },
+      });
+
+      await provider.callApi('test prompt');
+
+      expect(request.mock.calls[0][0].data).toMatchObject({
+        max_tokens: expected,
+        temperature: 0.2,
+        top_p: 0.9,
+        top_k: 40,
+      });
+      expect(span.mock.calls[0][0]).toMatchObject({
+        maxTokens: expected,
+        temperature: 0.2,
+        topP: 0.9,
+        topK: 40,
+      });
+    },
+  );
 
   it('hashes Llama request body cache keys without leaking prompts', async () => {
     const prompt = 'llama-secret-prompt-value';

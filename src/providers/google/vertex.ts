@@ -351,15 +351,16 @@ export class VertexChatProvider extends GoogleGenericProvider {
           ? 'vertex:llama'
           : 'vertex:palm2';
 
-    // Set up tracing context
+    const llama = system === 'vertex:llama' ? this.getLlamaSamplingOptions() : undefined;
     const spanContext: GenAISpanContext = {
       system,
       operationName: 'chat',
       model: this.modelName,
       providerId: this.id(),
-      temperature: this.config.temperature,
-      topP: this.config.topP,
-      maxTokens: this.config.maxOutputTokens || this.config.max_tokens,
+      temperature: llama?.temperature ?? this.config.temperature,
+      topP: llama?.top_p ?? this.config.topP,
+      topK: llama?.top_k,
+      maxTokens: llama?.max_tokens ?? (this.config.maxOutputTokens || this.config.max_tokens),
       testIndex: context?.testIdx ?? (context?.test?.vars?.__testIdx as number | undefined),
       promptLabel: context?.prompt?.label,
       // W3C Trace Context for linking to evaluation trace
@@ -1214,6 +1215,16 @@ export class VertexChatProvider extends GoogleGenericProvider {
     }
   }
 
+  private getLlamaSamplingOptions() {
+    const generationConfig = this.config.generationConfig;
+    return {
+      max_tokens: generationConfig?.maxOutputTokens ?? this.config.maxOutputTokens ?? 1024,
+      temperature: generationConfig?.temperature ?? this.config.temperature,
+      top_p: generationConfig?.topP ?? this.config.topP,
+      top_k: generationConfig?.topK ?? this.config.topK,
+    };
+  }
+
   async callLlamaApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     const region = this.getRegion();
     const regionError = getVertexLlamaRegionError(this.modelName, region);
@@ -1237,15 +1248,11 @@ export class VertexChatProvider extends GoogleGenericProvider {
       return { error: safetyRequestConfig.error };
     }
 
-    // Prepare the request body for Llama models
     const body = {
       model: getVertexLlamaWireId(this.modelName),
       messages,
-      max_tokens: this.config.maxOutputTokens || 1024,
       stream: false,
-      temperature: this.config.temperature,
-      top_p: this.config.topP,
-      top_k: this.config.topK,
+      ...this.getLlamaSamplingOptions(),
       ...safetyRequestConfig.bodyFields,
     };
 
