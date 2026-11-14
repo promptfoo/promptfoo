@@ -66,7 +66,7 @@ providers:
 
 Supported environment variables:
 
-- `DOCKER_MODEL_RUNNER_BASE_URL` - (optional) protocol, host name, and port. Defaults to `http://localhost:12434`. Set to `http://model-runner.docker.internal` when running within a container.
+- `DOCKER_MODEL_RUNNER_BASE_URL` - (optional) protocol, host name, and port. Defaults to `http://localhost:12434`; a trailing slash is optional. Set to `http://model-runner.docker.internal` when running within a container.
 - `DOCKER_MODEL_RUNNER_API_KEY` - (optional) api key that is passed as the Bearer token in the Authorization Header when calling the API. Defaults to `dmr` to satisfy OpenAI API validation (not used by Docker Model Runner).
 
 Standard OpenAI parameters are supported:

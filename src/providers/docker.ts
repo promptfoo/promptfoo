@@ -98,7 +98,8 @@ export function createDockerProvider(
     getProviderEnvString(options?.env, 'DOCKER_MODEL_RUNNER_BASE_URL') ??
     getEnvString('DOCKER_MODEL_RUNNER_BASE_URL') ??
     'http://localhost:12434';
-  const apiBaseUrl = apiUrl + '/engines/v1';
+  // A trailing slash on the configured URL would double the path separator.
+  const apiBaseUrl = `${apiUrl.replace(/\/+$/, '')}/engines/v1`;
 
   const apiKey =
     getProviderEnvString(options?.env, 'DOCKER_MODEL_RUNNER_API_KEY') ??

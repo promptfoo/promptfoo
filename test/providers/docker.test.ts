@@ -110,6 +110,19 @@ describe('docker model runner provider', () => {
       expect(provider).toBeInstanceOf(DMRChatCompletionProvider);
       // The actual config verification is tested in the DMR Provider Classes tests
     });
+
+    it.each([
+      ['http://custom:8080', 'http://custom:8080/engines/v1'],
+      ['http://custom:8080/', 'http://custom:8080/engines/v1'],
+      ['http://custom:8080/proxy//', 'http://custom:8080/proxy/engines/v1'],
+    ])('builds the API base URL from %s without a doubled slash', (baseUrl, expected) => {
+      for (const providerPath of ['docker:chat:m', 'docker:completion:m', 'docker:embeddings:m']) {
+        const provider = createDockerProvider(providerPath, {
+          env: { DOCKER_MODEL_RUNNER_BASE_URL: baseUrl },
+        }) as DMRChatCompletionProvider | DMRCompletionProvider | DMREmbeddingProvider;
+        expect(provider.config.apiBaseUrl).toBe(expected);
+      }
+    });
   });
 
   describe('parseProviderPath', () => {
