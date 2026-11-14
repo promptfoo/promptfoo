@@ -70,7 +70,10 @@ tests:
       - type: javascript
         value: |
           const unsupportedGuarantee = /\b(?:guarantee(?:d|s)?|always|automatically|unconditionally)\b[\s\S]*\bstanding desk\b|\bstanding desk\b[\s\S]*\b(?:guarantee(?:d|s)?|always|automatically|unconditionally)\b/i;
-          return !unsupportedGuarantee.test(output);
+          const affirmative = output.replace(
+            /\b(?:not|never)\s+(?:guaranteed|always|automatically|unconditionally)\b|\b(?:does not|doesn't|cannot|can't)\s+guarantee\b/gi, '',
+          );
+          return !unsupportedGuarantee.test(affirmative);
       - type: contains
         value: 'manager approval'
 
@@ -87,7 +90,7 @@ tests:
           const sources = new Set(
             Array.from(context.vars.context.matchAll(/^Source:\s*(\S+)\s*$/gim), (match) => match[1]),
           );
-          const citations = output.match(/[\w./-]+\.md#[\w./-]+/gi) || [];
+          const citations = output.match(/[\w./-]+\.md#[\w/-]+(?:\.[\w/-]+)*/gi) || [];
           return citations.length > 0 && citations.every((citation) => sources.has(citation));
 
   - description: Source metadata should be preserved
@@ -102,7 +105,7 @@ tests:
       - type: javascript
         value: |
           const source = context.vars.context.match(/^Source:\s*(\S+)\s*$/im)?.[1];
-          const citedSources = output.match(/[\w./-]+\.md#[\w./-]+/gi) || [];
+          const citedSources = output.match(/[\w./-]+\.md#[\w/-]+(?:\.[\w/-]+)*/gi) || [];
           return source !== undefined
             && citedSources.length > 0
             && citedSources.every((citation) => citation === source);
@@ -131,7 +134,7 @@ tests:
             context.vars.context.matchAll(/^Source:\s*(\S+)\s*$/gim),
             (match) => match[1],
           );
-          const citations = output.match(/[\w./-]+\.md#[\w./-]+/gi) || [];
+          const citations = output.match(/[\w./-]+\.md#[\w/-]+(?:\.[\w/-]+)*/gi) || [];
           return sources.every((source) => citations.includes(source))
             && citations.every((citation) => sources.includes(citation));
       - type: javascript
@@ -142,7 +145,7 @@ tests:
           const dismissesConflict =
             /\b(?:no|not|without)\s+(?:real\s+|actual\s+)?(?:conflict|disagreement|contradiction)\b/i.test(output)
             || /\b(?:conflict|disagreement|contradiction)\s+(?:is|was)\s+(?:a\s+)?(?:misunderstanding|absent|resolved)\b/i.test(output)
-            || /\b(?:sources?|policies|documents?)\s+(?:conflict|disagree|contradict)\b.{0,16}\b(?:no|not|false|mistaken|agree)\b/i.test(output);
+            || /\b(?:sources?|policies|documents?)\s+(?:conflict|disagree|contradict)\b\s*(?:\?\s*(?:no|not|false|mistaken)\b|[,;:—-]\s*(?:not true|which is false|but (?:they|the sources) agree)\b)/i.test(output);
           return acknowledgesConflict && !dismissesConflict;
 
   - description: Model should not refuse when sufficient context exists
