@@ -96,3 +96,45 @@ describe('handlePerplexityScore inverse (not-perplexity-score)', () => {
     ).toThrow('does not support providers that do not return logProbs');
   });
 });
+
+describe.each([
+  ['perplexity', handlePerplexity],
+  ['perplexity-score', handlePerplexityScore],
+] as const)('%s log probabilities', (type, handle) => {
+  const assertion = { type, threshold: type === 'perplexity' ? 5 : 0.5 };
+
+  it.each([
+    { label: 'NaN', logProbs: [NaN] },
+    { label: 'positive infinity', logProbs: [Infinity] },
+    { label: 'positive value', logProbs: [-2, 0.5] },
+    { label: 'null', logProbs: [null] },
+    { label: 'numeric string', logProbs: ['-2'] },
+    { label: 'missing token', logProbs: new Array<number>(3).fill(-2, 1) },
+  ])('rejects $label with or without a threshold or negation', ({ logProbs }) => {
+    for (const inverse of [false, true]) {
+      for (const threshold of [undefined, assertion.threshold]) {
+        expect(() =>
+          handle(
+            params({ assertion: { type, threshold }, inverse, logProbs: logProbs as number[] }),
+          ),
+        ).toThrow('logProbs must contain only non-positive numbers');
+      }
+    }
+  });
+
+  it('rejects empty log probabilities', () => {
+    expect(() => handle(params({ assertion, logProbs: [] }))).toThrow(
+      'does not support providers that do not return logProbs',
+    );
+  });
+
+  it('allows negative infinity for a zero-probability token', () => {
+    const result = handle(params({ assertion, logProbs: [-2, -Infinity] }));
+    expect(result.pass).toBe(false);
+    expect(result.score).toBe(0);
+
+    const inverted = handle(params({ assertion, logProbs: [-2, -Infinity], inverse: true }));
+    expect(inverted.pass).toBe(true);
+    expect(inverted.score).toBe(1);
+  });
+});

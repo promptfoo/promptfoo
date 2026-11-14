@@ -1,13 +1,23 @@
 import type { AssertionParams, GradingResult } from '../types/index';
 
-export function handlePerplexity({ logProbs, assertion, inverse }: AssertionParams): GradingResult {
-  if (!logProbs || logProbs.length === 0) {
-    throw new Error('Perplexity assertion does not support providers that do not return logProbs');
+function perplexityFrom(logProbs: number[] | undefined, assertionName: string): number {
+  if (!Array.isArray(logProbs) || logProbs.length === 0) {
+    throw new Error(
+      `${assertionName} assertion does not support providers that do not return logProbs`,
+    );
   }
-  const sumLogProbs = logProbs.reduce((acc, logProb) => acc + logProb, 0);
-  const avgLogProb = sumLogProbs / logProbs.length;
-  const perplexity = Math.exp(-avgLogProb);
+  let sum = 0;
+  for (const logProb of logProbs) {
+    if (typeof logProb !== 'number' || Number.isNaN(logProb) || logProb > 0) {
+      throw new Error('Perplexity logProbs must contain only non-positive numbers');
+    }
+    sum += logProb;
+  }
+  return Math.exp(-sum / logProbs.length);
+}
 
+export function handlePerplexity({ logProbs, assertion, inverse }: AssertionParams): GradingResult {
+  const perplexity = perplexityFrom(logProbs, 'Perplexity');
   const pass =
     assertion.threshold === undefined ? true : perplexity <= assertion.threshold !== inverse;
   return {
@@ -27,15 +37,7 @@ export function handlePerplexityScore({
   assertion,
   inverse,
 }: AssertionParams): GradingResult {
-  if (!logProbs || logProbs.length === 0) {
-    throw new Error(
-      'perplexity-score assertion does not support providers that do not return logProbs',
-    );
-  }
-  const sumLogProbs = logProbs.reduce((acc, logProb) => acc + logProb, 0);
-  const avgLogProb = sumLogProbs / logProbs.length;
-  const perplexity = Math.exp(-avgLogProb);
-  const perplexityNorm = 1 / (1 + perplexity);
+  const perplexityNorm = 1 / (1 + perplexityFrom(logProbs, 'perplexity-score'));
 
   const pass =
     assertion.threshold === undefined ? true : perplexityNorm >= assertion.threshold !== inverse;
