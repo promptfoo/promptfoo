@@ -420,6 +420,18 @@ describe('BestOfNProvider - Runtime Behavior', () => {
     expect(result.metadata).toMatchObject({ redteamFinalPrompt: 'candidate 3', step: 3 });
   });
 
+  it('preserves partial target output for grading after a content filter cutoff', async () => {
+    mockTargetProvider.callApi.mockResolvedValueOnce({
+      output: 'partial answer',
+      isRefusal: true,
+      hasPartialOutput: true,
+    });
+    const provider = new BestOfNProvider({ injectVar: 'input', maxConcurrency: 1 });
+    const result = await provider.callApi('test prompt', createMockContext(mockTargetProvider));
+    expect(result.output).toBe('partial answer');
+    expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(1);
+  });
+
   it('returns the last refusal when every candidate is refused', async () => {
     mockFetchWithProxy.mockResolvedValue({
       json: async () => ({ modifiedPrompts: ['candidate 1', 'candidate 2'] }),

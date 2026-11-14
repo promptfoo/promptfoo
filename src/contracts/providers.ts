@@ -96,6 +96,8 @@ export interface ProviderResponse {
   providerTransformedOutput?: string | any;
   tokenUsage?: TokenUsage;
   isRefusal?: boolean;
+  /** The provider returned partial model output that can still be graded after a cutoff. */
+  hasPartialOutput?: boolean;
   /**
    * Indicates the target intentionally ended the active conversation/session.
    * Multi-turn redteam strategies can use this to stop probing gracefully.

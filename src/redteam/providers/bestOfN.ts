@@ -312,7 +312,7 @@ function isRefusalResponse(response: ProviderResponse, keepEmptyResponses: boole
   if (keepEmptyResponses) {
     return false;
   }
-  if (response.isRefusal === true) {
+  if (response.isRefusal === true && !response.hasPartialOutput) {
     return true;
   }
   if (response.output === undefined || response.output === null) {

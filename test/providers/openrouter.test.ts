@@ -478,6 +478,7 @@ describe('OpenRouter', () => {
           isRefusal: true,
           guardrails: { flagged: true },
         });
+        expect(result.hasPartialOutput).toBe(Array.isArray(output) ? true : undefined);
       } finally {
         restoreEnv();
       }
