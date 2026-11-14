@@ -229,6 +229,10 @@ Please choose one of the following options:
     }
   }
 
+  getRateLimitContext() {
+    return { baseUrl: this.getApiBaseUrl(), deploymentName: this.deploymentName };
+  }
+
   getApiBaseUrl(): string | undefined {
     if (this.apiBaseUrl) {
       return this.apiBaseUrl.replace(/\/$/, '');

@@ -128,6 +128,16 @@ export class OpenAiGenericProvider implements ApiProvider {
     };
   }
 
+  getRateLimitContext() {
+    const customOrg = Object.entries(this.config.headers ?? {}).find(
+      ([name]) => name.toLowerCase() === OPENAI_ORGANIZATION_HEADER.toLowerCase(),
+    );
+    return {
+      baseUrl: this.getApiUrl(),
+      organization: customOrg ? customOrg[1] : this.getOrganization(),
+    };
+  }
+
   getApiUrlDefault(): string {
     return 'https://api.openai.com/v1';
   }

@@ -1,4 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import { VertexEmbeddingProvider } from '../../src/providers/google/vertex';
+import { OllamaChatProvider } from '../../src/providers/ollama';
+import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { getRateLimitKey } from '../../src/scheduler/rateLimitKey';
 
 import type { ApiProvider } from '../../src/types/providers';
@@ -64,6 +67,25 @@ describe('getRateLimitKey', () => {
       const key2 = getRateLimitKey(provider2);
 
       expect(key1).not.toBe(key2);
+    });
+
+    it('separates credentials with the same suffix', () => {
+      const provider1 = createMockProvider('openai:gpt-4', { apiKey: 'synthetic-alpha-1234' });
+      const provider2 = createMockProvider('openai:gpt-4', { apiKey: 'synthetic-beta-1234' });
+
+      expect(getRateLimitKey(provider1)).not.toBe(getRateLimitKey(provider2));
+    });
+
+    it('does not treat separators in an endpoint as quota fields', () => {
+      const provider1 = createMockProvider('openai:gpt-4', {
+        apiBaseUrl: 'https://example.test/|organization:tenant',
+      });
+      const provider2 = createMockProvider('openai:gpt-4', {
+        apiBaseUrl: 'https://example.test/',
+        organization: 'tenant',
+      });
+
+      expect(getRateLimitKey(provider1)).not.toBe(getRateLimitKey(provider2));
     });
 
     it('should generate same key for same API key', () => {
@@ -271,6 +293,100 @@ describe('getRateLimitKey', () => {
       const key = getRateLimitKey(provider);
 
       expect(key).toMatch(/^custom:model\/v1\.2-beta\[.{12}\]$/);
+    });
+  });
+
+  describe('Multi-tenant and cloud provider differentiation', () => {
+    it('uses the OpenAI endpoint that will receive the request', () => {
+      const pool = (apiHost: string, apiBaseUrl: string) =>
+        getRateLimitKey(
+          new OpenAiChatCompletionProvider('model', { config: { apiHost, apiBaseUrl } }),
+        );
+      expect(pool('a.test', 'https://ignored-a')).toBe(pool('a.test', 'https://ignored-b'));
+      expect(pool('a.test', 'https://ignored-a')).not.toBe(pool('b.test', 'https://ignored-a'));
+    });
+
+    it('uses the scoped Ollama server and normalizes trailing slashes', () => {
+      const pool = (url: string) =>
+        getRateLimitKey(new OllamaChatProvider('model', { env: { OLLAMA_BASE_URL: url } }));
+      expect(pool('http://localhost:11434/')).toBe(pool('http://localhost:11434'));
+      expect(pool('http://localhost:11434')).not.toBe(pool('http://remote-gpu:11434'));
+    });
+
+    it('keeps scoped Vertex projects separate and honors explicit project precedence', () => {
+      const pool = (project: string, projectId?: string) =>
+        getRateLimitKey(
+          new VertexEmbeddingProvider('model', {
+            env: { VERTEX_PROJECT_ID: project },
+            config: { projectId },
+          }),
+        );
+      expect(pool('prod')).not.toBe(pool('dev'));
+      expect(pool('prod', 'shared')).toBe(pool('dev', 'shared'));
+    });
+
+    it('isolates credential projects while preserving one pool across key rotation', () => {
+      const vertex = (project: string, key: string) =>
+        new VertexEmbeddingProvider('model', {
+          config: { credentials: JSON.stringify({ project_id: project, private_key: key }) },
+        });
+      const prod = vertex('one', 'synthetic-a');
+      expect(prod.getRateLimitContext()).toMatchObject({ projectId: 'one' });
+      expect(JSON.stringify(prod.getRateLimitContext())).not.toContain('synthetic-a');
+      expect(getRateLimitKey(prod)).toBe(getRateLimitKey(vertex('one', 'synthetic-b')));
+      expect(getRateLimitKey(prod)).not.toBe(getRateLimitKey(vertex('two', 'synthetic-a')));
+    });
+
+    it('should differentiate Azure OpenAI deployments and resources', () => {
+      const prodDeployment = createMockProvider('azure:gpt-4o', {
+        resourceName: 'my-resource',
+        deploymentName: 'gpt-4o-prod',
+      });
+      const devDeployment = createMockProvider('azure:gpt-4o', {
+        resourceName: 'my-resource',
+        deploymentName: 'gpt-4o-dev',
+      });
+      const otherResource = createMockProvider('azure:gpt-4o', {
+        resourceName: 'other-resource',
+        deploymentName: 'gpt-4o-prod',
+      });
+
+      const prodKey = getRateLimitKey(prodDeployment);
+      const devKey = getRateLimitKey(devDeployment);
+      const otherKey = getRateLimitKey(otherResource);
+
+      expect(prodKey).not.toBe(devKey);
+      expect(prodKey).not.toBe(otherKey);
+    });
+
+    it('should differentiate Google Cloud Vertex AI projects', () => {
+      const proj1 = createMockProvider('vertex:gemini-1.5-pro', {
+        projectId: 'project-corp-prod',
+        location: 'us-central1',
+      });
+      const proj2 = createMockProvider('vertex:gemini-1.5-pro', {
+        project: 'project-corp-dev',
+        location: 'us-central1',
+      });
+
+      const key1 = getRateLimitKey(proj1);
+      const key2 = getRateLimitKey(proj2);
+
+      expect(key1).not.toBe(key2);
+    });
+
+    it('should differentiate Cloudflare Workers AI accounts and organizations', () => {
+      const account1 = createMockProvider('cloudflare:llama3', {
+        account: 'account-123',
+      });
+      const account2 = createMockProvider('cloudflare:llama3', {
+        accountId: 'account-456',
+      });
+
+      const key1 = getRateLimitKey(account1);
+      const key2 = getRateLimitKey(account2);
+
+      expect(key1).not.toBe(key2);
     });
   });
 });

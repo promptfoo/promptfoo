@@ -223,6 +223,48 @@ type VertexEmbeddingPredictResponse = {
   }>;
 };
 
+function getVertexRateLimitContext(provider: {
+  config: GoogleProviderConfig;
+  env?: EnvOverrides;
+  getApiHost(): string;
+  getRegion(): string;
+}) {
+  const { config, env } = provider;
+  const projectId =
+    config.projectId ||
+    resolveProviderEnv(env, ['VERTEX_PROJECT_ID', 'GOOGLE_PROJECT_ID', 'GOOGLE_CLOUD_PROJECT'])
+      ?.value ||
+    config.googleAuthOptions?.projectId;
+  const route = { baseUrl: provider.getApiHost(), region: provider.getRegion() };
+  if (projectId) {
+    return { ...route, projectId };
+  }
+
+  // Use public credential identity when ADC has not resolved its project yet.
+  // Resolving the scheduler pool must not perform filesystem or network I/O.
+  const source = config.credentials || config.googleAuthOptions?.credentials;
+  let credential: unknown = source;
+  if (typeof source === 'string') {
+    if (source.startsWith('file://')) {
+      return { ...route, credentialFile: source };
+    }
+    try {
+      credential = JSON.parse(source);
+    } catch {
+      return route;
+    }
+  }
+  if (credential && typeof credential === 'object') {
+    if ('project_id' in credential && typeof credential.project_id === 'string') {
+      return { ...route, projectId: credential.project_id };
+    }
+    if ('client_email' in credential && typeof credential.client_email === 'string') {
+      return { ...route, credentialAccount: credential.client_email };
+    }
+  }
+  return { ...route, credentialFile: config.googleAuthOptions?.keyFilename || config.keyFilename };
+}
+
 function getVertexApiHost(
   region: string,
   configApiHost?: string,
@@ -274,6 +316,10 @@ export class VertexChatProvider extends GoogleGenericProvider {
    * Get the Vertex AI API host based on region.
    * Public for use by integrations like Adaline Gateway.
    */
+  getRateLimitContext() {
+    return getVertexRateLimitContext(this);
+  }
+
   getApiHost(): string {
     return getVertexApiHost(this.getRegion(), this.config.apiHost, this.env);
   }
@@ -1417,6 +1463,10 @@ export class VertexEmbeddingProvider implements ApiEmbeddingProvider {
 
   getApiVersion(): string {
     return this.config.apiVersion || 'v1';
+  }
+
+  getRateLimitContext() {
+    return getVertexRateLimitContext(this);
   }
 
   getApiHost(): string {

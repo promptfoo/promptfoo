@@ -13,33 +13,30 @@ export function getRateLimitKey(provider: ApiProvider): string {
   const config = provider.config || {};
   const relevantConfig: Record<string, string> = {};
 
-  // Use last 4 chars of API key for differentiation (safe partial identifier)
-  if (config.apiKey && config.apiKey.length > 4) {
-    relevantConfig.apiKeyTail = config.apiKey.slice(-4);
-  }
-  if (config.apiBaseUrl) {
-    relevantConfig.apiBaseUrl = config.apiBaseUrl;
-  }
-  if (config.region) {
-    relevantConfig.region = config.region;
-  }
-  if (config.organization) {
-    relevantConfig.organization = config.organization;
+  if (typeof config.apiKey === 'string' && config.apiKey) {
+    relevantConfig.apiKey = config.apiKey;
   }
 
-  // Filter out undefined values and create stable hash
-  const configParts = Object.entries(relevantConfig)
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([k, v]) => `${k}:${v}`)
-    .join('|');
+  const routing = provider.getRateLimitContext?.() ?? {
+    baseUrl: config.apiBaseUrl || config.baseUrl || config.apiHost || config.host,
+    region: config.region || config.location,
+    organization: config.organization || config.orgId,
+    projectId: config.projectId || config.project,
+    deploymentName: config.deploymentName,
+    resourceName: config.resourceName,
+    account: config.account || config.accountId,
+  };
+  for (const [field, value] of Object.entries(routing)) {
+    if (typeof value === 'string' && value) {
+      relevantConfig[field] = value;
+    }
+  }
 
-  if (configParts) {
-    // Use 12 hex chars (48 bits) for low collision probability
-    /**
-     * Hash a string using SHA-256.
-     * Returns first 12 chars of hex digest (48 bits).
-     */
-    return `${providerId}[${createHash('sha256').update(configParts).digest('hex').slice(0, 12)}]`;
+  const configParts = Object.entries(relevantConfig).sort(([a], [b]) => a.localeCompare(b));
+  if (configParts.length > 0) {
+    // Encode boundaries before hashing so a value containing separators cannot mimic a field.
+    const digest = createHash('sha256').update(JSON.stringify(configParts)).digest('hex');
+    return `${providerId}[${digest.slice(0, 12)}]`;
   }
 
   return providerId;
