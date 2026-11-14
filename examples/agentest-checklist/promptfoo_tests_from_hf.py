@@ -23,8 +23,12 @@ URL = (
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Generate promptfoo tests from the checklist CSV.")
-    parser.add_argument("limit", nargs="?", type=int, help="maximum number of examples to write")
+    parser = argparse.ArgumentParser(
+        description="Generate promptfoo tests from the checklist CSV."
+    )
+    parser.add_argument(
+        "limit", nargs="?", type=int, help="maximum number of examples to write"
+    )
     limit = parser.parse_args().limit
     if limit is not None and limit < 1:
         parser.error("limit must be a positive integer")
