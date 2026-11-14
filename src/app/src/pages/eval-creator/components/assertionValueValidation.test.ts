@@ -197,6 +197,42 @@ describe('getAssertionValueError', () => {
 });
 
 describe('structured value assertions', () => {
+  describe.each([
+    'trajectory:tool-used',
+    'not-trajectory:tool-used',
+    'trajectory:step-count',
+    'not-trajectory:step-count',
+  ] as const)('%s count bounds', (type) => {
+    it.each(
+      [null, '2', false, [], {}, -1, 1.5, NaN, Infinity, -Infinity].map((bound) => ({ bound })),
+    )('rejects invalid bounds $bound before saving or running', ({ bound }) => {
+      for (const name of ['min', 'max']) {
+        const assertion = make({
+          type,
+          value: { pattern: 'search*', min: 0, max: 2, [name]: bound },
+        });
+        expect(getRunnableAssertionValueError(assertion)).toMatch(/whole numbers, 0 or greater/);
+        expect(getAssertionValueError(assertion)).toMatch(/whole numbers, 0 or greater/);
+      }
+    });
+
+    it('rejects reversed bounds', () => {
+      expect(
+        getRunnableAssertionValueError(
+          make({ type, value: { pattern: 'search*', min: 3, max: 2 } }),
+        ),
+      ).toMatch(/Minimum trajectory count cannot exceed maximum/);
+    });
+
+    it('accepts valid zero and equal count bounds', () => {
+      for (const bounds of [{ min: 0 }, { max: 0 }, { min: 0, max: 0 }, { min: 2, max: 2 }]) {
+        expect(
+          getRunnableAssertionValueError(make({ type, value: { pattern: 'search*', ...bounds } })),
+        ).toBeUndefined();
+      }
+    });
+  });
+
   it('rejects optional SQL config that is not an object', () => {
     expect(
       getRunnableAssertionValueError(make({ type: 'is-sql', value: 'not-json' as any })),
