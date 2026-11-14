@@ -120,13 +120,12 @@ describe('addInjections', () => {
     expect(result.vars?.prompt, 'default template').toBe(`Default template: ${prompt}`);
 
     const sampled = await addInjections(testCases, 'prompt', { sample: 3 });
-    expect(
-      sampled.map((testCase) => testCase.vars?.prompt),
-      'sampled templates',
-    ).toEqual([
-      `Default template: ${prompt}`,
-      `Before ${prompt} middle ${prompt} after`,
-      'Template without a placeholder',
-    ]);
+    expect(sampled.map((testCase) => testCase.vars?.prompt).sort(), 'sampled templates').toEqual(
+      [
+        `Default template: ${prompt}`,
+        `Before ${prompt} middle ${prompt} after`,
+        'Template without a placeholder',
+      ].sort(),
+    );
   });
 });

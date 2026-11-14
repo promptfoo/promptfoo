@@ -51,7 +51,7 @@ strategies:
 
 ### Sampling Multiple Templates
 
-By default, one template is applied per test case. To test multiple templates:
+By default, the Skeleton Key template is applied to each test case. Larger samples select templates uniformly without replacement:
 
 ```yaml title="promptfooconfig.yaml"
 strategies:
