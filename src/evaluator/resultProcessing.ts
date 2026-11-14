@@ -64,7 +64,7 @@ export function projectOutputMetadata<T>(
   if (stripGradingResult) {
     const internal = asRecord(asRecord(metadata)?.[PROMPTFOO_METADATA_KEY]);
     const comparison = asRecord(internal?.comparisonError);
-    if (comparison && Object.hasOwn(comparison, 'gradingVerdict')) {
+    if (comparison && Object.prototype.hasOwnProperty.call(comparison, 'gradingVerdict')) {
       const { gradingVerdict: _verdict, ...baseline } = comparison;
       metadata = {
         ...metadata,

@@ -3281,7 +3281,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
             ? getComparisonError(result)
             : undefined;
         const baseline = saved ?? { ...previous, error: result.error };
-        if (!Object.hasOwn(baseline, 'gradingVerdict')) {
+        if (!Object.prototype.hasOwnProperty.call(baseline, 'gradingVerdict')) {
           const grade = result.gradingResult;
           setComparisonError(result, {
             ...baseline,
