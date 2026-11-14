@@ -49,7 +49,6 @@ phases:
         promptfoo eval \
           -c promptfooconfig.yaml \
           --share \
-          --fail-on-error \
           -o promptfoo-results.json \
           -o promptfoo-report.html
 
@@ -67,13 +66,13 @@ cache:
 
 - Loads `OPENAI_API_KEY` from Parameter Store
 - Runs the eval suite defined in `promptfooconfig.yaml`
-- Fails the CodeBuild build if any assertions fail
+- Fails the build when the eval misses the default 100% test pass rate
 - Saves JSON and HTML reports as build artifacts
 - Caches promptfoo responses between builds
 
 ## Add a quality gate
 
-If you want a custom pass-rate threshold instead of `--fail-on-error`, write the JSON output and check the stats in a second command:
+Set `PROMPTFOO_PASS_RATE_THRESHOLD` to apply a custom pass-rate threshold while writing the JSON report:
 
 ```yaml
 phases:
@@ -84,14 +83,7 @@ phases:
       - npm install -g promptfoo
   build:
     commands:
-      - promptfoo eval -c promptfooconfig.yaml --share -o promptfoo-results.json
-      - |
-        PASS_RATE=$(jq '.results.stats.successes / (.results.stats.successes + .results.stats.failures) * 100' promptfoo-results.json)
-        echo "Pass rate: ${PASS_RATE}%"
-        if (( $(echo "${PASS_RATE} < 95" | bc -l) )); then
-          echo "Quality gate failed: ${PASS_RATE}% < 95%"
-          exit 1
-        fi
+      - PROMPTFOO_PASS_RATE_THRESHOLD=95 promptfoo eval -c promptfooconfig.yaml --share -o promptfoo-results.json
 ```
 
 ## Run promptfoo code scans on CodeCommit pull requests
