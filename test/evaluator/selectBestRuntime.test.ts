@@ -546,8 +546,24 @@ describeEvaluator('select-best runtime grading configuration', () => {
       expect(row.error).toContain('Check the grader configuration and credentials');
       expect(row.error).toContain('Run with --verbose to log the underlying error');
       expect(row.error).not.toContain('temporary grader failure');
-      expect(row.gradingResult?.pass).toBe(true);
+      expect(row.gradingResult).toMatchObject({ pass: false, score: 0, reason: row.error });
       expect(row.gradingResult?.componentResults).toEqual([]);
+      const strip = {
+        shouldStripPromptText: false,
+        shouldStripResponseOutput: false,
+        shouldStripTestVars: false,
+        shouldStripGradingResult: true,
+        shouldStripMetadata: false,
+      };
+      for (const artifact of [
+        row.toEvaluateResult(strip),
+        sanitizeResultForJsonlArtifact(row, strip),
+      ]) {
+        expect(artifact.gradingResult).toBeNull();
+        expect(artifact.metadata?.__promptfoo?.comparisonError).not.toHaveProperty(
+          'gradingVerdict',
+        );
+      }
     }
     expect(record.getStats()).toMatchObject({ successes: 0, failures: 0, errors: 2 });
     expect(await EvalResult.getCompletedIndexPairs(record.id, { excludeErrors: true })).toEqual(
@@ -561,6 +577,10 @@ describeEvaluator('select-best runtime grading configuration', () => {
 
     const recovered = await record.fetchResultsByTestIdx(0);
     expect(recovered.filter((row) => row.success)).toHaveLength(1);
+    for (const row of recovered) {
+      expect(row.gradingResult?.pass).toBe(row.success);
+      expect(row.gradingResult?.reason).not.toContain('Error grading select-best');
+    }
     expect(recovered.find((row) => row.success)?.error).toBeFalsy();
     expect(recovered.every((row) => row.metadata?.__promptfoo?.comparisonError === undefined)).toBe(
       true,
@@ -569,6 +589,34 @@ describeEvaluator('select-best runtime grading configuration', () => {
     expect(record.getStats()).toMatchObject({ successes: 1, failures: 1, errors: 0 });
     expect(target.callApi).toHaveBeenCalledTimes(2);
     expect(grader.callApi).toHaveBeenCalledTimes(2);
+  });
+
+  it('restores a legacy error row after another comparison grader failure', async () => {
+    const { grader, suite, target } = makeSuite();
+    vi.mocked(grader.callApi)
+      .mockResolvedValueOnce({ error: 'first outage' })
+      .mockResolvedValueOnce({ error: 'second outage' });
+    const record = await Eval.create({}, suite.prompts, { id: randomUUID() });
+    await evaluate(suite, record, { maxConcurrency: 1 });
+    // Pre-fix rows stored the assertion verdict on gradingResult during an outage.
+    for (const row of await record.fetchResultsByTestIdx(0)) {
+      const baseline = row.metadata!.__promptfoo.comparisonError;
+      Object.assign(row.gradingResult!, baseline.gradingVerdict);
+      delete baseline.gradingVerdict;
+      await row.save();
+    }
+    cliState.resume = true;
+    await evaluate(suite, record, { maxConcurrency: 1 });
+    expect(
+      (await record.fetchResultsByTestIdx(0)).every((row) => row.gradingResult?.pass === false),
+    ).toBe(true);
+    await evaluate(suite, record, { maxConcurrency: 1 });
+    const rows = await record.fetchResultsByTestIdx(0);
+    expect(rows.filter((row) => row.success && row.gradingResult?.pass)).toHaveLength(1);
+    expect(
+      rows.every((row) => !row.gradingResult?.reason.includes('Error grading select-best')),
+    ).toBe(true);
+    expect(target.callApi).toHaveBeenCalledTimes(2);
   });
 
   it.each(['malformed YAML', 'Error', 'string', 'error response'])(
@@ -610,6 +658,7 @@ describeEvaluator('select-best runtime grading configuration', () => {
           expect(row.failureReason).toBe(ResultFailureReason.ERROR);
           expect(row.error).toContain('Check the grader configuration and credentials');
           expect(row.error).toContain(failure === 'malformed YAML' ? graderPath : grader.id());
+          expect(row.gradingResult).toMatchObject({ pass: false, score: 0, reason: row.error });
         }
         expect(record.getStats()).toMatchObject({ successes: 0, failures: 0, errors: 2 });
         if (failure === 'error response') {

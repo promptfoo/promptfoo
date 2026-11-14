@@ -1588,7 +1588,10 @@ function hasCompletedComparison(
 type ComparisonErrorState = Pick<
   EvaluationStoreResult,
   'success' | 'score' | 'failureReason' | 'error'
->;
+> & {
+  // Older saved errors keep the original verdict on the row itself.
+  gradingVerdict?: Pick<GradingResult, 'pass' | 'score' | 'reason'> | null;
+};
 
 function getComparisonError(result: EvaluationStoreResult): ComparisonErrorState | undefined {
   const state = result.metadata?.[PROMPTFOO_METADATA_KEY]?.comparisonError;
@@ -3271,10 +3274,18 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
           score: result.score,
           failureReason: result.failureReason,
         };
-        // Keep the existing assertion verdict and outcome for a successful retry.
-        if (!getComparisonError(result)) {
-          setComparisonError(result, { ...previous, error: result.error });
+        const baseline = getComparisonError(result) ?? { ...previous, error: result.error };
+        if (!Object.hasOwn(baseline, 'gradingVerdict')) {
+          const grade = result.gradingResult;
+          setComparisonError(result, {
+            ...baseline,
+            gradingVerdict: grade
+              ? { pass: grade.pass, score: grade.score, reason: grade.reason }
+              : null,
+          });
         }
+        // Exports and report consumers read the aggregate as well as the row outcome.
+        result.gradingResult = { ...result.gradingResult, pass: false, score: 0, reason };
         result.error = reason;
         result.failureReason = ResultFailureReason.ERROR;
         result.success = false;
@@ -3564,6 +3575,11 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       result.score = saved.score;
       result.failureReason = saved.failureReason;
       result.error = saved.error;
+      if (saved.gradingVerdict !== undefined) {
+        result.gradingResult = saved.gradingVerdict
+          ? { ...result.gradingResult, ...saved.gradingVerdict }
+          : null;
+      }
       setComparisonError(result);
       this.updateComparisonResultCounts(result, previous, metrics);
     }
