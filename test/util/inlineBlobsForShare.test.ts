@@ -68,6 +68,36 @@ describe('inlineBlobRefsForShare', () => {
     expect(getShareAuthorizedBlob).toHaveBeenCalledOnce();
   });
 
+  it.each([true, false])(
+    'inlines a shallow alias regardless of traversal order (deep first: %s)',
+    async (deepFirst) => {
+      const shared = { preview: uri };
+      let deep: unknown = shared;
+      for (let i = 0; i < 7; i++) {
+        deep = { child: deep };
+      }
+      const input = deepFirst ? { deep, shared } : { shared, deep };
+
+      const result = await inlineBlobRefsForShare(input, createBlobInlineCache(), 'local-eval-1');
+
+      expect(result.shared.preview).toBe(`data:image/png;base64,${bytes.toString('base64')}`);
+      expect(result.deep).toEqual(deep);
+      expect(shared.preview).toBe(uri);
+      expect(getShareAuthorizedBlob).toHaveBeenCalledOnce();
+    },
+  );
+
+  it('preserves cycles in cloned objects and arrays', async () => {
+    const array: unknown[] = [];
+    const object = { array, preview: uri };
+    array.push(object, array);
+    const result = await inlineBlobRefsForShare(object, createBlobInlineCache(), 'local-eval-1');
+
+    expect(result.array[0]).toBe(result);
+    expect(result.array[1]).toBe(result.array);
+    expect(result.preview).toBe(`data:image/png;base64,${bytes.toString('base64')}`);
+  });
+
   it('inlines a shared metadata object in every result row', async () => {
     const sharedMetadata = { preview: uri };
     const rows = [{ metadata: sharedMetadata }, { metadata: sharedMetadata }];
