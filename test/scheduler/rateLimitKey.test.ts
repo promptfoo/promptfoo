@@ -1,4 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import { VertexEmbeddingProvider } from '../../src/providers/google/vertex';
+import { OllamaChatProvider } from '../../src/providers/ollama';
+import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { getRateLimitKey } from '../../src/scheduler/rateLimitKey';
 
 import type { ApiProvider } from '../../src/types/providers';
@@ -294,23 +297,44 @@ describe('getRateLimitKey', () => {
   });
 
   describe('Multi-tenant and cloud provider differentiation', () => {
-    it('should generate different keys for different baseUrl, apiHost, or host aliases', () => {
-      const provider1 = createMockProvider('ollama:llama3', {
-        baseUrl: 'http://localhost:11434',
-      });
-      const provider2 = createMockProvider('ollama:llama3', {
-        baseUrl: 'http://remote-gpu:11434',
-      });
-      const providerHost = createMockProvider('ollama:llama3', {
-        host: 'http://remote-gpu:11434',
-      });
+    it('uses the OpenAI endpoint that will receive the request', () => {
+      const pool = (apiHost: string, apiBaseUrl: string) =>
+        getRateLimitKey(
+          new OpenAiChatCompletionProvider('model', { config: { apiHost, apiBaseUrl } }),
+        );
+      expect(pool('a.test', 'https://ignored-a')).toBe(pool('a.test', 'https://ignored-b'));
+      expect(pool('a.test', 'https://ignored-a')).not.toBe(pool('b.test', 'https://ignored-a'));
+    });
 
-      const key1 = getRateLimitKey(provider1);
-      const key2 = getRateLimitKey(provider2);
-      const keyHost = getRateLimitKey(providerHost);
+    it('uses the scoped Ollama server and normalizes trailing slashes', () => {
+      const pool = (url: string) =>
+        getRateLimitKey(new OllamaChatProvider('model', { env: { OLLAMA_BASE_URL: url } }));
+      expect(pool('http://localhost:11434/')).toBe(pool('http://localhost:11434'));
+      expect(pool('http://localhost:11434')).not.toBe(pool('http://remote-gpu:11434'));
+    });
 
-      expect(key1).not.toBe(key2);
-      expect(key2).toBe(keyHost);
+    it('keeps scoped Vertex projects separate and honors explicit project precedence', () => {
+      const pool = (project: string, projectId?: string) =>
+        getRateLimitKey(
+          new VertexEmbeddingProvider('model', {
+            env: { VERTEX_PROJECT_ID: project },
+            config: { projectId },
+          }),
+        );
+      expect(pool('prod')).not.toBe(pool('dev'));
+      expect(pool('prod', 'shared')).toBe(pool('dev', 'shared'));
+    });
+
+    it('isolates credential projects while preserving one pool across key rotation', () => {
+      const vertex = (project: string, key: string) =>
+        new VertexEmbeddingProvider('model', {
+          config: { credentials: JSON.stringify({ project_id: project, private_key: key }) },
+        });
+      const prod = vertex('one', 'synthetic-a');
+      expect(prod.getRateLimitContext()).toMatchObject({ projectId: 'one' });
+      expect(JSON.stringify(prod.getRateLimitContext())).not.toContain('synthetic-a');
+      expect(getRateLimitKey(prod)).toBe(getRateLimitKey(vertex('one', 'synthetic-b')));
+      expect(getRateLimitKey(prod)).not.toBe(getRateLimitKey(vertex('two', 'synthetic-a')));
     });
 
     it('should differentiate Azure OpenAI deployments and resources', () => {

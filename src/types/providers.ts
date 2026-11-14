@@ -146,6 +146,8 @@ export interface ApiProvider extends MinimalApiProvider {
   /** Opt in to receiving evaluation cancellation through CancellableEmbeddingProvider. */
   supportsEmbeddingCancellation?: boolean;
   config?: any;
+  /** Synchronous quota-routing fields from this provider's effective configuration. */
+  getRateLimitContext?: () => Record<string, string | undefined>;
   delay?: number;
   /** True when callApi applies delay itself and the evaluator should not wait again. */
   handlesOwnDelay?: boolean;
