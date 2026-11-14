@@ -431,7 +431,11 @@ function getStructuredValueError(assertion: Assertion): string | undefined {
 }
 
 function getRequiredStringValueError(assertion: Assertion): string | undefined {
-  if (!REQUIRED_STRING_ASSERTION_TYPES.has(assertion.type) || hasNonBlankString(assertion.value)) {
+  const isLiteralSuffix = assertion.type === 'ends-with' || assertion.type === 'not-ends-with';
+  const hasValue = isLiteralSuffix
+    ? typeof assertion.value === 'string' && assertion.value.length > 0
+    : hasNonBlankString(assertion.value);
+  if (!REQUIRED_STRING_ASSERTION_TYPES.has(assertion.type) || hasValue) {
     return undefined;
   }
 
