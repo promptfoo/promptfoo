@@ -1,6 +1,6 @@
 import React from 'react';
 
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import AssertsForm from './AssertsForm';
@@ -123,13 +123,17 @@ describe('AssertsForm', () => {
 
     const valueInput = screen.getByLabelText('Value');
     expect(valueInput).toHaveValue('{"min":1,"max":3}');
-    fireEvent.change(valueInput, { target: { value: '{"min":2,"max":4}' } });
+    await user.clear(valueInput);
+    await user.paste('{"min":2,"max":4}');
     expect(onAdd).toHaveBeenLastCalledWith([
       { type: 'character-count', value: { min: 2, max: 4 } },
     ]);
 
-    await user.click(screen.getByLabelText('Type'));
-    await user.click(screen.getByText('equals', { exact: true }));
+    const typeSelect = screen.getByRole('combobox', { name: 'Type' });
+    await user.tab({ shift: true });
+    expect(typeSelect).toHaveFocus();
+    await user.keyboard('eq');
+    expect(typeSelect).toHaveTextContent('equals');
     expect(valueInput).toHaveValue('{"min":2,"max":4}');
     expect(onAdd).toHaveBeenLastCalledWith([{ type: 'equals', value: '{"min":2,"max":4}' }]);
   });
