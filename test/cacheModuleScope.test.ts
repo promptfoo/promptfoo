@@ -17,11 +17,20 @@ async function loadCopies() {
   const second = await import('../src/cache');
   const agentic = await import('../src/providers/agentic-utils');
   first.enableCache();
-  second.enableCache();
   return { first, second, agentic };
 }
 
 describe('cache policy across module copies', () => {
+  it('shares explicit toggles while giving the current scope precedence', async () => {
+    const { first, second } = await loadCopies();
+    first.disableCache();
+    expect(second.isCacheEnabled()).toBe(false);
+    await first.withCacheEnabled(true, async () => expect(second.isCacheEnabled()).toBe(true));
+    expect(second.isCacheEnabled()).toBe(false);
+    second.enableCache();
+    expect(first.isCacheEnabled()).toBe(true);
+  });
+
   it('skips HTTP cache reads and writes without changing the other copy default', async () => {
     const { first, second } = await loadCopies();
     expect(first.fetchWithCache).not.toBe(second.fetchWithCache);

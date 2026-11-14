@@ -389,43 +389,25 @@ result.componentResults?.forEach((r) => console.log(`  ${r.assertion?.type}: ${r
 
 ## Cache API
 
-Control promptfoo's caching layer for LLM provider calls.
+`cache.enableCache()` and `cache.disableCache()` set the default for provider calls across ESM and CommonJS imports in the same process.
+To bypass the cache for one eval, use `evaluate(testSuite, { cache: false })`.
 
 ### `enableCache()`
 
-Enable caching for provider calls (default).
+Enable caching for provider calls. Caching is enabled by default.
 
 ```typescript
 export function enableCache(): void;
-```
-
-**Example:**
-
-```typescript
-import { cache, evaluate } from 'promptfoo';
-
-cache.enableCache();
 ```
 
 ---
 
 ### `disableCache()`
 
-Disable caching. Useful during development/testing to always hit the provider.
+Make fresh provider requests by default.
 
 ```typescript
 export function disableCache(): void;
-```
-
-**Example:**
-
-```typescript
-import { cache, evaluate } from 'promptfoo';
-
-// Disable for fresh results
-cache.disableCache();
-const evalRecord = await evaluate(testSuite);
-cache.enableCache();
 ```
 
 ---
