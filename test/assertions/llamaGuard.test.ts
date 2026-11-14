@@ -367,13 +367,25 @@ describe('handleLlamaGuard', () => {
     ).rejects.toThrow('llama-guard assertion type must have a prompt');
   });
 
-  it('throws when the configured value is not a string array', async () => {
-    await expect(
-      handleLlamaGuard({
-        ...baseParams,
-        assertion: { type: 'llama-guard', value: 'S1' },
-        renderedValue: 'S1',
-      }),
-    ).rejects.toThrow('llama-guard assertion value must be a string array if set');
+  it('treats an empty category input as an omitted filter', async () => {
+    mockedMatchesLlamaGuard.mockResolvedValue({ pass: true, score: 1, reason: 'safe' });
+    await handleLlamaGuard({ ...baseParams, renderedValue: '' });
+    expect(mockedMatchesLlamaGuard).toHaveBeenCalledWith(
+      expect.objectContaining({ categories: [] }),
+      expect.anything(),
+      undefined,
+    );
   });
+
+  it.each([{ value: 'S1' }, { value: ['S1', ['S2']] }, { value: [] }])(
+    'throws for malformed category configuration $value',
+    async ({ value }) => {
+      await expect(
+        handleLlamaGuard({
+          ...baseParams,
+          renderedValue: value as AssertionParams['renderedValue'],
+        }),
+      ).rejects.toThrow('llama-guard assertion value must be a string array if set');
+    },
+  );
 });

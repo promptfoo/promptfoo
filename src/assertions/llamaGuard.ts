@@ -23,10 +23,13 @@ export const handleLlamaGuard = async ({
   // references, and script results into `renderedValue`, so reading assertion.value
   // would leave a configured allow-list such as ['{{ category }}'] unrendered and
   // silently match nothing — turning a template into a safety false negative.
-  const configuredValue = renderedValue ?? assertion.value;
+  const value = renderedValue ?? assertion.value;
+  const configuredValue = typeof value === 'string' && value.trim() === '' ? undefined : value;
   if (
-    configuredValue &&
-    !(Array.isArray(configuredValue) && typeof configuredValue[0] === 'string')
+    configuredValue != null &&
+    (!Array.isArray(configuredValue) ||
+      configuredValue.length === 0 ||
+      !configuredValue.every((category) => typeof category === 'string'))
   ) {
     throw new Error('llama-guard assertion value must be a string array if set');
   }
@@ -35,7 +38,7 @@ export const handleLlamaGuard = async ({
     {
       userPrompt: promptToClassify,
       assistantResponse: outputString,
-      categories: Array.isArray(configuredValue) ? (configuredValue as string[]) : [],
+      categories: configuredValue ?? [],
       conversation: resolveClassifierConversation(providerResponse, prompt || ''),
     },
     test.options,

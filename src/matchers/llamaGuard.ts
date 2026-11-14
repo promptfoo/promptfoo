@@ -41,14 +41,6 @@ export async function matchesLlamaGuard(
   grading?: GradingConfig,
   providerCallContext?: CallApiContextParams,
 ): Promise<Omit<GradingResult, 'assertion'>> {
-  if (!assistantResponse) {
-    return {
-      pass: true,
-      score: 1,
-      reason: 'No output to classify',
-    };
-  }
-
   // A mistyped or unsupported code (e.g. `S01`) would otherwise filter away every real
   // violation and turn a configuration error into a silent safety pass, so reject it up
   // front rather than failing open.
@@ -58,6 +50,14 @@ export async function matchesLlamaGuard(
       `Unknown LlamaGuard category code(s): ${unknownConfigured.join(', ')}. ` +
         `Valid codes are ${Object.keys(LLAMAGUARD_CATEGORY_DESCRIPTIONS).join(', ')}.`,
     );
+  }
+
+  if (!assistantResponse) {
+    return {
+      pass: true,
+      score: 1,
+      reason: 'No output to classify',
+    };
   }
 
   // No default provider: a generic text-grading provider (e.g. the default GPT-4o-mini

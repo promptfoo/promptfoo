@@ -38,8 +38,11 @@ export function describeLlamaGuardCategory(code: string): string {
   return isKnownLlamaGuardCategory(code) ? LLAMAGUARD_CATEGORY_DESCRIPTIONS[code] : code;
 }
 
-export function isKnownLlamaGuardCategory(code: string): boolean {
-  return Object.prototype.hasOwnProperty.call(LLAMAGUARD_CATEGORY_DESCRIPTIONS, code);
+export function isKnownLlamaGuardCategory(code: unknown): boolean {
+  return (
+    typeof code === 'string' &&
+    Object.prototype.hasOwnProperty.call(LLAMAGUARD_CATEGORY_DESCRIPTIONS, code)
+  );
 }
 
 /**

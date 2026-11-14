@@ -19,6 +19,12 @@ describe('matchesLlamaGuard', () => {
     expect(mockProvider.callApi).not.toHaveBeenCalled();
   });
 
+  it('validates configured categories before skipping empty output', async () => {
+    await expect(
+      matchesLlamaGuard({ userPrompt: 'test prompt', assistantResponse: '', categories: ['S01'] }),
+    ).rejects.toThrow('Unknown LlamaGuard category code(s): S01');
+  });
+
   it('should throw a clear error when no LlamaGuard-capable provider is configured', async () => {
     // Unlike llm-rubric/factuality/context-relevance, this matcher has NO default
     // provider fallback: a generic text-grading provider cannot produce
