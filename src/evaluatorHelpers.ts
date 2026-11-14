@@ -51,13 +51,143 @@ export async function extractTextFromPDF(pdfPath: string): Promise<string> {
   }
 }
 
+// Builds the placeholder reference graph: each string-valued variable maps to the
+// names of the variables its placeholders reference, in order.
+function buildReferenceGraph(
+  variables: Record<string, VarValue>,
+  regex: RegExp,
+): Map<string, string[]> {
+  const refs = new Map<string, string[]>();
+  for (const [key, value] of Object.entries(variables)) {
+    if (typeof value === 'string') {
+      refs.set(
+        key,
+        [...value.matchAll(regex)].map((match) => match[1]),
+      );
+    }
+  }
+  return refs;
+}
+
+// Pops the strongly connected component rooted at `root` off the SCC stack and,
+// when it is cyclic (more than one member, or a self-reference), records its
+// members in `cyclic`.
+function collectSccIfCyclic(
+  root: string,
+  refs: Map<string, string[]>,
+  sccStack: string[],
+  onStack: Set<string>,
+  cyclic: Set<string>,
+): void {
+  const members: string[] = [];
+  let member: string;
+  do {
+    member = sccStack.pop() as string;
+    onStack.delete(member);
+    members.push(member);
+  } while (member !== root);
+  if (members.length > 1 || (refs.get(root) ?? []).includes(root)) {
+    for (const name of members) {
+      cyclic.add(name);
+    }
+  }
+}
+
+interface TarjanState {
+  refs: Map<string, string[]>;
+  indexOf: Map<string, number>;
+  lowlink: Map<string, number>;
+  onStack: Set<string>;
+  sccStack: string[];
+  cyclic: Set<string>;
+  counter: number;
+}
+
+// Iterative Tarjan walk from `start`: assigns index/lowlink, pushes discovered
+// nodes, and pops strongly connected components as their roots complete.
+function strongConnectFrom(start: string, state: TarjanState): void {
+  const { refs, indexOf, lowlink, onStack, sccStack, cyclic } = state;
+  indexOf.set(start, state.counter);
+  lowlink.set(start, state.counter);
+  state.counter++;
+  sccStack.push(start);
+  onStack.add(start);
+  const work = [{ node: start, childIndex: 0 }];
+  while (work.length > 0) {
+    const top = work[work.length - 1];
+    const children = refs.get(top.node) ?? [];
+    if (top.childIndex < children.length) {
+      const child = children[top.childIndex++];
+      if (!indexOf.has(child)) {
+        indexOf.set(child, state.counter);
+        lowlink.set(child, state.counter);
+        state.counter++;
+        sccStack.push(child);
+        onStack.add(child);
+        work.push({ node: child, childIndex: 0 });
+      } else if (onStack.has(child)) {
+        lowlink.set(
+          top.node,
+          Math.min(lowlink.get(top.node) as number, indexOf.get(child) as number),
+        );
+      }
+    } else {
+      work.pop();
+      if (work.length > 0) {
+        const parent = work[work.length - 1].node;
+        lowlink.set(
+          parent,
+          Math.min(lowlink.get(parent) as number, lowlink.get(top.node) as number),
+        );
+      }
+      if (lowlink.get(top.node) === indexOf.get(top.node)) {
+        collectSccIfCyclic(top.node, refs, sccStack, onStack, cyclic);
+      }
+    }
+  }
+}
+
+// Returns the names of string-valued variables whose placeholder references form
+// a cycle (direct or transitive). Iterative Tarjan SCC: a variable is cyclic when
+// its strongly connected component has more than one member or it references
+// itself. Iterative so long reference chains cannot overflow the call stack.
+function findCyclicVars(variables: Record<string, VarValue>, regex: RegExp): Set<string> {
+  const state: TarjanState = {
+    refs: buildReferenceGraph(variables, regex),
+    indexOf: new Map(),
+    lowlink: new Map(),
+    onStack: new Set(),
+    sccStack: [],
+    cyclic: new Set(),
+    counter: 0,
+  };
+  for (const start of state.refs.keys()) {
+    if (!state.indexOf.has(start)) {
+      strongConnectFrom(start, state);
+    }
+  }
+  return state.cyclic;
+}
+
 export function resolveVariables(
   variables: Record<string, VarValue>,
   skipResolveVars?: string[],
   varsResolvedFromSkipped?: Set<string>,
 ): Record<string, VarValue> {
   let resolved: boolean;
-  const regex = /\{\{\s*(\w+)\s*\}\}/; // Matches {{variableName}}, {{ variableName }}, etc.
+  const regex = /\{\{\s*(\w+)\s*\}\}/g; // Matches {{variableName}}, {{ variableName }}, etc.
+
+  // Variables whose placeholder references form a cycle. Substituting a cyclic
+  // variable inlines its growing value into a dependent on every pass (a cycle
+  // behind an unresolved placeholder duplicates the unresolved text), so cyclic
+  // variables are never substituted. Cycle membership is recomputed after every
+  // substitution, because a substitution can assemble a placeholder that was
+  // absent from the graph moments earlier (a value ending in '{{' can complete
+  // a later 'name}}', and a stringified non-string value can carry placeholder
+  // text): only a cycle set derived from the current values is sound.
+  // Comparing parsed placeholder names avoids building a RegExp from arbitrary
+  // variable keys, which can throw on metacharacters.
+  let cyclicVars = findCyclicVars(variables, regex);
 
   let iterations = 0;
   do {
@@ -71,20 +201,38 @@ export function resolveVariables(
         continue;
       }
       const value = variables[key] as string;
-      const match = regex.exec(value);
+      // Find the first placeholder whose variable is defined. An unresolved placeholder is
+      // left in place - the final nunjucks render will fail if necessary - but it must not
+      // block resolvable placeholders that follow it in the same string.
+      // Cyclic variables (self-references and cycles of any length) are skipped:
+      // replacing them would substitute the value into itself on every pass,
+      // growing it instead of resolving it.
+      let match: RegExpMatchArray | undefined;
+      for (const candidate of value.matchAll(regex)) {
+        const varName = candidate[1];
+        // Skipped variables (skipResolveVars / varsResolvedFromSkipped) are opaque:
+        // their literal contents are inlined as-is and the consumer is marked as
+        // resolved-from-skipped, so cycle checks must not look inside them.
+        const candidateIsSkipped =
+          skipResolveVars?.includes(varName) || varsResolvedFromSkipped?.has(varName);
+        if (variables[varName] === undefined || (!candidateIsSkipped && cyclicVars.has(varName))) {
+          continue;
+        }
+        match = candidate;
+        break;
+      }
       if (match) {
         const [placeholder, varName] = match;
-        if (variables[varName] === undefined) {
-          // Do nothing - final nunjucks render will fail if necessary.
-          // logger.warn(`Variable "${varName}" not found for substitution.`);
-        } else {
-          // A replacer function keeps `$&`, `$'` and `` $` `` in the value literal.
-          variables[key] = value.replace(placeholder, () => variables[varName] as string);
-          if (skipResolveVars?.includes(varName) || varsResolvedFromSkipped?.has(varName)) {
-            varsResolvedFromSkipped?.add(key);
-          }
-          resolved = false; // Indicate that we've made a replacement and should check again
+        // A replacer function keeps `$&`, `$'` and `` $` `` in the value literal.
+        variables[key] = value.replace(placeholder, () => variables[varName] as string);
+        if (skipResolveVars?.includes(varName) || varsResolvedFromSkipped?.has(varName)) {
+          varsResolvedFromSkipped?.add(key);
         }
+        // The mutation above may have assembled a new placeholder, so cycle
+        // membership must be rebuilt from the current values before the next
+        // candidate is considered.
+        cyclicVars = findCyclicVars(variables, regex);
+        resolved = false; // Indicate that we've made a replacement and should check again
       }
     }
     iterations++;

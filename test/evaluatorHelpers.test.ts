@@ -674,6 +674,110 @@ describe('evaluatorHelpers', () => {
       expect(resolveVariables(variables)).toEqual({ greeting: 'Hello, {{name}}!' });
     });
 
+    it('should resolve defined variables that follow an unresolved placeholder', () => {
+      const variables = {
+        greeting: 'Hello {{ undefined_var }} and {{ name }}',
+        name: 'Alice',
+      };
+      expect(resolveVariables(variables)).toEqual({
+        greeting: 'Hello {{ undefined_var }} and Alice',
+        name: 'Alice',
+      });
+    });
+
+    it('should keep resolving later placeholders when an earlier one is unresolved', () => {
+      const variables = {
+        message: '{{missing}} {{a}} {{b}}',
+        a: 'A',
+        b: '{{a}}',
+      };
+      expect(resolveVariables(variables)).toEqual({
+        message: '{{missing}} A A',
+        a: 'A',
+        b: 'A',
+      });
+    });
+
+    it('should not expand a self-reference that follows an unresolved placeholder', () => {
+      const variables = { message: '{{missing}} {{message}}' };
+      expect(resolveVariables(variables)).toEqual({ message: '{{missing}} {{message}}' });
+    });
+
+    it('should not expand a direct cycle that follows an unresolved placeholder', () => {
+      const variables = { a: '{{missing}} {{b}}', b: '{{a}}' };
+      expect(resolveVariables(variables)).toEqual({ a: '{{missing}} {{b}}', b: '{{a}}' });
+    });
+
+    it('should not expand a transitive cycle that follows an unresolved placeholder', () => {
+      const variables = { a: '{{missing}} {{b}}', b: '{{c}}', c: '{{a}}' };
+      expect(resolveVariables(variables)).toEqual({
+        a: '{{missing}} {{b}}',
+        b: '{{c}}',
+        c: '{{a}}',
+      });
+    });
+
+    it('should not grow a self-reference assembled by a substitution', () => {
+      // Inlining open='{{' assembles '{{message}}' inside message mid-loop. The
+      // placeholder did not exist in the initial graph, so a cycle set computed
+      // once from the initial values is stale; the assembled self-reference must
+      // be frozen instead of doubling on every pass.
+      const variables = { message: '{{missing}} {{open}}message}}', open: '{{' };
+      expect(resolveVariables(variables)).toEqual({
+        message: '{{missing}} {{message}}',
+        open: '{{',
+      });
+    });
+
+    it('should not grow a reference injected by a stringified array value', () => {
+      // Stringifying parts inlines '{{message}}' into message. The same
+      // freeze-on-formed-cycle rule applies: one inlining, no runaway growth.
+      const variables = { message: '{{missing}} {{parts}}', parts: ['{{message}}'] };
+      expect(resolveVariables(variables)).toEqual({
+        message: '{{missing}} {{message}}',
+        parts: ['{{message}}'],
+      });
+    });
+
+    it('should resolve variables whose key contains regex metacharacters', () => {
+      const variables = { 'input[': '{{name}}', name: 'x' };
+      expect(resolveVariables(variables)).toEqual({ 'input[': 'x', name: 'x' });
+    });
+
+    it('should not expand a dependency whose own graph is cyclic', () => {
+      const variables = { loop: '{{missing}} {{loop}}', other: 'x', message: '{{other}} {{loop}}' };
+      expect(resolveVariables(variables)).toEqual({
+        loop: '{{missing}} {{loop}}',
+        other: 'x',
+        message: 'x {{loop}}',
+      });
+    });
+
+    it('should leave every member of a non-tree cycle unresolved', () => {
+      const variables = {
+        v0: '{{v1}} {{v2}}',
+        v1: '{{v0}}',
+        v2: '{{v1}}',
+        message: '{{missing}} {{v2}}',
+      };
+      expect(resolveVariables(variables)).toEqual({
+        v0: '{{v1}} {{v2}}',
+        v1: '{{v0}}',
+        v2: '{{v1}}',
+        message: '{{missing}} {{v2}}',
+      });
+    });
+
+    it('should inline a skipped variable whose contents mention the consumer', () => {
+      const varsResolvedFromSkipped = new Set<string>();
+      const variables = { wrapped: '{{payload}}', payload: '{{wrapped}}' };
+      expect(resolveVariables(variables, ['payload'], varsResolvedFromSkipped)).toEqual({
+        wrapped: '{{wrapped}}',
+        payload: '{{wrapped}}',
+      });
+      expect(varsResolvedFromSkipped.has('wrapped')).toBe(true);
+    });
+
     it('should not fail for unresolved placeholders', () => {
       const variables = { greeting: 'Hello, {{name}}!', name: '{{unknown}}' };
       expect(resolveVariables(variables)).toEqual({
