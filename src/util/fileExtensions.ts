@@ -5,4 +5,5 @@ export {
   isJavascriptFile,
   isVideoFile,
   JAVASCRIPT_EXTENSIONS,
+  parseFileUrl,
 } from '../validation/fileExtensions';

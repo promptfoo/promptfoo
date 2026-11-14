@@ -22,8 +22,14 @@ import {
   type UnifiedConfig,
   type VarValue,
 } from './types/index';
-import { isAudioFile, isImageFile, isJavascriptFile, isVideoFile } from './util/fileExtensions';
-import { renderVarsInObject, setLoadedFileMimeTypes } from './util/index';
+import {
+  isAudioFile,
+  isImageFile,
+  isJavascriptFile,
+  isVideoFile,
+  parseFileUrl,
+} from './util/fileExtensions';
+import { isRuntimeVar, renderVarsInObject, setLoadedFileMimeTypes } from './util/index';
 import invariant from './util/invariant';
 import { filterFiniteScores } from './util/numeric';
 import { extractVariablesFromTemplate, getNunjucksEngine } from './util/templates';
@@ -72,20 +78,24 @@ export function resolveVariables(
       }
       const value = variables[key] as string;
       const match = regex.exec(value);
-      if (match) {
-        const [placeholder, varName] = match;
-        if (variables[varName] === undefined) {
-          // Do nothing - final nunjucks render will fail if necessary.
-          // logger.warn(`Variable "${varName}" not found for substitution.`);
-        } else {
-          // A replacer function keeps `$&`, `$'` and `` $` `` in the value literal.
-          variables[key] = value.replace(placeholder, () => variables[varName] as string);
-          if (skipResolveVars?.includes(varName) || varsResolvedFromSkipped?.has(varName)) {
-            varsResolvedFromSkipped?.add(key);
-          }
-          resolved = false; // Indicate that we've made a replacement and should check again
-        }
+      if (!match || variables[match[1]] === undefined) {
+        continue;
       }
+      const [, source] = match;
+      const protectedSource =
+        skipResolveVars?.includes(source) || varsResolvedFromSkipped?.has(source);
+      if (protectedSource) {
+        // Render the remaining authored placeholders together before marking the alias as data.
+        // A replacement callback never scans placeholders supplied by the provider.
+        variables[key] = value.replace(/\{\{\s*(\w+)\s*\}\}/g, (placeholder, name: string) =>
+          variables[name] === undefined ? placeholder : String(variables[name]),
+        );
+        varsResolvedFromSkipped?.add(key);
+      } else {
+        // Replace one ordinary reference per pass; replacing all can expand recursive aliases exponentially.
+        variables[key] = value.replace(match[0], () => String(variables[source]));
+      }
+      resolved = false;
     }
     iterations++;
   } while (!resolved && iterations < 5);
@@ -227,6 +237,105 @@ function detectMimeFromBase64(base64Data: string): string | null {
 }
 
 /**
+ * Resolves `file://` references nested inside a vars value.
+ *
+ * Top-level vars are handled by renderPrompt, where a reference may also invoke a
+ * JavaScript/Python var script or be encoded as base64 media. Nested references are
+ * plain data, so only text and YAML files are read here; script and media references
+ * are left as authored rather than parsed as text.
+ */
+async function resolveNestedFileReferences(
+  value: VarValue,
+  basePath: string,
+  resolved: WeakMap<object, VarValue> = new WeakMap(),
+): Promise<VarValue> {
+  if (value && typeof value === 'object') {
+    if (resolved.has(value)) {
+      return resolved.get(value)!;
+    }
+    if (Array.isArray(value)) {
+      const result: VarValue[] = [];
+      resolved.set(value, result);
+      for (const item of value) {
+        result.push(await resolveNestedFileReferences(item as VarValue, basePath, resolved));
+      }
+      return result;
+    }
+    const prototype = Object.getPrototypeOf(value);
+    if (prototype !== null && prototype !== Object.prototype) {
+      return value;
+    }
+    const result: Record<string, VarValue> = Object.create(prototype);
+    resolved.set(value, result);
+    for (const [key, item] of Object.entries(value)) {
+      Object.defineProperty(result, key, {
+        value: await resolveNestedFileReferences(item as VarValue, basePath, resolved),
+        enumerable: true,
+        configurable: true,
+        writable: true,
+      });
+    }
+    return result;
+  }
+  if (typeof value !== 'string' || !value.startsWith('file://')) {
+    return value;
+  }
+
+  const { filePath: referencePath } = parseFileUrl(value);
+  const filePath = path.resolve(process.cwd(), basePath, referencePath);
+  const fileExtension = path.extname(filePath).toLowerCase();
+
+  // These types are loaded with top-level-only semantics (var name, prompt, and provider
+  // context), so leave nested references to them untouched.
+  if (
+    isJavascriptFile(filePath) ||
+    fileExtension === '.py' ||
+    fileExtension === '.pdf' ||
+    isImageFile(filePath) ||
+    isVideoFile(filePath) ||
+    isAudioFile(filePath)
+  ) {
+    logger.debug('[EvaluatorHelpers] Leaving nested file reference unresolved', { value });
+    return value;
+  }
+
+  // Object context, not interpolation: structured log transports keep the path a field.
+  logger.debug('[EvaluatorHelpers] Loading nested var file reference', { filePath });
+  if (fileExtension === '.yaml' || fileExtension === '.yml') {
+    return JSON.stringify(loadYaml(await fs.readFile(filePath, 'utf8')) as string | object);
+  }
+  return (await fs.readFile(filePath, 'utf8')).trim();
+}
+
+// A symbol preserves register provenance through strategy-level object spreads
+// while leaving the public/serialized variables unchanged.
+const runtimeFileVarNames = Symbol('runtimeFileVarNames');
+
+export function setRuntimeFileVarNames(vars: Record<string, VarValue>, names: string[]): void {
+  if (names.length > 0) {
+    const previous = (vars as typeof vars & { [runtimeFileVarNames]?: ReadonlySet<string> })[
+      runtimeFileVarNames
+    ];
+    Object.defineProperty(vars, runtimeFileVarNames, {
+      value: new Set([...(previous ?? []), ...names]),
+      enumerable: true,
+      configurable: true,
+    });
+  }
+}
+
+const loadedVarsFileNames = Symbol('loadedVarsFileNames');
+
+export function setLoadedVarsFileNames(
+  vars: Record<string, VarValue>,
+  names: readonly string[],
+): void {
+  if (names.length > 0) {
+    Object.defineProperty(vars, loadedVarsFileNames, { value: new Set(names), enumerable: true });
+  }
+}
+
+/**
  * Renders a prompt template with variable substitution using Nunjucks.
  *
  * @param prompt - The prompt template to render
@@ -237,6 +346,7 @@ function detectMimeFromBase64(base64Data: string): string | null {
  *                         rendering for. This is critical for red team testing where injection
  *                         variables contain attack payloads (e.g., SSTI, XSS) that should NOT be
  *                         evaluated by Promptfoo before reaching the target.
+ * @param nestedFileVarNames - Configured variables eligible for nested file loading.
  * @returns The rendered prompt string
  */
 export async function renderPrompt(
@@ -245,15 +355,25 @@ export async function renderPrompt(
   nunjucksFilters?: NunjucksFilterMap,
   provider?: ApiProvider,
   skipRenderVars?: string[],
+  nestedFileVarNames?: ReadonlySet<string>,
 ): Promise<string> {
   const nunjucks = getNunjucksEngine(nunjucksFilters);
   const loadedMimeTypes = setLoadedFileMimeTypes(vars);
+  const runtimeVars = (vars as typeof vars & { [runtimeFileVarNames]?: ReadonlySet<string> })[
+    runtimeFileVarNames
+  ];
+  const skipVars = runtimeVars ? [...(skipRenderVars ?? []), ...runtimeVars] : skipRenderVars;
+  const preloadedVars = (vars as typeof vars & { [loadedVarsFileNames]?: ReadonlySet<string> })[
+    loadedVarsFileNames
+  ];
 
   let basePrompt = prompt.raw;
 
+  const resolved = new WeakMap<object, VarValue>();
+
   // Load files
   for (const [varName, value] of Object.entries(vars)) {
-    if (skipRenderVars?.includes(varName)) {
+    if (preloadedVars?.has(varName) || skipVars?.includes(varName) || isRuntimeVar(varName)) {
       continue;
     }
 
@@ -391,6 +511,8 @@ export async function renderPrompt(
         );
       }
       vars[varName] = javascriptOutput.output;
+    } else if (nestedFileVarNames?.has(varName) && value !== null && typeof value === 'object') {
+      vars[varName] = await resolveNestedFileReferences(value, cliState.basePath || '', resolved);
     }
   }
 
@@ -423,13 +545,16 @@ export async function renderPrompt(
 
   // Remove any trailing newlines from vars, as this tends to be a footgun for JSON prompts.
   for (const key of Object.keys(vars)) {
-    if (typeof vars[key] === 'string' && !skipRenderVars?.includes(key)) {
+    if (typeof vars[key] === 'string' && !skipVars?.includes(key)) {
       vars[key] = (vars[key] as string).replace(/\n$/, '');
     }
   }
   // Resolve variable mappings
   const varsResolvedFromSkipped = new Set<string>();
-  resolveVariables(vars, skipRenderVars, varsResolvedFromSkipped);
+  resolveVariables(vars, skipVars, varsResolvedFromSkipped);
+  // Strategies spread the mutated vars and render again. An alias that now contains
+  // runtime text needs the same protection as the original register on that render.
+  setRuntimeFileVarNames(vars, [...varsResolvedFromSkipped]);
   // Third party integrations
   if (prompt.raw.startsWith('portkey://')) {
     const portKeyResult = await getPortkeyPrompt(prompt.raw.slice('portkey://'.length), vars);
@@ -522,7 +647,7 @@ export async function renderPrompt(
       Object.entries(vars).map(([key, value]) => {
         if (
           typeof value !== 'string' ||
-          skipRenderVars?.includes(key) ||
+          skipVars?.includes(key) ||
           varsResolvedFromSkipped.has(key)
         ) {
           return [key, value];
