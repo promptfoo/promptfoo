@@ -9,14 +9,12 @@ import Box from '@mui/material/Box';
 import Fab from '@mui/material/Fab';
 import IconButton from '@mui/material/IconButton';
 import Typography from '@mui/material/Typography';
-import {
-  ProductGrid,
-  ProductModal,
-  StoreErrorBoundary,
-  useCartContext,
-  useProducts,
-} from '@site/src/components/Store';
+import { useCartContext } from '@site/src/components/Store/CartProvider';
+import { ProductGrid } from '@site/src/components/Store/ProductGrid';
+import { ProductModal } from '@site/src/components/Store/ProductModal';
+import { StoreErrorBoundary } from '@site/src/components/Store/StoreErrorBoundary';
 import { useCopyToClipboard } from '@site/src/components/Store/useCopyToClipboard';
+import { useProducts } from '@site/src/components/Store/useFourthwall';
 import Layout from '@theme/Layout';
 
 function FloatingCartButton() {

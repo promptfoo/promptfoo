@@ -2,7 +2,7 @@ import type { RedteamGenerationContext } from './types';
 
 export type { RedteamGenerationContext } from './types';
 
-function isRecord(value: unknown): value is Record<string, unknown> {
+export function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
@@ -19,10 +19,10 @@ export function remoteGenerationContextPayload(contextOrCloudTargetId?: unknown)
   return cloudTargetId ? { targetId: cloudTargetId } : {};
 }
 
-function getCloudTargetIdFromProviderId(providerId: unknown): string | undefined {
+export function getCloudTargetIdFromProviderId(providerId: unknown): string | undefined {
   const prefix = 'promptfoo://provider/';
   return typeof providerId === 'string' && providerId.startsWith(prefix)
-    ? providerId.slice(prefix.length)
+    ? providerId.slice(prefix.length) || undefined
     : undefined;
 }
 

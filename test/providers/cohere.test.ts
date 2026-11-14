@@ -1239,6 +1239,20 @@ describe('CohereEmbeddingProvider', () => {
     vi.unstubAllEnvs();
   });
 
+  it('surfaces the API error when the embeddings request is rejected', async () => {
+    vi.mocked(fetchWithCache).mockResolvedValue({
+      cached: false,
+      status: 401,
+      statusText: 'Unauthorized',
+      data: { message: 'invalid api token' },
+    } as any);
+    const provider = new CohereEmbeddingProvider('embed-english-v3.0', { apiKey: 'bad-key' });
+
+    await expect(provider.callEmbeddingApi('Embed this')).rejects.toThrow(
+      /API error: 401 Unauthorized[\s\S]*invalid api token/,
+    );
+  });
+
   it('parses float embeddings returned by the Cohere v2 API', async () => {
     vi.mocked(fetchWithCache).mockResolvedValue({
       cached: false,

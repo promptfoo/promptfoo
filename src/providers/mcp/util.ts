@@ -4,6 +4,7 @@ import { fetchWithProxy } from '../../util/fetch/index';
 import { renderVarsInObject } from '../../util/index';
 import { fetchOAuthToken, type OAuthTokenResult, TOKEN_REFRESH_BUFFER_MS } from '../../util/oauth';
 import { sanitizeObject } from '../../util/sanitizer';
+import { waitForPromiseWithAbort } from '../shared';
 import { normalizeRenderedOAuthScopes } from './auth';
 
 import type { VarValue } from '../../types/shared';
@@ -143,7 +144,10 @@ function isValidTokenEndpoint(tokenEndpoint: string, serverUrl: URL): boolean {
  * Follows RFC 8414 OAuth 2.0 Authorization Server Metadata.
  * Only requires token_endpoint from the response (unlike SDK which requires authorization_endpoint).
  */
-export async function discoverTokenEndpoint(serverUrl: string): Promise<string> {
+export async function discoverTokenEndpoint(
+  serverUrl: string,
+  signal?: AbortSignal,
+): Promise<string> {
   // Check cache first
   const cached = tokenEndpointCache.get(serverUrl);
   if (cached) {
@@ -172,7 +176,10 @@ export async function discoverTokenEndpoint(serverUrl: string): Promise<string> 
   for (const discoveryUrl of discoveryUrls) {
     try {
       logger.debug(`[MCP Auth] Trying OAuth discovery at ${discoveryUrl}`);
-      const response = await fetchWithProxy(discoveryUrl, { redirect: 'error' });
+      const response = await fetchWithProxy(discoveryUrl, {
+        redirect: 'error',
+        ...(signal && { signal }),
+      });
 
       if (!response.ok) {
         logger.debug(`[MCP Auth] Discovery failed at ${discoveryUrl}: ${response.status}`);
@@ -188,6 +195,7 @@ export async function discoverTokenEndpoint(serverUrl: string): Promise<string> 
 
       logger.debug(`[MCP Auth] No valid token_endpoint in metadata from ${discoveryUrl}`);
     } catch (error) {
+      signal?.throwIfAborted();
       logger.debug(`[MCP Auth] Error fetching ${discoveryUrl}: ${error}`);
     }
   }
@@ -199,21 +207,30 @@ export async function discoverTokenEndpoint(serverUrl: string): Promise<string> 
 }
 
 // In-flight token requests, so concurrent callers share one token fetch
-const pendingTokenRequests = new Map<string, Promise<OAuthTokenResult>>();
+const pendingTokenRequests = new Map<
+  string,
+  {
+    controller: AbortController;
+    promise: Promise<OAuthTokenResult>;
+    waiters: number;
+  }
+>();
 
 /** Reuse a valid token, discover its endpoint if needed, and replace rejected tokens. */
 export async function getOAuthTokenWithExpiry(
   auth: MCPOAuthClientCredentialsAuth | MCPOAuthPasswordAuth,
   serverUrl?: string,
   rejectedToken?: string,
+  signal?: AbortSignal,
 ): Promise<OAuthTokenResult> {
+  signal?.throwIfAborted();
   // Use configured tokenUrl or discover it
   let tokenUrl = auth.tokenUrl;
   if (!tokenUrl) {
     if (!serverUrl) {
       throw new Error('Either tokenUrl or serverUrl is required for OAuth token fetching');
     }
-    tokenUrl = await discoverTokenEndpoint(serverUrl);
+    tokenUrl = await discoverTokenEndpoint(serverUrl, signal);
   }
 
   const cacheKey = getOAuthCacheKey(auth, tokenUrl);
@@ -223,8 +240,10 @@ export async function getOAuthTokenWithExpiry(
   }
 
   let pending = pendingTokenRequests.get(cacheKey);
-  if (!pending) {
-    pending = fetchOAuthToken({
+  if (!pending || pending.controller.signal.aborted) {
+    const controller = new AbortController();
+    const promise = fetchOAuthToken({
+      signal: controller.signal,
       tokenUrl,
       // Credentials must not follow a redirect away from a discovered endpoint
       redirect: auth.tokenUrl ? undefined : 'error',
@@ -236,6 +255,7 @@ export async function getOAuthTokenWithExpiry(
       scopes: normalizeRenderedOAuthScopes(auth.scopes),
     })
       .then((result) => {
+        controller.signal.throwIfAborted();
         // Keep short-lived tokens usable instead of refreshing them on every request.
         const remainingMs = Math.max(0, result.expiresAt - Date.now());
         oauthTokenCache.set(cacheKey, {
@@ -245,10 +265,23 @@ export async function getOAuthTokenWithExpiry(
         logger.debug('[MCP Auth] Cached OAuth token');
         return result;
       })
-      .finally(() => pendingTokenRequests.delete(cacheKey));
+      .finally(() => {
+        if (pendingTokenRequests.get(cacheKey)?.controller === controller) {
+          pendingTokenRequests.delete(cacheKey);
+        }
+      });
+    pending = { controller, promise, waiters: 0 };
     pendingTokenRequests.set(cacheKey, pending);
   }
-  return pending;
+  pending.waiters++;
+  try {
+    return await waitForPromiseWithAbort(pending.promise, signal);
+  } finally {
+    pending.waiters--;
+    if (pending.waiters === 0) {
+      pending.controller.abort();
+    }
+  }
 }
 
 /**
