@@ -20,7 +20,7 @@ export TOKENLAB_API_KEY=sk-...
 Run the example:
 
 ```sh
-promptfoo eval
+npx promptfoo@latest eval
 ```
 
 The config includes both OpenAI-compatible chat completions and the Responses API path.

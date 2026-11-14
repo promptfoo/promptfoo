@@ -68,6 +68,7 @@ describe('provider-tokenlab README', () => {
     // Reproduce exactly what the README tells the reader to export, and nothing else.
     restoreEnv = mockProcessEnv({
       ...Object.fromEntries(VENDOR_KEY_ENV_VARS.map((key) => [key, undefined])),
+      OPENAI_API_HOST: 'other.example',
       TOKENLAB_API_KEY: TOKENLAB_KEY,
     });
   });
@@ -116,10 +117,12 @@ describe('provider-tokenlab README', () => {
     const providers = (await loadApiProviders(config.providers as any)) as Array<{
       id: () => string;
       getApiKey?: () => string | undefined;
+      getApiUrl: () => string;
     }>;
 
     expect(providers.length).toBeGreaterThan(0);
     for (const provider of providers) {
+      expect(provider.getApiUrl()).toBe('https://api.tokenlab.sh/v1');
       expect(provider.getApiKey?.(), `Provider "${provider.id()}" resolves no credential`).toBe(
         TOKENLAB_KEY,
       );
