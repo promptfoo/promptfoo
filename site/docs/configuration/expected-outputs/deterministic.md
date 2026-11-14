@@ -791,7 +791,7 @@ tests:
 
 - A string, such as `search_orders`
 - An array of strings, such as `['search_orders', 'compose_reply']`
-- An object with `pattern`, `min`, and optional `max`
+- An object with `name` or `pattern`, plus optional `min` and `max`. `min` defaults to 1, or to 0 when only `max` is set, so `max: 0` asserts that the tool was never used
 
 ### trajectory:tool-args-match {#trajectorytool-args-match}
 

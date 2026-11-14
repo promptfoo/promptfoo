@@ -112,18 +112,18 @@ function resolveToolMatchers(
 
   if (value && typeof value === 'object' && !Array.isArray(value)) {
     const matcher = normalizeTrajectoryMatcher(value as TrajectoryStepMatcher, 'tool');
+    const { max: rawMax, min: rawMin } = value as TrajectoryCountValue;
+    const max = typeof rawMax === 'number' ? rawMax : undefined;
+    // A max-only bound is a usage budget, so it has no lower bound (as in skill-used and
+    // trajectory:step-count). Only an absent min gets this default, so a malformed one still
+    // falls back to requiring a match.
+    const maxOnly = max !== undefined && (rawMin === undefined || rawMin === null);
     return {
       kind: 'count',
       matcher: {
         ...matcher,
-        max:
-          typeof (value as TrajectoryCountValue).max === 'number'
-            ? (value as TrajectoryCountValue).max
-            : undefined,
-        min:
-          typeof (value as TrajectoryCountValue).min === 'number'
-            ? (value as TrajectoryCountValue).min
-            : undefined,
+        max,
+        min: typeof rawMin === 'number' ? rawMin : maxOnly ? 0 : undefined,
       },
     };
   }
