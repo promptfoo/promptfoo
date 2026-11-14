@@ -24,7 +24,7 @@ import { maybeLoadConfigFromExternalFile } from './file';
 import { isJavascriptFile } from './fileExtensions';
 import { renderEnvOnlyInObject } from './render';
 import { getExcelWorkbookPath, parseXlsxFile } from './xlsx';
-import { loadYaml } from './yamlLoad';
+import { loadConfigYaml, loadYaml } from './yamlLoad';
 
 import type {
   CsvRow,
@@ -81,7 +81,7 @@ export async function readTestFiles(
     });
 
     for (const p of paths) {
-      const rawData = loadYaml(await fsPromises.readFile(p, 'utf-8'));
+      const rawData = loadConfigYaml(await fsPromises.readFile(p, 'utf-8'));
       const yamlData = maybeLoadConfigFromExternalFile(rawData);
       Object.assign(ret, yamlData);
     }
@@ -248,7 +248,7 @@ async function readLocalStandaloneTestsFile(
     telemetry.record('feature_used', {
       feature: 'yaml tests file',
     });
-    const rawContent = loadYaml(await fsPromises.readFile(resolvedVarsPath, 'utf-8'));
+    const rawContent = loadConfigYaml(await fsPromises.readFile(resolvedVarsPath, 'utf-8'));
     const rows = maybeLoadConfigFromExternalFile(rawContent) as unknown as CsvRow[];
     return csvRowsToTestCases(rows);
   }
@@ -430,7 +430,7 @@ function parseJsonlTestCases(fileContent: string, filePath: string): TestCase[] 
 }
 
 function parseYamlTestCases(fileContent: string): TestCase[] {
-  const rawContent = loadYaml(fileContent);
+  const rawContent = loadConfigYaml(fileContent);
   const testCases: TestCase[] = Array.isArray(rawContent)
     ? (rawContent as TestCase[])
     : [rawContent as TestCase];
@@ -510,7 +510,7 @@ async function readTestWithEnv(
   if (typeof test === 'string') {
     const testFilePath = path.resolve(sourceBasePath, test);
     effectiveBasePath = path.dirname(testFilePath);
-    const rawContent = loadYaml(await fsPromises.readFile(testFilePath, 'utf-8'));
+    const rawContent = loadConfigYaml(await fsPromises.readFile(testFilePath, 'utf-8'));
     const rawTestCase = maybeLoadConfigFromExternalFile(rawContent) as TestCaseWithVarsFile;
     testCase = await loadTestWithVars(rawTestCase, effectiveBasePath);
   } else {
@@ -694,7 +694,7 @@ async function loadTestsFromGlobWithEnv(
     ) {
       testCases = await readStandaloneTestsFile(testFile, basePath);
     } else if (testFile.endsWith('.yaml') || testFile.endsWith('.yml')) {
-      const rawContent = loadYaml(await fsPromises.readFile(testFile, 'utf-8'));
+      const rawContent = loadConfigYaml(await fsPromises.readFile(testFile, 'utf-8'));
       testCases = maybeLoadConfigFromExternalFile(rawContent) as TestCase[];
       testCases = await _deref(testCases, testFile);
     } else if (testFile.endsWith('.jsonl')) {

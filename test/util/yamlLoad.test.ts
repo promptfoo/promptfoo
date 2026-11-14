@@ -1,6 +1,6 @@
 import * as yaml from 'js-yaml';
 import { describe, expect, it } from 'vitest';
-import { loadYaml } from '../../src/util/yamlLoad';
+import { loadConfigYaml, loadYaml } from '../../src/util/yamlLoad';
 
 describe('loadYaml', () => {
   it('parses plain YAML documents', () => {
@@ -141,5 +141,20 @@ describe('loadYaml', () => {
     expect(() => loadYaml('a: [unclosed', { filename: 'my-config.yaml' })).toThrow(
       /my-config\.yaml/,
     );
+  });
+
+  it('returns unquoted timestamps as Date objects', () => {
+    expect(loadYaml('{ d: 2024-01-02, t: 2024-01-02T10:00:00Z }')).toEqual({
+      d: new Date('2024-01-02T00:00:00.000Z'),
+      t: new Date('2024-01-02T10:00:00.000Z'),
+    });
+  });
+});
+
+describe('loadConfigYaml', () => {
+  it('distinguishes date-only literals from UTC midnight timestamps', () => {
+    expect(
+      loadConfigYaml('values: [2024-01-02, 2024-01-02T00:00:00Z, 2024-01-02T01:00:00+01:00]'),
+    ).toEqual({ values: ['2024-01-02', '2024-01-02T00:00:00.000Z', '2024-01-02T00:00:00.000Z'] });
   });
 });
