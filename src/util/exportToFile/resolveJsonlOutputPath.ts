@@ -353,12 +353,10 @@ export function createJsonlOutputDirectoriesSync(plan: JsonlOutputPathPlan): voi
   for (const directory of plan.parentDirectories) {
     mkdirSync(directory, { recursive: true });
   }
-  mkdirSync(path.dirname(plan.targetPath), { recursive: true });
 }
 
 export async function createJsonlOutputDirectories(plan: JsonlOutputPathPlan): Promise<void> {
   for (const directory of plan.parentDirectories) {
     await fsPromises.mkdir(directory, { recursive: true });
   }
-  await fsPromises.mkdir(path.dirname(plan.targetPath), { recursive: true });
 }

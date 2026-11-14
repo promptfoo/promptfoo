@@ -158,6 +158,19 @@ afterAll(() => {
 });
 
 describe('JSONL output path preparation (Windows path emulation)', () => {
+  it('writes directly under a drive root without trying to create the root', async () => {
+    const fileSystem = createMockFileSystem();
+    const modules = await loadJsonlModules(fileSystem);
+    const output = 'D:\\out.jsonl';
+    const writer = new modules.JsonlFileWriter(output);
+    await writer.write({ row: 1 });
+    await writer.close();
+    expect(fileSystem.streamedRows).toEqual(['{"row":1}\n']);
+    expect(fileSystem.sync.mkdirSync).not.toHaveBeenCalled();
+    await modules.createJsonlOutputDirectories(await modules.resolveJsonlOutputPath(output));
+    expect(fileSystem.promises.mkdir).not.toHaveBeenCalled();
+  });
+
   it('handles direct, symlink, and current-directory paths under the extended UNC share root', async () => {
     const fileSystem = createMockFileSystem();
     const modules = await loadJsonlModules(fileSystem);
@@ -172,7 +185,6 @@ describe('JSONL output path preparation (Windows path emulation)', () => {
     expect(fileSystem.streamedRows).toEqual(['{"row":1}\n']);
     expect(fileSystem.sync.mkdirSync.mock.calls.map(([directory]) => directory)).toEqual([
       `${root}nested`,
-      `${root}nested`,
     ]);
 
     fileSystem.reset();
@@ -180,7 +192,6 @@ describe('JSONL output path preparation (Windows path emulation)', () => {
     await modules.createJsonlOutputDirectories(asyncPlan);
     expect(asyncPlan).toEqual({ targetPath: outputPath, parentDirectories: [`${root}nested`] });
     expect(fileSystem.promises.mkdir.mock.calls.map(([directory]) => directory)).toEqual([
-      `${root}nested`,
       `${root}nested`,
     ]);
 
