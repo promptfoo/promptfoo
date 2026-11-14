@@ -48,61 +48,61 @@
       <text y="25" font-size="10" fill="#fff" text-anchor="middle">Info Disclosure</text>
     </g>
 
-    <!-- LLM03: Supply Chain -->
+    <!-- LLM03: Excessive Agency -->
     <g transform="translate(550,200)">
       <circle r="25" fill="#4a90e2" opacity="0.2"/>
       <path d="M-8,-8 L0,-8 L8,0 L0,8 L-8,0 Z" fill="#4a90e2" stroke="#4a90e2"/>
-      <text y="25" font-size="10" fill="#fff" text-anchor="middle">Supply Chain</text>
-    </g>
-
-    <!-- LLM04: Data Poisoning -->
-    <g transform="translate(510,260)">
-      <circle r="25" fill="#4a90e2" opacity="0.2"/>
-      <path d="M-5,-8 C8,-8 8,8 -5,8 C-8,0 -8,0 -5,-8" fill="#4a90e2"/>
-      <text y="25" font-size="10" fill="#fff" text-anchor="middle">Data Poisoning</text>
-    </g>
-
-    <!-- LLM05: Output Handling -->
-    <g transform="translate(400,280)">
-      <circle r="25" fill="#4a90e2" opacity="0.2"/>
-      <rect x="-8" y="-8" width="16" height="16" fill="none" stroke="#4a90e2"/>
-      <text y="25" font-size="10" fill="#fff" text-anchor="middle">Output Handling</text>
-    </g>
-
-    <!-- LLM06: Agency -->
-    <g transform="translate(290,260)">
-      <circle r="25" fill="#4a90e2" opacity="0.2"/>
-      <path d="M-8,-8 L8,-8 L0,8 Z" fill="#4a90e2"/>
       <text y="25" font-size="10" fill="#fff" text-anchor="middle">Excessive Agency</text>
     </g>
 
-    <!-- LLM07: Prompt Leak -->
+    <!-- LLM04: Supply Chain -->
+    <g transform="translate(510,260)">
+      <circle r="25" fill="#4a90e2" opacity="0.2"/>
+      <path d="M-5,-8 C8,-8 8,8 -5,8 C-8,0 -8,0 -5,-8" fill="#4a90e2"/>
+      <text y="25" font-size="10" fill="#fff" text-anchor="middle">Supply Chain</text>
+    </g>
+
+    <!-- LLM05: Data Poisoning -->
+    <g transform="translate(400,280)">
+      <circle r="25" fill="#4a90e2" opacity="0.2"/>
+      <rect x="-8" y="-8" width="16" height="16" fill="none" stroke="#4a90e2"/>
+      <text y="25" font-size="10" fill="#fff" text-anchor="middle">Data Poisoning</text>
+    </g>
+
+    <!-- LLM06: Consumption -->
+    <g transform="translate(290,260)">
+      <circle r="25" fill="#4a90e2" opacity="0.2"/>
+      <path d="M-8,-8 L8,-8 L0,8 Z" fill="#4a90e2"/>
+      <text y="25" font-size="10" fill="#fff" text-anchor="middle">Consumption</text>
+    </g>
+
+    <!-- LLM07: Misinfo -->
     <g transform="translate(250,200)">
       <circle r="25" fill="#4a90e2" opacity="0.2"/>
       <path d="M-5,-8 L5,-8 L8,-5 L8,5 L5,8 L-5,8 L-8,5 L-8,-5 Z" fill="#4a90e2"/>
-      <text y="25" font-size="10" fill="#fff" text-anchor="middle">Prompt Leak</text>
+      <text y="25" font-size="10" fill="#fff" text-anchor="middle">Misinformation</text>
     </g>
 
-    <!-- LLM08: Embeddings -->
+    <!-- LLM08: Hidden Context -->
     <g transform="translate(290,140)">
       <circle r="25" fill="#4a90e2" opacity="0.2"/>
       <circle r="8" fill="none" stroke="#4a90e2"/>
       <path d="M-8,-8 L8,8 M-8,8 L8,-8" stroke="#4a90e2" stroke-width="2"/>
-      <text y="25" font-size="10" fill="#fff" text-anchor="middle">Embeddings</text>
+      <text y="25" font-size="10" fill="#fff" text-anchor="middle">Hidden Context</text>
     </g>
 
-    <!-- LLM09: Misinfo -->
+    <!-- LLM09: Embeddings -->
     <g transform="translate(340,100)">
       <circle r="25" fill="#4a90e2" opacity="0.2"/>
       <path d="M-8,0 Q0,-8 8,0 Q0,8 -8,0" fill="#4a90e2"/>
-      <text y="25" font-size="10" fill="#fff" text-anchor="middle">Misinformation</text>
+      <text y="25" font-size="10" fill="#fff" text-anchor="middle">Embeddings</text>
     </g>
 
-    <!-- LLM10: Consumption -->
+    <!-- LLM10: Output Handling -->
     <g transform="translate(460,100)">
       <circle r="25" fill="#4a90e2" opacity="0.2"/>
       <path d="M-8,-8 L8,-8 L8,8 L-8,8 Z M-4,-4 L4,-4 L4,4 L-4,4 Z" fill="#4a90e2"/>
-      <text y="25" font-size="10" fill="#fff" text-anchor="middle">Consumption</text>
+      <text y="25" font-size="10" fill="#fff" text-anchor="middle">Output Handling</text>
     </g>
   </g>
 

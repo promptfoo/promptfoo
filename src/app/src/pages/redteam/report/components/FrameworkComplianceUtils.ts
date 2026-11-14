@@ -1,4 +1,24 @@
-import { categoryAliases, displayNameOverrides } from '@promptfoo/redteam/constants';
+import {
+  categoryAliases,
+  DOD_AI_ETHICS_PRINCIPLE_NAMES,
+  displayNameOverrides,
+  OWASP_API_TOP_10_NAMES,
+  OWASP_LLM_TOP_10_2026_NAMES,
+  OWASP_LLM_TOP_10_NAMES,
+} from '@promptfoo/redteam/constants';
+
+export const categoryNamesByFramework: Partial<Record<string, string[]>> = {
+  'owasp:llm': OWASP_LLM_TOP_10_NAMES,
+  'owasp:llm:2026': OWASP_LLM_TOP_10_2026_NAMES,
+  'owasp:api': OWASP_API_TOP_10_NAMES,
+  'dod:ai:ethics': DOD_AI_ETHICS_PRINCIPLE_NAMES,
+};
+
+export function getFrameworkCategoryLabel(framework: string, categoryId: string): string {
+  const number = categoryId.split(':').pop() ?? categoryId;
+  const name = categoryNamesByFramework[framework]?.[Number.parseInt(number, 10) - 1];
+  return `${number}. ${name ?? `Category ${number}`}`;
+}
 
 export type TestResultStats = {
   // The count of successful defenses (tests that passed)
@@ -93,6 +113,7 @@ export const FRAMEWORK_DESCRIPTIONS: Record<string, string> = {
   'mitre:atlas': 'MITRE ATLAS framework for adversarial threat landscape for AI systems',
   'nist:ai:measure': 'NIST AI Risk Management Framework for responsible AI development',
   'owasp:api': 'OWASP API Top 10 security risks for application programming interfaces',
+  'owasp:llm:2026': 'OWASP 2026 security risks for applications using large language models',
   'owasp:llm': 'OWASP LLM Top 10 security vulnerabilities for large language models',
   'eu:ai-act': 'EU AI Act for responsible AI development',
 };

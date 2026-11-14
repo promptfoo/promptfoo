@@ -10,12 +10,32 @@ export const FRAMEWORK_NAMES: Record<string, string> = {
   'mitre:atlas': 'MITRE ATLAS',
   'nist:ai:measure': 'NIST AI RMF',
   'owasp:api': 'OWASP API Top 10',
-  'owasp:llm': 'OWASP LLM Top 10',
+  'owasp:llm': 'OWASP LLM Top 10 (2025)',
+  'owasp:llm:2026': 'OWASP LLM Top 10 (2026)',
   'owasp:agentic': 'OWASP Top 10 for Agentic Applications',
   'eu:ai-act': 'EU AI Act',
   'iso:42001': 'ISO/IEC 42001',
   gdpr: 'GDPR',
 };
+
+/**
+ * OWASP Top 10 for LLM Applications (2026 edition, published August 4, 2026).
+ * Index is the risk number minus one.
+ *
+ * @see https://genai.owasp.org/resource/owasp-genai-llm-top-10-2026/
+ */
+export const OWASP_LLM_TOP_10_2026_NAMES = [
+  'Prompt Injection',
+  'Sensitive Information Disclosure',
+  'Excessive Agency',
+  'Supply Chain',
+  'Data and Model Poisoning',
+  'Unbounded Consumption',
+  'Misinformation',
+  'Hidden Context Exposure',
+  'Vector and Embedding Weaknesses',
+  'Improper Output Handling',
+];
 
 export const OWASP_LLM_TOP_10_NAMES = [
   'Prompt Injection',
@@ -171,6 +191,25 @@ export const OWASP_LLM_TOP_10_MAPPING: Record<
     strategies: [],
   },
 };
+
+const previousHiddenContext = OWASP_LLM_TOP_10_MAPPING['owasp:llm:07'];
+
+const OWASP_LLM_TOP_10_2026_MAPPING: Record<string, { plugins: Plugin[]; strategies: Strategy[] }> =
+  {
+    'owasp:llm:2026:01': OWASP_LLM_TOP_10_MAPPING['owasp:llm:01'],
+    'owasp:llm:2026:02': OWASP_LLM_TOP_10_MAPPING['owasp:llm:02'],
+    'owasp:llm:2026:03': OWASP_LLM_TOP_10_MAPPING['owasp:llm:06'],
+    'owasp:llm:2026:04': OWASP_LLM_TOP_10_MAPPING['owasp:llm:03'],
+    'owasp:llm:2026:05': OWASP_LLM_TOP_10_MAPPING['owasp:llm:04'],
+    'owasp:llm:2026:06': OWASP_LLM_TOP_10_MAPPING['owasp:llm:10'],
+    'owasp:llm:2026:07': OWASP_LLM_TOP_10_MAPPING['owasp:llm:09'],
+    'owasp:llm:2026:08': {
+      ...previousHiddenContext,
+      plugins: ['tool-discovery', ...previousHiddenContext.plugins],
+    },
+    'owasp:llm:2026:09': OWASP_LLM_TOP_10_MAPPING['owasp:llm:08'],
+    'owasp:llm:2026:10': OWASP_LLM_TOP_10_MAPPING['owasp:llm:05'],
+  };
 
 export const OWASP_API_TOP_10_MAPPING: Record<
   string,
@@ -984,6 +1023,7 @@ export const ALIASED_PLUGINS = [
   'nist:ai:measure',
   'owasp:api',
   'owasp:llm',
+  'owasp:llm:2026',
   'owasp:llm:redteam:model',
   'owasp:llm:redteam:implementation',
   'owasp:llm:redteam:system',
@@ -1003,6 +1043,7 @@ export const ALIASED_PLUGINS = [
   ...Object.keys(NIST_AI_RMF_MAPPING),
   ...Object.keys(OWASP_API_TOP_10_MAPPING),
   ...Object.keys(OWASP_LLM_TOP_10_MAPPING),
+  ...Object.keys(OWASP_LLM_TOP_10_2026_MAPPING),
   ...Object.keys(OWASP_AGENTIC_TOP_10_MAPPING),
   ...Object.keys(EU_AI_ACT_MAPPING),
   ...Object.keys(ISO_42001_MAPPING),
@@ -1020,6 +1061,7 @@ export const ALIASED_PLUGIN_MAPPINGS: Record<
   'nist:ai:measure': NIST_AI_RMF_MAPPING,
   'owasp:api': OWASP_API_TOP_10_MAPPING,
   'owasp:llm': OWASP_LLM_TOP_10_MAPPING,
+  'owasp:llm:2026': OWASP_LLM_TOP_10_2026_MAPPING,
   'owasp:llm:redteam': OWASP_LLM_RED_TEAM_MAPPING,
   'owasp:agentic': OWASP_AGENTIC_TOP_10_MAPPING,
   'eu:ai-act': EU_AI_ACT_MAPPING,
