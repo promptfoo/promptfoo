@@ -112,12 +112,11 @@ export function buildConversationKey(
   repeatIndex = 0,
   promptIndex = 0,
 ): string {
-  const conversationId = test.metadata?.conversationId;
   return JSON.stringify([
     getProviderIdentifier(provider),
     prompt.id,
     promptIndex,
-    conversationId == null ? null : String(conversationId),
+    test.metadata?.conversationId,
     repeatIndex,
   ]);
 }

@@ -685,6 +685,15 @@ describeEvaluator('evaluator execution control', () => {
     );
   });
 
+  it('preserves the JSON type of conversation IDs when grouping rows', () => {
+    const provider: ApiProvider = { id: () => 'echo', callApi: vi.fn() };
+    const prompt = toPrompt('{{ _conversation }}');
+
+    expect(buildConversationKey(provider, prompt, { metadata: { conversationId: 1 } })).not.toBe(
+      buildConversationKey(provider, prompt, { metadata: { conversationId: '1' } }),
+    );
+  });
+
   it('isolates conversation history between prompts without explicit IDs', async () => {
     const renderedPrompts: string[] = [];
     const provider: ApiProvider = {
