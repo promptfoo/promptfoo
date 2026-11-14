@@ -142,7 +142,7 @@ These metrics are programmatic tests that are run on LLM output. [See all detail
 | [javascript](/docs/configuration/expected-outputs/javascript)                                                      | provided Javascript function validates the output                               |
 | [python](/docs/configuration/expected-outputs/python)                                                              | provided Python function validates the output                                   |
 | [ruby](/docs/configuration/expected-outputs/ruby)                                                                  | provided Ruby function validates the output                                     |
-| [webhook](/docs/configuration/expected-outputs/deterministic/#webhook)                                             | webhook returns a boolean `pass` and an optional score from 0 to 1              |
+| [webhook](/docs/configuration/expected-outputs/deterministic/#webhook)                                             | Webhook returns a boolean pass and optional score (0–1) within each timeout     |
 | [rouge-l](/docs/configuration/expected-outputs/deterministic/#rouge-l)                                             | Rouge-L (LCS) score is at least the threshold (default 0.75)                    |
 | [rouge-n](/docs/configuration/expected-outputs/deterministic/#rouge-n)                                             | Rouge-N score is above a given threshold (default 0.75)                         |
 | [rouge-s](/docs/configuration/expected-outputs/deterministic/#rouge-s)                                             | Rouge-S (skip-bigram) score is at least the threshold (default 0.75)            |
