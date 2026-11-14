@@ -372,6 +372,18 @@ describe('handleIsHtml', () => {
     });
   });
 
+  it('requires an explicit paragraph end at the end of del', () => {
+    const check = (outputString: string) =>
+      handleIsHtml({
+        ...defaultParams,
+        assertion: { type: 'is-html' },
+        inverse: false,
+        outputString,
+      }).pass;
+    expect(check('<del><p>x</del>')).toBe(false);
+    expect(check('<del><p>x</p></del>')).toBe(true);
+  });
+
   it('should reject HTML with unclosed elements', () => {
     const unclosedExamples = [
       { input: '<div>Unclosed div', tag: 'div' },
@@ -380,6 +392,9 @@ describe('handleIsHtml', () => {
       { input: '<!DOCTYPE html><html><body><main><h1>Title</h1><p>Truncated', tag: 'main' },
       { input: '<div><span>Missing span end tag</div>', tag: 'span' },
       { input: '<div />', tag: 'div' },
+      { input: '<p />', tag: 'p' },
+      { input: '<body/>', tag: 'body' },
+      { input: '<dl><dt>a</dl>', tag: 'dt' },
       { input: '<template><div>x</template>', tag: 'div' },
       { input: '<table><thead><tr><th>x</th></tr></table>', tag: 'thead' },
       { input: '<svg><circle cx="1"', tag: 'svg' },
@@ -406,6 +421,7 @@ describe('handleIsHtml', () => {
   it('should accept elements whose end tags HTML allows omitting', () => {
     const fragments = [
       '<p>First paragraph<p>Second paragraph',
+      '<p data-value=x/>',
       '<div><a href="/"><p>x</p></a></div>',
       '<div><p>x<a href="/">y</a></div>',
       '<div><a href="/"><p>x<div>y</div></a></div>',
@@ -508,8 +524,8 @@ describe('handleIsHtml', () => {
 
   it('should still accept body variants regardless of trailing chars', () => {
     // Control cases for the wrapper detection fix — body followed by `>`,
-    // whitespace, or `/` must continue to count as user-declared body.
-    const bodyVariants = ['<body>x</body>', '<body attr="val">x</body>', '<body/>'];
+    // or whitespace must continue to count as user-declared body.
+    const bodyVariants = ['<body>x</body>', '<body attr="val">x</body>'];
 
     bodyVariants.forEach((input) => {
       const params: AssertionParams = {

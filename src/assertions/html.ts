@@ -306,13 +306,23 @@ function getSiblingIndex(parent: HtmlParentNode, element: HtmlElement): number {
   return siblingIndexes.get(element) ?? -1;
 }
 
-function isFollowedByTableBody(element: HtmlElement): boolean {
+// These HTML parents require a closing paragraph tag even at the end of their contents.
+const EXPLICIT_PARAGRAPH_END_PARENTS = new Set([
+  'a',
+  'audio',
+  'del',
+  'ins',
+  'map',
+  'noscript',
+  'video',
+]);
+
+function requiresParagraphEndAtParentEnd(element: HtmlElement): boolean {
   const parent = element.parentNode;
-  const nextSibling = parent ? parent.childNodes[getSiblingIndex(parent, element) + 1] : undefined;
   return (
-    nextSibling !== undefined &&
-    isElementNode(nextSibling) &&
-    (nextSibling.tagName === 'tbody' || nextSibling.tagName === 'tfoot')
+    !!parent &&
+    isElementNode(parent) &&
+    (EXPLICIT_PARAGRAPH_END_PARENTS.has(parent.tagName) || parent.tagName.includes('-'))
   );
 }
 
@@ -337,12 +347,23 @@ function hasUnclosedParagraphInLink(element: HtmlElement, previous: HtmlNode | u
 }
 
 function canOmitEndTag(element: HtmlElement, tagName: string): boolean {
-  if (tagName === 'thead') {
-    return isFollowedByTableBody(element);
+  if ((tagName === 'thead' || tagName === 'dt') && element.parentNode) {
+    const parent = element.parentNode;
+    const next = parent.childNodes[getSiblingIndex(parent, element) + 1];
+    if (!next || !isElementNode(next)) {
+      return false;
+    }
+    return tagName === 'dt'
+      ? next.tagName === 'dt' || next.tagName === 'dd'
+      : next.tagName === 'tbody' || next.tagName === 'tfoot';
   }
   if (tagName === 'p' && element.parentNode) {
     const parent = element.parentNode;
-    const previous = parent.childNodes[getSiblingIndex(parent, element) - 1];
+    const index = getSiblingIndex(parent, element);
+    if (index === parent.childNodes.length - 1 && requiresParagraphEndAtParentEnd(element)) {
+      return false;
+    }
+    const previous = parent.childNodes[index - 1];
     if (hasUnclosedParagraphInLink(element, previous)) {
       return false;
     }
@@ -369,7 +390,7 @@ function isUnclosedElement(element: HtmlElement, input: string, inputLowercase: 
     !element.sourceCodeLocation?.endTag &&
     (element.namespaceURI === html.NS.HTML
       ? !VOID_HTML_ELEMENTS.has(tagName) &&
-        !canOmitEndTag(element, tagName) &&
+        (hasSelfClosingStartTag(element, input) || !canOmitEndTag(element, tagName)) &&
         isUserProvidedElement(element, inputLowercase)
       : !hasSelfClosingStartTag(element, input))
   );
