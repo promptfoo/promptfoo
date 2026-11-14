@@ -720,6 +720,44 @@ describe('BestOfNProvider - Runtime Behavior', () => {
     expect(mockTargetProvider.callApi).not.toHaveBeenCalled();
     expect(result.error).toContain('maxCharsPerMessage=5');
   });
+
+  it('honors the layer step cap carried on the loaded provider over the plugin cap', async () => {
+    // A layer step configures the provider with maxCharsPerMessage: 100, then
+    // readTest replaces the provider descriptor with the loaded instance. The
+    // step cap must survive loading so the boundary enforces it instead of
+    // the plugin cap of 5.
+    const provider = new BestOfNProvider({
+      injectVar: 'input',
+      maxCharsPerMessage: 100,
+      maxConcurrency: 1,
+    });
+    const context = {
+      ...createMockContext(mockTargetProvider),
+      test: {
+        provider,
+        metadata: {
+          pluginConfig: { maxCharsPerMessage: 5 },
+        },
+      },
+    } as CallApiContextParams;
+
+    mockFetchWithProxy.mockResolvedValue({
+      json: async () => ({
+        modifiedPrompts: ['12345678'],
+      }),
+    });
+
+    const result = await provider.callApi('test prompt', context);
+
+    expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(1);
+    expect(mockTargetProvider.callApi).toHaveBeenCalledWith(
+      '12345678',
+      expect.any(Object),
+      undefined,
+    );
+    expect(result.output).toBe('target response');
+    expect(result.error).toBeUndefined();
+  });
 });
 
 describe('BestOfNProvider - Config Serialization', () => {

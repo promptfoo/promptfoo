@@ -30,6 +30,7 @@ import type {
 interface AuthoritativeMarkupInjectionConfig {
   injectVar: string;
   targetId?: string;
+  maxCharsPerMessage?: number;
 }
 
 export default class AuthoritativeMarkupInjectionProvider implements ApiProvider {
@@ -42,6 +43,7 @@ export default class AuthoritativeMarkupInjectionProvider implements ApiProvider
   constructor(
     options: ProviderOptions & {
       injectVar?: string;
+      maxCharsPerMessage?: number;
       targetId?: string;
     } = {},
   ) {
@@ -53,6 +55,10 @@ export default class AuthoritativeMarkupInjectionProvider implements ApiProvider
     invariant(typeof options.injectVar === 'string', 'Expected injectVar to be set');
     this.config = {
       injectVar: options.injectVar,
+      // Keep the layer step cap on the loaded instance so the target-call
+      // boundary can read it from test.provider.config after readTest
+      // replaces the provider descriptor.
+      ...(options.maxCharsPerMessage ? { maxCharsPerMessage: options.maxCharsPerMessage } : {}),
       targetId: options.targetId,
     };
     logger.debug('[AuthoritativeMarkupInjection] Constructor options', {
