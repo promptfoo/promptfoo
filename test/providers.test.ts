@@ -101,7 +101,7 @@ describe('loadApiProvider', () => {
       return { id: () => 'child', callApi } as unknown as OpenAiChatCompletionProvider;
     });
     await wrapper.callApi('target', {
-      originalProvider: { id: () => 'target', callApi: vi.fn() },
+      originalProvider: { id: () => 'target', callApi: async () => ({ output: 'target' }) },
       prompt: { raw: 'target', label: 'test' },
       vars: {},
     });
