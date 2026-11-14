@@ -158,7 +158,12 @@ export class BedrockMantleChatProvider extends OpenAiChatCompletionProvider {
     }
     // Gemma 4 accepts this field even though the base provider's OpenAI-specific reasoning
     // model detection does not recognize its Bedrock model id.
-    if (model.startsWith('google.gemma-4-') && result.config.reasoning_effort !== undefined) {
+    if (
+      model.startsWith('google.gemma-4-') &&
+      result.config.isReasoningModel !== false &&
+      result.config.reasoning_effort !== undefined &&
+      result.body.reasoning_effort === undefined
+    ) {
       result.body.reasoning_effort = result.config.reasoning_effort;
     }
     if (isBedrockGrokModel(model)) {

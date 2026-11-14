@@ -1034,7 +1034,10 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     // should promote a custom deployment to "reasoning model" status, otherwise
     // max_output_tokens defaults change unexpectedly.
     const isReasoningModel =
-      isGPT6Model || isEffectiveReasoningModel || isAzureResponsesDeploymentWithReasoningConfig;
+      this.resolveReasoningModel(
+        config,
+        isEffectiveReasoningModel || isAzureResponsesDeploymentWithReasoningConfig,
+      ) || isGPT6Model;
     const supportsVerbosity =
       isGPT6Model || isEffectiveGpt5Model || isAzureResponsesDeploymentWithVerbosityConfig;
 
@@ -1043,7 +1046,11 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       isAzureResponsesDeploymentWithReasoningConfig,
       isReasoningModel,
       supportsVerbosity,
-      supportsTemperature: isGPT6Model || supportsTemperature,
+      supportsTemperature:
+        isGPT6Model ||
+        config.isReasoningModel === false ||
+        (supportsTemperature &&
+          (config.isReasoningModel === undefined || isEffectiveReasoningModel)),
     };
   }
 
@@ -1107,6 +1114,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
         : undefined;
     const effectiveReasoningEffort = renderedReasoning?.effort ?? renderedReasoningEffort;
     const hasAzureReasoningEffort =
+      isReasoningModel &&
       isAzureResponsesDeploymentWithReasoningConfig &&
       effectiveReasoningEffort !== undefined &&
       effectiveReasoningEffort !== 'none';

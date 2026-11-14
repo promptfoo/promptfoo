@@ -488,9 +488,10 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       capabilityModelName.includes('/o4');
     const isGPT6Model = isGpt6Model(capabilityModelName);
     const isOpenRouterGpt6 = isGPT6Model && this.usesOpenRouter();
-    const isReasoningModel = usesConfiguredCapabilities
+    const detectedReasoning = usesConfiguredCapabilities
       ? this.isReasoningModel()
       : this.isReasoningCapabilityModel(capabilityModelName);
+    const isReasoningModel = this.resolveReasoningModel(config, detectedReasoning) || isGPT6Model;
     const maxCompletionTokens = isReasoningModel
       ? (config.max_completion_tokens ?? getEnvInt('OPENAI_MAX_COMPLETION_TOKENS'))
       : undefined;
@@ -499,19 +500,20 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         ? undefined
         : getEnvInt('OPENAI_MAX_TOKENS')
       : getEnvInt('OPENAI_MAX_TOKENS', 1024);
-    const maxTokens =
-      isReasoningModel || isGPT5Model ? undefined : (config.max_tokens ?? maxTokensDefault);
+    const maxTokens = isReasoningModel ? undefined : (config.max_tokens ?? maxTokensDefault);
 
     const temperatureDefault = config.omitDefaults
       ? getEnvString('OPENAI_TEMPERATURE') === undefined
         ? undefined
         : getEnvFloat('OPENAI_TEMPERATURE')
       : getEnvFloat('OPENAI_TEMPERATURE', 0);
+    const detectedTemperatureSupport = usesConfiguredCapabilities
+      ? this.supportsTemperature()
+      : this.supportsTemperatureForCapabilityModel(capabilityModelName);
     const supportsTemperature =
       isGPT6Model ||
-      (usesConfiguredCapabilities
-        ? this.supportsTemperature()
-        : this.supportsTemperatureForCapabilityModel(capabilityModelName));
+      config.isReasoningModel === false ||
+      (detectedTemperatureSupport && (config.isReasoningModel === undefined || detectedReasoning));
     const temperature = supportsTemperature
       ? (config.temperature ?? temperatureDefault)
       : undefined;
@@ -604,12 +606,13 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     if (
       !isGPT6Model &&
       config.reasoning_effort &&
-      (isReasoningModel || capabilityModelName.includes('gpt-oss'))
+      (isReasoningModel ||
+        (config.isReasoningModel !== false && capabilityModelName.includes('gpt-oss')))
     ) {
       body.reasoning_effort = renderVarsInObject(config.reasoning_effort, context?.vars ?? {});
     }
 
-    if (config.reasoning && isOSeriesModel) {
+    if (config.reasoning && isOSeriesModel && config.isReasoningModel !== false) {
       body.reasoning = prepareOpenAiReasoning(config.reasoning, context?.vars);
     }
 
@@ -624,10 +627,10 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       body.store = config.store;
     }
 
-    // Sanitize body for models that reject max_tokens (e.g. GPT-5, reasoning models).
+    // Sanitize body for reasoning models that reject max_tokens.
     // This catches max_tokens introduced via passthrough or YAML anchors that bypass
     // the normal maxTokens variable logic above.
-    if ((isReasoningModel || isGPT5Model) && 'max_tokens' in body) {
+    if (isReasoningModel && 'max_tokens' in body) {
       delete body.max_tokens;
     }
 
