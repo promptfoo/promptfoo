@@ -52,6 +52,7 @@ import type winston from 'winston';
 
 import type {
   EvalConversations,
+  EvalRegisters,
   RateLimitRegistryRef,
   ScoringFunction,
   Vars,
