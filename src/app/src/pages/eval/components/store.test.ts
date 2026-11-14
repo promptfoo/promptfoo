@@ -213,7 +213,7 @@ describe('useTableStore', () => {
     ];
 
     act(() => {
-      useTableStore.setState({ filteredMetrics: initialMetrics });
+      useTableStore.setState({ filteredMetrics: initialMetrics, nonEmptyPromptIndices: [0] });
     });
 
     const newEvalId = 'new-eval-id';
@@ -224,6 +224,7 @@ describe('useTableStore', () => {
 
     const state = useTableStore.getState();
     expect(state.filteredMetrics).toBeNull();
+    expect(state.nonEmptyPromptIndices).toBeNull();
     expect(state.evalId).toBe(newEvalId);
   });
 
@@ -2415,6 +2416,7 @@ describe('useTableStore', () => {
         totalCount: 100,
         filteredCount: 50,
         filteredMetrics: mockFilteredMetrics,
+        nonEmptyPromptIndices: [0],
         config: {},
         version: 4,
         author: 'test',
@@ -2432,6 +2434,7 @@ describe('useTableStore', () => {
 
       const state = useTableStore.getState();
       expect(state.filteredMetrics).toEqual(mockFilteredMetrics);
+      expect(state.nonEmptyPromptIndices).toEqual([0]);
     });
 
     it('should set `filteredMetrics` to null after a successful `fetchEvalData` call when no filters are active', async () => {
@@ -2443,6 +2446,7 @@ describe('useTableStore', () => {
           totalCount: 0,
           filteredCount: 0,
           filteredMetrics: null,
+          nonEmptyPromptIndices: null,
         }),
       });
 
@@ -2452,6 +2456,7 @@ describe('useTableStore', () => {
 
       const state = useTableStore.getState();
       expect(state.filteredMetrics).toBe(null);
+      expect(state.nonEmptyPromptIndices).toBeNull();
     });
 
     it('should update `filteredMetrics` when `setFilteredMetrics` is called with a valid array of metrics, and reset to null when called with null', () => {

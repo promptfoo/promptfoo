@@ -1616,6 +1616,7 @@ function ResultsTable({
     config,
     version,
     filteredResultsCount,
+    nonEmptyPromptIndices,
     fetchEvalData,
     isFetching,
     filters,
@@ -1635,9 +1636,37 @@ function ResultsTable({
     return config?.redteam !== undefined;
   }, [config?.redteam]);
 
+  const hasFilteredResultView =
+    Boolean(debouncedSearchText) || filterMode !== 'all' || filters.appliedCount > 0;
+
+  // Auto-hide columns only from the full filtered-result summary. The loaded body is
+  // page-scoped and cannot distinguish missing results from valid empty-text outputs.
+  const effectiveColumnVisibility = React.useMemo(() => {
+    if (inComparisonMode || !hasFilteredResultView || nonEmptyPromptIndices == null) {
+      return columnVisibility;
+    }
+
+    const visibility: VisibilityState = { ...columnVisibility };
+    const nonEmptyPrompts = new Set(nonEmptyPromptIndices);
+    head.prompts.forEach((_, idx) => {
+      if (!nonEmptyPrompts.has(idx)) {
+        visibility[`Prompt ${idx + 1}`] = false;
+      }
+    });
+    return visibility;
+  }, [
+    columnVisibility,
+    hasFilteredResultView,
+    head.prompts,
+    inComparisonMode,
+    nonEmptyPromptIndices,
+  ]);
+
   const visiblePromptCount = React.useMemo(
-    () => head.prompts.filter((_, idx) => columnVisibility[`Prompt ${idx + 1}`] !== false).length,
-    [head.prompts, columnVisibility],
+    () =>
+      head.prompts.filter((_, idx) => effectiveColumnVisibility[`Prompt ${idx + 1}`] !== false)
+        .length,
+    [head.prompts, effectiveColumnVisibility],
   );
 
   const [lightboxOpen, setLightboxOpen] = React.useState(false);
@@ -2176,7 +2205,7 @@ function ResultsTable({
     manualPagination: true,
     pageCount,
     state: {
-      columnVisibility,
+      columnVisibility: effectiveColumnVisibility,
       columnSizing,
       pagination,
     },

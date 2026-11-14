@@ -292,6 +292,12 @@ interface TableState {
   setFilteredMetrics: (metrics: PromptMetrics[] | null) => void;
 
   /**
+   * Prompt indices that contain persisted output across the complete filtered result set.
+   * null means column auto-hide metadata is unavailable or not applicable.
+   */
+  nonEmptyPromptIndices: number[] | null;
+
+  /**
    * Evaluation-level statistics including durationMs (wall-clock time).
    * Set automatically by fetchEvalData from API response.
    */
@@ -529,7 +535,8 @@ const clearFilters = (prevState: TableState) => ({
 export const useTableStore = create<TableState>()(
   subscribeWithSelector((set, get) => ({
     evalId: null,
-    setEvalId: (evalId: string) => set(() => ({ evalId, filteredMetrics: null })),
+    setEvalId: (evalId: string) =>
+      set(() => ({ evalId, filteredMetrics: null, nonEmptyPromptIndices: null })),
 
     author: null,
     setAuthor: (author: string | null) => set(() => ({ author })),
@@ -563,6 +570,7 @@ export const useTableStore = create<TableState>()(
     filteredMetrics: null,
     setFilteredMetrics: (metrics: PromptMetrics[] | null) =>
       set(() => ({ filteredMetrics: metrics })),
+    nonEmptyPromptIndices: null,
 
     stats: null,
 
@@ -669,6 +677,7 @@ export const useTableStore = create<TableState>()(
             shouldHighlightSearchText: searchText !== '',
             // Store filtered metrics from backend (null when no filters or feature disabled)
             filteredMetrics: data.filteredMetrics || null,
+            nonEmptyPromptIndices: data.nonEmptyPromptIndices ?? null,
             // Store evaluation-level stats including durationMs
             stats: data.stats || null,
             filters: {

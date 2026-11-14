@@ -1605,6 +1605,10 @@
                         "totalCount": { "type": "number" },
                         "filteredCount": { "type": "number" },
                         "filteredMetrics": { "type": ["array", "null"], "items": {} },
+                        "nonEmptyPromptIndices": {
+                          "type": ["array", "null"],
+                          "items": { "type": "integer", "minimum": 0 }
+                        },
                         "config": { "type": "object", "additionalProperties": {} },
                         "author": { "type": ["string", "null"] },
                         "version": { "type": "number" },
