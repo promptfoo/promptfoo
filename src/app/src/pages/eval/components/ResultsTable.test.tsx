@@ -14,7 +14,6 @@ import EvalOutputCell from './EvalOutputCell';
 import * as ProviderDisplayModule from './ProviderDisplay';
 import ResultsTable from './ResultsTable';
 import { useResultsViewSettingsStore, useTableStore } from './store';
-import type { SubmitRatingRequest } from '@promptfoo/types/api/eval';
 
 type GradingResult = NonNullable<ComponentProps<typeof EvalOutputCell>['output']['gradingResult']>;
 
@@ -1841,7 +1840,7 @@ describe('ResultsTable rating actions', () => {
     return table;
   }
 
-  async function savedRating(expectedAction: NonNullable<SubmitRatingRequest['action']>) {
+  async function savedRating(expectedAction: 'rate' | 'clear' | 'annotate') {
     await waitFor(() => {
       expect(callApi).toHaveBeenCalledWith(
         '/eval/123/results/test-output-1/rating',
@@ -1853,8 +1852,9 @@ describe('ResultsTable rating actions', () => {
     const request = callApi.mock.calls.find(
       ([url]) => url === '/eval/123/results/test-output-1/rating',
     )![1];
-    const { action, ...payload } = JSON.parse(request!.body as string) as GradingResult &
-      SubmitRatingRequest;
+    const { action, ...payload } = JSON.parse(request!.body as string) as GradingResult & {
+      action: unknown;
+    };
     expect(action).toBe(expectedAction);
     expect(updatedOutput.gradingResult).not.toHaveProperty('action');
     expect(payload).toEqual(updatedOutput.gradingResult);
