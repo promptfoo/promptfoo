@@ -7,7 +7,6 @@ import { FILE_METADATA_KEY } from '../constants';
 import { getEnvBool, getEnvInt } from '../envars';
 import { collectFileMetadata, renderPrompt } from '../evaluatorHelpers';
 import logger from '../logger';
-import { generateIdFromPrompt } from '../prompts/id';
 import { type AgentWorkspace, createAgentWorkspaceForConfig } from '../providers/agentWorkspace';
 import { providerRegistry } from '../providers/providerRegistry';
 import { maybeWrapMcpProviderForRedteam } from '../redteam/mcpTargetProvider';
@@ -116,7 +115,7 @@ export function buildConversationKey(
   const conversationId = test.metadata?.conversationId;
   return JSON.stringify([
     getProviderIdentifier(provider),
-    prompt.id ?? generateIdFromPrompt(prompt),
+    prompt.id,
     promptIndex,
     conversationId == null ? null : String(conversationId),
     repeatIndex,
