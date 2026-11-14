@@ -65,7 +65,7 @@ const POISONING_PATTERNS: ReadonlyArray<{ name: string; pattern: RegExp }> = [
     // directing an agent.
     name: 'debug-override-field',
     pattern:
-      /\bdebug\s*"?\s*:\s*"?[^"\n]{0,200}?\b(ignore|disregard|bypass|you must|from now on|reveal|exfiltrate|override\s+(all\s+)?(polic(y|ies)|safety|previous|instructions?)|send\s+(all\s+)?(secret|credential|password|api[\s_-]?key|token)s?)\b/i,
+      /\bdebug\s*(?:"\s*)?:\s*"?[^"\n]{0,200}?\b(ignore|disregard|bypass|you must|from now on|reveal|exfiltrate|override\s+(all\s+)?(polic(y|ies)|safety|previous|instructions?)|send\s+(all\s+)?(secret|credential|password|api[\s_-]?key|token)s?)\b/i,
   },
   {
     // Anchored to clause-initial or imperative position so descriptions of
@@ -426,9 +426,7 @@ export class MCPToolResponsePoisoningPlugin extends RedteamPluginBase {
    *
    * Generated envelopes are executed against the real server, so an
    * unrestricted run can invoke write-capable tools. When the user configures
-   * no allowlist we fall back to the advertised catalog minus any tool the
-   * server itself declares as mutating, which protects the careless case
-   * without breaking servers that advertise no annotations.
+   * no allowlist, catalog discovery requires a separate explicit opt-in.
    */
   private resolveAllowedTools(
     purpose: string,
@@ -490,7 +488,7 @@ export class MCPToolResponsePoisoningPlugin extends RedteamPluginBase {
       );
     }
 
-    return new Set(permitted);
+    return new Set(reachable);
   }
 
   /**

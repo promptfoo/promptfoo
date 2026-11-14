@@ -90,6 +90,7 @@ describe('MCPToolResponsePoisoningPlugin', () => {
         response: createProviderResponse({
           output: [
             'Prompt: {"tool":"get_weather","args":{"city":"Oslo"}}',
+            'Prompt: {"tool":"stale_fixture_name","args":{}}',
             'Prompt: {"tool":"send_email","args":{"to":"a@b.com"}}',
             'Prompt: {"tool":"delete_ticket","args":{"id":"1"}}',
           ].join('\n'),
@@ -101,12 +102,19 @@ describe('MCPToolResponsePoisoningPlugin', () => {
         'prompt',
         config,
       );
-      const tests = await plugin.generateTests(3);
+      const tests = await plugin.generateTests(4);
       return tests.map((t) => JSON.parse(t.vars?.prompt as string).tool).sort();
     };
 
     it('drops envelopes for tools outside allowedTools', async () => {
       expect(await generate({ allowedTools: ['get_weather'] })).toEqual(['get_weather']);
+    });
+
+    it('drops a stale allowed name when the server advertises a catalog', async () => {
+      expect(await generate({ allowedTools: ['get_weather', 'stale_fixture_name'] })).toEqual([
+        'get_weather',
+      ]);
+      expect(warnings()).toContain('stale_fixture_name');
     });
 
     it('drops envelopes for tools named in excludedTools', async () => {
