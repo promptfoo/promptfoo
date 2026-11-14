@@ -474,6 +474,7 @@ describe('OpenRouter', () => {
 
         expect(result).toMatchObject({
           output,
+          latencyMs: expect.any(Number),
           finishReason,
           isRefusal: true,
           guardrails: { flagged: true },
@@ -605,6 +606,7 @@ describe('OpenRouter', () => {
 
         const malformed = await provider.callApi('Test prompt');
         expect(malformed).toEqual({
+          latencyMs: expect.any(Number),
           error: 'Malformed response data: expected choices[0].message',
           tokenUsage: { total: 5, prompt: 3, completion: 2, numRequests: 1 },
           cached: false,
@@ -666,6 +668,7 @@ describe('OpenRouter', () => {
         // the partial output that rode along must never be graded.
         expect(failed.error).toBe(`API error: ${privateDiagnostic}`);
         expect(failed.error).not.toContain('partial output must not be graded');
+        expect(failed.latencyMs).toEqual(expect.any(Number));
         expect(failed).toMatchObject({
           tokenUsage: { total: 5, prompt: 3, completion: 2, numRequests: 1 },
           cached: false,
@@ -709,6 +712,7 @@ describe('OpenRouter', () => {
 
         expect(result).toEqual({
           error: 'API error: OpenRouter provider returned a generation error',
+          latencyMs: expect.any(Number),
           tokenUsage: { numRequests: 1 },
           cached: false,
           cost: undefined,
@@ -1334,6 +1338,7 @@ describe('OpenRouter', () => {
     it('should preserve fields from the original response on cache hits', async () => {
       const restoreEnv = mockProcessEnv({ OPENROUTER_API_KEY: 'test-key' });
 
+      vi.useFakeTimers({ toFake: ['Date'] });
       try {
         const mockResponse = {
           choices: [{ message: { content: 'The output' }, finish_reason: 'stop' }],
@@ -1345,17 +1350,21 @@ describe('OpenRouter', () => {
           statusText: 'OK',
           headers: new Headers({ 'Content-Type': 'application/json' }),
         });
-        mockedFetchWithRetries.mockResolvedValueOnce(response);
+        mockedFetchWithRetries.mockImplementationOnce(async () => {
+          vi.setSystemTime(Date.now() + 43);
+          return response;
+        });
 
         const cachedProvider = new OpenRouterProvider('google/gemini-2.5-pro', {});
 
         const first = await cachedProvider.callApi('Repeatable prompt');
         expect(first.cached).toBe(false);
         expect(first.output).toBe('The output');
-        expect(first.latencyMs).toEqual(expect.any(Number));
+        expect(first.latencyMs).toBe(43);
         expect(first.finishReason).toBe('stop');
         expect(mockedFetchWithRetries).toHaveBeenCalledTimes(1);
 
+        vi.setSystemTime(Date.now() + 1000);
         const second = await cachedProvider.callApi('Repeatable prompt');
         expect(mockedFetchWithRetries).toHaveBeenCalledTimes(1); // Still 1
         expect(second).toEqual({
@@ -1366,6 +1375,7 @@ describe('OpenRouter', () => {
           tokenUsage: { total: 10, cached: 10, numRequests: 0 },
         });
       } finally {
+        vi.useRealTimers();
         restoreEnv();
       }
     });

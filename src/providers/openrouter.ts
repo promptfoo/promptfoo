@@ -297,6 +297,7 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
                 ),
           ...(data.usage ? { tokenUsage: getTokenUsageWithRequestCount(data, cached) } : {}),
           cached,
+          latencyMs,
           cost: this.calculateResponseCost(data, config),
           isRefusal: true,
           guardrails: {
@@ -324,6 +325,7 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
           error: `API error: ${choiceError.error.message}`,
           ...(data.usage ? { tokenUsage: getTokenUsageWithRequestCount(data, cached) } : {}),
           cached,
+          latencyMs,
           cost: this.calculateResponseCost(data, config),
           raw: data,
           finishReason: 'error',
@@ -344,6 +346,7 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
       if (status < 200 || status >= 300) {
         const rateLimitKind = getOpenAiGatewayRateLimitKind(data);
         return {
+          latencyMs,
           error: `API error: ${status} ${statusText}\n${typeof data === 'string' ? data : JSON.stringify(data)}`,
           metadata: {
             ...(rateLimitKind ? { rateLimitKind } : {}),
@@ -354,7 +357,7 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
       // Cache coalescing can complete this diagnostic before a shared caller aborts.
       // Usable choices and all other processing retain their cancellation checks.
       if (isOpenAiErrorOnlyResponse(data)) {
-        return { error: formatOpenAiError(data) };
+        return { error: formatOpenAiError(data), latencyMs };
       }
       throwIfAborted(callApiOptions?.abortSignal);
     } catch (err) {
@@ -381,6 +384,7 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
     if (data?.error) {
       return {
         error: formatOpenAiError(data as OpenAIErrorResponse),
+        latencyMs,
       };
     }
 
@@ -401,6 +405,7 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
             : 'Malformed response data: expected choices[0].message',
         tokenUsage: getTokenUsageWithRequestCount(data, cached),
         cached,
+        latencyMs,
         // error paths can reach here with a null body; no data, no cost
         cost: data ? this.calculateResponseCost(data, config) : undefined,
         metadata: data ? getOpenRouterBillingMetadata(data) : undefined,
@@ -417,6 +422,7 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
         error: 'API error: OpenRouter provider returned a generation error',
         tokenUsage: getTokenUsageWithRequestCount(data, cached),
         cached,
+        latencyMs,
         cost: this.calculateResponseCost(data, config),
         metadata: getOpenRouterBillingMetadata(data),
         finishReason,
@@ -435,6 +441,7 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
         error: 'Malformed response data: unusable choices[0].message',
         tokenUsage: getTokenUsageWithRequestCount(data, cached),
         cached,
+        latencyMs,
         cost: this.calculateResponseCost(data, config),
         metadata: getOpenRouterBillingMetadata(data),
         ...(finishReason && { finishReason }),
@@ -454,6 +461,7 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
             : message.refusal || 'Content filtered by the model provider.',
         tokenUsage: getTokenUsageWithRequestCount(data, cached),
         cached,
+        latencyMs,
         cost: this.calculateResponseCost(data, config),
         isRefusal: true,
         guardrails: { flagged: true },
@@ -477,6 +485,7 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
         },
         tokenUsage: getTokenUsageWithRequestCount(data, cached),
         cached,
+        latencyMs,
         cost: this.calculateResponseCost(data, config),
         metadata: getOpenRouterBillingMetadata(data),
         ...(finishReason && { finishReason }),
@@ -525,9 +534,9 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
       output,
       tokenUsage: getTokenUsageWithRequestCount(data, cached),
       cached,
+      latencyMs,
       cost: this.calculateResponseCost(data, config),
       metadata: getOpenRouterBillingMetadata(data),
-      ...(latencyMs !== undefined && { latencyMs }),
       ...(finishReason && { finishReason }),
     };
   }
