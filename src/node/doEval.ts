@@ -879,7 +879,7 @@ async function doEvalWithEnv(
     const runtimeOptions: EvalRuntimeOptions = {
       ...options,
       ...(providerFilter ? { providerFilter } : {}),
-      ...(filterMetadataAny !== undefined ? { metadataAnyFiltered: true } : {}),
+      ...(filterMetadataAny === undefined ? {} : { metadataAnyFiltered: true }),
     };
 
     if (!resumeEval && config.metadata && 'generationAccounting' in config.metadata) {
