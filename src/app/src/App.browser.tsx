@@ -144,13 +144,27 @@ describe.each(['', '/promptfoo'])('browser routing with basename "%s"', (basenam
     expect(window.location.pathname).toBe(basename + '/eval/example');
   });
 
-  it('replaces a legacy redirect without adding a browser history entry', async () => {
-    const historyLength = window.history.length;
-    renderRoute('/report', basename);
-    await expect.element(page.getByText('ReportPage', { exact: true })).toBeVisible();
-    expect(window.location.pathname).toBe(basename + '/reports');
-    expect(window.history.length).toBe(historyLength);
-  });
+  it.each([
+    ['/', '/eval', 'EvalPage'],
+    ['/dashboard', '/eval', 'EvalPage'],
+    ['/dashboard/', '/eval', 'EvalPage'],
+    ['/report', '/reports', 'ReportPage'],
+  ])(
+    'replaces %s with %s without adding a browser history entry',
+    async (path, target, pageName) => {
+      const historyLength = window.history.length;
+      renderRoute(path, basename);
+      await expect.element(page.getByText(pageName, { exact: true })).toBeVisible();
+      expect(window.location.pathname).toBe(basename + target);
+      expect(window.history.length).toBe(historyLength);
+
+      await page.getByRole('link', { name: 'Open history' }).click();
+      await expect.element(page.getByText('HistoryPage', { exact: true })).toBeVisible();
+      window.history.back();
+      await expect.element(page.getByText(pageName, { exact: true })).toBeVisible();
+      expect(window.location.pathname).toBe(basename + target);
+    },
+  );
 
   it('uses the real login page to redirect to a report with query parameters', async () => {
     renderRoute('/login?redirect=%2Freports%3FevalId%3Dexample%26view%3Dtable', basename);

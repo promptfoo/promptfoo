@@ -2,6 +2,12 @@ packages:
   - 'src/app'
   - 'site'
 
+# This server imports Zod directly but omits it from its published dependencies.
+packageExtensions:
+  '@modelcontextprotocol/server-filesystem@2026.8.31':
+    dependencies:
+      zod: '^4.3.6'
+
 # Supply-chain floor for local pnpm installs. The unit is MINUTES, so 14400 = 10 days,
 # matching the "10 days" minimumReleaseAge renovate.json already applies to the npm
 # datasource. Scope note: CI, the Dockerfile, and the publish workflow all install with
@@ -15,7 +21,6 @@ minimumReleaseAge: 14400
 # pnpm.onlyBuiltDependencies for older pnpm; keep the two lists identical.
 allowBuilds:
   '@huggingface/transformers': true
-  '@playwright/browser-chromium': true
   core-js: true
   core-js-pure: true
   esbuild: true
