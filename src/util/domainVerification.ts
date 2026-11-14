@@ -203,7 +203,10 @@ export async function verifyHttpUrl(
     if (signal?.aborted) {
       return inconclusive('timeout');
     }
-    const cause = error instanceof Error && error.cause instanceof Error ? error.cause : error;
+    const cause =
+      error instanceof Error && 'cause' in error && error.cause instanceof Error
+        ? error.cause
+        : error;
     return inconclusive(cause instanceof Error ? cause.message : 'unknown error');
   }
 }
