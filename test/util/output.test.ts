@@ -1033,7 +1033,7 @@ describe('writeOutput', () => {
     });
   });
 
-  it('ignores missing legacy latency when summing JUnit suite time', async () => {
+  it('ignores missing, negative and nonfinite legacy latency when summing JUnit suite time', async () => {
     const makeLegacyResult = (testIdx: number, latencyMs?: number): EvaluateResult =>
       ({
         success: true,
@@ -1053,7 +1053,14 @@ describe('writeOutput', () => {
     const eval_ = {
       createdAt: '2026-05-03T15:00:00.000Z',
       fetchResultsBatched: vi.fn(),
-      getResults: vi.fn().mockResolvedValue([makeLegacyResult(0, 2000), makeLegacyResult(1)]),
+      getResults: vi
+        .fn()
+        .mockResolvedValue([
+          makeLegacyResult(0, 2000),
+          makeLegacyResult(1),
+          makeLegacyResult(2, -500),
+          makeLegacyResult(3, Number.POSITIVE_INFINITY),
+        ]),
       persisted: false,
       results: [],
       useOldResults: () => true,

@@ -46,12 +46,14 @@ function normalizeInlineText(value: string | undefined, fallback: string): strin
   return truncateText(sanitized || fallback, MAX_JUNIT_NAME_LENGTH);
 }
 
+function nonnegativeDurationMs(durationMs: number | undefined): number {
+  return typeof durationMs === 'number' && Number.isFinite(durationMs) && durationMs > 0
+    ? durationMs
+    : 0;
+}
+
 function formatDurationSeconds(durationMs: number | undefined): string {
-  const safeDurationMs =
-    typeof durationMs === 'number' && Number.isFinite(durationMs) && durationMs > 0
-      ? durationMs
-      : 0;
-  return Number((safeDurationMs / 1000).toFixed(3)).toString();
+  return Number((nonnegativeDurationMs(durationMs) / 1000).toFixed(3)).toString();
 }
 
 function getEvaluationTimestamp(evalRecord: Eval): string | undefined {
@@ -178,7 +180,7 @@ async function buildJunitSuites(evalRecord: Eval): Promise<JunitSuite[]> {
       testcase: buildJunitTestCase(result),
       testIdx: result.testIdx,
     });
-    suite.timeMs += Number.isFinite(result.latencyMs) ? result.latencyMs : 0;
+    suite.timeMs += nonnegativeDurationMs(result.latencyMs);
     if (!result.success) {
       if (result.failureReason === ResultFailureReason.ASSERT) {
         suite.failures += 1;
