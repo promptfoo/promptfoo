@@ -34,6 +34,7 @@ import {
   collectGroundingMetadata,
   collectThoughtSignatures,
   formatCandidateContents,
+  formatGeminiThinking,
   geminiFormatAndSystemInstructions,
   getGoogleResponseServiceTier,
   loadFile,
@@ -5577,6 +5578,29 @@ describe('util', () => {
       expect(formatCandidateContents({ content: { parts: [signedPart] } } as any)).toBe(
         'Signed response',
       );
+    });
+
+    it('labels streamed thought text once and preserves the final answer', () => {
+      const parts = [
+        { text: 'Add. ', thought: true },
+        { text: 'Done.\n', thought: true },
+        { text: '42' },
+      ];
+      expect(formatGeminiThinking(parts, undefined)).toBe('Thinking: Add. Done.\n\n42');
+      expect(formatGeminiThinking(parts, false)).toBe('42');
+      expect(formatGeminiThinking([{ text: '  ', thought: true }, { text: '42' }], true)).toBe(
+        '42',
+      );
+    });
+
+    it('preserves thought images and signed calls when filtering thought text', () => {
+      const thought = { text: 'Look it up.', thought: true };
+      const image = { thought: true, inlineData: { mimeType: 'image/png', data: 'AA==' } };
+      const call = { functionCall: { name: 'f', args: {} }, thoughtSignature: 'sig' };
+      const parts = [thought, image, call];
+      expect(formatGeminiThinking(parts, undefined)).toEqual(parts);
+      expect(formatGeminiThinking(parts, false)).toEqual([image, call]);
+      expect(formatCandidateContents({ content: { parts } } as any)).toEqual(parts);
     });
 
     it('collects thought signatures across streamed candidate parts', () => {

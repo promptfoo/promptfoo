@@ -40,9 +40,10 @@ import {
   calculateGoogleCostFromUsage,
   collectGroundingMetadata,
   collectThoughtSignatures,
-  formatCandidateContents,
+  formatGeminiThinking,
   geminiFormatAndSystemInstructions,
   getCandidate,
+  getCandidateParts,
   getGoogleClient,
   getGoogleResponseServiceTier,
   getVertexServiceTierHeaders,
@@ -50,7 +51,6 @@ import {
   loadCredentials,
   mergeGoogleCompletionOptions,
   mergeGoogleRequestTools,
-  mergeParts,
   normalizeGeminiAudio,
   normalizeGoogleServiceTier,
   normalizeSafetySettings,
@@ -79,6 +79,7 @@ import type {
   ClaudeResponse,
   ClaudeThinkingConfig,
   GoogleProviderConfig,
+  Part,
 } from './types';
 import type {
   GeminiApiResponse,
@@ -242,6 +243,14 @@ function getVertexBodyCacheKey(prefix: string, body: unknown, apiHost: string): 
     .update('\0')
     .update(serialized)
     .digest('hex')}`;
+}
+
+/** Whether a Gemini request sets `thinkingConfig.includeThoughts`, in camel or snake case. */
+function requestsThoughtSummaries(generationConfig: unknown): boolean {
+  const config = (generationConfig ?? {}) as Record<string, any>;
+  return [config.thinkingConfig, config.thinking_config].some(
+    (thinking) => thinking?.includeThoughts === true || thinking?.include_thoughts === true,
+  );
 }
 
 function getVertexClientOptions(provider: { config: GoogleProviderConfig }) {
@@ -789,8 +798,13 @@ export class VertexChatProvider extends GoogleGenericProvider {
       )
         ? await getCache()
         : undefined;
+    // Cached responses hold formatted output. Requests for thought summaries get their own keys,
+    // so entries saved with the summary glued to the answer are not served; other keys are unchanged.
+    const thinkingCacheKey = requestsThoughtSummaries(body.generationConfig)
+      ? `:showThinking=${config.showThinking !== false}`
+      : '';
     const cacheKey = cache
-      ? getVertexBodyCacheKey(`vertex:${this.modelName}`, cacheBody, apiHost)
+      ? getVertexBodyCacheKey(`vertex:${this.modelName}${thinkingCacheKey}`, cacheBody, apiHost)
       : undefined;
 
     let response;
@@ -897,6 +911,7 @@ export class VertexChatProvider extends GoogleGenericProvider {
         }
         const dataWithResponse = normalizedData as GeminiResponseData[];
         let output;
+        const parts: Part[] = [];
         for (const datum of dataWithResponse) {
           // Check for blockReason first (before getCandidate) since blocked responses have no candidates
           if (datum.promptFeedback?.blockReason) {
@@ -976,7 +991,9 @@ export class VertexChatProvider extends GoogleGenericProvider {
           } else if (candidate.finishReason && candidate.finishReason === 'MAX_TOKENS') {
             // MAX_TOKENS is treated as a successful completion with the generated output
             if (candidate.content?.parts) {
-              output = mergeParts(output, formatCandidateContents(candidate));
+              for (const part of getCandidateParts(candidate)) {
+                parts.push(part);
+              }
             }
             const outputTokens = datum.usageMetadata?.candidatesTokenCount || 0;
             logger.debug(`Gemini API: MAX_TOKENS reached`, {
@@ -992,13 +1009,17 @@ export class VertexChatProvider extends GoogleGenericProvider {
               error: `Finish reason ${candidate.finishReason}: ${JSON.stringify(data)}`,
             };
           } else if (candidate.content?.parts) {
-            output = mergeParts(output, formatCandidateContents(candidate));
+            for (const part of getCandidateParts(candidate)) {
+              parts.push(part);
+            }
           } else if (candidate.finishReason !== 'STOP') {
             return {
               error: `No output found in response: ${JSON.stringify(data)}`,
             };
           }
         }
+
+        output = formatGeminiThinking(parts, config.showThinking);
 
         if (output === undefined || output === '') {
           return {
