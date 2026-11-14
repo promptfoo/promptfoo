@@ -2,6 +2,7 @@ import { getBedrockGovCloudTextRates } from '../bedrock/openaiGovCloudPricing';
 import { getGpt6Variant, isGpt6Model } from './gpt6';
 import {
   GPT_LONG_CONTEXT_THRESHOLD,
+  getOpenAICacheReadInputTokens,
   getOpenAICacheWriteInputTokens,
   isAzureOpenAiEndpoint,
   OPENAI_BILLING_MODELS,
@@ -1313,11 +1314,7 @@ export function extractOpenAIBillingUsage(rawUsage: any): OpenAIBillingUsage {
 
   return {
     totalInputTokens,
-    cachedInputTokens: getNumericValue(
-      // Some OpenAI-compatible APIs (e.g. Moonshot) report cached prompt tokens
-      // at the top level of usage instead of inside prompt_tokens_details.
-      inputDetails.cached_tokens ?? usage.cached_input_tokens ?? usage.cached_tokens,
-    ),
+    cachedInputTokens: getOpenAICacheReadInputTokens(usage) ?? 0,
     cacheWriteInputTokens: getOpenAICacheWriteInputTokens(usage) ?? 0,
     cacheWrite12hInputTokens: getNumericValue(
       inputDetails.cache_write_tokens_details?.ttl_12h_tokens,

@@ -6,6 +6,7 @@ import {
   extractOpenAIBillingUsage,
   type OpenAIProcessingTier,
 } from '../../../src/providers/openai/billing';
+import { getOpenAICompletionTokenDetails, getTokenUsage } from '../../../src/providers/openai/util';
 
 const createCachedResponsesUsage = () => ({
   input_tokens: 2000,
@@ -1069,6 +1070,17 @@ describe('OpenAI billing helpers', () => {
     expect(calculateOpenAIUsageCost('gpt-4o-mini', {}, topLevelCached)).toBeCloseTo(expected, 10);
     expect(calculateOpenAIUsageCost('gpt-4o-mini', {}, nestedCached)).toBeCloseTo(expected, 10);
     expect(extractOpenAIBillingUsage(topLevelCached).cachedInputTokens).toBe(800);
+  });
+
+  it.each([
+    [{ cached_input_tokens: 400, cached_tokens: 800 }, 400],
+    [{ prompt_tokens_details: { cached_tokens: 0 }, cached_tokens: 800 }, 0],
+  ])('uses the same cached count for billing and token reporting', (details, expected) => {
+    const usage = { prompt_tokens: 1000, completion_tokens: 100, ...details };
+
+    expect(extractOpenAIBillingUsage(usage).cachedInputTokens).toBe(expected);
+    expect(getTokenUsage({ usage }, false).completionDetails?.cacheReadInputTokens).toBe(expected);
+    expect(getOpenAICompletionTokenDetails(usage)?.cacheReadInputTokens ?? 0).toBe(expected);
   });
 
   it('applies Batch pricing to fine-tuned inference and leaves unsupported Flex and Fast unset', () => {
