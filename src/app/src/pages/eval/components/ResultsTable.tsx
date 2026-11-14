@@ -1668,6 +1668,7 @@ function ResultsTable({
   };
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
+  const [groupRatingRevision, setGroupRatingRevision] = React.useState(0);
   const handleRating = React.useCallback(
     async (
       rowIndex: number,
@@ -1713,12 +1714,19 @@ function ResultsTable({
             table: newTable,
           });
           useTableStore.getState().refreshFailureSummary();
+          if (
+            Object.values(filters.values).some(
+              (filter) => filter.type === 'error' && isFilterApplied(filter),
+            )
+          ) {
+            setGroupRatingRevision((revision) => revision + 1);
+          }
         } catch (error) {
           console.error('Failed to update table:', error);
         }
       }
     },
-    [body, head, setTable, evalId, inComparisonMode, showToast],
+    [body, head, setTable, evalId, inComparisonMode, showToast, filters.values, version],
   );
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: row positions should stay paired with the loaded body until the next page payload arrives.
@@ -1933,6 +1941,7 @@ function ResultsTable({
     comparisonEvalIds,
     debouncedSearchText,
     fetchEvalData,
+    groupRatingRevision,
     appliedFiltersString, // Use the stable string representation instead of filters.values
     // Removed filters.appliedCount since appliedFiltersString covers it
   ]);

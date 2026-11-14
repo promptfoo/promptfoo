@@ -928,7 +928,7 @@ export default class Eval {
   async getFailureSummary() {
     const db = await getDb();
     const rows = await db.all<{ id: string; error: string; count: number }>(sql`
-      SELECT ${failureGroupIdSql} AS id, SUBSTR(${failureReasonSql}, 1, 500) AS error, COUNT(*) AS count
+      SELECT ${failureGroupIdSql} AS id, COALESCE(NULLIF(SUBSTR(${failureReasonSql}, 1, 500), ''), 'Failure reason unavailable') AS error, COUNT(*) AS count
       FROM eval_results
       WHERE eval_id = ${this.id} AND success = 0
       GROUP BY ${failureReasonSql}

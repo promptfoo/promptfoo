@@ -1975,6 +1975,19 @@ describe('evaluator', () => {
   });
 
   describe('getFailureSummary', () => {
+    it('returns a usable preview for a failure beginning with a NUL', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 1, resultTypes: ['error'] });
+      const db = await getDb();
+      await db.run(
+        sql`UPDATE eval_results SET error = char(0) || 'details' WHERE eval_id = ${eval_.id}`,
+      );
+      const {
+        failures: [group],
+      } = await eval_.getFailureSummary();
+      expect(group.error).toBe('Failure reason unavailable');
+      expect(group.id).toMatch(/^[a-f0-9]{64}$/);
+    });
+
     it('keeps a selected group stable when its first result is re-rated or removed', async () => {
       const eval_ = await EvalFactory.create({ numResults: 3, resultTypes: ['error'] });
       const db = await getDb();
