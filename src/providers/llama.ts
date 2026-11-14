@@ -103,10 +103,14 @@ export class LlamaProvider implements ApiProvider {
         const message = typeof error === 'string' ? error : (error?.message ?? data?.message);
         const httpStatus = `${status} ${statusText}`.trimEnd();
         const detail = typeof message === 'string' && message ? `: ${message}` : '';
-        return { error: `API response error: ${httpStatus}${detail}` };
+        return { error: `API response error: ${httpStatus}${detail}`, cached, latencyMs };
       }
       if (typeof data?.content !== 'string') {
-        return { error: 'API response error: expected a string in the content field' };
+        return {
+          error: 'API response error: expected a string in the content field',
+          cached,
+          latencyMs,
+        };
       }
 
       return { output: data.content, cached, latencyMs };

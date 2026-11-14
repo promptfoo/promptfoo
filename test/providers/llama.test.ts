@@ -179,6 +179,7 @@ describe('LlamaProvider', () => {
 
       expect(await new LlamaProvider(modelName).callApi(prompt)).toEqual({
         error: `API response error: ${expected}`,
+        cached: false,
       });
       expect(deleteFromCache).toHaveBeenCalledTimes(status === 200 ? 1 : 0);
     });
@@ -192,6 +193,26 @@ describe('LlamaProvider', () => {
 
       expect(await new LlamaProvider(modelName).callApi(prompt)).toEqual({
         error: 'API response error: expected a string in the content field',
+        cached: false,
+      });
+      expect(deleteFromCache).toHaveBeenCalledOnce();
+    });
+
+    it.each([
+      [{}, 'API response error: expected a string in the content field'],
+      [{ error: 'generation failed' }, 'API response error: 200 OK: generation failed'],
+    ])('retains cache provenance for a malformed cached completion %j', async (data, error) => {
+      const deleteFromCache = vi.fn().mockResolvedValue(undefined);
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        ...createMockFetchResponse(data, { cached: true }),
+        latencyMs: 42,
+        deleteFromCache,
+      });
+
+      expect(await new LlamaProvider(modelName).callApi(prompt)).toEqual({
+        error,
+        cached: true,
+        latencyMs: 42,
       });
       expect(deleteFromCache).toHaveBeenCalledOnce();
     });
@@ -204,6 +225,7 @@ describe('LlamaProvider', () => {
 
       expect(await new LlamaProvider(modelName).callApi(prompt)).toEqual({
         error: 'API response error: 200 OK: generation failed',
+        cached: false,
       });
     });
   });
