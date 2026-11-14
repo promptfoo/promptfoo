@@ -886,14 +886,16 @@ describe('formatFetchError', () => {
   });
 
   it('does not serialize response bodies or credentials in object causes', () => {
-    const error = new Error('fetch failed', {
+    const error = Object.assign(new Error('fetch failed'), {
       cause: { response: 'private test payload', headers: { authorization: 'fixture-token' } },
     });
     expect(formatFetchError(error)).toBe('Error: fetch failed');
   });
 
   it('finds the transport cause behind a response-body error', () => {
-    const error = new Error('Failed to read response body', { cause: makeTerminatedError() });
+    const error = Object.assign(new Error('Failed to read response body'), {
+      cause: makeTerminatedError(),
+    });
 
     expect(describeFetchError(error)).toContain('SocketError: other side closed');
     expect(describeFetchError(error)).toContain('UND_ERR_SOCKET');
@@ -901,7 +903,7 @@ describe('formatFetchError', () => {
   });
 
   it('terminates when an error is its own cause', () => {
-    const error = new Error('fixture cycle');
+    const error = Object.assign(new Error('fixture cycle'), { cause: undefined as unknown });
     error.cause = error;
     expect(formatFetchError(error)).toBe('Error: fixture cycle');
   });

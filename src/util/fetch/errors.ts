@@ -494,8 +494,9 @@ function getErrorChain(error: Error): SystemError[] {
   const chain: SystemError[] = [];
   let cause: unknown = error;
   while (cause instanceof Error && chain.length < 5 && !chain.includes(cause)) {
-    chain.push(cause);
-    cause = cause.cause;
+    const current: SystemError = cause;
+    chain.push(current);
+    cause = current.cause;
   }
   return chain;
 }
@@ -524,7 +525,7 @@ export function formatFetchError(error: unknown): string {
   const chain = getErrorChain(error);
   let message = String(error);
   const causes = chain.slice(1).map(String);
-  const lastCause = chain.at(-1)?.cause;
+  const lastCause = chain[chain.length - 1]?.cause;
   if (typeof lastCause === 'string') {
     causes.push(lastCause);
   }
