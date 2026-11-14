@@ -684,7 +684,12 @@ describe('handleIsHtml', () => {
     ['<div><svg><circle r=1/></svg></div>', false],
     ['<div><svg><circle r="1"/></svg></div>', true],
   ])('validates source end tags for %s', (input, pass) => {
-    const result = handleIsHtml({ ...defaultParams, outputString: input, inverse: false });
+    const result = handleIsHtml({
+      ...defaultParams,
+      assertion: { type: 'is-html' },
+      outputString: input,
+      inverse: false,
+    });
     expect(result.pass).toBe(pass);
   });
 });
