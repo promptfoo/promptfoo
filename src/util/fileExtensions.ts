@@ -6,6 +6,7 @@ export {
   isPythonFile,
   isVideoFile,
   JAVASCRIPT_EXTENSIONS,
+  normalizeWindowsFileUrlPath,
   parseExecutableFileReference,
   parsePythonFileReference,
   parseRubyFileReference,

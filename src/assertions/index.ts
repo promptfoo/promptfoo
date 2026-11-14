@@ -39,6 +39,7 @@ import {
 } from '../types/index';
 import {
   isJavascriptFile,
+  normalizeWindowsFileUrlPath,
   parseExecutableFileReference,
   parsePythonFileReference,
   parseRubyFileReference,
@@ -507,7 +508,10 @@ async function runAssertionInternal({
       const rubyReference = parseRubyFileReference(fileReference);
       const { filePath: referencedPath, functionName } =
         rubyReference ?? pythonReference ?? parseExecutableFileReference(fileReference);
-      const filePath = path.resolve(basePath, referencedPath);
+      const filePath = path.resolve(
+        basePath,
+        normalizeWindowsFileUrlPath(referencedPath, process.platform),
+      );
 
       if (isJavascriptFile(filePath)) {
         // Load errors (missing file or export) are config mistakes and still throw.

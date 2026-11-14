@@ -48,6 +48,9 @@ function parseFiniteNumber(value: string | undefined): number | undefined {
 }
 
 export function assertionFromString(expected: string): Assertion {
+  if (isPythonFileReference(expected)) {
+    return { type: 'python', value: expected };
+  }
   // Legacy options
   if (
     expected.startsWith('javascript:') ||
@@ -79,13 +82,10 @@ export function assertionFromString(expected: string): Assertion {
       value: expected.slice(expected.startsWith('grade:') ? 6 : 11),
     };
   }
-  const hasPythonPrefix = expected.startsWith('python:');
-  if (hasPythonPrefix || isPythonFileReference(expected)) {
-    // The prefixed form carries an inline function body; the unprefixed form is a
-    // `file://` reference that the assertion layer resolves later.
+  if (expected.startsWith('python:')) {
     return {
       type: 'python',
-      value: hasPythonPrefix ? expected.slice('python:'.length).trim() : expected,
+      value: expected.slice('python:'.length).trim(),
     };
   }
 

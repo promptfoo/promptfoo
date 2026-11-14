@@ -77,6 +77,9 @@ describe('scriptBasedProvider', () => {
 
       expect(goFactory.test('file://path/provider.py:Class.GO')).toBe(false);
       expect(goFactory.test('file://path/provider.go:CallApi')).toBe(true);
+      expect(goFactory.test('file://path/provider.rb:Class.go')).toBe(false);
+      expect(pythonFactory.test('file://path/provider.rb:Class.py')).toBe(false);
+      expect(goFactory.test('file://path.go:archive/provider.py')).toBe(false);
       expect(pythonFactory.test('file://path/provider.PY:custom_call')).toBe(true);
     });
 

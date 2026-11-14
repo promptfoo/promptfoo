@@ -560,6 +560,7 @@ describe('assertionFromString', () => {
     'file://script.PY:get_assert',
     'file://script.PY:Check.run',
     'file://script.PY:Class.py',
+    'file://script.PY:Class.js',
     'file://script.PY:评分',
   ])('should preserve a Python file reference case-insensitively: %s', (expected) => {
     expect(assertionFromString(expected)).toEqual({

@@ -155,3 +155,8 @@ export function parseExecutableFileReference(filePath: string): {
 
   return { filePath };
 }
+
+/** Canonical Windows file URLs prefix the drive with a slash; POSIX paths may literally start with /C:/. */
+export function normalizeWindowsFileUrlPath(filePath: string, platform: string): string {
+  return platform === 'win32' && /^\/[A-Za-z]:[\\/]/.test(filePath) ? filePath.slice(1) : filePath;
+}

@@ -42,6 +42,7 @@ vi.mock('fs', async () => {
     readFileSync: vi.fn(),
     writeFileSync: vi.fn(),
     statSync: vi.fn(),
+    lstatSync: vi.fn(),
     readdirSync: vi.fn(),
     existsSync: vi.fn(),
     mkdirSync: vi.fn(),
@@ -896,11 +897,11 @@ describe('file utilities', () => {
     });
 
     describe('maybeLoadConfigFromExternalFile with assertion detection', () => {
-      it('should preserve Python assertion file references', () => {
+      it.each(['python', 'not-python'])('preserves a bare file reference for %s', (type) => {
         const config = {
           assert: [
             {
-              type: 'python',
+              type,
               value: 'file://good_assertion.py',
             },
           ],
@@ -1773,7 +1774,7 @@ describe('file utilities', () => {
     });
 
     it('should parse a mixed-case Python path with a function selector', () => {
-      vi.spyOn(fs, 'existsSync').mockReturnValue(true);
+      vi.mocked(fs.lstatSync).mockReturnValueOnce({ isFile: () => true } as fs.Stats);
       vi.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
       expect(parsePathOrGlob('/base', 'provider.PY:custom_call')).toEqual({
         extension: '.PY',
@@ -1795,6 +1796,16 @@ describe('file utilities', () => {
         isPathPattern: false,
         filePath: path.join('/base', 'provider.py'),
       });
+    });
+
+    it('keeps a dangling mixed-case symlink ahead of its lowercase sibling', () => {
+      vi.mocked(fs.lstatSync).mockReturnValueOnce({ isSymbolicLink: () => true } as fs.Stats);
+      vi.mocked(fs.existsSync).mockImplementation(
+        (name) => name === path.join('/base', 'provider.py'),
+      );
+      expect(parsePathOrGlob('/base', 'provider.PY').filePath).toBe(
+        path.join('/base', 'provider.PY'),
+      );
     });
 
     it('should parse a Go file path with function name', async () => {

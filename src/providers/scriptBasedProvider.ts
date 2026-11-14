@@ -1,4 +1,9 @@
-import { getResolvedRelativePath, parseExecutableFileReference } from '../util/file';
+import {
+  getResolvedRelativePath,
+  isPythonFile,
+  parseExecutableFileReference,
+  parseRubyFileReference,
+} from '../util/file';
 
 import type { LoadApiProviderContext } from '../types/index';
 import type { ApiProvider, ProviderOptions } from '../types/providers';
@@ -24,10 +29,16 @@ export function createScriptBasedProviderFactory(
 
       // Check file extension only if fileExtension is provided
       if (fileExtension && providerPath.startsWith('file://')) {
-        const { filePath } = parseExecutableFileReference(providerPath.slice('file://'.length));
-        const lowerPath = filePath.toLowerCase();
-        const lowerExtension = `.${fileExtension.toLowerCase()}`;
-        return lowerPath.endsWith(lowerExtension) || lowerPath.includes(`${lowerExtension}:`);
+        const reference = providerPath.slice('file://'.length);
+        const { filePath } =
+          parseRubyFileReference(reference) ?? parseExecutableFileReference(reference);
+        if (fileExtension === 'py') {
+          return isPythonFile(filePath);
+        }
+        return (
+          filePath.endsWith(`.${fileExtension}`) ||
+          (fileExtension === 'go' && /\.go:[^:/\\]+$/.test(filePath))
+        );
       }
 
       return false;

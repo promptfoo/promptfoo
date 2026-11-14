@@ -17,7 +17,11 @@ import logger from '../logger';
 import { runPython } from '../python/pythonUtils';
 import { isJavascriptFile, isPythonFile } from './fileExtensions';
 
-export { parseExecutableFileReference } from './fileExtensions';
+export {
+  isPythonFile,
+  parseExecutableFileReference,
+  parseRubyFileReference,
+} from './fileExtensions';
 
 import { parseFileUrl } from './functions/loadFunction';
 import { safeResolve } from './pathUtils';
@@ -338,7 +342,7 @@ export function maybeLoadConfigFromExternalFile(
         key === 'value' &&
         'type' in config &&
         typeof config.type === 'string' &&
-        (config.type === 'python' || config.type === 'javascript');
+        ['python', 'not-python', 'javascript', 'not-javascript'].includes(config.type);
 
       // Detect vars contexts: if we're processing a 'vars' key, switch to vars context
       // This preserves file:// glob patterns for test case expansion
@@ -409,7 +413,7 @@ export function parsePathOrGlob(
     const extension = path.extname(filename);
     const lowercaseFilename = `${filename.slice(0, -extension.length)}.py`;
     if (
-      !fs.existsSync(path.join(basePath, filename)) &&
+      !fs.lstatSync(path.join(basePath, filename), { throwIfNoEntry: false }) &&
       fs.existsSync(path.join(basePath, lowercaseFilename))
     ) {
       filename = lowercaseFilename;
