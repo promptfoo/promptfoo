@@ -793,7 +793,8 @@ export async function runRedteamConversation({
       const containsPenalizedPhrase = checkPenalizedPhrases(targetResponse.output);
       // Apply penalty if the phrase is present
       if (containsPenalizedPhrase) {
-        currentScore = Math.max(highestScore - 1, currentScore - 3);
+        // Floor at 1, but never above the judge's own rating (a 0 must stay 0).
+        currentScore = Math.min(currentScore, Math.max(1, currentScore - 3));
       }
 
       if (currentScore > highestScore) {
