@@ -36,8 +36,8 @@ vi.mock('../../../src/redteam/remoteGeneration', async (importOriginal) => {
     ...(await importOriginal()),
     getRemoteGenerationUrl: vi.fn().mockReturnValue('http://test-url'),
     getRemoteHealthUrl: vi.fn().mockReturnValue('http://test-health-url'),
-    neverGenerateRemote: vi.fn().mockReturnValue(false),
-    shouldGenerateRemote: vi.fn().mockReturnValue(false),
+    neverGenerateRemote: vi.fn(),
+    shouldGenerateRemote: vi.fn(),
   };
 });
 vi.mock('../../../src/util/apiHealth', async (importOriginal) => {
@@ -67,8 +67,9 @@ describe('Plugins', () => {
       }),
     });
 
-    // Reset all mocks
     vi.clearAllMocks();
+    vi.mocked(neverGenerateRemote).mockReturnValue(false);
+    vi.mocked(shouldGenerateRemote).mockReturnValue(false);
     vi.mocked(fetchWithCache).mockReset();
   });
 
