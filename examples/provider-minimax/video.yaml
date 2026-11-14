@@ -1,0 +1,13 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Generate a short MiniMax H3 video
+prompts:
+  - A red kite glides over a green meadow.
+providers:
+  - id: minimax:video
+    config:
+      duration: 6
+      ratio: '16:9'
+tests:
+  - assert:
+      - type: contains
+        value: 'storageRef:'
