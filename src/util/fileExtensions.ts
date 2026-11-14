@@ -26,7 +26,7 @@ function normalizeFilePath(filePath: string): string {
  * Splits at the last colon whose prefix is a script file (JS/TS, `.py`, `.rb`),
  * so colons in directories and file names stay part of the path. Ruby
  * namespaced methods (`Validators::Format.check_length`) place the function
- * after the colon that follows the `.rb` file; backtrack to that colon only
+ * after the colon that follows the `.rb` file. Backtrack to that colon
  * when the suffix contains `::`, so multi-colon data file names such as
  * `data.js:2026-05-27T12:00:00.json` stay intact. Colons at index 0 or 1 are
  * never separators.
@@ -43,10 +43,15 @@ function normalizeFilePath(filePath: string): string {
  *   `file://data.js:2026-05-27T12:00:00.json`     → `{ filePath: 'data.js:2026-05-27T12:00:00.json' }` (data file, no suffix)
  *
  * @param fileUrl The `file://` URL.
+ * @param assertionFileExists - Assertion callers may resolve string-named JavaScript exports
+ * containing colons. Prefer a literal file when both interpretations are possible.
  * @returns The file path and optional function name.
  * @throws If `fileUrl` does not start with `file://`.
  */
-export function parseFileUrl(fileUrl: string): { filePath: string; functionName?: string } {
+export function parseFileUrl(
+  fileUrl: string,
+  assertionFileExists?: (filePath: string) => boolean,
+): { filePath: string; functionName?: string } {
   if (!fileUrl.startsWith('file://')) {
     throw new Error('URL must start with file://');
   }
@@ -56,6 +61,30 @@ export function parseFileUrl(fileUrl: string): { filePath: string; functionName?
   // The function suffix normally follows the script file at the last colon,
   // so colons in directories and earlier file names stay in the path.
   const lastColonIndex = urlWithoutProtocol.lastIndexOf(':');
+  const basenameStart =
+    Math.max(urlWithoutProtocol.lastIndexOf('/'), urlWithoutProtocol.lastIndexOf('\\')) + 1;
+  const firstColon = urlWithoutProtocol.indexOf(':', basenameStart);
+
+  // In assertions a JS export may itself contain colons (e.g. checks.mjs:grade.js:v2).
+  // For an ambiguous basename, prefer the whole file, then the longest existing JS file.
+  if (assertionFileExists && firstColon >= 0 && firstColon < lastColonIndex) {
+    const literal = normalizeFilePath(urlWithoutProtocol);
+    for (
+      let colon = lastColonIndex;
+      colon >= firstColon && colon > 1;
+      colon = urlWithoutProtocol.lastIndexOf(':', colon - 1)
+    ) {
+      const candidate = normalizeFilePath(urlWithoutProtocol.slice(0, colon));
+      if (isJavascriptFile(candidate)) {
+        if (assertionFileExists(literal)) {
+          return { filePath: literal };
+        }
+        if (assertionFileExists(candidate)) {
+          return { filePath: candidate, functionName: urlWithoutProtocol.slice(colon + 1) };
+        }
+      }
+    }
+  }
   if (lastColonIndex > 1) {
     const candidateFilePath = urlWithoutProtocol.slice(0, lastColonIndex);
     const functionName = urlWithoutProtocol.slice(lastColonIndex + 1);

@@ -312,6 +312,41 @@ describe('parseFileUrl', () => {
     });
   });
 
+  it('resolves a JavaScript export containing colons only in assertion references', () => {
+    const reference = 'file://C:/suite:one/checks.mjs:grade:v2';
+    expect(parseFileUrl(reference)).toEqual({ filePath: 'C:/suite:one/checks.mjs:grade:v2' });
+    expect(parseFileUrl(reference, (candidate) => candidate === 'C:/suite:one/checks.mjs')).toEqual(
+      {
+        filePath: 'C:/suite:one/checks.mjs',
+        functionName: 'grade:v2',
+      },
+    );
+  });
+
+  it('uses the longest existing script when a JS export name contains a file extension', () => {
+    const ref = 'file://checks.mjs:grade.js:v2';
+    const files = new Set(['checks.mjs']);
+    const exists = (candidate: string) => files.has(candidate);
+    expect(parseFileUrl(ref, exists)).toEqual({
+      filePath: 'checks.mjs',
+      functionName: 'grade.js:v2',
+    });
+    files.add('checks.mjs:grade.js');
+    expect(parseFileUrl(ref, exists)).toEqual({
+      filePath: 'checks.mjs:grade.js',
+      functionName: 'v2',
+    });
+    files.add('checks.mjs:grade.js:v2');
+    expect(parseFileUrl(ref, exists)).toEqual({ filePath: 'checks.mjs:grade.js:v2' });
+  });
+
+  it('preserves an existing multi-colon data filename in an assertion', () => {
+    const filename = 'data.js:2026-05-27T12:00:00.json';
+    expect(parseFileUrl(`file://${filename}`, (candidate) => candidate === filename)).toEqual({
+      filePath: filename,
+    });
+  });
+
   it('should keep multi-colon data file names intact', () => {
     const result = parseFileUrl('file://data.js:2026-05-27T12:00:00.json');
     expect(result).toEqual({

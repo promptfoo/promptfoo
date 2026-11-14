@@ -148,7 +148,12 @@ export function maybeLoadFromExternalFile(
 
   // Parse the file URL to extract file path and function name using existing utility
   // This handles colon splitting correctly, including Windows drive letters (C:\path)
-  const { filePath: cleanPath, functionName } = parseFileUrl(renderedFilePath);
+  const { filePath: cleanPath, functionName } = parseFileUrl(
+    renderedFilePath,
+    context === 'assertion'
+      ? (candidate) => fs.existsSync(path.resolve(cliState.basePath || '', candidate))
+      : undefined,
+  );
 
   // In vars contexts, preserve all file:// references for test case expansion
   // This prevents premature file loading - JS/Python files should be executed at runtime

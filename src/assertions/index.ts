@@ -1,3 +1,4 @@
+import { existsSync } from 'fs';
 import fs from 'fs/promises';
 import path from 'path';
 
@@ -497,7 +498,9 @@ async function runAssertionInternal({
   if (typeof renderedValue === 'string') {
     if (renderedValue.startsWith('file://')) {
       const basePath = cliState.basePath || '';
-      const { filePath: scriptPath, functionName } = parseFileUrl(renderedValue);
+      const { filePath: scriptPath, functionName } = parseFileUrl(renderedValue, (candidate) =>
+        existsSync(path.resolve(basePath, candidate)),
+      );
       const filePath = path.resolve(basePath, scriptPath);
 
       if (isJavascriptFile(filePath)) {
