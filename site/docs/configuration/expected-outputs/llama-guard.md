@@ -123,6 +123,8 @@ tests:
         // highlight-end
 ```
 
+The default grading prompt includes the selected target conversation for GOAT and Crescendo runs. If the grader reports that its token limit truncated the verdict, the assertion reports a grading failure, including for `not-llama-guard`.
+
 ## Metadata
 
 A flagged result sets `metadata.violatedCategories` to the matched codes (e.g. `["S1", "S10"]`) and `metadata.categoryDescriptions` to the code-to-name map, so downstream tooling does not need to duplicate the table above.
