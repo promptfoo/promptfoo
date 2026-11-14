@@ -30,6 +30,29 @@ describe('matchesSelectBest', () => {
     expect(result.filter((item) => item.pass)).toHaveLength(1);
   });
 
+  it.each(['-1', '−1', '1.5', '.5', '1e2', '1/2', '2'])(
+    'returns a grader error for an invalid candidate index %s',
+    async (output) => {
+      const result = await matchesSelectBest('choose a candidate', ['A', 'B'], {
+        provider: createSelectBestProvider(output),
+      });
+      for (const grade of result) {
+        expect(grade).toMatchObject({
+          pass: false,
+          metadata: { graderError: true },
+          tokensUsed: { total: 7 },
+        });
+      }
+    },
+  );
+
+  it('accepts a winning index followed by an explanation', async () => {
+    const result = await matchesSelectBest('choose a candidate', ['A', 'B'], {
+      provider: createSelectBestProvider('I choose 1. Its answer is clearer.'),
+    });
+    expect(result.map((grade) => grade.pass)).toEqual([false, true]);
+  });
+
   it('should return independent failure results for invalid verdicts', async () => {
     const provider = createSelectBestProvider('no verdict');
     const grading: GradingConfig = { provider };
