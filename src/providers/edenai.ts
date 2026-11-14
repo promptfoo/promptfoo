@@ -1,9 +1,8 @@
-import { getEnvString } from '../envars';
+import { getEnvString, getProviderEnvString } from '../envars';
 import { sanitizeObject } from '../util/sanitizer';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 
 import type { EnvVarKey } from '../envars';
-import type { EnvOverrides } from '../types/env';
 import type { ApiProvider, ProviderOptions } from '../types/index';
 import type { OpenAiChatCompletionCostData } from './openai/chat';
 import type { OpenAiCompletionOptions } from './openai/types';
@@ -17,14 +16,6 @@ type EdenAiConfig = OpenAiCompletionOptions;
 type EdenAiProviderOptions = Omit<ProviderOptions, 'config'> & {
   config?: EdenAiConfig;
 };
-
-function getProviderEnvString(env: EnvOverrides | undefined, key: EnvVarKey): string | undefined {
-  if (env && Object.prototype.hasOwnProperty.call(env, key)) {
-    const value = env[key as keyof EnvOverrides];
-    return value === undefined ? undefined : String(value);
-  }
-  return undefined;
-}
 
 class EdenAiProvider extends OpenAiChatCompletionProvider {
   config: EdenAiConfig;
