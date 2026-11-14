@@ -19,6 +19,7 @@ export interface ElevenLabsTTSConfig extends ElevenLabsBaseConfig {
 
   // Future: Pronunciation dictionaries
   pronunciationDictionaryId?: string;
+  pronunciationDictionaryVersionId?: string;
   pronunciationRules?: PronunciationRule[];
 
   // Future: Voice design & remixing
