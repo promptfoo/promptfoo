@@ -636,6 +636,11 @@ describe('evaluatorHelpers', () => {
       });
     });
 
+    it('consumes an unterminated quoted suffix only once', () => {
+      const value = ('{{ ' + String.fromCharCode(92, 34)).repeat(32_000);
+      expect(resolveVariables({ value }).value).toBe(value);
+    });
+
     it('should resolve variables in large values with many unclosed openers', () => {
       const value = `${'{{'.repeat(25_000)}{{ foo }} ${'{{ "'.repeat(10_000)}`;
       const started = performance.now();
