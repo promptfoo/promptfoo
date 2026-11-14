@@ -208,6 +208,7 @@ interface FetchEvalOptions {
   searchText?: string;
   skipSettingEvalId?: boolean;
   skipLoadingState?: boolean;
+  refreshFailureSummary?: boolean;
   filters?: ResultsFilter[];
 }
 
@@ -217,6 +218,7 @@ interface ColumnState {
 }
 
 export type ResultsFilterType =
+  | 'error'
   | 'metric'
   | 'metadata'
   | 'plugin'
@@ -245,6 +247,10 @@ export type ResultsFilter = {
   id: string;
   type: ResultsFilterType;
   value: string;
+  /** Display-only failure description; never sent in table query URLs. */
+  label?: string;
+  /** Failure groups belong to one evaluation and are cleared when navigating away. */
+  evalId?: string;
   operator: ResultsFilterOperator;
   logicOperator: 'and' | 'or';
   /**
@@ -267,6 +273,8 @@ interface TableState {
 
   table: EvaluateTable | null;
   setTable: (table: EvaluateTable | null) => void;
+  resultsRevision: number;
+  refreshFailureSummary: () => void;
 
   config: Partial<UnifiedConfig> | null;
   setConfig: (config: Partial<UnifiedConfig> | null) => void;
@@ -312,9 +320,13 @@ interface TableState {
     type: ResultsFilterType;
     operator: ResultsFilter['operator'];
     value: string;
+    label?: string;
+    evalId?: string;
     logicOperator?: ResultsFilter['logicOperator'];
     field?: string;
   }) => void;
+
+  setFailureGroup: (evalId: string, group: { id: string; error: string } | null) => void;
 
   /**
    * Removes a filter from the filters array.
@@ -360,6 +372,7 @@ interface TableState {
     options: {
       metric: string[];
       metadata: string[];
+      error: string[];
       // Redteam-specific filter options are only available for redteam evaluations.
       plugin?: string[];
       strategy?: string[];
@@ -529,7 +542,24 @@ const clearFilters = (prevState: TableState) => ({
 export const useTableStore = create<TableState>()(
   subscribeWithSelector((set, get) => ({
     evalId: null,
-    setEvalId: (evalId: string) => set(() => ({ evalId, filteredMetrics: null })),
+    setEvalId: (evalId: string) =>
+      set((state) => {
+        const kept = Object.values(state.filters.values).filter(
+          (filter) => filter.type !== 'error' || filter.evalId === evalId,
+        );
+        return {
+          evalId,
+          filteredMetrics: null,
+          filters:
+            kept.length === Object.keys(state.filters.values).length
+              ? state.filters
+              : {
+                  ...state.filters,
+                  values: Object.fromEntries(kept.map((filter) => [filter.id, filter])),
+                  appliedCount: kept.filter(isFilterApplied).length,
+                },
+        };
+      }),
 
     author: null,
     setAuthor: (author: string | null) => set(() => ({ author })),
@@ -538,6 +568,8 @@ export const useTableStore = create<TableState>()(
     setVersion: (version: number) => set(() => ({ version })),
 
     table: null,
+    resultsRevision: 0,
+    refreshFailureSummary: () => set((state) => ({ resultsRevision: state.resultsRevision + 1 })),
 
     /**
      * Note: This method is only used when ratings are updated; therefore filters
@@ -584,6 +616,7 @@ export const useTableStore = create<TableState>()(
         searchText = '',
         skipSettingEvalId = false,
         skipLoadingState = false,
+        refreshFailureSummary = false,
         filters = [],
       } = options;
 
@@ -657,6 +690,7 @@ export const useTableStore = create<TableState>()(
 
           set((prevState) => ({
             table: data.table,
+            resultsRevision: prevState.resultsRevision + (refreshFailureSummary ? 1 : 0),
             filteredResultsCount: data.filteredCount,
             totalResultsCount: data.totalCount,
             highlightedResultsCount: computeHighlightCount(data.table),
@@ -676,6 +710,7 @@ export const useTableStore = create<TableState>()(
               options: {
                 metric: computeAvailableMetrics(data.table),
                 metadata: [],
+                error: [],
                 ...redteamOptions,
               },
               policyIdToNameMap,
@@ -709,6 +744,7 @@ export const useTableStore = create<TableState>()(
       options: {
         metric: [],
         metadata: [],
+        error: [],
       },
     },
 
@@ -725,13 +761,13 @@ export const useTableStore = create<TableState>()(
           existingFilters.length > 0 ? Math.max(...existingFilters.map((f) => f.sortIndex)) : -1;
         const nextSortIndex = maxSortIndex + 1;
 
-        // Inherit logic operator from existing filters (use the one from the filter with sortIndex 1)
-        // If no existing filters, default to 'and'
+        // Failure groups are an independent constraint, outside ordinary AND/OR logic.
+        const ordinaryFilters = existingFilters
+          .filter((existing) => existing.type !== 'error')
+          .sort((a, b) => a.sortIndex - b.sortIndex);
         const inheritedLogicOperator =
-          existingFilters.length > 0
-            ? (existingFilters.find((f) => f.sortIndex === 1)?.logicOperator ??
-              existingFilters[0].logicOperator ??
-              'and')
+          ordinaryFilters.length > 0
+            ? (ordinaryFilters[1]?.logicOperator ?? ordinaryFilters[0].logicOperator ?? 'and')
             : 'and';
 
         return {
@@ -750,6 +786,35 @@ export const useTableStore = create<TableState>()(
               },
             },
             appliedCount,
+          },
+        };
+      });
+    },
+
+    setFailureGroup: (evalId, group) => {
+      set((state) => {
+        const kept = Object.values(state.filters.values)
+          .filter((filter) => filter.type !== 'error')
+          .sort((a, b) => a.sortIndex - b.sortIndex);
+        if (group) {
+          kept.push({
+            id: crypto.randomUUID(),
+            type: 'error',
+            operator: 'equals',
+            value: group.id,
+            label: group.error,
+            evalId,
+            logicOperator: 'and',
+            sortIndex: kept.length,
+          });
+        }
+        return {
+          filters: {
+            ...state.filters,
+            values: Object.fromEntries(
+              kept.map((filter, sortIndex) => [filter.id, { ...filter, sortIndex }]),
+            ),
+            appliedCount: kept.filter(isFilterApplied).length,
           },
         };
       });
@@ -816,7 +881,7 @@ export const useTableStore = create<TableState>()(
       set((prevState) => {
         const updatedValues: Record<string, ResultsFilter> = {};
         Object.entries(prevState.filters.values).forEach(([id, filter]) => {
-          updatedValues[id] = { ...filter, logicOperator };
+          updatedValues[id] = filter.type === 'error' ? filter : { ...filter, logicOperator };
         });
         return {
           filters: {

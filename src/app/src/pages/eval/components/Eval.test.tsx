@@ -1327,7 +1327,7 @@ describe('Eval', () => {
   });
 
   it('clears the details hash when applying filters', async () => {
-    let subscriptionCallback: ((filters: any) => void) | null = null;
+    let subscriptionCallback: ((filters: any, previousFilters: any) => void) | null = null;
 
     // Mock subscribe to capture the callback and trigger it
     (useTableStore as any).subscribe = vi.fn((selector, callback) => {
@@ -1373,7 +1373,7 @@ describe('Eval', () => {
     // Trigger the subscription callback manually
     if (subscriptionCallback) {
       await act(async () => {
-        subscriptionCallback!(mockFilters);
+        subscriptionCallback!(mockFilters, { values: {}, appliedCount: 0 });
       });
     }
 

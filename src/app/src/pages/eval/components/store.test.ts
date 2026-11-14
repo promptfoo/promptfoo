@@ -2014,6 +2014,7 @@ describe('useTableStore', () => {
             options: {
               metric: computeAvailableMetrics(mockTable),
               metadata: [],
+              error: [],
               plugin: [],
               strategy: [],
               severity: [],
@@ -2063,6 +2064,7 @@ describe('useTableStore', () => {
             options: {
               metric: computeAvailableMetrics(mockTable),
               metadata: [],
+              error: [],
               plugin: [],
               strategy: [],
               severity: [],
@@ -2126,6 +2128,7 @@ describe('useTableStore', () => {
             options: {
               metric: computeAvailableMetrics(mockTable),
               metadata: [],
+              error: [],
               plugin: [],
               strategy: [],
               severity: [],
@@ -2170,6 +2173,7 @@ describe('useTableStore', () => {
             options: {
               metric: computeAvailableMetrics(mockTable),
               metadata: [],
+              error: [],
               plugin: [],
               strategy: [],
               severity: [],
@@ -2210,6 +2214,7 @@ describe('useTableStore', () => {
             options: {
               metric: computeAvailableMetrics(mockTable),
               metadata: [],
+              error: [],
               plugin: [],
               strategy: [],
               severity: [],

@@ -41,10 +41,20 @@ function parseFiltersParam(filtersParam: string | null): ResultsFilter[] | null 
   }
 
   try {
-    return JSON.parse(filtersParam) as ResultsFilter[];
+    const filters: unknown = JSON.parse(filtersParam);
+    return Array.isArray(filters) && filters.every((filter) => filter && typeof filter === 'object')
+      ? filters
+      : null;
   } catch {
     return null;
   }
+}
+
+function serializeFilters(filters: ResultsFilter[]): string {
+  // Provider failure descriptions can contain user data. The digest identifies the group.
+  return JSON.stringify(
+    filters.map((filter) => (filter.type === 'error' ? { ...filter, label: undefined } : filter)),
+  );
 }
 
 /** True when a delete signal removed the displayed eval (or all evals, for a delete-all). */
@@ -131,6 +141,7 @@ export default function Eval({ fetchId }: EvalOptions) {
         const data = await fetchEvalData(id, {
           skipSettingEvalId: true,
           skipLoadingState: isBackgroundUpdate,
+          refreshFailureSummary: isBackgroundUpdate,
           filterMode,
           filters: Object.values(filters.values).filter((filter) =>
             filter.type === 'metadata'
@@ -333,11 +344,22 @@ export default function Eval({ fetchId }: EvalOptions) {
           }
         } else if (_filters.appliedCount > 0) {
           // Serialize the filters to a JSON string
-          const serializedFilters = JSON.stringify(Object.values(_filters.values));
+          const serializedFilters = serializeFilters(Object.values(_filters.values));
           // Check whether the serialized filters are already in the search params
           if (_searchParams.get('filter') !== serializedFilters) {
             replaceSearchParams((params) => {
               params.set('filter', serializedFilters);
+              const selectedGroup = Object.values(_filters.values).find(
+                (filter) => filter.type === 'error',
+              );
+              const previousGroup = Object.values(previousFilters.values).find(
+                (filter) => filter.type === 'error',
+              );
+              // Update both URL controls in one navigation; separate setters race
+              // because their callbacks can still hold the previous location.search.
+              if (selectedGroup && selectedGroup.value !== previousGroup?.value) {
+                params.delete('mode');
+              }
             });
           }
         }
@@ -364,6 +386,21 @@ export default function Eval({ fetchId }: EvalOptions) {
       });
     } finally {
       isHydratingFiltersRef.current = false;
+    }
+
+    if (filters?.some((filter) => filter.type === 'error' && filter.label !== undefined)) {
+      _searchParams.set(
+        'filter',
+        serializeFilters(Object.values(useTableStore.getState().filters.values)),
+      );
+      navigate(
+        {
+          pathname: location.pathname,
+          search: _searchParams.toString(),
+          hash: window.location.hash,
+        },
+        { replace: true },
+      );
     }
 
     if (!filters) {
