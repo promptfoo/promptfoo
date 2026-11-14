@@ -36,7 +36,7 @@ The end result is a comprehensive report card that enumerates the OWASP Top 10 v
 
 ![Promptfoo OWASP LLM Top 10](/img/docs/compliance.png)
 
-To set up the scan through the Promptfoo UI, select the OWASP LLM Top 10 option in the list of presets on the Plugins page.
+The OWASP LLM Top 10 preset on the Plugins page uses the 2025 mappings. To scan against the 2026 edition, add `owasp:llm:2026` to `redteam.plugins` in your YAML config. To show that edition in the report, add the same ID to `redteam.frameworks`.
 
 ![Promptfoo OWASP LLM Top 10 configuration](/img/docs/owasp-selection.png)
 
