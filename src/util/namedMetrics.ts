@@ -1,4 +1,5 @@
 import { renderMetricName } from '../assertions/index';
+import { setNamedMetricValue } from './numeric';
 
 import type { GradingResult, Vars } from '../types/index';
 
@@ -12,6 +13,14 @@ interface NamedMetricContribution {
   assertionCount: number;
   metricWeightTotal: number;
   weightedScoreTotal: number;
+}
+
+function addNamedMetricValue(record: Record<string, number>, name: string, value: number): void {
+  setNamedMetricValue(
+    record,
+    name,
+    (Object.hasOwn(record, name) ? (record[name] ?? 0) : 0) + value,
+  );
 }
 
 function getContributingAssertionCount(
@@ -77,14 +86,11 @@ export function accumulateNamedMetric(
     testVars,
   });
 
-  accumulator.namedScores[metricName] =
-    (accumulator.namedScores[metricName] ?? 0) + weightedScoreTotal;
-  accumulator.namedScoresCount[metricName] =
-    (accumulator.namedScoresCount[metricName] ?? 0) + assertionCount;
+  addNamedMetricValue(accumulator.namedScores, metricName, weightedScoreTotal);
+  addNamedMetricValue(accumulator.namedScoresCount, metricName, assertionCount);
 
   accumulator.namedScoreWeights ||= {};
-  accumulator.namedScoreWeights[metricName] =
-    (accumulator.namedScoreWeights[metricName] ?? 0) + metricWeightTotal;
+  addNamedMetricValue(accumulator.namedScoreWeights, metricName, metricWeightTotal);
 }
 
 export function backfillNamedScoreWeights(accumulator: NamedMetricAccumulator): void {
@@ -92,7 +98,7 @@ export function backfillNamedScoreWeights(accumulator: NamedMetricAccumulator): 
 
   for (const [metricName, assertionCount] of Object.entries(accumulator.namedScoresCount)) {
     if (!Object.prototype.hasOwnProperty.call(accumulator.namedScoreWeights, metricName)) {
-      accumulator.namedScoreWeights[metricName] = assertionCount;
+      setNamedMetricValue(accumulator.namedScoreWeights, metricName, assertionCount);
     }
   }
 }

@@ -76,7 +76,7 @@ import {
 import invariant from '../util/invariant';
 import { safeJsonStringify, summarizeEvaluateResultForLogging } from '../util/json';
 import { accumulateNamedMetric, backfillNamedScoreWeights } from '../util/namedMetrics';
-import { filterFiniteScores } from '../util/numeric';
+import { filterFiniteScores, setNamedMetricValue } from '../util/numeric';
 import { getProviderPromptOverride, isPromptAllowed } from '../util/promptMatching';
 import {
   getProviderIdentifier,
@@ -386,10 +386,13 @@ function updateDerivedMetrics(
     __count: promptEvalCount,
   };
   for (const metric of derivedMetrics) {
-    metrics.namedScores[metric.name] ??= 0;
+    if (!Object.hasOwn(metrics.namedScores, metric.name)) {
+      setNamedMetricValue(metrics.namedScores, metric.name, 0);
+    }
     try {
-      metrics.namedScores[metric.name] = metric.value(evalContext, evalStep);
-      evalContext[metric.name] = metrics.namedScores[metric.name];
+      const value = metric.value(evalContext, evalStep);
+      setNamedMetricValue(metrics.namedScores, metric.name, value);
+      setNamedMetricValue(evalContext, metric.name, value);
     } catch (error) {
       logger.debug(
         `Could not evaluate derived metric '${metric.name}': ${(error as Error).message}`,
