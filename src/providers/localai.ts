@@ -30,10 +30,12 @@ class LocalAiGenericProvider implements ApiProvider {
     const { id, config, env } = options;
     this.modelName = modelName;
     this.env = env;
-    this.apiBaseUrl =
+    // Endpoints append `/chat/completions` etc., so a trailing slash would double it.
+    this.apiBaseUrl = (
       config?.apiBaseUrl ||
       resolveProviderEnv(env, ['LOCALAI_BASE_URL'])?.value ||
-      'http://localhost:8080/v1';
+      'http://localhost:8080/v1'
+    ).replace(/\/+$/, '');
     this.config = config || {};
     this.id = id ? () => id : this.id;
   }

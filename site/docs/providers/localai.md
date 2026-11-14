@@ -37,7 +37,7 @@ providers:
 
 Supported environment variables:
 
-- `LOCALAI_BASE_URL` - defaults to `http://localhost:8080/v1`
+- `LOCALAI_BASE_URL` - defaults to `http://localhost:8080/v1`; a trailing slash is optional
 - `LOCALAI_TEMPERATURE` - default sampling temperature. Defaults to 0.7.
 - `REQUEST_TIMEOUT_MS` - maximum request time, in milliseconds. Defaults to 300000.
 
