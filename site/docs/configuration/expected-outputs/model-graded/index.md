@@ -268,6 +268,8 @@ For output-based model-graded assertions (`llm-rubric`, `factuality`, `g-eval`,
 no explicit grader is configured — **after** `--grader`, `assertion.provider`, and
 `test.options.provider` / `defaultTest.options.provider` have all been checked and found absent.
 
+Promptfoo warns when it selects this fallback for text grading.
+
 In practice this means the following config generates responses **and** grades them with `gpt-4.1`:
 
 ```yaml
