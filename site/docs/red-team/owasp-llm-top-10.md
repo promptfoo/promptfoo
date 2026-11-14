@@ -22,6 +22,10 @@ The current top 10 are:
 9. [LLM09: Vector and Embedding Weaknesses](#9-vector-and-embedding-weaknesses-llm09)
 10. [LLM10: Improper Output Handling](#10-improper-output-handling-llm10)
 
+Existing configurations keep the 2025 mappings through `owasp:llm` and `owasp:llm:NN`.
+To opt in to the 2026 edition, use `owasp:llm:2026` for the full preset or
+`owasp:llm:2026:NN` for one category. Framework reports label the edition used.
+
 ## Scanning for OWASP Top 10
 
 This guide will walk through how to use Promptfoo's features to test for and mitigate OWASP risks.
@@ -52,7 +56,7 @@ Example configuration:
 ```yaml
 redteam:
   plugins:
-    - owasp:llm:01
+    - owasp:llm:2026:01
     # Include any other plugins for behaviors that you want to avoid
     - contracts
     - politics
@@ -111,7 +115,7 @@ Or, using the OWASP shorthand:
 ```yaml
 redteam:
   plugins:
-    - owasp:llm:02
+    - owasp:llm:2026:02
 ```
 
 ### Custom Plugins
@@ -180,7 +184,7 @@ Or, using the OWASP shorthand:
 ```yaml
 redteam:
   plugins:
-    - owasp:llm:03
+    - owasp:llm:2026:03
 ```
 
 You can learn more about red teaming agents in [Promptfoo's guide](/docs/red-team/agents/).
@@ -209,7 +213,7 @@ targets:
 
 redteam:
   plugins:
-    - owasp:llm
+    - owasp:llm:2026
     - harmful
     - pii
   strategies:
@@ -243,7 +247,7 @@ Or, using the OWASP shorthand:
 ```yaml
 redteam:
   plugins:
-    - owasp:llm:05
+    - owasp:llm:2026:05
 ```
 
 <a id="10-unbounded-consumption-llm10"></a>
@@ -327,7 +331,7 @@ Using the OWASP shorthand:
 ```yaml
 redteam:
   plugins:
-    - owasp:llm:07
+    - owasp:llm:2026:07
 ```
 
 <a id="7-system-prompt-leakage-llm07"></a>
@@ -516,7 +520,7 @@ You can automatically include _all_ of the OWASP LLM Top 10 with the following s
 ```yaml
 redteam:
   plugins:
-    - owasp:llm
+    - owasp:llm:2026
   strategies:
     - jailbreak-templates
     - jailbreak

@@ -34,9 +34,9 @@ const FrameworkCompliance = ({ evalId, categoryStats, config }: FrameworkComplia
   const frameworksToShow = React.useMemo(() => {
     const configuredFrameworks = config?.redteam?.frameworks;
 
-    // If not configured or empty, show all frameworks (default behavior)
+    // Preserve the default framework set. The 2026 edition is opt-in.
     if (!configuredFrameworks || configuredFrameworks.length === 0) {
-      return FRAMEWORK_COMPLIANCE_IDS;
+      return FRAMEWORK_COMPLIANCE_IDS.filter((id) => id !== 'owasp:llm:2026');
     }
 
     // Filter to only show configured frameworks

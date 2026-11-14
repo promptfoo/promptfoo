@@ -224,6 +224,21 @@ describe('FrameworkCompliance', () => {
     );
   });
 
+  it('shows the 2026 OWASP edition when explicitly selected', () => {
+    renderWithProviders(
+      <FrameworkCompliance
+        evalId="test-eval"
+        categoryStats={{}}
+        config={{
+          redteam: { frameworks: ['owasp:llm:2026'], plugins: [], strategies: [] },
+        }}
+      />,
+    );
+    expect(mockFrameworkCard.mock.calls.map(([props]) => props.framework)).toEqual([
+      'owasp:llm:2026',
+    ]);
+  });
+
   it('should pass showUntestedPlugins from the store to FrameworkCard', () => {
     const categoryStats = {
       bola: { pass: 10, total: 10, passWithFilter: 10, failCount: 0 },

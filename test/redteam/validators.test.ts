@@ -820,7 +820,7 @@ describe('redteamConfigSchema', () => {
 
     it('should not duplicate plugins when using multiple aliased names', () => {
       const input = {
-        plugins: ['owasp:llm:01', 'owasp:llm:02', 'owasp:llm:05'],
+        plugins: ['owasp:llm:01', 'owasp:llm:02', 'owasp:llm:04'],
         numTests: 3,
       };
       const result = RedteamConfigSchema.safeParse(input);
@@ -1760,4 +1760,14 @@ describe('InputsSchema', () => {
       expect(result.success).toBe(true);
     });
   });
+});
+
+it('keeps legacy OWASP aliases while allowing explicit 2026 categories', () => {
+  const ids = (alias: string) =>
+    (RedteamConfigSchema.parse({ plugins: [alias] }).plugins ?? []).map(({ id }) => id);
+  expect(ids('owasp:llm:04')).toContain('bias:age');
+  expect(ids('owasp:llm:06')).toContain('excessive-agency');
+  expect(ids('owasp:llm:2026:04')).toEqual([]);
+  expect(ids('owasp:llm:2026:06')).toEqual(['divergent-repetition', 'reasoning-dos']);
+  expect(ids('owasp:llm:2026')).toContain('tool-discovery');
 });

@@ -10,7 +10,8 @@ export const FRAMEWORK_NAMES: Record<string, string> = {
   'mitre:atlas': 'MITRE ATLAS',
   'nist:ai:measure': 'NIST AI RMF',
   'owasp:api': 'OWASP API Top 10',
-  'owasp:llm': 'OWASP LLM Top 10',
+  'owasp:llm': 'OWASP LLM Top 10 (2025)',
+  'owasp:llm:2026': 'OWASP LLM Top 10 (2026)',
   'owasp:agentic': 'OWASP Top 10 for Agentic Applications',
   'eu:ai-act': 'EU AI Act',
   'iso:42001': 'ISO/IEC 42001',
@@ -23,7 +24,7 @@ export const FRAMEWORK_NAMES: Record<string, string> = {
  *
  * @see https://genai.owasp.org/resource/owasp-genai-llm-top-10-2026/
  */
-export const OWASP_LLM_TOP_10_NAMES = [
+export const OWASP_LLM_TOP_10_2026_NAMES = [
   'Prompt Injection',
   'Sensitive Information Disclosure',
   'Excessive Agency',
@@ -34,6 +35,19 @@ export const OWASP_LLM_TOP_10_NAMES = [
   'Hidden Context Exposure',
   'Vector and Embedding Weaknesses',
   'Improper Output Handling',
+];
+
+export const OWASP_LLM_TOP_10_NAMES = [
+  'Prompt Injection',
+  'Sensitive Information Disclosure',
+  'Supply Chain',
+  'Data and Model Poisoning',
+  'Improper Output Handling',
+  'Excessive Agency',
+  'System Prompt Leakage',
+  'Vector and Embedding Weaknesses',
+  'Misinformation',
+  'Unbounded Consumption',
 ];
 
 export const OWASP_API_TOP_10_NAMES = [
@@ -100,25 +114,12 @@ export const OWASP_LLM_TOP_10_MAPPING: Record<
     strategies: ['jailbreak', 'jailbreak-templates', 'jailbreak:composite'],
   },
   'owasp:llm:03': {
-    // Excessive Agency (LLM06 in the 2025 edition)
-    plugins: [
-      'excessive-agency',
-      'rbac',
-      'bfla',
-      'bola',
-      'shell-injection',
-      'sql-injection',
-      'ssrf',
-    ],
-    strategies: ['jailbreak', 'jailbreak-templates', 'jailbreak:composite'],
-  },
-  'owasp:llm:04': {
-    // Supply Chain (LLM03 in the 2025 edition)
+    // Supply Chain
     plugins: [],
     strategies: [],
   },
-  'owasp:llm:05': {
-    // Data and Model Poisoning (LLM04 in the 2025 edition)
+  'owasp:llm:04': {
+    // Data and Model Poisoning
     plugins: [
       'harmful:misinformation-disinformation',
       'harmful:hate',
@@ -131,27 +132,28 @@ export const OWASP_LLM_TOP_10_MAPPING: Record<
     ],
     strategies: ['jailbreak', 'jailbreak-templates', 'jailbreak:composite'],
   },
-  'owasp:llm:06': {
-    // Unbounded Consumption (LLM10 in the 2025 edition)
-    plugins: ['divergent-repetition', 'reasoning-dos'],
-    strategies: [],
+  'owasp:llm:05': {
+    // Improper Output Handling
+    plugins: ['shell-injection', 'sql-injection', 'ssrf', 'debug-access'],
+    strategies: ['jailbreak', 'jailbreak-templates'],
   },
-  'owasp:llm:07': {
-    // Misinformation (LLM09 in the 2025 edition)
+  'owasp:llm:06': {
+    // Excessive Agency
     plugins: [
-      'hallucination',
-      'overreliance',
-      'harmful:misinformation-disinformation',
-      'harmful:specialized-advice',
+      'excessive-agency',
+      'rbac',
+      'bfla',
+      'bola',
+      'shell-injection',
+      'sql-injection',
+      'ssrf',
     ],
     strategies: ['jailbreak', 'jailbreak-templates', 'jailbreak:composite'],
   },
-  'owasp:llm:08': {
-    // Hidden Context Exposure (broadens LLM07 System Prompt Leakage from the 2025 edition
-    // to cover tool/function schemas and other assembled context)
+  'owasp:llm:07': {
+    // System Prompt Leakage
     plugins: [
       'prompt-extraction',
-      'tool-discovery',
       'rbac',
       'harmful:privacy',
       'pii:api-db',
@@ -161,8 +163,8 @@ export const OWASP_LLM_TOP_10_MAPPING: Record<
     ],
     strategies: ['jailbreak', 'jailbreak-templates', 'jailbreak:composite'],
   },
-  'owasp:llm:09': {
-    // Vector and Embedding Weaknesses (LLM08 in the 2025 edition)
+  'owasp:llm:08': {
+    // Vector and Embedding Weaknesses
     plugins: [
       'cross-session-leak',
       'harmful:privacy',
@@ -173,12 +175,41 @@ export const OWASP_LLM_TOP_10_MAPPING: Record<
     ],
     strategies: ['jailbreak', 'jailbreak-templates', 'jailbreak:composite'],
   },
+  'owasp:llm:09': {
+    // Misinformation
+    plugins: [
+      'hallucination',
+      'overreliance',
+      'harmful:misinformation-disinformation',
+      'harmful:specialized-advice',
+    ],
+    strategies: ['jailbreak', 'jailbreak-templates', 'jailbreak:composite'],
+  },
   'owasp:llm:10': {
-    // Improper Output Handling (LLM05 in the 2025 edition)
-    plugins: ['shell-injection', 'sql-injection', 'ssrf', 'debug-access'],
-    strategies: ['jailbreak', 'jailbreak-templates'],
+    // Unbounded Consumption
+    plugins: ['divergent-repetition', 'reasoning-dos'],
+    strategies: [],
   },
 };
+
+const previousHiddenContext = OWASP_LLM_TOP_10_MAPPING['owasp:llm:07'];
+
+const OWASP_LLM_TOP_10_2026_MAPPING: Record<string, { plugins: Plugin[]; strategies: Strategy[] }> =
+  {
+    'owasp:llm:2026:01': OWASP_LLM_TOP_10_MAPPING['owasp:llm:01'],
+    'owasp:llm:2026:02': OWASP_LLM_TOP_10_MAPPING['owasp:llm:02'],
+    'owasp:llm:2026:03': OWASP_LLM_TOP_10_MAPPING['owasp:llm:06'],
+    'owasp:llm:2026:04': OWASP_LLM_TOP_10_MAPPING['owasp:llm:03'],
+    'owasp:llm:2026:05': OWASP_LLM_TOP_10_MAPPING['owasp:llm:04'],
+    'owasp:llm:2026:06': OWASP_LLM_TOP_10_MAPPING['owasp:llm:10'],
+    'owasp:llm:2026:07': OWASP_LLM_TOP_10_MAPPING['owasp:llm:09'],
+    'owasp:llm:2026:08': {
+      ...previousHiddenContext,
+      plugins: ['tool-discovery', ...previousHiddenContext.plugins],
+    },
+    'owasp:llm:2026:09': OWASP_LLM_TOP_10_MAPPING['owasp:llm:08'],
+    'owasp:llm:2026:10': OWASP_LLM_TOP_10_MAPPING['owasp:llm:05'],
+  };
 
 export const OWASP_API_TOP_10_MAPPING: Record<
   string,
@@ -992,6 +1023,7 @@ export const ALIASED_PLUGINS = [
   'nist:ai:measure',
   'owasp:api',
   'owasp:llm',
+  'owasp:llm:2026',
   'owasp:llm:redteam:model',
   'owasp:llm:redteam:implementation',
   'owasp:llm:redteam:system',
@@ -1011,6 +1043,7 @@ export const ALIASED_PLUGINS = [
   ...Object.keys(NIST_AI_RMF_MAPPING),
   ...Object.keys(OWASP_API_TOP_10_MAPPING),
   ...Object.keys(OWASP_LLM_TOP_10_MAPPING),
+  ...Object.keys(OWASP_LLM_TOP_10_2026_MAPPING),
   ...Object.keys(OWASP_AGENTIC_TOP_10_MAPPING),
   ...Object.keys(EU_AI_ACT_MAPPING),
   ...Object.keys(ISO_42001_MAPPING),
@@ -1028,6 +1061,7 @@ export const ALIASED_PLUGIN_MAPPINGS: Record<
   'nist:ai:measure': NIST_AI_RMF_MAPPING,
   'owasp:api': OWASP_API_TOP_10_MAPPING,
   'owasp:llm': OWASP_LLM_TOP_10_MAPPING,
+  'owasp:llm:2026': OWASP_LLM_TOP_10_2026_MAPPING,
   'owasp:llm:redteam': OWASP_LLM_RED_TEAM_MAPPING,
   'owasp:agentic': OWASP_AGENTIC_TOP_10_MAPPING,
   'eu:ai-act': EU_AI_ACT_MAPPING,

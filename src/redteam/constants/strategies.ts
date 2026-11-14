@@ -4,6 +4,7 @@ export const FRAMEWORK_COMPLIANCE_IDS = [
   'nist:ai:measure',
   'owasp:api',
   'owasp:llm',
+  'owasp:llm:2026',
   'owasp:agentic',
   'eu:ai-act',
   'iso:42001',

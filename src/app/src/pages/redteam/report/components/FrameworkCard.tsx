@@ -10,6 +10,7 @@ import {
   DOD_AI_ETHICS_PRINCIPLE_NAMES,
   FRAMEWORK_NAMES,
   OWASP_API_TOP_10_NAMES,
+  OWASP_LLM_TOP_10_2026_NAMES,
   OWASP_LLM_TOP_10_NAMES,
   riskCategorySeverityMap,
   Severity,
@@ -64,6 +65,7 @@ const severitySortOrder: Record<Severity, number> = {
 
 const categoryNamesByFramework: Partial<Record<string, string[]>> = {
   'owasp:llm': OWASP_LLM_TOP_10_NAMES,
+  'owasp:llm:2026': OWASP_LLM_TOP_10_2026_NAMES,
   'owasp:api': OWASP_API_TOP_10_NAMES,
   'dod:ai:ethics': DOD_AI_ETHICS_PRINCIPLE_NAMES,
 };
@@ -264,6 +266,7 @@ const FrameworkCard = ({
         <div className="mt-4">
           {(framework === 'owasp:api' ||
             framework === 'owasp:llm' ||
+            framework === 'owasp:llm:2026' ||
             framework === 'dod:ai:ethics') &&
           Object.keys(ALIASED_PLUGIN_MAPPINGS[framework]).length > 0 ? (
             // Show categorized plugins for frameworks with named categories

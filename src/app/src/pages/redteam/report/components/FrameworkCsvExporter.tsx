@@ -8,6 +8,7 @@ import {
   FRAMEWORK_NAMES,
   type FrameworkComplianceId,
   OWASP_API_TOP_10_NAMES,
+  OWASP_LLM_TOP_10_2026_NAMES,
   OWASP_LLM_TOP_10_NAMES,
   riskCategorySeverityMap,
   Severity,
@@ -105,6 +106,7 @@ const CSVExporter = ({
       if (
         frameworkId === 'owasp:api' ||
         frameworkId === 'owasp:llm' ||
+        frameworkId === 'owasp:llm:2026' ||
         frameworkId === 'dod:ai:ethics'
       ) {
         // Add data for categorized frameworks
@@ -112,13 +114,15 @@ const CSVExporter = ({
           ([categoryId, { plugins: categoryPlugins }]) => {
             const categoryNumber = categoryId.split(':').pop();
             const categoryName =
-              categoryNumber && frameworkId === 'owasp:llm'
-                ? OWASP_LLM_TOP_10_NAMES[Number.parseInt(categoryNumber) - 1]
-                : categoryNumber && frameworkId === 'owasp:api'
-                  ? OWASP_API_TOP_10_NAMES[Number.parseInt(categoryNumber) - 1]
-                  : categoryNumber && frameworkId === 'dod:ai:ethics'
-                    ? DOD_AI_ETHICS_PRINCIPLE_NAMES[Number.parseInt(categoryNumber) - 1]
-                    : `Category ${categoryNumber}`;
+              categoryNumber && frameworkId === 'owasp:llm:2026'
+                ? OWASP_LLM_TOP_10_2026_NAMES[Number.parseInt(categoryNumber) - 1]
+                : categoryNumber && frameworkId === 'owasp:llm'
+                  ? OWASP_LLM_TOP_10_NAMES[Number.parseInt(categoryNumber) - 1]
+                  : categoryNumber && frameworkId === 'owasp:api'
+                    ? OWASP_API_TOP_10_NAMES[Number.parseInt(categoryNumber) - 1]
+                    : categoryNumber && frameworkId === 'dod:ai:ethics'
+                      ? DOD_AI_ETHICS_PRINCIPLE_NAMES[Number.parseInt(categoryNumber) - 1]
+                      : `Category ${categoryNumber}`;
 
             // Expand plugins if needed
             const expandedPlugins = expandPluginCollections(categoryPlugins, categoryStats);
