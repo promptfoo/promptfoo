@@ -928,10 +928,8 @@ describe('TestCaseGenerationProvider', () => {
         </ToastProvider>,
       );
       await user.click(screen.getByTestId('test-case-generation-btn'));
-      await waitFor(() =>
-        expect(screen.getByTestId('chat-message-3')).toHaveTextContent(
-          'Simulated target output (turn 1)',
-        ),
+      expect(await screen.findByTestId('chat-message-3', {}, { timeout: 5000 })).toHaveTextContent(
+        'Simulated target output (turn 1)',
       );
       const [first, second] = callApiMock.mock.calls
         .filter(([path]) => path === '/redteam/generate-test')
