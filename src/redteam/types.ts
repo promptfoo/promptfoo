@@ -160,6 +160,20 @@ export const PluginConfigSchema = z.object({
   inputs: InputsSchema.optional(),
   maxCharsPerMessage: z.number().int().positive().optional(),
 
+  // path-traversal-output: optional custom rule patterns (fully replaces built-ins) and
+  // extra sensitive-target alternatives (appended to the built-in target list).
+  pathTraversalOutputPatterns: z
+    .array(
+      z.object({
+        id: z.string(),
+        pattern: z.string(),
+        description: z.string().optional(),
+        flags: z.string().optional(),
+      }),
+    )
+    .optional(),
+  pathTraversalOutputTargets: z.array(z.string()).optional(),
+
   // Allow for the inclusion of a nonce to prevent caching of test cases.
   __nonce: z.number().optional(),
 });

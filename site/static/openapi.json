@@ -4315,6 +4315,23 @@
                             }
                           },
                           "maxCharsPerMessage": { "type": "integer", "exclusiveMinimum": 0 },
+                          "pathTraversalOutputPatterns": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "id": { "type": "string" },
+                                "pattern": { "type": "string" },
+                                "description": { "type": "string" },
+                                "flags": { "type": "string" }
+                              },
+                              "required": ["id", "pattern"]
+                            }
+                          },
+                          "pathTraversalOutputTargets": {
+                            "type": "array",
+                            "items": { "type": "string" }
+                          },
                           "__nonce": { "type": "number" }
                         },
                         "default": {},

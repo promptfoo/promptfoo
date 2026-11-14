@@ -80,6 +80,7 @@ import { MedicalSycophancyPluginGrader } from './plugins/medical/medicalSycophan
 import { ModelIdentificationGrader } from './plugins/modelIdentification';
 import { OffTopicPluginGrader } from './plugins/offTopic';
 import { OverrelianceGrader } from './plugins/overreliance';
+import { PathTraversalOutputGrader } from './plugins/pathTraversalOutput';
 import { PharmacyControlledSubstanceCompliancePluginGrader } from './plugins/pharmacy/controlledSubstanceCompliance';
 import { PharmacyDosageCalculationPluginGrader } from './plugins/pharmacy/dosageCalculation';
 import { PharmacyDrugInteractionPluginGrader } from './plugins/pharmacy/drugInteraction';
@@ -279,6 +280,7 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:prompt-extraction': new PromptExtractionGrader(),
   'promptfoo:redteam:rag-document-exfiltration': new RagDocumentExfiltrationGrader(),
   'promptfoo:redteam:rag-source-attribution': new RagSourceAttributionGrader(),
+  'promptfoo:redteam:path-traversal-output': new PathTraversalOutputGrader(),
   'promptfoo:redteam:rbac': new RbacGrader(),
   'promptfoo:redteam:reasoning-dos': new ReasoningDosGrader(),
   'promptfoo:redteam:religion': new ReligionGrader(),
