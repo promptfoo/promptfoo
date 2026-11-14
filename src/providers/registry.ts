@@ -111,7 +111,11 @@ import { modelNameFromProviderPath } from './shared';
 import { SimulatedUser } from './simulatedUser';
 import { loadSlackProviderModule } from './slack-availability';
 import { createSnowflakeProvider } from './snowflake';
-import { TransformersEmbeddingProvider, TransformersTextGenerationProvider } from './transformers';
+import {
+  TransformersEmbeddingProvider,
+  TransformersTextClassificationProvider,
+  TransformersTextGenerationProvider,
+} from './transformers';
 import { createTrueFoundryProvider } from './truefoundry';
 import { createVercelProvider } from './vercel';
 import { VoyageEmbeddingProvider } from './voyage';
@@ -1912,7 +1916,7 @@ export const providerMap: ProviderFactory[] = [
         throw new Error(
           `Invalid Transformers.js provider path: ${providerPath}. ` +
             'Format: transformers:<task>:<model>\n' +
-            'Supported tasks: feature-extraction, text-generation\n' +
+            'Supported tasks: feature-extraction, text-generation, text-classification\n' +
             'Example: transformers:feature-extraction:Xenova/all-MiniLM-L6-v2',
         );
       }
@@ -1925,10 +1929,12 @@ export const providerMap: ProviderFactory[] = [
           return new TransformersEmbeddingProvider(modelName, providerOptions);
         case 'text-generation':
           return new TransformersTextGenerationProvider(modelName, providerOptions);
+        case 'text-classification':
+          return new TransformersTextClassificationProvider(modelName, providerOptions);
         default:
           throw new Error(
             `Unsupported Transformers.js task type: ${taskType}. ` +
-              'Supported tasks: feature-extraction (alias: embeddings), text-generation',
+              'Supported tasks: feature-extraction (alias: embeddings), text-generation, text-classification',
           );
       }
     },
