@@ -54,6 +54,7 @@ export const ProviderEnvOverridesSchema = z.object({
   DEEPSEEK_API_KEY: z.string().optional(),
   DOCKER_MODEL_RUNNER_BASE_URL: z.string().optional(),
   DOCKER_MODEL_RUNNER_API_KEY: z.string().optional(),
+  EDENAI_API_KEY: z.string().optional(),
   ELEVENLABS_API_KEY: z.string().optional(),
   ENVOY_API_BASE_URL: z.string().optional(),
   ENVOY_API_KEY: z.string().optional(),

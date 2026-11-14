@@ -32,6 +32,7 @@ import { CohereChatCompletionProvider, CohereEmbeddingProvider } from './cohere'
 import { DatabricksMosaicAiChatCompletionProvider } from './databricks';
 import { createDeepSeekProvider } from './deepseek';
 import { EchoProvider } from './echo';
+import { createEdenAiProvider } from './edenai';
 import {
   ElevenLabsAgentsProvider,
   ElevenLabsAlignmentProvider,
@@ -821,6 +822,19 @@ export const providerMap: ProviderFactory[] = [
     },
   },
   configuredProviderFactory('deepseek:', () => createDeepSeekProvider),
+  {
+    test: (providerPath: string) => providerPath.startsWith('edenai:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      return createEdenAiProvider(providerPath, {
+        ...providerOptions,
+        env: providerOptions.env ?? context.env,
+      });
+    },
+  },
   {
     test: (providerPath: string) => providerPath === 'echo',
     create: async (

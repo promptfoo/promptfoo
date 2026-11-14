@@ -133,6 +133,7 @@ describe('provider environment scopes', () => {
   });
 
   it.each([
+    ['edenai:openai/gpt-4o-mini', 'EDENAI_API_KEY'],
     ['cohere:chat:command-r', 'COHERE_API_KEY'],
     ['cohere:embedding:embed-english-v3.0', 'COHERE_API_KEY'],
     ['slack:C-fixture', 'SLACK_BOT_TOKEN'],

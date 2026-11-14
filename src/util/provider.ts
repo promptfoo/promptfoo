@@ -211,6 +211,7 @@ const KNOWN_ENV_VARS: Record<string, string> = {
   xai: 'XAI_API_KEY',
   groq: 'GROQ_API_KEY',
   deepseek: 'DEEPSEEK_API_KEY',
+  edenai: 'EDENAI_API_KEY',
   // Meta's Model API documents MODEL_API_KEY as its official env var.
   meta: 'MODEL_API_KEY',
   moonshot: 'MOONSHOT_API_KEY',
