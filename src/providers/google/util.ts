@@ -304,6 +304,14 @@ export function getGoogleApiBaseUrl(
   config: CompletionOptions,
   env?: Readonly<Record<string, string | undefined>>,
 ): string {
+  // Callers append `/${apiVersion}/...`, so a trailing slash would double it.
+  return resolveGoogleApiBaseUrl(config, env).replace(/\/+$/, '');
+}
+
+function resolveGoogleApiBaseUrl(
+  config: CompletionOptions,
+  env?: Readonly<Record<string, string | undefined>>,
+): string {
   if (config.apiHost) {
     return `https://${getNunjucksEngine().renderString(config.apiHost, {})}`;
   }
