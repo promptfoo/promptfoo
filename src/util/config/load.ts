@@ -1,3 +1,4 @@
+import { existsSync } from 'fs';
 import * as fsPromises from 'fs/promises';
 import * as path from 'path';
 import process from 'process';
@@ -18,6 +19,8 @@ import { readPrompts } from '../../prompts/index';
 import { loadApiProviders, resolveProviderConfigs } from '../../providers/index';
 import telemetry from '../../telemetry';
 import {
+  type Assertion,
+  type AssertionOrSet,
   type CommandLineOptions,
   CommandLineOptionsSchema,
   EvaluateOptionsSchema,
@@ -36,7 +39,7 @@ import {
 } from '../../types/index';
 import { isApiProvider } from '../../types/providers';
 import { maybeLoadFromExternalFile, pathExists } from '../../util/file';
-import { isJavascriptFile } from '../../util/fileExtensions';
+import { isJavascriptFile, isScriptFilePath, parseFileUrl } from '../../util/fileExtensions';
 import { readFilters, renderEnvOnlyInObject } from '../../util/index';
 import invariant from '../../util/invariant';
 import { PromptSchema } from '../../validators/prompts';
@@ -554,6 +557,32 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
 
 type TestSource = { tests: TestSuiteConfig['tests']; basePath: string };
 
+function resolveSourceAssertions(assertions: AssertionOrSet[], basePath: string): AssertionOrSet[] {
+  function resolveScript(assertion: Assertion): Assertion {
+    const value = assertion?.value;
+    if (typeof value !== 'string' || !value.startsWith('file://')) {
+      return assertion;
+    }
+    const { filePath, functionName } = parseFileUrl(value, (candidate) =>
+      existsSync(path.resolve(basePath, candidate)),
+    );
+    if (path.isAbsolute(filePath) || !isScriptFilePath(filePath)) {
+      return assertion;
+    }
+    const suffix = functionName === undefined ? '' : `:${functionName}`;
+    return { ...assertion, value: `file://${path.resolve(basePath, filePath)}${suffix}` };
+  }
+
+  return assertions.map((assertion) => {
+    if (assertion?.type === 'assert-set') {
+      return Array.isArray(assertion.assert)
+        ? { ...assertion, assert: assertion.assert.map(resolveScript) }
+        : assertion;
+    }
+    return resolveScript(assertion);
+  });
+}
+
 async function readTestSources(
   sources: TestSource[],
   env: TestSuite['env'],
@@ -563,7 +592,20 @@ async function readTestSources(
   const tests: TestCase[] = [];
   for (const source of sources) {
     try {
-      tests.push(...(await read(source.tests, source.basePath, env)));
+      const rows = await read(source.tests, source.basePath, env);
+      for (const row of rows) {
+        // Deferred scripts run relative to the combined suite's first config.
+        // Keep local rows from other directories bound to their source.
+        if (
+          source.basePath !== sources[0].basePath &&
+          Array.isArray(row.assert) &&
+          row.metadata?.__promptfoo?.remote !== true
+        ) {
+          tests.push({ ...row, assert: resolveSourceAssertions(row.assert, source.basePath) });
+        } else {
+          tests.push(row);
+        }
+      }
     } catch (error) {
       throw new ConfigResolutionError(
         `Failed to load tests from ${source.basePath || process.cwd()}: ${error instanceof Error ? error.message : String(error)}`,
