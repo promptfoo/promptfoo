@@ -125,7 +125,9 @@ describe('matchesClassification', () => {
 
   it('treats inherited properties as missing labels', async () => {
     const grading = { provider: new TestGrader() };
-    await expect(matchesClassification('constructor', 'sample', 0.5, grading)).resolves.toMatchObject({
+    await expect(
+      matchesClassification('constructor', 'sample', 0.5, grading),
+    ).resolves.toMatchObject({
       pass: false,
       score: 0,
     });
@@ -440,14 +442,6 @@ describe('matchesClassification', () => {
       pass: false,
       reason: `Classification ${expected} has score 0.60 < ${threshold}`,
       score: 0.6,
-    });
-  });
-
-  it('treats inherited properties as missing labels', async () => {
-    const grading = { provider: new TestGrader() };
-    await expect(matchesClassification('constructor', 'sample', 0.5, grading)).resolves.toMatchObject({
-      pass: false,
-      score: 0,
     });
   });
 
