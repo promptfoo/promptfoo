@@ -37,7 +37,13 @@ import {
   type TraceData,
   type VarValue,
 } from '../types/index';
-import { isJavascriptFile } from '../util/fileExtensions';
+import {
+  isJavascriptFile,
+  normalizeWindowsFileUrlPath,
+  parseExecutableFileReference,
+  parsePythonFileReference,
+  parseRubyFileReference,
+} from '../util/fileExtensions';
 import invariant from '../util/invariant';
 import { getNunjucksEngine } from '../util/templates';
 import { sleep } from '../util/time';
@@ -497,17 +503,15 @@ async function runAssertionInternal({
   if (typeof renderedValue === 'string') {
     if (renderedValue.startsWith('file://')) {
       const basePath = cliState.basePath || '';
-      const fileRef = renderedValue.slice('file://'.length);
-      let filePath = fileRef;
-      let functionName: string | undefined;
-
-      if (fileRef.includes(':')) {
-        const colonIndex = fileRef.indexOf(':');
-        filePath = fileRef.slice(0, colonIndex);
-        functionName = fileRef.slice(colonIndex + 1);
-      }
-
-      filePath = path.resolve(basePath, filePath);
+      const fileReference = renderedValue.slice('file://'.length);
+      const pythonReference = parsePythonFileReference(fileReference);
+      const rubyReference = parseRubyFileReference(fileReference);
+      const { filePath: referencedPath, functionName } =
+        rubyReference ?? pythonReference ?? parseExecutableFileReference(fileReference);
+      const filePath = path.resolve(
+        basePath,
+        normalizeWindowsFileUrlPath(referencedPath, process.platform),
+      );
 
       if (isJavascriptFile(filePath)) {
         // Load errors (missing file or export) are config mistakes and still throw.
@@ -520,11 +524,17 @@ async function runAssertionInternal({
           );
         }
         logger.debug(`Javascript script ${filePath} output: ${valueFromScript}`);
-      } else if (filePath.endsWith('.py') || filePath.endsWith('.rb')) {
+      } else if (
+        pythonReference ||
+        rubyReference ||
+        filePath.endsWith('.py') ||
+        filePath.endsWith('.rb')
+      ) {
         try {
-          const runScript = filePath.endsWith('.py')
-            ? runPython
-            : (await import('../ruby/rubyUtils.js')).runRuby;
+          const runScript =
+            pythonReference || filePath.endsWith('.py')
+              ? runPython
+              : (await import('../ruby/rubyUtils.js')).runRuby;
           valueFromScript = await runScript<ValueFromScriptType>(
             filePath,
             functionName || 'get_assert',

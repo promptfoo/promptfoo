@@ -134,7 +134,7 @@ assert:
     value: file://relative/path/to/script.py:custom_assert
 ```
 
-If no function is specified, it defaults to `get_assert`.
+If no function is specified, it defaults to `get_assert`. In a CSV `__expected` column, a bare reference such as `file://checks/grade.PY:get_assert` runs the external Python assertion. The `.py` suffix is case-insensitive.
 
 This file will be called with an `output` string and an `AssertionValueFunctionContext` object (see above).
 It expects that either a `bool` (pass/fail), `float` (score), or `GradingResult` will be returned.

@@ -22,6 +22,7 @@ import {
   isAudioFile,
   isImageFile,
   isJavascriptFile,
+  isPythonFile,
   isVideoFile,
 } from '../../src/util/fileExtensions';
 import { mockProcessEnv } from './utils';
@@ -41,6 +42,7 @@ vi.mock('fs', async () => {
     readFileSync: vi.fn(),
     writeFileSync: vi.fn(),
     statSync: vi.fn(),
+    lstatSync: vi.fn(),
     readdirSync: vi.fn(),
     existsSync: vi.fn(),
     mkdirSync: vi.fn(),
@@ -90,6 +92,22 @@ describe('file utilities', () => {
       expect(isJavascriptFile('test.MJS')).toBe(true);
       expect(isJavascriptFile('test.CTS')).toBe(true);
       expect(isJavascriptFile('test.TXT')).toBe(false);
+    });
+  });
+
+  describe('isPythonFile', () => {
+    it('matches only Python source extensions case-insensitively', () => {
+      expect(isPythonFile('test.py')).toBe(true);
+      expect(isPythonFile('test.PY')).toBe(true);
+      expect(isPythonFile('test.Py')).toBe(true);
+      expect(isPythonFile('test.pyi')).toBe(false);
+      expect(isPythonFile('test.py.bak')).toBe(false);
+      expect(isPythonFile('test.py\n')).toBe(false);
+      expect(isPythonFile('test?loader=script.py')).toBe(false);
+      expect(isPythonFile('test#loader.py')).toBe(false);
+      expect(isPythonFile('fixtures#1/test.py')).toBe(true);
+      expect(isPythonFile('C#/test.PY')).toBe(true);
+      expect(isPythonFile('test.txt')).toBe(false);
     });
   });
 
@@ -879,17 +897,31 @@ describe('file utilities', () => {
     });
 
     describe('maybeLoadConfigFromExternalFile with assertion detection', () => {
-      it('should preserve Python assertion file references', () => {
+      it.each(['python', 'not-python'])('preserves a bare file reference for %s', (type) => {
         const config = {
           assert: [
             {
-              type: 'python',
+              type,
               value: 'file://good_assertion.py',
             },
           ],
         };
         const result = maybeLoadConfigFromExternalFile(config);
         expect(result.assert[0].value).toBe('file://good_assertion.py');
+        expect(fs.readFileSync).not.toHaveBeenCalled();
+      });
+
+      it('should preserve mixed-case Python assertion file references', () => {
+        const config = {
+          assert: [
+            {
+              type: 'python',
+              value: 'file://fixtures#1/good_assertion.PY:get_assert',
+            },
+          ],
+        };
+        const result = maybeLoadConfigFromExternalFile(config);
+        expect(result.assert[0].value).toBe('file://fixtures#1/good_assertion.PY:get_assert');
         expect(fs.readFileSync).not.toHaveBeenCalled();
       });
 
@@ -1739,6 +1771,41 @@ describe('file utilities', () => {
         isPathPattern: false,
         filePath: path.join('/base', 'file.py'),
       });
+    });
+
+    it('should parse a mixed-case Python path with a function selector', () => {
+      vi.mocked(fs.lstatSync).mockReturnValueOnce({ isFile: () => true } as fs.Stats);
+      vi.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
+      expect(parsePathOrGlob('/base', 'provider.PY:custom_call')).toEqual({
+        extension: '.PY',
+        functionName: 'custom_call',
+        isPathPattern: false,
+        filePath: path.join('/base', 'provider.PY'),
+      });
+    });
+
+    it('should hash and load the same lowercase fallback used by the Python workers', () => {
+      vi.spyOn(fs, 'existsSync').mockImplementation(
+        (candidate) => candidate === path.join('/base', 'provider.py'),
+      );
+      vi.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
+
+      expect(parsePathOrGlob('/base', 'provider.PY')).toEqual({
+        extension: '.py',
+        functionName: undefined,
+        isPathPattern: false,
+        filePath: path.join('/base', 'provider.py'),
+      });
+    });
+
+    it('keeps a dangling mixed-case symlink ahead of its lowercase sibling', () => {
+      vi.mocked(fs.lstatSync).mockReturnValueOnce({ isSymbolicLink: () => true } as fs.Stats);
+      vi.mocked(fs.existsSync).mockImplementation(
+        (name) => name === path.join('/base', 'provider.py'),
+      );
+      expect(parsePathOrGlob('/base', 'provider.PY').filePath).toBe(
+        path.join('/base', 'provider.PY'),
+      );
     });
 
     it('should parse a Go file path with function name', async () => {
