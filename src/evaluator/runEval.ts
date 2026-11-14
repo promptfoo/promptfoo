@@ -65,6 +65,13 @@ const promptUsesConversationVariableCache = new LRUCache<string, boolean>({
   max: PROMPT_CONVERSATION_CACHE_MAX,
 });
 
+export class ConversationGroupAbortError extends Error {
+  constructor() {
+    super('Another conversation group failed');
+    this.name = 'AbortError';
+  }
+}
+
 export function promptUsesConversationVariable(prompt: Pick<Prompt, 'raw'>): boolean {
   const cached = promptUsesConversationVariableCache.get(prompt.raw);
   if (cached !== undefined) {
@@ -79,6 +86,39 @@ export function promptUsesConversationVariable(prompt: Pick<Prompt, 'raw'>): boo
     promptUsesConversationVariableCache.set(prompt.raw, referenced);
   }
   return referenced;
+}
+
+export function shouldUseConversationVariable(prompt: Prompt, test: AtomicTestCase): boolean {
+  return (
+    !getEnvBool('PROMPTFOO_DISABLE_CONVERSATION_VAR') &&
+    !test.options?.disableConversationVar &&
+    promptUsesConversationVariable(prompt)
+  );
+}
+
+/**
+ * Builds the key used to preserve conversation state across related eval steps.
+ *
+ * Provider identifiers and prompt ids can both collide, but every result-table
+ * column has a unique index, so the column index is part of the key. Repeat
+ * iterations intentionally get separate keys so repeated evals remain isolated.
+ * The components are encoded as a tuple because identifiers can contain
+ * separators that would make concatenated keys ambiguous.
+ */
+export function buildConversationKey(
+  provider: ApiProvider,
+  prompt: Prompt,
+  test: AtomicTestCase,
+  repeatIndex = 0,
+  promptIndex = 0,
+): string {
+  return JSON.stringify([
+    getProviderIdentifier(provider),
+    prompt.id,
+    promptIndex,
+    test.metadata?.conversationId,
+    repeatIndex,
+  ]);
 }
 
 /** Test-only: reset the per-process prompt conversation-variable cache. */
@@ -264,21 +304,14 @@ function createRunEvalState({
   provider,
   prompt,
   promptIndex,
+  repeatIndex,
   test,
-}: Pick<RunEvalOptions, 'provider' | 'prompt' | 'test'> & {
+}: Pick<RunEvalOptions, 'provider' | 'prompt' | 'repeatIndex' | 'test'> & {
   promptIndex: number;
 }): RunEvalState {
   const vars = structuredClone(test.vars || {});
   const fileMetadata = collectFileMetadata(vars);
-  // Provider identifiers and prompt ids can both collide, but every result-table
-  // column has a unique index. Encode the components as a tuple because identifiers
-  // can contain separators that would make concatenated keys ambiguous.
-  const conversationKey = JSON.stringify([
-    getProviderIdentifier(provider),
-    prompt.id,
-    promptIndex,
-    test.metadata?.conversationId,
-  ]);
+  const conversationKey = buildConversationKey(provider, prompt, test, repeatIndex, promptIndex);
 
   const setup = createRunEvalSetup({
     provider,
@@ -354,12 +387,7 @@ function attachConversationVar({
   test: AtomicTestCase;
   vars: Vars;
 }) {
-  const usesConversation = promptUsesConversationVariable(prompt);
-  if (
-    !getEnvBool('PROMPTFOO_DISABLE_CONVERSATION_VAR') &&
-    !test.options?.disableConversationVar &&
-    usesConversation
-  ) {
+  if (shouldUseConversationVariable(prompt, test)) {
     vars._conversation = conversations?.[conversationKey] || [];
   }
 }
@@ -1333,7 +1361,7 @@ export async function runEvalInternal(
     `Provider delay should be set for ${provider.label}`,
   );
 
-  const state = createRunEvalState({ provider, prompt, promptIndex, test });
+  const state = createRunEvalState({ provider, prompt, promptIndex, repeatIndex, test });
   attachConversationVar({
     conversations,
     conversationKey: state.conversationKey,
@@ -1425,6 +1453,16 @@ export async function runEvalInternal(
           latencyMs = providerCall.latencyMs;
           if (stepWorkspace) {
             response.metadata = { ...response.metadata, ...(await stepWorkspace.metadata()) };
+          }
+          // Discard late responses from internally cancelled steps before they mutate
+          // history. Caller cancellation and CLI pause retain completed target results.
+          if (
+            abortSignal?.aborted &&
+            (abortSignal.reason instanceof ConversationGroupAbortError ||
+              (!orchestrationOptions.abortSignal?.aborted &&
+                !orchestrationOptions.pauseSignal?.aborted))
+          ) {
+            abortSignal.throwIfAborted();
           }
 
           updateConversationHistory({
@@ -1531,6 +1569,13 @@ export async function runEvalInternal(
       // Leave incomplete CLI-paused work eligible for resume instead of persisting an ERROR.
       return [];
     }
+    if (
+      abortSignal?.reason instanceof ConversationGroupAbortError &&
+      (isAbortError(err) || err === abortSignal.reason)
+    ) {
+      throw err;
+    }
+
     const { errorWithStack, metadata, logContext } = buildProviderErrorContext({
       error: err,
       provider,
