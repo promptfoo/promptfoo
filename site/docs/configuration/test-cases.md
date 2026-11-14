@@ -397,9 +397,12 @@ promptfoo eval --filter-metadata category=math --filter-metadata difficulty=easy
 
 # Comma-separated values use OR logic within one key
 promptfoo eval --filter-metadata category=math,science
+
+# Match across keys in top-level tests
+promptfoo eval --filter-metadata-any target=a --filter-metadata-any category=math
 ```
 
-Each value uses case-sensitive substring matching, including for array metadata. Repeated flags use AND even for the same key. Whitespace is significant. Commas separate alternatives, and leading, trailing, or consecutive commas are invalid. To match a value that contains a comma, escape it as `\,`:
+The OR flag applies to top-level tests. An eval selected with this flag must be started again to rerun it. Resume and retry are unavailable for this selection. Each value uses case-sensitive substring matching, including for array metadata. Repeated flags use AND even for the same key. Whitespace is significant. Commas separate alternatives, and leading, trailing, or consecutive commas are invalid. To match a value that contains a comma, escape it as `\,`:
 
 ```bash
 promptfoo eval --filter-metadata 'title=Hello\, world'
