@@ -117,6 +117,9 @@ export function getCloudTaskTeamId(url: string | URL | Request): string | undefi
   if (!isPromptfooCloudTaskUrl(url)) {
     return undefined;
   }
+  if (!getCloudBearerToken(url)) {
+    return undefined;
+  }
 
   const organizationId = cloudConfig.getCurrentOrganizationId();
   return cloudConfig.getCurrentTeamId(organizationId);

@@ -51,6 +51,10 @@ describe('formatConfigBody', () => {
     expect(result).toContain('    ');
   });
 
+  it('should propagate non-string serialization errors', () => {
+    expect(() => formatConfigBody({ body: 1n })).toThrow(TypeError);
+  });
+
   it('should handle nested objects', () => {
     const body = { outer: { inner: 'deep' } };
     const result = formatConfigBody({ body });

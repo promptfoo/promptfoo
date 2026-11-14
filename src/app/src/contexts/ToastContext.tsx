@@ -68,41 +68,38 @@ const ToastNotification = React.memo(
 ToastNotification.displayName = 'ToastNotification';
 
 export const ToastProvider = ({ children }: ToastProviderProps) => {
-  const [open, setOpen] = useState(false);
-  const [message, setMessage] = useState('');
-  const [severity, setSeverity] = useState<ToastSeverity>('info');
-  const [duration, setDuration] = useState<number>(2000);
+  const [toast, setToast] = useState({
+    open: false,
+    message: '',
+    severity: 'info' as ToastSeverity,
+    duration: 2000,
+  });
 
   const showToast = useCallback(
     (message: string, severity: ToastSeverity = 'info', duration: number = 2000) => {
-      setMessage(message);
-      setSeverity(severity);
-      setDuration(duration);
-      setOpen(true);
+      setToast({ open: true, message, severity, duration });
     },
     [],
   );
 
   const handleClose = useCallback(() => {
-    setOpen(false);
+    setToast((current) => ({ ...current, open: false }));
   }, []);
 
   // Auto-close timer
   React.useEffect(() => {
-    if (open && duration > 0) {
-      const timer = setTimeout(() => {
-        setOpen(false);
-      }, duration);
+    if (toast.open && toast.duration > 0) {
+      const timer = setTimeout(handleClose, toast.duration);
       return () => clearTimeout(timer);
     }
-  }, [open, duration]);
+  }, [toast, handleClose]);
 
   const value = useMemo(() => ({ showToast }), [showToast]);
 
   return (
     <ToastContext.Provider value={value}>
       {children}
-      <ToastNotification open={open} message={message} severity={severity} onClose={handleClose} />
+      <ToastNotification {...toast} onClose={handleClose} />
     </ToastContext.Provider>
   );
 };

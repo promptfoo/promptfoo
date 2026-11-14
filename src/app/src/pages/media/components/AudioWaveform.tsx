@@ -4,42 +4,30 @@ import { cn } from '@app/lib/utils';
 import { hashToNumber } from '@app/utils/media';
 import { Music } from 'lucide-react';
 
+const sizes = {
+  compact: { barCount: 7, barWidth: 4, minBarHeight: 8, maxBarHeight: 24, iconSize: 'h-10 w-10' },
+  expanded: {
+    barCount: 12,
+    barWidth: 8,
+    minBarHeight: 16,
+    maxBarHeight: 48,
+    iconSize: 'h-16 w-16',
+  },
+};
+
 interface AudioWaveformProps {
   /** Content hash used to generate deterministic bar heights */
   hash: string;
-  /** Whether audio is currently playing (enables animation) */
-  isPlaying?: boolean;
-  /** Number of bars in the waveform visualization */
-  barCount?: number;
-  /** Width of each bar in pixels */
-  barWidth?: number;
-  /** Minimum height of bars in pixels */
-  minBarHeight?: number;
-  /** Maximum height of bars in pixels */
-  maxBarHeight?: number;
-  /** Additional CSS classes */
-  className?: string;
-  /** Whether to show the music icon above the waveform */
-  showIcon?: boolean;
-  /** Size of the music icon */
-  iconSize?: string;
+  isPlaying: boolean;
+  size: keyof typeof sizes;
 }
 
 /**
  * Audio waveform visualization with deterministic bar heights based on content hash.
  * Used in both MediaCard (compact) and MediaModal (expanded) views.
  */
-export function AudioWaveform({
-  hash,
-  isPlaying = false,
-  barCount = 7,
-  barWidth = 4,
-  minBarHeight = 8,
-  maxBarHeight = 24,
-  className,
-  showIcon = false,
-  iconSize = 'h-10 w-10',
-}: AudioWaveformProps) {
+export function AudioWaveform({ hash, isPlaying, size }: AudioWaveformProps) {
+  const { barCount, barWidth, minBarHeight, maxBarHeight, iconSize } = sizes[size];
   // Generate deterministic bar heights from hash
   const bars = useMemo(() => {
     const seed = hashToNumber(hash);
@@ -53,9 +41,9 @@ export function AudioWaveform({
   }, [hash, barCount, minBarHeight, maxBarHeight]);
 
   return (
-    <div className={cn('flex flex-col items-center gap-2', className)}>
-      {showIcon && <Music className={cn(iconSize, 'text-purple-400 dark:text-purple-500')} />}
-      <div className="flex items-end" style={{ gap: `${Math.max(1, barWidth / 4)}px` }}>
+    <div className="flex flex-col items-center gap-2">
+      <Music className={cn(iconSize, 'text-purple-400 dark:text-purple-500')} />
+      <div className="flex items-end" style={{ gap: `${barWidth / 4}px` }}>
         {bars.map((height, i) => (
           <div
             key={i}

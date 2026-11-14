@@ -71,7 +71,9 @@ All deterministic types support `not-` prefix: `not-contains`, `not-regex`, etc.
 | ------------- | ---------------------------------------- |
 | `similar`     | Cosine similarity (set `threshold: 0.8`) |
 | `levenshtein` | Edit distance                            |
-| `rouge-n`     | ROUGE score (summarization)              |
+| `rouge-l`     | ROUGE-L, summary-level LCS (ROUGE-Lsum)  |
+| `rouge-n`     | ROUGE-N unigram overlap (summarization)  |
+| `rouge-s`     | ROUGE-S, skip-bigram overlap             |
 | `bleu`        | BLEU score (translation)                 |
 
 ### Model-graded (use sparingly — costs money, non-deterministic)

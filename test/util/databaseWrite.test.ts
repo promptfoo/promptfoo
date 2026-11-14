@@ -3,6 +3,7 @@ import { getDb } from '../../src/database/index';
 import { updateSignalFile } from '../../src/database/signal';
 import { datasetsTable, evalsTable, promptsTable, tagsTable } from '../../src/database/tables';
 import { runDbMigrations } from '../../src/migrate';
+import Eval from '../../src/models/eval';
 import {
   clearStandaloneEvalCache,
   getStandaloneEvals,
@@ -26,7 +27,7 @@ function expectWrittenHistoryCached() {
   expect(getCachedStandaloneEvals(getStandaloneEvalCacheKey())).toBeDefined();
 }
 
-describe('writeResultsToDatabase', () => {
+describe('evaluation database writes', () => {
   beforeAll(async () => {
     await runDbMigrations();
   });
@@ -48,9 +49,11 @@ describe('writeResultsToDatabase', () => {
     clearStandaloneEvalCache();
   });
 
-  it('rolls back related rows when a dependent insert fails', async () => {
-    const db = await getDb();
-    await db.run(`
+  it.each(['Eval.create', 'writeResultsToDatabase'])(
+    '%s rolls back related rows when a dependent insert fails',
+    async (writer) => {
+      const db = await getDb();
+      await db.run(`
       CREATE TRIGGER fail_evals_to_tags_insert
       BEFORE INSERT ON evals_to_tags
       BEGIN
@@ -58,22 +61,21 @@ describe('writeResultsToDatabase', () => {
       END;
     `);
 
-    await expect(
-      writeResultsToDatabase(
-        createEvaluateSummaryV2(),
-        {
-          tags: { suite: 'regression' },
-          tests: [],
-        },
-        new Date('2024-01-01T00:00:00.000Z'),
-      ),
-    ).rejects.toThrow();
+      const config = { tags: { suite: 'regression' }, tests: [] };
+      const createdAt = new Date('2024-01-01T00:00:00.000Z');
+      const summary = createEvaluateSummaryV2();
+      const write =
+        writer === 'Eval.create'
+          ? Eval.create(config, summary.table.head.prompts, { createdAt })
+          : writeResultsToDatabase(summary, config, createdAt);
+      await expect(write).rejects.toThrow();
 
-    await expect(db.select().from(evalsTable).all()).resolves.toHaveLength(0);
-    await expect(db.select().from(promptsTable).all()).resolves.toHaveLength(0);
-    await expect(db.select().from(datasetsTable).all()).resolves.toHaveLength(0);
-    await expect(db.select().from(tagsTable).all()).resolves.toHaveLength(0);
-  });
+      await expect(db.select().from(evalsTable).all()).resolves.toHaveLength(0);
+      await expect(db.select().from(promptsTable).all()).resolves.toHaveLength(0);
+      await expect(db.select().from(datasetsTable).all()).resolves.toHaveLength(0);
+      await expect(db.select().from(tagsTable).all()).resolves.toHaveLength(0);
+    },
+  );
 
   it('keeps cached history when a later write rolls back', async () => {
     const firstEvalId = await writeResultsToDatabase(createEvaluateSummaryV2(), {}, new Date());

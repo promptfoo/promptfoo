@@ -5,6 +5,7 @@ import dotenv from 'dotenv';
 import express from 'express';
 import OpenAI from 'openai';
 import WebSocket, { WebSocketServer } from 'ws';
+import defaultErrorHandler from './defaultErrorHandler.cjs';
 
 dotenv.config();
 
@@ -40,6 +41,7 @@ app.use(express.json());
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok' });
 });
+app.use(defaultErrorHandler);
 
 // WebSocket: /ws (non-streaming)
 wss.on('connection', (ws, request) => {

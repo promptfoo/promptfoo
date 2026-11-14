@@ -7,7 +7,7 @@ prompts:
 providers:
   - id: browser
     config:
-      headless: false # See the browser in action
+      headless: true # Set to false to see the browser in action
       steps:
         # Navigate to the demo
         - action: navigate
@@ -55,14 +55,13 @@ providers:
           args:
             ms: 2000
 
-        # Extract entire result area for debugging
+        # Read the textbox value, rather than its static Result label
         - action: extract
           args:
-            selector: '#result'
-          name: resultArea
+            script: return document.querySelector('#result textarea')?.value ?? '';
+          name: result
 
-      # For demo purposes, we'll just check that we got something
-      transformResponse: 'extracted.resultArea && extracted.resultArea.includes("Result") ? "Calculator interaction successful" : "No result found"'
+      transformResponse: 'extracted.result'
 
 # Simple demo tests
 tests:
@@ -71,15 +70,17 @@ tests:
       num2: '5'
       operation: Add
       operationSelector: '#operation label:nth-child(1)'
+      expected: 15
     assert:
-      - type: contains
-        value: 'successful'
+      - type: javascript
+        value: output.trim() !== '' && Number(output) === context.vars.expected
 
   - vars:
       num1: '20'
       num2: '4'
       operation: Multiply
       operationSelector: '#operation label:nth-child(3)'
+      expected: 80
     assert:
-      - type: contains
-        value: 'successful'
+      - type: javascript
+        value: output.trim() !== '' && Number(output) === context.vars.expected

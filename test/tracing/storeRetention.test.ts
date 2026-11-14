@@ -2,7 +2,7 @@ import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { getDb } from '../../src/database/index';
 import { spansTable, tracesTable } from '../../src/database/tables';
 import { runDbMigrations } from '../../src/migrate';
-import { getTraceSpans, TraceStore } from '../../src/tracing/store';
+import { getTraceStore, TraceStore } from '../../src/tracing/store';
 import EvalFactory from '../factories/evalFactory';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -72,7 +72,7 @@ describe('TraceStore retention cleanup', () => {
   });
 });
 
-describe('getTraceSpans', () => {
+describe('TraceStore span retrieval', () => {
   beforeAll(async () => {
     await runDbMigrations();
   });
@@ -108,7 +108,7 @@ describe('getTraceSpans', () => {
       })
       .run();
 
-    const spans = await getTraceSpans('trace-fetch');
+    const spans = await getTraceStore().getSpans('trace-fetch');
 
     expect(spans).toHaveLength(1);
     expect(spans[0]).toMatchObject({ spanId: 'trace-fetch-span', name: 'fetch-operation' });

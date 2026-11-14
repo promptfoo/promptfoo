@@ -23,14 +23,14 @@ Assertions are _optional_. Many people get value out of reviewing outputs manual
 
 ## Example
 
-Let's imagine we're building an app that does language translation. This config runs each prompt through GPT-5 mini and Gemini, substituting `language` and `input` variables:
+Let's imagine we're building an app that does language translation. This config runs each prompt through GPT-6 Luna and Gemini, substituting `language` and `input` variables:
 
 ```yaml
 prompts:
   - file://prompt1.txt
   - file://prompt2.txt
 providers:
-  - openai:gpt-5-mini
+  - openai:gpt-6-luna
   - id: vertex:gemini-3.5-flash
     config:
       region: global
@@ -60,7 +60,7 @@ prompts:
   - file://prompt1.txt
   - file://prompt2.txt
 providers:
-  - openai:gpt-5-mini
+  - openai:gpt-6-luna
   - id: vertex:gemini-3.5-flash
     config:
       region: global
@@ -86,7 +86,7 @@ prompts:
   - file://prompt1.txt
   - file://prompt2.txt
 providers:
-  - openai:gpt-5-mini
+  - openai:gpt-6-luna
   - id: vertex:gemini-3.5-flash
     config:
       region: global
@@ -128,9 +128,11 @@ providers:
 Where the provider file looks like this:
 
 ```yaml
-id: openai:gpt-5-mini
+id: openai:gpt-6-luna
 label: Foo bar
 config:
+  reasoning:
+    effort: none
   temperature: 0.9
 ```
 
@@ -140,7 +142,7 @@ The `tests` config property takes a list of paths to files or directories. For e
 
 ```yaml
 prompts: file://prompts.txt
-providers: openai:gpt-5-mini
+providers: openai:gpt-6-luna
 
 # Load & runs all test cases matching these filepaths
 tests:
@@ -280,7 +282,7 @@ prompts:
   - file://prompt1.txt
   - file://prompt2.txt
 providers:
-  - openai:gpt-5-mini
+  - openai:gpt-6-luna
   - id: vertex:gemini-3.5-flash
     config:
       region: global
@@ -307,12 +309,12 @@ tests:
         threshold: 0.6
 ```
 
-You can also use `defaultTest` to override the model used for each test. This can be useful for [model-graded evals](/docs/configuration/expected-outputs/model-graded):
+To choose the judge for [model-graded assertions](/docs/configuration/expected-outputs/model-graded), set `defaultTest.options.provider`. Keep the models being tested in the top-level `providers` list:
 
 ```yaml
 defaultTest:
   options:
-    provider: openai:gpt-5-mini
+    provider: openai:gpt-6-luna
 ```
 
 Set `options.disableDefaultAsserts: true` on a test case when that test should define its own assertions without inheriting `defaultTest.assert`. Other `defaultTest` fields, such as `vars`, `metadata`, `threshold`, and `options`, still apply:
@@ -358,7 +360,7 @@ You can load `defaultTest` configuration from external files using `defaultTest:
 
 ### YAML references
 
-Promptfoo YAML and JSON configurations support [references](https://opis.io/json-schema/2.x/references.html) that reuse blocks from the surrounding config.
+promptfoo configurations support JSON schema [references](https://opis.io/json-schema/2.x/references.html), which define reusable blocks.
 
 Use the `$ref` key to re-use assertions without having to fully define them more than once. Here's an example:
 
@@ -367,7 +369,7 @@ prompts:
   - file://prompt1.txt
   - file://prompt2.txt
 providers:
-  - openai:gpt-5-mini
+  - openai:gpt-6-luna
   - id: vertex:gemini-3.5-flash
     config:
       region: global
@@ -395,14 +397,10 @@ assertionTemplates:
 // highlight-end
 ```
 
+HTTP(S) `$ref` downloads are limited to 50 MiB per response, including decompressed content. Private and loopback network destinations are blocked. Use a local reference or split larger documents if a remote reference exceeds this limit.
+
 :::info
-
-Promptfoo resolves a pure local JSON Pointer `$ref` object used to select a schema from the surrounding config. Once selected, references owned by the standalone JSON Schema are passed through unchanged. This boundary applies to provider-owned structured-output and tool schema fields, including OpenAI-compatible response formats and tools, Codex `output_schema`, OpenAI Agents output and tool schemas, Anthropic `output_format.schema`, Google response and function-declaration schemas, OpenCode `format.schema`, Vercel `responseSchema`, and Anthropic or Bedrock tool schemas in provider, target, prompt, and test-option config.
-
-If an ordinary config `$ref` also selects that definition, Promptfoo gives the provider a detached schema copy. The reference parser processes the shared definition and all of its child refs as ordinary config. Promptfoo makes this distinction for inline values and for config documents loaded through local file or supported safe remote references. Relative config references resolve from the document that contains them, while references inside provider and assertion schemas remain unchanged.
-
-Loading a complete response format with `file://` remains supported. At a schema root, a pure unfragmented `file://...` ref or one with a JSON Pointer fragment (`#/...`) loads that file while leaving references inside the loaded schema unchanged. Named fragments such as `#anchor` remain unchanged for the provider to interpret. Relative schema selectors resolve from the containing config file, or from the containing external test file. Whether a provider accepts internal, relative, remote, cyclic, or malformed schema references depends on that provider.
-
+`tools` and `functions` values in providers config are _not_ dereferenced. This is because they are standalone JSON schemas that may contain their own internal references.
 :::
 
 ## Multiple variables in a single test case
@@ -414,8 +412,8 @@ For example:
 ```yaml
 prompts: file://prompts.txt
 providers:
-  - openai:gpt-5-mini
-  - openai:gpt-5
+  - openai:gpt-6-luna
+  - openai:gpt-6-sol
 tests:
   - vars:
       // highlight-start
@@ -614,11 +612,11 @@ For example, for Claude:
 
 ```yaml
 providers:
-  - id: anthropic:messages:claude-sonnet-4-5-20250929
+  - id: anthropic:messages:claude-sonnet-5
     config:
       thinking:
-        type: 'enabled'
-        budget_tokens: 16000
+        type: 'adaptive'
+      effort: high # Reasoning depth; replaces budget_tokens on Claude 5 models
       showThinking: false # Exclude thinking content from output
 ```
 
@@ -647,27 +645,7 @@ For test transforms specifically:
 
 Note that only one transform is applied at the test case level - either from `defaultTest` or the individual test case, not both.
 
-The `TestCase.options.transform` field is a Javascript snippet that modifies the LLM output before it is run through the test assertions.
-
-It is a function that takes a string output and a context object:
-
-```typescript
-transformFn: (output: string, context: {
-  prompt: {
-    // ID of the prompt, if assigned
-    id?: string;
-    // Raw prompt as provided in the test case, without {{variable}} substitution.
-    raw?: string;
-    // Prompt as sent to the LLM API and assertions.
-    display?: string;
-  };
-  vars?: Record<string, any>;
-  // Metadata returned in the provider response.
-  metadata?: Record<string, any>;
-}) => void;
-```
-
-This is useful if you need to somehow transform or clean LLM output before running an eval.
+Use `options.transform` to change the provider output before assertions run. The transform receives the output (for example, a string or object) and a context with `vars`, `prompt`, and optional provider `metadata`. Return the value to pass to assertions, either directly or as a promise. Returning `null` or `undefined` causes an error.
 
 For example:
 
@@ -715,7 +693,7 @@ tests:
 ```
 
 :::tip
-Use `defaultTest` apply a transform option to every test case in your test suite.
+Use `defaultTest` to apply a transform option to every test case in your test suite.
 :::
 
 :::tip
@@ -893,7 +871,7 @@ prompts:
   - file://prompt1.txt
   - file://prompt2.txt
 providers:
-  - openai:gpt-5-mini
+  - openai:gpt-6-luna
   - id: vertex:gemini-3.5-flash
     config:
       region: global
@@ -908,7 +886,7 @@ prompts:
   - file://prompt1.txt
   - file://prompt2.txt
 providers:
-  - openai:gpt-5-mini
+  - openai:gpt-6-luna
   - id: vertex:gemini-3.5-flash
     config:
       region: global

@@ -1,4 +1,9 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createAgentWorkspace } from '../../src/providers/agentWorkspace';
 
 import type { ApiProvider, ProviderResponse } from '../../src/types/index';
 
@@ -43,6 +48,10 @@ vi.mock('../../src/providers/index', () => ({
 }));
 
 describe('matchesAgentRubric', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   beforeEach(() => {
     vi.resetAllMocks();
     const agentResponse = async (): Promise<ProviderResponse> => ({
@@ -189,4 +198,95 @@ describe('matchesAgentRubric', () => {
       }),
     );
   });
+  it('grades inside the workspace that the output came from', async () => {
+    const { matchesAgentRubric } = await import('../../src/matchers/agent');
+    const source = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-rubric-fixture-'));
+    fs.writeFileSync(path.join(source, 'file.txt'), 'content');
+    const workspace = await createAgentWorkspace(source, 'copy');
+    try {
+      await matchesAgentRubric(
+        'Check the file',
+        'Done',
+        {},
+        {},
+        undefined,
+        undefined,
+        workspace.dir,
+      );
+    } finally {
+      await workspace.remove();
+      fs.rmSync(source, { recursive: true, force: true });
+    }
+
+    expect(mocks.codexProvider.callApi).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        prompt: expect.objectContaining({ config: { working_dir: workspace.dir } }),
+      }),
+    );
+  });
+
+  it.each([
+    ['a directory the target reported', os.tmpdir()],
+    ['a non-string value', { dir: os.tmpdir() }],
+  ])('does not grade in %s', async (_label, workingDir) => {
+    const { matchesAgentRubric } = await import('../../src/matchers/agent');
+
+    await matchesAgentRubric('Check the file', 'Done', {}, {}, undefined, undefined, workingDir);
+
+    const [, context] = vi.mocked(mocks.codexProvider.callApi).mock.calls[0];
+    expect(context?.prompt).not.toHaveProperty('config');
+  });
+
+  it.each(['deleted', 'replaced', 'replaced ancestor'])(
+    'fails grading when the target workspace was %s',
+    async (change) => {
+      if (process.platform === 'win32') {
+        return;
+      }
+      const { matchesAgentRubric } = await import('../../src/matchers/agent');
+      const source = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-rubric-fixture-'));
+      fs.writeFileSync(path.join(source, 'passing.txt'), 'original evidence');
+      const workspace = await createAgentWorkspace(source, 'copy');
+      const grader: ApiProvider = {
+        id: () => 'anthropic:claude-agent-sdk',
+        config: { working_dir: source },
+        callApi: vi.fn(async () => ({
+          output: '{"pass":true,"score":1,"reason":"source exists"}',
+        })),
+      };
+      mocks.loadApiProvider.mockResolvedValue(grader);
+      const parent = path.dirname(workspace.dir);
+      try {
+        if (change === 'replaced ancestor') {
+          fs.renameSync(parent, `${parent}-moved`);
+          fs.symlinkSync(`${parent}-moved`, parent);
+        } else {
+          fs.rmSync(workspace.dir, { recursive: true });
+          if (change === 'replaced') {
+            fs.symlinkSync(source, workspace.dir);
+          }
+        }
+        await expect(
+          matchesAgentRubric(
+            'Check passing.txt',
+            'Done',
+            { provider: 'anthropic:claude-agent-sdk' },
+            {},
+            undefined,
+            undefined,
+            workspace.dir,
+          ),
+        ).rejects.toThrow('workspace is no longer available');
+        expect(grader.callApi).not.toHaveBeenCalled();
+      } finally {
+        if (change === 'replaced ancestor') {
+          fs.unlinkSync(parent);
+          fs.renameSync(`${parent}-moved`, parent);
+        }
+        await workspace.remove();
+        fs.rmSync(source, { recursive: true, force: true });
+      }
+    },
+  );
 });

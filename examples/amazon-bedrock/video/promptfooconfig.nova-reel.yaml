@@ -1,6 +1,6 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-# Legacy Nova Reel: Bedrock end of life is September 30, 2026.
-# https://docs.aws.amazon.com/bedrock/latest/userguide/model-lifecycle.html
+# Historical Nova Reel: reached Bedrock end of life on September 30, 2026.
+# https://docs.aws.amazon.com/bedrock/latest/userguide/model-lifecycle-legacy.html
 description: Amazon Nova Reel Video Generation
 
 providers:

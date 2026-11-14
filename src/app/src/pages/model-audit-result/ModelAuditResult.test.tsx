@@ -1,7 +1,7 @@
 import { TooltipProvider } from '@app/components/ui/tooltip';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { MemoryRouter, Route, Routes } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useModelAuditConfigStore, useModelAuditHistoryStore } from '../model-audit/stores';
 import ModelAuditResult from './ModelAuditResult';
@@ -26,8 +26,8 @@ vi.mock('../model-audit/components/ModelAuditSkeleton', () => ({
 }));
 
 const mockNavigate = vi.fn();
-vi.mock('react-router-dom', async () => {
-  const actual = await vi.importActual('react-router-dom');
+vi.mock('react-router', async () => {
+  const actual = await vi.importActual('react-router');
   return {
     ...actual,
     useNavigate: () => mockNavigate,
@@ -67,17 +67,11 @@ describe('ModelAuditResult', () => {
     historyError: null,
     totalCount: 0,
     pageSize: 25,
-    currentPage: 0,
     sortModel: [{ field: 'createdAt', sort: 'desc' as const }],
-    searchQuery: '',
     fetchHistoricalScans: vi.fn(),
     fetchScanById: mockFetchScanById,
     deleteHistoricalScan: mockDeleteHistoricalScan,
-    setPageSize: vi.fn(),
-    setCurrentPage: vi.fn(),
     setSortModel: vi.fn(),
-    setSearchQuery: vi.fn(),
-    resetFilters: vi.fn(),
   });
 
   beforeEach(() => {
@@ -179,10 +173,9 @@ describe('ModelAuditResult', () => {
     renderComponent('test-scan-id');
 
     await waitFor(() => {
-      // Component uses icons and background colors, not text
-      // Verify the scan name is rendered (indicates component loaded)
       expect(screen.getByRole('heading', { name: 'Test Scan' })).toBeInTheDocument();
     });
+    expect(document.querySelector('.lucide-circle-check-big')).toBeInTheDocument();
   });
 
   it('should show issues found status when has errors', async () => {
@@ -193,10 +186,9 @@ describe('ModelAuditResult', () => {
     renderComponent('test-scan-id');
 
     await waitFor(() => {
-      // Component uses icons and background colors, not text
-      // Verify the scan name is rendered (indicates component loaded)
       expect(screen.getByRole('heading', { name: 'Test Scan' })).toBeInTheDocument();
     });
+    expect(document.querySelector('.lucide-triangle-alert')).toBeInTheDocument();
   });
 
   it('should open delete confirmation dialog when delete is clicked', async () => {

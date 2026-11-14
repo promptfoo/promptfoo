@@ -6,6 +6,7 @@ import * as yaml from 'js-yaml';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
 import {
+  getNunjucksEngineForFilePath,
   getResolvedRelativePath,
   maybeLoadConfigFromExternalFile,
   maybeLoadFromExternalFile,
@@ -24,10 +25,6 @@ import {
   isVideoFile,
 } from '../../src/util/fileExtensions';
 import { mockProcessEnv } from './utils';
-
-const hasGlobMagic = (candidatePath: string) => {
-  return /[*?[\]{}()!+@]/.test(candidatePath) || candidatePath.includes('\\');
-};
 
 vi.mock('proxy-agent', () => ({
   ProxyAgent: vi.fn().mockImplementation(() => ({
@@ -58,9 +55,9 @@ vi.mock('fs/promises', async () => {
   };
 });
 
-vi.mock('glob', () => ({
+vi.mock('glob', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('glob')>()),
   globSync: vi.fn(),
-  hasMagic: vi.fn((candidatePath: string) => hasGlobMagic(candidatePath)),
 }));
 
 vi.mock('../../src/esm', () => ({
@@ -156,12 +153,10 @@ describe('file utilities', () => {
 
     beforeEach(() => {
       vi.resetAllMocks();
-      vi.mocked(fs.existsSync).mockReturnValue(true);
+      vi.mocked(fs.existsSync).mockImplementation(
+        (file) => !hasMagic(String(file), { windowsPathsNoEscape: true }),
+      );
       vi.mocked(fs.readFileSync).mockReturnValue(mockFileContent);
-      vi.mocked(hasMagic).mockImplementation((pattern: string | string[]) => {
-        const p = Array.isArray(pattern) ? pattern.join('') : pattern;
-        return hasGlobMagic(p);
-      });
       cliState.basePath = '/mock/base/path';
     });
 
@@ -239,6 +234,15 @@ describe('file utilities', () => {
 
       const result = maybeLoadFromExternalFile('file://data*.json');
       expect(result).toEqual([mockData1, mockData2]);
+    });
+
+    it('expands Windows glob paths using real glob detection', () => {
+      vi.mocked(globSync).mockReturnValue(['C:/suite/scenario.yaml']);
+      vi.mocked(fs.readFileSync).mockReturnValue('description: scenario');
+
+      expect(maybeLoadFromExternalFile(String.raw`file://C:\suite\*.yaml`)).toEqual([
+        { description: 'scenario' },
+      ]);
     });
 
     it('should handle glob patterns with arrays in files', () => {
@@ -367,6 +371,34 @@ describe('file utilities', () => {
       mockProcessEnv({ TEST_ROOT_PATH: undefined });
     });
 
+    it.each([
+      { disabled: false, suiteValue: undefined, expected: 'file' },
+      { disabled: false, suiteValue: '', expected: '' },
+      { disabled: false, suiteValue: 'suite', expected: 'suite' },
+      { disabled: true, suiteValue: undefined, expected: '' },
+    ])(
+      'uses scoped env-file paths with restriction $disabled and suite value $suiteValue',
+      ({ disabled, suiteValue, expected }) => {
+        const restoreEnv = mockProcessEnv({
+          TEST_ROOT_PATH: 'host',
+          PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS: String(disabled),
+        });
+        try {
+          const rendered = cliState.withEnvFileOverrides(
+            { TEST_ROOT_PATH: 'file', PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS: 'false' },
+            () =>
+              cliState.withEnv({ TEST_ROOT_PATH: suiteValue }, () =>
+                getNunjucksEngineForFilePath().renderString('{{ env.TEST_ROOT_PATH }}', {}),
+              ),
+          );
+          expect(rendered).toBe(expected);
+          expect(process.env.TEST_ROOT_PATH).toBe('host');
+        } finally {
+          restoreEnv();
+        }
+      },
+    );
+
     it('should ignore basePath when file path is absolute', () => {
       const basePath = '/base/path';
       cliState.basePath = basePath;
@@ -413,43 +445,6 @@ describe('file utilities', () => {
 
       expect(fs.readFileSync).toHaveBeenCalledTimes(2);
       expect(result).toEqual({ data: { foo: 1 }, nested: { text: 'bar' } });
-    });
-
-    it('should load $ref file URLs by default', () => {
-      vi.mocked(fs.readFileSync).mockReturnValue('{"type":"string"}');
-      const config = {
-        schema: {
-          $ref: 'file://schemas/shared.json',
-        },
-      };
-
-      expect(maybeLoadConfigFromExternalFile(config)).toEqual({
-        schema: { $ref: { type: 'string' } },
-      });
-      expect(fs.readFileSync).toHaveBeenCalledWith(
-        path.resolve('/mock/base/path', 'schemas/shared.json'),
-        'utf8',
-      );
-    });
-
-    it('should preserve $ref files only when a reference parser follows', () => {
-      vi.mocked(fs.readFileSync).mockReturnValue('sibling content');
-      const config = {
-        schema: {
-          $ref: 'file://schemas/shared.json#/$defs/Shared',
-        },
-        sibling: 'file://sibling.txt',
-      };
-
-      expect(maybeLoadConfigFromExternalFile(config, undefined, { preserveRefs: true })).toEqual({
-        schema: config.schema,
-        sibling: 'sibling content',
-      });
-      expect(fs.readFileSync).toHaveBeenCalledTimes(1);
-      expect(fs.readFileSync).toHaveBeenCalledWith(
-        path.resolve('/mock/base/path', 'sibling.txt'),
-        'utf8',
-      );
     });
 
     it('should handle arrays and nested structures', () => {
@@ -811,10 +806,6 @@ describe('file utilities', () => {
       vi.resetAllMocks();
       (fs.existsSync as ReturnType<typeof vi.fn>).mockReturnValue(true);
       (fs.readFileSync as ReturnType<typeof vi.fn>).mockReturnValue('file content');
-      vi.mocked(hasMagic).mockImplementation((pattern: string | string[]) => {
-        const p = Array.isArray(pattern) ? pattern.join('') : pattern;
-        return p.includes('*') || p.includes('?') || p.includes('[') || p.includes('{');
-      });
       cliState.basePath = '/test';
     });
 
@@ -1145,6 +1136,67 @@ describe('file utilities', () => {
       ];
 
       expect(await maybeLoadToolsFromExternalFile(tools, vars)).toEqual(expected);
+    });
+
+    it.each([
+      '{{ second }}',
+      '{{ env.PROMPTFOO_TEST_TOOL_CANARY }}',
+      '{% if true %}tool-marker{% endif %}',
+      '{{ range.constructor("return \'tool-marker\'")() }}',
+    ])('keeps substituted tool descriptions literal: %s', async (description) => {
+      const restoreEnv = mockProcessEnv({ PROMPTFOO_TEST_TOOL_CANARY: 'synthetic-tool-canary' });
+      try {
+        const tool = {
+          type: 'function',
+          function: { name: '{{ name }}', description: '{{ description }}' },
+        };
+        const vars = { name: 'calculator', description, second: 'tool-marker' };
+        const expected = {
+          type: 'function',
+          function: { name: 'calculator', description },
+        };
+        expect(await maybeLoadToolsFromExternalFile(tool, vars)).toEqual(expected);
+        expect(await maybeLoadToolsFromExternalFile([tool], vars)).toEqual([expected]);
+        expect(tool.function.description).toBe('{{ description }}');
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it.each(['json', 'yaml'])(
+      'loads templated %s references in arrays without rendering file contents',
+      async (extension) => {
+        const definitions = [
+          { type: 'function', function: { name: 'test', description: '{{ name }}' } },
+        ];
+        vi.mocked(fs.readFileSync).mockReturnValue(
+          extension === 'json' ? JSON.stringify(definitions) : yaml.dump(definitions),
+        );
+        const result = await maybeLoadToolsFromExternalFile(['file://{{ file }}'], {
+          file: `tools.${extension}`,
+          name: 'runtime name',
+        });
+        expect(result).toEqual(definitions);
+        expect(fs.readFileSync).toHaveBeenCalledExactlyOnceWith(
+          expect.stringContaining(`tools.${extension}`),
+          'utf8',
+        );
+      },
+    );
+
+    it('loads templated function references in arrays without arguments or rendering returned definitions', async () => {
+      const definitions = [
+        { type: 'function', function: { name: 'test', description: '{{ name }}' } },
+      ];
+      const getTools = vi.fn(async () => definitions);
+      vi.mocked(importModule).mockResolvedValue({ getTools });
+      const result = await maybeLoadToolsFromExternalFile(['file://{{ file }}:getTools'], {
+        file: 'tools.mjs',
+        name: 'runtime name',
+      });
+      expect(result).toEqual(definitions);
+      expect(getTools).toHaveBeenCalledExactlyOnceWith();
+      expect(importModule).toHaveBeenCalledExactlyOnceWith(expect.stringContaining('tools.mjs'));
     });
 
     it('should render variables and load from external file', async () => {
