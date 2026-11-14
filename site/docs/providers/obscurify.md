@@ -6,13 +6,13 @@ description: Configure Obscurify.ai chat models in Promptfoo with the OpenAI-com
 
 # Obscurify.ai
 
-[Obscurify.ai](https://obscurify.ai/?utm_source=promptfoo) is a privacy-focused AI provider with an [OpenAI-compatible API](https://obscurify.ai/api-docs). Use Promptfoo's [OpenAI provider](/docs/providers/openai/) with Obscurify.ai's endpoint and API key.
+[Obscurify.ai](https://obscurify.ai/) is a privacy-focused AI provider with an [OpenAI-compatible API](https://obscurify.ai/api-docs). Use Promptfoo's [OpenAI provider](/docs/providers/openai/) with Obscurify.ai's endpoint and API key.
 
-Accounts are a random account number with no email. Prompts and responses are not stored, and requests only use zero-data-retention routes. See the [privacy policy](https://obscurify.ai/privacy) and [terms](https://obscurify.ai/terms).
+If your eval requires zero data retention, choose a model labelled ZDR by Obscurify.ai. For other models, the upstream provider’s policy may permit retention or training on prompts and responses. See the [privacy policy](https://obscurify.ai/privacy) and [terms](https://obscurify.ai/terms).
 
 ## Setup
 
-Create an account on [obscurify.ai](https://obscurify.ai/?utm_source=promptfoo), click **Show API Key** on the account page, and set `OBSCURIFY_API_KEY` in your shell, or load it from a file with `--env-file`. The API works on every plan with a positive balance.
+Create an account on [obscurify.ai](https://obscurify.ai/), click **Show API Key** on the account page, and set `OBSCURIFY_API_KEY` in your shell, or load it from a file with `--env-file`. The API works on every plan with a positive balance.
 
 ```yaml
 providers:
