@@ -70,6 +70,8 @@ interface ReplicatePrediction {
 }
 
 const REPLICATE_CACHE_KEY_HMAC_KEY = 'promptfoo:replicate:cache-key:v1';
+// Entries written before terminal-state validation may contain partial outputs without a status.
+const REPLICATE_RESULT_CACHE_PREFIX = 'replicate-result-v2';
 const pendingPredictions = new Map<
   string,
   {
@@ -358,7 +360,7 @@ export class ReplicateProvider implements ApiProvider {
     let cacheKey;
     if (isCacheEnabled()) {
       cache = await getCache();
-      cacheKey = `replicate:${this.modelName}:${getReplicateAuthCacheNamespace(this.apiKey)}:${hashReplicateCacheValue(
+      cacheKey = `${REPLICATE_RESULT_CACHE_PREFIX}:${this.modelName}:${getReplicateAuthCacheNamespace(this.apiKey)}:${hashReplicateCacheValue(
         data,
       )}`;
 
@@ -642,7 +644,7 @@ export class ReplicateImageProvider extends ReplicateProvider {
     }
 
     const cache = getCache();
-    const cacheKey = `replicate:image:${this.modelName}:${getReplicateAuthCacheNamespace(this.apiKey)}:${hashReplicateCacheValue(
+    const cacheKey = `${REPLICATE_RESULT_CACHE_PREFIX}:image:${this.modelName}:${getReplicateAuthCacheNamespace(this.apiKey)}:${hashReplicateCacheValue(
       {
         config: this.config,
         prompt,

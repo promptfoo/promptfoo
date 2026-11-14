@@ -41,7 +41,7 @@ const createMockPredictionResponse = (output: string | string[] | null = 'test r
 describe.each([
   { name: 'text', Provider: ReplicateProvider },
   { name: 'image', Provider: ReplicateImageProvider },
-])('Replicate $name terminal predictions', ({ Provider }) => {
+])('Replicate $name terminal predictions', ({ name, Provider }) => {
   const mockCache = { get: vi.fn(), set: vi.fn() };
 
   beforeEach(() => {
@@ -54,6 +54,22 @@ describe.each([
   afterEach(() => {
     vi.resetAllMocks();
     vi.useRealTimers();
+  });
+
+  it('revalidates legacy normalized results that may contain partial predictions', async () => {
+    const legacyKey = name === 'image' ? /^replicate:image:test-model:/ : /^replicate:test-model:/;
+    mockCache.get.mockImplementation(async (key: string) =>
+      legacyKey.test(key)
+        ? JSON.stringify(name === 'image' ? ['https://example.invalid/partial'] : { output: 'partial' })
+        : undefined,
+    );
+    mockedFetchWithCache.mockResolvedValue(
+      createMockFetchResponse({ id: 'test-id', status: 'canceled', output: 'partial' }),
+    );
+    const provider = new Provider('test-model', { config: { apiKey: 'fixture' } });
+    const result = await provider.callApi('test prompt');
+    expect(result.error).toContain('Prediction canceled');
+    expect(result.output).toBeUndefined();
   });
 
   describe.each(['canceled', 'aborted'])('%s', (status) => {
@@ -430,7 +446,7 @@ describe('ReplicateProvider', () => {
     expect(result.output).toBe('test response');
     expect(mockCache.set).toHaveBeenCalledTimes(1);
     const cacheKey = mockCache.set.mock.calls[0][0] as string;
-    expect(cacheKey).toMatch(/^replicate:test-model:[a-f0-9]{64}:[a-f0-9]{64}$/);
+    expect(cacheKey).toMatch(/^replicate-result-v2:test-model:[a-f0-9]{64}:[a-f0-9]{64}$/);
     expect(cacheKey).not.toContain(prompt);
     expect(cacheKey).not.toContain(mockApiKey);
     expect(mockCache.get).toHaveBeenCalledWith(cacheKey);
@@ -476,8 +492,8 @@ describe('ReplicateProvider', () => {
 
     const cacheKeyA = mockCache.get.mock.calls[0][0] as string;
     const cacheKeyB = mockCache.get.mock.calls[1][0] as string;
-    expect(cacheKeyA).toMatch(/^replicate:test-model:[a-f0-9]{64}:[a-f0-9]{64}$/);
-    expect(cacheKeyB).toMatch(/^replicate:test-model:[a-f0-9]{64}:[a-f0-9]{64}$/);
+    expect(cacheKeyA).toMatch(/^replicate-result-v2:test-model:[a-f0-9]{64}:[a-f0-9]{64}$/);
+    expect(cacheKeyB).toMatch(/^replicate-result-v2:test-model:[a-f0-9]{64}:[a-f0-9]{64}$/);
     expect(cacheKeyA).not.toBe(cacheKeyB);
     expect(mockedFetchWithCache).toHaveBeenCalledTimes(2);
     for (const cacheKey of [cacheKeyA, cacheKeyB]) {
@@ -509,7 +525,7 @@ describe('ReplicateProvider', () => {
     const cacheKeyA = mockCache.get.mock.calls[0][0] as string;
     const cacheKeyB = mockCache.get.mock.calls[1][0] as string;
     expect(cacheKeyA).toBe(cacheKeyB);
-    expect(cacheKeyA).toMatch(/^replicate:test-model:[a-f0-9]{64}:[a-f0-9]{64}$/);
+    expect(cacheKeyA).toMatch(/^replicate-result-v2:test-model:[a-f0-9]{64}:[a-f0-9]{64}$/);
     expect(cacheKeyA).not.toContain('replicate-stable-tenant-secret');
     expect(cacheKeyA).not.toContain('Shared replicate prompt');
   });
@@ -872,7 +888,7 @@ describe('ReplicateImageProvider', () => {
 
     expect(result.cached).toBe(false);
     const cacheKey = mockCache.set.mock.calls[0][0] as string;
-    expect(cacheKey).toMatch(/^replicate:image:test-model:[a-f0-9]{64}:[a-f0-9]{64}$/);
+    expect(cacheKey).toMatch(/^replicate-result-v2:image:test-model:[a-f0-9]{64}:[a-f0-9]{64}$/);
     expect(cacheKey).not.toContain(prompt);
     expect(cacheKey).not.toContain('PFQA_REPLICATE_IMAGE_CONFIG_SENTINEL');
     expect(cacheKey).not.toContain(mockApiKey);
@@ -909,7 +925,7 @@ describe('ReplicateImageProvider', () => {
     ).resolves.toEqual(expect.objectContaining({ cached: false }));
 
     const cacheKey = mockCache.set.mock.calls[0][0] as string;
-    expect(cacheKey).toMatch(/^replicate:image:test-model:[a-f0-9]{64}:[a-f0-9]{64}$/);
+    expect(cacheKey).toMatch(/^replicate-result-v2:image:test-model:[a-f0-9]{64}:[a-f0-9]{64}$/);
     expect(cacheKey).not.toContain('PFQA_REPLICATE_CONTEXT_API_KEY_SECRET');
     expect(cacheKey).not.toContain('PFQA_REPLICATE_CIRCULAR_CONTEXT_PROMPT');
     expect(cacheKey).not.toContain('PFQA_REPLICATE_LOGGER_SECRET');
