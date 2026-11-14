@@ -373,7 +373,7 @@ providers:
       apiBaseUrl: https://modelsell.com/v1
       apiKeyEnvar: MODELSELL_API_KEY
       headers:
-        OpenAI-Organization: ""
+        OpenAI-Organization: ''
 ```
 
 Create a [Modelsell API key](https://modelsell.com/console/token), then set `MODELSELL_MODEL` to an exact model ID returned by the authenticated [`GET /v1/models`](https://modelsell.com/docs/api-reference/%E8%B4%A6%E6%88%B7%E7%AE%A1%E7%90%86/listModels) endpoint. The available catalog can vary by account, so avoid hard-coding a model ID in shared configs.
