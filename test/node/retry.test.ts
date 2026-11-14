@@ -521,6 +521,7 @@ describe('retryCommand', () => {
       expect(options).toEqual({
         delay: 0,
         eventSource: 'cli',
+        expectedMatrixValuesFingerprint: null,
         maxConcurrency: 4,
         showProgressBar: true,
         varValuesBasePath: '/workspace',
@@ -566,6 +567,7 @@ describe('retryCommand', () => {
       expect(options).toEqual({
         delay: 25,
         eventSource: 'cli',
+        expectedMatrixValuesFingerprint: null,
         maxConcurrency: 1,
         showProgressBar: false,
         varValuesBasePath: '/workspace',
