@@ -672,4 +672,15 @@ describe('matchesGEval', () => {
       numRequests: 0,
     });
   });
+  it('skips malformed steps and out-of-range scores before a valid grader object', async () => {
+    vi.spyOn(DefaultGradingProvider, 'callApi')
+      .mockResolvedValueOnce({ output: '{"steps":[""]}\n{"steps":["Check accuracy"]}' })
+      .mockResolvedValueOnce({
+        output: '{"score":11,"reason":"Malformed"}\n{"score":8,"reason":"Clear"}',
+      });
+
+    const result = await matchesGEval('Evaluate accuracy', 'Test input', 'Test output', 0.7);
+
+    expect(result).toMatchObject({ pass: true, score: 0.8, reason: 'Clear' });
+  });
 });
