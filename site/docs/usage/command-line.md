@@ -135,6 +135,7 @@ By default the `eval` command will read the `promptfooconfig.yaml` configuration
 | `--prompt-suffix <path>`             | Suffix appended to every prompt                                                                                                                                                       |
 | `-r, --providers <name or path...>`  | Provider names or paths to custom API caller modules                                                                                                                                  |
 | `--remote`                           | Force remote inference wherever possible (used for red teams)                                                                                                                         |
+| `--pass-rate-ci`                     | Show a 95% Wilson interval for an independently sampled pass rate                                                                                                                     |
 | `--repeat <number>`                  | Number of times to run each test                                                                                                                                                      |
 | `--share`                            | Create a shareable URL                                                                                                                                                                |
 | `--no-share`                         | Do not create a shareable URL, this overrides the config file                                                                                                                         |
@@ -147,6 +148,8 @@ By default the `eval` command will read the `promptfooconfig.yaml` configuration
 | `-v, --vars <path>`                  | Path to CSV with test cases (alias for --tests)                                                                                                                                       |
 | `-w, --watch`                        | Watch for changes in config and re-run                                                                                                                                                |
 | `-x, --extension <paths...>`         | Extension hooks to run, such as `file://handler.js:afterAll`                                                                                                                          |
+
+Use `--pass-rate-ci` when each test case is an independent random draw from the population whose pass rate you want to estimate. Curated benchmarks, duplicate cases, and related variants do not meet that assumption. The interval uses the same denominator as the displayed pass rate, including errors. It appears for a fresh, single-column run with one attempt per case and zero recorded cache hits. Red team, resumed, and retried runs omit it.
 
 Use `--tag` for run-specific eval tags that should not change `promptfooconfig.yaml`:
 
