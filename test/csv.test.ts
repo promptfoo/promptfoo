@@ -334,7 +334,7 @@ describe('testCaseFromCsvRow', () => {
       expect(result).toEqual({
         vars: {},
         assert: [
-          { type: 'similar', value: 'foo', threshold: 0.8 },
+          { type: 'similar', value: 'foo' },
           { type: 'similar', value: 'bar', threshold: 0.6 },
         ],
         options: {},
@@ -352,7 +352,7 @@ describe('testCaseFromCsvRow', () => {
       const result = testCaseFromCsvRow(row);
       expect(result).toEqual({
         vars: {},
-        assert: [{ type: 'similar', value: 'foo', threshold: 0.8 }],
+        assert: [{ type: 'similar', value: 'foo' }],
         options: {},
       });
       expect(logger.warn).toHaveBeenCalledWith(
@@ -885,13 +885,24 @@ describe('assertionFromString', () => {
 
   it('should handle legacy fn option', verifyFunctionAssertion);
 
-  it('should use DEFAULT_SEMANTIC_SIMILARITY_THRESHOLD for similar assertion without threshold', () => {
-    const expected = 'similar:Expected output';
+  it('should leave the threshold unset for handler-defaulted assertion types', () => {
+    // These handlers own their no-threshold behavior: `similar` defaults to 0.75 (not the
+    // legacy CSV 0.8), `cost`/`latency` require an explicit threshold and throw without one,
+    // and `perplexity`/`perplexity-score` pass unconditionally without one. Injecting a CSV
+    // default made bare cells grade differently from the same assertion in YAML.
+    for (const type of ['similar', 'cost', 'latency', 'perplexity', 'perplexity-score']) {
+      const result: Assertion = assertionFromString(`${type}:Expected output`);
+      expect(result.type).toBe(type);
+      expect(result.value).toBe('Expected output');
+      expect(result.threshold).toBeUndefined();
+    }
+  });
 
-    const result: Assertion = assertionFromString(expected);
-    expect(result.type).toBe('similar');
-    expect(result.value).toBe('Expected output');
-    expect(result.threshold).toBe(0.8); // DEFAULT_SEMANTIC_SIMILARITY_THRESHOLD
+  it('should keep an explicit threshold for handler-defaulted assertion types', () => {
+    expect(assertionFromString('similar(0.9):Expected output').threshold).toBe(0.9);
+    expect(assertionFromString('cost(0.5)').threshold).toBe(0.5);
+    expect(assertionFromString('latency(1000)').threshold).toBe(1000);
+    expect(assertionFromString('perplexity(5)').threshold).toBe(5);
   });
 
   it('should use 0.75 as default threshold for other assertions requiring threshold', () => {
@@ -901,11 +912,7 @@ describe('assertionFromString', () => {
       'context-faithfulness',
       'context-recall',
       'context-relevance',
-      'cost',
-      'latency',
       'levenshtein',
-      'perplexity-score',
-      'perplexity',
       'rouge-l',
       'rouge-n',
       'rouge-s',
@@ -1019,7 +1026,6 @@ describe('assertionFromString', () => {
     expect(assertionFromString('similar:cosine similarity text')).toEqual({
       type: 'similar',
       value: 'cosine similarity text',
-      threshold: 0.8,
     });
   });
 });
