@@ -10,10 +10,10 @@ grader model. For an offline smoke run, use the committed tests.smoke.json with
 promptfooconfig.smoke.yaml.
 """
 
+import argparse
 import csv
 import io
 import json
-import sys
 import urllib.request
 
 URL = (
@@ -23,7 +23,11 @@ URL = (
 
 
 def main() -> None:
-    limit = int(sys.argv[1]) if len(sys.argv) > 1 else None
+    parser = argparse.ArgumentParser(description="Generate promptfoo tests from the checklist CSV.")
+    parser.add_argument("limit", nargs="?", type=int, help="maximum number of examples to write")
+    limit = parser.parse_args().limit
+    if limit is not None and limit < 1:
+        parser.error("limit must be a positive integer")
     with urllib.request.urlopen(URL, timeout=60) as response:
         text = response.read().decode("utf-8")
     rows = list(csv.DictReader(io.StringIO(text)))

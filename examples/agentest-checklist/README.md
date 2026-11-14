@@ -31,7 +31,7 @@ npx promptfoo@latest eval
 
 ### Optional: smaller generated suite
 
-To regenerate a truncated suite for local experimentation (this overwrites `tests.json`), pass a limit. Do **not** run this as part of the full-eval sequence above, or the next `eval` will cover only that subset instead of all 110 cases:
+To regenerate a truncated suite for local experimentation (this overwrites `tests.json`), pass a positive integer limit. Do **not** run this as part of the full-eval sequence above, or the next `eval` will cover only that subset instead of all 110 cases:
 
 ```bash
 python promptfoo_tests_from_hf.py 10
