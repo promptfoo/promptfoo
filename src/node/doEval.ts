@@ -61,6 +61,7 @@ import { shouldShareResults } from '../util/sharing';
 import { resolveTestsWatchPaths } from '../util/testCaseReader';
 import { TokenUsageTracker } from '../util/tokenUsage';
 import { isUuid } from '../util/uuid';
+import { validateRatingFeedback } from '../validators/ratingFeedback';
 import { deleteErrorResults, getErrorResultIds, recalculatePromptMetrics } from './retry';
 import { notCloudEnabledShareInstructions } from './shareInstructions';
 import type { FSWatcher } from 'chokidar';
@@ -844,6 +845,8 @@ async function doEvalWithEnv(
       Object.assign(options, resolveSuggestionOptions(cmdObj, commandLineOptions, options));
     }
 
+    validateRatingFeedback(config);
+    validateRatingFeedback(testSuite);
     const testSuiteSchema = TestSuiteSchema.safeParse(testSuite);
     if (!testSuiteSchema.success) {
       logger.warn(

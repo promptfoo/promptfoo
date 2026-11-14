@@ -23,6 +23,7 @@ import {
 import { readFilters, warnOnDegradedJsonlRecovery, writeMultipleOutputs } from './util/index';
 import { readTests } from './util/testCaseReader';
 import { INLINE_FUNCTION_LABEL, TRANSFORM_KEYS } from './util/transform';
+import { validateRatingFeedback } from './validators/ratingFeedback';
 
 import type {
   EnvOverrides,
@@ -331,6 +332,7 @@ export async function evaluateWithSource(
 }
 
 async function evaluateWithEnv(testSuite: EvaluateTestSuite, options: InternalEvaluateOptions) {
+  validateRatingFeedback(testSuite);
   const { author: suiteAuthor, ...testSuiteConfig } = testSuite;
 
   if (testSuiteConfig.writeLatestResults) {
@@ -343,6 +345,7 @@ async function evaluateWithEnv(testSuite: EvaluateTestSuite, options: InternalEv
   options.abortSignal?.throwIfAborted();
   const providerMap = buildConfiguredProviderMap(loadedProviders);
   const constructedTestSuite = await createRuntimeTestSuite(testSuiteConfig, loadedProviders);
+  validateRatingFeedback(constructedTestSuite);
   await resolveNestedProviders(testSuiteConfig, constructedTestSuite, providerMap);
 
   const unifiedConfig = createSerializableUnifiedConfig(

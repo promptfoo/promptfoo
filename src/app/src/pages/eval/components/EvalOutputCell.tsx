@@ -15,6 +15,7 @@ import {
 import { type EvaluateTableOutput, type GradingResult, type ImageOutput } from '@promptfoo/types';
 import { ResultFailureReason } from '@promptfoo/types/results';
 import { getActualPrompt } from '@promptfoo/util/providerResponse';
+import { RatingFeedbackUrlSchema } from '@promptfoo/validators/ratingFeedback';
 import { diffJson, diffSentences, diffWords } from 'diff';
 import {
   Check,
@@ -73,6 +74,32 @@ function stringifyOutputText(text: unknown): string {
   }
 
   return JSON.stringify(text) ?? String(text);
+}
+
+const RATING_FEEDBACK_PLACEHOLDER_PATTERN = /\{\{(evalId|resultId|testCaseId|rating)\}\}/g;
+
+export function buildRatingFeedbackUrl(
+  template: string | undefined,
+  values: {
+    evalId?: string;
+    resultId: string;
+    testCaseId?: string;
+    rating: 'pass' | 'fail';
+  },
+): string | undefined {
+  const parsed = RatingFeedbackUrlSchema.safeParse(template);
+  if (!parsed.success) {
+    return undefined;
+  }
+  try {
+    const urlString = parsed.data.replace(
+      RATING_FEEDBACK_PLACEHOLDER_PATTERN,
+      (_, name: keyof typeof values) => encodeURIComponent(values[name] ?? ''),
+    );
+    return new URL(urlString).href;
+  } catch {
+    return undefined;
+  }
 }
 
 /**
@@ -1304,6 +1331,7 @@ function EvalOutputCell({
     showPassFail,
     showMetricPills,
     showPassReasons,
+    inComparisonMode,
     maxImageWidth,
     maxImageHeight,
   } = useResultsViewSettingsStore();
@@ -1459,6 +1487,16 @@ function EvalOutputCell({
     });
   };
 
+  const feedbackUrl =
+    activeRating === null || inComparisonMode
+      ? undefined
+      : buildRatingFeedbackUrl(output.testCase.feedback?.[activeRating ? 'pass' : 'fail'], {
+          evalId: evaluationId,
+          resultId: output.id,
+          testCaseId,
+          rating: activeRating ? 'pass' : 'fail',
+        });
+
   const [scoreDialogOpen, setScoreDialogOpen] = React.useState(false);
 
   const handleSetScore = () => {
@@ -1609,6 +1647,16 @@ function EvalOutputCell({
         handlePromptClose,
         setActionsHovered,
       })}
+      {feedbackUrl && (
+        <a
+          className="text-sm underline"
+          href={feedbackUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          Open feedback on {new URL(feedbackUrl).host}
+        </a>
+      )}
       {lightboxOpen && lightboxImage && (
         <div className="lightbox" onClick={() => toggleLightbox()}>
           <img src={lightboxImage} alt="Lightbox" />
