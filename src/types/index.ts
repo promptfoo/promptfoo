@@ -271,6 +271,12 @@ export interface RunEvalOptions {
    * Queue used while deferred grading is active to group grader provider calls.
    */
   providerCallQueue?: ProviderCallQueueRef;
+
+  /** @internal Protects locked acceptance criteria from target-provider mutation. */
+  lockIntegrity?: {
+    disableTemplating: boolean;
+    disableVarExpansion: boolean;
+  };
 }
 
 export const EvaluateOptionsSchema = z.object({
@@ -856,6 +862,7 @@ export type AssertionValue = string | string[] | number | object | AssertionValu
 export type AssertionValueFunctionResult = boolean | number | GradingResult;
 
 export interface AssertionParams {
+  strictJsonSchema?: boolean;
   assertion: Assertion;
   baseType: AssertionType;
   /** Context passed to provider.callApi() for model-graded assertions */
