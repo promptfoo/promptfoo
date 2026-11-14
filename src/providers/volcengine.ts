@@ -279,9 +279,10 @@ export class VolcengineProvider extends OpenAiChatCompletionProvider {
     return {
       provider: 'volcengine',
       model: this.modelName,
-      config: sanitizeProviderObject(config, 'Ark provider config', {
-        sanitizeUrls: true,
-      }) as Record<string, unknown>,
+      config: sanitizeProviderObject(config, 'Ark provider config', true) as Record<
+        string,
+        unknown
+      >,
     };
   }
 
