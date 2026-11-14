@@ -138,4 +138,63 @@ describe('shouldRetry', () => {
     });
     expect(shouldRetry(0, error, true, DEFAULT_RETRY_POLICY)).toBe(true);
   });
+
+  describe('Nested error cause and Node.js native fetch error detection', () => {
+    it('should retry TypeError: fetch failed with ETIMEDOUT cause code', () => {
+      const cause = new Error('Connect timeout');
+      (cause as { code?: string }).code = 'ETIMEDOUT';
+      const error = new TypeError('fetch failed', { cause });
+
+      expect(shouldRetry(0, error, false, DEFAULT_RETRY_POLICY)).toBe(true);
+    });
+
+    it('should retry TypeError: fetch failed with undici UND_ERR_CONNECT_TIMEOUT cause code', () => {
+      const cause = new Error('Connect Timeout');
+      (cause as { code?: string }).code = 'UND_ERR_CONNECT_TIMEOUT';
+      const error = new TypeError('fetch failed', { cause });
+
+      expect(shouldRetry(0, error, false, DEFAULT_RETRY_POLICY)).toBe(true);
+    });
+
+    it('should retry TypeError: fetch failed with temporary DNS failure EAI_AGAIN cause code', () => {
+      const cause = new Error('getaddrinfo EAI_AGAIN api.openai.com');
+      (cause as { code?: string }).code = 'EAI_AGAIN';
+      const error = new TypeError('fetch failed', { cause });
+
+      expect(shouldRetry(0, error, false, DEFAULT_RETRY_POLICY)).toBe(true);
+    });
+
+    it('should retry when cause message contains transient network phrase', () => {
+      const cause = new Error('connect ECONNREFUSED 127.0.0.1:11434');
+      const error = new TypeError('fetch failed', { cause });
+
+      expect(shouldRetry(0, error, false, DEFAULT_RETRY_POLICY)).toBe(true);
+    });
+
+    it.each(['ENOTFOUND', 'DEPTH_ZERO_SELF_SIGNED_CERT', 'ERR_TLS_CERT_ALTNAME_INVALID'])(
+      'does not retry native fetch with a permanent %s cause',
+      (code) => {
+        const cause = Object.assign(new Error('Connection failed'), { code });
+        const error = new TypeError('fetch failed', { cause });
+
+        expect(shouldRetry(0, error, false, DEFAULT_RETRY_POLICY)).toBe(false);
+      },
+    );
+
+    it.each([
+      [{ message: 504, code: 'ECONNREFUSED' }, true],
+      [{ message: { detail: 'unavailable' } }, false],
+    ])('handles a structured cause without a string message', (cause, retryable) => {
+      const error = new TypeError('fetch failed', { cause });
+
+      expect(shouldRetry(0, error, false, DEFAULT_RETRY_POLICY)).toBe(retryable);
+    });
+
+    it('should not retry when cause represents a non-transient user error', () => {
+      const cause = new Error('Invalid JSON format');
+      const error = new Error('Request validation failed', { cause });
+
+      expect(shouldRetry(0, error, false, DEFAULT_RETRY_POLICY)).toBe(false);
+    });
+  });
 });

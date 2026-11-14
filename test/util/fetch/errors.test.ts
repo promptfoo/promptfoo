@@ -142,6 +142,13 @@ describe('findTargetErrorStatus', () => {
 });
 
 describe('isTransientConnectionError', () => {
+  it('checks the native fetch cause when the wrapper has its own code', () => {
+    const cause = Object.assign(new Error('Socket closed'), { code: 'ECONNRESET' });
+    const error = Object.assign(new TypeError('fetch failed', { cause }), { code: 'WRAPPER' });
+
+    expect(isTransientConnectionError(error)).toBe(true);
+  });
+
   it('returns false for undefined error', () => {
     expect(isTransientConnectionError(undefined)).toBe(false);
   });
