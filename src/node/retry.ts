@@ -97,6 +97,18 @@ function normalizeRetryLayout(value: unknown, ancestors = new Set<object>()): un
   }
 }
 
+function normalizeRetryDefaultTest(value: unknown, metadata: unknown): unknown {
+  if (value === undefined) {
+    return value;
+  }
+  const normalized = normalizeRetryLayout(value);
+  if (!normalized || typeof normalized !== 'object' || Array.isArray(normalized)) {
+    return normalized;
+  }
+  // Explicit config loading fills these fields; auto-discovery may leave them absent.
+  return { vars: {}, assert: [], options: {}, metadata: metadata ?? {}, ...normalized };
+}
+
 function hasRelativeFileReference(value: unknown): boolean {
   if (typeof value === 'string') {
     return value.startsWith('file://') && !path.isAbsolute(value.slice(7));
@@ -117,7 +129,7 @@ function assertRetryLayoutMatched(
     normalizeRetryLayout({
       tests: savedConfig.tests,
       scenarios: savedConfig.scenarios,
-      defaultTest: savedConfig.defaultTest,
+      defaultTest: normalizeRetryDefaultTest(savedConfig.defaultTest, savedConfig.metadata),
       filterRange: range,
     });
   let matches = false;

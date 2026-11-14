@@ -14,8 +14,9 @@ import { doEval } from '../../src/node/doEval';
 import { getErrorResultIds, retryCommand } from '../../src/node/retry';
 import telemetry from '../../src/telemetry';
 import { ResultFailureReason } from '../../src/types/index';
+import { loadDefaultConfig } from '../../src/util/config/default';
 
-import type { CommandLineOptions, TestSuite } from '../../src/types/index';
+import type { CommandLineOptions, TestSuite, UnifiedConfig } from '../../src/types/index';
 
 vi.mock('../../src/logger');
 vi.mock('../../src/telemetry', () => ({
@@ -59,6 +60,11 @@ describe('retry configured test selection', () => {
     form: 'top-level' | 'scenario' | 'mixed',
     commandLineOptions: Partial<CommandLineOptions>,
     cliFilters: Partial<Pick<CommandLineOptions, 'filterFirstN' | 'filterPattern'>> = {},
+    initialConfig: {
+      defaultTest?: UnifiedConfig['defaultTest'];
+      metadata?: UnifiedConfig['metadata'];
+      discover?: boolean;
+    } = {},
   ) {
     const readyPath = path.join(tempDir, 'ready');
     const callsPath = path.join(tempDir, 'calls.jsonl');
@@ -98,13 +104,19 @@ describe('retry configured test selection', () => {
               },
             ],
           }),
+      ...(initialConfig.defaultTest ? { defaultTest: initialConfig.defaultTest } : {}),
+      ...(initialConfig.metadata ? { metadata: initialConfig.metadata } : {}),
       commandLineOptions,
     };
-    const configPath = path.join(tempDir, 'config.json');
+    const configPath = path.join(
+      tempDir,
+      initialConfig.discover ? 'promptfooconfig.json' : 'config.json',
+    );
     fs.writeFileSync(configPath, JSON.stringify(config));
+    const defaults = initialConfig.discover ? await loadDefaultConfig(tempDir) : undefined;
     const record = await doEval(
       {
-        config: [configPath],
+        ...(initialConfig.discover ? {} : { config: [configPath] }),
         table: false,
         write: true,
         share: false,
@@ -112,8 +124,8 @@ describe('retry configured test selection', () => {
         maxConcurrency: 1,
         ...cliFilters,
       },
-      {},
-      undefined,
+      defaults?.defaultConfig ?? {},
+      defaults?.defaultConfigPath,
       { showProgressBar: false },
     );
     const initial = (await record.toEvaluateSummary()).results;
@@ -300,6 +312,82 @@ describe('retry configured test selection', () => {
       await assertRetryMatchesInitial(fixture, false);
     },
   );
+
+  it.each(
+    [{ vars: { prefix: 'Hello' } }, { metadata: { source: 'saved' } }].flatMap((defaultTest) =>
+      [false, true].map((transportOverride) => ({ defaultTest, transportOverride })),
+    ),
+  )(
+    'accepts an auto-discovered default test with transportOverride=$transportOverride: $defaultTest',
+    async ({ defaultTest, transportOverride }) => {
+      const fixture = await initialEval('top-level', {}, {}, { defaultTest, discover: true });
+      expect(fixture.record.config.defaultTest).toEqual(defaultTest);
+      if (transportOverride) {
+        fs.writeFileSync(
+          fixture.configPath,
+          JSON.stringify({
+            ...fixture.config,
+            providers: fixture.config.providers.map((id) => ({ id, config: { timeoutMs: 4321 } })),
+          }),
+        );
+      }
+
+      await assertRetryMatchesInitial(fixture, true);
+    },
+  );
+
+  it.each([
+    { vars: { prefix: 'Changed' } },
+    { vars: { prefix: 'Hello', empty: {} } },
+    { vars: { prefix: 'Hello' }, assert: [{ type: 'contains', value: 'keep' }] },
+    { vars: { prefix: 'Hello' }, options: { transform: 'output + "changed"' } },
+    { vars: { prefix: 'Hello' }, metadata: { source: 'changed' } },
+  ])(
+    'preserves ERROR rows when an auto-discovered default test changes: %j',
+    async (defaultTest) => {
+      const fixture = await initialEval(
+        'top-level',
+        {},
+        {},
+        { defaultTest: { vars: { prefix: 'Hello' } }, discover: true },
+      );
+      const errors = await getErrorResultIds(fixture.record.id);
+      fs.writeFileSync(fixture.configPath, JSON.stringify({ ...fixture.config, defaultTest }));
+
+      await expect(retryCommand(fixture.record.id, { config: fixture.configPath })).rejects.toThrow(
+        /saved test layout.*ERROR results were preserved/,
+      );
+      expect(await getErrorResultIds(fixture.record.id)).toEqual(errors);
+      expect(
+        fs.readFileSync(fixture.callsPath, 'utf8').trim().split(String.fromCharCode(10)),
+      ).toHaveLength(fixture.initial.length);
+    },
+  );
+
+  it('preserves ERROR rows when explicit loading changes inherited default metadata', async () => {
+    const fixture = await initialEval(
+      'top-level',
+      {},
+      {},
+      {
+        defaultTest: { vars: { prefix: 'Hello' } },
+        metadata: { source: 'saved' },
+        discover: true,
+      },
+    );
+    expect(fixture.initial.every((result) => result.testCase.metadata?.source === 'saved')).toBe(
+      true,
+    );
+    const errors = await getErrorResultIds(fixture.record.id);
+
+    await expect(retryCommand(fixture.record.id, { config: fixture.configPath })).rejects.toThrow(
+      /saved test layout.*ERROR results were preserved/,
+    );
+    expect(await getErrorResultIds(fixture.record.id)).toEqual(errors);
+    expect(
+      fs.readFileSync(fixture.callsPath, 'utf8').trim().split(String.fromCharCode(10)),
+    ).toHaveLength(fixture.initial.length);
+  });
 
   it('allows an unchanged unfiltered layout with transport-only overrides', async () => {
     const fixture = await initialEval('top-level', {});
