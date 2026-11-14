@@ -654,7 +654,11 @@ export function selectVerdictObject<T extends object>(
       const values = new Set<string>();
       let seen = 0;
       for (const obj of completeVerdicts) {
-        const normalized = normalizeVerdictValue(readDecision(obj, key));
+        const input = readDecision(obj, key);
+        const normalized = normalizeVerdictValue(input);
+        if (input !== undefined && normalized === undefined) {
+          return undefined;
+        }
         if (normalized !== undefined) {
           values.add(normalized);
           seen++;

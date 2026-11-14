@@ -1235,6 +1235,13 @@ describe('json utilities', () => {
       expect(selectVerdictObject(entries, KEYS)).toBeUndefined();
     });
 
+    it('rejects a present score that cannot be compared', () => {
+      const entries = extractJsonObjectsWithMeta(
+        '{"pass":true,"score":0.2} {"pass":true,"score":[1]}',
+      );
+      expect(selectVerdictObject(entries, KEYS)).toBeUndefined();
+    });
+
     it('checks a complete candidate even when followed by unrelated JSON', () => {
       const entries = extractJsonObjectsWithMeta(
         '{"pass":true,"final":{"pass":false}} {"notes":"done"}',
