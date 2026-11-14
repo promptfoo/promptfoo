@@ -24,6 +24,27 @@ function createLevenshteinParams(
 }
 
 describe('handleLevenshtein', () => {
+  it.each([
+    { value: 42, output: '43', threshold: 1, inverse: false, pass: true },
+    { value: 42, output: '43', threshold: 0, inverse: false, pass: false },
+    { value: 42, output: '43', threshold: 0, inverse: true, pass: true },
+    { value: 42, output: '43', threshold: 1, inverse: true, pass: false },
+    { value: 0, output: '0', threshold: 0, inverse: false, pass: true },
+    { value: -1.5, output: '-1.6', threshold: 1, inverse: false, pass: true },
+  ])(
+    'grades numeric reference $value against $output',
+    ({ value, output, threshold, inverse, pass }) => {
+      expect(
+        handleLevenshtein({
+          ...createLevenshteinParams(output),
+          assertion: { type: 'levenshtein', threshold },
+          renderedValue: value,
+          inverse,
+        }),
+      ).toMatchObject({ pass, score: pass ? 1 : 0 });
+    },
+  );
+
   it('should pass when strings are identical', () => {
     const result = handleLevenshtein({
       assertion: { type: 'levenshtein' },
@@ -86,16 +107,19 @@ describe('handleLevenshtein', () => {
     expect(result.score).toBe(0);
   });
 
-  it('should throw error when renderedValue is not a string', () => {
-    expect(() =>
-      handleLevenshtein({
-        assertion: { type: 'levenshtein' },
-        renderedValue: 123 as any,
-        ...createLevenshteinParams('test'),
-        inverse: false,
-      }),
-    ).toThrow('"levenshtein" assertion type must have a string value');
-  });
+  it.each([NaN, Infinity, -Infinity, null, undefined, {}, [], true].map((value) => ({ value })))(
+    'rejects invalid reference $value',
+    ({ value }) => {
+      expect(() =>
+        handleLevenshtein({
+          assertion: { type: 'levenshtein' },
+          renderedValue: value as AssertionParams['renderedValue'],
+          ...createLevenshteinParams('test'),
+          inverse: false,
+        }),
+      ).toThrow('"levenshtein" assertion type must have a string or finite number value');
+    },
+  );
 
   it('should handle empty strings', () => {
     const result = handleLevenshtein({

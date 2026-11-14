@@ -10,10 +10,11 @@ export function handleLevenshtein({
   inverse,
 }: AssertionParams): GradingResult {
   invariant(
-    typeof renderedValue === 'string',
-    '"levenshtein" assertion type must have a string value',
+    typeof renderedValue === 'string' ||
+      (typeof renderedValue === 'number' && Number.isFinite(renderedValue)),
+    '"levenshtein" assertion type must have a string or finite number value',
   );
-  const levDistance = distance(outputString, renderedValue);
+  const levDistance = distance(outputString, String(renderedValue));
   const threshold = assertion.threshold ?? 5;
   const pass = levDistance <= threshold !== inverse;
   return {
