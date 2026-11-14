@@ -497,6 +497,7 @@ describe('GoogleGenericProvider', () => {
       await expect(
         provider['executeFunctionCallback']('missing_function', '{}', config),
       ).rejects.toThrow("No callback found for function 'missing_function'");
+      expect(withGenAIToolSpan).not.toHaveBeenCalled();
     });
 
     it.each(['toString', 'constructor', 'valueOf'])(

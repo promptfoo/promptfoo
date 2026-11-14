@@ -179,7 +179,11 @@ function getProviderEnvAliasGroups(
   }
   if (providerPath.startsWith('bedrock:')) {
     const mode = getBedrockTextRoute(providerPath)?.apiMode;
-    return mode === 'chat' || mode === 'messages' || mode === 'responses'
+    return mode === 'chat' ||
+      mode === 'messages' ||
+      mode === 'responses' ||
+      mode === 'runtime-chat' ||
+      mode === 'runtime-responses'
       ? [['AWS_BEDROCK_REGION', 'AWS_REGION', 'AWS_DEFAULT_REGION']]
       : [];
   }
@@ -215,7 +219,7 @@ function getProviderEnvAliasGroups(
     ];
   }
   if (
-    /^(?:google|palm):(?:interactions:)?(?:gemini-omni-flash-preview|gemini-omni-1\.1-flash|gemini-robotics-er-2-preview)$/.test(
+    /^(?:google|palm):(?:interactions:)?(?:gemini-omni-flash-preview|gemini-omni-1\.1-flash|gemini-3\.5-transcribe|gemini-robotics-er-2-preview)$/.test(
       providerPath,
     )
   ) {
@@ -358,6 +362,12 @@ function configuredProviderFactory(
   };
 }
 
+const LEGACY_OPENAI_COMPLETION_DEFAULT = 'gpt-3.5-turbo-instruct';
+const OPENAI_EMBEDDING_MODEL_IDS = new Set([
+  'text-embedding-3-large',
+  'text-embedding-3-small',
+  'text-embedding-ada-002',
+]);
 const OPENAI_CONFIG_MODEL_OVERRIDE_ROUTES = new Set(['image', 'video']);
 const OPENAI_PASSTHROUGH_MODEL_ROUTES = new Set([
   'chat',
@@ -390,9 +400,15 @@ function getEffectiveOpenAiApiModel(
     retiredRoute === 'tts';
   const selectedModel = providerOverridesModelFromConfig
     ? configuredModel || modelName || modelType
-    : modelName || (explicitRouteUsesConfiguredModel ? configuredModel : undefined) || modelType;
+    : modelName ||
+      (explicitRouteUsesConfiguredModel ? configuredModel : undefined) ||
+      (modelType === 'completion' ? LEGACY_OPENAI_COMPLETION_DEFAULT : modelType);
 
-  if (OPENAI_FIXED_MODEL_ROUTES.has(modelType) || modelType === 'gpt-transcribe') {
+  if (
+    OPENAI_FIXED_MODEL_ROUTES.has(modelType) ||
+    OpenAiModerationProvider.MODERATION_MODEL_IDS.includes(modelType) ||
+    modelType === 'gpt-transcribe'
+  ) {
     return selectedModel;
   }
 
@@ -404,6 +420,7 @@ function getEffectiveOpenAiApiModel(
       OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES.includes(modelType) ||
       OpenAiTtsProvider.OPENAI_TTS_MODEL_NAMES.includes(modelType) ||
       retiredRoute === 'chat' ||
+      retiredRoute === 'completion' ||
       retiredRoute === 'responses' ||
       retiredRoute === 'tts' ||
       (!retiredRoute &&
@@ -899,9 +916,12 @@ export const providerMap: ProviderFactory[] = [
       providerOptions: ProviderOptions,
       _context: LoadApiProviderContext,
     ) => {
-      const [_, modelType, modelName] = providerPath.split(':');
+      const modelType = providerPath.split(':')[1];
       if (modelType === 'image') {
-        return new FalImageGenerationProvider(modelName, providerOptions);
+        return new FalImageGenerationProvider(
+          modelNameFromProviderPath(providerPath, 2),
+          providerOptions,
+        );
       }
       throw new Error(
         `Invalid fal provider path: ${providerPath}. Use one of the following providers: fal:image:<model name>`,
@@ -1278,7 +1298,7 @@ export const providerMap: ProviderFactory[] = [
       }
       if (modelType === 'completion') {
         return new OpenAiCompletionProvider(
-          modelName || configuredModel || 'gpt-3.5-turbo-instruct',
+          modelName || configuredModel || LEGACY_OPENAI_COMPLETION_DEFAULT,
           providerOptions,
         );
       }
@@ -1329,13 +1349,29 @@ export const providerMap: ProviderFactory[] = [
         );
       }
       if (
+        modelType === 'gpt-rosalind-discovery' &&
+        isOpenAiFirstPartyApiUrl(
+          resolveOpenAiApiUrl(providerOptions.config ?? {}, providerOptions.env),
+        )
+      ) {
+        throw new Error(
+          'Promptfoo requires an explicit API endpoint for Rosalind Discovery on native OpenAI hosts. Select openai:responses:gpt-rosalind-discovery or openai:chat:gpt-rosalind-discovery for an endpoint your project supports.',
+        );
+      }
+      if (
         shouldDefaultToOpenAiResponses(modelType) ||
-        (OPENAI_DAYBREAK_ALIASES.has(modelType) &&
+        ((OPENAI_DAYBREAK_ALIASES.has(modelType) || modelType === 'gpt-rosalind-research') &&
           isOpenAiFirstPartyApiUrl(
             resolveOpenAiApiUrl(providerOptions.config ?? {}, providerOptions.env),
           ))
       ) {
         return new OpenAiResponsesProvider(modelType, providerOptions);
+      }
+      if (OPENAI_EMBEDDING_MODEL_IDS.has(modelType)) {
+        return new OpenAiEmbeddingProvider(modelType, providerOptions);
+      }
+      if (OpenAiModerationProvider.MODERATION_MODEL_IDS.includes(modelType)) {
+        return new OpenAiModerationProvider(modelType, providerOptions);
       }
       if (OpenAiChatCompletionProvider.OPENAI_CHAT_MODEL_NAMES.includes(modelType)) {
         return new OpenAiChatCompletionProvider(modelType, providerOptions);
@@ -1361,6 +1397,8 @@ export const providerMap: ProviderFactory[] = [
       switch (getRetiredOpenAiModelRoute(modelType)) {
         case 'chat':
           return new OpenAiChatCompletionProvider(modelType, providerOptions);
+        case 'completion':
+          return new OpenAiCompletionProvider(modelType, providerOptions);
         case 'tts':
           return new OpenAiTtsProvider(modelType, providerOptions);
         case 'realtime':
@@ -1380,7 +1418,10 @@ export const providerMap: ProviderFactory[] = [
         return new OpenAiAssistantProvider(modelName, providerOptions);
       }
       if (modelType === 'image') {
-        return new OpenAiImageProvider(modelName, providerOptions);
+        return new OpenAiImageProvider(
+          modelName || configuredModel || 'gpt-image-2.5-flare',
+          providerOptions,
+        );
       }
       if (modelType === 'video') {
         return new OpenAiVideoProvider(modelName || 'sora-2', providerOptions);

@@ -4435,26 +4435,35 @@ describe('AnthropicMessagesProvider', () => {
       expect(params.thinking?.budget_tokens).toBe(5000);
     });
 
-    it('omits the built-in temperature default for Sonnet 5 (no explicit config)', async () => {
-      // Regression for the live-API 400: `temperature` is deprecated for this model.
-      const provider = createProvider('claude-sonnet-5', { config: {} });
-      const createSpy = vi
-        .spyOn(provider.anthropic.messages, 'create')
-        .mockResolvedValue({ ...mockResp, model: 'claude-sonnet-5' });
+    it.each(['claude-sonnet-5', 'claude-haiku-5-5'])(
+      'omits default temperature on %s',
+      async (model) => {
+        // Regression for the live-API 400: `temperature` is deprecated for this model.
+        const provider = createProvider(model, { config: {} });
+        const createSpy = vi
+          .spyOn(provider.anthropic.messages, 'create')
+          .mockResolvedValue({ ...mockResp, model });
 
-      await provider.callApi('Hello');
+        await provider.callApi('Hello');
 
-      const params = createSpy.mock.calls[0][0] as unknown as Record<string, unknown>;
-      expect(params).not.toHaveProperty('temperature');
-    });
+        const params = createSpy.mock.calls[0][0] as unknown as Record<string, unknown>;
+        expect(params).not.toHaveProperty('temperature');
+        if (model === 'claude-haiku-5-5') {
+          expect(params.max_tokens).toBe(2048);
+        }
+      },
+    );
 
-    it('omits temperature/top_p/top_k and warns with a Sonnet 5 message', async () => {
-      const provider = createProvider('claude-sonnet-5', {
+    it.each([
+      ['claude-sonnet-5', 'Claude Sonnet 5'],
+      ['claude-haiku-5-5', 'Claude Haiku 5.5'],
+    ])('omits explicit sampling parameters and warns on %s', async (model, displayName) => {
+      const provider = createProvider(model, {
         config: { temperature: 0.5, top_p: 0.9, top_k: 40 },
       });
       const createSpy = vi
         .spyOn(provider.anthropic.messages, 'create')
-        .mockResolvedValue({ ...mockResp, model: 'claude-sonnet-5' });
+        .mockResolvedValue({ ...mockResp, model });
       const warnSpy = vi.spyOn(logger, 'warn');
 
       await provider.callApi('Hello');
@@ -4464,7 +4473,7 @@ describe('AnthropicMessagesProvider', () => {
       expect(params).not.toHaveProperty('top_p');
       expect(params).not.toHaveProperty('top_k');
       expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining('temperature is deprecated on Claude Sonnet 5'),
+        expect.stringContaining(`temperature is deprecated on ${displayName}`),
       );
     });
 
@@ -4968,6 +4977,8 @@ describe('AnthropicMessagesProvider', () => {
     'claude-mythos-5',
     'claude-fable-5-1',
     'claude-mythos-5-1',
+    'claude-fable-5-2',
+    'claude-mythos-5-2',
     'claude-opus-5-5',
   ])('%s model', (model) => {
     const mockResponse = (modelName: string) =>
@@ -5038,49 +5049,53 @@ describe('AnthropicMessagesProvider', () => {
     });
   });
 
-  describe.each(['claude-fable-5-1', 'claude-mythos-5-1', 'claude-opus-5-5', 'claude-sonnet-5-5'])(
-    '%s tool choice',
-    (model) => {
-      it.each([
-        { type: 'any' as const },
-        { type: 'tool' as const, name: 'get_weather' },
-        { type: 'auto' as const },
-        { type: 'none' as const },
-      ])('omits only unsupported forced tool choice: %j', async (tool_choice) => {
-        const warnSpy = vi.spyOn(logger, 'warn');
-        const provider = createProvider(model, {
-          config: {
-            tools: [{ name: 'get_weather', input_schema: { type: 'object', properties: {} } }],
-            tool_choice,
-            thinking: { type: 'adaptive' },
-          },
-        });
-        const createSpy = vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
-          id: 'msg-51',
-          type: 'message',
-          role: 'assistant',
-          model,
-          content: [{ type: 'text', text: 'ok' }],
-          stop_reason: 'end_turn',
-          stop_sequence: null,
-          usage: { input_tokens: 10, output_tokens: 5 },
-        } as Anthropic.Messages.Message);
-
-        await provider.callApi('Check the weather');
-
-        const params = createSpy.mock.calls[0][0];
-        expect(params.tools).toHaveLength(1);
-        if (tool_choice.type === 'any' || tool_choice.type === 'tool') {
-          expect(params).not.toHaveProperty('tool_choice');
-          expect(warnSpy).toHaveBeenCalledWith(
-            expect.stringContaining('(forced tool use) is not supported on Claude'),
-          );
-        } else {
-          expect(params.tool_choice).toEqual(tool_choice);
-        }
+  describe.each([
+    'claude-fable-5-1',
+    'claude-mythos-5-1',
+    'claude-fable-5-2',
+    'claude-mythos-5-2',
+    'claude-opus-5-5',
+    'claude-sonnet-5-5',
+  ])('%s tool choice', (model) => {
+    it.each([
+      { type: 'any' as const },
+      { type: 'tool' as const, name: 'get_weather' },
+      { type: 'auto' as const },
+      { type: 'none' as const },
+    ])('omits only unsupported forced tool choice: %j', async (tool_choice) => {
+      const warnSpy = vi.spyOn(logger, 'warn');
+      const provider = createProvider(model, {
+        config: {
+          tools: [{ name: 'get_weather', input_schema: { type: 'object', properties: {} } }],
+          tool_choice,
+          thinking: { type: 'adaptive' },
+        },
       });
-    },
-  );
+      const createSpy = vi.spyOn(provider.anthropic.messages, 'create').mockResolvedValue({
+        id: 'msg-51',
+        type: 'message',
+        role: 'assistant',
+        model,
+        content: [{ type: 'text', text: 'ok' }],
+        stop_reason: 'end_turn',
+        stop_sequence: null,
+        usage: { input_tokens: 10, output_tokens: 5 },
+      } as Anthropic.Messages.Message);
+
+      await provider.callApi('Check the weather');
+
+      const params = createSpy.mock.calls[0][0];
+      expect(params.tools).toHaveLength(1);
+      if (tool_choice.type === 'any' || tool_choice.type === 'tool') {
+        expect(params).not.toHaveProperty('tool_choice');
+        expect(warnSpy).toHaveBeenCalledWith(
+          expect.stringContaining('(forced tool use) is not supported on Claude'),
+        );
+      } else {
+        expect(params.tool_choice).toEqual(tool_choice);
+      }
+    });
+  });
 
   describe('claude-sonnet-5-5 thinking', () => {
     const mockResponse = () =>
