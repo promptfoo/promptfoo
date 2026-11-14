@@ -361,6 +361,10 @@ const PromptCacheOptions = z.strictObject({
   ttl: z.literal('30m').optional(),
 });
 const ConversationFields = TextRequestFields.extend({
+  isReasoningModel: z
+    .boolean()
+    .optional()
+    .describe('Override reasoning request shaping for an OpenAI-compatible deployment'),
   reasoning_effort: z.union([ReasoningEffort, Template]).nullable().optional(),
   reasoning: Reasoning.optional(),
   verbosity: z.enum(['low', 'medium', 'high']).optional(),
