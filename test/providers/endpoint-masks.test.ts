@@ -305,7 +305,7 @@ describe('provider endpoint environment precedence', () => {
       'Llama',
       'LLAMA_BASE_URL',
       '/completion',
-      'http://localhost:8080',
+      'http://localhost:9931',
       async (env: EnvOverrides) => new LlamaProvider('model', { env }).callApi('hello'),
       { content: 'hello' },
     ],
