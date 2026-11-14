@@ -22,8 +22,13 @@ import {
   type UnifiedConfig,
   type VarValue,
 } from './types/index';
-import { isAudioFile, isImageFile, isJavascriptFile, isVideoFile } from './util/fileExtensions';
-import { parseFileUrl } from './util/functions/loadFunction';
+import {
+  isAudioFile,
+  isImageFile,
+  isJavascriptFile,
+  isVideoFile,
+  parseFileUrl,
+} from './util/fileExtensions';
 import { renderVarsInObject, setLoadedFileMimeTypes } from './util/index';
 import invariant from './util/invariant';
 import { filterFiniteScores } from './util/numeric';
