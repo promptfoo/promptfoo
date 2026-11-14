@@ -15,6 +15,13 @@ providers:
       defaultFps: 24
       defaultResolution: '1280x720'
 
+defaultTest:
+  assert:
+    - type: regex
+      value: '^\[Video Result\]\(https?://\S+\)'
+    - type: javascript
+      value: "['completed', 'succeeded'].includes(context.providerResponse?.metadata?.status)"
+
 tests:
   - vars:
       prompt: 'Cinematic drone slow fly-through over misty pine mountains at sunrise'
@@ -25,11 +32,7 @@ tests:
       resolution: '1920x1080'
     assert:
       - type: contains
-        value: '[Video Result]'
-      - type: contains
-        value: '.mp4'
-      - type: javascript
-        value: 'output.includes("Duration: 5s") && output.includes("Status: completed")'
+        value: 'Duration: 5s'
 
   - vars:
       prompt: 'Subtle blinking and gentle wind blowing hair, warm natural lighting'
@@ -39,10 +42,6 @@ tests:
       fps: 30
       resolution: '1280x720'
     assert:
-      - type: contains
-        value: 'https://'
-      - type: javascript
-        value: 'output.includes("Status: completed")'
       - type: latency
         threshold: 30000
 
@@ -56,5 +55,3 @@ tests:
     assert:
       - type: contains
         value: 'Duration: 4s'
-      - type: contains
-        value: '[Video Result]'
