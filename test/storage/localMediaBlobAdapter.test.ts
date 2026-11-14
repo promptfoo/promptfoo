@@ -211,7 +211,7 @@ describe('local media blob adapter', () => {
             : contentType;
       expect(response.headers['content-type']).toContain(expected);
       expect(response.headers['x-content-type-options']).toBe('nosniff');
-      expect(response.headers['cache-control']).toBe('public, max-age=31536000, immutable');
+      expect(response.headers['cache-control']).toBe('private, max-age=31536000, immutable');
       expect(response.headers['content-disposition']).toBe(
         contentType === 'text/html' || contentType === 'image/svg+xml' ? 'attachment' : undefined,
       );
@@ -350,7 +350,7 @@ describe('local media blob adapter', () => {
       expect(repaired.status).toBe(200);
       expect(repaired.headers['content-type']).toBe('image/jpeg');
       expect(repaired.headers['content-disposition']).toBeUndefined();
-      expect(repaired.headers['cache-control']).toBe('public, max-age=31536000, immutable');
+      expect(repaired.headers['cache-control']).toBe('private, max-age=31536000, immutable');
       expect(repaired.body).toEqual(payload);
     },
   );
