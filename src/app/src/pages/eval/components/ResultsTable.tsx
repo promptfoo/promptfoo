@@ -1642,24 +1642,25 @@ function ResultsTable({
   // Auto-hide columns only from the full filtered-result summary. The loaded body is
   // page-scoped and cannot distinguish missing results from valid empty-text outputs.
   const effectiveColumnVisibility = React.useMemo(() => {
-    const visibility: VisibilityState = { ...columnVisibility };
-    if (!hasFilteredResultView || nonEmptyPromptIndices == null) {
-      return visibility;
+    if (inComparisonMode || !hasFilteredResultView || nonEmptyPromptIndices == null) {
+      return columnVisibility;
     }
 
+    const visibility: VisibilityState = { ...columnVisibility };
     const nonEmptyPrompts = new Set(nonEmptyPromptIndices);
     head.prompts.forEach((_, idx) => {
-      const colId = `Prompt ${idx + 1}`;
-      // Only auto-hide if the column is currently set to visible
-      if (visibility[colId] === false) {
-        return;
-      }
       if (!nonEmptyPrompts.has(idx)) {
-        visibility[colId] = false;
+        visibility[`Prompt ${idx + 1}`] = false;
       }
     });
     return visibility;
-  }, [columnVisibility, hasFilteredResultView, head.prompts, nonEmptyPromptIndices]);
+  }, [
+    columnVisibility,
+    hasFilteredResultView,
+    head.prompts,
+    inComparisonMode,
+    nonEmptyPromptIndices,
+  ]);
 
   const visiblePromptCount = React.useMemo(
     () =>

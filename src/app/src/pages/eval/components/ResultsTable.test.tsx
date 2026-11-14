@@ -3013,60 +3013,69 @@ describe('ResultsTable Filtered vs Total Pass Rate Highlighting', () => {
     });
   });
 
-  it('auto-hides prompt columns that are empty in a filtered result view', () => {
-    const mockFilteredSparseTable = {
-      body: Array(3).fill({
-        outputs: [
-          {
-            pass: true,
-            score: 1,
-            text: 'visible filtered output',
-          },
-        ],
-        test: {},
-        vars: [],
-      }),
-      head: {
-        prompts: [{ provider: 'test-provider-1' }, { provider: 'test-provider-2' }],
-        vars: [],
-      },
-    };
+  it.each([false, true])(
+    'uses the filtered column summary with comparison mode=%s',
+    (inComparisonMode) => {
+      vi.mocked(useResultsViewSettingsStore).mockImplementation(() => ({
+        ...createViewSettings(),
+        inComparisonMode,
+      }));
+      const mockFilteredSparseTable = {
+        body: Array(3).fill({
+          outputs: [
+            {
+              pass: true,
+              score: 1,
+              text: 'visible filtered output',
+            },
+          ],
+          test: {},
+          vars: [],
+        }),
+        head: {
+          prompts: [{ provider: 'test-provider-1' }, { provider: 'test-provider-2' }],
+          vars: [],
+        },
+      };
 
-    vi.mocked(useTableStore).mockImplementation(() => ({
-      config: {},
-      evalId: '123',
-      inComparisonMode: false,
-      setTable: vi.fn(),
-      table: mockFilteredSparseTable,
-      version: 4,
-      renderMarkdown: true,
-      fetchEvalData: vi.fn(),
-      filters: {
-        values: {
-          testFilter: {
-            id: 'testFilter',
-            type: 'metric',
-            operator: 'equals',
-            value: 'test',
-            logicOperator: 'and',
+      vi.mocked(useTableStore).mockImplementation(() => ({
+        config: {},
+        evalId: '123',
+        inComparisonMode: false,
+        setTable: vi.fn(),
+        table: mockFilteredSparseTable,
+        version: 4,
+        renderMarkdown: true,
+        fetchEvalData: vi.fn(),
+        filters: {
+          values: {
+            testFilter: {
+              id: 'testFilter',
+              type: 'metric',
+              operator: 'equals',
+              value: 'test',
+              logicOperator: 'and',
+            },
+          },
+          appliedCount: 1,
+          options: {
+            metric: [],
           },
         },
-        appliedCount: 1,
-        options: {
-          metric: [],
-        },
-      },
-      filterMode: 'all',
-      filteredResultsCount: 3,
-      totalResultsCount: 10,
-      nonEmptyPromptIndices: [0],
-    }));
+        filterMode: 'all',
+        filteredResultsCount: 3,
+        totalResultsCount: 10,
+        nonEmptyPromptIndices: [0],
+      }));
 
-    renderWithProviders(<ResultsTable {...defaultProps} />);
+      renderWithProviders(<ResultsTable {...defaultProps} />);
 
-    expect(screen.queryByLabelText('No output for this prompt')).not.toBeInTheDocument();
-    expect(screen.getAllByTestId('eval-output-cell')).toHaveLength(3);
-  });
+      expect(screen.queryAllByLabelText('No output for this prompt')).toHaveLength(
+        inComparisonMode ? 3 : 0,
+      );
+      expect(screen.getAllByTestId('eval-output-cell')).toHaveLength(3);
+    },
+  );
 
   it('keeps a column visible when it has output elsewhere in the filtered result set', () => {
     const mockPageWithSparseOutputs = {
