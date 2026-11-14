@@ -1119,6 +1119,13 @@ export const DerivedMetricSchema = z.object({
 });
 export type DerivedMetric = z.infer<typeof DerivedMetricSchema>;
 
+const ResultsTableConfigSchema = z
+  .object({
+    defaultVisibleVars: z.array(z.string()).optional(),
+    defaultHiddenVars: z.array(z.string()).optional(),
+  })
+  .optional();
+
 const TraceProviderEndpointSchema = z.url().refine((endpoint) => {
   const url = new URL(endpoint);
   const hasCredentialPath = hasTraceCredentialPath(url.pathname);
@@ -1218,6 +1225,9 @@ export const TestSuiteSchema = z.object({
 
   // Metrics to calculate after the eval has been completed
   derivedMetrics: z.array(DerivedMetricSchema).optional(),
+
+  // Results table display preferences in the web viewer
+  resultsTable: ResultsTableConfigSchema,
 
   // Extensions that are called at various plugin points
   extensions: z
@@ -1392,6 +1402,9 @@ export const TestSuiteConfigSchema = z.object({
 
   // Metrics to calculate after the eval has been completed
   derivedMetrics: z.array(DerivedMetricSchema).optional(),
+
+  // Results table display preferences in the web viewer
+  resultsTable: ResultsTableConfigSchema,
 
   // Extension that is called at various plugin points
   extensions: z.array(z.string()).nullable().optional(),
