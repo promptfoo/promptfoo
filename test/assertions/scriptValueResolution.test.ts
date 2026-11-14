@@ -327,6 +327,25 @@ describe('Script value resolution', () => {
 
   // REGRESSION TESTS: Ensure javascript/python/ruby assertions still work correctly
   describe('javascript assertion regression', () => {
+    it.each(['group:one/checks.cjs', 'C:/fixtures/checks.cjs'])(
+      'loads a named export when the path already contains a colon: %s',
+      async (scriptPath) => {
+        vi.mocked(importModule).mockResolvedValueOnce(() => true);
+
+        const result = await runAssertion({
+          assertion: createStringAssertion('javascript', `file://${scriptPath}:checkOutput`),
+          test: { vars: {} },
+          providerResponse: baseProviderResponse,
+        });
+
+        expect(importModule).toHaveBeenCalledWith(
+          path.resolve(cliState.basePath || '', scriptPath),
+          'checkOutput',
+        );
+        expect(result.pass).toBe(true);
+      },
+    );
+
     it('should use script return value as assertion result (NOT as comparison)', async () => {
       // The gradingFunction returns { pass: true, score: 1, reason: '...' } when output contains 'expected'
       const result = await runAssertion({

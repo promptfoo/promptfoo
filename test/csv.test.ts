@@ -851,6 +851,23 @@ describe('assertionFromString', () => {
     expect(result.value).toBe('x > 10');
   });
 
+  it.each(['js', 'cjs', 'mjs', 'ts', 'cts', 'mts'])(
+    'should parse a JavaScript file reference with a named export (%s)',
+    (extension) => {
+      const value = `file://assertions/check.${extension}:checkOutput`;
+      expect(assertionFromString(value)).toEqual({ type: 'javascript', value });
+    },
+  );
+
+  it.each([
+    'file://checks.json:checkOutput',
+    'file://checks.js/data.txt:checkOutput',
+    'file://checks.jsx',
+    'checks.js:checkOutput',
+  ])('should keep non-JavaScript file references as equality values: %s', (value) => {
+    expect(assertionFromString(value)).toEqual({ type: 'equals', value });
+  });
+
   it('should create an llm-rubric assertion with "grade:" prefix', () => {
     const expected = 'grade:Evaluate the response based on clarity and accuracy';
 
