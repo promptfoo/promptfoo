@@ -619,6 +619,28 @@ describe('extractMathAnswer', async () => {
     expect(await extractMathAnswer('\\boxed{ unfinished \\boxed{42}')).toBe('42');
   });
 
+  it.each([
+    ['\\[unclosed\n$$3$$\nDone.', '3'],
+    ['\\[2\\] $$3$$', '3'],
+    ['$$2$$ \\[3\\]', '3'],
+    ['\\boxed{2}, result: 3', '3'],
+    ['work 2 Final answer: 3', '3'],
+    ['Result      equals    (2, 3).', '(2, 3)'],
+  ])('preserves display and label precedence in %s', async (text, expected) => {
+    expect(await extractMathAnswer(text)).toBe(expected);
+  });
+
+  it('handles long incomplete formatting and long whitespace-separated labels', async () => {
+    const space = ' '.repeat(16_000);
+    const start = performance.now();
+    expect(cleanMathText('42' + space + '\\mathrm{m}')).toBe('42');
+    expect(cleanMathText('\\text{'.repeat(4_000))).toHaveLength(24_000);
+    expect(await extractMathAnswer('Thus' + space + '42')).toBe('42');
+    expect(await extractMathAnswer('\\['.repeat(4_000) + '\n$$42$$\nDone.')).toBe('42');
+    expect(await extractMathAnswer('\\boxed{42}' + '$'.repeat(16_000))).toBe('42');
+    expect(performance.now() - start).toBeLessThan(1_500);
+  });
+
   it('handles many malformed boxed prefixes without quadratic extraction work', async () => {
     const malformed = '\\boxed{'.repeat(8000);
     const startedAt = performance.now();

@@ -144,8 +144,21 @@ export function normalizeLatex(text: string): string {
   s = s.replace(/≈/g, '=').replace(/\\approx/g, '=');
 
   // Strip "(i.e., ...)" and "(= ...)" trailing parentheticals.
-  s = s.trim().replace(/\s*\(i\.e\..*?\)\s*$/, '');
-  s = s.trim().replace(/\s*\(=\s*[^)]+\)\s*$/, '');
+  s = s.trim();
+  if (s.endsWith(')')) {
+    const lineStart = Math.max(s.lastIndexOf('\n'), s.lastIndexOf('\r')) + 1;
+    const explanation = s.indexOf('(i.e.', lineStart);
+    if (explanation >= 0) {
+      s = s.slice(0, explanation).trimEnd();
+    }
+  }
+  if (s.endsWith(')')) {
+    const previousClose = s.lastIndexOf(')', s.length - 2);
+    const explanation = s.indexOf('(=', previousClose + 1);
+    if (explanation >= 0 && explanation + 2 < s.length - 1) {
+      s = s.slice(0, explanation).trimEnd();
+    }
+  }
 
   // Strip leading "= " or whitespace that survived the ≈→= conversion.
   s = s.trim().replace(/^[=\s]+/, '');
@@ -186,7 +199,7 @@ export function normalizeLatex(text: string): string {
   return s;
 }
 
-const TRAILING_UNIT_PATTERN = /^(.*?)(?:\s*)(rad|deg|km|cm|mm|kg|ms|m|s|g)\s*$/;
+const TRAILING_UNIT_PATTERN = /(?:rad|deg|km|cm|mm|kg|ms|m|s|g)$/;
 const NUMERIC_VALUE_PATTERN = /^-?\d+(?:\.\d+)?(?:\s*\/\s*\d+(?:\.\d+)?)?$/;
 const SELF_CONTAINED_LATEX_CONSTANTS = new Set(['\\pi']);
 
@@ -279,7 +292,7 @@ function stripTrailingUnit(text: string): string {
   if (!match) {
     return trimmed;
   }
-  const value = match[1].trimEnd();
+  const value = trimmed.slice(0, match.index).trimEnd();
   // Check the raw value and its LaTeX-normalized form, so both `1/2 m` and
   // `\frac12 m` are recognized as unit-suffixed values.
   if (isUnitStrippableValue(value) || isUnitStrippableValue(normalizeLatex(value))) {
@@ -288,35 +301,103 @@ function stripTrailingUnit(text: string): string {
   return trimmed;
 }
 
+// Remove complete, non-overlapping delimiter pairs. Once a closer is
+// missing there is no later pair of this kind to search for.
+function unwrapDelimited(text: string, open: string, close: string): string {
+  let cursor = 0;
+  const parts: string[] = [];
+  while (cursor < text.length) {
+    const start = text.indexOf(open, cursor);
+    if (start < 0) {
+      break;
+    }
+    const end = text.indexOf(close, start + open.length);
+    if (end < 0) {
+      break;
+    }
+    parts.push(text.slice(cursor, start), text.slice(start + open.length, end));
+    cursor = end + close.length;
+  }
+  return parts.length ? parts.join('') + text.slice(cursor) : text;
+}
+
+function trimTrailingChars(text: string, character: RegExp): string {
+  let end = text.length;
+  while (end > 0 && character.test(text[end - 1])) {
+    end--;
+  }
+  return text.slice(0, end);
+}
+
+function normalizeRomanUnit(text: string): string {
+  let marker = -1;
+  for (const match of text.matchAll(/\\mathrm\{/gi)) {
+    marker = match.index;
+  }
+  if (marker < 0) {
+    return text;
+  }
+  const unit = /^\\mathrm\{\s*(rad|deg|km|cm|mm|kg|ms|m|s|g)\s*\}/i.exec(text.slice(marker));
+  if (!unit) {
+    return text;
+  }
+  const suffix = text.slice(marker + unit[0].length);
+  const fence = suffix.trim();
+  if (fence !== '' && fence !== '$$' && fence !== '$' && fence !== '\\]' && fence !== '\\)') {
+    return text;
+  }
+  let start = marker;
+  while (start > 0) {
+    if (/\s/.test(text[start - 1])) {
+      start--;
+      if (start > 0 && text[start - 1] === '\\') {
+        start--;
+      }
+    } else if (start >= 2 && text.startsWith('\\,', start - 2)) {
+      start -= 2;
+    } else {
+      break;
+    }
+  }
+  return text.slice(0, start) + ' ' + unit[1] + suffix;
+}
+
+function stripTextLabels(text: string): string {
+  const parts: string[] = [];
+  let cursor = 0;
+  const open = '\\text{';
+  while (cursor < text.length) {
+    const start = text.indexOf(open, cursor);
+    if (start < 0) {
+      break;
+    }
+    const end = text.indexOf('}', start + open.length);
+    if (end < 0) {
+      break;
+    }
+    // The optional LaTeX backslash-space before a label belongs to it.
+    const prefix = text.slice(cursor, start).trimEnd();
+    parts.push(prefix.endsWith('\\') ? prefix.slice(0, -1).trimEnd() : prefix);
+    cursor = end + 1;
+  }
+  return parts.length ? parts.join('') + text.slice(cursor) : text;
+}
+
 /**
  * Strip formatting wrappers that don't affect mathematical meaning.
  */
 export function cleanMathText(text: string): string {
-  let s = stripThinkingBlocks(text);
+  let s = stripTextLabels(normalizeRomanUnit(stripThinkingBlocks(text)));
 
-  // Normalize common LaTeX unit styling before the plain-unit suffix pass.
-  s = s.replace(
-    /(?:\\,|\\\s|\s)*\\mathrm\{\s*(rad|deg|km|cm|mm|kg|ms|m|s|g)\s*\}(?=\s*(?:(?:\$\$|\\\]|\\\)|\$)\s*)?$)/i,
-    ' $1',
-  );
-
-  // \text{...} units/labels and any preceding space/backslash.
-  s = s.replace(/\s*\\?\s*\\text\{[^}]*\}/g, '');
-
-  // Trailing backslash-space sequences left over from \text removal.
-  s = s.trim().replace(/\\+\s*$/, '');
-
-  // Remove units only after self-contained numeric, parenthesized numeric,
-  // or safe LaTeX values, so `x + m` remains symbolic while `\pi rad` works.
-  s = stripTrailingUnit(s);
-  s = s.trim().replace(/\s*°\s*$/, '');
-
-  // Display math fences.
-  s = s.replace(/\$\$([\s\S]*?)\$\$/g, '$1');
-  s = s.replace(/\\\[([\s\S]*?)\\\]/g, '$1');
-
-  // Inline math fences.
-  s = s.replace(/\\\(([\s\S]*?)\\\)/g, '$1');
+  // Trailing LaTeX spacing and common display/inline math wrappers.
+  s = trimTrailingChars(s.trim(), /\\/);
+  s = stripTrailingUnit(s).trim();
+  if (s.endsWith('°')) {
+    s = s.slice(0, -1).trimEnd();
+  }
+  s = unwrapDelimited(s, '$$', '$$');
+  s = unwrapDelimited(s, '\\[', '\\]');
+  s = unwrapDelimited(s, '\\(', '\\)');
   s = s.replace(/\$([^$]+)\$/g, '$1');
 
   // A tolerated unit can sit inside a math fence (`$$10 kg$$`), so retry
@@ -441,7 +522,25 @@ export async function tryParseEachSegment(text: string): Promise<BoxedExpression
 
 const TRIVIAL_LINE = /^[\\\]\[\)\(}\s]*$/;
 const BOXED_PREFIX = '\\boxed{';
-const DISPLAY_BLOCK_PATTERN = /\$\$([\s\S]*?)\$\$|\\\[([\s\S]*?)\\\]/g;
+// The last possible closer lets an unfinished bracket fence precede a valid
+// dollar block without restarting an unsuccessful search for every opener.
+function* displayBlocks(text: string) {
+  const lastBracket = text.lastIndexOf('\\]');
+  const lastDollar = text.lastIndexOf('$$');
+  let endOfPreviousBlock = 0;
+  for (const match of text.matchAll(/\$\$|\\\[/g)) {
+    const start = match.index;
+    if (start < endOfPreviousBlock) {
+      continue;
+    }
+    const dollars = match[0] === '$$';
+    if (start + 2 <= (dollars ? lastDollar : lastBracket)) {
+      const end = text.indexOf(dollars ? '$$' : '\\]', start + 2);
+      endOfPreviousBlock = end + 2;
+      yield { content: text.slice(start + 2, end), end: endOfPreviousBlock };
+    }
+  }
+}
 
 type BoxedMatch = {
   content: string;
@@ -567,13 +666,21 @@ function isCoordinateMathComponent(component: string): boolean {
 }
 
 function extractTrailingCoordinateExpression(text: string): string | undefined {
-  const match = text.match(/(\([^()\r\n]*,[^()\r\n]*\)|\[[^\[\]\r\n]*,[^\[\]\r\n]*\])[.,;:?]*$/);
-  if (!match) {
+  const core = trimTrailingChars(text, /[.,;:?]/);
+  const close = core[core.length - 1];
+  if (close !== ')' && close !== ']') {
     return undefined;
   }
-  const components = match[1].slice(1, -1).split(',');
-  return components.length > 1 && components.every(isCoordinateMathComponent)
-    ? match[1]
+  const start = core.lastIndexOf(close === ')' ? '(' : '[');
+  if (start < 0 || core.indexOf(close, start) !== core.length - 1) {
+    return undefined;
+  }
+  const coordinate = core.slice(start);
+  const components = coordinate.slice(1, -1).split(',');
+  return components.length > 1 &&
+    !/[\r\n]/.test(coordinate) &&
+    components.every(isCoordinateMathComponent)
+    ? coordinate
     : undefined;
 }
 
@@ -599,19 +706,19 @@ function extractRightmostMathExpression(text: string): string | undefined {
   const collected: string[] = [];
   for (let i = tokens.length - 1; i >= 0; i--) {
     // `!` is factorial in math, so do not silently trim it as punctuation.
-    const stripped = tokens[i].replace(/[.,;:?]+$/, '');
+    const stripped = trimTrailingChars(tokens[i], /[.,;:?]/);
     if (!stripped) {
       continue;
     }
     if (isMathShapedToken(stripped)) {
-      collected.unshift(stripped);
+      collected.push(stripped);
       continue;
     }
     if (collected.length > 0) {
       break;
     }
   }
-  return collected.length > 0 ? cleanMathText(collected.join(' ')) : undefined;
+  return collected.length > 0 ? cleanMathText(collected.reverse().join(' ')) : undefined;
 }
 
 function stripTopLevelTrailingProse(text: string): string {
@@ -660,21 +767,28 @@ function extractFromLastLine(cleanedLines: string[]): string | undefined {
     return undefined;
   }
   let candidate = cleanedLines[cleanedLines.length - 1];
-  const finalPrefixMatch = candidate.match(
-    /^(?:final\s+answer|answer|result|total|therefore|thus|hence)(?:(?:\s*:\s*)|(?:\s+(?:is|equals?)\s+)|\s+)(.+)$/i,
-  );
-  if (finalPrefixMatch) {
-    candidate = finalPrefixMatch[1].trim();
-  }
-  // Mid-line affirmative final after stripped display work or an inequality
-  // explanation ("$$2$$ Answer: 3", "41 != 42, final answer is 42").
-  const finalSuffixMatch =
-    candidate.match(/[0-9)\]}]\s+(?:final\s+answer|answer|result|total)\s*:\s*(\S.*)$/i) ??
-    candidate.match(
-      /[,;]\s*(?:final\s+answer|answer|result|total)(?:(?:\s*:\s*)|(?:\s+(?:is|equals?)\s+)|\s+)(\S.*)$/i,
+  // Match the label only. Capturing the unbounded answer in the regex
+  // rescans the remainder when the line fails to match at its end.
+  const prefix =
+    /^(?:final\s+answer|answer|result|total|therefore|thus|hence)(?:\s*:|\s+(?:is|equals?)\s+|\s+)/i.exec(
+      candidate,
     );
-  if (finalSuffixMatch) {
-    candidate = finalSuffixMatch[1].trim();
+  if (prefix) {
+    candidate = candidate.slice(prefix[0].length).trim() || candidate;
+  }
+  const numericLabel = /[0-9)\]}]\s+(?:final\s+answer|answer|result|total)\s*:/i.exec(candidate);
+  const numericAnswer =
+    numericLabel && candidate.slice(numericLabel.index + numericLabel[0].length).trim();
+  if (numericAnswer) {
+    candidate = numericAnswer;
+  } else {
+    const label =
+      /[,;]\s*(?:final\s+answer|answer|result|total)(?:\s*:|\s+(?:is|equals?)\s+|\s+)/i.exec(
+        candidate,
+      );
+    if (label) {
+      candidate = candidate.slice(label.index + label[0].length).trim() || candidate;
+    }
   }
   if (hasDisqualifyingClaim(candidate) || hasAdditionalAssignment(candidate)) {
     return candidate;
@@ -701,7 +815,7 @@ function extractFromLastLine(cleanedLines: string[]): string | undefined {
   // this, a labelled answer like "Answer: 0.5." (after the prefix strip) would
   // become "0.5." and fail to parse — only the prose-extraction branch did
   // this previously, so labelled non-prose lines slipped through.
-  candidate = candidate.replace(/[.,;:?]+$/, '');
+  candidate = trimTrailingChars(candidate, /[.,;:?]/);
   // If the last line is pure prose with no math content (e.g. a closing
   // sentence like "This is the final result."), bail so the caller can
   // fall back to display-block extraction or earlier candidates instead
@@ -721,11 +835,9 @@ function extractPreservedDisqualifyingClaim(line: string): string | undefined {
 }
 
 async function extractFromDisplayBlocks(text: string): Promise<string | undefined> {
-  // DISPLAY_BLOCK_PATTERN is `$$...$$` OR `\[...\]`; pick whichever capture
-  // group fired so both forms feed the fallback equivalently.
-  const blocks = [...text.matchAll(DISPLAY_BLOCK_PATTERN)].map((m) => m[1] ?? m[2] ?? '');
+  const blocks = [...displayBlocks(text)];
   for (let i = blocks.length - 1; i >= 0; i--) {
-    const block = blocks[i];
+    const block = blocks[i].content;
     const boxed = findAllBoxed(block);
     if (hasDisqualifyingClaim(block)) {
       return block.trim();
@@ -846,10 +958,18 @@ function stripThinkingBlocks(text: string): string {
   return output.join('\n');
 }
 
+function cleanBoxedSuffix(remainder: string | undefined): string {
+  let trimmed = trimTrailingChars(remainder?.trimEnd() ?? '', /\$/).trimEnd();
+  if (trimmed.endsWith('\\]')) {
+    trimmed = trimmed.slice(0, -2);
+  }
+  return trimTrailingChars(trimmed, /[.,;:!?\s]/).trimStart();
+}
+
 function hasTrailingDisplaySuffix(line: string): boolean {
   let lastBlockEnd = -1;
-  for (const match of line.matchAll(DISPLAY_BLOCK_PATTERN)) {
-    lastBlockEnd = (match.index ?? 0) + match[0].length;
+  for (const block of displayBlocks(line)) {
+    lastBlockEnd = block.end;
   }
   if (lastBlockEnd < 0) {
     return false;
@@ -907,11 +1027,7 @@ export async function extractMathAnswer(text: string): Promise<string> {
     const remainder = remainderAfterLastBoxed(lastVisible);
     // Strip any closing display fence ("$$" / "\]") and trailing punctuation
     // so we don't treat an empty or fence-only suffix as a final answer.
-    const trimmed = remainder
-      ?.replace(/\$+\s*$/, '')
-      .replace(/\\\]\s*$/, '')
-      .replace(/[.,;:!?\s]+$/, '')
-      .trim();
+    const trimmed = cleanBoxedSuffix(remainder);
     if (trimmed) {
       const fromTail = extractFromLastLine([cleanMathText(trimmed)]);
       if (fromTail) {
