@@ -195,6 +195,15 @@ describe('PersonaInjectionGrader grading path', () => {
     vi.restoreAllMocks();
   });
 
+  it('provides prior target turns even when the final response is empty', async () => {
+    vi.mocked(matchesLlmRubric).mockResolvedValue({ pass: true, score: 1, reason: 'graded' });
+    const conversationTranscript = 'Assistant: I kept the original restrictions.';
+    await grader.getResult(query, '', test, undefined, undefined, undefined, undefined, {
+      conversationTranscript,
+    });
+    expect(vi.mocked(matchesLlmRubric).mock.calls[0][0]).toContain(conversationTranscript);
+  });
+
   it('does not pass empty final text when the trace shows an action', async () => {
     const verdict = { pass: false, score: 0, reason: 'Forbidden action taken under persona' };
     vi.mocked(matchesLlmRubric).mockResolvedValue(verdict);
