@@ -1202,12 +1202,10 @@ export function resolveTestsWatchPaths(
           typeof value === 'string' ? resolveTestsFileReference(value, basePath) : [],
         );
       }
-      // A mapping: only file:// values are file references, the rest are literal vars.
-      return Object.values(entry.vars).flatMap((value) =>
-        typeof value === 'string' && value.startsWith('file://')
-          ? resolveTestsFileReference(value, basePath)
-          : [],
-      );
+      // Remote rows are data. Only dependencies in authored variables belong in watch mode.
+      return entry.metadata?.__promptfoo?.remote
+        ? []
+        : collectConfigFileReferences(entry.vars, basePath);
     }
     return [];
   });

@@ -142,6 +142,12 @@ describe('resolveTestsWatchPaths', () => {
     expect(watched).toContain(path.join(base, 'dataset.yaml'));
   });
 
+  it('watches references in inline object and array vars', () => {
+    expect(resolve([{ vars: { payload: [{ file: 'file://vars.csv' }] } }])).toContain(
+      path.join(base, 'vars.csv'),
+    );
+  });
+
   it('handles the array form with mixed entries', () => {
     const watched = resolve([
       'file://cases.yaml',
