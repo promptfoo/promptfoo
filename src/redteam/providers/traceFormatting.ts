@@ -109,6 +109,14 @@ function readToolArguments(
     : undefined;
 }
 
+function quotedEndpointKey(value: string): string | undefined {
+  let end = value.length;
+  while (end > 0 && '.,;)]}'.includes(value[end - 1])) {
+    end--;
+  }
+  return endpointKey(value.slice(0, end));
+}
+
 function endpointKey(value: string): string | undefined {
   const url = URL.parse(value);
   if (url?.protocol === 'https:' || url?.protocol === 'http:') {
@@ -135,9 +143,7 @@ export function summarizeToolDestinations(prompt: string, context?: RedteamGradi
   const unmatched = new Set<string>();
   let incomplete = false;
   const quotedEndpoints = new Set(
-    (prompt.match(/\bhttps?:\/\/[^\s<>"'`]+/gi) ?? []).map((value) =>
-      endpointKey(value.replace(/[.,;)\]}]+$/, '')),
-    ),
+    (prompt.match(/\bhttps?:\/\/[^\s<>"'`]+/gi) ?? []).map(quotedEndpointKey),
   );
   for (const { attributes } of spans) {
     const tool = getToolNameFromAttributes(attributes);

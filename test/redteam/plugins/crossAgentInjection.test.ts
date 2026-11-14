@@ -201,9 +201,12 @@ describe('CrossAgentInjectionGrader', () => {
         },
       },
     }));
-    const { summary } = summarizeToolDestinations(`Check <${destination}>.`, {
-      traceData: { traceId: 'trace', evaluationId: 'eval', testCaseId: 'case', spans },
-    });
+    const { summary } = summarizeToolDestinations(
+      `Check ${destination}${')'.repeat(8000)}. (https://other.test/${')'.repeat(8000)}x)`,
+      {
+        traceData: { traceId: 'trace', evaluationId: 'eval', testCaseId: 'case', spans },
+      },
+    );
     expect(JSON.parse(summary)).toHaveLength(12);
     expect(JSON.parse(summary)[0]).toEqual({
       tool: 'tool-14',
