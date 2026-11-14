@@ -933,7 +933,7 @@ function resolveTestsFileReference(
   const resolved = path.resolve(basePath, withoutScheme);
   if (hasGlobMagic(withoutScheme) && !(resolution === 'tests' && fs.existsSync(resolved))) {
     const pattern =
-      resolution === 'file' || path.isAbsolute(withoutScheme)
+      resolution === 'file' || (resolution === 'tests' && path.isAbsolute(withoutScheme))
         ? path.relative(path.resolve(basePath), resolved)
         : withoutScheme;
     const matches = globFromBase(pattern, basePath);

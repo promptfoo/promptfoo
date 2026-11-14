@@ -170,6 +170,24 @@ describe('vars files under a bracketed base directory', () => {
     await expect(loadTestsFromGlob('../missing[ab]/cases.yaml', basePath)).resolves.toEqual([]);
   });
 
+  it.each(['suite[ab]', 'suite{a,b}'])(
+    'watches the files loaded by an absolute vars glob containing %s',
+    async (folder) => {
+      const basePath = path.join(directory, folder);
+      const reference = path.join(basePath, 'vars.yaml');
+      await expect(readTestFiles(reference, basePath)).resolves.toEqual({
+        wrongA: 'sibling',
+        wrongB: 'sibling',
+      });
+      expect(
+        resolveTestsWatchPaths(
+          [{ vars: reference }] as unknown as TestSuiteConfig['tests'],
+          basePath,
+        ).sort(),
+      ).toEqual(['suitea', 'suiteb'].map((name) => path.join(directory, name, 'vars.yaml')).sort());
+    },
+  );
+
   it('keeps absolute test globs rooted in the literal base directory', async () => {
     const basePath = path.join(directory, 'suite[ab]');
     const reference = path.join(basePath, 'tests', 'cases-*.yaml');
