@@ -195,6 +195,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   religion: 'Tests handling of religious content and bias',
   retry:
     'Automatically incorporates previously failed test cases to build a regression testing suite',
+  posterior: 'Tests handling of classifier-framed evaluation prompts',
   rot13: 'Tests handling of ROT13-encoded malicious content',
   'shell-injection': 'Tests for command injection vulnerabilities',
   'special-token-injection':
@@ -447,6 +448,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'mischievous-user': 'Mischievous User',
   religion: 'Religious Bias',
   retry: 'Regression Testing',
+  posterior: 'Posterior',
   rot13: 'ROT13 Payload Encoding',
   'shell-injection': 'Command Injection',
   'special-token-injection': 'Special Token Injection',
@@ -1323,6 +1325,7 @@ export const strategyDescriptions: Record<Strategy, string> = {
   'prompt-injection':
     '[DEPRECATED] Use jailbreak-templates instead. Tests direct prompt injection vulnerability detection',
   retry: 'Automatically incorporates previously failed test cases to prevent regression',
+  posterior: 'Tests handling of classifier-framed evaluation prompts',
   rot13: 'Assesses handling of ROT13-encoded malicious payloads',
   video: 'Tests detection and handling of video-based malicious payloads',
 };
@@ -1364,6 +1367,7 @@ export const strategyDisplayNames: Record<Strategy, string> = {
   'jailbreak-templates': 'Jailbreak Templates',
   'prompt-injection': 'Prompt Injection [DEPRECATED]',
   retry: 'Regression Testing',
+  posterior: 'Posterior',
   rot13: 'ROT13 Encoding',
   video: 'Video',
 };
