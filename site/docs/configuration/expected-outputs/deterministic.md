@@ -270,14 +270,15 @@ This assertion will pass for:
 - Complete HTML documents: `<!DOCTYPE html><html>...</html>`
 - HTML fragments: `<div>Content</div>`
 - Multiple elements: `<h1>Title</h1><p>Paragraph</p>`
-- Self-closing tags: `<img src="test.jpg" />`
+- Void HTML elements such as `<img src="test.jpg" />` and self-closing SVG elements such as `<svg><circle r="1"/></svg>`
+- Optional end tags in a valid position, such as `<dl><dt>Term<dd>Definition</dl>`
 
 It will fail for:
 
 - Plain text: `Just text`
 - Mixed content: `Text before <div>HTML</div> text after`
 - XML documents: `<?xml version="1.0"?><root>...</root>`
-- Incomplete HTML: `<div>Unclosed div`
+- Elements missing a required end tag, such as `<div>Unclosed div`, `<p />`, and `<dl><dt>Term</dl>`
 - Non-HTML content with HTML inside: `Here is some HTML: <div>test</div>`
 
 ### Contains-Sql
