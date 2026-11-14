@@ -7,20 +7,11 @@ import {
 } from './types';
 
 function tryConvertOpenAIEvals(parsedJson: unknown): ParsedImportFile | undefined {
-  if (isOpenAIEvalsJsonlRow(parsedJson)) {
+  const rows = Array.isArray(parsedJson) ? parsedJson : [parsedJson];
+  if (rows.length > 0 && rows.every(isOpenAIEvalsJsonlRow)) {
     return {
       source: IMPORT_SOURCE_OPENAI_EVALS,
-      evalData: convertOpenAIEvalsJsonl([parsedJson]),
-    };
-  }
-  if (
-    Array.isArray(parsedJson) &&
-    parsedJson.length > 0 &&
-    parsedJson.every(isOpenAIEvalsJsonlRow)
-  ) {
-    return {
-      source: IMPORT_SOURCE_OPENAI_EVALS,
-      evalData: convertOpenAIEvalsJsonl(parsedJson),
+      evalData: convertOpenAIEvalsJsonl(rows),
     };
   }
   return undefined;
@@ -53,11 +44,9 @@ export function parseImportFile(fileContent: string): ParsedImportFile {
   } catch (jsonError) {
     const parsedRows = parseJsonlLines(fileContent);
     if (parsedRows) {
-      if (parsedRows.every(isOpenAIEvalsJsonlRow)) {
-        return {
-          source: IMPORT_SOURCE_OPENAI_EVALS,
-          evalData: convertOpenAIEvalsJsonl(parsedRows),
-        };
+      const openaiResult = tryConvertOpenAIEvals(parsedRows);
+      if (openaiResult !== undefined) {
+        return openaiResult;
       }
       // The file parsed cleanly as JSONL but is not a valid OpenAI Evals
       // export. Re-throwing the whole-file JSON error here would point at a

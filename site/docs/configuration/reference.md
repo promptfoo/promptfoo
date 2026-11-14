@@ -594,6 +594,8 @@ All merges are **shallow**: returned properties replace existing values at the t
 | `context.suite.derivedMetrics`    | `DerivedMetric[]`          | [Derived metrics](/docs/configuration/expected-outputs#creating-derived-metrics). |
 | `context.suite.redteam`           | `RedteamConfig`            | The [red team](/docs/red-team) configuration to be evaluated.                     |
 
+When no explicit `providerPromptMap` is supplied, `beforeAll` receives provider ID and label entries initialized from each provider's `prompts` (or all current prompt labels). Changing an entry's values creates a shared override; deleting it removes that restriction. Replacing an array on the same generated map also creates an override even when its values match; unchanged whole-map serialized roundtrips preserve per-provider filters. Unchanged entries keep per-provider routing, so providers sharing an ID or label can retain different filters and unrestricted providers include prompts added by the hook.
+
 #### beforeEach
 
 | Property       | Type                     | Description                    |
@@ -1280,6 +1282,8 @@ interface EvaluateResult {
 GradingResult is an object that represents the result of grading a test case. It includes whether the test case passed, the score, the reason for the result, the tokens used, and the results of any component assertions.
 
 `namedScores`, `namedScoreWeights`, and `componentResults` may be omitted or `null` to indicate no values.
+
+In results from custom graders and scoring functions, a named score that is a boolean, `null`, or a numeric string is recorded as a number: `true` is 1, and `false` and `null` are 0. A nested component result may omit `reason` and `score`; an omitted score is 1 when `pass` is true and 0 otherwise.
 
 ```typescript
 interface ResultSuggestion {
