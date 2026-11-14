@@ -2559,6 +2559,31 @@ describe('util', () => {
         expect(Array.isArray(contents)).toBe(true);
         expect(contents).toEqual([]);
       });
+
+      it('should register media values nested inside cyclic arrays and objects within contextVars', () => {
+        const rawImage =
+          '/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/2wBDAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAAAAX/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwA/8A/9k=';
+        const prompt = JSON.stringify([
+          {
+            role: 'user',
+            parts: [{ text: rawImage }],
+          },
+        ]);
+        const cyclic: Record<string, unknown> = {};
+        cyclic.self = cyclic;
+        const contextVars = {
+          cyclic,
+          items: [{ nestedImage: rawImage }],
+          mediaList: [rawImage],
+        };
+        const { contents } = geminiFormatAndSystemInstructions(prompt, contextVars);
+        expect(contents[0].parts[0]).toEqual({
+          inlineData: {
+            mimeType: 'image/jpeg',
+            data: rawImage,
+          },
+        });
+      });
     });
   });
 

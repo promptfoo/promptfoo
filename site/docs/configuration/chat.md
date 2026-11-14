@@ -308,6 +308,8 @@ This has the effect of including the conversation history _within_ the prompt co
 
 The `storeOutputAs` option makes it possible to reference previous outputs in multi-turn conversations. When set, it records the LLM output as a variable that can be used in subsequent chats.
 
+Stored output is treated as data. A `file://` path returned by the model is passed as literal text, including paths to local media. For a local attachment, declare the file in the test configuration. A provider that supports inline media can also consume the media bytes directly.
+
 Here's an example:
 
 ```yaml title="promptfooconfig.yaml"

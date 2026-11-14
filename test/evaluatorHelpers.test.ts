@@ -13,6 +13,7 @@ import {
 } from '../src/evaluatorHelpers';
 import logger from '../src/logger';
 import { AIStudioChatProvider } from '../src/providers/google/ai.studio';
+import { geminiFormatAndSystemInstructions } from '../src/providers/google/util';
 import { runPython } from '../src/python/pythonUtils';
 import { transform } from '../src/util/transform';
 import { createMockProvider } from './factories/provider';
@@ -467,6 +468,402 @@ describe('evaluatorHelpers', () => {
       expect(renderedPrompt).toBe('Test prompt with {"key":"valueFromYaml"}');
     });
 
+    describe('nested file:// references in object vars (issue #1613)', () => {
+      afterEach(() => {
+        vi.restoreAllMocks();
+      });
+
+      it('should load file:// content nested one level deep in a plain object var', async () => {
+        // Before the fix: `reporting_period.previous.report` would stay as the
+        // raw `file://` string and get injected into the prompt literally.
+        const prompt = toPrompt('Report: {{ reporting_period.previous.report }}');
+        const vars = {
+          reporting_period: {
+            current: { period: '2023-12-31' },
+            previous: {
+              period: '2022-12-31',
+              report: 'file://data/report.txt',
+            },
+          },
+        };
+
+        vi.spyOn(fs, 'readFileSync').mockReturnValueOnce('<h1>Sample Report</h1>');
+
+        const renderedPrompt = await renderPrompt(
+          prompt,
+          vars,
+          {},
+          undefined,
+          undefined,
+          new Set(Object.keys(vars)),
+        );
+
+        expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('report.txt'), 'utf8');
+        expect(renderedPrompt).toBe('Report: <h1>Sample Report</h1>');
+      });
+
+      it('should load file:// content nested deeply in a plain object var', async () => {
+        const prompt = toPrompt('Deep: {{ a.b.c.d }}');
+        const vars = {
+          a: { b: { c: { d: 'file://deep/nested.txt' } } },
+        };
+
+        vi.spyOn(fs, 'readFileSync').mockReturnValueOnce('deep content');
+
+        const renderedPrompt = await renderPrompt(
+          prompt,
+          vars,
+          {},
+          undefined,
+          undefined,
+          new Set(Object.keys(vars)),
+        );
+
+        expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('nested.txt'), 'utf8');
+        expect(renderedPrompt).toBe('Deep: deep content');
+      });
+
+      it('should expand file:// references inside an array var', async () => {
+        const prompt = toPrompt('{{ items | join(", ") }}');
+        const vars = {
+          items: ['literal', 'file://item.txt'],
+        };
+
+        vi.spyOn(fs, 'readFileSync').mockReturnValueOnce('from file');
+
+        const renderedPrompt = await renderPrompt(
+          prompt,
+          vars,
+          {},
+          undefined,
+          undefined,
+          new Set(Object.keys(vars)),
+        );
+
+        expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('item.txt'), 'utf8');
+        expect(renderedPrompt).toBe('literal, from file');
+      });
+
+      it('should load a yaml file:// reference nested inside an object var', async () => {
+        const prompt = toPrompt('Config: {{ cfg.schema }}');
+        const vars = {
+          cfg: { schema: 'file://schema.yaml' },
+        };
+
+        vi.spyOn(fs, 'readFileSync').mockReturnValueOnce('key: value');
+
+        const renderedPrompt = await renderPrompt(
+          prompt,
+          vars,
+          {},
+          undefined,
+          undefined,
+          new Set(Object.keys(vars)),
+        );
+
+        expect(fs.readFileSync).toHaveBeenCalledWith(
+          expect.stringContaining('schema.yaml'),
+          'utf8',
+        );
+        expect(renderedPrompt).toBe('Config: {"key":"value"}');
+      });
+
+      it('should leave non-file:// strings inside nested objects untouched', async () => {
+        const prompt = toPrompt('{{ data.label }}');
+        const vars = {
+          data: { label: 'just a string', count: 42 },
+        };
+
+        const renderedPrompt = await renderPrompt(
+          prompt,
+          vars,
+          {},
+          undefined,
+          undefined,
+          new Set(Object.keys(vars)),
+        );
+
+        // readFileSync should NOT have been called
+        expect(fsMocks.readFileSync).not.toHaveBeenCalled();
+        expect(renderedPrompt).toBe('just a string');
+      });
+
+      it('should not apply nested expansion to vars listed in skipRenderVars', async () => {
+        const prompt = toPrompt('{{ safe.inner }}');
+        const vars = {
+          safe: { inner: 'file://should-not-load.txt' },
+        };
+
+        const renderedPrompt = await renderPrompt(
+          prompt,
+          vars,
+          {},
+          undefined,
+          ['safe'],
+          new Set(Object.keys(vars)),
+        );
+
+        // The file should NOT be loaded because `safe` is in skipRenderVars
+        expect(fsMocks.readFileSync).not.toHaveBeenCalled();
+        // The raw object is passed through Nunjucks – the nested property is accessible
+        // but its value stays as the original string
+        expect(renderedPrompt).toContain('file://should-not-load.txt');
+      });
+
+      it('should exclude _conversation from nested file resolution', async () => {
+        const prompt = toPrompt('{{ _conversation[0].output }}');
+        const vars = {
+          _conversation: [{ output: 'file:///etc/passwd' }],
+        };
+
+        const renderedPrompt = await renderPrompt(
+          prompt,
+          vars,
+          {},
+          undefined,
+          undefined,
+          new Set(Object.keys(vars)),
+        );
+
+        expect(fsMocks.readFileSync).not.toHaveBeenCalled();
+        expect(renderedPrompt).toBe('file:///etc/passwd');
+      });
+
+      it('should handle cyclic object structures without infinite recursion', async () => {
+        const prompt = toPrompt('{{ node.name }}');
+        const node: Record<string, any> = { name: 'Root' };
+        node.self = node;
+        const vars = { node };
+
+        const renderedPrompt = await renderPrompt(
+          prompt,
+          vars,
+          {},
+          undefined,
+          undefined,
+          new Set(Object.keys(vars)),
+        );
+
+        expect(renderedPrompt).toBe('Root');
+      });
+
+      it('should preserve non-plain objects such as Date intact', async () => {
+        const dateObj = new Date('2024-01-15T00:00:00.000Z');
+        const prompt = toPrompt('{{ created_at }}');
+        const vars = { created_at: dateObj };
+
+        const renderedPrompt = await renderPrompt(
+          prompt,
+          vars,
+          {},
+          undefined,
+          undefined,
+          new Set(Object.keys(vars)),
+        );
+
+        expect(renderedPrompt).toBe(dateObj.toString());
+      });
+
+      it('should resolve shared object aliases consistently across branches', async () => {
+        const shared = { content: 'file://shared.txt' };
+        const prompt = toPrompt('A: {{ a.content }} B: {{ b.content }}');
+        const vars = { a: shared, b: shared };
+
+        vi.spyOn(fs, 'readFileSync').mockReturnValue('shared content');
+
+        const renderedPrompt = await renderPrompt(
+          prompt,
+          vars,
+          {},
+          undefined,
+          undefined,
+          new Set(Object.keys(vars)),
+        );
+
+        expect(renderedPrompt).toBe('A: shared content B: shared content');
+      });
+
+      it('should detect plain objects even if they have an own constructor property', async () => {
+        const prompt = toPrompt('{{ item.text }} (type: {{ item.constructor }})');
+        const vars = {
+          item: {
+            constructor: 'custom-type',
+            text: 'file://item.txt',
+          },
+        };
+
+        vi.spyOn(fs, 'readFileSync').mockReturnValueOnce('resolved text');
+
+        const renderedPrompt = await renderPrompt(
+          prompt,
+          vars,
+          {},
+          undefined,
+          undefined,
+          new Set(Object.keys(vars)),
+        );
+
+        expect(renderedPrompt).toBe('resolved text (type: custom-type)');
+      });
+
+      it('should preserve __proto__ as an own key safely without prototype pollution', async () => {
+        const prompt = toPrompt('{{ item.label }}');
+        const vars = {
+          item: JSON.parse('{"__proto__": "metadata", "label": "file://label.txt"}'),
+        };
+
+        vi.spyOn(fs, 'readFileSync').mockReturnValueOnce('safe label');
+
+        const renderedPrompt = await renderPrompt(
+          prompt,
+          vars,
+          {},
+          undefined,
+          undefined,
+          new Set(Object.keys(vars)),
+        );
+
+        expect(renderedPrompt).toBe('safe label');
+        expect(Object.prototype.hasOwnProperty.call(vars.item, '__proto__')).toBe(true);
+      });
+
+      it('should leave nested JS and Python script references unresolved', async () => {
+        const prompt = toPrompt('JS: {{ config.jsScript }} PY: {{ config.pyScript }}');
+        const vars = {
+          config: {
+            jsScript: 'file://helpers/script.js',
+            pyScript: 'file://helpers/script.py',
+          },
+        };
+
+        const renderedPrompt = await renderPrompt(
+          prompt,
+          vars,
+          {},
+          undefined,
+          undefined,
+          new Set(Object.keys(vars)),
+        );
+
+        expect(fsMocks.readFileSync).not.toHaveBeenCalled();
+        expect(renderedPrompt).toBe('JS: file://helpers/script.js PY: file://helpers/script.py');
+      });
+
+      it('should extract text from nested PDF file references', async () => {
+        const prompt = toPrompt('PDF: {{ doc.content }}');
+        const vars = {
+          doc: { content: 'file://document.pdf' },
+        };
+
+        const renderedPrompt = await renderPrompt(
+          prompt,
+          vars,
+          {},
+          undefined,
+          undefined,
+          new Set(Object.keys(vars)),
+        );
+
+        expect(renderedPrompt).toBe('PDF: Extracted PDF text');
+      });
+
+      it('should load nested image files as data URLs', async () => {
+        const prompt = toPrompt('Img: {{ asset.image }}');
+        const vars = {
+          asset: { image: 'file://photo.png' },
+        };
+
+        const samplePngBase64 =
+          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+        vi.spyOn(fs, 'readFileSync').mockReturnValueOnce(
+          Buffer.from(samplePngBase64, 'base64') as any,
+        );
+
+        const renderedPrompt = await renderPrompt(
+          prompt,
+          vars,
+          {},
+          undefined,
+          undefined,
+          new Set(Object.keys(vars)),
+        );
+
+        expect(renderedPrompt).toContain('data:image/png;base64,');
+      });
+
+      it('should load nested audio files and register M4A mime type for google provider', async () => {
+        const prompt = toPrompt('Audio: {{ track.audio }}');
+        const bytes = Buffer.from('000000186674797069736f6d0000000069736f6d6d703432', 'hex');
+        const vars = {
+          track: { audio: 'file://recording.m4a' },
+        };
+
+        const mockGoogleProvider = {
+          id: () => 'google-audio',
+          callApi: vi.fn(),
+          getAudioInputFormat: () => 'google' as const,
+        };
+
+        vi.spyOn(fs, 'readFileSync').mockReturnValueOnce(bytes as any);
+
+        const renderedPrompt = await renderPrompt(
+          prompt,
+          vars,
+          {},
+          mockGoogleProvider as any,
+          undefined,
+          new Set(Object.keys(vars)),
+        );
+
+        expect(renderedPrompt).toBe(`Audio: ${bytes.toString('base64')}`);
+        const { contents } = geminiFormatAndSystemInstructions(bytes.toString('base64'), vars);
+        expect(contents[0].parts[0]).toEqual({
+          inlineData: {
+            mimeType: 'audio/mp4',
+            data: bytes.toString('base64'),
+          },
+        });
+      });
+
+      it('should normalize canonical Windows file URLs (file:///C:/path/to/file)', async () => {
+        const originalPlatform = process.platform;
+        Object.defineProperty(process, 'platform', {
+          value: 'win32',
+          configurable: true,
+        });
+
+        try {
+          const prompt = toPrompt('Doc: {{ doc.content }}');
+          const vars = {
+            doc: { content: 'file:///C:/workspace/data.txt' },
+          };
+
+          vi.spyOn(fs, 'readFileSync').mockReturnValueOnce('windows data');
+
+          const renderedPrompt = await renderPrompt(
+            prompt,
+            vars,
+            {},
+            undefined,
+            undefined,
+            new Set(Object.keys(vars)),
+          );
+
+          expect(renderedPrompt).toBe('Doc: windows data');
+          expect(mockPathResolve).toHaveBeenCalledWith(
+            expect.any(String),
+            expect.any(String),
+            'C:/workspace/data.txt',
+          );
+        } finally {
+          Object.defineProperty(process, 'platform', {
+            value: originalPlatform,
+            configurable: true,
+          });
+        }
+      });
+    });
+
     describe('with PROMPTFOO_DISABLE_TEMPLATING', () => {
       beforeEach(() => {
         mockProcessEnv({ PROMPTFOO_DISABLE_TEMPLATING: 'true' });
@@ -647,6 +1044,11 @@ describe('evaluatorHelpers', () => {
   });
 
   describe('resolveVariables', () => {
+    it('bounds self-referential aliases containing multiple placeholders', () => {
+      const vars = { self: '{{self}}{{self}}' };
+      expect(resolveVariables(vars).self).toBe('{{self}}'.repeat(33));
+    });
+
     it('should replace placeholders with corresponding variable values', () => {
       const variables = {
         final: '{{ my_greeting }}, {{name}}!',
