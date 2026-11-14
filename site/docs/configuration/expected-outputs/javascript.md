@@ -247,6 +247,8 @@ assert:
 
 The JavaScript file must export an assertion function. Here are examples:
 
+Exported object methods retain their object as `this`, so graders can read sibling configuration fields. Standalone exported functions are called without a receiver.
+
 ```js
 // Default export
 module.exports = (output, context) => {

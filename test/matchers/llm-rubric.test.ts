@@ -2254,7 +2254,7 @@ Evaluate the response
         }),
       }),
     );
-    expect(mockImportModule).toHaveBeenCalledWith(filePath, undefined);
+    expect(mockImportModule).toHaveBeenCalledWith(filePath, undefined, { bindToModule: true });
 
     expect(result).toEqual(
       expect.objectContaining({ pass: true, score: 1, reason: 'Test passed' }),

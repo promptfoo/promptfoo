@@ -3,6 +3,7 @@ import fsPromises from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { isModuleNamespaceObject } from 'node:util/types';
 import vm from 'node:vm';
 
 import { resolveModulePath } from 'exsolve';
@@ -225,6 +226,32 @@ export function getDirectory(): string {
   );
 }
 
+function getNamedExport(mod: Record<string, unknown>, name: string, bindToModule = false) {
+  const exported = mod[name];
+  return bindToModule &&
+    !isModuleNamespaceObject(mod) &&
+    mod.__esModule !== true &&
+    exported !== mod &&
+    typeof exported === 'function'
+    ? exported.bind(mod)
+    : exported;
+}
+
+function bindDefaultExport(
+  exported: unknown,
+  owner: { default?: unknown; __esModule?: unknown } | undefined,
+  bindToModule = false,
+) {
+  return bindToModule &&
+    owner?.default &&
+    owner !== exported &&
+    !isModuleNamespaceObject(owner) &&
+    owner.__esModule !== true &&
+    typeof exported === 'function'
+    ? exported.bind(owner)
+    : exported;
+}
+
 /**
  * ESM-only module loader - simplified without eval() or CommonJS fallback
  * Uses Node.js native ESM import with proper URL resolution
@@ -232,8 +259,9 @@ export function getDirectory(): string {
 export async function importModule(
   modulePath: string,
   functionName?: string,
-  options?: { cacheCjsFallback?: boolean },
+  options?: { cacheCjsFallback?: boolean; bindToModule?: boolean },
 ) {
+  const bindToModule = options?.bindToModule;
   const loadPath = await normalizeModuleExtension(modulePath);
   logger.debug(
     `Attempting to import module: ${JSON.stringify({ resolvedPath: safeResolve(modulePath), moduleId: modulePath })}`,
@@ -249,16 +277,29 @@ export async function importModule(
     // Native dynamic import - no eval() needed in ESM-only environment
     const importedModule = await import(resolvedPathStr);
 
-    const mod = importedModule?.default?.default || importedModule?.default || importedModule;
+    const nestedDefault = importedModule?.default?.default;
+    const mod = nestedDefault || importedModule?.default || importedModule;
     logger.debug(
       `Successfully imported module: ${JSON.stringify({ resolvedPath, moduleId: modulePath })}`,
     );
 
     if (functionName) {
       logger.debug(`Returning named export: ${functionName}`);
-      return mod[functionName];
+      // ESM namespace functions have always been standalone. A default-exported
+      // object or CommonJS exports object can own a grader method.
+      const namedExport = getNamedExport(mod, functionName, bindToModule && mod !== importedModule);
+      if (namedExport !== undefined || !bindToModule || mod === importedModule) {
+        return namedExport;
+      }
+
+      // Default unwrapping can hide a sibling method or a standalone named ESM export.
+      const owner = importedModule.default ?? {};
+      const siblingExport = Object.prototype.hasOwnProperty.call(owner, functionName)
+        ? getNamedExport(owner, functionName, true)
+        : undefined;
+      return siblingExport ?? getNamedExport(importedModule, functionName);
     }
-    return mod;
+    return bindDefaultExport(mod, importedModule?.default, bindToModule);
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : String(err);
 
@@ -283,8 +324,10 @@ export async function importModule(
         if (functionName) {
           logger.debug(`Returning named export: ${functionName}`);
           return options?.cacheCjsFallback
-            ? Promise.resolve(mod).then((value) => value[functionName])
-            : mod[functionName];
+            ? Promise.resolve(mod).then((value) =>
+                getNamedExport(value, functionName, bindToModule),
+              )
+            : getNamedExport(mod, functionName, bindToModule);
         }
         return mod;
       } catch (cjsErr) {
