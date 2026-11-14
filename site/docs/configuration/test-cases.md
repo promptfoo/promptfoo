@@ -137,7 +137,7 @@ tests:
 
 - Omit `providers` to run the test against all providers. Use `providers: []` to skip it.
 - When both `providers` and `providerPromptMap` are set, a provider must match both.
-- `--filter-providers` runs tests only against selected providers. Excluded IDs and labels remain valid references. If a custom module sets its ID at load time, give it a label and reference that label. Unknown-reference errors list the selected providers and the number excluded.
+- `--filter-providers` and `--providers` run tests only against selected providers. Excluded IDs and labels remain valid references. If a custom module sets its ID at load time, give it a label and reference that label. Unknown-reference errors list the selected providers and the number excluded.
 
 ### Filtering Tests by Prompt
 

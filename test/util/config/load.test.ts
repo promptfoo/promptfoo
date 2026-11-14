@@ -1613,7 +1613,10 @@ describe('resolveConfigs', () => {
     },
   );
 
-  it('validates references to excluded providers without loading them', async () => {
+  it.each([
+    { filterTargets: 'selected-target' },
+    { providers: ['promptfoo://provider/selected-target'] },
+  ])('validates excluded providers without loading them (%o)', async (selection) => {
     const selected = { id: 'promptfoo://provider/selected-target' };
     const excluded = {
       id: 'promptfoo://provider/{{ env.PR_FILTER_TARGET }}',
@@ -1638,10 +1641,7 @@ describe('resolveConfigs', () => {
     );
     vi.mocked(globSync).mockReturnValueOnce(['config.json']);
 
-    const result = await resolveConfigs(
-      { config: ['config.json'], filterTargets: 'selected-target' },
-      {},
-    );
+    const result = await resolveConfigs({ config: ['config.json'], ...selection }, {});
 
     expect(result.selectedProviderConfigs).toEqual([selected]);
     expect(cliState.selectedProviderConfigs).toEqual([selected]);

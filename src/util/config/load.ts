@@ -64,8 +64,6 @@ import { validateTestProviderReferences } from '../validateTestProviderReference
 import { loadYaml } from '../yamlLoad';
 import { DEFAULT_CONFIG_EXTENSIONS } from './extensions';
 
-import type { ProviderIdentity } from '../provider';
-
 const clone = Clone({ circles: true });
 
 type ConfigResolutionLogLevel = 'error' | 'warn';
@@ -1161,11 +1159,20 @@ async function resolveLoadedConfig(
   // Filter providers BEFORE instantiation to avoid loading providers that won't be used.
   // Filtering on resolved configs allows matching by provider id/label from file-based providers.
   const filterOption = cmdObj.filterProviders || cmdObj.filterTargets;
-  const excludedProviders: ProviderIdentity[] = [];
-  const filteredProviderConfigs = filterProviderConfigs(cliFilteredProviderConfigs, filterOption, {
-    excluded: excludedProviders,
-    renderIdentity: (ref) => renderProviderIdentity(ref, runtimeEnv),
-  });
+  const renderIdentity = (ref: Parameters<typeof renderProviderIdentity>[0]) =>
+    renderProviderIdentity(ref, runtimeEnv);
+  const filteredProviderConfigs = filterProviderConfigs(
+    cliFilteredProviderConfigs,
+    filterOption,
+    renderIdentity,
+  );
+  const selected = new Set(Array.isArray(filteredProviderConfigs) ? filteredProviderConfigs : []);
+  const excludedProviders =
+    (cmdObj.providers || filterOption) && Array.isArray(resolvedProviderConfigs)
+      ? resolvedProviderConfigs.flatMap((provider, index) =>
+          selected.has(provider) ? [] : [getProviderIdAndLabel(provider, index, renderIdentity)],
+        )
+      : [];
 
   if (
     filterOption &&

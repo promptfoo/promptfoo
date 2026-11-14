@@ -3,7 +3,6 @@ import { normalizeProviderRef, type ProviderRefDescriptor } from '../../util/pro
 
 import type { ApiProvider, CommandLineOptions, TestSuiteConfig } from '../../types/index';
 import type { ProviderOptions, ProviderOptionsMap } from '../../types/providers';
-import type { ProviderIdentity } from '../provider';
 
 /**
  * Converts an untrusted persisted provider filter into the CLI option shape used by config
@@ -71,21 +70,14 @@ export function getProviderIdAndLabel(
 export function filterProviderConfigs(
   providers: TestSuiteConfig['providers'],
   filterOption?: string,
-  {
-    excluded,
-    renderIdentity,
-  }: { excluded?: ProviderIdentity[]; renderIdentity?: RenderIdentity } = {},
+  renderIdentity?: RenderIdentity,
 ): TestSuiteConfig['providers'] {
   if (!filterOption) {
     return providers;
   }
   const regex = new RegExp(filterOption);
   function matches({ id, label }: { id: string; label?: string }): boolean {
-    if (regex.test(id) || (label && regex.test(label))) {
-      return true;
-    }
-    excluded?.push({ id, label });
-    return false;
+    return regex.test(id) || (label !== undefined && regex.test(label));
   }
 
   if (Array.isArray(providers)) {
