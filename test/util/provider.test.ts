@@ -418,6 +418,14 @@ describe('doesProviderRefMatch', () => {
     ['exec:./scripts/*', 'exec:scripts/alpha.js'],
     ['python:./scripts/*', 'python:scripts/alpha.py:call_api'],
     ['golang:./scripts/*', 'golang:scripts/alpha.go'],
+    [
+      `file://${path.resolve('.')}/other/../providers/*`,
+      `file://${path.resolve('providers/alpha.js')}`,
+    ],
+    [
+      `file://${path.resolve('providers')}/*`,
+      `file://${path.resolve('.')}/other/../providers/alpha.js`,
+    ],
     ['file://providers/../providers/*', 'file://providers/alpha.js'],
     ['file://./providers/*', `file://${path.resolve('providers/alpha.js')}`],
     ['file://providers/*', `file://${path.join('providers', 'alpha.js')}`],

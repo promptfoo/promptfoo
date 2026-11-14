@@ -74,6 +74,13 @@ export function sanitizeProviderIdForLog(providerId: string): string {
     : providerId;
 }
 
+function normalizeWildcardPath(canonical: string): string {
+  // The shared canonicalizer preserves absolute file IDs for exact matching.
+  return canonical.startsWith('file://')
+    ? `file://${path.normalize(canonical.slice('file://'.length))}`
+    : canonical;
+}
+
 function matchesBasenameScriptWildcard(ref: string, id: string, basePath: unknown): boolean {
   const script = /^(python|golang):([^:]+)(:[^:]*)?$/.exec(id);
   if (
@@ -119,12 +126,12 @@ export function doesProviderRefMatch(ref: string, provider: ApiProvider): boolea
   if (ref.endsWith('*')) {
     const prefix = ref.slice(0, -1);
     // Normalize before removing '*' so a directory's trailing separator is retained.
-    const canonicalPrefix = canonicalRef.slice(0, -1);
+    const canonicalPrefix = normalizeWildcardPath(canonicalRef).slice(0, -1);
     if (
       label?.startsWith(prefix) ||
       id.startsWith(prefix) ||
       canonicalId.startsWith(prefix) ||
-      canonicalId.startsWith(canonicalPrefix)
+      normalizeWildcardPath(canonicalId).startsWith(canonicalPrefix)
     ) {
       return true;
     }
