@@ -18,8 +18,8 @@ import { getAjv } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
 import { resolveProviderApiKey } from '../credentials';
 import { resolveProviderEnv } from '../env';
-import { encodePcmToWav } from '../pcm';
 import { calculateLiveCost } from '../livePricing';
+import { encodePcmToWav } from '../pcm';
 import {
   calculateCost,
   clampCachedTokens,
