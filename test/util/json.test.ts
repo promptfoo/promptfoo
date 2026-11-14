@@ -1221,6 +1221,18 @@ describe('json utilities', () => {
       });
     });
 
+    it('rejects a truncated shell with ambiguous integer-keyed branches', () => {
+      const entries = extractJsonObjectsWithMeta('{"2":{"pass":true},"1":{"pass":false}');
+      expect(selectVerdictObject(entries, KEYS)).toBeUndefined();
+    });
+
+    it('checks a complete candidate even when followed by unrelated JSON', () => {
+      const entries = extractJsonObjectsWithMeta(
+        '{"pass":true,"final":{"pass":false}} {"notes":"done"}',
+      );
+      expect(selectVerdictObject(entries, KEYS)).toBeUndefined();
+    });
+
     it('returns a complete verdict as-is when nested metadata repeats the same score', () => {
       const entries = extractJsonObjectsWithMeta(
         '{"pass": false, "score": 0, "reason": "clearly harmful", "metadata": {"score": 0, "model": "gpt"}}',

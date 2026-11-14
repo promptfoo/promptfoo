@@ -451,7 +451,7 @@ function isVerdictShaped(value: unknown, verdictKeys: string[]): value is Record
   );
 }
 
-function* walkVerdictObjects(root: object, verdictKeys: string[]) {
+function* walkVerdictObjects(root: object, verdictKeys: string[], checkOrder = false) {
   const pending: { value: unknown; depth: number }[] = [{ value: root, depth: 0 }];
   const seen = new WeakSet<object>();
   while (pending.length > 0) {
@@ -469,7 +469,21 @@ function* walkVerdictObjects(root: object, verdictKeys: string[]) {
       continue;
     }
     if (isVerdictShaped(value, verdictKeys)) {
-      yield { value, depth };
+      yield { value, depth, unordered: false };
+    }
+    if (
+      checkOrder &&
+      Object.entries(value).some(
+        ([key, child]) =>
+          /^(0|[1-9]\d*)$/.test(key) &&
+          Number(key) < 0xffffffff &&
+          child !== null &&
+          typeof child === 'object',
+      ) &&
+      Object.values(value).filter((child) => child !== null && typeof child === 'object').length > 1
+    ) {
+      yield { value: undefined, depth, unordered: true };
+      return;
     }
     const children = Object.values(value);
     for (let i = children.length - 1; i >= 0; i--) {
@@ -498,9 +512,15 @@ function* walkVerdictObjects(root: object, verdictKeys: string[]) {
  * holding MULTIPLE verdict-shaped elements are ambiguous (e.g. per-criterion
  * rubric breakdowns) and are never descended into.
  */
-export function unwrapNestedVerdict<T extends object>(obj: T, verdictKeys: string[]): T {
+export function unwrapNestedVerdict<T extends object>(
+  obj: T,
+  verdictKeys: string[],
+): T | undefined {
   let best: object = obj;
-  for (const { value } of walkVerdictObjects(obj, verdictKeys)) {
+  for (const { value, unordered } of walkVerdictObjects(obj, verdictKeys, true)) {
+    if (unordered || !value) {
+      return undefined;
+    }
     best = value;
   }
   return best as T;
@@ -568,7 +588,7 @@ function containsConflictingNestedVerdict(
   verdictKeys: string[],
 ): boolean {
   for (const { value, depth } of walkVerdictObjects(obj, verdictKeys)) {
-    if (depth > 0 && verdictsConflict(obj, value, verdictKeys)) {
+    if (value && depth > 0 && verdictsConflict(obj, value, verdictKeys)) {
       return true;
     }
   }
@@ -655,13 +675,16 @@ export function selectVerdictObject<T extends object>(
     }
     const chosen = entry.object as Record<string, unknown>;
     const lastVerdict = unwrapNestedVerdict(last.object as Record<string, unknown>, verdictKeys);
+    if (!lastVerdict) {
+      return undefined;
+    }
     if (
       isVerdictShaped(lastVerdict, verdictKeys) &&
       verdictsConflict(chosen, lastVerdict, verdictKeys)
     ) {
       return undefined; // echoed verdict conflicts with merged shell: fail closed
     }
-    return chosen as T;
+    return containsConflictingNestedVerdict(chosen, verdictKeys) ? undefined : (chosen as T);
   }
 
   // No complete verdict-shaped object anywhere: truncation salvage / merged
