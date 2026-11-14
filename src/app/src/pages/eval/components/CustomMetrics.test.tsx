@@ -44,6 +44,11 @@ describe('CustomMetrics', () => {
     cleanup();
   });
 
+  it('renders a prototype-colliding score without an inherited denominator', () => {
+    renderWithProviders(<CustomMetrics lookup={{ ['__proto__']: 2 }} metricTotals={{}} />);
+    expect(screen.getByTestId('metric-value-__proto__')).toHaveTextContent(/^2\.00$/);
+  });
+
   it('returns null when lookup is empty', () => {
     const { container } = renderWithProviders(<CustomMetrics lookup={{}} />);
     expect(container.firstChild).toBeNull();

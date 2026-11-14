@@ -90,6 +90,41 @@ describe('FilterChips', () => {
     expect(screen.getByText('(10/10)')).toBeInTheDocument();
   });
 
+  it('omits partial counts when a contributing prompt has no denominator', async () => {
+    vi.mocked(useTableStore).mockReturnValue(
+      createMockStore({
+        table: {
+          head: {
+            prompts: [
+              {
+                metrics: {
+                  namedScores: { metric: 2, 'zero-control': 0 },
+                  namedScoresCount: { 'zero-control': 0 },
+                },
+              },
+              {
+                metrics: {
+                  namedScores: { metric: 1 },
+                  namedScoresCount: { metric: 1 },
+                },
+              },
+            ],
+          },
+        },
+      }) as any,
+    );
+
+    renderWithTooltip(<FilterChips />);
+    const user = userEvent.setup();
+    const chip = screen.getByRole('button', { name: 'metric' });
+    expect(chip).toHaveTextContent(/^metric$/);
+    expect(screen.getByRole('button', { name: /zero-control/ })).toHaveTextContent('(0/0)');
+    await user.hover(chip);
+    expect(await screen.findByRole('tooltip')).toHaveTextContent('Pass rate unavailable');
+    await user.click(chip);
+    expect(mockAddFilter).toHaveBeenCalledWith(expect.objectContaining({ field: 'metric' }));
+  });
+
   it('applies default styling for inactive chips', () => {
     renderWithTooltip(<FilterChips />);
 

@@ -78,6 +78,7 @@ import { isEncodingStrategy } from '@promptfoo/redteam/constants/strategies';
 import { useMetricsGetter, usePromptPassMetrics } from './hooks';
 import {
   getNamedMetricTotals,
+  mergeFilteredNamedMetrics,
   parseEvalOutputPromptHash,
   setEvalDetailsHash,
   useEvalDetailsHash,
@@ -1083,6 +1084,8 @@ function PromptColumnHeader({
   isRedteam,
   testCounts,
   passingTestCounts,
+  isFilteringActive,
+  derivedMetricNames,
   config,
   filterMode,
   headPromptCount,
@@ -1100,6 +1103,8 @@ function PromptColumnHeader({
   isRedteam: boolean;
   testCounts: PromptSummaryMetric[];
   passingTestCounts: PromptSummaryMetric[];
+  isFilteringActive: boolean;
+  derivedMetricNames: string[];
   config: ReturnType<typeof useTableStore.getState>['config'];
   filterMode: EvalResultsFilterMode;
   headPromptCount: number;
@@ -1110,6 +1115,12 @@ function PromptColumnHeader({
 }) {
   const columnId = `Prompt ${idx + 1}`;
   const { total: metrics, filtered: filteredMetrics } = getMetrics(idx);
+  const displayMetrics = mergeFilteredNamedMetrics(metrics, filteredMetrics, derivedMetricNames);
+  const totalMetricNames = Object.keys(metrics?.namedScores ?? {}).filter(
+    (metricName) =>
+      derivedMetricNames.includes(metricName) || (isFilteringActive && !filteredMetrics),
+  );
+  const metricTotals = getNamedMetricTotals(displayMetrics);
 
   return (
     <div className="output-header">
@@ -1157,11 +1168,14 @@ function PromptColumnHeader({
             </div>
           </button>
         ) : null}
-        {!isRedteam && metrics?.namedScores && Object.keys(metrics.namedScores).length > 0 ? (
+        {!isRedteam &&
+        displayMetrics?.namedScores &&
+        Object.keys(displayMetrics.namedScores).length > 0 ? (
           <div className="collapse-hidden">
             <CustomMetrics
-              lookup={metrics.namedScores}
-              metricTotals={getNamedMetricTotals(metrics)}
+              lookup={displayMetrics.namedScores}
+              metricTotals={metricTotals}
+              totalMetricNames={totalMetricNames}
               onShowMore={() => setCustomMetricsDialogOpen(true)}
             />
           </div>
@@ -1619,6 +1633,7 @@ function ResultsTable({
     fetchEvalData,
     isFetching,
     filters,
+    derivedMetricNamesByPrompt,
   } = useTableStore();
   const { inComparisonMode, comparisonEvalIds, renderMarkdown, stickyHeader, setStickyHeader } =
     useResultsViewSettingsStore();
@@ -2063,6 +2078,12 @@ function ResultsTable({
                 isRedteam={isRedteam}
                 testCounts={testCounts}
                 passingTestCounts={passingTestCounts}
+                isFilteringActive={isFilteringActive}
+                derivedMetricNames={
+                  derivedMetricNamesByPrompt?.[idx] ??
+                  config?.derivedMetrics?.map((metric) => metric.name) ??
+                  []
+                }
                 config={config}
                 filterMode={filterMode}
                 headPromptCount={head.prompts.length}
@@ -2120,6 +2141,9 @@ function ResultsTable({
   }, [
     body.length,
     config?.providers,
+    config?.derivedMetrics,
+    derivedMetricNamesByPrompt,
+    isFilteringActive,
     columnHelper,
     failureFilter,
     filterMode,
@@ -2559,6 +2583,7 @@ function ResultsTable({
       </div>
       <CustomMetricsDialog
         open={customMetricsDialogOpen}
+        isFilteringActive={isFilteringActive}
         onClose={() => setCustomMetricsDialogOpen(false)}
       />
     </>

@@ -2729,6 +2729,62 @@ describe('ResultsTable Named Metric Totals', () => {
     vi.mocked(useResultsViewSettingsStore).mockReset();
   });
 
+  it.each([null, 0, 1])('labels totals and uses a filtered base score of %s', (score) => {
+    mockTableStore([columnMetrics(3), columnMetrics(4)]);
+    const state = useTableStore();
+    const table = state.table!;
+    vi.mocked(useTableStore).mockReturnValue({
+      ...state,
+      config: { derivedMetrics: [{ name: 'formula', value: '0.75' }] },
+      derivedMetricNamesByPrompt: [['formula'], []],
+      table: {
+        ...table,
+        head: {
+          ...table.head,
+          prompts: table.head.prompts.map((prompt, idx) => ({
+            ...prompt,
+            metrics: {
+              ...prompt.metrics!,
+              namedScores: { ...prompt.metrics!.namedScores, formula: idx === 0 ? 0.75 : 3 },
+              namedScoresCount: { ...prompt.metrics!.namedScoresCount, formula: 4 },
+            },
+          })),
+        },
+      },
+      filteredMetrics:
+        score === null
+          ? null
+          : [
+              {
+                ...table.head.prompts[0].metrics!,
+                namedScores: { 'has-hello': score, formula: 1 },
+                namedScoresCount: { 'has-hello': 2, formula: 2 },
+              },
+            ],
+    });
+
+    renderWithProviders(<ResultsTable {...defaultProps} debouncedSearchText="needle" />);
+
+    expect(metricValueTexts()).toEqual([
+      score === null
+        ? '100.00% (3.00/3.00)'
+        : `${(score * 50).toFixed(2)}% (${score.toFixed(2)}/2.00)`,
+      '100.00% (4.00/4.00)',
+    ]);
+    expect(screen.getAllByTestId('metric-name-has-hello').map((el) => el.textContent)).toEqual([
+      score === null ? 'has-hello (total)' : 'has-hello',
+      'has-hello (total)',
+    ]);
+    expect(screen.getAllByTestId('metric-value-formula').map((el) => el.textContent)).toEqual([
+      '0.75',
+      '75.00% (3.00/4.00)',
+    ]);
+    expect(screen.getAllByTestId('metric-name-formula').map((el) => el.textContent)).toEqual([
+      'formula (total)',
+      'formula (total)',
+    ]);
+  });
+
   it('uses each column’s own named metric count when the first column errored', () => {
     mockTableStore([columnMetrics(4), columnMetrics(5), columnMetrics(5)]);
 

@@ -18,6 +18,7 @@ import { useTableStore } from './store';
 
 interface CustomMetricsProps {
   lookup: Record<string, number>;
+  totalMetricNames?: readonly string[];
   counts?: Record<string, number>;
   metricTotals?: Record<string, number>;
   /**
@@ -39,32 +40,48 @@ interface MetricValueProps {
 }
 
 const MetricValue = ({ metric, score, counts, metricTotals }: MetricValueProps) => {
-  if (metricTotals && metricTotals[metric]) {
-    if (metricTotals[metric] === 0) {
-      return <span data-testid={`metric-value-${metric}`}>0%</span>;
-    }
+  if (score === null) {
+    return <span data-testid={`metric-value-${metric}`}>0</span>;
+  }
+  if (!Number.isFinite(score)) {
+    return <span data-testid={`metric-value-${metric}`}>—</span>;
+  }
+  const total =
+    metricTotals && Object.prototype.hasOwnProperty.call(metricTotals, metric)
+      ? metricTotals[metric]
+      : undefined;
+  if (
+    total !== undefined &&
+    total !== 0 &&
+    Number.isFinite(total) &&
+    Number.isFinite((score / total) * 100)
+  ) {
     return (
       <span data-testid={`metric-value-${metric}`}>
-        {((score / metricTotals[metric]) * 100).toFixed(2)}% ({score?.toFixed(2) ?? '0'}/
-        {metricTotals[metric]?.toFixed(2) ?? '0'})
-      </span>
-    );
-  } else if (counts && counts[metric]) {
-    if (counts[metric] === 0) {
-      return <span data-testid={`metric-value-${metric}`}>0</span>;
-    }
-    return (
-      <span data-testid={`metric-value-${metric}`}>
-        {(score / counts[metric]).toFixed(2)} ({score?.toFixed(2) ?? '0'}/
-        {counts[metric]?.toFixed(2) ?? '0'})
+        {((score / total) * 100).toFixed(2)}% ({score.toFixed(2)}/{total.toFixed(2)})
       </span>
     );
   }
-  return <span data-testid={`metric-value-${metric}`}>{score?.toFixed(2) ?? '0'}</span>;
+  const count =
+    counts && Object.prototype.hasOwnProperty.call(counts, metric) ? counts[metric] : undefined;
+  if (
+    count !== undefined &&
+    count !== 0 &&
+    Number.isFinite(count) &&
+    Number.isFinite(score / count)
+  ) {
+    return (
+      <span data-testid={`metric-value-${metric}`}>
+        {(score / count).toFixed(2)} ({score.toFixed(2)}/{count.toFixed(2)})
+      </span>
+    );
+  }
+  return <span data-testid={`metric-value-${metric}`}>{score.toFixed(2)}</span>;
 };
 
 const CustomMetrics = ({
   lookup,
+  totalMetricNames = [],
   counts,
   metricTotals,
   truncationCount = 10,
@@ -121,6 +138,10 @@ const CustomMetrics = ({
               </>
             );
           }
+        }
+
+        if (totalMetricNames.includes(metric)) {
+          displayLabel = `${displayLabel} (total)`;
         }
 
         return metric && typeof score !== 'undefined' ? (
