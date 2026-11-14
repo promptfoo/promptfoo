@@ -1328,7 +1328,7 @@ You may also return a numeric `score` from `0` to `1`, inclusive. An invalid sco
 }
 ```
 
-The webhook request is subject to a timeout controlled by the `WEBHOOK_TIMEOUT` environment variable, in milliseconds (default `5000`). The timeout covers the whole response, including the body: an endpoint that sends headers promptly but does not finish its JSON body within the budget fails the assertion with `Webhook error: Request timed out after <timeout> ms`. Increase `WEBHOOK_TIMEOUT` for endpoints that legitimately need longer.
+Set `WEBHOOK_TIMEOUT` in milliseconds (default `5000`) to limit each HTTP attempt. The deadline includes receiving the headers and reading the JSON body. If the body stalls past the deadline, the assertion fails with `Webhook error: Request timed out after <timeout> ms`. Retries and backoff can make the total assertion time longer.
 
 ### Rouge-N
 
