@@ -68,7 +68,7 @@ const DEFAULT_REQUEST_SIZE_LIMIT = '100mb';
  */
 // Cap magnitude so body-parser's bytes.parse cannot overflow to Infinity
 // (Number.MAX_VALUE ~ 1e308); an unbounded limit would skip raw-body's guard.
-const REQUEST_SIZE_LIMIT_PATTERN = /^\d{1,15}(?:\.\d{1,15})?\s*(?:b|kb|mb|gb|tb)?$/i;
+const REQUEST_SIZE_LIMIT_PATTERN = /^\d{1,15}(?:\.\d{1,15})?\s*(?:b|kb|mb|gb|tb|pb)?$/i;
 
 export function getRequestSizeLimit(): string {
   const configured = getEnvString('PROMPTFOO_REQUEST_SIZE_LIMIT')?.trim();
@@ -77,12 +77,12 @@ export function getRequestSizeLimit(): string {
   }
   if (!REQUEST_SIZE_LIMIT_PATTERN.test(configured)) {
     logger.warn('Invalid PROMPTFOO_REQUEST_SIZE_LIMIT; using default', {
-      configured,
       fallback: DEFAULT_REQUEST_SIZE_LIMIT,
     });
     return DEFAULT_REQUEST_SIZE_LIMIT;
   }
-  return configured;
+  // body-parser's bytes parser only accepts ASCII spaces before the unit.
+  return configured.replace(/\s+/g, ' ');
 }
 
 /**

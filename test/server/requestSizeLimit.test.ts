@@ -27,6 +27,19 @@ describe('server request size limit', () => {
     restoreEnv();
     restoreEnv = mockProcessEnv({ PROMPTFOO_REQUEST_SIZE_LIMIT: '1 MB' });
     expect(getRequestSizeLimit()).toBe('1 MB');
+    restoreEnv();
+    restoreEnv = mockProcessEnv({ PROMPTFOO_REQUEST_SIZE_LIMIT: '1pb' });
+    expect(getRequestSizeLimit()).toBe('1pb');
+  });
+
+  it('normalizes a tab before the unit so a kilobyte limit is not parsed as one byte', async () => {
+    restoreEnv = mockProcessEnv({ PROMPTFOO_REQUEST_SIZE_LIMIT: '1\tkb' });
+    expect(getRequestSizeLimit()).toBe('1 kb');
+    const res = await request(createApp())
+      .post('/api/request-size-limit-probe')
+      .set('Content-Type', 'application/json')
+      .send(JSON.stringify({ data: 'x'.repeat(100) }));
+    expect(res.status).not.toBe(413);
   });
 
   it('falls back to the default for an empty value', () => {
