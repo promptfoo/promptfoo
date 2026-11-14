@@ -31,6 +31,7 @@ import {
   type ProviderResponse,
   ResultFailureReason,
 } from '../types/index';
+import { stripBayesAtNInputHashes } from '../util/sanitizer';
 import { getCurrentTimestamp } from '../util/time';
 import {
   accumulateGradingTokenUsage,
@@ -455,7 +456,7 @@ export default class EvalResult {
       });
     }
 
-    return {
+    return stripBayesAtNInputHashes({
       cost: this.cost,
       ...(this.response?.incurredCost !== undefined && {
         incurredCost: this.response.incurredCost,
@@ -494,7 +495,7 @@ export default class EvalResult {
             this.testCase.metadata,
           ),
       failureReason: this.failureReason,
-    };
+    });
   }
 }
 
@@ -503,7 +504,9 @@ export function asEvaluateResult(
   result: EvalResult | EvaluateResult,
   stripFlags = getStripFlags(),
 ): EvaluateResult {
-  return 'toEvaluateResult' in result ? result.toEvaluateResult(stripFlags) : result;
+  return 'toEvaluateResult' in result
+    ? result.toEvaluateResult(stripFlags)
+    : stripBayesAtNInputHashes(result);
 }
 
 export { getResultIndexKey } from '../evaluator/resultIndex';

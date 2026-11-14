@@ -77,6 +77,36 @@ describe('EvalResult', () => {
     response: undefined,
   });
 
+  it('strips legacy plan verifiers from both normal rows and streaming JSONL rows', async () => {
+    const plan = {
+      version: 1,
+      groups: [
+        {
+          repeatGroupId: 'question',
+          promptIdx: 0,
+          provider: { id: 'provider' },
+          repetitions: 2,
+          inputHash: 'sha256:' + 'a'.repeat(64),
+          fileHashes: ['another-verifier'],
+        },
+      ],
+    };
+    const metadata = { bayesAtNPlan: plan, label: 'retained' };
+    const input = createEvaluateResult({ metadata, testCase: { metadata } });
+    const model = await EvalResult.createFromEvaluateResult('legacy-plan', input, {
+      persist: false,
+    });
+    for (const row of [model.toEvaluateResult(), sanitizeResultForJsonlArtifact(input)]) {
+      expect(row.metadata?.label).toBe('retained');
+      expect(row.testCase.metadata?.label).toBe('retained');
+      expect(JSON.stringify(row)).not.toContain('inputHash');
+      expect(JSON.stringify(row)).not.toContain('fileHashes');
+      expect(row.metadata?.bayesAtNPlan).toMatchObject({ version: 1 });
+    }
+    expect(input.metadata?.bayesAtNPlan).toEqual(plan);
+    expect(plan.groups[0].inputHash).toContain('sha256:');
+  });
+
   describe('sanitizeProvider', () => {
     it('should handle ApiProvider objects', () => {
       const apiProvider = createMockProvider({

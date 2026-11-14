@@ -12,6 +12,7 @@ import {
   mapTestProviderRefs,
   REDACTED,
   sanitizeObject,
+  stripBayesAtNInputHashes,
   stripProviderPromptSelectors,
   stripTestProviderPromptSelectors,
 } from '../util/sanitizer';
@@ -923,7 +924,7 @@ export function sanitizeResultForJsonlArtifact<T extends object>(
     stripOutput: shouldStripResponseOutput,
   });
 
-  return {
+  return stripBayesAtNInputHashes({
     ...result,
     ...(artifactResult.testCase
       ? {
@@ -971,5 +972,5 @@ export function sanitizeResultForJsonlArtifact<T extends object>(
           redacted.response?.metadata,
           (artifactResult.testCase as AtomicTestCase | undefined)?.metadata,
         ),
-  } as T;
+  } as T);
 }

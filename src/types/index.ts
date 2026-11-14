@@ -297,6 +297,7 @@ export const EvaluateOptionsSchema = z.object({
     >((v) => typeof v === 'function')
     .optional(),
   repeat: z.number().optional(),
+  bayesAtN: z.boolean().optional(),
   showProgressBar: z.boolean().optional(),
   /**
    * Timeout in milliseconds for each individual test case/provider API call.
@@ -506,6 +507,15 @@ export interface RepeatStabilitySummary {
   groupsWithErrors: number;
   cachedResults: number;
   groups: RepeatStabilityGroup[];
+  bayesAtN?: {
+    promptIdx: number;
+    provider: Pick<ProviderOptions, 'id' | 'label'>;
+    questions: number;
+    trials: number;
+    mean?: number;
+    posteriorStd?: number;
+    unavailableReason?: string;
+  }[];
 }
 
 export interface EvaluateSummaryV3 {

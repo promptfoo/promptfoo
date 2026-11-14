@@ -107,6 +107,12 @@ import {
   createEmptyTokenUsage,
 } from '../util/tokenUsageUtils';
 import { TransformInputType, transform } from '../util/transform';
+import {
+  createBayesAtNPlan,
+  hasBayesAtNComparison,
+  hasBayesAtNSharedSession,
+  validateBayesAtNRepeat,
+} from './bayesAtN';
 import { compileDerivedMetricFormula } from './derivedMetricFormula';
 import { PromptSuggestionsRejectedError } from './errors';
 import { getResultIndexKey } from './resultIndex';
@@ -114,12 +120,16 @@ import { PROMPTFOO_METADATA_KEY, sanitizeResultForJsonlArtifact } from './result
 import {
   ABORTED_GRADING_PREFIX,
   applyGradingError,
+  bayesAtNFunctionSources,
   CONVERSATION_VAR_NAME,
   deferredGradingPromises,
   getRepeatCacheNamespace,
   isGradingAbort,
+  type PreparedBayesAtNInput,
+  prepareBayesAtNInput,
   promptUsesConversationVariable,
   runEvalInternal,
+  verifyBayesAtNInput,
 } from './runEval';
 
 import type {
@@ -1204,6 +1214,7 @@ async function prepareTestCaseForEval(
     ...(defaultTest?.metadata || {}),
     ...testCase.metadata,
   };
+  delete testCase.metadata.bayesAtNPlan;
   testCase.prompts = testCase.prompts ?? defaultTest?.prompts;
   testCase.provider = await resolveDefaultTestProvider(defaultTest, testCase);
   testCase.assertScoringFunction =
@@ -1211,11 +1222,13 @@ async function prepareTestCaseForEval(
   testCase.providers = testCase.providers ?? defaultTest?.providers;
 
   if (typeof testCase.assertScoringFunction === 'string') {
+    const source = testCase.assertScoringFunction;
     const { filePath: resolvedPath, functionName } = parseFileUrl(testCase.assertScoringFunction);
     testCase.assertScoringFunction = await loadFunction<ScoringFunction>({
       filePath: resolvedPath,
       functionName,
     });
+    bayesAtNFunctionSources.set(testCase.assertScoringFunction, source);
   }
 }
 
@@ -1278,6 +1291,10 @@ function appendRunEvalOptionsForTestCase({
       ? [testCase.vars]
       : generateVarCombinations(testCase.vars || {});
 
+  if (options.bayesAtN) {
+    validateBayesAtNRepeat(options.repeat);
+    validateBayesAtNRepeat(testCase.options?.repeat);
+  }
   const globalRepeat = normalizeRepeatCount(options.repeat);
   const testRepeat = normalizeRepeatCount(testCase.options?.repeat, globalRepeat);
   const effectiveOptions = {
@@ -1298,7 +1315,9 @@ function appendRunEvalOptionsForTestCase({
         rateLimitRegistry,
         registers,
         repeatGroupId:
-          testRepeat > 1 ? `test-${testCaseIndex}-vars-${varCombinationIndex}` : undefined,
+          testRepeat > 1 || options.bayesAtN
+            ? `test-${testCaseIndex}-vars-${varCombinationIndex}`
+            : undefined,
         repeatIndex,
         runEvalOptions,
         testCase,
@@ -2144,6 +2163,7 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
   fileWriters: EvaluatorResultWriter[];
   rateLimitRegistry: RateLimitRegistry | undefined;
   private readonly comparisonProviders = new Map<string, ComparisonProviders>();
+  private readonly bayesAtNInputs = new Map<RunEvalOptions, PreparedBayesAtNInput>();
   private readonly currentResultKeys = new Set<string>();
   private readonly retryErrorResultIds = new Set(
     cliState.retryMode ? cliState._retryErrorResultIds : [],
@@ -2444,10 +2464,15 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       testSuite: TestSuite;
     },
   ) {
+    const bayesAtNInput = this.bayesAtNInputs.get(evalStep);
+    this.bayesAtNInputs.delete(evalStep);
     const beforeEachOut = await runExtensionHook(testSuite.extensions, 'beforeEach', {
       test: evalStep.test,
     });
     evalStep.test = beforeEachOut.test;
+    if (bayesAtNInput) {
+      verifyBayesAtNInput(evalStep, bayesAtNInput);
+    }
 
     const rows = await runEvalInternal(
       {
@@ -2455,7 +2480,11 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
         deferGrading,
         providerCallQueue: deferGrading ? providerCallQueue : undefined,
       },
-      { abortSignal: deferredGradingAbortSignal, pauseSignal: this.options.pauseSignal },
+      {
+        abortSignal: deferredGradingAbortSignal,
+        pauseSignal: this.options.pauseSignal,
+        bayesAtNInput,
+      },
     );
     onRowsReady?.();
     return rows;
@@ -3827,6 +3856,17 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
     const { options } = this;
     let { testSuite } = this;
 
+    const storedBayesPlan = this.store.config.metadata?.bayesAtNPlan;
+    if (!cliState.resume && this.store.config.metadata) {
+      // A new evaluation must schedule its own trials, even when its config came from an export.
+      const metadata = { ...this.store.config.metadata };
+      delete metadata.bayesAtNPlan;
+      this.store.config.metadata = metadata;
+      if (storedBayesPlan !== undefined && this.store.persisted) {
+        await this.store.save();
+      }
+    }
+
     const processedIndices = new Set<number>();
 
     const targetErrorAbortController = new AbortController();
@@ -3912,6 +3952,62 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
       tests,
     });
     markComparisonRows(runEvalOptions, rowsWithSelectBestAssertion, rowsWithMaxScoreAssertion);
+    if (options.bayesAtN) {
+      if (
+        options.isRedteam ||
+        testSuite.redteam ||
+        rowsWithSelectBestAssertion.size ||
+        rowsWithMaxScoreAssertion.size ||
+        runEvalOptions.some((step) => hasBayesAtNComparison(step.test.assert))
+      ) {
+        throw new Error('Bayes@N does not support redteam runs or comparison assertions');
+      }
+      if (runEvalOptions.some((step) => step.test.providerOutput !== undefined)) {
+        throw new Error(
+          'Bayes@N requires fresh provider generations, not precomputed providerOutput',
+        );
+      }
+      if (
+        runEvalOptions.some(
+          (step) =>
+            promptUsesConversationVariable(step.prompt) ||
+            step.test.options?.storeOutputAs ||
+            hasBayesAtNSharedSession(step),
+        )
+      ) {
+        throw new Error(
+          'Bayes@N does not support conversation history, output registers, or shared provider sessions',
+        );
+      }
+      for (const step of runEvalOptions) {
+        checkAbort();
+        const prepared = await prepareBayesAtNInput(step, testSuite, checkAbort);
+        this.bayesAtNInputs.set(step, prepared);
+      }
+      const currentPlan = createBayesAtNPlan(
+        runEvalOptions.map((step) => ({
+          ...step,
+          inputHash: this.bayesAtNInputs.get(step)!.inputHash,
+          provider: {
+            id: () =>
+              sanitizeObject({ id: step.provider.id() }, { sanitizeUrls: true, maxDepth: Infinity })
+                .id,
+            label: sanitizeObject(
+              { label: step.provider.label },
+              { sanitizeUrls: true, maxDepth: Infinity },
+            ).label,
+          },
+        })),
+      );
+      this.store.config.metadata = {
+        ...this.store.config.metadata,
+        bayesAtNPlan: currentPlan,
+      };
+      // Retain only the schedule counts needed to reconstruct completed summaries.
+      if (this.store.persisted) {
+        await this.store.save();
+      }
+    }
     if (cliState.resume && this.store.persisted) {
       for (const step of runEvalOptions) {
         if (rowsWithSelectBestAssertion.has(step.testIdx)) {
@@ -4106,6 +4202,24 @@ class Evaluator<TEvaluation extends EvaluationRecord, TResult extends Evaluation
   }
 
   async evaluate(): Promise<TEvaluation> {
+    const hasStoredPlan = this.store.config.metadata?.bayesAtNPlan !== undefined;
+    if (
+      (cliState.resume || cliState.retryMode) &&
+      (this.options.bayesAtN ||
+        hasStoredPlan ||
+        this.store.config.evaluateOptions?.bayesAtN ||
+        this.store.evaluation.runtimeOptions?.bayesAtN)
+    ) {
+      throw new Error(
+        'Bayes@N supports fresh evaluations only; resume and retries are unsupported',
+      );
+    }
+    if (
+      this.options.bayesAtN &&
+      (this.store.results.length > 0 || (await this.store.readResults()).length > 0)
+    ) {
+      throw new Error('Bayes@N requires a new empty evaluation record');
+    }
     return providerRegistry.withEvaluation(async () => {
       const startTime = Date.now();
       const maxEvalTimeMs = this.options.maxEvalTimeMs ?? getMaxEvalTimeMs();
@@ -4329,6 +4443,17 @@ export function evaluate<
   options: InternalEvaluateOptions,
   runtime: EvaluatorRuntime<TEvaluation, TResult>,
 ): Promise<TEvaluation> {
+  if (
+    (cliState.resume || cliState.retryMode) &&
+    (options.bayesAtN ||
+      evalRecord.config.metadata?.bayesAtNPlan !== undefined ||
+      evalRecord.config.evaluateOptions?.bayesAtN ||
+      evalRecord.runtimeOptions?.bayesAtN)
+  ) {
+    return Promise.reject(
+      new Error('Bayes@N supports fresh evaluations only; resume and retries are unsupported'),
+    );
+  }
   return cliState.withBasePath(testSuite.basePath ?? cliState.basePath, () =>
     cliState.withEnv(testSuite.env ?? cliState.env, () =>
       cliState.withConfig(

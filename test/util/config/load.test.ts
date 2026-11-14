@@ -1551,6 +1551,33 @@ describe('resolveConfigs', () => {
     vi.restoreAllMocks();
   });
 
+  it.each([false, true])(
+    'keeps the saved Bayes@N plan eval-only (explicit default metadata=%s)',
+    async (explicitMetadata) => {
+      const plan = { version: 1, groups: Array(100).fill({ repeatGroupId: 'question' }) };
+      const metadata = { bayesAtNPlan: plan, dataset: 'retained' };
+      const defaultMetadata = { bayesAtNPlan: plan, label: 'default' };
+      vi.mocked(readPrompts).mockResolvedValue([{ raw: 'question', label: 'Prompt' }]);
+      vi.mocked(loadApiProviders).mockResolvedValue([createMockProvider({ id: 'echo' })]);
+      const { config, testSuite } = await resolveConfigs(
+        {},
+        {
+          prompts: ['question'],
+          providers: ['echo'],
+          tests: [{}],
+          metadata,
+          ...(explicitMetadata && { defaultTest: { metadata: defaultMetadata } }),
+        },
+      );
+      expect(config.metadata).toEqual(metadata);
+      expect(testSuite.defaultTest).toMatchObject({
+        metadata: explicitMetadata ? { label: 'default' } : { dataset: 'retained' },
+      });
+      expect(metadata.bayesAtNPlan).toBe(plan);
+      expect(defaultMetadata.bayesAtNPlan).toBe(plan);
+    },
+  );
+
   it('should set cliState.basePath', async () => {
     const cmdObj = { config: ['config.json'] };
     const defaultConfig = {};

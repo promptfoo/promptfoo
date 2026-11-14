@@ -1284,6 +1284,10 @@ async function resolveLoadedConfig(
       ...parsedDefaultTest?.options,
     },
   };
+  if (defaultTest.metadata?.bayesAtNPlan !== undefined) {
+    defaultTest.metadata = { ...defaultTest.metadata };
+    delete defaultTest.metadata.bayesAtNPlan;
+  }
 
   const testSuite: TestSuite = {
     basePath,

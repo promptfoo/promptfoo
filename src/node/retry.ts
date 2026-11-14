@@ -302,6 +302,14 @@ export async function retryCommand(evalId: string, cmdObj: RetryCommandOptions) 
     throw new Error(`Evaluation with ID ${evalId} not found`);
   }
 
+  if (
+    originalEval.runtimeOptions?.bayesAtN ||
+    originalEval.config.evaluateOptions?.bayesAtN ||
+    originalEval.config.metadata?.bayesAtNPlan !== undefined
+  ) {
+    throw new Error('Bayes@N supports fresh evaluations only; retries are unsupported');
+  }
+
   // Get all ERROR result IDs - capture these BEFORE retry so we know what to delete on success
   const errorResultIds = await getErrorResultIds(evalId);
   if (errorResultIds.length === 0) {
