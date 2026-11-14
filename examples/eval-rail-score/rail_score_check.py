@@ -59,14 +59,20 @@ def get_assert(output: Any, context: dict[str, Any]) -> dict[str, Any]:
             )
             break
         except ContentTooHarmfulError:
-            return {"pass": False, "score": 0, "reason": "RAIL Score blocked the content."}
+            return {
+                "pass": False,
+                "score": 0,
+                "reason": "RAIL Score blocked the content.",
+            }
         except Exception as error:
             if (
                 "429" in str(error) or "RateLimit" in type(error).__name__
             ) and attempt < 2:
                 time.sleep(2 ** (attempt + 1))
                 continue
-            raise RuntimeError(f"RAIL Score API error: {type(error).__name__}") from None
+            raise RuntimeError(
+                f"RAIL Score API error: {type(error).__name__}"
+            ) from None
 
     overall = result.rail_score.score
     named_scores = {
@@ -81,7 +87,9 @@ def get_assert(output: Any, context: dict[str, Any]) -> dict[str, Any]:
         score = result.dimension_scores.get(dimension)
         if score is None:
             passed = False
-            reason_parts.append(f"RAIL Score did not report the required {dimension} dimension.")
+            reason_parts.append(
+                f"RAIL Score did not report the required {dimension} dimension."
+            )
         elif score.score < minimum:
             passed = False
             reason_parts.append(
