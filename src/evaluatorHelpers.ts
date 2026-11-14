@@ -23,41 +23,12 @@ import {
   type VarValue,
 } from './types/index';
 import { isAudioFile, isImageFile, isJavascriptFile, isVideoFile } from './util/fileExtensions';
-import {
-  getOutputVars,
-  isOutputValue,
-  isRuntimeVar,
-  markOutputValue,
-  renderVarsInObject,
-  setLoadedFileMimeTypes,
-  setOutputVars,
-} from './util/index';
+import { isRuntimeVar, renderVarsInObject, setLoadedFileMimeTypes } from './util/index';
 import invariant from './util/invariant';
 import { filterFiniteScores } from './util/numeric';
 import { extractVariablesFromTemplate, getNunjucksEngine } from './util/templates';
 import { transform } from './util/transform';
 import { loadYaml } from './util/yamlLoad';
-
-/**
- * Marks provider-output registers on a vars object.
- * Lives here so evaluator.ts does not add another legacy-runtime -> node import.
- */
-export function tagOutputRegisters(
-  vars: Record<string, VarValue>,
-  registers: Record<string, VarValue> | undefined,
-): void {
-  if (!registers) {
-    return;
-  }
-  setOutputVars(vars, Object.keys(registers));
-  for (const val of Object.values(registers)) {
-    markOutputValue(val);
-  }
-}
-
-export function markStoredOutput(output: unknown): void {
-  markOutputValue(output);
-}
 
 type FileMetadata = Record<string, { path: string; type: string; format?: string }>;
 
@@ -256,54 +227,87 @@ function detectMimeFromBase64(base64Data: string): string | null {
 }
 
 /**
- * Loads text, JSON, and YAML `file://` references nested in object and array vars.
- * Scripts, PDFs, and media are only loaded as top-level vars, so nested ones stay as-is.
+ * Resolves `file://` references nested inside a vars value.
+ *
+ * Top-level vars are handled by renderPrompt, where a reference may also invoke a
+ * JavaScript/Python var script or be encoded as base64 media. Nested references are
+ * plain data, so only text and YAML files are read here; script and media references
+ * are left as authored rather than parsed as text.
  */
-async function loadNestedFileVars(
-  value: unknown,
-  ancestors = new WeakSet<object>(),
-): Promise<unknown> {
-  if (typeof value === 'string') {
-    if (!value.startsWith('file://')) {
+async function resolveNestedFileReferences(
+  value: VarValue,
+  basePath: string,
+  resolved: WeakMap<object, VarValue> = new WeakMap(),
+): Promise<VarValue> {
+  if (value && typeof value === 'object') {
+    if (resolved.has(value)) {
+      return resolved.get(value)!;
+    }
+    if (Array.isArray(value)) {
+      const result: VarValue[] = [];
+      resolved.set(value, result);
+      for (const item of value) {
+        result.push(await resolveNestedFileReferences(item as VarValue, basePath, resolved));
+      }
+      return result;
+    }
+    const prototype = Object.getPrototypeOf(value);
+    if (prototype !== null && prototype !== Object.prototype) {
       return value;
     }
-    const filePath = path.resolve(
-      process.cwd(),
-      cliState.basePath || '',
-      value.slice('file://'.length),
-    );
-    if (
-      isJavascriptFile(filePath) ||
-      /\.(py|pdf)$/i.test(filePath) ||
-      isImageFile(filePath) ||
-      isVideoFile(filePath) ||
-      isAudioFile(filePath)
-    ) {
-      return value;
+    const result: Record<string, VarValue> = Object.create(prototype);
+    resolved.set(value, result);
+    for (const [key, item] of Object.entries(value)) {
+      Object.defineProperty(result, key, {
+        value: await resolveNestedFileReferences(item as VarValue, basePath, resolved),
+        enumerable: true,
+        configurable: true,
+        writable: true,
+      });
     }
-    const contents = await fs.readFile(filePath, 'utf8');
-    return /\.ya?ml$/i.test(filePath) ? JSON.stringify(loadYaml(contents)) : contents.trim();
+    return result;
   }
+  if (typeof value !== 'string' || !value.startsWith('file://')) {
+    return value;
+  }
+
+  // Nested references are plain data: only the path is needed here, with no var-script
+  // function name, so this mirrors the top-level slice rather than importing a parser
+  // from the node layer (which would add a cross-layer dependency).
+  const referencePath = value.slice('file://'.length);
+  const filePath = path.resolve(process.cwd(), basePath, referencePath);
+  const fileExtension = path.extname(filePath).toLowerCase();
+
+  // These types are loaded with top-level-only semantics (var name, prompt, and provider
+  // context), so leave nested references to them untouched.
   if (
-    !value ||
-    typeof value !== 'object' ||
-    isOutputValue(value) ||
-    ancestors.has(value) ||
-    (!Array.isArray(value) && Object.getPrototypeOf(value) !== Object.prototype)
+    isJavascriptFile(filePath) ||
+    fileExtension === '.py' ||
+    fileExtension === '.pdf' ||
+    isImageFile(filePath) ||
+    isVideoFile(filePath) ||
+    isAudioFile(filePath)
   ) {
+    logger.debug('[EvaluatorHelpers] Leaving nested file reference unresolved', { value });
     return value;
   }
-  ancestors.add(value);
-  const entries: [string, unknown][] = [];
-  for (const [key, item] of Object.entries(value)) {
-    entries.push([key, await loadNestedFileVars(item, ancestors)]);
+
+  // Object context, not interpolation: structured log transports keep the path a field.
+  logger.debug('[EvaluatorHelpers] Loading nested var file reference', { filePath });
+  if (fileExtension === '.yaml' || fileExtension === '.yml') {
+    return JSON.stringify(loadYaml(await fs.readFile(filePath, 'utf8')) as string | object);
   }
-  ancestors.delete(value);
-  // Keep the original when nothing was loaded; renderPrompt runs on every redteam turn.
-  if (entries.every(([key, item]) => item === (value as Record<string, unknown>)[key])) {
-    return value;
+  return (await fs.readFile(filePath, 'utf8')).trim();
+}
+
+// A symbol preserves register provenance through strategy-level object spreads
+// while leaving the public/serialized variables unchanged.
+const runtimeFileVarNames = Symbol('runtimeFileVarNames');
+
+export function setRuntimeFileVarNames(vars: Record<string, VarValue>, names: string[]): void {
+  if (names.length > 0) {
+    Object.defineProperty(vars, runtimeFileVarNames, { value: new Set(names), enumerable: true });
   }
-  return Array.isArray(value) ? entries.map(([, item]) => item) : Object.fromEntries(entries);
 }
 
 /**
@@ -317,8 +321,7 @@ async function loadNestedFileVars(
  *                         rendering for. This is critical for red team testing where injection
  *                         variables contain attack payloads (e.g., SSTI, XSS) that should NOT be
  *                         evaluated by Promptfoo before reaching the target.
- * @param outputVars - Optional names of vars holding provider output (`storeOutputAs` registers).
- *                     `file://` references in them are not loaded.
+ * @param nestedFileVarNames - Configured variables eligible for nested file loading.
  * @returns The rendered prompt string
  */
 export async function renderPrompt(
@@ -327,19 +330,22 @@ export async function renderPrompt(
   nunjucksFilters?: NunjucksFilterMap,
   provider?: ApiProvider,
   skipRenderVars?: string[],
-  outputVars?: string[],
+  nestedFileVarNames?: ReadonlySet<string>,
 ): Promise<string> {
   const nunjucks = getNunjucksEngine(nunjucksFilters);
   const loadedMimeTypes = setLoadedFileMimeTypes(vars);
-  const effectiveOutputVars = outputVars
-    ? setOutputVars(vars, outputVars)
-    : (getOutputVars(vars) ?? new Set<string>());
+  const runtimeVars = (vars as typeof vars & { [runtimeFileVarNames]?: ReadonlySet<string> })[
+    runtimeFileVarNames
+  ];
+  const skipVars = runtimeVars ? [...(skipRenderVars ?? []), ...runtimeVars] : skipRenderVars;
 
   let basePrompt = prompt.raw;
 
+  const resolved = new WeakMap<object, VarValue>();
+
   // Load files
   for (const [varName, value] of Object.entries(vars)) {
-    if (skipRenderVars?.includes(varName) || isRuntimeVar(varName)) {
+    if (skipVars?.includes(varName) || isRuntimeVar(varName)) {
       continue;
     }
 
@@ -347,14 +353,6 @@ export async function renderPrompt(
       const basePath = cliState.basePath || '';
       const filePath = path.resolve(process.cwd(), basePath, value.slice('file://'.length));
       const fileExtension = filePath.split('.').pop();
-
-      // Output registers holding model output must never execute scripts or load local text/data files.
-      // Only media files (images, video, audio) are permitted to resolve to base64 for multimodal providers.
-      if (effectiveOutputVars.has(varName) || isOutputValue(value)) {
-        if (!isImageFile(filePath) && !isVideoFile(filePath) && !isAudioFile(filePath)) {
-          continue;
-        }
-      }
 
       logger.debug(`Loading var ${varName} from file: ${filePath}`);
       if (isJavascriptFile(filePath)) {
@@ -485,10 +483,8 @@ export async function renderPrompt(
         );
       }
       vars[varName] = javascriptOutput.output;
-    } else if (value && typeof value === 'object') {
-      if (!isOutputValue(value) && !effectiveOutputVars.has(varName)) {
-        vars[varName] = (await loadNestedFileVars(value)) as VarValue;
-      }
+    } else if (nestedFileVarNames?.has(varName) && value !== null && typeof value === 'object') {
+      vars[varName] = await resolveNestedFileReferences(value, cliState.basePath || '', resolved);
     }
   }
 
@@ -521,13 +517,13 @@ export async function renderPrompt(
 
   // Remove any trailing newlines from vars, as this tends to be a footgun for JSON prompts.
   for (const key of Object.keys(vars)) {
-    if (typeof vars[key] === 'string' && !skipRenderVars?.includes(key)) {
+    if (typeof vars[key] === 'string' && !skipVars?.includes(key)) {
       vars[key] = (vars[key] as string).replace(/\n$/, '');
     }
   }
   // Resolve variable mappings
   const varsResolvedFromSkipped = new Set<string>();
-  resolveVariables(vars, skipRenderVars, varsResolvedFromSkipped);
+  resolveVariables(vars, skipVars, varsResolvedFromSkipped);
   // Third party integrations
   if (prompt.raw.startsWith('portkey://')) {
     const portKeyResult = await getPortkeyPrompt(prompt.raw.slice('portkey://'.length), vars);
@@ -620,7 +616,7 @@ export async function renderPrompt(
       Object.entries(vars).map(([key, value]) => {
         if (
           typeof value !== 'string' ||
-          skipRenderVars?.includes(key) ||
+          skipVars?.includes(key) ||
           varsResolvedFromSkipped.has(key)
         ) {
           return [key, value];
@@ -809,20 +805,16 @@ function restorePromptFunctions(returnedPrompts: Prompt[], originalPrompts: Prom
   // A prompt function that was neither restored nor returned by the hook means the
   // prompt will render its raw source as text — the original #9653 symptom. Surface
   // why, so users get a breadcrumb instead of a silent behavior change.
-  const labelsWithFunction = new Set<string>();
   const returnedLabels = new Set<string>();
   for (const prompt of restored) {
     if (prompt?.label != null) {
       returnedLabels.add(prompt.label);
       if (typeof prompt.function === 'function') {
-        labelsWithFunction.add(prompt.label);
+        originalsByLabel.delete(prompt.label);
       }
     }
   }
   for (const [label, original] of originalsByLabel) {
-    if (labelsWithFunction.has(label)) {
-      continue;
-    }
     if (original === null) {
       if (returnedLabels.has(label)) {
         logger.warn(

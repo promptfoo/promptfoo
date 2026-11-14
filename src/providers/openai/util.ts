@@ -1,9 +1,11 @@
 import OpenAI from 'openai';
 import { InvalidToolCallError } from '../../contracts/providers';
 import logger from '../../logger';
+import { buildHttpRateLimitError } from '../../util/fetch';
 import { getAjv, safeJsonStringify } from '../../util/json';
 import { isSafeCost, isSafeTokenCount } from '../../util/numeric';
 import { isNonCredentialHeader, looksLikeSecret, sanitizeUrl } from '../../util/sanitizer';
+import { isKnownClaudeModelWithDeprecatedSampling } from '../anthropic/util';
 import { calculateCost } from '../shared';
 import { InvalidToolSchemaError } from '../toolSchemaError';
 import { prepareOpenAiFunctions } from './prepare';
@@ -765,6 +767,22 @@ export function isOpenAiFirstPartyApiUrl(apiUrl?: string): boolean {
   }
 }
 
+/** Apply Claude's wire-format restriction after prompt and passthrough overrides are merged. */
+export function omitDeprecatedClaudeSamplingParams(body: Record<string, unknown>): void {
+  if (typeof body.model !== 'string') {
+    return;
+  }
+  // Only the fine-tune base identifies the model; later fields are user-defined.
+  const fineTuneBase = /(?:^|\/)ft:([^:]+)(?::|$)/.exec(body.model)?.[1];
+  const model = fineTuneBase ?? body.model;
+  const leaf = model.slice(model.lastIndexOf('/') + 1);
+  if (isKnownClaudeModelWithDeprecatedSampling(leaf)) {
+    delete body.temperature;
+    delete body.top_p;
+    delete body.top_k;
+  }
+}
+
 export function normalizeOpenAiBillingModelName(modelName: string): string {
   if (modelName.startsWith('openai/')) {
     return modelName.slice('openai/'.length);
@@ -1292,9 +1310,12 @@ export function failApiCall(err: any) {
     const errorType = err.error?.type || err.type || 'unknown';
     const errorMessage = err.error?.message || err.message || 'Unknown error';
     const statusCode = err.status ? ` ${err.status}` : '';
-    return {
-      error: `API error: ${errorType}${statusCode} ${errorMessage}`,
-    };
+    const error = `API error: ${errorType}${statusCode} ${errorMessage}`;
+    if (err.status === 429) {
+      const rateLimit = buildHttpRateLimitError({ status: err.status, headers: err.headers }, err);
+      return { error, metadata: { rateLimitKind: rateLimit.kind } };
+    }
+    return { error };
   }
   return {
     error: `API error: ${String(err)}`,

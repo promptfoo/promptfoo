@@ -23,7 +23,7 @@ import { parseAzureBlobUri, readAzureBlobText, sanitizeAzureBlobUriForError } fr
 import { maybeLoadConfigFromExternalFile } from './file';
 import { isJavascriptFile } from './fileExtensions';
 import { renderEnvOnlyInObject } from './render';
-import { parseXlsxFile } from './xlsx';
+import { getExcelWorkbookPath, parseXlsxFile } from './xlsx';
 import { loadYaml } from './yamlLoad';
 
 import type {
@@ -81,9 +81,15 @@ export async function readTestFiles(
     });
 
     for (const p of paths) {
-      const rawData = loadYaml(await fsPromises.readFile(p, 'utf-8'));
-      const yamlData = maybeLoadConfigFromExternalFile(rawData);
-      Object.assign(ret, yamlData);
+      const rawData = loadYaml(await fsPromises.readFile(p, 'utf-8')) as TestCase['vars'];
+      const authoredVars = resolveNestedVarsFileReferences(rawData, path.dirname(p));
+      const vars = Object.fromEntries(
+        Object.entries(authoredVars ?? {}).map(([key, value]) => [
+          key,
+          value && typeof value === 'object' ? value : maybeLoadConfigFromExternalFile(value),
+        ]),
+      );
+      Object.assign(ret, vars);
     }
   }
   return ret;
@@ -213,6 +219,12 @@ async function readLocalStandaloneTestsFile(
     });
     return readJavascriptTestCases(pathWithoutFunction, maybeFunctionName, finalConfig);
   }
+  if (getExcelWorkbookPath(pathWithoutFunction)) {
+    telemetry.record('feature_used', {
+      feature: 'xlsx tests file - local',
+    });
+    return csvRowsToTestCases(await parseXlsxFile(resolvedVarsPath));
+  }
   if (fileExtension === 'py') {
     telemetry.record('feature_used', {
       feature: 'python tests file',
@@ -225,12 +237,6 @@ async function readLocalStandaloneTestsFile(
       feature: 'csv tests file - local',
     });
     return csvRowsToTestCases(await readLocalCsvRows(resolvedVarsPath));
-  }
-  if (fileExtension === 'xlsx' || fileExtension === 'xls') {
-    telemetry.record('feature_used', {
-      feature: 'xlsx tests file - local',
-    });
-    return csvRowsToTestCases(await parseXlsxFile(resolvedVarsPath));
   }
   if (fileExtension === 'json') {
     telemetry.record('feature_used', {
@@ -284,20 +290,12 @@ function getStandaloneTestsFileMetadata(
   const pathWithoutFunction = stripFunctionSuffix(resolvedVarsPath);
   const maybeFunctionName =
     lastColonIndex > 1 ? resolvedVarsPath.slice(lastColonIndex + 1) : undefined;
-  // Sheet specifiers apply only to xlsx/xls basenames. Inspecting the basename preserves `#`
-  // characters in parent directories and non-Excel filenames.
-  const fileNameWithoutSheet = path.basename(pathWithoutFunction).split('#')[0];
-  const sheetAwareExtension = parsePath(fileNameWithoutSheet).ext.slice(1);
-  const fileExtension =
-    sheetAwareExtension === 'xlsx' || sheetAwareExtension === 'xls'
-      ? sheetAwareExtension
-      : parsePath(pathWithoutFunction).ext.slice(1);
 
   return {
     resolvedVarsPath,
     pathWithoutFunction,
     maybeFunctionName,
-    fileExtension,
+    fileExtension: parsePath(pathWithoutFunction).ext.slice(1),
   };
 }
 
@@ -481,23 +479,71 @@ export async function readTestConfig(
   );
 }
 
-function resolveVarsFileReferences(value: unknown, basePath: string): unknown {
+function resolveVarsFileReferences(
+  value: unknown,
+  basePath: string,
+  seen = new WeakMap<object, unknown>(),
+): unknown {
   if (typeof value === 'string') {
     if (!value.startsWith('file://')) {
       return value;
     }
     const reference = renderEnvOnlyInObject(value);
-    return `file://${path.resolve(basePath, reference.slice(7))}`;
+    const referencePath = reference.slice(7);
+    // file:///C:/... is the canonical Windows form. Preserve POSIX paths.
+    const localPath =
+      process.platform === 'win32' && /^\/[A-Za-z]:[\\/]/.test(referencePath)
+        ? referencePath.slice(1)
+        : referencePath;
+    return `file://${path.resolve(basePath, localPath)}`;
+  }
+  if (!value || typeof value !== 'object') {
+    return value;
+  }
+  if (seen.has(value)) {
+    return seen.get(value);
   }
   if (Array.isArray(value)) {
-    return value.map((item) => resolveVarsFileReferences(item, basePath));
+    const result: unknown[] = [];
+    seen.set(value, result);
+    for (const item of value) {
+      result.push(resolveVarsFileReferences(item, basePath, seen));
+    }
+    return result;
   }
-  if (value && typeof value === 'object' && Object.getPrototypeOf(value) === Object.prototype) {
-    return Object.fromEntries(
-      Object.entries(value).map(([key, item]) => [key, resolveVarsFileReferences(item, basePath)]),
-    );
+  const prototype = Object.getPrototypeOf(value);
+  if (prototype !== Object.prototype && prototype !== null) {
+    return value;
   }
-  return value;
+  const result: Record<string, unknown> = Object.create(prototype);
+  seen.set(value, result);
+  for (const [key, item] of Object.entries(value)) {
+    Object.defineProperty(result, key, {
+      value: resolveVarsFileReferences(item, basePath, seen),
+      writable: true,
+      configurable: true,
+      enumerable: true,
+    });
+  }
+  return result;
+}
+
+function resolveNestedVarsFileReferences(
+  vars: TestCase['vars'],
+  basePath: string,
+): TestCase['vars'] {
+  if (!vars) {
+    return vars;
+  }
+  const seen = new WeakMap<object, unknown>();
+  return Object.fromEntries(
+    Object.entries(vars).map(([key, value]) => [
+      key,
+      value && typeof value === 'object' && key !== '_conversation'
+        ? resolveVarsFileReferences(value, basePath, seen)
+        : value,
+    ]),
+  ) as TestCase['vars'];
 }
 
 async function readTestWithEnv(
@@ -508,6 +554,7 @@ async function readTestWithEnv(
   loadProviders = true,
   // Bare vars-file references and providers in imported rows use the tests file's directory.
   sourceBasePath = basePath,
+  nestedBasePath = sourceBasePath,
 ): Promise<TestCase> {
   if (typeof test === 'object' && isRemoteTestCase(test)) {
     return test as TestCase;
@@ -524,6 +571,11 @@ async function readTestWithEnv(
   } else {
     testCase = await loadTestWithVars(test, sourceBasePath);
   }
+
+  testCase.vars = resolveNestedVarsFileReferences(
+    testCase.vars,
+    typeof test === 'string' ? effectiveBasePath : nestedBasePath,
+  );
 
   const providerId =
     typeof testCase.provider === 'string' ? testCase.provider : testCase.provider?.id;
@@ -693,15 +745,12 @@ async function loadTestsFromGlobWithEnv(
     // Extract path without function name (Windows-aware)
     const pathWithoutFunction = stripFunctionSuffix(testFile);
 
-    // Handle xlsx/xls files with optional sheet specifier (e.g., file.xlsx#Sheet1)
-    const fileWithoutSheet = testFile.split('#')[0];
     if (
       testFile.endsWith('.csv') ||
       testFile.startsWith('https://docs.google.com/spreadsheets/') ||
       isJavascriptFile(pathWithoutFunction) ||
       pathWithoutFunction.endsWith('.py') ||
-      fileWithoutSheet.endsWith('.xlsx') ||
-      fileWithoutSheet.endsWith('.xls')
+      getExcelWorkbookPath(testFile)
     ) {
       testCases = await readStandaloneTestsFile(testFile, basePath);
     } else if (testFile.endsWith('.yaml') || testFile.endsWith('.yml')) {
@@ -767,6 +816,17 @@ export async function readTestConfigs(
   );
 }
 
+function usesStandaloneWorkbookLoader(source: string, basePath: string): boolean {
+  const workbookPath = getExcelWorkbookPath(source);
+  // A sheet name can contain glob characters. Expand only bare workbook globs.
+  return (
+    workbookPath !== undefined &&
+    (workbookPath !== source ||
+      !hasGlobMagic(workbookPath) ||
+      fs.existsSync(path.resolve(basePath, workbookPath)))
+  );
+}
+
 async function readTestsWithEnv(
   tests: TestSuiteConfig['tests'],
   basePath: string,
@@ -780,8 +840,18 @@ async function readTestsWithEnv(
       // Resolve local provider and vars references only for local sources.
       return tests;
     }
+    const { pathWithoutFunction } = getStandaloneTestsFileMetadata(source, basePath);
     return Promise.all(
-      tests.map((test) => readTestWithEnv(test, basePath, false, env, loadProviders)),
+      tests.map((test) =>
+        readTestWithEnv(
+          test,
+          basePath,
+          false,
+          env,
+          loadProviders,
+          path.dirname(pathWithoutFunction),
+        ),
+      ),
     );
   };
 
@@ -830,15 +900,12 @@ async function readTestsWithEnv(
       // Extract path without function name (Windows-aware)
       const pathWithoutScheme = globOrTest.replace(/^file:\/\//, '');
       const pathWithoutFunction = stripFunctionSuffix(pathWithoutScheme);
-      // Handle xlsx/xls files with optional sheet specifier (e.g., file.xlsx#Sheet1)
-      const pathWithoutSheet = globOrTest.split('#')[0];
       // Read standalone sources, then resolve provider and vars references for local rows.
       if (
         isRemoteTestsReference(globOrTest) ||
         isJavascriptFile(pathWithoutFunction) ||
         pathWithoutFunction.endsWith('.py') ||
-        pathWithoutSheet.endsWith('.xlsx') ||
-        pathWithoutSheet.endsWith('.xls') ||
+        usesStandaloneWorkbookLoader(pathWithoutScheme, basePath) ||
         pathWithoutFunction !== pathWithoutScheme
       ) {
         ret.push(...(await loadStandalone(globOrTest)));
@@ -900,27 +967,6 @@ function stripFunctionSuffix(resolvedPath: string): string {
   return lastColonIndex > 1 ? resolvedPath.slice(0, lastColonIndex) : resolvedPath;
 }
 
-/**
- * Strip an Excel `#SheetName` selector from a path.
- *
- * Sheet specifiers apply only to xlsx/xls basenames, so this inspects the basename and
- * preserves `#` characters in parent directories and in non-Excel filenames, matching
- * `getStandaloneTestsFileMetadata`.
- */
-function stripSheetSelector(resolvedPath: string): string {
-  const base = path.basename(resolvedPath);
-  const hashIndex = base.indexOf('#');
-  if (hashIndex === -1) {
-    return resolvedPath;
-  }
-  const baseWithoutSheet = base.slice(0, hashIndex);
-  const ext = parsePath(baseWithoutSheet).ext.slice(1).toLowerCase();
-  if (ext !== 'xlsx' && ext !== 'xls') {
-    return resolvedPath;
-  }
-  return path.join(path.dirname(resolvedPath), baseWithoutSheet);
-}
-
 /** References the loader fetches over the network rather than reading from disk. */
 export function isRemoteTestsReference(reference: string): boolean {
   return reference.includes('://') && !reference.startsWith('file://');
@@ -955,7 +1001,7 @@ function resolveTestsFileReference(reference: string, basePath: string): string[
       { windowsPathsNoEscape: true },
     );
     if (matches.length > 0) {
-      return matches.map((match) => stripSheetSelector(match));
+      return matches.map((match) => getExcelWorkbookPath(match) ?? match);
     }
     // No matches: fall through, since the reference may be a literal filename that
     // happens to contain a glob metacharacter.
@@ -963,7 +1009,7 @@ function resolveTestsFileReference(reference: string, basePath: string): string[
 
   // A concrete path. Only strip a `:functionName` suffix for script references, so that
   // a vars file whose name legally contains a colon is still watched in full.
-  const withoutSheet = stripSheetSelector(resolved);
+  const withoutSheet = getExcelWorkbookPath(resolved) ?? resolved;
   const withoutFunction = stripFunctionSuffix(withoutSheet);
   const isScript = isJavascriptFile(withoutFunction) || withoutFunction.endsWith('.py');
   return [isScript ? withoutFunction : withoutSheet];

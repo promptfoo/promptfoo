@@ -786,18 +786,22 @@ describe('runEval', () => {
     const results = await runEval({
       ...defaultOptions,
       provider: mockProvider,
-      prompt: { raw: 'Using {{ savedText }} {{ savedValue.path }}', label: 'test-label' },
-      test: {},
+      prompt: {
+        raw: 'Using {{ savedText }} {{ savedValue.path }} {{ savedTemplate }}',
+        label: 'test-label',
+      },
+      test: { vars: { sensitive: 'local value' } },
       conversations: {},
       registers: {
         savedText: 'file:///nonexistent/secret.txt',
         savedValue: { path: 'file:///nonexistent/secret.txt' },
+        savedTemplate: '{{ sensitive }}',
       },
     });
 
     expect(results[0].success).toBe(true);
     expect(mockProvider.callApi).toHaveBeenCalledWith(
-      'Using file:///nonexistent/secret.txt file:///nonexistent/secret.txt',
+      'Using file:///nonexistent/secret.txt file:///nonexistent/secret.txt {{ sensitive }}',
       expect.anything(),
       undefined,
     );
@@ -818,40 +822,52 @@ describe('runEval', () => {
 
     const redteamStrategyProvider: ApiProvider = {
       id: vi.fn().mockReturnValue('promptfoo:redteam:iterative'),
-      callApi: vi.fn().mockImplementation(async (_prompt: string, context?: any) => {
-        // Redteam iterative provider re-renders prompt with injectVar and updated vars
-        const updatedVars = {
-          ...context.vars,
-          prompt: 'fixture attack',
-        };
-        const rendered = await renderPrompt(
-          context.prompt,
-          updatedVars,
-          context.filters,
-          agenticTarget,
-          ['prompt'],
-        );
-        return agenticTarget.callApi(rendered, context);
-      }),
+      callApi: vi
+        .fn()
+        .mockImplementation(async (_prompt: string, context?: CallApiContextParams) => {
+          if (!context?.prompt) {
+            throw new Error('Expected a prompt to re-render');
+          }
+          // Redteam iterative provider re-renders prompt with injectVar and updated vars
+          const updatedVars = {
+            ...context.vars,
+            prompt: 'fixture attack',
+          };
+          const rendered = await renderPrompt(
+            context.prompt,
+            updatedVars,
+            context.filters,
+            agenticTarget,
+            ['prompt'],
+          );
+          return agenticTarget.callApi(rendered, context);
+        }),
     };
 
     const registers = {
       saved: { report: 'file:///nonexistent/canary.txt' },
+      savedText: 'file:///nonexistent/canary.txt',
+      savedTemplate: '{{ sensitive }}',
     };
 
     const results = await runEval({
       ...defaultOptions,
       provider: redteamStrategyProvider,
-      prompt: { raw: '{{prompt}}|{{saved.report}}', label: 'canary-prompt' },
+      prompt: {
+        raw: '{{prompt}}|{{saved.report}}|{{savedText}}|{{savedTemplate}}',
+        label: 'canary-prompt',
+      },
       test: {
-        vars: { prompt: 'initial prompt' },
+        vars: { prompt: 'initial prompt', sensitive: 'local value' },
       },
       conversations: {},
       registers,
     });
 
     expect(results[0].success).toBe(true);
-    expect(targetPromptReceived).toBe('fixture attack|file:///nonexistent/canary.txt');
+    expect(targetPromptReceived).toBe(
+      'fixture attack|file:///nonexistent/canary.txt|file:///nonexistent/canary.txt|{{ sensitive }}',
+    );
   });
 
   it('should store output in register when specified', async () => {

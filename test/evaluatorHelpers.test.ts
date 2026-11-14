@@ -10,6 +10,7 @@ import {
   renderPrompt,
   resolveVariables,
   runExtensionHook,
+  setRuntimeFileVarNames,
 } from '../src/evaluatorHelpers';
 import logger from '../src/logger';
 import { AIStudioChatProvider } from '../src/providers/google/ai.studio';
@@ -325,6 +326,10 @@ describe('evaluatorHelpers', () => {
           '{{ period.previous.report }}|{{ period.previous.data | join(",") }}|{{ period.untouched | join(",") }}',
         ),
         vars,
+        undefined,
+        undefined,
+        undefined,
+        new Set(['period']),
       );
 
       expect(renderedPrompt).toBe(
@@ -341,6 +346,7 @@ describe('evaluatorHelpers', () => {
         storedText: 'file:///etc/passwd',
       };
 
+      setRuntimeFileVarNames(vars, ['stored', 'storedText']);
       const renderedPrompt = await renderPrompt(
         toPrompt(
           '{{ _conversation[0].output }}|{{ sessionId }}|{{ stored.answer }}|{{ storedText }}',
@@ -349,7 +355,6 @@ describe('evaluatorHelpers', () => {
         undefined,
         undefined,
         undefined,
-        ['stored', 'storedText'],
       );
 
       expect(renderedPrompt).toBe(Array(4).fill('file:///etc/passwd').join('|'));
@@ -364,10 +369,15 @@ describe('evaluatorHelpers', () => {
 
       vi.mocked(fs.readFileSync).mockReturnValue('NORMAL-CONTENT\n');
 
-      // First render marks 'saved' as outputVar
-      await renderPrompt(toPrompt('{{ normal.file }}'), vars, undefined, undefined, undefined, [
-        'saved',
-      ]);
+      setRuntimeFileVarNames(vars, ['saved']);
+      await renderPrompt(
+        toPrompt('{{ normal.file }}'),
+        vars,
+        undefined,
+        undefined,
+        undefined,
+        new Set(['normal']),
+      );
 
       expect(vars.normal.file).toBe('NORMAL-CONTENT');
       expect(vars.saved.report).toBe('file://canary.txt');
@@ -391,7 +401,14 @@ describe('evaluatorHelpers', () => {
       });
 
       await expect(
-        renderPrompt(toPrompt('{{ cfg.report }}'), { cfg: { report: 'file://missing.txt' } }),
+        renderPrompt(
+          toPrompt('{{ cfg.report }}'),
+          { cfg: { report: 'file://missing.txt' } },
+          undefined,
+          undefined,
+          undefined,
+          new Set(['cfg']),
+        ),
       ).rejects.toThrow('ENOENT');
     });
 
@@ -399,7 +416,16 @@ describe('evaluatorHelpers', () => {
       const cfg: Record<string, unknown> = { name: 'loop' };
       cfg.self = cfg;
 
-      await expect(renderPrompt(toPrompt('{{ cfg.name }}'), { cfg })).resolves.toBe('loop');
+      await expect(
+        renderPrompt(
+          toPrompt('{{ cfg.name }}'),
+          { cfg },
+          undefined,
+          undefined,
+          undefined,
+          new Set(['cfg']),
+        ),
+      ).resolves.toBe('loop');
     });
 
     it('should load external js files in renderPrompt and execute the exported function', async () => {

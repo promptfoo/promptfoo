@@ -1,8 +1,8 @@
 import { getEventListeners } from 'node:events';
 
-import { AIProjectClient } from '@azure/ai-projects';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AzureFoundryAgentProvider } from '../../../src/providers/azure/foundry-agent';
+import { FoundryProjectClient } from '../../../src/providers/azure/foundryProjectClient';
 import { createProviderRateLimitOptions } from '../../../src/scheduler/providerWrapper';
 import { RateLimitRegistry } from '../../../src/scheduler/rateLimitRegistry';
 import { createDeferred, mockProcessEnv } from '../../util/utils';
@@ -29,11 +29,11 @@ const response = () => Response.json(responseBody);
 const failure = (status: number, headers: Record<string, string> = {}, code = 'fixture_error') =>
   Response.json({ error: { code, message: 'fixture failure' } }, { status, headers });
 
-// Use the actual project client and its bundled OpenAI SDK. Only HTTP and agent
+// Use the project client and the shared OpenAI SDK. Only HTTP and agent
 // lookup are mocked, so SDK listeners, retry timers and errors remain exercised.
 describe('Foundry SDK cancellation and retries', () => {
   let fetchMock: ReturnType<typeof vi.fn>;
-  let client: AIProjectClient;
+  let client: FoundryProjectClient;
 
   function provider(config: Record<string, unknown> = {}) {
     const instance = new AzureFoundryAgentProvider('test-agent', {
@@ -66,13 +66,13 @@ describe('Foundry SDK cancellation and retries', () => {
     vi.spyOn(Math, 'random').mockReturnValue(0);
     fetchMock = vi.fn().mockImplementation(async () => response());
     vi.stubGlobal('fetch', fetchMock);
-    client = new AIProjectClient(projectUrl, {
+    client = new FoundryProjectClient(projectUrl, {
       getToken: async () => ({
         token: 'synthetic-fixture-token',
         expiresOnTimestamp: Date.now() + 86400000,
       }),
     });
-    vi.spyOn(client.agents, 'get').mockResolvedValue(agent as any);
+    vi.spyOn(client, 'getAgent').mockResolvedValue(agent as any);
   });
 
   afterEach(() => {
@@ -455,8 +455,8 @@ describe('Foundry SDK cancellation and retries', () => {
         token: 'synthetic-recovered-token',
         expiresOnTimestamp: Date.now() + 86400000,
       }));
-    client = new AIProjectClient(projectUrl, { getToken });
-    vi.spyOn(client.agents, 'get').mockResolvedValue(agent as any);
+    client = new FoundryProjectClient(projectUrl, { getToken });
+    vi.spyOn(client, 'getAgent').mockResolvedValue(agent as any);
     const getClient = vi.spyOn(client, 'getOpenAIClient');
     fetchMock.mockResolvedValueOnce(
       Response.json({
@@ -703,7 +703,9 @@ describe('Foundry SDK cancellation and retries', () => {
   it.each(['configured', 'client default', 'SDK default'])(
     'bounds stalled bodies with the %s timeout and zero retries',
     async (source) => {
-      const sdkClient = client.getOpenAIClient(source === 'SDK default' ? {} : { timeout: 20 });
+      const sdkClient = client
+        .getOpenAIClient()
+        .withOptions(source === 'SDK default' ? {} : { timeout: 20 });
       const originalFetch = sdkClient.fetchWithTimeout;
       vi.spyOn(client, 'getOpenAIClient').mockReturnValue(sdkClient);
       const timeout = source === 'configured' ? 10 : sdkClient.timeout;
@@ -767,8 +769,8 @@ describe('Foundry SDK cancellation and retries', () => {
       resolveToken = resolve;
     });
     const getToken = vi.fn().mockReturnValue(token);
-    client = new AIProjectClient(projectUrl, { getToken });
-    vi.spyOn(client.agents, 'get').mockResolvedValue(agent as any);
+    client = new FoundryProjectClient(projectUrl, { getToken });
+    vi.spyOn(client, 'getAgent').mockResolvedValue(agent as any);
     const controller = new AbortController();
     let result;
     const pending = provider({ timeoutMs: 10, retryOptions: { maxRetries: 0 } })
@@ -839,8 +841,8 @@ describe('Foundry SDK cancellation and retries', () => {
       resolveToken = resolve;
     });
     const getToken = vi.fn().mockReturnValue(token);
-    client = new AIProjectClient(projectUrl, { getToken });
-    vi.spyOn(client.agents, 'get').mockResolvedValue(agent as any);
+    client = new FoundryProjectClient(projectUrl, { getToken });
+    vi.spyOn(client, 'getAgent').mockResolvedValue(agent as any);
     const controller = new AbortController();
     const pending = provider().callApi('hello', undefined, { abortSignal: controller.signal });
     const rejected = expect(pending).rejects.toMatchObject({ name: 'AbortError' });
@@ -857,7 +859,9 @@ describe('Foundry SDK cancellation and retries', () => {
 
   it('uses the public client retry default and stops at its configured limit', async () => {
     const getClient = client.getOpenAIClient.bind(client);
-    vi.spyOn(client, 'getOpenAIClient').mockImplementation(() => getClient({ maxRetries: 1 }));
+    vi.spyOn(client, 'getOpenAIClient').mockImplementation(() =>
+      getClient().withOptions({ maxRetries: 1 }),
+    );
     fetchMock.mockImplementation(async () => failure(503, { 'retry-after-ms': '0' }));
     const pending = provider().callApi('hello');
     await vi.runAllTimersAsync();

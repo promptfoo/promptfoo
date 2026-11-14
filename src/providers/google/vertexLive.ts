@@ -23,7 +23,8 @@ export class VertexLiveProvider extends GoogleLiveProvider {
       getVertexModelDefaultRegion(this.modelName) ||
       'us-central1';
     // Live uses the Cloud API versions, not Gemini API v1alpha/v1beta.
-    const apiVersion = config.apiVersion || 'v1';
+    const apiVersion =
+      config.apiVersion || resolveProviderEnv(this.env, ['VERTEX_API_VERSION'])?.value || 'v1';
     if (!['v1', 'v1beta1'].includes(apiVersion)) {
       throw new Error('Vertex Live apiVersion must be v1 or v1beta1.');
     }

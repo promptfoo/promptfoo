@@ -1,6 +1,3 @@
-import path from 'path';
-
-import protobuf from 'protobufjs';
 import request from 'supertest';
 import {
   afterEach,
@@ -13,35 +10,9 @@ import {
   vi,
 } from 'vitest';
 import { OTLPReceiver, startOTLPReceiver, stopOTLPReceiver } from '../../src/tracing/otlpReceiver';
+import { encodeOTLPRequest } from './otlpRequestFixture';
 
 import type { TraceStore } from '../../src/tracing/store';
-
-// Helper to create protobuf-encoded OTLP data for tests
-let protoRoot: protobuf.Root | null = null;
-
-async function getProtoRoot(): Promise<protobuf.Root> {
-  if (protoRoot) {
-    return protoRoot;
-  }
-  const protoDir = path.join(__dirname, '../../src/tracing/proto');
-  const root = new protobuf.Root();
-  root.resolvePath = (_origin: string, target: string) => {
-    return path.join(protoDir, target);
-  };
-  await root.load('opentelemetry/proto/collector/trace/v1/trace_service.proto');
-  protoRoot = root;
-  return protoRoot;
-}
-
-async function encodeOTLPRequest(data: any): Promise<Buffer> {
-  const root = await getProtoRoot();
-  const ExportTraceServiceRequest = root.lookupType(
-    'opentelemetry.proto.collector.trace.v1.ExportTraceServiceRequest',
-  );
-  const message = ExportTraceServiceRequest.create(data);
-  const encoded = ExportTraceServiceRequest.encode(message).finish();
-  return Buffer.from(encoded);
-}
 
 // Mock the database
 vi.mock('../../src/database', () => ({
@@ -397,7 +368,7 @@ describe('OTLPReceiver', () => {
       receiver = new OTLPReceiver({ acceptFormats: ['json'] });
       (receiver as any).traceStore = mockTraceStore;
 
-      const encodedData = await encodeOTLPRequest({
+      const encodedData = encodeOTLPRequest({
         resourceSpans: [
           {
             scopeSpans: [
@@ -525,7 +496,7 @@ describe('OTLPReceiver', () => {
         ],
       };
 
-      const encodedData = await encodeOTLPRequest(protobufRequest);
+      const encodedData = encodeOTLPRequest(protobufRequest);
 
       const response = await request(receiver.getApp())
         .post('/v1/traces')

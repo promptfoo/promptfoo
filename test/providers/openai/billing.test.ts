@@ -189,6 +189,7 @@ describe('OpenAI billing helpers', () => {
     it.each([
       ['bedrock:gpt-daybreak-blue-5.6-sol', 'us-east-2', 'default', 4.4, 0.44, 5.5, 22],
       ['gpt-6.1-sol', 'us-east-1', 'default', 2.2, 0.11, 2.75, 11],
+      ['gpt-6.1-sol', 'us-east-1', 'ultrafast', 13.2, 0.66, 16.5, 66],
       ['gpt-6-astra', 'us-west-2', 'default', 11, 1.1, 13.75, 55],
       ['gpt-6-astra', 'us-east-1', 'ultrafast', 66, 6.6, 82.5, 330],
     ] as const)(

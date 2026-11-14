@@ -21,7 +21,7 @@ import {
   isHuggingFaceModel,
   parseHuggingFaceModel,
 } from '../util/huggingfaceMetadata';
-import { parseModelAuditArgs } from '../util/modelAuditCliParser';
+import { getModelAuditDelegationEnv, parseModelAuditArgs } from '../util/modelAuditCliParser';
 import { checkModelAuditInstalled } from '../util/modelAuditInstall';
 import { getModelAuditVerdict, parseCompleteModelAuditResults } from '../util/modelAuditResults';
 import type { Command } from 'commander';
@@ -885,10 +885,7 @@ export function modelScanCommand(program: Command): void {
         logger.debug(`Using modelaudit version: ${currentScannerVersion}`);
       }
 
-      const delegationEnv = {
-        ...process.env,
-        PROMPTFOO_DELEGATED: 'true',
-      };
+      const delegationEnv = getModelAuditDelegationEnv();
 
       if (options.listScanners) {
         const args = buildCliArgs(paths || [], {
