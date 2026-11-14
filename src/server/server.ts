@@ -376,22 +376,31 @@ export function createApp() {
   // Configure proper MIME types for JavaScript files
   app.use(setJavaScriptMimeType);
 
-  async function serveApp(_req: Request, res: Response): Promise<void> {
-    if (!isNetworkEgressDisabled()) {
-      res.sendFile('index.html', { root: staticDir, dotfiles: 'allow' });
-      return;
-    }
+  const indexPath = path.join(staticDir, 'index.html');
+  const noNetworkIndex =
+    isNetworkEgressDisabled() && fs.existsSync(indexPath)
+      ? fs
+          .readFileSync(indexPath, 'utf8')
+          .replace(/<head>/i, '<head><meta name="promptfoo-no-network">')
+      : undefined;
 
-    const html = await fs.promises.readFile(path.join(staticDir, 'index.html'), 'utf8');
+  function serveNoNetworkIndex(_req: Request, res: Response): void {
     res.setHeader('Cache-Control', 'no-store');
-    res.type('html').send(html.replace(/<head>/i, '<head><meta name="promptfoo-no-network">'));
+    res.type('html').send(noNetworkIndex);
   }
 
-  app.get(['/', '/index.html'], serveApp);
+  if (noNetworkIndex !== undefined) {
+    app.get(['/', '/index.html'], serveNoNetworkIndex);
+  }
   app.use(express.static(staticDir, { dotfiles: 'allow' }));
 
-  // Serve the same HTML settings for client-side deep links.
-  app.get('/*splat', serveApp);
+  if (noNetworkIndex !== undefined) {
+    app.get('/*splat', serveNoNetworkIndex);
+  }
+  // Handle client routing, return all requests to the app
+  app.get('/*splat', (_req: Request, res: Response): void => {
+    res.sendFile('index.html', { root: staticDir, dotfiles: 'allow' });
+  });
   app.use(defaultErrorHandler);
   return app;
 }
