@@ -447,7 +447,7 @@ function isVerdictShaped(value: unknown, verdictKeys: string[]): value is Record
     typeof value === 'object' &&
     value !== null &&
     !Array.isArray(value) &&
-    verdictKeys.some((key) => Object.hasOwn(value, key))
+    verdictKeys.some((key) => Object.prototype.hasOwnProperty.call(value, key))
   );
 }
 
