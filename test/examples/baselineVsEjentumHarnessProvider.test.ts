@@ -261,6 +261,18 @@ describe('baseline-vs-ejentum-harness provider', () => {
     }
   });
 
+  it('retries initialization after the provider loader fails', async () => {
+    const underlying = { callApi: vi.fn() };
+    const loader = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('load failed'))
+      .mockResolvedValue(underlying);
+    const provider = new EjentumAugmentedProvider({ loadApiProvider: loader });
+    await expect(provider.getUnderlyingProvider()).rejects.toThrow('load failed');
+    await expect(provider.getUnderlyingProvider()).resolves.toBe(underlying);
+    expect(loader).toHaveBeenCalledTimes(2);
+  });
+
   it('applies configured request timeout to fetch call via AbortSignal', async () => {
     fetchMock.mockResolvedValueOnce(mockResponse([{ reasoning: 'speedy' }]));
     const mockUnderlying = {

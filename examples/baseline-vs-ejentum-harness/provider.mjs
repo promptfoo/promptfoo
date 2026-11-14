@@ -147,10 +147,10 @@ class EjentumAugmentedProvider {
       ...forwardedConfig
     } = this.config;
 
-    const loadApiProvider = this.loadApiProvider || (await getLoadApiProvider());
     const providerPath = model.startsWith('openai:') ? model : `openai:chat:${model}`;
 
     this.initPromise = (async () => {
+      const loadApiProvider = this.loadApiProvider || (await getLoadApiProvider());
       const provider = await loadApiProvider(providerPath, {
         options: {
           config: forwardedConfig,
@@ -159,7 +159,10 @@ class EjentumAugmentedProvider {
       });
       this.underlyingProvider = provider;
       return provider;
-    })();
+    })().catch((error) => {
+      this.initPromise = null;
+      throw error;
+    });
 
     return this.initPromise;
   }
