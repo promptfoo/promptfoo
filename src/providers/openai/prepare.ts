@@ -13,15 +13,20 @@ const FunctionDefinition = z.looseObject({
   parameters: z.record(z.string(), z.unknown()).optional(),
   strict: z.boolean().nullable().optional(),
 });
+const RenderedStrictFlag = z
+  .union([z.boolean(), z.enum(['true', 'false']).transform((value) => value === 'true')])
+  .nullable()
+  .optional();
 const ResponseFormat = z.looseObject({
   type: z.string(),
   name: z.string().optional(),
   schema: z.record(z.string(), z.unknown()).optional(),
+  strict: RenderedStrictFlag,
   json_schema: z
     .looseObject({
       name: z.string().optional(),
       schema: z.record(z.string(), z.unknown()).optional(),
-      strict: z.boolean().nullable().optional(),
+      strict: RenderedStrictFlag,
     })
     .optional(),
 });

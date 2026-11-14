@@ -4,6 +4,7 @@ import { fetchWithProxy } from '../../util/fetch/index';
 import {
   maybeLoadResponseFormatFromExternalFile,
   maybeLoadToolsFromExternalFile,
+  renderEnvOnlyInObject,
   renderVarsInObject,
 } from '../../util/index';
 import { resolveProviderApiKey } from '../credentials';
@@ -13,6 +14,7 @@ import { getOpenAiEffectiveServiceTier } from '../openai/util';
 import { ResponsesProcessor } from '../responses/index';
 import { normalizeResponsesInput } from '../responses/input';
 import { readResponsesStream } from '../responses/stream';
+import { resolveResponseSchemaStrict } from '../responses/strict';
 import { getRequestTimeoutMs } from '../shared';
 import {
   assertXAIServiceTier,
@@ -113,7 +115,7 @@ export type XAIAgentTool =
   | XAICollectionsSearchTool
   | XAIMCPTool;
 
-function buildTextFormat(responseFormat: any) {
+function buildTextFormat(responseFormat: any, renderEnvWithoutVars: boolean) {
   if (!responseFormat) {
     return { format: { type: 'text' } };
   }
@@ -125,12 +127,17 @@ function buildTextFormat(responseFormat: any) {
   if (responseFormat.type === 'json_schema') {
     const schema = responseFormat.schema || responseFormat.json_schema?.schema;
     const schemaName = responseFormat.json_schema?.name || responseFormat.name || 'response_schema';
+    const strict = resolveResponseSchemaStrict(
+      responseFormat.json_schema?.strict,
+      responseFormat.strict,
+      renderEnvWithoutVars ? renderEnvOnlyInObject : undefined,
+    );
     return {
       format: {
         type: 'json_schema',
         name: schemaName,
         schema,
-        strict: true,
+        strict,
       },
     };
   }
@@ -340,7 +347,7 @@ export class XAIResponsesProvider implements ApiProvider {
       context?.vars,
     );
 
-    const textFormat = buildTextFormat(responseFormat);
+    const textFormat = buildTextFormat(responseFormat, context?.vars === undefined);
 
     // Load tools from external file if needed
     const loadedTools = config.tools

@@ -108,7 +108,7 @@ export interface AzureCompletionOptions {
         type: 'json_schema';
         json_schema: {
           name: string;
-          strict: boolean;
+          strict?: boolean;
           schema: AzureResponseFormatSchema;
         };
       };
