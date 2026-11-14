@@ -96,6 +96,17 @@ describe('matchesCitationFaithfulness', () => {
     expect(result.reason).toContain('valid verdict');
   });
 
+  it.each(['[0]', '[1] and [3]'])(
+    'rejects missing array passages in %s before grading',
+    async (output) => {
+      const spy = vi.spyOn(DefaultGradingProvider, 'callApi');
+      const result = await matchesCitationFaithfulness(query, output, context, 1);
+      expect(result.pass).toBe(false);
+      expect(result.reason).toContain('outside the supplied context');
+      expect(spy).not.toHaveBeenCalled();
+    },
+  );
+
   it('fails an answer with no [N] citation markers without calling the grader', async () => {
     const spy = vi.spyOn(DefaultGradingProvider, 'callApi');
     const result = await matchesCitationFaithfulness(

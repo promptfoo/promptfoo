@@ -574,7 +574,16 @@ export async function matchesCitationFaithfulness(
   // letting the grader pass it vacuously (and save an API call). Run this before
   // resolving the grading provider so a locally-classifiable answer fails cleanly
   // even when no grader is configured, instead of throwing a provider/config error.
-  if (!/\[\d+\]/.test(output)) {
+  const markers = output.matchAll(/\[(\d+)\]/g);
+  let hasCitation = false;
+  for (const marker of markers) {
+    hasCitation = true;
+    const passage = Number(marker[1]);
+    if (Array.isArray(context) && (passage < 1 || passage > context.length)) {
+      return fail('Answer cites a passage outside the supplied context.', tokensUsed);
+    }
+  }
+  if (!hasCitation) {
     return fail('Answer contains no [N] citation markers to evaluate.', tokensUsed);
   }
 

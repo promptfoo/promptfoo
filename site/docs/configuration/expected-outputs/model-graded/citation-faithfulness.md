@@ -39,7 +39,7 @@ assert:
 - `context` - Reference passages, provided as an array so each entry is numbered `[1]`, `[2]`, ... (in vars or via `contextTransform`)
 - `threshold` - Optional minimum score 0-1 (default: 1). The score is `1.0` for a faithful answer and `0.0` for an unfaithful one, so the default requires a faithful verdict to pass.
 
-The answer under test should contain `[N]` citation markers that refer to the passage numbers. Answers without numeric citation markers fail before a grader is called. This check does not require every supported claim to have a citation; it checks the markers that are present and the factual support of the answer.
+The answer under test should contain `[N]` citation markers that refer to the passage numbers. Answers without numeric citation markers fail before a grader is called. With an array of passages, a marker outside the range from 1 through the array length also fails immediately. This check does not require every supported claim to have a citation; it checks the markers that are present and the factual support of the answer.
 
 ### Full example
 
