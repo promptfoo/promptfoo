@@ -370,6 +370,52 @@ describe('PythonProvider', () => {
       );
     });
 
+    it('returns without waiting for a slow cache write', async () => {
+      const provider = new PythonProvider('script.py');
+      mockIsCacheEnabled.mockReturnValue(true);
+      const write = createDeferred<void>();
+      const mockCache = {
+        get: vi.fn().mockResolvedValue(null),
+        set: vi.fn().mockReturnValue(write.promise),
+      };
+      mockGetCache.mockResolvedValue(mockCache as never);
+      mockPoolInstance.execute.mockResolvedValue({ output: 'fresh result' });
+
+      const result = await provider.callApi('test prompt');
+
+      expect(result).toEqual({ output: 'fresh result', cached: false });
+      expect(mockCache.set).toHaveBeenCalledTimes(1);
+      write.resolve();
+      await write.promise;
+    });
+
+    it.each(['rejection', 'synchronous throw'])('returns after a cache write %s', async (mode) => {
+      const provider = new PythonProvider('script.py');
+      mockIsCacheEnabled.mockReturnValue(true);
+      const mockCache = {
+        get: vi.fn().mockResolvedValue(null),
+        set: vi.fn(() => {
+          const error = new Error('disk full');
+          if (mode === 'synchronous throw') {
+            throw error;
+          }
+          return Promise.reject(error);
+        }),
+      };
+      mockGetCache.mockResolvedValue(mockCache as never);
+      mockPoolInstance.execute.mockResolvedValue({ output: 'fresh result' });
+
+      await expect(provider.callApi('test prompt')).resolves.toEqual({
+        output: 'fresh result',
+        cached: false,
+      });
+      await vi.waitFor(() => {
+        expect(logger.warn).toHaveBeenCalledWith('PythonProvider failed to cache result', {
+          error: expect.objectContaining({ message: 'disk full' }),
+        });
+      });
+    });
+
     it('should properly transform token usage in cached results', async () => {
       const provider = new PythonProvider('script.py');
       mockIsCacheEnabled.mockReturnValue(true);

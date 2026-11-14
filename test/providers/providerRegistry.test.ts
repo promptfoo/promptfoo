@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import logger from '../../src/logger';
-import { providerRegistry } from '../../src/providers/providerRegistry';
+import { ProviderRegistry, providerRegistry } from '../../src/providers/providerRegistry';
+import { publishScriptProviderCacheWrite } from '../../src/providers/scriptResult';
 import { createDeferred } from '../util/utils';
 
 vi.mock('../../src/logger');
@@ -12,6 +13,34 @@ afterEach(async () => {
 });
 
 describe('providerRegistry', () => {
+  it('waits for pending script-provider cache writes from another module copy at shutdown', async () => {
+    vi.resetModules();
+    const library = await import('../../src/providers/scriptResult');
+    expect(library.publishScriptProviderCacheWrite).not.toBe(publishScriptProviderCacheWrite);
+    const registry = new ProviderRegistry();
+    const write = createDeferred<void>();
+    library.publishScriptProviderCacheWrite(
+      { set: () => write.promise },
+      'shutdown-flush-key',
+      '{"output":"x"}',
+      'TestProvider',
+    );
+
+    let settled = false;
+    const shutdown = registry.shutdownForProcess().then(() => {
+      settled = true;
+    });
+    // Let the empty active-call drain finish; only the detached write should block now.
+    await new Promise((resolve) => setImmediate(resolve));
+    try {
+      expect(settled).toBe(false);
+    } finally {
+      write.resolve();
+      await shutdown;
+    }
+    expect(settled).toBe(true);
+  });
+
   it.each([
     { reuse: false, reject: false },
     { reuse: false, reject: true },

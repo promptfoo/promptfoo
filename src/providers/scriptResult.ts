@@ -100,3 +100,45 @@ export function validateScriptResult(
     );
   }
 }
+
+// A CLI-loaded provider can import the separately bundled public API. Both
+// module copies must publish to the set that process shutdown drains.
+const PENDING_WRITES = Symbol.for('promptfoo.scriptProvider.pendingCacheWrites.v1');
+const processState = globalThis as typeof globalThis & {
+  [PENDING_WRITES]?: Set<Promise<unknown>>;
+};
+const pendingScriptProviderCacheWrites = (processState[PENDING_WRITES] ??= new Set());
+
+export async function flushPendingScriptProviderCacheWrites(): Promise<void> {
+  while (pendingScriptProviderCacheWrites.size > 0) {
+    await Promise.allSettled([...pendingScriptProviderCacheWrites]);
+  }
+}
+
+/**
+ * Persist a script-provider result without blocking the caller.
+ * Matches fetchWithCache: keyv-file rewrites of a large cache.json can take
+ * 100ms+ per write, so Python/Ruby must not await. Failures are logged and must
+ * not reject the call. Executable scriptCompletion still awaits cache.set (#11198).
+ *
+ * Pending writes are tracked so providerRegistry.shutdownForProcess (graceful
+ * shutdown and SIGTERM) can flush them before exit, without putting the wait back
+ * on each provider call.
+ */
+
+export function publishScriptProviderCacheWrite(
+  cache: { set: (key: string, value: string) => Promise<unknown> | unknown },
+  cacheKey: string,
+  value: string,
+  providerLabel: string,
+): void {
+  const write = Promise.resolve()
+    .then(() => cache.set(cacheKey, value))
+    .catch((err) => {
+      logger.warn(`${providerLabel} failed to cache result`, { error: err });
+    });
+  pendingScriptProviderCacheWrites.add(write);
+  void write.finally(() => {
+    pendingScriptProviderCacheWrites.delete(write);
+  });
+}

@@ -13,6 +13,7 @@ import {
   applyCachedCallApiMetadata,
   buildScriptArgs,
   hasScriptResultError,
+  publishScriptProviderCacheWrite,
   validateScriptResult,
 } from './scriptResult';
 
@@ -197,7 +198,7 @@ export class RubyProvider implements ApiProvider {
 
       if (isCacheEnabled() && !hasError) {
         logger.debug(`RubyProvider caching result: ${cacheKey}`);
-        await cache.set(cacheKey, JSON.stringify(result));
+        publishScriptProviderCacheWrite(cache, cacheKey, JSON.stringify(result), 'RubyProvider');
       } else {
         logger.debug(
           `RubyProvider not caching result: ${isCacheEnabled() ? (hasError ? 'has error' : 'unknown reason') : 'cache disabled'}`,
