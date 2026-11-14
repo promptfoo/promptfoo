@@ -10,6 +10,10 @@ import { importModule } from '../../../src/esm';
 import logger from '../../../src/logger';
 import { fetchJson, GoogleLiveProvider, tryGetThenPost } from '../../../src/providers/google/live';
 import { getGoogleAccessToken } from '../../../src/providers/google/util';
+import {
+  isPrivateRangeGuardContextActive,
+  withPrivateRangeGuard,
+} from '../../../src/util/fetch/guardContext';
 import * as fetchModule from '../../../src/util/fetch/index';
 import { mockProcessEnv } from '../../util/utils';
 
@@ -299,6 +303,80 @@ describe('GoogleLiveProvider', () => {
 
   it('should return the correct id', () => {
     expect(provider.id()).toBe('google:live:gemini-2.0-flash-exp');
+  });
+
+  it('checks stateful tool overrides before looking up Python or opening a socket', async () => {
+    const options = createTextLiveOptions();
+    const stubApi = { url: 'https://192.0.2.15/tools/' };
+    const target = new GoogleLiveProvider('fixture', {
+      config: { ...options.config, functionToolStatefulApi: stubApi },
+    });
+    const { validatePythonPath } = await import('../../../src/python/pythonUtils');
+    vi.mocked(validatePythonPath).mockClear();
+
+    for (const functionToolStatefulApi of [
+      { ...stubApi, file: 'fixture-worker.py', pythonExecutable: 'fixture-python' },
+      { url: 'http://127.0.0.1/tools/' },
+    ]) {
+      await expect(
+        withPrivateRangeGuard(() =>
+          target.callApi('sample', {
+            prompt: { raw: 'sample', label: 'test', config: { functionToolStatefulApi } },
+            vars: {},
+          }),
+        ),
+      ).rejects.toThrow('PROMPTFOO_BLOCK_PRIVATE_RANGES');
+    }
+    expect(validatePythonPath).not.toHaveBeenCalled();
+    expect((await import('child_process')).spawn).not.toHaveBeenCalled();
+    expect(WebSocket).not.toHaveBeenCalled();
+  });
+
+  it.each(['{# fixture #}', '{% if false %}{% endif %}', 'file://missing-tool.cjs:finish'])(
+    'refuses an overridden callback before connecting in guarded diagnostics',
+    async (callback) => {
+      await expect(
+        withPrivateRangeGuard(() =>
+          provider.callApi('sample', {
+            prompt: {
+              raw: 'sample',
+              label: 'test',
+              config: { functionToolCallbacks: { finish: callback } },
+            },
+            vars: {},
+          }),
+        ),
+      ).rejects.toThrow('PROMPTFOO_BLOCK_PRIVATE_RANGES');
+      expect(WebSocket).not.toHaveBeenCalled();
+      expect(mockImportModule).not.toHaveBeenCalled();
+    },
+  );
+
+  it('uses the guarded transport for an inherited URL-only stateful API', async () => {
+    const target = new GoogleLiveProvider('fixture', {
+      config: {
+        ...createTextLiveOptions().config,
+        functionToolStatefulApi: { url: 'https://192.0.2.15/tools/' },
+      },
+    });
+    vi.mocked(WebSocket).mockImplementation(createRespondingSocket('sample'));
+    mockFetchWithProxy.mockImplementation(async () => {
+      expect(isPrivateRangeGuardContextActive()).toBe(true);
+      return Response.json({ count: 1 });
+    });
+    const result = await withPrivateRangeGuard(() =>
+      target.callApi('test', {
+        prompt: { raw: 'test', label: 'sample', config: { timeoutMs: 500 } },
+        vars: {},
+      }),
+    );
+
+    expect(result.output).toMatchObject({ text: 'sample', statefulApiState: { count: 1 } });
+    expect(mockFetchWithProxy).toHaveBeenCalledWith(
+      'https://192.0.2.15/tools/get_state',
+      expect.anything(),
+    );
+    expect((await import('child_process')).spawn).not.toHaveBeenCalled();
   });
 
   it('keeps final state retrieval alive after the expected Live socket close', async () => {

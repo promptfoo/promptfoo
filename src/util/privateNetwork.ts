@@ -4,7 +4,7 @@ import { isIP } from 'node:net';
 import { CLOUD_PROVIDER_PREFIX } from '../constants';
 import { getEnvBool, getEnvString } from '../envars';
 import logger from '../logger';
-import { PrivateRangeBlockedError } from './fetch/guardContext';
+import { isPrivateRangeGuardContextActive, PrivateRangeBlockedError } from './fetch/guardContext';
 import { maybeLoadFromExternalFile } from './file';
 import {
   assertLiteralGuardedFilePath,
@@ -295,6 +295,7 @@ interface ProviderTarget {
     sessionParser?: unknown;
     validateStatus?: unknown;
     functionToolCallbacks?: unknown;
+    functionToolStatefulApi?: unknown;
   };
 }
 
@@ -671,6 +672,54 @@ function validateHttpTemplateValues(value: unknown): void {
   }
 }
 
+function getStatefulToolApiUrl(api: unknown): string | undefined {
+  if (api == null) {
+    return undefined;
+  }
+  if (
+    typeof api !== 'object' ||
+    !('url' in api) ||
+    typeof api.url !== 'string' ||
+    !/^https?:\/\//i.test(api.url)
+  ) {
+    throw new PrivateRangeBlockedError(
+      'PROMPTFOO_BLOCK_PRIVATE_RANGES is set: refusing a stateful tool API with no verifiable URL',
+    );
+  }
+  if ('file' in api && api.file) {
+    throw new PrivateRangeBlockedError(
+      'PROMPTFOO_BLOCK_PRIVATE_RANGES is set: refusing a stateful tool API that starts a local process',
+    );
+  }
+  return api.url;
+}
+
+/** Check the effective Live configuration after provider and prompt options are merged. */
+export async function validateGuardedLiveTools(config: {
+  functionToolStatefulApi?: unknown;
+  functionToolCallbacks?: unknown;
+}): Promise<void> {
+  if (isPrivateRangeGuardContextActive()) {
+    refuseExecutableFunctionCallbacks(config.functionToolCallbacks);
+    const url = getStatefulToolApiUrl(config.functionToolStatefulApi);
+    if (url) {
+      await assertUrlResolvesPublic(url);
+    }
+  }
+}
+
+function refuseExecutableFunctionCallbacks(callbacks: unknown): void {
+  if (
+    callbacks &&
+    typeof callbacks === 'object' &&
+    Object.values(callbacks).some((callback) => typeof callback === 'string' && callback.length > 0)
+  ) {
+    throw new PrivateRangeBlockedError(
+      'PROMPTFOO_BLOCK_PRIVATE_RANGES is set: refusing provider functionToolCallbacks that execute outside the fetch guard',
+    );
+  }
+}
+
 function collectHttpTargets(config: ProviderTarget['config'], urls: string[]): void {
   validateHttpTemplateValues(config);
   const auth = config?.auth as { type?: unknown; tokenUrl?: unknown } | undefined;
@@ -744,16 +793,7 @@ function refuseExecutableFields(providerOptions: ProviderTarget): void {
       );
     }
   }
-  const functionToolCallbacks = config?.functionToolCallbacks;
-  if (typeof functionToolCallbacks === 'object' && functionToolCallbacks !== null) {
-    for (const callback of Object.values(functionToolCallbacks)) {
-      if (typeof callback === 'string' && callback.length > 0) {
-        throw new PrivateRangeBlockedError(
-          'PROMPTFOO_BLOCK_PRIVATE_RANGES is set: refusing provider with a string functionToolCallbacks entry that would execute outside the fetch guard',
-        );
-      }
-    }
-  }
+  refuseExecutableFunctionCallbacks(config?.functionToolCallbacks);
   const topLevelTransform = providerOptions?.transform;
   if (typeof topLevelTransform === 'string' && topLevelTransform.length > 0) {
     throw new PrivateRangeBlockedError(
@@ -863,6 +903,15 @@ export function getCallerSuppliedBaseUrls(providerOptions: ProviderTarget): stri
   }
   if (typeof providerOptions?.id === 'string' && /^https?(?:$|:)/.test(providerOptions.id)) {
     collectHttpTargets(config, urls);
+  }
+  if (
+    typeof providerOptions?.id === 'string' &&
+    /^(?:google|palm|vertex):live:/.test(providerOptions.id)
+  ) {
+    const url = getStatefulToolApiUrl(config?.functionToolStatefulApi);
+    if (url) {
+      urls.push(url);
+    }
   }
   const rawRequest = config?.request;
   if (typeof rawRequest === 'string' && rawRequest.length > 0) {

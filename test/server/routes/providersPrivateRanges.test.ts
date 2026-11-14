@@ -55,6 +55,34 @@ describe('PROMPTFOO_BLOCK_PRIVATE_RANGES server guards (#11768 item 2)', () => {
   describe('POST /api/providers/test', () => {
     const body = { providerOptions: { id: 'http://169.254.169.254/v1' } };
 
+    it.each([
+      ['google', { file: 'fixture-worker.py', url: 'https://192.0.2.15/tools/' }],
+      [
+        'palm',
+        {
+          file: 'fixture-worker.py',
+          pythonExecutable: 'fixture-python',
+          url: 'https://192.0.2.15/tools/',
+        },
+      ],
+      ['vertex', { url: 'http://127.0.0.1/tools/' }],
+      ['google', {}],
+    ] as const)('refuses an unsafe %s Live stateful API before loading', async (prefix, api) => {
+      restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
+      const response = await request(app)
+        .post('/api/providers/test')
+        .send({
+          providerOptions: {
+            id: prefix + ':live:fixture',
+            config: { functionToolStatefulApi: api },
+          },
+        });
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('PROMPTFOO_BLOCK_PRIVATE_RANGES');
+      expect(mockedLoadApiProvider).not.toHaveBeenCalled();
+      expect(mockedTestProviderConnectivity).not.toHaveBeenCalled();
+    });
+
     it('refuses a private target with 400 when the flag is set', async () => {
       restoreEnv = mockProcessEnv({ PROMPTFOO_BLOCK_PRIVATE_RANGES: 'true' });
 
