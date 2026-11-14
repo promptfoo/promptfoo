@@ -717,6 +717,28 @@ describe('evaluatorHelpers', () => {
       });
     });
 
+    it('should not grow a self-reference assembled by a substitution', () => {
+      // Inlining open='{{' assembles '{{message}}' inside message mid-loop. The
+      // placeholder did not exist in the initial graph, so a cycle set computed
+      // once from the initial values is stale; the assembled self-reference must
+      // be frozen instead of doubling on every pass.
+      const variables = { message: '{{missing}} {{open}}message}}', open: '{{' };
+      expect(resolveVariables(variables)).toEqual({
+        message: '{{missing}} {{message}}',
+        open: '{{',
+      });
+    });
+
+    it('should not grow a reference injected by a stringified array value', () => {
+      // Stringifying parts inlines '{{message}}' into message. The same
+      // freeze-on-formed-cycle rule applies: one inlining, no runaway growth.
+      const variables = { message: '{{missing}} {{parts}}', parts: ['{{message}}'] };
+      expect(resolveVariables(variables)).toEqual({
+        message: '{{missing}} {{message}}',
+        parts: ['{{message}}'],
+      });
+    });
+
     it('should resolve variables whose key contains regex metacharacters', () => {
       const variables = { 'input[': '{{name}}', name: 'x' };
       expect(resolveVariables(variables)).toEqual({ 'input[': 'x', name: 'x' });

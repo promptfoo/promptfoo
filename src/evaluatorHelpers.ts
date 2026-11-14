@@ -180,13 +180,14 @@ export function resolveVariables(
   // Variables whose placeholder references form a cycle. Substituting a cyclic
   // variable inlines its growing value into a dependent on every pass (a cycle
   // behind an unresolved placeholder duplicates the unresolved text), so cyclic
-  // variables are never substituted. The set is computed once from the initial
-  // values because it is invariant under substitution: only acyclic candidates
-  // are ever inlined, and if an acyclic candidate's references could reach the
-  // key it is inlined into, key and candidate would already form a cycle.
+  // variables are never substituted. Cycle membership is recomputed after every
+  // substitution, because a substitution can assemble a placeholder that was
+  // absent from the graph moments earlier (a value ending in '{{' can complete
+  // a later 'name}}', and a stringified non-string value can carry placeholder
+  // text): only a cycle set derived from the current values is sound.
   // Comparing parsed placeholder names avoids building a RegExp from arbitrary
   // variable keys, which can throw on metacharacters.
-  const cyclicVars = findCyclicVars(variables, regex);
+  let cyclicVars = findCyclicVars(variables, regex);
 
   let iterations = 0;
   do {
@@ -227,6 +228,10 @@ export function resolveVariables(
         if (skipResolveVars?.includes(varName) || varsResolvedFromSkipped?.has(varName)) {
           varsResolvedFromSkipped?.add(key);
         }
+        // The mutation above may have assembled a new placeholder, so cycle
+        // membership must be rebuilt from the current values before the next
+        // candidate is considered.
+        cyclicVars = findCyclicVars(variables, regex);
         resolved = false; // Indicate that we've made a replacement and should check again
       }
     }

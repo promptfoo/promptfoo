@@ -96,6 +96,12 @@ function subsets<T>(items: T[]): T[][] {
 const VALUE_CHOICES = subsets(REF_CHOICES).map((refs) =>
   refs.length === 0 ? 'lit' : refs.map((ref) => `{{${ref}}}`).join(' '),
 );
+// Assembly-capable values: '{{v0}}v1}}' with v0='{{' becomes '{{v1}}' only
+// after a substitution, forming a reference (or cycle) that was absent from
+// the initial graph. The oracle recomputes cycle membership from current
+// values every pass, so any staleness in the implementation's cycle set
+// diverges on these configs.
+VALUE_CHOICES.push('{{', '{{v0}}v1}}');
 
 const MSG_TEMPLATES = ['{{missing}} {{v0}} {{v1}} {{v2}}', 'plain {{v2}} tail'];
 
