@@ -188,6 +188,21 @@ describe('Version Route', () => {
     }
   });
 
+  it('should skip upstream update checks in no-network mode', async () => {
+    const restoreEnv = mockProcessEnv({ PROMPTFOO_NO_NETWORK: 'true' });
+
+    try {
+      const response = await request(app).get('/api/version');
+
+      expect(response.status).toBe(200);
+      expect(mockedGetLatestVersion).not.toHaveBeenCalled();
+      expect(response.body.latestVersion).toBe(response.body.currentVersion);
+      expect(response.body.updateAvailable).toBe(false);
+    } finally {
+      restoreEnv();
+    }
+  });
+
   it('should not classify generic self-hosted mode as Docker', async () => {
     const restoreEnv = mockProcessEnv({
       PROMPTFOO_OFFICIAL_DOCKER_IMAGE: undefined,

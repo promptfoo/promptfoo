@@ -123,10 +123,12 @@ export function buildRemoteUrl(pathname: string, fallback: string): string | nul
 
 /**
  * Gets the URL for checking remote API health based on configuration.
- * @returns The health check URL, or null if remote generation is disabled.
+ * @returns The health check URL, or null when automatic health checks are disabled.
  */
 export function getRemoteHealthUrl(): string | null {
-  return buildRemoteUrl('/health', 'https://api.promptfoo.app/health');
+  return getEnvBool('PROMPTFOO_NO_NETWORK')
+    ? null
+    : buildRemoteUrl('/health', 'https://api.promptfoo.app/health');
 }
 
 /**

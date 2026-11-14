@@ -1,4 +1,4 @@
-import { getEnvString } from '../envars';
+import { getEnvBool, getEnvString } from '../envars';
 import { CloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
 import { fetchWithTimeout } from './fetch/index';
@@ -9,11 +9,24 @@ interface HealthResponse {
 }
 
 /**
+ * Whether PROMPTFOO_NO_NETWORK disables non-eval network egress. Callers
+ * that poll remote health must answer locally instead of reaching the
+ * remote endpoint when this is true.
+ */
+export function isNetworkEgressDisabled(): boolean {
+  return getEnvBool('PROMPTFOO_NO_NETWORK');
+}
+
+/**
  * Checks the health of the remote API.
  * @param url - The URL to check.
  * @returns A promise that resolves to the health check response.
  */
 export async function checkRemoteHealth(url: string): Promise<HealthResponse> {
+  if (isNetworkEgressDisabled()) {
+    return { status: 'DISABLED', message: 'network egress is disabled (PROMPTFOO_NO_NETWORK)' };
+  }
+
   logger.debug(
     `[CheckRemoteHealth] Checking API health: ${JSON.stringify({
       url,

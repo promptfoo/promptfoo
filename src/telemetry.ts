@@ -20,7 +20,11 @@ let posthogClient: PostHog | null = null;
 let isShuttingDown = false;
 
 function getPostHogClient(): PostHog | null {
-  if (getEnvBool('PROMPTFOO_DISABLE_TELEMETRY') || getEnvBool('IS_TESTING')) {
+  if (
+    getEnvBool('PROMPTFOO_DISABLE_TELEMETRY') ||
+    getEnvBool('IS_TESTING') ||
+    getEnvBool('PROMPTFOO_NO_NETWORK')
+  ) {
     return null;
   }
 
@@ -109,7 +113,7 @@ export class Telemetry {
   }
 
   get disabled() {
-    return getEnvBool('PROMPTFOO_DISABLE_TELEMETRY');
+    return getEnvBool('PROMPTFOO_DISABLE_TELEMETRY') || getEnvBool('PROMPTFOO_NO_NETWORK');
   }
 
   private recordTelemetryDisabled() {
@@ -129,6 +133,13 @@ export class Telemetry {
   }
 
   private sendEvent(eventName: TelemetryEventTypes, properties: EventProperties): void {
+    if (getEnvBool('PROMPTFOO_NO_NETWORK')) {
+      // No-egress guarantee: no telemetry event may leave the process, not
+      // even the "telemetry disabled" marker. (The marker is still emitted
+      // under plain PROMPTFOO_DISABLE_TELEMETRY.)
+      logger.debug('PROMPTFOO_NO_NETWORK is set: dropping telemetry event', { eventName });
+      return;
+    }
     const ciFlag = isCI();
     const personProperties = this.getPersonProperties(ciFlag);
     const propertiesWithMetadata = {
@@ -215,6 +226,10 @@ export class Telemetry {
    * This is a separate endpoint to save consent used only for redteam data synthesis for "harmful" plugins.
    */
   async saveConsent(email: string, metadata?: Record<string, string>): Promise<void> {
+    if (getEnvBool('PROMPTFOO_NO_NETWORK')) {
+      logger.debug('PROMPTFOO_NO_NETWORK is set: skipping license consent submission');
+      return;
+    }
     try {
       const response = await fetchWithTimeout(
         CONSENT_ENDPOINT,

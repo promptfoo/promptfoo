@@ -27,7 +27,7 @@ export async function getLatestVersion() {
 }
 
 export async function checkForUpdates(): Promise<boolean> {
-  if (getEnvBool('PROMPTFOO_DISABLE_UPDATE')) {
+  if (getEnvBool('PROMPTFOO_DISABLE_UPDATE') || getEnvBool('PROMPTFOO_NO_NETWORK')) {
     return false;
   }
 
@@ -98,7 +98,7 @@ export async function getModelAuditCurrentVersion(): Promise<string | null> {
 }
 
 export async function checkModelAuditUpdates(): Promise<boolean> {
-  if (getEnvBool('PROMPTFOO_DISABLE_UPDATE')) {
+  if (getEnvBool('PROMPTFOO_DISABLE_UPDATE') || getEnvBool('PROMPTFOO_NO_NETWORK')) {
     return false;
   }
 

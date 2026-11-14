@@ -84,7 +84,8 @@ const FAILURE_RETRY_DELAY = 60 * 1000; // 1 minute
 router.get('/', async (_req: Request, res: Response): Promise<void> => {
   try {
     const now = Date.now();
-    const updateChecksDisabled = getEnvBool('PROMPTFOO_DISABLE_UPDATE');
+    const updateChecksDisabled =
+      getEnvBool('PROMPTFOO_DISABLE_UPDATE') || getEnvBool('PROMPTFOO_NO_NETWORK');
     let latestVersion = updateChecksDisabled ? VERSION : versionCache.latestVersion;
 
     // A wall-clock rollback must not pin stale cache or failure-rate-limit state indefinitely.
