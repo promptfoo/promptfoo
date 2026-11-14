@@ -2124,7 +2124,20 @@
             "application/json": {
               "schema": {
                 "type": "object",
-                "properties": { "pass": { "type": "boolean" }, "score": { "type": "number" } },
+                "properties": {
+                  "pass": { "type": "boolean" },
+                  "score": { "type": "number" },
+                  "ratingAction": {
+                    "type": "string",
+                    "enum": ["rate", "clear", "update"],
+                    "description": "Rating intent. Omit for the legacy inferred-rating behavior."
+                  },
+                  "ratingUpdate": {
+                    "type": "string",
+                    "enum": ["score", "comment"],
+                    "description": "Field to update; required only when ratingAction is update."
+                  }
+                },
                 "required": ["pass", "score"],
                 "additionalProperties": {}
               }
@@ -2141,9 +2154,21 @@
                   "properties": {
                     "id": { "type": "string" },
                     "success": { "type": "boolean" },
-                    "score": { "type": "number" }
+                    "score": { "type": "number" },
+                    "failureReason": {
+                      "oneOf": [
+                        { "type": "number", "enum": [0] },
+                        { "type": "number", "enum": [1] },
+                        { "type": "number", "enum": [2] }
+                      ]
+                    },
+                    "gradingResult": {
+                      "type": ["object", "null"],
+                      "properties": {},
+                      "additionalProperties": {}
+                    }
                   },
-                  "required": ["id", "success", "score"],
+                  "required": ["id", "success", "score", "failureReason", "gradingResult"],
                   "additionalProperties": {}
                 }
               }

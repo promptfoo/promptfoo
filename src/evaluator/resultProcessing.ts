@@ -681,6 +681,7 @@ export function sanitizeGradingResultForDb<T>(gradingResult: T): T {
 export const PROMPTFOO_METADATA_KEY = '__promptfoo';
 const TRACE_LINKAGE_KEY = 'traceLinkage';
 const REPEAT_LINKAGE_KEY = 'repeatLinkage';
+const MANUAL_RATING_METADATA_KEY = 'manualRating';
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === 'object' && !Array.isArray(value)
@@ -688,16 +689,36 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
     : undefined;
 }
 
+function stripManualRatingStateFromMetadata<T extends Record<string, unknown> | null | undefined>(
+  metadata: T,
+): T {
+  const metadataRecord = asRecord(metadata);
+  const promptfooMetadata = asRecord(metadataRecord?.[PROMPTFOO_METADATA_KEY]);
+  if (!metadataRecord || !promptfooMetadata || !(MANUAL_RATING_METADATA_KEY in promptfooMetadata)) {
+    return metadata;
+  }
+
+  const { [MANUAL_RATING_METADATA_KEY]: _manualRating, ...remainingPromptfooMetadata } =
+    promptfooMetadata;
+  const strippedMetadata = { ...metadataRecord };
+  delete strippedMetadata[PROMPTFOO_METADATA_KEY];
+  if (Object.keys(remainingPromptfooMetadata).length > 0) {
+    strippedMetadata[PROMPTFOO_METADATA_KEY] = remainingPromptfooMetadata;
+  }
+  return strippedMetadata as T;
+}
+
 export function persistTraceMetadata(
   metadata: EvaluateResult['metadata'],
   traceId: EvaluateResult['traceId'],
   evaluationId: EvaluateResult['evaluationId'],
 ): EvaluateResult['metadata'] {
+  const publicMetadata = stripManualRatingStateFromMetadata(metadata);
   if (!traceId && !evaluationId) {
-    return stripTraceLinkageFromMetadata(metadata);
+    return stripTraceLinkageFromMetadata(publicMetadata);
   }
 
-  const metadataRecord = metadata ?? {};
+  const metadataRecord = publicMetadata ?? {};
   const promptfooMetadata = asRecord(metadataRecord[PROMPTFOO_METADATA_KEY]);
   if (metadataRecord[PROMPTFOO_METADATA_KEY] !== undefined && promptfooMetadata === undefined) {
     logger.warn(
@@ -823,7 +844,7 @@ export function surfaceTraceMetadata(metadata: Record<string, unknown> | null | 
   evaluationId?: string;
   metadata: Record<string, unknown>;
 } {
-  const metadataRecord = metadata ?? {};
+  const metadataRecord = stripManualRatingStateFromMetadata(metadata) ?? {};
   const promptfooMetadata = asRecord(metadataRecord[PROMPTFOO_METADATA_KEY]);
   const traceLinkage = asRecord(promptfooMetadata?.[TRACE_LINKAGE_KEY]);
 

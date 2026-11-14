@@ -167,8 +167,9 @@ export function mockCallApiRoutes(routes: MockApiRoute[]) {
       throw route.rejectWith;
     }
 
-    const body =
-      typeof route.response === 'function' ? route.response(path, options) : route.response;
+    const body = await (typeof route.response === 'function'
+      ? route.response(path, options)
+      : route.response);
     return createMockResponse(body, route);
   });
 

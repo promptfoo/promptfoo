@@ -106,6 +106,55 @@ describe('apiMocks', () => {
     );
   });
 
+  it.each([200, 400])(
+    'waits for deferred route bodies before delivering HTTP %s',
+    async (status) => {
+      let resolveBody!: (body: unknown) => void;
+      mockCallApiRoutes([
+        {
+          path: '/deferred',
+          status,
+          headers: { 'X-Test': 'deferred' },
+          response: () =>
+            new Promise((resolve) => {
+              resolveBody = resolve;
+            }),
+        },
+      ]);
+      let settled = false;
+      const pending = callApi('/deferred').then((response) => {
+        settled = true;
+        return response;
+      });
+      await Promise.resolve();
+      expect(settled).toBe(false);
+      await expect(callApi('/unexpected')).rejects.toThrow('Unhandled GET callApi request');
+      resolveBody({ ready: true });
+      const response = await pending;
+      expect(response.status).toBe(status);
+      expect(response.ok).toBe(status === 200);
+      expect(response.headers.get('X-Test')).toBe('deferred');
+      await expect(response.json()).resolves.toEqual({ ready: true });
+      await expect(response.text()).resolves.toBe('{"ready":true}');
+    },
+  );
+
+  it('rejects callApi when an asynchronous route response fails', async () => {
+    let rejectResponse!: (reason: Error) => void;
+    mockCallApiRoutes([
+      {
+        path: '/deferred',
+        response: () =>
+          new Promise((_resolve, reject) => {
+            rejectResponse = reject;
+          }),
+      },
+    ]);
+    const rejected = expect(callApi('/deferred')).rejects.toThrow('Connection lost');
+    rejectResponse(new Error('Connection lost'));
+    await rejected;
+  });
+
   it('rejects calls that do not match the next route method', async () => {
     mockCallApiRoutes([{ method: 'POST', path: '/submit', response: { ok: true } }]);
 

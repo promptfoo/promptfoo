@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from 'react';
 
 import EnterpriseBanner from '@app/components/EnterpriseBanner';
 import { Spinner } from '@app/components/ui/spinner';
@@ -34,6 +34,13 @@ interface EvalOptions {
 
 /** Payload the view-server socket emits on its 'init' / 'update' events. */
 type EvalRefreshSignal = { deletedEvalIds?: string[]; evalId?: string } | null;
+
+type EvalLoadGeneration = {
+  backgroundPending: number;
+  foregroundFailed: boolean;
+  foregroundPending: boolean;
+  succeeded: boolean;
+};
 
 function parseFiltersParam(filtersParam: string | null): ResultsFilter[] | null {
   if (!filtersParam) {
@@ -77,6 +84,8 @@ export default function Eval({ fetchId }: EvalOptions) {
   } = useTableStore();
 
   const { filterMode } = useFilterMode();
+  const filterParam = new URLSearchParams(location.search).get('filter');
+  const urlFilters = useMemo(() => parseFiltersParam(filterParam), [filterParam]);
 
   const { setInComparisonMode, setComparisonEvalIds } = useResultsViewSettingsStore();
 
@@ -89,8 +98,12 @@ export default function Eval({ fetchId }: EvalOptions) {
   const [recentEvals, setRecentEvals] = useState<ResultLightweightWithLabel[]>([]);
   const [defaultEvalId, setDefaultEvalId] = useState<string | undefined>(undefined);
   const isHydratingFiltersRef = useRef(false);
-  const currentEvalIdRef = useRef(evalId);
-  currentEvalIdRef.current = evalId;
+  const loadStateRef = useRef<EvalLoadGeneration>({
+    backgroundPending: 0,
+    foregroundFailed: false,
+    foregroundPending: false,
+    succeeded: table !== null,
+  });
 
   // ================================
   // Handlers
@@ -120,38 +133,86 @@ export default function Eval({ fetchId }: EvalOptions) {
    * @param {boolean} isBackgroundUpdate - Whether this is a background update (e.g., from socket) that shouldn't show loading state
    * @returns {Boolean} Whether the eval was loaded successfully.
    */
-  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
-  const loadEvalById = useCallback(
-    async (id: string, isBackgroundUpdate = false) => {
-      try {
-        setEvalId(id);
-
-        const { filters } = useTableStore.getState();
-
-        const data = await fetchEvalData(id, {
-          skipSettingEvalId: true,
-          skipLoadingState: isBackgroundUpdate,
-          filterMode,
-          filters: Object.values(filters.values).filter((filter) =>
-            filter.type === 'metadata'
-              ? Boolean(filter.value && filter.field)
-              : Boolean(filter.value),
-          ),
-        });
-
-        if (!data) {
-          setFailed(true);
-          return false;
-        }
-        return true;
-      } catch (error) {
-        console.error('Error loading eval:', error);
-        setFailed(true);
-        return false;
+  const loadEvalById = useEffectEvent(async (id: string, isBackgroundUpdate = false) => {
+    const isSameEvalBackgroundUpdate = isBackgroundUpdate && useTableStore.getState().evalId === id;
+    const loadState = isBackgroundUpdate
+      ? loadStateRef.current
+      : {
+          backgroundPending: 0,
+          foregroundFailed: false,
+          foregroundPending: true,
+          succeeded: false,
+        };
+    if (isBackgroundUpdate) {
+      loadState.backgroundPending += 1;
+    } else {
+      loadStateRef.current = loadState;
+    }
+    const isCurrentLoad = () => loadStateRef.current === loadState;
+    const reportFailureIfSettled = () => {
+      if (
+        !isCurrentLoad() ||
+        loadState.succeeded ||
+        loadState.foregroundPending ||
+        loadState.backgroundPending > 0
+      ) {
+        return;
       }
-    },
-    [fetchEvalData, setFailed, setEvalId, filterMode],
-  );
+      if (loadState.foregroundFailed || useTableStore.getState().table === null) {
+        setFailed(true);
+      }
+    };
+    let succeeded = false;
+    let superseded = false;
+    try {
+      if (!isBackgroundUpdate && useTableStore.getState().evalId !== id) {
+        // The parent owns the new eval's initial load. Do not let the previous table
+        // issue page/filter requests or display results under the new id while it loads.
+        setTable(null);
+        setLoaded(false);
+      }
+      // A root-route refresh for a different eval is committed by fetchEvalData only after
+      // its response succeeds; eagerly changing evalId would pair the old table with a new id.
+      if (!isBackgroundUpdate || isSameEvalBackgroundUpdate) {
+        setEvalId(id);
+      }
+
+      const { filters } = useTableStore.getState();
+
+      const data = await fetchEvalData(id, {
+        skipSettingEvalId: !isBackgroundUpdate || isSameEvalBackgroundUpdate,
+        skipLoadingState: isBackgroundUpdate,
+        filterMode,
+        filters: Object.values(filters.values).filter((filter) =>
+          filter.type === 'metadata'
+            ? Boolean(filter.value && filter.field)
+            : Boolean(filter.value),
+        ),
+      });
+      superseded = data === undefined;
+      succeeded = data !== null && !superseded;
+      return succeeded;
+    } catch (error) {
+      console.error('Error loading eval:', error);
+      return false;
+    } finally {
+      if (isBackgroundUpdate) {
+        loadState.backgroundPending = Math.max(0, loadState.backgroundPending - 1);
+      } else {
+        loadState.foregroundPending = false;
+        loadState.foregroundFailed = !succeeded && !superseded;
+      }
+      if (succeeded && isCurrentLoad()) {
+        loadState.succeeded = true;
+        setFailed(false);
+      }
+      // ResultsTable can supersede this load when its page or filters change.
+      // Its request owns the result; cancellation is not an eval-not-found failure.
+      if (!superseded) {
+        reportFailureIfSettled();
+      }
+    }
+  });
 
   const clearEvalState = useCallback(() => {
     setTable(null);
@@ -165,9 +226,9 @@ export default function Eval({ fetchId }: EvalOptions) {
    * Populates the table store from a websocket signal. Explicit /eval/:id routes stay
    * pinned (they only reload when their own eval changes), while the root /eval route
    * follows the latest eval. Held in a ref (below) so the socket effect never has to tear
-   * down and reopen the connection when this handler's dependencies (e.g. filterMode via
-   * loadEvalById, or fetchId on navigation) change.
+   * down and reopen the connection when the route changes.
    */
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: existing routing distinguishes pinned, latest, scoped, and deletion signals
   const handleResultsFile = async (data: EvalRefreshSignal) => {
     if (!data) {
       logger.debug('[Eval] No eval data available', {});
@@ -228,7 +289,8 @@ export default function Eval({ fetchId }: EvalOptions) {
     }
 
     const latestEvalId = newRecentEvals[0].evalId;
-    const displayedEvalId = fetchId ?? currentEvalIdRef.current;
+    const currentEvalId = useTableStore.getState().evalId;
+    const displayedEvalId = fetchId ?? currentEvalId;
     setDefaultEvalId(latestEvalId);
 
     if (deletedEvalIds) {
@@ -246,7 +308,7 @@ export default function Eval({ fetchId }: EvalOptions) {
     const shouldReload =
       fetchId === null
         ? scopedEvalId === undefined ||
-          scopedEvalId === currentEvalIdRef.current ||
+          scopedEvalId === currentEvalId ||
           scopedEvalId === latestEvalId
         : scopedEvalId === fetchId;
     if (shouldReload) {
@@ -346,28 +408,32 @@ export default function Eval({ fetchId }: EvalOptions) {
     return () => unsubscribe();
   }, [replaceSearchParams]);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
+  // Report drill-downs can change filters without selecting a different eval.
   useEffect(() => {
-    const _searchParams = new URLSearchParams(window.location.search);
-
-    // Use getState() to avoid adding functions to dependencies
-    const { resetFilters: doResetFilters, addFilter: doAddFilter } = useTableStore.getState();
-
-    // Read search params
-    const filters = parseFiltersParam(_searchParams.get('filter'));
+    const { filters, resetFilters, addFilter } = useTableStore.getState();
+    // The subscription already wrote these values to the URL; preserve their UI identities.
+    if ((filterParam || '[]') === JSON.stringify(Object.values(filters.values))) {
+      return;
+    }
 
     isHydratingFiltersRef.current = true;
     try {
-      doResetFilters();
-      filters?.forEach((filter) => {
-        doAddFilter(filter);
-      });
+      resetFilters();
+      urlFilters?.forEach(addFilter);
     } finally {
       isHydratingFiltersRef.current = false;
     }
-
-    if (!filters) {
+    if (!urlFilters) {
       showToast('Invalid filter parameter in URL: filters must be valid JSON', 'error');
+    }
+  }, [filterParam, urlFilters, showToast]);
+
+  // Selection follows the API and route; ResultsTable owns filter and pagination requests.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: URL hydration and table effects own query changes
+  useEffect(() => {
+    // API changes can retire settled queues even when the new server never sends an init.
+    useTableStore.getState().pruneInactiveRatingQueues();
+    if (!urlFilters) {
       return;
     }
 
@@ -409,11 +475,9 @@ export default function Eval({ fetchId }: EvalOptions) {
     apiBaseUrl,
     clearEvalState,
     fetchId,
-    loadEvalById,
     setDefaultEvalId,
     setInComparisonMode,
     setComparisonEvalIds,
-    // Note: resetFilters and addFilter are accessed via getState() to avoid dependency issues
   ]);
 
   // The websocket only needs to be rebuilt when its connection target (apiBaseUrl) changes.
