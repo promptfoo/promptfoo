@@ -1750,7 +1750,7 @@ describe('readTests', () => {
       vi.mocked(globSync).mockImplementation((pattern) =>
         Object.keys(files).filter(
           (file) =>
-            path.dirname(file) === path.dirname(String(pattern)) &&
+            path.dirname(file) === path.dirname(path.resolve(String(pattern))) &&
             file.endsWith(path.extname(String(pattern))),
         ),
       );
@@ -1782,7 +1782,7 @@ describe('readTests', () => {
         GLOB_LITERAL: 'nomatch',
       };
       vi.mocked(globSync).mockImplementation((pattern) =>
-        String(pattern) === path.resolve('{{ env.GLOB_LITERAL }}/*.csv')
+        path.resolve(String(pattern)) === path.resolve('{{ env.GLOB_LITERAL }}/*.csv')
           ? [path.resolve('tests/a.csv')]
           : [],
       );
@@ -1957,8 +1957,10 @@ describe('loadTestsFromGlob', () => {
     const testsFile = path.join(configDir, 'tests', 'cases.yaml');
     const varsFile = path.join(configDir, 'vars', 'extra.yaml');
     vi.mocked(fs.existsSync).mockImplementation((file) => file === testsFile);
-    vi.mocked(globSync).mockImplementation((pattern) =>
-      pattern === path.join(configDir, 'vars', '*.yaml') ? [varsFile] : [],
+    vi.mocked(globSync).mockImplementation((pattern, options) =>
+      path.resolve(String(options?.cwd), String(pattern)) === path.join(configDir, 'vars', '*.yaml')
+        ? [varsFile]
+        : [],
     );
     vi.mocked(fs.readFileSync).mockImplementation((file) =>
       file === varsFile

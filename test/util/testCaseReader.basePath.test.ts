@@ -3,7 +3,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { readTestFiles } from '../../src/util/testCaseReader';
+import { readTestFiles, resolveTestsWatchPaths } from '../../src/util/testCaseReader';
 
 describe('vars files under a bracketed base directory', () => {
   let directory: string;
@@ -13,6 +13,7 @@ describe('vars files under a bracketed base directory', () => {
     for (const [folder, filename, contents] of [
       ['suite[ab]', 'vars.yaml', 'chosen: own'],
       ['suite[ab]', 'extra.yaml', 'extra: own-extra'],
+      ['suite{a,b}', 'vars.yaml', 'brace: own'],
       ['suitea', 'vars.yaml', 'wrongA: sibling'],
       ['suiteb', 'vars.yaml', 'wrongB: sibling'],
       ['common', 'vars.yaml', 'parent: expected'],
@@ -34,6 +35,17 @@ describe('vars files under a bracketed base directory', () => {
     await expect(readTestFiles('vars.yaml', path.join(directory, 'suite[ab]'))).resolves.toEqual({
       chosen: 'own',
     });
+  });
+
+  it('keeps base directory braces literal while expanding the file pattern', async () => {
+    await expect(
+      readTestFiles('vars.{yaml,json}', path.join(directory, 'suite{a,b}')),
+    ).resolves.toEqual({
+      brace: 'own',
+    });
+    expect(resolveTestsWatchPaths('vars.{yaml,json}', path.join(directory, 'suite{a,b}'))).toEqual([
+      path.join(directory, 'suite{a,b}', 'vars.yaml'),
+    ]);
   });
 
   it('expands authored globs inside the exact base directory', async () => {

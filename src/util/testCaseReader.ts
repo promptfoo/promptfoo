@@ -6,7 +6,7 @@ import { parse as parsePath } from 'path';
 import $RefParser from '@apidevtools/json-schema-ref-parser';
 import { parse as parseCsv } from 'csv-parse/sync';
 import dedent from 'dedent';
-import { escape as escapeGlob, globSync, hasMagic } from 'glob';
+import { globSync, hasMagic } from 'glob';
 import cliState from '../cliState';
 import { testCaseFromCsvRow } from '../csv';
 import { getEnvBool, getEnvString } from '../envars';
@@ -64,6 +64,17 @@ function isRemoteTestCase(test: TestCaseWithVarsFile): boolean {
   return test.metadata?.__promptfoo?.remote === true;
 }
 
+function globFromBase(pattern: string, basePath: string): string[] {
+  const cwd = path.resolve(basePath);
+  const resolved = path.resolve(cwd, pattern);
+  const relative = path.relative(cwd, resolved);
+  // The literal directory stays outside the glob. A leading ./ preserves globstar
+  // traversal of directory links at the first level of a relative pattern.
+  const fromBase =
+    path.isAbsolute(pattern) || path.isAbsolute(relative) ? resolved : `./${relative}`;
+  return globSync(fromBase, { cwd, absolute: true, windowsPathsNoEscape: true });
+}
+
 export async function readTestFiles(
   pathOrGlobs: string | string[],
   basePath: string = cliState.basePath || '',
@@ -74,14 +85,7 @@ export async function readTestFiles(
 
   const ret: Record<string, string | string[] | object> = {};
   for (const pathOrGlob of pathOrGlobs) {
-    const resolvedPath = path.resolve(
-      escapeGlob(path.resolve(basePath), { windowsPathsNoEscape: true }),
-      pathOrGlob,
-    );
-
-    const paths = globSync(resolvedPath, {
-      windowsPathsNoEscape: true,
-    });
+    const paths = globFromBase(pathOrGlob, basePath);
 
     for (const p of paths) {
       const rawData = loadYaml(await fsPromises.readFile(p, 'utf-8'));
@@ -645,15 +649,7 @@ async function loadTestsFromGlobWithEnv(
 
   const testFiles: string[] = fs.existsSync(resolvedPath)
     ? [resolvedPath]
-    : globSync(
-        path.resolve(
-          escapeGlob(path.resolve(basePath), { windowsPathsNoEscape: true }),
-          path.relative(path.resolve(basePath), resolvedPath),
-        ),
-        {
-          windowsPathsNoEscape: true,
-        },
-      );
+    : globFromBase(path.relative(path.resolve(basePath), resolvedPath), basePath);
 
   // Check for possible function names in the path (Windows-aware)
   const pathWithoutFunction = stripFunctionSuffix(resolvedPath);
@@ -926,13 +922,7 @@ function resolveTestsFileReference(reference: string, basePath: string): string[
 
   const resolved = path.resolve(basePath, withoutScheme);
   if (hasGlobMagic(withoutScheme)) {
-    const matches = globSync(
-      path.resolve(
-        escapeGlob(path.resolve(basePath), { windowsPathsNoEscape: true }),
-        path.relative(path.resolve(basePath), resolved),
-      ),
-      { windowsPathsNoEscape: true },
-    );
+    const matches = globFromBase(path.relative(path.resolve(basePath), resolved), basePath);
     if (matches.length > 0) {
       return matches.map((match) => getExcelWorkbookPath(match) ?? match);
     }
