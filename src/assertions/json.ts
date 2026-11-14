@@ -10,6 +10,7 @@ export function handleIsJson({
   renderedValue,
   inverse,
   valueFromScript,
+  strictJsonSchema,
   assertion,
 }: AssertionParams): GradingResult {
   let parsedJson;
@@ -28,13 +29,13 @@ export function handleIsJson({
         // Reference the JSON schema from external file
         const schema = valueFromScript;
         invariant(schema, 'is-json references a file that does not export a JSON schema');
-        validate = getAjv().compile(schema as object);
+        validate = getAjv(strictJsonSchema).compile(schema as object);
       } else {
         const scheme = loadYaml(renderedValue) as object;
-        validate = getAjv().compile(scheme);
+        validate = getAjv(strictJsonSchema).compile(scheme);
       }
     } else if (typeof renderedValue === 'object') {
-      validate = getAjv().compile(renderedValue);
+      validate = getAjv(strictJsonSchema).compile(renderedValue);
     } else {
       throw new Error('is-json assertion must have a string or object value');
     }
@@ -46,9 +47,9 @@ export function handleIsJson({
         score: 0,
         reason: inverse
           ? 'Output is JSON that conforms to the provided schema'
-          : `JSON does not conform to the provided schema. Errors: ${getAjv().errorsText(
-              validate.errors,
-            )}`,
+          : `JSON does not conform to the provided schema. Errors: ${getAjv(
+              strictJsonSchema,
+            ).errorsText(validate.errors)}`,
         assertion,
       };
     }
@@ -68,6 +69,7 @@ export function handleContainsJson({
   outputString,
   inverse,
   valueFromScript,
+  strictJsonSchema,
 }: AssertionParams): GradingResult {
   let errorMessage = `Expected output to ${inverse ? 'not ' : ''}contain valid JSON`;
   const jsonObjects = extractJsonObjects(outputString);
@@ -80,13 +82,13 @@ export function handleContainsJson({
           // Reference the JSON schema from external file
           const schema = valueFromScript;
           invariant(schema, 'contains-json references a file that does not export a JSON schema');
-          validate = getAjv().compile(schema as object);
+          validate = getAjv(strictJsonSchema).compile(schema as object);
         } else {
           const scheme = loadYaml(renderedValue) as object;
-          validate = getAjv().compile(scheme);
+          validate = getAjv(strictJsonSchema).compile(scheme);
         }
       } else if (typeof renderedValue === 'object') {
-        validate = getAjv().compile(renderedValue);
+        validate = getAjv(strictJsonSchema).compile(renderedValue);
       } else {
         throw new Error('contains-json assertion must have a string or object value');
       }
@@ -98,9 +100,9 @@ export function handleContainsJson({
         }
         break;
       } else {
-        errorMessage = `JSON does not conform to the provided schema. Errors: ${getAjv().errorsText(
-          validate.errors,
-        )}`;
+        errorMessage = `JSON does not conform to the provided schema. Errors: ${getAjv(
+          strictJsonSchema,
+        ).errorsText(validate.errors)}`;
       }
     }
   }

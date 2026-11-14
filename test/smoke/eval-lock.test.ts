@@ -64,6 +64,19 @@ describe('eval lock CLI', () => {
     );
   }
 
+  it('keeps a missed locked threshold nonzero even with a success exit code override', () => {
+    const selectedLock = path.join(tempDir, 'exit-code.lock.json');
+    const locked = runEval(['--lock', selectedLock], '100', FIXTURE_PATH, {
+      PROMPTFOO_FAILED_TEST_EXIT_CODE: '0',
+    });
+    expect(locked.status, locked.stderr || locked.stdout).toBe(100);
+
+    const verified = runEval(['--verify', selectedLock], '0', FIXTURE_PATH, {
+      PROMPTFOO_FAILED_TEST_EXIT_CODE: '256',
+    });
+    expect(verified.status, verified.stderr || verified.stdout).toBe(100);
+  });
+
   it('keeps provider context mutations from satisfying a locked assertion', () => {
     const providerPath = path.join(tempDir, 'mutating-provider.cjs');
     const selectedConfig = path.join(tempDir, 'mutating.yaml');

@@ -1216,6 +1216,9 @@ async function gradeRunEvalResponse({
     providerTransformedOutput,
   };
 
+  // Registers, prompt functions, and target transforms can change runtime vars.
+  // In a locked run only the committed, expanded test vars may define a criterion.
+  const gradingVars = lockIntegrity ? (test.vars ?? {}) : vars;
   if (deferGrading) {
     invariant(providerCallQueue, 'providerCallQueue is required when deferGrading is enabled');
     ret.response = processedResponse;
@@ -1227,11 +1230,12 @@ async function gradeRunEvalResponse({
           provider,
           providerResponse: assertionProviderResponse,
           test,
-          vars,
+          vars: gradingVars,
           latencyMs: response.latencyMs ?? latencyMs,
           assertScoringFunction: test.assertScoringFunction as ScoringFunction,
           traceId,
           disableTemplating: lockIntegrity?.disableTemplating,
+          strictJsonSchema: lockIntegrity ? true : undefined,
         }).then((checkResult) => applyGradingResult(ret, checkResult)),
     ).catch((error) => {
       applyGradingError(ret, error, deferredGradingAbortSignal);
@@ -1249,11 +1253,12 @@ async function gradeRunEvalResponse({
           provider,
           providerResponse: assertionProviderResponse,
           test,
-          vars,
+          vars: gradingVars,
           latencyMs: response.latencyMs ?? latencyMs,
           assertScoringFunction: test.assertScoringFunction as ScoringFunction,
           traceId,
           disableTemplating: lockIntegrity?.disableTemplating,
+          strictJsonSchema: lockIntegrity ? true : undefined,
         }),
     );
     applyGradingResult(ret, checkResult);

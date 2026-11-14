@@ -129,7 +129,6 @@ const DATA_ONLY_ASSERTION_TYPES = new Set([
   'is-xml',
   'latency',
   'levenshtein',
-  'max-score',
   'meteor',
   'perplexity',
   'perplexity-score',
@@ -320,7 +319,21 @@ function portableProviderRef(provider: unknown): unknown {
   return { ...portableProvider, config: portableConfig };
 }
 
-function validateDataOnlyAssertions(assertions: unknown): void {
+function validateAssertionTemplate(value: unknown): void {
+  if (typeof value !== 'string') {
+    return;
+  }
+  // Remaining templates run during grading, after the lock has been verified.
+  // Only literal text and lookups on committed test variables are self-contained.
+  const literal = value.replace(/\{\{\s*(?!env\b)[a-zA-Z_]\w*(?:\.[a-zA-Z_]\w*)*\s*\}\}/g, '');
+  if (/\{[{%#]/.test(literal)) {
+    throw new Error(
+      'Evaluation locks only support literal assertion templates and simple test variable references such as {{expected}} or {{data.expected}}',
+    );
+  }
+}
+
+function validateDataOnlyAssertions(assertions: unknown, disableTemplating: boolean): void {
   if (!Array.isArray(assertions)) {
     return;
   }
@@ -330,8 +343,14 @@ function validateDataOnlyAssertions(assertions: unknown): void {
     if (!assertion || typeof assertion.type !== 'string') {
       continue;
     }
+    if (!disableTemplating) {
+      validateAssertionTemplate(assertion.metric);
+      for (const value of Array.isArray(assertion.value) ? assertion.value : [assertion.value]) {
+        validateAssertionTemplate(value);
+      }
+    }
     if (assertion.type === 'assert-set') {
-      validateDataOnlyAssertions(assertion.assert);
+      validateDataOnlyAssertions(assertion.assert, disableTemplating);
       continue;
     }
 
@@ -351,7 +370,7 @@ function validateDataOnlyAssertions(assertions: unknown): void {
   }
 }
 
-function validateDataOnlyTest(test: Record<string, unknown>): void {
+function validateDataOnlyTest(test: Record<string, unknown>, disableTemplating: boolean): void {
   if (test.prompts !== undefined || test.providers !== undefined) {
     throw new Error(
       'Evaluation locks do not support prompt or provider selectors: every locked test must run for each selected target and prompt',
@@ -370,10 +389,10 @@ function validateDataOnlyTest(test: Record<string, unknown>): void {
       );
     }
   }
-  validateDataOnlyAssertions(test.assert);
+  validateDataOnlyAssertions(test.assert, disableTemplating);
 }
 
-function validateDataOnlyCriteria(testSuite: EvalBarSource): void {
+function validateDataOnlyCriteria(testSuite: EvalBarSource, disableTemplating: boolean): void {
   const defaultTest = asRecord(testSuite.defaultTest);
   const tests = Array.isArray(testSuite.tests) ? testSuite.tests : [];
   const scenarios = Array.isArray(testSuite.scenarios) ? testSuite.scenarios : [];
@@ -385,12 +404,12 @@ function validateDataOnlyCriteria(testSuite: EvalBarSource): void {
   }
 
   if (defaultTest) {
-    validateDataOnlyTest(defaultTest);
+    validateDataOnlyTest(defaultTest, disableTemplating);
   }
   for (const testValue of tests) {
     const test = asRecord(testValue);
     if (test) {
-      validateDataOnlyTest(test);
+      validateDataOnlyTest(test, disableTemplating);
     }
   }
 
@@ -403,11 +422,11 @@ function validateDataOnlyCriteria(testSuite: EvalBarSource): void {
       if (!scenarioConfig) {
         continue;
       }
-      validateDataOnlyTest(scenarioConfig);
+      validateDataOnlyTest(scenarioConfig, disableTemplating);
       for (const testValue of scenarioTests) {
         const test = asRecord(testValue);
         if (test) {
-          validateDataOnlyTest(test);
+          validateDataOnlyTest(test, disableTemplating);
         }
       }
     }
@@ -595,7 +614,7 @@ export function createEvalBar(
       'Evaluation locks do not support custom Nunjucks filters because filters can execute against mutable runtime state',
     );
   }
-  validateDataOnlyCriteria(testSuite);
+  validateDataOnlyCriteria(testSuite, execution.disableTemplating ?? false);
 
   if (
     testSuite.providerPromptMap != null ||
@@ -666,9 +685,21 @@ export function hashManifest(manifest: Record<string, unknown>): string {
   return sha256(canonicalPrml(manifest));
 }
 
+// Shift the decimal exponent only once. Dividing the binary approximation of
+// 7.2 by 100 produces 0.07200000000000001 and wrongly rejects 9 passes in 125.
+function shiftDecimal(value: number, places: number): number {
+  const [coefficient, exponent] = value.toExponential().split('e');
+  return Number(`${coefficient}e${Number(exponent) + places}`);
+}
+
 export function createEvalLock(bar: EvalBar, thresholdPercent: number): EvalLockFile {
   if (!Number.isFinite(thresholdPercent) || thresholdPercent < 0 || thresholdPercent > 100) {
     throw new Error('PROMPTFOO_PASS_RATE_THRESHOLD must be between 0 and 100 to create a lock');
+  }
+
+  const threshold = shiftDecimal(thresholdPercent, -2);
+  if (thresholdPercent > 0 && threshold === 0) {
+    throw new Error('Pass-rate threshold is too small to represent in the evaluation lock');
   }
 
   const manifest: PrmlManifest = {
@@ -677,7 +708,7 @@ export function createEvalLock(bar: EvalBar, thresholdPercent: number): EvalLock
     created_at: new Date().toISOString(),
     metric: 'pass_rate',
     comparator: '>=',
-    threshold: thresholdPercent / 100,
+    threshold,
     dataset: {
       id: 'promptfoo-resolved-eval-bar-v1',
       hash: hashEvalBar(bar),
@@ -743,5 +774,5 @@ export async function verifyEvalLock(lockPath: string, bar: EvalBar): Promise<Ev
 }
 
 export function lockedThresholdPercent(lock: EvalLockFile): number {
-  return lock.manifest.threshold * 100;
+  return shiftDecimal(lock.manifest.threshold, 2);
 }

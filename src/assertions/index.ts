@@ -447,6 +447,7 @@ async function runAssertionInternal({
   traceData,
   claimStoredGradingUsage,
   disableTemplating,
+  strictJsonSchema,
 }: {
   prompt?: string;
   provider?: ApiProvider;
@@ -460,6 +461,7 @@ async function runAssertionInternal({
   traceData?: TraceData | null;
   claimStoredGradingUsage?: () => boolean;
   disableTemplating?: boolean;
+  strictJsonSchema?: boolean;
 }): Promise<GradingResult> {
   // Use resolved vars if provided, otherwise fall back to test.vars
   const resolvedVars = vars || test.vars || {};
@@ -657,6 +659,7 @@ async function runAssertionInternal({
 
   const assertionParams: AssertionParams = {
     assertion,
+    strictJsonSchema,
     baseType: getAssertionBaseType(assertion),
     providerCallContext,
     assertionValueContext: context,
@@ -779,6 +782,7 @@ export async function runAssertions({
   vars,
   traceId,
   disableTemplating,
+  strictJsonSchema,
 }: {
   assertScoringFunction?: ScoringFunction;
   latencyMs?: number;
@@ -789,6 +793,7 @@ export async function runAssertions({
   vars?: Record<string, VarValue>;
   traceId?: string;
   disableTemplating?: boolean;
+  strictJsonSchema?: boolean;
 }): Promise<GradingResult> {
   if (!test.assert || test.assert.length < 1) {
     return AssertionsResult.noAssertsResult();
@@ -885,6 +890,7 @@ export async function runAssertions({
       traceData: preloadedTraceData,
       claimStoredGradingUsage,
       disableTemplating,
+      strictJsonSchema,
     });
 
     assertResult.addResult({

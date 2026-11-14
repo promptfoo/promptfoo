@@ -67,3 +67,25 @@ describe('locked template interpretation', () => {
     }
   });
 });
+
+describe('locked JSON schema validation', () => {
+  it('keeps strict schema validation under a relaxed environment', async () => {
+    const restore = mockProcessEnv({ PROMPTFOO_DISABLE_AJV_STRICT_MODE: 'true' });
+    const options = {
+      assertion: { type: 'is-json' as const, value: { type: 'object', customAnnotation: true } },
+      test: {},
+      providerResponse: { output: '{}' },
+    };
+    try {
+      expect((await runAssertion(options)).pass).toBe(true);
+      await expect(
+        runAssertion({
+          ...options,
+          strictJsonSchema: true,
+        }),
+      ).rejects.toThrow('unknown keyword');
+    } finally {
+      restore();
+    }
+  });
+});

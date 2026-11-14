@@ -15,8 +15,7 @@ export function resetAjv(): void {
   ajvInstances.clear();
 }
 
-export function getAjv(): Ajv {
-  const strictSchema = !getEnvBool('PROMPTFOO_DISABLE_AJV_STRICT_MODE');
+export function getAjv(strictSchema = !getEnvBool('PROMPTFOO_DISABLE_AJV_STRICT_MODE')): Ajv {
   let ajvInstance = ajvInstances.get(strictSchema);
   if (!ajvInstance) {
     ajvInstance = new Ajv({ strictSchema });

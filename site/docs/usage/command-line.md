@@ -185,7 +185,7 @@ The lock hashes the resolved default test, tests, assertions, scenarios, repeat 
 
 The initial lock format admits only built-in, data-only assertions such as equality, containment, regular-expression, structured-data, count, distance, trace, and local scoring checks. It rejects provider-backed or model-graded assertions, redteam criteria, scripts, webhooks, manual or comparative grading, assertion and test transforms, custom scoring functions, custom Nunjucks filters, extension hooks, progress callbacks, in-memory functions, undefined values, and unresolved `file://` or `package:` references. This explicit boundary prevents deferred code or ambient runtime state from silently changing the effective acceptance criterion after registration. Replace dynamic criteria with static, data-backed checks before locking. Sampling requires `--filter-sample-seed` so the selected tests can be reproduced. The lock path must also be different from every configured eval output path.
 
-Every locked test must apply to every selected target and prompt. The initial format rejects per-test `prompts`/`providers` selectors, provider `prompts` selectors, and `providerPromptMap`; these can otherwise omit failing cases without changing the test definitions. You can change the prompts and models under evaluation while keeping the complete test set. Criteria must use plain JSON data: undefined values, sparse arrays, negative zero, and class instances are rejected rather than hashed lossily. The lock also binds `PROMPTFOO_DISABLE_TEMPLATING` and `PROMPTFOO_DISABLE_VAR_EXPANSION`.
+Every locked test must apply to every selected target and prompt. The initial format rejects per-test `prompts`/`providers` selectors, provider `prompts` selectors, and `providerPromptMap`; these can otherwise omit failing cases without changing the test definitions. You can change the prompts and models under evaluation while keeping the complete test set. Criteria must use plain JSON data: undefined values, sparse arrays, negative zero, and class instances are rejected rather than hashed lossily. The lock also binds `PROMPTFOO_DISABLE_TEMPLATING` and `PROMPTFOO_DISABLE_VAR_EXPANSION`. With templating enabled, assertion values and metric names can interpolate plain test variable paths such as `{{expected}}` or `{{data.expected}}`. Grading reads the committed values from each expanded test. Runtime expressions, filters, and template includes must be resolved before registration. Locked JSON assertions use strict schema validation even when `PROMPTFOO_DISABLE_AJV_STRICT_MODE` is enabled.
 
 Locked runs give target providers separate copies of the test, variables, and prompt context so context mutations cannot change the grading criteria. Custom JavaScript still runs in the same process and must be trusted; evaluation locks do not sandbox providers.
 
@@ -195,7 +195,7 @@ Use `--verify` for a later run. Verification happens before provider calls, and 
 promptfoo eval -c promptfooconfig.yaml --verify eval.lock.json
 ```
 
-A changed manifest or eval bar exits with code `3`. A valid lock whose run misses the locked threshold uses the normal failed-test exit code (`100` by default). `--lock` and `--verify` cannot be combined with each other, `--watch`, `--resume`, or `--retry-errors`.
+A changed manifest or eval bar exits with code `3`. A valid lock whose run misses the locked threshold uses the normal failed-test exit code (`100` by default). Locked runs use `100` if the configured failure exit code is outside the range 1–255. `--lock` and `--verify` cannot be combined with each other, `--watch`, `--resume`, or `--retry-errors`.
 
 An interrupted locked run exits with code `130` and does not satisfy the gate. Start a new `--verify` run to evaluate the complete locked bar.
 
@@ -205,7 +205,7 @@ The lock is a hash commitment, not a signature or timestamp. Store it in a prote
 
 :::
 
-The `eval` command will return exit code `100` when there is at least 1 test case failure or when the pass rate is below the threshold set by `PROMPTFOO_PASS_RATE_THRESHOLD`. It returns exit code `3` for a tampered or unverifiable eval lock and exit code `1` for other errors. The exit code for failed tests can be overridden with environment variable `PROMPTFOO_FAILED_TEST_EXIT_CODE`.
+The `eval` command will return exit code `100` when there is at least 1 test case failure or when the pass rate is below the threshold set by `PROMPTFOO_PASS_RATE_THRESHOLD`. It returns exit code `3` for a tampered or unverifiable eval lock and exit code `1` for other errors. The exit code for failed tests can be overridden with environment variable `PROMPTFOO_FAILED_TEST_EXIT_CODE`. Locked gates accept overrides from 1 to 255 and fall back to 100 for other values.
 
 ## `promptfoo optimize`
 

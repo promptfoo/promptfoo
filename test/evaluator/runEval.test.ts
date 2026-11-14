@@ -117,6 +117,23 @@ describe('runEval', () => {
     expect(test.vars).toEqual({ expected: 'trusted' });
   });
 
+  it('grades locked templates against committed test vars when a register overrides one', async () => {
+    const [result] = await runEval({
+      ...defaultOptions,
+      provider: mockProvider,
+      prompt: { raw: 'Test prompt', label: 'test-label' },
+      test: {
+        vars: { expected: 'Committed output' },
+        assert: [{ type: 'equals', value: '{{expected}}' }],
+      },
+      registers: { expected: 'Test output' },
+      lockIntegrity: { disableTemplating: false, disableVarExpansion: false },
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.gradingResult?.reason).toContain('Committed output');
+  });
+
   it.each(['PROMPTFOO_DISABLE_TEMPLATING', 'PROMPTFOO_DISABLE_VAR_EXPANSION'] as const)(
     'fails locked grading when a provider changes %s',
     async (setting) => {

@@ -222,6 +222,7 @@ describe('evalLock', () => {
     ['provider-backed graders', { type: 'llm-rubric', value: 'Be correct', provider: 'grader' }],
     ['webhooks', { type: 'webhook', value: 'https://example.test/grade' }],
     ['manual grading', { type: 'human' }],
+    ['comparative grading', { type: 'max-score' }],
   ])('rejects %s as mutable criteria', (_name, assertion) => {
     const suite = createSuite();
     suite.tests![0].assert = [assertion as Assertion];
@@ -229,6 +230,18 @@ describe('evalLock', () => {
     expect(() => createEvalBar(suite, { repeat: 1 })).toThrow(
       'only support data-only assertion criteria',
     );
+  });
+
+  it.each([
+    '{{ env.CRITERION }}',
+    '{% if env.GATE %}ok{% endif %}',
+    "{% include 'criterion.njk' %}",
+    '{{ values | random }}',
+    '{{ value.toString() }}',
+  ])('rejects runtime-dependent assertion templates: %s', (value) => {
+    const suite = createSuite(value);
+    expect(() => createEvalBar(suite, { repeat: 1 })).toThrow('simple test variable references');
+    expect(() => createEvalBar(suite, { repeat: 1, disableTemplating: true })).not.toThrow();
   });
 
   it('rejects redteam criteria even with an explicit grading provider', () => {
@@ -316,6 +329,22 @@ describe('evalLock', () => {
     expect(() => createEvalBar(suite, { repeat: 1 })).toThrow(
       'only support data-only assertion criteria',
     );
+  });
+
+  it.each([
+    [7.2, 9, 125],
+    [58, 29, 50],
+    [7, 7, 100],
+  ])('preserves the inclusive threshold %s%% as a decimal ratio', (percent, passes, total) => {
+    const lock = createEvalLock(createEvalBar(createSuite(), { repeat: 1 }), percent);
+    expect(lock.manifest.threshold).toBe(passes / total);
+    expect(lockedThresholdPercent(lock)).toBe(percent);
+  });
+
+  it('rejects a nonzero threshold that would round to zero in the manifest', () => {
+    expect(() =>
+      createEvalLock(createEvalBar(createSuite(), { repeat: 1 }), Number.MIN_VALUE),
+    ).toThrow('too small to represent');
   });
 
   it('accepts nested and negated data-only assertions', () => {

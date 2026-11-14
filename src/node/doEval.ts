@@ -1425,9 +1425,9 @@ async function doEvalWithEnv(
       const invalidLockedPassRate = Boolean(
         activeEvalLock && (totalTests === 0 || !Number.isFinite(passRate)),
       );
-      const belowThreshold =
-        invalidLockedPassRate ||
-        passRate < (Number.isFinite(passRateThreshold) ? passRateThreshold : 100);
+      const belowThreshold = activeEvalLock
+        ? invalidLockedPassRate || successes / totalTests < activeEvalLock.manifest.threshold
+        : passRate < (Number.isFinite(passRateThreshold) ? passRateThreshold : 100);
       // An eval stopped because its target is unavailable did not run every test, so it
       // fails whatever the tests before the stop did.
       if (isCliInvocation && (belowThreshold || targetErrorStatus != null)) {
@@ -1443,7 +1443,11 @@ async function doEvalWithEnv(
             ),
           );
         }
-        process.exitCode = Number.isSafeInteger(failedTestExitCode) ? failedTestExitCode : 100;
+        // Only 1..255 reliably signals failure to the invoking CI process.
+        const usableExitCode =
+          Number.isSafeInteger(failedTestExitCode) &&
+          (!activeEvalLock || (failedTestExitCode >= 1 && failedTestExitCode <= 255));
+        process.exitCode = usableExitCode ? failedTestExitCode : 100;
         // A run that failed its tests returns here, as it always has. A run stopped by its
         // target goes on to clean up its providers, as it did when it still exited with 0.
         if (targetErrorStatus == null) {
