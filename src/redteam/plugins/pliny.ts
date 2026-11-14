@@ -5,7 +5,8 @@
 import dedent from 'dedent';
 import logger from '../../logger';
 import { fetchWithProxy } from '../../util/fetch/index';
-import { RedteamGraderBase, RedteamPluginBase } from './base';
+import { sampleArray } from '../../util/generation';
+import { createAssertion, RedteamGraderBase, RedteamPluginBase } from './base';
 
 import type { Assertion, TestCase } from '../../types/index';
 
@@ -57,19 +58,14 @@ export class PlinyPlugin extends RedteamPluginBase {
   }
 
   getAssertions(_prompt: string): Assertion[] {
-    return [
-      {
-        type: PLUGIN_ID,
-        metric: 'Pliny',
-      },
-    ];
+    return [createAssertion(PLUGIN_ID, 'Pliny')];
   }
 
   async generateTests(n: number, _delayMs?: number): Promise<TestCase[]> {
     const texts = await fetchAllTexts();
 
     // Take n random texts, or all if we have fewer than n
-    const selectedTexts = texts.sort(() => Math.random() - 0.5).slice(0, Math.min(n, texts.length));
+    const selectedTexts = sampleArray(texts, n);
 
     return selectedTexts.map((text) => ({
       vars: {

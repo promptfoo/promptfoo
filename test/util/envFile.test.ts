@@ -6,6 +6,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { loadEnvFiles } from '../../src/util/envFile';
 import { mockProcessEnv } from './utils';
 
+// These tests exercise default loading against temporary files.
+vi.mock('../../src/util/envFile', async (importOriginal) => importOriginal());
+
 describe('loadEnvFiles', () => {
   let directory: string;
   let restoreEnv: () => void;

@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import cliState from '../../src/cliState';
 import { resolveProviderApiKey } from '../../src/providers/credentials';
 import { mockProcessEnv } from '../util/utils';
 
@@ -69,6 +70,31 @@ describe('provider credential policy', () => {
         ['OPENAI_API_KEY'],
       ),
     ).toBeUndefined();
+  });
+
+  it.each(['suite', 'file'] as const)('prefers a %s alias over the host primary key', (layer) => {
+    mockProcessEnv({ AZURE_API_KEY: 'host-key' });
+    const run =
+      layer === 'suite'
+        ? cliState.withEnv.bind(cliState)
+        : cliState.withEnvFileOverrides.bind(cliState);
+    run({ AZURE_OPENAI_API_KEY: 'scoped-key' }, () => {
+      expect(resolveProviderApiKey(undefined, undefined, defaults)).toBe('scoped-key');
+    });
+  });
+
+  it('prefers suite aliases over file aliases while preserving per-name masks', () => {
+    cliState.withEnvFileOverrides(
+      { AZURE_API_KEY: 'file-primary', AZURE_OPENAI_API_KEY: 'file-alias' },
+      () => {
+        cliState.withEnv({ AZURE_OPENAI_API_KEY: 'suite-alias' }, () => {
+          expect(resolveProviderApiKey(undefined, undefined, defaults)).toBe('suite-alias');
+        });
+        cliState.withEnv({ AZURE_OPENAI_API_KEY: '' }, () => {
+          expect(resolveProviderApiKey(undefined, undefined, defaults)).toBe('file-primary');
+        });
+      },
+    );
   });
 
   it('preserves legacy aliases while preferring provider overrides over process defaults', () => {
