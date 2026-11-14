@@ -86,7 +86,8 @@ export function csrfProtection(req: Request, res: Response, next: NextFunction):
   // Only trust the Host header — X-Forwarded-Host is attacker-controllable
   // unless a trusted reverse proxy strips/overwrites it.
   const host = req.headers.host || '';
-  const hasBrowserHeaders = secFetchSite !== undefined || origin !== undefined;
+  const hasBrowserHeaders =
+    secFetchSite !== undefined || origin !== undefined || req.headers.referer !== undefined;
 
   // An explicitly allowlisted cross-site origin (localhost aliases or
   // PROMPTFOO_CSRF_ALLOWED_ORIGINS) is trusted ahead of the Host gate so a
@@ -98,7 +99,7 @@ export function csrfProtection(req: Request, res: Response, next: NextFunction):
     // Safe methods carry no CSRF risk, but a rebinding-shaped browser GET
     // still reads local data (same-origin requests bypass CORS entirely), so
     // browser-signal-bearing safe requests face the same Host check.
-    // Health probes and other non-browser clients send neither header and
+    // Health probes and other non-browser clients without these headers
     // pass straight through, whatever Host they use.
     if (!hasBrowserHeaders || originIsAllowlisted) {
       return next();

@@ -80,22 +80,25 @@ describe('csrfProtection', () => {
       },
     );
 
-    it('blocks rebinding-shaped GET whose Host is a rebinding domain', () => {
-      const req = mockReq({
-        method: 'GET',
-        headers: {
-          'sec-fetch-site': 'same-origin',
-          host: 'rebind.evil.com:15500',
-        },
-      });
-      const res = mockRes();
-      csrfProtection(req, res, next);
-      expect(next).not.toHaveBeenCalled();
-      expect(res.status).toHaveBeenCalledWith(403);
-      expect(res.json).toHaveBeenCalledWith({
-        error: 'Requests must use a local or allowlisted host',
-      });
-    });
+    it.each([{ 'sec-fetch-site': 'same-origin' }, { referer: 'http://rebind.evil.com:15500/' }])(
+      'blocks a browser-shaped GET on a rebinding domain with %j',
+      (headers) => {
+        const req = mockReq({
+          method: 'GET',
+          headers: {
+            ...headers,
+            host: 'rebind.evil.com:15500',
+          },
+        });
+        const res = mockRes();
+        csrfProtection(req, res, next);
+        expect(next).not.toHaveBeenCalled();
+        expect(res.status).toHaveBeenCalledWith(403);
+        expect(res.json).toHaveBeenCalledWith({
+          error: 'Requests must use a local or allowlisted host',
+        });
+      },
+    );
 
     it('allows browser GET with local Host (cross-site read handled by CORS layer)', () => {
       const req = mockReq({
