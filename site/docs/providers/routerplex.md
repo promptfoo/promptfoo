@@ -84,7 +84,8 @@ defaultTest:
 
 ## Errors
 
-- `401`: the key is wrong or the environment variable is not set in the shell running promptfoo.
+- `Missing ROUTERPLEX_API_KEY`: set the variable in the shell running Promptfoo or load it with `--env-file`. Promptfoo checks it before sending the request.
+- `401`: RouterPlex rejected the key. Verify it against the key in your dashboard.
 - `402`: the account balance is used up. Add credit.
 - `403`: the key reached its own budget, or the model is not on its allowlist.
 
