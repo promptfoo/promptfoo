@@ -508,6 +508,45 @@ function providerDedupeKey(provider: unknown, functionIds: Map<Function, number>
   }
 }
 
+/** Keep inline matrix file references relative to the saved suite directory. */
+function scopeMatrixTest<T>(test: T, sourceDir: string, suiteDir: string): T {
+  if (sourceDir === suiteDir || !test || typeof test !== 'object' || !('vars' in test)) {
+    return test;
+  }
+  const vars = test.vars;
+  if (!vars || typeof vars !== 'object' || Array.isArray(vars)) {
+    return test;
+  }
+  const scopeDirective = (value: unknown): unknown => {
+    if (
+      !value ||
+      typeof value !== 'object' ||
+      !('$values' in value) ||
+      typeof value.$values !== 'string' ||
+      !value.$values.startsWith('file://')
+    ) {
+      return value;
+    }
+    const file = value.$values.slice('file://'.length);
+    if (path.isAbsolute(file)) {
+      return value;
+    }
+    return {
+      ...value,
+      $values: `file://${path.relative(suiteDir, path.resolve(sourceDir, file))}`,
+    };
+  };
+  return {
+    ...test,
+    vars: Object.fromEntries(
+      Object.entries(vars).map(([name, value]) => [
+        name,
+        Array.isArray(value) ? value.map(scopeDirective) : scopeDirective(value),
+      ]),
+    ),
+  };
+}
+
 /**
  * Reads multiple configuration files and combines them into a single UnifiedConfig.
  *
@@ -516,6 +555,7 @@ function providerDedupeKey(provider: unknown, functionIds: Map<Function, number>
  */
 export async function combineConfigs(configPaths: string[]): Promise<UnifiedConfig> {
   const configs: UnifiedConfig[] = [];
+  const sourcePaths: string[] = [];
   for (const configPath of configPaths) {
     const resolvedPath = path.resolve(process.cwd(), configPath);
 
@@ -531,8 +571,16 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
     for (const globPath of globPaths) {
       const config = await readConfig(globPath);
       configs.push(config);
+      sourcePaths.push(globPath);
     }
   }
+
+  // Replay uses the directory of the first CLI config as its matrix base.
+  const suiteDir = path.dirname(path.resolve(configPaths[0] ?? '.'));
+  const scopeTest = <T>(test: T, index: number): T =>
+    configs.length > 1
+      ? scopeMatrixTest(test, path.dirname(path.resolve(sourcePaths[index])), suiteDir)
+      : test;
 
   const providers: UnifiedConfig['providers'] = [];
   const seenProviders = new Set<unknown>();
@@ -561,16 +609,16 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
   const tests: UnifiedConfig['tests'] = [];
   for (let i = 0; i < configs.length; i++) {
     const config = configs[i];
-    const configPath = configPaths[i];
+    const configPath = sourcePaths[i];
     if (typeof config.tests === 'string') {
       const newTests = await readTests(config.tests, path.dirname(configPath));
-      tests.push(...newTests);
+      tests.push(...newTests.map((test) => scopeTest(test, i)));
     } else if (Array.isArray(config.tests)) {
-      tests.push(...config.tests);
+      tests.push(...config.tests.map((test) => scopeTest(test, i)));
     } else if (config.tests && typeof config.tests === 'object' && 'path' in config.tests) {
       // Handle TestGeneratorConfig object
       const newTests = await readTests(config.tests, path.dirname(configPath));
-      tests.push(...newTests);
+      tests.push(...newTests.map((test) => scopeTest(test, i)));
     }
   }
 
@@ -656,7 +704,7 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
   configs.forEach((config, idx) => {
     if (typeof config.prompts === 'string') {
       invariant(Array.isArray(prompts), 'Cannot mix string and map-type prompts');
-      const absolutePrompt = makeAbsolute(configPaths[idx], config.prompts);
+      const absolutePrompt = makeAbsolute(sourcePaths[idx], config.prompts);
       addSeenPrompt(absolutePrompt);
     } else if (Array.isArray(config.prompts)) {
       invariant(Array.isArray(prompts), 'Cannot mix configs with map and array-type prompts');
@@ -667,7 +715,7 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
               (typeof prompt.raw === 'string' || typeof prompt.label === 'string')),
           `Invalid prompt: ${JSON.stringify(prompt)}. Prompts must be either a string or an object with a 'raw' or 'label' string property.`,
         );
-        addSeenPrompt(makeAbsolute(configPaths[idx], prompt as string | Prompt));
+        addSeenPrompt(makeAbsolute(sourcePaths[idx], prompt as string | Prompt));
       });
     } else {
       // Object format such as { 'prompts/prompt1.txt': 'foo', 'prompts/prompt2.txt': 'bar' }
@@ -687,9 +735,23 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
     prompts,
     tests,
     scenarios: configs.some((config) => config.scenarios !== undefined)
-      ? configs.flatMap((config) => config.scenarios || [])
+      ? configs.flatMap((config, index) =>
+          [config.scenarios ?? []].flat().map((scenario) =>
+            typeof scenario === 'string'
+              ? scenario
+              : {
+                  ...scenario,
+                  config: Array.isArray(scenario.config)
+                    ? scenario.config.map((test) => scopeTest(test, index))
+                    : scenario.config,
+                  tests: Array.isArray(scenario.tests)
+                    ? scenario.tests.map((test) => scopeTest(test, index))
+                    : scenario.tests,
+                },
+          ),
+        )
       : undefined,
-    defaultTest: configs.reduce((prev: Partial<TestCase> | string | undefined, curr) => {
+    defaultTest: configs.reduce((prev: Partial<TestCase> | string | undefined, curr, index) => {
       // If any config has a string defaultTest (file reference), preserve it
       if (typeof curr.defaultTest === 'string') {
         return curr.defaultTest;
@@ -703,7 +765,8 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
         return undefined;
       }
       // Otherwise merge objects
-      const currDefaultTest = typeof curr.defaultTest === 'object' ? curr.defaultTest : {};
+      const currDefaultTest =
+        typeof curr.defaultTest === 'object' ? scopeTest(curr.defaultTest, index) : {};
       const prevObj = typeof prev === 'object' ? prev : {};
       return {
         ...prevObj,

@@ -421,6 +421,34 @@ describe('combineConfigs', () => {
     });
   });
 
+  it('keeps matrix dependencies scoped to the source of each inline test and scenario', async () => {
+    vi.mocked(globSync)
+      .mockReturnValueOnce(['/project/a/config.json'])
+      .mockReturnValueOnce(['/project/b/config.json']);
+    const literal = { nested: { $values: 'file://literal.yaml' } };
+    const vars = { values: [{ $values: 'file://values.yaml' }, 'inline'], literal };
+    const test = { vars };
+    const primary = { prompts: ['test'], providers: ['echo'], tests: [test] };
+    const secondary = {
+      ...primary,
+      defaultTest: test,
+      scenarios: [{ config: [test], tests: [test] }],
+    };
+    vi.mocked(fs.readFileSync)
+      .mockReturnValueOnce(JSON.stringify(primary))
+      .mockReturnValueOnce(JSON.stringify(secondary));
+    const result = await combineConfigs(['/project/a/config.json', '/project/b/config.json']);
+    const scoped = {
+      vars: {
+        values: [{ $values: `file://${path.join('..', 'b', 'values.yaml')}` }, 'inline'],
+        literal,
+      },
+    };
+    expect(result.tests).toEqual([test, scoped]);
+    expect(result.defaultTest).toMatchObject(scoped);
+    expect(result.scenarios).toEqual([{ config: [scoped], tests: [scoped] }]);
+  });
+
   it('preserves whether scenarios were omitted', async () => {
     const baseConfig = {
       prompts: ['prompt'],
