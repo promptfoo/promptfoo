@@ -124,6 +124,18 @@ describe('compareResults', () => {
     ]);
   });
 
+  it('matches reordered object keys at each depth and preserves array order', () => {
+    const a = result(undefined, 'p', 'pass', { vars: { input: [{ x: 1, y: 2 }, 3], id: 4 } });
+    const b = result(undefined, 'p', 'fail', { vars: { id: 4, input: [{ y: 2, x: 1 }, 3] } });
+    const reordered = result(undefined, 'p', 'pass', {
+      vars: { id: 4, input: [3, { x: 1, y: 2 }] },
+    });
+    const comparison = compareResults(side('a', [a]), side('b', [b, reordered]));
+    expect(comparison.gradedOnBoth).toBe(1);
+    expect(comparison.b.unmatched).toBe(1);
+    expect(comparison.changes).toHaveLength(1);
+  });
+
   it('pairs repeated rows of the same test in test order', () => {
     const comparison = compareResults(
       side('a', [
@@ -296,6 +308,42 @@ describe('compare command', () => {
       { test: 't1', provider: 'p', promptIdx: 0, a: 'pass', b: 'fail' },
     ]);
     expect(process.exitCode).toBeUndefined();
+  });
+
+  it('keeps provider-local positions when another provider is inserted', async () => {
+    // Both retained rows are the second prompt of p. Its first prompt has no row in B.
+    const a = path.join(tempDir, 'a.json');
+    const b = path.join(tempDir, 'b.json');
+    const prompts = [{ provider: 'p' }, { provider: 'p' }];
+    fs.writeFileSync(
+      a,
+      JSON.stringify({
+        results: {
+          version: 2,
+          table: { head: { prompts } },
+          results: [result('t', 'p', 'pass'), result('t', 'p', 'pass', { promptIdx: 1 })],
+        },
+      }),
+    );
+    fs.writeFileSync(
+      b,
+      JSON.stringify({
+        results: {
+          version: 3,
+          prompts: [{ provider: 'extra' }, ...prompts],
+          results: [result('t', 'extra', 'pass'), result('t', 'p', 'fail', { promptIdx: 2 })],
+        },
+      }),
+    );
+
+    await run(a, b, '--json');
+    const output = JSON.parse(vi.mocked(logger.info).mock.calls[0][0] as string);
+    expect(output).toMatchObject({
+      gradedOnBoth: 1,
+      a: { unmatched: 1 },
+      b: { unmatched: 1 },
+      changes: [{ test: 't', provider: 'p', promptIdx: 1, a: 'pass', b: 'fail' }],
+    });
   });
 
   it('compares stored evals by ID', async () => {

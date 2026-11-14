@@ -8,9 +8,15 @@ import { filterRuntimeVars } from '../util/comparison';
 import { readOutput } from '../util/file';
 import type { Command } from 'commander';
 
-import type { EvaluateResult } from '../types/index';
+import type { CompletedPrompt, EvaluateResult } from '../types/index';
 
 type Outcome = 'pass' | 'fail' | 'error';
+
+interface ComparisonInput {
+  name: string;
+  results: EvaluateResult[];
+  prompts?: Pick<CompletedPrompt, 'provider'>[];
+}
 
 interface Row {
   test: string;
@@ -56,16 +62,34 @@ function testNameOf(result: EvaluateResult): string {
   return (
     result.testCase?.description ||
     result.description ||
-    JSON.stringify(filterRuntimeVars(result.vars) ?? {})
+    JSON.stringify(filterRuntimeVars(result.vars) ?? {}, (_key, value: unknown) => {
+      if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+        return value;
+      }
+      const record = value as Record<string, unknown>;
+      return Object.fromEntries(
+        Object.keys(record)
+          .sort()
+          .map((key) => [key, record[key]]),
+      );
+    })
   );
 }
 
 /**
- * Keys each result by (test, prompt index, provider). Tests are named by description, or by
+ * Keys each result by (test, prompt position within the provider, provider). Tests are named by description, or by
  * their vars when they have none. A key seen more than once (repeats, duplicate descriptions)
  * is paired in test order.
  */
-function rowsByKey(results: EvaluateResult[]): Map<string, Row> {
+function rowsByKey({ results, prompts }: ComparisonInput): Map<string, Row> {
+  // Global column numbers move when providers change order. Use the complete header so
+  // missing results cannot shift a prompt's position within its provider.
+  const promptCounts = new Map<string, number>();
+  const promptPositions = prompts?.map(({ provider }) => {
+    const position = promptCounts.get(provider) ?? 0;
+    promptCounts.set(provider, position + 1);
+    return position;
+  });
   const sorted = [...results].sort((x, y) => x.testIdx - y.testIdx || x.promptIdx - y.promptIdx);
   const rows = new Map<string, Row>();
   const occurrences = new Map<string, number>();
@@ -78,7 +102,8 @@ function rowsByKey(results: EvaluateResult[]): Map<string, Row> {
       score: result.score,
       latencyMs: Number.isFinite(result.latencyMs) ? result.latencyMs : undefined,
     };
-    const base = JSON.stringify([row.test, row.promptIdx, row.provider]);
+    const position = promptPositions?.[row.promptIdx] ?? row.promptIdx;
+    const base = JSON.stringify([row.test, position, row.provider]);
     const occurrence = occurrences.get(base) ?? 0;
     occurrences.set(base, occurrence + 1);
     rows.set(`${base}#${occurrence}`, row);
@@ -130,12 +155,9 @@ function summarize(
  * Compares two evals row by row. Only rows graded on both sides are scored, so an eval with
  * more errors is not measured on an easier subset.
  */
-export function compareResults(
-  a: { name: string; results: EvaluateResult[] },
-  b: { name: string; results: EvaluateResult[] },
-): EvalComparison {
-  const rowsA = rowsByKey(a.results);
-  const rowsB = rowsByKey(b.results);
+export function compareResults(a: ComparisonInput, b: ComparisonInput): EvalComparison {
+  const rowsA = rowsByKey(a);
+  const rowsB = rowsByKey(b);
   const isGraded = (rows: Map<string, Row>, key: string) => {
     const outcome = rows.get(key)?.outcome;
     return outcome !== undefined && outcome !== 'error';
@@ -212,15 +234,21 @@ export function renderComparison(comparison: EvalComparison): string {
   return lines.join('\n');
 }
 
-async function loadResults(ref: string): Promise<EvaluateResult[]> {
+async function loadSummary(ref: string) {
   if (ref.endsWith('.json')) {
-    return readOutput(ref).results.results;
+    return readOutput(ref).results;
   }
   const eval_ = ref === 'latest' ? await Eval.latest() : await Eval.findById(ref);
   if (!eval_) {
     throw new Error(`No eval found with ID ${ref}`);
   }
-  return (await eval_.toEvaluateSummary()).results;
+  return eval_.toEvaluateSummary();
+}
+
+async function loadComparisonInput(name: string): Promise<ComparisonInput> {
+  const summary = await loadSummary(name);
+  const prompts = 'table' in summary ? summary.table.head.prompts : summary.prompts;
+  return { name, results: summary.results, prompts };
 }
 
 export function compareCommand(program: Command) {
@@ -234,11 +262,8 @@ export function compareCommand(program: Command) {
       telemetry.record('command_used', { name: 'compare' });
       let comparison: EvalComparison;
       try {
-        const [resultsA, resultsB] = await Promise.all([loadResults(evalA), loadResults(evalB)]);
-        comparison = compareResults(
-          { name: evalA, results: resultsA },
-          { name: evalB, results: resultsB },
-        );
+        const [a, b] = await Promise.all([loadComparisonInput(evalA), loadComparisonInput(evalB)]);
+        comparison = compareResults(a, b);
       } catch (error) {
         logger.error(`Failed to compare evals: ${error instanceof Error ? error.message : error}`);
         process.exitCode = 1;
