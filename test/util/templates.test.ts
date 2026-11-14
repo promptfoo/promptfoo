@@ -403,17 +403,22 @@ describe('getNunjucksEngine', () => {
     }
   });
 
-  it('should handle callbacks for plain strings without compiling', () => {
+  it('delivers plain-string callbacks asynchronously like templated strings', async () => {
     const engine = getNunjucksEngine();
-    const compileSpy = vi.spyOn(nunjucks.Template.prototype as any, '_compile');
-    try {
-      const cb = vi.fn();
-      engine.renderString('plain-callback', {}, cb);
-      expect(cb).toHaveBeenCalledWith(null, 'plain-callback');
-      expect(compileSpy).not.toHaveBeenCalled();
-    } finally {
-      compileSpy.mockRestore();
-    }
+    const order: string[] = [];
+    const rendered = new Promise<string | null>((resolve, reject) => {
+      engine.renderString('plain-callback', {}, (error, value) => {
+        order.push('callback');
+        if (error) {
+          reject(error);
+        } else {
+          resolve(value);
+        }
+      });
+    });
+    order.push('returned');
+    await expect(rendered).resolves.toBe('plain-callback');
+    expect(order).toEqual(['returned', 'callback']);
   });
 
   it('should compile and render templates when tags are present', () => {
