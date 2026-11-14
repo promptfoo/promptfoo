@@ -493,10 +493,24 @@ async function runAssertionInternal({
 
   // Render assertion values
   type ValueFromScriptType = string | boolean | number | GradingResult | object | undefined;
+  const baseType = getAssertionBaseType(assertion);
   let renderedValue = assertion.value;
   let valueFromScript: ValueFromScriptType;
   const scriptFailure = (reason: string): GradingResult =>
     applyAssertionWeight({ pass: false, score: 0, reason, assertion }, assertion.weight);
+  // Parse inline JSON before interpolating its fields. A quoted variable may
+  // contain JSON punctuation or resolve to a numeric trajectory status.
+  if (
+    baseType === 'trajectory:step-status' &&
+    typeof renderedValue === 'string' &&
+    renderedValue.trimStart().startsWith('{')
+  ) {
+    try {
+      renderedValue = JSON.parse(renderedValue);
+    } catch {
+      // Whole-value templates and non-JSON input follow normal string resolution.
+    }
+  }
   if (typeof renderedValue === 'string') {
     if (renderedValue.startsWith('file://')) {
       const basePath = cliState.basePath || '';
@@ -577,7 +591,6 @@ async function runAssertionInternal({
   // Script assertion types (javascript, python, ruby) interpret renderedValue as code to execute
   // All other types should use the script output as the comparison value
   const SCRIPT_RESULT_ASSERTIONS = new Set(['javascript', 'python', 'ruby']);
-  const baseType = getAssertionBaseType(assertion);
 
   if (valueFromScript !== undefined && !SCRIPT_RESULT_ASSERTIONS.has(baseType)) {
     // Validate the script result type - only javascript/python/ruby can return functions
