@@ -215,20 +215,24 @@ describe('matchesClassification', () => {
     });
   });
 
+  const failedClassifications: { response: ProviderClassificationResponse; reason: string }[] = [
+    { response: { error: 'Request timed out' }, reason: 'Request timed out' },
+    {
+      response: { error: 'Partial result (high score)', classification: { classA: 0.9 } },
+      reason: 'Partial result (high score)',
+    },
+    {
+      response: { error: 'Partial result (low score)', classification: { classA: 0.1 } },
+      reason: 'Partial result (low score)',
+    },
+    { response: {}, reason: 'Unknown error fetching classification' },
+    { response: { classification: {} }, reason: 'No classification scores returned' },
+  ];
+
   it.each(
-    [
-      { response: { error: 'Request timed out' }, reason: 'Request timed out' },
-      {
-        response: { error: 'Partial result (high score)', classification: { classA: 0.9 } },
-        reason: 'Partial result (high score)',
-      },
-      {
-        response: { error: 'Partial result (low score)', classification: { classA: 0.1 } },
-        reason: 'Partial result (low score)',
-      },
-      { response: {}, reason: 'Unknown error fetching classification' },
-      { response: { classification: {} }, reason: 'No classification scores returned' },
-    ].flatMap((testCase) => [false, true].map((cached) => ({ ...testCase, cached }))),
+    failedClassifications.flatMap((testCase) =>
+      [false, true].map((cached) => ({ ...testCase, cached })),
+    ),
   )(
     'retains reported usage when grading fails: $reason (cached=$cached)',
     async ({ response, reason, cached }) => {
