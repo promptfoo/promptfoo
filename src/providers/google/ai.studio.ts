@@ -17,18 +17,16 @@ import {
   collectGroundingMetadata,
   collectThoughtSignatures,
   createAuthCacheDiscriminator,
-  formatCandidateContents,
   formatGeminiThinking,
-  type GeminiAnswer,
   geminiFormatAndSystemInstructions,
   getCandidate,
+  getCandidateParts,
   getEffectiveGeminiApiModel,
   getGoogleApiBaseUrl,
   getGoogleGuardrails,
   getGoogleResponseServiceTier,
   getLastPromptSafetyRatings,
   isNonCandidateStreamChunk,
-  mergeCandidateContents,
   mergeGoogleCompletionOptions,
   mergeGoogleRequestTools,
   normalizeGeminiAudio,
@@ -48,7 +46,7 @@ import type {
   ProviderEmbeddingResponse,
   ProviderResponse,
 } from '../../types/index';
-import type { CompletionOptions, GoogleProviderConfig } from './types';
+import type { CompletionOptions, GoogleProviderConfig, Part } from './types';
 import type { GeminiResponseData } from './util';
 
 const DEFAULT_API_HOST = 'generativelanguage.googleapis.com';
@@ -410,9 +408,9 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
         error: `No response data found in response: ${JSON.stringify(data)}`,
       };
     }
-    let output: ReturnType<typeof formatCandidateContents> | undefined;
+    let output: ReturnType<typeof formatGeminiThinking>;
     let candidate: ReturnType<typeof getCandidate> | undefined;
-    let answer: GeminiAnswer = { output: undefined, thoughts: '' };
+    const parts: Part[] = [];
     try {
       for (const datum of dataWithResponse) {
         if (Array.isArray(data) && isNonCandidateStreamChunk(datum)) {
@@ -429,9 +427,11 @@ export class AIStudioChatProvider extends GoogleGenericProvider {
           continue;
         }
 
-        answer = mergeCandidateContents(answer, candidateForChunk);
+        for (const part of getCandidateParts(candidateForChunk)) {
+          parts.push(part);
+        }
       }
-      output = formatGeminiThinking(answer, config.showThinking);
+      output = formatGeminiThinking(parts, config.showThinking);
 
       if (output === undefined || output === '' || candidate === undefined) {
         throw new Error(`No output found in response: ${JSON.stringify(data)}`);

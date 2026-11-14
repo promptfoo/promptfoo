@@ -35,12 +35,10 @@ import {
   collectThoughtSignatures,
   formatCandidateContents,
   formatGeminiThinking,
-  type GeminiAnswer,
   geminiFormatAndSystemInstructions,
   getGoogleResponseServiceTier,
   loadFile,
   maybeCoerceToGeminiFormat,
-  mergeCandidateContents,
   mergeGoogleCompletionOptions,
   mergeGoogleRequestTools,
   mergeParts,
@@ -5582,69 +5580,27 @@ describe('util', () => {
       );
     });
 
-    it('leaves thought parts out of the formatted text', () => {
-      const thought = { text: 'Let me calculate.', thought: true };
-
-      expect(
-        formatCandidateContents({ content: { parts: [thought, { text: '42' }] } } as any, true),
-      ).toBe('42');
-      expect(formatCandidateContents({ content: { parts: [thought] } } as any, true)).toBe('');
-    });
-
-    it('returns parts with a thought image unchanged', () => {
-      const thoughtImage = { thought: true, inlineData: { mimeType: 'image/png', data: 'AA==' } };
-      const parts = [thoughtImage, { text: '42' }];
-
-      expect(formatCandidateContents({ content: { parts } } as any)).toEqual(parts);
-      expect(
-        mergeCandidateContents(
-          mergeCandidateContents({ output: undefined, thoughts: '' }, {
-            content: { parts: [thoughtImage] },
-          } as any),
-          { content: { parts: [{ functionCall: { name: 'f', args: {} } }] } } as any,
-        ).output,
-      ).toEqual([thoughtImage, { functionCall: { name: 'f', args: {} } }]);
-    });
-
-    it('labels thought summaries once, with one blank line before the answer', () => {
-      // Gemini ends each streamed summary with blank lines.
-      let answer: GeminiAnswer = { output: undefined, thoughts: '' };
-      for (const parts of [
-        [{ text: '**Plan**\n\nAdd.\n\n\n', thought: true }],
-        [{ text: '**Check**\n\nDone.\n\n\n', thought: true }],
-        [{ text: '42' }],
-      ]) {
-        answer = mergeCandidateContents(answer, { content: { parts } } as any);
-      }
-
-      expect(formatGeminiThinking(answer, undefined)).toBe(
-        'Thinking: **Plan**\n\nAdd.\n\n\n**Check**\n\nDone.\n\n42',
+    it('labels streamed thought text once and preserves the final answer', () => {
+      const parts = [
+        { text: 'Add. ', thought: true },
+        { text: 'Done.\n', thought: true },
+        { text: '42' },
+      ];
+      expect(formatGeminiThinking(parts, undefined)).toBe('Thinking: Add. Done.\n\n42');
+      expect(formatGeminiThinking(parts, false)).toBe('42');
+      expect(formatGeminiThinking([{ text: '  ', thought: true }, { text: '42' }], true)).toBe(
+        '42',
       );
-      expect(formatGeminiThinking(answer, false)).toBe('42');
-      expect(formatGeminiThinking({ output: '42', thoughts: '\n\n' }, undefined)).toBe('42');
     });
 
-    it('retains a mixed text chunk’s thoughts when a later chunk contains a tool call', () => {
+    it('preserves thought images and signed calls when filtering thought text', () => {
       const thought = { text: 'Look it up.', thought: true };
-      const text = { text: 'Searching.' };
-      const call = { functionCall: { name: 'search', args: {} }, thoughtSignature: 'signature' };
-      const textAnswer = mergeCandidateContents({ output: undefined, thoughts: '' }, {
-        content: { parts: [thought, text] },
-      } as any);
-      const answer = mergeCandidateContents(textAnswer, { content: { parts: [call] } } as any);
-
-      expect(formatGeminiThinking(answer, undefined)).toEqual([thought, text, call]);
-      expect(formatGeminiThinking(answer, false)).toEqual([text, call]);
-    });
-
-    it('drops thought text from part arrays only when showThinking is false', () => {
-      const thought = { text: 'Look it up.', thought: true };
-      const thoughtImage = { thought: true, inlineData: { mimeType: 'image/png', data: 'AA==' } };
+      const image = { thought: true, inlineData: { mimeType: 'image/png', data: 'AA==' } };
       const call = { functionCall: { name: 'f', args: {} }, thoughtSignature: 'sig' };
-      const answer: GeminiAnswer = { output: [thought, thoughtImage, call], thoughts: '' };
-
-      expect(formatGeminiThinking(answer, undefined)).toEqual([thought, thoughtImage, call]);
-      expect(formatGeminiThinking(answer, false)).toEqual([thoughtImage, call]);
+      const parts = [thought, image, call];
+      expect(formatGeminiThinking(parts, undefined)).toEqual(parts);
+      expect(formatGeminiThinking(parts, false)).toEqual([image, call]);
+      expect(formatCandidateContents({ content: { parts } } as any)).toEqual(parts);
     });
 
     it('collects thought signatures across streamed candidate parts', () => {

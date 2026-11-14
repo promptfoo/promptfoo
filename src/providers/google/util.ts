@@ -1445,7 +1445,7 @@ function isThoughtTextPart(part: Part): part is Part & { text: string } {
   return part.thought === true && typeof part.text === 'string';
 }
 
-export function formatCandidateContents(candidate: Candidate, omitThoughtText = false) {
+export function getCandidateParts(candidate: Candidate): Part[] {
   // Check if the candidate was blocked or stopped for safety reasons
   if (
     candidate.finishReason &&
@@ -1478,73 +1478,31 @@ export function formatCandidateContents(candidate: Candidate, omitThoughtText = 
     throw new Error(errorMessage);
   }
 
-  if (candidate.content?.parts) {
-    let output = '';
-    let is_text = true;
-    for (const part of candidate.content.parts) {
-      if (omitThoughtText && isThoughtTextPart(part)) {
-        // Thought summaries are not part of the answer; see formatGeminiThinking.
-        continue;
-      }
-      if ('text' in part) {
-        output += part.text;
-      } else {
-        is_text = false;
-      }
-    }
-    if (is_text) {
-      return output;
-    } else {
-      return candidate.content.parts;
-    }
-  } else {
+  if (!candidate.content?.parts) {
     throw new Error(`No output found in response: ${JSON.stringify(candidate)}`);
   }
+  return candidate.content.parts;
 }
 
-/** A Gemini answer accumulated over response chunks, with its thought summaries. */
-export interface GeminiAnswer {
-  output: Part[] | string | undefined;
-  thoughts: string;
-  /** Parts of chunks that held only thoughts; a part-array output gets them back. */
-  thoughtParts?: Part[];
+export function formatCandidateContents(candidate: Candidate) {
+  const parts = getCandidateParts(candidate);
+  return parts.every((part) => 'text' in part) ? parts.map((part) => part.text).join('') : parts;
 }
 
-/**
- * Adds a candidate to the answer. Thought summaries are kept apart from the output, so
- * thoughts streamed across chunks can be labelled once.
- */
-export function mergeCandidateContents(answer: GeminiAnswer, candidate: Candidate): GeminiAnswer {
-  const content = formatCandidateContents(candidate, true);
-  const thoughtParts = (candidate.content?.parts ?? []).filter(isThoughtTextPart);
-  const thoughts = answer.thoughts + thoughtParts.map((part) => part.text).join('');
-  // Text chunks omit thought parts while multipart chunks retain them. Save omitted parts
-  // in case a later tool call or image changes the output to a part array.
-  const omittedParts =
-    typeof content === 'string' && thoughtParts.length > 0
-      ? [...(answer.thoughtParts ?? []), ...thoughtParts]
-      : answer.thoughtParts;
-  const output =
-    content === '' && thoughtParts.length > 0 ? answer.output : mergeParts(answer.output, content);
-  return { output, thoughts, thoughtParts: omittedParts };
-}
-
-/**
- * Prepends thought summaries to a text answer in the `Thinking: ...` form used by other
- * reasoning providers. Part arrays (function calls, images) keep their thought parts.
- * With `showThinking: false`, thought summaries are left out of both.
- */
-export function formatGeminiThinking(
-  { output, thoughts, thoughtParts = [] }: GeminiAnswer,
-  showThinking: boolean | undefined,
-) {
-  if (Array.isArray(output)) {
-    // Gemini sends thoughts before the answer, so streamed thought-only chunks go first.
-    return showThinking === false
-      ? output.filter((part) => !isThoughtTextPart(part))
-      : [...thoughtParts, ...output];
+/** Format text after the last chunk. Multipart replies retain their wire order and signatures. */
+export function formatGeminiThinking(parts: Part[], showThinking: boolean | undefined) {
+  if (parts.some((part) => !('text' in part))) {
+    return showThinking === false ? parts.filter((part) => !isThoughtTextPart(part)) : parts;
   }
-  // Gemini ends each summary with blank lines; trim them so one blank line precedes the answer.
+  let output = '';
+  let thoughts = '';
+  for (const part of parts) {
+    if (isThoughtTextPart(part)) {
+      thoughts += part.text;
+    } else {
+      output += part.text ?? '';
+    }
+  }
   const summary = thoughts.trim();
   if (!summary || showThinking === false) {
     return output;

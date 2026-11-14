@@ -1701,6 +1701,30 @@ describe('AIStudioChatProvider', () => {
         },
       );
 
+      it.each([true, false])(
+        'retains stream order and signatures with tool call first: %s',
+        async (callFirst) => {
+          provider = new AIStudioChatProvider('gemini-3.6-flash', {
+            config: { apiKey: 'test-key', streaming: true },
+          });
+          const call = {
+            functionCall: createBostonWeatherCall(),
+            thoughtSignature: 'call-signature',
+          };
+          const thought = { text: 'Checking.', thought: true };
+          const text = { text: 'Done.', thoughtSignature: 'text-signature' };
+          const chunks = callFirst ? [[call], [thought, text]] : [[thought, text], [call]];
+          vi.mocked(cache.fetchWithCache).mockResolvedValue({
+            data: [chunk(chunks[0]), chunk(chunks[1], 'STOP')],
+            cached: false,
+          } as any);
+
+          const response = await provider.callGemini('What is the weather in Boston?');
+          expect(response.error).toBeUndefined();
+          expect(response.output).toEqual(chunks.flat());
+        },
+      );
+
       it('returns thoughts of a reply cut off while thinking unless showThinking is false', async () => {
         const data = chunk([{ text: 'Still thinking', thought: true }], 'MAX_TOKENS');
         vi.mocked(cache.fetchWithCache).mockResolvedValue({ data, cached: false } as any);
