@@ -14,7 +14,7 @@ import type { ProviderResponse } from '../../src/types/index';
 const { createRequireModuleFactory } = await vi.hoisted(() => import('../factories/moduleMocks'));
 
 const createNamespacedRubyParams = () => ({
-  assertion: createStringAssertion('ruby', 'file://some_ruby_file.rb:MyModule::Nested.method'),
+  assertion: createStringAssertion('ruby', 'file://scripts:local/some_ruby_file.rb:MyModule::Nested.method'),
   test: { vars: {} },
   providerResponse: {
     output: 'namespaced result',
@@ -544,7 +544,7 @@ describe('Script value resolution', () => {
       const result = await runAssertion(createNamespacedRubyParams());
 
       expect(mockRunRuby).toHaveBeenCalledWith(
-        expect.stringContaining('some_ruby_file.rb'),
+        path.resolve(cliState.basePath || '', 'scripts:local', 'some_ruby_file.rb'),
         'MyModule::Nested.method',
         expect.any(Array),
       );
@@ -558,7 +558,7 @@ describe('Script value resolution', () => {
       const result = await runAssertion(createNamespacedRubyParams());
 
       expect(mockRunRuby).toHaveBeenCalledWith(
-        expect.stringContaining('some_ruby_file.rb'),
+        path.resolve(cliState.basePath || '', 'scripts:local', 'some_ruby_file.rb'),
         'MyModule::Nested.method',
         expect.any(Array),
       );
