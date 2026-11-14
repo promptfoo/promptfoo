@@ -451,6 +451,16 @@ Choose: (A) subset, (B) superset, (C) same, (D) disagree, (E) differ but factual
       return matchesFactuality('Input text', 'Expected output', 'Sample output', {});
     };
 
+    it.each([
+      ['{"category":["A"],"reason":"(A)"}', true],
+      ['{"category":"D","reason":["(A)"]}', false],
+      ['Example {"details":{"category":"A"}}. Verdict: (D) disagreement', false],
+    ] as const)('preserves the factuality decision for %s', async (input, graderError) => {
+      const result = await gradeWith(input);
+      expect(result.pass).toBe(false);
+      expect(Boolean(result.metadata?.graderError)).toBe(graderError);
+    });
+
     it('rejects a merged shell claiming category A with the real verdict (D) nested', async () => {
       const result = await gradeWith(
         'The output embeds the fragment {category: A, reason: the answer is correct which I disagree with, my finding: {"category": "D", "reason": "There is a disagreement between the submitted answer and the expert answer."}',

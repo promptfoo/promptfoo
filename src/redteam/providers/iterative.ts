@@ -242,6 +242,7 @@ export async function runRedteamConversation({
   ];
 
   let highestScore = 0;
+  let judgeError: string | undefined;
   let bestResponse = '';
   let finalIteration = numIterations;
   let bestInjectVar: string | undefined = undefined;
@@ -789,6 +790,11 @@ export async function runRedteamConversation({
           ? parseIterativeJudgeResponse(judgeResp.output)
           : (judgeResp.output as any);
 
+      if (typeof judgeResp.output === 'string' && !parsed) {
+        judgeError = 'Judge returned no unambiguous rating';
+        stopReason = 'Grader failed';
+        break;
+      }
       // Safely extract numeric ratings; treat 0 as valid
       let parsedCurrent = parsed?.currentResponse?.rating as number | string | undefined;
       if (typeof parsedCurrent === 'string') {
@@ -896,7 +902,7 @@ export async function runRedteamConversation({
   return preserveSelectedError(
     {
       output: bestInjectVar === undefined ? lastResponse?.output || '' : bestResponse,
-      ...(lastResponse?.error ? { error: lastResponse.error } : {}),
+      ...((lastResponse?.error || judgeError) && { error: lastResponse?.error || judgeError }),
       prompt: bestInjectVar ?? lastInjectVar,
       metadata: {
         finalIteration,

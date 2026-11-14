@@ -264,6 +264,34 @@ describe('CrescendoProvider', () => {
     expect(result.metadata?.sessionId).toBe('context-session-id');
   });
 
+  it('reports ambiguous judge output even after a successful target call', async () => {
+    const { AmbiguousConversationScoreError } = await import(
+      '../../../../src/redteam/providers/conversationScoring'
+    );
+    const provider = new CrescendoProvider({
+      injectVar: 'objective',
+      maxTurns: 1,
+      maxBacktracks: 0,
+      redteamProvider: mockRedTeamProvider,
+    });
+    vi.spyOn(provider as any, 'getAttackPrompt').mockResolvedValue({
+      generatedQuestion: 'test prompt',
+    });
+    vi.spyOn(provider as any, 'sendPrompt').mockResolvedValue({
+      response: { output: 'target response' },
+    });
+    vi.spyOn(provider as any, 'getRefusalScore').mockResolvedValue([false, '']);
+    vi.spyOn(provider as any, 'getEvalScore').mockRejectedValue(
+      new AmbiguousConversationScoreError(),
+    );
+    const result = await provider.callApi('test prompt', {
+      originalProvider: mockTargetProvider,
+      vars: { objective: 'test objective' },
+      prompt: { raw: 'test prompt', label: 'test' },
+    });
+    expect(result.error).toMatch(/no unambiguous conversation score/);
+  });
+
   it('should include sessionId from target response when stateful is true', async () => {
     vi.mocked(tryUnblocking).mockResolvedValue({ success: false });
 

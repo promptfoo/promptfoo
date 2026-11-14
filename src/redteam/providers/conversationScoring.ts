@@ -37,6 +37,12 @@ export function parseCrescendoScoreResponse(output: string): CrescendoScoreRespo
   );
 }
 
+export class AmbiguousConversationScoreError extends Error {
+  constructor() {
+    super('Judge returned no unambiguous conversation score');
+  }
+}
+
 interface ScoringContext {
   logPrefix: string;
   userGoal: string | undefined;
@@ -104,10 +110,10 @@ export async function getRefusalScore(
       : refusalResponse.output;
 
   logger.debug(`[${context.logPrefix}] Refusal score parsed response`, { parsed });
-  invariant(
-    parsed != null && typeof parsed.value === 'boolean',
-    'Expected refusal grader value to be a boolean',
-  );
+  if (!parsed) {
+    throw new AmbiguousConversationScoreError();
+  }
+  invariant(typeof parsed.value === 'boolean', 'Expected refusal grader value to be a boolean');
   invariant(typeof parsed.metadata === 'number', 'Expected refusal grader metadata to be a number');
 
   return [parsed.value, parsed.rationale];
@@ -167,8 +173,11 @@ export async function getEvalScore(
       : evalResponse.output;
 
   logger.debug(`[${context.logPrefix}] Eval score parsed response`, { parsed });
+  if (!parsed) {
+    throw new AmbiguousConversationScoreError();
+  }
   invariant(
-    parsed != null && typeof parsed.value === 'boolean',
+    typeof parsed.value === 'boolean',
     `Expected eval grader value to be a boolean: ${parsed}`,
   );
   invariant(

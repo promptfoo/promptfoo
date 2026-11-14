@@ -978,10 +978,7 @@ export async function runJsonGradingPrompt({
     pass,
     score,
     reason,
-    tokensUsed: normalizeMatcherTokenUsage({
-      ...resp.tokenUsage,
-      completionDetails: resp.tokenUsage?.completionDetails || parsed.tokensUsed?.completionDetails,
-    }),
+    tokensUsed: normalizeMatcherTokenUsage(resp.tokenUsage),
     metadata: {
       ...trustedResponseMetadata,
       renderedGradingPrompt: renderedPrompt,

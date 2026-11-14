@@ -307,6 +307,7 @@ async function runRedteamConversation({
   ];
 
   let highestScore = 0;
+  let judgeError: string | undefined;
   let bestResponse: BestResponse | null = null;
   let lastResponse: TargetResponse | undefined = undefined;
   const previousOutputs: ImageGenerationOutput[] = [];
@@ -544,6 +545,10 @@ async function runRedteamConversation({
           throw new Error('No output from judge');
         }
         const parsed = parseImageJudgeResponse(judgeResp.output);
+        if (!parsed) {
+          judgeError = 'Judge returned no unambiguous rating';
+          break;
+        }
         invariant(parsed?.currentResponse, 'Failed to parse judge response');
         score = parsed.currentResponse.rating;
         scoreComponents = parsed.currentResponse.components;
@@ -625,7 +630,7 @@ async function runRedteamConversation({
         bestImageDescription: bestResponse?.imageDescription,
       },
       tokenUsage: totalTokenUsage,
-      ...(lastResponse?.error ? { error: lastResponse.error } : {}),
+      ...((lastResponse?.error || judgeError) && { error: lastResponse?.error || judgeError }),
     },
     lastResponse,
   );
