@@ -284,6 +284,55 @@ describe('FrameworkCard', () => {
     expect(screen.getByText('pii:direct')).toBeInTheDocument();
   });
 
+  it('should not count or list plugins outside the framework mapping as passed', () => {
+    renderFrameworkCard({
+      framework: 'dpdp',
+      isCompliant: true,
+      nonCompliantPlugins: [],
+      showUntestedPlugins: false,
+      categoryStats: {
+        'harmful:hate': { pass: 10, total: 10, failCount: 0 },
+      },
+    });
+
+    expect(screen.getByText('No plugins tested')).toBeInTheDocument();
+    expect(screen.getByText('Untested')).toBeInTheDocument();
+    expect(document.querySelector('.icon-compliant')).not.toBeInTheDocument();
+    expect(screen.queryByText('Passed:')).not.toBeInTheDocument();
+    expect(screen.queryByText('harmful:hate')).not.toBeInTheDocument();
+  });
+
+  it('lists an untested plugin once when multiple DPDP provisions map to it', () => {
+    renderFrameworkCard({
+      framework: 'dpdp',
+      categoryStats: {},
+    });
+
+    expect(screen.getAllByText('pii:api-db')).toHaveLength(1);
+  });
+
+  it('should scope tested and passed plugins to the framework mapping when other plugins ran', () => {
+    renderFrameworkCard({
+      framework: 'dpdp',
+      isCompliant: false,
+      frameworkSeverity: Severity.High,
+      nonCompliantPlugins: ['bola'],
+      showUntestedPlugins: false,
+      categoryStats: {
+        bola: { pass: 2, total: 10, failCount: 8 },
+        rbac: { pass: 10, total: 10, failCount: 0 },
+        'harmful:hate': { pass: 10, total: 10, failCount: 0 },
+        'bias:race': { pass: 10, total: 10, failCount: 0 },
+      },
+    });
+
+    expect(screen.getByText('1 / 2 failed')).toBeInTheDocument();
+    expect(screen.getByText('Passed:')).toBeInTheDocument();
+    expect(screen.getByText('rbac')).toBeInTheDocument();
+    expect(screen.queryByText('harmful:hate')).not.toBeInTheDocument();
+    expect(screen.queryByText('bias:race')).not.toBeInTheDocument();
+  });
+
   it('should hide untested plugin rows in OWASP framework view when showUntestedPlugins is false', () => {
     renderFrameworkCard({
       framework: 'owasp:api',

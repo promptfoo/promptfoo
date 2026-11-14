@@ -95,4 +95,5 @@ export const FRAMEWORK_DESCRIPTIONS: Record<string, string> = {
   'owasp:api': 'OWASP API Top 10 security risks for application programming interfaces',
   'owasp:llm': 'OWASP LLM Top 10 security vulnerabilities for large language models',
   'eu:ai-act': 'EU AI Act for responsible AI development',
+  dpdp: 'India Digital Personal Data Protection Act, 2023 and DPDP Rules, 2025',
 };

@@ -14,6 +14,7 @@ import {
   categoryAliases,
   DEFAULT_PLUGINS,
   DOD_AI_ETHICS_MAPPING,
+  DPDP_MAPPING,
   displayNameOverrides,
   EU_AI_ACT_MAPPING,
   FOUNDATION_PLUGINS,
@@ -138,6 +139,10 @@ const STANDARD_PRESETS: PluginPreset[] = [
   {
     name: 'GDPR',
     plugins: new Set(Object.values(GDPR_MAPPING).flatMap((v) => v.plugins)),
+  },
+  {
+    name: 'India DPDP Act',
+    plugins: new Set(Object.values(DPDP_MAPPING).flatMap((v) => v.plugins)),
   },
 ];
 
