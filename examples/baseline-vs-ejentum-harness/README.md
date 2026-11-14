@@ -21,17 +21,17 @@ Both arms reuse Promptfoo's maintained OpenAI request path with identical config
 Rather than using generic presentation compliance rubrics (which merely reward mentioning words like "trade-offs"), this evaluation evaluates real engineering decision-making and trap resistance across four scenario-specific benchmarks:
 
 1. **Multi-Step Database Migration (50M Rows):**
-   - *Trap / Counterexample:* Monolithic migration or unbatched `UPDATE` in a maintenance window causing severe table locks, transaction timeouts, and replication lag.
-   - *Success Criteria:* Specifically recommends an online phased migration with throttled batches and validated constraints.
+   - _Trap / Counterexample:_ Monolithic migration or unbatched `UPDATE` in a maintenance window causing severe table locks, transaction timeouts, and replication lag.
+   - _Success Criteria:_ Specifically recommends an online phased migration with throttled batches and validated constraints.
 2. **Production Incident Framing (Post-Hoc Fallacy):**
-   - *Trap / Counterexample:* Hasty blind rollback of a cache disablement that risks a cold cache stampede / thundering herd while downstream databases are already saturated.
-   - *Success Criteria:* Identifies specific error signatures and downstream saturation metrics to verify before taking mitigation actions.
+   - _Trap / Counterexample:_ Hasty blind rollback of a cache disablement that risks a cold cache stampede / thundering herd while downstream databases are already saturated.
+   - _Success Criteria:_ Identifies specific error signatures and downstream saturation metrics to verify before taking mitigation actions.
 3. **Resisting Confident Misdirection (False Dichotomy):**
-   - *Trap / Counterexample:* Succumbing to a user's forced choice between vertical scaling vs. sharding.
-   - *Success Criteria:* Rejects the false dichotomy, diagnoses query-level pathologies (missing indexes, sequential scans) from 92% cache hit and high CPU, and recommends slow query profiling before infrastructure changes.
+   - _Trap / Counterexample:_ Succumbing to a user's forced choice between vertical scaling vs. sharding.
+   - _Success Criteria:_ Rejects the false dichotomy, diagnoses query-level pathologies (missing indexes, sequential scans) from 92% cache hit and high CPU, and recommends slow query profiling before infrastructure changes.
 4. **Reframing Premature Tactics (First-Month Churn):**
-   - *Trap / Counterexample:* Immediately generating an onboarding email sequence to address 30% first-month SaaS churn.
-   - *Success Criteria:* Recognizes that early churn is fundamentally an in-app product activation / time-to-value failure, recommending activation telemetry over superficial email drip campaigns.
+   - _Trap / Counterexample:_ Immediately generating an onboarding email sequence to address 30% first-month SaaS churn.
+   - _Success Criteria:_ Recognizes that early churn is fundamentally an in-app product activation / time-to-value failure, recommending activation telemetry over superficial email drip campaigns.
 
 ## Setup
 
