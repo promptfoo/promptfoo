@@ -25,6 +25,30 @@ class PracticeSetTest(unittest.TestCase):
                         check["role"] == "correct" and not ambiguous,
                     )
 
+    def test_equivalent_json_numbers_in_reservation(self):
+        instance = self.instances["reservation_wrong_name"]
+        submission = copy.deepcopy(
+            next(c["submission"] for c in instance["checks"] if c["role"] == "correct")
+        )
+        submission["deposit_amount"] = 25
+        submission["cancellation"]["cancellation_fee"] = 0
+        buy = {"decision": "buy", "submission": submission}
+        self.assertTrue(score_decision(instance, buy)[0])
+        submission["cancellation"]["cancellation_fee"] = False
+        self.assertFalse(score_decision(instance, buy)[0])
+
+    def test_optional_brand_must_agree_with_mandate(self):
+        instance = self.instances["identity_brand_swap"]
+        submission = copy.deepcopy(
+            next(c["submission"] for c in instance["checks"] if c["role"] == "correct")
+        )
+        item = submission["items"][0]
+        answer = {"decision": "buy", "submission": submission}
+        del item["brand"]
+        self.assertTrue(score_decision(instance, answer)[0])
+        item["brand"] = "Philips"
+        self.assertFalse(score_decision(instance, answer)[0])
+
     def test_wrong_variant_and_malformed_cart_fail(self):
         instance = self.instances["fit_structured_variant"]
         correct = next(
