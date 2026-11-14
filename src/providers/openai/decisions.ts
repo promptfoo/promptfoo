@@ -269,7 +269,7 @@ export class OpenAiDecisionsProvider extends OpenAiGenericProvider {
       };
     }
     const { instructions, input } = rubric;
-    const question: z.infer<typeof questionSchema> = levels?.success
+    const question: DecisionQuestion = levels?.success
       ? { name: 'grade', type: 'score', instructions, levels: levels.data }
       : { name: 'grade', type: 'predicate', instructions };
     const result = await this.ask(input, { ...config, questions: [question] }, context, options);
