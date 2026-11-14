@@ -13,6 +13,15 @@ MIN_CONTENT_LENGTH = 10
 MAX_CONTENT_LENGTH = 10_000
 
 
+def score_on_scale(value: Any, label: str) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float, str)):
+        raise ValueError(f"{label} must be a number between 0 and 10")
+    number = float(value)
+    if not 0 <= number <= 10:
+        raise ValueError(f"{label} must be a number between 0 and 10")
+    return number
+
+
 def get_assert(output: Any, context: dict[str, Any]) -> dict[str, Any]:
     """
     Returns the normalized RAIL score and per-dimension named scores.
@@ -44,9 +53,15 @@ def get_assert(output: Any, context: dict[str, Any]) -> dict[str, Any]:
 
     mode = config.get("mode", "basic")
     domain = config.get("domain", "general")
-    threshold = float(config.get("threshold", 5.0))
+    threshold = score_on_scale(config.get("threshold", 5.0), "threshold")
 
     dimension_thresholds = config.get("dimensionThresholds", {})
+    if not isinstance(dimension_thresholds, dict):
+        raise ValueError("dimensionThresholds must map dimension names to thresholds")
+    dimension_thresholds = {
+        dim: score_on_scale(value, f"dimensionThresholds.{dim}")
+        for dim, value in dimension_thresholds.items()
+    }
     client = RailScoreClient(api_key=api_key)
 
     for attempt in range(3):
@@ -74,16 +89,16 @@ def get_assert(output: Any, context: dict[str, Any]) -> dict[str, Any]:
                 f"RAIL Score API error: {type(error).__name__}"
             ) from None
 
-    overall = result.rail_score.score
+    overall = score_on_scale(result.rail_score.score, "overall score")
     named_scores = {
-        f"rail_{dim}": ds.score / 10.0 for dim, ds in result.dimension_scores.items()
+        f"rail_{dim}": score_on_scale(ds.score, f"{dim} score") / 10.0
+        for dim, ds in result.dimension_scores.items()
     }
 
     # A high overall score cannot compensate for a failed required dimension.
     reason_parts = []
     passed = overall >= threshold
     for dimension, minimum in dimension_thresholds.items():
-        minimum = float(minimum)
         score = result.dimension_scores.get(dimension)
         if score is None:
             passed = False
