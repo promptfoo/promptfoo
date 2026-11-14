@@ -45,7 +45,7 @@ describe('SimulatedUser', () => {
   let originalProvider: MockApiProvider;
 
   beforeEach(() => {
-    mockUserProviderCallApi.mockClear();
+    mockUserProviderCallApi.mockReset();
     mockUserProviderCallApi.mockResolvedValue({ output: 'user response' });
 
     originalProvider = createMockProvider({
@@ -212,6 +212,34 @@ describe('SimulatedUser', () => {
       expect(messageCount).toBe(2);
       expect(originalProvider.callApi).toHaveBeenCalledTimes(1);
       expect(timeUtils.sleep).not.toHaveBeenCalled();
+    });
+
+    it('stops before user generation when the target ends the seeded conversation', async () => {
+      const initialMessages = [{ role: 'user', content: 'Goodbye' }];
+      originalProvider.callApi.mockResolvedValueOnce({
+        conversationEnded: true,
+        sessionId: 'closed',
+        guardrails: { flagged: true },
+        tokenUsage: { total: 13, numRequests: 1 },
+      });
+
+      const result = await simulatedUser.callApi('test prompt', {
+        originalProvider,
+        vars: { initialMessages },
+        prompt: { raw: 'test', label: 'test' },
+      });
+
+      expect(originalProvider.callApi).toHaveBeenCalledTimes(1);
+      expect(mockUserProviderCallApi).not.toHaveBeenCalled();
+      expect(result).toMatchObject({
+        output: 'User: Goodbye\n---\nAssistant: ',
+        metadata: {
+          messages: [...initialMessages, { role: 'assistant', content: '' }],
+          sessionId: 'closed',
+        },
+        guardrails: { flagged: true },
+        tokenUsage: { total: 13, numRequests: 1 },
+      });
     });
 
     it('should stop conversation when ###STOP### is received', async () => {

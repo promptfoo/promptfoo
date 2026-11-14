@@ -33,9 +33,7 @@ For each turn:
 1. The simulated user's message is sent to the agent
 2. The agent's response is sent back to the simulated user
 3. The simulated user generates the next message based on their instructions
-4. This continues until either:
-   - The maximum number of turns is reached
-   - The agent determines that the conversation has reached a natural conclusion
+4. The conversation stops when the turn limit is reached, the simulated user ends it, or the target returns `conversationEnded: true`. The final target message is used for grading.
 
 ## Example Conversation
 
