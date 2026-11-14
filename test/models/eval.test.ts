@@ -2249,6 +2249,33 @@ describe('evaluator', () => {
       expect(result.testIndices).toEqual([1, 2, 3]);
     });
 
+    it('matches literal metadata substrings with ASCII case folding', async () => {
+      const eval_ = await EvalFactory.create({ numResults: 0 });
+      const rows = [
+        { tag: 'gpt_4 100% marker\\%_ tail\\ x\0z' },
+        { tag: 'gptX4 1000 marker\\AB tail x' },
+        { tag: null },
+        {},
+      ];
+      for (const [testIdx, metadata] of rows.entries()) {
+        await eval_.addResult(createEvaluateResult({ testIdx, metadata }));
+      }
+
+      for (const value of ['GPT_4', '100%', 'marker\\%_', 'tail\\', 'X\0Z']) {
+        for (const [operator, expected] of [
+          ['contains', [0]],
+          ['not_contains', [1, 2, 3]],
+        ] as const) {
+          const filter = JSON.stringify({ type: 'metadata', operator, field: 'tag', value });
+          const page = await eval_.getTablePage({ filters: [filter] });
+          expect(
+            page.body.map((row) => row.testIdx),
+            filter,
+          ).toEqual(expected);
+        }
+      }
+    });
+
     it('filters by metadata exists operator (non-empty values only)', async () => {
       const eval_ = await EvalFactory.create(createPassFailOptions(10));
 
