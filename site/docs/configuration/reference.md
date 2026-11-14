@@ -1189,8 +1189,9 @@ Shared-session option names are reserved in Bayes@N, including with custom
 provider IDs: `persistSession`, `session_id`, `persist_sessions`, `thread_id`,
 `persist_threads`, `resume`, `continue`, `sessionId`, `session_key`, and `session`.
 The restriction also covers `runOptions.session`, OpenClaw's session-key header,
-Claude's session-related `extra_args` flags, Slack's `threadTs`, and n8n's prepared
-`vars.sessionId`. Target overrides and configured graders are checked too.
+Claude's session-related `extra_args` flags, Slack's `threadTs`, n8n's prepared
+`vars.sessionId`, and Realtime's `maintainContext` when `metadata.conversationId`
+enables history. Target overrides and configured graders are checked too.
 Remove shared-session modes from base provider configuration even if a per-test
 option disables them, since some providers read only their base configuration.
 Saving a fresh Claude session with `persist_session` or creating a fresh OpenCode
@@ -1208,7 +1209,9 @@ Loaded providers can describe private nonsecret configuration, input files, and
 context-dependent session reuse through the synchronous
 `getEvaluationInputs(context)` hook. It must return absolute file paths without
 network calls or mutation. The older `getInputFilePaths(context)` hook remains
-supported for file declarations. Google Video declares media inputs using its
+supported for file declarations. Graders with native file inputs must be loaded
+providers that declare those inputs. Inline undeclared file modes and unresolved
+JSON/YAML grader configuration references are rejected. Google Video declares media inputs using its
 native aliases and owning base paths. HTTP declares multipart path sources using
 its native template and path rules. Multipart modes with request transforms or
 dynamically fetched authentication/session variables, and templated multipart
