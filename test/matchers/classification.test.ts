@@ -171,6 +171,10 @@ describe('matchesClassification', () => {
   it.each(
     [
       { response: { error: 'Request timed out' }, reason: 'Request timed out' },
+      {
+        response: { classification: {}, noLabelsDetected: true, error: 'Request timed out' },
+        reason: 'Request timed out',
+      },
       { response: {}, reason: 'Unknown error fetching classification' },
       { response: { classification: {} }, reason: 'No classification scores returned' },
     ].flatMap((testCase) => [false, true].map((cached) => ({ ...testCase, cached }))),

@@ -13,7 +13,8 @@ const createStreamingToolConfig = () => ({
   toolConfig: { functionCallingConfig: { streamFunctionCallArguments: true } },
 });
 
-vi.mock('../../../src/envars', () => ({
+vi.mock('../../../src/envars', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../src/envars')>()),
   getEnvString: vi.fn(),
   getEnvInt: vi.fn().mockReturnValue(300000),
   getEnvBool: vi.fn().mockReturnValue(false),
@@ -496,6 +497,7 @@ describe('GoogleGenericProvider', () => {
       await expect(
         provider['executeFunctionCallback']('missing_function', '{}', config),
       ).rejects.toThrow("No callback found for function 'missing_function'");
+      expect(withGenAIToolSpan).not.toHaveBeenCalled();
     });
 
     it.each(['toString', 'constructor', 'valueOf'])(

@@ -37,11 +37,15 @@ export async function matchesClassification(
 
   const scores = Object.values(resp.classification ?? {});
   // No scores means no verdict, unless the provider confirms that it ran and detected no labels.
-  if (!resp.classification || (scores.length === 0 && resp.noLabelsDetected !== true)) {
+  if (
+    !resp.classification ||
+    (scores.length === 0 && (resp.noLabelsDetected !== true || Boolean(resp.error)))
+  ) {
     const failure = graderFail(
-      resp.classification
-        ? 'No classification scores returned'
-        : resp.error || 'Unknown error fetching classification',
+      resp.error ||
+        (resp.classification
+          ? 'No classification scores returned'
+          : 'Unknown error fetching classification'),
       resp.tokenUsage,
     );
     return {

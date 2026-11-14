@@ -3,6 +3,7 @@ import path from 'path';
 
 import Clone from 'rfdc';
 import { z } from 'zod';
+import { InvalidToolCallError } from '../../contracts/providers';
 import logger from '../../logger';
 import { extractBase64FromDataUrl, isDataUrl, parseDataUrl } from '../../util/dataUrl';
 import {
@@ -15,17 +16,22 @@ import { parseFileUrl } from '../../util/functions/loadFunction';
 import { renderVarsInObject } from '../../util/index';
 import { getAjv } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
+import { resolveProviderApiKey } from '../credentials';
 import { resolveProviderEnv } from '../env';
+import { encodePcmToWav } from '../pcm';
 import {
   calculateCost,
   clampCachedTokens,
   type ProviderConfig,
   parseChatPrompt,
+  parseToolCallArguments,
   transformToolChoice,
   transformTools,
 } from '../shared';
+import { InvalidToolSchemaError } from '../toolSchemaError';
 import { loadCredentials } from './auth';
 import {
+  GEMINI_4_MODELS,
   GEMINI_FLASH_MODELS,
   GOOGLE_MODELS,
   type GoogleModel,
@@ -280,8 +286,29 @@ export function mergeGoogleRequestTools(
   ];
 }
 
+export function getNativeGeminiApiKey(
+  config: { apiKey?: string; apiKeyEnvar?: string },
+  env?: Readonly<Record<string, string | undefined>>,
+): string | undefined {
+  const key = resolveProviderApiKey(config, env, [
+    'GOOGLE_API_KEY',
+    'GEMINI_API_KEY',
+    'PALM_API_KEY',
+    'GOOGLE_GENERATIVE_AI_API_KEY',
+  ]);
+  return key ? getNunjucksEngine().renderString(key, {}) : undefined;
+}
+
 /** Resolve native Gemini endpoints consistently across text and image adapters. */
 export function getGoogleApiBaseUrl(
+  config: CompletionOptions,
+  env?: Readonly<Record<string, string | undefined>>,
+): string {
+  // Callers append `/${apiVersion}/...`, so a trailing slash would double it.
+  return resolveGoogleApiBaseUrl(config, env).replace(/\/+$/, '');
+}
+
+function resolveGoogleApiBaseUrl(
   config: CompletionOptions,
   env?: Readonly<Record<string, string | undefined>>,
 ): string {
@@ -382,14 +409,17 @@ export function removeGoogleFunctionDeclarations(tools: unknown): Tool[] {
 }
 
 /**
- * Current Gemini Flash models ignore sampling parameters and reject penalties
+ * Gemini 4 and current Gemini Flash models ignore sampling parameters and reject penalties
  * and candidate counts. Remove typed and passthrough spellings.
  */
 export function removeDeprecatedGeminiGenerationParams<T>(
   modelName: string,
   generationConfig: T,
+  requestedModelName = modelName,
 ): T {
+  const isGemini4 = GEMINI_4_MODELS.some(({ id }) => modelName.startsWith(id));
   if (
+    !isGemini4 &&
     !GEMINI_FLASH_MODELS.some(({ id }) => modelName.startsWith(id)) &&
     modelName !== 'gemini-flash-latest' &&
     modelName !== 'gemini-flash-lite-latest'
@@ -423,10 +453,14 @@ export function removeDeprecatedGeminiGenerationParams<T>(
   }
 
   if (
+    isGemini4 ||
     modelName.startsWith('gemini-3.8-flash') ||
     modelName.startsWith('gemini-3.7-flash') ||
     modelName === 'gemini-flash-latest'
   ) {
+    const supportedThinkingLevels = modelName.startsWith('gemini-4-hydrogen')
+      ? 'LOW, MEDIUM, HIGH, or XHIGH'
+      : 'LOW, MEDIUM, or HIGH';
     for (const config of [sanitized.thinkingConfig, sanitized.thinking_config]) {
       const thinkingConfig = config as
         | {
@@ -441,13 +475,13 @@ export function removeDeprecatedGeminiGenerationParams<T>(
         thinkingConfig?.thinking_budget !== undefined
       ) {
         throw new Error(
-          `${modelName} does not support thinkingBudget. Use thinkingLevel (LOW, MEDIUM, or HIGH).`,
+          `${requestedModelName} does not support thinkingBudget. Use thinkingLevel (${supportedThinkingLevels}).`,
         );
       }
       const thinkingLevel = thinkingConfig?.thinkingLevel ?? thinkingConfig?.thinking_level;
       if (typeof thinkingLevel === 'string' && thinkingLevel.toUpperCase() === 'MINIMAL') {
         throw new Error(
-          `${modelName} does not support MINIMAL thinking. Use LOW, MEDIUM, or HIGH.`,
+          `${requestedModelName} does not support MINIMAL thinking. Use ${supportedThinkingLevels}.`,
         );
       }
     }
@@ -610,6 +644,22 @@ function applyGoogleRegionalPremium(
   };
 }
 
+// Google keeps these Gemini API IDs callable while changing the model that serves them.
+// Vertex has a separate lifecycle. https://ai.google.dev/gemini-api/docs/changelog
+const GEMINI_API_REDIRECTS = [
+  { id: 'gemini-3.5-flash', target: 'gemini-3.6-flash', from: Date.UTC(2026, 9, 8) },
+  { id: 'gemini-3.7-flash', target: 'gemini-3.8-flash', from: Date.UTC(2026, 9, 8) },
+  { id: 'gemini-2.5-pro', target: 'gemini-3.8-flash', from: Date.UTC(2026, 11, 1) },
+  { id: 'gemini-2.5-flash', target: 'gemini-3.5-flash-lite', from: Date.UTC(2026, 11, 1) },
+];
+
+export function getEffectiveGeminiApiModel(modelName: string, timestamp = Date.now()): string {
+  return (
+    GEMINI_API_REDIRECTS.find(({ id, from }) => id === modelName && timestamp >= from)?.target ??
+    modelName
+  );
+}
+
 function getGoogleCatalogCost(
   model: GoogleModel | undefined,
   promptTokens: number,
@@ -668,12 +718,9 @@ export function calculateGoogleCost(
   pricingTime = Date.now(),
 ): number | undefined {
   const timestamp = Number.isFinite(pricingTime) ? pricingTime : Date.now();
-  // Gemini API redirects 3.5 Flash to 3.6 Flash from 2026-10-08. Vertex still serves
-  // the original model with its own rates. https://ai.google.dev/gemini-api/docs/changelog
-  const pricingModelName =
-    !isVertexMode && modelName === 'gemini-3.5-flash' && timestamp >= Date.UTC(2026, 9, 8)
-      ? 'gemini-3.6-flash'
-      : modelName;
+  const pricingModelName = isVertexMode
+    ? modelName
+    : getEffectiveGeminiApiModel(modelName, timestamp);
   const model = GOOGLE_MODELS.find((m) => m.id === pricingModelName);
 
   if (
@@ -1078,53 +1125,86 @@ export function maybeCoerceToGeminiFormat(
     coerced = true;
   } else if (
     Array.isArray(contents) &&
-    contents.every((item) => typeof item.content === 'string')
+    contents.every(
+      (item) => item?.role || typeof item?.content === 'string' || Array.isArray(item?.parts),
+    )
   ) {
-    // This looks like an OpenAI chat format
     const targetRole = options?.useAssistantRole ? 'assistant' : 'model';
-    coercedContents = contents.map((item) => ({
-      role: (item.role === 'assistant' ? targetRole : item.role) as 'user' | 'model' | undefined,
-      parts: [{ text: item.content }],
-    }));
-    coerced = true;
-  } else if (Array.isArray(contents) && contents.every((item) => item.role && item.content)) {
-    // This looks like an OpenAI chat format with content that might be an array or object
-    const targetRole = options?.useAssistantRole ? 'assistant' : 'model';
-    coercedContents = contents.map((item) => {
-      const mappedRole = (item.role === 'assistant' ? targetRole : item.role) as
-        | 'user'
-        | 'model'
-        | undefined;
-      if (Array.isArray(item.content)) {
-        // Handle array content
-        const parts = item.content.map((contentItem: any) => {
-          if (typeof contentItem === 'string') {
-            return { text: contentItem };
-          } else if (contentItem.type === 'text') {
-            return { text: contentItem.text };
-          } else {
-            // Handle other content types if needed
-            return contentItem;
-          }
-        });
-        return {
-          role: mappedRole,
-          parts,
+    const toolNames = new Map<string, string>();
+    coercedContents = [];
+    for (const item of contents) {
+      if (item.role === 'tool' || item.tool_call_id != null) {
+        const name = toolNames.get(item.tool_call_id) ?? item.name;
+        if (
+          typeof item.tool_call_id !== 'string' ||
+          !item.tool_call_id ||
+          typeof name !== 'string' ||
+          !name ||
+          (item.name && name !== item.name)
+        ) {
+          throw new Error('Tool result requires a tool_call_id and matching function name');
+        }
+        const part = {
+          functionResponse: {
+            id: item.tool_call_id,
+            name,
+            response: { result: item.content ?? '' },
+          },
         };
-      } else if (typeof item.content === 'object') {
-        // Handle object content
-        return {
-          role: mappedRole,
-          parts: [item.content],
-        };
-      } else {
-        // Handle string content
-        return {
-          role: mappedRole,
-          parts: [{ text: item.content }],
-        };
+        const previous = coercedContents[coercedContents.length - 1];
+        if (
+          previous?.role === 'user' &&
+          previous.parts.length &&
+          previous.parts.every((part) => part.functionResponse)
+        ) {
+          previous.parts.push(part);
+        } else {
+          coercedContents.push({ role: 'user', parts: [part] });
+        }
+        continue;
       }
-    });
+      const role = (
+        item.role === 'assistant' ? targetRole : item.role === 'developer' ? 'system' : item.role
+      ) as 'user' | 'model';
+      const parts: Part[] =
+        item.parts?.slice() ??
+        (Array.isArray(item.content)
+          ? item.content.map((part: any) =>
+              typeof part === 'string'
+                ? { text: part }
+                : part.type === 'text'
+                  ? { text: part.text }
+                  : part,
+            )
+          : typeof item.content === 'object' && item.content !== null
+            ? [item.content]
+            : item.content == null || (item.tool_calls?.length && item.content === '')
+              ? []
+              : [{ text: item.content }]);
+      for (const call of item.tool_calls ?? []) {
+        if (
+          typeof call?.function?.name !== 'string' ||
+          !call.function.name ||
+          (call.id !== undefined && (typeof call.id !== 'string' || !call.id))
+        ) {
+          throw new Error('Tool call requires a function name and a valid id when provided');
+        }
+        if (call.id) {
+          toolNames.set(call.id, call.function.name);
+        }
+        parts.push({
+          functionCall: {
+            ...(call.id ? { id: call.id } : {}),
+            name: call.function.name,
+            args: parseToolCallArguments(call.function.arguments),
+          },
+          // Preserve Gemini signatures, or mark imported synthetic/cross-model history.
+          thoughtSignature:
+            call.extra_content?.google?.thought_signature ?? 'skip_thought_signature_validator',
+        });
+      }
+      coercedContents.push({ role, parts });
+    }
     coerced = true;
   } else if (typeof contents === 'object' && contents !== null && 'parts' in contents) {
     // This might be a single content object
@@ -1496,23 +1576,8 @@ export function normalizeGeminiAudio(output: Part[] | string | undefined) {
   }
 
   const sampleRate = Number(mimeType.match(/(?:^|;)\s*rate=(\d+)/i)?.[1] ?? 24_000);
-  const header = Buffer.alloc(44);
-  header.write('RIFF', 0);
-  header.writeUInt32LE(36 + audioData.length, 4);
-  header.write('WAVE', 8);
-  header.write('fmt ', 12);
-  header.writeUInt32LE(16, 16);
-  header.writeUInt16LE(1, 20);
-  header.writeUInt16LE(1, 22);
-  header.writeUInt32LE(sampleRate, 24);
-  header.writeUInt32LE(sampleRate * 2, 28);
-  header.writeUInt16LE(2, 32);
-  header.writeUInt16LE(16, 34);
-  header.write('data', 36);
-  header.writeUInt32LE(audioData.length, 40);
-
   return {
-    data: Buffer.concat([header, audioData]).toString('base64'),
+    data: encodePcmToWav(audioData, sampleRate).toString('base64'),
     format: 'wav',
     sampleRate,
     channels: 1,
@@ -2208,42 +2273,83 @@ export function validateFunctionCall(
     } else {
       throw new Error('Unrecognized function call format');
     }
+    if (
+      !Array.isArray(functionCalls) ||
+      functionCalls.length === 0 ||
+      functionCalls.some((call) => !call || typeof call.name !== 'string')
+    ) {
+      throw new Error('Expected at least one function call');
+    }
   } catch {
-    throw new Error(
+    throw new InvalidToolCallError(
       `Google did not return a valid-looking function call: ${JSON.stringify(output)}`,
     );
   }
 
-  const interpolatedFunctions = loadFile(functions, vars) as Tool[];
+  let interpolatedFunctions: Tool[];
+  try {
+    interpolatedFunctions = loadFile(functions, vars) as Tool[];
+  } catch (err) {
+    throw new InvalidToolSchemaError((err as Error).message);
+  }
+  if (interpolatedFunctions !== undefined && !Array.isArray(interpolatedFunctions)) {
+    throw new InvalidToolSchemaError('Expected the loaded functions to be an array');
+  }
+  if (
+    interpolatedFunctions?.some(
+      (tool) =>
+        !tool ||
+        typeof tool !== 'object' ||
+        (tool.functionDeclarations !== undefined &&
+          (!Array.isArray(tool.functionDeclarations) ||
+            tool.functionDeclarations.some(
+              (declaration) =>
+                !declaration || typeof declaration.name !== 'string' || !declaration.name.trim(),
+            ))),
+    )
+  ) {
+    throw new InvalidToolSchemaError('Expected valid function declarations in each tool');
+  }
+  const declarations = interpolatedFunctions?.flatMap((tool) => tool.functionDeclarations ?? []);
+  if (!declarations?.length) {
+    throw new InvalidToolSchemaError(
+      `Called "${functionCalls[0].name}", but there is no function with that name`,
+    );
+  }
   const ajv = getAjv();
 
   for (const functionCall of functionCalls) {
     // Parse function call and validate it against schema
     const functionName = functionCall.name;
-    const functionArgs = parseStringObject(functionCall.args);
-    const functionSchema = interpolatedFunctions
-      ?.flatMap((tool) => tool.functionDeclarations ?? [])
-      .find((declaration) => declaration.name === functionName);
-    if (!functionSchema) {
-      throw new Error(`Called "${functionName}", but there is no function with that name`);
+    let functionArgs;
+    try {
+      functionArgs = functionCall.args === undefined ? {} : parseStringObject(functionCall.args);
+    } catch (err) {
+      throw new InvalidToolCallError((err as Error).message);
     }
-    if (Object.keys(functionArgs).length !== 0 && functionSchema?.parameters) {
+    const functionSchema = declarations.find((declaration) => declaration.name === functionName);
+    if (!functionSchema) {
+      throw new InvalidToolCallError(
+        `Called "${functionName}", but there is no function with that name`,
+      );
+    }
+    if (functionSchema.parameters) {
       const parameterSchema = normalizeSchemaTypes(functionSchema.parameters);
       let validate;
       try {
         validate = ajv.compile(parameterSchema as AnySchema);
       } catch (err) {
-        throw new Error(
+        throw new InvalidToolSchemaError(
           `Tool schema doesn't compile with ajv: ${err}. If this is a valid tool schema you may need to reformulate your assertion without is-valid-function-call.`,
         );
       }
       if (!validate(functionArgs)) {
-        throw new Error(
+        throw new InvalidToolCallError(
           `Call to "${functionName}":\n${JSON.stringify(functionCall)}\ndoes not match schema:\n${JSON.stringify(validate.errors)}`,
         );
       }
     } else if (!(JSON.stringify(functionArgs) === '{}' && !functionSchema?.parameters)) {
-      throw new Error(
+      throw new InvalidToolCallError(
         `Call to "${functionName}":\n${JSON.stringify(functionCall)}\ndoes not match schema:\n${JSON.stringify(functionSchema)}`,
       );
     }
