@@ -462,7 +462,7 @@ defaultTest:
 
 #### select-best rubric prompt
 
-For control over the `select-best` rubric prompt, you may use the variables `{{outputs}}` (list of strings) and `{{criteria}}` (string). It expects the LLM output to contain the index of the winning output.
+For control over the `select-best` rubric prompt, you may use the variables `{{outputs}}` (list of strings) and `{{criteria}}` (string). It expects the LLM output to contain only one distinct valid output index; responses that mention multiple valid indexes fail as ambiguous. Prefer returning just the winning index. See [Select Best](./select-best.md) for parsing details.
 
 ## Classifiers
 
