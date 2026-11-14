@@ -1,3 +1,4 @@
+import { withEvalResultWriter } from '../database/evalResultWrite';
 import { evaluate as evaluateWithRuntime } from '../evaluator/engine';
 import { nodeEvaluatorRuntime } from './evaluatorRuntime';
 
@@ -34,10 +35,15 @@ export function evaluate<
   options: InternalEvaluateOptions,
   runtime?: EvaluatorRuntime<TEvaluation, TResult>,
 ): Promise<TEvaluation> {
-  return evaluateWithRuntime(
-    testSuite,
-    evalRecord,
-    options,
-    runtime ?? (nodeEvaluatorRuntime as unknown as EvaluatorRuntime<TEvaluation, TResult>),
-  );
+  const run = () =>
+    evaluateWithRuntime(
+      testSuite,
+      evalRecord,
+      options,
+      runtime ?? (nodeEvaluatorRuntime as unknown as EvaluatorRuntime<TEvaluation, TResult>),
+    );
+  const record = evalRecord as TEvaluation & Eval;
+  return !runtime && record.persisted && !record.useOldResults()
+    ? withEvalResultWriter(record, run)
+    : run();
 }

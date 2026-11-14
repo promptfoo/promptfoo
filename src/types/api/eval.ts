@@ -334,6 +334,15 @@ export const BulkDeleteEvalsRequestSchema = z.object({
 
 export type BulkDeleteEvalsRequest = z.infer<typeof BulkDeleteEvalsRequestSchema>;
 
+// DELETE /api/eval/:evalId/results/:id
+
+export const DeleteEvalResultParamsSchema = z.object({
+  evalId: z.string().min(1),
+  id: z.string().min(1),
+});
+
+export type DeleteEvalResultParams = z.infer<typeof DeleteEvalResultParamsSchema>;
+
 /** Grouped schemas for server-side validation. */
 export const EvalSchemas = {
   CreateJob: {
@@ -395,6 +404,9 @@ export const EvalSchemas = {
   Delete: {
     Params: DeleteEvalParamsSchema,
     Response: DeleteEvalResponseSchema,
+  },
+  DeleteResult: {
+    Params: DeleteEvalResultParamsSchema,
   },
   BulkDelete: {
     Request: BulkDeleteEvalsRequestSchema,

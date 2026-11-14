@@ -7,7 +7,16 @@ import Eval, { EvalQueries } from '../../models/eval';
 import EvalResult from '../../models/evalResult';
 import { evaluateWithSource } from '../../node';
 import { EvalSchemas } from '../../types/api/eval';
-import { deleteEval, deleteEvals, updateResult, writeResultsToDatabase } from '../../util/database';
+import {
+  deleteEval,
+  deleteEvalResult,
+  deleteEvals,
+  EvalResultDeletionConflict,
+  EvalResultNotFoundError,
+  updateResult,
+  withEvalResultWriter,
+  writeResultsToDatabase,
+} from '../../util/database';
 import {
   ComparisonEvalNotFoundError,
   evalTableToJson,
@@ -737,67 +746,78 @@ evalRouter.post(
         return;
       }
 
-      // Capture the current state before we change it
-      const hasExistingManualOverride = Boolean(
-        result.gradingResult?.componentResults?.some(
-          (r) => r.assertion?.type === HUMAN_ASSERTION_TYPE,
-        ),
-      );
-      const successChanged = result.success !== gradingResult.pass;
-      const scoreChange = gradingResult.score - result.score;
+      const rating = await withEvalResultWriter(eval_, async () => {
+        const currentResult = await EvalResult.findById(id);
+        if (!currentResult || currentResult.evalId !== evalId) {
+          return { status: 404, response: { error: 'Result not found' } };
+        }
 
-      // Update the result
-      result.gradingResult = gradingResult;
-      result.success = gradingResult.pass;
-      result.score = gradingResult.score;
-
-      // Update the prompt metrics
-      const prompt = eval_.prompts[result.promptIdx];
-      invariant(prompt, 'Prompt not found');
-      if (!prompt.metrics) {
-        logger.error(
-          `[${id}] This is not normal. Prompt metrics not found for prompt ${result.promptIdx}`,
+        // Capture the current state before we change it
+        const hasExistingManualOverride = Boolean(
+          currentResult.gradingResult?.componentResults?.some(
+            (r) => r.assertion?.type === HUMAN_ASSERTION_TYPE,
+          ),
         );
+        const successChanged = currentResult.success !== gradingResult.pass;
+        const scoreChange = gradingResult.score - currentResult.score;
 
-        res.status(400).json({ error: 'Prompt metrics not found' });
+        // Update the result
+        currentResult.gradingResult = gradingResult;
+        currentResult.success = gradingResult.pass;
+        currentResult.score = gradingResult.score;
+
+        // Update the prompt metrics
+        const prompt = eval_.prompts[currentResult.promptIdx];
+        invariant(prompt, 'Prompt not found');
+        if (!prompt.metrics) {
+          logger.error(
+            `[${id}] This is not normal. Prompt metrics not found for prompt ${currentResult.promptIdx}`,
+          );
+
+          return { status: 400, response: { error: 'Prompt metrics not found' } };
+        }
+
+        if (successChanged) {
+          if (currentResult.success) {
+            // Result changed from fail to pass
+            prompt.metrics.testPassCount += 1;
+            prompt.metrics.testFailCount -= 1;
+            prompt.metrics.assertPassCount += 1;
+            prompt.metrics.score += scoreChange;
+            if (hasExistingManualOverride) {
+              // If there was an existing manual override, we need to decrement the assertFailCount because it changed from fail to pass
+              prompt.metrics.assertFailCount -= 1;
+            }
+          } else {
+            prompt.metrics.testPassCount -= 1;
+            prompt.metrics.testFailCount += 1;
+            prompt.metrics.assertFailCount += 1;
+            prompt.metrics.score += scoreChange;
+            if (hasExistingManualOverride) {
+              // If there was an existing manual override, we need to decrement the assertPassCount because it changed from pass to fail
+              prompt.metrics.assertPassCount -= 1;
+            }
+          }
+        } else if (!hasExistingManualOverride) {
+          // Nothing changed, so the user just added an assertion
+          if (currentResult.success) {
+            prompt.metrics.assertPassCount += 1;
+          } else {
+            prompt.metrics.assertFailCount += 1;
+          }
+        }
+
+        await currentResult.save();
+        await eval_.save();
+
+        return { status: 200, response: EvalSchemas.SubmitRating.Response.parse(currentResult) };
+      });
+      res.status(rating.status).json(rating.response);
+    } catch (error) {
+      if (error instanceof EvalResultDeletionConflict) {
+        res.status(409).json({ error: error.message });
         return;
       }
-
-      if (successChanged) {
-        if (result.success) {
-          // Result changed from fail to pass
-          prompt.metrics.testPassCount += 1;
-          prompt.metrics.testFailCount -= 1;
-          prompt.metrics.assertPassCount += 1;
-          prompt.metrics.score += scoreChange;
-          if (hasExistingManualOverride) {
-            // If there was an existing manual override, we need to decrement the assertFailCount because it changed from fail to pass
-            prompt.metrics.assertFailCount -= 1;
-          }
-        } else {
-          prompt.metrics.testPassCount -= 1;
-          prompt.metrics.testFailCount += 1;
-          prompt.metrics.assertFailCount += 1;
-          prompt.metrics.score += scoreChange;
-          if (hasExistingManualOverride) {
-            // If there was an existing manual override, we need to decrement the assertPassCount because it changed from pass to fail
-            prompt.metrics.assertPassCount -= 1;
-          }
-        }
-      } else if (!hasExistingManualOverride) {
-        // Nothing changed, so the user just added an assertion
-        if (result.success) {
-          prompt.metrics.assertPassCount += 1;
-        } else {
-          prompt.metrics.assertFailCount += 1;
-        }
-      }
-
-      await result.save();
-      await eval_.save();
-
-      res.json(EvalSchemas.SubmitRating.Response.parse(result));
-    } catch (error) {
       sendError(res, 500, 'Failed to submit rating', error);
     }
   },
@@ -851,6 +871,30 @@ evalRouter.post('/', async (req: Request, res: Response): Promise<void> => {
       body: sanitizeObject(body, { context: 'request body' }),
     });
     res.status(500).json({ error: 'Failed to write eval to database' });
+  }
+});
+
+evalRouter.delete('/:evalId/results/:id', async (req: Request, res: Response): Promise<void> => {
+  const paramsResult = EvalSchemas.DeleteResult.Params.safeParse(req.params);
+  if (!paramsResult.success) {
+    replyValidationError(res, paramsResult.error);
+    return;
+  }
+
+  const { evalId, id } = paramsResult.data;
+  try {
+    await deleteEvalResult(evalId, id);
+    res.status(204).send();
+  } catch (error) {
+    if (error instanceof EvalResultDeletionConflict) {
+      res.status(409).json({ error: error.message });
+      return;
+    }
+    if (error instanceof EvalResultNotFoundError) {
+      res.status(404).json({ error: 'Eval result not found' });
+      return;
+    }
+    sendError(res, 500, 'Failed to delete eval result', error);
   }
 });
 

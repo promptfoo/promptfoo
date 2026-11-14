@@ -621,6 +621,7 @@ export function createServerOpenApiRegistry() {
       200: jsonResponse(EvalSchemas.SubmitRating.Response),
       400: jsonResponse(ErrorResponseSchema, 'Validation error'),
       404: jsonResponse(ErrorResponseSchema, 'Result or evaluation not found'),
+      409: jsonResponse(ErrorResponseSchema, 'Evaluation is being modified'),
       500: jsonResponse(ErrorResponseSchema, 'Server error'),
     },
   });
@@ -637,6 +638,24 @@ export function createServerOpenApiRegistry() {
     responses: {
       200: jsonResponse(EvalSchemas.Save.Response),
       400: jsonResponse(ErrorResponseSchema, 'Validation error'),
+      500: jsonResponse(ErrorResponseSchema, 'Server error'),
+    },
+  });
+
+  register({
+    method: 'delete',
+    path: '/api/eval/{evalId}/results/{id}',
+    operationId: 'deleteEvalResult',
+    tags: ['Eval'],
+    summary: 'Delete one result within an evaluation',
+    request: {
+      params: EvalSchemas.DeleteResult.Params,
+    },
+    responses: {
+      204: noContent('Eval result deleted'),
+      400: jsonResponse(ErrorResponseSchema, 'Validation error'),
+      404: jsonResponse(ErrorResponseSchema, 'Eval result not found'),
+      409: jsonResponse(ErrorResponseSchema, 'Evaluation metrics unavailable'),
       500: jsonResponse(ErrorResponseSchema, 'Server error'),
     },
   });

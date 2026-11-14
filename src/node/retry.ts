@@ -1,6 +1,7 @@
 import chalk from 'chalk';
 import { and, eq, inArray } from 'drizzle-orm';
 import cliState from '../cliState';
+import { withEvalResultWriter } from '../database/evalResultWrite';
 import { getDb } from '../database/index';
 import { evalResultsTable } from '../database/tables';
 import { evaluate } from '../evaluator';
@@ -170,7 +171,12 @@ const RECALCULATE_BATCH_SIZE = 1000;
  * Recalculates prompt metrics based on current results after ERROR results have been deleted.
  * Uses streaming batched iteration to avoid OOM with large evaluations (40K+ results).
  */
-export async function recalculatePromptMetrics(evalRecord: Eval): Promise<void> {
+export function recalculatePromptMetrics(evalRecord: Eval): Promise<void> {
+  const run = () => rebuildPromptMetrics(evalRecord);
+  return evalRecord.persisted ? withEvalResultWriter(evalRecord, run) : run();
+}
+
+async function rebuildPromptMetrics(evalRecord: Eval): Promise<void> {
   logger.debug('Recalculating prompt metrics after deleting ERROR results');
 
   const startTime = Date.now();

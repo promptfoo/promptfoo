@@ -60,6 +60,10 @@ const dbMocks = vi.hoisted(() => {
   };
 });
 
+vi.mock('../../src/database/evalResultWrite', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/database/evalResultWrite')>()),
+  withEvalResultWriter: (_eval: Eval, run: () => Promise<unknown>) => run(),
+}));
 vi.mock('../../src/database/index', () => ({
   getDb: vi.fn(async () => dbMocks.db),
 }));

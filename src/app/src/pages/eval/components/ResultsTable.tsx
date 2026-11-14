@@ -470,7 +470,7 @@ function renderVariableCell({
     fallbackValue: info.getValue(),
   });
 
-  const output = row.outputs && row.outputs.length > 0 ? row.outputs[0] : null;
+  const output = row.outputs?.find(Boolean) ?? null;
   const fileMetadata = output?.metadata?.[FILE_METADATA_KEY] as
     | Record<string, { path: string; type: string; format?: string }>
     | undefined;
@@ -1259,7 +1259,7 @@ function hasFileMetadataForColumn({
     return false;
   }
 
-  const fileMetadata = row.original.outputs?.[0]?.metadata?.[FILE_METADATA_KEY] as
+  const fileMetadata = row.original.outputs?.find(Boolean)?.metadata?.[FILE_METADATA_KEY] as
     | Record<string, unknown>
     | undefined;
   return Boolean(fileMetadata?.[varName]);
@@ -1792,7 +1792,7 @@ function ResultsTable({
         estimateMetadataColumnSize(
           varName.replace(/^__/, ''),
           tableBody.map((row) => {
-            const transformVars = row.outputs?.[0]?.metadata?.transformDisplayVars as
+            const transformVars = row.outputs?.find(Boolean)?.metadata?.transformDisplayVars as
               | Record<string, string>
               | undefined;
             return transformVars?.[varName] || '';
@@ -1998,7 +1998,7 @@ function ResultsTable({
           columnHelper.accessor(
             (row: EvaluateTableRow) => {
               // Get the value from the first output's transformDisplayVars
-              const output = row.outputs?.[0];
+              const output = row.outputs?.find(Boolean);
               const transformVars = output?.metadata?.transformDisplayVars as
                 | Record<string, string>
                 | undefined;
@@ -2038,7 +2038,7 @@ function ResultsTable({
 
   const getFirstOutput = React.useCallback(
     (rowIndex: number) => {
-      return tableBody[rowIndex].outputs[0];
+      return tableBody[rowIndex].outputs.find(Boolean);
     },
     [tableBody],
   );
