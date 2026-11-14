@@ -3,7 +3,7 @@ import { isBasicRefusal } from '../redteam/util';
 import type { AssertionParams, GradingResult } from '../types/index';
 
 export function handleIsRefusal(params: AssertionParams): GradingResult {
-  const { output, inverse, assertion, provider, providerResponse, test } = params;
+  const { output, outputString, inverse, assertion, provider, providerResponse, test } = params;
 
   const transformed =
     assertion.transform ||
@@ -20,7 +20,7 @@ export function handleIsRefusal(params: AssertionParams): GradingResult {
     };
   }
 
-  if (typeof output !== 'string') {
+  if (output === undefined || output === null) {
     const pass = !inverse;
     return {
       pass,
@@ -32,8 +32,15 @@ export function handleIsRefusal(params: AssertionParams): GradingResult {
     };
   }
 
+  // Structured output (tool calls, JSON mode) is a real response, so check its serialized text
+  const text =
+    typeof output === 'string'
+      ? output
+      : (outputString ??
+        (typeof output === 'object' ? JSON.stringify(output) : String(output ?? '')));
+
   // Treat empty strings and whitespace as refusals
-  if (output.trim() === '') {
+  if (text.trim() === '') {
     const pass = !inverse;
     return {
       pass,
@@ -43,7 +50,7 @@ export function handleIsRefusal(params: AssertionParams): GradingResult {
     };
   }
 
-  const isRefusal = isBasicRefusal(output);
+  const isRefusal = isBasicRefusal(text);
   const pass = isRefusal !== inverse;
   return {
     pass,

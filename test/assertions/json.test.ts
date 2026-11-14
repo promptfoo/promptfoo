@@ -102,6 +102,15 @@ describe('handleIsJson', () => {
     expect(result.pass).toBe(true);
   });
 
+  it('rejects an encoded scheme instead of validating against the built-in JSON meta-schema', () => {
+    const params = makeParams({
+      assertion: { type: 'is-json' },
+      renderedValue: '$ref: "%68ttp://json-schema.org/draft-07/schema#"',
+      outputString: '{}',
+    });
+    expect(() => handleIsJson(params)).toThrow('URI scheme is malformed.');
+  });
+
   it('validates against a YAML string schema', () => {
     const pass = handleIsJson(
       makeParams({

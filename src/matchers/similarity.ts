@@ -55,6 +55,10 @@ function buildSimilarityResult(
   metric: SimilarityMetric,
   tokensUsed: TokenUsage,
 ): Omit<GradingResult, 'assertion'> {
+  if (!Number.isFinite(similarity)) {
+    return fail(`Invalid similarity score: ${similarity}`, tokensUsed);
+  }
+
   if (metric === 'euclidean') {
     // For distance metrics: lower is better, threshold is maximum distance
     const distance = similarity;

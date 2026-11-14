@@ -3,26 +3,23 @@ import { DEFAULT_QUERY_LIMIT } from '../constants';
 import { deleteTraceRecordsForEvals } from '../database/evalDeletion';
 import { getDb } from '../database/index';
 import {
-  datasetsTable,
   evalResultsTable,
   evalsTable,
   evalsToDatasetsTable,
   evalsToPromptsTable,
   evalsToTagsTable,
-  promptsTable,
   spansTable,
   tagsTable,
   tracesTable,
 } from '../database/tables';
 import { getAuthor } from '../globalConfig/accounts';
 import logger from '../logger';
-import Eval, { createEvalId } from '../models/eval';
+import Eval, { createEvalId, insertEvalDatasetAndTags, insertEvalPrompts } from '../models/eval';
 import { notifyEvaluationChanged, notifyEvaluationsDeleted } from '../models/evalMutation';
-import { generateIdFromPrompt } from '../models/prompt';
+import { getStripFlags } from '../models/evalResult';
 import {
   type EvaluateSummaryV2,
   type EvaluateTable,
-  type EvalWithMetadata,
   type PromptWithMetadata,
   type ResultsFile,
   type TestCasesWithMetadata,
@@ -31,7 +28,11 @@ import {
 } from '../types/index';
 import invariant from '../util/invariant';
 import { sha256 } from './createHash';
-import { restoreAzureBlobSasTokens, sanitizeTracingConfigForPersistence } from './sanitizer';
+import {
+  restoreAzureBlobSasTokens,
+  sanitizeConfigForOutput,
+  sanitizeTracingConfigForPersistence,
+} from './sanitizer';
 import {
   getCachedStandaloneEvals,
   getStandaloneEvalCacheKey,
@@ -73,30 +74,7 @@ export async function writeResultsToDatabase(
     // Record prompt relation
     invariant(results.table, 'Table is required');
 
-    for (const prompt of results.table.head.prompts) {
-      const label = prompt.label || prompt.display || prompt.raw;
-      const promptId = generateIdFromPrompt(prompt);
-
-      await tx
-        .insert(promptsTable)
-        .values({
-          id: promptId,
-          prompt: label,
-        })
-        .onConflictDoNothing()
-        .run();
-
-      await tx
-        .insert(evalsToPromptsTable)
-        .values({
-          evalId,
-          promptId,
-        })
-        .onConflictDoNothing()
-        .run();
-
-      logger.debug(`Inserting prompt ${promptId}`);
-    }
+    await insertEvalPrompts(tx, evalId, results.table.head.prompts);
 
     // Record dataset relation
     const datasetId = sha256(JSON.stringify(config.tests || []));
@@ -112,53 +90,7 @@ export async function writeResultsToDatabase(
       );
     }
 
-    await tx
-      .insert(datasetsTable)
-      .values({
-        id: datasetId,
-        tests: testsForStorage,
-      })
-      .onConflictDoNothing()
-      .run();
-
-    await tx
-      .insert(evalsToDatasetsTable)
-      .values({
-        evalId,
-        datasetId,
-      })
-      .onConflictDoNothing()
-      .run();
-
-    logger.debug(`Inserting dataset ${datasetId}`);
-
-    // Record tags
-    if (config.tags) {
-      for (const [tagKey, tagValue] of Object.entries(config.tags)) {
-        const tagId = sha256(`${tagKey}:${tagValue}`);
-
-        await tx
-          .insert(tagsTable)
-          .values({
-            id: tagId,
-            name: tagKey,
-            value: tagValue,
-          })
-          .onConflictDoNothing()
-          .run();
-
-        await tx
-          .insert(evalsToTagsTable)
-          .values({
-            evalId,
-            tagId,
-          })
-          .onConflictDoNothing()
-          .run();
-
-        logger.debug(`Inserting tag ${tagId}`);
-      }
-    }
+    await insertEvalDatasetAndTags(tx, evalId, { id: datasetId, tests: testsForStorage }, config);
   });
 
   notifyEvaluationChanged(evalId);
@@ -213,7 +145,7 @@ export async function updateResult(
 }
 
 async function getPromptsWithPredicate(
-  predicate: (eval_: Eval) => boolean,
+  predicate: (datasetId: string) => boolean,
   limit: number,
 ): Promise<PromptWithMetadata[]> {
   // TODO(ian): Make this use a proper database query
@@ -222,40 +154,24 @@ async function getPromptsWithPredicate(
   const groupedPrompts: { [hash: string]: PromptWithMetadata } = {};
 
   for (const eval_ of evals_) {
-    const createdAt = new Date(eval_.createdAt).toISOString();
-    if (predicate(eval_)) {
-      const datasetId = sha256(JSON.stringify(eval_.config.tests || []));
+    const timestamp = eval_.createdAt;
+    const createdAt = new Date(timestamp).toISOString();
+    const datasetId = sha256(JSON.stringify(eval_.config.tests || []));
+    if (predicate(datasetId)) {
       for (const prompt of eval_.getPrompts()) {
         const promptId = sha256(prompt.raw);
-        if (promptId in groupedPrompts) {
-          groupedPrompts[promptId].recentEvalDate = new Date(
-            Math.max(
-              groupedPrompts[promptId].recentEvalDate.getTime(),
-              new Date(createdAt).getTime(),
-            ),
-          );
-          groupedPrompts[promptId].count += 1;
-          groupedPrompts[promptId].evals.push({
-            id: eval_.id,
-            datasetId,
-            metrics: prompt.metrics,
-          });
-        } else {
-          groupedPrompts[promptId] = {
-            count: 1,
-            id: promptId,
-            prompt,
-            recentEvalDate: new Date(createdAt),
-            recentEvalId: eval_.id,
-            evals: [
-              {
-                id: eval_.id,
-                datasetId,
-                metrics: prompt.metrics,
-              },
-            ],
-          };
+        const group = (groupedPrompts[promptId] ??= {
+          count: 0,
+          id: promptId,
+          prompt,
+          recentEvalDate: new Date(createdAt),
+          recentEvalId: eval_.id,
+          evals: [],
+        });
+        if (timestamp > group.recentEvalDate.getTime()) {
+          group.recentEvalDate = new Date(createdAt);
         }
+        group.count = group.evals.push({ id: eval_.id, datasetId, metrics: prompt.metrics });
       }
     }
   }
@@ -267,78 +183,60 @@ export function getPromptsForTestCasesHash(
   testCasesSha256: string,
   limit: number = DEFAULT_QUERY_LIMIT,
 ) {
-  return getPromptsWithPredicate((eval_) => {
-    const testsJson = JSON.stringify(eval_.config.tests || []);
-    const hash = sha256(testsJson);
-    return hash === testCasesSha256;
-  }, limit);
+  return getPromptsWithPredicate((datasetId) => datasetId === testCasesSha256, limit);
 }
 
-async function readTestCases(limit: number): Promise<TestCasesWithMetadata[]> {
-  const evals_ = await Eval.getMany(limit);
+export async function getTestCases(limit = DEFAULT_QUERY_LIMIT): Promise<TestCasesWithMetadata[]> {
+  const evals = await Eval.getMany(limit);
+  const groupedTestCases: Record<
+    string,
+    Omit<TestCasesWithMetadata, 'prompts'> & {
+      prompts: Record<string, TestCasesWithMetadataPrompt>;
+    }
+  > = {};
 
-  const groupedTestCases: { [hash: string]: TestCasesWithMetadata } = {};
+  for (const evl of evals) {
+    const { id: evalId, config, createdAt } = evl;
+    const date = new Date(createdAt).toISOString();
+    // Same config projection as toResultsFile, without loading result rows.
+    const { tests: testCases } = sanitizeConfigForOutput(config, getStripFlags(config.env));
+    if (!testCases) {
+      continue;
+    }
+    if (typeof testCases !== 'string' && !Array.isArray(testCases)) {
+      logger.warn('Skipping TestGeneratorConfig object in database storage');
+      continue;
+    }
 
-  for (const eval_ of evals_) {
-    const createdAt = new Date(eval_.createdAt).toISOString();
-    const resultWrapper: ResultsFile = await eval_.toResultsFile();
-    const testCases = resultWrapper.config.tests;
-    if (testCases) {
-      const evalId = eval_.id;
-      // For database storage, we need to handle the union type properly
-      // Only store actual test case arrays, not generator configs
-      let storableTestCases: string | Array<string | any>;
-      if (typeof testCases === 'string') {
-        storableTestCases = testCases;
-      } else if (Array.isArray(testCases)) {
-        storableTestCases = testCases;
-      } else {
-        // If it's a TestGeneratorConfig object, we can't store it directly
-        // This case should be rare as the database typically stores resolved tests
-        logger.warn('Skipping TestGeneratorConfig object in database storage');
-        continue;
-      }
-      const datasetId = sha256(JSON.stringify(eval_.config.tests || []));
+    // Hash the stored tests so output stripping does not change dataset identity.
+    const id = sha256(JSON.stringify(config.tests || []));
+    const dataset = (groupedTestCases[id] ??= {
+      id,
+      count: 0,
+      testCases: testCases as TestCasesWithMetadata['testCases'],
+      recentEvalDate: new Date(date),
+      recentEvalId: evalId,
+      prompts: {},
+    });
+    dataset.count++;
+    if (createdAt > dataset.recentEvalDate.getTime()) {
+      dataset.recentEvalDate = new Date(createdAt);
+    }
 
-      if (datasetId in groupedTestCases) {
-        groupedTestCases[datasetId].recentEvalDate = new Date(
-          Math.max(groupedTestCases[datasetId].recentEvalDate.getTime(), eval_.createdAt),
-        );
-        groupedTestCases[datasetId].count += 1;
-      } else {
-        groupedTestCases[datasetId] = {
-          id: datasetId,
-          count: 1,
-          testCases: storableTestCases,
-          recentEvalDate: new Date(createdAt),
-          recentEvalId: evalId,
-          prompts: [],
-        };
-      }
-      const newPrompts = eval_.getPrompts().map((prompt) => ({
-        id: sha256(prompt.raw),
-        prompt,
-        evalId,
-      }));
-      const promptsById: Record<string, TestCasesWithMetadataPrompt> = {};
-      for (const prompt of groupedTestCases[datasetId].prompts.concat(newPrompts)) {
-        if (!(prompt.id in promptsById)) {
-          promptsById[prompt.id] = prompt;
-        }
-      }
-      groupedTestCases[datasetId].prompts = Object.values(promptsById);
+    for (const prompt of evl.getPrompts()) {
+      const promptId = sha256(prompt.raw);
+      dataset.prompts[promptId] ??= { id: promptId, prompt, evalId };
     }
   }
 
-  return Object.values(groupedTestCases);
+  return Object.values(groupedTestCases).map(({ prompts, ...dataset }) => ({
+    ...dataset,
+    prompts: Object.values(prompts),
+  }));
 }
 
 export function getPrompts(limit: number = DEFAULT_QUERY_LIMIT) {
   return getPromptsWithPredicate(() => true, limit);
-}
-
-export async function getTestCases(limit: number = DEFAULT_QUERY_LIMIT) {
-  return readTestCases(limit);
 }
 
 export async function getPromptFromHash(hash: string) {
@@ -361,65 +259,15 @@ export async function getDatasetFromHash(hash: string) {
   return undefined;
 }
 
-async function getEvalsWithPredicate(
-  predicate: (result: ResultsFile) => boolean,
-  limit: number,
-): Promise<EvalWithMetadata[]> {
+export async function hasRecentEvalWithIdPrefix(prefix: string): Promise<boolean> {
   const db = await getDb();
-  const evals_ = await db
-    .select({
-      id: evalsTable.id,
-      createdAt: evalsTable.createdAt,
-      author: evalsTable.author,
-      results: evalsTable.results,
-      config: evalsTable.config,
-      description: evalsTable.description,
-    })
+  const recentEvals = await db
+    .select({ id: evalsTable.id })
     .from(evalsTable)
     .orderBy(desc(evalsTable.createdAt))
-    .limit(limit)
+    .limit(DEFAULT_QUERY_LIMIT)
     .all();
-
-  const ret: EvalWithMetadata[] = [];
-
-  for (const eval_ of evals_) {
-    const createdAt = new Date(eval_.createdAt).toISOString();
-    const resultWrapper: ResultsFile = {
-      version: 3,
-      createdAt,
-      author: eval_.author,
-      // @ts-ignore
-      results: eval_.results,
-      config: eval_.config,
-    };
-    if (predicate(resultWrapper)) {
-      const evalId = eval_.id;
-      ret.push({
-        id: evalId,
-        date: new Date(eval_.createdAt),
-        config: eval_.config,
-        // @ts-ignore
-        results: eval_.results,
-        description: eval_.description || undefined,
-      });
-    }
-  }
-
-  return ret;
-}
-
-async function getEvals(limit: number = DEFAULT_QUERY_LIMIT) {
-  return getEvalsWithPredicate(() => true, limit);
-}
-
-export async function getEvalFromId(hash: string) {
-  const evals_ = await getEvals();
-  for (const eval_ of evals_) {
-    if (eval_.id.startsWith(hash)) {
-      return eval_;
-    }
-  }
-  return undefined;
+  return recentEvals.some(({ id }) => id.startsWith(prefix));
 }
 
 export async function deleteEval(evalId: string) {

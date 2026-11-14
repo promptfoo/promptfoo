@@ -1,4 +1,4 @@
-import { getEnvString } from '../envars';
+import { getEnvString, getProviderEnvString } from '../envars';
 import { renderVarsInObject } from '../util/render';
 import { resolveProviderEnv } from './env';
 import { OpenAiChatCompletionProvider } from './openai/chat';
@@ -43,7 +43,7 @@ export class AbliterationProvider extends OpenAiChatCompletionProvider {
     return (
       this.config.apiKey ||
       (apiKeyEnvar
-        ? this.env?.[apiKeyEnvar as keyof EnvOverrides] || getEnvString(apiKeyEnvar)
+        ? getProviderEnvString(this.env, apiKeyEnvar) || getEnvString(apiKeyEnvar)
         : undefined)
     );
   }

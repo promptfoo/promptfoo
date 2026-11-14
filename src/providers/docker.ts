@@ -1,5 +1,5 @@
 import { fetchWithCache } from '../cache';
-import { getEnvString } from '../envars';
+import { getEnvString, getProviderEnvString } from '../envars';
 import logger from '../logger';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { OpenAiCompletionProvider } from './openai/completion';
@@ -95,13 +95,13 @@ export function createDockerProvider(
   options: { config?: ProviderOptions; id?: string; env?: EnvOverrides } = {},
 ) {
   const apiUrl =
-    options?.env?.DOCKER_MODEL_RUNNER_BASE_URL ??
+    getProviderEnvString(options?.env, 'DOCKER_MODEL_RUNNER_BASE_URL') ??
     getEnvString('DOCKER_MODEL_RUNNER_BASE_URL') ??
     'http://localhost:12434';
   const apiBaseUrl = apiUrl + '/engines/v1';
 
   const apiKey =
-    options?.env?.DOCKER_MODEL_RUNNER_API_KEY ??
+    getProviderEnvString(options?.env, 'DOCKER_MODEL_RUNNER_API_KEY') ??
     getEnvString('DOCKER_MODEL_RUNNER_API_KEY') ??
     'dmr';
 

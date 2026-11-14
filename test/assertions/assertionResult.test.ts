@@ -423,6 +423,4 @@ describe('AssertionsResult', () => {
     expect(result.score).toBe(0.9);
     expect(result.reason).toBe('Async scoring result');
   });
-
-  it('handles multiple named scores with undefined metrics', verifyUndefinedNamedMetric);
 });

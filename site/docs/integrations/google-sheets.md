@@ -41,13 +41,9 @@ Swahili,Hello world,similar(0.8):hello world
 
 For private sheets, you'll need to set up Google's Default Application Credentials:
 
-1. **Install the authenticated Sheets package**
+1. **Check the optional package for authenticated reads and writes**
 
-   ```bash
-   npm install @googleapis/sheets
-   ```
-
-   `@googleapis/sheets` is an optional runtime dependency. Public-sheet CSV imports do not need it, but private-sheet reads and Google Sheets output writes do.
+   Standard npm installs include the package for your Promptfoo version. Public-sheet CSV imports work without it. If you omitted optional dependencies, use the package named in the CLI error. Promptfoo 0.125.1 uses `npm install @googleapis/sheets`. Builds that make Sheets REST requests through Google Auth use `npm install google-auth-library`. Run the command in the project where Promptfoo is installed, or add `-g` for a global npm installation.
 
 2. **Set Up Authentication**
    - Create a [service account](https://console.cloud.google.com/iam-admin/serviceaccounts) in Google Cloud

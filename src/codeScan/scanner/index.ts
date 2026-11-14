@@ -12,12 +12,14 @@ import logger, { getLogLevel, setLogLevel } from '../../logger';
 import {
   CodeScanOutputFormat,
   CodeScanOutputFormatSchema,
+  type FileRecord,
   type PullRequestContext,
   type ScanResponse,
 } from '../../types/codeScan';
 import { type AgentClient, createAgentClient } from '../../util/agent/agentClient';
 import { loadConfigOrDefault, mergeConfigWithOptions, resolveGuidance } from '../config/loader';
-import { validateOnBranch } from '../git/diff';
+import { runGit } from '../git/command';
+import { countUncommittedFiles, getDefaultBaseBranch, validateOnBranch } from '../git/diff';
 import { processDiff } from '../git/diffProcessor';
 import { extractMetadata } from '../git/metadata';
 import {
@@ -31,6 +33,35 @@ import { parseGitHubPr } from '../util/github';
 import { registerCleanupHandlers } from './cleanup';
 import { createSpinner, displayScanResults } from './output';
 import { buildScanRequest, executeScanRequestWithRetry } from './request';
+
+async function describeEmptyScan(
+  repoPath: string,
+  files: FileRecord[],
+  baseBranch: string,
+  compareRef: string,
+): Promise<string> {
+  const details = [`No files to scan in ${baseBranch}...${compareRef}.`];
+  const skipped = files.filter((file) => file.skipReason);
+  const reasons = [...new Set(skipped.map((file) => file.skipReason))].join(', ');
+  details.push(
+    files.length === 0
+      ? 'There are no net file changes in this range.'
+      : `${files.length} changed file(s) contain no scannable patches.`,
+  );
+  if (skipped.length) {
+    details.push(`${skipped.length} file(s) skipped: ${reasons}.`);
+  }
+  try {
+    const dirtyCount = await countUncommittedFiles(repoPath);
+    if (dirtyCount) {
+      details.push(`${dirtyCount} uncommitted file(s) are not part of the scan.`);
+    }
+  } catch {
+    // Status is best-effort context; the compared range is still useful.
+  }
+  details.push('Commit relevant changes, or use --base/--compare to select another range.');
+  return details.join(' ');
+}
 
 /**
  * Options for executing a scan
@@ -208,27 +239,13 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
     // Validate branch and determine base branch
     logger.debug('Processing git diff...');
 
-    const { simpleGit } = await import('simple-git');
-    const git = simpleGit(absoluteRepoPath);
-
     // Validate we're on a branch (only if compare ref not specified)
     if (!options.compare) {
-      await validateOnBranch(git);
+      await validateOnBranch(absoluteRepoPath);
     }
 
     // Determine base branch (use provided or auto-detect)
-    let baseBranch: string;
-    if (options.base) {
-      baseBranch = options.base;
-    } else {
-      const branches = await git.branch();
-      baseBranch =
-        branches.all.includes('main') || branches.all.includes('origin/main')
-          ? 'main'
-          : branches.all.includes('master') || branches.all.includes('origin/master')
-            ? 'master'
-            : 'main';
-    }
+    const baseBranch = options.base || (await getDefaultBaseBranch(absoluteRepoPath));
 
     // Determine compare ref (use provided or default to HEAD)
     const compareRef = options.compare || 'HEAD';
@@ -246,15 +263,17 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
 
     // Check if there are no files to scan
     if (includedFiles.length === 0) {
-      const msg = 'No files to scan';
-
-      // For non-text formats (JSON, SARIF), emit a structured empty response for programmatic consumption
-      if (outputFormat !== CodeScanOutputFormat.TEXT) {
-        displayResults({ success: true, comments: [], review: msg }, outputFormat);
-      } else if (spinner) {
-        spinner.succeed(msg);
+      // For non-text formats (JSON, SARIF), keep the stable machine-readable
+      // review string for programmatic consumption
+      if (outputFormat === CodeScanOutputFormat.TEXT) {
+        const msg = await describeEmptyScan(absoluteRepoPath, files, baseBranch, compareRef);
+        if (spinner) {
+          spinner.succeed(msg);
+        } else {
+          logger.info(msg);
+        }
       } else {
-        logger.info(msg);
+        displayResults({ success: true, comments: [], review: 'No files to scan' }, outputFormat);
       }
 
       // Exit with code 0 (success) when no files to scan
@@ -273,7 +292,7 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
     let pullRequest: PullRequestContext | undefined = undefined;
     if (parsedPR) {
       // Get current commit SHA
-      const currentCommit = await git.revparse(['HEAD']);
+      const currentCommit = await runGit(absoluteRepoPath, ['rev-parse', '--verify', 'HEAD']);
 
       pullRequest = {
         owner: parsedPR.owner,

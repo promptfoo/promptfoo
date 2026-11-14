@@ -397,6 +397,20 @@ else {
 }
 `,
       );
+      // Keep archive creation and checksum setup outside the release workflow's deadline.
+      for (const [archive, source] of [
+        ['better-sqlite3-0.0.0.tgz', 'native'],
+        ['artifact/promptfoo-0.0.0.tgz', 'fixture'],
+      ] as const) {
+        const packed = spawnSync('tar', ['-czf', archive, '-C', source, 'package'], {
+          cwd: root,
+          encoding: 'utf8',
+          timeout: 15_000,
+        });
+        expect(packed.error, packed.stderr).toBeUndefined();
+        expect(packed.status, packed.stderr).toBe(0);
+      }
+      const expectedSha512 = createHash('sha512').update(fs.readFileSync(tarball)).digest('hex');
       const validate = workflow.jobs['validate-npm'].steps.find(
         (step) => step.name === 'Validate npm package',
       )!.run!;
@@ -438,24 +452,18 @@ if (args[0] === 'install') {
         script,
         // Git Bash's npm launcher starts several helper processes to rediscover Node and npm.
         // Use this runner's entrypoints for the real install/rebuild acceptance cases.
-        // Relative archive paths avoid GNU tar treating Windows drive letters as remote hosts.
         (testsInstalledCli
           ? 'npm() { "$NODE_BINARY" "$BACKFILL_NPM_FIXTURE" "$@"; }\n'
           : directNpm
             ? 'npm() { "$NODE_BINARY" "$NPM_CLI" "$@"; }\n'
-            : '') +
-          'tar -czf better-sqlite3-0.0.0.tgz -C native package\n' +
-          'tar -czf artifact/promptfoo-0.0.0.tgz -C fixture package\n' +
-          'cd fixture/package\n' +
-          'export EXPECTED_SHA512="$(node -e \'console.log(require("node:crypto").createHash("sha512").update(require("node:fs").readFileSync(process.argv[1])).digest("hex"))\' "$PACKAGE_TARBALL")"\n' +
-          validate,
+            : '') + validate,
       );
       // The process-tree runner retains the same deadline and waits for close after
       // terminating descendants, before afterEach removes the fixture directory.
       const result = await runInstallProfileCommand(
         bash,
-        ['-e', '-o', 'pipefail', path.basename(script)],
-        root,
+        ['-e', '-o', 'pipefail', path.relative(fixture, script).replaceAll('\\', '/')],
+        fixture,
         {
           ...process.env,
           NODE_BINARY: process.execPath.replaceAll('\\', '/'),
@@ -466,6 +474,7 @@ if (args[0] === 'install') {
           RUNNER_TEMP: root.replaceAll('\\', '/'),
           PACKAGE_TARBALL: tarball,
           PACKAGE_DIR: packageDir.replaceAll('\\', '/'),
+          EXPECTED_SHA512: expectedSha512,
           TAG_NAME: '0.0.0',
           BACKFILL_EVIDENCE: evidence,
           BACKFILL_FAILURE: failure,

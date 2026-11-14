@@ -1,30 +1,15 @@
-# google-live-audio (Google Live API Audio with Gemini)
+# google-live-audio (Gemini Live API)
 
-This example demonstrates how to use promptfoo with Google's Live API for audio generation using Gemini models.
+Grade a spoken answer and its transcript with one Gemini Live request.
 
-You can run this example with:
+## Run the eval
+
+Set `GOOGLE_API_KEY` to your [Google AI Studio API key](https://aistudio.google.com/apikey), then run:
 
 ```bash
 npx promptfoo@latest init --example google-live-audio
 cd google-live-audio
+npx promptfoo@latest eval
 ```
 
-## Prerequisites
-
-- Google AI Studio API key set as the environment variable `GOOGLE_API_KEY`
-
-You can obtain a Google AI Studio API key from the [Google AI Studio website](https://ai.google.dev/).
-
-## Running the Example
-
-```bash
-promptfoo eval -c promptfooconfig.yaml
-```
-
-View the results:
-
-```bash
-promptfoo view
-```
-
-For more information about the Google Live API, see the [Google Live API documentation](https://ai.google.dev/gemini-api/docs/live).
+The assertions check the returned audio and grade the transcript at `output.text`. See the [Google Live provider docs](https://www.promptfoo.dev/docs/providers/google/#google-live-api) for configuration.

@@ -147,12 +147,15 @@ vi.mock('fs', async (importOriginal) => {
 });
 
 describe('util', () => {
-  it.each(['gemini-flash-latest', 'gemini-flash-lite-latest'])(
-    'uses the global Vertex endpoint by default for %s',
-    (modelId) => {
-      expect(getVertexModelDefaultRegion(modelId)).toBe('global');
-    },
-  );
+  it.each([
+    'gemini-4-argon',
+    'gemini-4-argon-cyber-permissive',
+    'gemini-4-hydrogen',
+    'gemini-flash-latest',
+    'gemini-flash-lite-latest',
+  ])('uses the global Vertex endpoint by default for %s', (modelId) => {
+    expect(getVertexModelDefaultRegion(modelId)).toBe('global');
+  });
 
   it.each(['llama-4-scout-17b-16e-instruct-maas', 'llama-4-maverick-17b-128e-instruct-maas'])(
     'uses the us-east5 Vertex endpoint by default for %s',
@@ -443,14 +446,71 @@ describe('util', () => {
       );
     });
 
-    it('preserves nested template text in inline system instructions', () => {
+    it('renders inline system instruction substitutions once', () => {
       expect(
         parseConfigSystemInstruction('Keep {{label}}.', {
           label: '{{name}}',
           name: '{{token}}',
           token: 'end',
         }),
-      ).toEqual({ parts: [{ text: 'Keep {{token}}.' }] });
+      ).toEqual({ parts: [{ text: 'Keep {{name}}.' }] });
+    });
+
+    it.each(
+      ['inline', 'Content', 'text file', 'JSON file'].flatMap((source) =>
+        [
+          '{{name}}',
+          '{{ env.QA_SYSTEM_TEMPLATE_CANARY }}',
+          '{% if true %}CONTROL_FLOW{% endif %}',
+          '{{ range.constructor("return 6 * 7")() }}',
+          '{{ unfinished',
+        ].map((value) => ({ source, value })),
+      ),
+    )('keeps runtime $value literal in a trusted $source instruction', ({ source, value }) => {
+      const template = 'Trusted {{ 6 * 7 }}: {{value}}';
+      const content = { parts: [{ text: template }] };
+      const instruction =
+        source === 'inline'
+          ? template
+          : source === 'Content'
+            ? content
+            : `file://instruction.${source === 'JSON file' ? 'json' : 'txt'}`;
+      if (source.endsWith('file')) {
+        vi.mocked(fs.readFileSync).mockReturnValueOnce(
+          source === 'JSON file' ? JSON.stringify(content) : template,
+        );
+      }
+      const original = structuredClone(instruction);
+      expect(
+        parseConfigSystemInstruction(instruction, {
+          value,
+          name: 'must stay literal',
+          env: { QA_SYSTEM_TEMPLATE_CANARY: 'SYNTHETIC_CANARY' },
+        }),
+      ).toEqual({ parts: [{ text: `Trusted 42: ${value}` }] });
+      expect(instruction).toEqual(original);
+    });
+
+    it('keeps text from a whole inline JSON instruction variable literal', () => {
+      const instruction = { parts: [{ text: '{{name}}' }] };
+      expect(
+        parseConfigSystemInstruction('{{instruction}}', {
+          instruction: JSON.stringify(instruction),
+          name: 'must stay literal',
+        }),
+      ).toEqual(instruction);
+    });
+
+    it('renders file contents after resolving a whole instruction reference variable', () => {
+      const instructionFile = `file://${path.resolve('/provider', 'instruction.txt')}`;
+      vi.mocked(fs.readFileSync).mockReturnValueOnce('Trusted {{ 6 * 7 }}: {{value}}');
+      expect(
+        parseConfigSystemInstruction('{{instructionFile}}', {
+          instructionFile,
+          value: '{{name}}',
+          name: 'must stay literal',
+        }),
+      ).toEqual({ parts: [{ text: 'Trusted 42: {{name}}' }] });
     });
 
     it('rejects invalid inline response schema JSON', () => {
@@ -3359,6 +3419,9 @@ describe('util', () => {
       expect(removeDeprecatedGeminiGenerationParams('gemini-2.5-flash', config)).toBe(config);
     });
     it.each([
+      'gemini-4-argon',
+      'gemini-4-argon-cyber-permissive',
+      'gemini-4-hydrogen',
       'gemini-3.8-flash',
       'gemini-3.7-flash',
       'gemini-3.6-flash',
@@ -3389,6 +3452,18 @@ describe('util', () => {
       expect(generationConfig.temperature).toBe(0.7);
     });
 
+    it.each([
+      { thinkingConfig: { thinkingLevel: 'XHIGH' } },
+      { thinking_config: { thinking_level: 'xhigh' } },
+    ])('keeps XHIGH thinking for Gemini 4 Hydrogen: %j', (generationConfig) => {
+      expect(
+        removeDeprecatedGeminiGenerationParams('gemini-4-hydrogen', {
+          ...generationConfig,
+          temperature: 0.2,
+        }),
+      ).toEqual(generationConfig);
+    });
+
     it('preserves sampling controls for models that still support them', () => {
       const generationConfig = { temperature: 0.7, topP: 0.9, topK: 40 };
 
@@ -3398,6 +3473,21 @@ describe('util', () => {
     });
 
     it.each([
+      {
+        modelName: 'gemini-4-argon',
+        generationConfig: { thinkingConfig: { thinkingLevel: 'MINIMAL' } },
+        message: 'gemini-4-argon does not support MINIMAL thinking. Use LOW, MEDIUM, or HIGH.',
+      },
+      {
+        modelName: 'gemini-4-argon',
+        generationConfig: { thinking_config: { thinking_level: 'minimal' } },
+      },
+      {
+        modelName: 'gemini-4-hydrogen',
+        generationConfig: { thinking_config: { thinking_level: 'minimal' } },
+        message:
+          'gemini-4-hydrogen does not support MINIMAL thinking. Use LOW, MEDIUM, HIGH, or XHIGH.',
+      },
       {
         modelName: 'gemini-3.8-flash',
         generationConfig: { thinkingConfig: { thinkingLevel: 'MINIMAL' } },
@@ -3425,13 +3515,34 @@ describe('util', () => {
           thinking_config: { thinking_level: 'MINIMAL' },
         },
       },
-    ])('rejects unsupported MINIMAL thinking on $modelName', ({ modelName, generationConfig }) => {
-      expect(() => removeDeprecatedGeminiGenerationParams(modelName, generationConfig)).toThrow(
-        `${modelName} does not support MINIMAL thinking`,
-      );
-    });
+    ])(
+      'rejects unsupported MINIMAL thinking on $modelName',
+      ({ modelName, generationConfig, message }) => {
+        expect(() => removeDeprecatedGeminiGenerationParams(modelName, generationConfig)).toThrow(
+          message ?? `${modelName} does not support MINIMAL thinking`,
+        );
+      },
+    );
 
     it.each([
+      {
+        modelName: 'gemini-4-argon',
+        generationConfig: { thinkingConfig: { thinkingBudget: 1024 } },
+      },
+      {
+        modelName: 'gemini-4-argon',
+        generationConfig: { thinkingConfig: { thinkingBudget: 0 } },
+      },
+      {
+        modelName: 'gemini-4-argon-cyber-permissive',
+        generationConfig: { thinking_config: { thinking_budget: 1024 } },
+      },
+      {
+        modelName: 'gemini-4-hydrogen',
+        generationConfig: { thinkingConfig: { thinkingBudget: 0 } },
+        message:
+          'gemini-4-hydrogen does not support thinkingBudget. Use thinkingLevel (LOW, MEDIUM, HIGH, or XHIGH).',
+      },
       {
         modelName: 'gemini-3.8-flash',
         generationConfig: { thinkingConfig: { thinkingBudget: 1024 } },
@@ -3463,11 +3574,14 @@ describe('util', () => {
           thinking_config: { thinking_budget: 1024 },
         },
       },
-    ])('rejects deprecated thinking budgets on $modelName', ({ modelName, generationConfig }) => {
-      expect(() => removeDeprecatedGeminiGenerationParams(modelName, generationConfig)).toThrow(
-        `${modelName} does not support thinkingBudget. Use thinkingLevel`,
-      );
-    });
+    ])(
+      'rejects deprecated thinking budgets on $modelName',
+      ({ modelName, generationConfig, message }) => {
+        expect(() => removeDeprecatedGeminiGenerationParams(modelName, generationConfig)).toThrow(
+          message ?? `${modelName} does not support thinkingBudget. Use thinkingLevel`,
+        );
+      },
+    );
   });
 
   describe('calculateGoogleCost', () => {
@@ -3478,6 +3592,24 @@ describe('util', () => {
     afterEach(() => {
       vi.restoreAllMocks();
     });
+
+    it.each([
+      { model: 'gemini-2.5-pro', target: 'gemini-3.8-flash' },
+      { model: 'gemini-2.5-flash', target: 'gemini-3.5-flash-lite' },
+    ])(
+      'uses the Gemini API replacement tariff for $model from the cutover',
+      ({ model, target }) => {
+        // Use audio input so the old Flash tariff differs from the replacement.
+        const cost = (id: string, vertex = false) =>
+          calculateGoogleCost(id, {}, 1000, 500, vertex, 1000);
+        vi.spyOn(Date, 'now').mockReturnValue(Date.UTC(2026, 11, 1) - 1);
+        const originalVertexCost = cost(model, true);
+        expect(cost(model)).not.toBeCloseTo(cost(target)!, 10);
+        vi.spyOn(Date, 'now').mockReturnValue(Date.UTC(2026, 11, 1));
+        expect(cost(model)).toBeCloseTo(cost(target)!, 10);
+        expect(cost(model, true)).toBe(originalVertexCost);
+      },
+    );
 
     it('should return undefined for missing token counts', () => {
       expect(calculateGoogleCost('gemini-pro', {}, undefined, 100)).toBeUndefined();
@@ -3687,6 +3819,51 @@ describe('util', () => {
       });
     });
 
+    describe('Gemini 4 Argon pricing', () => {
+      it('switches to standard rates when introductory pricing expires', () => {
+        const now = vi.spyOn(Date, 'now');
+        now.mockReturnValue(Date.UTC(2026, 10, 30, 23, 59, 59, 999));
+
+        expect(calculateGoogleCost('gemini-4-argon', {}, 1000, 500)).toBeCloseTo(0.007, 10);
+
+        now.mockReturnValue(Date.UTC(2026, 11, 1));
+
+        expect(calculateGoogleCost('gemini-4-argon', {}, 1000, 500)).toBeCloseTo(0.014, 10);
+      });
+
+      it.each([
+        { period: 'during', now: Date.UTC(2026, 9, 14) },
+        { period: 'after', now: Date.UTC(2026, 11, 1) },
+      ])(
+        'prices Cyber Permissive at Vertex standard rates $period the Argon discount',
+        ({ now }) => {
+          vi.spyOn(Date, 'now').mockReturnValue(now);
+
+          expect(
+            calculateGoogleCost(
+              'gemini-4-argon-cyber-permissive',
+              { region: 'global' },
+              1000,
+              500,
+              true,
+            ),
+          ).toBeCloseTo(0.014, 10);
+          expect(
+            calculateGoogleCost(
+              'gemini-4-argon-cyber-permissive',
+              { region: 'us' },
+              1000,
+              500,
+              true,
+            ),
+          ).toBeCloseTo(0.0154, 10);
+          expect(
+            calculateGoogleCost('gemini-4-argon-cyber-permissive', {}, 1000, 500, false),
+          ).toBeUndefined();
+        },
+      );
+    });
+
     it.each(['gemini-3.5-flash-lite', 'gemini-flash-lite-latest'])(
       'uses Gemini 3.5 Flash-Lite pricing for %s',
       (modelName) => {
@@ -3696,49 +3873,38 @@ describe('util', () => {
       },
     );
 
-    it.each(['gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3.6-flash'])(
-      'applies cached, priority, and flex pricing for %s',
-      (modelName) => {
-        const standard = calculateGoogleCost(
-          modelName,
-          {},
-          1000,
-          500,
-          false,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          400,
-        );
-        const priority = calculateGoogleCost(
-          modelName,
-          { service_tier: 'priority' },
-          1000,
-          500,
-          false,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          400,
-        );
-        const flex = calculateGoogleCost(
-          modelName,
-          { service_tier: 'flex' },
-          1000,
-          500,
-          false,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          400,
-        );
+    it.each([
+      { modelName: 'gemini-3.8-flash', input: 0.75, cacheRead: 0.075, output: 3.75 },
+      { modelName: 'gemini-3.7-flash', input: 0.75, cacheRead: 0.075, output: 3.75 },
+      { modelName: 'gemini-3.6-flash', input: 0.75, cacheRead: 0.075, output: 3.75 },
+      { modelName: 'gemini-4-argon', input: 2, cacheRead: 0.1, output: 10 },
+      { modelName: 'gemini-4-hydrogen', input: 1.5, cacheRead: 0.075, output: 7.5 },
+    ])(
+      'applies cached, priority, and flex pricing for $modelName',
+      ({ modelName, input, cacheRead, output }) => {
+        for (const [serviceTier, multiplier] of [
+          [undefined, 1],
+          ['priority', 1.8],
+          ['flex', 0.5],
+        ] as const) {
+          const cost = calculateGoogleCost(
+            modelName,
+            serviceTier ? { service_tier: serviceTier } : {},
+            1000,
+            500,
+            false,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            400,
+          );
 
-        expect(standard).toBeCloseTo((600 * 0.75 + 400 * 0.075 + 500 * 3.75) / 1e6, 12);
-        expect(priority).toBeCloseTo((600 * 1.35 + 400 * 0.135 + 500 * 6.75) / 1e6, 12);
-        expect(flex).toBeCloseTo((600 * 0.375 + 400 * 0.0375 + 500 * 1.875) / 1e6, 12);
+          expect(cost).toBeCloseTo(
+            ((600 * input + 400 * cacheRead + 500 * output) * multiplier) / 1e6,
+            12,
+          );
+        }
       },
     );
 
@@ -3812,6 +3978,12 @@ describe('util', () => {
       { modelName: 'gemini-3.5-flash-lite', region: 'eu', expectedCost: 0.001705 },
       { modelName: 'gemini-3.5-flash', region: 'us', expectedCost: 0.0066 },
       { modelName: 'gemini-3.5-flash', region: 'eu', expectedCost: 0.0066 },
+      { modelName: 'gemini-4-argon', region: 'global', expectedCost: 0.007 },
+      { modelName: 'gemini-4-argon', region: 'us', expectedCost: 0.0077 },
+      { modelName: 'gemini-4-argon', region: 'eu', expectedCost: 0.0077 },
+      { modelName: 'gemini-4-hydrogen', region: 'global', expectedCost: 0.00525 },
+      { modelName: 'gemini-4-hydrogen', region: 'us', expectedCost: 0.005775 },
+      { modelName: 'gemini-4-hydrogen', region: 'eu', expectedCost: 0.005775 },
     ])(
       'applies the Vertex regional premium to $modelName in the $region multi-region',
       ({ modelName, region, expectedCost }) => {
@@ -4309,6 +4481,36 @@ describe('util', () => {
         (250_001 * input + 1_000 * output) / 1e6,
         12,
       );
+    });
+
+    it.each([
+      ['gemini-3.8-flash-tts', 18],
+      ['gemini-3.8-flash-lite-tts', 12],
+    ])('prices %s with scheduled introductory rates and inference tiers', (id, audioRate) => {
+      vi.useFakeTimers();
+      try {
+        for (const [date, discount] of [
+          ['2026-12-31T23:59:59Z', 0.5],
+          ['2027-01-01T00:00:00Z', 1],
+        ] as const) {
+          vi.setSystemTime(new Date(date));
+          for (const [service_tier, multiplier] of [
+            ['standard', 1],
+            ['flex', 0.5],
+            ['priority', 1.8],
+          ] as const) {
+            expect(
+              calculateGoogleCost(String(id), { service_tier }, 1000, 250, false, 0, 250),
+            ).toBeCloseTo(((1000 + 250 * Number(audioRate)) / 1e6) * discount * multiplier, 12);
+          }
+          expect(calculateGoogleCost(String(id), {}, 1000, 250, true, 0, 250)).toBeCloseTo(
+            ((1000 + 250 * Number(audioRate)) / 1e6) * discount,
+            12,
+          );
+        }
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it('should forward standard Gemini usage metadata into modality-aware billing', () => {

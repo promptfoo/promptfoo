@@ -520,27 +520,18 @@ export const useResultsViewSettingsStore = create<SettingsState>()(
   ),
 );
 
-// Helper function to determine if a filter is applied
-const isFilterApplied = (filter: Partial<ResultsFilter> | ResultsFilter): boolean => {
-  if (filter.type === 'metadata') {
-    // For metadata filters with exists operator, only field is required
-    if (filter.operator === 'exists') {
-      return Boolean(filter.field);
-    }
-    // For other metadata operators, both field and value are required
+export function isFilterApplied(filter: Partial<ResultsFilter>): boolean {
+  if (
+    (filter.type === 'metadata' && filter.operator === 'exists') ||
+    (filter.type === 'metric' && filter.operator === 'is_defined')
+  ) {
+    return Boolean(filter.field);
+  }
+  if (filter.type === 'metadata' || filter.type === 'metric') {
     return Boolean(filter.value && filter.field);
   }
-  if (filter.type === 'metric') {
-    // For metric filters with is_defined operator, only field is required
-    if (filter.operator === 'is_defined') {
-      return Boolean(filter.field);
-    }
-    // For metric filters with comparison operators, both field and value are required
-    return Boolean(filter.value && filter.field);
-  }
-  // For non-metadata/non-metric filters, value is required
   return Boolean(filter.value);
-};
+}
 
 const clearFilters = (prevState: TableState) => ({
   filters: {

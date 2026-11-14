@@ -197,7 +197,7 @@ export default function BSidesSeattle2026(): React.ReactElement {
                 <p>Our engineers ran a session on Red Teaming for AI at 2:30PM each day.</p>
               </a>
               <a
-                href="https://discord.com/invite/promptfoo"
+                href="https://discord.gg/gHPS9jjfbs"
                 target="_blank"
                 rel="noopener noreferrer"
                 className={styles.spiritCard}
@@ -247,7 +247,7 @@ export default function BSidesSeattle2026(): React.ReactElement {
                   Join our Discord community to connect with our team and the AI security community.
                 </p>
                 <a
-                  href="https://discord.gg/promptfoo"
+                  href="https://discord.gg/gHPS9jjfbs"
                   target="_blank"
                   rel="noopener noreferrer"
                   className={styles.cardLink}
@@ -290,7 +290,7 @@ export default function BSidesSeattle2026(): React.ReactElement {
               </p>
               <div className={styles.ctaButtons}>
                 <a
-                  href="https://discord.gg/promptfoo"
+                  href="https://discord.gg/gHPS9jjfbs"
                   target="_blank"
                   rel="noopener noreferrer"
                   className={styles.primaryCta}

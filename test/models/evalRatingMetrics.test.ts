@@ -19,6 +19,42 @@ describe('prompt metrics after live manual ratings', () => {
     await runDbMigrations();
   });
 
+  it('keeps a first score-only edit through a later comment and stale prompt flush', async () => {
+    const prompts = [
+      createCompletedPrompt('score only', {
+        metrics: createPromptMetrics({ score: 1, testPassCount: 1 }),
+      }),
+    ];
+    const evalRecord = await Eval.create({}, prompts, { id: randomUUID() });
+    await evalRecord.addPrompts(prompts);
+    await evalRecord.addResult(
+      createEvaluateResult({ success: true, score: 1, gradingResult: null }),
+    );
+    const [row] = await EvalResult.findManyByEvalId(evalRecord.id);
+    await EvalResult.submitRating(
+      evalRecord.id,
+      row.id,
+      { pass: true, score: 0.4, reason: '' },
+      'update',
+      'score',
+    );
+    await EvalResult.submitRating(
+      evalRecord.id,
+      row.id,
+      { pass: true, score: 1, reason: '', comment: 'reviewed' },
+      'update',
+      'comment',
+    );
+    await evalRecord.addPrompts(prompts);
+    const persisted = await EvalResult.findById(row.id);
+    expect(persisted?.score).toBe(0.4);
+    expect(persisted?.gradingResult?.comment).toBe('reviewed');
+    expect((await Eval.findById(evalRecord.id))?.prompts[0].metrics).toMatchObject({
+      score: 0.4,
+      testPassCount: 1,
+    });
+  });
+
   it.each([
     { rated: false, compared: false },
     { rated: true, compared: false },

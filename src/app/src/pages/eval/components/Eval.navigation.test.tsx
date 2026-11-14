@@ -4,10 +4,10 @@ import FrameworkPluginResult from '@app/pages/redteam/report/components/Framewor
 import TestSuites from '@app/pages/redteam/report/components/TestSuites';
 import { mockCallApiRoutes, resetCallApiMock } from '@app/tests/apiMocks';
 import { renderWithProviders } from '@app/utils/testutils';
-import { screen, waitFor } from '@testing-library/react';
+import { act, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { BrowserRouter, useNavigate } from 'react-router';
-import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest';
 import Eval from './Eval';
 import FilterModeProvider from './FilterModeProvider';
 import { useResultsViewSettingsStore, useTableStore } from './store';
@@ -72,6 +72,11 @@ const initialTableState = useTableStore.getState();
 const initialViewState = useResultsViewSettingsStore.getState();
 const pluginFilter = [{ type: 'plugin', operator: 'equals', value: 'harmful:hate' }];
 const requests: string[] = [];
+
+beforeAll(async () => {
+  // Load the mocked lazy report before the tests start waiting for its controls.
+  await import('@app/pages/redteam/report/components/Report');
+});
 
 beforeEach(() => {
   resetCallApiMock();
@@ -163,6 +168,9 @@ it.each(['plugin', 'policy', 'framework'] as const)(
     const rendered = renderEval();
     await screen.findByText('row 3');
     await user.click(screen.getByRole('tab', { name: 'Vulnerability Report' }));
+    await act(async () => {
+      await vi.dynamicImportSettled();
+    });
     requests.length = 0;
     await user.click(
       source === 'framework'
@@ -190,6 +198,9 @@ it('fetches a changed mode when a report reuses the same plugin filter', async (
   renderEval(`?filter=${encodeURIComponent(JSON.stringify(pluginFilter))}&mode=passes`);
   await screen.findByText('row 1');
   await user.click(screen.getByRole('tab', { name: 'Vulnerability Report' }));
+  await act(async () => {
+    await vi.dynamicImportSettled();
+  });
   requests.length = 0;
   await user.click(await screen.findByText('Hate Speech'));
 

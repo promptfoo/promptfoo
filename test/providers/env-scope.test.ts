@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../src/cache';
 import cliState from '../../src/cliState';
+import { getEnvOverridesProvider, setEnvOverridesProvider } from '../../src/envOverrides';
 import logger from '../../src/logger';
 import { AI21ChatCompletionProvider } from '../../src/providers/ai21';
 import { getAnthropicProviders } from '../../src/providers/anthropic/defaults';
@@ -72,12 +73,224 @@ function apiKey(provider: object): string | undefined {
 }
 
 describe('provider environment scopes', () => {
+  it('prefers registered provider credentials over suite credentials, below explicit provider env', () => {
+    const previousProvider = getEnvOverridesProvider();
+    setEnvOverridesProvider(
+      (layer) => ({
+        OPENAI_API_KEY: `${layer}-key`,
+        GOOGLE_API_KEY: `${layer}-key`,
+      }),
+      { providerLayer: true },
+    );
+    try {
+      expect({
+        openai: apiKey(new OpenAiChatCompletionProvider('fixture')),
+        google: GoogleAuthManager.getApiKey({}).apiKey,
+      }).toEqual({ openai: 'provider-key', google: 'provider-key' });
+      const env = { OPENAI_API_KEY: 'explicit-key', GOOGLE_API_KEY: 'explicit-key' };
+      expect({
+        openai: apiKey(new OpenAiChatCompletionProvider('fixture', { env })),
+        google: GoogleAuthManager.getApiKey({}, env).apiKey,
+      }).toEqual({ openai: 'explicit-key', google: 'explicit-key' });
+    } finally {
+      setEnvOverridesProvider(previousProvider);
+    }
+  });
+
+  it.each([
+    ['openai:chat:fixture', 'OPENAI_API_KEY', 'OPENAI_API_KEY'],
+    ['google:gemini-2.5-flash', 'GOOGLE_API_KEY', 'GEMINI_API_KEY'],
+    ['fireworks:fixture', 'FIREWORKS_API_KEY', 'FIREWORKS_API_KEY'],
+  ])('preserves credential scopes through the %s loader', async (route, key, registeredKey) => {
+    const previousProvider = getEnvOverridesProvider();
+    let credential = 'provider-key';
+    setEnvOverridesProvider(
+      (layer) =>
+        layer === 'provider'
+          ? { [registeredKey]: credential, DEPLOYMENT_ONLY: 'provider-secret' }
+          : previousProvider?.(layer),
+      { providerLayer: true },
+    );
+    try {
+      const provider = await loadApiProvider(route, {
+        env: { [key]: 'suite-key' },
+        options: { label: `{{env.${key}}}|{{env.DEPLOYMENT_ONLY}}` },
+      });
+      expect(apiKey(provider)).toBe('provider-key');
+      expect(provider.label).toBe('suite-key|{{env.DEPLOYMENT_ONLY}}');
+      credential = 'rotated-key';
+      expect(apiKey(provider)).toBe('rotated-key');
+      for (const explicit of ['explicit-key', '']) {
+        const overridden = await loadApiProvider(route, {
+          env: { [key]: 'suite-key' },
+          options: { env: { [key]: explicit, [registeredKey]: explicit } },
+        });
+        expect(apiKey(overridden)).toBe(explicit || undefined);
+      }
+    } finally {
+      setEnvOverridesProvider(previousProvider);
+    }
+  });
+
+  it.each([
+    ['cohere:chat:command-r', 'COHERE_API_KEY'],
+    ['cohere:embedding:embed-english-v3.0', 'COHERE_API_KEY'],
+    ['slack:C-fixture', 'SLACK_BOT_TOKEN'],
+    ['mistral:chat:mistral-large-latest', 'MISTRAL_API_KEY'],
+    ['voyage:voyage-3.5', 'VOYAGE_API_KEY'],
+    ['ai21:chat:jamba-large', 'AI21_API_KEY'],
+  ])('preserves registered credentials for direct credential readers: %s', async (route, key) => {
+    const previousProvider = getEnvOverridesProvider();
+    setEnvOverridesProvider(
+      (layer) => (layer === 'provider' ? { [key]: 'registered-key' } : previousProvider?.(layer)),
+      { providerLayer: true },
+    );
+    try {
+      for (const explicit of [undefined, 'explicit-key', '']) {
+        const loading = loadApiProvider(route, {
+          env: { [key]: 'suite-key' },
+          options: { env: explicit === undefined ? undefined : { [key]: explicit } },
+        });
+        if (route.startsWith('slack:') && explicit === '') {
+          await expect(loading).rejects.toThrow('Slack provider requires a token');
+        } else {
+          const provider = await loading;
+          const keyValue = route.startsWith('slack:')
+            ? Reflect.get(provider, 'client').token
+            : apiKey(provider);
+          expect(keyValue || undefined).toBe((explicit ?? 'registered-key') || undefined);
+        }
+      }
+    } finally {
+      setEnvOverridesProvider(previousProvider);
+    }
+  });
+
+  it.each([
+    ['anthropic:messages:claude-sonnet-4-5', 'ANTHROPIC_BASE_URL'],
+    ['f5:fixture', 'F5_API_BASE_URL'],
+  ])('keeps the registered endpoint ahead of suite configuration: %s', async (route, key) => {
+    const previousProvider = getEnvOverridesProvider();
+    setEnvOverridesProvider(
+      (layer) =>
+        layer === 'provider' ? { [key]: 'https://registered.example' } : previousProvider?.(layer),
+      { providerLayer: true },
+    );
+    try {
+      for (const explicit of [undefined, 'https://explicit.example']) {
+        const provider = await loadApiProvider(route, {
+          env: { [key]: 'https://suite.example' },
+          options: {
+            config: { apiKey: 'fixture' },
+            env: explicit ? { [key]: explicit } : undefined,
+          },
+        });
+        const url = route.startsWith('f5:')
+          ? Reflect.get(provider, 'getApiUrl').call(provider)
+          : Reflect.get(provider, 'getApiBaseUrl').call(provider);
+        expect(url).toContain(explicit ?? 'https://registered.example');
+      }
+    } finally {
+      setEnvOverridesProvider(previousProvider);
+    }
+  });
+
   it('preserves provider scope across Vertex Express image credential aliases', async () => {
     const provider = await loadApiProvider('google:gemini-2.5-flash-image', {
       env: { VERTEX_API_KEY: 'suite-vertex-key' },
       options: { config: { vertexai: true }, env: { GOOGLE_API_KEY: 'provider-google-key' } },
     });
     expect(Reflect.get(provider, 'getVertexApiKey').call(provider)).toBe('provider-google-key');
+  });
+
+  describe.each([
+    ['snowflake:fixture', 'SNOWFLAKE_ACCOUNT_IDENTIFIER', 'SNOWFLAKE_API_KEY', 'accountIdentifier'],
+    ['cloudera:fixture', 'CDP_DOMAIN', 'CDP_TOKEN', 'domain'],
+  ])('%s endpoint and credential scopes', (route, endpointKey, credentialKey, configKey) => {
+    const values = (scope: string) => ({
+      [endpointKey]: `${scope}.example.invalid`,
+      [credentialKey]: `${scope}-key`,
+    });
+    const url = (scope: string) =>
+      route.startsWith('snowflake:')
+        ? `https://${scope}.example.invalid.snowflakecomputing.com/api/v2/cortex/inference:complete`
+        : `https://${scope}.example.invalid/namespaces/serving-default/endpoints/fixture/v1/chat/completions`;
+    let previousProvider: ReturnType<typeof getEnvOverridesProvider>;
+
+    beforeEach(() => {
+      previousProvider = getEnvOverridesProvider();
+      setEnvOverridesProvider(
+        (layer) => (layer === 'provider' ? values('registered') : previousProvider?.(layer)),
+        { providerLayer: true },
+      );
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: { choices: [{ message: { role: 'assistant', content: 'fixture output' } }] },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+    });
+    afterEach(() => setEnvOverridesProvider(previousProvider));
+
+    it.each(['registered', 'env', 'config'])(
+      'uses matching %s endpoint and credentials in the outgoing request',
+      async (source) => {
+        const provider = await loadApiProvider(route, {
+          env: values('suite'),
+          options: {
+            env: source === 'env' ? values('env') : undefined,
+            config:
+              source === 'config'
+                ? { [configKey]: 'config.example.invalid', apiKey: 'config-key' }
+                : undefined,
+          },
+        });
+        expect(await provider.callApi('hello')).toMatchObject({ output: 'fixture output' });
+        expect(fetchWithCache).toHaveBeenCalledOnce();
+        const [requestUrl, request] = vi.mocked(fetchWithCache).mock.calls[0];
+        expect(requestUrl).toBe(url(source));
+        expect(request?.headers).toMatchObject({ Authorization: `Bearer ${source}-key` });
+      },
+    );
+
+    it.each(['suite', 'file', 'process', 'legacy callback'])(
+      'retains %s values without provider-layer overrides',
+      async (source) => {
+        setEnvOverridesProvider(previousProvider);
+        if (source === 'process') {
+          mockProcessEnv(values('fallback'));
+        } else if (source === 'legacy callback') {
+          setEnvOverridesProvider((layer) => (layer === 'suite' ? values('fallback') : undefined));
+        }
+        await cliState.withEnvFileOverrides(
+          source === 'file' ? values('fallback') : undefined,
+          async () => {
+            const provider = await loadApiProvider(route, {
+              env: source === 'suite' ? values('fallback') : {},
+            });
+            expect(await provider.callApi('hello')).toMatchObject({ output: 'fixture output' });
+            const [requestUrl, request] = vi.mocked(fetchWithCache).mock.calls[0];
+            expect(requestUrl).toBe(url('fallback'));
+            expect(request?.headers).toMatchObject({ Authorization: 'Bearer fallback-key' });
+          },
+        );
+      },
+    );
+
+    it('preserves the existing empty provider endpoint behavior', async () => {
+      const loading = loadApiProvider(route, {
+        env: values('suite'),
+        options: { env: { [endpointKey]: '' } },
+      });
+      if (route.startsWith('snowflake:')) {
+        await expect(loading).rejects.toThrow('Snowflake provider requires an account identifier');
+        expect(fetchWithCache).not.toHaveBeenCalled();
+      } else {
+        const provider = await loading;
+        expect(await provider.callApi('hello')).toMatchObject({ output: 'fixture output' });
+        expect(vi.mocked(fetchWithCache).mock.calls[0][0]).toBe(url('registered'));
+      }
+    });
   });
 
   let restoreEnv: () => void;

@@ -1,6 +1,8 @@
 import nunjucks from 'nunjucks';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
+import { getEnvString, getProcessEnv } from '../../src/envars';
+import { getEnvOverridesProvider, setEnvOverridesProvider } from '../../src/envOverrides';
 import {
   analyzeTemplateReference,
   extractVariablesFromTemplate,
@@ -402,6 +404,40 @@ describe('getNunjucksEngine', () => {
   });
 
   describe('environment variables as globals', () => {
+    it('keeps provider credentials separate from template and subprocess environments', () => {
+      mockProcessEnv({ PROMPTFOO_DISABLE_TEMPLATE_ENV_VARS: 'true' }, { clear: true });
+      const previousProvider = getEnvOverridesProvider();
+      setEnvOverridesProvider(
+        (layer) => {
+          if (layer === 'provider') {
+            return { OPENAI_API_KEY: 'provider-key', ANTHROPIC_API_KEY: 'provider-secret' };
+          }
+          return layer === 'suite'
+            ? { OPENAI_API_KEY: 'caller-owned-key', PROMPTFOO_AUTHOR: 'caller' }
+            : undefined;
+        },
+        { providerLayer: true },
+      );
+      try {
+        expect(getEnvString('OPENAI_API_KEY')).toBe('provider-key');
+        expect(getEnvString('ANTHROPIC_API_KEY')).toBe('provider-secret');
+        expect(getEnvString('PROMPTFOO_AUTHOR')).toBe('caller');
+        expect(getProcessEnv().OPENAI_API_KEY).toBeUndefined();
+        expect(getProcessEnv().ANTHROPIC_API_KEY).toBeUndefined();
+        const engine = getNunjucksEngine();
+        expect(
+          engine.renderString('leak {{ env.OPENAI_API_KEY }} {{ env["ANTHROPIC_API_KEY"] }}', {}),
+        ).toBe('leak caller-owned-key ');
+        expect(engine.renderString('{{ env.PROMPTFOO_AUTHOR }}', {})).toBe('caller');
+        expect(Object.keys(engine.getGlobal('env')).sort()).toEqual([
+          'OPENAI_API_KEY',
+          'PROMPTFOO_AUTHOR',
+        ]);
+      } finally {
+        setEnvOverridesProvider(previousProvider);
+      }
+    });
+
     const verifyEnvironmentGlobals = () => {
       mockProcessEnv({ TEST_VAR: 'test_value' });
       const engine = getNunjucksEngine();

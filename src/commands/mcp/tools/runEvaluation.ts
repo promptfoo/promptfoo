@@ -486,16 +486,7 @@ export function registerRunEvaluationTool(server: McpServer) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
         logger.error(`Evaluation execution failed: ${errorMessage}`);
 
-        const errorData = {
-          configuration: {
-            configPath: args.configPath || 'promptfooconfig.yaml',
-            testCaseIndices: args.testCaseIndices,
-            promptFilter: args.promptFilter,
-            providerFilter: args.providerFilter,
-          },
-        };
-
-        return createToolResponse('run_evaluation', false, errorData);
+        return createToolResponse('run_evaluation', false, undefined, errorMessage);
       }
     },
   );

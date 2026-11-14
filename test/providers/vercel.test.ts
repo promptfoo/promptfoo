@@ -1,16 +1,19 @@
 import { context as otelContext, propagation, trace } from '@opentelemetry/api';
 import {
   InMemorySpanExporter,
-  NodeTracerProvider,
   SimpleSpanProcessor,
-} from '@opentelemetry/sdk-trace-node';
+  TracerProvider,
+} from '@opentelemetry/sdk-trace';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getCache, isCacheEnabled } from '../../src/cache';
+import { getEnvOverridesProvider, setEnvOverridesProvider } from '../../src/envOverrides';
+import { loadApiProvider } from '../../src/providers/index';
 import {
   createVercelProvider,
   VercelAiEmbeddingProvider,
   VercelAiProvider,
 } from '../../src/providers/vercel';
+import { registerTracerProvider } from '../../src/tracing/tracerProvider';
 import { mockProcessEnv } from '../util/utils';
 
 const createFreshTextResult = () => ({
@@ -72,12 +75,12 @@ afterEach(() => restoreEnv());
 
 const testTraceparent = '00-0123456789abcdef0123456789abcdef-0123456789abcdef-01';
 const spanExporter = new InMemorySpanExporter();
-const testTracerProvider = new NodeTracerProvider({
-  spanProcessors: [new SimpleSpanProcessor(spanExporter)],
+const testTracerProvider = new TracerProvider({
+  spanProcessors: [new SimpleSpanProcessor({ exporter: spanExporter })],
 });
 
 beforeAll(() => {
-  testTracerProvider.register();
+  registerTracerProvider(testTracerProvider);
 });
 
 afterAll(async () => {
@@ -116,6 +119,34 @@ describe('VercelAiProvider', () => {
   });
 
   describe('constructor', () => {
+    it.each([undefined, 'explicit-key', ''])(
+      'keeps a registered gateway alias ahead of suite keys with explicit value %j',
+      async (explicit) => {
+        const { createGateway, generateText } = await import('ai');
+        vi.mocked(generateText).mockResolvedValue(createFreshTextResult() as any);
+        const previousProvider = getEnvOverridesProvider();
+        setEnvOverridesProvider(
+          (layer) =>
+            layer === 'provider'
+              ? { AI_GATEWAY_API_KEY: 'registered-key' }
+              : previousProvider?.(layer),
+          { providerLayer: true },
+        );
+        try {
+          const provider = await loadApiProvider('vercel:openai/gpt-4o-mini', {
+            env: { VERCEL_AI_GATEWAY_API_KEY: 'suite-key' },
+            options: { env: { VERCEL_AI_GATEWAY_API_KEY: explicit } },
+          });
+          await provider.callApi('hello');
+          expect(createGateway).toHaveBeenLastCalledWith(
+            expect.objectContaining({ apiKey: explicit ?? 'registered-key' }),
+          );
+        } finally {
+          setEnvOverridesProvider(previousProvider);
+        }
+      },
+    );
+
     it('preserves gateway initialization errors', async () => {
       const { createGateway } = await import('ai');
       vi.mocked(createGateway).mockImplementationOnce(() => {

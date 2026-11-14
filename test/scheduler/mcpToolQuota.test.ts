@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { setImmediate } from 'node:timers/promises';
 
 import { context, propagation, trace } from '@opentelemetry/api';
-import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
+import { TracerProvider } from '@opentelemetry/sdk-trace';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { withCacheEnabled, withCacheNamespace } from '../../src/cache';
 import { loadApiProvider } from '../../src/providers';
@@ -11,8 +11,9 @@ import { wrapProviderWithRateLimiting } from '../../src/scheduler/providerWrappe
 import { getRateLimitKey } from '../../src/scheduler/rateLimitKey';
 import { RateLimitRegistry } from '../../src/scheduler/rateLimitRegistry';
 import { SlotQueue } from '../../src/scheduler/slotQueue';
+import { registerTracerProvider } from '../../src/tracing/tracerProvider';
 import { createDeferred, mockProcessEnv } from '../util/utils';
-import type { ReadableSpan, SpanProcessor } from '@opentelemetry/sdk-trace-node';
+import type { ReadableSpan, SpanProcessor } from '@opentelemetry/sdk-trace';
 
 import type { ApiProvider } from '../../src/types/providers';
 
@@ -26,7 +27,7 @@ describe('completed MCP diagnostics and target model quota', () => {
   const controllers: AbortController[] = [];
   const drains: (() => void)[] = [];
   let restoreEnvironment: () => void;
-  let tracerProvider: NodeTracerProvider;
+  let tracerProvider: TracerProvider;
 
   beforeEach(() => {
     restoreEnvironment = mockProcessEnv({
@@ -106,8 +107,8 @@ describe('completed MCP diagnostics and target model quota', () => {
       async forceFlush() {},
       async shutdown() {},
     };
-    tracerProvider = new NodeTracerProvider({ spanProcessors: [processor] });
-    tracerProvider.register();
+    tracerProvider = new TracerProvider({ spanProcessors: [processor] });
+    registerTracerProvider(tracerProvider);
     const policy = completed.promise.then(() => {
       if (abortOnCompletion && !pendingTool) {
         events.push('caller abort');

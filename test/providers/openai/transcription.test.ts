@@ -1031,7 +1031,7 @@ describe('OpenAiTranscriptionProvider', () => {
       expect(fetchWithCache).toHaveBeenCalled();
     });
 
-    it('should include timestamp_granularities option', async () => {
+    it('requests Whisper timestamps and exposes them alongside the transcript', async () => {
       const provider = new OpenAiTranscriptionProvider('whisper-1', {
         config: {
           apiKey: 'test-key',
@@ -1039,12 +1039,26 @@ describe('OpenAiTranscriptionProvider', () => {
         },
       });
 
-      await provider.callApi('/path/to/audio.mp3');
+      const words = [{ word: 'Hello', start: 0, end: 0.4 }];
+      const segment = { text: ' Hello', start: 0, end: 0.5 };
+      vi.mocked(fetchWithCache).mockResolvedValue(
+        createMockFetchResponse({
+          text: 'Hello',
+          words,
+          segments: [{ ...segment, id: 0, tokens: [42] }],
+        }),
+      );
+
+      const result = await provider.callApi('/path/to/audio.mp3');
 
       const formData = vi.mocked(fetchWithCache).mock.calls[0]![1]!.body as unknown as MockFormData;
       expect(formData.get('response_format')).toBe('verbose_json');
       expect(formData.getAll('timestamp_granularities[]')).toEqual(['word', 'segment']);
       expect(formData.has('timestamp_granularities')).toBe(false);
+      expect(result).toMatchObject({
+        output: 'Hello',
+        metadata: { words, segments: 1, segmentTimestamps: [segment] },
+      });
     });
 
     it('should include organization ID in headers when provided', async () => {

@@ -133,14 +133,6 @@ vi.mock('../../../src/util/file', async (importOriginal) => {
   };
 });
 
-// Also mock the barrel file since the provider imports from util/index
-vi.mock('../../../src/util/index', async (importOriginal) => {
-  return {
-    ...(await importOriginal()),
-    maybeLoadToolsFromExternalFile: mockMaybeLoadToolsFromExternalFile,
-  };
-});
-
 vi.mock('glob', async (importOriginal) => {
   return {
     ...(await importOriginal()),
@@ -845,6 +837,8 @@ describe('AIStudioChatProvider', () => {
 
   describe('callGemini', () => {
     beforeEach(() => {
+      // Baseline fixtures exercise the original Gemini 2.5 request format and tariffs.
+      vi.spyOn(Date, 'now').mockReturnValue(Date.UTC(2026, 10, 5));
       provider = new AIStudioChatProvider('gemini-pro', {
         config: {
           apiKey: 'test-key',
@@ -933,6 +927,45 @@ describe('AIStudioChatProvider', () => {
         expect(result.cost).toBeCloseTo(expectedCost, 10);
       },
     );
+
+    it.each([
+      { model: 'gemini-3.5-flash', from: Date.UTC(2026, 9, 8) },
+      { model: 'gemini-2.5-pro', from: Date.UTC(2026, 11, 1) },
+      { model: 'gemini-2.5-flash', from: Date.UTC(2026, 11, 1) },
+    ])(
+      'uses the serving model controls at the $model cutover without rewriting the URL',
+      async ({ model, from }) => {
+        const provider = new AIStudioChatProvider(model, {
+          config: {
+            apiKey: 'test-key',
+            passthrough: {
+              generationConfig: { temperature: 0.7, candidateCount: 2, maxOutputTokens: 200 },
+            },
+          },
+        });
+        vi.mocked(cache.fetchWithCache).mockResolvedValue(createOkGeminiFetchResponse());
+        for (const now of [from - 1, from]) {
+          vi.spyOn(Date, 'now').mockReturnValue(now);
+          await provider.callGemini('test');
+          const [url, request] = vi.mocked(cache.fetchWithCache).mock.lastCall!;
+          expect(url).toContain(`/models/${model}:generateContent`);
+          expect(JSON.parse(request?.body as string).generationConfig).toEqual(
+            now < from
+              ? { temperature: 0.7, candidateCount: 2, maxOutputTokens: 200 }
+              : { maxOutputTokens: 200 },
+          );
+        }
+      },
+    );
+
+    it('rejects a legacy thinking budget on the redirected Gemini 2.5 Pro ID before transport', async () => {
+      vi.spyOn(Date, 'now').mockReturnValue(Date.UTC(2026, 11, 1));
+      const provider = new AIStudioChatProvider('gemini-2.5-pro', createBudgetedThinkingOptions());
+      await expect(provider.callGemini('test')).rejects.toThrow(
+        'gemini-2.5-pro does not support thinkingBudget',
+      );
+      expect(cache.fetchWithCache).not.toHaveBeenCalled();
+    });
 
     it.each(['gemini-3.8-flash', 'gemini-3.7-flash'])(
       'rejects unsupported MINIMAL thinking before requesting %s',
@@ -2031,9 +2064,13 @@ describe('AIStudioChatProvider', () => {
       });
 
       // Verify maybeLoadToolsFromExternalFile was called with the tools file path
-      expect(mockMaybeLoadToolsFromExternalFile).toHaveBeenCalledWith('file://tools.json', {
-        location: 'San Francisco',
-      });
+      expect(mockMaybeLoadToolsFromExternalFile).toHaveBeenCalledWith(
+        'file://tools.json',
+        {
+          location: 'San Francisco',
+        },
+        undefined,
+      );
       expect(cache.fetchWithCache).toHaveBeenCalledWith(
         'https://rendered-generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent',
         {
@@ -2198,6 +2235,7 @@ describe('AIStudioChatProvider', () => {
       expect(mockMaybeLoadToolsFromExternalFile).toHaveBeenCalledWith(
         [{ googleSearch: {} }],
         undefined,
+        undefined,
       );
       const callArgs = vi.mocked(cache.fetchWithCache).mock.calls.at(-1);
       const body = JSON.parse(callArgs![1]!.body as string);
@@ -2238,6 +2276,7 @@ describe('AIStudioChatProvider', () => {
 
       expect(mockMaybeLoadToolsFromExternalFile).toHaveBeenCalledWith(
         'file://tools.json',
+        undefined,
         undefined,
       );
       const callArgs = vi.mocked(cache.fetchWithCache).mock.calls.at(-1);
@@ -2858,6 +2897,69 @@ describe('AIStudioChatProvider', () => {
       });
     });
 
+    it.each([
+      { date: 'Wed, 07 Oct 2026 12:00:00 GMT', now: Date.UTC(2026, 9, 9), cost: 0.006 },
+      { date: 'Fri, 09 Oct 2026 12:00:00 GMT', now: Date.UTC(2026, 9, 9), cost: 0.002625 },
+      { date: 'Thu, 31 Dec 2026 12:00:00 GMT', now: Date.UTC(2027, 0, 2), cost: 0.002625 },
+      { date: undefined, now: Date.UTC(2026, 9, 9), cost: 0.002625 },
+      { date: 'not-a-date', now: Date.UTC(2026, 9, 9), cost: 0.002625 },
+      {
+        date: 'Fri, 09 Oct 2026 12:00:00 GMT',
+        now: Date.UTC(2026, 9, 9),
+        cost: 0.002625,
+        cached: false,
+      },
+      { date: undefined, now: Date.UTC(2027, 0, 2), cost: 0.00525, cached: false },
+    ])(
+      'prices cached Gemini responses using their original HTTP date: %j',
+      async ({ date, now, cost, cached = true }) => {
+        vi.spyOn(Date, 'now').mockReturnValue(now);
+        const provider = new AIStudioChatProvider('gemini-3.5-flash', createApiKeyOptions());
+        vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+          ...createMockFetchResponse({
+            candidates: [{ content: { parts: [{ text: 'cached response' }] } }],
+            usageMetadata: {
+              promptTokenCount: 1000,
+              candidatesTokenCount: 500,
+              totalTokenCount: 1500,
+            },
+          }),
+          cached,
+          headers: date === undefined ? {} : { date },
+        });
+
+        const result = await provider.callGemini('test prompt');
+
+        expect(result.cost).toBeCloseTo(cost, 10);
+        expect(result.cached).toBe(cached);
+        expect(result.tokenUsage).toMatchObject({ total: 1500, numRequests: cached ? 0 : 1 });
+      },
+    );
+
+    it('preserves custom costs when a cached response has a historical HTTP date', async () => {
+      vi.spyOn(Date, 'now').mockReturnValue(Date.UTC(2027, 0, 2));
+      const provider = new AIStudioChatProvider('gemini-3.5-flash', {
+        config: { apiKey: 'test-key', inputCost: 0.00001, outputCost: 0.00002 },
+      });
+      vi.mocked(cache.fetchWithCache).mockResolvedValueOnce({
+        ...createMockFetchResponse({
+          candidates: [{ content: { parts: [{ text: 'cached response' }] } }],
+          usageMetadata: {
+            promptTokenCount: 1000,
+            candidatesTokenCount: 500,
+            totalTokenCount: 1500,
+          },
+        }),
+        cached: true,
+        headers: { date: 'Wed, 07 Oct 2026 12:00:00 GMT' },
+      });
+
+      const result = await provider.callGemini('test prompt');
+
+      expect(result.cost).toBeCloseTo(0.02, 10);
+      expect(result.cached).toBe(true);
+    });
+
     it('should not double-count tool-use prompt tokens when pricing a standard Gemini response', async () => {
       const provider = new AIStudioChatProvider('gemini-2.5-flash', createApiKeyOptions());
       vi.mocked(cache.fetchWithCache).mockResolvedValueOnce(
@@ -2908,6 +3010,8 @@ describe('AIStudioChatProvider', () => {
       });
 
       it('should price cached and audio usage for AI Studio responses', async () => {
+        // Exercise the original 3.5 rates before the Gemini API redirected this ID.
+        vi.spyOn(Date, 'now').mockReturnValue(Date.UTC(2026, 8, 1));
         const provider = new AIStudioChatProvider('gemini-3.5-flash', {
           config: { apiKey: 'test-key', passthrough: { service_tier: 'priority' } },
         });
@@ -3067,6 +3171,51 @@ describe('AIStudioEmbeddingProvider', () => {
     expect(response.tokenUsage).toEqual({ total: 7, numRequests: 1 });
   });
 
+  it('sends instructions as text and dimensions as a top-level field for Embedding 2', async () => {
+    vi.mocked(cache.fetchWithCache).mockResolvedValue(embeddingResponse([0.1, 0.2]) as any);
+    const provider = new AIStudioEmbeddingProvider('gemini-embedding-2', {
+      config: { outputDimensionality: 256 },
+    });
+    const input = 'task: search result | query: electric cars';
+    expect((await provider.callEmbeddingApi(input)).embedding).toEqual([0.1, 0.2]);
+    const [url, init] = vi.mocked(cache.fetchWithCache).mock.calls[0];
+    expect(url).toMatch(/models\/gemini-embedding-2:embedContent$/);
+    expect(JSON.parse(String(init?.body))).toEqual({
+      content: { parts: [{ text: input }] },
+      outputDimensionality: 256,
+    });
+  });
+
+  it.each([
+    [
+      { taskType: 'RETRIEVAL_QUERY' },
+      'taskType. Include the task or title in the input text instead.',
+    ],
+    [{ title: 'Manual' }, 'title. Include the task or title in the input text instead.'],
+    [{ autoTruncate: false }, 'autoTruncate. Omit this option when using embedContent.'],
+  ] as const)(
+    'rejects unsupported Embedding 2 options before sending a request: %j',
+    async (config, message) => {
+      const provider = new AIStudioEmbeddingProvider('gemini-embedding-2', { config });
+      expect(await provider.callEmbeddingApi('text')).toEqual({
+        error: `gemini-embedding-2 does not support ${message}`,
+      });
+      expect(cache.fetchWithCache).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([{ values: [] }, { values: [null] }, { values: ['0.1'] }, { values: 'string' }])(
+    'rejects malformed embedding values: %j',
+    async ({ values }) => {
+      const data = { embedding: { values } };
+      vi.mocked(cache.fetchWithCache).mockResolvedValue({ data, cached: false } as any);
+      const provider = new AIStudioEmbeddingProvider('gemini-embedding-2');
+      expect(await provider.callEmbeddingApi('text')).toEqual({
+        error: 'No valid embedding vector in Google AI Studio response.',
+      });
+    },
+  );
+
   it('reports cost for priced embedding models', async () => {
     vi.mocked(cache.fetchWithCache).mockResolvedValue(embeddingResponse([0.1, 0.2], 10_000) as any);
 
@@ -3155,7 +3304,7 @@ describe('AIStudioEmbeddingProvider', () => {
     expect(response.error).toContain('API call error: Error: network down');
   });
 
-  it('surfaces a descriptive error when the response has no values', async () => {
+  it('preserves Google API error details when the response has no values', async () => {
     vi.mocked(cache.fetchWithCache).mockResolvedValue({
       data: { error: { message: 'bad' } },
       cached: false,
@@ -3164,7 +3313,7 @@ describe('AIStudioEmbeddingProvider', () => {
     const provider = new AIStudioEmbeddingProvider('gemini-embedding-001');
     const response = await provider.callEmbeddingApi('hello');
     expect(response.embedding).toBeUndefined();
-    expect(response.error).toContain('No embedding found');
+    expect(response.error).toBe('Google AI Studio embedding API error: bad');
   });
 
   it('marks responses as cached without a new request', async () => {

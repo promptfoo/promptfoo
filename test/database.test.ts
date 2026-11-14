@@ -94,6 +94,15 @@ describe('database WAL mode', () => {
     }
   });
 
+  it('reads absent evaluation traces without creating or opening a database', async () => {
+    const { isDbOpen } = await import('../src/database');
+    const { TraceStore } = await import('../src/tracing/store');
+
+    await expect(new TraceStore().getTracesByEvaluation('missing-eval')).resolves.toEqual([]);
+    expect(isDbOpen()).toBe(false);
+    expect(fs.existsSync(path.join(tempDir, 'promptfoo.db'))).toBe(false);
+  });
+
   it('enables WAL journal mode by default', async () => {
     // First import and initialize the database to trigger WAL mode configuration
     const database = await import('../src/database');
@@ -158,8 +167,9 @@ describe('database WAL mode', () => {
     const database = await import('../src/database');
     const db = await database.getDb();
 
-    // Unit tests use a shared in-memory DB and skip WAL setup.
-    expect(db).toBeDefined();
+    const result = await db.all<{ journal_mode: string }>(sql`PRAGMA journal_mode`);
+    expect(result).toEqual([{ journal_mode: 'memory' }]);
+    expect(fs.existsSync(database.getDbPath())).toBe(false);
   });
 
   describe('closeDbIfOpen', () => {

@@ -149,7 +149,7 @@ export default function BSidesSF2026(): React.ReactElement {
                   Join our Discord community to connect with our team and our community.
                 </p>
                 <a
-                  href="https://discord.com/invite/promptfoo"
+                  href="https://discord.gg/gHPS9jjfbs"
                   target="_blank"
                   rel="noopener noreferrer"
                   className={styles.secondaryCta}

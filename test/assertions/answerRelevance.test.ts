@@ -4,17 +4,25 @@ import { matchesAnswerRelevance } from '../../src/matchers/rag';
 import invariant from '../../src/util/invariant';
 import { createPassingGrade, createThresholdAssertion } from '../factories/literalFixtures';
 
-import type { AssertionValueFunctionContext } from '../../src/types/index';
+import type { AssertionParams, AssertionValueFunctionContext } from '../../src/types/index';
 
-const createProviderOutput = () => ({
-  output: 'test output',
-  tokenUsage: {},
-});
-
-const createEmptyTestOptions = () => ({
-  vars: {},
-  options: {},
-});
+function createAnswerRelevanceParams(): Omit<AssertionParams, 'assertion' | 'inverse'> {
+  return {
+    output: 'test output',
+    prompt: 'test prompt',
+    test: {
+      vars: {},
+      options: {},
+    },
+    baseType: 'answer-relevance',
+    assertionValueContext: {} as AssertionValueFunctionContext,
+    outputString: 'test output',
+    providerResponse: {
+      output: 'test output',
+      tokenUsage: {},
+    },
+  };
+}
 
 vi.mock('../../src/matchers/rag');
 vi.mock('../../src/util/invariant');
@@ -34,15 +42,9 @@ describe('handleAnswerRelevance', () => {
     mockMatchesAnswerRelevance.mockResolvedValue(createPassingGrade());
 
     const result = await handleAnswerRelevance({
+      ...createAnswerRelevanceParams(),
       assertion: createThresholdAssertion('answer-relevance', 0.7),
-      output: 'test output',
-      prompt: 'test prompt',
-      test: createEmptyTestOptions(),
-      baseType: 'answer-relevance',
-      assertionValueContext: {} as AssertionValueFunctionContext,
       inverse: false,
-      outputString: 'test output',
-      providerResponse: createProviderOutput(),
     });
 
     expect(mockMatchesAnswerRelevance).toHaveBeenCalledWith(
@@ -68,20 +70,15 @@ describe('handleAnswerRelevance', () => {
     mockMatchesAnswerRelevance.mockResolvedValue(createPassingGrade());
 
     const result = await handleAnswerRelevance({
+      ...createAnswerRelevanceParams(),
       assertion: createThresholdAssertion('answer-relevance', 0.7),
-      output: 'test output',
-      prompt: 'test prompt',
       test: {
         vars: {
           query: 'test query',
         },
         options: {},
       },
-      baseType: 'answer-relevance',
-      assertionValueContext: {} as AssertionValueFunctionContext,
       inverse: false,
-      outputString: 'test output',
-      providerResponse: createProviderOutput(),
     });
 
     expect(mockMatchesAnswerRelevance).toHaveBeenCalledWith(
@@ -105,23 +102,12 @@ describe('handleAnswerRelevance', () => {
   it('should throw error if output is not string', async () => {
     await expect(
       handleAnswerRelevance({
+        ...createAnswerRelevanceParams(),
         assertion: {
           type: 'answer-relevance',
         },
         output: {},
-        prompt: 'test prompt',
-        test: {
-          vars: {},
-          options: {},
-        },
-        baseType: 'answer-relevance',
-        assertionValueContext: {} as AssertionValueFunctionContext,
         inverse: false,
-        outputString: 'test output',
-        providerResponse: {
-          output: 'test output',
-          tokenUsage: {},
-        },
       }),
     ).rejects.toThrow('answer-relevance assertion type must evaluate a string output');
   });
@@ -129,23 +115,12 @@ describe('handleAnswerRelevance', () => {
   it('should throw error if prompt is missing', async () => {
     await expect(
       handleAnswerRelevance({
+        ...createAnswerRelevanceParams(),
         assertion: {
           type: 'answer-relevance',
         },
-        output: 'test output',
         prompt: '',
-        test: {
-          vars: {},
-          options: {},
-        },
-        baseType: 'answer-relevance',
-        assertionValueContext: {} as AssertionValueFunctionContext,
         inverse: false,
-        outputString: 'test output',
-        providerResponse: {
-          output: 'test output',
-          tokenUsage: {},
-        },
       }),
     ).rejects.toThrow('answer-relevance assertion type must have a prompt');
   });
@@ -155,17 +130,11 @@ describe('handleAnswerRelevance', () => {
     mockMatchesAnswerRelevance.mockResolvedValue(createPassingGrade());
 
     const result = await handleAnswerRelevance({
+      ...createAnswerRelevanceParams(),
       assertion: {
         type: 'answer-relevance',
       },
-      output: 'test output',
-      prompt: 'test prompt',
-      test: createEmptyTestOptions(),
-      baseType: 'answer-relevance',
-      assertionValueContext: {} as AssertionValueFunctionContext,
       inverse: false,
-      outputString: 'test output',
-      providerResponse: createProviderOutput(),
     });
 
     expect(mockMatchesAnswerRelevance).toHaveBeenCalledWith(
@@ -194,17 +163,11 @@ describe('handleAnswerRelevance', () => {
     });
 
     const result = await handleAnswerRelevance({
+      ...createAnswerRelevanceParams(),
       assertion: {
         type: 'not-answer-relevance',
       },
-      output: 'test output',
-      prompt: 'test prompt',
-      test: createEmptyTestOptions(),
-      baseType: 'answer-relevance',
-      assertionValueContext: {} as AssertionValueFunctionContext,
       inverse: true,
-      outputString: 'test output',
-      providerResponse: createProviderOutput(),
     });
 
     expect(mockMatchesAnswerRelevance).toHaveBeenCalledWith(

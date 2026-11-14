@@ -85,6 +85,7 @@ describe('Google example provider contracts', () => {
     vi.resetAllMocks();
     restoreEnv = mockProcessEnv({
       GOOGLE_API_KEY: 'example-native-key',
+      GOOGLE_APPLICATION_CREDENTIALS: undefined,
       GOOGLE_GENERATIVE_AI_API_KEY: undefined,
       GEMINI_API_KEY: undefined,
       PALM_API_KEY: undefined,
@@ -119,6 +120,7 @@ describe('Google example provider contracts', () => {
     // it through a native import as well as Vitest's transformed module graph.
     vi.spyOn(GoogleAuth.prototype, 'getClient').mockResolvedValue({
       request: oauthRequest,
+      transporter: { defaults: {} },
     } as unknown as Awaited<ReturnType<GoogleAuth['getClient']>>);
     vi.spyOn(GoogleAuth.prototype, 'getProjectId').mockImplementation(
       async () => 'sdk-detected-project',
@@ -191,6 +193,7 @@ describe('Google example provider contracts', () => {
       'grades a %s response with a supported assertion',
       async (outcome) => {
         const { test, provider, prompt } = await loadExample('google-video', filename);
+        expect(provider.id()).toBe('vertex:video:veo-3.1-generate-001');
         const grading = await runAssertions({
           test,
           provider,
@@ -264,8 +267,8 @@ describe('Google example provider contracts', () => {
         expect(requests[0]).toMatchObject({
           auth: vertex ? 'oauth' : 'native',
           url: vertex
-            ? 'https://aiplatform.googleapis.com/v1/projects/example-project/locations/global/publishers/google/models/gemini-3.1-flash-image:generateContent'
-            : 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-image:generateContent',
+            ? 'https://aiplatform.eu.rep.googleapis.com/v1/projects/example-project/locations/eu/publishers/google/models/gemini-3.1-flash-image:generateContent'
+            : `https://generativelanguage.googleapis.com/v1beta/models/${grounded ? 'gemini-3.1-flash-image' : 'gemini-nano-banana-2.1'}:generateContent`,
           body: {
             generationConfig: {
               responseModalities: ['TEXT', 'IMAGE'],
@@ -325,6 +328,51 @@ describe('Google example provider contracts', () => {
     expect(requests).toHaveLength(testSuite.providers.length);
     expect(oauthRequest).not.toHaveBeenCalled();
   });
+
+  it.each([
+    { name: 'ADC only', apiKey: undefined, credentialsFile: undefined },
+    { name: 'ADC plus an API key', apiKey: 'example-native-key', credentialsFile: undefined },
+    {
+      name: 'a service account plus an API key',
+      apiKey: 'example-native-key',
+      credentialsFile: 'synthetic-service-account.json',
+    },
+  ])(
+    'basic Vertex example keeps OAuth and independent grading with $name',
+    async ({ apiKey, credentialsFile }) => {
+      mockProcessEnv({
+        GOOGLE_API_KEY: apiKey,
+        GOOGLE_APPLICATION_CREDENTIALS: credentialsFile,
+        GOOGLE_PROJECT_ID: 'example-project',
+      });
+      const { provider, test, prompt } = await loadExample('google-vertex');
+      await provider.callApi(prompt, {
+        vars: test.vars ?? {},
+        prompt: { raw: prompt, label: prompt },
+      });
+      // A model-graded assertion added to the example should use its own instructions and ADC.
+      const grading = await runAssertion({
+        test,
+        provider,
+        prompt,
+        providerResponse: { output: 'billing' },
+        assertion: {
+          type: 'llm-rubric',
+          value: 'The output routes a duplicate charge to billing.',
+        },
+      });
+      expect(grading.pass).toBe(true);
+      expect(requests).toHaveLength(2);
+      expect(JSON.stringify(requests[0].body.systemInstruction)).toContain('Classify each message');
+      const graderInstructions = JSON.stringify(requests[1].body.systemInstruction);
+      expect(graderInstructions).toContain('You are grading output');
+      expect(graderInstructions).not.toContain('Classify each message');
+      expect(requests[1].url).toBe(
+        'https://aiplatform.googleapis.com/v1/projects/example-project/locations/global/publishers/google/models/gemini-3.8-flash:generateContent',
+      );
+      expect(requests.every(({ auth }) => auth === 'oauth')).toBe(true);
+    },
+  );
 
   it.each([
     { directory: 'google-aistudio-tools', vertex: false },

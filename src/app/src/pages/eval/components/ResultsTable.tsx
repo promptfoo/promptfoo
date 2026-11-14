@@ -63,7 +63,7 @@ import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 import { useFilterMode } from './FilterModeProvider';
 import { ProviderDisplay } from './ProviderDisplay';
 import { type ProviderDef } from './providerConfig';
-import { type ResultsFilter, useResultsViewSettingsStore, useTableStore } from './store';
+import { isFilterApplied, useResultsViewSettingsStore, useTableStore } from './store';
 import TruncatedText from './TruncatedText';
 import { useHeaderCollapse } from './useHeaderCollapse';
 import VariableMarkdownCell from './VariableMarkdownCell';
@@ -81,7 +81,7 @@ import './ResultsTable.css';
 
 import { NumberInput } from '@app/components/ui/number-input';
 import { isEncodingStrategy } from '@promptfoo/redteam/constants/strategies';
-import { useMetricsGetter, usePassingTestCounts, usePassRates, useTestCounts } from './hooks';
+import { useMetricsGetter, usePromptPassMetrics } from './hooks';
 import {
   getNamedMetricTotals,
   getRatingCellKey,
@@ -535,22 +535,6 @@ type ManualRatingUpdate = {
 
 type PersistedRatingResult = SubmitRatingResponse;
 
-function isAppliedResultFilter(filter: ResultsFilter): boolean {
-  if (filter.type === 'metadata' && filter.operator === 'exists') {
-    return Boolean(filter.field);
-  }
-  if (filter.type === 'metadata') {
-    return Boolean(filter.value && filter.field);
-  }
-  if (filter.type === 'metric' && filter.operator === 'is_defined') {
-    return Boolean(filter.field);
-  }
-  if (filter.type === 'metric') {
-    return Boolean(filter.value && filter.field);
-  }
-  return Boolean(filter.value);
-}
-
 function formatProviderString(prompt: EvaluateTable['head']['prompts'][number]): string {
   if (typeof prompt.provider === 'string') {
     return prompt.provider;
@@ -624,22 +608,15 @@ function renderRequestMetric({
   );
 }
 
-function renderAssertMetric({
-  numAsserts,
-  numGoodAsserts,
-  idx,
-}: {
-  numAsserts: number[];
-  numGoodAsserts: number[];
-  idx: number;
-}): React.ReactNode {
-  if (!numAsserts[idx]) {
+function renderAssertMetric(metrics: PromptMetrics['total']): React.ReactNode {
+  const total = (metrics?.assertFailCount ?? 0) + (metrics?.assertPassCount ?? 0);
+  if (!total) {
     return null;
   }
 
   return (
     <div>
-      <strong>Asserts:</strong> {numGoodAsserts[idx]}/{numAsserts[idx]} passed
+      <strong>Asserts:</strong> {metrics?.assertPassCount || 0}/{total} passed
     </div>
   );
 }
@@ -1145,8 +1122,6 @@ function renderPromptMetricDetails({
   idx,
   isRedteam,
   showStats,
-  numAsserts,
-  numGoodAsserts,
   testCounts,
 }: {
   metrics: PromptMetrics['total'];
@@ -1154,8 +1129,6 @@ function renderPromptMetricDetails({
   idx: number;
   isRedteam: boolean;
   showStats: boolean;
-  numAsserts: number[];
-  numGoodAsserts: number[];
   testCounts: PromptSummaryMetric[];
 }): React.ReactNode {
   if (!showStats) {
@@ -1165,7 +1138,7 @@ function renderPromptMetricDetails({
   return (
     <div className="prompt-detail collapse-hidden">
       {renderRequestMetric({ metrics, isRedteam })}
-      {renderAssertMetric({ numAsserts, numGoodAsserts, idx })}
+      {renderAssertMetric(metrics)}
       {renderCostMetric({
         metrics,
         filteredMetrics,
@@ -1206,8 +1179,6 @@ function PromptColumnHeader({
   getMetrics,
   showStats,
   isRedteam,
-  numAsserts,
-  numGoodAsserts,
   testCounts,
   passingTestCounts,
   config,
@@ -1225,8 +1196,6 @@ function PromptColumnHeader({
   getMetrics: ReturnType<typeof useMetricsGetter>;
   showStats: boolean;
   isRedteam: boolean;
-  numAsserts: number[];
-  numGoodAsserts: number[];
   testCounts: PromptSummaryMetric[];
   passingTestCounts: PromptSummaryMetric[];
   config: ReturnType<typeof useTableStore.getState>['config'];
@@ -1309,8 +1278,6 @@ function PromptColumnHeader({
         idx,
         isRedteam,
         showStats,
-        numAsserts,
-        numGoodAsserts,
         testCounts,
       })}
       {filterMode === 'failures' && headPromptCount > 1 && (
@@ -1501,7 +1468,7 @@ function renderResultsTableCell({
   lightboxImage: string | null;
   toggleLightbox: (url?: string) => void;
 }): React.ReactNode {
-  const columnId = String(cell.column.id);
+  const columnId = cell.column.id;
   const isMetadataCol = isMetadataColumn(columnId);
   const renderedCellContent = flexRender(cell.column.columnDef.cell, cell.getContext());
   const value = cell.getValue();
@@ -1657,7 +1624,7 @@ function ResultsTableHeader({
       data-testid="results-table-header"
       data-header-collapsed={collapsed}
       className={cn(
-        'relative -mx-4 overflow-hidden px-4',
+        'relative -mx-4 overflow-hidden border-t border-border',
         stickyHeader && 'results-table-sticky',
         stickyHeader && collapsed !== undefined && 'results-table-scroll-fallback',
         hasMinimalScrollRoom && 'minimal-scroll-room',
@@ -1668,7 +1635,7 @@ function ResultsTableHeader({
           type="button"
           onClick={() => setStickyHeader(false)}
           aria-label="Dismiss sticky header"
-          className="p-1.5 rounded hover:bg-muted hover:text-foreground transition-colors"
+          className="inline-flex size-7 cursor-pointer items-center justify-center rounded-md bg-muted text-muted-foreground transition-colors hover:bg-foreground/10 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           <X className="size-4" />
         </button>
@@ -1676,7 +1643,7 @@ function ResultsTableHeader({
       <div
         ref={headerScrollRef}
         data-testid="results-table-header-scroll-container"
-        className="overflow-x-auto overflow-y-hidden overscroll-x-contain"
+        className="overflow-x-auto overflow-y-hidden overscroll-x-contain px-4"
       >
         <table
           className={`results-table results-table-header-table firefox-fix ${
@@ -1751,7 +1718,8 @@ function ResultsTable({
     isFetching,
     filters,
   } = useTableStore();
-  const { inComparisonMode, comparisonEvalIds } = useResultsViewSettingsStore();
+  const { inComparisonMode, comparisonEvalIds, renderMarkdown, stickyHeader, setStickyHeader } =
+    useResultsViewSettingsStore();
   const { setFilterMode } = useFilterMode();
 
   const { showToast } = useToast();
@@ -2072,7 +2040,7 @@ function ResultsTable({
   // Create a stable reference for applied filters to avoid unnecessary re-renders
   const appliedFiltersString = React.useMemo(() => {
     const appliedFilters = Object.values(filters.values)
-      .filter(isAppliedResultFilter)
+      .filter(isFilterApplied)
       .sort((a, b) => a.sortIndex - b.sortIndex); // Sort by sortIndex for stability
     // Create a stable string representation of applied filters
     return JSON.stringify(
@@ -2161,13 +2129,7 @@ function ResultsTable({
       pageSize: pagination.pageSize,
       filterMode,
       searchText: debouncedSearchText,
-      // Only pass the filters that have been applied.
-      // For metadata filters with exists operator, only field is required.
-      // For other metadata operators, both field and value are required.
-      // For metric filters with is_defined operator, only field is required.
-      // For metric filters with comparison operators, both field and value are required.
-      // For non-metadata/non-metric filters, value is required.
-      filters: Object.values(filters.values).filter(isAppliedResultFilter),
+      filters: Object.values(filters.values).filter(isFilterApplied),
       skipSettingEvalId: true, // Don't change evalId when paginating or filtering
     });
   }, [
@@ -2182,32 +2144,11 @@ function ResultsTable({
     // Removed filters.appliedCount since appliedFiltersString covers it
   ]);
 
-  const testCounts = useTestCounts();
-  const passingTestCounts = usePassingTestCounts();
-  const passRates = usePassRates();
+  const { testCounts, passingTestCounts, passRates } = usePromptPassMetrics();
   const getMetrics = useMetricsGetter();
-
-  const numAsserts = React.useMemo(
-    () =>
-      head.prompts.map((_, idx) => {
-        const { total: metrics } = getMetrics(idx);
-        return (metrics?.assertFailCount ?? 0) + (metrics?.assertPassCount ?? 0);
-      }),
-    [head.prompts, getMetrics],
-  );
-
-  const numGoodAsserts = React.useMemo(
-    () =>
-      head.prompts.map((_, idx) => {
-        const { total: metrics } = getMetrics(idx);
-        return metrics?.assertPassCount || 0;
-      }),
-    [head.prompts, getMetrics],
-  );
 
   const columnHelper = React.useMemo(() => createColumnHelper<EvaluateTableRow>(), []);
 
-  const { renderMarkdown } = useResultsViewSettingsStore();
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   const variableColumns = React.useMemo(() => {
     if (head.vars.length > 0) {
@@ -2328,8 +2269,6 @@ function ResultsTable({
                 getMetrics={getMetrics}
                 showStats={showStats}
                 isRedteam={isRedteam}
-                numAsserts={numAsserts}
-                numGoodAsserts={numGoodAsserts}
                 testCounts={testCounts}
                 passingTestCounts={passingTestCounts}
                 config={config}
@@ -2399,8 +2338,6 @@ function ResultsTable({
     head.prompts,
     isRedteam,
     maxTextLength,
-    numAsserts,
-    numGoodAsserts,
     onFailureFilterToggle,
     debouncedSearchText,
     showStats,
@@ -2453,8 +2390,6 @@ function ResultsTable({
     onColumnSizingChange: setColumnSizing,
     enableColumnResizing: true,
   });
-
-  const { stickyHeader, setStickyHeader } = useResultsViewSettingsStore();
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional
   useEffect(() => {

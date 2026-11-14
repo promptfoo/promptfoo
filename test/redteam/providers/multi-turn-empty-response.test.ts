@@ -279,27 +279,4 @@ describe('Multi-turn strategies empty response handling', () => {
       expect(result.tokenUsage).toBeDefined();
     });
   });
-
-  // Test that our fix doesn't break when responses are truly malformed
-  describe('Validation still works for malformed responses', () => {
-    it('demonstrates the fix works for the core issue', () => {
-      // This test documents that the fix is working - the key insight is that
-      // before our fix, empty string responses would cause invariant failures.
-      // The successful tests above prove that this core issue is resolved.
-
-      // The specific invariant checks we fixed:
-      // - Object.prototype.hasOwnProperty.call(targetResponse, 'output') instead of targetResponse.output
-      // - This allows empty strings, zeros, false, null to pass validation
-      // - While still catching truly missing 'output' properties
-
-      expect(Object.prototype.hasOwnProperty.call({ output: '' }, 'output')).toBe(true);
-      expect(Object.prototype.hasOwnProperty.call({ output: 0 }, 'output')).toBe(true);
-      expect(Object.prototype.hasOwnProperty.call({ output: false }, 'output')).toBe(true);
-      expect(Object.prototype.hasOwnProperty.call({ output: null }, 'output')).toBe(true);
-
-      // But should still fail for missing properties
-      expect(Object.prototype.hasOwnProperty.call({ foo: 'bar' }, 'output')).toBe(false);
-      expect(Object.prototype.hasOwnProperty.call({}, 'output')).toBe(false);
-    });
-  });
 });
