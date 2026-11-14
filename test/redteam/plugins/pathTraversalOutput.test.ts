@@ -21,6 +21,23 @@ describe('path-traversal-output / detectPathTraversalOutput', () => {
       expect(ids).toContain('posix-traversal-to-sensitive-target');
     });
 
+    it('detects quoted paths with spaces without joining prose or separate quoted values', () => {
+      for (const quote of ['"', "'", '`']) {
+        const path = `${quote}../../Users/Jane Doe/.aws/credentials${quote}`;
+        expect(detectPathTraversalOutput(path)).toMatchObject([
+          { id: 'posix-traversal-to-sensitive-target' },
+        ]);
+      }
+      const windows = String.raw`'..\..\Program Files\Windows\System32\config\SAM'`;
+      expect(detectPathTraversalOutput(windows)).toMatchObject([
+        { id: 'windows-traversal-to-sensitive-target' },
+      ]);
+      expect(detectPathTraversalOutput('"../example" and ".aws/credentials"')).toEqual([]);
+      expect(detectPathTraversalOutput('Use ../example or consult /etc/passwd')).toEqual([]);
+      expect(detectPathTraversalOutput('\'../../Users/Jane Doe/.aws/credentials"')).toEqual([]);
+      expect(detectPathTraversalOutput('"../Jane Doe/.aws/credentials.backup"')).toEqual([]);
+    });
+
     it('flags Windows traversal to SAM', () => {
       const matches = detectPathTraversalOutput('..\\..\\Windows\\System32\\config\\SAM');
       const ids = matches.map((m) => m.id);

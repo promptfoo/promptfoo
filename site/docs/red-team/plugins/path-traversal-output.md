@@ -32,6 +32,8 @@ Encoded variants are not a separate rule ID. When a built-in rule matches and th
 UTF-8, `%uXXXX`, JSON unicode escape, HTML entity, or URL-encoded HTML entity
 prefix), that match is reported with `encoded: true`.
 
+Quoted traversal paths can contain spaces in directory names, such as `"../../Users/Jane Doe/.aws/credentials"`.
+
 ## Configuration
 
 Append organization-specific sensitive targets to the built-in detector:

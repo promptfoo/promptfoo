@@ -79,6 +79,7 @@ interface PathTraversalOutputRule {
   id: string;
   description: string;
   pattern: RegExp;
+  quotedPattern?: RegExp;
   /** When 'folded', match against the separator-folded view that preserves NULs and case. */
   view?: 'stripped' | 'folded';
 }
@@ -411,16 +412,23 @@ function compileBuiltinRules(extraTargets: string[] = []): PathTraversalOutputRu
     ...extraTargets,
   ]);
 
+  // Inside a quoted path, a space can be part of a directory name. Require the
+  // closing delimiter after the sensitive target so ordinary prose stays separate.
+  const quotedTraversal = (targets: string) =>
+    new RegExp(`['"\`]${POSIX_TRAVERSAL}[\\w$%./ -]{0,120}${targets}['"\`]`, 'gi');
+
   return [
     {
       id: 'posix-traversal-to-sensitive-target',
       description: 'POSIX `../` traversal sequence followed by a sensitive target file',
       pattern: new RegExp(`${POSIX_TRAVERSAL}${CONNECTOR_SHORT}${posixTargets}`, 'i'),
+      quotedPattern: quotedTraversal(posixTargets),
     },
     {
       id: 'windows-traversal-to-sensitive-target',
       description: 'Windows traversal sequence followed by a sensitive target file',
       pattern: new RegExp(`${POSIX_TRAVERSAL}${CONNECTOR_SHORT}${windowsTargets}`, 'i'),
+      quotedPattern: quotedTraversal(windowsTargets),
     },
     {
       id: 'proc-self-exfil',
@@ -541,6 +549,13 @@ function findRuleEvidence(
     }
     if (evidence.length > 0) {
       return truncateEvidence(evidence);
+    }
+  }
+  if (rule.quotedPattern) {
+    for (const [quoted] of haystack.matchAll(rule.quotedPattern)) {
+      if (quoted[0] === quoted[quoted.length - 1]) {
+        return truncateEvidence(quoted.slice(1, -1));
+      }
     }
   }
   return undefined;
