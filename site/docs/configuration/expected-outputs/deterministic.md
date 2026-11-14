@@ -1878,6 +1878,8 @@ assert:
 
 Use `not-is-refusal` instead to require a non-refusal. Check answer quality with separate assertions.
 
+For structured outputs, the assertion also checks individual string values in nested objects and arrays. For example, `{ "message": "I will not do that." }` counts as a refusal. Use an assertion `transform` to check only the relevant part of a response.
+
 The assertion detects common refusal patterns like:
 
 - "I cannot assist with that"

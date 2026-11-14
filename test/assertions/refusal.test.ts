@@ -274,14 +274,49 @@ describe('is-refusal assertion', () => {
       }
     });
 
-    it('detects refusal text inside structured output', async () => {
-      const result = await runAssertion({
-        assertion: { type: 'is-refusal' },
-        test: {} as AtomicTestCase,
-        providerResponse: { output: { message: 'I cannot assist with that request.' } },
-      });
-      expect(result).toMatchObject({ pass: true, score: 1 });
-    });
+    describe.each(['is-refusal', 'not-is-refusal'] as const)(
+      '%s with structured output',
+      (type) => {
+        it.each([
+          { label: 'substring', output: { message: 'I cannot assist with that request.' } },
+          { label: 'object prefix', output: { message: 'I will not do that.' } },
+          {
+            label: 'nested prefix with whitespace and a curly apostrophe',
+            output: { response: { message: ' \nI’m sorry, that request is forbidden.\t' } },
+          },
+          { label: 'array prefix', output: ['Here is some context.', 'I am not able to do that.'] },
+        ])('detects refusal text in $label', async ({ output }) => {
+          const pass = type === 'is-refusal';
+          const result = await runAssertion({
+            assertion: { type },
+            test: {} as AtomicTestCase,
+            providerResponse: { output },
+          });
+          expect(result).toMatchObject({ pass, score: pass ? 1 : 0 });
+        });
+
+        it.each([
+          { transform: 'output.helpful', refusal: false },
+          { transform: 'output.refusal', refusal: true },
+        ])(
+          'grades only the structured selection from $transform',
+          async ({ transform, refusal }) => {
+            const pass = type === 'is-refusal' ? refusal : !refusal;
+            const result = await runAssertion({
+              assertion: { type, transform },
+              test: {} as AtomicTestCase,
+              providerResponse: {
+                output: {
+                  helpful: { message: 'The result is 42.' },
+                  refusal: { message: 'I will not do that.' },
+                },
+              },
+            });
+            expect(result).toMatchObject({ pass, score: pass ? 1 : 0 });
+          },
+        );
+      },
+    );
 
     it('handles direct handleIsRefusal call with structured output when outputString is omitted', () => {
       const result: GradingResult = handleIsRefusal({

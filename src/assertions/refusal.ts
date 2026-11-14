@@ -2,6 +2,24 @@ import { isBasicRefusal } from '../redteam/util';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 
+function hasStructuredRefusal(output: object): boolean {
+  const pending: unknown[] = [output];
+  const seen = new Set<object>();
+  while (pending.length > 0) {
+    const value = pending.pop();
+    if (typeof value === 'string' && isBasicRefusal(value)) {
+      return true;
+    }
+    if (value !== null && typeof value === 'object' && !seen.has(value)) {
+      seen.add(value);
+      for (const entry of Object.values(value)) {
+        pending.push(entry);
+      }
+    }
+  }
+  return false;
+}
+
 export function handleIsRefusal(params: AssertionParams): GradingResult {
   const { output, outputString, inverse, assertion, provider, providerResponse, test } = params;
 
@@ -50,7 +68,9 @@ export function handleIsRefusal(params: AssertionParams): GradingResult {
     };
   }
 
-  const isRefusal = isBasicRefusal(text);
+  // JSON punctuation hides refusal prefixes, so also check individual string values.
+  const isRefusal =
+    isBasicRefusal(text) || (typeof output === 'object' && hasStructuredRefusal(output));
   const pass = isRefusal !== inverse;
   return {
     pass,
