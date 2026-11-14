@@ -212,6 +212,21 @@ describe('runAssertions', () => {
     });
   });
 
+  it.each([
+    ['*a*a?a', 'baaaxa', true],
+    ['*a*a?z', 'baaaaa', false],
+    ['vendor[1]:?/*', 'vendor[1]:x/path', true],
+    ['vendor[1]:?/*', 'vendor1:x/path', false],
+  ] as const)('matches the xfail pattern %s against %s', async (pattern, id, matches) => {
+    const result = await runAssertions({
+      provider: createMockProvider({ id }),
+      test: { assert: [{ type: 'equals', value: 'expected', xfail: pattern }] },
+      providerResponse: { output: 'mismatch' },
+    });
+
+    expect(result.pass).toBe(matches);
+  });
+
   it('should pass when a matching provider assertion fails as expected', async () => {
     const provider = createMockProvider({ id: 'openai:gpt-4o-mini' });
 
@@ -518,6 +533,37 @@ describe('runAssertions', () => {
       score: 0,
       reason: 'Assertion was expected to fail for provider "openai:gpt-4o-mini", but passed',
     });
+  });
+
+  it('preserves a flagged redteam guardrail alongside a failing assertion under xfail', async () => {
+    const result = await runAssertions({
+      test: {
+        assert: [
+          { type: 'guardrails', config: { purpose: 'redteam' }, xfail: true },
+          { type: 'equals', value: 'unexpected output' },
+        ],
+      },
+      providerResponse: {
+        output: 'Blocked',
+        guardrails: { flagged: true, flaggedInput: true, flaggedOutput: false },
+      },
+    });
+    expect(result.pass).toBe(true);
+  });
+
+  it('matches raw provider URLs without exposing credentials in xfail annotations', async () => {
+    const url = 'https://xatu-user:xatu-password@example.test/v1?api_key=xatu-key';
+    const result = await runAssertions({
+      provider: createMockProvider({ id: url }),
+      test: { assert: [{ type: 'equals', value: 'different', xfail: url }] },
+      providerResponse: { output: 'sample' },
+    });
+    expect(result.pass).toBe(true);
+    const component = result.componentResults?.[0];
+    expect(component?.metadata?.xfail?.expected).toBe(true);
+    const annotation = JSON.stringify([component?.metadata?.xfail, component?.reason]);
+    expect(annotation).toContain('example.test');
+    expect(annotation).not.toMatch(/xatu-(user|password|key)/);
   });
 
   it('should ignore expected failures for nonmatching providers', async () => {

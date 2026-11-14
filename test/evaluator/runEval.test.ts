@@ -289,7 +289,10 @@ describe('runEval', () => {
       prompt: { raw: 'Test prompt', label: 'test-label' },
       test: {
         provider: overrideProvider,
-        assert: [{ type: 'equals', value: 'Different output', xfail: 'override-provider' }],
+        assert: [
+          { type: 'equals', value: 'Different output', xfail: 'override-provider' },
+          { type: 'javascript', value: (_output, context) => context.provider === mockProvider },
+        ],
       },
       conversations: {},
       registers: {},

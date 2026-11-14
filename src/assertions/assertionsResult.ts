@@ -49,15 +49,29 @@ function mergeMetadata(
   };
 }
 
-function isUnexpectedXFailPass(result: GradingResult): boolean {
-  return result.metadata?.xfail?.expected === true && result.metadata.xfail.originalPass === true;
-}
-
 function getUnexpectedXFailPassReason(result: GradingResult): string | undefined {
-  if (isUnexpectedXFailPass(result)) {
-    return result.reason;
+  const pending = [result];
+  const visited = new Set<GradingResult>();
+  while (pending.length > 0) {
+    const current = pending.pop()!;
+    if (visited.has(current)) {
+      continue;
+    }
+    visited.add(current);
+    if (
+      !current.pass &&
+      current.assertion?.xfail &&
+      current.metadata?.xfail?.expected === true &&
+      current.metadata.xfail.originalPass === true
+    ) {
+      return current.reason;
+    }
+    const children = current.componentResults ?? [];
+    for (let index = children.length - 1; index >= 0; index--) {
+      pending.push(children[index]);
+    }
   }
-  return result.componentResults?.map(getUnexpectedXFailPassReason).find(Boolean);
+  return undefined;
 }
 
 function normalizeAssertionTokenUsage(result: GradingResult) {
@@ -279,7 +293,10 @@ export class AssertionsResult {
     const isRedteamGuardrail =
       result.assertion?.type === 'guardrails' && result.assertion?.config?.purpose === 'redteam';
 
-    if (isRedteamGuardrail && !result.pass) {
+    const guardrailPass = result.assertion?.xfail
+      ? (result.metadata?.xfail?.originalPass ?? result.pass)
+      : result.pass;
+    if (isRedteamGuardrail && !guardrailPass) {
       this.failedContentSafetyChecks = true;
     }
     const unexpectedXFailPassReason = getUnexpectedXFailPassReason(result);

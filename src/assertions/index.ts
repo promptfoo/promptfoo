@@ -37,8 +37,10 @@ import {
   type TraceData,
   type VarValue,
 } from '../types/index';
+import { isApiProvider } from '../types/providers';
 import { isJavascriptFile } from '../util/fileExtensions';
 import invariant from '../util/invariant';
+import { sanitizeUrlForLogging } from '../util/sanitizer';
 import { getNunjucksEngine } from '../util/templates';
 import { sleep } from '../util/time';
 import { transform } from '../util/transform';
@@ -374,12 +376,15 @@ function getProviderIdentifiers(provider?: ApiProvider): string[] {
   return Array.from(identifiers);
 }
 
-function getProviderDisplayName(provider?: ApiProvider): string {
-  return getProviderIdentifiers(provider)[0] ?? 'unknown provider';
+function redactXFailIdentifier(identifier: string): string {
+  if (identifier.startsWith('/')) {
+    return sanitizeUrlForLogging(identifier);
+  }
+  return identifier.replace(/[a-z][a-z0-9+.-]*:\/\/[^\s]+/gi, (url) => sanitizeUrlForLogging(url));
 }
 
-function escapeRegExp(value: string): string {
-  return value.replace(/[\\^$.*+?()[\]{}|]/g, '\\$&');
+function getProviderDisplayName(provider?: ApiProvider): string {
+  return redactXFailIdentifier(getProviderIdentifiers(provider)[0] ?? 'unknown provider');
 }
 
 function providerIdentifierMatches(pattern: string, identifier: string): boolean {
@@ -387,14 +392,31 @@ function providerIdentifierMatches(pattern: string, identifier: string): boolean
     return true;
   }
 
-  if (!pattern.includes('*') && !pattern.includes('?')) {
-    return false;
+  // Only the most recent star needs to expand. Trying combinations of earlier
+  // stars makes a near miss exponentially expensive for a regular expression.
+  let patternIndex = 0;
+  let identifierIndex = 0;
+  let lastStar = -1;
+  let starEnd = 0;
+  while (identifierIndex < identifier.length) {
+    const token = pattern[patternIndex];
+    if (token === '*') {
+      lastStar = patternIndex++;
+      starEnd = identifierIndex;
+    } else if (token === '?' || token === identifier[identifierIndex]) {
+      patternIndex++;
+      identifierIndex++;
+    } else if (lastStar === -1) {
+      return false;
+    } else {
+      patternIndex = lastStar + 1;
+      identifierIndex = ++starEnd;
+    }
   }
-
-  const wildcardRegex = new RegExp(
-    `^${escapeRegExp(pattern).replace(/\\\*/g, '.*').replace(/\\\?/g, '.')}$`,
-  );
-  return wildcardRegex.test(identifier);
+  while (pattern[patternIndex] === '*') {
+    patternIndex++;
+  }
+  return patternIndex === pattern.length;
 }
 
 function getXFailProviderPatterns(assertion: Assertion): string[] | undefined {
@@ -441,7 +463,13 @@ function getProviderXFailMatch(
       identifiers.some((identifier) => providerIdentifierMatches(pattern, identifier)),
   );
 
-  return pattern ? { provider: getProviderDisplayName(provider), pattern, reason } : undefined;
+  return pattern
+    ? {
+        provider: getProviderDisplayName(provider),
+        pattern: redactXFailIdentifier(pattern),
+        reason,
+      }
+    : undefined;
 }
 
 function applyProviderXFail(
@@ -596,7 +624,8 @@ async function runAssertionInternal({
   traceData?: TraceData | null;
   claimStoredGradingUsage?: () => boolean;
 }): Promise<GradingResult> {
-  const applyXFail = (result: GradingResult) => applyProviderXFail(assertion, result, provider);
+  const applyXFail = (result: GradingResult) =>
+    applyProviderXFail(assertion, result, isApiProvider(test.provider) ? test.provider : provider);
 
   // Use resolved vars if provided, otherwise fall back to test.vars
   const resolvedVars = vars || test.vars || {};

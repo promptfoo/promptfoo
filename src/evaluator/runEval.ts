@@ -1131,8 +1131,6 @@ async function gradeRunEvalResponse({
     providerTransformedOutput,
   };
 
-  const assertionProvider = isApiProvider(test.provider) ? test.provider : provider;
-
   if (deferGrading) {
     invariant(providerCallQueue, 'providerCallQueue is required when deferGrading is enabled');
     ret.response = processedResponse;
@@ -1141,7 +1139,7 @@ async function gradeRunEvalResponse({
       () =>
         runAssertions({
           prompt: renderedPrompt,
-          provider: assertionProvider,
+          provider,
           providerResponse: assertionProviderResponse,
           test,
           vars,
@@ -1162,7 +1160,7 @@ async function gradeRunEvalResponse({
       () =>
         runAssertions({
           prompt: renderedPrompt,
-          provider: assertionProvider,
+          provider,
           providerResponse: assertionProviderResponse,
           test,
           vars,
