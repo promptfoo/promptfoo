@@ -1,6 +1,7 @@
 import { execFile } from 'child_process';
 import crypto from 'crypto';
 import fs from 'fs';
+import path from 'path';
 
 import { getCache, isCacheEnabled } from '../cache';
 import { getProcessEnv } from '../envars';
@@ -15,25 +16,71 @@ import type {
   ProviderResponse,
 } from '../types/index';
 
+/** Bump when `parseScriptParts` changes the argv it produces, so output cached for the old argv is not reused. */
+export const EXEC_CACHE_VERSION = 'argv-v2';
+
 const ANSI_ESCAPE = /\x1b(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g;
 
 export function stripText(text: string) {
   return text.replace(ANSI_ESCAPE, '');
 }
 
+/**
+ * Splits a command line into arguments, shell-style but without running a shell:
+ * - whitespace outside quotes separates arguments
+ * - `'...'` and `"..."` group text; adjacent segments join (`--a="b c"` -> `--a=b c`)
+ * - empty quotes are kept as empty arguments
+ * - backslashes are always literal (Windows paths like `"C:\dir\"` work), so a quote
+ *   can't be escaped: use the other quote style (`'say "hi"'`)
+ * - a quote with no closing match is kept as a literal character
+ */
 export function parseScriptParts(scriptPath: string): string[] {
-  const scriptPartsRegex = /[^\s"']+|"([^"]*)"|'([^']*)'/g;
-  let match;
-  const scriptParts = [];
+  const parts: string[] = [];
+  let current = '';
+  let inToken = false;
 
-  while ((match = scriptPartsRegex.exec(scriptPath)) !== null) {
-    scriptParts.push(match[1] || match[2] || match[0]);
+  for (let i = 0; i < scriptPath.length; i++) {
+    const char = scriptPath[i];
+    if (char === '"' || char === "'") {
+      const end = scriptPath.indexOf(char, i + 1);
+      if (end !== -1) {
+        current += scriptPath.slice(i + 1, end);
+        inToken = true;
+        i = end;
+        continue;
+      }
+    } else if (/\s/.test(char)) {
+      if (inToken) {
+        parts.push(current);
+        current = '';
+        inToken = false;
+      }
+      continue;
+    }
+    current += char;
+    inToken = true;
   }
 
-  return scriptParts;
+  if (inToken) {
+    parts.push(current);
+  }
+  return parts;
 }
 
-export function getFileHashes(scriptParts: string[]): string[] {
+export function getFileHashes(scriptParts: string[], cwd = process.cwd()): string[] {
+  // An attached option may refer to a changing file, including credentials.
+  // Skip caching these commands without reading the attached file.
+  for (const part of scriptParts) {
+    const equals = part.indexOf('=');
+    if (
+      equals > 0 &&
+      equals < part.length - 1 &&
+      fs.existsSync(path.resolve(cwd, part.slice(equals + 1)))
+    ) {
+      return [];
+    }
+  }
+
   const fileHashes: string[] = [];
 
   for (const part of scriptParts) {
@@ -61,16 +108,18 @@ export class ScriptCompletionProvider implements ApiProvider {
 
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     const scriptParts = parseScriptParts(this.scriptPath);
-    const fileHashes = getFileHashes(scriptParts);
+    // Provider env overrides can carry credentials. The child sees them through
+    // options, so removing them from a shared cache key could replay another result.
+    const cacheable = isCacheEnabled() && Object.keys(this.options?.env ?? {}).length === 0;
+    const fileHashes = cacheable ? getFileHashes(scriptParts, this.options?.config.basePath) : [];
 
-    if (fileHashes.length === 0) {
-      logger.warn(`Could not find any valid files in the command: ${this.scriptPath}`);
-    }
-
-    const cacheKey = `exec:${this.scriptPath}:${fileHashes.join(':')}:${prompt}:${JSON.stringify(this.options)}`;
+    const cacheKey =
+      fileHashes.length > 0
+        ? `exec:${EXEC_CACHE_VERSION}:${this.scriptPath}:${fileHashes.join(':')}:${prompt}:${JSON.stringify(this.options)}`
+        : undefined;
 
     let cachedResult;
-    if (fileHashes.length > 0 && isCacheEnabled()) {
+    if (cacheKey && isCacheEnabled()) {
       const cache = await getCache();
       cachedResult = await cache.get(cacheKey);
 
@@ -78,10 +127,6 @@ export class ScriptCompletionProvider implements ApiProvider {
         logger.debug(`Returning cached result for script ${this.scriptPath}: ${cachedResult}`);
         return { ...JSON.parse(cachedResult as string), cached: true };
       }
-    } else if (fileHashes.length === 0 && isCacheEnabled()) {
-      logger.warn(
-        `Could not hash any files for command ${this.scriptPath}, caching will not be used`,
-      );
     }
 
     return new Promise<ProviderResponse>((resolve, reject) => {
@@ -120,7 +165,7 @@ export class ScriptCompletionProvider implements ApiProvider {
         }
         logger.debug(`Output from script ${this.scriptPath}: ${standardOutput}`);
         const result = { output: standardOutput };
-        if (fileHashes.length > 0 && isCacheEnabled()) {
+        if (cacheKey && isCacheEnabled()) {
           const cache = await getCache();
           await cache.set(cacheKey, JSON.stringify(result));
         }
