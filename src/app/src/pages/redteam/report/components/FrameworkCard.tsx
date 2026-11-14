@@ -7,11 +7,7 @@ import { cn } from '@app/lib/utils';
 import { calculateAttackSuccessRate } from '@promptfoo/presentation/redteamMetrics';
 import {
   ALIASED_PLUGIN_MAPPINGS,
-  DOD_AI_ETHICS_PRINCIPLE_NAMES,
   FRAMEWORK_NAMES,
-  OWASP_API_TOP_10_NAMES,
-  OWASP_LLM_TOP_10_2026_NAMES,
-  OWASP_LLM_TOP_10_NAMES,
   riskCategorySeverityMap,
   Severity,
   severityDisplayNames,
@@ -21,8 +17,10 @@ import { compareByASRDescending } from '../utils/utils';
 import {
   type CategoryStats,
   categorizePlugins,
+  categoryNamesByFramework,
   expandPluginCollections,
   FRAMEWORK_DESCRIPTIONS,
+  getFrameworkCategoryLabel,
 } from './FrameworkComplianceUtils';
 import FrameworkPluginResult from './FrameworkPluginResult';
 
@@ -63,13 +61,6 @@ const severitySortOrder: Record<Severity, number> = {
   [Severity.Informational]: 4,
 };
 
-const categoryNamesByFramework: Partial<Record<string, string[]>> = {
-  'owasp:llm': OWASP_LLM_TOP_10_NAMES,
-  'owasp:llm:2026': OWASP_LLM_TOP_10_2026_NAMES,
-  'owasp:api': OWASP_API_TOP_10_NAMES,
-  'dod:ai:ethics': DOD_AI_ETHICS_PRINCIPLE_NAMES,
-};
-
 const getPluginSeverity = (plugin: string): Severity => {
   return riskCategorySeverityMap[plugin as keyof typeof riskCategorySeverityMap] || Severity.Low;
 };
@@ -78,17 +69,6 @@ const sortPluginsBySeverity = (plugins: string[]): string[] => {
   return [...plugins].sort((a, b) => {
     return severitySortOrder[getPluginSeverity(a)] - severitySortOrder[getPluginSeverity(b)];
   });
-};
-
-const getCategoryDisplay = (
-  framework: string,
-  categoryId: string,
-): { categoryNumber: string; categoryName: string } => {
-  const categoryNumber = categoryId.split(':').pop() ?? categoryId;
-  const categoryNameList = categoryNamesByFramework[framework];
-  const categoryIndex = Number.parseInt(categoryNumber, 10) - 1;
-  const categoryName = categoryNameList?.[categoryIndex] ?? `Category ${categoryNumber}`;
-  return { categoryNumber, categoryName };
 };
 
 type CategoryBadgeVariant = 'success' | 'secondary' | 'destructive';
@@ -264,19 +244,13 @@ const FrameworkCard = ({
         </div>
         {/* Always expanded */}
         <div className="mt-4">
-          {(framework === 'owasp:api' ||
-            framework === 'owasp:llm' ||
-            framework === 'owasp:llm:2026' ||
-            framework === 'dod:ai:ethics') &&
+          {categoryNamesByFramework[framework] &&
           Object.keys(ALIASED_PLUGIN_MAPPINGS[framework]).length > 0 ? (
             // Show categorized plugins for frameworks with named categories
             <div className="space-y-4">
               {Object.entries(ALIASED_PLUGIN_MAPPINGS[framework]).map(
                 ([categoryId, { plugins: categoryPlugins }]) => {
-                  const { categoryNumber, categoryName } = getCategoryDisplay(
-                    framework,
-                    categoryId,
-                  );
+                  const categoryLabel = getFrameworkCategoryLabel(framework, categoryId);
 
                   const expandedPlugins = expandPluginCollections(categoryPlugins, categoryStats);
                   const {
@@ -308,9 +282,7 @@ const FrameworkCard = ({
                           showHeaderBorder && 'border-b border-border',
                         )}
                       >
-                        <span className="text-sm font-medium">
-                          {categoryNumber}. {categoryName}
-                        </span>
+                        <span className="text-sm font-medium">{categoryLabel}</span>
                         <Badge
                           variant={categoryBadge.variant}
                           className="h-5 whitespace-nowrap text-[0.7rem]"
