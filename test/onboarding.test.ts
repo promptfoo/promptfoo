@@ -168,8 +168,7 @@ const GOOGLE_ONBOARDING_MODELS = [
   { id: 'vertex:gemini-3.7-flash', config: { region: 'global' } },
   { id: 'vertex:gemini-3.6-flash', config: { region: 'global' } },
   { id: 'vertex:gemini-3.5-flash-lite', config: { region: 'global' } },
-  'vertex:gemini-3.1-pro-preview',
-  'vertex:gemini-2.5-pro',
+  { id: 'vertex:gemini-3.1-pro-preview', config: { region: 'global' } },
 ];
 
 describe('createDummyFiles', () => {
