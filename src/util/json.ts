@@ -613,19 +613,25 @@ export function selectVerdictObject<T extends object>(
     .map((entry) => entry.object as Record<string, unknown>)
     .filter((obj) => isVerdictShaped(obj, verdictKeys));
   if (completeVerdicts.length >= 2) {
+    let hasSharedDecision = false;
     for (const key of verdictKeys) {
       const values = new Set<string>();
+      let seen = 0;
       for (const obj of completeVerdicts) {
-        if (key in obj) {
-          const normalized = normalizeVerdictValue(obj[key]);
-          if (normalized !== undefined) {
-            values.add(normalized);
-          }
+        const normalized = normalizeVerdictValue(obj[key]);
+        if (normalized !== undefined) {
+          values.add(normalized);
+          seen++;
         }
       }
       if (values.size > 1) {
-        return undefined; // conflicting verdicts: ambiguous, fail closed
+        return undefined;
       }
+      hasSharedDecision ||= seen === completeVerdicts.length;
+    }
+    // Without a decision field in common, the candidates cannot corroborate each other.
+    if (!hasSharedDecision) {
+      return undefined;
     }
   }
 

@@ -125,11 +125,10 @@ export async function matchesSearchRubric(
       // the model-under-test and echoed by the judge). Fail closed rather than
       // falling back to substring matching, which would trust that text.
       return {
-        pass: false,
-        score: 0,
-        reason:
+        ...graderFail(
           'Search rubric evaluation failed: ambiguous verdict (conflicting JSON objects) in provider response',
-        tokensUsed: resp.tokenUsage,
+          resp.tokenUsage,
+        ),
         assertion,
       };
     }
