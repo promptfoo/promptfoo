@@ -10,7 +10,6 @@ import {
 import EvalResult from '../../src/models/evalResult';
 import { deleteAllEvals, deleteEval, deleteEvals } from '../../src/util/database';
 import { createEvaluateResult } from '../factories/eval';
-import { ResultFailureReason } from '../../src/types/index';
 import { clearEvalTables } from '../util/evalDb';
 
 const createSingleResultConfig = () => ({
