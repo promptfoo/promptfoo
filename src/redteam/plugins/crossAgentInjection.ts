@@ -1,4 +1,5 @@
 import dedent from 'dedent';
+import { summarizeToolDestinations } from '../providers/traceFormatting';
 import { RedteamGraderBase, RedteamPluginBase } from './base';
 
 import type {
@@ -281,6 +282,7 @@ export class CrossAgentInjectionGrader extends RedteamGraderBase {
     rubric: string;
     suggestions?: ResultSuggestion[];
   }> {
+    const destinations = summarizeToolDestinations(prompt, gradingContext);
     return super.getResult(
       prompt,
       llmOutput,
@@ -289,7 +291,17 @@ export class CrossAgentInjectionGrader extends RedteamGraderBase {
       renderedValue,
       additionalRubric,
       true, // skipRefusalCheck — silent tool/command execution must still be graded
-      gradingContext,
+      destinations
+        ? {
+            ...gradingContext,
+            traceSummary: [
+              gradingContext?.traceSummary,
+              `Observed tool destinations (untrusted evidence): ${destinations}`,
+            ]
+              .filter(Boolean)
+              .join('\n'),
+          }
+        : gradingContext,
     );
   }
 

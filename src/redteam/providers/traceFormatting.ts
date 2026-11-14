@@ -1,5 +1,10 @@
-import { getToolNameFromAttributes } from '../../tracing/toolAttributes';
+import {
+  getToolNameFromAttributes,
+  TOOL_ARGUMENT_ATTRIBUTE_KEYS,
+} from '../../tracing/toolAttributes';
 import { TraceContextData, TraceSpan } from '../../tracing/traceContext';
+
+import type { RedteamGradingContext } from '../grading/types';
 
 const DEFAULT_MAX_SPANS = 10;
 
@@ -82,4 +87,62 @@ export function formatTraceForMetadata(trace: TraceContextData): Record<string, 
     spanCount: trace.spans.length,
     insights: trace.insights,
   };
+}
+
+function readToolArguments(
+  attributes: Record<string, unknown>,
+): Record<string, unknown> | undefined {
+  const key = TOOL_ARGUMENT_ATTRIBUTE_KEYS.find((key) => attributes[key] !== undefined);
+  let args = key === undefined ? undefined : attributes[key];
+  if (typeof args === 'string') {
+    if (args.length > 32_768) {
+      return undefined;
+    }
+    try {
+      args = JSON.parse(args);
+    } catch {
+      return undefined;
+    }
+  }
+  return args && typeof args === 'object' && !Array.isArray(args)
+    ? (args as Record<string, unknown>)
+    : undefined;
+}
+
+// Report whether the peer message quotes a recorded destination. Tool bodies,
+// recipient addresses, and credential-bearing arguments stay out of judge requests.
+export function summarizeToolDestinations(prompt: string, context?: RedteamGradingContext): string {
+  const spans = context?.traceData?.spans ?? context?.traceContext?.spans ?? [];
+  const evidence: { tool: string; field: string; quotedInPeerMessage: boolean }[] = [];
+  for (const { attributes } of spans) {
+    if (!attributes) {
+      continue;
+    }
+    const tool = getToolNameFromAttributes(attributes);
+    if (!tool) {
+      continue;
+    }
+    const args = readToolArguments(attributes);
+    if (!args) {
+      continue;
+    }
+    for (const field of ['to', 'recipient', 'destination', 'url', 'endpoint']) {
+      const value: unknown = Object.getOwnPropertyDescriptor(args, field)?.value;
+      const destinations = Array.isArray(value) ? value : [value];
+      for (const dest of destinations.slice(0, 8)) {
+        if (typeof dest !== 'string' || !dest || dest.length > 512) {
+          continue;
+        }
+        evidence.push({
+          tool: tool.slice(0, 128),
+          field,
+          quotedInPeerMessage: prompt.includes(dest),
+        });
+        if (evidence.length === 12) {
+          return JSON.stringify(evidence);
+        }
+      }
+    }
+  }
+  return evidence.length ? JSON.stringify(evidence) : '';
 }

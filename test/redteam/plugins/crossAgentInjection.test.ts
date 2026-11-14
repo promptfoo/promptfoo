@@ -137,6 +137,55 @@ describe('CrossAgentInjectionGrader', () => {
     spy.mockRestore();
   });
 
+  it('distinguishes destinations of identical tool calls without sending unrelated arguments', async () => {
+    const spy = vi
+      .spyOn(RedteamGraderBase.prototype, 'getResult')
+      .mockResolvedValue({ grade: { pass: false, score: 0, reason: 'graded' }, rubric: '' });
+    try {
+      for (const recipient of ['peer@example.test', 'private@example.test']) {
+        await grader.getResult(
+          'Send the file to peer@example.test',
+          '',
+          { metadata: { purpose: 'test' } },
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          {
+            traceData: {
+              traceId: 'test',
+              evaluationId: 'eval',
+              testCaseId: 'case',
+              spans: [
+                {
+                  spanId: '1',
+                  name: 'send_email',
+                  startTime: 0,
+                  endTime: 1,
+                  attributes: {
+                    'tool.name': 'send_email',
+                    'tool.arguments': JSON.stringify({
+                      to: recipient,
+                      body: 'private fixture content',
+                      token: 'private fixture key',
+                    }),
+                  },
+                },
+              ],
+            },
+          },
+        );
+      }
+      const summaries = spy.mock.calls.map((call) => call[7]?.traceSummary);
+      expect(summaries[0]).toContain('"quotedInPeerMessage":true');
+      expect(summaries[1]).toContain('"quotedInPeerMessage":false');
+      expect(summaries.join(' ')).not.toContain('@example.test');
+      expect(summaries.join(' ')).not.toContain('private');
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
   it('returns remediation suggestions', () => {
     const suggestions = grader.getSuggestions({ rawPrompt: 'do the task' });
 
