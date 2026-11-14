@@ -79,9 +79,7 @@ export function shouldRetry(
       message.startsWith('websocket request timed out after ') ||
       message.includes('econnrefused') ||
       message.includes('network') ||
-      message.includes('503') ||
-      message.includes('502') ||
-      message.includes('504')
+      /(?:^|\D)(?:502|503|504)(?:\D|$)/.test(message)
     );
   }
 
