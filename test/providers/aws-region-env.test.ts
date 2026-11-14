@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
+import { AwsBedrockAgentsProvider } from '../../src/providers/bedrock/agents';
 import { resolveBedrockMantleRegion } from '../../src/providers/bedrock/mantle';
 import { SageMakerCompletionProvider } from '../../src/providers/sagemaker';
 import { mockProcessEnv } from '../util/utils';
@@ -21,6 +22,15 @@ afterEach(() => {
 });
 
 const selectors = [
+  {
+    name: 'Bedrock Agent Runtime',
+    primary: 'AWS_BEDROCK_REGION',
+    read: (env?: EnvOverrides, region?: string) =>
+      new AwsBedrockAgentsProvider('fixture', {
+        config: { agentId: 'fixture', agentAliasId: 'alias', region },
+        env,
+      }).getRegion(),
+  },
   {
     name: 'Mantle',
     primary: 'AWS_BEDROCK_REGION',
@@ -52,6 +62,11 @@ async function withLayer<T>(
 }
 
 describe.each(selectors)('$name region environment', ({ primary, read }) => {
+  it('uses AWS_REGION for GovCloud when the service-specific setting is absent', () => {
+    mockProcessEnv({ AWS_REGION: 'us-gov-east-1' });
+    expect(read()).toBe('us-gov-east-1');
+  });
+
   it.each(['provider', 'suite', 'file'])(
     'keeps empty %s values from reviving the same host alias',
     async (layer) => {

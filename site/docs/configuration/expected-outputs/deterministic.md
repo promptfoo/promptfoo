@@ -1011,6 +1011,8 @@ See [Javascript assertions](/docs/configuration/expected-outputs/javascript).
 
 The `latency` assertion fails if the LLM call takes longer than the specified threshold. Duration is specified in milliseconds.
 
+When the provider does not supply latency, Promptfoo measures elapsed provider-call time with a monotonic clock, so wall-clock adjustments do not affect it. Provider-reported latency is used unchanged.
+
 Example:
 
 ```yaml
@@ -1552,7 +1554,7 @@ For additional context, read about the metric on [Wikipedia](https://en.wikipedi
 METEOR requires the optional `natural` package. Install it before using METEOR assertions:
 
 ```bash
-npm install natural@^8.1.2
+npm install natural@^8.2.6
 ```
 
 If the package is not installed, METEOR assertions return a failed result (`pass: false`, `score: 0`) with installation instructions in the reason.
