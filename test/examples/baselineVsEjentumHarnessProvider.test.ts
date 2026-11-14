@@ -38,6 +38,7 @@ function mockResponse(body: unknown, ok = true, status = 200) {
     status,
     statusText: ok ? 'OK' : 'Error',
     headers: new Headers(),
+    body: { cancel: vi.fn().mockResolvedValue(undefined) },
     json: vi.fn().mockResolvedValue(body),
     text: vi.fn().mockResolvedValue(JSON.stringify(body)),
   };
@@ -97,25 +98,34 @@ describe('baseline-vs-ejentum-harness provider', () => {
     expect(mockUnderlying.callApi).not.toHaveBeenCalled();
   });
 
-  it('returns an error when Ejentum API returns non-OK status', async () => {
-    const response = mockResponse(
-      { message: 'Unauthorized', request: 'private fixture' },
-      false,
-      401,
-    );
-    fetchMock.mockResolvedValueOnce(response);
-    const mockUnderlying = { callApi: vi.fn() };
-    const provider = new EjentumAugmentedProvider({
-      config: { mode: 'reasoning' },
-      underlyingProvider: mockUnderlying,
-    });
-    const result = await provider.callApi('solve this');
-    expect(result).toEqual({
-      error: 'Ejentum API returned HTTP 401',
-    });
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(mockUnderlying.callApi).not.toHaveBeenCalled();
-  });
+  it.each([false, true])(
+    'releases an unread error body and preserves the status (cancel fails: %s)',
+    async (cancelFails) => {
+      const response = mockResponse(
+        { message: 'Unauthorized', request: 'private fixture' },
+        false,
+        401,
+      );
+      if (cancelFails) {
+        response.body.cancel.mockRejectedValueOnce(new Error('stream closed'));
+      }
+      fetchMock.mockResolvedValueOnce(response);
+      const mockUnderlying = { callApi: vi.fn() };
+      const provider = new EjentumAugmentedProvider({
+        config: { mode: 'reasoning' },
+        underlyingProvider: mockUnderlying,
+      });
+      const result = await provider.callApi('solve this');
+      expect(result).toEqual({
+        error: 'Ejentum API returned HTTP 401',
+      });
+      expect(response.body.cancel).toHaveBeenCalledOnce();
+      expect(response.json).not.toHaveBeenCalled();
+      expect(response.text).not.toHaveBeenCalled();
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(mockUnderlying.callApi).not.toHaveBeenCalled();
+    },
+  );
 
   it('returns an error when Ejentum fetch fails with network error', async () => {
     fetchMock.mockRejectedValueOnce(new Error('Connection timeout'));

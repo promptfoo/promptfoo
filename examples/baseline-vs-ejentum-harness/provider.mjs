@@ -77,6 +77,7 @@ async function fetchScaffold(url, key, prompt, mode, timeoutMs) {
 
     const response = await fetch(url, fetchOptions);
     if (!response.ok) {
+      await response.body?.cancel().catch(() => undefined);
       return {
         error: `Ejentum API returned HTTP ${response.status}`,
       };
