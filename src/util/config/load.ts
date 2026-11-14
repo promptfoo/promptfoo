@@ -583,10 +583,25 @@ function resolveSourceAssertions(assertions: AssertionOrSet[], basePath: string)
   });
 }
 
+function scopeTestAssertions<T extends Partial<TestCase>>(
+  row: T,
+  sourceBasePath: string,
+  suiteBasePath: string | undefined,
+): T {
+  // Deferred scripts run relative to the combined suite's first config.
+  // Keep local rows from other directories bound to their source.
+  return sourceBasePath !== suiteBasePath &&
+    Array.isArray(row?.assert) &&
+    row.metadata?.__promptfoo?.remote !== true
+    ? { ...row, assert: resolveSourceAssertions(row.assert, sourceBasePath) }
+    : row;
+}
+
 async function readTestSources(
   sources: TestSource[],
   env: TestSuite['env'],
   loadProviders = true,
+  suiteBasePath = sources[0]?.basePath,
 ): Promise<TestCase[]> {
   const read = loadProviders ? readTests : readTestConfigs;
   const tests: TestCase[] = [];
@@ -594,17 +609,7 @@ async function readTestSources(
     try {
       const rows = await read(source.tests, source.basePath, env);
       for (const row of rows) {
-        // Deferred scripts run relative to the combined suite's first config.
-        // Keep local rows from other directories bound to their source.
-        if (
-          source.basePath !== sources[0].basePath &&
-          Array.isArray(row.assert) &&
-          row.metadata?.__promptfoo?.remote !== true
-        ) {
-          tests.push({ ...row, assert: resolveSourceAssertions(row.assert, source.basePath) });
-        } else {
-          tests.push(row);
-        }
+        tests.push(scopeTestAssertions(row, source.basePath, suiteBasePath));
       }
     } catch (error) {
       throw new ConfigResolutionError(
@@ -638,6 +643,7 @@ async function prepareCombinedConfig(
     }
   }
 
+  const suiteBasePath = configSources[0]?.basePath;
   const configs = configSources.map(({ config }) => config);
   const combinedEnv = configs.reduce((env, config) => ({ ...env, ...config.env }), {});
   const providers: UnifiedConfig['providers'] = [];
@@ -774,7 +780,7 @@ async function prepareCombinedConfig(
         ...('config' in test && { config: resolveNestedFileReferences(basePath, test.config) }),
       };
     }
-    const source = test as TestCase;
+    const source = scopeTestAssertions(test as TestCase, basePath, suiteBasePath);
     // Keep grader IDs unchanged so references can reuse configured providers.
     return {
       ...source,
@@ -852,21 +858,33 @@ async function prepareCombinedConfig(
             )
           : source;
       for (const scenario of [loaded].flat()) {
-        scenarios.push(
-          typeof scenario === 'object' && scenario?.tests
-            ? {
-                ...scenario,
-                ...(Array.isArray(scenario.config) && {
-                  config: scenario.config.map((test: unknown) => makeTestAbsolute(basePath, test)),
-                }),
-                tests: [scenario.tests].flat().map((test) => makeTestAbsolute(basePath, test)),
-              }
-            : scenario,
-        );
+        if (typeof scenario !== 'object' || !scenario?.tests) {
+          scenarios.push(scenario);
+          continue;
+        }
+        const tests = [scenario.tests].flat().map((test) => makeTestAbsolute(basePath, test));
+        scenarios.push({
+          ...scenario,
+          ...(Array.isArray(scenario.config) && {
+            config: scenario.config.map((test: unknown) => makeTestAbsolute(basePath, test)),
+          }),
+          // Read later sources once while their owning directory can still resolve
+          // deferred scripts, including ambiguous named exports and literal glob characters.
+          tests:
+            basePath === suiteBasePath
+              ? tests
+              : await readTestSources(
+                  [{ tests: tests as TestSuiteConfig['tests'], basePath }],
+                  stringifyEnvValues(combinedEnv),
+                  false,
+                  suiteBasePath,
+                ),
+        });
       }
     }
   }
 
+  let defaultFileBasePath: string | undefined;
   // Combine all configs into a single UnifiedConfig
   const combinedConfig: UnifiedConfig = {
     tags: configs.reduce((prev, curr) => ({ ...prev, ...curr.tags }), {}),
@@ -880,6 +898,7 @@ async function prepareCombinedConfig(
       const { config: curr, basePath } = source;
       // The last file default wins; inline defaults only merge when no file was selected.
       if (typeof curr.defaultTest === 'string') {
+        defaultFileBasePath = basePath;
         return makeTestAbsolute(basePath, curr.defaultTest) as string;
       }
       // If prev is already a string (file reference), keep it
@@ -891,7 +910,10 @@ async function prepareCombinedConfig(
         return undefined;
       }
       // Otherwise merge objects
-      const currDefaultTest = typeof curr.defaultTest === 'object' ? curr.defaultTest : {};
+      const currDefaultTest =
+        typeof curr.defaultTest === 'object'
+          ? scopeTestAssertions(curr.defaultTest, basePath, suiteBasePath)
+          : {};
       const prevObj = typeof prev === 'object' ? prev : {};
       return {
         ...prevObj,
@@ -935,6 +957,22 @@ async function prepareCombinedConfig(
     })(),
     tracing: configs.find((config) => config.tracing)?.tracing,
   };
+
+  // Only load the winning file, after the default precedence rules above have run.
+  if (
+    defaultFileBasePath &&
+    defaultFileBasePath !== suiteBasePath &&
+    typeof combinedConfig.defaultTest === 'string' &&
+    combinedConfig.defaultTest.startsWith('file://')
+  ) {
+    const reference = combinedConfig.defaultTest;
+    const loaded = await cliState.withEnv(combinedEnv, () => maybeLoadFromExternalFile(reference));
+    combinedConfig.defaultTest = scopeTestAssertions(
+      loaded as Partial<TestCase>,
+      defaultFileBasePath,
+      suiteBasePath,
+    );
+  }
 
   return {
     config: combinedConfig,
