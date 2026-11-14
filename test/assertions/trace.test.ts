@@ -136,8 +136,11 @@ describe('trace assertions', () => {
     ],
   };
 
-  describe('deterministic assertions with span attribute filters', () => {
-    it.each<{ assertion: Assertion; pass: boolean }>([
+  describe.each(['', 'not-'] as const)('%strace assertions', (prefix) => {
+    type TraceAssertion = Assertion & {
+      type: 'trace-span-count' | 'trace-span-duration' | 'trace-error-spans';
+    };
+    it.each<{ assertion: TraceAssertion; pass: boolean }>([
       { assertion: { type: 'trace-span-count', value: { max: 2 } }, pass: true },
       { assertion: { type: 'trace-span-count', value: { min: 3 } }, pass: false },
       { assertion: { type: 'trace-span-duration', value: { max: 500 } }, pass: true },
@@ -176,7 +179,7 @@ describe('trace assertions', () => {
 
       const result = await runAssertion({
         assertion: {
-          ...assertion,
+          type: `${prefix}${assertion.type}`,
           value: {
             ...(assertion.value as object),
             pattern: 'execute_*',
@@ -188,13 +191,22 @@ describe('trace assertions', () => {
         traceId: 'test-trace-id',
       });
 
-      expect(result.pass).toBe(pass);
-      expect(result.score).toBe(pass ? 1 : 0);
+      const expected = prefix ? !pass : pass;
+      expect(result).toMatchObject({
+        assertion: { type: `${prefix}${assertion.type}` },
+        pass: expected,
+        score: Number(expected),
+      });
+      if (prefix) {
+        expect(result.reason).toContain(
+          `${prefix}${assertion.type} ${expected ? 'passed' : 'failed'}`,
+        );
+      }
       expect(result.reason).toContain('Attribute filters applied to keys: ["gen_ai.tool.name"]');
       expect(result.reason).not.toContain('search');
     });
 
-    it.each<{ assertion: Assertion; pass: boolean }>([
+    it.each<{ assertion: TraceAssertion; pass: boolean }>([
       { assertion: { type: 'trace-span-count', value: { min: 1 } }, pass: false },
       { assertion: { type: 'trace-span-duration', value: { max: 500 } }, pass: true },
       { assertion: { type: 'trace-error-spans', value: { max_count: 0 } }, pass: true },
@@ -202,7 +214,7 @@ describe('trace assertions', () => {
       mockTraceStore.getTrace.mockResolvedValue(mockTraceData);
       const result = await runAssertion({
         assertion: {
-          ...assertion,
+          type: `${prefix}${assertion.type}`,
           value: {
             ...(assertion.value as object),
             pattern: '*',
@@ -214,10 +226,62 @@ describe('trace assertions', () => {
         traceId: 'test-trace-id',
       });
 
-      expect(result.pass).toBe(pass);
+      const expected = prefix ? !pass : pass;
+      expect(result).toMatchObject({ pass: expected, score: Number(expected) });
       expect(result.reason).toContain('Attribute filters applied to keys: ["gen_ai.tool.name"]');
       expect(result.reason).not.toContain('private-tool-value');
     });
+
+    it.each<{ assertion: TraceAssertion; error: string }>([
+      {
+        assertion: { type: 'trace-span-count', value: { pattern: '*', min: 2, max: 1 } },
+        error: 'min must not exceed max',
+      },
+      {
+        assertion: { type: 'trace-span-count', value: { pattern: '*', min: '2' } },
+        error: 'min must be a finite non-negative number',
+      },
+      {
+        assertion: { type: 'trace-span-duration', value: { max: -1 } },
+        error: 'max must be a finite non-negative number',
+      },
+      {
+        assertion: { type: 'trace-error-spans', value: { max_percentage: -1 } },
+        error: 'max_percentage must be a number between 0 and 100',
+      },
+      {
+        assertion: { type: 'trace-error-spans', value: 'invalid' },
+        error: 'value must be a number or an object',
+      },
+    ])(
+      'rejects invalid constraints before grading an empty trace: $assertion',
+      async ({ assertion, error }) => {
+        await expect(
+          runAssertion({
+            assertion: { ...assertion, type: `${prefix}${assertion.type}` },
+            test: mockTest,
+            providerResponse: mockProviderResponse,
+            traceId: mockTraceData.traceId,
+            traceData: { ...mockTraceData, spans: [] },
+          }),
+        ).rejects.toThrow(error);
+      },
+    );
+
+    it.each(['trace-span-count', 'trace-span-duration', 'trace-error-spans'] as const)(
+      'requires trace data for %s',
+      async (type) => {
+        await expect(
+          runAssertion({
+            assertion: { type: `${prefix}${type}`, value: { pattern: '*', max: 1 } },
+            test: mockTest,
+            providerResponse: mockProviderResponse,
+            traceId: mockTraceData.traceId,
+            traceData: null,
+          }),
+        ).rejects.toThrow('No trace data available');
+      },
+    );
   });
 
   describe('javascript assertions with trace', () => {

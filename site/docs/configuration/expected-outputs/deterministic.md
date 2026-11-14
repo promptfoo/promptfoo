@@ -1186,7 +1186,7 @@ assert:
       max: 2000
 ```
 
-A span must match both `pattern` and every attribute. Attribute keys are literal, including dots; values use case-sensitive exact equality without glob matching or type conversion. Values must be strings, booleans, or finite numbers. Missing attributes do not match, while an empty object adds no restriction. Duration percentiles and error percentages use only the selected spans. If matching spans must exist, include a `trace-span-count` assertion with `min: 1`; duration and error assertions retain their existing behavior when no spans match.
+A span must match both `pattern` and every attribute. Attribute keys are literal, including dots; values use case-sensitive exact equality without glob matching or type conversion. Values must be strings, booleans, or finite numbers. Missing attributes do not match, while an empty object adds no restriction. Duration percentiles and error percentages use only the selected spans. If matching spans must exist, include a `trace-span-count` assertion with `min: 1`. With no matches, the count is zero. Duration and error assertions pass, so their negated forms fail. A missing trace produces an error for either form.
 
 ### Trace-Span-Duration
 
