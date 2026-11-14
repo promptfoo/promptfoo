@@ -658,7 +658,12 @@ async function runAssertionInternal({
 
   // Check for redteam assertions first
   if (assertionParams.baseType.startsWith('promptfoo:redteam:')) {
-    return handleRedteam(assertionParams, claimStoredGradingUsage);
+    // Zero-weight redteam assertions record their scores without failing the test,
+    // same as every other handler below.
+    return applyAssertionWeight(
+      await handleRedteam(assertionParams, claimStoredGradingUsage),
+      assertion.weight,
+    );
   }
 
   const handler = ASSERTION_HANDLERS[assertionParams.baseType as keyof typeof ASSERTION_HANDLERS];

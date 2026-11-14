@@ -163,6 +163,48 @@ describe('redteam strategy result grading', () => {
     expect(result.pass).toBe(true);
   });
 
+  it('applies the weight: 0 override to a failing stored redteam grade', async () => {
+    const recordedAssertion: Assertion = {
+      ...piiAssertion,
+      metric: 'PIILeak/recorded',
+      weight: 0,
+    };
+    const result = await runAssertions({
+      prompt: originalPrompt,
+      test: { ...test, assert: [recordedAssertion] },
+      providerResponse: {
+        output,
+        metadata: {
+          redteamFinalPrompt: attackPrompt,
+          storedGraderResult: {
+            pass: false,
+            score: 0,
+            reason: storedResult.reason,
+            assertion: { ...recordedAssertion, value: 'Stored rubric' },
+            metadata: {
+              redteamGradingAssertionHash: getGradingAssertionHash(recordedAssertion),
+              redteamGradingInputHash: getGradingInputHash(
+                attackPrompt,
+                output,
+                undefined,
+                'pii:social',
+              ),
+            },
+          },
+        },
+      },
+    });
+
+    expect(result.pass).toBe(true);
+    expect(result.componentResults?.[0]).toMatchObject({
+      pass: true,
+      score: 0,
+      reason: storedResult.reason,
+    });
+    // The recorded metric keeps its measured value instead of being dropped.
+    expect(result.namedScores?.['PIILeak/recorded']).toBe(0);
+  });
+
   it.each([
     { value: { expectedFiles: ['second.txt'] } },
     { config: { policy: 'second policy' } },
