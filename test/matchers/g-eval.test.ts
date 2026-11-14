@@ -561,6 +561,100 @@ describe('matchesGEval', () => {
     });
   });
 
+  it.each([
+    ['pretty-printed', '{\n  "steps": ["Check clarity"]\n}'],
+    ['with a space after the brace', '{ "steps": ["Check clarity"] }'],
+    ['in a fenced block', '```json\n{\n  "steps": ["Check clarity"]\n}\n```'],
+    ['after a sentence', 'Here are the steps:\n{"steps": ["Check clarity"]}\nHope this helps.'],
+    ['after a sentence with a {steps} placeholder', 'Using {steps}: {"steps": ["Check clarity"]}'],
+  ])('should read the evaluation steps when the grader returns them %s', async (_, stepsOutput) => {
+    vi.spyOn(DefaultGradingProvider, 'callApi')
+      .mockImplementationOnce(async () => ({
+        output: stepsOutput,
+        tokenUsage: { total: 3, prompt: 1, completion: 2 },
+      }))
+      .mockImplementationOnce(async () => ({
+        output: '{"score": 8, "reason": "Clear"}',
+        tokenUsage: { total: 4, prompt: 2, completion: 2 },
+      }));
+
+    const result = await matchesGEval('Evaluate coherence', 'Test input', 'Test output', 0.7);
+
+    expect(result).toEqual({
+      pass: true,
+      score: 0.8,
+      reason: 'Clear',
+      tokensUsed: expect.any(Object),
+    });
+  });
+
+  it.each([
+    ['prose with no JSON', 'I could not come up with any steps.'],
+    ['a JSON object without a steps key', 'Here you go: {"score": 8}'],
+  ])('should still fail clearly when the steps response is %s', async (_, stepsOutput) => {
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValueOnce({
+      output: stepsOutput,
+      tokenUsage: { total: 3, prompt: 1, completion: 2 },
+    });
+
+    const result = await matchesGEval('Evaluate coherence', 'Test input', 'Test output', 0.7);
+
+    expect(result).toEqual({
+      pass: false,
+      score: 0,
+      reason: `LLM-proposed evaluation steps are not in JSON format: ${stepsOutput}`,
+      tokensUsed: expect.objectContaining({ total: 3, prompt: 1, completion: 2 }),
+      metadata: { graderError: true },
+    });
+    expect(DefaultGradingProvider.callApi).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ['prose with no JSON', 'The output reads well, I would say eight out of ten.'],
+    ['an empty object', '{}'],
+  ])('should still fail clearly when the evaluation result is %s', async (_, resultOutput) => {
+    vi.spyOn(DefaultGradingProvider, 'callApi')
+      .mockImplementationOnce(async () => createClarityStepsResponse())
+      .mockImplementationOnce(async () => ({
+        output: resultOutput,
+        tokenUsage: { total: 4, prompt: 2, completion: 2 },
+      }));
+
+    const result = await matchesGEval('Evaluate coherence', 'Test input', 'Test output', 0.7);
+
+    expect(result.pass).toBe(false);
+    expect(result.score).toBe(0);
+    expect(result.metadata).toEqual({ graderError: true });
+    expect(result.reason).toEqual(expect.any(String));
+    expect(DefaultGradingProvider.callApi).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([
+    ['pretty-printed', '{\n  "score": 8,\n  "reason": "Clear"\n}'],
+    ['in a fenced block', '```json\n{\n  "score": 8,\n  "reason": "Clear"\n}\n```'],
+    ['after a sentence', 'Scoring against {criteria}:\n{"score": 8, "reason": "Clear"}'],
+    [
+      'after a sentence with a {score} placeholder',
+      'Using {score}: {"score": 8, "reason": "Clear"}',
+    ],
+  ])('should read the evaluation result when the grader returns it %s', async (_, resultOutput) => {
+    vi.spyOn(DefaultGradingProvider, 'callApi')
+      .mockImplementationOnce(async () => createClarityStepsResponse())
+      .mockImplementationOnce(async () => ({
+        output: resultOutput,
+        tokenUsage: { total: 4, prompt: 2, completion: 2 },
+      }));
+
+    const result = await matchesGEval('Evaluate coherence', 'Test input', 'Test output', 0.7);
+
+    expect(result).toEqual({
+      pass: true,
+      score: 0.8,
+      reason: 'Clear',
+      tokensUsed: expect.any(Object),
+    });
+  });
+
   it('tracks token usage for both API calls', async () => {
     const criteria = 'Evaluate coherence and clarity';
     const input = 'Test input';
@@ -577,5 +671,16 @@ describe('matchesGEval', () => {
       completionDetails: expect.any(Object),
       numRequests: 0,
     });
+  });
+  it('skips malformed steps and out-of-range scores before a valid grader object', async () => {
+    vi.spyOn(DefaultGradingProvider, 'callApi')
+      .mockResolvedValueOnce({ output: '{"steps":[""]}\n{"steps":["Check accuracy"]}' })
+      .mockResolvedValueOnce({
+        output: '{"score":11,"reason":"Malformed"}\n{"score":8,"reason":"Clear"}',
+      });
+
+    const result = await matchesGEval('Evaluate accuracy', 'Test input', 'Test output', 0.7);
+
+    expect(result).toMatchObject({ pass: true, score: 0.8, reason: 'Clear' });
   });
 });
