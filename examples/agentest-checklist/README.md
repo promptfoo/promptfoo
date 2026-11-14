@@ -27,7 +27,7 @@ export OPENAI_API_KEY=sk-...   # required for llm-rubric grading (or set your gr
 npx promptfoo@latest eval
 ```
 
-`llm-rubric` needs a separate grading provider. With only the `echo` target configured, Promptfoo grades via OpenAI unless you pass another grader, so set `OPENAI_API_KEY` (or e.g. `npx promptfoo@latest eval --grader openai:gpt-4o-mini` with that key available). The provider in `promptfooconfig.yaml` is `echo`, which is free and offline for the target. Swap in your agent or provider before you read the scores as an evaluation of agent behavior.
+`llm-rubric` needs a separate grading provider. With only the `echo` target configured, Promptfoo grades via OpenAI unless you pass another grader, so set `OPENAI_API_KEY` (or pass `--grader <provider:model>` for any grading provider whose key you have set; see the Promptfoo docs for current provider IDs). The provider in `promptfooconfig.yaml` is `echo`, which is free and offline for the target. Swap in your agent or provider before you read the scores as an evaluation of agent behavior.
 
 ### Optional: smaller generated suite
 
