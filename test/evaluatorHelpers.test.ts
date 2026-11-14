@@ -542,6 +542,15 @@ describe('evaluatorHelpers', () => {
       },
     );
 
+    it('resolves references between statements with quoted delimiters', async () => {
+      const vars = {
+        template: '{% set a = "{{" %}{{ foo }}{% set b = "}}" %}',
+        foo: '{{ bar | upper }}',
+        bar: 'hello',
+      };
+      expect(await renderPrompt(toPrompt('{{ template }}'), vars, {})).toBe('HELLO');
+    });
+
     it('should respect Nunjucks escaped strings inside test variables', async () => {
       const prompt = toPrompt('{{ template }}');
       const renderedPrompt = await renderPrompt(

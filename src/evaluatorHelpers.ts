@@ -107,7 +107,7 @@ function maskNunjucksBlocks(value: string): string {
   }
 
   const tokens =
-    /\{%-?\s*(raw|verbatim)\s*-?%\}|\{#|\{\{(?:[^'"{]|\{(?!\{)|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')*?\}\}/g;
+    /\{%-?\s*(raw|verbatim)\s*-?%\}|\{%(?:[^'"%]|%(?!\})|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')*%\}|\{#|\{\{(?:[^'"{]|\{(?!\{)|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')*?\}\}/g;
   const rawTags = /\{%-?\s*(end)?(raw|verbatim)\s*-?%\}/g;
   const pieces: string[] = [];
   let cursor = 0;
@@ -126,7 +126,7 @@ function maskNunjucksBlocks(value: string): string {
     } else if (match[0] === '{#') {
       const end = value.indexOf('#}', tokens.lastIndex);
       tokens.lastIndex = end === -1 ? value.length : end + 2;
-    } else if (!/['"]/.test(match[0])) {
+    } else if (match[0].startsWith('{{') && !/['"]/.test(match[0])) {
       continue;
     }
     pieces.push(value.slice(cursor, match.index), ' '.repeat(tokens.lastIndex - match.index));
