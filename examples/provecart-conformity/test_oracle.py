@@ -1,6 +1,6 @@
 import copy
-from pathlib import Path
 import unittest
+from pathlib import Path
 
 from oracle import load_practice_set, score_decision
 
@@ -15,7 +15,9 @@ class PracticeSetTest(unittest.TestCase):
         for name, instance in self.instances.items():
             with self.subTest(instance=name):
                 ambiguous = bool(instance.get("ambiguity"))
-                self.assertEqual(score_decision(instance, {"decision": "ask"})[0], ambiguous)
+                self.assertEqual(
+                    score_decision(instance, {"decision": "ask"})[0], ambiguous
+                )
                 for check in instance["checks"]:
                     buy = {"decision": "buy", "submission": check["submission"]}
                     self.assertEqual(
@@ -25,13 +27,22 @@ class PracticeSetTest(unittest.TestCase):
 
     def test_wrong_variant_and_malformed_cart_fail(self):
         instance = self.instances["fit_structured_variant"]
-        correct = next(check["submission"] for check in instance["checks"]
-                       if check["role"] == "correct")
+        correct = next(
+            check["submission"]
+            for check in instance["checks"]
+            if check["role"] == "correct"
+        )
         wrong_variant = copy.deepcopy(correct)
         wrong_variant["items"][0]["variant"] = "wrong"
-        for submission in (wrong_variant, {"items": [True], "merchant": {}},
-                           {"items": [], "merchant": "shop.example.com"}):
+        for submission in (
+            wrong_variant,
+            {"items": [True], "merchant": {}},
+            {"items": [], "merchant": "shop.example.com"},
+        ):
             with self.subTest(submission=submission):
-                self.assertFalse(score_decision(
-                    instance, {"decision": "buy", "submission": submission},
-                )[0])
+                self.assertFalse(
+                    score_decision(
+                        instance,
+                        {"decision": "buy", "submission": submission},
+                    )[0]
+                )

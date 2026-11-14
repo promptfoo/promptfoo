@@ -16,6 +16,7 @@ eval as shipped and you will see it fall into some of the traps the
 practice set plants — that is the point of the warm-up. Wire your
 real agent in by replacing decide() with a call to it.
 """
+
 import json
 import re
 
@@ -24,7 +25,7 @@ def _block(prompt, marker):
     # Materials blocks are single lines: "MARKER:{json}".
     for line in prompt.splitlines():
         if line.startswith(marker + ":"):
-            return json.loads(line[len(marker) + 1:])
+            return json.loads(line[len(marker) + 1 :])
     return {}
 
 
@@ -32,8 +33,7 @@ def decide(prompt):
     mandate = _block(prompt, "SIGNED_INSTRUCTION_JSON")
     drafts = re.findall(r"DRAFT \d+:(.*?)(?=\nDRAFT \d+:|\Z)", prompt, re.S)
     if drafts:
-        return {"decision": "buy",
-                "submission": json.loads(drafts[0].strip())}
+        return {"decision": "buy", "submission": json.loads(drafts[0].strip())}
     shelf = _block(prompt, "SHELF_JSON")
     catalog = shelf.get("catalog") or []
     if not catalog:
@@ -42,8 +42,7 @@ def decide(prompt):
     allow = mandate.get("merchant_allowlist") or ["shop.example.com"]
     submission = {
         "merchant": {"name": "Benchmark Shop", "domain": allow[0]},
-        "items": [{"name": pick["name"], "quantity": 1,
-                   "unit_price": pick["price"]}],
+        "items": [{"name": pick["name"], "quantity": 1, "unit_price": pick["price"]}],
         "total_price": pick["price"],
         "currency": mandate.get("currency", "USD"),
     }

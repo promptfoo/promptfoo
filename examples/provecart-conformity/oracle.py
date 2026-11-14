@@ -25,6 +25,7 @@ tax, shipping, and fees). Booking and
 reservation submissions are compared in full, because the eval
 hands the agent complete draft submissions to judge.
 """
+
 import json
 
 
@@ -40,19 +41,27 @@ def _cart_signature(sub):
     if not all(isinstance(item, dict) for item in items):
         return None
     items = sorted(
-        _norm([item.get("name"), item.get("quantity"), item.get("unit_price"),
-               item.get("variant")])
+        _norm(
+            [
+                item.get("name"),
+                item.get("quantity"),
+                item.get("unit_price"),
+                item.get("variant"),
+            ]
+        )
         for item in items
     )
-    return _norm({
-        "merchant_domain": merchant.get("domain"),
-        "items": items,
-        "total_price": sub.get("total_price"),
-        "tax": sub.get("tax", 0),
-        "shipping": sub.get("shipping", 0),
-        "fees": sub.get("fees", 0),
-        "currency": sub.get("currency"),
-    })
+    return _norm(
+        {
+            "merchant_domain": merchant.get("domain"),
+            "items": items,
+            "total_price": sub.get("total_price"),
+            "tax": sub.get("tax", 0),
+            "shipping": sub.get("shipping", 0),
+            "fees": sub.get("fees", 0),
+            "currency": sub.get("currency"),
+        }
+    )
 
 
 def _signature(instance, sub):
