@@ -332,6 +332,36 @@ describe('handleLlamaGuard', () => {
     );
   });
 
+  it('uses the selected red-team target history without duplicating the assistant response', async () => {
+    mockedMatchesLlamaGuard.mockResolvedValue({ pass: true, score: 1, reason: 'safe' });
+    const history = [
+      { role: 'user', content: 'first request' },
+      { role: 'assistant', content: 'first reply' },
+      { role: 'user', content: 'continue' },
+    ];
+    await handleLlamaGuard({
+      ...baseParams,
+      providerResponse: {
+        prompt: 'continue',
+        output: 'original reply',
+        metadata: {
+          redteamFinalPrompt: 'continue',
+          messages: [...history, { role: 'assistant', content: 'original reply' }],
+        },
+      },
+      outputString: 'transformed reply',
+    });
+    expect(mockedMatchesLlamaGuard).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userPrompt: 'continue',
+        conversation: history,
+        assistantResponse: 'transformed reply',
+      }),
+      {},
+      undefined,
+    );
+  });
+
   it('forwards the full conversation for multi-turn prompts', async () => {
     mockedMatchesLlamaGuard.mockResolvedValue({
       pass: true,

@@ -3,16 +3,13 @@ import {
   describeLlamaGuardCategory,
   isKnownLlamaGuardCategory,
   LLAMAGUARD_CATEGORY_DESCRIPTIONS,
-  parseLlamaGuardOutput,
+  parseLlamaGuardGradingResponse,
 } from '../util/llamaGuard';
 import { callProviderWithContext, getAndCheckProvider } from './providers';
 import { isEmptyRubricPrompt, loadRubricPrompt, renderLlmRubricPrompt } from './rubric';
 import { graderFail, normalizeMatcherTokenUsage } from './shared';
 
 import type { CallApiContextParams, GradingConfig, GradingResult } from '../types/index';
-
-const UNSAFE_VERDICT =
-  /^unsafe[^\S\r\n]*\r?\n[^\S\r\n]*S[1-9]\d*(?:[^\S\r\n]*,[^\S\r\n]*S[1-9]\d*)*$/;
 
 interface LlamaGuardMatchOptions {
   /** The user-side text to classify (used when `conversation` is absent). */
@@ -100,12 +97,10 @@ export async function matchesLlamaGuard(
   if (typeof resp.output !== 'string') {
     return graderFail('LlamaGuard produced a non-text response', resp.tokenUsage);
   }
-  const output = resp.output.trim();
-  if (output !== 'safe' && !UNSAFE_VERDICT.test(output)) {
-    return graderFail('LlamaGuard returned an unparseable verdict', resp.tokenUsage);
+  const verdict = parseLlamaGuardGradingResponse(resp.output, resp.finishReason);
+  if ('error' in verdict) {
+    return graderFail(verdict.error, resp.tokenUsage);
   }
-
-  const verdict = parseLlamaGuardOutput(output);
   const tokensUsed = normalizeMatcherTokenUsage(resp.tokenUsage);
 
   if (verdict.safe) {

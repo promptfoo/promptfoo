@@ -2,10 +2,12 @@
  * Shared parsing for LlamaGuard-shaped classifier output ("safe" / "unsafe\n<codes>"),
  * used by both the `llama-guard` assertion (src/assertions/llamaGuard.ts, via
  * src/matchers/llamaGuard.ts) and the legacy `type: moderation` + Replicate LlamaGuard
- * path (src/providers/replicate.ts). Kept dependency-free (no imports from
- * src/providers or src/matchers) so both layers can import it without risking a
+ * path (src/providers/replicate.ts). Kept independent of
+ * src/providers and src/matchers so both layers can import it without risking a
  * circular import.
  */
+
+import { normalizeFinishReason } from './finishReason';
 
 export const LLAMAGUARD_CATEGORY_DESCRIPTIONS: Record<string, string> = {
   S1: 'Violent Crimes',
@@ -89,4 +91,22 @@ export function parseLlamaGuardOutput(output: string): LlamaGuardVerdict {
   }
 
   return { safe: false, categories, unknownCategories, raw };
+}
+
+const UNSAFE_VERDICT =
+  /^unsafe[^\S\r\n]*\r?\n[^\S\r\n]*S[1-9]\d*(?:[^\S\r\n]*,[^\S\r\n]*S[1-9]\d*)*$/;
+
+/** A portable text grader must produce a complete, unambiguous verdict. */
+export function parseLlamaGuardGradingResponse(
+  output: string,
+  finishReason?: string,
+): LlamaGuardVerdict | { error: string } {
+  if (normalizeFinishReason(finishReason) === 'length') {
+    return { error: 'LlamaGuard returned a truncated verdict' };
+  }
+  const raw = output.trim();
+  if (raw !== 'safe' && !UNSAFE_VERDICT.test(raw)) {
+    return { error: 'LlamaGuard returned an unparseable verdict' };
+  }
+  return parseLlamaGuardOutput(raw);
 }

@@ -128,6 +128,24 @@ describe('matchesLlamaGuard', () => {
     expect(result.metadata).toEqual({ graderError: true });
   });
 
+  it.each(['length', 'MAX_TOKENS'])(
+    'treats a truncated verdict ending on a complete hazard code as a grader failure (%s)',
+    async (finishReason) => {
+      const provider = createMockProvider({
+        response: { output: 'unsafe\nS2', finishReason, tokenUsage: { total: 4 } },
+      });
+      const result = await matchesLlamaGuard(
+        { userPrompt: 'request', assistantResponse: 'reply', categories: ['S1'] },
+        { provider },
+      );
+      expect(result).toMatchObject({
+        pass: false,
+        metadata: { graderError: true },
+        tokensUsed: { total: 4 },
+      });
+    },
+  );
+
   it('should tag a non-string response as a grader failure without throwing', async () => {
     const mockProvider = createMockProvider({
       response: { output: { unexpected: 'object' } as unknown as string },

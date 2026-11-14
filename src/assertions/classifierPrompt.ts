@@ -61,8 +61,11 @@ function getLastUserMessage(parsedPrompt: ChatMessage[]): string | undefined {
 export function resolveClassifierPrompt(
   providerResponse: ProviderResponse | undefined,
   prompt: string,
-): string {
+): string | undefined {
   const resolved = getActualPromptWithFallback(providerResponse, prompt);
+  if (!resolved) {
+    return undefined;
+  }
 
   try {
     const parsedPrompt = parseChatPrompt<ChatMessage[] | null>(resolved, null);
@@ -80,32 +83,39 @@ export function resolveClassifierPrompt(
 }
 
 /**
- * Like {@link resolveClassifierPrompt}, but preserves every turn when the evaluated
- * prompt is a serialized multi-turn chat. Used by conversation-aware classifiers
- * (LlamaGuard) that judge the final turn in the context of what preceded it; returns
- * undefined when the prompt is not a chat array, so callers fall back to single-turn.
+ * Resolve the preceding target turns from a red-team strategy or serialized
+ * chat prompt. A plain prompt without saved history uses single-turn grading.
  */
 export function resolveClassifierConversation(
   providerResponse: ProviderResponse | undefined,
   prompt: string,
 ): { role: string; content: string }[] | undefined {
-  const resolved = getActualPromptWithFallback(providerResponse, prompt);
-
+  const saved = providerResponse?.metadata?.messages;
   try {
-    const parsedPrompt = parseChatPrompt<ChatMessage[] | null>(resolved, null);
-    if (!Array.isArray(parsedPrompt) || parsedPrompt.length === 0) {
-      return undefined;
+    // GOAT and Crescendo report a final prompt and save their selected target
+    // conversation including its response. The matcher appends the evaluated
+    // output (which may be transformed), so only pass the preceding turns.
+    if (providerResponse?.metadata?.redteamFinalPrompt && Array.isArray(saved)) {
+      const history = saved[saved.length - 1]?.role === 'assistant' ? saved.slice(0, -1) : saved;
+      if (history[history.length - 1]?.role === 'user') {
+        return getTextTurns(history);
+      }
     }
 
-    const turns = parsedPrompt
-      .map((message) => ({
-        role: typeof message?.role === 'string' ? message.role : 'user',
-        content: getChatMessageText(message?.content),
-      }))
-      .filter((turn): turn is { role: string; content: string } => turn.content !== undefined);
-
-    return turns.length > 0 ? turns : undefined;
+    const resolved = getActualPromptWithFallback(providerResponse, prompt);
+    const parsed = parseChatPrompt<ChatMessage[] | null>(resolved, null);
+    return Array.isArray(parsed) ? getTextTurns(parsed) : undefined;
   } catch {
     return undefined;
   }
+}
+
+function getTextTurns(messages: ChatMessage[]): { role: string; content: string }[] | undefined {
+  const turns = messages
+    .map((message) => ({
+      role: typeof message?.role === 'string' ? message.role : 'user',
+      content: getChatMessageText(message?.content),
+    }))
+    .filter((turn): turn is { role: string; content: string } => turn.content !== undefined);
+  return turns.length > 0 ? turns : undefined;
 }

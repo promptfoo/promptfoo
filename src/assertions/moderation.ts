@@ -16,7 +16,7 @@ export const handleModeration = async ({
   // Priority: 1) response.prompt (provider-reported), 2) redteamFinalPrompt (legacy),
   // 3) original prompt, then unwrap serialized chat prompts to the last user message.
   const promptToModerate = resolveClassifierPrompt(providerResponse, prompt || '');
-  invariant(promptToModerate, 'moderation assertion type must have a prompt');
+  invariant(promptToModerate !== undefined, 'moderation assertion type must have a prompt');
   invariant(
     !assertion.value || (Array.isArray(assertion.value) && typeof assertion.value[0] === 'string'),
     'moderation assertion value must be a string array if set',

@@ -15,7 +15,7 @@ export const handleLlamaGuard = async ({
   inverse,
 }: AssertionParams): Promise<GradingResult> => {
   const promptToClassify = resolveClassifierPrompt(providerResponse, prompt || '');
-  if (!promptToClassify) {
+  if (promptToClassify === undefined) {
     throw new Error('llama-guard assertion type must have a prompt');
   }
 

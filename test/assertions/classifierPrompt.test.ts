@@ -174,6 +174,14 @@ describe('resolveClassifierConversation', () => {
     ]);
   });
 
+  it('ignores unrelated saved messages when a provider reports a plain prompt', () => {
+    const response = {
+      prompt: 'actual request',
+      metadata: { messages: [{ role: 'user', content: 'unrelated request' }] },
+    };
+    expect(resolveClassifierConversation(response, 'fallback')).toBeUndefined();
+  });
+
   it('returns undefined for a plain-text prompt', () => {
     expect(resolveClassifierConversation({ output: 'out' }, 'just text')).toBeUndefined();
   });
