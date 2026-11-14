@@ -57,7 +57,7 @@ Below is the minimal pattern most teams start with:
 | 1   | **Trigger** (Cron or Webhook) | Decide _when_ to evaluate (nightly, on Git push webhook …).       |
 | 2   | **Execute Command**           | Runs Promptfoo and emits raw stdout / stderr.                     |
 | 3   | **Code / Set** node           | Parses the resulting JSON, extracts pass/fail counts & share‑URL. |
-| 4   | **IF** node                   | Branches on “nonPasses > 0”.                                       |
+| 4   | **IF** node                   | Branches on “nonPasses > 0”.                                      |
 | 5   | **Slack / Email / GitHub**    | Sends alert or PR comment when the gate fails.                    |
 
 ### Execute Command node configuration
