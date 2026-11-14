@@ -885,6 +885,22 @@ describe('server route end-to-end smoke coverage', { concurrent: false }, () => 
     }
   });
 
+  it.each(['/%FF', '/api/media/audio/%FF'])(
+    'returns a private generic error for an undecodable request path %s',
+    async (path) => {
+      const response = await sendRequest(app, {
+        method: 'get',
+        openApiPath: path,
+        path,
+        expectedStatus: 400,
+      });
+      expect(response.status).toBe(400);
+      expect(response.body).toEqual({ error: 'Bad Request' });
+      expect(response.headers['cache-control']).toBe('private, no-store');
+      expect(response.headers['x-content-type-options']).toBe('nosniff');
+    },
+  );
+
   it('handles malformed JSON before route dispatch and keeps the app healthy', async () => {
     const canary = 'malformed-request-body-canary';
     const environment = app.get('env');

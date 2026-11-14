@@ -77,7 +77,9 @@ describe('local media blob adapter', () => {
     const info = await request(app).get(`/api/media/info/${uppercaseKey}`);
     expect(info.status).toBe(200);
     expect(info.body.data.key).toBe(key);
-    expect(await fs.readFile(fileURLToPath(info.body.data.url))).toEqual(payload);
+    expect(info.body.data.url).toBe(`/api/media/${key}`);
+    const downloaded = await request(app).get(info.body.data.url).expect(200);
+    expect(downloaded.body).toEqual(payload);
   });
 
   it('excludes abandoned blob staging directories without excluding legacy files', async () => {
@@ -188,7 +190,9 @@ describe('local media blob adapter', () => {
     expect(response.headers['content-type']).toBe('image/jpeg');
     const info = await request(app).get(`/api/media/info/${legacyKey}`);
     expect(info.status).toBe(200);
-    expect(await fs.readFile(fileURLToPath(info.body.data.url))).toEqual(payload);
+    expect(info.body.data.url).toBe(`/api/media/${legacyKey}`);
+    const downloaded = await request(app).get(info.body.data.url).expect(200);
+    expect(downloaded.body).toEqual(payload);
     await fs.writeFile(`${path.join(directory, legacyKey)}.meta.json`, '{}');
     await provider.delete(legacyKey);
     expect(await provider.exists(legacyKey)).toBe(false);
@@ -211,13 +215,14 @@ describe('local media blob adapter', () => {
             : contentType;
       expect(response.headers['content-type']).toContain(expected);
       expect(response.headers['x-content-type-options']).toBe('nosniff');
-      expect(response.headers['cache-control']).toBe('public, max-age=31536000, immutable');
+      expect(response.headers['cache-control']).toBe('private, max-age=31536000, immutable');
       expect(response.headers['content-disposition']).toBe(
         contentType === 'text/html' || contentType === 'image/svg+xml' ? 'attachment' : undefined,
       );
       const info = await request(app).get(`/api/media/info/${key}`);
       expect(info.status).toBe(200);
-      expect(await fs.readFile(fileURLToPath(info.body.data.url))).toEqual(payload);
+      expect(info.body.data.url).toBe(`/api/media/${key}`);
+      expect(response.headers['content-length']).toBe(String(payload.length));
     },
   );
 
@@ -342,7 +347,7 @@ describe('local media blob adapter', () => {
       expect(response.headers['content-type']).toBe('application/octet-stream');
       expect(response.headers['content-disposition']).toBe('attachment');
       expect(response.headers['content-length']).toBe(String(payload.length));
-      expect(response.headers['cache-control']).toBe('no-store');
+      expect(response.headers['cache-control']).toBe('private, no-store');
       expect(response.body).toEqual(payload);
 
       await provider.store(payload, metadata);
@@ -350,7 +355,7 @@ describe('local media blob adapter', () => {
       expect(repaired.status).toBe(200);
       expect(repaired.headers['content-type']).toBe('image/jpeg');
       expect(repaired.headers['content-disposition']).toBeUndefined();
-      expect(repaired.headers['cache-control']).toBe('public, max-age=31536000, immutable');
+      expect(repaired.headers['cache-control']).toBe('private, max-age=31536000, immutable');
       expect(repaired.body).toEqual(payload);
     },
   );

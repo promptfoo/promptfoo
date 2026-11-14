@@ -153,10 +153,33 @@ describe('Media Routes', () => {
           key: 'audio/abcdef123456.mp3',
           exists: true,
           url: '/media/audio/abcdef123456.mp3',
+          apiUrl: '/api/media/audio/abcdef123456.mp3',
         },
       });
       expect(mockedMediaExists).toHaveBeenCalledWith('audio/abcdef123456.mp3');
       expect(mockStorage.getUrl).toHaveBeenCalledWith('audio/abcdef123456.mp3');
+    });
+
+    it.each([
+      ['audio/abcdef123456.mp3', 'file:///private/legacy.mp3'],
+      [`blob/${'a'.repeat(64)}`, ' \tFi\nLe:/private/blob'],
+    ])('replaces a local URL for %s with the fetchable API path', async (key, url) => {
+      mockedMediaExists.mockResolvedValue(true);
+      mockedGetMediaStorage.mockReturnValue({
+        providerId: 'local',
+        getUrl: vi.fn().mockResolvedValue(url),
+      } as unknown as MediaStorageProvider);
+
+      const response = await api.get(`/api/media/info/${key}`);
+
+      expect(response.status).toBe(200);
+      expect(response.headers['cache-control']).toBe('private, no-store');
+      expect(response.body.data).toEqual({
+        key,
+        exists: true,
+        url: `/api/media/${key}`,
+        apiUrl: `/api/media/${key}`,
+      });
     });
 
     it('should return info when URL generation is unsupported', async () => {
@@ -177,6 +200,7 @@ describe('Media Routes', () => {
           key: 'audio/abcdef123456.mp3',
           exists: true,
           url: null,
+          apiUrl: '/api/media/audio/abcdef123456.mp3',
         },
       });
       expect(mockedMediaExists).toHaveBeenCalledWith('audio/abcdef123456.mp3');
@@ -256,7 +280,7 @@ describe('Media Routes', () => {
       expect(response.status).toBe(200);
       expect(response.headers['content-type']).toBe('audio/wav');
       expect(response.headers['content-length']).toBe(String(mockData.length));
-      expect(response.headers['cache-control']).toBe('public, max-age=31536000, immutable');
+      expect(response.headers['cache-control']).toBe('private, max-age=31536000, immutable');
       expect(response.body).toEqual(mockData);
       expect(mockedRetrieveMedia).toHaveBeenCalledWith('audio/abcdef123456.wav');
     });

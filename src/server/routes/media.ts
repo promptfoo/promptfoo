@@ -14,6 +14,16 @@ import type { Request, Response } from 'express';
 
 export const mediaRouter = express.Router();
 
+mediaRouter.use((_req, res, next) => {
+  res.setHeader('Cache-Control', 'private, no-store');
+  next();
+});
+
+function isLocalFileUrl(url: string): boolean {
+  // Mirror browser URL preprocessing and strip leading Unicode whitespace as well.
+  return /^file:/i.test(url.replace(/[\t\n\r]/g, '').replace(/^[\s\u0000-\u0020]+/, ''));
+}
+
 /**
  * Get storage stats
  * Must be defined BEFORE wildcard routes
@@ -64,7 +74,16 @@ mediaRouter.get('/info/:type/:filename', async (req: Request, res: Response): Pr
     }
 
     const storage = getMediaStorage();
-    const url = await storage.getUrl(key);
+    const apiUrl = `${req.baseUrl || '/api/media'}/${key}`;
+    let url: string | null = null;
+    try {
+      url = await storage.getUrl(key);
+    } catch (error) {
+      logger.warn('[Media API] Failed to generate provider URL', { error, key });
+    }
+    if (url && isLocalFileUrl(url)) {
+      url = apiUrl;
+    }
 
     res.json(
       MediaSchemas.Info.Response.parse({
@@ -73,6 +92,7 @@ mediaRouter.get('/info/:type/:filename', async (req: Request, res: Response): Pr
           key,
           exists: true,
           url,
+          apiUrl,
         },
       }),
     );
@@ -128,8 +148,8 @@ mediaRouter.get('/:type/:filename', async (req: Request, res: Response): Promise
       res.setHeader(
         'Cache-Control',
         mimeType === 'application/octet-stream'
-          ? 'no-store'
-          : 'public, max-age=31536000, immutable',
+          ? 'private, no-store'
+          : 'private, max-age=31536000, immutable',
       );
       res.send(data);
       return;
@@ -156,11 +176,16 @@ mediaRouter.get('/:type/:filename', async (req: Request, res: Response): Promise
     const contentType = contentTypes[extension] || 'application/octet-stream';
 
     res.setHeader('Content-Type', contentType);
+    res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Content-Length', data.length);
-    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable'); // 1 year cache (content-addressed)
+    res.setHeader('Cache-Control', 'private, max-age=31536000, immutable'); // 1 year cache (content-addressed)
     res.send(data);
   } catch (error) {
     logger.error('[Media API] Error serving media', { error });
     res.status(500).json({ error: 'Failed to serve media' });
   }
+});
+
+mediaRouter.use((_req: Request, res: Response): void => {
+  res.status(404).json({ error: 'Media route not found' });
 });
