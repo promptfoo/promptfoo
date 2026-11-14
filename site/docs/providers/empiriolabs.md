@@ -1,6 +1,6 @@
 ---
 title: EmpirioLabs AI
-description: Connect promptfoo to EmpirioLabs' OpenAI-compatible chat, embedding, and transcription APIs with isolated credentials and custom pricing.
+description: Connect promptfoo to EmpirioLabs' OpenAI-compatible chat, embedding, and transcription APIs with isolated credentials and custom pricing for cost estimates.
 sidebar_position: 42
 ---
 

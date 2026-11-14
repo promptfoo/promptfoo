@@ -203,7 +203,8 @@ provider `env`, evaluation `env`, `--env-file`, then shell variables. Explicit p
 
 ### Overriding Pricing
 
-You can override promptfoo's cost estimates in `config`, including for models that have no
+For providers with built-in cost estimation, you can override promptfoo's cost estimates in
+`config`. On OpenAI-compatible endpoints, the same options also price models that have no
 built-in pricing entry:
 
 ```yaml
