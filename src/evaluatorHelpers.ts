@@ -149,7 +149,9 @@ export function resolveVariables(
         let referencesSkipped = false;
         // A replacer function keeps `$&`, `$'` and `` $` `` in the value literal.
         const newValue = value.replace(regex, (placeholder: string, varName: string) => {
-          const replacement = variables[varName];
+          const replacement = Object.prototype.hasOwnProperty.call(variables, varName)
+            ? variables[varName]
+            : undefined;
           const isSkipped = skippedVars.has(varName) || resolvedFromSkipped.has(varName);
           if (
             replacement === undefined ||

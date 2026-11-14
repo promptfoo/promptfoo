@@ -693,6 +693,16 @@ describe('evaluatorHelpers', () => {
       });
     });
 
+    it('should leave inherited names unresolved but substitute own variables with those names', () => {
+      const message = '{{missing}} / {{constructor}} / {{toString}} / {{name}}';
+      expect(resolveVariables({ message, name: 'Alice' }).message).toBe(
+        '{{missing}} / {{constructor}} / {{toString}} / Alice',
+      );
+      expect(resolveVariables({ message, name: 'Alice', constructor: 'own' }).message).toBe(
+        '{{missing}} / own / {{toString}} / Alice',
+      );
+    });
+
     it('should resolve multiple defined placeholders after an unresolved one', () => {
       const variables = {
         message: '{{ undefined_var }} then {{ first }} and {{ second }}',
