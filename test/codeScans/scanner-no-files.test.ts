@@ -43,6 +43,8 @@ describe('Scanner machine-readable output', () => {
     }));
     vi.doMock('../../src/codeScan/git/diff', () => ({
       validateOnBranch: vi.fn().mockResolvedValue('main'),
+      countUncommittedFiles: vi.fn().mockResolvedValue(dirtyFiles?.length ?? 0),
+      getDefaultBaseBranch: vi.fn().mockResolvedValue('main'),
     }));
     vi.doMock('../../src/codeScan/config/loader', async () => {
       const actual = await vi.importActual<typeof import('../../src/codeScan/config/loader')>(
@@ -62,12 +64,8 @@ describe('Scanner machine-readable output', () => {
         resolveGuidance: vi.fn().mockReturnValue(undefined),
       };
     });
-    vi.doMock('simple-git', () => ({
-      simpleGit: vi.fn(() => ({
-        branch: vi.fn().mockResolvedValue({ current: 'main', all: ['main'] }),
-        revparse: vi.fn().mockResolvedValue('abc123'),
-        status: vi.fn().mockResolvedValue({ files: dirtyFiles ?? [] }),
-      })),
+    vi.doMock('../../src/util/runCommand', () => ({
+      runCommand: vi.fn().mockResolvedValue({ stdout: 'abc123', stderr: '' }),
     }));
     vi.doMock('../../src/util/agent/agentClient', () => ({
       createAgentClient: vi.fn().mockResolvedValue({

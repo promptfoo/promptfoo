@@ -1331,7 +1331,7 @@ describe('OpenAI assertions', () => {
       });
     });
 
-    it.each([null, {}, { name: 42 }, { name: 'getCurrentTemperature' }])(
+    it.each([null, {}, { name: 42 }, { name: 'getCurrentTemperature', parameters: null }])(
       'keeps malformed function definitions from passing negation: %j',
       async (definition) => {
         const provider = new OpenAiChatCompletionProvider('test-provider', {
