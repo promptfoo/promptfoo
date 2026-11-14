@@ -13,7 +13,7 @@ Promptfoo's LLM-based grading catches novel attacks through semantic understandi
 
 ## Getting Started
 
-Requires Node.js `^20.20.0` or `>=22.22.0`, as supported by Promptfoo
+Requires Node.js `>=22.22.0`, as supported by Promptfoo
 (`agent-threat-rules` is published as pure ESM).
 
 ```bash
