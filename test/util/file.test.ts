@@ -879,6 +879,19 @@ describe('file utilities', () => {
     });
 
     describe('maybeLoadConfigFromExternalFile with assertion detection', () => {
+      it('defers templated assertion files until test vars are available', () => {
+        const scalar = 'file://{{ rubricFile }}.txt';
+        const array = ['ordinary text', 'file://{{ expectedFile }}.txt'];
+        const config = {
+          assert: [
+            { type: 'llm-rubric', value: scalar },
+            { type: 'assert-set', assert: [{ type: 'contains-all', value: array }] },
+          ],
+        };
+
+        expect(maybeLoadConfigFromExternalFile(config, 'test')).toEqual(config);
+      });
+
       it('should preserve Python assertion file references', () => {
         const config = {
           assert: [
