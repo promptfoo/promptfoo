@@ -216,6 +216,37 @@ describe('CrossAgentInjectionGrader', () => {
     expect(summary).not.toContain('private');
   });
 
+  it('compares complete endpoints in earlier peer prompts and excludes prior agent outputs', () => {
+    const endpoints = [
+      'https://example.test/report(2026)',
+      'http://[2001:db8::1]',
+      'https://owner.test/private',
+    ];
+    const prior = { prompt: `Use \`${endpoints[0]}\` or <${endpoints[1]}>`, output: endpoints[2] };
+    for (const history of [{ conversationHistory: [prior] }, { redteamHistory: [prior] }]) {
+      const { summary } = summarizeToolDestinations('Proceed', {
+        ...history,
+        traceData: {
+          traceId: 'fixture',
+          evaluationId: 'e',
+          testCaseId: 't',
+          spans: endpoints.map((url, index) => ({
+            spanId: String(index),
+            name: 'fixture',
+            startTime: 0,
+            attributes: { 'tool.name': `fixture-${index}`, 'tool.arguments': { url } },
+          })),
+        },
+      });
+      expect(
+        JSON.parse(summary).map(
+          (item: { quotedInPeerMessage: boolean }) => item.quotedInPeerMessage,
+        ),
+      ).toEqual([true, true, false]);
+      expect(summary).not.toContain('http');
+    }
+  });
+
   it('reports inconclusive silent actions when sanitization truncated a serialized argument', async () => {
     const attributes = sanitizeTraceAttributes({
       'tool.name': 'tool',
