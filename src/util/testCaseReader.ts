@@ -1093,9 +1093,17 @@ function collectNestedFileReferences(
         ? resolveTestsWatchPaths([{ vars: row.vars }], varsBasePath)
         : [],
     );
-    // Script providers use the row's directory; provider config files and inline
-    // vars still use the config directory. Rewrite only the script ID for collection.
+    // Nested var references follow the declaring row. Top-level paths and providers
+    // retain their existing resolution bases, including standalone scalar sources.
     const scopedRows = rows.map((row) => {
+      if (
+        row?.vars &&
+        !Array.isArray(row.vars) &&
+        typeof row.vars === 'object' &&
+        !isRemoteTestCase(row)
+      ) {
+        row = { ...row, vars: resolveNestedVarsFileReferences(row.vars, path.dirname(testsFile)) };
+      }
       const provider = row?.provider;
       const id = typeof provider === 'string' ? provider : provider?.id;
       if (typeof id !== 'string' || !id.startsWith('file://')) {
