@@ -98,6 +98,42 @@ describe('MetricsTable', () => {
     expect(mockOnClose).toHaveBeenCalledTimes(1);
   });
 
+  it('keeps unavailable pass rates and counts distinct from an explicit zero', async () => {
+    const table = structuredClone(mockTableData);
+    const prompt = table.head.prompts[0];
+    const metrics = prompt.metrics!;
+    metrics.namedScores = { accuracy: 2, 'zero-control': 0 };
+    metrics.namedScoresCount = { 'zero-control': 0 };
+    for (const score of [60, 80]) {
+      table.head.prompts.push({
+        ...prompt,
+        metrics: {
+          ...metrics,
+          namedScores: { accuracy: score },
+          namedScoresCount: { accuracy: 100 },
+        },
+      });
+    }
+    vi.mocked(useTableStore).mockReturnValue({
+      ...vi.mocked(useTableStore)(),
+      table,
+    });
+
+    render(<CustomMetricsDialog open={true} onClose={mockOnClose} />);
+
+    const accuracy = within((await screen.findByText('accuracy')).closest('tr')!);
+    expect(accuracy.getAllByTitle('Pass rate unavailable')).toHaveLength(2);
+    expect(accuracy.getAllByText('—')).toHaveLength(3);
+    expect(accuracy.getByText('60.00%')).toBeInTheDocument();
+    expect(accuracy.getByText('80.00%')).toBeInTheDocument();
+    expect(accuracy.getByTitle('Pass-rate spread across prompt columns')).toHaveTextContent('--');
+    expect(accuracy.queryByText('70.00%')).not.toBeInTheDocument();
+
+    const zero = within(screen.getByText('zero-control').closest('tr')!);
+    expect(zero.getAllByText('0.00%').length).toBeGreaterThan(0);
+    expect(zero.queryByTitle('Pass rate unavailable')).not.toBeInTheDocument();
+  });
+
   it('should return null when table is missing', () => {
     vi.mocked(useTableStore).mockReturnValue({
       table: null,
