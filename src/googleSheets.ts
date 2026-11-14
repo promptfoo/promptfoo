@@ -151,13 +151,9 @@ export async function fetchCsvFromGoogleSheetAuthenticated(url: string): Promise
   const headers = rows[0];
   const dataRows = rows.slice(1);
 
-  return dataRows.map((row) => {
-    const csvRow: CsvRow = {};
-    headers.forEach((header, index) => {
-      csvRow[header] = row[index] ?? '';
-    });
-    return csvRow;
-  });
+  return dataRows.map((row) =>
+    Object.fromEntries(headers.map((header, index) => [header, row[index] ?? ''])),
+  );
 }
 
 export async function fetchCsvFromGoogleSheet(url: string): Promise<CsvRow[]> {
