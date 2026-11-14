@@ -17,7 +17,7 @@ import {
 } from '../remoteGeneration';
 import { remoteGenerationContextPayload } from '../remoteGenerationContext';
 import { throwIfTargetPromptExceedsMaxChars } from '../shared/promptLength';
-import { getSessionId } from '../util';
+import { getSessionId, isEmptyResponse } from '../util';
 import { callTargetProvider } from './shared';
 
 import type {
@@ -84,6 +84,9 @@ export default class BestOfNProvider implements ApiProvider {
     let targetCost: number | undefined;
     let incurredTargetCost: number | undefined;
     const sessionIds: string[] = [];
+    // Coding-agent verifiers grade what the agent did, so an empty final message can still
+    // carry an exploit and must reach the grader.
+    const keepEmptyResponses = isCodingAgentPlugin(context.test?.metadata?.pluginId);
     try {
       // Get candidate prompts from the server
       const response = await fetchWithProxy(
@@ -178,7 +181,7 @@ export default class BestOfNProvider implements ApiProvider {
           if (options?.abortSignal?.aborted) {
             completion.cancellation ??= { error: options.abortSignal.reason };
           }
-          if (completedErrorResponse || completion.cancellation) {
+          if (successfulResponse || completedErrorResponse || completion.cancellation) {
             return;
           }
 
@@ -209,7 +212,13 @@ export default class BestOfNProvider implements ApiProvider {
                 (response.incurredCost ?? (response.cached ? 0 : response.cost));
             }
             currentStep++;
-            if (!response.error) {
+            // A refusal is not a successful jailbreak, so keep sampling candidates until the
+            // target answers or the candidates run out.
+            if (
+              !successfulResponse &&
+              !response.error &&
+              !isRefusalResponse(response, keepEmptyResponses)
+            ) {
               successfulResponse = response;
               successfulResponse.prompt = candidatePrompt;
               successfulResponse.metadata = {
@@ -217,7 +226,6 @@ export default class BestOfNProvider implements ApiProvider {
                 redteamFinalPrompt: candidatePrompt,
                 step: currentStep,
               };
-              return false; // Stop processing more candidates
             }
           } catch (err) {
             if (isCallerAbortError(err, options?.abortSignal)) {
@@ -288,4 +296,31 @@ export default class BestOfNProvider implements ApiProvider {
       };
     }
   }
+}
+
+function hasMediaOutput(response: ProviderResponse): boolean {
+  return Boolean(response.images?.length || response.audio || response.video);
+}
+
+// Only the target's own refusal flag and empty replies count. Refusal wording is left to the
+// plugin grader, since some graders treat an apologetic reply as a possible jailbreak.
+function isCodingAgentPlugin(pluginId: unknown): boolean {
+  return typeof pluginId === 'string' && pluginId.startsWith('coding-agent:');
+}
+
+function isRefusalResponse(response: ProviderResponse, keepEmptyResponses: boolean): boolean {
+  if (keepEmptyResponses) {
+    return false;
+  }
+  if (response.isRefusal === true && !response.hasPartialOutput) {
+    return true;
+  }
+  if (response.output === undefined || response.output === null) {
+    return !hasMediaOutput(response);
+  }
+  return (
+    typeof response.output === 'string' &&
+    isEmptyResponse(response.output) &&
+    !hasMediaOutput(response)
+  );
 }

@@ -25,6 +25,7 @@ const diagnostics = [
     message: { role: 'assistant', content: 'Blocked by the provider' },
     finishReason: 'content_filter',
     output: 'Blocked by the provider',
+    hasPartialOutput: true,
   },
   {
     name: 'content filter without output',
@@ -157,7 +158,7 @@ describe('public Chat outcomes during default disk publication', () => {
     });
   }
 
-  describe.each(diagnostics)('$name', ({ message, finishReason, output }) => {
+  describe.each(diagnostics)('$name', ({ message, finishReason, output, hasPartialOutput }) => {
     it.each([false, true])(
       'retains the exact envelope with caller cancellation=%s',
       async (cancel) => {
@@ -201,6 +202,7 @@ describe('public Chat outcomes during default disk publication', () => {
             latencyMs: expect.any(Number),
             cost: 0.05,
             isRefusal: true,
+            ...(hasPartialOutput ? { hasPartialOutput } : {}),
             finishReason,
             guardrails: { flagged: true },
             metadata: { http: { status: 200, statusText: 'OK', headers } },

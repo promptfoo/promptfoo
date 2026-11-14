@@ -909,6 +909,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       const cost = this.calculateResponseCost(data, config, cached);
       return {
         output: message.refusal || message.content || 'Content filtered by provider',
+        ...(!message.refusal && message.content ? { hasPartialOutput: true } : {}),
         tokenUsage: getTokenUsage(data, cached),
         cached,
         latencyMs,
@@ -1022,6 +1023,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           latencyMs,
           ...(cost === undefined ? {} : { cost }),
           isRefusal: true,
+          ...(policy.partialOutput === undefined ? {} : { hasPartialOutput: true }),
           guardrails: {
             flagged: true,
             ...(policy.flaggedInput ? { flaggedInput: true } : {}),
