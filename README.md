@@ -91,8 +91,9 @@ tests:
       request: 'Book a flight to Paris.'
     assert:
       - type: is-json
-      - type: javascript
-        value: JSON.parse(output).itinerary !== undefined
+        value:
+          type: object
+          required: [itinerary]
 ```
 
 ### Tool calling
@@ -125,7 +126,7 @@ tests:
     assert:
       - type: is-valid-openai-tools-call
       - type: javascript
-        value: output[0].function.name === 'schedule_meeting'
+        value: Array.isArray(output) && output[0]?.function?.name === 'schedule_meeting'
 ```
 
 ### RAG pipelines
