@@ -587,4 +587,94 @@ This policy excludes all staff going on any outgoing structured programs, short 
       expect(result.metadata?.graderError).toBe(true);
     });
   });
+  it('should still segment by sentence when the grader echoes the cue on its own line', async () => {
+    // The echoed cue adds a second line, which flips splitTextIntoSentences into line
+    // mode for the whole response. Dropping chatter before segmentation keeps the two
+    // relevant sentences on the remaining line counted separately.
+    const input = 'What comes first and second?';
+    const context = 'Alpha is first. Beta is second. Gamma is third.';
+    const mockCallApi = vi.fn().mockResolvedValue({
+      output: 'candidate sentences:\nAlpha is first. Beta is second.',
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
+
+    const result = await matchesContextRelevance(input, context, 0.2);
+
+    expect(result.metadata?.totalContextUnits).toBe(3);
+    expect(result.metadata?.relevantSentenceCount).toBe(2);
+    expect(result.score).toBeCloseTo(0.67, 2);
+  });
+
+  it('should accept list markers beyond "1." when matching extractions', async () => {
+    // Graders vary their list formatting; a marker the stripper does not recognise
+    // leaves the candidate unmatchable and silently drops a real extraction.
+    const input = 'Who created Python?';
+    const context =
+      'Python is known for readability. It was created by Guido van Rossum. It is widely used.';
+    const mockCallApi = vi.fn().mockResolvedValue({
+      output: '(1) It was created by Guido van Rossum.',
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
+
+    const result = await matchesContextRelevance(input, context, 0.2);
+
+    expect(result.metadata?.relevantSentenceCount).toBe(1);
+    expect(result.score).toBeCloseTo(0.33, 2);
+  });
+
+  it('should count both sentences when the cue shares a line with the first', async () => {
+    // Segmenting leaves the cue attached to the first sentence, so the membership
+    // check rejected an otherwise verbatim extraction and 2/3 became 1/3.
+    const input = 'What comes first and second?';
+    const context = 'Alpha is first. Beta is second. Gamma is third.';
+    const mockCallApi = vi.fn().mockResolvedValue({
+      output: 'candidate sentences: Alpha is first. Beta is second.',
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
+
+    const result = await matchesContextRelevance(input, context, 0.2);
+
+    expect(result.metadata?.relevantSentenceCount).toBe(2);
+    expect(result.score).toBeCloseTo(0.67, 2);
+  });
+
+  it('should not count a bare list marker left standing by sentence splitting', async () => {
+    // `A.` splits into its own segment and normalizes to `a`, which is a substring of
+    // nearly any context — counting it inflates the numerator, the very failure this
+    // filter exists to prevent.
+    const input = 'What is the capital of France?';
+    const context = 'Paris is the capital of France. Berlin is the capital of Germany.';
+    const mockCallApi = vi.fn().mockResolvedValue({
+      output: 'A. Paris is the capital of France.',
+      tokenUsage: { total: 10, prompt: 5, completion: 5 },
+    });
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
+
+    const result = await matchesContextRelevance(input, context, 0.2);
+
+    expect(result.metadata?.extractedSentences).toEqual(['Paris is the capital of France.']);
+    expect(result.metadata?.relevantSentenceCount).toBe(1);
+    expect(result.score).toBeCloseTo(0.5, 2);
+  });
+
+  it('keeps distinct enumerated source lines when both are quoted', async () => {
+    const source = '(1) Ready.\n(2) Ready.';
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValue({ output: source });
+    const result = await matchesContextRelevance('local', source, 1);
+    expect(result.score).toBe(1);
+    expect(result.metadata?.extractedSentences).toEqual(source.split('\n'));
+  });
+
+  it('preserves a source cue and rejects a cue with no extraction', async () => {
+    const provider = vi.spyOn(DefaultGradingProvider, 'callApi');
+    provider.mockResolvedValueOnce({ output: 'Candidate sentences: ready.' });
+    const quoted = await matchesContextRelevance('local', 'Candidate sentences: ready.', 1);
+    expect(quoted.score).toBe(1);
+    provider.mockResolvedValueOnce({ output: 'candidate sentences:' });
+    const empty = await matchesContextRelevance('local', 'Alpha is first.', 0);
+    expect(empty.metadata?.graderError).toBe(true);
+  });
 });

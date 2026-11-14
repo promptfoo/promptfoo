@@ -268,6 +268,8 @@ export async function matchesContextRecall(
   };
 }
 
+const LIST_MARKER_PREFIX = /^\s*(?:[-*\u2022\u2013\u2014]|\(?\d+[.)]|\(?[a-zA-Z][.)])\s+/;
+
 export async function matchesContextRelevance(
   question: string,
   context: string | string[],
@@ -327,7 +329,12 @@ export async function matchesContextRelevance(
   // would score 1/N instead of 1.0).
   const insufficientInformation = resp.output.includes(CONTEXT_RELEVANCE_BAD);
   const segmentRelevant = contextIsPreSegmented ? splitIntoSentences : splitTextIntoSentences;
-  const segments = insufficientInformation ? [] : segmentRelevant(resp.output);
+  // Some graders echo the rubric's cue before their verbatim extractions. Remove
+  // that cue before choosing line or sentence mode, preserving a quoted source cue.
+  const graderOutput = resp.output.replace(/^\s*candidate sentences:[ \t]*(?:\r?\n)?/i, (cue) =>
+    contextString.toLowerCase().includes(cue.trim().toLowerCase()) ? cue : '',
+  );
+  const segments = insufficientInformation ? [] : segmentRelevant(graderOutput);
 
   // Only count segments whose sentences are quoted from the context. A grader line can
   // join nonadjacent sentences from a chunk, but still counts as one selected unit.
@@ -337,7 +344,10 @@ export async function matchesContextRelevance(
   const quotedSegments = new Map<string, string>();
   for (const segment of segments) {
     // A list marker needs following whitespace; otherwise preserve numbers like 1.2 and -5.
-    const key = normalizeForComparison(segment.replace(/^\s*(?:\d+[.)]|[-*])\s+/, ''));
+    const normalized = normalizeForComparison(segment);
+    const key = contextNormalized.includes(normalized)
+      ? normalized
+      : normalizeForComparison(segment.replace(LIST_MARKER_PREFIX, ''));
     const sentences = splitTextIntoSentences(key);
     if (
       sentences.length > 0 &&
@@ -352,7 +362,8 @@ export async function matchesContextRelevance(
   // Nonempty output that quotes nothing from the context (a refusal, an apology, an
   // out-of-format explanation) is a malformed grading attempt, not a low-relevance verdict.
   // Tag it as a grader error so inverse assertions cannot turn it into a spurious pass.
-  const graderError = segments.length > 0 && relevantSentences.length === 0;
+  const graderError =
+    !insufficientInformation && resp.output.trim().length > 0 && relevantSentences.length === 0;
 
   if (graderError) {
     return {
