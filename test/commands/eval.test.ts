@@ -539,9 +539,10 @@ describe('evalCommand', () => {
     { flags: ['--pass-rate-ci'], columns: 1, cacheHits: 18, expected: false },
     { flags: ['--pass-rate-ci', '--repeat', '10'], columns: 1, cacheHits: 0, expected: false },
     { flags: ['--pass-rate-ci'], columns: 2, cacheHits: 0, expected: false },
+    { flags: ['--pass-rate-ci'], columns: 1, cacheHits: 0, caseRepeats: true, expected: false },
   ])(
     'reports the sampled pass rate with $flags, $columns columns, $cacheHits cached rows',
-    async ({ flags, columns, cacheHits, expected }) => {
+    async ({ flags, columns, cacheHits, caseRepeats, expected }) => {
       evalCommand(program, defaultConfig, defaultConfigPath);
       const previousExitCode = process.exitCode;
       const info = vi.spyOn(logger, 'info').mockImplementation(() => logger);
@@ -549,6 +550,11 @@ describe('evalCommand', () => {
         const record = evalRecord as Eval;
         for (let i = 0; i < columns; i++) {
           record.prompts.push({ raw: 'Question', label: 'Question', provider: `provider-${i}` });
+        }
+        if (caseRepeats) {
+          const row = createEvaluateResult({ repeatGroupId: 'per-case', repeatIndex: 0 });
+          const summary = calculateRepeatStability([row, { ...row, repeatIndex: 1 }]);
+          vi.spyOn(record, 'getObservedRepeatStability').mockResolvedValue(summary);
         }
         const stats = record.getStats();
         vi.spyOn(record, 'getStats').mockReturnValue({

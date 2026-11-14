@@ -149,7 +149,7 @@ By default the `eval` command will read the `promptfooconfig.yaml` configuration
 | `-w, --watch`                        | Watch for changes in config and re-run                                                                                                                                                |
 | `-x, --extension <paths...>`         | Extension hooks to run, such as `file://handler.js:afterAll`                                                                                                                          |
 
-Use `--pass-rate-ci` when each test case is an independent random draw from the population whose pass rate you want to estimate. Curated benchmarks, duplicate cases, and related variants do not meet that assumption. The interval uses the same denominator as the displayed pass rate, including errors. It appears for a fresh, single-column run with one attempt per case and zero recorded cache hits. Red team, resumed, and retried runs omit it.
+Use `--pass-rate-ci` when each test case is an independent random draw from the population whose pass rate you want to estimate. Curated benchmarks, duplicate cases, and related variants do not meet that assumption. The interval uses the same denominator as the displayed pass rate, including errors. It appears for a fresh, single-column run with one attempt per case and zero recorded cache hits. Repeating a case with either `--repeat` or `options.repeat` suppresses the overall interval. Red team, resumed, and retried runs omit it.
 
 Use `--tag` for run-specific eval tags that should not change `promptfooconfig.yaml`:
 

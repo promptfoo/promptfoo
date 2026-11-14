@@ -1118,7 +1118,8 @@ async function doEvalWithEnv(
         !isRedteam &&
         !resumeEval &&
         evalRecord.prompts.length === 1 &&
-        repeat === 1,
+        repeat === 1 &&
+        !repeatStability,
       tracker,
       targetErrorStatus,
       repeatStability,
