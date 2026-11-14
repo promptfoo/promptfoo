@@ -834,6 +834,15 @@ describe('file utilities', () => {
         expect(fs.readFileSync).not.toHaveBeenCalled();
       });
 
+      it('should preserve Ruby files in assertion context', () => {
+        const result = maybeLoadFromExternalFile(
+          'file://assert.rb:Checks::check_value',
+          'assertion',
+        );
+        expect(result).toBe('file://assert.rb:Checks::check_value');
+        expect(fs.readFileSync).not.toHaveBeenCalled();
+      });
+
       it('should load Python files normally in general context', () => {
         (fs.readFileSync as ReturnType<typeof vi.fn>).mockReturnValue('def test(): pass');
         const result = maybeLoadFromExternalFile('file://script.py', 'general');
@@ -879,6 +888,99 @@ describe('file utilities', () => {
     });
 
     describe('maybeLoadConfigFromExternalFile with assertion detection', () => {
+      it.each(['javascript', 'python', 'ruby', 'not-javascript'])(
+        'loads file contents in generic %s payloads',
+        (type) => {
+          vi.mocked(fs.readFileSync).mockReturnValue('script contents');
+          const payload = { type, script: 'file://snippet.js', value: 'file://input.py' };
+
+          expect(maybeLoadConfigFromExternalFile({ body: payload })).toEqual({
+            body: { type, script: 'script contents', value: 'script contents' },
+          });
+          expect(fs.readFileSync).toHaveBeenCalledTimes(2);
+        },
+      );
+
+      it('preserves nested assertion scripts without leaking context into their config', () => {
+        vi.mocked(fs.readFileSync).mockReturnValue('script contents');
+        const nestedAssertion = {
+          type: 'not-javascript',
+          script: 'file://check.js',
+          value: 10,
+          config: { assert: [{ type: 'javascript', script: 'file://snippet.js' }] },
+        };
+
+        expect(
+          maybeLoadConfigFromExternalFile(
+            { assert: [{ type: 'assert-set', assert: [nestedAssertion] }] },
+            'test',
+          ),
+        ).toEqual({
+          assert: [
+            {
+              type: 'assert-set',
+              assert: [
+                {
+                  ...nestedAssertion,
+                  config: { assert: [{ type: 'javascript', script: 'script contents' }] },
+                },
+              ],
+            },
+          ],
+        });
+        expect(fs.readFileSync).toHaveBeenCalledTimes(1);
+      });
+
+      it.each(['body', 'provider', 'metadata', 'vars', 'value', 'config'])(
+        'keeps assert arrays inside generic %s payloads as data',
+        (key) => {
+          vi.mocked(fs.readFileSync).mockReturnValue('script contents');
+          const payload = { assert: [{ type: 'javascript', script: 'file://snippet.js' }] };
+
+          expect(maybeLoadConfigFromExternalFile({ [key]: payload })).toEqual({
+            [key]: { assert: [{ type: 'javascript', script: 'script contents' }] },
+          });
+        },
+      );
+
+      it('treats a top-level generic assert array as data', () => {
+        vi.mocked(fs.readFileSync).mockReturnValue('script contents');
+
+        expect(
+          maybeLoadConfigFromExternalFile({
+            assert: [{ type: 'javascript', script: 'file://snippet.js' }],
+          }),
+        ).toEqual({ assert: [{ type: 'javascript', script: 'script contents' }] });
+      });
+
+      it('does not pass test context into provider, metadata, or non-script value data', () => {
+        vi.mocked(fs.readFileSync).mockReturnValue('script contents');
+        const payload = { assert: [{ type: 'javascript', script: 'file://snippet.js' }] };
+        const loaded = { assert: [{ type: 'javascript', script: 'script contents' }] };
+
+        expect(
+          maybeLoadConfigFromExternalFile(
+            {
+              options: { provider: { config: { body: payload } } },
+              metadata: payload,
+              assert: [{ type: 'is-json', value: payload }],
+            },
+            'test',
+          ),
+        ).toEqual({
+          options: { provider: { config: { body: loaded } } },
+          metadata: loaded,
+          assert: [{ type: 'is-json', value: loaded }],
+        });
+      });
+
+      it('keeps test vars as data without reclassifying assert-shaped values', () => {
+        const vars = { assert: [{ type: 'javascript', script: 'file://snippet.js' }] };
+
+        expect(maybeLoadConfigFromExternalFile({ vars }, 'test')).toEqual({ vars });
+        expect(fs.readFileSync).not.toHaveBeenCalled();
+      });
+
       it('should preserve Python assertion file references', () => {
         const config = {
           assert: [
@@ -888,7 +990,7 @@ describe('file utilities', () => {
             },
           ],
         };
-        const result = maybeLoadConfigFromExternalFile(config);
+        const result = maybeLoadConfigFromExternalFile(config, 'test');
         expect(result.assert[0].value).toBe('file://good_assertion.py');
         expect(fs.readFileSync).not.toHaveBeenCalled();
       });
@@ -902,8 +1004,23 @@ describe('file utilities', () => {
             },
           ],
         };
-        const result = maybeLoadConfigFromExternalFile(config);
+        const result = maybeLoadConfigFromExternalFile(config, 'test');
         expect(result.assert[0].value).toBe('file://assertion.js:checkResult');
+        expect(fs.readFileSync).not.toHaveBeenCalled();
+      });
+
+      it.each([
+        ['javascript', 'file://assertion.js:checkResult'],
+        ['not-python', 'file://assertion.py:check_result'],
+        ['ruby', 'file://assertion.rb:Checks::check_result'],
+      ])('should preserve %s script fields', (type, script) => {
+        const config = {
+          assert: [{ type, script, value: 'call-site value' }],
+        };
+
+        const result = maybeLoadConfigFromExternalFile(config, 'test');
+
+        expect(result.assert[0].script).toBe(script);
         expect(fs.readFileSync).not.toHaveBeenCalled();
       });
 
@@ -912,7 +1029,7 @@ describe('file utilities', () => {
         const config = {
           util: 'file://helper.py',
         };
-        const result = maybeLoadConfigFromExternalFile(config);
+        const result = maybeLoadConfigFromExternalFile(config, 'test');
         expect(result.util).toBe('def utility(): pass');
         expect(fs.readFileSync).toHaveBeenCalled();
       });
@@ -930,7 +1047,7 @@ describe('file utilities', () => {
             },
           ],
         };
-        const result = maybeLoadConfigFromExternalFile(config);
+        const result = { tests: maybeLoadConfigFromExternalFile(config.tests, 'test') };
         expect(result.tests[0].assert[0].value).toBe('file://nested_assertion.py');
         expect(fs.readFileSync).not.toHaveBeenCalled();
       });
@@ -953,7 +1070,7 @@ describe('file utilities', () => {
             },
           ],
         };
-        const result = maybeLoadConfigFromExternalFile(config);
+        const result = maybeLoadConfigFromExternalFile(config, 'test');
         expect(result.assert[0].value).toBe('file://python_assert.py');
         expect(result.assert[1].value).toBe('some data'); // contains assertion loads file
         expect(result.assert[2].value).toBe('file://js_assert.js');
@@ -974,7 +1091,7 @@ describe('file utilities', () => {
             },
           ],
         };
-        const result = maybeLoadConfigFromExternalFile(config);
+        const result = maybeLoadConfigFromExternalFile(config, 'test');
         expect(result.vars.text).toBe('file://./resources/tests/*.json');
         expect(fs.readFileSync).not.toHaveBeenCalled();
       });
@@ -992,7 +1109,7 @@ describe('file utilities', () => {
             },
           ],
         };
-        const result = maybeLoadConfigFromExternalFile(config);
+        const result = { tests: maybeLoadConfigFromExternalFile(config.tests, 'test') };
         expect(result.tests[0].vars.input).toBe('file://inputs/*.txt');
         expect(result.tests[0].vars.data).toBe('file://data/test-*.json');
         expect(result.tests[0].vars.patterns).toBe('file://data/test-{a,b}.yaml');
@@ -1006,7 +1123,7 @@ describe('file utilities', () => {
             content: 'file://content.txt', // No glob pattern - still preserved
           },
         };
-        const result = maybeLoadConfigFromExternalFile(config);
+        const result = maybeLoadConfigFromExternalFile(config, 'test');
         // File references in vars should be preserved for runtime loading
         // JS/Python files will be executed by renderPrompt in evaluatorHelpers.ts
         expect(result.vars.content).toBe('file://content.txt');
@@ -1019,7 +1136,7 @@ describe('file utilities', () => {
             dynamicContent: 'file://generateContent.js',
           },
         };
-        const result = maybeLoadConfigFromExternalFile(config);
+        const result = maybeLoadConfigFromExternalFile(config, 'test');
         expect(result.vars.dynamicContent).toBe('file://generateContent.js');
         expect(fs.readFileSync).not.toHaveBeenCalled();
       });
@@ -1030,7 +1147,7 @@ describe('file utilities', () => {
             dynamicContent: 'file://generateContent.py',
           },
         };
-        const result = maybeLoadConfigFromExternalFile(config);
+        const result = maybeLoadConfigFromExternalFile(config, 'test');
         expect(result.vars.dynamicContent).toBe('file://generateContent.py');
         expect(fs.readFileSync).not.toHaveBeenCalled();
       });
@@ -1053,7 +1170,7 @@ describe('file utilities', () => {
           },
         ];
 
-        const result = maybeLoadConfigFromExternalFile(testCasesFromExternalFile);
+        const result = maybeLoadConfigFromExternalFile(testCasesFromExternalFile, 'test');
 
         // Both Python and JS file references should be preserved for runtime execution
         expect(result[0].vars.context).toBe('file://load_context.py');
@@ -1079,7 +1196,7 @@ describe('file utilities', () => {
           ],
         };
 
-        const result = maybeLoadConfigFromExternalFile(config);
+        const result = { tests: maybeLoadConfigFromExternalFile(config.tests, 'test') };
 
         expect(result.tests[0].vars.content).toBe('file://content.txt');
         expect(result.tests[0].vars.data).toBe('file://data.json');
