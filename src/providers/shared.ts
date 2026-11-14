@@ -178,8 +178,20 @@ export function calculateCost(
   }
 
   const model = models.find((m) => m.id === modelName);
+
+  // Manual rates can price a model before it appears in the built-in catalog.
   if (!model || !model.cost) {
-    return undefined;
+    const manualInputCost = config.inputCost ?? config.cost;
+    const manualOutputCost = config.outputCost ?? config.cost;
+    // Like the OpenAI billing fallback: a side with no tokens needs no rate.
+    if (
+      (manualInputCost == null && manualOutputCost == null) ||
+      (promptTokens > 0 && manualInputCost == null) ||
+      (completionTokens > 0 && manualOutputCost == null)
+    ) {
+      return undefined;
+    }
+    return (manualInputCost ?? 0) * promptTokens + (manualOutputCost ?? 0) * completionTokens;
   }
 
   const longContextCost =

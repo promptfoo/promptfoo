@@ -732,8 +732,38 @@ export function calculateGoogleCost(
     isVertexMode,
     usesNonGlobalVertexEndpoint,
   );
+  const audioInputTokens = clampCachedTokens(audioPromptTokens, promptTokens);
+  const imageInputTokens = clampCachedTokens(
+    imagePromptTokens,
+    Math.max(promptTokens - audioInputTokens, 0),
+  );
+  const textInputTokens = Math.max(promptTokens - audioInputTokens - imageInputTokens, 0);
+  const audioOutputTokens = clampCachedTokens(audioCompletionTokens, completionTokens);
+  const videoOutputTokens = clampCachedTokens(
+    videoCompletionTokens,
+    Math.max(completionTokens - audioOutputTokens, 0),
+  );
+
   if (!baseModelCost) {
-    return undefined;
+    // Cached Gemini tokens are already included in the prompt count. Explicit
+    // rates apply to cached and fresh tokens of the same modality alike.
+    const input = config.inputCost ?? config.cost;
+    const output = config.outputCost ?? config.cost;
+    const charges: [number, number | undefined][] = [
+      [textInputTokens, input],
+      [audioInputTokens, config.audioInputCost ?? config.audioCost ?? input],
+      [imageInputTokens, config.imageInputCost ?? input],
+      [completionTokens - audioOutputTokens - videoOutputTokens, output],
+      [audioOutputTokens, config.audioOutputCost ?? config.audioCost ?? output],
+      [videoOutputTokens, config.videoOutputCost ?? output],
+    ];
+    if (
+      charges.every(([, rate]) => rate == null) ||
+      charges.some(([tokens, rate]) => tokens > 0 && rate == null)
+    ) {
+      return undefined;
+    }
+    return charges.reduce((total, [tokens, rate]) => total + tokens * (rate ?? 0), 0);
   }
 
   const vertexRegionalMultiplier =
@@ -777,12 +807,6 @@ export function calculateGoogleCost(
   const multiplier = tierCosts.serviceTierMultiplier;
   const inputCost = config.inputCost ?? config.cost ?? catalogInputCost * multiplier;
   const outputCost = config.outputCost ?? config.cost ?? catalogOutputCost * multiplier;
-  const audioInputTokens = clampCachedTokens(audioPromptTokens, promptTokens);
-  const imageInputTokens = clampCachedTokens(
-    imagePromptTokens,
-    Math.max(promptTokens - audioInputTokens, 0),
-  );
-  const textInputTokens = Math.max(promptTokens - audioInputTokens - imageInputTokens, 0);
   const cachedTokens = clampCachedTokens(cachedPromptTokens, promptTokens);
   let cachedAudioTokens = clampCachedTokens(
     cachedAudioPromptTokens,
@@ -803,11 +827,6 @@ export function calculateGoogleCost(
   const cachedTextTokens = Math.min(
     Math.max(cachedTokens - cachedAudioTokens - cachedImageTokens, 0),
     textInputTokens,
-  );
-  const audioOutputTokens = clampCachedTokens(audioCompletionTokens, completionTokens);
-  const videoOutputTokens = clampCachedTokens(
-    videoCompletionTokens,
-    Math.max(completionTokens - audioOutputTokens, 0),
   );
   const audioInputCost =
     config.audioInputCost ??
