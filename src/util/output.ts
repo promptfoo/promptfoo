@@ -29,6 +29,7 @@ import { streamEvalCsv } from './eval/evalTableUtils';
 import invariant from './invariant';
 import { writeJunitXmlOutput } from './junit';
 import { getOutputFileFormat, SUPPORTED_OUTPUT_FILE_FORMATS } from './outputFormats';
+import { isMissingPackageImportError, optionalPackageInstallHint } from './packageImportErrors';
 import { sanitizeConfigForOutput, sanitizeRuntimeOptions } from './sanitizer';
 import { getNunjucksEngine } from './templates';
 
@@ -532,6 +533,111 @@ async function writeJsonOutputSafely(
   }
 }
 
+async function renderEvalHtmlReport(evalRecord: Eval): Promise<string> {
+  const table = await evalRecord.getTable();
+  invariant(table, 'Table is required');
+  const stripFlags = getStripFlags(evalRecord.config.env);
+  const summary = await createOutputSummary(evalRecord, stripFlags);
+  const redactedConfig = sanitizeConfigForOutput(evalRecord.config, stripFlags);
+  const metadata = createOutputMetadata(evalRecord);
+  const template = await fsPromises.readFile(
+    path.join(getDirectory(), 'tableOutput.html'),
+    'utf-8',
+  );
+  const htmlTable = [
+    [
+      ...table.head.vars,
+      ...table.head.prompts.map((prompt) => `[${prompt.provider}] ${prompt.label}`),
+    ],
+    ...table.body.map((row, rowIndex) => [
+      ...row.vars.map((value, variableIndex) => ({
+        kind: 'variable',
+        name: table.head.vars[variableIndex],
+        text: value,
+      })),
+      ...row.outputs.map((output, outputIndex) => ({
+        kind: 'output',
+        detailId: `result-detail-${rowIndex}-${outputIndex}`,
+        detailTitle: `Result detail - row ${rowIndex + 1}, prompt ${outputIndex + 1}`,
+        description: row.description || row.test?.description || '',
+        ...outputToHtmlReportCell(output),
+      })),
+    ]),
+  ];
+  const reportOutputs = table.body.flatMap((row) => row.outputs);
+  const totalResults = reportOutputs.length;
+  const successes = reportOutputs.filter((output) => output.pass).length;
+  const errors = reportOutputs.filter(
+    (output) => !output.pass && output.failureReason === ResultFailureReason.ERROR,
+  ).length;
+  const failures = totalResults - successes - errors;
+  const passRate = totalResults > 0 ? (successes / totalResults) * 100 : 0;
+  return getNunjucksEngine().renderString(template, {
+    config: redactedConfig,
+    table: htmlTable,
+    results: summary,
+    metadata,
+    report: {
+      totalResults,
+      totalRows: table.body.length,
+      promptCount: table.head.prompts.length,
+      variableCount: table.head.vars.length,
+      successes,
+      failures,
+      errors,
+      passRateDisplay: `${passRate.toFixed(1)}%`,
+    },
+  });
+}
+
+// Measured with real Chromium: about 29 MB of report HTML took over four minutes and produced
+// a 584 MB PDF. Warn well before that, while the export is still likely to be shareable.
+const PDF_LARGE_HTML_WARNING_BYTES = 10 * 1024 * 1024;
+
+async function writePdfOutput(outputPath: string, evalRecord: Eval): Promise<void> {
+  let chromium;
+  try {
+    ({ chromium } = await import('playwright'));
+  } catch (error) {
+    if (!isMissingPackageImportError(error, 'playwright')) {
+      throw error;
+    }
+    const hint = optionalPackageInstallHint('npm install promptfoo "playwright@^1.63.0"');
+    throw new Error(`PDF output requires Playwright. ${hint}`);
+  }
+  const htmlOutput = await renderEvalHtmlReport(evalRecord);
+  const htmlBytes = Buffer.byteLength(htmlOutput);
+  if (htmlBytes > PDF_LARGE_HTML_WARNING_BYTES) {
+    logger.warn(
+      `PDF report is ${(htmlBytes / (1024 * 1024)).toFixed(1)} MB of HTML. Rendering may take several minutes, produce a very large file, or fail. Consider exporting HTML instead: --output report.html`,
+    );
+  }
+  let browser;
+  try {
+    browser = await chromium.launch({ headless: true });
+  } catch (error) {
+    throw new Error(
+      `Failed to launch Chromium for PDF output: ${error instanceof Error ? error.message : String(error)}\nInstall matching Chromium with npx playwright install chromium in your project, or playwright install chromium for a global installation.`,
+    );
+  }
+  try {
+    const page = await browser.newPage();
+    await page.setContent(htmlOutput, { waitUntil: 'networkidle' });
+    await page.pdf({
+      path: outputPath,
+      format: 'A4',
+      printBackground: true,
+      margin: { top: '12mm', bottom: '12mm', left: '10mm', right: '10mm' },
+    });
+  } catch (error) {
+    throw new Error(
+      `Failed to render PDF output from ${htmlOutput.length} bytes of HTML: ${error instanceof Error ? error.message : String(error)}\nVery large reports can exceed Chromium's rendering limits. Try exporting HTML instead: --output report.html`,
+    );
+  } finally {
+    await browser.close();
+  }
+}
+
 export async function writeOutput(
   outputPath: string,
   evalRecord: Eval,
@@ -589,60 +695,9 @@ export async function writeOutput(
       yaml.dump(await createOutputData(evalRecord, shareableUrl, options)),
     );
   } else if (outputExtension === 'html') {
-    const table = await evalRecord.getTable();
-    const stripFlags = getStripFlags(evalRecord.config.env);
-    const summary = await createOutputSummary(evalRecord, stripFlags);
-    const redactedConfig = sanitizeConfigForOutput(evalRecord.config, stripFlags);
-    const metadata = createOutputMetadata(evalRecord);
-    const template = await fsPromises.readFile(
-      path.join(getDirectory(), 'tableOutput.html'),
-      'utf-8',
-    );
-    const htmlTable = [
-      [
-        ...table.head.vars,
-        ...table.head.prompts.map((prompt) => `[${prompt.provider}] ${prompt.label}`),
-      ],
-      ...table.body.map((row, rowIndex) => [
-        ...row.vars.map((value, variableIndex) => ({
-          kind: 'variable',
-          name: table.head.vars[variableIndex],
-          text: value,
-        })),
-        ...row.outputs.map((output, outputIndex) => ({
-          kind: 'output',
-          detailId: `result-detail-${rowIndex}-${outputIndex}`,
-          detailTitle: `Result detail - row ${rowIndex + 1}, prompt ${outputIndex + 1}`,
-          description: row.description || row.test?.description || '',
-          ...outputToHtmlReportCell(output),
-        })),
-      ]),
-    ];
-    const reportOutputs = table.body.flatMap((row) => row.outputs);
-    const totalResults = reportOutputs.length;
-    const successes = reportOutputs.filter((output) => output.pass).length;
-    const errors = reportOutputs.filter(
-      (output) => !output.pass && output.failureReason === ResultFailureReason.ERROR,
-    ).length;
-    const failures = totalResults - successes - errors;
-    const passRate = totalResults > 0 ? (successes / totalResults) * 100 : 0;
-    const htmlOutput = getNunjucksEngine().renderString(template, {
-      config: redactedConfig,
-      table: htmlTable,
-      results: summary,
-      metadata,
-      report: {
-        totalResults,
-        totalRows: table.body.length,
-        promptCount: table.head.prompts.length,
-        variableCount: table.head.vars.length,
-        successes,
-        failures,
-        errors,
-        passRateDisplay: `${passRate.toFixed(1)}%`,
-      },
-    });
-    await fsPromises.writeFile(outputPath, htmlOutput);
+    await fsPromises.writeFile(outputPath, await renderEvalHtmlReport(evalRecord));
+  } else if (outputExtension === 'pdf') {
+    await writePdfOutput(outputPath, evalRecord);
   } else if (outputExtension === 'jsonl') {
     const jsonlOutputPath = await resolveJsonlOutputPath(outputPath);
     if (jsonlOutputPath !== outputPath) {
@@ -755,6 +810,9 @@ export async function writeMultipleOutputs(
   );
   const errors = results.flatMap((result) => (result.status === 'rejected' ? [result.reason] : []));
   if (errors.length > 0) {
-    throw Object.assign(new Error('One or more output writes failed'), { errors });
+    const details = errors.map((error) => (error instanceof Error ? error.message : String(error)));
+    throw Object.assign(new Error(`One or more output writes failed:\n${details.join('\n')}`), {
+      errors,
+    });
   }
 }
