@@ -573,6 +573,24 @@ describe('runAssertions', () => {
     }
   });
 
+  it.each([
+    ['https://example.test/v1?api_key=xatu-left xatu-right', '[REDACTED]'],
+    ['https://xatu-left xatu-right@example.test/v1', '[REDACTED]'],
+    ['judge(https://example.test/v1(model)?api_key=xatu-left xatu-right)', 'judge([REDACTED])'],
+    ['judge (/v1/model?api_key=xatu-left xatu-right)', 'judge ([REDACTED])'],
+  ])('withholds ambiguous URL tails from generated xfail annotations', async (label, display) => {
+    const result = await runAssertions({
+      provider: createMockProvider({ label }),
+      test: { assert: [{ type: 'equals', value: 'different', xfail: label }] },
+      providerResponse: { output: 'sample' },
+    });
+    expect(result.pass).toBe(true);
+    const component = result.componentResults?.[0];
+    expect(component?.metadata?.xfail).toMatchObject({ provider: display, pattern: display });
+    expect(component?.reason).toContain(`provider "${display}"`);
+    expect(component?.reason).not.toMatch(/xatu-(left|right)/);
+  });
+
   it.each(['', ' (https://example.test/v1)'])(
     'preserves long provider labels with optional trailing URLs',
     async (suffix) => {

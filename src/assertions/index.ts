@@ -1,4 +1,3 @@
-import fs from 'fs/promises';
 import path from 'path';
 
 import async from 'async';
@@ -34,17 +33,16 @@ import {
   type AtomicTestCase,
   type CallApiContextParams,
   type GradingResult,
+  isApiProvider,
   type TraceData,
   type VarValue,
 } from '../types/index';
-import { isApiProvider } from '../types/providers';
 import { isJavascriptFile } from '../util/fileExtensions';
 import invariant from '../util/invariant';
 import { REDACTED, sanitizeUrlForLogging } from '../util/sanitizer';
 import { getNunjucksEngine } from '../util/templates';
 import { sleep } from '../util/time';
 import { transform } from '../util/transform';
-import { loadYaml } from '../util/yamlLoad';
 import { handleAgentRubric } from './agentRubric';
 import { handleAnswerRelevance } from './answerRelevance';
 import { AssertionsResult } from './assertionsResult';
@@ -377,26 +375,33 @@ function getProviderIdentifiers(provider?: ApiProvider): string[] {
 }
 
 function redactXFailIdentifier(identifier: string): string {
-  return identifier.replace(/\S+/g, (token) => {
-    const separator = token.indexOf('://');
-    let start = token.startsWith('(') ? 1 : 0;
-    if (separator >= 0) {
-      // Locate the scheme from its separator once, even for long labels.
-      start = separator;
-      while (start > 0 && /[a-z0-9+.-]/i.test(token[start - 1])) {
-        start--;
-      }
-      if (!/[a-z]/i.test(token[start]) || token.includes('://', separator + 3)) {
-        return REDACTED;
-      }
-    } else if (token[start] !== '/') {
-      return token;
-    }
+  const marker = /:\/\/|(?:^|[\s(])\//.exec(identifier);
+  if (!marker) {
+    return identifier;
+  }
 
-    const parenthesized = start > 0 && token[start - 1] === '(' && token.endsWith(')');
-    const url = token.slice(start, parenthesized ? -1 : undefined);
-    return token.slice(0, start) + sanitizeUrlForLogging(url) + (parenthesized ? ')' : '');
-  });
+  let start = marker.index;
+  if (marker[0] === '://') {
+    // Find the scheme from its separator once, even after a long label.
+    while (start > 0 && /[a-z0-9+.-]/i.test(identifier[start - 1])) {
+      start--;
+    }
+    if (!/[a-z]/i.test(identifier[start])) {
+      return REDACTED;
+    }
+  } else {
+    start += marker[0].length - 1;
+  }
+
+  const wrapped = identifier[start - 1] === '(' && identifier.endsWith(')');
+  const url = identifier.slice(start, wrapped ? -1 : undefined);
+  // Whitespace can be part of a credential. With no reliable boundary between
+  // the URL and more label text, withhold the entire ambiguous suffix.
+  const displayUrl =
+    /\s/.test(url) || identifier.includes('://', marker.index + marker[0].length)
+      ? REDACTED
+      : sanitizeUrlForLogging(url);
+  return identifier.slice(0, start) + displayUrl + (wrapped ? ')' : '');
 }
 
 function getProviderDisplayName(provider?: ApiProvider): string {
@@ -1139,17 +1144,7 @@ export async function runCompareAssertion(
   }));
 }
 
-export async function readAssertions(filePath: string): Promise<Assertion[]> {
-  try {
-    const assertions = loadYaml(await fs.readFile(filePath, 'utf-8')) as Assertion[];
-    if (!Array.isArray(assertions) || assertions[0]?.type === undefined) {
-      throw new Error('Assertions file must be an array of assertion objects');
-    }
-    return assertions;
-  } catch (err) {
-    throw new Error(`Failed to read assertions from ${filePath}:\n${err}`);
-  }
-}
+export { readAssertions } from './utils';
 
 // These exports are used by the node.js package (index.ts)
 export default {
