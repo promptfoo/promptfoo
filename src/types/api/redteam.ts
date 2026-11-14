@@ -1,5 +1,9 @@
 import { z } from 'zod';
-import { ALL_PLUGINS, ALL_STRATEGIES } from '../../redteam/constants';
+import {
+  ALL_PLUGINS,
+  ALL_STRATEGIES,
+  findUnicodeNormalizationConfigIssues,
+} from '../../redteam/constants';
 import {
   ConversationMessageSchema,
   PluginConfigSchema,
@@ -37,6 +41,22 @@ const PreviewGenerationProviderSchema = z.preprocess(
   z.union([z.string().min(1), JsonProviderOptionsWithIdSchema]).optional(),
 );
 
+// The Unicode form check lives on the strategy sub-schema rather than the request
+// object so the request stays a plain ZodObject that `.extend()` still accepts
+// (see src/openapi/server.ts).
+const TestCaseGenerationStrategySchema = z
+  .object({
+    id: z.string().refine((val) => (ALL_STRATEGIES as string[]).includes(val), {
+      message: `Invalid strategy ID. Must be one of: ${ALL_STRATEGIES.join(', ')}`,
+    }) as unknown as z.ZodType<Strategy>,
+    config: StrategyConfigSchema.prefault({}),
+  })
+  .superRefine(({ id, config }, ctx) => {
+    for (const issue of findUnicodeNormalizationConfigIssues(id, config)) {
+      ctx.addIssue({ code: 'custom', ...issue });
+    }
+  });
+
 export const TestCaseGenerationSchema = z.object({
   plugin: z.object({
     id: z.string().refine((val) => ALL_PLUGINS.includes(val as Plugin), {
@@ -44,12 +64,7 @@ export const TestCaseGenerationSchema = z.object({
     }) as unknown as z.ZodType<Plugin>,
     config: PluginConfigSchema.catchall(z.unknown()).prefault({}),
   }),
-  strategy: z.object({
-    id: z.string().refine((val) => (ALL_STRATEGIES as string[]).includes(val), {
-      message: `Invalid strategy ID. Must be one of: ${ALL_STRATEGIES.join(', ')}`,
-    }) as unknown as z.ZodType<Strategy>,
-    config: StrategyConfigSchema.prefault({}),
-  }),
+  strategy: TestCaseGenerationStrategySchema,
   config: z.object({
     applicationDefinition: z.object({
       purpose: z.string().nullable().optional(),
