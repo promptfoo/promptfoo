@@ -388,6 +388,7 @@ print(json.dumps(result))
     expect(evaluateSkills('Full-Stack', ['Python\u200bista', 'Django', 'React'])).toBe(false);
     expect(evaluateSkills('Full-Stack', ['Python', 'Django', 'React\u200dNative'])).toBe(false);
     expect(evaluateSkills('Full-Stack', ['Python', 'Django', 'React'])).toBe(true);
+    expect(evaluateSkills('Full-Stack', ['Python\n', '\tDjango', 'React'])).toBe(true);
     expect(evaluateSkills('Data Scientist', ['Python', 'AWS'])).toBe(false);
     expect(evaluateSkills('Data Scientist', ['Python', 'Machine Learning'])).toBe(false);
     expect(evaluateSkills('Data Scientist', ['Machine Learning', 'AWS'])).toBe(false);

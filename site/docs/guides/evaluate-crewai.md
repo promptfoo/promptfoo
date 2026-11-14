@@ -452,7 +452,7 @@ tests:
           import unicodedata
 
           def is_token_character(character):
-              if not character:
+              if not character or character.isspace():
                   return False
               category = unicodedata.category(character)
               return character.isalnum() or category[0] in {'M', 'C'} or category == 'Pc'
