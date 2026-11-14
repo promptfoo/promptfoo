@@ -77,6 +77,8 @@ tests:
 ```
 
 :::tip
+Replicate moderation reports a grading error for contradictory verdicts or unsupported hazard codes. A category filter and the `not-moderation` assertion both preserve that error.
+
 LlamaGuard 4 is the default moderation provider on Replicate, featuring enhanced capabilities and an additional category (S14: Code Interpreter Abuse). You can explicitly specify it:
 
 ```yaml
