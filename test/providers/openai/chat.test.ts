@@ -136,6 +136,36 @@ const createMockReasoningResponse = () =>
     usage: { total_tokens: 20, prompt_tokens: 10, completion_tokens: 10 },
   });
 
+/**
+ * Minimal recording Span double. Captures the span name and every attribute the
+ * provider stamps, at creation time and afterwards, so tests can assert on what the
+ * span would actually export.
+ */
+function mockChatSpan() {
+  const attributes: Record<string, unknown> = {};
+  const state = { attributes, name: '' };
+  const getTracerSpy = vi.spyOn(trace, 'getTracer').mockReturnValue({
+    startActiveSpan: (
+      name: string,
+      options: { attributes?: Record<string, unknown> },
+      _context: unknown,
+      callback: any,
+    ) => {
+      state.name = name;
+      Object.assign(attributes, options.attributes);
+      return callback({
+        setAttribute: (key: string, value: unknown) => {
+          attributes[key] = value;
+        },
+        setStatus: vi.fn(),
+        recordException: vi.fn(),
+        end: vi.fn(),
+      });
+    },
+  } as any);
+  return { state, restore: () => getTracerSpy.mockRestore() };
+}
+
 describe('OpenAI Provider', () => {
   beforeEach(() => {
     vi.resetAllMocks();
@@ -489,6 +519,123 @@ describe('OpenAI Provider', () => {
       expect(result.output).toBeUndefined();
       expect(result.tokenUsage).toBeUndefined();
       expect(result.metadata?.http).toEqual({ status: 0, statusText: 'Error', headers: {} });
+    });
+
+    it('records the effective wire sampling parameters, not the configured ones', async () => {
+      const span = mockChatSpan();
+      mockFetchWithCache.mockResolvedValue({
+        data: {
+          id: 'chatcmpl-abc123',
+          model: 'gpt-4o-mini-2024-07-18',
+          choices: [{ message: { content: 'Test output' }, finish_reason: 'stop' }],
+          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      try {
+        const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
+        await provider.callApi('Test prompt');
+
+        // The provider never configured max_tokens or temperature, but getOpenAiBody
+        // fills in the OPENAI_MAX_TOKENS / OPENAI_TEMPERATURE defaults before sending.
+        const body = JSON.parse(mockFetchWithCache.mock.calls[0][1]?.body as string);
+        expect(body.max_tokens).toBe(1024);
+        expect(body.temperature).toBe(0);
+        expect(span.state.attributes['gen_ai.request.max_tokens']).toBe(1024);
+        expect(span.state.attributes['gen_ai.request.temperature']).toBe(0);
+      } finally {
+        span.restore();
+      }
+    });
+
+    it('omits sampling parameters the wire body drops for reasoning models', async () => {
+      const span = mockChatSpan();
+      mockFetchWithCache.mockResolvedValue({
+        data: {
+          choices: [{ message: { content: 'Test output' }, finish_reason: 'stop' }],
+          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      try {
+        // GPT-5 rejects max_tokens and temperature, so getOpenAiBody strips both even
+        // though they are configured. The span must not claim they were sent.
+        const provider = new OpenAiChatCompletionProvider('gpt-5', {
+          config: { max_tokens: 500, temperature: 0.9 },
+        });
+        await provider.callApi('Test prompt');
+
+        const body = JSON.parse(mockFetchWithCache.mock.calls[0][1]?.body as string);
+        expect(body).not.toHaveProperty('max_tokens');
+        expect(body).not.toHaveProperty('temperature');
+        expect(span.state.attributes).not.toHaveProperty('gen_ai.request.max_tokens');
+        expect(span.state.attributes).not.toHaveProperty('gen_ai.request.temperature');
+      } finally {
+        span.restore();
+      }
+    });
+
+    it('records the model actually sent when passthrough overrides it', async () => {
+      const span = mockChatSpan();
+      mockFetchWithCache.mockResolvedValue({
+        data: {
+          choices: [{ message: { content: 'Test output' }, finish_reason: 'stop' }],
+          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      try {
+        const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
+          config: { passthrough: { model: 'gpt-4o' } },
+        });
+        await provider.callApi('Test prompt');
+
+        const body = JSON.parse(mockFetchWithCache.mock.calls[0][1]?.body as string);
+        expect(body.model).toBe('gpt-4o');
+        expect(span.state.attributes['gen_ai.request.model']).toBe('gpt-4o');
+        expect(span.state.name).toBe('chat gpt-4o');
+      } finally {
+        span.restore();
+      }
+    });
+
+    it('records the response id and served model returned by the API', async () => {
+      const span = mockChatSpan();
+      mockFetchWithCache.mockResolvedValue({
+        data: {
+          id: 'chatcmpl-abc123',
+          // Aliases resolve to a dated snapshot server-side, so the served model
+          // differs from the requested one.
+          model: 'gpt-4o-mini-2024-07-18',
+          choices: [{ message: { content: 'Test output' }, finish_reason: 'stop' }],
+          usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      try {
+        const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
+        const result = await provider.callApi('Test prompt');
+
+        expect(result.metadata?.responseId).toBe('chatcmpl-abc123');
+        expect(result.metadata?.model).toBe('gpt-4o-mini-2024-07-18');
+        expect(span.state.attributes['gen_ai.response.id']).toBe('chatcmpl-abc123');
+        expect(span.state.attributes['gen_ai.response.model']).toBe('gpt-4o-mini-2024-07-18');
+        expect(span.state.attributes['gen_ai.request.model']).toBe('gpt-4o-mini');
+      } finally {
+        span.restore();
+      }
     });
 
     it('should record GPT-5.6 cache writes in the chat span', async () => {

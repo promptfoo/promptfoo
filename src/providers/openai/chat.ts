@@ -740,19 +740,41 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       : {};
   }
 
+  private getChatResponseMetadata(data: unknown): Record<string, unknown> {
+    const raw = data && typeof data === 'object' ? (data as Record<string, unknown>) : {};
+    return {
+      ...(typeof raw.id === 'string' && raw.id ? { responseId: raw.id } : {}),
+      ...(typeof raw.model === 'string' && raw.model ? { model: raw.model } : {}),
+      ...this.getProviderResponseMetadata(data),
+    };
+  }
+
   protected getChatTracingRequest(
     body: Record<string, unknown>,
-  ): Pick<GenAISpanContext, 'maxTokens' | 'temperature' | 'topP' | 'stopSequences'> {
-    const asNumber = (value: unknown) => (typeof value === 'number' ? value : undefined);
+  ): Pick<
+    GenAISpanContext,
+    | 'model'
+    | 'maxTokens'
+    | 'temperature'
+    | 'topP'
+    | 'stopSequences'
+    | 'frequencyPenalty'
+    | 'presencePenalty'
+  > {
+    const asNumber = (value: unknown) =>
+      typeof value === 'number' && Number.isFinite(value) ? value : undefined;
     return {
+      model: typeof body.model === 'string' && body.model ? body.model : this.modelName,
       maxTokens: asNumber(body.max_completion_tokens) ?? asNumber(body.max_tokens),
       temperature: asNumber(body.temperature),
       topP: asNumber(body.top_p),
       stopSequences: Array.isArray(body.stop)
-        ? body.stop
+        ? body.stop.filter((stop): stop is string => typeof stop === 'string')
         : typeof body.stop === 'string'
           ? [body.stop]
           : undefined,
+      frequencyPenalty: asNumber(body.frequency_penalty),
+      presencePenalty: asNumber(body.presence_penalty),
     };
   }
 
@@ -917,7 +939,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         ...(finishReason && { finishReason }),
         guardrails: { flagged: true },
         metadata: {
-          ...this.getProviderResponseMetadata(data),
+          ...this.getChatResponseMetadata(data),
           http: { status, statusText, headers: headers ?? {} },
         },
       };
@@ -1029,7 +1051,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           },
           raw: data,
           metadata: {
-            ...this.getProviderResponseMetadata(data),
+            ...this.getChatResponseMetadata(data),
             ...(policy.code ? { providerPolicy: { code: policy.code } } : {}),
             http: { status, statusText, headers: responseHeaders ?? {} },
           },
@@ -1053,7 +1075,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
           ...(cost === undefined ? {} : { cost }),
           raw: data,
           metadata: {
-            ...this.getProviderResponseMetadata(data),
+            ...this.getChatResponseMetadata(data),
             ...(rateLimitKind ? { rateLimitKind } : {}),
             http: { status, statusText, headers: responseHeaders ?? {} },
           },
@@ -1085,7 +1107,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
               flaggedInput: true, // This error specifically indicates input was rejected
             },
             metadata: {
-              ...this.getProviderResponseMetadata(data),
+              ...this.getChatResponseMetadata(data),
               http: {
                 status,
                 statusText,
@@ -1183,7 +1205,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       const message = data.choices[0].message;
       const finishReason = normalizeFinishReason(data.choices[0].finish_reason);
       const cost = this.calculateResponseCost(data, config, cached);
-      const providerMetadata = this.getProviderResponseMetadata(data);
+      const providerMetadata = this.getChatResponseMetadata(data);
       completedModelAccounting = {
         tokenUsage: getTokenUsage(data, cached),
         cost,
