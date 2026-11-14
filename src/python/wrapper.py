@@ -14,8 +14,14 @@ def call_method(script_path, method_name, *args):
 
     print(f"Importing module {module_name} from {script_dir} ...")
 
+    # Preserve modules already imported by the wrapper, such as json.
+    while module_name in sys.modules:
+        module_name = f"_promptfoo_{module_name}"
+
     spec = importlib.util.spec_from_file_location(module_name, script_path)
     script_module = importlib.util.module_from_spec(spec)
+    # Register before execution so dataclasses, self-imports, and pickle can resolve it.
+    sys.modules[module_name] = script_module
     spec.loader.exec_module(script_module)
 
     if "." in method_name:
