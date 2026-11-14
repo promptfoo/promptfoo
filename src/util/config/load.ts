@@ -61,7 +61,6 @@ import { validateTestProviderReferences } from '../validateTestProviderReference
 import { loadYaml } from '../yamlLoad';
 import { DEFAULT_CONFIG_EXTENSIONS } from './extensions';
 
-
 const KNOWN_TOP_LEVEL_CONFIG_KEYS: ReadonlySet<string> = new Set([
   ...Object.keys(TestSuiteConfigSchema.shape),
   // Keys added by UnifiedConfigSchema.extend(...).
@@ -140,7 +139,7 @@ export function enforceUnknownConfigKeyDiagnosticsForConfig(
   );
   const { strictConfigEnabled } = resolveConfiguredEnvStrictness(
     commandLineOptions,
-    path.dirname(configPath),
+    config?.basePath ?? path.dirname(configPath),
     explicitEnvPath,
     config?.env,
   );

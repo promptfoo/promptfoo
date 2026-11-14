@@ -89,7 +89,7 @@ describe('optimize command', () => {
     );
   });
 
-  it('delegates config-defined env loading to the resolver', async () => {
+  it('loads the config-defined env before running the optimizer', async () => {
     vi.mocked(resolveConfigs).mockResolvedValue({
       config: {},
       testSuite: {
@@ -108,8 +108,12 @@ describe('optimize command', () => {
       defaultConfigPath: 'promptfooconfig.yaml',
     });
 
-    expect(setupEnv).toHaveBeenCalledTimes(1);
-    expect(setupEnv).toHaveBeenCalledWith(undefined);
+    expect(setupEnv).toHaveBeenCalledTimes(2);
+    expect(setupEnv).toHaveBeenNthCalledWith(1, undefined);
+    expect(setupEnv).toHaveBeenNthCalledWith(2, '.env.optimize');
+    expect(vi.mocked(setupEnv).mock.invocationCallOrder[1]).toBeLessThan(
+      vi.mocked(optimizePromptTestSuite).mock.invocationCallOrder[0],
+    );
     expect(resolveConfigs).toHaveBeenCalledWith(
       { config: ['promptfooconfig.yaml'], envPath: undefined },
       {},

@@ -38,6 +38,10 @@ export async function doOptimize(options: OptimizeOptions): Promise<void> {
     options.defaultConfig,
   );
 
+  if (!options.envPath?.length && resolved.commandLineOptions?.envPath) {
+    setupEnv(resolved.commandLineOptions.envPath);
+  }
+
   telemetry.record('command_used', {
     name: 'optimize - started',
     numPrompts: resolved.testSuite.prompts.length,
