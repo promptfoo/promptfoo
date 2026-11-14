@@ -23,6 +23,7 @@ import {
   type VarValue,
 } from './types/index';
 import { isAudioFile, isImageFile, isJavascriptFile, isVideoFile } from './util/fileExtensions';
+import { parseFileUrl } from './util/functions/loadFunction';
 import { renderVarsInObject, setLoadedFileMimeTypes } from './util/index';
 import invariant from './util/invariant';
 import { filterFiniteScores } from './util/numeric';
@@ -57,7 +58,7 @@ export function resolveVariables(
   varsResolvedFromSkipped?: Set<string>,
 ): Record<string, VarValue> {
   let resolved: boolean;
-  const regex = /\{\{\s*(\w+)\s*\}\}/; // Matches {{variableName}}, {{ variableName }}, etc.
+  const regex = /\{\{\s*(\w+)\s*\}\}/g; // Matches {{variableName}}, {{ variableName }}, etc.
 
   let iterations = 0;
   do {
@@ -71,20 +72,19 @@ export function resolveVariables(
         continue;
       }
       const value = variables[key] as string;
-      const match = regex.exec(value);
-      if (match) {
-        const [placeholder, varName] = match;
+      let replaced = false;
+      variables[key] = value.replace(regex, (placeholder, varName: string) => {
         if (variables[varName] === undefined) {
-          // Do nothing - final nunjucks render will fail if necessary.
-          // logger.warn(`Variable "${varName}" not found for substitution.`);
-        } else {
-          // A replacer function keeps `$&`, `$'` and `` $` `` in the value literal.
-          variables[key] = value.replace(placeholder, () => variables[varName] as string);
-          if (skipResolveVars?.includes(varName) || varsResolvedFromSkipped?.has(varName)) {
-            varsResolvedFromSkipped?.add(key);
-          }
-          resolved = false; // Indicate that we've made a replacement and should check again
+          return placeholder;
         }
+        replaced = true;
+        if (skipResolveVars?.includes(varName) || varsResolvedFromSkipped?.has(varName)) {
+          varsResolvedFromSkipped?.add(key);
+        }
+        return String(variables[varName]);
+      });
+      if (replaced) {
+        resolved = false;
       }
     }
     iterations++;
@@ -318,7 +318,14 @@ const runtimeFileVarNames = Symbol('runtimeFileVarNames');
 
 export function setRuntimeFileVarNames(vars: Record<string, VarValue>, names: string[]): void {
   if (names.length > 0) {
-    Object.defineProperty(vars, runtimeFileVarNames, { value: new Set(names), enumerable: true });
+    const previous = (vars as typeof vars & { [runtimeFileVarNames]?: ReadonlySet<string> })[
+      runtimeFileVarNames
+    ];
+    Object.defineProperty(vars, runtimeFileVarNames, {
+      value: new Set([...(previous ?? []), ...names]),
+      enumerable: true,
+      configurable: true,
+    });
   }
 }
 
@@ -379,7 +386,7 @@ export async function renderPrompt(
   async function resolveNestedFileRefs(value: unknown): Promise<unknown> {
     if (typeof value === 'string' && value.startsWith('file://')) {
       const basePath = cliState.basePath || '';
-      const parsedPath = normalizeFileUri(value);
+      const { filePath: parsedPath } = parseFileUrl(value);
       const filePath = path.resolve(process.cwd(), basePath, parsedPath);
       const fileExtension = filePath.split('.').pop()?.toLowerCase();
 
@@ -552,6 +559,9 @@ export async function renderPrompt(
   // Resolve variable mappings
   const varsResolvedFromSkipped = new Set<string>();
   resolveVariables(vars, skipVars, varsResolvedFromSkipped);
+  // Strategies spread the mutated vars and render again. An alias that now contains
+  // runtime text needs the same protection as the original register on that render.
+  setRuntimeFileVarNames(vars, [...varsResolvedFromSkipped]);
   // Third party integrations
   if (prompt.raw.startsWith('portkey://')) {
     const portKeyResult = await getPortkeyPrompt(prompt.raw.slice('portkey://'.length), vars);
