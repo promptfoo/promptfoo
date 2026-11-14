@@ -83,6 +83,8 @@ describe('normalizeFinishReason', () => {
     it('should pass through unknown reasons unchanged', () => {
       expect(normalizeFinishReason('unknown_reason')).toBe('unknown_reason');
       expect(normalizeFinishReason('custom_stop')).toBe('custom_stop');
+      expect(normalizeFinishReason('__proto__')).toBe('__proto__');
+      expect(normalizeFinishReason('constructor')).toBe('constructor');
     });
 
     it('should lowercase unknown reasons after normalization', () => {
