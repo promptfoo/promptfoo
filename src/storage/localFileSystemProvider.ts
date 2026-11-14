@@ -26,6 +26,7 @@ import type {
 
 const MEDIA_SUBDIR = 'media';
 const HASH_INDEX_FILE = 'hash-index.json';
+const LEGACY_MEDIA_KEY = /^(?:audio|image|video)\/[a-fA-F0-9]{12}\.[a-zA-Z0-9]+$/;
 
 /**
  * Local filesystem storage provider
@@ -254,7 +255,7 @@ export class LocalFileSystemProvider implements MediaStorageProvider {
 
   async findByHash(contentHash: string): Promise<string | null> {
     const key = this.hashIndex.get(contentHash);
-    if (typeof key === 'string' && !key.startsWith('blob/')) {
+    if (typeof key === 'string' && LEGACY_MEDIA_KEY.test(key)) {
       try {
         const filePath = await this.getFilePath(key);
         const file = await fsPromises.open(
