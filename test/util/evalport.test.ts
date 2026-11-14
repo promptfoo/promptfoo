@@ -42,6 +42,12 @@ function makeResult(overrides: Partial<EvaluateResult> = {}): EvaluateResult {
 
 describe('evalport interchange', () => {
   describe('promptfooTestsToEvalPortSuite', () => {
+    it('rejects empty suites', () => {
+      expect(() => promptfooTestsToEvalPortSuite([], { suiteId: 'empty' })).toThrow(
+        'EvalPort suites require at least one test case',
+      );
+    });
+
     it('flattens a single string var to input and preserves vars for round-trip', () => {
       const tests: TestCase[] = [
         {
@@ -116,7 +122,8 @@ describe('evalport interchange', () => {
       ];
       const suite = promptfooTestsToEvalPortSuite(tests, { suiteId: 's' });
       expect(suite.graders[0]?.type).toBe('contains');
-      expect(suite.graders[0]?.metadata).toMatchObject({
+      expect(suite.graders[0]).not.toHaveProperty('metadata');
+      expect(suite.graders[0]?.params).toMatchObject({
         promptfoo: { assertionType: 'not-contains', inverse: true },
       });
     });
@@ -312,7 +319,18 @@ describe('evalport interchange', () => {
 
     it('reuses suite grader IDs when the suite is supplied', () => {
       const suite = promptfooTestsToEvalPortSuite(
-        [{ vars: { q: 'a' }, assert: [{ type: 'equals', value: 'Paris' }] }],
+        [
+          {
+            vars: { q: 'a' },
+            assert: [
+              {
+                type: 'assert-set',
+                metric: 'geography',
+                assert: [{ type: 'equals', value: 'Paris' }],
+              },
+            ],
+          },
+        ],
         { suiteId: 's' },
       );
       const suiteGraderId = suite.graders[0]?.id;
@@ -606,32 +624,31 @@ describe('evalport interchange', () => {
         { id: 'g1', type: 'exact_match', params: {} },
         { id: 'g2', type: 'contains', params: { ignore_case: true } },
         { id: 'g3', type: 'contains', params: { substring: 'hi' } },
-        { id: 'g4', type: 'regex', params: {} },
+        { id: 'g4', type: 'regex', params: { pattern: '^hi', flags: '' } },
         { id: 'g5', type: 'semantic_similarity', params: {} },
         { id: 'g6', type: 'llm_judge', params: {} },
-        { id: 'g7', type: 'json_schema', params: {} },
+        { id: 'g7', type: 'json_schema', params: { schema: { type: 'object' } } },
         { id: 'g8', type: 'human', params: {} },
         { id: 'g9', type: 'code', params: { language: 'python', source: 'print(1)' } },
         { id: 'g10', type: 'code', params: { language: 'javascript', source: '1' } },
         { id: 'g11', type: 'code', params: { language: 'ruby', source: 'x' } },
         { id: 'g12', type: 'weird', params: { handler: 'weird' } },
+        { id: 'g13', type: 'json_schema', params: {} },
+        { id: 'g14', type: 'regex', params: { pattern: '^HI', flags: 'i' }, weight: 3 },
+        { id: 'g15', type: 'json_schema', params: { schema: {}, strict: true } },
       ]);
       const restored = evalPortSuiteToPromptfooTests(suite);
       expect(restored[0]?.assert).toEqual([
         { type: 'equals', value: '' },
         { type: 'icontains', value: '' },
         { type: 'contains', value: 'hi' },
-        { type: 'regex', value: '' },
+        { type: 'regex', value: '^hi' },
         { type: 'similar' },
         { type: 'llm-rubric', value: '' },
-        { type: 'is-json' },
+        { type: 'is-json', value: { type: 'object' } },
         { type: 'human' },
-        { type: 'python', value: 'print(1)' },
-        { type: 'javascript', value: '1' },
       ]);
-      expect(restored[0]?.metadata).toMatchObject({
-        evalportGraders: [{ id: 'g11' }, { id: 'g12' }],
-      });
+      expect(restored[0]?.metadata?.evalportGraders).toEqual(suite.graders.slice(8));
     });
 
     it('uses expected outputs and thresholds for foreign graders', () => {
@@ -732,8 +749,8 @@ describe('evalport interchange', () => {
       ];
       const suite = promptfooTestsToEvalPortSuite(tests, { suiteId: 's' });
       expect(suite.graders).toHaveLength(1);
-      expect(suite.graders[0]?.metadata).toMatchObject({
-        promptfoo: { assertSet: { metric: 'outer', threshold: 0.5 } },
+      expect(suite.graders[0]?.params).toMatchObject({
+        promptfooAssertSet: { metric: 'outer', threshold: 0.5 },
       });
     });
 
@@ -1028,6 +1045,21 @@ describe('evalport interchange', () => {
       for (const [assertion, expected] of models) {
         expect(assertionToEvalPortGrader(assertion, 'gr_1').params?.model).toBe(expected);
       }
+    });
+
+    it.each(
+      [
+        'Grade {{output}}',
+        ['Grade {{output}}'],
+        [{ role: 'user', content: 'Grade {{output}}' }],
+      ].map((rubricPrompt) => ({ rubricPrompt })),
+    )('round-trips a custom rubric prompt', ({ rubricPrompt }) => {
+      const tests: TestCase[] = [
+        { assert: [{ type: 'llm-rubric', value: 'criterion', rubricPrompt }] },
+      ];
+      const exported = promptfooTestsToEvalPortSuite(tests, { suiteId: 'custom-rubric' });
+      const restored = evalPortSuiteToPromptfooTests(JSON.parse(JSON.stringify(exported)));
+      expect(restored[0]?.assert).toEqual(tests[0].assert);
     });
 
     it('round-trips structured providers and execution fields', () => {

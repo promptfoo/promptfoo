@@ -24,6 +24,8 @@ const suite = promptfooTestsToEvalPortSuite(config.tests, { suiteId: 'my_eval' }
 console.log(validateEvalPortSuite(suite).valid); // true
 ```
 
+EvalPort suites require at least one test case. The exporter throws if the input suite is empty.
+
 Each `assert` entry becomes its own EvalPort grader (`assert-set` groups are expanded, not averaged away). `vars` are flattened to the EvalPort `input` string, with the original record preserved under `metadata.promptfoo.vars` for a lossless round-trip.
 
 ## Export eval results
@@ -77,4 +79,4 @@ const tests = evalPortSuiteToPromptfooTests(suite); // runnable via `promptfoo e
 | `llm-rubric`, `g-eval`, `model-graded-factuality`, `answer-relevance`, `context-faithfulness`, ... | `llm_judge`                                     |
 | everything else (`javascript`, `python`, `webhook`, ...)                                           | `custom` (`params.handler: "promptfoo:<type>"`) |
 
-`not-<type>` keeps its mapping with `inverse: true` recorded in grader metadata. Framework-native graders with no promptfoo equivalent import without a fabricated assertion; they are preserved under `metadata.promptfoo.evalportGraders`.
+`not-<type>` keeps its mapping with `inverse: true` recorded in `params.promptfoo`. The importer keeps foreign code graders, regex graders with flags, JSON Schema graders with `strict: true`, and other unmapped grader definitions in `metadata.evalportGraders`. Review these definitions when choosing the assertions to run in Promptfoo.

@@ -1,4 +1,4 @@
-import { ResultFailureReason } from '../types/index';
+import { GradingConfigSchema, ResultFailureReason } from '../types/index';
 import { sanitizeObject } from './sanitizer';
 
 import type {
@@ -38,7 +38,7 @@ import type {
  *   `GraderResult`s: a `componentResults` array (from `assert-set` grouping)
  *   maps to one `GraderResult` per component rather than being collapsed.
  * - `not-<type>` assertions keep their mapping but record `inverse: true` in
- *   grader metadata, since EvalPort has no negation primitive.
+ *   params.promptfoo, since EvalPort has no negation primitive.
  */
 
 export const EVALPORT_SPEC_VERSION = '1.0.0';
@@ -318,6 +318,9 @@ function buildStoredAssertion(
       maxDepth: Number.POSITIVE_INFINITY,
     });
   }
+  if (assertion.rubricPrompt !== undefined) {
+    stored.rubricPrompt = assertion.rubricPrompt;
+  }
   if (typeof assertion.transform === 'string') {
     stored.transform = assertion.transform;
   }
@@ -358,7 +361,6 @@ export function assertionToEvalPortGrader(assertion: Assertion, id: string): Eva
       params: { expected: valueString, ignore_case: false, promptfoo: storedAssertion },
       weight,
       description,
-      metadata: { promptfoo: promptfooMeta },
     };
   }
   if (CONTAINS_TYPES.has(base)) {
@@ -372,7 +374,6 @@ export function assertionToEvalPortGrader(assertion: Assertion, id: string): Eva
       },
       weight,
       description,
-      metadata: { promptfoo: promptfooMeta },
     };
   }
   if (REGEX_TYPES.has(base)) {
@@ -385,7 +386,6 @@ export function assertionToEvalPortGrader(assertion: Assertion, id: string): Eva
       },
       weight,
       description,
-      metadata: { promptfoo: promptfooMeta },
     };
   }
   if (SEMANTIC_TYPES.has(base)) {
@@ -395,7 +395,6 @@ export function assertionToEvalPortGrader(assertion: Assertion, id: string): Eva
       params: { threshold: assertion.threshold ?? 0.8, promptfoo: storedAssertion },
       weight,
       description,
-      metadata: { promptfoo: promptfooMeta },
     };
   }
   if (LLM_JUDGE_TYPES.has(base)) {
@@ -414,7 +413,6 @@ export function assertionToEvalPortGrader(assertion: Assertion, id: string): Eva
       params: { model: providerModel, prompt, promptfoo: storedAssertion },
       weight,
       description,
-      metadata: { promptfoo: promptfooMeta },
     };
   }
   return {
@@ -426,7 +424,6 @@ export function assertionToEvalPortGrader(assertion: Assertion, id: string): Eva
     },
     weight,
     description,
-    metadata: { promptfoo: promptfooMeta },
   };
 }
 
@@ -534,13 +531,7 @@ function convertTestToEvalPortTestCase(
   const graderIds = flat.map((item) => {
     const draft = assertionToEvalPortGrader(item.assertion, 'gr_pending');
     if (item.assertSet?.metric !== undefined) {
-      const meta = isPlainRecord(draft.metadata?.promptfoo)
-        ? (draft.metadata.promptfoo as Record<string, unknown>)
-        : {};
-      draft.metadata = {
-        ...draft.metadata,
-        promptfoo: { ...meta, assertSet: item.assertSet },
-      };
+      draft.params = { ...draft.params, promptfooAssertSet: item.assertSet };
     }
     return resolveGraderId(draft, state);
   });
@@ -579,6 +570,9 @@ export function promptfooTestsToEvalPortSuite(
   tests: TestCase[],
   options: ToEvalPortSuiteOptions,
 ): EvalPortSuite {
+  if (tests.length === 0) {
+    throw new Error('EvalPort suites require at least one test case');
+  }
   const state: GraderDedupState = { graders: [], graderIdByKey: new Map<string, string>() };
   const testCases = tests.map((test, index) => convertTestToEvalPortTestCase(test, index, state));
 
@@ -596,18 +590,6 @@ export function promptfooTestsToEvalPortSuite(
   };
 }
 
-function codeGraderToAssertion(params: Record<string, unknown>): Assertion | undefined {
-  const language = typeof params.language === 'string' ? params.language : undefined;
-  const source = typeof params.source === 'string' ? params.source : '';
-  if (language === 'python') {
-    return { type: 'python', value: source };
-  }
-  if (language === 'javascript') {
-    return { type: 'javascript', value: source };
-  }
-  return undefined;
-}
-
 /**
  * Best-effort mapping for graders that were not exported from promptfoo.
  * Framework-native types with no promptfoo equivalent return `undefined` so
@@ -617,15 +599,11 @@ function graderToPromptfooAssertion(
   grader: EvalPortGrader,
   expectedOutput: string | undefined,
 ): Assertion | undefined {
-  const promptfooMeta = isPlainRecord(grader.metadata?.promptfoo)
-    ? (grader.metadata.promptfoo as Record<string, unknown>)
-    : undefined;
-  // Lossless path: this grader was exported from promptfoo, so the original
-  // assertion is recorded in metadata.
-  if (promptfooMeta !== undefined && typeof promptfooMeta.assertionType === 'string') {
-    const params = isPlainRecord(grader.params?.promptfoo)
-      ? (grader.params.promptfoo as Record<string, unknown>)
-      : undefined;
+  const params = isPlainRecord(grader.params?.promptfoo) ? grader.params.promptfoo : undefined;
+  // Older exports duplicated attribution at grader.metadata.promptfoo.
+  const promptfooMeta = params ?? grader.metadata?.promptfoo;
+  if (isPlainRecord(promptfooMeta) && typeof promptfooMeta.assertionType === 'string') {
+    const rubric = GradingConfigSchema.shape.rubricPrompt.safeParse(params?.rubricPrompt);
     const storedValue = params?.value;
     const storedConfig = params?.config;
     const storedProvider = params?.provider;
@@ -634,6 +612,7 @@ function graderToPromptfooAssertion(
     const storedNormalizeUnicode = params?.normalizeUnicode;
     return {
       type: promptfooMeta.assertionType as Assertion['type'],
+      ...(rubric.success && rubric.data !== undefined && { rubricPrompt: rubric.data }),
       ...(storedValue !== undefined && storedValue !== '[function]'
         ? { value: storedValue as Assertion['value'] }
         : {}),
@@ -682,10 +661,11 @@ function foreignGraderToAssertion(
         value: typeof params.substring === 'string' ? params.substring : (expectedOutput ?? ''),
       };
     case 'regex':
-      return {
-        type: 'regex',
-        value: typeof params.pattern === 'string' ? params.pattern : '',
-      };
+      // Promptfoo constructs RegExp with the pattern only.
+      if (params.flags || typeof params.pattern !== 'string' || !params.pattern) {
+        return undefined;
+      }
+      return { type: 'regex', value: params.pattern };
     case 'semantic_similarity':
       return {
         type: 'similar',
@@ -699,11 +679,12 @@ function foreignGraderToAssertion(
         value: typeof params.prompt === 'string' ? params.prompt : '',
       };
     case 'json_schema':
-      return { type: 'is-json' };
+      // The per-grader strict option has no Promptfoo equivalent.
+      return !params.strict && isPlainRecord(params.schema)
+        ? { type: 'is-json', value: params.schema }
+        : undefined;
     case 'human':
       return { type: 'human' };
-    case 'code':
-      return codeGraderToAssertion(params);
     default:
       return undefined;
   }
@@ -712,7 +693,7 @@ function foreignGraderToAssertion(
 /**
  * Converts an EvalPort suite to promptfoo test cases runnable via `eval`.
  * Framework-native graders without a promptfoo equivalent are preserved under
- * `metadata.promptfoo.evalportGraders` rather than fabricated.
+ * `metadata.evalportGraders` rather than fabricated.
  */
 function resolveImportedVars(
   testCase: EvalPortTestCase,
@@ -738,7 +719,7 @@ function resolveImportedVars(
 /**
  * Converts an EvalPort suite to promptfoo test cases runnable via `eval`.
  * Framework-native graders without a promptfoo equivalent are preserved under
- * `metadata.promptfoo.evalportGraders` rather than fabricated.
+ * `metadata.evalportGraders` rather than fabricated.
  */
 export function evalPortSuiteToPromptfooTests(suite: EvalPortSuite): TestCase[] {
   const gradersById = new Map<string, EvalPortGrader>();
@@ -763,7 +744,7 @@ export function evalPortSuiteToPromptfooTests(suite: EvalPortSuite): TestCase[] 
       if (assertion) {
         assertions.push(assertion);
       } else {
-        unmapped.push({ id: grader.id, type: grader.type, params: grader.params ?? {} });
+        unmapped.push(grader);
       }
     }
     return {
@@ -806,7 +787,9 @@ interface ExpandedGradingResult {
 
 /** Key for joining a result-side grader to its suite definition (metadata excluded). */
 function graderJoinKey(draft: EvalPortGrader): string {
-  return stableKey({ type: draft.type, params: draft.params, weight: draft.weight });
+  // Result components identify the leaf assertion independently of its enclosing set.
+  const { promptfooAssertSet: _assertSet, ...params } = draft.params ?? {};
+  return stableKey({ type: draft.type, params, weight: draft.weight });
 }
 
 function suiteGraderIdByKey(suite: EvalPortSuite | undefined): Map<string, string> {
