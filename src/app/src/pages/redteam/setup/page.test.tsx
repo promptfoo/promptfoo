@@ -54,7 +54,8 @@ const reviewRunGates = vi.hoisted(() => ({
   signalEvalCompleted: vi.fn(),
   checkEmailStatus: vi.fn(),
 }));
-vi.mock('@app/hooks/useApiHealth', () => ({
+vi.mock('@app/hooks/useApiHealth', async (importOriginal) => ({
+  ...(await importOriginal()),
   useApiHealth: () => ({ data: { status: 'connected' }, isLoading: false }),
 }));
 vi.mock('@app/utils/emailVerification', () => ({

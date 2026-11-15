@@ -70,7 +70,8 @@ vi.mock('@app/stores/redteamJobStore', () => ({
   })),
 }));
 
-vi.mock('@app/hooks/useApiHealth', () => ({
+vi.mock('@app/hooks/useApiHealth', async (importOriginal) => ({
+  ...(await importOriginal()),
   useApiHealth: vi.fn(),
 }));
 
@@ -1323,6 +1324,32 @@ Application Details:
       } finally {
         marker.remove();
       }
+    });
+
+    it('should enable Run Now and show the skipped-check note when API status is skipped', () => {
+      vi.mocked(useApiHealth).mockReturnValue({
+        data: {
+          status: 'skipped',
+          message: 'network egress is disabled (PROMPTFOO_NO_NETWORK)',
+        },
+        refetch: vi.fn(),
+        isLoading: false,
+      } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
+
+      renderWithProviders(
+        <Review
+          navigateToPlugins={vi.fn()}
+          navigateToStrategies={vi.fn()}
+          navigateToPurpose={vi.fn()}
+        />,
+      );
+
+      expect(screen.getByRole('button', { name: /run now/i })).toBeEnabled();
+      expect(
+        screen.getByText(
+          /Network egress is disabled \(PROMPTFOO_NO_NETWORK\). The Promptfoo Cloud health check is skipped; local generation is still available./,
+        ),
+      ).toBeInTheDocument();
     });
 
     it('should display warning alert when API is unknown', () => {

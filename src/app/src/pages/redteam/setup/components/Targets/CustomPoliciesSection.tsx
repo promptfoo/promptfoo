@@ -15,7 +15,7 @@ import { Input } from '@app/components/ui/input';
 import { Label } from '@app/components/ui/label';
 import { Textarea } from '@app/components/ui/textarea';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
-import { useApiHealth } from '@app/hooks/useApiHealth';
+import { isApiHealthAvailable, useApiHealth } from '@app/hooks/useApiHealth';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
 import { cn } from '@app/lib/utils';
@@ -653,12 +653,12 @@ export const CustomPoliciesSection = () => {
             <TestCaseGenerateButton
               onClick={() => handleGenerateTestCase(row.original)}
               disabled={
-                apiHealthStatus !== 'connected' ||
+                !isApiHealthAvailable(apiHealthStatus) ||
                 (generatingTestCase && generatingPolicyId === row.original.id)
               }
               isGenerating={generatingTestCase && generatingPolicyId === row.original.id}
               tooltipTitle={
-                apiHealthStatus === 'connected'
+                isApiHealthAvailable(apiHealthStatus)
                   ? undefined
                   : 'Promptfoo Cloud connection is required for test generation'
               }

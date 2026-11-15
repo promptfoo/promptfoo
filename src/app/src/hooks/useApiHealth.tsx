@@ -1,7 +1,7 @@
 import { callApi } from '@app/utils/api';
 import { useQuery } from '@tanstack/react-query';
 
-export type ApiHealthStatus = 'unknown' | 'connected' | 'blocked' | 'disabled';
+export type ApiHealthStatus = 'unknown' | 'connected' | 'blocked' | 'disabled' | 'skipped';
 
 interface HealthResponse {
   status: string;
@@ -13,6 +13,27 @@ export type ApiHealthResult = {
   message: string;
 };
 
+// PROMPTFOO_NO_NETWORK skips the background Promptfoo Cloud health check, so a
+// 'disabled' health status only means the check was skipped, not that local
+// generation is disabled. The installed server injects the meta tag at runtime;
+// standalone builds embed the flag at build time (see PostHogProvider).
+export function isNoNetworkMode(): boolean {
+  return (
+    import.meta.env.VITE_PROMPTFOO_NO_NETWORK === 'true' ||
+    (typeof document !== 'undefined' &&
+      document.querySelector('meta[name="promptfoo-no-network"]') !== null)
+  );
+}
+
+/**
+ * Whether generation controls should stay enabled for this health status. A
+ * skipped poll leaves generation enabled the same way a connected poll does;
+ * only a genuinely disabled or failed check blocks.
+ */
+export function isApiHealthAvailable(status: ApiHealthStatus): boolean {
+  return status === 'connected' || status === 'skipped';
+}
+
 /**
  * Checks the health of the connection to Promptfoo Cloud.
  */
@@ -23,6 +44,9 @@ export function useApiHealth() {
       try {
         const response = await callApi('/remote-health', { cache: 'no-store' });
         const { status, message } = (await response.json()) as HealthResponse;
+        if (status === 'DISABLED' && isNoNetworkMode()) {
+          return { status: 'skipped', message };
+        }
         return {
           status: status === 'DISABLED' ? 'disabled' : status === 'OK' ? 'connected' : 'blocked',
           message,

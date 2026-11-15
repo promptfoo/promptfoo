@@ -10,7 +10,7 @@ import {
 } from '@app/components/ui/collapsible';
 import { Label } from '@app/components/ui/label';
 import { Textarea } from '@app/components/ui/textarea';
-import { useApiHealth } from '@app/hooks/useApiHealth';
+import { isApiHealthAvailable, useApiHealth } from '@app/hooks/useApiHealth';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { cn } from '@app/lib/utils';
 import { callApi } from '@app/utils/api';
@@ -343,7 +343,7 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
                       disabled={
                         !hasTargetConfigured ||
                         Boolean(targetConfigError) ||
-                        apiHealthStatus !== 'connected' ||
+                        !isApiHealthAvailable(apiHealthStatus) ||
                         !!discoveryError ||
                         !!discoveryResult ||
                         isDiscovering

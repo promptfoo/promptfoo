@@ -23,7 +23,7 @@ import { Separator } from '@app/components/ui/separator';
 import { Spinner } from '@app/components/ui/spinner';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { EVAL_ROUTES, REDTEAM_ROUTES } from '@app/constants/routes';
-import { useApiHealth, type ApiHealthStatus } from '@app/hooks/useApiHealth';
+import { type ApiHealthStatus, isNoNetworkMode, useApiHealth } from '@app/hooks/useApiHealth';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
 import { cn } from '@app/lib/utils';
@@ -158,18 +158,6 @@ function removeIntentEntry(
 const NO_NETWORK_HEALTH_NOTE =
   'Network egress is disabled (PROMPTFOO_NO_NETWORK). The Promptfoo Cloud health check is skipped; local generation is still available.';
 
-// PROMPTFOO_NO_NETWORK skips the background Promptfoo Cloud health check, so a
-// 'disabled' health status only means the check was skipped, not that local
-// generation is disabled. The installed server injects the meta tag at runtime;
-// standalone builds embed the flag at build time (see PostHogProvider).
-function isNoNetworkMode(): boolean {
-  return (
-    import.meta.env.VITE_PROMPTFOO_NO_NETWORK === 'true' ||
-    (typeof document !== 'undefined' &&
-      document.querySelector('meta[name="promptfoo-no-network"]') !== null)
-  );
-}
-
 // A 'disabled' health status blocks Run Now only when remote generation is
 // actually disabled. Under no-network mode the cloud check was skipped and
 // local generation is still allowed.
@@ -219,6 +207,8 @@ function getApiHealthAlertMessage(
       return noNetworkMode
         ? NO_NETWORK_HEALTH_NOTE
         : 'Remote generation is disabled. The "Run Now" option is not available.';
+    case 'skipped':
+      return NO_NETWORK_HEALTH_NOTE;
     default:
       return 'Checking connection status...';
   }

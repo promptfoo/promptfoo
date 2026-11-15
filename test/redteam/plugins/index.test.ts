@@ -14,8 +14,13 @@ import {
 } from '../../../src/redteam/constants';
 import { trackGenerationTokenUsage } from '../../../src/redteam/generationTokenUsage';
 import { Plugins } from '../../../src/redteam/plugins/index';
-import { neverGenerateRemote, shouldGenerateRemote } from '../../../src/redteam/remoteGeneration';
+import {
+  getRemoteHealthUrl,
+  neverGenerateRemote,
+  shouldGenerateRemote,
+} from '../../../src/redteam/remoteGeneration';
 import { getShortPluginId } from '../../../src/redteam/util';
+import { checkRemoteHealth } from '../../../src/util/apiHealth';
 import {
   createMockProvider,
   createProviderResponse,
@@ -451,6 +456,37 @@ describe('Plugins', () => {
       expect(result).toEqual([
         { test: 'case', metadata: { pluginId: 'ssrf', pluginConfig: { modifiers: {} } } },
       ]);
+    });
+
+    it('should skip the health preflight and still generate when the health URL is null', async () => {
+      // PROMPTFOO_NO_NETWORK makes getRemoteHealthUrl return null: the
+      // preflight is skipped, but remote generation itself stays enabled.
+      vi.mocked(shouldGenerateRemote).mockReturnValue(true);
+      vi.mocked(neverGenerateRemote).mockReturnValue(false);
+      vi.mocked(getRemoteHealthUrl).mockReturnValue(null);
+
+      const mockResponse = createMockFetchResponse({ result: [{ test: 'case' }] });
+
+      vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+
+      const plugin = Plugins.find((p) => p.key === 'ssrf');
+      const result = await plugin?.action({
+        provider: mockProvider,
+        purpose: 'test',
+        injectVar: 'testVar',
+        n: 1,
+        config: {},
+        delayMs: 0,
+        targetId: 'cloud-target-123',
+      });
+
+      expect(checkRemoteHealth).not.toHaveBeenCalled();
+      expect(fetchWithCache).toHaveBeenCalledTimes(1);
+      expect(result).toEqual([
+        { test: 'case', metadata: { pluginId: 'ssrf', pluginConfig: { modifiers: {} } } },
+      ]);
+
+      vi.mocked(getRemoteHealthUrl).mockReturnValue('http://test-health-url');
     });
 
     it('should strip graderExamples from remote generation request but preserve in metadata', async () => {

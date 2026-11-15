@@ -29,7 +29,8 @@ vi.mock('@app/hooks/useTelemetry', () => ({
   }),
 }));
 
-vi.mock('@app/hooks/useApiHealth', () => ({
+vi.mock('@app/hooks/useApiHealth', async (importOriginal) => ({
+  ...(await importOriginal()),
   useApiHealth: vi.fn(),
 }));
 

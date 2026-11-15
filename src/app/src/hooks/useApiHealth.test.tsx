@@ -39,6 +39,7 @@ describe('useApiHealth', () => {
   afterEach(() => {
     queryClient.clear();
     vi.resetAllMocks();
+    vi.unstubAllEnvs();
   });
 
   const wrapper = ({ children }: { children: React.ReactNode }) => (
@@ -114,6 +115,67 @@ describe('useApiHealth', () => {
 
     expect(result.current.data.message).toBe('Remote generation is disabled');
     expect(result.current.isLoading).toBe(false);
+  });
+
+  it('maps DISABLED to skipped in no-network mode (build-time flag)', async () => {
+    vi.stubEnv('VITE_PROMPTFOO_NO_NETWORK', 'true');
+    mockCallApiResponse({
+      status: 'DISABLED',
+      message: 'network egress is disabled (PROMPTFOO_NO_NETWORK)',
+    });
+
+    const { result } = renderHook(() => useApiHealth(), { wrapper });
+
+    // Trigger a refetch since initialData prevents automatic fetching
+    result.current.refetch();
+
+    await waitFor(() => {
+      expect(result.current.data.status).toBe('skipped');
+    });
+
+    expect(result.current.data.message).toBe('network egress is disabled (PROMPTFOO_NO_NETWORK)');
+    expect(result.current.isLoading).toBe(false);
+  });
+
+  it('maps DISABLED to skipped in no-network mode (runtime meta tag)', async () => {
+    mockCallApiResponse({
+      status: 'DISABLED',
+      message: 'network egress is disabled (PROMPTFOO_NO_NETWORK)',
+    });
+
+    const marker = document.createElement('meta');
+    marker.name = 'promptfoo-no-network';
+    document.head.append(marker);
+    try {
+      const { result } = renderHook(() => useApiHealth(), { wrapper });
+
+      // Trigger a refetch since initialData prevents automatic fetching
+      result.current.refetch();
+
+      await waitFor(() => {
+        expect(result.current.data.status).toBe('skipped');
+      });
+
+      expect(result.current.data.message).toBe('network egress is disabled (PROMPTFOO_NO_NETWORK)');
+    } finally {
+      marker.remove();
+    }
+  });
+
+  it('keeps DISABLED as disabled outside no-network mode', async () => {
+    mockCallApiResponse({
+      status: 'DISABLED',
+      message: 'network egress is disabled (PROMPTFOO_NO_NETWORK)',
+    });
+
+    const { result } = renderHook(() => useApiHealth(), { wrapper });
+
+    // Trigger a refetch since initialData prevents automatic fetching
+    result.current.refetch();
+
+    await waitFor(() => {
+      expect(result.current.data.status).toBe('disabled');
+    });
   });
 
   it('updates status when API response changes', async () => {
