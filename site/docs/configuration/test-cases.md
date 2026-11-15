@@ -255,7 +255,7 @@ question,expectedAnswer
 Variables are automatically mapped from column headers.
 
 :::tip Custom CSV Delimiters
-By default, Promptfoo expects comma-separated values. Set `PROMPTFOO_CSV_DELIMITER` (e.g., `PROMPTFOO_CSV_DELIMITER=";"` or `PROMPTFOO_CSV_DELIMITER="\t"`) to parse semicolon- or tab-delimited files.
+By default, Promptfoo expects comma-separated values. Set `PROMPTFOO_CSV_DELIMITER` (e.g., `PROMPTFOO_CSV_DELIMITER=";"`) to parse files with alternative delimiters such as semicolons. For tab-delimited files, pass an escaped tab in bash (`PROMPTFOO_CSV_DELIMITER=$'\t'`) or PowerShell (`$env:PROMPTFOO_CSV_DELIMITER="`t"`).
 :::
 
 ### Excel (XLSX/XLS) Support
