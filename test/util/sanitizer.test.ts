@@ -262,6 +262,24 @@ describe('stripProviderPromptSelectors', () => {
 });
 
 describe('sanitizeConfigForOutput', () => {
+  it.each(['AccountKey', 'SharedAccessSignature'])(
+    'redacts Azure Storage connection strings containing %s in exports and request logs',
+    (credentialName) => {
+      const credential = 'synthetic-storage-credential';
+      const env = {
+        AZURE_STORAGE_CONNECTION_STRING: `DefaultEndpointsProtocol=https;AccountName=fixture;${credentialName}=${credential}`,
+        AZURE_CLIENT_ID: 'fixture-client',
+      };
+      const config = { env, providers: [{ id: 'echo', env }] };
+      const safeEnv = { ...env, AZURE_STORAGE_CONNECTION_STRING: '[REDACTED]' };
+      for (const output of [sanitizeConfigForOutput(config), sanitizeObject(config)]) {
+        expect(output).toMatchObject({ env: safeEnv, providers: [{ env: safeEnv }] });
+        expect(JSON.stringify(output)).not.toContain(credential);
+      }
+      expect(config.env.AZURE_STORAGE_CONNECTION_STRING).toContain(credential);
+    },
+  );
+
   it.each([
     { prompts: 'private literal' },
     { prompts: ['private literal'] },

@@ -236,15 +236,23 @@ describe('redteamInit', () => {
 
     expect(modelPrompt?.[0].choices).toEqual(
       expect.arrayContaining([
+        expect.objectContaining({ value: 'google:gemini-4-argon' }),
+        expect.objectContaining({ value: 'google:gemini-4-hydrogen' }),
         expect.objectContaining({ value: 'google:gemini-3.8-flash' }),
         expect.objectContaining({ value: 'google:gemini-3.7-flash' }),
         expect.objectContaining({ value: 'google:gemini-3.6-flash' }),
         expect.objectContaining({ value: 'google:gemini-3.5-flash-lite' }),
+        expect.objectContaining({ value: 'vertex:gemini-4-argon' }),
+        expect.objectContaining({ value: 'vertex:gemini-4-hydrogen' }),
         expect.objectContaining({ value: 'vertex:gemini-3.8-flash' }),
         expect.objectContaining({ value: 'vertex:gemini-3.7-flash' }),
         expect.objectContaining({ value: 'vertex:gemini-3.6-flash' }),
         expect.objectContaining({ value: 'vertex:gemini-3.5-flash-lite' }),
+        expect.objectContaining({ value: 'vertex:gemini-3.1-pro-preview' }),
       ]),
+    );
+    expect(modelPrompt?.[0].choices).not.toContainEqual(
+      expect.objectContaining({ value: 'vertex:gemini-2.5-pro' }),
     );
   });
 
@@ -274,10 +282,13 @@ describe('redteamInit', () => {
   });
 
   it.each([
+    'vertex:gemini-4-argon',
+    'vertex:gemini-4-hydrogen',
     'vertex:gemini-3.8-flash',
     'vertex:gemini-3.7-flash',
     'vertex:gemini-3.6-flash',
     'vertex:gemini-3.5-flash-lite',
+    'vertex:gemini-3.1-pro-preview',
   ])('configures the global Vertex region for %s', async (modelName) => {
     vi.mocked(select)
       .mockReset()
