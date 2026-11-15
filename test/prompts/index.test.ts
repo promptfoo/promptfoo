@@ -403,6 +403,22 @@ describe('readPrompts', () => {
     expect(fs.readFileSync).toHaveBeenCalledTimes(1);
   });
 
+  it.each(['prompt.PY', 'prompt.Py'])(
+    'should read a Python file whose extension is not lowercase: %s',
+    async (promptPath) => {
+      const code = `print('dummy prompt')`;
+      vi.mocked(fs.readFileSync).mockReturnValue(code);
+      await expect(readPrompts(promptPath)).resolves.toEqual([
+        {
+          function: expect.any(Function),
+          label: `${promptPath}: ${code}`,
+          raw: code,
+        },
+      ]);
+      expect(fs.readFileSync).toHaveBeenCalledTimes(1);
+    },
+  );
+
   it('should read a .js file without named function', async () => {
     const promptPath = 'prompt.js';
     const mockFunction = () => console.log('dummy prompt');

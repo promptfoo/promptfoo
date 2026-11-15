@@ -3,7 +3,7 @@ import path from 'path';
 
 import { globSync } from 'glob';
 import logger from '../logger';
-import { isJavascriptFile } from '../util/fileExtensions';
+import { isJavascriptFile, isPythonFile } from '../util/fileExtensions';
 import { parsePathOrGlob } from '../util/index';
 import invariant from '../util/invariant';
 import { PromptSchema } from '../validators/prompts';
@@ -49,7 +49,7 @@ async function processPromptFile(
   if (extension === '.md') {
     return processTemplateFile(filePath, prompt, labelPath);
   }
-  if (extension === '.py') {
+  if (extension && isPythonFile(extension)) {
     return processPythonFile(filePath, prompt, functionName, labelPath);
   }
   if (extension === '.txt') {
