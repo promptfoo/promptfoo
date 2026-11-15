@@ -2,7 +2,7 @@ import os from 'os';
 import path from 'path';
 
 import dedent from 'dedent';
-import { getEnvString, getProviderEnvString } from '../envars';
+import { getEnvString, getProviderEnvString, parseEnvBool } from '../envars';
 import { getExplicitProviderEnv, setExplicitProviderEnv } from '../envOverrides';
 import { importModule } from '../esm';
 import logger from '../logger';
@@ -319,6 +319,20 @@ export function mergeProviderEnv(
       }
       merged[key] = value;
       explicit[key] = isExplicit ? value : undefined;
+    }
+  }
+  // PROMPTFOO_NO_NETWORK is monotonic: a truthy value from any merged layer
+  // must survive, so a provider override cannot lift a restriction the suite
+  // requested. The merged map replaces the suite layer inside
+  // cliState.withEnv, so without this the suite's original value is gone
+  // before getEnvBool runs in the provider scope. Only this key is
+  // special-cased; every other key keeps normal low-to-high precedence.
+  if (merged) {
+    const lockedLayerIndex = layers.findIndex((layer) => parseEnvBool(layer?.PROMPTFOO_NO_NETWORK));
+    if (lockedLayerIndex !== -1) {
+      merged.PROMPTFOO_NO_NETWORK = 'true';
+      explicit.PROMPTFOO_NO_NETWORK =
+        explicitLayers[lockedLayerIndex]?.PROMPTFOO_NO_NETWORK === undefined ? undefined : 'true';
     }
   }
   if (merged && layers.some((layer, index) => layer !== explicitLayers[index])) {

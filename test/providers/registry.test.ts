@@ -431,6 +431,26 @@ describe('Provider Registry', () => {
     },
   );
 
+  it.each([
+    [{ PROMPTFOO_NO_NETWORK: 'true' }, { PROMPTFOO_NO_NETWORK: 'false' }],
+    [{ PROMPTFOO_NO_NETWORK: '1' }, { PROMPTFOO_NO_NETWORK: 'false' }],
+    [{ PROMPTFOO_NO_NETWORK: 'false' }, { PROMPTFOO_NO_NETWORK: 'true' }],
+  ])('keeps a truthy PROMPTFOO_NO_NETWORK from any layer: %#', (suiteEnv, providerEnv) => {
+    expect(mergeProviderEnv('echo', suiteEnv, providerEnv)).toEqual({
+      PROMPTFOO_NO_NETWORK: 'true',
+    });
+  });
+
+  it('keeps normal precedence for other keys when PROMPTFOO_NO_NETWORK is locked', () => {
+    expect(
+      mergeProviderEnv(
+        'echo',
+        { PROMPTFOO_NO_NETWORK: 'true', FOO: 'suite' },
+        { PROMPTFOO_NO_NETWORK: 'false', FOO: 'provider' },
+      ),
+    ).toEqual({ PROMPTFOO_NO_NETWORK: 'true', FOO: 'provider' });
+  });
+
   it.each(['openai:codex-sdk', 'openai:codex-sdk:gpt-5.5'])(
     'merges scoped Codex SDK environment for %s',
     async (providerPath) => {
