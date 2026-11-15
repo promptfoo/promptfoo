@@ -187,6 +187,8 @@ The initial lock format admits only built-in, data-only assertions such as equal
 
 Every locked test must apply to every selected target and prompt. The initial format rejects per-test `prompts`/`providers` selectors, provider `prompts` selectors, and `providerPromptMap`; these can otherwise omit failing cases without changing the test definitions. You can change the prompts and models under evaluation while keeping the complete test set. Criteria must use plain JSON data: undefined values, sparse arrays, negative zero, and class instances are rejected rather than hashed lossily. The lock also binds `PROMPTFOO_DISABLE_TEMPLATING` and `PROMPTFOO_DISABLE_VAR_EXPANSION`. With templating enabled, assertion values and metric names can interpolate plain test variable paths such as `{{expected}}` or `{{data.expected}}`. Grading reads the committed values from each expanded test. Runtime expressions, filters, and template includes must be resolved before registration. Locked JSON assertions use strict schema validation even when `PROMPTFOO_DISABLE_AJV_STRICT_MODE` is enabled.
 
+Variable-to-variable substitutions use sorted variable names in both locked and unlocked runs, so reordering keys cannot change the grading criterion.
+
 Locked runs give target providers separate copies of the test, variables, and prompt context so context mutations cannot change the grading criteria. Custom JavaScript still runs in the same process and must be trusted; evaluation locks do not sandbox providers.
 
 Use `--verify` for a later run. Verification happens before provider calls, and the threshold stored in the lock is authoritative for the run:
@@ -197,7 +199,7 @@ promptfoo eval -c promptfooconfig.yaml --verify eval.lock.json
 
 A changed manifest or eval bar exits with code `3`. A valid lock whose run misses the locked threshold uses the normal failed-test exit code (`100` by default). Locked runs use `100` if the configured failure exit code is outside the range 1–255. `--lock` and `--verify` cannot be combined with each other, `--watch`, `--resume`, or `--retry-errors`.
 
-The lock also commits `PROMPTFOO_SHORT_CIRCUIT_TEST_FAILURES` and enforces that aggregation mode during grading. Function-valued derived metrics and non-enumerable data properties are rejected because they can change criteria without changing the JSON snapshot. Data-only derived metric formulas remain supported.
+The lock also commits `PROMPTFOO_SHORT_CIRCUIT_TEST_FAILURES` and enforces that aggregation mode during grading. Function-valued or accessor-backed derived metrics, proxy-backed data, and non-enumerable data properties are rejected because they can change criteria without changing the JSON snapshot. Data-only derived metric formulas remain supported.
 
 An interrupted locked run, including cancellation through `evaluateOptions.abortSignal`, exits with code `130` and does not satisfy the gate. Start a new `--verify` run to evaluate the complete locked bar.
 
