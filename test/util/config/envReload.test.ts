@@ -559,6 +559,29 @@ describe('suite environment loading', () => {
     },
   );
 
+  it('keeps explicit --tests assertion scripts relative to the working directory', async () => {
+    const config = writeConfig('cli-tests', { prompts: ['{{ expected }}'] });
+    fs.writeFileSync(path.join(tempDir, 'check.cjs'), `exports.check = () => 'x';`);
+    fs.writeFileSync(
+      path.join(tempDir, 'cases.json'),
+      JSON.stringify([
+        {
+          vars: { expected: 'x' },
+          assert: [{ type: 'equals', value: 'file://check.cjs:check' }],
+        },
+      ]),
+    );
+    const previousCwd = process.cwd();
+    process.chdir(tempDir);
+    try {
+      const resolved = await resolveConfigs({ config: [config], tests: 'cases.json' }, {});
+      const result = await evaluateResolved(resolved.testSuite, new Eval({}), { cache: false });
+      expect((await result.getResults()).map((row) => row.success)).toEqual([true]);
+    } finally {
+      process.chdir(previousCwd);
+    }
+  });
+
   it.each(['inline scenario', 'scenario tests file', 'inline default', 'default file'])(
     'keeps later config assertion scripts in a %s through combination and replay',
     async (location) => {
