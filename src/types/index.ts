@@ -276,6 +276,7 @@ export interface RunEvalOptions {
   lockIntegrity?: {
     disableTemplating: boolean;
     disableVarExpansion: boolean;
+    shortCircuitTestFailures: boolean;
   };
 }
 

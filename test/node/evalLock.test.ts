@@ -107,7 +107,7 @@ describe('evalLock', () => {
     expect(() => createEvalBar(suite, { repeat: 1 })).toThrow('accessors');
   });
 
-  it.each(['disableTemplating', 'disableVarExpansion'] as const)(
+  it.each(['disableTemplating', 'disableVarExpansion', 'shortCircuitTestFailures'] as const)(
     'rejects verification after changing %s',
     async (setting) => {
       const lockPath = path.join(tempDir, 'interpretation.lock.json');
@@ -395,6 +395,76 @@ describe('evalLock', () => {
     const changedVars = structuredClone(original);
     changedVars.tests![0].vars = { data: { __promptfoo: {} } };
     expect(hashEvalBar(createEvalBar(changedVars, { repeat: 1 }))).not.toBe(originalHash);
+  });
+
+  it.each(['value', 'vars', 'options'] as const)(
+    'preserves literal provider references in %s data',
+    (location) => {
+      const suiteWithPayload = (reference: string) => {
+        const suite = createSuite();
+        suite.providers = [
+          { id: () => 'echo', label: 'target', callApi: async () => ({ output: '' }) },
+        ];
+        const payload = { type: 'record', provider: reference };
+        if (location === 'value') {
+          suite.tests![0].assert = [{ type: 'equals', value: payload }];
+        } else {
+          suite.tests![0].vars = location === 'vars' ? payload : { options: payload };
+        }
+        return createEvalBar(suite, { repeat: 1 });
+      };
+      const byId = suiteWithPayload('echo');
+      const byLabel = suiteWithPayload('target');
+      expect(hashEvalBar(byId)).not.toBe(hashEvalBar(byLabel));
+      expect(canonicalJson(byId)).toContain('"provider":"echo"');
+      expect(canonicalJson(byLabel)).toContain('"provider":"target"');
+    },
+  );
+
+  it('still resolves providers in schema fields without rewriting their payloads', () => {
+    const suite = createSuite();
+    const provider = {
+      id: () => 'echo',
+      label: 'target',
+      config: { payload: { type: 'record', provider: 'target' } },
+      callApi: async () => ({ output: '' }),
+    };
+    suite.providers = [provider];
+    suite.defaultTest = { provider: 'target', options: { provider: 'target' } };
+    suite.tests![0].assert = [
+      { type: 'assert-set', assert: [{ type: 'equals', value: 'Paris', provider: 'target' }] },
+    ];
+    suite.scenarios = [{ config: [{ options: { provider: 'target' } }], tests: [] }];
+    const bar = createEvalBar(suite, { repeat: 1 });
+    expect(bar.defaultTest).toMatchObject({ provider, options: { provider } });
+    expect(bar.tests).toMatchObject([{ assert: [{ assert: [{ provider }] }] }]);
+    expect(bar.scenarios).toMatchObject([{ config: [{ options: { provider } }] }]);
+    expect(canonicalJson(bar)).toContain('"payload":{"provider":"target","type":"record"}');
+  });
+
+  it.each(['weight', 'threshold', 'value'])(
+    'rejects non-enumerable assertion %s before copying it',
+    (field) => {
+      const suite = createSuite();
+      Object.defineProperty(suite.tests![0].assert![0], field, { value: 0, enumerable: false });
+      expect(() => createEvalBar(suite, { repeat: 1 })).toThrow('non-enumerable');
+    },
+  );
+
+  it('rejects non-enumerable user data and array properties during canonicalization', () => {
+    for (const data of [{}, []]) {
+      Object.defineProperty(data, 'hidden', { value: 'criterion', enumerable: false });
+      expect(() => canonicalJson(data)).toThrow('non-enumerable');
+    }
+    expect(canonicalJson(['criterion'])).toBe('["criterion"]');
+  });
+
+  it('rejects derived metric callbacks while allowing data-only metric formulas', () => {
+    const suite = createSuite();
+    suite.derivedMetrics = [{ name: 'score', value: () => 1 }];
+    expect(() => createEvalBar(suite, { repeat: 1 })).toThrow('function-valued derived metrics');
+    suite.derivedMetrics = [{ name: 'score', value: 'accuracy / __count' }];
+    expect(() => hashEvalBar(createEvalBar(suite, { repeat: 1 }))).not.toThrow();
   });
 
   it('rejects closure-dependent function criteria', () => {

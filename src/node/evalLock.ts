@@ -85,6 +85,7 @@ type EvalBarSource = {
   providers?: unknown;
   providerPromptMap?: unknown;
   redteam?: unknown;
+  derivedMetrics?: unknown;
 };
 
 export type EvalBar = {
@@ -102,6 +103,7 @@ export type EvalBar = {
     filterRange: string | null;
     disableTemplating: boolean;
     disableVarExpansion: boolean;
+    shortCircuitTestFailures: boolean;
   };
 };
 
@@ -173,7 +175,7 @@ function omitUndefinedFields(value: Record<string, unknown>): Record<string, unk
   return Object.fromEntries(Object.entries(value).filter(([, entry]) => entry !== undefined));
 }
 
-function snapshotAssertionEnvelope(value: unknown): unknown {
+function snapshotAssertionEnvelope(value: unknown, providerMap: ConfiguredProviderMap): unknown {
   const assertion = asRecord(value);
   if (!assertion) {
     return value;
@@ -185,23 +187,35 @@ function snapshotAssertionEnvelope(value: unknown): unknown {
   }
   return {
     ...omitUndefinedFields(assertion),
+    ...(assertion.provider !== undefined && {
+      provider: resolveConfiguredProviderReference(assertion.provider, providerMap),
+    }),
     ...(Array.isArray(assertion.assert) && {
-      assert: assertion.assert.map(snapshotAssertionEnvelope),
+      assert: assertion.assert.map((entry) => snapshotAssertionEnvelope(entry, providerMap)),
     }),
   };
 }
 
-function snapshotTestEnvelope(value: unknown): unknown {
+function snapshotTestEnvelope(value: unknown, providerMap: ConfiguredProviderMap): unknown {
   const test = asRecord(value);
   if (!test) {
     return value;
   }
   assertPlainDataObject(test);
   const snapshot = omitUndefinedFields(test);
+  if (test.provider !== undefined) {
+    snapshot.provider = resolveConfiguredProviderReference(test.provider, providerMap);
+  }
   const options = asRecord(test.options);
   if (options) {
     assertPlainDataObject(options);
     snapshot.options = omitUndefinedFields(options);
+    if (options.provider !== undefined) {
+      (snapshot.options as Record<string, unknown>).provider = resolveConfiguredProviderReference(
+        options.provider,
+        providerMap,
+      );
+    }
   }
   const metadata = asRecord(test.metadata);
   const internalMetadata = asRecord(metadata?.__promptfoo);
@@ -212,7 +226,7 @@ function snapshotTestEnvelope(value: unknown): unknown {
     snapshot.metadata = { ...metadata, __promptfoo: portableMetadata };
   }
   if (Array.isArray(test.assert)) {
-    snapshot.assert = test.assert.map(snapshotAssertionEnvelope);
+    snapshot.assert = test.assert.map((entry) => snapshotAssertionEnvelope(entry, providerMap));
   }
   return snapshot;
 }
@@ -224,6 +238,13 @@ function assertPlainDataObject(value: object): void {
     throw new Error(
       'Evaluation locks require plain JSON data with standard object and array prototypes',
     );
+  }
+  if (
+    Object.entries(Object.getOwnPropertyDescriptors(value)).some(
+      ([key, descriptor]) => !descriptor.enumerable && !(Array.isArray(value) && key === 'length'),
+    )
+  ) {
+    throw new Error('Evaluation locks cannot include non-enumerable properties');
   }
   if (
     Array.isArray(value) &&
@@ -243,52 +264,6 @@ function assertPlainDataObject(value: object): void {
     )
   ) {
     throw new Error('Evaluation locks require plain JSON data without symbols or accessors');
-  }
-}
-
-function snapshotGradingProviderReferences(
-  value: unknown,
-  providerMap: ConfiguredProviderMap,
-  ancestors: Set<object>,
-  providerOption = false,
-): unknown {
-  if (
-    value === null ||
-    value === undefined ||
-    typeof value !== 'object' ||
-    isRuntimeApiProvider(value)
-  ) {
-    return value;
-  }
-  assertPlainDataObject(value);
-  if (ancestors.has(value)) {
-    throw new Error('Evaluation locks cannot include circular test data');
-  }
-  ancestors.add(value);
-
-  try {
-    if (Array.isArray(value)) {
-      return value.map((entry) =>
-        snapshotGradingProviderReferences(entry, providerMap, ancestors, providerOption),
-      );
-    }
-
-    const record = value as Record<string, unknown>;
-    const isAssertion = typeof record.type === 'string';
-    return Object.fromEntries(
-      Object.entries(record).map(([key, entry]) => {
-        const resolved =
-          key === 'provider' && (providerOption || isAssertion)
-            ? resolveConfiguredProviderReference(entry, providerMap)
-            : entry;
-        return [
-          key,
-          snapshotGradingProviderReferences(resolved, providerMap, ancestors, key === 'options'),
-        ] as [string, unknown];
-      }),
-    );
-  } finally {
-    ancestors.delete(value);
   }
 }
 
@@ -601,6 +576,7 @@ export function createEvalBar(
     filterRange?: string;
     disableTemplating?: boolean;
     disableVarExpansion?: boolean;
+    shortCircuitTestFailures?: boolean;
   },
 ): EvalBar {
   if (Array.isArray(testSuite.extensions) && testSuite.extensions.length > 0) {
@@ -615,6 +591,14 @@ export function createEvalBar(
     );
   }
   validateDataOnlyCriteria(testSuite, execution.disableTemplating ?? false);
+  if (
+    Array.isArray(testSuite.derivedMetrics) &&
+    testSuite.derivedMetrics.some((metric) => typeof asRecord(metric)?.value === 'function')
+  ) {
+    throw new Error(
+      'Evaluation locks do not support function-valued derived metrics because callbacks can mutate live test criteria',
+    );
+  }
 
   if (
     testSuite.providerPromptMap != null ||
@@ -632,47 +616,41 @@ export function createEvalBar(
   const providerMap = buildConfiguredProviderMap(
     runtimeProviders as Parameters<typeof buildConfiguredProviderMap>[0],
   );
-  const snapshot = (value: unknown) =>
-    snapshotGradingProviderReferences(value, providerMap, new Set());
-  const snapshotProviderContainer = (value: unknown) =>
-    snapshotGradingProviderReferences(value, providerMap, new Set(), true);
+  const snapshotTest = (value: unknown) => snapshotTestEnvelope(value, providerMap);
 
   return {
     version: 1,
     implementation: { id: 'promptfoo', version: IMPLEMENTATION_VERSION },
-    defaultTest: snapshotProviderContainer(snapshotTestEnvelope(testSuite.defaultTest ?? null)),
-    tests: snapshot(
-      Array.isArray(testSuite.tests)
-        ? testSuite.tests.map(snapshotTestEnvelope)
-        : (testSuite.tests ?? []),
-    ),
-    scenarios: snapshot(
-      Array.isArray(testSuite.scenarios)
-        ? testSuite.scenarios.map((scenario) => {
-            const record = asRecord(scenario);
-            if (record) {
-              assertPlainDataObject(record);
-            }
-            return record
-              ? {
-                  ...omitUndefinedFields(record),
-                  ...(Array.isArray(record.config) && {
-                    config: record.config.map(snapshotTestEnvelope),
-                  }),
-                  ...(Array.isArray(record.tests) && {
-                    tests: record.tests.map(snapshotTestEnvelope),
-                  }),
-                }
-              : scenario;
-          })
-        : (testSuite.scenarios ?? null),
-    ),
-    redteam: snapshotProviderContainer(testSuite.redteam ?? null),
+    defaultTest: snapshotTest(testSuite.defaultTest ?? null),
+    tests: Array.isArray(testSuite.tests)
+      ? testSuite.tests.map(snapshotTest)
+      : (testSuite.tests ?? []),
+    scenarios: Array.isArray(testSuite.scenarios)
+      ? testSuite.scenarios.map((scenario) => {
+          const record = asRecord(scenario);
+          if (record) {
+            assertPlainDataObject(record);
+          }
+          return record
+            ? {
+                ...omitUndefinedFields(record),
+                ...(Array.isArray(record.config) && {
+                  config: record.config.map(snapshotTest),
+                }),
+                ...(Array.isArray(record.tests) && {
+                  tests: record.tests.map(snapshotTest),
+                }),
+              }
+            : scenario;
+        })
+      : (testSuite.scenarios ?? null),
+    redteam: testSuite.redteam ?? null,
     execution: {
       repeat: execution.repeat,
       filterRange: execution.filterRange ?? null,
       disableTemplating: execution.disableTemplating ?? false,
       disableVarExpansion: execution.disableVarExpansion ?? false,
+      shortCircuitTestFailures: execution.shortCircuitTestFailures ?? false,
     },
   };
 }

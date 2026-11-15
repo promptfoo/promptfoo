@@ -17,6 +17,7 @@ export type InternalEvaluateOptions = EvaluateOptions & {
   lockIntegrity?: {
     disableTemplating: boolean;
     disableVarExpansion: boolean;
+    shortCircuitTestFailures: boolean;
   };
   /** Locked evaluations keep provider context separate from authoritative grading inputs. */
   isolateProviderContext?: boolean;

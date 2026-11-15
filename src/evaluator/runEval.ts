@@ -259,6 +259,7 @@ function assertLockRuntimeIntegrity(lockIntegrity: RunEvalOptions['lockIntegrity
   const settings = [
     ['PROMPTFOO_DISABLE_TEMPLATING', lockIntegrity.disableTemplating],
     ['PROMPTFOO_DISABLE_VAR_EXPANSION', lockIntegrity.disableVarExpansion],
+    ['PROMPTFOO_SHORT_CIRCUIT_TEST_FAILURES', lockIntegrity.shortCircuitTestFailures],
   ] as const;
   for (const [name, lockedValue] of settings) {
     if (getEnvBool(name, false) !== lockedValue) {
@@ -1238,6 +1239,7 @@ async function gradeRunEvalResponse({
           traceId,
           disableTemplating: lockIntegrity?.disableTemplating,
           strictJsonSchema: lockIntegrity ? true : undefined,
+          shortCircuitTestFailures: lockIntegrity?.shortCircuitTestFailures,
         }).then((checkResult) => applyGradingResult(ret, checkResult)),
     ).catch((error) => {
       applyGradingError(ret, error, deferredGradingAbortSignal);
@@ -1261,6 +1263,7 @@ async function gradeRunEvalResponse({
           traceId,
           disableTemplating: lockIntegrity?.disableTemplating,
           strictJsonSchema: lockIntegrity ? true : undefined,
+          shortCircuitTestFailures: lockIntegrity?.shortCircuitTestFailures,
         }),
     );
     applyGradingResult(ret, checkResult);

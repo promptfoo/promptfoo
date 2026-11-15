@@ -108,7 +108,11 @@ describe('runEval', () => {
       provider,
       prompt: { raw: 'Test prompt', label: 'test-label' },
       test,
-      lockIntegrity: { disableTemplating: false, disableVarExpansion: false },
+      lockIntegrity: {
+        disableTemplating: false,
+        disableVarExpansion: false,
+        shortCircuitTestFailures: false,
+      },
     });
 
     expect(result.success).toBe(false);
@@ -127,39 +131,115 @@ describe('runEval', () => {
         assert: [{ type: 'equals', value: '{{expected}}' }],
       },
       registers: { expected: 'Test output' },
-      lockIntegrity: { disableTemplating: false, disableVarExpansion: false },
+      lockIntegrity: {
+        disableTemplating: false,
+        disableVarExpansion: false,
+        shortCircuitTestFailures: false,
+      },
     });
 
     expect(result.success).toBe(false);
     expect(result.gradingResult?.reason).toContain('Committed output');
   });
 
-  it.each(['PROMPTFOO_DISABLE_TEMPLATING', 'PROMPTFOO_DISABLE_VAR_EXPANSION'] as const)(
-    'fails locked grading when a provider changes %s',
-    async (setting) => {
-      const restoreInitialEnv = mockProcessEnv({ [setting]: undefined });
-      let restoreProviderEnv = () => {};
-      const provider: ApiProvider = {
-        id: () => 'environment-mutating-provider',
-        callApi: vi.fn(async () => {
-          restoreProviderEnv = mockProcessEnv({ [setting]: 'true' });
-          return { output: 'trusted' };
-        }),
-      };
+  it.each([
+    'PROMPTFOO_DISABLE_TEMPLATING',
+    'PROMPTFOO_DISABLE_VAR_EXPANSION',
+    'PROMPTFOO_SHORT_CIRCUIT_TEST_FAILURES',
+  ] as const)('fails locked grading when a provider changes %s', async (setting) => {
+    const restoreInitialEnv = mockProcessEnv({ [setting]: undefined });
+    let restoreProviderEnv = () => {};
+    const provider: ApiProvider = {
+      id: () => 'environment-mutating-provider',
+      callApi: vi.fn(async () => {
+        restoreProviderEnv = mockProcessEnv({ [setting]: 'true' });
+        return { output: 'trusted' };
+      }),
+    };
 
+    try {
+      const [result] = await runEval({
+        ...defaultOptions,
+        provider,
+        prompt: { raw: 'Test prompt', label: 'test-label' },
+        test: { assert: [{ type: 'equals', value: 'trusted' }] },
+        lockIntegrity: {
+          disableTemplating: false,
+          disableVarExpansion: false,
+          shortCircuitTestFailures: false,
+        },
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain(`${setting} changed after verification`);
+    } finally {
+      restoreProviderEnv();
+      restoreInitialEnv();
+    }
+  });
+
+  it('keeps target transforms from changing committed grading variables', async () => {
+    const test: AtomicTestCase = {
+      vars: { expected: 'trusted' },
+      assert: [{ type: 'equals', value: '{{expected}}' }],
+    };
+    const [result] = await runEval({
+      ...defaultOptions,
+      provider: {
+        id: () => 'transforming-target',
+        callApi: async () => ({ output: 'wrong' }),
+        transform: '(context.vars.expected = output, output)',
+      },
+      prompt: { raw: 'test', label: 'test' },
+      test,
+      lockIntegrity: {
+        disableTemplating: false,
+        disableVarExpansion: false,
+        shortCircuitTestFailures: false,
+      },
+    });
+    expect(result.success).toBe(false);
+    expect(result.gradingResult?.reason).toContain('trusted');
+    expect(test.vars).toEqual({ expected: 'trusted' });
+  });
+
+  it.each([true, false])(
+    'enforces committed short-circuit mode %s after a transform changes the environment',
+    async (shortCircuitTestFailures) => {
+      const restoreInitialEnv = mockProcessEnv({
+        PROMPTFOO_SHORT_CIRCUIT_TEST_FAILURES: String(shortCircuitTestFailures),
+      });
+      let restoreTransformEnv = () => {};
       try {
         const [result] = await runEval({
           ...defaultOptions,
-          provider,
-          prompt: { raw: 'Test prompt', label: 'test-label' },
-          test: { assert: [{ type: 'equals', value: 'trusted' }] },
-          lockIntegrity: { disableTemplating: false, disableVarExpansion: false },
+          provider: {
+            id: () => 'aggregation-target',
+            callApi: async () => ({ output: 'actual' }),
+            transform: (output) => {
+              restoreTransformEnv = mockProcessEnv({
+                PROMPTFOO_SHORT_CIRCUIT_TEST_FAILURES: String(!shortCircuitTestFailures),
+              });
+              return output;
+            },
+          },
+          prompt: { raw: 'test', label: 'test' },
+          test: {
+            threshold: 0.5,
+            assert: [
+              { type: 'equals', value: 'actual' },
+              { type: 'equals', value: 'wrong' },
+            ],
+          },
+          lockIntegrity: {
+            disableTemplating: false,
+            disableVarExpansion: false,
+            shortCircuitTestFailures,
+          },
         });
-
-        expect(result.success).toBe(false);
-        expect(result.error).toContain(`${setting} changed after verification`);
+        expect(result.success).toBe(!shortCircuitTestFailures);
       } finally {
-        restoreProviderEnv();
+        restoreTransformEnv();
         restoreInitialEnv();
       }
     },

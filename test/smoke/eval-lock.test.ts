@@ -177,6 +177,165 @@ tests:
     expect(fs.existsSync(selectedLock)).toBe(false);
   });
 
+  it('rejects a literal provider payload edit that would turn a failure into a pass', () => {
+    const selectedConfig = path.join(tempDir, 'provider-payload.yaml');
+    const selectedLock = path.join(tempDir, 'provider-payload.lock.json');
+    const config = (provider: string) => `providers: [{ id: echo, label: target }]
+prompts: ['{"type":"record","provider":"target"}']
+tests:
+  - assert: [{ type: equals, value: { type: record, provider: ${provider} } }]
+`;
+    fs.writeFileSync(selectedConfig, config('echo'));
+    const locked = runEval(['--lock', selectedLock], '100', selectedConfig);
+    expect(locked.status, locked.stderr || locked.stdout).toBe(100);
+    fs.writeFileSync(selectedConfig, config('target'));
+    const changed = runEval(['--verify', selectedLock], '100', selectedConfig);
+    expect(changed.status, changed.stderr || changed.stdout).toBe(3);
+    expect(changed.stdout + changed.stderr).toContain('do not match');
+  });
+
+  it('rejects environment-dependent assertions loaded from an external test file', () => {
+    const testsPath = path.join(tempDir, 'environment-tests.yaml');
+    const selectedConfig = path.join(tempDir, 'environment.yaml');
+    const selectedLock = path.join(tempDir, 'environment.lock.json');
+    fs.writeFileSync(testsPath, "- assert: [{ type: equals, value: '{{ env.EXPECTED }}' }]\n");
+    fs.writeFileSync(
+      selectedConfig,
+      `providers: [echo]\nprompts: [actual]\nenv: { EXPECTED: different }\ntests: ${JSON.stringify(testsPath)}\n`,
+    );
+    const result = runEval(['--lock', selectedLock], '100', selectedConfig);
+    expect(result.status, result.stderr || result.stdout).toBe(1);
+    expect(result.stdout + result.stderr).toContain('simple test variable references');
+    expect(fs.existsSync(selectedLock)).toBe(false);
+  });
+
+  it('keeps target transforms from satisfying a locked assertion by mutating vars', () => {
+    const selectedConfig = path.join(tempDir, 'transform.yaml');
+    const selectedLock = path.join(tempDir, 'transform.lock.json');
+    const outputPath = path.join(tempDir, 'transform-output.json');
+    fs.writeFileSync(
+      selectedConfig,
+      `providers:
+  - id: echo
+    transform: '(context.vars.expected = output, output)'
+prompts: [wrong]
+tests:
+  - vars: { expected: trusted }
+    assert: [{ type: equals, value: '{{expected}}' }]
+`,
+    );
+    const locked = runEval(['--lock', selectedLock], '100', selectedConfig);
+    expect(locked.status, locked.stderr || locked.stdout).toBe(100);
+    const verified = runEval(['--verify', selectedLock, '-o', outputPath], '100', selectedConfig);
+    expect(verified.status, verified.stderr || verified.stdout).toBe(100);
+    const row = JSON.parse(fs.readFileSync(outputPath, 'utf8')).results.results[0];
+    expect(row).toMatchObject({ success: false, score: 0, response: { output: 'wrong' } });
+    expect(row.gradingResult.reason).toContain('trusted');
+  });
+
+  it('rejects derived metric callbacks before they can mutate later rows', () => {
+    const selectedConfig = path.join(tempDir, 'derived-mutation.cjs');
+    const selectedLock = path.join(tempDir, 'derived-mutation.lock.json');
+    fs.writeFileSync(
+      selectedConfig,
+      `module.exports = {
+  providers: ['echo'], prompts: ['actual'],
+  evaluateOptions: { maxConcurrency: 1 },
+  defaultTest: { assert: [{ type: 'equals', value: 'actual' }] },
+  tests: [{ description: 'first' }, { description: 'second' }],
+  derivedMetrics: [{ name: 'mutation', value: (_scores, step) => {
+    step.test.assert[0].value = 'wrong';
+    throw new Error('DERIVED_CALLBACK_RAN');
+  } }]
+};`,
+    );
+    const result = runEval(['--lock', selectedLock], '100', selectedConfig, {
+      PROMPTFOO_DISABLE_TEMPLATING: 'true',
+    });
+    expect(result.status, result.stderr || result.stdout).toBe(1);
+    expect(result.stdout + result.stderr).toContain('function-valued derived metrics');
+    expect(result.stdout + result.stderr).not.toContain('DERIVED_CALLBACK_RAN');
+    expect(fs.existsSync(selectedLock)).toBe(false);
+  });
+
+  it('rejects changing the short-circuit mode after registration', () => {
+    const selectedConfig = path.join(tempDir, 'aggregation.yaml');
+    const selectedLock = path.join(tempDir, 'aggregation.lock.json');
+    fs.writeFileSync(
+      selectedConfig,
+      `providers: [echo]
+prompts: [actual]
+tests:
+  - threshold: 0.5
+    assert:
+      - { type: equals, value: actual }
+      - { type: equals, value: different }
+`,
+    );
+    const locked = runEval(['--lock', selectedLock], '100', selectedConfig, {
+      PROMPTFOO_SHORT_CIRCUIT_TEST_FAILURES: 'true',
+    });
+    expect(locked.status, locked.stderr || locked.stdout).toBe(100);
+    const verified = runEval(['--verify', selectedLock], '100', selectedConfig, {
+      PROMPTFOO_SHORT_CIRCUIT_TEST_FAILURES: 'false',
+    });
+    expect(verified.status, verified.stderr || verified.stdout).toBe(3);
+    expect(verified.stdout + verified.stderr).toContain('do not match');
+  });
+
+  it('rejects a hidden assertion weight returned by a test generator', () => {
+    const testsPath = path.join(tempDir, 'hidden-weight.cjs');
+    const selectedConfig = path.join(tempDir, 'hidden-weight.yaml');
+    const selectedLock = path.join(tempDir, 'hidden-weight.lock.json');
+    fs.writeFileSync(
+      testsPath,
+      `module.exports = () => {
+  const assertion = { type: 'equals', value: 'different' };
+  Object.defineProperty(assertion, 'weight', { value: 0, enumerable: false });
+  return [{ assert: [assertion] }];
+};`,
+    );
+    fs.writeFileSync(
+      selectedConfig,
+      `providers: [echo]\nprompts: [actual]\ntests: ${JSON.stringify(`file://${testsPath}`)}\n`,
+    );
+    const result = runEval(['--lock', selectedLock], '100', selectedConfig);
+    expect(result.status, result.stderr || result.stdout).toBe(1);
+    expect(result.stdout + result.stderr).toContain('non-enumerable');
+    expect(fs.existsSync(selectedLock)).toBe(false);
+  });
+
+  it('fails a verified run cancelled by an external signal after a passing response', () => {
+    const selectedConfig = path.join(tempDir, 'external-abort.cjs');
+    const selectedLock = path.join(tempDir, 'external-abort.lock.json');
+    fs.writeFileSync(
+      selectedConfig,
+      `const controller = new AbortController();
+module.exports = {
+  providers: [{ id: () => 'abort-target', callApi: async () => {
+    if (process.env.ABORT_LOCK_TEST === 'true') controller.abort();
+    return { output: 'actual' };
+  } }],
+  prompts: ['test'],
+  defaultTest: { assert: [{ type: 'equals', value: 'actual' }] },
+  tests: [{ description: 'first' }, { description: 'second' }],
+  evaluateOptions: { maxConcurrency: 1, abortSignal: controller.signal }
+};`,
+    );
+    const locked = runEval(['--lock', selectedLock], '100', selectedConfig, {
+      PROMPTFOO_DISABLE_TEMPLATING: 'true',
+      ABORT_LOCK_TEST: 'false',
+    });
+    expect(locked.status, locked.stderr || locked.stdout).toBe(0);
+    const verified = runEval(['--verify', selectedLock], '100', selectedConfig, {
+      PROMPTFOO_DISABLE_TEMPLATING: 'true',
+      ABORT_LOCK_TEST: 'true',
+    });
+    expect(verified.status, verified.stderr || verified.stdout).toBe(130);
+    expect(verified.stdout + verified.stderr).toContain('run was interrupted');
+    expect(verified.stdout + verified.stderr).not.toContain('Evaluation lock passed');
+  });
+
   it('locks the resolved bar, verifies it, and rejects a doctored config before running', () => {
     const scriptConfigPath = path.join(tempDir, 'script-config.yaml');
     const scriptLockPath = path.join(tempDir, 'script.lock.json');

@@ -1787,6 +1787,7 @@ describe('evalCommand', () => {
           filterRange: null,
           disableTemplating: true,
           disableVarExpansion: false,
+          shortCircuitTestFailures: false,
         },
       },
       80,
@@ -1810,7 +1811,11 @@ describe('evalCommand', () => {
         expect.anything(),
         expect.anything(),
         expect.objectContaining({
-          lockIntegrity: { disableTemplating: true, disableVarExpansion: false },
+          lockIntegrity: {
+            disableTemplating: true,
+            disableVarExpansion: false,
+            shortCircuitTestFailures: false,
+          },
         }),
       );
     } finally {
@@ -1821,6 +1826,52 @@ describe('evalCommand', () => {
       process.exitCode = previousExitCode;
     }
   });
+
+  it.each([
+    { caller: 'cli', write: true },
+    { caller: 'cli', write: false },
+    { caller: 'library', write: false },
+  ])(
+    'fails an externally aborted locked $caller run with write=$write',
+    async ({ caller, write }) => {
+      const previousExitCode = process.exitCode;
+      process.exitCode = undefined;
+      const restoreEnv = mockProcessEnv({
+        PROMPTFOO_DISABLE_TEMPLATING: 'true',
+        PROMPTFOO_PASS_RATE_THRESHOLD: '100',
+      });
+      const controller = new AbortController();
+      const writeLockSpy = vi
+        .spyOn(evalLock, 'writeEvalLock')
+        .mockImplementation(async (_path, bar, threshold) =>
+          evalLock.createEvalLock(bar, threshold),
+        );
+      vi.mocked(evaluate).mockImplementationOnce(async (_testSuite, evalRecord) => {
+        controller.abort();
+        return evalRecord as Eval;
+      });
+
+      try {
+        const run = doEval(
+          { write, lock: 'eval.lock.json' } as Parameters<typeof doEval>[0] & { lock: string },
+          defaultConfig,
+          defaultConfigPath,
+          { eventSource: caller === 'cli' ? 'cli' : undefined, abortSignal: controller.signal },
+        );
+        if (caller === 'cli') {
+          await expect(run).resolves.toBeInstanceOf(Eval);
+          expect(process.exitCode).toBe(130);
+        } else {
+          await expect(run).rejects.toThrow('run was interrupted');
+          expect(process.exitCode).toBeUndefined();
+        }
+      } finally {
+        writeLockSpy.mockRestore();
+        restoreEnv();
+        process.exitCode = previousExitCode;
+      }
+    },
+  );
 
   it.each([
     ['lock', { lock: 'eval.lock.json' }],

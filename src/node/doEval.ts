@@ -897,6 +897,7 @@ async function doEvalWithEnv(
         filterRange,
         disableTemplating: getEnvBool('PROMPTFOO_DISABLE_TEMPLATING'),
         disableVarExpansion: getEnvBool('PROMPTFOO_DISABLE_VAR_EXPANSION'),
+        shortCircuitTestFailures: getEnvBool('PROMPTFOO_SHORT_CIRCUIT_TEST_FAILURES'),
       };
       if (evaluateOptions.progressCallback) {
         return failEvalRun(
@@ -934,6 +935,7 @@ async function doEvalWithEnv(
           lockIntegrity = {
             disableTemplating: lockExecution.disableTemplating,
             disableVarExpansion: lockExecution.disableVarExpansion,
+            shortCircuitTestFailures: lockExecution.shortCircuitTestFailures,
           };
           logger.info(
             chalk.green(
@@ -953,6 +955,7 @@ async function doEvalWithEnv(
           lockIntegrity = {
             disableTemplating: lockExecution.disableTemplating,
             disableVarExpansion: lockExecution.disableVarExpansion,
+            shortCircuitTestFailures: lockExecution.shortCircuitTestFailures,
           };
           logger.info(
             chalk.green(
@@ -1145,6 +1148,16 @@ async function doEvalWithEnv(
 
     // Clear resume flag after run completes
     cliState.resume = false;
+
+    if (activeEvalLock && evaluateOptions.abortSignal?.aborted) {
+      logger.error(chalk.red('Evaluation lock was not satisfied because the run was interrupted'));
+      if (isCliInvocation) {
+        process.exitCode = 130;
+      } else {
+        throw new Error('Evaluation lock was not satisfied because the run was interrupted');
+      }
+      return ret;
+    }
 
     // If paused, print minimal guidance and skip the rest of the reporting
     if (paused && cmdObj.write !== false) {

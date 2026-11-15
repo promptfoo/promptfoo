@@ -783,6 +783,7 @@ export async function runAssertions({
   traceId,
   disableTemplating,
   strictJsonSchema,
+  shortCircuitTestFailures,
 }: {
   assertScoringFunction?: ScoringFunction;
   latencyMs?: number;
@@ -794,6 +795,7 @@ export async function runAssertions({
   traceId?: string;
   disableTemplating?: boolean;
   strictJsonSchema?: boolean;
+  shortCircuitTestFailures?: boolean;
 }): Promise<GradingResult> {
   if (!test.assert || test.assert.length < 1) {
     return AssertionsResult.noAssertsResult();
@@ -801,6 +803,7 @@ export async function runAssertions({
 
   const mainAssertResult = new AssertionsResult({
     threshold: test.threshold,
+    shortCircuitTestFailures,
   });
   const subAssertResults: AssertionsResult[] = [];
   const asserts: {
@@ -812,6 +815,7 @@ export async function runAssertions({
       if (assertion.type === 'assert-set') {
         const subAssertResult = new AssertionsResult({
           threshold: assertion.threshold,
+          shortCircuitTestFailures,
           parentAssertionSet: {
             assertionSet: assertion,
             index: i,

@@ -233,16 +233,20 @@ export class AssertionsResult {
   private namedScoreWeights: Record<string, number> = Object.create(null);
   private result: GradingResult | null = null;
   private failedContentSafetyChecks: boolean = false;
+  private shortCircuitTestFailures: boolean | undefined;
 
   constructor({
     threshold,
     parentAssertionSet,
+    shortCircuitTestFailures,
   }: {
     threshold?: number;
     parentAssertionSet?: ParentAssertionSet;
+    shortCircuitTestFailures?: boolean;
   } = {}) {
     this.threshold = threshold;
     this._parentAssertionSet = parentAssertionSet;
+    this.shortCircuitTestFailures = shortCircuitTestFailures;
   }
 
   get parentAssertionSet() {
@@ -306,7 +310,7 @@ export class AssertionsResult {
 
     this.failedReason = result.reason;
 
-    if (getEnvBool('PROMPTFOO_SHORT_CIRCUIT_TEST_FAILURES')) {
+    if (this.shortCircuitTestFailures ?? getEnvBool('PROMPTFOO_SHORT_CIRCUIT_TEST_FAILURES')) {
       throw new Error(result.reason);
     }
   }
