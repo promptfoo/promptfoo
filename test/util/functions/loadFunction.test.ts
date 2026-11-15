@@ -323,6 +323,15 @@ describe('parseFileUrl', () => {
     );
   });
 
+  it('resolves a JavaScript export containing slashes only in assertion references', () => {
+    const reference = 'file://checks.mjs:grade:v2/prod';
+    expect(parseFileUrl(reference)).toEqual({ filePath: 'checks.mjs:grade:v2/prod' });
+    expect(parseFileUrl(reference, (candidate) => candidate === 'checks.mjs')).toEqual({
+      filePath: 'checks.mjs',
+      functionName: 'grade:v2/prod',
+    });
+  });
+
   it('uses the longest existing script when a JS export name contains a file extension', () => {
     const ref = 'file://checks.mjs:grade.js:v2';
     const files = new Set(['checks.mjs']);
