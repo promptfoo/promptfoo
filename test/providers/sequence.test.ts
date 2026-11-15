@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SequenceProvider } from '../../src/providers/sequence';
 
 import type { ApiProvider, ProviderResponse } from '../../src/types';
@@ -17,6 +17,10 @@ function createSequenceCall(responses: ProviderResponse[]) {
     context: { originalProvider, vars: {} },
   };
 }
+
+afterEach(() => {
+  vi.resetAllMocks();
+});
 
 describe('SequenceProvider', () => {
   it('should keep guardrail flags from all steps and retain the first flagged reason', async () => {
