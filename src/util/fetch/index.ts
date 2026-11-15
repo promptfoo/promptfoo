@@ -27,6 +27,8 @@ import { monkeyPatchFetch, preserveCloudAuthRedirects } from './monkeyPatchFetch
 import { getEffectiveRequestSignal } from './requestSignal';
 import { readWithResponseDeadline, trackResponseDeadline } from './responseDeadline';
 
+// Re-exported for assertions: a direct import adds a core -> node edge that
+// `npm run architecture:check` rejects.
 export { readWithResponseDeadline };
 
 import { getFetchRetryContextMaxRetries } from './retryContext';
