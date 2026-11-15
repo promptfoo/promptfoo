@@ -1126,6 +1126,62 @@ Application Details:
       expect(runButton).toBeDisabled();
     });
 
+    it('should enable the Run Now button when API status is disabled in no-network mode (runtime meta tag)', () => {
+      vi.mocked(useApiHealth).mockReturnValue({
+        data: {
+          status: 'disabled',
+          message: 'network egress is disabled (PROMPTFOO_NO_NETWORK)',
+        },
+        refetch: vi.fn(),
+        isLoading: false,
+      } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
+
+      const marker = document.createElement('meta');
+      marker.name = 'promptfoo-no-network';
+      document.head.append(marker);
+      try {
+        renderWithProviders(
+          <Review
+            navigateToPlugins={vi.fn()}
+            navigateToStrategies={vi.fn()}
+            navigateToPurpose={vi.fn()}
+          />,
+        );
+
+        const runButton = screen.getByRole('button', { name: /run now/i });
+        expect(runButton).toBeEnabled();
+      } finally {
+        marker.remove();
+      }
+    });
+
+    it('should enable the Run Now button when API status is disabled in no-network mode (build-time flag)', () => {
+      vi.mocked(useApiHealth).mockReturnValue({
+        data: {
+          status: 'disabled',
+          message: 'network egress is disabled (PROMPTFOO_NO_NETWORK)',
+        },
+        refetch: vi.fn(),
+        isLoading: false,
+      } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
+
+      vi.stubEnv('VITE_PROMPTFOO_NO_NETWORK', 'true');
+      try {
+        renderWithProviders(
+          <Review
+            navigateToPlugins={vi.fn()}
+            navigateToStrategies={vi.fn()}
+            navigateToPurpose={vi.fn()}
+          />,
+        );
+
+        const runButton = screen.getByRole('button', { name: /run now/i });
+        expect(runButton).toBeEnabled();
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    });
+
     it('should disable the Run Now button when API status is unknown', () => {
       vi.mocked(useApiHealth).mockReturnValue({
         data: { status: 'unknown', message: null },
@@ -1232,6 +1288,43 @@ Application Details:
       ).toBeInTheDocument();
     });
 
+    it('should display no-network alert when API is disabled in no-network mode', () => {
+      vi.mocked(useApiHealth).mockReturnValue({
+        data: {
+          status: 'disabled',
+          message: 'network egress is disabled (PROMPTFOO_NO_NETWORK)',
+        },
+        refetch: vi.fn(),
+        isLoading: false,
+      } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
+
+      const marker = document.createElement('meta');
+      marker.name = 'promptfoo-no-network';
+      document.head.append(marker);
+      try {
+        renderWithProviders(
+          <Review
+            navigateToPlugins={vi.fn()}
+            navigateToStrategies={vi.fn()}
+            navigateToPurpose={vi.fn()}
+          />,
+        );
+
+        expect(
+          screen.getByText(
+            /Network egress is disabled \(PROMPTFOO_NO_NETWORK\). The Promptfoo Cloud health check is skipped; local generation is still available./,
+          ),
+        ).toBeInTheDocument();
+        expect(
+          screen.queryByText(
+            /Remote generation is disabled. The "Run Now" option is not available./,
+          ),
+        ).not.toBeInTheDocument();
+      } finally {
+        marker.remove();
+      }
+    });
+
     it('should display warning alert when API is unknown', () => {
       vi.mocked(useApiHealth).mockReturnValue({
         data: { status: 'unknown', message: null },
@@ -1315,6 +1408,41 @@ Application Details:
       expect(tooltip).toHaveTextContent(
         /Remote generation is disabled\. Running red team evaluations/i,
       );
+    });
+
+    it('should explain the skipped health check when hovering over Run Now in no-network mode', async () => {
+      vi.mocked(useApiHealth).mockReturnValue({
+        data: {
+          status: 'disabled',
+          message: 'network egress is disabled (PROMPTFOO_NO_NETWORK)',
+        },
+        refetch: vi.fn(),
+        isLoading: false,
+      } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
+
+      const marker = document.createElement('meta');
+      marker.name = 'promptfoo-no-network';
+      document.head.append(marker);
+      try {
+        renderWithProviders(
+          <Review
+            navigateToPlugins={vi.fn()}
+            navigateToStrategies={vi.fn()}
+            navigateToPurpose={vi.fn()}
+          />,
+        );
+
+        const button = screen.getByRole('button', { name: /run now/i });
+        expect(button).toBeEnabled();
+        hoverElement(button);
+
+        const tooltip = screen.getByRole('tooltip');
+        expect(tooltip).toHaveTextContent(
+          /health check is skipped; local generation is still available/i,
+        );
+      } finally {
+        marker.remove();
+      }
     });
 
     it('should show tooltip message when hovering over disabled button due to unknown API status', async () => {
