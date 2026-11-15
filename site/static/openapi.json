@@ -49,6 +49,7 @@
         "operationId": "getRemoteHealth",
         "tags": ["Health"],
         "summary": "Check remote generation health",
+        "description": "When PROMPTFOO_NO_NETWORK is set, the health check is skipped and this route answers locally with status DISABLED instead of contacting api.promptfoo.app; local and self-hosted generation remain available. It also returns DISABLED when remote generation is disabled.",
         "responses": {
           "200": {
             "description": "Successful response",
@@ -5510,6 +5511,7 @@
         "operationId": "getVersion",
         "tags": ["Version"],
         "summary": "Check Promptfoo version and update commands",
+        "description": "When PROMPTFOO_NO_NETWORK (or PROMPTFOO_DISABLE_UPDATE) is set, the remote latest-version lookup is skipped and latestVersion equals the current version.",
         "responses": {
           "200": {
             "description": "Successful response",
