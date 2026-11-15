@@ -400,6 +400,26 @@ describe('macro analysis work and scope changes', () => {
     expect(extractRequiredVariablesFromTemplate(value)).toBeUndefined();
   });
 
+  it.each([
+    ['default', '{% macro m(x=missing) %}body{% endmacro %}ok'],
+    ['body', '{% macro m() %}{{missing}}{% endmacro %}ok'],
+  ])('does not require a dormant macro %s for eager rendering', (_name, value) => {
+    expect(getNunjucksEngine().renderString(value, {})).toBe('ok');
+    expect(extractUnboundVariablesFromTemplate(value)).toContain('missing');
+    expect(extractRequiredVariablesFromTemplate(value)).toEqual([]);
+  });
+
+  it.each<[string, (value: string) => boolean]>([
+    ['single reference', (value) => !analyzeTemplateReference(value, '_conversation').parsed],
+    ['all references', (value) => extractUnboundVariablesFromTemplate(value) === undefined],
+    ['required references', (value) => extractRequiredVariablesFromTemplate(value) === undefined],
+  ])('bounds repeated signature scans across call variants: %s', (_name, isIndeterminate) => {
+    const params = Array.from({ length: 512 }, (_value, index) => `p${index}`);
+    const value = `{% macro m(${params.join(',')}) %}body{% endmacro %}${params.map((name) => `{{ m(${name}=0) }}`).join('')}{{_conversation}}`;
+
+    expect(isIndeterminate(value)).toBe(true);
+  });
+
   it('bounds AST work across nested macro argument variants', () => {
     type AstNode = { fields?: string[]; typename?: string; [field: string]: unknown };
     const parser = (nunjucks as unknown as { parser: { parse: (value: string) => unknown } })

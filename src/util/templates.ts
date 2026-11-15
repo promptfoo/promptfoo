@@ -49,6 +49,7 @@ let macroAnalysisDepth = 0;
 type DeferredMacro = {
   node: NunjucksAstNode;
   paramNames: string[];
+  paramNameSet: ReadonlySet<string>;
   definitionScope: ReadonlySet<string>;
   called: boolean;
   analyzing: boolean;
@@ -60,6 +61,12 @@ type MacroAnalysisMemo = {
 };
 
 class TemplateAnalysisLimitError extends Error {}
+
+function consumeAnalysisWork(memo?: MacroAnalysisMemo): void {
+  if (memo && --memo.remainingVisits < 0) {
+    throw new TemplateAnalysisLimitError('Template dependency analysis exceeded its work limit');
+  }
+}
 
 class LinkedScope implements ReadonlySet<string> {
   private readonly names = new Set<string>();
@@ -372,9 +379,11 @@ function astNodeListReferencesVariable(
         addNamesToScopeInPlace(scope, names);
       }
     }
-    for (const macro of scope.localMacros()) {
-      if (!macro.called && analyzeMacroBody(macro, variableName, scope.macroAnalysisMemo())) {
-        return true;
+    if (!(typeof variableName === 'object' && 'excludeOrOperands' in variableName)) {
+      for (const macro of scope.localMacros()) {
+        if (!macro.called && analyzeMacroBody(macro, variableName, scope.macroAnalysisMemo())) {
+          return true;
+        }
       }
     }
     return false;
@@ -447,7 +456,9 @@ function analyzeSignatureArgs(
   }
 
   const defaultScope = new LinkedScope(boundSymbols);
+  const memo = defaultScope.macroAnalysisMemo();
   for (const child of argsNode.children) {
+    consumeAnalysisWork(memo);
     if (!isNunjucksAstNode(child)) {
       continue;
     }
@@ -459,6 +470,7 @@ function analyzeSignatureArgs(
     }
     if (child.typename === 'KeywordArgs' && Array.isArray(child.children)) {
       for (const pair of child.children) {
+        consumeAnalysisWork(memo);
         const keywordParamName =
           isNunjucksAstNode(pair) && pair.typename === 'Pair' ? getSymbolName(pair.key) : undefined;
         if (
@@ -495,7 +507,8 @@ function analyzeSignatureArgs(
 
 function collectSuppliedMacroParamNames(
   argsNode: unknown,
-  paramNames: readonly string[],
+  macro: DeferredMacro,
+  memo?: MacroAnalysisMemo,
 ): Set<string> {
   const supplied = new Set<string>();
   if (!isNunjucksAstNode(argsNode) || !Array.isArray(argsNode.children)) {
@@ -504,20 +517,22 @@ function collectSuppliedMacroParamNames(
 
   let positionalIndex = 0;
   for (const child of argsNode.children) {
+    consumeAnalysisWork(memo);
     if (!isNunjucksAstNode(child)) {
       continue;
     }
     if (child.typename === 'KeywordArgs' && Array.isArray(child.children)) {
       for (const pair of child.children) {
+        consumeAnalysisWork(memo);
         const name =
           isNunjucksAstNode(pair) && pair.typename === 'Pair' ? getSymbolName(pair.key) : undefined;
-        if (name && paramNames.includes(name)) {
+        if (name && macro.paramNameSet.has(name)) {
           supplied.add(name);
         }
       }
       continue;
     }
-    const name = paramNames[positionalIndex++];
+    const name = macro.paramNames[positionalIndex++];
     if (name) {
       supplied.add(name);
     }
@@ -590,22 +605,21 @@ function macroNodeReferencesVariable(
   boundSymbols: ReadonlySet<string>,
 ): boolean {
   const { paramNames } = analyzeSignatureArgs(node.args, undefined, boundSymbols);
+  const macro: DeferredMacro = {
+    node,
+    paramNames,
+    paramNameSet: new Set(paramNames),
+    definitionScope: boundSymbols,
+    called: false,
+    analyzing: false,
+  };
   const macroName = getSymbolName(node.name);
   if (macroName && boundSymbols instanceof LinkedScope) {
-    boundSymbols.registerMacro(macroName, {
-      node,
-      paramNames,
-      definitionScope: boundSymbols,
-      called: false,
-      analyzing: false,
-    });
+    boundSymbols.registerMacro(macroName, macro);
     return false;
   }
 
-  return analyzeMacroBody(
-    { node, paramNames, definitionScope: boundSymbols, called: false, analyzing: false },
-    variableName,
-  );
+  return analyzeMacroBody(macro, variableName);
 }
 
 function isNodeReferencesVariable(
@@ -754,7 +768,7 @@ function postfixNodeReferencesVariable(
     const memo = boundSymbols instanceof LinkedScope ? boundSymbols.macroAnalysisMemo() : undefined;
     if (macro) {
       macro.called = true;
-      const suppliedParamNames = collectSuppliedMacroParamNames(part.args, macro.paramNames);
+      const suppliedParamNames = collectSuppliedMacroParamNames(part.args, macro, memo);
       if (analyzeMacroBody(macro, variableName, memo, suppliedParamNames)) {
         return true;
       }
@@ -885,9 +899,7 @@ function astReferencesVariable(
   boundSymbols: ReadonlySet<string> = new Set(),
 ): boolean {
   const memo = boundSymbols instanceof LinkedScope ? boundSymbols.macroAnalysisMemo() : undefined;
-  if (memo && --memo.remainingVisits < 0) {
-    throw new TemplateAnalysisLimitError('Template dependency analysis exceeded its work limit');
-  }
+  consumeAnalysisWork(memo);
   if (
     node.typename === 'Or' &&
     typeof variableName === 'object' &&

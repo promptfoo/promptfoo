@@ -1448,6 +1448,52 @@ describe('evaluatorHelpers', () => {
       expect(JSON.parse(rendered)).toEqual({ text: value });
     });
 
+    it.each([
+      ['default', '{% macro m(x=missing) %}body{% endmacro %}ok'],
+      ['body', '{% macro m() %}{{missing}}{% endmacro %}ok'],
+    ])('should render a value with an unused macro %s', async (_name, value) => {
+      expect(await renderPrompt(toPrompt('{{v}}'), { v: value }, {})).toBe('ok');
+    });
+
+    it('should keep large keyword-argument macro definitions as JSON data', async () => {
+      const params = Array.from({ length: 1000 }, (_value, index) => `p${index}`);
+      const value = `{% macro m(${params.join(',')}) %}body{% endmacro %}{{ m(${params.map((name) => `${name}=0`).join(',')}) }}`;
+      const rendered = await renderPrompt(toPrompt('{"text":"{{v}}"}'), { v: value }, {});
+
+      expect(JSON.parse(rendered)).toEqual({ text: value });
+    });
+
+    it('should not turn JSON data into template source after structured rendering fails', async () => {
+      const restoreEnv = mockProcessEnv({ PROMPTFOO_TEST_JSON_BOUNDARY: 'fake-boundary-marker' });
+      try {
+        await expect(
+          renderPrompt(
+            toPrompt('{"n":"{{ v | load | length }}"}'),
+            { v: '{{ env.PROMPTFOO_TEST_JSON_BOUNDARY | dump }}' },
+            {},
+          ),
+        ).rejects.toThrow();
+      } finally {
+        restoreEnv();
+      }
+    });
+
+    it('should load JSON variable data without a second template pass', async () => {
+      const rendered = await renderPrompt(
+        toPrompt('{"n":"{{ v | load | length }}"}'),
+        { v: '[1,2]' },
+        {},
+      );
+
+      expect(JSON.parse(rendered)).toEqual({ n: '2' });
+    });
+
+    it('should allow expressions in the trusted JSON prompt itself', async () => {
+      const rendered = await renderPrompt(toPrompt('{"n":"{{ [1, 2] | length }}"}'), {}, {});
+
+      expect(JSON.parse(rendered)).toEqual({ n: '2' });
+    });
+
     it('should bind the implicit caller in macro-body dependencies', async () => {
       const template =
         '{% macro m() %}{{ caller() ~ "!" }}{% endmacro %}{% call m() %}x{% endcall %}';
