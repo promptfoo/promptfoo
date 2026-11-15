@@ -529,11 +529,65 @@ describe('evalLock', () => {
     ];
     suite.scenarios = [{ config: [{ options: { provider: 'target' } }], tests: [] }];
     const bar = createEvalBar(suite, { repeat: 1 });
-    expect(bar.defaultTest).toMatchObject({ provider, options: { provider } });
-    expect(bar.tests).toMatchObject([{ assert: [{ assert: [{ provider }] }] }]);
-    expect(bar.scenarios).toMatchObject([{ config: [{ options: { provider } }] }]);
+    const snapshot = { id: 'echo', label: 'target', config: provider.config };
+    expect(bar.defaultTest).toMatchObject({ provider: snapshot, options: { provider: snapshot } });
+    expect(bar.tests).toMatchObject([{ assert: [{ assert: [{ provider: snapshot }] }] }]);
+    expect(bar.scenarios).toMatchObject([{ config: [{ options: { provider: snapshot } }] }]);
     expect(canonicalJson(bar)).toContain('"payload":{"provider":"target","type":"record"}');
   });
+
+  it.each(['assertion', 'test', 'value', 'vars'] as const)(
+    'rejects provider-shaped %s data instead of discarding acceptance criteria',
+    (location) => {
+      const suite = createSuite();
+      let providerCalls = 0;
+      const methods = {
+        id: () => {
+          providerCalls++;
+          return 'disguised-criterion';
+        },
+        callApi: async () => ({ output: '' }),
+      };
+      if (location === 'assertion') {
+        Object.assign(suite.tests![0].assert![0], methods);
+      } else if (location === 'test') {
+        Object.assign(suite.tests![0], methods);
+      } else if (location === 'value') {
+        suite.tests![0].assert = [{ type: 'equals', value: { ...methods, expected: 'Paris' } }];
+      } else {
+        suite.tests![0].vars = { ...methods, expected: 'Paris' };
+      }
+
+      expect(() => hashEvalBar(createEvalBar(suite, { repeat: 1 }))).toThrow(
+        'cannot safely bind function values',
+      );
+      expect(providerCalls).toBe(0);
+    },
+  );
+
+  it.each(['text', 'embedding', 'classification', 'moderation'] as const)(
+    'normalizes runtime providers in the schema-level %s slot',
+    (providerType) => {
+      const suiteWithProvider = (basePath: string, temperature = 0) => {
+        const suite = createSuite();
+        const provider = {
+          id: () => 'echo',
+          label: 'target',
+          config: { basePath, temperature },
+          callApi: async () => ({ output: '' }),
+        };
+        suite.providers = [provider];
+        suite.tests![0].options = { provider: { [providerType]: 'target' } };
+        return createEvalBar(suite, { repeat: 1 });
+      };
+      const original = suiteWithProvider('/checkout/one');
+      expect(original.tests).toMatchObject([
+        { options: { provider: { [providerType]: { id: 'echo', config: { temperature: 0 } } } } },
+      ]);
+      expect(hashEvalBar(original)).toBe(hashEvalBar(suiteWithProvider('/checkout/two')));
+      expect(hashEvalBar(original)).not.toBe(hashEvalBar(suiteWithProvider('/checkout/two', 1)));
+    },
+  );
 
   it.each(['weight', 'threshold', 'value'])(
     'rejects non-enumerable assertion %s before copying it',
@@ -558,6 +612,65 @@ describe('evalLock', () => {
     expect(() => createEvalBar(suite, { repeat: 1 })).toThrow('function-valued derived metrics');
     suite.derivedMetrics = [{ name: 'score', value: 'accuracy / __count' }];
     expect(() => hashEvalBar(createEvalBar(suite, { repeat: 1 }))).not.toThrow();
+  });
+
+  it.each(['name', 'value', 'array'] as const)(
+    'rejects accessor-backed derived metric %s without reading it',
+    (location) => {
+      const suite = createSuite();
+      let reads = 0;
+      const metric = { name: 'score', value: 'accuracy / __count' };
+      const metrics = [metric];
+      Object.defineProperty(
+        location === 'array' ? metrics : metric,
+        location === 'array' ? '0' : location,
+        {
+          enumerable: true,
+          get() {
+            reads++;
+            return location === 'array'
+              ? metric
+              : location === 'name'
+                ? 'score'
+                : 'accuracy / __count';
+          },
+        },
+      );
+      suite.derivedMetrics = metrics;
+
+      expect(() => createEvalBar(suite, { repeat: 1 })).toThrow('accessors');
+      expect(reads).toBe(0);
+    },
+  );
+
+  it.each(['metric', 'array'] as const)(
+    'rejects proxy-backed derived metric %s without invoking traps',
+    (location) => {
+      const suite = createSuite();
+      let reads = 0;
+      const handler = {
+        get() {
+          reads++;
+          throw new Error('DERIVED_PROXY_RAN');
+        },
+      };
+      const metric = { name: 'score', value: 'accuracy / __count' };
+      suite.derivedMetrics =
+        location === 'array' ? new Proxy([metric], handler) : [new Proxy(metric, handler)];
+
+      expect(() => createEvalBar(suite, { repeat: 1 })).toThrow('proxies');
+      expect(reads).toBe(0);
+    },
+  );
+
+  it.each([
+    { map: () => [] },
+    [{ name: { toString: (): string => 'score' }, value: '1' }],
+    [{ name: 'score', value: { toString: (): string => '1' } }],
+  ])('rejects derived metrics that are not data-only string formulas: %j', (derivedMetrics) => {
+    expect(() => createEvalBar({ ...createSuite(), derivedMetrics }, { repeat: 1 })).toThrow(
+      'Evaluation locks require derived metrics',
+    );
   });
 
   it('rejects closure-dependent function criteria', () => {

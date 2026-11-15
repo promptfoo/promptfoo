@@ -8,6 +8,8 @@ import { toSerializableProviderRef } from '../models/evalResult';
 import { sha256 } from '../util/createHash';
 import {
   buildConfiguredProviderMap,
+  GRADING_PROVIDER_TYPE_KEYS,
+  isProviderTypeMap,
   resolveConfiguredProviderReference,
 } from '../util/gradingProvider';
 
@@ -177,6 +179,29 @@ function omitUndefinedFields(value: Record<string, unknown>): Record<string, unk
   return Object.fromEntries(Object.entries(value).filter(([, entry]) => entry !== undefined));
 }
 
+function snapshotProviderReference(value: unknown, providerMap: ConfiguredProviderMap): unknown {
+  const provider = resolveConfiguredProviderReference(value, providerMap);
+  if (isRuntimeApiProvider(provider)) {
+    return portableProviderRef(provider);
+  }
+  if (Array.isArray(provider)) {
+    assertPlainDataObject(provider);
+    return provider.map((entry) => snapshotProviderReference(entry, providerMap));
+  }
+  if (isProviderTypeMap(provider)) {
+    assertPlainDataObject(provider);
+    return Object.fromEntries(
+      Object.entries(provider).map(([key, entry]) => [
+        key,
+        GRADING_PROVIDER_TYPE_KEYS.some((type) => type === key)
+          ? snapshotProviderReference(entry, providerMap)
+          : entry,
+      ]),
+    );
+  }
+  return provider;
+}
+
 function snapshotAssertions(assertions: unknown[], providerMap: ConfiguredProviderMap): unknown[] {
   assertPlainDataObject(assertions);
   return assertions.map((entry) => snapshotAssertionEnvelope(entry, providerMap));
@@ -195,7 +220,7 @@ function snapshotAssertionEnvelope(value: unknown, providerMap: ConfiguredProvid
   return {
     ...omitUndefinedFields(assertion),
     ...(assertion.provider !== undefined && {
-      provider: resolveConfiguredProviderReference(assertion.provider, providerMap),
+      provider: snapshotProviderReference(assertion.provider, providerMap),
     }),
     ...(Array.isArray(assertion.assert) && {
       assert: snapshotAssertions(assertion.assert, providerMap),
@@ -211,14 +236,14 @@ function snapshotTestEnvelope(value: unknown, providerMap: ConfiguredProviderMap
   assertPlainDataObject(test);
   const snapshot = omitUndefinedFields(test);
   if (test.provider !== undefined) {
-    snapshot.provider = resolveConfiguredProviderReference(test.provider, providerMap);
+    snapshot.provider = snapshotProviderReference(test.provider, providerMap);
   }
   const options = asRecord(test.options);
   if (options) {
     assertPlainDataObject(options);
     snapshot.options = omitUndefinedFields(options);
     if (options.provider !== undefined) {
-      (snapshot.options as Record<string, unknown>).provider = resolveConfiguredProviderReference(
+      (snapshot.options as Record<string, unknown>).provider = snapshotProviderReference(
         options.provider,
         providerMap,
       );
@@ -437,6 +462,32 @@ function validateDataOnlyCriteria(testSuite: EvalBarSource, disableTemplating: b
   }
 }
 
+function validateDerivedMetrics(metrics: unknown): void {
+  if (metrics == null) {
+    return;
+  }
+  if (!Array.isArray(metrics)) {
+    throw new Error(
+      'Evaluation locks require derived metrics to be an array of data-only formulas',
+    );
+  }
+  assertPlainDataObject(metrics);
+  for (const value of metrics) {
+    const metric = asRecord(value);
+    if (metric) {
+      assertPlainDataObject(metric);
+    }
+    if (typeof metric?.value === 'function') {
+      throw new Error(
+        'Evaluation locks do not support function-valued derived metrics because callbacks can mutate live test criteria',
+      );
+    }
+    if (typeof metric?.name !== 'string' || typeof metric.value !== 'string') {
+      throw new Error('Evaluation locks require derived metrics with string names and formulas');
+    }
+  }
+}
+
 function uuidV7(): string {
   const bytes = randomBytes(16);
   const timestamp = Date.now();
@@ -563,10 +614,6 @@ function canonicalize(value: unknown, ancestors: Set<object>, location: string):
     throw new Error(`Evaluation locks cannot include ${typeof value} values`);
   }
 
-  if (isRuntimeApiProvider(value)) {
-    return canonicalize(portableProviderRef(value), ancestors, location);
-  }
-
   assertPlainDataObject(value);
 
   if (ancestors.has(value)) {
@@ -620,14 +667,7 @@ export function createEvalBar(
     );
   }
   validateDataOnlyCriteria(testSuite, execution.disableTemplating ?? false);
-  if (
-    Array.isArray(testSuite.derivedMetrics) &&
-    testSuite.derivedMetrics.some((metric) => typeof asRecord(metric)?.value === 'function')
-  ) {
-    throw new Error(
-      'Evaluation locks do not support function-valued derived metrics because callbacks can mutate live test criteria',
-    );
-  }
+  validateDerivedMetrics(testSuite.derivedMetrics);
 
   if (
     testSuite.providerPromptMap != null ||

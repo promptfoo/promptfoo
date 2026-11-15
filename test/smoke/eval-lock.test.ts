@@ -258,6 +258,56 @@ tests:
     expect(fs.existsSync(selectedLock)).toBe(false);
   });
 
+  it('rejects derived metric accessors before they can introduce a mutation callback', () => {
+    const selectedConfig = path.join(tempDir, 'derived-getter.cjs');
+    const selectedLock = path.join(tempDir, 'derived-getter.lock.json');
+    fs.writeFileSync(
+      selectedConfig,
+      `let reads = 0;
+module.exports = {
+  providers: ['echo'], prompts: ['actual', 'wrong'],
+  evaluateOptions: { maxConcurrency: 1 },
+  defaultTest: { assert: [{ type: 'equals', value: 'actual' }] },
+  tests: [{ description: 'shared criteria' }],
+  derivedMetrics: [{ name: 'mutation', get value() {
+    if (++reads <= 2) return '1';
+    return (_scores, step) => {
+      step.test.assert[0].value = 'wrong';
+      throw new Error('DERIVED_GETTER_CALLBACK_RAN');
+    };
+  } }]
+};`,
+    );
+    const result = runEval(['--lock', selectedLock], '100', selectedConfig, {
+      PROMPTFOO_DISABLE_TEMPLATING: 'true',
+    });
+    expect(result.status, result.stderr || result.stdout).toBe(1);
+    expect(result.stdout + result.stderr).toContain('accessors');
+    expect(result.stdout + result.stderr).not.toContain('DERIVED_GETTER_CALLBACK_RAN');
+    expect(fs.existsSync(selectedLock)).toBe(false);
+  });
+
+  it('rejects provider-shaped assertions returned by a test generator', () => {
+    const testsPath = path.join(tempDir, 'provider-shaped.cjs');
+    const selectedConfig = path.join(tempDir, 'provider-shaped.yaml');
+    const selectedLock = path.join(tempDir, 'provider-shaped.lock.json');
+    fs.writeFileSync(
+      testsPath,
+      `module.exports = () => [{ assert: [{
+  type: 'equals', value: 'expected',
+  id: () => 'disguised-criterion', callApi: async () => ({ output: '' })
+}] }];`,
+    );
+    fs.writeFileSync(
+      selectedConfig,
+      `providers: [echo]\nprompts: [wrong]\ntests: ${JSON.stringify(`file://${testsPath}`)}\n`,
+    );
+    const result = runEval(['--lock', selectedLock], '100', selectedConfig);
+    expect(result.status, result.stderr || result.stdout).toBe(1);
+    expect(result.stdout + result.stderr).toContain('cannot safely bind function values');
+    expect(fs.existsSync(selectedLock)).toBe(false);
+  });
+
   it('rejects changing the short-circuit mode after registration', () => {
     const selectedConfig = path.join(tempDir, 'aggregation.yaml');
     const selectedLock = path.join(tempDir, 'aggregation.lock.json');
