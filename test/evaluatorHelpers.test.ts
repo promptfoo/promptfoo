@@ -637,6 +637,43 @@ describe('evaluatorHelpers', () => {
         clearPromptTemplateCache();
       }
     });
+
+    it('should pass env in this.ctx to custom filters on the cached path', async () => {
+      clearPromptTemplateCache();
+      vi.stubEnv('PF_CTX_ENV_TEST', 'from-env');
+      try {
+        const filters = {
+          fromEnv: function (this: any, _s: string) {
+            return this.ctx.env.PF_CTX_ENV_TEST;
+          },
+        };
+        const rendered = await renderPrompt(
+          toPrompt('{{ text | fromEnv }}'),
+          { text: 'x' },
+          filters,
+        );
+        expect(rendered).toBe('from-env');
+      } finally {
+        vi.unstubAllEnvs();
+        clearPromptTemplateCache();
+      }
+    });
+
+    it('should not cache row variable values', async () => {
+      clearPromptTemplateCache();
+      const compileSpy = vi.spyOn(nunjucks.Template.prototype as any, '_compile');
+      try {
+        const prompt = toPrompt('Data: {{ data }}');
+        const row = { data: '{"k": 1}' };
+        expect(await renderPrompt(prompt, row)).toBe('Data: {"k": 1}');
+        expect(await renderPrompt(prompt, row)).toBe('Data: {"k": 1}');
+        // Prompt compiled once (cached); the row value is compiled on each render (uncached).
+        expect(compileSpy).toHaveBeenCalledTimes(3);
+      } finally {
+        compileSpy.mockRestore();
+        clearPromptTemplateCache();
+      }
+    });
   });
 
   describe('renderPrompt with prompt functions', () => {

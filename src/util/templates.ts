@@ -420,7 +420,7 @@ function astReferencesVariable(
 
 // Cached engines and imported macros share this view. Resolve keys from the current
 // async scope; enumerate process.env only when a template actually iterates it.
-const templateEnv: Record<string, string | undefined> = new Proxy(
+export const templateEnv: Record<string, string | undefined> = new Proxy(
   {},
   {
     get(_target, key) {

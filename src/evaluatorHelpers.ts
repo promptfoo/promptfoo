@@ -28,7 +28,7 @@ import { isAudioFile, isImageFile, isJavascriptFile, isVideoFile } from './util/
 import { renderVarsInObject, setLoadedFileMimeTypes } from './util/index';
 import invariant from './util/invariant';
 import { filterFiniteScores } from './util/numeric';
-import { extractVariablesFromTemplate, getNunjucksEngine } from './util/templates';
+import { extractVariablesFromTemplate, getNunjucksEngine, templateEnv } from './util/templates';
 import { transform } from './util/transform';
 import { loadYaml } from './util/yamlLoad';
 
@@ -286,7 +286,8 @@ function renderTemplateString(
     tmpl = new nunjucks.Template(templateStr, getEngine());
     promptTemplateCache.set(cacheKey, tmpl);
   }
-  return tmpl.render(context);
+  // Match the engine's renderString wrapper, which injects env into this.ctx for custom filters.
+  return tmpl.render({ env: templateEnv, ...context });
 }
 
 /**
@@ -598,12 +599,8 @@ export async function renderPrompt(
 
         return [
           key,
-          renderTemplateString(
-            autoWrapRawIfPartialNunjucks(value),
-            vars,
-            getNunjucks,
-            nunjucksFilters,
-          ),
+          // Row values are usually one-off; render them uncached so they don't fill the template cache.
+          getNunjucks().renderString(autoWrapRawIfPartialNunjucks(value), vars),
         ];
       }),
     );
