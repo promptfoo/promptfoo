@@ -97,9 +97,9 @@ export function parseRateLimitHeaders(headers: Record<string, string>): ParsedRa
 
   // --- Retry-After ---
   if (h['retry-after-ms'] !== undefined) {
-    const ms = Number.parseInt(h['retry-after-ms'], 10);
+    const ms = parseIntegerHeader(h['retry-after-ms']);
     // Accept 0 as valid (means "retry immediately")
-    if (Number.isFinite(ms) && ms >= 0) {
+    if (ms !== undefined) {
       result.retryAfterMs = ms;
       if (result.resetAt === undefined) {
         result.resetAt = Date.now() + ms;
@@ -147,12 +147,28 @@ export function parseRetryAfter(value: string): number | null {
   return null;
 }
 
+/**
+ * Parse a header value as a bare non-negative integer, or undefined when the
+ * value is not one. `Number.parseInt` stops at the first character it cannot
+ * consume, so without this guard a malformed value ("12abc") is read as 12 and
+ * shadows a valid fallback header. Same intent as the `String(seconds) ===
+ * value.trim()` check in `parseRetryAfter` and `BARE_NUMBER_RE` below.
+ */
+function parseIntegerHeader(value: string): number | undefined {
+  const trimmed = value.trim();
+  if (!/^\d+$/.test(trimmed)) {
+    return undefined;
+  }
+  const num = Number.parseInt(trimmed, 10);
+  return Number.isFinite(num) && num >= 0 ? num : undefined;
+}
+
 function parseFirstMatch(headers: Record<string, string>, names: string[]): number | undefined {
   for (const name of names) {
     const value = headers[name];
     if (value !== undefined) {
-      const num = Number.parseInt(value, 10);
-      if (Number.isFinite(num) && num >= 0) {
+      const num = parseIntegerHeader(value);
+      if (num !== undefined) {
         return num;
       }
     }
