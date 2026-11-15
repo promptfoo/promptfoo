@@ -256,4 +256,23 @@ describe('attachGradingProvider', () => {
     expect(result.metadata.gradingProvider).toBe('https://judge.example/grade');
     expect(result.metadata.gradingProvider).not.toContain('super-secret');
   });
+
+  it.each([
+    'https:judge.example/grade?api_key=super-secret',
+    'HTTPS:user:pass@judge.example/grade?api_key=super-secret',
+    'https:/judge.example/grade?api_key=super-secret',
+    'https:\\\\judge.example/grade?api_key=super-secret',
+  ])('persists a redacted judge id for the accepted %s form', (id) => {
+    const provider = {
+      id: () => id,
+      label: 'Judge',
+      callApi: async () => ({ output: '' }),
+    } as ApiProvider;
+
+    const result = attachGradingProvider({ pass: true, score: 1, reason: 'ok' }, provider);
+
+    expect(result.metadata.gradingProvider).toBe('https://judge.example/grade (Judge)');
+    expect(result.metadata.gradingProvider).not.toContain('super-secret');
+    expect(result.metadata.gradingProvider).not.toContain('pass@');
+  });
 });

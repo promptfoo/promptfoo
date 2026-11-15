@@ -838,6 +838,20 @@ it.each([
   }
 });
 
+it.each([
+  ['https:judge.example/grade?api_key=fixture', 'https://judge.example/grade'],
+  ['Judge (http:u:p@judge.example/grade?token=fixture)', 'Judge (http://judge.example/grade)'],
+])('normalizes HTTP judge ids without slashes before redacting', async (provider, expected) => {
+  const { getGradingProviderDisplay } = await import('./utils');
+  const result = { pass: true, score: 1, reason: 'ok' };
+  expect(getGradingProviderDisplay({ ...result, metadata: { gradingProvider: provider } })).toBe(
+    expected,
+  );
+  expect(
+    getGradingProviderDisplay({ ...result, assertion: { type: 'llm-rubric', provider } }),
+  ).toBe(expected);
+});
+
 it('keeps the primary endpoint recognizable after composing sanitized fields', async () => {
   const { getGradingProviderDisplay } = await import('./utils');
   expect(

@@ -1741,12 +1741,18 @@ export function sanitizeUrlForLogging(url: string): string {
   }
 }
 
+const LOOSE_HTTP_SCHEME = /(^|[\s(=])(https?):[\\/]*(?=[^\\/\s])/gi;
+
 /**
  * A raw HTTP provider can return spaces and parentheses inside its credential.
  * Treat the remainder of the string as part of the URL, including for older
  * composite IDs whose label and query cannot be distinguished.
  */
-function sanitizeJudgePart(part: string): string {
+function sanitizeJudgePart(rawPart: string): string {
+  // The HTTP provider also accepts ids like `https:host/path`, which WHATWG URL
+  // parsing normalizes to `https://host/path`. Normalize them the same way so the
+  // authority and query are recognized instead of passing through as plain text.
+  const part = rawPart.replace(LOOSE_HTTP_SCHEME, '$1$2://');
   const separator = part.indexOf('://');
   const pathStart = /(?:^|[\s(=])\//.exec(part);
   let start: number;
