@@ -5,6 +5,7 @@ import { getEnvString, getProcessEnv } from '../../src/envars';
 import { getEnvOverridesProvider, setEnvOverridesProvider } from '../../src/envOverrides';
 import {
   analyzeTemplateReference,
+  extractRequiredVariablesFromTemplate,
   extractUnboundVariablesFromTemplate,
   extractVariablesFromExpression,
   extractVariablesFromTemplate,
@@ -338,6 +339,101 @@ describe('analyzeTemplateReference', () => {
     const template =
       "{% macro m() %}{{ _conversation }}{% endmacro %}{% set saved=m %}{% set m='' %}{{ saved() }}";
     expect(analyzeTemplateReference(template, '_conversation')).toEqual({
+      referenced: true,
+      parsed: true,
+    });
+  });
+});
+
+function nestedMacroArgumentVariants(): string {
+  let value = '';
+  for (let index = 16; index >= 0; index--) {
+    const calls = index === 16 ? '' : `{{m${index + 1}()}}{{m${index + 1}('x')}}`;
+    value = `{% macro m${index}(x='') %}${value}${calls}{% endmacro %}`;
+  }
+  return value + "{{m0()}}{{m0('x')}}";
+}
+
+describe('macro analysis work and scope changes', () => {
+  it.each<[string, (value: string) => boolean | undefined]>([
+    [
+      'single reference',
+      (value: string) => analyzeTemplateReference(value, '_conversation').referenced,
+    ],
+    [
+      'all references',
+      (value: string) => extractUnboundVariablesFromTemplate(value)?.includes('_conversation'),
+    ],
+    [
+      'required references',
+      (value: string) => extractRequiredVariablesFromTemplate(value)?.includes('_conversation'),
+    ],
+  ])('invalidates a cached negative after a macro is rebound: %s', (_name, referencesHistory) => {
+    const value =
+      "{% macro a() %}{{b()}}{% endmacro %}{% macro b() %}x{% endmacro %}{{a()}}{% macro b() %}{{_conversation}}{% endmacro %}{{a()}}{% set b='' %}";
+
+    expect(getNunjucksEngine().renderString(value, { _conversation: 'history' })).toBe('xhistory');
+    expect(referencesHistory(value)).toBe(true);
+  });
+
+  it('bounds AST work across nested macro argument variants', () => {
+    type AstNode = { fields?: string[]; typename?: string; [field: string]: unknown };
+    const parser = (nunjucks as unknown as { parser: { parse: (value: string) => unknown } })
+      .parser;
+    const parse = parser.parse.bind(parser);
+    const descriptors: Array<[AstNode, PropertyDescriptor]> = [];
+    let bodyReads = 0;
+    const parseSpy = vi.spyOn(parser, 'parse').mockImplementation((value) => {
+      const ast = parse(value);
+      const pending: unknown[] = [ast];
+      while (pending.length > 0) {
+        const current = pending.pop();
+        if (!current || typeof current !== 'object') {
+          continue;
+        }
+        const node = current as AstNode;
+        for (const field of node.fields ?? []) {
+          const child = node[field];
+          if (node.typename === 'Macro' && field === 'body') {
+            descriptors.push([node, Object.getOwnPropertyDescriptor(node, field)!]);
+            Object.defineProperty(node, field, {
+              configurable: true,
+              get: () => {
+                bodyReads++;
+                return child;
+              },
+            });
+          }
+          pending.push(...(Array.isArray(child) ? child : [child]));
+        }
+      }
+      return ast;
+    });
+    const value = nestedMacroArgumentVariants();
+    try {
+      const references = extractUnboundVariablesFromTemplate(value);
+      // An exhausted analysis may be indeterminate, but must not expand the call tree.
+      expect(references === undefined || references.length === 0).toBe(true);
+      expect(bodyReads).toBeGreaterThanOrEqual(17);
+      expect(bodyReads).toBeLessThan(40000);
+    } finally {
+      for (const [node, descriptor] of descriptors) {
+        Object.defineProperty(node, 'body', descriptor);
+      }
+      parseSpy.mockRestore();
+    }
+  });
+
+  it('keeps exhausted analyses indeterminate rather than dropping later history reads', () => {
+    const value = nestedMacroArgumentVariants() + '{{_conversation}}';
+    expect(getNunjucksEngine().renderString(value, { _conversation: 'history' })).toBe('history');
+    expect(analyzeTemplateReference(value, '_conversation')).toEqual({
+      referenced: true,
+      parsed: false,
+    });
+    expect(extractUnboundVariablesFromTemplate(value)).toBeUndefined();
+    expect(extractRequiredVariablesFromTemplate(value)).toBeUndefined();
+    expect(analyzeTemplateReference('{{_conversation}}', '_conversation')).toEqual({
       referenced: true,
       parsed: true,
     });

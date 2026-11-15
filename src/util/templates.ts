@@ -54,7 +54,12 @@ type DeferredMacro = {
   analyzing: boolean;
 };
 
-type MacroAnalysisMemo = Map<DeferredMacro, Set<string>>;
+type MacroAnalysisMemo = {
+  results: Map<DeferredMacro, Set<string>>;
+  remainingVisits: number;
+};
+
+class TemplateAnalysisLimitError extends Error {}
 
 class LinkedScope implements ReadonlySet<string> {
   private readonly names = new Set<string>();
@@ -65,6 +70,7 @@ class LinkedScope implements ReadonlySet<string> {
     private readonly parent?: ReadonlySet<string>,
     names: Iterable<string> = [],
   ) {
+    this.fallbackMacroMemo = parent instanceof LinkedScope ? parent.macroAnalysisMemo() : undefined;
     for (const name of names) {
       this.names.add(name);
     }
@@ -83,13 +89,16 @@ class LinkedScope implements ReadonlySet<string> {
     return this;
   }
 
-  registerMacro(name: string, definition: DeferredMacro): void {
+  registerMacro(name: string, definition: DeferredMacro, invalidateMemo = true): void {
     this.macros.set(name, definition);
+    if (invalidateMemo) {
+      this.macroAnalysisMemo()?.results.clear();
+    }
   }
 
   removeMacroBindings(node: unknown): void {
     for (const name of collectBindingNames(node)) {
-      this.macros.delete(name);
+      this.removeMacro(name);
     }
   }
 
@@ -105,7 +114,9 @@ class LinkedScope implements ReadonlySet<string> {
   }
 
   removeMacro(name: string): void {
-    this.macros.delete(name);
+    if (this.macros.delete(name)) {
+      this.macroAnalysisMemo()?.results.clear();
+    }
   }
 
   findMacro(name: string): DeferredMacro | undefined {
@@ -299,6 +310,29 @@ function collectFromImportBindingNames(namesNode: unknown): string[] {
   return names;
 }
 
+function countAstNodes(nodes: readonly unknown[]): number {
+  const pending = [...nodes];
+  let count = 0;
+  while (pending.length > 0) {
+    const node = pending.pop();
+    if (!isNunjucksAstNode(node)) {
+      continue;
+    }
+    count++;
+    for (const field of node.fields ?? []) {
+      const child = node[field];
+      if (Array.isArray(child)) {
+        for (const item of child) {
+          pending.push(item);
+        }
+      } else {
+        pending.push(child);
+      }
+    }
+  }
+  return count;
+}
+
 function astNodeListReferencesVariable(
   nodes: readonly unknown[],
   variableName: ReferenceTarget,
@@ -308,7 +342,11 @@ function astNodeListReferencesVariable(
   const scope = new LinkedScope(boundSymbols);
   const previousMemo = scope.macroAnalysisMemo();
   if (previousMemo === undefined) {
-    scope.replaceMacroAnalysisMemo(new Map());
+    // Allow linear work on large ASTs without expanding small macro call trees exponentially.
+    scope.replaceMacroAnalysisMemo({
+      results: new Map(),
+      remainingVisits: 10000 + 16 * countAstNodes(nodes),
+    });
   }
   try {
     for (const item of nodes) {
@@ -500,7 +538,7 @@ function analyzeMacroBody(
   const memoKey = macroAnalysisMemoKey(suppliedParamNames);
   if (
     macro.analyzing ||
-    memo?.get(macro)?.has(memoKey) ||
+    memo?.results.get(macro)?.has(memoKey) ||
     macroAnalysisDepth >= MAX_MACRO_ANALYSIS_DEPTH
   ) {
     return false;
@@ -525,14 +563,15 @@ function analyzeMacroBody(
     const macroName = getSymbolName(macro.node.name);
     if (macroName) {
       macroScope.add(macroName);
-      macroScope.registerMacro(macroName, macro);
+      // Initializing the implicit self binding does not rebind a visible definition.
+      macroScope.registerMacro(macroName, macro, false);
     }
     macroScope.add('caller');
     const result = astChildReferencesVariable(macro.node, 'body', variableName, macroScope);
     if (!result && memo) {
-      const memoKeys = memo.get(macro) ?? new Set<string>();
+      const memoKeys = memo.results.get(macro) ?? new Set<string>();
       memoKeys.add(memoKey);
-      memo.set(macro, memoKeys);
+      memo.results.set(macro, memoKeys);
     }
     return result;
   } finally {
@@ -843,6 +882,10 @@ function astReferencesVariable(
   parent?: NunjucksParentContext,
   boundSymbols: ReadonlySet<string> = new Set(),
 ): boolean {
+  const memo = boundSymbols instanceof LinkedScope ? boundSymbols.macroAnalysisMemo() : undefined;
+  if (memo && --memo.remainingVisits < 0) {
+    throw new TemplateAnalysisLimitError('Template dependency analysis exceeded its work limit');
+  }
   if (
     node.typename === 'Or' &&
     typeof variableName === 'object' &&
@@ -920,6 +963,20 @@ function astReferencesVariable(
   }
 
   return astFieldsReferenceVariable(node, variableName, boundSymbols);
+}
+
+function boundedAstReferencesVariable(
+  node: NunjucksAstNode,
+  variableName: ReferenceTarget,
+): boolean | undefined {
+  try {
+    return astReferencesVariable(node, variableName);
+  } catch (error) {
+    if (error instanceof TemplateAnalysisLimitError) {
+      return undefined;
+    }
+    throw error;
+  }
 }
 
 // Cached engines and imported macros share this view. Resolve keys from the current
@@ -1199,10 +1256,9 @@ export function extractVariablesFromTemplates(templates: string[]): string[] {
 
 /**
  * Detailed result for {@link analyzeTemplateReference}. `parsed` is `false`
- * only when the Nunjucks parser threw or its private export is missing; in
- * that case `referenced` is set conservatively from a textual substring check
- * so callers can preserve the old substring-match safety envelope without
- * memoizing a parse failure.
+ * when parsing or bounded scope analysis cannot complete. In that case,
+ * `referenced` retains the textual substring safety envelope and callers must
+ * not memoize the indeterminate result.
  */
 export type TemplateReferenceResult = {
   referenced: boolean;
@@ -1211,11 +1267,10 @@ export type TemplateReferenceResult = {
 
 /**
  * Classify whether a template references `variableName` as a real Nunjucks
- * expression symbol, and surface whether the template parsed successfully.
+ * expression symbol, and surface whether parsing and scope analysis completed.
  *
  * Callers that cache results should avoid caching when `parsed` is `false`,
- * otherwise a transient parse failure would poison the cache for the lifetime
- * of the process.
+ * so an indeterminate analysis cannot poison the cache for the process lifetime.
  */
 export function analyzeTemplateReference(
   template: string,
@@ -1229,9 +1284,10 @@ export function analyzeTemplateReference(
   if (!parseResult.ok) {
     return { referenced: true, parsed: false };
   }
+  const referenced = boundedAstReferencesVariable(parseResult.ast, variableName);
   return {
-    referenced: astReferencesVariable(parseResult.ast, variableName),
-    parsed: true,
+    referenced: referenced ?? true,
+    parsed: referenced !== undefined,
   };
 }
 
@@ -1240,8 +1296,9 @@ export function analyzeTemplateReference(
  * symbol (not a string literal, comment, object key, filter/test name, property
  * access, macro/for/set binding, or `{% import %}` alias).
  *
- * If parsing fails, returns `true` whenever the template textually contains
- * `variableName`. This preserves the safety envelope of the old substring-based
+ * If parsing fails or scope analysis exceeds its work limit, returns `true`
+ * whenever the template textually contains `variableName`. This preserves the
+ * safety envelope of the old substring-based
  * check so callers that gate serial-only behavior on this result do not
  * silently downgrade to parallel execution when a template is malformed.
  */
@@ -1359,8 +1416,8 @@ export function templateLoadsExternalContext(template: string): boolean {
 
 /**
  * Collect all unbound expression symbols with one parse and one scope-aware
- * AST walk. Returns undefined on parse failure so callers can retain their
- * conservative textual fallback.
+ * AST walk. Returns undefined when parsing or bounded analysis cannot complete,
+ * so callers can retain their conservative textual fallback.
  */
 export function extractUnboundVariablesFromTemplate(template: string): string[] | undefined {
   const parseResult = parseNunjucksTemplate(template);
@@ -1368,7 +1425,9 @@ export function extractUnboundVariablesFromTemplate(template: string): string[] 
     return undefined;
   }
   const references = new Set<string>();
-  astReferencesVariable(parseResult.ast, references);
+  if (boundedAstReferencesVariable(parseResult.ast, references) === undefined) {
+    return undefined;
+  }
   return Array.from(references);
 }
 
@@ -1376,6 +1435,7 @@ export function extractUnboundVariablesFromTemplate(template: string): string[] 
  * Collect symbols that must be supplied for eager rendering. Nunjucks permits
  * missing operands in an `or` fallback, so those occurrences are excluded only
  * for this traversal; the same name elsewhere remains a required reference.
+ * Returns undefined when parsing or bounded scope analysis cannot complete.
  */
 export function extractRequiredVariablesFromTemplate(template: string): string[] | undefined {
   const parseResult = parseNunjucksTemplate(template);
@@ -1386,6 +1446,8 @@ export function extractRequiredVariablesFromTemplate(template: string): string[]
     references: new Set<string>(),
     excludeOrOperands: true,
   };
-  astReferencesVariable(parseResult.ast, target);
+  if (boundedAstReferencesVariable(parseResult.ast, target) === undefined) {
+    return undefined;
+  }
   return Array.from(target.references);
 }
