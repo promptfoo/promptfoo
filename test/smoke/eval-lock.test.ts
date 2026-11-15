@@ -305,6 +305,56 @@ tests:
     expect(fs.existsSync(selectedLock)).toBe(false);
   });
 
+  it.each([false, true])('rejects generated assertion-array getters (nested: %s)', (nested) => {
+    const testsPath = path.join(tempDir, `getter-${nested}.cjs`);
+    const selectedConfig = path.join(tempDir, `getter-${nested}.yaml`);
+    const selectedLock = path.join(tempDir, `getter-${nested}.lock.json`);
+    fs.writeFileSync(
+      testsPath,
+      `module.exports = () => {
+  let reads = 0;
+  const assertions = [];
+  Object.defineProperty(assertions, '0', { enumerable: true, get() {
+    return { type: 'equals', value: ++reads < 3 ? 'different' : 'actual' };
+  } });
+  return [{ assert: ${nested ? "[{ type: 'assert-set', assert: assertions }]" : 'assertions'} }];
+};`,
+    );
+    fs.writeFileSync(
+      selectedConfig,
+      `providers: [echo]\nprompts: [actual]\ntests: ${JSON.stringify(`file://${testsPath}`)}\n`,
+    );
+    const result = runEval(['--lock', selectedLock], '100', selectedConfig);
+    expect(result.status, result.stderr || result.stdout).toBe(1);
+    expect(result.stdout + result.stderr).toContain('accessors');
+    expect(fs.existsSync(selectedLock)).toBe(false);
+  });
+
+  it('preserves deterministic normalization of YAML block-scalar criteria', () => {
+    const selectedConfig = path.join(tempDir, 'normalized-vars.yaml');
+    const selectedLock = path.join(tempDir, 'normalized-vars.lock.json');
+    const outputPath = path.join(tempDir, 'normalized-output.json');
+    fs.writeFileSync(
+      selectedConfig,
+      `providers: [echo]
+prompts: ['{{expected}}']
+tests:
+  - vars:
+      expected: |
+        Paris
+    assert: [{ type: equals, value: '{{expected}}' }]
+`,
+    );
+    const unlocked = runEval([], '100', selectedConfig);
+    expect(unlocked.status, unlocked.stderr || unlocked.stdout).toBe(0);
+    const locked = runEval(['--lock', selectedLock], '100', selectedConfig);
+    expect(locked.status, locked.stderr || locked.stdout).toBe(0);
+    const verified = runEval(['--verify', selectedLock, '-o', outputPath], '100', selectedConfig);
+    expect(verified.status, verified.stderr || verified.stdout).toBe(0);
+    const row = JSON.parse(fs.readFileSync(outputPath, 'utf8')).results.results[0];
+    expect(row).toMatchObject({ success: true, score: 1, response: { output: 'Paris' } });
+  });
+
   it('fails a verified run cancelled by an external signal after a passing response', () => {
     const selectedConfig = path.join(tempDir, 'external-abort.cjs');
     const selectedLock = path.join(tempDir, 'external-abort.lock.json');

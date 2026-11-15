@@ -6,7 +6,7 @@ import { getCache, isCacheEnabled, withCacheEnabled, withCacheNamespace } from '
 import cliState from '../cliState';
 import { FILE_METADATA_KEY } from '../constants';
 import { getEnvBool, getEnvInt } from '../envars';
-import { collectFileMetadata, renderPrompt } from '../evaluatorHelpers';
+import { collectFileMetadata, normalizePromptVariables, renderPrompt } from '../evaluatorHelpers';
 import logger from '../logger';
 import { type AgentWorkspace, createAgentWorkspaceForConfig } from '../providers/agentWorkspace';
 import { providerRegistry } from '../providers/providerRegistry';
@@ -1090,6 +1090,7 @@ async function applyRunEvalResponseOutcome({
   traceContext,
   vars,
   lockIntegrity,
+  lockedGradingVars,
 }: {
   abortSignal?: AbortSignal;
   deferGrading?: boolean;
@@ -1110,6 +1111,7 @@ async function applyRunEvalResponseOutcome({
   traceContext: Awaited<ReturnType<typeof generateTraceContextIfNeeded>>;
   vars: Vars;
   lockIntegrity?: RunEvalOptions['lockIntegrity'];
+  lockedGradingVars?: Vars;
 }) {
   if (response.error) {
     ret.error = response.error;
@@ -1148,6 +1150,7 @@ async function applyRunEvalResponseOutcome({
     traceContext,
     vars,
     lockIntegrity,
+    lockedGradingVars,
   });
 }
 
@@ -1171,6 +1174,7 @@ async function gradeRunEvalResponse({
   traceContext,
   vars,
   lockIntegrity,
+  lockedGradingVars,
 }: {
   abortSignal?: AbortSignal;
   deferGrading?: boolean;
@@ -1191,6 +1195,7 @@ async function gradeRunEvalResponse({
   traceContext: Awaited<ReturnType<typeof generateTraceContextIfNeeded>>;
   vars: Vars;
   lockIntegrity?: RunEvalOptions['lockIntegrity'];
+  lockedGradingVars?: Vars;
 }) {
   const { processedResponse, providerTransformedOutput } = await transformRunEvalResponse({
     evalId,
@@ -1219,9 +1224,8 @@ async function gradeRunEvalResponse({
     providerTransformedOutput,
   };
 
-  // Registers, prompt functions, and target transforms can change runtime vars.
-  // In a locked run only the committed, expanded test vars may define a criterion.
-  const gradingVars = lockIntegrity ? (test.vars ?? {}) : vars;
+  // The locked snapshot was normalized before any runtime callback could mutate vars.
+  const gradingVars = lockedGradingVars ?? vars;
   if (deferGrading) {
     invariant(providerCallQueue, 'providerCallQueue is required when deferGrading is enabled');
     ret.response = processedResponse;
@@ -1435,6 +1439,10 @@ export async function runEvalInternal(
   );
   assertLockRuntimeIntegrity(lockIntegrity);
 
+  const lockedGradingVars = lockIntegrity ? structuredClone(test.vars ?? {}) : undefined;
+  if (lockedGradingVars) {
+    normalizePromptVariables(lockedGradingVars);
+  }
   const state = createRunEvalState({ provider, prompt, promptIndex, test });
   attachConversationVar({
     conversations,
@@ -1594,6 +1602,7 @@ export async function runEvalInternal(
             traceContext: executionTraceContext,
             vars: persistedVars,
             lockIntegrity,
+            lockedGradingVars,
           });
 
           // Update token usage stats

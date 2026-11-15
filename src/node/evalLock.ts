@@ -1,6 +1,7 @@
 import { randomBytes } from 'crypto';
 import fs from 'fs/promises';
 import * as path from 'path';
+import { isProxy } from 'util/types';
 
 import { z } from 'zod';
 import { toSerializableProviderRef } from '../models/evalResult';
@@ -160,6 +161,7 @@ function isRuntimeApiProvider(value: unknown): value is {
   return (
     typeof value === 'object' &&
     value !== null &&
+    !isProxy(value) &&
     'id' in value &&
     typeof value.id === 'function' &&
     'callApi' in value &&
@@ -173,6 +175,11 @@ type ConfiguredProviderMap = ReturnType<typeof buildConfiguredProviderMap>;
 // values, metadata, and configs must retain its exact semantics.
 function omitUndefinedFields(value: Record<string, unknown>): Record<string, unknown> {
   return Object.fromEntries(Object.entries(value).filter(([, entry]) => entry !== undefined));
+}
+
+function snapshotAssertions(assertions: unknown[], providerMap: ConfiguredProviderMap): unknown[] {
+  assertPlainDataObject(assertions);
+  return assertions.map((entry) => snapshotAssertionEnvelope(entry, providerMap));
 }
 
 function snapshotAssertionEnvelope(value: unknown, providerMap: ConfiguredProviderMap): unknown {
@@ -191,7 +198,7 @@ function snapshotAssertionEnvelope(value: unknown, providerMap: ConfiguredProvid
       provider: resolveConfiguredProviderReference(assertion.provider, providerMap),
     }),
     ...(Array.isArray(assertion.assert) && {
-      assert: assertion.assert.map((entry) => snapshotAssertionEnvelope(entry, providerMap)),
+      assert: snapshotAssertions(assertion.assert, providerMap),
     }),
   };
 }
@@ -226,12 +233,15 @@ function snapshotTestEnvelope(value: unknown, providerMap: ConfiguredProviderMap
     snapshot.metadata = { ...metadata, __promptfoo: portableMetadata };
   }
   if (Array.isArray(test.assert)) {
-    snapshot.assert = test.assert.map((entry) => snapshotAssertionEnvelope(entry, providerMap));
+    snapshot.assert = snapshotAssertions(test.assert, providerMap);
   }
   return snapshot;
 }
 
 function assertPlainDataObject(value: object): void {
+  if (isProxy(value)) {
+    throw new Error('Evaluation locks cannot include proxies');
+  }
   if (
     Object.getPrototypeOf(value) !== (Array.isArray(value) ? Array.prototype : Object.prototype)
   ) {
@@ -312,14 +322,22 @@ function validateDataOnlyAssertions(assertions: unknown, disableTemplating: bool
   if (!Array.isArray(assertions)) {
     return;
   }
+  assertPlainDataObject(assertions);
 
   for (const assertionValue of assertions) {
     const assertion = asRecord(assertionValue);
-    if (!assertion || typeof assertion.type !== 'string') {
+    if (!assertion) {
+      continue;
+    }
+    assertPlainDataObject(assertion);
+    if (typeof assertion.type !== 'string') {
       continue;
     }
     if (!disableTemplating) {
       validateAssertionTemplate(assertion.metric);
+      if (Array.isArray(assertion.value)) {
+        assertPlainDataObject(assertion.value);
+      }
       for (const value of Array.isArray(assertion.value) ? assertion.value : [assertion.value]) {
         validateAssertionTemplate(value);
       }
@@ -346,6 +364,7 @@ function validateDataOnlyAssertions(assertions: unknown, disableTemplating: bool
 }
 
 function validateDataOnlyTest(test: Record<string, unknown>, disableTemplating: boolean): void {
+  assertPlainDataObject(test);
   if (test.prompts !== undefined || test.providers !== undefined) {
     throw new Error(
       'Evaluation locks do not support prompt or provider selectors: every locked test must run for each selected target and prompt',
@@ -357,6 +376,9 @@ function validateDataOnlyTest(test: Record<string, unknown>, disableTemplating: 
     );
   }
   const options = asRecord(test.options);
+  if (options) {
+    assertPlainDataObject(options);
+  }
   for (const key of DEFERRED_TEST_OPTION_KEYS) {
     if (options?.[key] != null) {
       throw new Error(
@@ -371,6 +393,8 @@ function validateDataOnlyCriteria(testSuite: EvalBarSource, disableTemplating: b
   const defaultTest = asRecord(testSuite.defaultTest);
   const tests = Array.isArray(testSuite.tests) ? testSuite.tests : [];
   const scenarios = Array.isArray(testSuite.scenarios) ? testSuite.scenarios : [];
+  assertPlainDataObject(tests);
+  assertPlainDataObject(scenarios);
 
   if (testSuite.redteam != null) {
     throw new Error(
@@ -390,19 +414,24 @@ function validateDataOnlyCriteria(testSuite: EvalBarSource, disableTemplating: b
 
   for (const scenarioValue of scenarios) {
     const scenario = asRecord(scenarioValue);
+    if (scenario) {
+      assertPlainDataObject(scenario);
+    }
     const scenarioConfigs = Array.isArray(scenario?.config) ? scenario.config : [];
     const scenarioTests = Array.isArray(scenario?.tests) ? scenario.tests : [];
+    assertPlainDataObject(scenarioConfigs);
+    assertPlainDataObject(scenarioTests);
     for (const configValue of scenarioConfigs) {
       const scenarioConfig = asRecord(configValue);
       if (!scenarioConfig) {
         continue;
       }
       validateDataOnlyTest(scenarioConfig, disableTemplating);
-      for (const testValue of scenarioTests) {
-        const test = asRecord(testValue);
-        if (test) {
-          validateDataOnlyTest(test, disableTemplating);
-        }
+    }
+    for (const testValue of scenarioTests) {
+      const test = asRecord(testValue);
+      if (test) {
+        validateDataOnlyTest(test, disableTemplating);
       }
     }
   }

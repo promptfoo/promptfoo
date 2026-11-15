@@ -122,6 +122,99 @@ describe('evalLock', () => {
     },
   );
 
+  it.each(['test', 'defaultTest', 'nested', 'scenarioConfig', 'scenarioTest'] as const)(
+    'rejects accessor-backed %s assertion arrays before reading their elements',
+    (location) => {
+      const suite = createSuite();
+      let reads = 0;
+      const assertions: Assertion[] = [];
+      Object.defineProperty(assertions, '0', {
+        enumerable: true,
+        get() {
+          reads++;
+          return { type: 'equals', value: reads === 1 ? 'Paris' : 'different' };
+        },
+      });
+      if (location === 'defaultTest') {
+        suite.defaultTest = { assert: assertions };
+      } else if (location === 'nested') {
+        suite.tests![0].assert = [{ type: 'assert-set', assert: assertions }];
+      } else if (location === 'scenarioConfig') {
+        suite.scenarios = [{ config: [{ assert: assertions }], tests: [] }];
+      } else if (location === 'scenarioTest') {
+        suite.scenarios = [{ config: [], tests: [{ assert: assertions }] }];
+      } else {
+        suite.tests![0].assert = assertions;
+      }
+      expect(() => createEvalBar(suite, { repeat: 1 })).toThrow('accessors');
+      expect(reads).toBe(0);
+    },
+  );
+
+  it.each(['tests', 'scenarios', 'scenarioConfigs', 'scenarioTests'] as const)(
+    'rejects accessor-backed %s containers without invoking them',
+    (location) => {
+      const suite = createSuite();
+      let reads = 0;
+      const sourceArray = <T>(value: T): T[] => {
+        const entries: T[] = [];
+        Object.defineProperty(entries, '0', {
+          enumerable: true,
+          get() {
+            reads++;
+            return value;
+          },
+        });
+        return entries;
+      };
+      if (location === 'tests') {
+        suite.tests = sourceArray(suite.tests![0]);
+      } else if (location === 'scenarios') {
+        suite.scenarios = sourceArray({ config: [{}], tests: [] });
+      } else if (location === 'scenarioConfigs') {
+        suite.scenarios = [{ config: sourceArray({}), tests: [] }];
+      } else {
+        suite.scenarios = [{ config: [], tests: sourceArray({}) }];
+      }
+      expect(() => createEvalBar(suite, { repeat: 1 })).toThrow('accessors');
+      expect(reads).toBe(0);
+    },
+  );
+
+  it.each(['object', 'array'] as const)(
+    'rejects proxy-backed %s criteria without invoking traps',
+    (kind) => {
+      const suite = createSuite();
+      let reads = 0;
+      const handler: ProxyHandler<object> = {
+        get() {
+          reads++;
+          throw new Error('PROXY_TRAP_RAN');
+        },
+        has() {
+          reads++;
+          throw new Error('PROXY_TRAP_RAN');
+        },
+        getPrototypeOf() {
+          reads++;
+          throw new Error('PROXY_TRAP_RAN');
+        },
+      };
+      if (kind === 'array') {
+        suite.tests![0].assert = new Proxy<Assertion[]>(
+          [{ type: 'equals', value: 'Paris' }],
+          handler,
+        );
+      } else {
+        suite.tests![0].assert = [
+          { type: 'equals', value: new Proxy({ expected: 'Paris' }, handler) },
+        ];
+      }
+      expect(() => hashEvalBar(createEvalBar(suite, { repeat: 1 }))).toThrow('proxies');
+      expect(reads).toBe(0);
+    },
+  );
+
   it.each([
     (suite: TestSuite) => {
       suite.tests![0].prompts = ['easy'];

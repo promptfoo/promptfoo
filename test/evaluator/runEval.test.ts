@@ -203,6 +203,39 @@ describe('runEval', () => {
     expect(test.vars).toEqual({ expected: 'trusted' });
   });
 
+  it.each<NonNullable<AtomicTestCase['vars']>>([
+    { expected: 'Paris\n' },
+    { expected: '{{city}}', city: 'Paris\n' },
+  ])('normalizes committed grading variables without changing the source: %j', async (vars) => {
+    const test: AtomicTestCase = {
+      vars: { ...vars },
+      assert: [{ type: 'equals', value: '{{expected}}' }],
+    };
+    const provider: ApiProvider = {
+      id: () => 'normalization-target',
+      callApi: async (prompt) => ({ output: prompt }),
+    };
+    const options = {
+      ...defaultOptions,
+      provider,
+      prompt: { raw: '{{expected}}', label: 'test' },
+      test,
+    };
+    const [unlocked] = await runEval(options);
+    const [locked] = await runEval({
+      ...options,
+      lockIntegrity: {
+        disableTemplating: false,
+        disableVarExpansion: false,
+        shortCircuitTestFailures: false,
+      },
+    });
+    expect(unlocked.success).toBe(true);
+    expect(locked.response?.output).toBe('Paris');
+    expect(locked.success).toBe(true);
+    expect(test.vars).toEqual(vars);
+  });
+
   it.each([true, false])(
     'enforces committed short-circuit mode %s after a transform changes the environment',
     async (shortCircuitTestFailures) => {

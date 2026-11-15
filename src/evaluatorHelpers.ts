@@ -93,6 +93,22 @@ export function resolveVariables(
   return variables;
 }
 
+export function normalizePromptVariables(
+  vars: Record<string, VarValue>,
+  skipRenderVars?: string[],
+): Set<string> {
+  // Keep normalization data-only so locked grading can apply it independently
+  // of prompt functions, target providers, and mutable runtime variables.
+  for (const key of Object.keys(vars)) {
+    if (typeof vars[key] === 'string' && !skipRenderVars?.includes(key)) {
+      vars[key] = (vars[key] as string).replace(/\n$/, '');
+    }
+  }
+  const varsResolvedFromSkipped = new Set<string>();
+  resolveVariables(vars, skipRenderVars, varsResolvedFromSkipped);
+  return varsResolvedFromSkipped;
+}
+
 // Utility: Detect partial/unclosed Nunjucks tags and wrap in {% raw %} if needed
 function autoWrapRawIfPartialNunjucks(prompt: string): string {
   // Detects any occurrence of an opening Nunjucks tag without a matching close
@@ -421,15 +437,7 @@ export async function renderPrompt(
     }
   }
 
-  // Remove any trailing newlines from vars, as this tends to be a footgun for JSON prompts.
-  for (const key of Object.keys(vars)) {
-    if (typeof vars[key] === 'string' && !skipRenderVars?.includes(key)) {
-      vars[key] = (vars[key] as string).replace(/\n$/, '');
-    }
-  }
-  // Resolve variable mappings
-  const varsResolvedFromSkipped = new Set<string>();
-  resolveVariables(vars, skipRenderVars, varsResolvedFromSkipped);
+  const varsResolvedFromSkipped = normalizePromptVariables(vars, skipRenderVars);
   // Third party integrations
   if (prompt.raw.startsWith('portkey://')) {
     const portKeyResult = await getPortkeyPrompt(prompt.raw.slice('portkey://'.length), vars);
