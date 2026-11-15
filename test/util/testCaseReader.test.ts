@@ -947,17 +947,10 @@ describe('readTest', () => {
 
     const varsFileResult = await readTest({ vars: 'cases/vars.yaml' }, '/project');
 
-    expect(maybeLoadConfigFromExternalFile).toHaveBeenCalledWith(
-      'file://a.txt',
-      undefined,
-      '/project',
-    );
-    expect(maybeLoadConfigFromExternalFile).toHaveBeenCalledWith(
-      'file://b.txt',
-      undefined,
-      '/project',
-    );
+    expect(maybeLoadConfigFromExternalFile).not.toHaveBeenCalled();
     expect(varsFileResult.vars).toEqual({ docs: ['file://a.txt', 'file://b.txt'] });
+    expect(varsFileResult.metadata?.__promptfoo?.varsFileKeys).toBeUndefined();
+    expect(varsFileResult.metadata?.__promptfoo?.varsFileKeys ?? []).not.toContain('docs');
 
     const testCaseResult = await readTest(
       {
@@ -969,6 +962,46 @@ describe('readTest', () => {
       '/project/cases',
     );
     expect(testCaseResult.vars?.docs).toEqual(['file://a.txt', 'file://b.txt']);
+  });
+
+  it('leaves string array package references untouched in vars file and excludes them from varsFileKeys', async () => {
+    vi.mocked(globSync).mockReturnValueOnce(['/project/cases/vars.yaml']);
+    vi.mocked(fs.readFileSync).mockReturnValueOnce(
+      'source:\n  - package:pkg:first\n  - package:pkg:second',
+    );
+
+    const result = await readTest({ vars: 'cases/vars.yaml' }, '/project');
+
+    expect(result.vars?.source).toEqual(['package:pkg:first', 'package:pkg:second']);
+    expect(result.metadata?.__promptfoo?.varsFileKeys).toBeUndefined();
+    expect(result.metadata?.__promptfoo?.varsFileKeys ?? []).not.toContain('source');
+  });
+
+  it('rebases string array vars when disableVarExpansion is true and preserves them without the option', async () => {
+    const disabledResult = await readTest(
+      {
+        options: { disableVarExpansion: true },
+        vars: {
+          docs: ['file://report.txt'],
+        },
+        assert: [{ type: 'equals', value: '1' }],
+      },
+      '/project/cases',
+    );
+    expect(disabledResult.vars?.docs).toEqual([
+      `file://${path.resolve('/project/cases', 'report.txt')}`,
+    ]);
+
+    const defaultResult = await readTest(
+      {
+        vars: {
+          docs: ['file://report.txt'],
+        },
+        assert: [{ type: 'equals', value: '1' }],
+      },
+      '/project/cases',
+    );
+    expect(defaultResult.vars?.docs).toEqual(['file://report.txt']);
   });
 
   it('readTest with TestCase that contains a vars glob input', async () => {

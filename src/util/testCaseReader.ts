@@ -94,9 +94,19 @@ export async function readTestFiles(
         // Directly authored scalar package references still use the normal renderer.
         // Top-level file references have always used the active config directory.
         // Nested fields resolve from the vars file that declares them.
-        // String arrays expand into scalar vars, so they keep the scalar base too.
-        const referenceBase =
-          typeof value === 'string' || isStringArray(value) ? cliState.basePath : path.dirname(p);
+        // String arrays are authored alternatives: leave them for expansion and the
+        // normal per-value loader (file:// and package: alike), as before.
+        if (isStringArray(value)) {
+          loadedKeys?.delete(key);
+          Object.defineProperty(ret, key, {
+            value,
+            enumerable: true,
+            writable: true,
+            configurable: true,
+          });
+          continue;
+        }
+        const referenceBase = typeof value === 'string' ? cliState.basePath : path.dirname(p);
         const loaded = mapVarsFileReferences(
           value,
           (ref) => maybeLoadConfigFromExternalFile(ref, undefined, referenceBase),
@@ -571,6 +581,7 @@ function resolveNestedVarsFileReferences(
   vars: TestCase['vars'],
   basePath: string,
   preloaded: readonly string[] = [],
+  expandsArrays = true,
 ): TestCase['vars'] {
   if (!vars) {
     return vars;
@@ -581,8 +592,8 @@ function resolveNestedVarsFileReferences(
       key,
       value &&
       typeof value === 'object' &&
-      // String arrays expand into scalar vars, which resolve relative to the config.
-      !isStringArray(value) &&
+      // Expanded string arrays become scalar vars, which resolve relative to the config.
+      !(expandsArrays && isStringArray(value)) &&
       key !== '_conversation' &&
       !preloaded.includes(key)
         ? mapVarsFileReferences(
@@ -626,6 +637,7 @@ async function readTestWithEnv(
     testCase.vars,
     typeof test === 'string' ? effectiveBasePath : nestedBasePath,
     Array.isArray(preloaded) ? preloaded : [],
+    testCase.options?.disableVarExpansion !== true,
   );
 
   const providerId =
@@ -1120,7 +1132,15 @@ function collectNestedFileReferences(
         typeof row.vars === 'object' &&
         !isRemoteTestCase(row)
       ) {
-        row = { ...row, vars: resolveNestedVarsFileReferences(row.vars, path.dirname(testsFile)) };
+        row = {
+          ...row,
+          vars: resolveNestedVarsFileReferences(
+            row.vars,
+            path.dirname(testsFile),
+            [],
+            row.options?.disableVarExpansion !== true,
+          ),
+        };
       }
       const provider = row?.provider;
       const id = typeof provider === 'string' ? provider : provider?.id;
