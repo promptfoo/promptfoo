@@ -197,7 +197,9 @@ promptfoo eval -c promptfooconfig.yaml --verify eval.lock.json
 
 A changed manifest or eval bar exits with code `3`. A valid lock whose run misses the locked threshold uses the normal failed-test exit code (`100` by default). Locked runs use `100` if the configured failure exit code is outside the range 1–255. `--lock` and `--verify` cannot be combined with each other, `--watch`, `--resume`, or `--retry-errors`.
 
-An interrupted locked run exits with code `130` and does not satisfy the gate. Start a new `--verify` run to evaluate the complete locked bar.
+The lock also commits `PROMPTFOO_SHORT_CIRCUIT_TEST_FAILURES` and enforces that aggregation mode during grading. Function-valued derived metrics and non-enumerable data properties are rejected because they can change criteria without changing the JSON snapshot. Data-only derived metric formulas remain supported.
+
+An interrupted locked run, including cancellation through `evaluateOptions.abortSignal`, exits with code `130` and does not satisfy the gate. Start a new `--verify` run to evaluate the complete locked bar.
 
 :::warning
 
