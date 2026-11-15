@@ -28,16 +28,61 @@ describe('Remote Health Route', () => {
     vi.resetAllMocks();
   });
 
-  it('returns DISABLED without upstream egress in no-network mode', async () => {
+  it('returns SKIPPED without upstream egress in no-network mode', async () => {
     const restoreEnv = mockProcessEnv({ PROMPTFOO_NO_NETWORK: 'true' });
     try {
       const response = await request(app).get('/api/remote-health');
 
       expect(response.status).toBe(200);
-      expect(response.body).toMatchObject({ status: 'DISABLED' });
+      expect(response.body).toMatchObject({
+        status: 'SKIPPED',
+        message: 'network egress is disabled (PROMPTFOO_NO_NETWORK)',
+      });
       // The upstream health check must never fire: no-network mode
       // promises zero non-eval egress, and the web UI polls this route
       // every 3 seconds.
+      expect(mockedCheckRemoteHealth).not.toHaveBeenCalled();
+    } finally {
+      restoreEnv();
+    }
+  });
+
+  it.each([
+    ['PROMPTFOO_DISABLE_REMOTE_GENERATION', 'true'],
+    ['PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION', 'true'],
+  ])('keeps remote generation disabled when no-network mode is combined with %s', async (flag) => {
+    const restoreEnv = mockProcessEnv({
+      PROMPTFOO_NO_NETWORK: 'true',
+      [flag]: 'true',
+    });
+    try {
+      const response = await request(app).get('/api/remote-health');
+
+      expect(response.status).toBe(200);
+      expect(response.body).toMatchObject({
+        status: 'DISABLED',
+        message: 'remote generation and grading are disabled',
+      });
+      expect(mockedCheckRemoteHealth).not.toHaveBeenCalled();
+    } finally {
+      restoreEnv();
+    }
+  });
+
+  it('returns DISABLED when remote generation is disabled without no-network mode', async () => {
+    const restoreEnv = mockProcessEnv({
+      PROMPTFOO_NO_NETWORK: undefined,
+      PROMPTFOO_DISABLE_REMOTE_GENERATION: 'true',
+      PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION: undefined,
+    });
+    try {
+      const response = await request(app).get('/api/remote-health');
+
+      expect(response.status).toBe(200);
+      expect(response.body).toMatchObject({
+        status: 'DISABLED',
+        message: 'remote generation and grading are disabled',
+      });
       expect(mockedCheckRemoteHealth).not.toHaveBeenCalled();
     } finally {
       restoreEnv();

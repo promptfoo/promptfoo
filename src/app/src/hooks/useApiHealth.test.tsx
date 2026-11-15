@@ -117,10 +117,10 @@ describe('useApiHealth', () => {
     expect(result.current.isLoading).toBe(false);
   });
 
-  it('maps DISABLED to skipped in no-network mode (build-time flag)', async () => {
+  it('maps SKIPPED to skipped in no-network mode (build-time flag)', async () => {
     vi.stubEnv('VITE_PROMPTFOO_NO_NETWORK', 'true');
     mockCallApiResponse({
-      status: 'DISABLED',
+      status: 'SKIPPED',
       message: 'network egress is disabled (PROMPTFOO_NO_NETWORK)',
     });
 
@@ -137,9 +137,9 @@ describe('useApiHealth', () => {
     expect(result.current.isLoading).toBe(false);
   });
 
-  it('maps DISABLED to skipped in no-network mode (runtime meta tag)', async () => {
+  it('maps SKIPPED to skipped in no-network mode (runtime meta tag)', async () => {
     mockCallApiResponse({
-      status: 'DISABLED',
+      status: 'SKIPPED',
       message: 'network egress is disabled (PROMPTFOO_NO_NETWORK)',
     });
 
@@ -157,6 +157,51 @@ describe('useApiHealth', () => {
       });
 
       expect(result.current.data.message).toBe('network egress is disabled (PROMPTFOO_NO_NETWORK)');
+    } finally {
+      marker.remove();
+    }
+  });
+
+  it('keeps DISABLED as disabled when remote generation is explicitly disabled in no-network mode (build-time flag)', async () => {
+    vi.stubEnv('VITE_PROMPTFOO_NO_NETWORK', 'true');
+    mockCallApiResponse({
+      status: 'DISABLED',
+      message: 'remote generation and grading are disabled',
+    });
+
+    const { result } = renderHook(() => useApiHealth(), { wrapper });
+
+    // Trigger a refetch since initialData prevents automatic fetching
+    result.current.refetch();
+
+    await waitFor(() => {
+      expect(result.current.data.status).toBe('disabled');
+    });
+
+    expect(result.current.data.message).toBe('remote generation and grading are disabled');
+    expect(result.current.isLoading).toBe(false);
+  });
+
+  it('keeps DISABLED as disabled when remote generation is explicitly disabled in no-network mode (runtime meta tag)', async () => {
+    mockCallApiResponse({
+      status: 'DISABLED',
+      message: 'remote generation and grading are disabled',
+    });
+
+    const marker = document.createElement('meta');
+    marker.name = 'promptfoo-no-network';
+    document.head.append(marker);
+    try {
+      const { result } = renderHook(() => useApiHealth(), { wrapper });
+
+      // Trigger a refetch since initialData prevents automatic fetching
+      result.current.refetch();
+
+      await waitFor(() => {
+        expect(result.current.data.status).toBe('disabled');
+      });
+
+      expect(result.current.data.message).toBe('remote generation and grading are disabled');
     } finally {
       marker.remove();
     }

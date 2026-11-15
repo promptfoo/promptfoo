@@ -223,7 +223,7 @@ export function createServerOpenApiRegistry() {
     tags: ['Health'],
     summary: 'Check remote generation health',
     description:
-      'When PROMPTFOO_NO_NETWORK is set, the health check is skipped and this route answers locally with status DISABLED instead of contacting api.promptfoo.app; local and self-hosted generation remain available. It also returns DISABLED when remote generation is disabled.',
+      'When PROMPTFOO_NO_NETWORK is set on its own, the health check is skipped and this route answers locally with status SKIPPED instead of contacting api.promptfoo.app; local and self-hosted generation remain available. It returns DISABLED when remote generation is explicitly disabled, and that answer wins when both flags are set.',
     responses: {
       200: jsonResponse(ServerSchemas.RemoteHealth.Response),
     },

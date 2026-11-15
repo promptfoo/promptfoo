@@ -37,6 +37,7 @@ vi.mock('../../../src/models/eval', () => ({
 
 vi.mock('../../../src/redteam/remoteGeneration', () => ({
   getRemoteHealthUrl: vi.fn(),
+  neverGenerateRemote: vi.fn(),
 }));
 
 vi.mock('../../../src/share', () => ({

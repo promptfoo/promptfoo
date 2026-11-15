@@ -13,10 +13,13 @@ export type ApiHealthResult = {
   message: string;
 };
 
-// PROMPTFOO_NO_NETWORK skips the background Promptfoo Cloud health check, so a
-// 'disabled' health status only means the check was skipped, not that local
-// generation is disabled. The installed server injects the meta tag at runtime;
-// standalone builds embed the flag at build time (see PostHogProvider).
+// PROMPTFOO_NO_NETWORK skips the background Promptfoo Cloud health check. The
+// server answers that skipped poll with its own SKIPPED status, while an
+// explicit remote-generation disable still answers DISABLED, so the two cases
+// stay distinct here: a skipped poll leaves generation enabled, a genuinely
+// disabled check blocks remote-only controls. The installed server injects the
+// meta tag at runtime; standalone builds embed the flag at build time (see
+// PostHogProvider).
 export function isNoNetworkMode(): boolean {
   return (
     import.meta.env.VITE_PROMPTFOO_NO_NETWORK === 'true' ||
@@ -44,7 +47,12 @@ export function useApiHealth() {
       try {
         const response = await callApi('/remote-health', { cache: 'no-store' });
         const { status, message } = (await response.json()) as HealthResponse;
-        if (status === 'DISABLED' && isNoNetworkMode()) {
+        // The server distinguishes a skipped poll (SKIPPED, no-network mode
+        // alone) from an explicit remote-generation disable (DISABLED, which
+        // wins when both flags are set). Trust the wire status: mapping
+        // DISABLED to skipped from the client-side no-network flag would
+        // re-enable remote-only controls that the disable flags forbid.
+        if (status === 'SKIPPED') {
           return { status: 'skipped', message };
         }
         return {

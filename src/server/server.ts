@@ -21,7 +21,7 @@ import logger from '../logger';
 import { runDbMigrations } from '../migrate';
 import Eval, { getEvalSummaries } from '../models/eval';
 import { invalidateEvaluationCache, invalidateEvaluationCaches } from '../models/evalMutation';
-import { getRemoteHealthUrl } from '../redteam/remoteGeneration';
+import { getRemoteHealthUrl, neverGenerateRemote } from '../redteam/remoteGeneration';
 import { createShareableUrl, determineShareDomain, stripAuthFromUrl } from '../share';
 import telemetry from '../telemetry';
 import { synthesizeFromTestSuite } from '../testCase/synthesis';
@@ -139,12 +139,28 @@ export function createApp() {
   });
 
   app.get('/api/remote-health', async (_req: Request, res: Response): Promise<void> => {
-    // PROMPTFOO_NO_NETWORK promises no non-eval egress: answer from the
-    // local process instead of forwarding the poll to api.promptfoo.app.
-    if (isNetworkEgressDisabled()) {
+    // An explicit remote-generation disable wins over the no-network skip:
+    // the UI must keep remote-only controls disabled when both flags are set,
+    // so answer DISABLED here instead of letting the no-network branch below
+    // collapse the two cases into one.
+    if (neverGenerateRemote()) {
       res.json(
         ServerSchemas.RemoteHealth.Response.parse({
           status: 'DISABLED',
+          message: 'remote generation and grading are disabled',
+        }),
+      );
+      return;
+    }
+
+    // PROMPTFOO_NO_NETWORK promises no non-eval egress: answer from the
+    // local process instead of forwarding the poll to api.promptfoo.app.
+    // This is a skipped poll, not a disabled check, so it gets its own
+    // status: local and self-hosted generation stay available.
+    if (isNetworkEgressDisabled()) {
+      res.json(
+        ServerSchemas.RemoteHealth.Response.parse({
+          status: 'SKIPPED',
           message: 'network egress is disabled (PROMPTFOO_NO_NETWORK)',
         }),
       );
