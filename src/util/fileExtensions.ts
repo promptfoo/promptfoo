@@ -61,8 +61,12 @@ export function parseFileUrl(
   // The function suffix normally follows the script file at the last colon,
   // so colons in directories and earlier file names stay in the path.
   const lastColonIndex = urlWithoutProtocol.lastIndexOf(':');
+  // A slash after the last colon belongs to the export name, not the directory.
   const basenameStart =
-    Math.max(urlWithoutProtocol.lastIndexOf('/'), urlWithoutProtocol.lastIndexOf('\\')) + 1;
+    Math.max(
+      urlWithoutProtocol.lastIndexOf('/', lastColonIndex),
+      urlWithoutProtocol.lastIndexOf('\\', lastColonIndex),
+    ) + 1;
   const firstColon = urlWithoutProtocol.indexOf(':', basenameStart);
 
   // In assertions a JS export may itself contain colons (e.g. checks.mjs:grade.js:v2).
