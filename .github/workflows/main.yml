@@ -21,9 +21,11 @@ env:
   VITE_TELEMETRY_DISABLED: 1
   NPM_CONFIG_AUDIT: 'false'
 jobs:
+  # Linux jobs pin ubuntu-24.04 rather than ubuntu-latest. The ubuntu-26.04 image has no Python
+  # 3.9 build, and the pinned ruby/setup-ruby release does not recognize it.
   ci-config:
     name: CI Config
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     outputs:
       test-matrix: ${{ steps.set-matrix.outputs.test-matrix }}
@@ -36,9 +38,9 @@ jobs:
         run: |
           # Shared entries: all Linux versions + one Windows Node version (sharded)
           base_entries='
-            {"node":"22.22","os":"ubuntu-latest","shard":""},
-            {"node":"24.x","os":"ubuntu-latest","shard":""},
-            {"node":"26.x","os":"ubuntu-latest","shard":""},
+            {"node":"22.22","os":"ubuntu-24.04","shard":""},
+            {"node":"24.x","os":"ubuntu-24.04","shard":""},
+            {"node":"26.x","os":"ubuntu-24.04","shard":""},
             {"node":"22.22","os":"windows-2025-vs2026","shard":1},
             {"node":"22.22","os":"windows-2025-vs2026","shard":2},
             {"node":"22.22","os":"windows-2025-vs2026","shard":3}
@@ -144,7 +146,7 @@ jobs:
         # CI. Real test/assertion failures still fail; see vitest.config.ts.
         env:
           PROMPTFOO_IGNORE_UNHANDLED_TEST_ERRORS: 'true'
-        run: npm run test${{ matrix.shard && format(' -- --shard={0}/3', matrix.shard) || '' }}${{ matrix.os == 'ubuntu-latest' && matrix.node == '22.22' && !matrix.shard && ' -- --coverage' || '' }}${{ startsWith(matrix.os, 'windows-') && ' --exclude=test/release-artifact.test.ts --exclude=test/examples/integrationCrewai.test.ts --exclude=test/examples/integrationInspectOsworldProvider.test.ts --exclude=test/python/python-subprocess-cancellation.test.ts --exclude=test/python/worker.lifecycle.test.ts' || '' }}
+        run: npm run test${{ matrix.shard && format(' -- --shard={0}/3', matrix.shard) || '' }}${{ matrix.os == 'ubuntu-24.04' && matrix.node == '22.22' && !matrix.shard && ' -- --coverage' || '' }}${{ startsWith(matrix.os, 'windows-') && ' --exclude=test/release-artifact.test.ts --exclude=test/examples/integrationCrewai.test.ts --exclude=test/examples/integrationInspectOsworldProvider.test.ts --exclude=test/python/python-subprocess-cancellation.test.ts --exclude=test/python/worker.lifecycle.test.ts' || '' }}
 
       - name: Test process fixtures without parallel workers
         # Cold npm and Python processes can miss deadlines when competing
@@ -153,14 +155,14 @@ jobs:
         run: npm run test -- test/release-artifact.test.ts test/examples/integrationCrewai.test.ts test/examples/integrationInspectOsworldProvider.test.ts test/python/python-subprocess-cancellation.test.ts test/python/worker.lifecycle.test.ts --maxWorkers=1
 
       - name: Run built agent skill examples
-        if: matrix.os != 'ubuntu-latest' && (!matrix.shard || matrix.shard == '1')
+        if: matrix.os != 'ubuntu-24.04' && (!matrix.shard || matrix.shard == '1')
         run: |
           npx tsdown
           npm run postbuild
           npm run test:smoke -- test/smoke/agent-skill-examples.test.ts
 
       - name: Check Backend Coverage Ratchets
-        if: matrix.os == 'ubuntu-latest' && matrix.node == '22.22' && !matrix.shard
+        if: matrix.os == 'ubuntu-24.04' && matrix.node == '22.22' && !matrix.shard
         env:
           COVERAGE_BASE: ${{ inputs.coverage_base }}
         run: |
@@ -171,7 +173,7 @@ jobs:
           npm run test:coverage:ratchet -- "${args[@]}"
 
       - name: Upload Backend Coverage to Codecov
-        if: matrix.os == 'ubuntu-latest' && matrix.node == '22.22' && !matrix.shard
+        if: matrix.os == 'ubuntu-24.04' && matrix.node == '22.22' && !matrix.shard
         # Authentication can fail before fail_ci_if_error applies; uploads are informational.
         continue-on-error: true
         uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
@@ -194,7 +196,7 @@ jobs:
       PROMPTFOO_POSTHOG_KEY: ${{ secrets.PROMPTFOO_POSTHOG_KEY }}
     # Cold-cache Node 26 installs can approach 20m before the build phase starts on GitHub-hosted runners.
     timeout-minutes: 30
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       matrix: ${{ fromJSON(needs.ci-config.outputs.build-matrix) }}
 
@@ -282,7 +284,7 @@ jobs:
     needs: ci-config
     name: Isolated Contracts on Node ${{ matrix.node }}
     timeout-minutes: 10
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
     strategy:
@@ -308,7 +310,7 @@ jobs:
   # validate the same immutable upload without waiting for any other build lane.
   package-build:
     name: Prepare package on Node ${{ matrix.node }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions: *read-only-permissions
     env:
@@ -339,7 +341,7 @@ jobs:
     name: Build on Node ${{ matrix.node }}
     needs: package-build
     if: ${{ !cancelled() }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions: *read-only-permissions
     strategy:
@@ -449,7 +451,7 @@ jobs:
   style-check:
     name: Style Check
     timeout-minutes: 10
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - *checkout-repo-read-only
 
@@ -509,7 +511,7 @@ jobs:
   shell-format:
     name: Shell Format Check
     timeout-minutes: 5
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
     steps:
@@ -545,7 +547,7 @@ jobs:
   assets:
     name: Generate Assets
     timeout-minutes: 10
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - *checkout-repo-read-only
 
@@ -585,7 +587,7 @@ jobs:
   python:
     name: Check Python
     timeout-minutes: 5
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       matrix:
         python-version: [3.9, 3.14]
@@ -614,7 +616,7 @@ jobs:
   docs:
     name: Build Docs
     timeout-minutes: 10
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - *checkout-repo-read-only
 
@@ -650,7 +652,7 @@ jobs:
   sbom-comparison:
     name: Compare shipped dependency inventories
     needs: [build, package-acceptance, docs]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
       contents: read
@@ -718,7 +720,7 @@ jobs:
   code-scan-action:
     name: Code Scan Action
     timeout-minutes: 10
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - *checkout-repo-read-only
 
@@ -749,7 +751,7 @@ jobs:
   site-tests:
     name: Site tests
     timeout-minutes: 10
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions: *test-reporting-permissions # Required for OIDC authentication with Codecov
     steps:
       - &checkout-repo
@@ -795,7 +797,7 @@ jobs:
     name: webui tests
     # Allow slow browser system dependency downloads before browser and coverage tests.
     timeout-minutes: 20
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions: *test-reporting-permissions # Required for OIDC authentication with Codecov
     steps:
       - *checkout-two-commits
@@ -851,7 +853,7 @@ jobs:
 
   integration-tests:
     name: Run Integration Tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - *checkout-repo-read-only
@@ -879,7 +881,7 @@ jobs:
 
   smoke-tests:
     name: Run Smoke Tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - *checkout-repo
@@ -924,7 +926,7 @@ jobs:
   share-test:
     name: Share Test
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions: *read-only-permissions
     steps:
@@ -1015,7 +1017,7 @@ jobs:
 
   redteam:
     name: Redteam (Production API)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - *checkout-repo
@@ -1036,7 +1038,7 @@ jobs:
   redteam-staging:
     name: Redteam (Staging API)
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions: *read-only-permissions
     steps:
@@ -1069,7 +1071,7 @@ jobs:
 
   actionlint:
     name: GitHub Actions Lint
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions: *read-only-permissions
     steps:
@@ -1083,7 +1085,7 @@ jobs:
   ruby:
     name: Check Ruby
     timeout-minutes: 5
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       matrix:
         ruby-version: ['3.0', '3.4']
@@ -1129,7 +1131,7 @@ jobs:
 
   golang:
     name: Go Tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
       - *checkout-repo

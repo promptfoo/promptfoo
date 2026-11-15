@@ -248,7 +248,11 @@ describe('redteamInit', () => {
         expect.objectContaining({ value: 'vertex:gemini-3.7-flash' }),
         expect.objectContaining({ value: 'vertex:gemini-3.6-flash' }),
         expect.objectContaining({ value: 'vertex:gemini-3.5-flash-lite' }),
+        expect.objectContaining({ value: 'vertex:gemini-3.1-pro-preview' }),
       ]),
+    );
+    expect(modelPrompt?.[0].choices).not.toContainEqual(
+      expect.objectContaining({ value: 'vertex:gemini-2.5-pro' }),
     );
   });
 
@@ -284,6 +288,7 @@ describe('redteamInit', () => {
     'vertex:gemini-3.7-flash',
     'vertex:gemini-3.6-flash',
     'vertex:gemini-3.5-flash-lite',
+    'vertex:gemini-3.1-pro-preview',
   ])('configures the global Vertex region for %s', async (modelName) => {
     vi.mocked(select)
       .mockReset()
