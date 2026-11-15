@@ -254,6 +254,10 @@ question,expectedAnswer
 
 Variables are automatically mapped from column headers.
 
+:::tip Custom CSV Delimiters
+By default, Promptfoo expects comma-separated values. Set `PROMPTFOO_CSV_DELIMITER` (e.g., `PROMPTFOO_CSV_DELIMITER=";"` or `PROMPTFOO_CSV_DELIMITER="\t"`) to parse semicolon- or tab-delimited files.
+:::
+
 ### Excel (XLSX/XLS) Support
 
 Use an Excel Open XML workbook (`.xlsx`) for test cases. If you have an Excel 97–2003 workbook (`.xls`), open it in Excel or LibreOffice and save it as `.xlsx` before importing it.
