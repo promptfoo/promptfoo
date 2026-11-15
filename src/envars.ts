@@ -272,6 +272,7 @@ type EnvVars = {
 
   // Atlas Cloud
   ATLASCLOUD_API_KEY?: string;
+  FIKRA_API_KEY?: string;
 
   // AWS Bedrock
   AWS_ACCESS_KEY_ID?: string;

@@ -15,6 +15,7 @@ import { AnthropicCompletionProvider } from './anthropic/completion';
 import { AnthropicMessagesProvider } from './anthropic/messages';
 import { ANTHROPIC_SHORTHAND_MODEL_IDS, looksLikeClaudeModelId } from './anthropic/util';
 import { createAtlasCloudProvider } from './atlascloud';
+import { createFikraProvider } from './fikra';
 import { AzureAssistantProvider } from './azure/assistant';
 import { AzureChatCompletionProvider } from './azure/chat';
 import { AzureCompletionProvider } from './azure/completion';
@@ -606,6 +607,7 @@ export const providerMap: ProviderFactory[] = [
     },
   },
   configuredProviderFactory('atlascloud:', () => createAtlasCloudProvider),
+  configuredProviderFactory('fikra:', () => createFikraProvider),
   {
     test: (providerPath: string) =>
       providerPath.startsWith('azure:') || providerPath.startsWith('azureopenai:'),
