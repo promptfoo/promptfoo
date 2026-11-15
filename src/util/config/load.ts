@@ -1280,6 +1280,7 @@ async function resolveLoadedConfig(
       : [{ tests: config.tests || [], basePath: cmdObj.tests ? '' : basePath }],
     runtimeEnv,
     false,
+    basePath,
   );
   config.tests = testConfigs.map((test) =>
     clone(isApiProvider(test.provider) ? { ...test, provider: undefined } : test),
