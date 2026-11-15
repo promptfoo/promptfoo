@@ -937,6 +937,43 @@ describe('trajectory assertions', () => {
       });
     });
 
+    it('passes a max-only count with a positive budget when the tool is never used', () => {
+      const value = { name: 'missing_tool', max: 2 };
+      const params: AssertionParams = {
+        ...defaultParams,
+        baseType: 'trajectory:tool-used',
+        assertion: { type: 'trajectory:tool-used', value },
+        renderedValue: value,
+      };
+
+      const result = handleTrajectoryToolUsed(params);
+      expect(result).toEqual({
+        pass: true,
+        score: 1,
+        reason: 'Matched tool "missing_tool" 0 time(s) (expected 0-2)',
+        assertion: params.assertion,
+      });
+    });
+
+    it('fails an inverse max-only count when the usage is within the budget', () => {
+      const value = { name: 'missing_tool', max: 2 };
+      const params: AssertionParams = {
+        ...defaultParams,
+        baseType: 'trajectory:tool-used',
+        inverse: true,
+        assertion: { type: 'not-trajectory:tool-used', value },
+        renderedValue: value,
+      };
+
+      const result = handleTrajectoryToolUsed(params);
+      expect(result).toEqual({
+        pass: false,
+        score: 0,
+        reason: 'Tool "missing_tool" matched 0 time(s), which violates the inverse assertion',
+        assertion: params.assertion,
+      });
+    });
+
     it('keeps requiring a match when min is present but not a number', () => {
       const value = { name: 'missing_tool', max: 2, min: '2' };
       const params: AssertionParams = {
