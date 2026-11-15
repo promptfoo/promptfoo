@@ -4,7 +4,7 @@ This example shows how to use **CrewAI agents** with promptfoo to evaluate AI ag
 
 ## What is CrewAI?
 
-CrewAI is a framework for orchestrating role-playing, autonomous AI agents. By fostering collaborative intelligence, CrewAI empowers agents to work together seamlessly, tackling complex tasks.
+CrewAI is a framework for coordinating agents in multi-step workflows.
 
 ## Quick Start
 
@@ -99,10 +99,16 @@ When using a real LLM, you may notice that the agent's output is not always reli
 
 ## Running the Evaluation
 
-Run the evaluation:
+Run the evaluation with an exported API key:
 
 ```bash
 npx promptfoo@latest eval --no-cache
+```
+
+Or load the key from `.env` explicitly:
+
+```bash
+npx promptfoo@latest eval --env-file .env --no-cache
 ```
 
 Explore results in browser:
