@@ -133,12 +133,10 @@ export function parseRubyFileReference(
 /**
  * Splits a script file path from its optional function selector.
  *
- * A JavaScript selector runs to the end of the reference, so an export key may
- * itself contain colons (`module.exports['check:detail']`). The split therefore
- * happens at the first colon that leaves a JavaScript file name in front of it,
- * not at the last colon. Colons that belong to the path stay in the path: a
- * drive prefix is never a separator, and neither is a colon whose suffix still
- * looks like a path segment or another file name.
+ * Prefer the rightmost JavaScript file boundary, preserving colons in file
+ * names. The remaining suffix is an export key: it may contain colons or end
+ * in a source extension (`module.exports['check:detail']`, `exports['score.js']`).
+ * A drive prefix or a colon followed by a path segment is not a separator.
  */
 export function parseExecutableFileReference(filePath: string): {
   filePath: string;
@@ -150,26 +148,18 @@ export function parseExecutableFileReference(filePath: string): {
   }
 
   // A leading drive-letter colon is part of the path, not a selector separator.
-  let separator = filePath.indexOf(':');
-  if (separator === 1) {
-    separator = filePath.indexOf(':', separator + 1);
-  }
+  let separator = filePath.lastIndexOf(':');
   while (separator > 1) {
     const candidateFilePath = filePath.slice(0, separator);
     const functionName = filePath.slice(separator + 1);
     if (
       isJavascriptFile(candidateFilePath) &&
       functionName.length > 0 &&
-      !/[\\/]/.test(functionName) &&
-      !isJavascriptFile(functionName)
+      !/[\\/]/.test(functionName)
     ) {
       return { filePath: candidateFilePath, functionName };
     }
-    const next = filePath.indexOf(':', separator + 1);
-    if (next === -1) {
-      break;
-    }
-    separator = next;
+    separator = filePath.lastIndexOf(':', separator - 1);
   }
 
   return { filePath };

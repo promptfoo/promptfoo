@@ -96,12 +96,11 @@ export async function loadFunction<T extends Function>({
 /**
  * Extracts the file path and optional function name from a `file://` URL.
  *
- * Splits at the **last** `:` rather than the first so Windows drive-letter
- * prefixes (`C:`, `D:`, ...) are preserved in `filePath`. The `lastColonIndex
- * > 1` guard prevents splitting at a leading drive-letter colon (`file://C:`
- * with no function name) or at the empty-path edge case (`file://:fn`). Only
- * JavaScript and Python callback files support the named-export suffix, so
- * colons in other valid POSIX paths remain part of the path.
+ * Uses the shared script-reference parser to preserve Windows drive letters
+ * and colons in filenames. For JavaScript, the rightmost supported file boundary
+ * separates the path from the export key, whose remaining colons are preserved.
+ * Only JavaScript and Python callback files support the named-export suffix,
+ * so colons in other valid POSIX paths remain part of the path.
  *
  * Examples:
  *   `file://callbacks.js`             → `{ filePath: 'callbacks.js' }`

@@ -481,7 +481,11 @@ describe('parseFileUrl', () => {
       'check:detail',
     ],
     ['file://grader.cjs:ns:a:b', 'grader.cjs', 'ns:a:b'],
-  ])('should keep a colon-containing JavaScript export intact: %s', (fileUrl, filePath, fn) => {
+    ['file://grader.cjs:other.js', 'grader.cjs', 'other.js'],
+    ['file://grader.cjs:score.js', 'grader.cjs', 'score.js'],
+    ['file://grader.cjs:copy.cjs:grade', 'grader.cjs:copy.cjs', 'grade'],
+    ['file://grader.cjs:copy.cjs:check:detail', 'grader.cjs:copy.cjs', 'check:detail'],
+  ])('should preserve JavaScript file and export boundaries: %s', (fileUrl, filePath, fn) => {
     expect(parseFileUrl(fileUrl)).toEqual({ filePath, functionName: fn });
   });
 
@@ -491,7 +495,6 @@ describe('parseFileUrl', () => {
     'file://C:',
     'file://grader.cjs:',
     String.raw`file://grader.cjs:ns\fn`,
-    'file://grader.cjs:other.js',
   ])('should still treat a path-shaped or empty suffix as part of the path: %s', (fileUrl) => {
     expect(parseFileUrl(fileUrl)).toEqual({ filePath: fileUrl.slice('file://'.length) });
   });

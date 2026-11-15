@@ -132,6 +132,17 @@ describe('fileReference utility functions', () => {
       expect(result).toEqual(parsedContent);
     });
 
+    it.each([
+      ['file://grader.cjs:score.js', '/configs/grader.cjs', 'score.js'],
+      ['file://grader.cjs:copy.cjs:grade', '/configs/grader.cjs:copy.cjs', 'grade'],
+      ['file://grader.cjs:check:detail', '/configs/grader.cjs', 'check:detail'],
+    ])('should load the selected JavaScript export: %s', async (fileRef, filePath, exportName) => {
+      importModule.mockResolvedValue(() => 'selected export');
+
+      expect(await loadFileReference(fileRef, '/configs')).toBe('selected export');
+      expect(importModule).toHaveBeenCalledWith(filePath, exportName);
+    });
+
     it('should load JavaScript files correctly', async () => {
       const fileRef = 'file:///path/to/config.js';
       const moduleOutput = { settings: { temperature: 0.7 } };
