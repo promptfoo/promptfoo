@@ -82,7 +82,11 @@ export async function readTestFiles(
     });
 
     for (const p of paths) {
-      const rawData = loadYaml(await fsPromises.readFile(p, 'utf-8'));
+      let rawData = loadYaml(await fsPromises.readFile(p, 'utf-8'));
+      // A vars file may itself be a single file:// reference to the real mapping.
+      if (typeof rawData === 'string') {
+        rawData = maybeLoadConfigFromExternalFile(rawData);
+      }
       // Preserve structured values and glob handling from the existing vars-file loader.
       const seen = new WeakMap<object, unknown>();
       for (const [key, value] of Object.entries(rawData ?? {})) {
@@ -90,7 +94,9 @@ export async function readTestFiles(
         // Directly authored scalar package references still use the normal renderer.
         // Top-level file references have always used the active config directory.
         // Nested fields resolve from the vars file that declares them.
-        const referenceBase = typeof value === 'string' ? cliState.basePath : path.dirname(p);
+        // String arrays expand into scalar vars, so they keep the scalar base too.
+        const referenceBase =
+          typeof value === 'string' || isStringArray(value) ? cliState.basePath : path.dirname(p);
         const loaded = mapVarsFileReferences(
           value,
           (ref) => maybeLoadConfigFromExternalFile(ref, undefined, referenceBase),
@@ -557,6 +563,10 @@ function absoluteVarsFileReference(value: string, basePath: string): string {
   return `file://${path.resolve(basePath, localPath)}`;
 }
 
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((item) => typeof item === 'string');
+}
+
 function resolveNestedVarsFileReferences(
   vars: TestCase['vars'],
   basePath: string,
@@ -569,7 +579,12 @@ function resolveNestedVarsFileReferences(
   return Object.fromEntries(
     Object.entries(vars).map(([key, value]) => [
       key,
-      value && typeof value === 'object' && key !== '_conversation' && !preloaded.includes(key)
+      value &&
+      typeof value === 'object' &&
+      // String arrays expand into scalar vars, which resolve relative to the config.
+      !isStringArray(value) &&
+      key !== '_conversation' &&
+      !preloaded.includes(key)
         ? mapVarsFileReferences(
             value,
             (reference) => absoluteVarsFileReference(reference, basePath),

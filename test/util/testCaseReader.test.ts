@@ -930,6 +930,47 @@ describe('readTest', () => {
     expect(result.metadata?.__promptfoo?.varsFileKeys).toEqual(['nested']);
   });
 
+  it('follows a vars file whose whole YAML content is a file:// reference to the real mapping', async () => {
+    vi.mocked(globSync).mockReturnValueOnce(['/project/cases/vars.yaml']);
+    vi.mocked(fs.readFileSync).mockReturnValueOnce('file://shared.yaml');
+    vi.mocked(maybeLoadConfigFromExternalFile).mockReturnValueOnce({ sharedVar: 'value1' });
+
+    const result = await readTest({ vars: 'cases/vars.yaml' }, '/project');
+
+    expect(maybeLoadConfigFromExternalFile).toHaveBeenCalledWith('file://shared.yaml');
+    expect(result.vars).toEqual({ sharedVar: 'value1' });
+  });
+
+  it('preserves config base path for string array vars and avoids rebasing in nested vars references', async () => {
+    vi.mocked(globSync).mockReturnValueOnce(['/project/cases/vars.yaml']);
+    vi.mocked(fs.readFileSync).mockReturnValueOnce('docs:\n  - file://a.txt\n  - file://b.txt');
+
+    const varsFileResult = await readTest({ vars: 'cases/vars.yaml' }, '/project');
+
+    expect(maybeLoadConfigFromExternalFile).toHaveBeenCalledWith(
+      'file://a.txt',
+      undefined,
+      '/project',
+    );
+    expect(maybeLoadConfigFromExternalFile).toHaveBeenCalledWith(
+      'file://b.txt',
+      undefined,
+      '/project',
+    );
+    expect(varsFileResult.vars).toEqual({ docs: ['file://a.txt', 'file://b.txt'] });
+
+    const testCaseResult = await readTest(
+      {
+        vars: {
+          docs: ['file://a.txt', 'file://b.txt'],
+        },
+        assert: [{ type: 'equals', value: '1' }],
+      },
+      '/project/cases',
+    );
+    expect(testCaseResult.vars?.docs).toEqual(['file://a.txt', 'file://b.txt']);
+  });
+
   it('readTest with TestCase that contains a vars glob input', async () => {
     const input: TestCaseWithVarsFile = {
       description: 'Test 1',
