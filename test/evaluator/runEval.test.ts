@@ -236,6 +236,42 @@ describe('runEval', () => {
     expect(test.vars).toEqual(vars);
   });
 
+  it.each([false, true])(
+    'grades reordered variable keys identically (locked: %s)',
+    async (locked) => {
+      const original = {
+        expected: '{{phrase}}',
+        phrase: '{{token}} {{token}} {{token}} {{token}} {{token}}',
+        token: 'ok',
+      };
+      const reversed = Object.fromEntries(Object.entries(original).reverse());
+      const results = [];
+      for (const vars of [original, reversed]) {
+        const [result] = await runEval({
+          ...defaultOptions,
+          provider: {
+            id: () => 'variable-order-target',
+            callApi: async () => ({ output: 'ok ok ok ok ok' }),
+          },
+          prompt: { raw: 'fixed prompt', label: 'test' },
+          test: { vars: { ...vars }, assert: [{ type: 'equals', value: '{{expected}}' }] },
+          ...(locked && {
+            lockIntegrity: {
+              disableTemplating: false,
+              disableVarExpansion: false,
+              shortCircuitTestFailures: false,
+            },
+          }),
+        });
+        results.push(result);
+      }
+      expect(results.map((result) => result.success)).toEqual([false, false]);
+      expect(results[0].gradingResult?.reason).toBe(results[1].gradingResult?.reason);
+      expect(original.expected).toBe('{{phrase}}');
+      expect(reversed.expected).toBe('{{phrase}}');
+    },
+  );
+
   it.each([true, false])(
     'enforces committed short-circuit mode %s after a transform changes the environment',
     async (shortCircuitTestFailures) => {

@@ -58,11 +58,14 @@ export function resolveVariables(
 ): Record<string, VarValue> {
   let resolved: boolean;
   const regex = /\{\{\s*(\w+)\s*\}\}/; // Matches {{variableName}}, {{ variableName }}, etc.
+  // Bounded substitutions must not depend on object insertion order, which
+  // evaluation-lock canonicalization intentionally ignores.
+  const keys = Object.keys(variables).sort();
 
   let iterations = 0;
   do {
     resolved = true;
-    for (const key of Object.keys(variables)) {
+    for (const key of keys) {
       if (
         skipResolveVars?.includes(key) ||
         varsResolvedFromSkipped?.has(key) ||

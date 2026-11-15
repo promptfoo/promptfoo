@@ -405,6 +405,34 @@ tests:
     expect(row).toMatchObject({ success: true, score: 1, response: { output: 'Paris' } });
   });
 
+  it('does not turn a locked failure into a pass after reordering variable keys', () => {
+    const selectedConfig = path.join(tempDir, 'variable-order.json');
+    const selectedLock = path.join(tempDir, 'variable-order.lock.json');
+    const outputPath = path.join(tempDir, 'variable-order-output.json');
+    const vars = {
+      expected: '{{phrase}}',
+      phrase: '{{token}} {{token}} {{token}} {{token}} {{token}}',
+      token: 'ok',
+    };
+    const config = (orderedVars: Record<string, string>) =>
+      JSON.stringify({
+        providers: ['echo'],
+        prompts: ['ok ok ok ok ok'],
+        tests: [{ vars: orderedVars, assert: [{ type: 'equals', value: '{{expected}}' }] }],
+      });
+    fs.writeFileSync(selectedConfig, config(vars));
+    const registered = runEval(['--lock', selectedLock], '100', selectedConfig);
+    expect(registered.status, registered.stderr || registered.stdout).toBe(100);
+    const commitment = fs.readFileSync(selectedLock, 'utf8');
+    fs.writeFileSync(selectedConfig, config(Object.fromEntries(Object.entries(vars).reverse())));
+    const verified = runEval(['--verify', selectedLock, '-o', outputPath], '100', selectedConfig);
+    expect(verified.status, verified.stderr || verified.stdout).toBe(100);
+    expect(fs.readFileSync(selectedLock, 'utf8')).toBe(commitment);
+    const row = JSON.parse(fs.readFileSync(outputPath, 'utf8')).results.results[0];
+    expect(row).toMatchObject({ success: false, score: 0, response: { output: 'ok ok ok ok ok' } });
+    expect(row.gradingResult.reason).toContain('ok ok ok ok {{token}}');
+  });
+
   it('fails a verified run cancelled by an external signal after a passing response', () => {
     const selectedConfig = path.join(tempDir, 'external-abort.cjs');
     const selectedLock = path.join(tempDir, 'external-abort.lock.json');

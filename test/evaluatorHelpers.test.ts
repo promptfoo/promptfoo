@@ -663,6 +663,28 @@ describe('evaluatorHelpers', () => {
       expect(resolveVariables(variables)).toEqual(expected);
     });
 
+    it.each([
+      ['expected', 'phrase', 'token'],
+      ['expected', 'token', 'phrase'],
+      ['phrase', 'expected', 'token'],
+      ['phrase', 'token', 'expected'],
+      ['token', 'expected', 'phrase'],
+      ['token', 'phrase', 'expected'],
+    ])('resolves reordered variable mappings consistently: %s, %s, %s', (...keys) => {
+      const source: Record<string, string> = {
+        expected: '{{phrase}}',
+        phrase: '{{token}} {{token}} {{token}} {{token}} {{token}}',
+        token: 'ok',
+      };
+      const vars = Object.fromEntries(keys.map((key) => [key, source[key]]));
+
+      expect(resolveVariables(vars)).toEqual({
+        expected: 'ok ok ok ok {{token}}',
+        phrase: 'ok ok ok ok ok',
+        token: 'ok',
+      });
+    });
+
     it('should not modify variables without placeholders', () => {
       const variables = { greeting: 'Hello, world!', name: 'John' };
       const expected = { greeting: 'Hello, world!', name: 'John' };
