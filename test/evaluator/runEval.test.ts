@@ -1370,6 +1370,32 @@ describe('runEval', () => {
       expect(results[0].error).toBe('error' in response ? response.error : undefined);
     });
 
+    it('reports measured latency in whole milliseconds', async () => {
+      vi.useFakeTimers();
+
+      const provider: ApiProvider = {
+        id: () => 'fractional-latency-provider',
+        callApi: async () => {
+          await Promise.resolve();
+          // performance.now() is fractional; shared results are stored as integers.
+          vi.advanceTimersByTime(12.6);
+          return { output: 'Test output' };
+        },
+      };
+
+      const results = await runEval({
+        ...defaultOptions,
+        provider,
+        prompt: { raw: 'Test prompt', label: 'test-label' },
+        test: {},
+        conversations: {},
+        registers: {},
+      });
+
+      expect(results[0].latencyMs).toBe(13);
+      expect(Number.isInteger(results[0].latencyMs)).toBe(true);
+    });
+
     it('should respect provider latencyMs of 0', async () => {
       const providerWithZeroLatency: ApiProvider = {
         id: vi.fn().mockReturnValue('zero-latency-provider'),
