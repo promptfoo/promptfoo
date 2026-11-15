@@ -1,0 +1,60 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Deterministic evaluation of exact money, currency codes, and UTC validity boundaries
+
+prompts:
+  - '{{query}}'
+
+providers:
+  - echo
+
+tests:
+  - description: Exact USD total with floating-point sensitive items
+    vars:
+      query: '{"currency":"USD","items":[{"description":"Consulting","amount":"19.99"},{"description":"Processing fee","amount":"0.05"},{"description":"Regulatory surcharge","amount":"1.40"}],"total":"21.44"}'
+      expectedCurrency: USD
+      expectedTotal: '21.44'
+    assert:
+      - type: javascript
+        value: file://assert-boundary.cjs:validateExactMoney
+
+  - description: Exact EUR total with integer cent accuracy
+    vars:
+      query: '{"currency":"EUR","items":[{"description":"Monthly subscription","amount":"99.00"},{"description":"VAT","amount":"1.50"}],"total":"100.50"}'
+      expectedCurrency: EUR
+      expectedTotal: '100.50'
+    assert:
+      - type: javascript
+        value: file://assert-boundary.cjs:validateExactMoney
+
+  - description: Matches expected EUR amount and currency code
+    vars:
+      query: '{"currency":"EUR","total":"150.00"}'
+      expectedCurrency: EUR
+      expectedTotal: '150.00'
+    assert:
+      - type: javascript
+        value: file://assert-boundary.cjs:validateCurrencyCode
+
+  - description: Quote issued before UTC cutoff boundary
+    vars:
+      query: '{"quoteId":"Q-1001","effectiveUntil":"2026-05-31T23:59:59.000Z"}'
+      cutoffUtc: '2026-06-01T00:00:00.000Z'
+    assert:
+      - type: javascript
+        value: file://assert-boundary.cjs:validateTemporalBoundary
+
+  - description: Quote issued at exact UTC cutoff boundary
+    vars:
+      query: '{"quoteId":"Q-1002","effectiveUntil":"2026-06-01T00:00:00.000Z"}'
+      cutoffUtc: '2026-06-01T00:00:00.000Z'
+    assert:
+      - type: javascript
+        value: file://assert-boundary.cjs:validateTemporalBoundary
+
+  - description: Quote issued after UTC cutoff boundary
+    vars:
+      query: '{"quoteId":"Q-1003","effectiveUntil":"2026-06-01T00:00:01.000Z"}'
+      cutoffUtc: '2026-06-01T00:00:00.000Z'
+    assert:
+      - type: not-javascript
+        value: file://assert-boundary.cjs:validateTemporalBoundary
