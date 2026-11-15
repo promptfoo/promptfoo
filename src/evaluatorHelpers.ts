@@ -722,19 +722,6 @@ function shouldRenderAllVarTemplates(
   }
 }
 
-function extractUnboundVariables(template: string): string[] {
-  const references = extractUnboundVariablesFromTemplate(template);
-  if (references) {
-    return references;
-  }
-  // Every candidate came from this same template. If parsing failed, the old
-  // conservative per-candidate check necessarily returned true for all of them;
-  // return the textual extraction directly instead of reparsing each candidate.
-  return extractVariablesFromTemplate(template).map(
-    (reference) => /^([A-Za-z_]\w*)/.exec(reference)?.[1] ?? reference,
-  );
-}
-
 function collectPromptReferencedVars(
   basePrompt: string,
   vars: Record<string, VarValue>,
@@ -746,12 +733,12 @@ function collectPromptReferencedVars(
   if (templateLoadsExternalContext(basePrompt)) {
     return new Set(Object.keys(vars));
   }
-  const pending = extractUnboundVariables(basePrompt);
+  const pending = extractUnboundVariablesFromTemplate(basePrompt);
+  if (!pending) {
+    return new Set(Object.keys(vars));
+  }
   while (pending.length > 0) {
-    const reference = pending.pop()!;
-    // AST references are complete bare symbols. Textual fallback references
-    // were already reduced to their root by extractUnboundVariables.
-    const key = reference;
+    const key = pending.pop()!;
     if (
       !key ||
       referenced.has(key) ||
@@ -767,7 +754,11 @@ function collectPromptReferencedVars(
     if (templateLoadsExternalContext(value)) {
       return new Set(Object.keys(vars));
     }
-    for (const dependency of extractUnboundVariables(value)) {
+    const dependencies = extractUnboundVariablesFromTemplate(value);
+    if (!dependencies) {
+      return new Set(Object.keys(vars));
+    }
+    for (const dependency of dependencies) {
       pending.push(dependency);
     }
   }
@@ -799,7 +790,7 @@ function referencesUndefinedVariables(template: string, vars: Record<string, Var
   // pass that resolves the raw block.
   const spans = collectRawSpans(template);
   let scrubbed = mapSpans(template, spans, () => '');
-  scrubbed = scrubbed.replace(/\{#[\s\S]*?#\}/g, '');
+  scrubbed = mapSpans(scrubbed, collectCommentSpans(scrubbed), () => '');
   // A quoted placeholder inside a surrounding expression or block tag is
   // literal text too: {{ '{{x}}' }} renders to the text {{x}}, so x is not a
   // dependency. The extractor below is regex-based and would report it, so

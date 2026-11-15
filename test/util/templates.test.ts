@@ -376,6 +376,30 @@ describe('macro analysis work and scope changes', () => {
     expect(referencesHistory(value)).toBe(true);
   });
 
+  it('finds history defaults in a recursive macro call', () => {
+    const value =
+      "{% macro m(x=_conversation) %}{{ m() if x == 'default' else x }}{% endmacro %}{{ m('default') }}";
+
+    expect(getNunjucksEngine().renderString(value, { _conversation: 'history' })).toBe('history');
+    expect(analyzeTemplateReference(value, '_conversation')).toEqual({
+      referenced: true,
+      parsed: true,
+    });
+    expect(extractUnboundVariablesFromTemplate(value)).toContain('_conversation');
+    expect(extractRequiredVariablesFromTemplate(value)).toContain('_conversation');
+  });
+
+  it('bounds recursive defaults without certifying a complete analysis', () => {
+    const value = '{% macro m(x=m()) %}{{x}}{% endmacro %}{{m()}}{{_conversation}}';
+
+    expect(analyzeTemplateReference(value, '_conversation')).toEqual({
+      referenced: true,
+      parsed: false,
+    });
+    expect(extractUnboundVariablesFromTemplate(value)).toBeUndefined();
+    expect(extractRequiredVariablesFromTemplate(value)).toBeUndefined();
+  });
+
   it('bounds AST work across nested macro argument variants', () => {
     type AstNode = { fields?: string[]; typename?: string; [field: string]: unknown };
     const parser = (nunjucks as unknown as { parser: { parse: (value: string) => unknown } })

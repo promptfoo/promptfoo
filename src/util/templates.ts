@@ -536,14 +536,14 @@ function analyzeMacroBody(
   suppliedParamNames?: ReadonlySet<string>,
 ): boolean {
   const memoKey = macroAnalysisMemoKey(suppliedParamNames);
-  if (
-    macro.analyzing ||
-    memo?.results.get(macro)?.has(memoKey) ||
-    macroAnalysisDepth >= MAX_MACRO_ANALYSIS_DEPTH
-  ) {
+  if (memo?.results.get(macro)?.has(memoKey)) {
     return false;
   }
+  if (macroAnalysisDepth >= MAX_MACRO_ANALYSIS_DEPTH) {
+    throw new TemplateAnalysisLimitError('Template macro analysis exceeded its depth limit');
+  }
 
+  const wasAnalyzing = macro.analyzing;
   macro.analyzing = true;
   macroAnalysisDepth++;
   try {
@@ -557,6 +557,10 @@ function analyzeMacroBody(
     );
     if (referencesVariable) {
       return true;
+    }
+    // Reentrant calls can evaluate defaults even when their body is already active.
+    if (wasAnalyzing) {
+      return false;
     }
 
     const macroScope = addNamesToScope(macro.definitionScope, macro.paramNames);
@@ -576,7 +580,7 @@ function analyzeMacroBody(
     return result;
   } finally {
     macroAnalysisDepth--;
-    macro.analyzing = false;
+    macro.analyzing = wasAnalyzing;
   }
 }
 
@@ -748,9 +752,7 @@ function postfixNodeReferencesVariable(
         ? boundSymbols.findMacro(macroName)
         : undefined;
     const memo = boundSymbols instanceof LinkedScope ? boundSymbols.macroAnalysisMemo() : undefined;
-    if (macro && macroAnalysisDepth < MAX_MACRO_ANALYSIS_DEPTH) {
-      // At the depth limit, leave the macro uncalled so the final-scope pass
-      // collects its dependencies without recursively expanding the whole chain.
+    if (macro) {
       macro.called = true;
       const suppliedParamNames = collectSuppliedMacroParamNames(part.args, macro.paramNames);
       if (analyzeMacroBody(macro, variableName, memo, suppliedParamNames)) {

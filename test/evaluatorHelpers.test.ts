@@ -1413,6 +1413,41 @@ describe('evaluatorHelpers', () => {
       ).rejects.toThrow('unknown block tag: unknown');
     });
 
+    it.each(['prompt', 'dependent value'])(
+      'should preserve used-variable errors after dependency analysis exhausts in a %s',
+      async (location) => {
+        let value = '';
+        for (let index = 16; index >= 0; index--) {
+          const calls = index === 16 ? '' : `{{m${index + 1}()}}{{m${index + 1}('x')}}`;
+          value = `{% macro m${index}(x='') %}${value}${calls}{% endmacro %}`;
+        }
+        value += "{{m0()}}{{m0('x')}}{{ v ~ '' }}";
+        const prompt = location === 'prompt' ? value : '{{alias}}';
+        const vars: Record<string, string> =
+          location === 'prompt' ? { v: '{% unknown %}' } : { alias: value, v: '{% unknown %}' };
+
+        await expect(renderPrompt(toPrompt(prompt), vars, {})).rejects.toThrow(
+          'unknown block tag: unknown',
+        );
+      },
+    );
+
+    it('should preserve indeterminate macro data in a JSON-only prompt', async () => {
+      let value = '';
+      for (let index = 16; index >= 0; index--) {
+        const calls = index === 16 ? '' : `{{m${index + 1}()}}{{m${index + 1}('x')}}`;
+        value = `{% macro m${index}(x='') %}${value}${calls}{% endmacro %}`;
+      }
+      value += "{{m0()}}{{m0('x')}}{{ v ~ '' }}";
+      const rendered = await renderPrompt(
+        toPrompt('{"text":"{{alias}}"}'),
+        { alias: value, v: '{% unknown %}' },
+        {},
+      );
+
+      expect(JSON.parse(rendered)).toEqual({ text: value });
+    });
+
     it('should bind the implicit caller in macro-body dependencies', async () => {
       const template =
         '{% macro m() %}{{ caller() ~ "!" }}{% endmacro %}{% call m() %}x{% endcall %}';
@@ -1426,6 +1461,13 @@ describe('evaluatorHelpers', () => {
       const renderedPrompt = await renderPrompt(toPrompt('{"text":"{{v}}"}'), { v: value }, {});
 
       expect(renderedPrompt).toBe(JSON.stringify({ text: value }, null, 2));
+    });
+
+    it('should preserve repeated unclosed comment openers beside a literal', async () => {
+      const value = `{{ "ok" }}${'{#'.repeat(16000)}`;
+      const rendered = await renderPrompt(toPrompt('{"text":"{{v}}"}'), { v: value }, {});
+
+      expect(JSON.parse(rendered)).toEqual({ text: `ok${'{#'.repeat(16000)}` });
     });
 
     it('should bound deep concatenation traversal without overflowing the stack', async () => {
