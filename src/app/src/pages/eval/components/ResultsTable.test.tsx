@@ -176,21 +176,24 @@ function createNextPageExpectation(mockFetchEvalData: unknown, checkPageSize = f
 
 vi.mock('./store', async (importOriginal) => ({
   ...(await importOriginal<typeof import('./store')>()),
-  useTableStore: vi.fn(() => ({
-    config: {},
-    evalId: '123',
-    setTable: vi.fn(),
-    table: null,
-    version: 4,
-    fetchEvalData: vi.fn(),
-    filters: {
-      values: {},
-      appliedCount: 0,
-      options: {
-        metric: [],
+  useTableStore: Object.assign(
+    vi.fn(() => ({
+      config: {},
+      evalId: '123',
+      setTable: vi.fn(),
+      table: null,
+      version: 4,
+      fetchEvalData: vi.fn(),
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: {
+          metric: [],
+        },
       },
-    },
-  })),
+    })),
+    { getState: () => ({ refreshFailureSummary: vi.fn() }) },
+  ),
   useResultsViewSettingsStore: vi.fn(() => ({
     inComparisonMode: false,
     renderMarkdown: true,
@@ -1791,7 +1794,11 @@ describe('ResultsTable rating actions', () => {
     callApi.mockReset().mockResolvedValue({ ok: true } as Response);
   });
 
-  function renderRatingTable(gradingResult?: Partial<GradingResult>, initialPass = false) {
+  function renderRatingTable(
+    gradingResult?: Partial<GradingResult>,
+    initialPass = false,
+    overrides: Record<string, unknown> = {},
+  ) {
     const table = {
       body: [
         {
@@ -1812,7 +1819,13 @@ describe('ResultsTable rating actions', () => {
       head: createProviderHead(),
     };
     vi.mocked(useTableStore).mockImplementation(() =>
-      createTableStore({ setTable, table, inComparisonMode: false, isFetching: false }),
+      createTableStore({
+        setTable,
+        table,
+        inComparisonMode: false,
+        isFetching: false,
+        ...overrides,
+      }),
     );
     renderWithProviders(<ResultsTable {...createDefaultProps()} />);
   }
@@ -1868,6 +1881,31 @@ describe('ResultsTable rating actions', () => {
     } else {
       expect(payload).not.toHaveProperty('componentResults');
     }
+  });
+
+  it('reloads an active failure group after a rating is saved', async () => {
+    const fetchEvalData = vi.fn();
+    const filter = {
+      type: 'error',
+      id: 'group',
+      operator: 'equals',
+      value: 'a'.repeat(64),
+      evalId: '123',
+      sortIndex: 0,
+      logicOperator: 'and',
+    };
+    renderRatingTable(undefined, false, {
+      fetchEvalData,
+      filters: { values: { group: filter }, appliedCount: 1, options: {} },
+    });
+    fetchEvalData.mockClear();
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Rate' }));
+    await waitFor(() =>
+      expect(fetchEvalData).toHaveBeenCalledWith(
+        '123',
+        expect.objectContaining({ filters: [filter] }),
+      ),
+    );
   });
 
   it('persists a human rating when the existing grade has no component results', async () => {

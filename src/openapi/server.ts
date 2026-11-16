@@ -538,6 +538,23 @@ export function createServerOpenApiRegistry() {
 
   register({
     method: 'get',
+    path: '/api/eval/{id}/failure-summary',
+    operationId: 'getEvalFailureSummary',
+    tags: ['Eval'],
+    summary: 'Group failed evaluation results by failure reason',
+    request: {
+      params: EvalSchemas.FailureSummary.Params,
+    },
+    responses: {
+      200: jsonResponse(EvalSchemas.FailureSummary.Response),
+      400: jsonResponse(ErrorResponseSchema, 'Validation error'),
+      404: jsonResponse(ErrorResponseSchema, 'Evaluation not found'),
+      500: jsonResponse(ErrorResponseSchema, 'Server error'),
+    },
+  });
+
+  register({
+    method: 'get',
     path: '/api/eval/{id}/metadata-keys',
     operationId: 'getEvalMetadataKeys',
     tags: ['Eval'],

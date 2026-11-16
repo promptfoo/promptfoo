@@ -22,6 +22,7 @@ import { type ResultsFilter, useTableStore } from '../store';
 const TYPE_LABELS: Record<ResultsFilter['type'], string> = {
   metric: 'Metric',
   metadata: 'Metadata',
+  error: 'Failure group',
   plugin: 'Plugin',
   strategy: 'Strategy',
   severity: 'Severity',
@@ -216,19 +217,22 @@ function FilterRow({
 
   const handleLogicOperatorChange = useCallback(
     (logicOperator: ResultsFilter['logicOperator']) => {
-      if (filter.sortIndex === 1) {
+      if (index === 1) {
         updateAllFilterLogicOperators(logicOperator);
       }
     },
-    [filter.sortIndex, updateAllFilterLogicOperators],
+    [index, updateAllFilterLogicOperators],
   );
 
   // Get logic operator from second filter
-  const filterWithSortIndex1 = Object.values(filters.values).find((f) => f.sortIndex === 1);
+  const ordinaryFilters = Object.values(filters.values)
+    .filter((f) => f.type !== 'error')
+    .sort((a, b) => a.sortIndex - b.sortIndex);
+  const secondFilter = ordinaryFilters[1];
   const displayLogicOperator =
-    filter.sortIndex === 1
+    index === 1
       ? (filter.logicOperator ?? 'and')
-      : (filterWithSortIndex1?.logicOperator ?? filter.logicOperator ?? 'and');
+      : (secondFilter?.logicOperator ?? filter.logicOperator ?? 'and');
 
   // Build type options
   const typeOptions = useMemo(() => {
@@ -339,6 +343,20 @@ function FilterRow({
     }
   }, [filter.type, metadataKey]);
 
+  // Failure groups are selected in the summary, not edited as arbitrary text predicates.
+  if (filter.type === 'error') {
+    return (
+      <div className="flex items-center gap-2">
+        <span className="min-w-0 flex-1 truncate text-sm" title={filter.label}>
+          Rows with failure: {filter.label ?? 'Selected group'}
+        </span>
+        <Button variant="ghost" size="sm" onClick={onRemove} aria-label="Remove failure group">
+          <X className="size-4" />
+        </Button>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-wrap items-center gap-1.5">
       {/* AND/OR selector (spacer for first filter only when multiple filters exist) */}
@@ -348,7 +366,7 @@ function FilterRow({
         <Select
           value={displayLogicOperator}
           onValueChange={(v) => handleLogicOperatorChange(v as ResultsFilter['logicOperator'])}
-          disabled={filter.sortIndex > 1}
+          disabled={index > 1}
         >
           <SelectTrigger className="h-8 w-[70px] shrink-0">
             <SelectValue />
@@ -568,6 +586,7 @@ export default function FiltersForm() {
   }, [filters.values]);
 
   const activeFilterCount = filters.appliedCount;
+  const ordinaryFilters = filterList.filter((filter) => filter.type !== 'error');
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -610,12 +629,12 @@ export default function FiltersForm() {
             <p className="text-sm text-muted-foreground">No filters applied</p>
           ) : (
             <div className="space-y-2">
-              {filterList.map((filter, index) => (
+              {filterList.map((filter) => (
                 <FilterRow
                   key={filter.id}
                   filter={filter}
-                  index={index}
-                  totalFilters={filterList.length}
+                  index={ordinaryFilters.indexOf(filter)}
+                  totalFilters={ordinaryFilters.length}
                   onRemove={() => handleRemoveFilter(filter.id)}
                 />
               ))}
