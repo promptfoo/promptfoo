@@ -321,21 +321,27 @@ describe('doRedteamRun', () => {
       );
     });
 
-    it('should log debug information when processing liveRedteamConfig', async () => {
-      // Get the mocked logger
+    it('logs the live config path while keeping its contents private', async () => {
       const mockLogger = (await import('../../src/logger')).default;
+      const privatePrompt = 'private-prompt-for-log-test';
+      const apiKey = 'private-provider-key-for-log-test';
 
       await doRedteamRun({
-        liveRedteamConfig: mockConfig,
+        liveRedteamConfig: {
+          prompts: [privatePrompt],
+          providers: [{ id: 'test-provider', config: { apiKey } }],
+        },
         loadedFromCloud: true,
+        verbose: true,
       });
 
       const [[expectedPath]] = vi.mocked(fsPromises.writeFile).mock.calls;
-
       expect(mockLogger.debug).toHaveBeenCalledWith(`Using live config from ${expectedPath}`);
-      expect(mockLogger.debug).toHaveBeenCalledWith(
-        `Live config: ${JSON.stringify(mockConfig, null, 2)}`,
-      );
+      for (const level of ['debug', 'info', 'warn', 'error'] as const) {
+        const messages = JSON.stringify(vi.mocked(mockLogger[level]).mock.calls);
+        expect(messages).not.toContain(privatePrompt);
+        expect(messages).not.toContain(apiKey);
+      }
     });
   });
 
