@@ -260,6 +260,58 @@ describe('MCPClient', () => {
       expect(mockClient.callTool).not.toHaveBeenCalled();
     });
 
+    it('refuses in-flight tool contract drift before forwarding a previously approved tool call', async () => {
+      mcpClient = new MCPClient({
+        server: {
+          command: 'node',
+          expectedTools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
+        },
+      });
+      await mcpClient.initialize();
+      mockClient.listTools.mockResolvedValueOnce({
+        tools: [{ name: 'tool1', description: 'desc1', inputSchema: { required: ['new_field'] } }],
+      });
+      mockClient.callTool.mockResolvedValue({ content: [{ type: 'text', text: 'unexpected' }] });
+
+      const result = await mcpClient.callTool('tool1', {});
+
+      expect(result.error).toMatch(/MCP server #1 tool contract drift.*tool1 \(input schema\)/);
+      expect(mockClient.callTool).not.toHaveBeenCalled();
+      expect(mockClient.listTools).toHaveBeenCalledTimes(2);
+      await mcpClient.cleanup();
+    });
+
+    it('keeps forwarding calls whose approved MCP contract has not changed', async () => {
+      mcpClient = new MCPClient({
+        server: {
+          command: 'node',
+          expectedTools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
+        },
+      });
+      await mcpClient.initialize();
+      mockClient.callTool.mockResolvedValue({ content: [{ type: 'text', text: 'ok' }] });
+
+      const result = await mcpClient.callTool('tool1', { query: 'test' });
+
+      expect(result.error).toBeUndefined();
+      expect(mockClient.callTool).toHaveBeenCalledOnce();
+      expect(mockClient.listTools).toHaveBeenCalledTimes(2);
+      await mcpClient.cleanup();
+    });
+
+    it('does not add tool-list requests for unpinned MCP calls', async () => {
+      mcpClient = new MCPClient({ server: { command: 'node' } });
+      await mcpClient.initialize();
+      mockClient.callTool.mockResolvedValue({ content: [{ type: 'text', text: 'ok' }] });
+
+      const result = await mcpClient.callTool('tool1', {});
+
+      expect(result.error).toBeUndefined();
+      expect(mockClient.callTool).toHaveBeenCalledOnce();
+      expect(mockClient.listTools).toHaveBeenCalledOnce();
+      await mcpClient.cleanup();
+    });
+
     it('rejects unexpected tools from an MCP server with a pinned contract', async () => {
       mockClient.listTools.mockResolvedValue(createTwoToolListResponse());
       mcpClient = new MCPClient({

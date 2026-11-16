@@ -57,7 +57,7 @@ For Google Gemini (AI Studio and Vertex), MCP integration adds the server’s to
   - `name`: (Optional) A name for the server instance.
   - `url`: URL for connecting to a remote MCP server.
   - `headers`: (Optional) Custom HTTP headers to send when connecting to a remote MCP server (only applies to `url`-based connections).
-  - `expectedTools`: (Optional) An approved snapshot of this server's exposed tool definitions, each with `name`, `description`, and `inputSchema`. On connection, Promptfoo aborts the evaluation if a tool is added, removed, or its description or input schema changes. The snapshot must cover all tools exposed by the `tools` and `exclude_tools` filters; omitted means no contract check. Capture the approved definitions from the MCP server's `tools/list` response and review changes before updating the snapshot.
+  - `expectedTools`: (Optional) An approved snapshot of this server's exposed tool definitions, each with `name`, `description`, and `inputSchema`. At connection and again immediately before each tool call, Promptfoo rejects a tool that was added, removed, or changed in description or input schema. Each pinned call makes an additional `tools/list` request, so use this protection when preventing mid-run drift matters more than that request overhead. The snapshot must cover all tools exposed by the `tools` and `exclude_tools` filters; omitted means no contract check. Capture the approved definitions from the MCP server's `tools/list` response and review changes before updating the snapshot.
     This check uses Promptfoo's shared MCP client; the Claude Agent SDK adapter cannot enforce it and rejects this setting.
   - `auth`: (Optional) Authentication configuration for the server. Can be used to automatically set auth headers for all connection types.
     - `type`: Authentication type, either `'bearer'` or `'api_key'`.
@@ -98,7 +98,7 @@ providers:
 The `tools` filter makes this contract apply to `lookup` rather than unrelated tools. The
 example definition is illustrative: **copy your server's exact live definition**, including
 additional schema fields, rather than guessing it. An added, removed, or changed approved tool
-makes the evaluation fail before any tool runs. The error identifies the affected tool and
+makes the evaluation fail before any tool runs, or stops a later call if the server changes mid-run. The error identifies the affected tool and
 whether its description or input schema changed. Review the change before updating the approved
 definitions. If a server returns a tool-list page cursor that the client cannot follow, the
 pin check rejects the incomplete list rather than approving it. The check is disabled when

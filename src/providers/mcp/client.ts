@@ -178,6 +178,7 @@ function getEffectiveRequestOptions(config: MCPConfig): MCPRequestOptions | unde
 export class MCPClient {
   private clients: Map<string, Client> = new Map();
   private tools: Map<string, MCPTool[]> = new Map();
+  private pinnedTools: Map<string, { expectedTools: MCPTool[]; serverLabel: string }> = new Map();
   private config: McpConfigParsed;
   private transports: Map<
     string,
@@ -212,6 +213,34 @@ export class MCPClient {
 
   constructor(config: unknown) {
     this.config = McpConfigSchema.parse(config);
+  }
+
+  /** Use the exact same visible tool selection for startup and in-flight pin checks. */
+  private async listVisibleTools(
+    client: Client,
+    requestOptions: MCPRequestOptions | undefined,
+    requireComplete: boolean,
+    serverLabel: string,
+  ): Promise<MCPTool[]> {
+    const toolsResult = await client.listTools(undefined, requestOptions);
+    if (requireComplete && toolsResult?.nextCursor !== undefined) {
+      throw new Error(
+        `MCP server ${serverLabel} returned an incomplete paginated tool list; expectedTools cannot be checked until all pages are collected.`,
+      );
+    }
+    let visible =
+      toolsResult?.tools?.map((tool) => ({
+        name: tool.name,
+        description: tool.description || '',
+        inputSchema: tool.inputSchema,
+      })) || [];
+    if (this.config.tools) {
+      visible = visible.filter((tool) => this.config.tools?.includes(tool.name));
+    }
+    if (this.config.exclude_tools) {
+      visible = visible.filter((tool) => !this.config.exclude_tools?.includes(tool.name));
+    }
+    return visible;
   }
 
   async initialize(): Promise<void> {
@@ -394,35 +423,13 @@ export class MCPClient {
         }
       }
 
-      // List available tools
-      const toolsResult = await client.listTools(
-        undefined, // no pagination params
+      // Validate the full visible contract on the connection used for execution.
+      const filteredTools = await this.listVisibleTools(
+        client,
         requestOptions,
+        server.expectedTools !== undefined,
+        serverLabel,
       );
-      // A partial list can match a pin while hiding changed tools on later pages.
-      // Until the shared tools/list path collects all pages, fail closed for pins.
-      if (server.expectedTools && toolsResult?.nextCursor !== undefined) {
-        throw new Error(
-          `MCP server ${serverLabel} returned an incomplete paginated tool list; expectedTools cannot be checked until all pages are collected.`,
-        );
-      }
-      const serverTools =
-        toolsResult?.tools?.map((tool) => ({
-          name: tool.name,
-          description: tool.description || '',
-          inputSchema: tool.inputSchema,
-        })) || [];
-
-      // Filter tools if specified
-      let filteredTools = serverTools;
-      if (this.config.tools) {
-        filteredTools = serverTools.filter((tool) => this.config.tools?.includes(tool.name));
-      }
-      if (this.config.exclude_tools) {
-        filteredTools = filteredTools.filter(
-          (tool) => !this.config.exclude_tools?.includes(tool.name),
-        );
-      }
 
       // Compare only exposed tools, on the same connection that executes the eval.
       if (server.expectedTools) {
@@ -433,6 +440,9 @@ export class MCPClient {
       this.transports.set(serverKey, transport);
       this.clients.set(serverKey, client);
       this.tools.set(serverKey, filteredTools);
+      if (server.expectedTools) {
+        this.pinnedTools.set(serverKey, { expectedTools: server.expectedTools, serverLabel });
+      }
 
       if (this.isVerboseEnabled) {
         console.log(
@@ -447,6 +457,7 @@ export class MCPClient {
         this.clients.delete(serverKey);
         this.transports.delete(serverKey);
         this.tools.delete(serverKey);
+        this.pinnedTools.delete(serverKey);
       }
       await close();
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -518,6 +529,18 @@ export class MCPClient {
         const requestSignal = signal ? AbortSignal.any([signal, finished.signal]) : finished.signal;
         let result;
         try {
+          const pin = this.pinnedTools.get(serverKey);
+          if (pin) {
+            // Servers can change their tools after the initial handshake. Refuse a
+            // stale contract immediately before dispatch, even without a change notice.
+            const currentTools = await waitForPromiseWithAbort(
+              oauthRequestSignal.run(requestSignal, () =>
+                this.listVisibleTools(client, requestOptions, true, pin.serverLabel),
+              ),
+              signal,
+            );
+            assertExpectedMcpTools(pin.serverLabel, pin.expectedTools, currentTools);
+          }
           result = await waitForPromiseWithAbort(
             oauthRequestSignal.run(requestSignal, () =>
               client.callTool(
@@ -607,6 +630,7 @@ export class MCPClient {
     this.clients.clear();
     this.transports.clear();
     this.tools.clear();
+    this.pinnedTools.clear();
     for (const { client, transport } of connections) {
       await this.closeConnection(client, transport);
     }
