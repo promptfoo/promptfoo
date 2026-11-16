@@ -262,7 +262,15 @@ describe('attachGradingProvider', () => {
     'HTTPS:user:pass@judge.example/grade?api_key=super-secret',
     'https:/judge.example/grade?api_key=super-secret',
     'https:\\\\judge.example/grade?api_key=super-secret',
+    // WHATWG URL parsing drops ASCII tab/newline anywhere and trims C0 controls/spaces.
+    'https:\tjudge.example/grade?api_key=super-secret',
+    'https:\r\n//judge.example/grade?api_key=super-secret',
+    'ht\ttps://judge.example/grade?api_key=super-secret',
+    'https://judge.exa\nmple/grade?api_key=super-secret',
+    ' \u0000https:judge.example/grade?api_key=super-secret\u001f ',
   ])('persists a redacted judge id for the accepted %s form', (id) => {
+    // Every form here is one the URL parser (and so fetch) accepts for this host.
+    expect(new URL(id).host).toBe('judge.example');
     const provider = {
       id: () => id,
       label: 'Judge',
@@ -274,5 +282,28 @@ describe('attachGradingProvider', () => {
     expect(result.metadata.gradingProvider).toBe('https://judge.example/grade (Judge)');
     expect(result.metadata.gradingProvider).not.toContain('super-secret');
     expect(result.metadata.gradingProvider).not.toContain('pass@');
+  });
+
+  it.each([
+    ['https:\u00a0judge.example/grade?api_key=super-secret', 'Judge'],
+    ['openai:gpt-4.1-mini', 'Judge,https:judge.example?api_key=super-secret'],
+    ['openai:gpt-4.1-mini', 'Judge\u0001https:judge.example/grade?api_key=super-secret'],
+  ])('fails closed when %s / %s keeps an HTTP scheme it cannot split', (id, label) => {
+    const provider = { id: () => id, label, callApi: async () => ({ output: '' }) } as ApiProvider;
+
+    const result = attachGradingProvider({ pass: true, score: 1, reason: 'ok' }, provider);
+
+    expect(result.metadata.gradingProvider).toContain('[REDACTED]');
+    expect(result.metadata.gradingProvider).not.toContain('super-secret');
+  });
+
+  it('leaves plain provider ids and labels alone', () => {
+    const provider = {
+      id: () => 'openai:gpt-4.1-mini',
+      label: 'Strict judge: v2',
+      callApi: async () => ({ output: '' }),
+    } as ApiProvider;
+
+    expect(formatResolvedGradingProvider(provider)).toBe('openai:gpt-4.1-mini (Strict judge: v2)');
   });
 });

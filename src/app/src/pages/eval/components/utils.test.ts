@@ -841,6 +841,9 @@ it.each([
 it.each([
   ['https:judge.example/grade?api_key=fixture', 'https://judge.example/grade'],
   ['Judge (http:u:p@judge.example/grade?token=fixture)', 'Judge (http://judge.example/grade)'],
+  ['https:\tjudge.example/grade?api_key=fixture', 'https://judge.example/grade'],
+  ['ht\ttps:\n//judge.example/grade?api_key=fixture', 'https://judge.example/grade'],
+  ['\u0000https:judge.example/grade?api_key=fixture', 'https://judge.example/grade'],
 ])('normalizes HTTP judge ids without slashes before redacting', async (provider, expected) => {
   const { getGradingProviderDisplay } = await import('./utils');
   const result = { pass: true, score: 1, reason: 'ok' };

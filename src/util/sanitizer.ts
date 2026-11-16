@@ -1742,6 +1742,36 @@ export function sanitizeUrlForLogging(url: string): string {
 }
 
 const LOOSE_HTTP_SCHEME = /(^|[\s(=])(https?):[\\/]*(?=[^\\/\s])/gi;
+const URL_TAB_OR_NEWLINE = /[\t\n\r]/g;
+const HTTP_SCHEME_MARKER = /(?:^|[^a-z0-9+.-])https?:/i;
+
+/**
+ * Apply the input clean-up the WHATWG URL parser (and therefore `fetch` and the
+ * HTTP provider) performs before parsing: remove ASCII tab and newline anywhere
+ * and trim leading and trailing C0 control or space characters. Without this,
+ * an id like `https:<TAB>host/path?api_key=...` is a valid endpoint at request
+ * time but hides its scheme from the checks below.
+ */
+function normalizeLikeUrlParser(value: string): string {
+  const withoutTabOrNewline = value.replace(URL_TAB_OR_NEWLINE, '');
+  let start = 0;
+  let end = withoutTabOrNewline.length;
+  while (start < end && withoutTabOrNewline.charCodeAt(start) <= 0x20) {
+    start++;
+  }
+  while (end > start && withoutTabOrNewline.charCodeAt(end - 1) <= 0x20) {
+    end--;
+  }
+  return withoutTabOrNewline.slice(start, end);
+}
+
+/**
+ * Text without a URL we can split. Anything still carrying an `http:`/`https:`
+ * marker did not normalize into such a URL, so fail closed instead of echoing it.
+ */
+function plainJudgeText(part: string): string {
+  return HTTP_SCHEME_MARKER.test(part) ? REDACTED : part;
+}
 
 /**
  * A raw HTTP provider can return spaces and parentheses inside its credential.
@@ -1752,7 +1782,7 @@ function sanitizeJudgePart(rawPart: string): string {
   // The HTTP provider also accepts ids like `https:host/path`, which WHATWG URL
   // parsing normalizes to `https://host/path`. Normalize them the same way so the
   // authority and query are recognized instead of passing through as plain text.
-  const part = rawPart.replace(LOOSE_HTTP_SCHEME, '$1$2://');
+  const part = normalizeLikeUrlParser(rawPart).replace(LOOSE_HTTP_SCHEME, '$1$2://');
   const separator = part.indexOf('://');
   const pathStart = /(?:^|[\s(=])\//.exec(part);
   let start: number;
@@ -1766,7 +1796,7 @@ function sanitizeJudgePart(rawPart: string): string {
     }
   } else {
     if (!pathStart) {
-      return part;
+      return plainJudgeText(part);
     }
     start = pathStart.index + pathStart[0].length - 1;
   }
