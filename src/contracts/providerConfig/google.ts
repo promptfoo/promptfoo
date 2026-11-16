@@ -18,9 +18,11 @@ const Speech = z.strictObject({
     })
     .optional(),
 });
-const Sampling = z.strictObject({
+const ExampleContext = {
   context: z.string().optional(),
   examples: z.array(z.strictObject({ input: z.string(), output: z.string() })).optional(),
+};
+const Sampling = z.strictObject({
   stopSequences: z.array(z.string()).optional(),
   temperature: z.number().optional(),
   maxOutputTokens: z.number().optional(),
@@ -135,6 +137,7 @@ export const GeminiSharedConfigInputSchema = Sampling.extend({
     .optional(),
   // Runtime spreads generationConfig into the request, so untyped Gemini fields stay open JSON.
   generationConfig: Sampling.extend({
+    ...ExampleContext,
     response_mime_type: z.string().optional(),
     response_schema: JsonObject.optional(),
     response_modalities: z.array(z.string()).optional(),
@@ -202,13 +205,6 @@ export const GeminiSharedConfigInputSchema = Sampling.extend({
     ])
     .optional(),
   functionToolCallbacks: z.record(z.string(), z.string()).optional(),
-  functionToolStatefulApi: z
-    .strictObject({
-      url: z.string(),
-      file: z.string().optional(),
-      pythonExecutable: z.string().optional(),
-    })
-    .optional(),
   systemInstruction: z
     .union([
       z.string(),
@@ -221,10 +217,10 @@ export const GeminiSharedConfigInputSchema = Sampling.extend({
 });
 
 export const GoogleAiStudioConfigInputSchema = GeminiSharedConfigInputSchema.extend({
-  apiKeyRequired: z.boolean().optional(),
   apiBaseUrl: z.string().optional(),
 });
 export const VertexGeminiConfigInputSchema = GeminiSharedConfigInputSchema.extend({
+  ...ExampleContext,
   projectId: z.string().optional(),
   region: z.string().optional(),
   publisher: z.string().optional(),
@@ -243,7 +239,7 @@ export const VertexGeminiConfigInputSchema = GeminiSharedConfigInputSchema.exten
 });
 
 const Model =
-  'gemini-(?!(?:omni-flash-preview|robotics-er-2-preview|3\\.5-live-translate-preview|3\\.5-transcribe-live)$)(?!robotics-er-2-streaming-)(?![^:]*-image)(?!nano-banana-2\\.1$)[^:]+';
+  'gemini-(?!(?:omni-flash-preview|decision-1|robotics-er-2-preview|3\\.5-live-translate-preview|3\\.5-transcribe-live)$)(?!robotics-er-2-streaming-)(?![^:]*-image)(?!nano-banana-2\\.1$)[^:]+';
 const Options = z.strictObject({
   inputs: InputsInputSchema.optional(),
   label: z.string().optional(),

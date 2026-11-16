@@ -2698,6 +2698,38 @@ describe('Provider Registry', () => {
       options: bareOptions,
     };
 
+    it.each([
+      'google:decisions:gemini-decision-1',
+      'google:gemini-decision-1',
+      'palm:decisions:gemini-decision-1',
+      'palm:gemini-decision-1',
+    ])('routes %s through the Gemini Decisions API', async (providerPath) => {
+      const factory = (await getProviderFactories(providerPath)).find((f) => f.test(providerPath))!;
+      const { GoogleDecisionsProvider } = await import('../../src/providers/google/decisions');
+      const provider = await factory.create(providerPath, bareOptions, bareContext);
+      expect(provider).toBeInstanceOf(GoogleDecisionsProvider);
+      expect(provider.id()).toBe(providerPath);
+
+      const custom = await factory.create(providerPath, { id: 'decision-eval' }, bareContext);
+      expect(custom.id()).toBe('decision-eval');
+    });
+
+    it.each([
+      'google:decisions',
+      'palm:decisions:',
+      'google:decisions:gemini-3.8-flash',
+      'google:chat:gemini-decision-1',
+      'palm:embedding:gemini-decision-1',
+      'vertex:decisions:gemini-decision-1',
+      'vertex:gemini-decision-1',
+      'vertex:live:gemini-decision-1',
+    ])('rejects an unsupported Gemini Decisions route %s', async (providerPath) => {
+      const factory = (await getProviderFactories(providerPath)).find((f) => f.test(providerPath))!;
+      await expect(factory.create(providerPath, bareOptions, bareContext)).rejects.toThrow(
+        /(?:google|palm):decisions:gemini-decision-1/,
+      );
+    });
+
     it('rejects a Vertex Live route without a model', async () => {
       const factory = (await getProviderFactories('vertex:live:')).find((f) =>
         f.test('vertex:live:'),

@@ -35,6 +35,7 @@ import {
   collectThoughtSignatures,
   formatCandidateContents,
   geminiFormatAndSystemInstructions,
+  getGoogleApiBaseUrl,
   getGoogleResponseServiceTier,
   loadFile,
   loadGoogleTools,
@@ -5961,5 +5962,28 @@ describe('portable Google tool forms', () => {
         functionDeclarations: [{ name: 'lookup', parameters: { type: 'OBJECT', properties: {} } }],
       },
     ]);
+  });
+});
+
+describe('getGoogleApiBaseUrl', () => {
+  beforeEach(() => {
+    vi.stubEnv('GOOGLE_API_HOST', undefined);
+    vi.stubEnv('PALM_API_HOST', undefined);
+    vi.stubEnv('GOOGLE_API_BASE_URL', undefined);
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it.each([
+    [{ apiBaseUrl: 'https://proxy.example/google' }, {}, 'https://proxy.example/google'],
+    [{ apiBaseUrl: 'https://proxy.example/google/' }, {}, 'https://proxy.example/google'],
+    [{}, { GOOGLE_API_BASE_URL: 'https://proxy.example/google//' }, 'https://proxy.example/google'],
+    [{ apiHost: 'proxy.example/google/' }, {}, 'https://proxy.example/google'],
+    [{}, { GOOGLE_API_HOST: 'proxy.example/' }, 'https://proxy.example'],
+    [{}, {}, 'https://generativelanguage.googleapis.com'],
+  ])('resolves %j with env %j to %s without a trailing slash', (config, env, expected) => {
+    expect(getGoogleApiBaseUrl(config, env)).toBe(expected);
   });
 });

@@ -32,6 +32,7 @@ describe('portable Gemini configuration', () => {
         tools: [{ type: 'function', function: { name: 'lookup', parameters: { type: 'object' } } }],
       },
       { tools: ['file://one.json', 'file://two.yaml'] },
+      { generationConfig: { context: 'context', examples: [{ input: 'in', output: 'out' }] } },
       { generationConfig: { response_schema: { type: 'object' } } },
       // generationConfig is sent verbatim, so Gemini fields without a typed entry stay open.
       { generationConfig: { responseMimeType: 'application/json', seed: 7, candidate_count: 1 } },
@@ -142,6 +143,10 @@ describe('portable Gemini configuration', () => {
       'google:gemini-3.5-transcribe',
       'vertex:gemini-3.5-transcribe-live',
       'google:interactions:gemini-4-hydrogen',
+      'google:gemini-decision-1',
+      'palm:gemini-decision-1',
+      'vertex:gemini-decision-1',
+      'vertex:chat:gemini-decision-1',
       'google:embedding:gemini-embedding-001',
       'vertex:video:veo',
       'vertex:claude-sonnet',
@@ -165,6 +170,26 @@ describe('portable Gemini configuration', () => {
       { generationConfig: { thinkingConfig: { includeThoughts: 'yes' } } },
       { tools: [{ functionDeclarations: [{ name: 4 }] }] },
     ].map((config): [unknown, boolean] => [{ id: 'google:gemini-2.5-flash', config }, false]),
+    ...[
+      { apiBaseUrl: 'https://proxy.example/google', apiKeyRequired: false },
+      { context: 'context' },
+      { examples: [{ input: 'in', output: 'out' }] },
+      { functionToolStatefulApi: { url: 'https://example.test/state' } },
+    ].map((config): [unknown, boolean] => [{ id: 'google:gemini-2.5-flash', config }, false]),
+    [
+      {
+        id: 'vertex:gemini-2.5-flash',
+        config: { context: 'context', examples: [{ input: 'in', output: 'out' }] },
+      },
+      true,
+    ],
+    [
+      {
+        id: 'vertex:gemini-2.5-flash',
+        config: { functionToolStatefulApi: { url: 'https://example.test/state' } },
+      },
+      false,
+    ],
     [{ id: 'vertex:gemini-2.5-flash', config: { apiBaseUrl: 'unsupported' } }, false],
   ];
   it.each(cases)('preserves Zod/Ajv parity for %j', (input, accepted) => {
