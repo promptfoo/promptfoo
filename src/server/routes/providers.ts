@@ -14,6 +14,10 @@ import { neverGenerateRemote } from '../../redteam/remoteGeneration';
 import { ProviderSchemas } from '../../types/api/providers';
 import { fetchWithProxy } from '../../util/fetch/index';
 import { getAvailableProviders } from '../config/serverConfig';
+import {
+  allowLocalCloudProxyRequests,
+  LOCAL_CLOUD_PROXY_DISABLED_MESSAGE,
+} from '../utils/cloudProxy';
 import { sendError } from '../utils/errors';
 import type { Request, Response } from 'express';
 
@@ -144,6 +148,11 @@ providersRouter.post('/http-generator', async (req: Request, res: Response): Pro
 
   if (neverGenerateRemote()) {
     res.status(400).json({ error: 'Requires remote generation be enabled.' });
+    return;
+  }
+
+  if (!allowLocalCloudProxyRequests()) {
+    res.status(403).json({ error: LOCAL_CLOUD_PROXY_DISABLED_MESSAGE });
     return;
   }
 

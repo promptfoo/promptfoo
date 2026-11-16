@@ -23,6 +23,11 @@ type EnvVars = {
   // promptfoo feature flags
   //=========================================================================
   PROMPTFOO_CACHE_ENABLED?: boolean;
+  /**
+   * Allow local server HTTP routes to relay caller data to Promptfoo Cloud under
+   * the operator's credentials. Read only from process.env, never config env.
+   */
+  PROMPTFOO_ALLOW_LOCAL_CLOUD_PROXY?: boolean;
   PROMPTFOO_DISABLE_AJV_STRICT_MODE?: boolean;
   /**
    * Disables the path-traversal guard applied to `file://` callback

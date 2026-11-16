@@ -29,6 +29,10 @@ import {
   getPluginConfigurationError,
   RemoteGenerationDisabledError,
 } from '../services/redteamTestCaseGenerationService';
+import {
+  allowLocalCloudProxyRequests,
+  LOCAL_CLOUD_PROXY_DISABLED_MESSAGE,
+} from '../utils/cloudProxy';
 import type { Request, Response } from 'express';
 
 export const redteamRouter = Router();
@@ -368,6 +372,11 @@ redteamRouter.post('/:taskId', async (req: Request, res: Response): Promise<void
   const { taskId } = paramsResult.data;
   if (neverGenerateRemote()) {
     res.status(400).json({ success: false, error: 'Requires remote generation be enabled.' });
+    return;
+  }
+
+  if (!allowLocalCloudProxyRequests()) {
+    res.status(403).json({ success: false, error: LOCAL_CLOUD_PROXY_DISABLED_MESSAGE });
     return;
   }
 

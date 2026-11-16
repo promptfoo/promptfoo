@@ -426,6 +426,36 @@ describe('Providers Routes', () => {
   });
 
   describe('POST /providers/http-generator validation', () => {
+    beforeEach(() => {
+      // Existing allowed-path cases explicitly opt in to local cloud proxying.
+      vi.stubEnv('PROMPTFOO_ALLOW_LOCAL_CLOUD_PROXY', 'true');
+    });
+
+    afterEach(() => {
+      vi.unstubAllEnvs();
+    });
+
+    it.each([
+      ['without opt-in', undefined],
+      ['with explicit denial', 'false'],
+    ])('does not relay cloud requests %s', async (_label, optIn) => {
+      vi.stubEnv('PROMPTFOO_ALLOW_LOCAL_CLOUD_PROXY', optIn);
+      vi.mocked(cloudConfig.isEnabled).mockReturnValue(true);
+      vi.mocked(cloudConfig.getAuthHeaders).mockReturnValue({
+        Authorization: 'Bearer test-local-cloud-key',
+      });
+
+      const response = await api
+        .post('/api/providers/http-generator')
+        .send({ requestExample: 'curl https://api.example.com/v1/chat' });
+
+      expect(response.status).toBe(403);
+      expect(response.body.error).toContain('PROMPTFOO_ALLOW_LOCAL_CLOUD_PROXY=true');
+      expect(response.body.error).not.toContain('test-local-cloud-key');
+      expect(cloudConfig.getAuthHeaders).not.toHaveBeenCalled();
+      expect(mockedFetchWithProxy).not.toHaveBeenCalled();
+    });
+
     it('should return generated HTTP configuration objects from the cloud API', async () => {
       const generatedConfig = createGeneratedChatConfig();
       mockedFetchWithProxy.mockResolvedValue({
