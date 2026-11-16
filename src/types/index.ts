@@ -1244,7 +1244,7 @@ export const TestSuiteSchema = z.object({
           (value) => {
             const parts = value.split(':');
             return (
-              (isPythonFile(parts[1]) || isJavascriptFile(parts[1])) &&
+              (isPythonFile(parts[1], { reference: true }) || isJavascriptFile(parts[1])) &&
               (parts.length === 3 || parts.length === 2)
             );
           },

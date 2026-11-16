@@ -77,10 +77,15 @@ export function isAudioFile(filePath: string): boolean {
  * @param filePath - The path of the file to check.
  * @returns True if the file has a Python source extension, false otherwise.
  */
-export function isPythonFile(filePath: string): boolean {
+export function isPythonFile(filePath: string, options: { reference?: boolean } = {}): boolean {
   const basenameStart = Math.max(filePath.lastIndexOf('/'), filePath.lastIndexOf('\\')) + 1;
   const basename = filePath.slice(basenameStart);
-  return !/[?#]/.test(basename) && basename.toLowerCase().endsWith('.py');
+  return (!options.reference || !/[?#]/.test(basename)) && basename.toLowerCase().endsWith('.py');
+}
+
+/** Applies URL-lookalike filtering only while recognizing a file reference. */
+function isPythonFileReference(filePath: string): boolean {
+  return isPythonFile(filePath, { reference: true });
 }
 
 /**
@@ -102,7 +107,7 @@ export function parsePythonFileReference(
     ) {
       return undefined;
     }
-    if (isPythonFile(candidateFilePath)) {
+    if (isPythonFileReference(candidateFilePath)) {
       const parts = functionName.split('.');
       if (parts.length <= 2 && parts.every((part) => part.length > 0 && !/[\\/:?#]/.test(part))) {
         return { filePath: candidateFilePath, functionName };
@@ -110,7 +115,7 @@ export function parsePythonFileReference(
     }
   }
 
-  return isPythonFile(filePath) ? { filePath } : undefined;
+  return isPythonFileReference(filePath) ? { filePath } : undefined;
 }
 
 /**
@@ -161,7 +166,7 @@ export function parseExecutableFileReference(
     if (
       isJavascriptFile(candidateFilePath) &&
       functionName.length > 0 &&
-      !/[\\/]/.test(functionName)
+      !functionName.includes('\\')
     ) {
       javascriptFallback ??= { filePath: candidateFilePath, functionName };
       if (!options.fileExists || options.fileExists(candidateFilePath)) {
@@ -170,10 +175,6 @@ export function parseExecutableFileReference(
     }
     separator = filePath.lastIndexOf(':', separator - 1);
   }
-  if (options.fileExists && javascriptFallback) {
-    return javascriptFallback;
-  }
-
   const rubyReference =
     options.includeRuby === false ? undefined : parseRubyFileReference(filePath);
   const pythonCandidate = parsePythonFileReference(filePath, { includeRuby: false });
@@ -187,6 +188,9 @@ export function parseExecutableFileReference(
     if (rubyReference && rubyExists && !pythonExists) {
       return rubyReference;
     }
+  }
+  if (options.fileExists && javascriptFallback) {
+    return javascriptFallback;
   }
 
   if (rubyReference) {

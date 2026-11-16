@@ -516,7 +516,7 @@ async function runAssertionInternal({
             path.resolve(basePath, normalizeWindowsFileUrlPath(candidate, process.platform)),
           ),
       });
-      const pythonReference = isPythonFile(executableReference.filePath)
+      const pythonReference = isPythonFile(executableReference.filePath, { reference: true })
         ? executableReference
         : undefined;
       const rubyReference = asRubyExecutableReference(executableReference);

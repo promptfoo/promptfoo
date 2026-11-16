@@ -103,8 +103,10 @@ describe('file utilities', () => {
       expect(isPythonFile('test.pyi')).toBe(false);
       expect(isPythonFile('test.py.bak')).toBe(false);
       expect(isPythonFile('test.py\n')).toBe(false);
-      expect(isPythonFile('test?loader=script.py')).toBe(false);
-      expect(isPythonFile('test#loader.py')).toBe(false);
+      expect(isPythonFile('test?loader=script.py')).toBe(true);
+      expect(isPythonFile('test#loader.py')).toBe(true);
+      expect(isPythonFile('test?loader=script.py', { reference: true })).toBe(false);
+      expect(isPythonFile('test#loader.py', { reference: true })).toBe(false);
       expect(isPythonFile('fixtures#1/test.py')).toBe(true);
       expect(isPythonFile('C#/test.PY')).toBe(true);
       expect(isPythonFile('test.txt')).toBe(false);

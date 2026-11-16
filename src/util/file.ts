@@ -99,7 +99,7 @@ export function matchesScriptFileExtension(reference: string, fileExtension: str
     fileExists: fileExistsAtBasePath,
   });
   if (fileExtension === 'py') {
-    return isPythonFile(filePath);
+    return isPythonFile(filePath, { reference: true });
   }
   return (
     filePath.endsWith(`.${fileExtension}`) ||
@@ -167,7 +167,8 @@ export function maybeLoadFromExternalFile(
   // Parse the file URL to extract file path and function name using existing utility
   // This handles colon splitting correctly, including Windows drive letters (C:\path)
   const { filePath: cleanPath, functionName } = parseFileUrl(renderedFilePath);
-  const isExecutableFile = isPythonFile(cleanPath) || isJavascriptFile(cleanPath);
+  const isExecutableFile =
+    isPythonFile(cleanPath, { reference: true }) || isJavascriptFile(cleanPath);
 
   // In assertion contexts, always preserve Python/JS file references
   // This prevents premature dereferencing of assertion files that should be
@@ -418,7 +419,7 @@ export function parsePathOrGlob(
         const pathWithoutFunction = filename.slice(0, lastColonIndex);
         if (
           isJavascriptFile(pathWithoutFunction) ||
-          isPythonFile(pathWithoutFunction) ||
+          isPythonFile(pathWithoutFunction, { reference: true }) ||
           pathWithoutFunction.endsWith('.go') ||
           pathWithoutFunction.endsWith('.rb')
         ) {

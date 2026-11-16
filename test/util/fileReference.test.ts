@@ -147,6 +147,7 @@ describe('fileReference utility functions', () => {
       ['file://grader.cjs:check.rb:detail', '/configs/grader.cjs', 'check.rb:detail'],
       ['file://grader.cjs:copy.cjs:grade', '/configs/grader.cjs:copy.cjs', 'grade'],
       ['file://grader.cjs:check:detail', '/configs/grader.cjs', 'check:detail'],
+      ['file://grader.cjs:validators/score', '/configs/grader.cjs', 'validators/score'],
     ])('should load the selected JavaScript export: %s', async (fileRef, filePath, exportName) => {
       importModule.mockResolvedValue(() => 'selected export');
 
@@ -226,6 +227,21 @@ describe('fileReference utility functions', () => {
         preserved: true,
       });
       expect(runPython).toHaveBeenCalledWith('/configs/config.rb:backup.py', 'get_config', []);
+    });
+
+    it('should load an existing Python filename containing a JavaScript marker', async () => {
+      const existsSpy = vi
+        .spyOn(fs, 'existsSync')
+        .mockImplementation((filePath) => filePath === '/configs/config.cjs:backup.py');
+      runPython.mockResolvedValue({ preserved: true });
+      try {
+        expect(
+          await loadFileReference('file://config.cjs:backup.py:get_config', '/configs'),
+        ).toEqual({ preserved: true });
+        expect(runPython).toHaveBeenCalledWith('/configs/config.cjs:backup.py', 'get_config', []);
+      } finally {
+        existsSpy.mockRestore();
+      }
     });
 
     it.each(['file:///path/to/config?handler=loader.PY', 'file:///path/to/config#loader.PY'])(

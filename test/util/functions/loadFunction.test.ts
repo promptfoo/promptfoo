@@ -236,18 +236,19 @@ describe('loadFunction', () => {
       expect(runPython).toHaveBeenCalledWith(mixedCasePath, 'custom_function', ['test input']);
     });
 
-    it.each(['/test/resolved/file?handler=score.PY', '/test/resolved/file#score.PY'])(
-      'should reject a query-like mixed-case Python path: %s',
-      async (queryLikePath) => {
-        mockResolve.mockReturnValueOnce(queryLikePath);
+    it.each([
+      '/test/resolved/file?handler=score.PY',
+      '/test/resolved/file#score.PY',
+      '/test/resolved/grader#1.py',
+    ])(
+      'should preserve legal filename characters in a direct Python path: %s',
+      async (filePath) => {
+        mockResolve.mockReturnValueOnce(filePath);
 
-        await expect(
-          loadFunction({
-            filePath: queryLikePath,
-            functionName: 'score',
-          }),
-        ).rejects.toThrow('File must be a JavaScript');
-        expect(runPython).not.toHaveBeenCalled();
+        const result = await loadFunction({ filePath, functionName: 'score' });
+        await result('test input');
+
+        expect(runPython).toHaveBeenCalledWith(filePath, 'score', ['test input']);
       },
     );
 
@@ -492,6 +493,7 @@ describe('parseFileUrl', () => {
     ['file://grader.cjs:ns:a:b', 'grader.cjs', 'ns:a:b'],
     ['file://grader.cjs:other.js', 'grader.cjs', 'other.js'],
     ['file://grader.cjs:score.js', 'grader.cjs', 'score.js'],
+    ['file://grader.cjs:validators/score', 'grader.cjs', 'validators/score'],
     ['file://grader.cjs:check.py:detail', 'grader.cjs', 'check.py:detail'],
     ['file://grader.cjs:check.rb:detail', 'grader.cjs', 'check.rb:detail'],
     ['file://grader.cjs:copy.cjs:grade', 'grader.cjs:copy.cjs', 'grade'],
@@ -509,6 +511,23 @@ describe('parseFileUrl', () => {
       expect(parseFileUrl('file://grader.cjs:check.js:detail', { basePath: '/configs' })).toEqual({
         filePath: 'grader.cjs',
         functionName: 'check.js:detail',
+      });
+    } finally {
+      existsSpy.mockRestore();
+    }
+  });
+
+  it('should prefer an existing Python filename containing a JavaScript marker', () => {
+    mockResolve.mockImplementation((_basePath, filePath) => filePath);
+    const existsSpy = vi
+      .spyOn(fs, 'existsSync')
+      .mockImplementation((filePath) => filePath === 'config.cjs:backup.py');
+    try {
+      expect(
+        parseFileUrl('file://config.cjs:backup.py:get_config', { basePath: '/configs' }),
+      ).toEqual({
+        filePath: 'config.cjs:backup.py',
+        functionName: 'get_config',
       });
     } finally {
       existsSpy.mockRestore();

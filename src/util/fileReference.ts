@@ -39,7 +39,7 @@ export async function loadFileReference(fileRef: string, basePath: string = ''):
       logger.debug(`Loading JavaScript file: ${resolvedPath}`);
       const mod = await importModule(resolvedPath, functionName);
       return typeof mod === 'function' ? await mod() : mod;
-    } else if (isPythonFile(resolvedPath)) {
+    } else if (isPythonFile(filePath, { reference: true })) {
       logger.debug(
         `Loading Python file: ${resolvedPath}, function: ${functionName || 'get_config'}`,
       );
