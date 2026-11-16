@@ -18,6 +18,9 @@ describe('portable Bedrock Converse configuration', () => {
     'bedrock:converse:amazon.nova-pro-v1:0',
     'bedrock:converse:us.xai.grok-4.6',
     'bedrock:converse:global.xai.grok-4.6',
+    'bedrock:converse:us.xai.grok-4.7',
+    'bedrock:converse:global.xai.grok-4.7',
+    'bedrock:converse:arn:aws:bedrock:us-east-1:123:application-inference-profile/custom.xai.grok',
     'bedrock:converse:openai.gpt-oss-120b-1:0',
     'bedrock:converse:arn:aws:bedrock:us-east-1:123:application-inference-profile/test',
   ];
@@ -25,7 +28,12 @@ describe('portable Bedrock Converse configuration', () => {
     ...[
       { tools: [{ name: 'lookup', parameters: { type: 'object' } }] },
       { tools: ['file://one.json', 'file://two.yaml'] },
-      { tools: [{ type: 'function', function: { name: 'a' } }, { toolSpec: { name: 'b' } }] },
+      {
+        tools: [
+          { type: 'function', function: { name: 'a', strict: true } },
+          { toolSpec: { name: 'b', inputSchema: { json: { type: 'object' } } } },
+        ],
+      },
       { toolChoice: 'none' },
       { guardrailIdentifier: 123, guardrailVersion: 1 },
     ].map((config): [unknown, boolean] => [
@@ -64,7 +72,6 @@ describe('portable Bedrock Converse configuration', () => {
           max_tokens: 0,
           top_p: 0,
           stop: [],
-          streaming: false,
           thinking: { type: 'adaptive' },
           additionalModelRequestFields: { output_config: { effort: 'high' } },
         },
@@ -113,11 +120,16 @@ describe('portable Bedrock Converse configuration', () => {
       'bedrock:converse:eu.xai.grok-4.6',
       'bedrock:converse:amazon.nova-sonic-v1:0',
       'bedrock:converse:us.amazon.nova-2-sonic-v1:0',
+      'bedrock:converse:amazon.nova-2-5-sonic',
+      'bedrock:converse:us.amazon.nova-2-5-sonic',
     ].map((id): [unknown, boolean] => [{ id }, false]),
     ...[
       { maxTokens: '100' },
       { maxToken: 100 },
       { tools: [{ toolSpec: { description: 'missing name' } }] },
+      { tools: [{ toolSpec: { name: 'missingInputSchema' } }] },
+      { tools: [{ type: 'function', function: { name: 'lookup', strict: 'true' } }] },
+      { streaming: true },
       { thinking: { type: 'enabled' } },
       { toolChoice: 'required' },
       { serviceTier: { type: 'unknown' } },

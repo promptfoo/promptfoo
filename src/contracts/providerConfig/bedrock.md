@@ -15,7 +15,8 @@ also outside this contract.
 
 Coverage follows the current runtime: AWS credentials/profile/bearer key, region,
 endpoint, guardrails, sampling aliases, thinking, Nova reasoning, service tiers,
-streaming, MCP, the three tool formats, tool choices, and callback strings.
+MCP, the three tool formats, tool choices, and callback strings. The config does
+not toggle streaming; streaming uses a separate runtime entry point.
 Tool files and template strings are retained for execution. Open JSON is intentional
 in tool input schemas and `additionalModelRequestFields`. Runtime callback functions
 are excluded. No defaults, credentials, file reads or SDK initialization occur in
@@ -29,6 +30,5 @@ future Converse routing and request changes.
 Embedded MCP uses the client-only contract; standalone provider transforms and
 `defaultArgs` are not accepted. Set `enabled: true` to enable the runtime client.
 
-This PR builds on the OpenAI/MCP contracts on main, independently of the pending
-Azure/Anthropic/Gemini contracts and reasoning refactor. Global YAML/editor and Cloud MCP wiring are
-separate work.
+This PR builds on the OpenAI/MCP contracts on main, independently of the Gemini
+contract and reasoning refactor. Global YAML/editor and Cloud MCP wiring are separate work.

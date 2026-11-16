@@ -10,7 +10,7 @@ const Tool = z.union([
     toolSpec: z.strictObject({
       name: z.string(),
       description: z.string().optional(),
-      inputSchema: z.strictObject({ json: z.json() }).optional(),
+      inputSchema: z.strictObject({ json: z.json() }),
     }),
   }),
   z.strictObject({
@@ -19,6 +19,7 @@ const Tool = z.union([
       name: z.string(),
       description: z.string().optional(),
       parameters: JsonObject.optional(),
+      strict: z.boolean().optional(),
     }),
   }),
   z.strictObject({
@@ -92,14 +93,13 @@ export const BedrockConverseConfigInputSchema = z.strictObject({
   functionToolCallbacks: z.record(z.string(), z.string()).optional(),
   additionalModelRequestFields: JsonObject.optional(),
   additionalModelResponseFieldPaths: z.array(z.string()).optional(),
-  streaming: z.boolean().optional(),
 });
 
 export const BedrockConverseProviderOptionsInputSchema = z.strictObject({
   id: z
     .string()
     .regex(
-      /^bedrock:converse:(?!openai\.(?![^:]*gpt-oss))(?!xai\.grok-)(?!anthropic\.claude-mythos-(?:5|preview)$)(?![^.]+\.anthropic\.claude-mythos-(?:5|preview)$)(?!(?!(?:us|global)\.xai\.grok-4\.6$)[^:]*\.xai\.)(?!(?:[^.]+\.)?amazon\.nova(?:-2)?-sonic-v1:0$).+$/,
+      /^bedrock:converse:(?!openai\.(?![^:]*gpt-oss))(?!xai\.grok-)(?!anthropic\.claude-mythos-(?:5|preview)$)(?![^.]+\.anthropic\.claude-mythos-(?:5|preview)$)(?!(?!arn:|(?:us|global)\.xai\.grok-4\.[67]$).*\.xai\.)(?!(?:[^.]+\.)?amazon\.nova(?:-sonic-v1:0|-2-sonic-v1:0|-2-5-sonic)$).+$/,
     ),
   config: BedrockConverseConfigInputSchema.optional(),
   inputs: InputsInputSchema.optional(),

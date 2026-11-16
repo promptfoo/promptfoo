@@ -14,22 +14,7 @@ const JUNIT_ASSERTION_FAILURE_MESSAGE = 'Assertion failed';
 const JUNIT_EVALUATION_ERROR_MESSAGE = 'Evaluation error';
 const INVALID_XML_CHARACTERS = /[^\t\n\r\u0020-\ud7ff\ue000-\ufffd\u{10000}-\u{10ffff}]/gu;
 
-type JunitProjectedResult = Pick<
-  EvaluateResult,
-  | 'description'
-  | 'error'
-  | 'failureReason'
-  | 'gradingResult'
-  | 'latencyMs'
-  | 'prompt'
-  | 'promptId'
-  | 'promptIdx'
-  | 'provider'
-  | 'score'
-  | 'success'
-  | 'testCase'
-  | 'testIdx'
->;
+type JunitProjectedResult = ReturnType<typeof projectEvalResult>;
 
 type JunitSuite = {
   displayName: string;
@@ -48,11 +33,7 @@ function truncateText(value: string, maxLength: number): string {
   return `${value.slice(0, end)}...`;
 }
 
-function normalizeInlineText(
-  value: string | undefined,
-  fallback: string,
-  maxLength = MAX_JUNIT_NAME_LENGTH,
-): string {
+function normalizeInlineText(value: string | undefined, fallback: string): string {
   // Collapse whitespace first so forbidden whitespace (vertical tab, form feed)
   // separates words instead of joining them, then drop what XML rejects and
   // collapse again to close the gaps it left behind. Sanitizing before
@@ -62,7 +43,7 @@ function normalizeInlineText(
     .replace(INVALID_XML_CHARACTERS, '')
     .replace(/\s+/g, ' ')
     .trim();
-  return truncateText(sanitized || fallback, maxLength);
+  return truncateText(sanitized || fallback, MAX_JUNIT_NAME_LENGTH);
 }
 
 function formatDurationSeconds(durationMs: number | undefined): string {
@@ -119,7 +100,7 @@ function getFailureDetails(result: JunitProjectedResult): string {
   );
 }
 
-function projectEvalResult(result: EvalResult | EvaluateResult): JunitProjectedResult {
+function projectEvalResult(result: EvalResult | EvaluateResult) {
   const projected = 'toEvaluateResult' in result ? result.toEvaluateResult() : result;
 
   return {
@@ -142,16 +123,10 @@ function projectEvalResult(result: EvalResult | EvaluateResult): JunitProjectedR
 async function* iterateJunitProjectedResults(
   evalRecord: Eval,
 ): AsyncGenerator<JunitProjectedResult> {
-  if (evalRecord.useOldResults()) {
-    const results = await evalRecord.getResults();
+  const usesOldResults = evalRecord.useOldResults();
+  if (usesOldResults || !evalRecord.persisted) {
+    const results = usesOldResults ? await evalRecord.getResults() : evalRecord.results;
     for (const result of results) {
-      yield projectEvalResult(result);
-    }
-    return;
-  }
-
-  if (!evalRecord.persisted) {
-    for (const result of evalRecord.results) {
       yield projectEvalResult(result);
     }
     return;
@@ -188,7 +163,8 @@ async function buildJunitSuites(evalRecord: Eval): Promise<JunitSuite[]> {
         rawName,
         promptKey,
         promptIdx: result.promptIdx,
-        displayName: '',
+        // The prompt ordinal and any collision suffix are added after grouping the results.
+        displayName,
         errors: 0,
         failures: 0,
         testcases: [],
@@ -218,17 +194,13 @@ async function buildJunitSuites(evalRecord: Eval): Promise<JunitSuite[]> {
     (a, b) => a.promptIdx - b.promptIdx || a.promptKey.localeCompare(b.promptKey),
   );
   for (const suite of orderedSuites) {
-    const baseName = normalizeInlineText(suite.rawName, 'unknown provider');
+    const baseName = suite.displayName;
     const collision = (providersByDisplayName.get(baseName)?.size ?? 0) > 1;
     const suffix =
       collision || suite.rawName.search(INVALID_XML_CHARACTERS) !== -1
         ? ` (${sha256(suite.providerKey).slice(0, 16)})`
         : '';
-    const providerName = normalizeInlineText(
-      suite.rawName,
-      'unknown provider',
-      MAX_JUNIT_NAME_LENGTH - suffix.length,
-    );
+    const providerName = truncateText(baseName, MAX_JUNIT_NAME_LENGTH - suffix.length);
     const ordinal = (promptCountsByProvider.get(suite.providerKey) ?? 0) + 1;
     promptCountsByProvider.set(suite.providerKey, ordinal);
     suite.displayName = `[${providerName}] prompt ${ordinal}${suffix}`;

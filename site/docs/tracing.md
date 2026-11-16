@@ -146,22 +146,26 @@ Promptfoo passes a W3C trace context to providers via the `traceparent` field. U
 
 ```javascript
 const { trace, context, propagation, SpanStatusCode } = require('@opentelemetry/api');
-const { NodeTracerProvider, SimpleSpanProcessor } = require('@opentelemetry/sdk-trace-node');
+const { TracerProvider, SimpleSpanProcessor } = require('@opentelemetry/sdk-trace');
+const { AsyncLocalStorageContextManager } = require('@opentelemetry/context-async-hooks');
+const { W3CTraceContextPropagator } = require('@opentelemetry/core');
 const { OTLPTraceExporter } = require('@opentelemetry/exporter-trace-otlp-http');
 const { resourceFromAttributes } = require('@opentelemetry/resources');
 
-// Initialize tracer (SDK 2.x API - pass spanProcessors to constructor)
-const provider = new NodeTracerProvider({
+// Initialize tracer (SDK 3.x API - pass spanProcessors to constructor)
+const provider = new TracerProvider({
   resource: resourceFromAttributes({ 'service.name': 'my-provider' }),
   spanProcessors: [
-    new SimpleSpanProcessor(
-      new OTLPTraceExporter({
+    new SimpleSpanProcessor({
+      exporter: new OTLPTraceExporter({
         url: 'http://localhost:4318/v1/traces',
       }),
-    ),
+    }),
   ],
 });
-provider.register();
+trace.setGlobalTracerProvider(provider);
+context.setGlobalContextManager(new AsyncLocalStorageContextManager().enable());
+propagation.setGlobalPropagator(new W3CTraceContextPropagator());
 
 const tracer = trace.getTracer('my-provider');
 
@@ -372,8 +376,8 @@ For traces created by an evaluation, Promptfoo stores the evaluation's redaction
 another's results — each trace is redacted with its own policy, not the active receiver's.
 Traces created only when spans arrive at the receiver (no evaluation row) use the
 registered evaluation policy from `evaluation.id`, then fall back to the active receiver's
-startup defaults. Similarly, `acceptFormats` configures the active HTTP receiver endpoint
-and is not changed by an overlapping evaluation.
+startup defaults, which remain fixed until the receiver stops. Similarly, `acceptFormats`
+configures the active HTTP receiver endpoint and is not changed by an overlapping evaluation.
 
 The OTLP receiver `host` defaults to loopback (`127.0.0.1`). If your exporter runs in a
 different container or host and must reach the receiver over the network, set
@@ -698,9 +702,9 @@ span.setAttributes({
 Reduce overhead in high-volume scenarios:
 
 ```javascript
-const { TraceIdRatioBasedSampler } = require('@opentelemetry/sdk-trace-node');
+const { TracerProvider, TraceIdRatioBasedSampler } = require('@opentelemetry/sdk-trace');
 
-const provider = new NodeTracerProvider({
+const provider = new TracerProvider({
   sampler: new TraceIdRatioBasedSampler(0.1), // Sample 10% of traces
 });
 ```
