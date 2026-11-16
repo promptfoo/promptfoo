@@ -190,6 +190,14 @@ export function parseExecutableFileReference(
     }
   }
   if (options.fileExists && javascriptFallback) {
+    const completeDataFileExists =
+      !isJavascriptFile(filePath) &&
+      !isPythonFile(filePath, { reference: true }) &&
+      !filePath.endsWith('.rb') &&
+      options.fileExists(filePath);
+    if (completeDataFileExists) {
+      return { filePath };
+    }
     return javascriptFallback;
   }
 

@@ -534,6 +534,20 @@ describe('parseFileUrl', () => {
     }
   });
 
+  it('should preserve a complete existing data-file path before the JavaScript fallback', () => {
+    mockResolve.mockImplementation((_basePath, filePath) => filePath);
+    const existsSpy = vi
+      .spyOn(fs, 'existsSync')
+      .mockImplementation((filePath) => filePath === 'config.cjs:backup:settings.json');
+    try {
+      expect(
+        parseFileUrl('file://config.cjs:backup:settings.json', { basePath: '/configs' }),
+      ).toEqual({ filePath: 'config.cjs:backup:settings.json' });
+    } finally {
+      existsSpy.mockRestore();
+    }
+  });
+
   it.each([
     'file://callbacks/2026-05-27T12:00:00.js',
     'file://./path/to/file:default.js',

@@ -244,6 +244,23 @@ describe('fileReference utility functions', () => {
       }
     });
 
+    it('should load a complete JSON filename containing JavaScript markers', async () => {
+      const filePath = '/configs/config.cjs:backup:settings.json';
+      const existsSpy = vi.spyOn(fs, 'existsSync').mockImplementation((candidate) => {
+        return candidate === filePath;
+      });
+      readFileMock.mockResolvedValue('"json-data-marker"');
+      try {
+        expect(await loadFileReference('file://config.cjs:backup:settings.json', '/configs')).toBe(
+          'json-data-marker',
+        );
+        expect(readFileMock).toHaveBeenCalledWith(filePath, 'utf8');
+        expect(importModule).not.toHaveBeenCalled();
+      } finally {
+        existsSpy.mockRestore();
+      }
+    });
+
     it.each(['file:///path/to/config?handler=loader.PY', 'file:///path/to/config#loader.PY'])(
       'should reject query-like Python file references: %s',
       async (fileRef) => {
