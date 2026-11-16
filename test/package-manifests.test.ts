@@ -231,7 +231,9 @@ const KNOWN_BAD_RELEASES = new Map([
     'storybook',
     '>=8.0.0 <8.6.19 || >=9.0.0 <9.1.21 || >=10.0.0 <10.6.2 || >=11.0.0-alpha.0 <11.0.0-alpha.6',
   ], // GHSA-f2ph-cmg5-wxc8
-  ['undici', '<7.30.1 || >=8.0.0 <8.10.2'], // 7.30.1 security fixes and GHSA-3xpg-4rpp-hhhm
+  // GHSA-mqg3-3v4r-cm32, GHSA-7xg3-fphp-28hg, GHSA-5rm8-gv32-r954,
+  // GHSA-9v6h-8rgp-m69f, GHSA-3g9m-rv3r-w5w2, GHSA-r4pc-4jcp-7pqc, GHSA-3xpg-4rpp-hhhm.
+  ['undici', '<7.30.2 || >=8.0.0 <8.12.4'],
   ['ws', '<5.2.5 || >=6.0.0 <6.2.4 || >=7.0.0 <7.5.11 || >=8.0.0 <8.21.0'], // GHSA-96hv-2xvq-fx4p
 ]);
 
