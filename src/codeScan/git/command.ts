@@ -10,7 +10,7 @@ export async function runGit(
 }
 
 export async function readGitBlob(repoPath: string, sha: string): Promise<Buffer> {
-  const { stdout } = await runCommand('git', ['cat-file', 'blob', sha], {
+  const { stdout } = await runCommand('git', ['cat-file', 'blob', '--end-of-options', sha], {
     cwd: repoPath,
     encoding: 'buffer',
   });

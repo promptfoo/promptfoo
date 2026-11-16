@@ -53,13 +53,22 @@ describe('processDiff', () => {
     expect(mockRunCommand).toHaveBeenNthCalledWith(
       1,
       'git',
-      ['diff', '--raw', '-z', '--no-color', '--no-ext-diff', '--no-abbrev', 'base...head'],
+      [
+        'diff',
+        '--raw',
+        '-z',
+        '--no-color',
+        '--no-ext-diff',
+        '--no-abbrev',
+        '--end-of-options',
+        'base...head',
+      ],
       { cwd: '/repo' },
     );
     expect(mockRunCommand).toHaveBeenNthCalledWith(
       2,
       'git',
-      ['diff', '--numstat', '-z', 'base...head'],
+      ['diff', '--numstat', '-z', '--end-of-options', 'base...head'],
       {
         cwd: '/repo',
       },

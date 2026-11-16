@@ -84,9 +84,10 @@ async function discoverChangedFiles(
       '--no-color',
       '--no-ext-diff',
       '--no-abbrev',
+      '--end-of-options',
       `${base}...${compare}`,
     ]),
-    runGit(repoPath, ['diff', '--numstat', '-z', `${base}...${compare}`]),
+    runGit(repoPath, ['diff', '--numstat', '-z', '--end-of-options', `${base}...${compare}`]),
   ]);
 
   const rawFiles = parseRawDiff(raw);
@@ -267,6 +268,7 @@ async function generatePatchForFile(
         '--unified=3',
         '--no-color',
         '--no-ext-diff',
+        '--end-of-options',
         `${base}...${compare}`,
         '--',
         filePath,
