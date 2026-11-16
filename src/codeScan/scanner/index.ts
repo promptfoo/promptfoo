@@ -17,7 +17,6 @@ import {
   type PullRequestContext,
   type ScanResponse,
 } from '../../types/codeScan';
-import { type AgentClient, createAgentClient } from '../../util/agent/agentClient';
 import { loadConfigOrDefault, mergeConfigWithOptions, resolveGuidance } from '../config/loader';
 import { runGit } from '../git/command';
 import { countUncommittedFiles, getDefaultBaseBranch, validateOnBranch } from '../git/diff';
@@ -34,7 +33,7 @@ import { resolveAuthCredentials } from '../util/auth';
 import { parseGitHubPr } from '../util/github';
 import { registerCleanupHandlers } from './cleanup';
 import { createSpinner, displayScanResults } from './output';
-import { buildScanRequest, executeScanRequestWithRetry } from './request';
+import { buildScanRequest, connectScanClient, executeScanRequestWithRetry } from './request';
 
 async function describeEmptyScan(
   repoPath: string,
@@ -119,7 +118,7 @@ const createFlushCallback = (exitCode: number) => async () => {
  * @param options - Scan options from CLI
  */
 export async function executeScan(repoPath: string, options: ScanOptions): Promise<void> {
-  let client: AgentClient | null = null;
+  let client: Awaited<ReturnType<typeof connectScanClient>> | null = null;
   let snapshot: Awaited<ReturnType<typeof createFilesystemSnapshot>> | undefined;
   let mcpProcess: ChildProcess | null = null;
   let mcpBridge: SocketIoMcpBridge | null = null;
@@ -208,11 +207,10 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
       logger.debug('Connecting to server...');
     }
 
-    client = await createAgentClient({
-      agent: 'code-scan',
-      host: config.apiHost || 'https://api.promptfoo.app',
-      auth: resolveAuthCredentials(options.apiKey, parsedPR),
-    });
+    client = await connectScanClient(
+      config.apiHost,
+      resolveAuthCredentials(options.apiKey, parsedPR),
+    );
     sessionId = client.sessionId;
 
     const compareRef = options.compare || 'HEAD';

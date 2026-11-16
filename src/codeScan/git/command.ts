@@ -24,3 +24,15 @@ export async function readGitBlob(
   );
   return stdout;
 }
+
+/** Read unmodified Git blobs in one bounded, binary-safe batch. */
+export async function readGitBlobBatch(repoPath: string, files: { oid: string; size: number }[]) {
+  const { stdout } = await runCommand('git', ['--no-replace-objects', 'cat-file', '--batch'], {
+    cwd: repoPath,
+    input: files.map(({ oid }) => oid).join('\n') + '\n',
+    encoding: 'buffer',
+    stripFinalNewline: false,
+    maxBuffer: files.reduce((bytes, file) => bytes + file.size + 128, 0),
+  });
+  return stdout;
+}

@@ -3,8 +3,9 @@ import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promis
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MAX_BLOB_SIZE_BYTES } from '../../../src/codeScan/constants/filtering';
+import * as gitCommand from '../../../src/codeScan/git/command';
 import { createFilesystemSnapshot } from '../../../src/codeScan/mcp/snapshot';
 import { mockProcessEnv } from '../../util/utils';
 
@@ -160,13 +161,19 @@ describe('hosted filesystem snapshot', () => {
     expect(await readdir(privateTemp)).toEqual([]);
   });
 
-  it('fails closed without disclosing the local path or requested ref on Git errors', async () => {
+  it('rejects a missing ref before starting other Git processes and keeps the error private', async () => {
     const missingRef = 'missing-private-branch';
-    const error = await createFilesystemSnapshot(repository, missingRef).catch(
-      (cause: Error) => cause,
-    );
-    expect(error).toBeInstanceOf(Error);
-    expect(String(error)).not.toContain(repository);
-    expect(String(error)).not.toContain(missingRef);
+    const commands = vi.spyOn(gitCommand, 'runGit');
+    try {
+      const error = await createFilesystemSnapshot(repository, missingRef).catch(
+        (cause: Error) => cause,
+      );
+      expect(error).toBeInstanceOf(Error);
+      expect(String(error)).not.toContain(repository);
+      expect(String(error)).not.toContain(missingRef);
+      expect(commands).toHaveBeenCalledTimes(1);
+    } finally {
+      commands.mockRestore();
+    }
   });
 });

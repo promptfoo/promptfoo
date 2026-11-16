@@ -15,15 +15,13 @@ import async from 'async';
 import binaryExtensions from 'binary-extensions';
 import textExtensions from 'text-extensions';
 import logger from '../../logger';
-import { DiffProcessorError } from '../../types/codeScan';
+import { DiffProcessorError, type FileRecord } from '../../types/codeScan';
 import { isInDenylist, MAX_BLOB_SIZE_BYTES, MAX_PATCH_SIZE_BYTES } from '../constants/filtering';
 import { isShareableContent, isShareablePath } from '../mcp/sharing';
 import { isTextBlob } from './blobText';
 import { readGitBlob, runGit } from './command';
 import { annotateDiffWithLineRanges } from './diffAnnotator';
 import { parseRawDiff } from './rawDiffParser';
-
-import type { FileRecord } from '../../types/codeScan';
 
 interface NumstatEntry {
   linesAdded: number;
