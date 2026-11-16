@@ -187,7 +187,7 @@ describe('filesystem MCP launcher', () => {
     );
     expect(mocks.spawn).toHaveBeenCalledWith(
       process.execPath,
-      [serverEntry, rootDir],
+      [serverEntry, '--read-only', '--confine-roots', '--', rootDir],
       expect.objectContaining({ cwd: path.dirname(serverEntry) }),
     );
   });
@@ -212,7 +212,14 @@ describe('filesystem MCP launcher', () => {
       startFilesystemMcpServer(rootDir);
       expect(mocks.spawn).toHaveBeenCalledWith(
         process.execPath,
-        [`--max-old-space-size=${heapLimit}`, serverEntry, rootDir],
+        [
+          `--max-old-space-size=${heapLimit}`,
+          serverEntry,
+          '--read-only',
+          '--confine-roots',
+          '--',
+          rootDir,
+        ],
         expect.anything(),
       );
       expect(mocks.spawn.mock.calls[0][2].env).not.toHaveProperty('NODE_OPTIONS');
@@ -229,7 +236,7 @@ describe('filesystem MCP launcher', () => {
         startFilesystemMcpServer(rootDir);
         expect(mocks.spawn).toHaveBeenCalledWith(
           process.execPath,
-          [serverEntry, rootDir],
+          [serverEntry, '--read-only', '--confine-roots', '--', rootDir],
           expect.anything(),
         );
         expect(mocks.spawn.mock.calls[0][2].env).not.toHaveProperty('NODE_OPTIONS');
@@ -259,13 +266,21 @@ describe('filesystem MCP launcher', () => {
     },
   );
 
+  it('checks the executable against the original checkout when serving a private snapshot', () => {
+    mocks.resolve.mockReturnValue(path.join(rootDir, 'node_modules/server/index.js'));
+    expect(() => startFilesystemMcpServer(path.resolve('snapshot'), rootDir)).toThrow(
+      'installed outside the scanned repository',
+    );
+    expect(mocks.spawn).not.toHaveBeenCalled();
+  });
+
   it('allows a sibling installation with the same directory prefix', () => {
     const siblingEntry = path.join(`${rootDir}-tools`, 'index.js');
     mocks.resolve.mockReturnValue(siblingEntry);
     startFilesystemMcpServer(rootDir);
     expect(mocks.spawn).toHaveBeenCalledWith(
       process.execPath,
-      [siblingEntry, rootDir],
+      [siblingEntry, '--read-only', '--confine-roots', '--', rootDir],
       expect.anything(),
     );
   });
@@ -286,6 +301,9 @@ describe('filesystem MCP launcher', () => {
         '--experimental-loader',
         pathToFileURL(esmLoader).href,
         serverEntry,
+        '--read-only',
+        '--confine-roots',
+        '--',
         rootDir,
       ],
       expect.objectContaining({ cwd: path.dirname(pnpLoader) }),
