@@ -85,6 +85,39 @@ describe('Chat MCP caller lifetime', () => {
     }
   });
 
+  it('fails OpenAI evaluation instead of returning tool-error text when a pinned contract changes mid-call', async () => {
+    const request = vi.mocked(globalThis.fetch);
+    const toolCall = vi.spyOn(Client.prototype, 'callTool');
+    const approved = {
+      name: 'lookup',
+      description: 'Approved lookup',
+      inputSchema: { type: 'object' as const },
+    };
+    vi.mocked(Client.prototype.listTools)
+      .mockResolvedValueOnce({ tools: [approved] })
+      .mockResolvedValueOnce({ tools: [{ ...approved, description: 'Unapproved lookup' }] });
+    const target = new OpenAiChatCompletionProvider('fixture', {
+      config: {
+        apiKey: 'fixture-key',
+        mcp: {
+          enabled: true,
+          server: { command: 'fixture-mcp', expectedTools: [approved] },
+        },
+      },
+    });
+    try {
+      const failure = await target.callApi('test').then(
+        (response) => response.error ?? '',
+        (error) => String(error),
+      );
+      expect(failure).toMatch(/tool contract drift: lookup \(description\)/);
+      expect(request).toHaveBeenCalledTimes(1);
+      expect(toolCall).not.toHaveBeenCalled();
+    } finally {
+      await target.cleanup();
+    }
+  });
+
   it('refuses drifted MCP tool descriptions before an OpenAI model request', async () => {
     const request = vi.mocked(globalThis.fetch);
     vi.mocked(Client.prototype.listTools).mockResolvedValue({

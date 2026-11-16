@@ -273,9 +273,9 @@ describe('MCPClient', () => {
       });
       mockClient.callTool.mockResolvedValue({ content: [{ type: 'text', text: 'unexpected' }] });
 
-      const result = await mcpClient.callTool('tool1', {});
-
-      expect(result.error).toMatch(/MCP server #1 tool contract drift.*tool1 \(input schema\)/);
+      await expect(mcpClient.callTool('tool1', {})).rejects.toThrow(
+        /MCP server #1 tool contract drift.*tool1 \(input schema\)/,
+      );
       expect(mockClient.callTool).not.toHaveBeenCalled();
       expect(mockClient.listTools).toHaveBeenCalledTimes(2);
       await mcpClient.cleanup();

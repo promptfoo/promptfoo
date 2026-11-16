@@ -18,6 +18,7 @@ import {
   loadProviderCallbackFromFileUrl,
 } from '../functionCallbackUtils';
 import { MCPClient } from '../mcp/client';
+import { MCPToolContractError } from '../mcp/errors';
 import { transformMCPToolsToOpenAi } from '../mcp/transform';
 import { getMcpErrorMessage, isMcpErrorResult, normalizeMcpToolContent } from '../mcp/util';
 import {
@@ -1323,6 +1324,11 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
                   })
                 ) {
                   throwIfAborted(callApiOptions?.abortSignal);
+                }
+                if (error instanceof MCPToolContractError) {
+                  // Continuing with model-generated output would hide a stale eval contract.
+                  errorOrigin = 'tool';
+                  throw error;
                 }
                 if (callApiOptions?.abortSignal?.aborted) {
                   errorOrigin = 'tool';

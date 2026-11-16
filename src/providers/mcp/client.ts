@@ -10,6 +10,7 @@ import { isCallerAbortError } from '../../util/fetch/requestSignal';
 import { isMissingPackageImportError } from '../../util/packageImportErrors';
 import { waitForPromiseWithAbort } from '../shared';
 import { withGenAIToolSpan } from '../tracing';
+import { MCPToolContractError } from './errors';
 import {
   applyQueryParams,
   getAuthHeaders,
@@ -67,7 +68,7 @@ function assertExpectedMcpTools(
   const failures = changed.length ? changed : ['duplicate definitions'];
   const visible = failures.slice(0, 10).join(', ');
   const overflow = failures.length > 10 ? ` (+${failures.length - 10} more)` : '';
-  throw new Error(
+  throw new MCPToolContractError(
     `MCP server ${serverKey} tool contract drift: ${visible}${overflow}. Review the live tools/list response before updating expectedTools.`,
   );
 }
@@ -224,7 +225,7 @@ export class MCPClient {
   ): Promise<MCPTool[]> {
     const toolsResult = await client.listTools(undefined, requestOptions);
     if (requireComplete && toolsResult?.nextCursor !== undefined) {
-      throw new Error(
+      throw new MCPToolContractError(
         `MCP server ${serverLabel} returned an incomplete paginated tool list; expectedTools cannot be checked until all pages are collected.`,
       );
     }
@@ -584,6 +585,11 @@ export class MCPClient {
           raw: result,
         };
       } catch (error) {
+        if (error instanceof MCPToolContractError) {
+          // A stale pinned contract invalidates the evaluation. Do not convert it
+          // into a recoverable tool result that the model could ignore.
+          throw error;
+        }
         if (isCallerAbortError(error, signal, { requireReasonMatch: true })) {
           throw signal!.reason;
         }
