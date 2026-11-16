@@ -589,8 +589,20 @@ function collectSuppliedMacroParamNames(
   argsNode: unknown,
   macro: Pick<DeferredMacro, 'paramNames' | 'paramNameSet'>,
   memo?: MacroAnalysisMemo,
+  boundSymbols?: LinkedScope,
+  suppliedMacroCandidates?: Map<string, ReadonlySet<DeferredMacro>>,
 ): Set<string> {
   const supplied = new Set<string>();
+  const recordMacroCandidate = (paramName: string | undefined, value: unknown) => {
+    if (!paramName || !suppliedMacroCandidates || !boundSymbols) {
+      return;
+    }
+    const sourceName = getSymbolName(value);
+    const candidates = sourceName ? boundSymbols.findMacros(sourceName) : undefined;
+    if (candidates && candidates.size > 0) {
+      suppliedMacroCandidates.set(paramName, candidates);
+    }
+  };
   if (!isNunjucksAstNode(argsNode) || !Array.isArray(argsNode.children)) {
     return supplied;
   }
@@ -608,6 +620,7 @@ function collectSuppliedMacroParamNames(
           isNunjucksAstNode(pair) && pair.typename === 'Pair' ? getSymbolName(pair.key) : undefined;
         if (name && macro.paramNameSet.has(name)) {
           supplied.add(name);
+          recordMacroCandidate(name, isNunjucksAstNode(pair) ? pair.value : undefined);
         }
       }
       continue;
@@ -615,6 +628,7 @@ function collectSuppliedMacroParamNames(
     const name = macro.paramNames[positionalIndex++];
     if (name) {
       supplied.add(name);
+      recordMacroCandidate(name, child);
     }
   }
   return supplied;
@@ -629,9 +643,10 @@ function analyzeMacroBody(
   variableName: ReferenceTarget,
   memo?: MacroAnalysisMemo,
   suppliedParamNames?: ReadonlySet<string>,
+  suppliedMacroCandidates?: ReadonlyMap<string, ReadonlySet<DeferredMacro>>,
 ): boolean {
   const memoKey = macroAnalysisMemoKey(suppliedParamNames);
-  if (memo?.results.get(macro)?.has(memoKey)) {
+  if (!suppliedMacroCandidates?.size && memo?.results.get(macro)?.has(memoKey)) {
     return false;
   }
   if (macroAnalysisDepth >= MAX_MACRO_ANALYSIS_DEPTH) {
@@ -659,6 +674,9 @@ function analyzeMacroBody(
     }
 
     const macroScope = addNamesToScope(macro.definitionScope, macro.paramNames);
+    for (const [name, candidates] of suppliedMacroCandidates ?? []) {
+      macroScope.registerMacroCandidates(name, candidates, false);
+    }
     const macroName = getSymbolName(macro.node.name);
     if (macroName) {
       macroScope.add(macroName);
@@ -667,7 +685,7 @@ function analyzeMacroBody(
     }
     macroScope.add('caller');
     const result = astChildReferencesVariable(macro.node, 'body', variableName, macroScope);
-    if (!result && memo) {
+    if (!result && memo && !suppliedMacroCandidates?.size) {
       const memoKeys = memo.results.get(macro) ?? new Set<string>();
       memoKeys.add(memoKey);
       memo.results.set(macro, memoKeys);
@@ -962,8 +980,17 @@ function funCallNodeReferencesVariable(
   if (macros) {
     for (const macro of macros) {
       macro.called = true;
-      const suppliedParamNames = collectSuppliedMacroParamNames(node.args, macro, memo);
-      if (analyzeMacroBody(macro, variableName, memo, suppliedParamNames)) {
+      const suppliedMacroCandidates = new Map<string, ReadonlySet<DeferredMacro>>();
+      const suppliedParamNames = collectSuppliedMacroParamNames(
+        node.args,
+        macro,
+        memo,
+        boundSymbols instanceof LinkedScope ? boundSymbols : undefined,
+        suppliedMacroCandidates,
+      );
+      if (
+        analyzeMacroBody(macro, variableName, memo, suppliedParamNames, suppliedMacroCandidates)
+      ) {
         return true;
       }
     }
@@ -1441,7 +1468,7 @@ function boundedAstReferencesVariable(
   try {
     return astReferencesVariable(node, variableName);
   } catch (error) {
-    if (error instanceof TemplateAnalysisLimitError) {
+    if (error instanceof TemplateAnalysisLimitError || error instanceof RangeError) {
       return undefined;
     }
     throw error;

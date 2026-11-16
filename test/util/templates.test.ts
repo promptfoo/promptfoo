@@ -406,6 +406,13 @@ describe('analyzeTemplateReference', () => {
     expect(extractRequiredVariablesFromTemplate('{{ user is defined }}')).toEqual([]);
   });
 
+  it('follows macros passed as arguments in required-reference analysis', () => {
+    const value =
+      '{% macro m() %}{{purpose|trim}}{% endmacro %}{% macro safe() %}ok{% endmacro %}{% macro apply(f) %}{{f()}}{% endmacro %}{{apply(m)}}{{apply(safe)}}';
+    expect(extractRequiredVariablesFromTemplate(value)).toEqual(['purpose']);
+    expect(getNunjucksEngine().renderString(value, { purpose: 'ready' })).toBe('readyok');
+  });
+
   it('analyzes JSON leaf strings as templates instead of nested structured prompts', () => {
     const prompt = JSON.stringify({ content: '{"{{_conversation|length}}":"x"}' });
     expect(analyzeTemplateReference(prompt, '_conversation')).toEqual({
@@ -546,6 +553,18 @@ describe('macro analysis work and scope changes', () => {
 
     expect(extractRequiredVariablesFromTemplate(value)).toEqual([]);
     expect(performance.now() - started).toBeLessThan(500);
+  });
+
+  it('returns indeterminate results instead of overflowing on deep filter chains', () => {
+    const value = '{{ "x"' + ' | trim'.repeat(2000) + ' }}';
+    expect(extractUnboundVariablesFromTemplate(value)).toBeUndefined();
+    expect(extractRequiredVariablesFromTemplate(value)).toBeUndefined();
+
+    const referenced = '{{ purpose' + ' | trim'.repeat(2000) + ' }}';
+    expect(analyzeTemplateReference(referenced, 'purpose')).toEqual({
+      referenced: true,
+      parsed: false,
+    });
   });
 
   it.each<[string, (value: string) => boolean | undefined]>([

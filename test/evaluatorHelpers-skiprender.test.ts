@@ -141,4 +141,13 @@ describe('renderPrompt with skipRenderVars', () => {
     const result = await renderPrompt(prompt, vars, {}, undefined, ['prompt']);
     expect(result).toContain('{{purpose | trim}}');
   });
+
+  it('should preserve deep filter chains through analysis and skipRenderVars', async () => {
+    const payload = '{{ "x"' + ' | trim'.repeat(2000) + ' }}';
+    const prompt = { raw: '{"text":"{{v}}"}', label: 'test' };
+
+    const result = await renderPrompt(prompt, { v: payload }, {}, undefined, ['v']);
+
+    expect(JSON.parse(result).text).toBe(payload);
+  });
 });
