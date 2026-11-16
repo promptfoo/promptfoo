@@ -10,6 +10,7 @@ keywords:
     foundation model security,
     model backdoor,
     OWASP LLM03,
+    OWASP LLM04,
     ModelAudit,
     model poisoning,
   ]
@@ -21,7 +22,7 @@ Traditional software supply chain security relies on deterministic verification:
 
 LLM supply chains break this model. A model file can pass every static check and still exhibit dangerous behavior. An API endpoint can change behavior overnight without any notification. A fine-tuned model can look identical to its base but have degraded safety training.
 
-OWASP identifies supply chain vulnerabilities as [LLM03](./owasp-llm-top-10.md#3-supply-chain-vulnerabilities-llm03) in the LLM Top 10. This guide establishes a framework for thinking about LLM supply chain security and shows how to implement defenses using Promptfoo.
+The 2026 OWASP LLM Top 10 lists supply chain vulnerabilities as [LLM04](./owasp-llm-top-10.md#4-supply-chain-vulnerabilities-llm04). The 2025 edition listed them as LLM03. This guide establishes a framework for thinking about LLM supply chain security and shows how to implement defenses using Promptfoo.
 
 ![LLM Supply Chain Security](/img/docs/llm-supply-chain.svg)
 
@@ -451,7 +452,7 @@ Static analysis is familiar but limited. Dynamic analysis is essential because L
 
 ## Related Documentation
 
-- [OWASP LLM Top 10](./owasp-llm-top-10.md) - Full coverage of LLM security risks including LLM03
+- [OWASP LLM Top 10](./owasp-llm-top-10.md) - Coverage of all ten risks in the 2026 edition
 - [Foundation Model Testing](./foundation-models.md) - Assessing base model security
 - [RAG Security](./rag.md) - Securing retrieval-augmented generation
 - [ModelAudit](/docs/model-audit/) - Static model file scanning

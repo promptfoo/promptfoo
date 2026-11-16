@@ -1761,3 +1761,20 @@ describe('InputsSchema', () => {
     });
   });
 });
+
+it('keeps legacy OWASP aliases while allowing explicit 2026 categories', () => {
+  const ids = (alias: string) =>
+    (RedteamConfigSchema.parse({ plugins: [alias] }).plugins ?? []).map(({ id }) => id);
+  expect(ids('owasp:llm:04')).toContain('bias:age');
+  expect(ids('owasp:llm:06')).toContain('excessive-agency');
+  const previousRiskNumbers = ['01', '02', '06', '03', '04', '10', '09', '07', '08', '05'];
+  previousRiskNumbers.forEach((previousNumber, index) => {
+    const newNumber = String(index + 1).padStart(2, '0');
+    const expected = ids(`owasp:llm:${previousNumber}`);
+    if (newNumber === '08') {
+      expected.push('tool-discovery');
+    }
+    expect(ids(`owasp:llm:2026:${newNumber}`).sort()).toEqual(expected.sort());
+  });
+  expect(ids('owasp:llm:2026')).toContain('tool-discovery');
+});

@@ -4,18 +4,17 @@ import { formatASRForDisplay } from '@promptfoo/app/src/utils/redteam';
 import { calculateAttackSuccessRate } from '@promptfoo/presentation/redteamMetrics';
 import {
   ALIASED_PLUGIN_MAPPINGS,
-  DOD_AI_ETHICS_PRINCIPLE_NAMES,
   FRAMEWORK_NAMES,
   type FrameworkComplianceId,
-  OWASP_API_TOP_10_NAMES,
-  OWASP_LLM_TOP_10_NAMES,
   riskCategorySeverityMap,
   Severity,
 } from '@promptfoo/redteam/constants';
 import {
   type CategoryStats,
   categorizePlugins,
+  categoryNamesByFramework,
   expandPluginCollections,
+  getFrameworkCategoryLabel,
   getPluginDisplayName,
 } from './FrameworkComplianceUtils';
 
@@ -102,30 +101,16 @@ const CSVExporter = ({
     frameworksToShow.forEach((frameworkId) => {
       const framework = FRAMEWORK_NAMES[frameworkId];
 
-      if (
-        frameworkId === 'owasp:api' ||
-        frameworkId === 'owasp:llm' ||
-        frameworkId === 'dod:ai:ethics'
-      ) {
+      if (categoryNamesByFramework[frameworkId]) {
         // Add data for categorized frameworks
         Object.entries(ALIASED_PLUGIN_MAPPINGS[frameworkId]).forEach(
           ([categoryId, { plugins: categoryPlugins }]) => {
-            const categoryNumber = categoryId.split(':').pop();
-            const categoryName =
-              categoryNumber && frameworkId === 'owasp:llm'
-                ? OWASP_LLM_TOP_10_NAMES[Number.parseInt(categoryNumber) - 1]
-                : categoryNumber && frameworkId === 'owasp:api'
-                  ? OWASP_API_TOP_10_NAMES[Number.parseInt(categoryNumber) - 1]
-                  : categoryNumber && frameworkId === 'dod:ai:ethics'
-                    ? DOD_AI_ETHICS_PRINCIPLE_NAMES[Number.parseInt(categoryNumber) - 1]
-                    : `Category ${categoryNumber}`;
-
             // Expand plugins if needed
             const expandedPlugins = expandPluginCollections(categoryPlugins, categoryStats);
 
             appendPluginRows(
               framework,
-              () => `${categoryNumber}. ${categoryName}`,
+              () => getFrameworkCategoryLabel(frameworkId, categoryId),
               expandedPlugins,
             );
           },
