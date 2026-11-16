@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import path from 'path';
 
 import { SpanStatusCode, trace } from '@opentelemetry/api';
@@ -706,6 +707,77 @@ describe('MCPClient', () => {
       expect(mcpClient.getAllTools()).toEqual([
         { name: 'tool2', description: 'desc2', inputSchema: {} },
       ]);
+    });
+
+    it('rejects an MCP server whose tool contract changed since approval', async () => {
+      mockClient.listTools.mockResolvedValueOnce(createSingleToolListResponse());
+      mcpClient = new MCPClient({
+        enabled: true,
+        server: { ...createNamedNpmServerConfig(), toolContractHash: '0'.repeat(64) },
+      });
+
+      await expect(mcpClient.initialize()).rejects.toThrow(
+        /MCP tool contract drift.*expected.*actual/i,
+      );
+      expect(mcpClient.getAllTools()).toEqual([]);
+      expect(mockClient.close).toHaveBeenCalledTimes(1);
+    });
+
+    it('accepts a pinned contract and ignores changes to filtered-out tools', async () => {
+      // The contract is serialized with sorted object keys, then hashed as an array.
+      const expectedHash = createHash('sha256')
+        .update(JSON.stringify([{ description: 'desc2', inputSchema: {}, name: 'tool2' }]))
+        .digest('hex');
+      mockClient.listTools.mockResolvedValueOnce({
+        tools: [
+          { name: 'tool2', inputSchema: {}, description: 'desc2' },
+          { name: 'excluded', description: 'new description', inputSchema: { type: 'object' } },
+        ],
+      });
+      mcpClient = new MCPClient({
+        enabled: true,
+        server: { ...createNamedNpmServerConfig(), toolContractHash: expectedHash },
+        tools: ['tool2'],
+      });
+
+      await expect(mcpClient.initialize()).resolves.toBeUndefined();
+      expect(mcpClient.getAllTools().map((tool) => tool.name)).toEqual(['tool2']);
+      await mcpClient.cleanup();
+    });
+
+    it('canonicalizes schema object keys and tool listing order for contract pins', async () => {
+      const contract = [
+        {
+          description: 'A',
+          inputSchema: {
+            properties: { a: { type: 'string' }, b: { type: 'number' } },
+            type: 'object',
+          },
+          name: 'alpha',
+        },
+        { description: 'Z', inputSchema: {}, name: 'zulu' },
+      ];
+      const expectedHash = createHash('sha256').update(JSON.stringify(contract)).digest('hex');
+      mockClient.listTools.mockResolvedValueOnce({
+        tools: [
+          { name: 'zulu', description: 'Z', inputSchema: {} },
+          {
+            name: 'alpha',
+            description: 'A',
+            inputSchema: {
+              type: 'object',
+              properties: { b: { type: 'number' }, a: { type: 'string' } },
+            },
+          },
+        ],
+      });
+      mcpClient = new MCPClient({
+        enabled: true,
+        server: { ...createNamedNpmServerConfig(), toolContractHash: expectedHash },
+      });
+
+      await expect(mcpClient.initialize()).resolves.toBeUndefined();
+      await mcpClient.cleanup();
     });
 
     it('should initialize with correct client metadata including name, version, and description', async () => {

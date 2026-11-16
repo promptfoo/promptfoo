@@ -479,6 +479,15 @@ describe('transformMCPConfigToClaudeCode', () => {
     );
   });
 
+  it('rejects tool contract pins when the Claude SDK owns tool discovery', async () => {
+    await expect(
+      transformMCPConfigToClaudeCode({
+        enabled: true,
+        server: { command: 'node', toolContractHash: 'a'.repeat(64) },
+      }),
+    ).rejects.toThrow(/cannot enforce toolContractHash pins/);
+  });
+
   it('rejects unsupported tool filters instead of silently dropping them', async () => {
     await expect(
       transformMCPConfigToClaudeCode({

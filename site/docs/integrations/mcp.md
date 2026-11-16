@@ -101,6 +101,41 @@ This can be useful when:
 - You need to provide custom identifiers or session information
 - The server needs specific headers for configuration or tracking
 
+## Detecting MCP tool-contract drift
+
+An MCP server can change its tools between evaluation runs without changing your
+prompts or assertions. To fail before an eval uses a different tool contract, pin
+`toolContractHash` on each MCP server connection:
+
+```yaml
+providers:
+  - id: openai:chat:gpt-4o
+    config:
+      mcp:
+        enabled: true
+        server:
+          command: node
+          args: [./my-mcp-server.js]
+          toolContractHash: '<64-character SHA-256 from the approved run>'
+```
+
+To record the initial value, first run the evaluation with `mcp.verbose: true`
+**without** `toolContractHash`. The connection prints `MCP tool contract hash for
+<server>: <hash>`; inspect and approve the tool definitions before adding that hash
+to the configuration. Remove `verbose` after recording the value. A later change
+to any included tool's name, description, or input schema fails the connection
+with the expected and actual hashes, before tool calls are possible. Review the
+change and deliberately update the pin only when appropriate.
+
+The hash uses SHA-256 of a JSON array of the selected tools (`name`,
+`description`, `inputSchema`), with tools sorted by their canonical JSON and
+object keys sorted recursively. `tools` and `exclude_tools` filters apply **before**
+hashing, so changes to excluded tools do not invalidate your eval. A pin belongs
+to one server, not to a combined multi-server list. Unpinned connections retain
+the previous behavior; hosted MCP tools handled directly by a model provider
+are not covered by this local client check. The Claude Agent SDK adapter
+rejects this setting rather than silently ignoring it.
+
 ## Connecting a Single Provider to Multiple MCP Servers
 
 Promptfoo allows a single provider to connect to multiple MCP servers by using the `servers` array in your provider's MCP config. All tools from all connected servers will be available to the provider.

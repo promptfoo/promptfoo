@@ -10,6 +10,13 @@ export const McpServerFieldsSchema = z.looseObject({
   command: z.string().describe('Command to launch a stdio MCP server').optional(),
   args: z.array(z.string()).optional().describe('Arguments passed to command; not used with path'),
   name: z.string().optional().describe('Optional server name used to identify its tools'),
+  toolContractHash: z
+    .string()
+    .regex(/^[a-f0-9]{64}$/)
+    .optional()
+    .describe(
+      'Expected SHA-256 of the filtered MCP tool contracts; reject changed tools before evaluation',
+    ),
   url: z
     .string()
     .describe('Remote MCP server URL; connection validates the effective URL')

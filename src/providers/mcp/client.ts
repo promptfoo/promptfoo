@@ -1,4 +1,5 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
+import { createHash } from 'node:crypto';
 import path from 'path';
 
 import cliState from '../../cliState';
@@ -34,6 +35,52 @@ import type {
 } from './types';
 
 const oauthRequestSignal = new AsyncLocalStorage<AbortSignal>();
+
+/** Stable across tool listing order and object-key insertion order. */
+function canonicalizeToolContract(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(canonicalizeToolContract);
+  }
+  if (value !== null && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value)
+        .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
+        .map(([key, entry]) => [key, canonicalizeToolContract(entry)]),
+    );
+  }
+  return value;
+}
+
+function hashToolContracts(tools: MCPTool[]): string {
+  const contracts = tools
+    .map(({ name, description, inputSchema }) =>
+      canonicalizeToolContract({ name, description, inputSchema }),
+    )
+    .sort((left, right) => {
+      const a = JSON.stringify(left);
+      const b = JSON.stringify(right);
+      return a < b ? -1 : a > b ? 1 : 0;
+    });
+  return createHash('sha256').update(JSON.stringify(contracts)).digest('hex');
+}
+
+function verifyToolContract(
+  server: MCPServerConfig,
+  serverKey: string,
+  tools: MCPTool[],
+  verbose: boolean,
+): void {
+  const observedHash = hashToolContracts(tools);
+  if (server.toolContractHash && server.toolContractHash !== observedHash) {
+    throw new Error(
+      `MCP tool contract drift for ${serverKey}: expected ${server.toolContractHash}, ` +
+        `actual ${observedHash}. Review the server tools before updating the pin.`,
+    );
+  }
+  if (verbose) {
+    console.log(`MCP tool contract hash for ${serverKey}: ${observedHash}`);
+  }
+}
 
 /**
  * Refresh tokens per request without reconnecting and aborting other tool calls.
@@ -377,6 +424,9 @@ export class MCPClient {
       }
 
       signal.throwIfAborted();
+      // Check after filters but before publishing the connection to a provider.
+      verifyToolContract(server, serverKey, filteredTools, this.isVerboseEnabled);
+
       this.transports.set(serverKey, transport);
       this.clients.set(serverKey, client);
       this.tools.set(serverKey, filteredTools);

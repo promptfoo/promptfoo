@@ -35,6 +35,10 @@ providers:
         name: test-server
 ```
 
+To fail an evaluation when an MCP server changes a tool name, description, or input
+schema, use the per-server `toolContractHash` guard described in the
+[MCP tool-contract drift section](../integrations/mcp.md#detecting-mcp-tool-contract-drift).
+
 ## Configuration Options
 
 ### Server Configuration

@@ -147,6 +147,12 @@ export function validateMCPConfigForClaudeCode(input: unknown): McpConfigParsed 
     return config;
   }
 
+  if (getServerConfigs(config).some((server) => server.toolContractHash)) {
+    throw new Error(
+      'Claude Agent SDK MCP integration cannot enforce toolContractHash pins; use a provider backed by the Promptfoo MCP client or remove the pin.',
+    );
+  }
+
   if (config.tools !== undefined || config.exclude_tools?.length) {
     throw new Error(
       'Claude Agent SDK MCP integration does not support MCP tool allowlists or non-empty exclusions; remove `tools`/`exclude_tools` or disable MCP for this provider.',
