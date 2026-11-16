@@ -13,20 +13,11 @@ export type ApiHealthResult = {
   message: string;
 };
 
-// PROMPTFOO_NO_NETWORK skips the background Promptfoo Cloud health check. The
-// server answers that skipped poll with its own SKIPPED status, while an
+// PROMPTFOO_NO_NETWORK skips the background Promptfoo Cloud health check.
+// The server answers that skipped poll with its own SKIPPED status, while an
 // explicit remote-generation disable still answers DISABLED, so the two cases
 // stay distinct here: a skipped poll leaves generation enabled, a genuinely
-// disabled check blocks remote-only controls. The installed server injects the
-// meta tag at runtime; standalone builds embed the flag at build time (see
-// PostHogProvider).
-export function isNoNetworkMode(): boolean {
-  return (
-    import.meta.env.VITE_PROMPTFOO_NO_NETWORK === 'true' ||
-    (typeof document !== 'undefined' &&
-      document.querySelector('meta[name="promptfoo-no-network"]') !== null)
-  );
-}
+// disabled check blocks remote-only controls.
 
 /**
  * Whether generation controls should stay enabled for this health status. A
