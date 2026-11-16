@@ -154,6 +154,21 @@ describe('fileReference utility functions', () => {
       expect(importModule).toHaveBeenCalledWith(filePath, exportName);
     });
 
+    it('should disambiguate a JavaScript-looking export using the existing module', async () => {
+      const existsSpy = vi
+        .spyOn(fs, 'existsSync')
+        .mockImplementation((filePath) => filePath === '/configs/grader.cjs');
+      importModule.mockResolvedValue(() => 'selected export');
+      try {
+        expect(await loadFileReference('file://grader.cjs:check.js:detail', '/configs')).toBe(
+          'selected export',
+        );
+        expect(importModule).toHaveBeenCalledWith('/configs/grader.cjs', 'check.js:detail');
+      } finally {
+        existsSpy.mockRestore();
+      }
+    });
+
     it('should load JavaScript files correctly', async () => {
       const fileRef = 'file:///path/to/config.js';
       const moduleOutput = { settings: { temperature: 0.7 } };

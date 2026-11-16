@@ -1,6 +1,11 @@
 /** Supported JavaScript and TypeScript extensions. */
 export const JAVASCRIPT_EXTENSIONS = ['js', 'cjs', 'mjs', 'ts', 'cts', 'mts'];
 
+export type FileReferenceParseOptions = {
+  includeRuby?: boolean;
+  fileExists?: (filePath: string) => boolean;
+};
+
 /** Matches JavaScript and TypeScript extensions case-insensitively. */
 export function isJavascriptFile(filePath: string): boolean {
   return new RegExp(`\\.(${JAVASCRIPT_EXTENSIONS.join('|')})$`, 'i').test(filePath);
@@ -83,7 +88,7 @@ export function isPythonFile(filePath: string): boolean {
  */
 export function parsePythonFileReference(
   filePath: string,
-  options: { includeRuby?: boolean } = {},
+  options: FileReferenceParseOptions = {},
 ): { filePath: string; functionName?: string } | undefined {
   const separator = filePath.lastIndexOf(':');
   if (separator > 1) {
@@ -141,7 +146,7 @@ export function parseRubyFileReference(
  */
 export function parseExecutableFileReference(
   filePath: string,
-  options: { includeRuby?: boolean } = {},
+  options: FileReferenceParseOptions = {},
 ): {
   filePath: string;
   functionName?: string;
@@ -149,6 +154,7 @@ export function parseExecutableFileReference(
   // Prefer the rightmost JavaScript file boundary before considering Ruby or
   // Python. A selector such as 'check.rb:detail' is an export key, not a file.
   let separator = filePath.lastIndexOf(':');
+  let javascriptFallback: { filePath: string; functionName: string } | undefined;
   while (separator > 1) {
     const candidateFilePath = filePath.slice(0, separator);
     const functionName = filePath.slice(separator + 1);
@@ -157,13 +163,32 @@ export function parseExecutableFileReference(
       functionName.length > 0 &&
       !/[\\/]/.test(functionName)
     ) {
-      return { filePath: candidateFilePath, functionName };
+      javascriptFallback ??= { filePath: candidateFilePath, functionName };
+      if (!options.fileExists || options.fileExists(candidateFilePath)) {
+        return { filePath: candidateFilePath, functionName };
+      }
     }
     separator = filePath.lastIndexOf(':', separator - 1);
+  }
+  if (options.fileExists && javascriptFallback) {
+    return javascriptFallback;
   }
 
   const rubyReference =
     options.includeRuby === false ? undefined : parseRubyFileReference(filePath);
+  const pythonCandidate = parsePythonFileReference(filePath, { includeRuby: false });
+  if (options.fileExists) {
+    const pythonExists =
+      pythonCandidate !== undefined && options.fileExists(pythonCandidate.filePath);
+    const rubyExists = rubyReference !== undefined && options.fileExists(rubyReference.filePath);
+    if (pythonCandidate && pythonExists && !rubyExists) {
+      return pythonCandidate;
+    }
+    if (rubyReference && rubyExists && !pythonExists) {
+      return rubyReference;
+    }
+  }
+
   if (rubyReference) {
     return rubyReference;
   }

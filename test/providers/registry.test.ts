@@ -1,3 +1,4 @@
+import fs from 'fs';
 import os from 'os';
 import path from 'path';
 
@@ -2446,6 +2447,30 @@ describe('Provider Registry', () => {
       const absolutePath = path.resolve('/absolute/path/script.py');
       await pythonFactory!.create(`file://${absolutePath}`, cloudOptions, customContext);
       expect(PythonProvider).toHaveBeenLastCalledWith(absolutePath, cloudOptions);
+    });
+
+    it('should route an existing Python filename containing a Ruby marker to Python', async () => {
+      const existsSpy = vi
+        .spyOn(fs, 'existsSync')
+        .mockImplementation((filePath) => String(filePath).endsWith('provider.rb:backup.py'));
+      try {
+        const factory = providerMap.find((entry) =>
+          entry.test('file://provider.rb:backup.py:call_api'),
+        );
+        expect(factory).toBeDefined();
+
+        await factory!.create(
+          'file://provider.rb:backup.py:call_api',
+          mockProviderOptions,
+          mockContext,
+        );
+        expect(PythonProvider).toHaveBeenLastCalledWith(
+          'provider.rb:backup.py:call_api',
+          mockProviderOptions,
+        );
+      } finally {
+        existsSpy.mockRestore();
+      }
     });
 
     it('should preserve absolute paths in file-based providers', async () => {

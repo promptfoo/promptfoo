@@ -1,9 +1,9 @@
-import {
-  getResolvedRelativePath,
-  isPythonFile,
-  parseExecutableFileReference,
-  parseRubyFileReference,
-} from '../util/file';
+import fs from 'fs';
+import path from 'path';
+
+import cliState from '../cliState';
+import { getResolvedRelativePath } from '../util/file';
+import { isPythonFile, parseExecutableFileReference } from '../validation/fileExtensions';
 
 import type { LoadApiProviderContext } from '../types/index';
 import type { ApiProvider, ProviderOptions } from '../types/providers';
@@ -30,8 +30,10 @@ export function createScriptBasedProviderFactory(
       // Check file extension only if fileExtension is provided
       if (fileExtension && providerPath.startsWith('file://')) {
         const reference = providerPath.slice('file://'.length);
-        const { filePath } =
-          parseRubyFileReference(reference) ?? parseExecutableFileReference(reference);
+        const { filePath } = parseExecutableFileReference(reference, {
+          fileExists: (candidate) =>
+            fs.existsSync(path.resolve(cliState.basePath || process.cwd(), candidate)),
+        });
         if (fileExtension === 'py') {
           return isPythonFile(filePath);
         }

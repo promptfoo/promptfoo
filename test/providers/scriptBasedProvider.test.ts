@@ -1,3 +1,5 @@
+import fs from 'fs';
+
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createScriptBasedProviderFactory } from '../../src/providers/scriptBasedProvider';
 import { getResolvedRelativePath } from '../../src/util/file';
@@ -81,6 +83,34 @@ describe('scriptBasedProvider', () => {
       expect(pythonFactory.test('file://path/provider.rb:Class.py')).toBe(false);
       expect(goFactory.test('file://path.go:archive/provider.py')).toBe(false);
       expect(pythonFactory.test('file://path/provider.PY:custom_call')).toBe(true);
+    });
+
+    it('should distinguish Python filenames containing a Ruby marker using existing files', () => {
+      const pythonFactory = createScriptBasedProviderFactory('python', 'py', MockProvider as any);
+      const rubyFactory = createScriptBasedProviderFactory('ruby', 'rb', MockProvider as any);
+      const existsSpy = vi
+        .spyOn(fs, 'existsSync')
+        .mockImplementation((filePath) => String(filePath).endsWith('provider.rb:backup.py'));
+      try {
+        expect(pythonFactory.test('file://provider.rb:backup.py:call_api')).toBe(true);
+        expect(rubyFactory.test('file://provider.rb:backup.py:call_api')).toBe(false);
+      } finally {
+        existsSpy.mockRestore();
+      }
+    });
+
+    it('should keep actual Ruby files ahead of Python-looking selectors', () => {
+      const pythonFactory = createScriptBasedProviderFactory('python', 'py', MockProvider as any);
+      const rubyFactory = createScriptBasedProviderFactory('ruby', 'rb', MockProvider as any);
+      const existsSpy = vi
+        .spyOn(fs, 'existsSync')
+        .mockImplementation((filePath) => String(filePath).endsWith('provider.rb'));
+      try {
+        expect(pythonFactory.test('file://provider.rb:Provider.PY')).toBe(false);
+        expect(rubyFactory.test('file://provider.rb:Provider.PY')).toBe(true);
+      } finally {
+        existsSpy.mockRestore();
+      }
     });
 
     it('should extract script path correctly when using prefix pattern', async () => {

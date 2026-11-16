@@ -16,7 +16,7 @@ import { loadYaml } from './yamlLoad';
  */
 export async function loadFileReference(fileRef: string, basePath: string = ''): Promise<any> {
   // Parse file:// URL with Windows-aware path handling
-  const { filePath, functionName } = parseFileUrl(fileRef);
+  const { filePath, functionName } = parseFileUrl(fileRef, { basePath });
 
   // Resolve the absolute path
   const resolvedPath = path.resolve(basePath, filePath);

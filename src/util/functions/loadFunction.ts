@@ -11,7 +11,7 @@ import {
   JAVASCRIPT_EXTENSIONS,
   normalizeWindowsFileUrlPath,
   parseExecutableFileReference,
-} from '../fileExtensions';
+} from '../../validation/fileExtensions';
 
 export const functionCache: Record<string, Function> = {};
 
@@ -113,13 +113,21 @@ export async function loadFunction<T extends Function>({
  * @returns The file path and optional function name.
  * @throws If `fileUrl` does not start with `file://`.
  */
-export function parseFileUrl(fileUrl: string): { filePath: string; functionName?: string } {
+export function parseFileUrl(
+  fileUrl: string,
+  options: { basePath?: string } = {},
+): { filePath: string; functionName?: string } {
   if (!fileUrl.startsWith('file://')) {
     throw new Error('URL must start with file://');
   }
 
   const urlWithoutProtocol = fileUrl.slice('file://'.length);
-  const parsedReference = parseExecutableFileReference(urlWithoutProtocol, { includeRuby: false });
+  const parsedReference = parseExecutableFileReference(urlWithoutProtocol, {
+    includeRuby: false,
+    fileExists: options.basePath
+      ? (candidate) => fs.existsSync(path.resolve(options.basePath!, candidate))
+      : undefined,
+  });
   return {
     ...parsedReference,
     filePath: normalizeWindowsFileUrlPath(parsedReference.filePath, process.platform),

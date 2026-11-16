@@ -1,3 +1,5 @@
+import fs from 'fs';
+
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { importModule } from '../../../src/esm';
 import { runPython } from '../../../src/python/pythonUtils';
@@ -496,6 +498,21 @@ describe('parseFileUrl', () => {
     ['file://grader.cjs:copy.cjs:check:detail', 'grader.cjs:copy.cjs', 'check:detail'],
   ])('should preserve JavaScript file and export boundaries: %s', (fileUrl, filePath, fn) => {
     expect(parseFileUrl(fileUrl)).toEqual({ filePath, functionName: fn });
+  });
+
+  it('should use the existing JavaScript file to disambiguate an export-looking filename', () => {
+    mockResolve.mockImplementation((_basePath, filePath) => filePath);
+    const existsSpy = vi
+      .spyOn(fs, 'existsSync')
+      .mockImplementation((filePath) => filePath === 'grader.cjs');
+    try {
+      expect(parseFileUrl('file://grader.cjs:check.js:detail', { basePath: '/configs' })).toEqual({
+        filePath: 'grader.cjs',
+        functionName: 'check.js:detail',
+      });
+    } finally {
+      existsSpy.mockRestore();
+    }
   });
 
   it.each([

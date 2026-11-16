@@ -1,3 +1,4 @@
+import { existsSync } from 'fs';
 import * as path from 'path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -834,6 +835,32 @@ describe('JavaScript file references', () => {
     });
 
     expect(importModule).toHaveBeenCalledWith('/configs/grader.cjs', 'check.rb:detail');
+    expect(mockFn).toHaveBeenCalledOnce();
+    expect(result).toMatchObject({ pass: true });
+  });
+
+  it('should preserve JavaScript-looking export names using the existing module', async () => {
+    const assertion: Assertion = {
+      type: 'javascript',
+      value: 'file://grader.cjs:check.js:detail',
+    };
+
+    const mockFn = vi.fn((_output: string) => true);
+    vi.mocked(path.resolve).mockImplementation((_basePath, filePath) => filePath);
+    vi.mocked(path.extname).mockReturnValue('.cjs');
+    vi.mocked(isPackagePath).mockReturnValue(false);
+    vi.mocked(existsSync).mockImplementation((filePath) => filePath === 'grader.cjs');
+    vi.mocked(importModule).mockResolvedValue({ 'check.js:detail': mockFn });
+
+    const result = await runAssertion({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      assertion,
+      test: {} as AtomicTestCase,
+      providerResponse: { output: 'Expected output' },
+    });
+
+    expect(importModule).toHaveBeenCalledWith('grader.cjs', 'check.js:detail');
     expect(mockFn).toHaveBeenCalledOnce();
     expect(result).toMatchObject({ pass: true });
   });

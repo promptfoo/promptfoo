@@ -1,3 +1,4 @@
+import { existsSync } from 'fs';
 import fs from 'fs/promises';
 import path from 'path';
 
@@ -37,17 +38,17 @@ import {
   type TraceData,
   type VarValue,
 } from '../types/index';
-import {
-  isJavascriptFile,
-  isPythonFile,
-  normalizeWindowsFileUrlPath,
-  parseExecutableFileReference,
-} from '../util/fileExtensions';
 import invariant from '../util/invariant';
 import { getNunjucksEngine } from '../util/templates';
 import { sleep } from '../util/time';
 import { transform } from '../util/transform';
 import { loadYaml } from '../util/yamlLoad';
+import {
+  isJavascriptFile,
+  isPythonFile,
+  normalizeWindowsFileUrlPath,
+  parseExecutableFileReference,
+} from '../validation/fileExtensions';
 import { handleAgentRubric } from './agentRubric';
 import { handleAnswerRelevance } from './answerRelevance';
 import { AssertionsResult } from './assertionsResult';
@@ -509,7 +510,12 @@ async function runAssertionInternal({
     if (renderedValue.startsWith('file://')) {
       const basePath = cliState.basePath || '';
       const fileReference = renderedValue.slice('file://'.length);
-      const executableReference = parseExecutableFileReference(fileReference);
+      const executableReference = parseExecutableFileReference(fileReference, {
+        fileExists: (candidate) =>
+          existsSync(
+            path.resolve(basePath, normalizeWindowsFileUrlPath(candidate, process.platform)),
+          ),
+      });
       const pythonReference = isPythonFile(executableReference.filePath)
         ? executableReference
         : undefined;

@@ -15,14 +15,11 @@ import {
 import { importModule } from '../esm';
 import logger from '../logger';
 import { runPython } from '../python/pythonUtils';
-import { isJavascriptFile, isPythonFile, parseExecutableFileReference } from './fileExtensions';
-
-export {
+import {
+  isJavascriptFile,
   isPythonFile,
   parseExecutableFileReference,
-  parseRubyFileReference,
-} from './fileExtensions';
-
+} from '../validation/fileExtensions';
 import { parseFileUrl } from './functions/loadFunction';
 import { safeResolve } from './pathUtils';
 import { renderVarsInObject } from './render';
@@ -393,7 +390,9 @@ export function parsePathOrGlob(
   let functionName: string | undefined;
 
   if (filename.includes(':')) {
-    const parsed = parseExecutableFileReference(filename);
+    const parsed = parseExecutableFileReference(filename, {
+      fileExists: (candidate) => fs.existsSync(path.resolve(basePath, candidate)),
+    });
     filename = parsed.filePath;
     functionName = parsed.functionName;
     if (!functionName) {
@@ -584,7 +583,9 @@ export async function maybeLoadToolsFromExternalFile(
   // Check if this is a Python/JS file reference with function name
   // These need special handling to execute the function and get the result
   if (typeof rendered === 'string' && rendered.startsWith('file://')) {
-    const { filePath, functionName } = parseFileUrl(rendered);
+    const { filePath, functionName } = parseFileUrl(rendered, {
+      basePath: cliState.basePath || process.cwd(),
+    });
 
     if (functionName && (filePath.endsWith('.py') || isJavascriptFile(filePath))) {
       // Execute the function to get tool definitions
