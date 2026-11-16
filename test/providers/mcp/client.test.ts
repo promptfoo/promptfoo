@@ -222,6 +222,25 @@ describe('MCPClient', () => {
       expect(mockClient.close).toHaveBeenCalled();
     });
 
+    it('refuses a pinned contract if the server reports more tool-list pages', async () => {
+      // A matching first page is not the complete contract when nextCursor is present.
+      mockClient.listTools.mockResolvedValue({
+        tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
+        nextCursor: 'page-2',
+      });
+      mcpClient = new MCPClient({
+        server: {
+          command: 'node',
+          expectedTools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
+        },
+      });
+      await expect(mcpClient.initialize()).rejects.toThrow(/incomplete.*paginated.*tool/i);
+      expect(mcpClient.hasInitialized).toBe(false);
+      expect(mcpClient.getAllTools()).toEqual([]);
+      expect(mockClient.close).toHaveBeenCalled();
+      expect(mockClient.callTool).not.toHaveBeenCalled();
+    });
+
     it('rejects MCP tool description drift before publishing the server', async () => {
       mcpClient = new MCPClient({
         server: {

@@ -399,6 +399,13 @@ export class MCPClient {
         undefined, // no pagination params
         requestOptions,
       );
+      // A partial list can match a pin while hiding changed tools on later pages.
+      // Until the shared tools/list path collects all pages, fail closed for pins.
+      if (server.expectedTools && toolsResult?.nextCursor) {
+        throw new Error(
+          `MCP server ${serverLabel} returned an incomplete paginated tool list; expectedTools cannot be checked until all pages are collected.`,
+        );
+      }
       const serverTools =
         toolsResult?.tools?.map((tool) => ({
           name: tool.name,
