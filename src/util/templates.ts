@@ -53,6 +53,12 @@ type DeferredMacro = {
   definitionScope: ReadonlySet<string>;
   called: boolean;
   analyzing: boolean;
+  usesCaller: boolean;
+};
+
+type ConditionalSummary = {
+  setBindings: Set<string>;
+  macroCandidates: Map<string, ReadonlySet<DeferredMacro>>;
 };
 
 type MacroAnalysisMemo = {
@@ -70,7 +76,7 @@ function consumeAnalysisWork(memo?: MacroAnalysisMemo): void {
 
 class LinkedScope implements ReadonlySet<string> {
   private readonly names = new Set<string>();
-  private readonly macros = new Map<string, DeferredMacro>();
+  private readonly macros = new Map<string, Set<DeferredMacro>>();
   private fallbackMacroMemo?: MacroAnalysisMemo;
 
   constructor(
@@ -97,7 +103,18 @@ class LinkedScope implements ReadonlySet<string> {
   }
 
   registerMacro(name: string, definition: DeferredMacro, invalidateMemo = true): void {
-    this.macros.set(name, definition);
+    this.macros.set(name, new Set([definition]));
+    if (invalidateMemo) {
+      this.macroAnalysisMemo()?.results.clear();
+    }
+  }
+
+  registerMacroCandidates(
+    name: string,
+    definitions: ReadonlySet<DeferredMacro>,
+    invalidateMemo = true,
+  ): void {
+    this.macros.set(name, new Set(definitions));
     if (invalidateMemo) {
       this.macroAnalysisMemo()?.results.clear();
     }
@@ -111,11 +128,11 @@ class LinkedScope implements ReadonlySet<string> {
 
   rebindMacros(targets: unknown, value: unknown): void {
     const sourceName = getSymbolName(value);
-    const sourceMacro = sourceName ? this.findMacro(sourceName) : undefined;
+    const sourceMacros = sourceName ? this.findMacros(sourceName) : undefined;
     this.removeMacroBindings(targets);
-    if (sourceMacro) {
+    if (sourceMacros) {
       for (const name of collectBindingNames(targets)) {
-        this.registerMacro(name, sourceMacro);
+        this.registerMacroCandidates(name, sourceMacros);
       }
     }
   }
@@ -126,15 +143,21 @@ class LinkedScope implements ReadonlySet<string> {
     }
   }
 
-  findMacro(name: string): DeferredMacro | undefined {
+  findMacros(name: string): ReadonlySet<DeferredMacro> | undefined {
     if (this.names.has(name)) {
       return this.macros.get(name);
     }
-    return this.parent instanceof LinkedScope ? this.parent.findMacro(name) : undefined;
+    return this.parent instanceof LinkedScope ? this.parent.findMacros(name) : undefined;
   }
 
   localMacros(): DeferredMacro[] {
-    return Array.from(this.macros.values());
+    const macros = new Set<DeferredMacro>();
+    for (const candidates of this.macros.values()) {
+      for (const macro of candidates) {
+        macros.add(macro);
+      }
+    }
+    return Array.from(macros);
   }
 
   macroAnalysisMemo(): MacroAnalysisMemo | undefined {
@@ -340,11 +363,64 @@ function countAstNodes(nodes: readonly unknown[]): number {
   return count;
 }
 
+function createConditionalSummary(): ConditionalSummary {
+  return { setBindings: new Set(), macroCandidates: new Map() };
+}
+
+function updateStatementBindings(
+  item: NunjucksAstNode,
+  scope: LinkedScope,
+  summary?: ConditionalSummary,
+): void {
+  if (item.typename === 'Set') {
+    scope.rebindMacros(item.targets, item.value);
+    addBindingNamesInPlace(scope, item.targets);
+    if (summary) {
+      for (const name of collectBindingNames(item.targets)) {
+        summary.setBindings.add(name);
+      }
+    }
+  } else if (item.typename === 'Macro') {
+    addBindingNamesInPlace(scope, item.name);
+  } else if (item.typename === 'Import') {
+    scope.removeMacroBindings(item.target);
+    addBindingNamesInPlace(scope, item.target);
+  } else if (item.typename === 'FromImport') {
+    const names = collectFromImportBindingNames(item.names);
+    for (const name of names) {
+      scope.removeMacro(name);
+    }
+    addNamesToScopeInPlace(scope, names);
+  }
+}
+
+function mergeConditionalBindings(
+  target: ConditionalSummary | undefined,
+  source: ConditionalSummary,
+): void {
+  if (!target) {
+    return;
+  }
+  for (const name of source.setBindings) {
+    target.setBindings.add(name);
+  }
+}
+
+function collectSummaryMacroCandidates(summary: ConditionalSummary, scope: LinkedScope): void {
+  for (const name of summary.setBindings) {
+    const candidates = scope.findMacros(name);
+    if (candidates && candidates.size > 0) {
+      summary.macroCandidates.set(name, candidates);
+    }
+  }
+}
+
 function astNodeListReferencesVariable(
   nodes: readonly unknown[],
   variableName: ReferenceTarget,
   parent: NunjucksParentContext,
   boundSymbols: ReadonlySet<string>,
+  summary?: ConditionalSummary,
 ): boolean {
   const scope = new LinkedScope(boundSymbols);
   const previousMemo = scope.macroAnalysisMemo();
@@ -360,23 +436,14 @@ function astNodeListReferencesVariable(
       if (!isNunjucksAstNode(item)) {
         continue;
       }
-      if (astReferencesVariable(item, variableName, parent, scope)) {
+      const nestedSummary =
+        summary && item.typename === 'If' ? createConditionalSummary() : undefined;
+      if (astReferencesVariable(item, variableName, parent, scope, nestedSummary)) {
         return true;
       }
-      if (item.typename === 'Set') {
-        scope.rebindMacros(item.targets, item.value);
-        addBindingNamesInPlace(scope, item.targets);
-      } else if (item.typename === 'Macro') {
-        addBindingNamesInPlace(scope, item.name);
-      } else if (item.typename === 'Import') {
-        scope.removeMacroBindings(item.target);
-        addBindingNamesInPlace(scope, item.target);
-      } else if (item.typename === 'FromImport') {
-        const names = collectFromImportBindingNames(item.names);
-        for (const name of names) {
-          scope.removeMacro(name);
-        }
-        addNamesToScopeInPlace(scope, names);
+      updateStatementBindings(item, scope, summary);
+      if (nestedSummary) {
+        mergeConditionalBindings(summary, nestedSummary);
       }
     }
     if (!(typeof variableName === 'object' && 'excludeOrOperands' in variableName)) {
@@ -385,6 +452,9 @@ function astNodeListReferencesVariable(
           return true;
         }
       }
+    }
+    if (summary) {
+      collectSummaryMacroCandidates(summary, scope);
     }
     return false;
   } finally {
@@ -397,18 +467,19 @@ function astChildReferencesVariable(
   field: string,
   variableName: ReferenceTarget,
   boundSymbols: ReadonlySet<string>,
+  summary?: ConditionalSummary,
 ): boolean {
   const child = node[field];
   if (Array.isArray(child)) {
     return child.some(
       (item) =>
         isNunjucksAstNode(item) &&
-        astReferencesVariable(item, variableName, { field, node }, boundSymbols),
+        astReferencesVariable(item, variableName, { field, node }, boundSymbols, summary),
     );
   }
   return (
     isNunjucksAstNode(child) &&
-    astReferencesVariable(child, variableName, { field, node }, boundSymbols)
+    astReferencesVariable(child, variableName, { field, node }, boundSymbols, summary)
   );
 }
 
@@ -599,6 +670,31 @@ function analyzeMacroBody(
   }
 }
 
+function astUsesCaller(node: unknown, memo?: MacroAnalysisMemo): boolean {
+  const pending = [node];
+  while (pending.length > 0) {
+    const current = pending.pop();
+    if (!isNunjucksAstNode(current)) {
+      continue;
+    }
+    consumeAnalysisWork(memo);
+    if (current.typename === 'Symbol' && current.value === 'caller') {
+      return true;
+    }
+    for (const field of current.fields ?? []) {
+      const child = current[field];
+      if (Array.isArray(child)) {
+        for (const item of child) {
+          pending.push(item);
+        }
+      } else {
+        pending.push(child);
+      }
+    }
+  }
+  return false;
+}
+
 function macroNodeReferencesVariable(
   node: NunjucksAstNode,
   variableName: ReferenceTarget,
@@ -612,6 +708,10 @@ function macroNodeReferencesVariable(
     definitionScope: boundSymbols,
     called: false,
     analyzing: false,
+    usesCaller: astUsesCaller(
+      node.body,
+      boundSymbols instanceof LinkedScope ? boundSymbols.macroAnalysisMemo() : undefined,
+    ),
   };
   const macroName = getSymbolName(node.name);
   if (macroName && boundSymbols instanceof LinkedScope) {
@@ -693,8 +793,9 @@ function callerNodeReferencesVariable(
   node: NunjucksAstNode,
   variableName: ReferenceTarget,
   boundSymbols: ReadonlySet<string>,
+  analyzeDeferred = false,
 ): boolean {
-  if (typeof variableName === 'object' && 'excludeOrOperands' in variableName) {
+  if (!analyzeDeferred && typeof variableName === 'object' && 'excludeOrOperands' in variableName) {
     // A call block packages its defaults and body as a deferred caller. They
     // are not reads at the macro call site when caller() is never invoked.
     return false;
@@ -712,6 +813,33 @@ function callerNodeReferencesVariable(
   return astChildReferencesVariable(node, 'body', variableName, callerScope);
 }
 
+function findCallBlockCaller(argsNode: unknown): NunjucksAstNode | undefined {
+  if (!isNunjucksAstNode(argsNode) || !Array.isArray(argsNode.children)) {
+    return undefined;
+  }
+  for (const child of argsNode.children) {
+    if (
+      !isNunjucksAstNode(child) ||
+      child.typename !== 'KeywordArgs' ||
+      !Array.isArray(child.children)
+    ) {
+      continue;
+    }
+    for (const pair of child.children) {
+      if (
+        isNunjucksAstNode(pair) &&
+        pair.typename === 'Pair' &&
+        getSymbolName(pair.key) === 'caller' &&
+        isNunjucksAstNode(pair.value) &&
+        pair.value.typename === 'Caller'
+      ) {
+        return pair.value;
+      }
+    }
+  }
+  return undefined;
+}
+
 function astFieldsReferenceVariable(
   node: NunjucksAstNode,
   variableName: ReferenceTarget,
@@ -720,6 +848,48 @@ function astFieldsReferenceVariable(
   return (node.fields ?? []).some((field) =>
     astChildReferencesVariable(node, field, variableName, boundSymbols),
   );
+}
+
+function macroCandidatesUseCaller(macros: ReadonlySet<DeferredMacro>): boolean {
+  for (const macro of macros) {
+    if (macro.usesCaller) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function funCallNodeReferencesVariable(
+  node: NunjucksAstNode,
+  variableName: ReferenceTarget,
+  boundSymbols: ReadonlySet<string>,
+): boolean {
+  if (astChildReferencesVariable(node, 'args', variableName, boundSymbols)) {
+    return true;
+  }
+  const deferredCaller =
+    typeof variableName === 'object' && 'excludeOrOperands' in variableName
+      ? findCallBlockCaller(node.args)
+      : undefined;
+  const macroName = getSymbolName(node.name);
+  const macros =
+    macroName && boundSymbols instanceof LinkedScope
+      ? boundSymbols.findMacros(macroName)
+      : undefined;
+  const memo = boundSymbols instanceof LinkedScope ? boundSymbols.macroAnalysisMemo() : undefined;
+  if (macros) {
+    for (const macro of macros) {
+      macro.called = true;
+      const suppliedParamNames = collectSuppliedMacroParamNames(node.args, macro, memo);
+      if (analyzeMacroBody(macro, variableName, memo, suppliedParamNames)) {
+        return true;
+      }
+    }
+  }
+  if (!deferredCaller || (macros && !macroCandidatesUseCaller(macros))) {
+    return false;
+  }
+  return callerNodeReferencesVariable(deferredCaller, variableName, boundSymbols, true);
 }
 
 function postfixNodeReferencesVariable(
@@ -762,21 +932,8 @@ function postfixNodeReferencesVariable(
       }
       continue;
     }
-    if (astChildReferencesVariable(part, 'args', variableName, boundSymbols)) {
+    if (funCallNodeReferencesVariable(part, variableName, boundSymbols)) {
       return true;
-    }
-    const macroName = getSymbolName(part.name);
-    const macro =
-      macroName && boundSymbols instanceof LinkedScope
-        ? boundSymbols.findMacro(macroName)
-        : undefined;
-    const memo = boundSymbols instanceof LinkedScope ? boundSymbols.macroAnalysisMemo() : undefined;
-    if (macro) {
-      macro.called = true;
-      const suppliedParamNames = collectSuppliedMacroParamNames(part.args, macro, memo);
-      if (analyzeMacroBody(macro, variableName, memo, suppliedParamNames)) {
-        return true;
-      }
     }
   }
   return false;
@@ -826,119 +983,11 @@ function isStatementListNode(
   return (node.typename === 'Root' || node.typename === 'NodeList') && Array.isArray(node.children);
 }
 
-function guaranteedConditionalSetBindings(node: unknown): Set<string> {
-  if (!isNunjucksAstNode(node)) {
-    return new Set();
-  }
-  if (node.typename === 'If') {
-    if (!isNunjucksAstNode(node.else_)) {
-      return new Set();
-    }
-    const bodyBindings = guaranteedConditionalSetBindings(node.body);
-    const elseBindings = guaranteedConditionalSetBindings(node.else_);
-    return new Set(Array.from(bodyBindings).filter((name) => elseBindings.has(name)));
-  }
-  if (!isStatementListNode(node)) {
-    return new Set();
-  }
-
-  const bindings = new Set<string>();
-  for (const child of node.children) {
-    if (!isNunjucksAstNode(child)) {
-      continue;
-    }
-    if (child.typename === 'Set') {
-      for (const name of collectBindingNames(child.targets)) {
-        bindings.add(name);
-      }
-    } else if (child.typename === 'If') {
-      for (const name of guaranteedConditionalSetBindings(child)) {
-        bindings.add(name);
-      }
-    }
-  }
-  return bindings;
-}
-
-function updateMacroAlias(
-  aliases: Map<string, DeferredMacro>,
-  shadowed: Set<string>,
-  name: string,
-  macro: DeferredMacro | undefined,
-): void {
-  shadowed.add(name);
-  if (macro) {
-    aliases.set(name, macro);
-  } else {
-    aliases.delete(name);
-  }
-}
-
-function updateMacroAliasesFromStatement(
-  child: NunjucksAstNode,
-  boundSymbols: LinkedScope,
-  aliases: Map<string, DeferredMacro>,
-  shadowed: Set<string>,
-): void {
-  if (child.typename === 'Set') {
-    const sourceName = getSymbolName(child.value);
-    const sourceMacro = sourceName
-      ? (aliases.get(sourceName) ??
-        (shadowed.has(sourceName) ? undefined : boundSymbols.findMacro(sourceName)))
-      : undefined;
-    for (const name of collectBindingNames(child.targets)) {
-      updateMacroAlias(aliases, shadowed, name, sourceMacro);
-    }
-    return;
-  }
-  if (child.typename !== 'If') {
-    return;
-  }
-  const nested = guaranteedConditionalMacroAliases(child, boundSymbols);
-  for (const name of guaranteedConditionalSetBindings(child)) {
-    updateMacroAlias(aliases, shadowed, name, nested.get(name));
-  }
-}
-
-function guaranteedConditionalMacroAliases(
-  node: unknown,
-  boundSymbols: LinkedScope,
-): Map<string, DeferredMacro> {
-  if (!isNunjucksAstNode(node)) {
-    return new Map();
-  }
-  if (node.typename === 'If') {
-    if (!isNunjucksAstNode(node.else_)) {
-      return new Map();
-    }
-    const bodyAliases = guaranteedConditionalMacroAliases(node.body, boundSymbols);
-    const elseAliases = guaranteedConditionalMacroAliases(node.else_, boundSymbols);
-    const common = new Map<string, DeferredMacro>();
-    for (const [name, macro] of bodyAliases) {
-      if (elseAliases.get(name) === macro) {
-        common.set(name, macro);
-      }
-    }
-    return common;
-  }
-  if (!isStatementListNode(node)) {
-    return new Map();
-  }
-
-  const aliases = new Map<string, DeferredMacro>();
-  const shadowed = new Set<string>();
-  for (const child of node.children) {
-    if (isNunjucksAstNode(child)) {
-      updateMacroAliasesFromStatement(child, boundSymbols, aliases, shadowed);
-    }
-  }
-  return aliases;
-}
-
 function ifNodeReferencesVariable(
   node: NunjucksAstNode,
   variableName: ReferenceTarget,
   boundSymbols: ReadonlySet<string>,
+  summary?: ConditionalSummary,
 ): boolean {
   if (
     !isExistenceGuardedConditional(node, variableName) &&
@@ -946,18 +995,51 @@ function ifNodeReferencesVariable(
   ) {
     return true;
   }
-  if (astChildReferencesVariable(node, 'body', variableName, new LinkedScope(boundSymbols))) {
+
+  const bodySummary = createConditionalSummary();
+  const elseSummary = createConditionalSummary();
+  if (
+    astChildReferencesVariable(
+      node,
+      'body',
+      variableName,
+      new LinkedScope(boundSymbols),
+      bodySummary,
+    )
+  ) {
     return true;
   }
-  if (astChildReferencesVariable(node, 'else_', variableName, new LinkedScope(boundSymbols))) {
+  if (
+    astChildReferencesVariable(
+      node,
+      'else_',
+      variableName,
+      new LinkedScope(boundSymbols),
+      elseSummary,
+    )
+  ) {
     return true;
   }
 
-  if (boundSymbols instanceof LinkedScope) {
-    for (const [name, macro] of guaranteedConditionalMacroAliases(node, boundSymbols)) {
-      boundSymbols.registerMacro(name, macro);
+  for (const name of bodySummary.setBindings) {
+    if (!elseSummary.setBindings.has(name)) {
+      continue;
     }
-    addNamesToScopeInPlace(boundSymbols, Array.from(guaranteedConditionalSetBindings(node)));
+    summary?.setBindings.add(name);
+    const candidates = new Set<DeferredMacro>([
+      ...(bodySummary.macroCandidates.get(name) ?? []),
+      ...(elseSummary.macroCandidates.get(name) ?? []),
+    ]);
+    if (candidates.size > 0) {
+      summary?.macroCandidates.set(name, candidates);
+    }
+    if (boundSymbols instanceof LinkedScope) {
+      boundSymbols.removeMacro(name);
+      if (candidates.size > 0) {
+        boundSymbols.registerMacroCandidates(name, candidates);
+      }
+      boundSymbols.add(name);
+    }
   }
   return false;
 }
@@ -974,7 +1056,38 @@ function isDefaultFilterWithUndefinedSafeInput(
   );
 }
 
-function defaultFilterFallbackReferencesVariable(
+function isDirectDefaultInput(node: unknown): node is NunjucksAstNode {
+  if (!isNunjucksAstNode(node)) {
+    return false;
+  }
+  return (
+    node.typename === 'Symbol' ||
+    (node.typename === 'LookupVal' && isDirectDefaultInput(node.target))
+  );
+}
+
+function defaultFilterInputReferencesVariable(
+  node: NunjucksAstNode,
+  variableName: RequiredReferenceTarget,
+  boundSymbols: ReadonlySet<string>,
+): boolean {
+  if (node.typename === 'Symbol') {
+    return false;
+  }
+  if (node.typename === 'LookupVal' && isDirectDefaultInput(node)) {
+    // Every direct property/index read in this chain is undefined-safe. A
+    // computed index or filter nested inside it still has to be analyzed.
+    return (
+      (isNunjucksAstNode(node.val) &&
+        defaultFilterInputReferencesVariable(node.val, variableName, boundSymbols)) ||
+      (isNunjucksAstNode(node.target) &&
+        defaultFilterInputReferencesVariable(node.target, variableName, boundSymbols))
+    );
+  }
+  return astReferencesVariable(node, variableName, undefined, boundSymbols);
+}
+
+function defaultFilterReferencesVariable(
   node: NunjucksAstNode,
   variableName: RequiredReferenceTarget,
   boundSymbols: ReadonlySet<string>,
@@ -983,15 +1096,20 @@ function defaultFilterFallbackReferencesVariable(
   if (!isNunjucksAstNode(args) || !Array.isArray(args.children)) {
     return false;
   }
-  // default/d accepts an undefined input. Only its fallback arguments are
-  // required; ordinary reference collection still sees the input name.
-  return args.children
-    .slice(1)
-    .some(
-      (child) =>
-        isNunjucksAstNode(child) &&
-        astReferencesVariable(child, variableName, { field: 'children', node: args }, boundSymbols),
-    );
+  const [input, ...fallbacks] = args.children;
+  if (
+    isNunjucksAstNode(input) &&
+    defaultFilterInputReferencesVariable(input, variableName, boundSymbols)
+  ) {
+    return true;
+  }
+  // default/d accepts an undefined direct input. Computations and filters that
+  // produce the input still run first, and fallback arguments remain required.
+  return fallbacks.some(
+    (child) =>
+      isNunjucksAstNode(child) &&
+      astReferencesVariable(child, variableName, { field: 'children', node: args }, boundSymbols),
+  );
 }
 
 function isExistenceGuardedConditional(
@@ -1014,6 +1132,7 @@ function astReferencesVariable(
   variableName: ReferenceTarget,
   parent?: NunjucksParentContext,
   boundSymbols: ReadonlySet<string> = new Set(),
+  summary?: ConditionalSummary,
 ): boolean {
   const memo = boundSymbols instanceof LinkedScope ? boundSymbols.macroAnalysisMemo() : undefined;
   consumeAnalysisWork(memo);
@@ -1026,7 +1145,7 @@ function astReferencesVariable(
   }
 
   if (node.typename === 'If') {
-    return ifNodeReferencesVariable(node, variableName, boundSymbols);
+    return ifNodeReferencesVariable(node, variableName, boundSymbols, summary);
   }
 
   if (isExistenceGuardedConditional(node, variableName)) {
@@ -1034,7 +1153,7 @@ function astReferencesVariable(
   }
 
   if (isDefaultFilterWithUndefinedSafeInput(node, variableName)) {
-    return defaultFilterFallbackReferencesVariable(
+    return defaultFilterReferencesVariable(
       node,
       variableName as RequiredReferenceTarget,
       boundSymbols,
@@ -1070,6 +1189,7 @@ function astReferencesVariable(
       variableName,
       { field: 'children', node },
       boundSymbols,
+      summary,
     );
   }
 
@@ -1393,6 +1513,33 @@ export function extractVariablesFromTemplates(templates: string[]): string[] {
   return Array.from(variableSet);
 }
 
+function jsonTemplateStrings(template: string): string[] | undefined {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(template);
+  } catch {
+    return undefined;
+  }
+
+  const strings: string[] = [];
+  const pending = [parsed];
+  while (pending.length > 0) {
+    const value = pending.pop();
+    if (typeof value === 'string') {
+      strings.push(value);
+    } else if (Array.isArray(value)) {
+      for (const item of value) {
+        pending.push(item);
+      }
+    } else if (value && typeof value === 'object') {
+      for (const item of Object.values(value)) {
+        pending.push(item);
+      }
+    }
+  }
+  return strings;
+}
+
 /**
  * Detailed result for {@link analyzeTemplateReference}. `parsed` is `false`
  * when parsing or bounded scope analysis cannot complete. In that case,
@@ -1417,6 +1564,20 @@ export function analyzeTemplateReference(
 ): TemplateReferenceResult {
   if (!variableName || !template.includes(variableName)) {
     return { referenced: false, parsed: true };
+  }
+
+  // Structured prompts render each string independently. Do not let a set in
+  // one JSON string hide a real reference in another string's scope.
+  const structuredStrings = jsonTemplateStrings(template);
+  if (structuredStrings) {
+    let referenced = false;
+    let parsed = true;
+    for (const value of structuredStrings) {
+      const result = analyzeTemplateReference(value, variableName);
+      referenced ||= result.referenced;
+      parsed &&= result.parsed;
+    }
+    return { referenced, parsed };
   }
 
   const parseResult = parseNunjucksTemplate(template);

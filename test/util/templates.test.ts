@@ -354,6 +354,16 @@ describe('analyzeTemplateReference', () => {
     expect(extractRequiredVariablesFromTemplate(template)).toContain('_conversation');
   });
 
+  it('preserves all possible macros when conditional branches diverge', () => {
+    const template =
+      "{% macro a(x=_conversation) %}{{x}}{% endmacro %}{% macro b(x=_conversation) %}{{x}}{% endmacro %}{{a('x')}}{{b('x')}}{% if enabled %}{% set saved=a %}{% else %}{% set saved=b %}{% endif %}{{saved()}}";
+    expect(analyzeTemplateReference(template, '_conversation')).toEqual({
+      referenced: true,
+      parsed: true,
+    });
+    expect(extractRequiredVariablesFromTemplate(template)).toContain('_conversation');
+  });
+
   it('treats default-filter inputs as undefined-safe only in required mode', () => {
     const value = "{% set greeting = name | default('anonymous') %}{{ greeting ~ '!' }}";
     expect(extractRequiredVariablesFromTemplate(value)).toEqual([]);
@@ -369,6 +379,26 @@ describe('analyzeTemplateReference', () => {
     );
   });
 
+  it('keeps computed default-filter inputs required while allowing direct lookups', () => {
+    expect(
+      extractRequiredVariablesFromTemplate("{{ purpose | trim | default('anonymous') }}"),
+    ).toEqual(['purpose']);
+    expect(extractRequiredVariablesFromTemplate("{{ user.name | default('anonymous') }}")).toEqual(
+      [],
+    );
+    expect(
+      extractRequiredVariablesFromTemplate("{{ names[index] | default('anonymous') }}"),
+    ).toEqual([]);
+    expect(
+      extractRequiredVariablesFromTemplate("{{ names[rows[index]].name | default('anonymous') }}"),
+    ).toEqual([]);
+    expect(
+      extractRequiredVariablesFromTemplate(
+        "{{ names[rows[index | trim]].name | default('anonymous') }}",
+      ),
+    ).toEqual(['index']);
+  });
+
   it('defers unused call-block defaults in required mode', () => {
     const value = '{% macro m() %}ok{% endmacro %}{% call(x=missing) m() %}unused{% endcall %}';
     expect(extractRequiredVariablesFromTemplate(value)).toEqual([]);
@@ -380,6 +410,12 @@ describe('analyzeTemplateReference', () => {
     const macroBody =
       '{% macro m() %}{{other}}{% endmacro %}{% call(x=missing) m() %}unused{% endcall %}';
     expect(extractRequiredVariablesFromTemplate(macroBody)).toEqual(['other']);
+  });
+
+  it('analyzes call-block reads when the callee invokes caller', () => {
+    const value =
+      '{% macro wrap() %}{{caller()}}{% endmacro %}{% call wrap() %}{{purpose|trim}}{% endcall %}';
+    expect(extractRequiredVariablesFromTemplate(value)).toContain('purpose');
   });
 });
 
@@ -393,6 +429,19 @@ function nestedMacroArgumentVariants(): string {
 }
 
 describe('macro analysis work and scope changes', () => {
+  it('computes nested conditional summaries without cubic rescanning', () => {
+    let value = 'ok';
+    for (let index = 0; index < 400; index++) {
+      value = `{% if flag${index} %}${value}{% else %}ok{% endif %}`;
+    }
+
+    const started = performance.now();
+    expect(extractUnboundVariablesFromTemplate(value)).toHaveLength(400);
+    const elapsed = performance.now() - started;
+
+    expect(elapsed).toBeLessThan(500);
+  });
+
   it.each<[string, (value: string) => boolean | undefined]>([
     [
       'single reference',

@@ -400,6 +400,16 @@ describeEvaluator('evaluator execution control', () => {
     expect(maxActiveCalls).toBe(1);
   });
 
+  it('keeps JSON string scopes separate when detecting conversation references', async () => {
+    const prompt = JSON.stringify({
+      a: '{% if true %}{% set _conversation=0 %}{% else %}{% set _conversation=0 %}{% endif %}',
+      b: '{{_conversation}}',
+    });
+    const { maxActiveCalls } = await runConcurrencyProbe(prompt, 2);
+
+    expect(maxActiveCalls).toBe(1);
+  });
+
   it('forces concurrency to 1 for browser providers with persistent sessions', async () => {
     const { maxActiveCalls } = await runConcurrencyProbe('Ask: {{ question }}', 2, {
       config: { persistSession: true },

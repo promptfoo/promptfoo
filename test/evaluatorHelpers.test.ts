@@ -1509,12 +1509,23 @@ describe('evaluatorHelpers', () => {
       expect(renderedPrompt).toBe('anonymous!');
     });
 
+    it('should preserve a computed default-filter input that would throw', async () => {
+      const template = "{{ purpose | trim | default('anonymous') }}";
+      expect(await renderPrompt(toPrompt('{{v}}'), { v: template }, {})).toBe(template);
+    });
+
     it('should not require a call-block default when the macro never invokes caller', async () => {
       const template =
         '{% macro m() %}ok{% endmacro %}{% call(x=missing) m() %}unused{% endcall %}';
       const renderedPrompt = await renderPrompt(toPrompt('{{v}}'), { v: template }, {});
 
       expect(renderedPrompt).toBe('ok');
+    });
+
+    it('should preserve an invoked call-block body that would throw', async () => {
+      const template =
+        '{% macro wrap() %}{{caller()}}{% endmacro %}{% call wrap() %}{{purpose|trim}}{% endcall %}';
+      expect(await renderPrompt(toPrompt('{{v}}'), { v: template }, {})).toBe(template);
     });
 
     it('should preserve an unterminated comment and its literal-looking suffix as data', async () => {
