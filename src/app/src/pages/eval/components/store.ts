@@ -306,6 +306,14 @@ interface TableState {
    */
   accumulatedGradingProviders: string[];
 
+  /**
+   * The eval plus comparison evals whose rows produced
+   * `accumulatedGradingProviders`. The table endpoint merges comparison eval
+   * outputs into each page, so judges are only accumulated while this scope is
+   * unchanged.
+   */
+  accumulatedGradingProvidersScope: string | null;
+
   fetchEvalData: (id: string, options?: FetchEvalOptions) => Promise<EvalTableDTO | null>;
   isFetching: boolean;
   isStreaming: boolean;
@@ -535,6 +543,11 @@ const clearFilters = (prevState: TableState) => ({
   },
 });
 
+/** Identifies the set of evals whose rows a table fetch can return. */
+function getGradingProvidersScope(evalId: string, comparisonEvalIds: string[]): string {
+  return JSON.stringify([evalId, ...[...comparisonEvalIds].sort()]);
+}
+
 export const useTableStore = create<TableState>()(
   subscribeWithSelector((set, get) => ({
     evalId: null,
@@ -542,7 +555,9 @@ export const useTableStore = create<TableState>()(
       set((state) => ({
         evalId,
         filteredMetrics: null,
-        ...(state.evalId === evalId ? {} : { accumulatedGradingProviders: [] }),
+        ...(state.evalId === evalId
+          ? {}
+          : { accumulatedGradingProviders: [], accumulatedGradingProvidersScope: null }),
       })),
 
     author: null,
@@ -588,6 +603,7 @@ export const useTableStore = create<TableState>()(
     stats: null,
 
     accumulatedGradingProviders: [],
+    accumulatedGradingProvidersScope: null,
 
     highlightedResultsCount: 0,
     userRatedResultsCount: 0,
@@ -618,7 +634,10 @@ export const useTableStore = create<TableState>()(
         currentState.currentMetadataKeysRequest.abort();
       }
 
+      const gradingProvidersScope = getGradingProvidersScope(id, comparisonEvalIds);
       const switchingEval = !skipSettingEvalId && get().evalId !== id;
+      const scopeChanged =
+        get().evalId === id && get().accumulatedGradingProvidersScope !== gradingProvidersScope;
 
       set({
         isFetching: skipLoadingState ? get().isFetching : true,
@@ -632,9 +651,10 @@ export const useTableStore = create<TableState>()(
         metadataValuesLoading: {},
         metadataValuesError: {},
         currentMetadataValuesRequests: {},
-        // Reset judge aggregate when loading a different eval; keep it when
-        // paging/filtering within the same eval so Judges stay evaluation-wide.
-        ...(switchingEval ? { accumulatedGradingProviders: [] } : {}),
+        // Reset judge aggregate when loading a different eval or comparison set;
+        // keep it when paging/filtering within the same scope so Judges stay
+        // evaluation-wide.
+        ...(switchingEval || scopeChanged ? { accumulatedGradingProviders: [] } : {}),
       });
 
       try {
@@ -690,9 +710,11 @@ export const useTableStore = create<TableState>()(
           set((prevState) => {
             const nextEvalId = skipSettingEvalId ? prevState.evalId : id;
             const pageJudges = collectUniqueGradingProviders(data.table);
-            const sameEval = prevState.evalId === nextEvalId;
+            const sameScope =
+              prevState.evalId === nextEvalId &&
+              prevState.accumulatedGradingProvidersScope === gradingProvidersScope;
             const accumulatedGradingProviders = (
-              sameEval
+              sameScope
                 ? Array.from(new Set([...prevState.accumulatedGradingProviders, ...pageJudges]))
                 : pageJudges
             ).sort((a, b) => a.localeCompare(b));
@@ -714,6 +736,7 @@ export const useTableStore = create<TableState>()(
               // Store evaluation-level stats including durationMs
               stats: data.stats || null,
               accumulatedGradingProviders,
+              accumulatedGradingProvidersScope: gradingProvidersScope,
               filters: {
                 ...prevState.filters,
                 options: {
