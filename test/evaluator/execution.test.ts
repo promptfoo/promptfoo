@@ -410,6 +410,13 @@ describeEvaluator('evaluator execution control', () => {
     expect(maxActiveCalls).toBe(1);
   });
 
+  it('detects conversation references in serialized JSON leaf strings', async () => {
+    const prompt = JSON.stringify({ content: '{"{{_conversation|length}}":"x"}' });
+    const { maxActiveCalls } = await runConcurrencyProbe(prompt, 2);
+
+    expect(maxActiveCalls).toBe(1);
+  });
+
   it('forces concurrency to 1 for browser providers with persistent sessions', async () => {
     const { maxActiveCalls } = await runConcurrencyProbe('Ask: {{ question }}', 2, {
       config: { persistSession: true },

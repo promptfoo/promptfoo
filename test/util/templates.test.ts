@@ -364,6 +364,24 @@ describe('analyzeTemplateReference', () => {
     expect(extractRequiredVariablesFromTemplate(template)).toContain('_conversation');
   });
 
+  it('merges one-sided updates with incoming macro aliases', () => {
+    const template =
+      "{% macro history(x=_conversation) %}{{x}}{% endmacro %}{% macro plain(x='ok') %}{{x}}{% endmacro %}{{history('warmup')}}{% set saved=plain %}{% if enabled %}{% set saved=history %}{% endif %}{{saved()}}";
+    expect(analyzeTemplateReference(template, '_conversation')).toEqual({
+      referenced: true,
+      parsed: true,
+    });
+    expect(extractRequiredVariablesFromTemplate(template)).toContain('_conversation');
+  });
+
+  it('analyzes JSON leaf strings as templates instead of nested structured prompts', () => {
+    const prompt = JSON.stringify({ content: '{"{{_conversation|length}}":"x"}' });
+    expect(analyzeTemplateReference(prompt, '_conversation')).toEqual({
+      referenced: true,
+      parsed: true,
+    });
+  });
+
   it('treats default-filter inputs as undefined-safe only in required mode', () => {
     const value = "{% set greeting = name | default('anonymous') %}{{ greeting ~ '!' }}";
     expect(extractRequiredVariablesFromTemplate(value)).toEqual([]);
@@ -397,6 +415,16 @@ describe('analyzeTemplateReference', () => {
         "{{ names[rows[index | trim]].name | default('anonymous') }}",
       ),
     ).toEqual(['index']);
+  });
+
+  it('preserves computed operands in logical fallbacks', () => {
+    expect(extractRequiredVariablesFromTemplate('{{ purpose | trim or "anonymous" }}')).toEqual([
+      'purpose',
+    ]);
+    expect(extractRequiredVariablesFromTemplate('{{ user or fallback | trim }}')).toEqual([
+      'fallback',
+    ]);
+    expect(extractRequiredVariablesFromTemplate('{{ user or "anonymous" }}')).toEqual([]);
   });
 
   it('defers unused call-block defaults in required mode', () => {

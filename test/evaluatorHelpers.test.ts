@@ -1578,6 +1578,11 @@ describe('evaluatorHelpers', () => {
       ).rejects.toThrow('unknown block tag: unknown');
     });
 
+    it('should preserve a computed or operand that would throw', async () => {
+      const template = '{{ purpose | trim or "anonymous" }}';
+      expect(await renderPrompt(toPrompt('{{v}}'), { v: template }, {})).toBe(template);
+    });
+
     it('should render an or fallback when its left operand is missing', async () => {
       const renderedPrompt = await renderPrompt(
         toPrompt('{{v}}'),

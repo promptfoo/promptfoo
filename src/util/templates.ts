@@ -983,6 +983,33 @@ function isStatementListNode(
   return (node.typename === 'Root' || node.typename === 'NodeList') && Array.isArray(node.children);
 }
 
+function conditionalMacroCandidates(
+  name: string,
+  bodySummary: ConditionalSummary,
+  elseSummary: ConditionalSummary,
+  boundSymbols: ReadonlySet<string>,
+): ReadonlySet<DeferredMacro> | undefined {
+  const assignedInBody = bodySummary.setBindings.has(name);
+  const assignedInElse = elseSummary.setBindings.has(name);
+  if (
+    (!assignedInBody && !assignedInElse) ||
+    (!(assignedInBody && assignedInElse) && !boundSymbols.has(name))
+  ) {
+    return undefined;
+  }
+
+  const candidates = new Set<DeferredMacro>([
+    ...(bodySummary.macroCandidates.get(name) ?? []),
+    ...(elseSummary.macroCandidates.get(name) ?? []),
+  ]);
+  if ((!assignedInBody || !assignedInElse) && boundSymbols instanceof LinkedScope) {
+    for (const macro of boundSymbols.findMacros(name) ?? []) {
+      candidates.add(macro);
+    }
+  }
+  return candidates;
+}
+
 function ifNodeReferencesVariable(
   node: NunjucksAstNode,
   variableName: ReferenceTarget,
@@ -1021,15 +1048,13 @@ function ifNodeReferencesVariable(
     return true;
   }
 
-  for (const name of bodySummary.setBindings) {
-    if (!elseSummary.setBindings.has(name)) {
+  const assignedNames = new Set([...bodySummary.setBindings, ...elseSummary.setBindings]);
+  for (const name of assignedNames) {
+    const candidates = conditionalMacroCandidates(name, bodySummary, elseSummary, boundSymbols);
+    if (candidates === undefined) {
       continue;
     }
     summary?.setBindings.add(name);
-    const candidates = new Set<DeferredMacro>([
-      ...(bodySummary.macroCandidates.get(name) ?? []),
-      ...(elseSummary.macroCandidates.get(name) ?? []),
-    ]);
     if (candidates.size > 0) {
       summary?.macroCandidates.set(name, candidates);
     }
@@ -1066,7 +1091,7 @@ function isDirectDefaultInput(node: unknown): node is NunjucksAstNode {
   );
 }
 
-function defaultFilterInputReferencesVariable(
+function undefinedSafeOperandReferencesVariable(
   node: NunjucksAstNode,
   variableName: RequiredReferenceTarget,
   boundSymbols: ReadonlySet<string>,
@@ -1079,9 +1104,9 @@ function defaultFilterInputReferencesVariable(
     // computed index or filter nested inside it still has to be analyzed.
     return (
       (isNunjucksAstNode(node.val) &&
-        defaultFilterInputReferencesVariable(node.val, variableName, boundSymbols)) ||
+        undefinedSafeOperandReferencesVariable(node.val, variableName, boundSymbols)) ||
       (isNunjucksAstNode(node.target) &&
-        defaultFilterInputReferencesVariable(node.target, variableName, boundSymbols))
+        undefinedSafeOperandReferencesVariable(node.target, variableName, boundSymbols))
     );
   }
   return astReferencesVariable(node, variableName, undefined, boundSymbols);
@@ -1099,7 +1124,7 @@ function defaultFilterReferencesVariable(
   const [input, ...fallbacks] = args.children;
   if (
     isNunjucksAstNode(input) &&
-    defaultFilterInputReferencesVariable(input, variableName, boundSymbols)
+    undefinedSafeOperandReferencesVariable(input, variableName, boundSymbols)
   ) {
     return true;
   }
@@ -1127,6 +1152,19 @@ function isExistenceGuardedConditional(
   );
 }
 
+function orNodeReferencesVariable(
+  node: NunjucksAstNode,
+  variableName: RequiredReferenceTarget,
+  boundSymbols: ReadonlySet<string>,
+): boolean {
+  return (
+    (isNunjucksAstNode(node.left) &&
+      undefinedSafeOperandReferencesVariable(node.left, variableName, boundSymbols)) ||
+    (isNunjucksAstNode(node.right) &&
+      undefinedSafeOperandReferencesVariable(node.right, variableName, boundSymbols))
+  );
+}
+
 function astReferencesVariable(
   node: NunjucksAstNode,
   variableName: ReferenceTarget,
@@ -1141,7 +1179,7 @@ function astReferencesVariable(
     typeof variableName === 'object' &&
     'excludeOrOperands' in variableName
   ) {
-    return false;
+    return orNodeReferencesVariable(node, variableName as RequiredReferenceTarget, boundSymbols);
   }
 
   if (node.typename === 'If') {
@@ -1551,6 +1589,21 @@ export type TemplateReferenceResult = {
   parsed: boolean;
 };
 
+function analyzeTemplateString(template: string, variableName: string): TemplateReferenceResult {
+  if (!template.includes(variableName)) {
+    return { referenced: false, parsed: true };
+  }
+  const parseResult = parseNunjucksTemplate(template);
+  if (!parseResult.ok) {
+    return { referenced: true, parsed: false };
+  }
+  const referenced = boundedAstReferencesVariable(parseResult.ast, variableName);
+  return {
+    referenced: referenced ?? true,
+    parsed: referenced !== undefined,
+  };
+}
+
 /**
  * Classify whether a template references `variableName` as a real Nunjucks
  * expression symbol, and surface whether parsing and scope analysis completed.
@@ -1567,28 +1620,21 @@ export function analyzeTemplateReference(
   }
 
   // Structured prompts render each string independently. Do not let a set in
-  // one JSON string hide a real reference in another string's scope.
+  // one JSON string hide a real reference in another string's scope. Each leaf
+  // is then a single template, even if its text happens to look like JSON.
   const structuredStrings = jsonTemplateStrings(template);
   if (structuredStrings) {
     let referenced = false;
     let parsed = true;
     for (const value of structuredStrings) {
-      const result = analyzeTemplateReference(value, variableName);
+      const result = analyzeTemplateString(value, variableName);
       referenced ||= result.referenced;
       parsed &&= result.parsed;
     }
     return { referenced, parsed };
   }
 
-  const parseResult = parseNunjucksTemplate(template);
-  if (!parseResult.ok) {
-    return { referenced: true, parsed: false };
-  }
-  const referenced = boundedAstReferencesVariable(parseResult.ast, variableName);
-  return {
-    referenced: referenced ?? true,
-    parsed: referenced !== undefined,
-  };
+  return analyzeTemplateString(template, variableName);
 }
 
 /**
