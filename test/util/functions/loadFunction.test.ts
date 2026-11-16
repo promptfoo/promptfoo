@@ -395,6 +395,10 @@ describe('parseFileUrl', () => {
       filePath: './path/to/file.py',
       functionName: 'function_name',
     });
+    expect(parseFileUrl('file://config.rb:backup.py:get_config')).toEqual({
+      filePath: 'config.rb:backup.py',
+      functionName: 'get_config',
+    });
   });
 
   it.each(['file://./path/to/file.PY:function_name', 'file://C:/path/to/file.Py:function_name'])(

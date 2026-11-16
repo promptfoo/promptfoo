@@ -204,6 +204,15 @@ describe('fileReference utility functions', () => {
       expect(result).toEqual(pythonOutput);
     });
 
+    it('should load a Python config filename containing a Ruby-looking segment', async () => {
+      runPython.mockResolvedValue({ preserved: true });
+
+      expect(await loadFileReference('file://config.rb:backup.py:get_config', '/configs')).toEqual({
+        preserved: true,
+      });
+      expect(runPython).toHaveBeenCalledWith('/configs/config.rb:backup.py', 'get_config', []);
+    });
+
     it.each(['file:///path/to/config?handler=loader.PY', 'file:///path/to/config#loader.PY'])(
       'should reject query-like Python file references: %s',
       async (fileRef) => {

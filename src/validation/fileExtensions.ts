@@ -83,13 +83,14 @@ export function isPythonFile(filePath: string): boolean {
  */
 export function parsePythonFileReference(
   filePath: string,
+  options: { includeRuby?: boolean } = {},
 ): { filePath: string; functionName?: string } | undefined {
   const separator = filePath.lastIndexOf(':');
   if (separator > 1) {
     const candidateFilePath = filePath.slice(0, separator);
     const functionName = filePath.slice(separator + 1);
     if (
-      parseRubyFileReference(filePath) ||
+      (options.includeRuby === false ? undefined : parseRubyFileReference(filePath)) ||
       (isJavascriptFile(candidateFilePath) &&
         functionName.length > 0 &&
         !/[\\/]/.test(functionName))
@@ -167,7 +168,7 @@ export function parseExecutableFileReference(
     return rubyReference;
   }
 
-  const pythonReference = parsePythonFileReference(filePath);
+  const pythonReference = parsePythonFileReference(filePath, options);
   if (pythonReference) {
     return pythonReference;
   }
