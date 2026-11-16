@@ -13,6 +13,7 @@ import {
   CodeScanOutputFormat,
   CodeScanOutputFormatSchema,
   type FileRecord,
+  FilesystemMcpError,
   type PullRequestContext,
   type ScanResponse,
 } from '../../types/codeScan';
@@ -27,6 +28,7 @@ import {
   stopFilesystemMcpServer,
   waitForFilesystemMcpServerReady,
 } from '../mcp/filesystem';
+import { createFilesystemSnapshot } from '../mcp/snapshot';
 import { SocketIoMcpBridge } from '../mcp/transport';
 import { resolveAuthCredentials } from '../util/auth';
 import { parseGitHubPr } from '../util/github';
@@ -118,6 +120,7 @@ const createFlushCallback = (exitCode: number) => async () => {
  */
 export async function executeScan(repoPath: string, options: ScanOptions): Promise<void> {
   let client: AgentClient | null = null;
+  let snapshot: Awaited<ReturnType<typeof createFilesystemSnapshot>> | undefined;
   let mcpProcess: ChildProcess | null = null;
   let mcpBridge: SocketIoMcpBridge | null = null;
   let sessionId: string | undefined = undefined;
@@ -151,6 +154,12 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
 
     // Load and merge configuration
     const config = mergeConfigWithOptions(loadConfigOrDefault(options.config), options);
+
+    if (!config.diffsOnly && Number.parseInt(process.versions.node, 10) < 24) {
+      throw new FilesystemMcpError(
+        'Full-repository code scans require Node.js 24 or later. Reinstall and run promptfoo with Node.js 24 or later, or use --diffs-only.',
+      );
+    }
 
     // Resolve guidance (CLI options take precedence)
     const guidance = resolveGuidance(options, config);
@@ -206,12 +215,19 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
     });
     sessionId = client.sessionId;
 
+    const compareRef = options.compare || 'HEAD';
+
     // Optionally start MCP filesystem server + bridge
     if (!config.diffsOnly) {
       logger.debug('Setting up repo MCP access...');
       logger.debug(`Using session ID: ${sessionId}`);
 
-      const startedMcpProcess = startFilesystemMcpServer(absoluteRepoPath);
+      snapshot = await createFilesystemSnapshot(
+        absoluteRepoPath,
+        compareRef,
+        abortController.signal,
+      );
+      const startedMcpProcess = startFilesystemMcpServer(snapshot.rootDir, snapshot.checkout);
       try {
         await waitForFilesystemMcpServerReady(startedMcpProcess);
         logger.debug('Filesystem MCP server ready');
@@ -225,7 +241,7 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
 
         client.socket.emit('runner:hello', {
           session_id: sessionId,
-          repo_root: absoluteRepoPath,
+          repo_root: snapshot.rootDir,
         });
 
         mcpProcess = startedMcpProcess;
@@ -247,13 +263,18 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
     // Determine base branch (use provided or auto-detect)
     const baseBranch = options.base || (await getDefaultBaseBranch(absoluteRepoPath));
 
-    // Determine compare ref (use provided or default to HEAD)
-    const compareRef = options.compare || 'HEAD';
-
     logger.debug(`Comparing: ${baseBranch}...${compareRef}`);
 
-    // Process diff with focused pipeline
-    const files = await processDiff(absoluteRepoPath, baseBranch, compareRef);
+    const fullScanMetadata = snapshot
+      ? await extractMetadata(absoluteRepoPath, baseBranch, snapshot.commit, true)
+      : undefined;
+    // Use the same immutable revisions for the snapshot, patches and hosted metadata.
+    const files = await processDiff(
+      absoluteRepoPath,
+      fullScanMetadata?.baseSha ?? baseBranch,
+      snapshot?.commit ?? compareRef,
+      !config.diffsOnly,
+    );
 
     const includedFiles = files.filter((f) => !f.skipReason && f.patch);
 
@@ -266,7 +287,9 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
       // For non-text formats (JSON, SARIF), keep the stable machine-readable
       // review string for programmatic consumption
       if (outputFormat === CodeScanOutputFormat.TEXT) {
-        const msg = await describeEmptyScan(absoluteRepoPath, files, baseBranch, compareRef);
+        const msg = snapshot
+          ? 'No eligible committed changes to scan in the selected directory.'
+          : await describeEmptyScan(absoluteRepoPath, files, baseBranch, compareRef);
         if (spinner) {
           spinner.succeed(msg);
         } else {
@@ -283,7 +306,8 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
     }
 
     // Extract git metadata
-    const metadata = await extractMetadata(absoluteRepoPath, baseBranch, compareRef);
+    const metadata =
+      fullScanMetadata ?? (await extractMetadata(absoluteRepoPath, baseBranch, compareRef));
     logger.debug(`Compare ref: ${metadata.branch}`);
     logger.debug(`Commits: ${metadata.commitMessages.length}`);
 
@@ -292,7 +316,8 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
     let pullRequest: PullRequestContext | undefined = undefined;
     if (parsedPR) {
       // Get current commit SHA
-      const currentCommit = await runGit(absoluteRepoPath, ['rev-parse', '--verify', 'HEAD']);
+      const currentCommit =
+        snapshot?.commit ?? (await runGit(absoluteRepoPath, ['rev-parse', '--verify', 'HEAD']));
 
       pullRequest = {
         owner: parsedPR.owner,
@@ -392,6 +417,12 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
       await stopFilesystemMcpServer(mcpProcess).catch(() => {
         logger.debug('MCP server cleanup completed');
       });
+    }
+
+    if (snapshot) {
+      await snapshot
+        .dispose()
+        .catch(() => logger.warn('Could not remove the private full-scan snapshot.'));
     }
 
     if (client) {

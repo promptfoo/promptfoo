@@ -9,10 +9,18 @@ export async function runGit(
   return stdout;
 }
 
-export async function readGitBlob(repoPath: string, sha: string): Promise<Buffer> {
-  const { stdout } = await runCommand('git', ['cat-file', 'blob', sha], {
-    cwd: repoPath,
-    encoding: 'buffer',
-  });
+export async function readGitBlob(
+  repoPath: string,
+  sha: string,
+  noReplaceObjects = false,
+): Promise<Buffer> {
+  const { stdout } = await runCommand(
+    'git',
+    [...(noReplaceObjects ? ['--no-replace-objects'] : []), 'cat-file', 'blob', sha],
+    {
+      cwd: repoPath,
+      encoding: 'buffer',
+    },
+  );
   return stdout;
 }

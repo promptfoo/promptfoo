@@ -17,6 +17,7 @@ import textExtensions from 'text-extensions';
 import logger from '../../logger';
 import { DiffProcessorError } from '../../types/codeScan';
 import { isInDenylist, MAX_BLOB_SIZE_BYTES, MAX_PATCH_SIZE_BYTES } from '../constants/filtering';
+import { isShareableContent, isShareablePath } from '../mcp/sharing';
 import { isTextBlob } from './blobText';
 import { readGitBlob, runGit } from './command';
 import { annotateDiffWithLineRanges } from './diffAnnotator';
@@ -74,22 +75,37 @@ async function discoverChangedFiles(
   repoPath: string,
   base: string,
   compare: string,
+  fullScan: boolean,
 ): Promise<FileRecord[]> {
+  const range = `${base}...${compare}`;
+  // Scope to this checkout directory but retain repository-relative paths for GitHub comments.
+  const scope = fullScan
+    ? ['--no-renames', '--no-relative', '--no-textconv', '--no-ext-diff', range, '--', '.']
+    : [range];
   // Run git diff --raw and --numstat in parallel
   const [raw, numstat] = await Promise.all([
     runGit(repoPath, [
+      ...(fullScan ? ['--no-replace-objects'] : []),
       'diff',
       '--raw',
       '-z',
       '--no-color',
       '--no-ext-diff',
       '--no-abbrev',
-      `${base}...${compare}`,
+      ...scope,
     ]),
-    runGit(repoPath, ['diff', '--numstat', '-z', `${base}...${compare}`]),
+    runGit(repoPath, [
+      ...(fullScan ? ['--no-replace-objects'] : []),
+      'diff',
+      '--numstat',
+      '-z',
+      ...scope,
+    ]),
   ]);
 
-  const rawFiles = parseRawDiff(raw);
+  const rawFiles = parseRawDiff(raw, fullScan).filter(
+    (file) => !fullScan || isShareablePath(file.path),
+  );
   const numstatMap = parseNumstat(numstat);
 
   // Merge the data
@@ -118,6 +134,7 @@ function filterDenylist(files: FileRecord[]): FileRecord[] {
 async function collectBlobSizes(
   repoPath: string,
   files: FileRecord[],
+  fullScan: boolean,
 ): Promise<Map<string, number>> {
   const shas = new Set<string>();
 
@@ -142,7 +159,11 @@ async function collectBlobSizes(
   const shaList = Array.from(shas).join('\n');
   const output = await runGit(
     repoPath,
-    ['cat-file', '--batch-check=%(objectname) %(objecttype) %(objectsize)'],
+    [
+      ...(fullScan ? ['--no-replace-objects'] : []),
+      'cat-file',
+      '--batch-check=%(objectname) %(objecttype) %(objectsize)',
+    ],
     {
       input: shaList,
     },
@@ -222,7 +243,11 @@ function getExtensionType(filePath: string): 'text' | 'binary' | 'unknown' {
  * Determine text/binary status for a single file
  * Uses 2-tier approach: extension lists first, then blob content analysis for unknown extensions
  */
-async function determineTextStatusForFile(repoPath: string, file: FileRecord): Promise<FileRecord> {
+async function determineTextStatusForFile(
+  repoPath: string,
+  file: FileRecord,
+  fullScan: boolean,
+): Promise<FileRecord> {
   if (file.skipReason) {
     return file;
   }
@@ -232,8 +257,15 @@ async function determineTextStatusForFile(repoPath: string, file: FileRecord): P
 
   let textStatus = extensionType === 'text';
 
-  // Step 2: For unknown extensions, analyze blob content
-  if (extensionType === 'unknown') {
+  // A full scan inspects both complete physical blobs, including content outside the patch.
+  if (fullScan && extensionType !== 'binary') {
+    for (const sha of [file.shaA, file.shaB]) {
+      if (sha && !isShareableContent((await readGitBlob(repoPath, sha, true)).toString('utf8'))) {
+        return { ...file, skipReason: 'excluded from full scan' };
+      }
+    }
+    textStatus = true;
+  } else if (extensionType === 'unknown') {
     const checkSha = file.shaB || file.shaA;
     textStatus = checkSha ? await isBlobText(repoPath, checkSha) : false;
   }
@@ -245,9 +277,13 @@ async function determineTextStatusForFile(repoPath: string, file: FileRecord): P
   };
 }
 
-async function determineTextStatus(repoPath: string, files: FileRecord[]): Promise<FileRecord[]> {
+async function determineTextStatus(
+  repoPath: string,
+  files: FileRecord[],
+  fullScan: boolean,
+): Promise<FileRecord[]> {
   return async.mapLimit(files, TEXT_DETECTION_CONCURRENCY, async (file: FileRecord) =>
-    determineTextStatusForFile(repoPath, file),
+    determineTextStatusForFile(repoPath, file, fullScan),
   );
 }
 
@@ -256,25 +292,62 @@ async function generatePatchForFile(
   base: string,
   compare: string,
   file: FileRecord,
+  fullScan: boolean,
 ): Promise<FileRecord> {
   const filePath = file.path;
   try {
-    const patch = await runGit(
+    // Git's literal file pathspec also matches descendants when a file turns into a
+    // directory. The trailing-slash exclusion keeps just this checked file.
+    const paths = fullScan
+      ? [`:(top,literal)${filePath}`, `:(top,literal,exclude)${filePath}/`]
+      : [filePath];
+    let patch = await runGit(
       repoPath,
       [
+        ...(fullScan ? ['--no-replace-objects'] : []),
         'diff',
         '--patch',
         '--unified=3',
         '--no-color',
         '--no-ext-diff',
+        ...(fullScan
+          ? [
+              '--no-textconv',
+              '--no-renames',
+              '--no-relative',
+              '--src-prefix=a/',
+              '--dst-prefix=b/',
+              '--raw',
+              '--no-abbrev',
+              '-z',
+            ]
+          : []),
         `${base}...${compare}`,
         '--',
-        filePath,
+        ...paths,
       ],
       {
         maxBuffer: MAX_PATCH_SIZE_BYTES,
       },
     );
+
+    if (fullScan) {
+      // A Git pathspec may still select additional paths (e.g. via GIT_ICASE_PATHSPECS).
+      // Accept exactly the one raw record whose path and blob IDs were inspected.
+      const separator = patch.indexOf('\0\0');
+      const entries = separator < 0 ? [] : parseRawDiff(patch.slice(0, separator));
+      const entry = entries[0];
+      if (
+        entries.length !== 1 ||
+        entry.path !== filePath ||
+        entry.shaA !== file.shaA ||
+        entry.shaB !== file.shaB ||
+        entry.status !== file.status
+      ) {
+        return { ...file, skipReason: 'excluded from full scan' };
+      }
+      patch = patch.slice(separator + 2);
+    }
 
     // Double check patch size
     const patchSize = Buffer.byteLength(patch, 'utf8');
@@ -287,6 +360,10 @@ async function generatePatchForFile(
 
     return { ...file, patch: annotatedDiff, lineRanges };
   } catch (err) {
+    if (fullScan) {
+      // Git errors can contain checkout paths or blob content.
+      return { ...file, skipReason: 'diff error' };
+    }
     const errorMessage = err instanceof Error ? err.message : String(err);
 
     // Check if error is due to maxBuffer exceeded
@@ -308,13 +385,14 @@ async function generatePatches(
   base: string,
   compare: string,
   files: FileRecord[],
+  fullScan: boolean,
 ): Promise<FileRecord[]> {
   return async.mapLimit(files, PATCH_CONCURRENCY, async (file: FileRecord) => {
     if (file.skipReason) {
       return file;
     }
 
-    return await generatePatchForFile(repoPath, base, compare, file);
+    return await generatePatchForFile(repoPath, base, compare, file, fullScan);
   });
 }
 
@@ -322,10 +400,27 @@ export async function processDiff(
   repoPath: string,
   base: string,
   compare: string = 'HEAD',
+  fullScan = false,
 ): Promise<FileRecord[]> {
   try {
+    if (fullScan) {
+      // Pin the two revisions across discovery, blob inspection and patch generation.
+      [base, compare] = await Promise.all(
+        [base, compare].map(async (ref) =>
+          (
+            await runGit(repoPath, [
+              '--no-replace-objects',
+              'rev-parse',
+              '--verify',
+              '--end-of-options',
+              `${ref}^{commit}`,
+            ])
+          ).trim(),
+        ),
+      );
+    }
     // Step 1: Discover changed files
-    let files = await discoverChangedFiles(repoPath, base, compare);
+    let files = await discoverChangedFiles(repoPath, base, compare, fullScan);
 
     if (files.length === 0) {
       return files;
@@ -336,29 +431,33 @@ export async function processDiff(
 
     // Check for remaining files
     if (!files.some((file) => !file.skipReason)) {
-      return files;
+      return fullScan ? [] : files;
     }
 
     // Step 3: Collect blob sizes and filter large files
-    const sizeMap = await collectBlobSizes(repoPath, files);
+    const sizeMap = await collectBlobSizes(repoPath, files, fullScan);
     files = attachBlobSizesAndFilter(files, sizeMap);
 
     // Check for remaining files
     if (!files.some((file) => !file.skipReason)) {
-      return files;
+      return fullScan ? [] : files;
     }
 
     // Step 4: Determine text/binary status
-    files = await determineTextStatus(repoPath, files);
+    files = await determineTextStatus(repoPath, files, fullScan);
 
     // Check for remaining files
     if (!files.some((file) => !file.skipReason)) {
-      return files;
+      return fullScan ? [] : files;
     }
 
     // Step 5: Generate per-file patches
-    return await generatePatches(repoPath, base, compare, files);
+    const patches = await generatePatches(repoPath, base, compare, files, fullScan);
+    return fullScan ? patches.filter((file) => !file.skipReason && file.patch) : patches;
   } catch (error) {
+    if (fullScan) {
+      throw new DiffProcessorError('Failed to process the full-scan diff');
+    }
     if (error instanceof DiffProcessorError) {
       throw error;
     }
