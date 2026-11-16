@@ -3,9 +3,8 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 
 import { FilesystemMcpError } from '../../types/codeScan';
-import { runCommand } from '../../util/runCommand';
 import { MAX_BLOB_SIZE_BYTES } from '../constants/filtering';
-import { runGit } from '../git/command';
+import { readGitBlobBatch, runGit } from '../git/command';
 import { isShareableContent, isShareablePath } from './sharing';
 
 // Count paths as well as bytes: a Git tree may reuse one small object many times.
@@ -19,13 +18,7 @@ interface SnapshotFile {
 }
 
 async function writeBlobs(repository: string, rootDir: string, files: SnapshotFile[]) {
-  const { stdout } = await runCommand('git', ['--no-replace-objects', 'cat-file', '--batch'], {
-    cwd: repository,
-    input: files.map(({ oid }) => oid).join('\n') + '\n',
-    encoding: 'buffer',
-    stripFinalNewline: false,
-    maxBuffer: files.reduce((bytes, file) => bytes + file.size + 128, 0),
-  });
+  const stdout = await readGitBlobBatch(repository, files);
   let offset = 0;
   for (const { oid, size, name } of files) {
     const end = stdout.indexOf(10, offset);
@@ -54,18 +47,18 @@ export async function createFilesystemSnapshot(
 ) {
   let rootDir: string | undefined;
   try {
-    const [commit, prefix, temp, checkout] = await Promise.all([
-      runGit(repository, [
-        '--no-replace-objects',
-        'rev-parse',
-        '--verify',
-        '--end-of-options',
-        `${compareRef}^{commit}`,
-      ]),
-      runGit(repository, ['rev-parse', '--show-prefix']),
-      realpath(tmpdir()),
-      runGit(repository, ['rev-parse', '--show-toplevel']).then((dir) => realpath(dir)),
+    // On Windows a running Git child keeps its working directory locked.
+    // Finish each preflight command before starting the next so errors leave no children behind.
+    const commit = await runGit(repository, [
+      '--no-replace-objects',
+      'rev-parse',
+      '--verify',
+      '--end-of-options',
+      `${compareRef}^{commit}`,
     ]);
+    const prefix = await runGit(repository, ['rev-parse', '--show-prefix']);
+    const checkout = await realpath(await runGit(repository, ['rev-parse', '--show-toplevel']));
+    const temp = await realpath(tmpdir());
     const relativeTemp = path.relative(checkout, temp);
     if (
       !path.isAbsolute(relativeTemp) &&
