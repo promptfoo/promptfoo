@@ -745,6 +745,92 @@ describe('MCPClient', () => {
       await mcpClient.cleanup();
     });
 
+    it.each([
+      {
+        caseName: 'PIN-SPEC vector 1: ordinary input schema',
+        tool: {
+          name: 'echo',
+          description: 'Echo a message.',
+          inputSchema: {
+            type: 'object',
+            properties: { msg: { type: 'string' } },
+            required: ['msg'],
+          },
+        },
+        expectedHash: 'cf54e2b84cf6ee8e50a7749d9a423f41800b7219c097c8c84dacf40208d60f6c',
+      },
+      {
+        caseName: 'PIN-SPEC vector 2: integer-like property keys sorted lexically',
+        tool: {
+          name: 'lookup',
+          description: '',
+          inputSchema: {
+            type: 'object',
+            properties: { '10': { type: 'string' }, '2': { type: 'integer' } },
+          },
+        },
+        expectedHash: '79552f1dac6cae1d9a3c2bc22c5c3cebfc9d06370a4afaa56d0a37bcdb6cfe3a',
+      },
+    ])('matches RugSnare surfaceHash $caseName', async ({ tool, expectedHash }) => {
+      mockClient.listTools.mockResolvedValueOnce({ tools: [tool] });
+      mcpClient = new MCPClient({
+        enabled: true,
+        server: { ...createNamedNpmServerConfig(), toolContractHash: expectedHash },
+      });
+      await expect(mcpClient.initialize()).resolves.toBeUndefined();
+      await mcpClient.cleanup();
+    });
+
+    it('sorts tool names by UTF-8 bytes, not JavaScript UTF-16 code units', async () => {
+      // UTF-8: U+E000 (EE 80 80) sorts before U+1F47D (F0 9F 91 BD).
+      const canonical =
+        '[{"description":"x","inputSchema":{},"name":"\uE000"},{"description":"x","inputSchema":{},"name":"👽"}]';
+      const expectedHash = createHash('sha256').update(canonical).digest('hex');
+      mockClient.listTools.mockResolvedValueOnce({
+        tools: [
+          { name: '👽', description: 'x', inputSchema: {} },
+          { name: '\uE000', description: 'x', inputSchema: {} },
+        ],
+      });
+      mcpClient = new MCPClient({
+        enabled: true,
+        server: { ...createNamedNpmServerConfig(), toolContractHash: expectedHash },
+      });
+      await expect(mcpClient.initialize()).resolves.toBeUndefined();
+      await mcpClient.cleanup();
+    });
+
+    it('rejects non-scalar Unicode when hashing a pinned tool', async () => {
+      mockClient.listTools.mockResolvedValueOnce({
+        tools: [{ name: 'invalid', description: '\uD800', inputSchema: {} }],
+      });
+      mcpClient = new MCPClient({
+        enabled: true,
+        server: { ...createNamedNpmServerConfig(), toolContractHash: '0'.repeat(64) },
+      });
+      await expect(mcpClient.initialize()).rejects.toThrow(/invalid Unicode/);
+      expect(mcpClient.getAllTools()).toEqual([]);
+      expect(mockClient.close).toHaveBeenCalledTimes(1);
+    });
+
+    it('pins tool-list order by name, not by description', async () => {
+      const canonical =
+        '[{"description":"Z","inputSchema":{},"name":"alpha"},{"description":"A","inputSchema":{},"name":"zulu"}]';
+      const expectedHash = createHash('sha256').update(canonical).digest('hex');
+      mockClient.listTools.mockResolvedValueOnce({
+        tools: [
+          { name: 'zulu', description: 'A', inputSchema: {} },
+          { name: 'alpha', description: 'Z', inputSchema: {} },
+        ],
+      });
+      mcpClient = new MCPClient({
+        enabled: true,
+        server: { ...createNamedNpmServerConfig(), toolContractHash: expectedHash },
+      });
+      await expect(mcpClient.initialize()).resolves.toBeUndefined();
+      await mcpClient.cleanup();
+    });
+
     it('canonicalizes schema object keys and tool listing order for contract pins', async () => {
       const contract = [
         {

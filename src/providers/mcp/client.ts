@@ -36,32 +36,52 @@ import type {
 
 const oauthRequestSignal = new AsyncLocalStorage<AbortSignal>();
 
-/** Stable across tool listing order and object-key insertion order. */
-function canonicalizeToolContract(value: unknown): unknown {
+/** RugSnare PIN-SPEC §3 canonical JSON: emit sorted keys directly (integer-like keys
+ * get reordered if an intermediate JS object is serialized with JSON.stringify). */
+function canonicalizeToolContract(value: unknown): string {
+  if (typeof value === 'string') {
+    if (/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/u.test(value)) {
+      throw new Error('MCP tool contract contains invalid Unicode');
+    }
+    return JSON.stringify(value);
+  }
   if (Array.isArray(value)) {
-    return value.map(canonicalizeToolContract);
+    return `[${value.map(canonicalizeToolContract).join(',')}]`;
   }
   if (value !== null && typeof value === 'object') {
-    return Object.fromEntries(
-      Object.entries(value)
-        .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
-        .map(([key, entry]) => [key, canonicalizeToolContract(entry)]),
-    );
+    const object = value as Record<string, unknown>;
+    return `{${Object.keys(object)
+      .sort()
+      .map((key) => `${canonicalizeToolContract(key)}:${canonicalizeToolContract(object[key])}`)
+      .join(',')}}`;
   }
-  return value;
+  if (typeof value === 'number' && !Number.isFinite(value)) {
+    throw new Error('MCP tool contract contains a non-finite number');
+  }
+  const serialized = JSON.stringify(value);
+  if (serialized === undefined) {
+    throw new Error('MCP tool contract contains a non-JSON value');
+  }
+  return serialized;
 }
 
+/** RugSnare PIN-SPEC §3.2 surfaceHash: names sorted by UTF-8 bytes, ties by the
+ * full canonical contract, independent of the tools/list response order. */
 function hashToolContracts(tools: MCPTool[]): string {
-  const contracts = tools
-    .map(({ name, description, inputSchema }) =>
-      canonicalizeToolContract({ name, description, inputSchema }),
+  const canonical = tools
+    .map(({ name, description, inputSchema }) => ({
+      name,
+      json: canonicalizeToolContract({ name, description, inputSchema }),
+    }))
+    .sort(
+      (left, right) =>
+        Buffer.compare(Buffer.from(left.name), Buffer.from(right.name)) ||
+        Buffer.compare(Buffer.from(left.json), Buffer.from(right.json)),
     )
-    .sort((left, right) => {
-      const a = JSON.stringify(left);
-      const b = JSON.stringify(right);
-      return a < b ? -1 : a > b ? 1 : 0;
-    });
-  return createHash('sha256').update(JSON.stringify(contracts)).digest('hex');
+    .map(({ json }) => json);
+  return createHash('sha256')
+    .update(`[${canonical.join(',')}]`)
+    .digest('hex');
 }
 
 function verifyToolContract(
@@ -70,6 +90,9 @@ function verifyToolContract(
   tools: MCPTool[],
   verbose: boolean,
 ): void {
+  if (!server.toolContractHash && !verbose) {
+    return;
+  }
   const observedHash = hashToolContracts(tools);
   if (server.toolContractHash && server.toolContractHash !== observedHash) {
     throw new Error(

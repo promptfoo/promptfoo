@@ -127,9 +127,10 @@ to any included tool's name, description, or input schema fails the connection
 with the expected and actual hashes, before tool calls are possible. Review the
 change and deliberately update the pin only when appropriate.
 
-The hash uses SHA-256 of a JSON array of the selected tools (`name`,
-`description`, `inputSchema`), with tools sorted by their canonical JSON and
-object keys sorted recursively. `tools` and `exclude_tools` filters apply **before**
+The hash is compatible with RugSnare's [PIN-SPEC `surfaceHash`](https://github.com/Paraphern/rugsnare/blob/main/docs/PIN-SPEC.md#32-surfacehash-interop-additive-direction-accepted-2026-10-21):
+SHA-256 of a compact JSON array of the selected tools (`description`,
+`inputSchema`, `name`), sorted by tool name (UTF-8 byte order), with object keys
+sorted recursively and JSON array order preserved. `tools` and `exclude_tools` filters apply **before**
 hashing, so changes to excluded tools do not invalidate your eval. A pin belongs
 to one server, not to a combined multi-server list. Unpinned connections retain
 the previous behavior; hosted MCP tools handled directly by a model provider
