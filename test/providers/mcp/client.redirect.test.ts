@@ -81,6 +81,59 @@ afterEach(async () => {
 });
 
 describe('MCP client HTTP redirects', () => {
+  it('does not persist the signed URL when a real HTTP server drifts', async () => {
+    const secret = 'do-not-persist-signed-mcp-url';
+    const mcpServer = new McpServer({ name: 'contract-test', version: '1.0.0' });
+    mcpServers.push(mcpServer);
+    mcpServer.registerTool(
+      'echo',
+      { inputSchema: { message: z.string() } },
+      async ({ message }) => ({
+        content: [{ type: 'text', text: message }],
+      }),
+    );
+    const transport = new StreamableHTTPServerTransport({
+      sessionIdGenerator: () => 'contract-drift-session',
+      enableJsonResponse: true,
+    });
+    await mcpServer.connect(transport);
+    const origin = await startServer(async (record, request, response) => {
+      if (record.method === 'GET') {
+        response.writeHead(405).end();
+      } else {
+        await transport.handleRequest(
+          request,
+          response,
+          record.body ? JSON.parse(record.body) : undefined,
+        );
+      }
+    });
+    const client = new MCPClient({
+      enabled: true,
+      server: {
+        url: `${origin.url}/mcp?token=${secret}`,
+        expectedTools: [{ name: 'echo', description: 'unapproved', inputSchema: {} }],
+      },
+    });
+    clients.push(client);
+
+    let errorText = '';
+    try {
+      await client.initialize();
+    } catch (error) {
+      errorText = String(error);
+    }
+    expect(errorText).toMatch(/MCP server #1 tool contract drift.*echo/);
+    expect(errorText).not.toContain(secret);
+    expect(errorText).not.toContain(origin.url);
+    expect(client.hasInitialized).toBe(false);
+    const methods = origin.requests
+      .filter((req) => req.body)
+      .map((req) => JSON.parse(req.body).method);
+    expect(methods).toContain('tools/list');
+    expect(methods).not.toContain('tools/call');
+  });
+
   it.each([307, 308])(
     'does not send credentials or bodies to another origin after a %i',
     async (status) => {
