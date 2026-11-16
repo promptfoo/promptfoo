@@ -430,28 +430,41 @@ describe('MCPClient', () => {
     });
 
     it('exposes colliding tool names uniquely and sends each call to its original MCP name', async () => {
-      mockClient.listTools
-        .mockResolvedValueOnce({
+      // Separate SDK instances: checking only the physical name would pass even if
+      // both model-facing aliases were incorrectly routed to the first server.
+      const firstClient = {
+        ...mockClient,
+        listTools: vi.fn().mockResolvedValue({
           tools: [{ name: 'echo', description: 'A echo', inputSchema: {} }],
-        })
-        .mockResolvedValueOnce({
+        }),
+        callTool: vi.fn().mockResolvedValue({ content: [{ type: 'text', text: 'A' }] }),
+      };
+      const secondClient = {
+        ...mockClient,
+        listTools: vi.fn().mockResolvedValue({
           tools: [{ name: 'echo', description: 'B echo', inputSchema: {} }],
-        });
-      mockClient.callTool.mockResolvedValue({ content: [{ type: 'text', text: 'received' }] });
+        }),
+        callTool: vi.fn().mockResolvedValue({ content: [{ type: 'text', text: 'B' }] }),
+      };
+      mcpMocks.MockClient.mockImplementationOnce(function FirstServerClient() {
+        return firstClient;
+      }).mockImplementationOnce(function SecondServerClient() {
+        return secondClient;
+      });
       mcpClient = new MCPClient(createMultipleServerOptions());
 
       await mcpClient.initialize();
       expect(mcpClient.getAllTools().map((tool) => tool.name)).toEqual(['echo', 'mcp_2_echo']);
-      await mcpClient.callTool('echo', { source: 1 });
-      await mcpClient.callTool('mcp_2_echo', { source: 2 });
-      expect(mockClient.callTool).toHaveBeenNthCalledWith(
-        1,
+      const a = await mcpClient.callTool('echo', { source: 1 });
+      const b = await mcpClient.callTool('mcp_2_echo', { source: 2 });
+      expect(a.content).toContain('A');
+      expect(b.content).toContain('B');
+      expect(firstClient.callTool).toHaveBeenCalledExactlyOnceWith(
         { name: 'echo', arguments: { source: 1 } },
         undefined,
         undefined,
       );
-      expect(mockClient.callTool).toHaveBeenNthCalledWith(
-        2,
+      expect(secondClient.callTool).toHaveBeenCalledExactlyOnceWith(
         { name: 'echo', arguments: { source: 2 } },
         undefined,
         undefined,
