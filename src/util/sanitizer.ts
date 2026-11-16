@@ -1766,6 +1766,21 @@ function normalizeLikeUrlParser(value: string): string {
 }
 
 /**
+ * Redact credential-looking path segments with the full parsed URL as context.
+ * Passing only `url.pathname` would let a path such as `//token/...` be re-read
+ * as a protocol-relative URL. Userinfo, query and fragment are dropped first
+ * since the judge display never shows them.
+ */
+function sanitizeParsedUrlPath(url: URL): string {
+  const pathOnly = new URL(url.href);
+  pathOnly.username = '';
+  pathOnly.password = '';
+  pathOnly.search = '';
+  pathOnly.hash = '';
+  return new URL(sanitizeUrlForLogging(pathOnly.href)).pathname;
+}
+
+/**
  * Text without a URL we can split. Anything still carrying an `http:`/`https:`
  * marker did not normalize into such a URL, so fail closed instead of echoing it.
  */
@@ -1831,7 +1846,7 @@ function sanitizeJudgePart(rawPart: string): string {
     const path =
       authority && url.pathname === '/' && !endpoint.endsWith('/')
         ? ''
-        : sanitizeUrlForLogging(url.pathname);
+        : sanitizeParsedUrlPath(url);
     return prefix + authority + path + (wrapped ? ')' : '');
   } catch {
     return REDACTED;

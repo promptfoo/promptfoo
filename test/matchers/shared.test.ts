@@ -297,6 +297,19 @@ describe('attachGradingProvider', () => {
     expect(result.metadata.gradingProvider).not.toContain('super-secret');
   });
 
+  it.each([
+    ['https://gateway.example//token/abcdef1234567890/grade', 'https://gateway.example//token/'],
+    ['https://gateway.example//v1/token_privateTenantCredential123/responses', '//v1/'],
+    ['/relative//token/abcdef1234567890/grade', '/relative//token/'],
+  ])('redacts path credentials behind a double slash in %s', (id, expectedPrefix) => {
+    const provider = { id: () => id, callApi: async () => ({ output: '' }) } as ApiProvider;
+
+    const result = attachGradingProvider({ pass: true, score: 1, reason: 'ok' }, provider);
+
+    expect(result.metadata.gradingProvider).toContain(expectedPrefix);
+    expect(result.metadata.gradingProvider).not.toMatch(/abcdef1234567890|privateTenantCredential/);
+  });
+
   it('leaves plain provider ids and labels alone', () => {
     const provider = {
       id: () => 'openai:gpt-4.1-mini',
