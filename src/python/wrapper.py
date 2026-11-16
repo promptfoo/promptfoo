@@ -44,14 +44,11 @@ def call_method(script_path, method_name, *args):
     print(f"Importing module {module_name} from {script_dir} ...")
 
     extension = os.path.splitext(script_path)[1]
-    if extension.lower() != ".py":
-        raise ImportError(f"Cannot load non-Python source file {script_path}")
-    loader_class = (
-        importlib.machinery.SourceFileLoader
-        if extension == ".py"
-        else UncachedSourceFileLoader
+    loader = (
+        UncachedSourceFileLoader(module_name, script_path)
+        if extension.lower() == ".py" and extension != ".py"
+        else None
     )
-    loader = loader_class(module_name, script_path)
     spec = importlib.util.spec_from_file_location(
         module_name, script_path, loader=loader
     )

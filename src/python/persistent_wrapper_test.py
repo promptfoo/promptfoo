@@ -2,6 +2,7 @@ import asyncio
 import io
 import json
 import os
+import py_compile
 import sys
 import tempfile
 import unittest
@@ -98,6 +99,18 @@ class TestLoadUserModule(unittest.TestCase):
 
             module = persistent_wrapper.load_user_module(script_path)
             self.assertEqual(module.test_func(4), 12)
+
+    def test_loads_compiled_python_provider(self) -> None:
+        """Compiled providers retain importlib's SourcelessFileLoader path."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            source_path = os.path.join(temp_dir, "provider.py")
+            compiled_path = os.path.join(temp_dir, "provider.pyc")
+            with open(source_path, "w", encoding="utf-8") as f:
+                f.write("def test_func(x):\n    return x * 4\n")
+            py_compile.compile(source_path, cfile=compiled_path, doraise=True)
+
+            module = persistent_wrapper.load_user_module(compiled_path)
+            self.assertEqual(module.test_func(3), 12)
 
     def test_normalizes_mixed_case_reference(self) -> None:
         """A mixed-case reference can resolve an existing lowercase source file."""

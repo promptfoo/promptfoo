@@ -130,14 +130,11 @@ def load_user_module(script_path):
         sys.path.insert(0, script_dir)
 
     extension = os.path.splitext(script_path)[1]
-    if extension.lower() != ".py":
-        raise ImportError(f"Cannot load non-Python source file {script_path}")
-    loader_class = (
-        importlib.machinery.SourceFileLoader
-        if extension == ".py"
-        else UncachedSourceFileLoader
+    loader = (
+        UncachedSourceFileLoader(module_name, script_path)
+        if extension.lower() == ".py" and extension != ".py"
+        else None
     )
-    loader = loader_class(module_name, script_path)
     spec = importlib.util.spec_from_file_location(
         module_name, script_path, loader=loader
     )

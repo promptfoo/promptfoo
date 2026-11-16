@@ -138,11 +138,15 @@ export function parseRubyFileReference(
  * in a source extension (`module.exports['check:detail']`, `exports['score.js']`).
  * A drive prefix or a colon followed by a path segment is not a separator.
  */
-export function parseExecutableFileReference(filePath: string): {
+export function parseExecutableFileReference(
+  filePath: string,
+  options: { includeRuby?: boolean } = {},
+): {
   filePath: string;
   functionName?: string;
 } {
-  const rubyReference = parseRubyFileReference(filePath);
+  const rubyReference =
+    options.includeRuby === false ? undefined : parseRubyFileReference(filePath);
   if (rubyReference) {
     return rubyReference;
   }

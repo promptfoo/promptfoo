@@ -119,7 +119,7 @@ export function parseFileUrl(fileUrl: string): { filePath: string; functionName?
   }
 
   const urlWithoutProtocol = fileUrl.slice('file://'.length);
-  const parsedReference = parseExecutableFileReference(urlWithoutProtocol);
+  const parsedReference = parseExecutableFileReference(urlWithoutProtocol, { includeRuby: false });
   return {
     ...parsedReference,
     filePath: normalizeWindowsFileUrlPath(parsedReference.filePath, process.platform),

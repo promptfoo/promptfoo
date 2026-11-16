@@ -440,6 +440,9 @@ describe('parseFileUrl', () => {
     expect(parseFileUrl('file://fixtures.rb:old/readme.txt')).toEqual({
       filePath: 'fixtures.rb:old/readme.txt',
     });
+    expect(parseFileUrl('file://config.rb:backup.json')).toEqual({
+      filePath: 'config.rb:backup.json',
+    });
   });
 
   it('should preserve a JavaScript selector whose export ends in .py', () => {

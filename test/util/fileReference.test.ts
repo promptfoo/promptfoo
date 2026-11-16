@@ -117,6 +117,15 @@ describe('fileReference utility functions', () => {
       expect(result).toEqual(parsedContent);
     });
 
+    it('should load a JSON filename containing a Ruby-looking segment', async () => {
+      readFileMock.mockResolvedValue('{"preserved":true}');
+
+      expect(await loadFileReference('file:///path/to/config.rb:backup.json')).toEqual({
+        preserved: true,
+      });
+      expect(fs.promises.readFile).toHaveBeenCalledWith('/path/to/config.rb:backup.json', 'utf8');
+    });
+
     it('should load YAML files correctly', async () => {
       const fileRef = 'file:///path/to/config.yaml';
       const fileContent = 'name: test\nvalue: 42';

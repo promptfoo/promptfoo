@@ -1,4 +1,5 @@
 import os
+import py_compile
 import sys
 import tempfile
 import unittest
@@ -124,6 +125,19 @@ async def test_async_function(arg1, arg2):
 
             self.assertEqual(
                 wrapper.call_method(mixed_case_path, "grade"), "mixed-case"
+            )
+
+    def test_call_method_loads_compiled_python_provider(self) -> None:
+        """Compiled providers retain importlib's SourcelessFileLoader path."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            source_path = os.path.join(temp_dir, "provider.py")
+            compiled_path = os.path.join(temp_dir, "provider.pyc")
+            with open(source_path, "w", encoding="utf-8") as script:
+                script.write("def grade():\n    return 'compiled'\n")
+            py_compile.compile(source_path, cfile=compiled_path, doraise=True)
+
+            self.assertEqual(
+                wrapper.call_method(compiled_path, "grade"), "compiled"
             )
 
     def test_call_method_preserves_distinct_mixed_case_file(self) -> None:
