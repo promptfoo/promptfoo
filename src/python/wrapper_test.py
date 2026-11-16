@@ -136,9 +136,7 @@ async def test_async_function(arg1, arg2):
                 script.write("def grade():\n    return 'compiled'\n")
             py_compile.compile(source_path, cfile=compiled_path, doraise=True)
 
-            self.assertEqual(
-                wrapper.call_method(compiled_path, "grade"), "compiled"
-            )
+            self.assertEqual(wrapper.call_method(compiled_path, "grade"), "compiled")
 
     def test_call_method_preserves_distinct_mixed_case_file(self) -> None:
         """Do not substitute or reuse bytecode from a distinct lowercase file."""
