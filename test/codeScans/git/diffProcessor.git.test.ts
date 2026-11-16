@@ -129,6 +129,9 @@ describe('processDiff with real git blobs', () => {
     'rejects option-like base ref %s without treating it as a git diff flag',
     async (ref) => {
       await expect(processDiff(repoPath, ref, headSha)).rejects.toThrow(DiffProcessorError);
+      // Without `--end-of-options`, `--output=<path>` makes `git diff` write its output to
+      // `<path>` and Git appends the rest of the `${base}...${compare}` range to that value,
+      // so the file it would have created is named `unexpected-diff-output...<headSha>`.
       expect(existsSync(path.join(repoPath, `unexpected-diff-output...${headSha}`))).toBe(false);
     },
   );
