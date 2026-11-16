@@ -100,7 +100,9 @@ example definition is illustrative: **copy your server's exact live definition**
 additional schema fields, rather than guessing it. An added, removed, or changed approved tool
 makes the evaluation fail before any tool runs. The error identifies the affected tool and
 whether its description or input schema changed. Review the change before updating the approved
-definitions. The check is disabled when `expectedTools` is omitted.
+definitions. If a server returns a tool-list page cursor that the client cannot follow, the
+pin check rejects the incomplete list rather than approving it. The check is disabled when
+`expectedTools` is omitted.
 
 #### Example: Connecting to a Remote MCP Server
 
