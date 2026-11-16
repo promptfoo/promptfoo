@@ -102,7 +102,8 @@ makes the evaluation fail before any tool runs, or stops a later call if the ser
 whether its description or input schema changed. Review the change before updating the approved
 definitions. If a server returns a tool-list page cursor that the client cannot follow, the
 pin check rejects the incomplete list rather than approving it. The check is disabled when
-`expectedTools` is omitted.
+`expectedTools` is omitted. When multiple servers are configured and any has a pin,
+visible tool names must be unique across servers; ambiguous duplicate names fail on connection.
 
 #### Example: Connecting to a Remote MCP Server
 
