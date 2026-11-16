@@ -62,7 +62,10 @@ function publishMcpToolNames(toolsByServer: ReadonlyMap<string, MCPTool[]>): Pub
     for (const tool of sortedTools) {
       // Preserve the first server's unqualified tool for existing callers.
       // Later servers with the same tool name receive a unique public alias.
-      if (!usedNames.has(tool.name)) {
+      // MCP permits dotted names and names up to 128 characters, but OpenAI
+      // function calls require [A-Za-z0-9_-] and at most 64 characters.
+      // Preserve valid unique names; give incompatible names a routable alias.
+      if (/^[A-Za-z0-9_-]{1,64}$/.test(tool.name) && !usedNames.has(tool.name)) {
         usedNames.add(tool.name);
         serverRoutes.set(tool.name, { serverKey, physicalName: tool.name, tool });
         continue;
@@ -522,7 +525,17 @@ export class MCPClient {
     const timeoutOptions = getEffectiveRequestOptions(this.config);
     const requestOptions = signal ? { ...timeoutOptions, signal } : timeoutOptions;
     // Resolve the model-visible name to exactly one physical MCP server/tool.
-    const route = publishMcpToolNames(this.tools).find(({ tool }) => tool.name === name);
+    const published = publishMcpToolNames(this.tools);
+    let route = published.find(({ tool }) => tool.name === name);
+    if (!route) {
+      // Direct MCP provider callers can still use spec-valid physical names
+      // such as admin.tools.list. Only model-facing names need normalization.
+      const physicalMatches = published.filter(({ physicalName }) => physicalName === name);
+      if (physicalMatches.length > 1) {
+        throw new Error(`Tool ${name} is ambiguous across MCP servers; use a published alias`);
+      }
+      route = physicalMatches[0];
+    }
     if (!route) {
       throw new Error(`Tool ${name} not found in any connected MCP server`);
     }

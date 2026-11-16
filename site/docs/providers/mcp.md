@@ -110,6 +110,9 @@ You can connect to multiple MCP servers simultaneously. Duplicate tool names are
 qualified by server position (for example, `echo` from the first server and
 `mcp_2_echo` from the second). Prompts should use the published alias for tools
 on later servers; Promptfoo sends the original name to the chosen MCP server.
+MCP names that cannot be sent as model function names (such as `admin.tools.list`
+or names longer than 64 characters) also receive aliases. Direct calls to a
+uniquely named tool can still use its original MCP name.
 
 ```yaml
 providers:

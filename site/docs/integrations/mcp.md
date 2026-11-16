@@ -155,7 +155,10 @@ If two servers expose a tool with the same name (for example, both expose
 configurations. It exposes later tools as `mcp_2_search`, `mcp_3_search`, and so
 on, using each server's position in the configured `servers` list. Those aliases
 are used in the model-facing tool definitions and are automatically routed to
-the original tool name on the right server. Other tool names stay unchanged.
+the original tool name on the right server. Unique model-compatible tool names
+stay unchanged. MCP also permits dotted names (such as `admin.tools.list`) and
+names longer than 64 characters; those receive aliases for model APIs that do
+not accept them. Direct MCP calls can still use a unique original name.
 Aliases use safe ASCII characters and are at most 64 characters long; an alias
 that would conflict with another real tool name gets a numeric suffix. A server
 that advertises the same name twice is rejected because those definitions cannot

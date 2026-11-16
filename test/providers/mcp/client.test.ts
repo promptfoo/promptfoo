@@ -521,6 +521,60 @@ describe('MCPClient', () => {
       expect(results[1]).toEqual(results[0]);
     });
 
+    it('exposes OpenAI-safe names for spec-valid dotted and long MCP tools without misrouting calls', async () => {
+      const physicalNames = [
+        'admin.tools.list',
+        'admin_tools_list',
+        'admin/tools/list',
+        `long_${'x'.repeat(80)}`,
+      ];
+      mockClient.listTools.mockResolvedValueOnce({
+        tools: physicalNames.map((name) => ({ name, description: name, inputSchema: {} })),
+      });
+      mockClient.callTool.mockResolvedValue({ content: [] });
+      mcpClient = new MCPClient(createMcpServerOptions());
+      await mcpClient.initialize();
+
+      const advertised = mcpClient.getAllTools().map((tool) => tool.name);
+      expect(advertised).toHaveLength(physicalNames.length);
+      expect(new Set(advertised).size).toBe(physicalNames.length);
+      expect(advertised).toContain('admin_tools_list');
+      for (const advertisedName of advertised) {
+        expect(advertisedName).toMatch(/^[A-Za-z0-9_-]{1,64}$/);
+      }
+      for (let i = 0; i < physicalNames.length; i++) {
+        await mcpClient.callTool(advertised[i], { caller: 'test' });
+        expect(mockClient.callTool).toHaveBeenNthCalledWith(
+          i + 1,
+          { name: physicalNames[i], arguments: { caller: 'test' } },
+          undefined,
+          undefined,
+        );
+      }
+      await mcpClient.callTool('admin.tools.list', { caller: 'legacy' });
+      expect(mockClient.callTool).toHaveBeenNthCalledWith(
+        physicalNames.length + 1,
+        { name: 'admin.tools.list', arguments: { caller: 'legacy' } },
+        undefined,
+        undefined,
+      );
+      await mcpClient.cleanup();
+    });
+
+    it('rejects ambiguous direct calls to duplicated physical names when only aliases distinguish them', async () => {
+      mockClient.listTools.mockResolvedValue({
+        tools: [{ name: 'admin.tools.list', description: 'Dotted MCP tool', inputSchema: {} }],
+      });
+      mcpClient = new MCPClient(createMultipleServerOptions());
+      await mcpClient.initialize();
+      expect(mcpClient.getAllTools().map((tool) => tool.name)).toEqual([
+        'mcp_1_admin_tools_list',
+        'mcp_2_admin_tools_list',
+      ]);
+      await expect(mcpClient.callTool('admin.tools.list', {})).rejects.toThrow(/ambiguous/i);
+      await mcpClient.cleanup();
+    });
+
     it('reserves existing tool names and keeps non-colliding tools unchanged', async () => {
       mockClient.listTools
         .mockResolvedValueOnce({
