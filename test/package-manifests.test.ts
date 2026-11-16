@@ -211,7 +211,7 @@ const KNOWN_BAD_RELEASES = new Map([
   ['drizzle-orm', '<0.45.2 || >=1.0.0-beta.2 <1.0.0-beta.20'], // GHSA-gpj5-g38j-94v9
   ['extract-zip', '<=2.0.1'], // GHSA-jmr9-qjv8-65gv, GHSA-7pqw-9j4j-h8q3
   ['fast-uri', '<2.4.8 || >=3.0.0 <3.1.9 || >=4.0.0 <4.2.3'], // GHSA-w74x-v6f9-j3xg, GHSA-wjr9-j795-jxcr, GHSA-xhq7-xmqj-769h, GHSA-333x-w4r6-6crp
-  ['glob', '14.0.2'], // Bundles minimatch 11.0.0 (GHSA-g3hv-75wg-m249)
+  ['glob', '>=13.0.5 <14.0.6'], // GHSA-qxr8-q827-836c; includes 14.0.2 (GHSA-g3hv-75wg-m249)
   ['image-size', '>=0.6.3 <=2.0.2'], // GHSA-5p2g-fcmc-qvqq, GHSA-w3rx-r6r6-pgpr
   // Also covers GHSA-hxh3-vqpv-xpqv and GHSA-5r4p-p66f-jhc7.
   // GHSA-4m76-xfj5-7975, GHSA-46wx-v44x-9hh2, GHSA-h7mg-cq63-vhpq,
@@ -221,7 +221,7 @@ const KNOWN_BAD_RELEASES = new Map([
   ['ibm-cloud-sdk-core', '5.6.3'], // Escaped quotes expose JSON secret suffixes in debug logs (#11472)
   ['js-yaml', '<3.15.2 || >=4.0.0 <4.3.2 || >=5.0.0 <5.2.3'], // #10356, GHSA-2883-xcg3-v3hh
   ['keyv', '6.0.0'], // Shai-Hulud compromise (#10301)
-  ['minimatch', '>=11.0.3 <=11.0.7'], // GHSA-hqmv-qgp3-jx75
+  ['minimatch', '>=11.0.0 <=11.0.7'], // GHSA-cf2h-pxjq-68xw, GHSA-hqmv-qgp3-jx75
   ['postcss-selector-parser', '<6.1.5 || >=7.0.0 <7.1.6'], // GHSA-rj75-hqrm-r3gf
   ['serialize-javascript', '<7.1.3'], // GHSA-gfhx-hw2g-v5hg, GHSA-m5mm-p8h7-m29v
   ['sharp', '<0.35.5'], // GHSA-wq5f-xc86-pv6w (bundled librsvg)
