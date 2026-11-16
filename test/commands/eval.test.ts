@@ -121,6 +121,8 @@ const chokidarMocks = vi.hoisted(() => {
       return watcher;
     }),
     close: vi.fn(async () => {}),
+    add: vi.fn(),
+    unwatch: vi.fn(async () => {}),
   };
 
   return {
@@ -944,6 +946,71 @@ describe('evalCommand', () => {
       const watched = await watchedPathsFor(undefined);
       expect(watched).toContain(defaultConfigPath);
     });
+  });
+
+  it('updates watched test files when config changes during watch mode', async () => {
+    const basePath = process.cwd();
+    const a = path.join(basePath, 'a.yaml');
+    const b = path.join(basePath, 'b.yaml');
+    const initialConfig = {
+      prompts: [],
+      providers: [],
+      tests: 'file://a.yaml',
+    } as UnifiedConfig;
+    const nextConfig = {
+      prompts: [],
+      providers: [],
+      tests: 'file://b.yaml',
+    } as UnifiedConfig;
+
+    vi.mocked(resolveConfigs)
+      .mockReset()
+      .mockResolvedValueOnce({
+        config: initialConfig,
+        testSuite: { prompts: [], providers: [] },
+        basePath,
+      })
+      .mockResolvedValue({
+        config: nextConfig,
+        testSuite: { prompts: [], providers: [] },
+        basePath,
+      });
+    vi.mocked(evaluate)
+      .mockReset()
+      .mockImplementation(async (_suite, record) => record as Eval);
+    chokidarMocks.watcher.add.mockReset();
+    chokidarMocks.watcher.unwatch.mockReset().mockResolvedValue(undefined);
+
+    await doEval({ watch: true, write: false }, initialConfig, defaultConfigPath, {});
+    expect(chokidarMocks.watch).toHaveBeenCalledWith(
+      expect.arrayContaining([a]),
+      expect.anything(),
+    );
+    const onChange = chokidarMocks.handlers.get('change');
+    expect(onChange).toBeDefined();
+    await onChange?.(defaultConfigPath);
+
+    expect(chokidarMocks.watcher.add).toHaveBeenCalledWith([b]);
+    expect(chokidarMocks.watcher.unwatch).toHaveBeenCalledWith([a]);
+
+    // Re-evaluating an unchanged config must not churn native file watchers.
+    await onChange?.(b);
+    expect(chokidarMocks.watcher.add).toHaveBeenCalledTimes(1);
+    expect(chokidarMocks.watcher.unwatch).toHaveBeenCalledTimes(1);
+
+    // When another config edit swaps the test file again, only the current
+    // dependency is removed (not the already removed original).
+    const c = path.join(basePath, 'c.yaml');
+    vi.mocked(resolveConfigs).mockResolvedValue({
+      config: { ...nextConfig, tests: 'file://c.yaml' },
+      testSuite: { prompts: [], providers: [] },
+      basePath,
+    });
+    await onChange?.(defaultConfigPath);
+    expect(chokidarMocks.watcher.add).toHaveBeenLastCalledWith([c]);
+    expect(chokidarMocks.watcher.unwatch).toHaveBeenLastCalledWith([b]);
+    expect(chokidarMocks.watcher.add).toHaveBeenCalledTimes(2);
+    expect(chokidarMocks.watcher.unwatch).toHaveBeenCalledTimes(2);
   });
 
   describe('watch mode process lifecycle', () => {

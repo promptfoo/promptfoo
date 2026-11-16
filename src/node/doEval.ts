@@ -358,6 +358,8 @@ async function doEvalWithEnv(
   // Set once watch mode starts watching; awaited before doEval returns so the CLI does
   // not shut down underneath the watcher.
   let watchTermination: Promise<void> | undefined;
+  let watcher: FSWatcher | undefined;
+  let watchedPaths = new Set<string>();
 
   const runEvaluationWithEnv = async (
     runEnv: EnvOverrides,
@@ -1184,64 +1186,63 @@ async function doEvalWithEnv(
     });
 
     if (cmdObj.watch && !resumeEval) {
+      const configPaths = (cmdObj.config || [defaultConfigPath]).filter(Boolean) as string[];
+      if (!configPaths.length) {
+        const message = `Could not locate config file(s) to watch. Pass --config path/to/promptfooconfig.yaml or run from a directory containing promptfooconfig.{${DEFAULT_CONFIG_EXTENSIONS.join(
+          ',',
+        )}}.`;
+        return failEvalRun(message, isCliInvocation, {
+          logForCli: () => logger.error(message),
+          cliFallback: ret,
+        });
+      }
+      const basePath = config.basePath ?? path.dirname(configPaths[0]);
+      const promptPaths = Array.isArray(config.prompts)
+        ? (config.prompts
+            .map((p) => {
+              if (typeof p === 'string' && p.startsWith('file://')) {
+                return path.resolve(basePath, p.slice('file://'.length));
+              } else if (typeof p === 'object' && p.id && p.id.startsWith('file://')) {
+                return path.resolve(basePath, p.id.slice('file://'.length));
+              }
+              return null;
+            })
+            .filter(Boolean) as string[])
+        : [];
+      const providerPaths = Array.isArray(config.providers)
+        ? (config.providers
+            .map((p) =>
+              typeof p === 'string' && p.startsWith('file://')
+                ? path.resolve(basePath, p.slice('file://'.length))
+                : null,
+            )
+            .filter(Boolean) as string[])
+        : [];
+      // `--tests`, and its `--vars` alias, replace the config's own tests entirely
+      // (see resolveConfigs), so `config.tests` already holds the command-line value.
+      const cliTests = cmdObj.tests || cmdObj.vars;
+      const varPaths: string[] = [];
+      if (cliTests) {
+        // Preserve the released path bases: --tests uses CWD, while --vars uses
+        // the config directory. --tests takes precedence when both are supplied.
+        varPaths.push(...resolveTestsWatchPaths(cliTests, cmdObj.tests ? process.cwd() : basePath));
+      } else {
+        varPaths.push(...resolveTestsWatchPaths(config.tests, basePath));
+        for (const source of testSources ?? []) {
+          varPaths.push(...resolveTestsWatchPaths(source.tests, source.basePath));
+        }
+      }
+      const watchPaths = Array.from(
+        new Set([...configPaths, ...promptPaths, ...providerPaths, ...varPaths]),
+      );
       if (initialization) {
-        const configPaths = (cmdObj.config || [defaultConfigPath]).filter(Boolean) as string[];
-        if (!configPaths.length) {
-          const message = `Could not locate config file(s) to watch. Pass --config path/to/promptfooconfig.yaml or run from a directory containing promptfooconfig.{${DEFAULT_CONFIG_EXTENSIONS.join(
-            ',',
-          )}}.`;
-          return failEvalRun(message, isCliInvocation, {
-            logForCli: () => logger.error(message),
-            cliFallback: ret,
-          });
-        }
-        const basePath = config.basePath ?? path.dirname(configPaths[0]);
-        const promptPaths = Array.isArray(config.prompts)
-          ? (config.prompts
-              .map((p) => {
-                if (typeof p === 'string' && p.startsWith('file://')) {
-                  return path.resolve(basePath, p.slice('file://'.length));
-                } else if (typeof p === 'object' && p.id && p.id.startsWith('file://')) {
-                  return path.resolve(basePath, p.id.slice('file://'.length));
-                }
-                return null;
-              })
-              .filter(Boolean) as string[])
-          : [];
-        const providerPaths = Array.isArray(config.providers)
-          ? (config.providers
-              .map((p) =>
-                typeof p === 'string' && p.startsWith('file://')
-                  ? path.resolve(basePath, p.slice('file://'.length))
-                  : null,
-              )
-              .filter(Boolean) as string[])
-          : [];
-        // `--tests`, and its `--vars` alias, replace the config's own tests entirely
-        // (see resolveConfigs), so `config.tests` already holds the command-line value.
-        const cliTests = cmdObj.tests || cmdObj.vars;
-        const varPaths: string[] = [];
-        if (cliTests) {
-          // Preserve the released path bases: --tests uses CWD, while --vars uses
-          // the config directory. --tests takes precedence when both are supplied.
-          varPaths.push(
-            ...resolveTestsWatchPaths(cliTests, cmdObj.tests ? process.cwd() : basePath),
-          );
-        } else {
-          varPaths.push(...resolveTestsWatchPaths(config.tests, basePath));
-          for (const source of testSources ?? []) {
-            varPaths.push(...resolveTestsWatchPaths(source.tests, source.basePath));
-          }
-        }
-        const watchPaths = Array.from(
-          new Set([...configPaths, ...promptPaths, ...providerPaths, ...varPaths]),
-        );
         // Editor saves must produce a change event even when CHOKIDAR_USEPOLLING is set.
-        const watcher = chokidar.watch(watchPaths, {
+        watcher = chokidar.watch(watchPaths, {
           atomic: true,
           ignored: /^\./,
           persistent: true,
         });
+        watchedPaths = new Set(watchPaths);
         // Library callers own their own process lifetime, so only the CLI blocks here.
         if (isCliInvocation) {
           watchTermination = watchUntilTerminated(watcher);
@@ -1269,6 +1270,22 @@ async function doEvalWithEnv(
               logger.info(`Watching for file changes on ${watchPath} ...`),
             ),
           );
+      } else if (watcher) {
+        // Config and file references can change between evaluations. Keep the
+        // subscriptions in sync instead of continuing to watch obsolete inputs.
+        const nextPaths = new Set(watchPaths);
+        const removed = [...watchedPaths].filter((watchPath) => !nextPaths.has(watchPath));
+        const added = watchPaths.filter((watchPath) => !watchedPaths.has(watchPath));
+        if (removed.length) {
+          await watcher.unwatch(removed);
+        }
+        if (added.length) {
+          watcher.add(added);
+          added.forEach((watchPath) =>
+            logger.info(`Watching for file changes on ${watchPath} ...`),
+          );
+        }
+        watchedPaths = nextPaths;
       }
     } else {
       const passRateThreshold = getEnvFloat('PROMPTFOO_PASS_RATE_THRESHOLD', 100);
