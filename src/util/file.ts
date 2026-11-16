@@ -15,11 +15,7 @@ import {
 import { importModule } from '../esm';
 import logger from '../logger';
 import { runPython } from '../python/pythonUtils';
-import {
-  isJavascriptFile,
-  isPythonFile,
-  parseExecutableFileReference,
-} from '../validation/fileExtensions';
+import { isJavascriptFile, isPythonFile, parseExecutableFileReference } from './fileExtensions';
 import { parseFileUrl } from './functions/loadFunction';
 import { safeResolve } from './pathUtils';
 import { renderVarsInObject } from './render';
@@ -90,6 +86,25 @@ export async function pathExists(filePath: string): Promise<boolean> {
     }
     throw err;
   }
+}
+
+/** Checks a path against the active configuration directory. */
+function fileExistsAtBasePath(filePath: string): boolean {
+  return fs.existsSync(path.resolve(cliState.basePath || process.cwd(), filePath));
+}
+
+/** Matches a provider script extension after resolving its optional selector. */
+export function matchesScriptFileExtension(reference: string, fileExtension: string): boolean {
+  const { filePath } = parseExecutableFileReference(reference, {
+    fileExists: fileExistsAtBasePath,
+  });
+  if (fileExtension === 'py') {
+    return isPythonFile(filePath);
+  }
+  return (
+    filePath.endsWith(`.${fileExtension}`) ||
+    (fileExtension === 'go' && /\.go:[^:/\\]+$/.test(filePath))
+  );
 }
 
 /**

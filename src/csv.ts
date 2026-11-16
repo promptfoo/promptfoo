@@ -1,8 +1,8 @@
 // Helpers for parsing CSV eval files, shared by frontend and backend. Cannot import native modules.
 import logger from './logger';
 import { BaseAssertionTypesSchema } from './types/index';
+import { isJavascriptFile, parsePythonFileReference } from './util/fileExtensions';
 import invariant from './util/invariant';
-import { isJavascriptFile, parsePythonFileReference } from './validation/fileExtensions';
 import { parseCommaSeparatedValues } from './validation/parseCommaSeparatedValues';
 
 import type { Assertion, AssertionType, BaseAssertionTypes, CsvRow, TestCase } from './types/index';

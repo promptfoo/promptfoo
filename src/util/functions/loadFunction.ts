@@ -11,7 +11,7 @@ import {
   JAVASCRIPT_EXTENSIONS,
   normalizeWindowsFileUrlPath,
   parseExecutableFileReference,
-} from '../../validation/fileExtensions';
+} from '../fileExtensions';
 
 export const functionCache: Record<string, Function> = {};
 

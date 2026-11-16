@@ -38,17 +38,17 @@ import {
   type TraceData,
   type VarValue,
 } from '../types/index';
-import invariant from '../util/invariant';
-import { getNunjucksEngine } from '../util/templates';
-import { sleep } from '../util/time';
-import { transform } from '../util/transform';
-import { loadYaml } from '../util/yamlLoad';
 import {
   isJavascriptFile,
   isPythonFile,
   normalizeWindowsFileUrlPath,
   parseExecutableFileReference,
-} from '../validation/fileExtensions';
+} from '../util/fileExtensions';
+import invariant from '../util/invariant';
+import { getNunjucksEngine } from '../util/templates';
+import { sleep } from '../util/time';
+import { transform } from '../util/transform';
+import { loadYaml } from '../util/yamlLoad';
 import { handleAgentRubric } from './agentRubric';
 import { handleAnswerRelevance } from './answerRelevance';
 import { AssertionsResult } from './assertionsResult';

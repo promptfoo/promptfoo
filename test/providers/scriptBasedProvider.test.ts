@@ -7,6 +7,12 @@ import { getResolvedRelativePath } from '../../src/util/file';
 import type { LoadApiProviderContext } from '../../src/types/index';
 import type { ProviderOptions } from '../../src/types/providers';
 
+vi.mock('fs', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('fs')>();
+  const mocked = { ...actual, existsSync: vi.fn(actual.existsSync) };
+  return { ...mocked, default: mocked };
+});
+
 // Mock the getResolvedRelativePath function
 vi.mock('../../src/util/file', async (importOriginal) => {
   return {
