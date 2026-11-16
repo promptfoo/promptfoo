@@ -413,6 +413,26 @@ describe('analyzeTemplateReference', () => {
     expect(getNunjucksEngine().renderString(value, { purpose: 'ready' })).toBe('readyok');
   });
 
+  it('binds supplied macro values while analyzing parameter defaults', () => {
+    const value =
+      '{% macro m() %}{{purpose|trim}}{% endmacro %}{% macro apply(f, x=f()) %}{{x}}{% endmacro %}{{apply(m)}}';
+    expect(extractRequiredVariablesFromTemplate(value)).toEqual(['purpose']);
+    expect(getNunjucksEngine().renderString(value, { purpose: 'ready' })).toBe('ready');
+  });
+
+  it('preserves live definition frames across conditional joins', () => {
+    const value =
+      "{% if true %}{% macro a() %}{{b()}}{% endmacro %}{% macro b(x='ok') %}{{x}}{% endmacro %}{{a()}}{% endif %}{% macro b(x=_conversation) %}{{x}}{% endmacro %}{{b('warmup')}}{{a()}}";
+    expect(getNunjucksEngine().renderString(value, { _conversation: 'history' })).toBe(
+      'okwarmuphistory',
+    );
+    expect(analyzeTemplateReference(value, '_conversation')).toEqual({
+      referenced: true,
+      parsed: true,
+    });
+    expect(extractRequiredVariablesFromTemplate(value)).toContain('_conversation');
+  });
+
   it('analyzes JSON leaf strings as templates instead of nested structured prompts', () => {
     const prompt = JSON.stringify({ content: '{"{{_conversation|length}}":"x"}' });
     expect(analyzeTemplateReference(prompt, '_conversation')).toEqual({
@@ -565,6 +585,22 @@ describe('macro analysis work and scope changes', () => {
       referenced: true,
       parsed: false,
     });
+  });
+
+  it('charges growing macro-candidate unions to the shared analysis budget', () => {
+    const count = 8000;
+    let value = '{% macro saved() %}ok{% endmacro %}';
+    for (let index = 0; index < count; index++) {
+      value += `{% macro m${index}() %}ok{% endmacro %}`;
+    }
+    for (let index = 0; index < count; index++) {
+      value += `{% if flag${index} %}{% set saved=m${index} %}{% endif %}`;
+    }
+    value += '{{_conversation}}';
+
+    const started = performance.now();
+    expect(extractUnboundVariablesFromTemplate(value)).toBeUndefined();
+    expect(performance.now() - started).toBeLessThan(1000);
   });
 
   it.each<[string, (value: string) => boolean | undefined]>([
