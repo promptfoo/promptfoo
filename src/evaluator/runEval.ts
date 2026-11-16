@@ -66,7 +66,8 @@ const promptUsesConversationVariableCache = new LRUCache<string, boolean>({
 });
 
 export function promptUsesConversationVariable(prompt: Pick<Prompt, 'raw'>): boolean {
-  const cached = promptUsesConversationVariableCache.get(prompt.raw);
+  const cacheKey = `${getEnvBool('PROMPTFOO_DISABLE_JSON_AUTOESCAPE') ? 'whole' : 'structured'}:${prompt.raw}`;
+  const cached = promptUsesConversationVariableCache.get(cacheKey);
   if (cached !== undefined) {
     return cached;
   }
@@ -76,7 +77,7 @@ export function promptUsesConversationVariable(prompt: Pick<Prompt, 'raw'>): boo
   // poison the cache for the lifetime of the process and silently downgrade
   // future conversation-aware runs to parallel execution.
   if (parsed) {
-    promptUsesConversationVariableCache.set(prompt.raw, referenced);
+    promptUsesConversationVariableCache.set(cacheKey, referenced);
   }
   return referenced;
 }
