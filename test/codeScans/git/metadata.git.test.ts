@@ -71,6 +71,26 @@ describe('code scan metadata with real git', () => {
     await expect(validateOnBranch(repoPath)).resolves.toBe('new/topic');
   });
 
+  it('uses only the resolved commits for full-scan metadata', async () => {
+    const metadata = await extractMetadata(repoPath, 'main', 'feature/topic', true);
+
+    expect(metadata).toEqual({
+      baseBranch: baseSha,
+      baseRef: baseSha,
+      baseSha,
+      branch: compareSha,
+      compareRef: compareSha,
+      compareSha,
+      commitMessages: [],
+      author: 'Unknown',
+      timestamp: expect.any(String),
+    });
+    expect(Number.isNaN(Date.parse(metadata.timestamp))).toBe(false);
+    await expect(extractMetadata(repoPath, 'private-missing-ref', 'HEAD', true)).rejects.toThrow(
+      /^Failed to resolve full-scan revisions$/,
+    );
+  });
+
   it('preserves the branch name when a tag has the same name', async () => {
     await git(['update-ref', 'refs/heads/review/collision', compareSha]);
     await git(['update-ref', 'refs/tags/review/collision', compareSha]);
