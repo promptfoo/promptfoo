@@ -401,7 +401,7 @@ export class MCPClient {
       );
       // A partial list can match a pin while hiding changed tools on later pages.
       // Until the shared tools/list path collects all pages, fail closed for pins.
-      if (server.expectedTools && toolsResult?.nextCursor) {
+      if (server.expectedTools && toolsResult?.nextCursor !== undefined) {
         throw new Error(
           `MCP server ${serverLabel} returned an incomplete paginated tool list; expectedTools cannot be checked until all pages are collected.`,
         );
