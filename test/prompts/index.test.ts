@@ -114,6 +114,16 @@ describe('readPrompts', () => {
     ]);
   });
 
+  it.each(['Return a .JSON', 'Return a .YAML'])(
+    'should preserve an inline prompt with an uppercase structured-data extension: %s',
+    async (prompt) => {
+      vi.mocked(fs.statSync).mockReturnValue({ isDirectory: () => false } as fs.Stats);
+
+      await expect(readPrompts(prompt)).resolves.toEqual([{ raw: prompt, label: prompt }]);
+      expect(fs.readFileSync).not.toHaveBeenCalled();
+    },
+  );
+
   it('should read a list of prompts', async () => {
     const prompts = ['Sample prompt A', 'Sample prompt B'];
     await expect(readPrompts(prompts)).resolves.toEqual([
@@ -419,25 +429,30 @@ describe('readPrompts', () => {
     },
   );
 
-  it('should read a named function from a mixed-case Python file', async () => {
-    const promptPath = 'prompt.PY:create_prompt';
-    const code = 'def create_prompt(context):\n    return "generated"';
-    vi.mocked(fs.readFileSync).mockReturnValue(code);
-    vi.mocked(fs.statSync).mockReturnValue({ isDirectory: () => false } as fs.Stats);
+  it.each(['prompt.PY:create_prompt', 'İ.py:create_prompt'])(
+    'should read a named function from a Python file: %s',
+    async (promptPath) => {
+      const code = 'def create_prompt(context):\n    return "generated"';
+      vi.mocked(fs.readFileSync).mockReturnValue(code);
+      vi.mocked(fs.statSync).mockReturnValue({ isDirectory: () => false } as fs.Stats);
 
-    const result = await readPrompts(promptPath);
+      const result = await readPrompts(promptPath);
 
-    expect(maybeFilePath(promptPath)).toBe(true);
-    expect(result).toEqual([
-      {
-        raw: code,
-        label: promptPath,
-        function: expect.any(Function),
-        config: undefined,
-      },
-    ]);
-    expect(fs.readFileSync).toHaveBeenCalledWith('prompt.PY', 'utf-8');
-  });
+      expect(maybeFilePath(promptPath)).toBe(true);
+      expect(result).toEqual([
+        {
+          raw: code,
+          label: promptPath,
+          function: expect.any(Function),
+          config: undefined,
+        },
+      ]);
+      expect(fs.readFileSync).toHaveBeenCalledWith(
+        promptPath.slice(0, promptPath.lastIndexOf(':')),
+        'utf-8',
+      );
+    },
+  );
 
   it('should read a .js file without named function', async () => {
     const promptPath = 'prompt.js';
