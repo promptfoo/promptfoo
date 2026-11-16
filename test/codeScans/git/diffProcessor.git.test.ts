@@ -1,6 +1,6 @@
-import { execFile } from 'node:child_process';
+import { execFile, execFileSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
@@ -9,6 +9,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { MAX_BLOB_SIZE_BYTES } from '../../../src/codeScan/constants/filtering';
 import { processDiff } from '../../../src/codeScan/git/diffProcessor';
 import { DiffProcessorError } from '../../../src/types/codeScan';
+import { mockProcessEnv } from '../../util/utils';
 
 describe('processDiff with real git blobs', () => {
   let repoPath: string;
@@ -146,5 +147,158 @@ describe('processDiff with real git blobs', () => {
       afterSizeBytes: MAX_BLOB_SIZE_BYTES + 1,
       skipReason: 'too large',
     });
+  });
+});
+
+describe('full-scan diff data sharing', () => {
+  const git = (repo: string, args: string[], input?: string) =>
+    execFileSync(
+      'git',
+      [
+        '-c',
+        'user.name=Diff test',
+        '-c',
+        'user.email=test@example.com',
+        '-c',
+        'commit.gpgSign=false',
+        ...args,
+      ],
+      { cwd: repo, input, encoding: 'utf8' },
+    ).trim();
+
+  it('returns only literal, in-scope regular files whose complete blobs pass the sharing policy', async () => {
+    const repo = await mkdtemp(path.join(tmpdir(), 'promptfoo-full-diff-'));
+    const write = async (name: string, body: string) => {
+      const file = path.join(repo, name);
+      await mkdir(path.dirname(file), { recursive: true });
+      await writeFile(file, body);
+    };
+    try {
+      git(repo, ['init', '--quiet', '--template=']);
+      git(repo, ['config', 'diff.srcPrefix', 'private-prefix/']);
+      git(repo, ['config', 'diff.dstPrefix', 'private-prefix/']);
+      const privateMarker = '-----BEGIN PRIVATE KEY-----';
+      const secretBlob = privateMarker + '\n' + 'ordinary context\n'.repeat(25);
+      for (const name of ['remove.ts', 'modified.ts', 'cleaned.ts']) {
+        await write('app/' + name, secretBlob);
+      }
+      await write('app/from.ts', 'renamed fixture');
+      await write('app/switch', 'old standalone file');
+      git(repo, ['add', '.']);
+      git(repo, ['commit', '-qm', 'base']);
+      const base = git(repo, ['rev-parse', 'HEAD']);
+
+      await rm(path.join(repo, 'app/remove.ts'));
+      await write('app/modified.ts', secretBlob + 'unrelated change');
+      await write('app/cleaned.ts', 'removed a private fixture');
+      await write('app/added.ts', privateMarker);
+      await write('app/visible.ts', 'visible content');
+      await write('app/settings/secrets.json', 'sensitive filename fixture');
+      await write('app/[ab].ts', 'literal brackets');
+      await write('app/a.ts', privateMarker);
+      await rm(path.join(repo, 'app/switch'));
+      await write('app/switch/credentials.json', 'sensitive descendant');
+      await write('outside.ts', 'sibling fixture');
+      git(repo, ['mv', 'app/from.ts', 'app/to.ts']);
+      git(repo, ['add', '.']);
+      const link = git(repo, ['hash-object', '-w', '--stdin'], 'untracked-target.ts');
+      git(repo, ['update-index', '--add', '--cacheinfo', `120000,${link},app/link.ts`]);
+      git(repo, ['update-index', '--add', '--cacheinfo', `160000,${base},app/nested-repo`]);
+      git(repo, ['commit', '-qm', 'changes']);
+
+      const files = await processDiff(path.join(repo, 'app'), base, 'HEAD', true);
+      expect(files.map((file) => file.path).sort()).toEqual([
+        'app/[ab].ts',
+        'app/from.ts',
+        'app/switch',
+        'app/to.ts',
+        'app/visible.ts',
+      ]);
+      expect(files.find((file) => file.path === 'app/[ab].ts')?.patch).toContain(
+        'literal brackets',
+      );
+      expect(files.find((file) => file.path === 'app/from.ts')?.status).toBe('D');
+      expect(files.find((file) => file.path === 'app/to.ts')?.status).toBe('A');
+      expect(files.find((file) => file.path === 'app/switch')).toMatchObject({
+        status: 'D',
+        patch: expect.stringContaining('old standalone file'),
+      });
+      const serialized = JSON.stringify(files);
+      expect(serialized).not.toContain(privateMarker);
+      expect(serialized).not.toContain('private-prefix');
+      expect(serialized).not.toContain('credentials.json');
+      expect(serialized).not.toContain('sibling fixture');
+      await expect(processDiff(repo, base, 'missing-private-ref', true)).rejects.toThrow(
+        /^Failed to process the full-scan diff$/,
+      );
+    } finally {
+      await rm(repo, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+    }
+  });
+
+  it('suppresses a patch if a case-insensitive pathspec also matches an excluded blob', async () => {
+    const repo = await mkdtemp(path.join(tmpdir(), 'promptfoo-diff-case-'));
+    try {
+      git(repo, ['init', '--bare', '--quiet', '--template=']);
+      const emptyTree = git(repo, ['mktree'], '');
+      const base = git(repo, ['commit-tree', emptyTree, '-m', 'base']);
+      const safe = git(repo, ['hash-object', '-w', '--stdin'], 'ordinary fixture');
+      const restricted = git(repo, ['hash-object', '-w', '--stdin'], '-----BEGIN PRIVATE KEY-----');
+      // Build the tree directly so both case variants exist on case-insensitive filesystems too.
+      const tree = git(
+        repo,
+        ['mktree', '-z'],
+        `100644 blob ${safe}\tTest.ts\0` +
+          `100644 blob ${restricted}\ttest.ts\0` +
+          `100644 blob ${safe}\tother.ts\0`,
+      );
+      const head = git(repo, ['commit-tree', tree, '-p', base, '-m', 'fixture']);
+      const restore = mockProcessEnv({ GIT_ICASE_PATHSPECS: '1' });
+      try {
+        const files = await processDiff(repo, base, head, true);
+        expect(files.map((file) => file.path)).toEqual(['other.ts']);
+        expect(files[0].patch).toContain('ordinary fixture');
+        expect(files[0].patch).not.toContain('PRIVATE KEY');
+      } finally {
+        restore();
+      }
+    } finally {
+      await rm(repo, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+    }
+  });
+
+  it('inspects and emits the original blobs when local Git replacements reinterpret a commit', async () => {
+    const repo = await mkdtemp(path.join(tmpdir(), 'promptfoo-diff-objects-'));
+    try {
+      git(repo, ['init', '--quiet', '--template=']);
+      git(repo, ['commit', '--allow-empty', '-qm', 'base']);
+      const base = git(repo, ['rev-parse', 'HEAD']);
+      const eligible = 'intended committed content';
+      await writeFile(path.join(repo, 'visible.custom'), eligible);
+      await writeFile(path.join(repo, 'omit.ts'), '-----BEGIN PRIVATE KEY-----');
+      git(repo, ['add', '.']);
+      git(repo, ['commit', '-qm', 'physical comparison']);
+      const compare = git(repo, ['rev-parse', 'HEAD']);
+
+      for (const pathName of ['visible.custom', 'omit.ts']) {
+        const original = git(repo, ['rev-parse', `${compare}:${pathName}`]);
+        const substitute = git(repo, ['hash-object', '-w', '--stdin'], 'local replacement bytes');
+        git(repo, ['replace', original, substitute]);
+      }
+      await writeFile(path.join(repo, 'replacement.ts'), 'replacement commit inventory');
+      git(repo, ['add', 'replacement.ts']);
+      git(repo, ['commit', '-qm', 'replacement comparison']);
+      git(repo, ['replace', compare, git(repo, ['rev-parse', 'HEAD'])]);
+
+      const files = await processDiff(repo, base, compare, true);
+      expect(files.map((file) => file.path)).toEqual(['visible.custom']);
+      expect(files[0]).toMatchObject({
+        afterSizeBytes: Buffer.byteLength(eligible),
+        patch: expect.stringContaining(eligible),
+      });
+      expect(files[0].patch).not.toContain('replacement');
+    } finally {
+      await rm(repo, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+    }
   });
 });
