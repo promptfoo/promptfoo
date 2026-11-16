@@ -386,6 +386,12 @@ function applyAssertionWeight(result: GradingResult, weight: number | undefined)
   return weight === 0 ? { ...result, pass: true } : result;
 }
 
+function asRubyExecutableReference(
+  reference: ReturnType<typeof parseExecutableFileReference>,
+): ReturnType<typeof parseExecutableFileReference> | undefined {
+  return reference.filePath.endsWith('.rb') ? reference : undefined;
+}
+
 /**
  * Execute a single assertion against provider output.
  *
@@ -507,9 +513,7 @@ async function runAssertionInternal({
       const pythonReference = isPythonFile(executableReference.filePath)
         ? executableReference
         : undefined;
-      const rubyReference = executableReference.filePath.endsWith('.rb')
-        ? executableReference
-        : undefined;
+      const rubyReference = asRubyExecutableReference(executableReference);
       const { filePath: referencedPath, functionName } = rubyReference ?? executableReference;
       const filePath = path.resolve(
         basePath,
