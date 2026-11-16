@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import { mkdirSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -8,6 +9,7 @@ import {
   stopFilesystemMcpServer,
   waitForFilesystemMcpServerReady,
 } from '../../../src/codeScan/mcp/filesystem';
+import { createFilesystemSnapshot } from '../../../src/codeScan/mcp/snapshot';
 import { SocketIoMcpBridge } from '../../../src/codeScan/mcp/transport';
 import { createTempDir, removeTempDir } from '../../util/utils';
 import type { Socket } from 'socket.io-client';
@@ -21,16 +23,40 @@ it.runIf(Number.parseInt(process.versions.node, 10) >= 24)(
     const fixture = realpathSync(createTempDir('promptfoo-filesystem-mcp-'));
     onTestFinished(() => removeTempDir(fixture));
     const root = join(fixture, 'repo');
-    const inside = join(root, 'report.txt');
+    const tracked = join(root, 'report.txt');
     const otherDir = join(fixture, 'other');
     const outside = join(otherDir, 'other.txt');
     mkdirSync(root);
     mkdirSync(otherDir);
     symlinkSync(otherDir, join(root, 'outside-link'), 'junction');
-    writeFileSync(inside, 'example');
+    writeFileSync(tracked, 'example');
+    writeFileSync(join(root, '.env'), 'private fixture');
+    execFileSync('git', ['init', '--quiet', '--template='], { cwd: root });
+    execFileSync('git', ['add', '--force', 'report.txt', '.env'], { cwd: root });
+    execFileSync(
+      'git',
+      [
+        '-c',
+        'user.name=Test',
+        '-c',
+        'user.email=test@example.com',
+        '-c',
+        'commit.gpgSign=false',
+        'commit',
+        '--quiet',
+        '-m',
+        'fixture',
+      ],
+      { cwd: root },
+    );
+    writeFileSync(tracked, 'local edit');
+    writeFileSync(join(root, 'untracked.ts'), 'local only');
     writeFileSync(outside, 'outside fixture');
 
-    const server = startFilesystemMcpServer(root);
+    const snapshot = await createFilesystemSnapshot(root);
+    onTestFinished(() => snapshot.dispose());
+    const inside = join(snapshot.rootDir, 'report.txt');
+    const server = startFilesystemMcpServer(snapshot.rootDir, snapshot.checkout);
     onTestFinished(() => stopFilesystemMcpServer(server));
     await waitForFilesystemMcpServerReady(server);
     const socket = Object.assign(new EventEmitter(), { connected: true });
@@ -55,21 +81,29 @@ it.runIf(Number.parseInt(process.versions.node, 10) >= 24)(
     await expect(call('read_text_file', inside)).resolves.toMatchObject({
       content: [{ type: 'text', text: 'example' }],
     });
-    const listing = await call('list_directory_with_sizes', root);
+    const listing = await call('list_directory_with_sizes', snapshot.rootDir);
     expect(listing).toMatchObject({
       content: [{ type: 'text', text: expect.stringMatching(/report\.txt\s+7 B\b/) }],
     });
-    expect(listing).toMatchObject({
-      content: [{ type: 'text', text: expect.stringMatching(/outside-link\s+unknown\b/) }],
+    expect(JSON.stringify(listing)).not.toMatch(/outside-link|untracked|\.env/);
+    const search = await client.callTool({
+      name: 'search_files',
+      arguments: { path: snapshot.rootDir, pattern: '**/*' },
     });
+    expect(JSON.stringify(search)).toContain('report.txt');
+    expect(JSON.stringify(search)).not.toMatch(/outside-link|untracked|\.env/);
+    for (const name of ['read_multiple_files', 'read_media_file', 'directory_tree']) {
+      expect(names).not.toContain(name);
+    }
     for (const [name, path] of [
       ['read_text_file', outside],
-      ['read_text_file', join(root, 'outside-link', 'other.txt')],
+      ['read_text_file', join(snapshot.rootDir, 'outside-link', 'other.txt')],
+      ['read_text_file', join(snapshot.rootDir, '.env')],
       ['list_directory_with_sizes', fixture],
     ]) {
       await expect(call(name, path)).resolves.toMatchObject({
         isError: true,
-        content: [{ type: 'text', text: expect.stringContaining('outside allowed directories') }],
+        content: [{ type: 'text', text: 'Filesystem request failed' }],
       });
     }
   },

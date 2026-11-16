@@ -23,6 +23,7 @@ async function setup() {
   return {
     write,
     response,
+    socket,
     request(fields: Omit<JsonRpcMessage, 'jsonrpc'>) {
       socket.emit('mcp:request', { jsonrpc: '2.0', ...fields });
     },
@@ -45,7 +46,16 @@ describe('read-only code scan transport', () => {
     const [list, read] = write.mock.calls.map(([line]) => JSON.parse(line));
     expect(read.params.arguments.path).toBe('marker.txt');
     expect(list.id).not.toEqual(read.id);
-    const hiddenTools = ['write_file', 'edit_file', 'create_directory', 'move_file', 'future_tool'];
+    const hiddenTools = [
+      'write_file',
+      'edit_file',
+      'create_directory',
+      'move_file',
+      'read_multiple_files',
+      'read_media_file',
+      'directory_tree',
+      'future_tool',
+    ];
     const safe = { name: 'read_text_file', description: 'Read text' };
     const withSizes = { name: 'list_directory_with_sizes' };
     fromServer({ id: read.id, result: { content: [] } });
@@ -74,6 +84,34 @@ describe('read-only code scan transport', () => {
       );
     }
     expect(write).not.toHaveBeenCalled();
+  });
+
+  it('keeps unsolicited notifications and server error details local', async () => {
+    const { socket, fromServer, request, write, response } = await setup();
+    const notify = vi.fn();
+    socket.on('mcp:server-notification', notify);
+    fromServer({ method: 'notifications/message', params: { data: 'private detail' } });
+    expect(notify).not.toHaveBeenCalled();
+    for (const id of [11, 12]) {
+      request({ id, method: 'tools/call', params: { name: 'read_text_file' } });
+    }
+    const [tool, rpc] = write.mock.calls.map(([line]) => JSON.parse(line).id);
+    fromServer({
+      id: tool,
+      result: { isError: true, content: [{ type: 'text', text: 'private detail' }] },
+    });
+    fromServer({
+      id: rpc,
+      error: { code: -32602, message: 'private detail', data: { path: 'private detail' } },
+    });
+    expect(response.mock.calls.map(([event]) => event.message)).toEqual([
+      {
+        jsonrpc: '2.0',
+        id: 11,
+        result: { isError: true, content: [{ type: 'text', text: 'Filesystem request failed' }] },
+      },
+      { jsonrpc: '2.0', id: 12, error: { code: -32602, message: 'Filesystem request failed' } },
+    ]);
   });
 
   it('keeps the directory supplied by the local launcher in control of the scan', async () => {

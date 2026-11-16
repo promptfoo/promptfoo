@@ -68,6 +68,8 @@ The action sets `sarif-path` only when a scan actually completes, so keep the up
     category: promptfoo-code-scan
 ```
 
+Full scans can share eligible committed text files from the compared revision with the hosted scanner. Set `diffsOnly: true` in the file selected by `config-path` to share only the Git diff.
+
 ## Supply Chain Security
 
 The hardening below applies to releases after v0.1.8; earlier releases resolve `promptfoo@latest` at runtime and predate the provenance attestation.

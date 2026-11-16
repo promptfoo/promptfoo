@@ -266,6 +266,14 @@ describe('filesystem MCP launcher', () => {
     },
   );
 
+  it('checks the executable against the original checkout when serving a private snapshot', () => {
+    mocks.resolve.mockReturnValue(path.join(rootDir, 'node_modules/server/index.js'));
+    expect(() => startFilesystemMcpServer(path.resolve('snapshot'), rootDir)).toThrow(
+      'installed outside the scanned repository',
+    );
+    expect(mocks.spawn).not.toHaveBeenCalled();
+  });
+
   it('allows a sibling installation with the same directory prefix', () => {
     const siblingEntry = path.join(`${rootDir}-tools`, 'index.js');
     mocks.resolve.mockReturnValue(siblingEntry);

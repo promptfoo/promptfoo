@@ -136,7 +136,7 @@ The action sets `sarif-path` only when a scan actually completes, so keep the up
 
 ### Configuration File
 
-To use `.promptfoo-code-scan.yaml`, set the action's `config-path` input to that file. Set `diffsOnly: true` in the file to limit hosted access to the diff. See the [CLI documentation](/docs/code-scanning/cli#configuration-file) for all available options.
+To use `.promptfoo-code-scan.yaml`, set the action's `config-path` input to that file. By default, full scans also share eligible committed text files from the compared revision. Set `diffsOnly: true` in the file to limit hosted access to the diff. See the [CLI documentation](/docs/code-scanning/cli#configuration-file) for all available options.
 
 ```yaml
 # Minimum severity level to report

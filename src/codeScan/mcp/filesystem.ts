@@ -52,7 +52,10 @@ function resolveFilesystemMcpServerEntry(): string {
   }
 }
 
-function getFilesystemMcpLaunch(rootDir: string): { args: string[]; cwd: string } {
+function getFilesystemMcpLaunch(
+  rootDir: string,
+  checkout: string,
+): { args: string[]; cwd: string } {
   // Preserve a caller's numeric heap limit without forwarding ambient loaders or preloads.
   const heapLimit = [
     ...(process.env.NODE_OPTIONS ?? '').matchAll(
@@ -61,9 +64,10 @@ function getFilesystemMcpLaunch(rootDir: string): { args: string[]; cwd: string 
   ].at(-1)?.[1];
   const nodeArgs = heapLimit ? [`--max-old-space-size=${heapLimit}`] : [];
   const canonicalRoot = realpathSync(rootDir);
+  const canonicalCheckout = realpathSync(checkout);
   const outsideRoot = (file: string): string => {
     const canonicalFile = realpathSync(file);
-    const relativePath = relative(canonicalRoot, canonicalFile);
+    const relativePath = relative(canonicalCheckout, canonicalFile);
     if (
       relativePath !== '..' &&
       !relativePath.startsWith(`..${sep}`) &&
@@ -108,7 +112,7 @@ function getFilesystemMcpLaunch(rootDir: string): { args: string[]; cwd: string 
  * @param rootDir Absolute path to root directory for filesystem access
  * @returns Child process handle
  */
-export function startFilesystemMcpServer(rootDir: string): ChildProcess {
+export function startFilesystemMcpServer(rootDir: string, checkout = rootDir): ChildProcess {
   // Validate rootDir is absolute
   if (!isAbsolute(rootDir)) {
     throw new FilesystemMcpError(`Root directory must be an absolute path, got: ${rootDir}`);
@@ -121,7 +125,7 @@ export function startFilesystemMcpServer(rootDir: string): ChildProcess {
   logger.debug(`Root directory: ${absoluteRootDir}`);
 
   try {
-    const { args, cwd } = getFilesystemMcpLaunch(absoluteRootDir);
+    const { args, cwd } = getFilesystemMcpLaunch(absoluteRootDir, checkout);
     const mcpProcess = spawn(process.execPath, args, {
       stdio: ['pipe', 'pipe', 'pipe'],
       cwd,

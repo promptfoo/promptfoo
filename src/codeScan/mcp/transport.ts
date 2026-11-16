@@ -14,16 +14,13 @@ import { SocketIoMcpBridgeError } from '../../types/codeScan';
 
 import type { JsonRpcMessage } from '../../types/codeScan';
 
-// The hosted scanner may inspect the checkout, including files outside the diff.
+// The scanner can navigate its snapshot and read one text file at a time.
 const readOnlyTools = new Set([
-  'directory_tree',
   'get_file_info',
   'list_allowed_directories',
   'list_directory',
   'list_directory_with_sizes',
   'read_file',
-  'read_media_file',
-  'read_multiple_files',
   'read_text_file',
   'search_files',
 ]);
@@ -83,7 +80,7 @@ export class SocketIoMcpBridge {
       throw new SocketIoMcpBridgeError('Socket not initialized');
     }
 
-    // Return the server's responses and notifications to the scanner.
+    // Only return responses to requests the scanner actually made.
     this.mcpProcess.stdout?.on('data', (chunk: Buffer) => {
       this.readBuffer += chunk.toString('utf8');
 
@@ -102,48 +99,9 @@ export class SocketIoMcpBridge {
         }
 
         try {
-          const message = JSON.parse(line);
-
-          if ('method' in message) {
-            if (message.id == null) {
-              this.socket.emit('mcp:server-notification', {
-                session_id: this.sessionId,
-                batch_id: 0,
-                message,
-              });
-            } else {
-              // No optional client capabilities are negotiated. Answer a server ping locally.
-              const reply =
-                message.method === 'ping'
-                  ? { result: {} }
-                  : { error: { code: -32601, message: 'Unsupported client method' } };
-              this.mcpProcess.stdin?.write(
-                JSON.stringify({ jsonrpc: '2.0', id: message.id, ...reply }) + '\n',
-              );
-            }
-            continue;
-          }
-
-          const wireId = String(message.id);
-          const mapping = this.wireIdMap.get(wireId);
-          if (!mapping) {
-            continue;
-          }
-          this.wireIdMap.delete(wireId);
-          if (mapping.method === 'initialize' && message.result?.capabilities) {
-            // The hosted client can discover and call tools through this bridge.
-            message.result.capabilities = message.result.capabilities.tools ? { tools: {} } : {};
-          }
-          if (mapping.method === 'tools/list' && Array.isArray(message.result?.tools)) {
-            message.result.tools = message.result.tools.filter(isReadOnlyTool);
-          }
-          this.socket.emit('mcp:response', {
-            session_id: this.sessionId,
-            batch_id: mapping.batchId,
-            message: { ...message, id: mapping.originalId },
-          });
+          this.handleServerMessage(line);
         } catch (_error) {
-          logger.debug(`Failed to parse MCP output: ${line}`);
+          logger.debug('Failed to process filesystem MCP output');
         }
       }
     });
@@ -196,14 +154,59 @@ export class SocketIoMcpBridge {
         // Write JSON-RPC message to MCP stdin with newline
         const jsonLine = JSON.stringify(forwarded) + '\n';
         this.mcpProcess.stdin?.write(jsonLine);
-      } catch (error) {
-        logger.error(
-          `Failed to write to MCP stdin: ${error instanceof Error ? error.message : String(error)}`,
-        );
+      } catch {
+        logger.error('Failed to forward filesystem MCP request');
       }
     });
 
     logger.debug('MCP ↔ Socket.io bridge active');
+  }
+
+  private handleServerMessage(line: string): void {
+    const message = JSON.parse(line);
+
+    if ('method' in message) {
+      if (message.id != null) {
+        // No optional client capabilities are negotiated. Answer a server ping locally.
+        const reply =
+          message.method === 'ping'
+            ? { result: {} }
+            : { error: { code: -32601, message: 'Unsupported client method' } };
+        this.mcpProcess.stdin?.write(
+          JSON.stringify({ jsonrpc: '2.0', id: message.id, ...reply }) + '\n',
+        );
+      }
+      return;
+    }
+
+    const wireId = String(message.id);
+    const mapping = this.wireIdMap.get(wireId);
+    if (!mapping) {
+      return;
+    }
+    this.wireIdMap.delete(wireId);
+    if (mapping.method === 'initialize' && message.result?.capabilities) {
+      // The hosted client can discover and call tools through this bridge.
+      message.result.capabilities = message.result.capabilities.tools ? { tools: {} } : {};
+    }
+    if (mapping.method === 'tools/list' && Array.isArray(message.result?.tools)) {
+      message.result.tools = message.result.tools.filter(isReadOnlyTool);
+    }
+    // Server errors may include local paths or fragments of the failed request.
+    const reply = message.error
+      ? { error: { code: message.error.code, message: 'Filesystem request failed' } }
+      : { result: message.result };
+    if (mapping.method === 'tools/call' && reply.result?.isError) {
+      reply.result = {
+        isError: true,
+        content: [{ type: 'text', text: 'Filesystem request failed' }],
+      };
+    }
+    this.socket.emit('mcp:response', {
+      session_id: this.sessionId,
+      batch_id: mapping.batchId,
+      message: { jsonrpc: '2.0', id: mapping.originalId, ...reply },
+    });
   }
 
   private takeCancellationParams(batchId: number, params: unknown) {

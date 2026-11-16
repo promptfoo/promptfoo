@@ -136,6 +136,16 @@ describe('Scanner machine-readable output', () => {
       events.push('stop');
     });
 
+    vi.doMock('../../src/codeScan/mcp/snapshot', () => ({
+      createFilesystemSnapshot: vi.fn(async () => ({
+        rootDir: '/private/snapshot',
+        checkout: '/test/repo',
+        commit: '1234',
+        dispose: async () => {
+          events.push('dispose-snapshot');
+        },
+      })),
+    }));
     vi.doMock('../../src/codeScan/mcp/filesystem', () => ({
       startFilesystemMcpServer: vi.fn(() => {
         events.push('start');
@@ -356,14 +366,28 @@ describe('Scanner machine-readable output', () => {
       'announce',
       'bridge-disconnect',
       'stop',
+      'dispose-snapshot',
       'client-disconnect',
     ]);
     expect(mcp.constructorArgs()).toEqual([mcp.mcpProcess, socket, 'test-session-id']);
     expect(socketEmit).toHaveBeenCalledWith('runner:hello', {
       session_id: 'test-session-id',
-      repo_root: expect.stringMatching(/test[/\\]repo$/),
+      repo_root: '/private/snapshot',
     });
     expect(mcp.stop).toHaveBeenCalledOnce();
+  });
+
+  it('avoids inspecting the working tree when a full scan has no eligible changes', async () => {
+    mockScanner();
+    mockMcpLifecycle();
+    const { executeScan } = await import('../../src/codeScan/scanner/index');
+    const { countUncommittedFiles } = await import('../../src/codeScan/git/diff');
+    const { default: logger } = await import('../../src/logger');
+    await executeScan('/test/repo', { diffsOnly: false });
+    expect(countUncommittedFiles).not.toHaveBeenCalled();
+    expect(logger.info).toHaveBeenCalledWith(
+      'No eligible committed changes to scan in the selected directory.',
+    );
   });
 
   it('stops a failed MCP setup exactly once without announcing or disconnecting the bridge', async () => {
@@ -384,6 +408,7 @@ describe('Scanner machine-readable output', () => {
       'construct',
       'connect',
       'stop',
+      'dispose-snapshot',
       'client-disconnect',
     ]);
     expect(mcp.stop).toHaveBeenCalledOnce();
