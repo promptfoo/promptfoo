@@ -251,10 +251,11 @@ describe('doRedteamRun', () => {
       async ({ loadedFromCloud, directory }) => {
         await doRedteamRun({ liveRedteamConfig: mockConfig, loadedFromCloud });
 
-        const [[filename, contents]] = vi.mocked(fsPromises.writeFile).mock.calls;
+        const [[filename, contents, options]] = vi.mocked(fsPromises.writeFile).mock.calls;
         expect(path.dirname(String(filename))).toBe(directory);
         expect(path.basename(String(filename))).toMatch(/^redteam-.+\.yaml$/);
         expect(contents).toBe('mocked-yaml-content');
+        expect(options).toEqual({ flag: 'wx', mode: 0o600 });
         expect(yaml.dump).toHaveBeenCalledWith(mockConfig);
         expect(doGenerateRedteam).toHaveBeenCalledWith(
           expect.objectContaining({ config: filename, output: filename }),
