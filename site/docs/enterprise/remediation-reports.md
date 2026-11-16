@@ -25,7 +25,7 @@ Remediation reports analyze your scan results and provide:
 - **Executive Summary**: High-level assessment of your security posture with top concerns
 - **Vulnerability-to-Remediation Mapping**: Quick reference showing which fixes address which vulnerabilities
 - **Prioritized Action Items**: Step-by-step implementation guidance ordered by impact and effort
-- **Code Examples**: Ready-to-use code snippets and configuration changes
+- **Code Examples**: Suggested code snippets and configuration changes to review for your application
 - **Attack Context**: Real examples from your scan showing how vulnerabilities were exploited
 
 ## Accessing Remediation Reports
@@ -101,7 +101,7 @@ For each vulnerability addressed by a remediation action, the report shows:
 - The model's vulnerable responses
 - Why the test was marked as a failure
 
-This context helps you understand the real-world exploitation of each vulnerability and verify your fixes are effective.
+Review the attack and target response together before accepting the reported violation or its proposed fix.
 
 ## Using Report Features
 
@@ -136,7 +136,7 @@ For system prompt vulnerabilities, use the **Harden Prompt** feature:
 
 ![System Prompt Hardening Dialog](/img/enterprise-docs/remediation-report-harden.png)
 
-This feature provides immediate, actionable improvements to your system prompts based on the specific vulnerabilities found in your scan.
+Treat the generated prompt as a proposed change. Check that it preserves the application's intended behavior as well as addressing the reported attacks.
 
 ## Report Statuses
 
@@ -177,13 +177,9 @@ Consider both impact and effort when prioritizing:
 
 ### Verification
 
-After implementing remediation actions:
+Rerun the original failing cases against the changed target with the same permissions, context, and grading criteria. Inspect the responses and any tool traces to confirm the prohibited behavior stopped. A lower aggregate risk score alone does not verify the fix.
 
-1. Run a new scan with the same configuration
-2. Compare the new report to the previous one
-3. Verify that addressed vulnerabilities no longer appear
-4. Check if the overall risk level has improved
-5. Generate a new remediation report to identify remaining issues
+Then run additional attacks and ordinary application tests to check for bypasses and regressions. Record which cases you tested when marking a finding as fixed.
 
 ## Integration with Findings Workflow
 

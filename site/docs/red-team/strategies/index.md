@@ -14,7 +14,7 @@ Strategies are attack techniques that systematically probe LLM applications for 
 
 ## Recommended Strategies
 
-Most users only need two strategies for comprehensive coverage. These agentic methods provide the highest attack success rates across use cases.
+Start with `jailbreak:meta` for single-turn attacks. Add `jailbreak:hydra` when you need to test conversations across multiple turns. Choose additional strategies for attack surfaces or failure modes relevant to your application.
 
 ### Meta Agent: Best for Single-Turn
 
@@ -30,9 +30,9 @@ The [Meta Agent](/docs/red-team/strategies/meta/) dynamically builds an attack t
 
 ### Quick Start
 
-For most applications, this configuration provides comprehensive red team coverage:
+Add these strategies to an existing red team configuration:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 redteam:
   strategies:
     - jailbreak:meta # Single-turn agentic attacks
@@ -49,22 +49,17 @@ _🌐 indicates that strategy uses remote inference in Promptfoo Community editi
 
 ### Static Strategies
 
-Transform inputs using predefined patterns to bypass security controls. These are deterministic transformations that don't require another LLM to act as an attacker. Static strategies are low-resource usage, but they are also easy to detect and often patched in the foundation models. For example, the `base64` strategy encodes inputs as base64 to bypass guardrails and other content filters. `jailbreak-templates` wraps the payload in known jailbreak templates like DAN or Skeleton Key.
+Transform inputs using predefined patterns to bypass security controls. These are deterministic transformations that don't require another LLM to act as an attacker. Use them to test a specific encoding or known attack pattern without an attacker-model call for the transformation. For example, the `base64` strategy encodes inputs as base64 to bypass guardrails and other content filters. `jailbreak-templates` wraps the payload in known jailbreak templates like DAN or Skeleton Key.
 
 ### Dynamic Strategies
 
-Dynamic strategies use an attacker agent to mutate the original adversarial input through iterative refinement. These strategies make multiple calls to both an attacker model and your target model to determine the most effective attack vector. They have higher success rates than static strategies, but they are also more resource intensive.
+Dynamic strategies use an attacker agent to mutate the original adversarial input through iterative refinement. These strategies make multiple calls to both an attacker model and your target model to determine the most effective attack vector. They make additional model calls, so review the strategy's attempt limits and token-budget settings before running a large test suite.
 
-By default, dynamic strategies like `jailbreak` and `jailbreak:composite` will:
-
-- Make multiple attempts to bypass the target's security controls
-- Stop after exhausting the configured token budget
-- Stop early if they successfully generate a harmful output
-- Track token usage to prevent runaway costs
+Stopping conditions differ by strategy. Consult its configuration reference for iteration limits, early stopping, and budget controls.
 
 ### Multi-turn Strategies
 
-Multi-turn strategies use an attacker agent to coerce the target over multiple conversation turns. They are particularly effective against stateful applications where they can convince the target to act against its purpose over time. Multi-turn strategies are more resource intensive than single-turn strategies, but they have the highest success rates.
+Multi-turn strategies use an attacker agent to coerce the target over multiple conversation turns. Use them to test whether earlier messages change how the target handles a later request. They can make many target and grading calls per test case.
 
 Multi-turn scans track target, attacker, and grading tokens separately. Probe counts include only requests to the target; grading request counts include one request per grading task, while cached responses do not create additional requests.
 
@@ -77,14 +72,14 @@ Indirect prompt injection strategies test whether AI agents can be manipulated t
 Regression strategies help maintain security over time by learning from past failures. For example, the `retry` strategy automatically incorporates previously failed test cases into your test suite, creating a form of regression testing for LLM behaviors.
 
 :::note
-All single-turn strategies can be applied to multi-turn applications, but multi-turn strategies require a stateful application.
+Multi-turn testing requires conversation context. Depending on the strategy, Promptfoo can replay a transcript or use sessions maintained by your target. See [Hydra session configuration](/docs/red-team/strategies/hydra) for an example.
 :::
 
 ## Configuration
 
 ### Basic Configuration
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 redteam:
   strategies:
     - jailbreak:meta # string syntax
@@ -95,7 +90,7 @@ redteam:
 
 Strategies can be applied to specific plugins or the entire test suite. By default, strategies are applied to all plugins. You can override this by specifying the `plugins` option in the strategy which will only apply the strategy to the specified plugins.
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 redteam:
   strategies:
     - id: jailbreak:tree
@@ -108,7 +103,7 @@ redteam:
 
 Chain strategies in order with the `layer` strategy. This is useful when you want to apply a transformation first, then another technique:
 
-```yaml title="promptfooconfig.yaml"
+```yaml
 redteam:
   strategies:
     - id: layer

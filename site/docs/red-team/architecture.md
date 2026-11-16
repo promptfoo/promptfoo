@@ -6,11 +6,9 @@ description: Red team AI systems by analyzing architecture components and attack
 
 # Architecture
 
-Promptfoo automated red teaming consists of three main components: **plugins**, **strategies**, and **targets**.
+A red team run generates attacks, sends them to your target, and grades the responses. **Plugins** define what to test, **strategies** define how to attack, and **providers** connect to the target and any models used for generation or grading.
 
-Each component is designed to be modular and reusable. We're building a framework that is useful out of the box with minimal configuration, but can be extended with custom components.
-
-For usage details, see the [quickstart guide](/docs/red-team/quickstart).
+For a first run, follow the [quickstart guide](/docs/red-team/quickstart).
 
 ```mermaid
 %%{init: {
@@ -48,7 +46,7 @@ graph TB
         direction TB
         API["<strong>HTTP API</strong><br/><small>REST Endpoints</small>"]
         Model["<strong>Direct Model</strong><br/><small>GPT, Claude, Llama, Local, etc.</small>"]
-        Browser["<strong>Browser Testing</strong><br/><small>Selenium, Puppeteer</small>"]
+        Browser["<strong>Browser Testing</strong><br/><small>Playwright</small>"]
         Provider["<strong>Custom Providers</strong><br/><small>Python, JavaScript, etc.</small>"]
     end
 
@@ -133,26 +131,20 @@ The test generation engine combines plugins and strategies to create attack prob
 
 ### Target Interface
 
-The target interface defines how test probes interact with the system under test. We support [over 30 target types](/docs/providers/), including:
+Choose a [provider](/docs/providers/) that can send the test input to your application and return the response to be graded:
 
 - **[HTTP API](/docs/providers/http/)** - Tests REST endpoints via configurable requests
 - **[Direct Model](/docs/red-team/configuration/#custom-providerstargets)** - Interfaces with LLM providers like OpenAI or local models
-- **[Browser](/docs/providers/browser/)** - Runs end-to-end tests using Selenium or Puppeteer
+- **[Browser](/docs/providers/browser/)** - Runs browser interactions using Playwright
 - **[Custom Provider](/docs/red-team/configuration/#providers)** - Implements custom runtime integrations via Python/JavaScript
 
 Each target type implements a common interface for sending probes and receiving responses.
 
 ### Evaluation Engine
 
-The evaluation engine processes target responses through:
+Each test's assertions check the target response against the plugin's criteria and application context. Many red team checks use an LLM grader. Results include the attack, response, pass/fail decision, and grading reason.
 
-- **[Vulnerability Analysis](/docs/red-team/llm-vulnerability-types)** - Scans responses for security issues using configurable detectors
-- **Response Analysis** - Examines output content and behavior patterns using [LLM-as-a-judge grading](/docs/configuration/expected-outputs/)
-- **Results** - Generates findings with:
-  - Vulnerability type
-  - Severity
-  - Attack vector
-  - Mitigation steps
+A request or grading error means the check could not complete. It should not be interpreted as a successful defense. See [grading results](/docs/red-team/troubleshooting/grading-results) for how to review and customize these judgments.
 
 ### Configuration
 
@@ -172,60 +164,37 @@ The configuration defines:
 3. **Target interface** delivers probes to the system
 4. **Evaluation engine** analyzes responses and reports findings
 
-Components can be used independently or composed into larger test suites. The modular design allows for extending functionality by adding new [plugins](/docs/red-team/configuration/#plugins), [strategies](/docs/red-team/configuration/#strategies), [targets](/docs/providers/) or evaluators.
+You can generate initial cases with `promptfoo redteam generate` and run the saved configuration with `promptfoo redteam eval`. This reuses the seed cases and configuration. Adaptive strategies still generate new attacks during evaluation, so their exact inputs can differ between runs.
 
 For CI/CD integration, see our [automation guide](/docs/integrations/ci-cd).
 
 ## Data Flow
 
-The following sequence diagram illustrates the runtime communication between Promptfoo components during a red team assessment.
+The diagram below shows one iterative attack. The strategy uses responses from earlier attempts to generate follow-ups. Finding a violation can end that attack's search while the remaining tests continue. Each strategy defines its own stopping conditions.
 
-The data flow follows a three-phase approach:
-
-**Phase 1: Initial Attack Generation**: The Promptfoo Client requests an attack from the cloud service, which leverages AI models to generate adversarial payloads. These attacks are based on the configured plugins and strategies.
-
-**Phase 2: Iterative Refinement** - The client executes attacks against the target system and evaluates responses. If a vulnerability is detected, testing concludes. Otherwise, the client generates follow-up attacks, providing context from previous attempts.
-
-This feedback loop generates increasingly sophisticated attacks, applying different strategies and attack vectors until either a vulnerability is found or the maximum attempt limit is reached.
-
-**Phase 3: Results Reporting**: Upon completion, the client produces a comprehensive test summary.
+Generation and grading may use Promptfoo remote services or configured model providers. The target receives attack inputs through its provider. Running the CLI locally does not make these services local. See [generation configuration](/docs/red-team/configuration#remote-generation) and [grader configuration](/docs/red-team/troubleshooting/grading-results#using-local-providers-for-grading) to choose where those requests go.
 
 ```mermaid
 sequenceDiagram
-    participant Client as Promptfoo<br/>Client
-    participant Cloud as Promptfoo<br/>Server
-    participant AI as AI Models
-    participant Target as Target<br/>System
+    participant Client as Promptfoo CLI
+    participant Generator as Attack generator
+    participant Target as Target application
+    participant Grader as Grader
+    participant Storage as Sharing destination
 
-    rect rgb(230, 245, 255)
-        Note over Client,Target: PHASE 1: Initial Attack
-        Client->>Cloud: Request attack generation
-        Cloud->>AI: Generate attack
-        AI-->>Cloud: Attack payload
-        Cloud-->>Client: Return attack
-        Client->>Target: Execute attack
+    loop Until this attack reaches its stopping condition
+        Client->>Generator: Request attack, including prior context if any
+        Generator-->>Client: Attack input
+        Client->>Target: Send attack through target provider
         Target-->>Client: Response
+        Client->>Grader: Evaluate response against test criteria
+        Grader-->>Client: Decision and reason
+        Client->>Client: Record result
     end
-
-    rect rgb(255, 245, 230)
-        Note over Client,Target: PHASE 2: Iterate Until Success
-
-        alt Target is vulnerable
-            Client->>Client: Vulnerability detected<br/>End testing
-        else Target not vulnerable
-            Client->>Cloud: Request follow-up attack<br/>(include previous context)
-            Cloud->>AI: Generate refined attack
-            AI-->>Cloud: New attack payload
-            Cloud-->>Client: Return follow-up attack
-            Client->>Target: Execute new attack
-            Target-->>Client: Response
-            Note over Client: Repeat until vulnerable<br/>or max attempts reached
-        end
-    end
-
-    rect rgb(245, 255, 245)
-        Note over Client,Target: PHASE 3: Report Results
-        Client->>Cloud: Submit test summary<br/>(attacks & results)
-        Cloud-->>Client: Acknowledge receipt
+    Client->>Client: Produce run results
+    opt Sharing enabled
+        Client->>Storage: Upload eval snapshot
     end
 ```
+
+Saving results locally and uploading them are separate operations. Sharing can be enabled by CLI flags, configuration, or a Cloud login. See [sharing](/docs/usage/sharing) for the data included and destination settings. Use `--no-share` to disable uploads for a run.

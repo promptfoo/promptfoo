@@ -15,15 +15,17 @@ keywords:
 
 # CI/CD Integration for LLM Evaluation and Security
 
-Integrate promptfoo into your CI/CD pipelines to automatically evaluate prompts, test for security vulnerabilities, and ensure quality before deployment. This guide covers modern CI/CD workflows for both quality testing and security scanning.
+Run a saved Promptfoo configuration in CI, fail the job when results miss your threshold, and retain the report for review. The examples below assume the config and its prompt and test files are committed to your repository.
 
 ## Why CI/CD for LLM Apps?
 
-- **Catch regressions early** - Test prompt changes before they reach production
-- **Security scanning** - Automated red teaming and vulnerability detection
-- **Quality gates** - Enforce minimum performance thresholds
-- **Compliance** - Generate reports for OWASP, NIST, and other frameworks
-- **Cost control** - Track token usage and API costs over time
+Use CI to check known examples after changes to prompts, models, or application code. Use scheduled red team runs to explore additional failure modes. Keep the test configuration and report with each run so a changed score can be traced to a changed input, grader, or target.
+
+## Prerequisites
+
+- Node.js `>=22.22.0` installed in your CI environment (Node.js 24 LTS recommended)
+- LLM provider API keys (stored as secure environment variables)
+- A promptfoo configuration file (`promptfooconfig.yaml`)
 
 ## Quick Start
 
@@ -38,13 +40,6 @@ npx promptfoo@latest eval -c promptfooconfig.yaml -o results.json
 # Run security scan (red teaming)
 npx promptfoo@latest redteam run
 ```
-
-## Prerequisites
-
-- Node.js `>=22.22.0` installed in your CI environment (Node.js 24 LTS recommended)
-- LLM provider API keys (stored as secure environment variables)
-- A promptfoo configuration file (`promptfooconfig.yaml`)
-- (Optional) Docker for containerized environments
 
 ## Core Concepts
 
@@ -100,30 +95,22 @@ npx promptfoo@latest eval -o results.json -o report.html -o results.junit.xml
 
 Learn more about [output formats and processing](/docs/configuration/outputs).
 
-:::info Enterprise Feature
-
-SonarQube integration is available in [Promptfoo Enterprise](/docs/enterprise/). Use the standard JSON output format and process it for SonarQube import.
-
-:::
-
 ### 3. Quality Gates
 
-Fail the build when quality thresholds aren't met:
+By default, `promptfoo eval` exits with code `100` when the pass rate is below 100%. An assertion failure or execution error lowers the pass rate. Other failures, such as an invalid config, can return a different nonzero code. Let the CI runner fail on a nonzero exit:
 
 ```bash
-# Fail on any test failures
-npx promptfoo@latest eval --fail-on-error
-
-# Custom threshold checking
-npx promptfoo@latest eval -o results.json
-PASS_RATE=$(jq '.results.stats.successes / (.results.stats.successes + .results.stats.failures) * 100' results.json)
-if (( $(echo "$PASS_RATE < 95" | bc -l) )); then
-  echo "Quality gate failed: Pass rate ${PASS_RATE}% < 95%"
-  exit 1
-fi
+npx promptfoo@latest eval -c promptfooconfig.yaml --no-cache -o results.json
 ```
 
-See [assertions and metrics](/docs/configuration/expected-outputs) for comprehensive validation options.
+To allow some assertion failures, set `PROMPTFOO_PASS_RATE_THRESHOLD` to a percentage. Check errors separately if execution failures must always block the job:
+
+```bash
+PROMPTFOO_PASS_RATE_THRESHOLD=95 npx promptfoo@latest eval -o results.json
+jq -e '.results.stats.errors == 0' results.json
+```
+
+The pass rate is `successes / (successes + failures + errors)`. Inspect the failed rows before changing the threshold. See [assertions and metrics](/docs/configuration/expected-outputs) to configure the checks themselves.
 
 ## Platform-Specific Guides
 
@@ -163,18 +150,8 @@ jobs:
         run: |
           npx promptfoo@latest eval \
             -c promptfooconfig.yaml \
-            --share \
             -o results.json \
             -o report.html
-
-      - name: Check quality gate
-        run: |
-          FAILURES=$(jq '.results.stats.failures' results.json)
-          if [ "$FAILURES" -gt 0 ]; then
-            echo "❌ Eval failed with $FAILURES failures"
-            exit 1
-          fi
-          echo "✅ All tests passed!"
 
       - name: Upload results
         if: always()
@@ -229,7 +206,6 @@ evaluate:
     - |
       npx promptfoo@latest eval \
         -c promptfooconfig.yaml \
-        --share \
         -o output.json \
         -o report.html \
         -o output.junit.xml
@@ -241,6 +217,7 @@ evaluate:
     paths:
       - .cache/promptfoo
   artifacts:
+    when: always
     reports:
       junit: output.junit.xml
     paths:
@@ -267,22 +244,15 @@ pipeline {
                 sh '''
                     npx promptfoo@latest eval \
                         -c promptfooconfig.yaml \
-                        --share \
                         -o results.json
                 '''
             }
         }
+    }
 
-        stage('Quality Gate') {
-            steps {
-                script {
-                    def results = readJSON file: 'results.json'
-                    def failures = results.results.stats.failures
-                    if (failures > 0) {
-                        error("Eval failed with ${failures} failures")
-                    }
-                }
-            }
+    post {
+        always {
+            archiveArtifacts artifacts: 'results.json', allowEmptyArchive: true
         }
     }
 }
@@ -302,7 +272,7 @@ pipeline {
 
 ### 1. Docker-based CI/CD
 
-Create a custom Docker image with promptfoo pre-installed:
+This image runs Promptfoo through `npx` when the container starts:
 
 ```dockerfile title="Dockerfile"
 FROM node:24-slim
@@ -336,138 +306,38 @@ steps:
 
 ### 3. Scheduled Security Scans
 
-Run comprehensive security scans on a schedule:
-
-```yaml
-# GitHub Actions
-on:
-  schedule:
-    - cron: '0 2 * * *' # 2 AM daily
-
-jobs:
-  security-scan:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Full red team scan
-        run: |
-          npx promptfoo@latest redteam generate \
-            --plugins harmful,pii,contracts \
-            --strategies jailbreak,jailbreak-templates
-          npx promptfoo@latest redteam run
-```
+After configuring a working red team target, run it on a schedule using the [GitHub Actions example above](#github-actions). Set the plugins, strategies, and test counts in `promptfooconfig.yaml` so the scope is recorded in version control.
 
 ### 4. SonarQube Integration
 
-:::info Enterprise Feature
-
-Direct SonarQube output format is available in [Promptfoo Enterprise](/docs/enterprise/). For open-source users, export to JSON and transform the results.
-
-:::
-
-For enterprise environments, integrate with SonarQube:
-
-```yaml
-# Export results for SonarQube processing
-- name: Run promptfoo security scan
-  run: |
-    npx promptfoo@latest eval \
-      --config promptfooconfig.yaml \
-      -o results.json
-
-# Transform results for SonarQube (custom script required)
-- name: Transform for SonarQube
-  run: |
-    node transform-to-sonarqube.js results.json > sonar-report.json
-
-- name: SonarQube scan
-  env:
-    SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-  run: |
-    sonar-scanner \
-      -Dsonar.externalIssuesReportPaths=sonar-report.json
-```
-
-See our [SonarQube integration guide](/docs/integrations/sonarqube) for detailed setup.
+See the [SonarQube integration guide](/docs/integrations/sonarqube) for deployment requirements and the issue-import workflow. A standard Promptfoo JSON export is not itself a SonarQube issue report.
 
 ## Processing Results
 
 ### Parsing JSON Output
 
-The output JSON follows this schema:
+The [output reference](/docs/configuration/outputs#structured-output-fields) describes the export envelope. Summary counts are in `results.stats`, and individual results are in `results.results`.
 
-```typescript
-interface OutputFile {
-  evalId: string | null;
-  results: {
-    version: 3;
-    timestamp: string;
-    stats: {
-      successes: number;
-      failures: number;
-      errors: number;
-    };
-    prompts: Array<unknown>;
-    results: Array<{
-      success: boolean;
-      score: number;
-      error?: string;
-      // ... other fields
-    }>;
-  };
-  config: Partial<UnifiedConfig>;
-  shareableUrl: string | null;
-  metadata?: OutputMetadata;
-  vars?: string[];
-  runtimeOptions?: Partial<EvaluateOptions>;
-  traces?: TraceData[];
-  blobAssets?: ExportedBlobAsset[];
-}
+This script reports the pass rate and fails if there are execution errors, no results, or fewer than 95% passing results:
+
+<!-- prettier-ignore -->
+```javascript title="process-results.cjs"
+const fs = require('node:fs')
+const output = JSON.parse(fs.readFileSync('results.json', 'utf8'))
+const { successes, failures, errors } = output.results.stats
+const total = successes + failures + errors
+const passRate = total > 0 ? (successes / total) * 100 : 0
+
+console.log(`Pass rate: ${passRate.toFixed(2)}%`)
+console.log(`Assertion failures: ${failures}, execution errors: ${errors}`)
+process.exitCode = errors > 0 || total === 0 || passRate < 95 ? 1 : 0
 ```
 
-`promptfoo eval -o results.json` and `promptfoo export eval <evalId>` use the
-same eval output envelope. Portable exports created with
-`promptfoo export eval <evalId> --include-media` may add embedded `blobAssets`.
-
-Example processing script:
-
-```javascript title="process-results.js"
-const fs = require('fs');
-const evalOutput = JSON.parse(fs.readFileSync('results.json', 'utf8'));
-const { stats, results: evalResults } = evalOutput.results;
-
-// Calculate metrics
-const passRate = (stats.successes / (stats.successes + stats.failures)) * 100;
-
-console.log(`Pass rate: ${passRate.toFixed(2)}%`);
-console.log(`Shareable URL: ${evalOutput.shareableUrl}`);
-
-// Check for specific failures
-const criticalFailures = evalResults.filter(
-  (result) => result.error?.includes('security') || result.error?.includes('injection'),
-);
-
-if (criticalFailures.length > 0) {
-  console.error('Critical security failures detected!');
-  process.exit(1);
-}
-```
+Do not infer vulnerability severity from words in an error message. Inspect a failed test's grading result and red team metadata when reviewing a security finding.
 
 ### Posting Results
 
-Post eval results to PR comments, Slack, or other channels:
-
-```bash
-# Extract and post results
-SHARE_URL=$(jq -r '.shareableUrl' results.json)
-PASS_RATE=$(jq '.results.stats.successes / (.results.stats.successes + .results.stats.failures) * 100' results.json)
-
-# Post to GitHub PR
-gh pr comment --body "
-## Promptfoo Eval Results
-- Pass rate: ${PASS_RATE}%
-- [View detailed results](${SHARE_URL})
-"
-```
+Publish the HTML or JSON report as a CI artifact, including on failed jobs. If you choose to upload results with `--share`, configure [sharing and access](/docs/usage/sharing) first, then read the returned URL from `shareableUrl`. It is `null` when no shared URL is available.
 
 ## Caching Strategies
 
@@ -489,39 +359,28 @@ cache:
 
 ## Security Best Practices
 
-1. **API Key Management**
-   - Store API keys as encrypted secrets
-   - Use least-privilege access controls
-   - Rotate keys regularly
+Store provider credentials in your CI platform's secret store and pass them as environment variables. A runner must be able to reach the target and any generation or grading services used by the config.
 
-2. **Network Security**
-   - Use private runners for sensitive data
-   - Restrict outbound network access
-   - Consider on-premise deployments for enterprise
+Reports can contain prompts, test data, and model responses. Restrict access to the artifacts accordingly. To omit response outputs and test variables from exports and sharing, set these flags:
 
-3. **Data Privacy**
-   - Enable output stripping for sensitive data:
+```bash
+export PROMPTFOO_STRIP_RESPONSE_OUTPUT=true
+export PROMPTFOO_STRIP_TEST_VARS=true
+```
 
-   ```bash
-   export PROMPTFOO_STRIP_RESPONSE_OUTPUT=true
-   export PROMPTFOO_STRIP_TEST_VARS=true
-   ```
-
-4. **Audit Logging**
-   - Keep eval history
-   - Track who triggered security scans
-   - Monitor for anomalous patterns
+Review the exported file before distributing it. These flags do not prevent the configured providers from receiving the inputs needed to run the test.
 
 ## Troubleshooting
 
 ### Common Issues
 
-| Issue         | Solution                                         |
-| ------------- | ------------------------------------------------ |
-| Rate limits   | Enable caching, reduce concurrency with `-j 1`   |
-| Timeouts      | Increase timeout values, use `--max-concurrency` |
-| Memory issues | Use streaming mode, process results in batches   |
-| Cache misses  | Check cache key includes all relevant files      |
+| Symptom                                     | Check or next action                                                               |
+| ------------------------------------------- | ---------------------------------------------------------------------------------- |
+| Provider returns rate-limit errors          | Reduce concurrency with `--max-concurrency 1` and review the provider's limits     |
+| Target requests time out                    | Check target connectivity and the provider's timeout settings                      |
+| JSON export exceeds memory or string limits | Export individual rows with `-o results.jsonl`                                     |
+| Expected cache entries are missing          | Confirm the CI cache restored the directory configured by `PROMPTFOO_CACHE_PATH`   |
+| A job passes despite some failed tests      | Check `PROMPTFOO_PASS_RATE_THRESHOLD` and whether the runner ignores nonzero exits |
 
 ### Debug Mode
 

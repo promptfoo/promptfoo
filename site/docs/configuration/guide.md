@@ -17,9 +17,9 @@ pagination_next: configuration/reference
 
 # Configuration
 
-The YAML configuration format runs each prompt through a series of example inputs (aka "test case") and checks if they meet requirements (aka "assertions").
+Use `promptfooconfig.yaml` to define prompts, the providers that run them, and test cases containing input variables. Add assertions to check the returned outputs against your requirements.
 
-Assertions are _optional_. Many people get value out of reviewing outputs manually, and the web UI helps facilitate this.
+Assertions are optional. Without them, use the web UI to compare outputs manually. A completed request alone does not establish that its output is correct.
 
 ## Example
 
