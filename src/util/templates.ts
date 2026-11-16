@@ -58,7 +58,6 @@ type DeferredMacro = {
 
 type ConditionalSummary = {
   setBindings: Set<string>;
-  macroDeclarations: Set<string>;
   macroCandidates: Map<string, ReadonlySet<DeferredMacro>>;
 };
 
@@ -365,7 +364,7 @@ function countAstNodes(nodes: readonly unknown[]): number {
 }
 
 function createConditionalSummary(): ConditionalSummary {
-  return { setBindings: new Set(), macroDeclarations: new Set(), macroCandidates: new Map() };
+  return { setBindings: new Set(), macroCandidates: new Map() };
 }
 
 function updateStatementBindings(
@@ -386,7 +385,6 @@ function updateStatementBindings(
     if (summary) {
       for (const name of collectBindingNames(item.name)) {
         summary.setBindings.add(name);
-        summary.macroDeclarations.add(name);
       }
     }
   } else if (item.typename === 'Import') {
@@ -411,8 +409,9 @@ function mergeConditionalBindings(
   for (const name of source.setBindings) {
     target.setBindings.add(name);
   }
-  for (const name of source.macroDeclarations) {
-    target.macroDeclarations.add(name);
+  for (const [name, candidates] of source.macroCandidates) {
+    const existing = target.macroCandidates.get(name);
+    target.macroCandidates.set(name, new Set([...(existing ?? []), ...candidates]));
   }
 }
 
@@ -1106,8 +1105,6 @@ function conditionalMacroCandidates(
   const assignedInElse = elseSummary.setBindings.has(name);
   const bodyRelevant = mode !== 'else';
   const elseRelevant = mode !== 'body';
-  const declaredInBody = bodyRelevant && bodySummary.macroDeclarations.has(name);
-  const declaredInElse = elseRelevant && elseSummary.macroDeclarations.has(name);
   const hasIncoming = boundSymbols.has(name);
   const definitelyBound =
     mode === 'body'
@@ -1122,10 +1119,10 @@ function conditionalMacroCandidates(
       candidates.add(macro);
     }
   };
-  if ((bodyRelevant && assignedInBody) || declaredInBody) {
+  if (bodyRelevant) {
     addCandidates(bodySummary.macroCandidates.get(name));
   }
-  if ((elseRelevant && assignedInElse) || declaredInElse) {
+  if (elseRelevant) {
     addCandidates(elseSummary.macroCandidates.get(name));
   }
   if (boundSymbols instanceof LinkedScope) {
@@ -1150,9 +1147,12 @@ function ifNodeReferencesVariable(
   boundSymbols: ReadonlySet<string>,
   summary?: ConditionalSummary,
 ): boolean {
+  const condition = node.cond;
   if (
-    !isExistenceGuardedConditional(node, variableName) &&
-    astChildReferencesVariable(node, 'cond', variableName, boundSymbols)
+    isNunjucksAstNode(condition) &&
+    (isExistenceGuardedConditional(node, variableName)
+      ? isNodeReferencesVariable(condition, variableName, boundSymbols)
+      : astReferencesVariable(condition, variableName, { field: 'cond', node }, boundSymbols))
   ) {
     return true;
   }
@@ -1182,7 +1182,12 @@ function ifNodeReferencesVariable(
     return true;
   }
 
-  const assignedNames = new Set([...bodySummary.setBindings, ...elseSummary.setBindings]);
+  const assignedNames = new Set([
+    ...bodySummary.setBindings,
+    ...elseSummary.setBindings,
+    ...bodySummary.macroCandidates.keys(),
+    ...elseSummary.macroCandidates.keys(),
+  ]);
   const mode = conditionalExecutionMode(node);
   for (const name of assignedNames) {
     const binding = conditionalMacroCandidates(name, bodySummary, elseSummary, boundSymbols, mode);
@@ -1222,16 +1227,6 @@ function isDefaultFilterWithUndefinedSafeInput(
   );
 }
 
-function isDirectDefaultInput(node: unknown): node is NunjucksAstNode {
-  if (!isNunjucksAstNode(node)) {
-    return false;
-  }
-  return (
-    node.typename === 'Symbol' ||
-    (node.typename === 'LookupVal' && isDirectDefaultInput(node.target))
-  );
-}
-
 function undefinedSafeOperandReferencesVariable(
   node: NunjucksAstNode,
   variableName: RequiredReferenceTarget,
@@ -1240,16 +1235,32 @@ function undefinedSafeOperandReferencesVariable(
   if (node.typename === 'Symbol') {
     return false;
   }
-  if (node.typename === 'LookupVal' && isDirectDefaultInput(node)) {
-    // Every direct property/index read in this chain is undefined-safe. A
-    // computed index or filter nested inside it still has to be analyzed.
-    return (
-      (isNunjucksAstNode(node.val) &&
-        undefinedSafeOperandReferencesVariable(node.val, variableName, boundSymbols)) ||
-      (isNunjucksAstNode(node.target) &&
-        undefinedSafeOperandReferencesVariable(node.target, variableName, boundSymbols))
-    );
+
+  const memo = boundSymbols instanceof LinkedScope ? boundSymbols.macroAnalysisMemo() : undefined;
+  let current = node;
+  while (current.typename === 'LookupVal') {
+    consumeAnalysisWork(memo);
+    // Direct property/index reads are undefined-safe, but computations inside
+    // an index still run before default/d can supply its fallback.
+    if (
+      isNunjucksAstNode(current.val) &&
+      undefinedSafeOperandReferencesVariable(current.val, variableName, boundSymbols)
+    ) {
+      return true;
+    }
+    const target = current.target;
+    if (!isNunjucksAstNode(target)) {
+      break;
+    }
+    if (target.typename === 'Symbol') {
+      return false;
+    }
+    if (target.typename !== 'LookupVal') {
+      break;
+    }
+    current = target;
   }
+
   return astReferencesVariable(node, variableName, undefined, boundSymbols);
 }
 

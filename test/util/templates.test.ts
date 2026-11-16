@@ -384,6 +384,16 @@ describe('analyzeTemplateReference', () => {
     expect(extractRequiredVariablesFromTemplate(template)).toContain('_conversation');
   });
 
+  it('carries possible macro candidates through nested conditional summaries', () => {
+    const template =
+      "{% if true %}{% if enabled %}{% macro m(x=_conversation) %}{{x}}{% endmacro %}{{m('warmup')}}{% endif %}{% endif %}{{m()}}";
+    expect(analyzeTemplateReference(template, '_conversation')).toEqual({
+      referenced: true,
+      parsed: true,
+    });
+    expect(extractRequiredVariablesFromTemplate(template)).toContain('_conversation');
+  });
+
   it('does not mark a macro definite when its only declaration is unreachable', () => {
     const value = '{% if false %}{% macro m() %}ok{% endmacro %}{% endif %}{{m()}}';
     expect(extractRequiredVariablesFromTemplate(value)).toContain('m');
@@ -496,6 +506,15 @@ describe('analyzeTemplateReference', () => {
       extractRequiredVariablesFromTemplate("{{ user.name if user is defined else 'anonymous' }}"),
     ).toEqual([]);
   });
+
+  it('retains computations in existence-guarded block conditionals', () => {
+    expect(
+      extractRequiredVariablesFromTemplate('{% if purpose | trim is defined %}ready{% endif %}'),
+    ).toEqual(['purpose']);
+    expect(
+      extractRequiredVariablesFromTemplate('{% if user is defined %}ready{% endif %}'),
+    ).toEqual([]);
+  });
 });
 
 function nestedMacroArgumentVariants(): string {
@@ -519,6 +538,14 @@ describe('macro analysis work and scope changes', () => {
     const elapsed = performance.now() - started;
 
     expect(elapsed).toBeLessThan(500);
+  });
+
+  it('analyzes deep undefined-safe lookup chains without recursive rescanning', () => {
+    const value = '{#c#}{{ a' + '.b'.repeat(12000) + " | default('x') }}";
+    const started = performance.now();
+
+    expect(extractRequiredVariablesFromTemplate(value)).toEqual([]);
+    expect(performance.now() - started).toBeLessThan(500);
   });
 
   it.each<[string, (value: string) => boolean | undefined]>([
