@@ -39,7 +39,7 @@ vi.mock('fs', () => ({
   unlink: vi.fn(),
 }));
 
-vi.mock('glob', () => ({
+vi.mock('glob/raw', () => ({
   globSync: vi.fn(),
 }));
 

@@ -50,7 +50,7 @@ vi.mock('fs/promises', () => ({
   rm: vi.fn(),
 }));
 
-vi.mock('glob', () => ({
+vi.mock('glob/raw', () => ({
   globSync: vi.fn(),
 }));
 
