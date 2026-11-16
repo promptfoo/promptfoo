@@ -548,6 +548,21 @@ describe('parseFileUrl', () => {
     }
   });
 
+  it('should apply file-aware parsing when the base path is empty', () => {
+    mockResolve.mockImplementation((_basePath, filePath) => filePath);
+    const existsSpy = vi
+      .spyOn(fs, 'existsSync')
+      .mockImplementation((filePath) => filePath === 'config.cjs:backup.py');
+    try {
+      expect(parseFileUrl('file://config.cjs:backup.py:get_config', { basePath: '' })).toEqual({
+        filePath: 'config.cjs:backup.py',
+        functionName: 'get_config',
+      });
+    } finally {
+      existsSpy.mockRestore();
+    }
+  });
+
   it.each([
     'file://callbacks/2026-05-27T12:00:00.js',
     'file://./path/to/file:default.js',

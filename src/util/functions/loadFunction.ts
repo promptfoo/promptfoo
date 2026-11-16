@@ -124,9 +124,10 @@ export function parseFileUrl(
   const urlWithoutProtocol = fileUrl.slice('file://'.length);
   const parsedReference = parseExecutableFileReference(urlWithoutProtocol, {
     includeRuby: false,
-    fileExists: options.basePath
-      ? (candidate) => fs.existsSync(path.resolve(options.basePath!, candidate))
-      : undefined,
+    fileExists:
+      options.basePath === undefined
+        ? undefined
+        : (candidate) => fs.existsSync(path.resolve(options.basePath!, candidate)),
   });
   return {
     ...parsedReference,

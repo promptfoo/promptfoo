@@ -261,6 +261,21 @@ describe('fileReference utility functions', () => {
       }
     });
 
+    it('should use file-aware parsing with the default empty base path', async () => {
+      const existsSpy = vi
+        .spyOn(fs, 'existsSync')
+        .mockImplementation((filePath) => filePath === 'config.cjs:backup.py');
+      runPython.mockResolvedValue('empty-base-marker');
+      try {
+        expect(await loadFileReference('file://config.cjs:backup.py:get_config')).toBe(
+          'empty-base-marker',
+        );
+        expect(runPython).toHaveBeenCalledWith('config.cjs:backup.py', 'get_config', []);
+      } finally {
+        existsSpy.mockRestore();
+      }
+    });
+
     it.each(['file:///path/to/config?handler=loader.PY', 'file:///path/to/config#loader.PY'])(
       'should reject query-like Python file references: %s',
       async (fileRef) => {
