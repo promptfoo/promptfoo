@@ -424,8 +424,37 @@ export class MCPClient {
     }
   }
 
+  private getToolRoutes(): { serverKey: string; tool: MCPTool; exposedName: string }[] {
+    const routes = Array.from(this.tools.entries()).flatMap(([serverKey, tools]) =>
+      tools.map((tool) => ({ serverKey, tool, exposedName: tool.name })),
+    );
+    const counts = new Map<string, number>();
+    for (const { tool } of routes) {
+      counts.set(tool.name, (counts.get(tool.name) ?? 0) + 1);
+    }
+
+    // Keep names from non-colliding servers unchanged, and avoid aliasing a real tool.
+    const occupied = new Set(routes.map(({ tool }) => tool.name));
+    for (const route of routes) {
+      if (counts.get(route.tool.name) === 1) {
+        continue;
+      }
+      const serverName = route.serverKey.replace(/[^a-zA-Z0-9_-]/g, '_');
+      const toolName = route.tool.name.replace(/[^a-zA-Z0-9_-]/g, '_').slice(-40);
+      const base = `${serverName.slice(0, 64 - toolName.length - 2)}__${toolName}`;
+      let exposedName = base;
+      for (let suffix = 2; occupied.has(exposedName); suffix++) {
+        const ending = `_${suffix}`;
+        exposedName = `${serverName.slice(0, 64 - toolName.length - 2 - ending.length)}__${toolName}${ending}`;
+      }
+      route.exposedName = exposedName;
+      occupied.add(exposedName);
+    }
+    return routes;
+  }
+
   getAllTools(): MCPTool[] {
-    return Array.from(this.tools.values()).flat();
+    return this.getToolRoutes().map(({ tool, exposedName }) => ({ ...tool, name: exposedName }));
   }
 
   async callTool(
@@ -448,11 +477,19 @@ export class MCPClient {
     const timeoutOptions = getEffectiveRequestOptions(this.config);
     const requestOptions = signal ? { ...timeoutOptions, signal } : timeoutOptions;
     const disconnectedServers: string[] = [];
+    const routes = this.getToolRoutes();
+    // Preserve existing direct callers' first-match behavior for unqualified names.
+    const route =
+      routes.find(({ exposedName }) => exposedName === name) ??
+      routes.find(({ tool }) => tool.name === name);
+    if (!route) {
+      throw new Error(`Tool ${name} not found in any connected MCP server`);
+    }
 
-    // Find which server has this tool
-    for (const [serverKey, serverTools] of this.tools.entries()) {
+    // Explicitly select the server, rather than always calling the first matching tool name.
+    for (const [serverKey] of this.tools.entries()) {
       signal?.throwIfAborted();
-      if (!serverTools.some((tool) => tool.name === name)) {
+      if (serverKey !== route.serverKey) {
         continue;
       }
       const client = this.clients.get(serverKey);
@@ -468,7 +505,7 @@ export class MCPClient {
           result = await waitForPromiseWithAbort(
             oauthRequestSignal.run(requestSignal, () =>
               client.callTool(
-                { name, arguments: args },
+                { name: route.tool.name, arguments: args },
                 undefined, // use default result schema
                 requestOptions,
               ),
