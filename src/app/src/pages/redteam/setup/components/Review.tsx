@@ -23,7 +23,7 @@ import { Separator } from '@app/components/ui/separator';
 import { Spinner } from '@app/components/ui/spinner';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { EVAL_ROUTES, REDTEAM_ROUTES } from '@app/constants/routes';
-import { type ApiHealthStatus, isNoNetworkMode, useApiHealth } from '@app/hooks/useApiHealth';
+import { type ApiHealthStatus, useApiHealth } from '@app/hooks/useApiHealth';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
 import { cn } from '@app/lib/utils';
@@ -158,21 +158,18 @@ function removeIntentEntry(
 const NO_NETWORK_HEALTH_NOTE =
   'Network egress is disabled (PROMPTFOO_NO_NETWORK). The Promptfoo Cloud health check is skipped; local generation is still available.';
 
-// A 'disabled' health status blocks Run Now only when remote generation is
-// actually disabled. Under no-network mode the cloud check was skipped and
-// local generation is still allowed.
-function isHealthStatusBlocking(apiHealthStatus: ApiHealthStatus, noNetworkMode: boolean): boolean {
-  return (
-    ['blocked', 'unknown'].includes(apiHealthStatus) ||
-    (apiHealthStatus === 'disabled' && !noNetworkMode)
-  );
+// A 'disabled' health status always blocks Run Now: the server answers
+// DISABLED only for a genuine remote-generation disable, which wins over
+// the no-network skip. The skipped poll has its own 'skipped' status, so
+// no client-side no-network exemption is needed or correct here.
+function isHealthStatusBlocking(apiHealthStatus: ApiHealthStatus): boolean {
+  return ['blocked', 'unknown', 'disabled'].includes(apiHealthStatus);
 }
 
 function getRunNowTooltipMessage(
   isRunning: boolean,
   targetConfigError: string | null,
   apiHealthStatus: ApiHealthStatus,
-  noNetworkMode: boolean,
 ): string | undefined {
   if (isRunning) {
     return undefined;
@@ -186,9 +183,9 @@ function getRunNowTooltipMessage(
     case 'blocked':
       return 'Cannot connect to Promptfoo Cloud. Please check your network connection or API settings.';
     case 'disabled':
-      return noNetworkMode
-        ? NO_NETWORK_HEALTH_NOTE
-        : 'Remote generation is disabled. Running red team evaluations requires connection to Promptfoo Cloud.';
+      return 'Remote generation is disabled. Running red team evaluations requires connection to Promptfoo Cloud.';
+    case 'skipped':
+      return NO_NETWORK_HEALTH_NOTE;
     case 'unknown':
       return 'Checking connection to Promptfoo Cloud...';
     default:
@@ -196,17 +193,12 @@ function getRunNowTooltipMessage(
   }
 }
 
-function getApiHealthAlertMessage(
-  apiHealthStatus: ApiHealthStatus,
-  noNetworkMode: boolean,
-): string {
+function getApiHealthAlertMessage(apiHealthStatus: ApiHealthStatus): string {
   switch (apiHealthStatus) {
     case 'blocked':
       return 'Cannot connect to Promptfoo Cloud. The "Run Now" option requires a connection to Promptfoo Cloud.';
     case 'disabled':
-      return noNetworkMode
-        ? NO_NETWORK_HEALTH_NOTE
-        : 'Remote generation is disabled. The "Run Now" option is not available.';
+      return 'Remote generation is disabled. The "Run Now" option is not available.';
     case 'skipped':
       return NO_NETWORK_HEALTH_NOTE;
     default:
@@ -227,7 +219,6 @@ export default function Review({
     data: { status: apiHealthStatus },
     isLoading: isCheckingApiHealth,
   } = useApiHealth();
-  const noNetworkMode = isNoNetworkMode();
   const { jobId: savedJobId, setJob, clearJob, _hasHydrated } = useRedteamJobStore();
   const pollIntervalRef = useRef<number | null>(null);
   const [isYamlDialogOpen, setIsYamlDialogOpen] = React.useState(false);
@@ -506,16 +497,12 @@ export default function Review({
   }, [config.strategies]);
 
   const isRunNowDisabled = useMemo(() => {
-    return (
-      isRunning ||
-      Boolean(targetConfigError) ||
-      isHealthStatusBlocking(apiHealthStatus, noNetworkMode)
-    );
-  }, [isRunning, apiHealthStatus, targetConfigError, noNetworkMode]);
+    return isRunning || Boolean(targetConfigError) || isHealthStatusBlocking(apiHealthStatus);
+  }, [isRunning, apiHealthStatus, targetConfigError]);
 
   const runNowTooltipMessage = useMemo(
-    () => getRunNowTooltipMessage(isRunning, targetConfigError, apiHealthStatus, noNetworkMode),
-    [isRunning, apiHealthStatus, targetConfigError, noNetworkMode],
+    () => getRunNowTooltipMessage(isRunning, targetConfigError, apiHealthStatus),
+    [isRunning, apiHealthStatus, targetConfigError],
   );
 
   const checkForRunningJob = async (): Promise<JobStatusResponse> => {
@@ -1305,9 +1292,7 @@ export default function Review({
             {apiHealthStatus !== 'connected' && !isCheckingApiHealth && (
               <Alert variant="warning" className="mb-4">
                 <AlertContent>
-                  <AlertDescription>
-                    {getApiHealthAlertMessage(apiHealthStatus, noNetworkMode)}
-                  </AlertDescription>
+                  <AlertDescription>{getApiHealthAlertMessage(apiHealthStatus)}</AlertDescription>
                 </AlertContent>
               </Alert>
             )}

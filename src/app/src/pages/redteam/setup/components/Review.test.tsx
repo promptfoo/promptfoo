@@ -1127,11 +1127,11 @@ Application Details:
       expect(runButton).toBeDisabled();
     });
 
-    it('should enable the Run Now button when API status is disabled in no-network mode (runtime meta tag)', () => {
+    it('should disable the Run Now button when API status is disabled in no-network mode (runtime meta tag)', () => {
       vi.mocked(useApiHealth).mockReturnValue({
         data: {
           status: 'disabled',
-          message: 'network egress is disabled (PROMPTFOO_NO_NETWORK)',
+          message: 'remote generation and grading are disabled',
         },
         refetch: vi.fn(),
         isLoading: false,
@@ -1150,17 +1150,17 @@ Application Details:
         );
 
         const runButton = screen.getByRole('button', { name: /run now/i });
-        expect(runButton).toBeEnabled();
+        expect(runButton).toBeDisabled();
       } finally {
         marker.remove();
       }
     });
 
-    it('should enable the Run Now button when API status is disabled in no-network mode (build-time flag)', () => {
+    it('should disable the Run Now button when API status is disabled in no-network mode (build-time flag)', () => {
       vi.mocked(useApiHealth).mockReturnValue({
         data: {
           status: 'disabled',
-          message: 'network egress is disabled (PROMPTFOO_NO_NETWORK)',
+          message: 'remote generation and grading are disabled',
         },
         refetch: vi.fn(),
         isLoading: false,
@@ -1177,7 +1177,7 @@ Application Details:
         );
 
         const runButton = screen.getByRole('button', { name: /run now/i });
-        expect(runButton).toBeEnabled();
+        expect(runButton).toBeDisabled();
       } finally {
         vi.unstubAllEnvs();
       }
@@ -1289,11 +1289,11 @@ Application Details:
       ).toBeInTheDocument();
     });
 
-    it('should display no-network alert when API is disabled in no-network mode', () => {
+    it('should display the disabled alert when API is disabled in no-network mode', () => {
       vi.mocked(useApiHealth).mockReturnValue({
         data: {
           status: 'disabled',
-          message: 'network egress is disabled (PROMPTFOO_NO_NETWORK)',
+          message: 'remote generation and grading are disabled',
         },
         refetch: vi.fn(),
         isLoading: false,
@@ -1312,13 +1312,11 @@ Application Details:
         );
 
         expect(
-          screen.getByText(
-            /Network egress is disabled \(PROMPTFOO_NO_NETWORK\). The Promptfoo Cloud health check is skipped; local generation is still available./,
-          ),
+          screen.getByText(/Remote generation is disabled. The "Run Now" option is not available./),
         ).toBeInTheDocument();
         expect(
           screen.queryByText(
-            /Remote generation is disabled. The "Run Now" option is not available./,
+            /Network egress is disabled \(PROMPTFOO_NO_NETWORK\). The Promptfoo Cloud health check is skipped; local generation is still available./,
           ),
         ).not.toBeInTheDocument();
       } finally {
@@ -1440,7 +1438,7 @@ Application Details:
     it('should explain the skipped health check when hovering over Run Now in no-network mode', async () => {
       vi.mocked(useApiHealth).mockReturnValue({
         data: {
-          status: 'disabled',
+          status: 'skipped',
           message: 'network egress is disabled (PROMPTFOO_NO_NETWORK)',
         },
         refetch: vi.fn(),
