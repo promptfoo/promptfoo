@@ -202,6 +202,128 @@ describe('MCPClient', () => {
   });
 
   describe('initialize', () => {
+    it('never exposes a signed remote URL in MCP contract drift results', async () => {
+      const secret = 'do-not-expose-signed-url-token';
+      mcpClient = new MCPClient({
+        server: {
+          url: `https://mcp.example.test/path?token=${secret}`,
+          expectedTools: [{ name: 'tool1', description: 'approved', inputSchema: {} }],
+        },
+      });
+      let actualError = '';
+      try {
+        await mcpClient.initialize();
+      } catch (error) {
+        actualError = String(error);
+      }
+      expect(actualError).toMatch(/MCP server #1 tool contract drift.*tool1/);
+      expect(actualError).not.toContain(secret);
+      expect(actualError).not.toContain('https://mcp.example.test/path');
+      expect(mockClient.close).toHaveBeenCalled();
+    });
+
+    it('rejects MCP tool description drift before publishing the server', async () => {
+      mcpClient = new MCPClient({
+        server: {
+          command: 'node',
+          expectedTools: [{ name: 'tool1', description: 'approved', inputSchema: {} }],
+        },
+      });
+      await expect(mcpClient.initialize()).rejects.toThrow(
+        /tool contract drift.*tool1 \(description\)/i,
+      );
+      expect(mcpClient.hasInitialized).toBe(false);
+      expect(mcpClient.getAllTools()).toEqual([]);
+      expect(mockClient.close).toHaveBeenCalled();
+      expect(mockClient.callTool).not.toHaveBeenCalled();
+    });
+
+    it('rejects unexpected tools from an MCP server with a pinned contract', async () => {
+      mockClient.listTools.mockResolvedValue(createTwoToolListResponse());
+      mcpClient = new MCPClient({
+        server: {
+          command: 'node',
+          expectedTools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
+        },
+      });
+      await expect(mcpClient.initialize()).rejects.toThrow(/tool contract drift.*tool2 \(added\)/i);
+      expect(mcpClient.hasInitialized).toBe(false);
+    });
+
+    it('rejects a tightened MCP input schema when the approved contract is unchanged', async () => {
+      mockClient.listTools.mockResolvedValue({
+        tools: [
+          {
+            name: 'tool1',
+            description: 'desc1',
+            inputSchema: {
+              type: 'object',
+              properties: { id: { type: 'string' } },
+              required: ['id'],
+            },
+          },
+        ],
+      });
+      mcpClient = new MCPClient({
+        server: {
+          command: 'node',
+          expectedTools: [
+            {
+              name: 'tool1',
+              description: 'desc1',
+              inputSchema: { type: 'object', properties: { id: { type: 'string' } } },
+            },
+          ],
+        },
+      });
+      await expect(mcpClient.initialize()).rejects.toThrow(
+        /tool contract drift.*tool1 \(input schema\)/i,
+      );
+      expect(mcpClient.hasInitialized).toBe(false);
+      expect(mockClient.callTool).not.toHaveBeenCalled();
+    });
+
+    it('compares tool schemas structurally without depending on JSON object key order', async () => {
+      mockClient.listTools.mockResolvedValue({
+        tools: [
+          {
+            name: 'tool1',
+            description: 'desc1',
+            inputSchema: { properties: { x: { type: 'string' } }, type: 'object' },
+          },
+        ],
+      });
+      mcpClient = new MCPClient({
+        server: {
+          command: 'node',
+          expectedTools: [
+            {
+              name: 'tool1',
+              description: 'desc1',
+              inputSchema: { type: 'object', properties: { x: { type: 'string' } } },
+            },
+          ],
+        },
+      });
+      await mcpClient.initialize();
+      expect(mcpClient.hasInitialized).toBe(true);
+      await mcpClient.cleanup();
+    });
+
+    it('compares only tools exposed by an explicit MCP tool allowlist', async () => {
+      mockClient.listTools.mockResolvedValue(createTwoToolListResponse());
+      mcpClient = new MCPClient({
+        tools: ['tool1'],
+        server: {
+          command: 'node',
+          expectedTools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
+        },
+      });
+      await mcpClient.initialize();
+      expect(mcpClient.getAllTools().map((tool) => tool.name)).toEqual(['tool1']);
+      await mcpClient.cleanup();
+    });
+
     it('passes file defaults below explicit MCP server environment values', async () => {
       mockClient.listTools.mockResolvedValueOnce({ tools: [] });
       mcpClient = new MCPClient({

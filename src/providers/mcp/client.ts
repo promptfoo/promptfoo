@@ -1,4 +1,5 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
+import { isDeepStrictEqual } from 'node:util';
 import path from 'path';
 
 import cliState from '../../cliState';
@@ -34,6 +35,42 @@ import type {
 } from './types';
 
 const oauthRequestSignal = new AsyncLocalStorage<AbortSignal>();
+
+/** Reject unapproved MCP contract changes without leaking schema contents into logs. */
+function assertExpectedMcpTools(
+  serverKey: string,
+  expectedTools: MCPTool[],
+  actualTools: MCPTool[],
+) {
+  const sortByName = (a: MCPTool, b: MCPTool) => a.name.localeCompare(b.name);
+  if (isDeepStrictEqual([...expectedTools].sort(sortByName), [...actualTools].sort(sortByName))) {
+    return;
+  }
+
+  const expected = new Map(expectedTools.map((tool) => [tool.name, tool]));
+  const actual = new Map(actualTools.map((tool) => [tool.name, tool]));
+  const changed = [...new Set([...expected.keys(), ...actual.keys()])].sort().flatMap((name) => {
+    const approved = expected.get(name);
+    const live = actual.get(name);
+    if (!approved) {
+      return [`${name} (added)`];
+    }
+    if (!live) {
+      return [`${name} (removed)`];
+    }
+    const fields = [
+      ...(isDeepStrictEqual(approved.description, live.description) ? [] : ['description']),
+      ...(isDeepStrictEqual(approved.inputSchema, live.inputSchema) ? [] : ['input schema']),
+    ];
+    return fields.length ? [`${name} (${fields.join(', ')})`] : [];
+  });
+  const failures = changed.length ? changed : ['duplicate definitions'];
+  const visible = failures.slice(0, 10).join(', ');
+  const overflow = failures.length > 10 ? ` (+${failures.length - 10} more)` : '';
+  throw new Error(
+    `MCP server ${serverKey} tool contract drift: ${visible}${overflow}. Review the live tools/list response before updating expectedTools.`,
+  );
+}
 
 /**
  * Refresh tokens per request without reconnecting and aborting other tool calls.
@@ -192,15 +229,16 @@ export class MCPClient {
     // Initialize servers
     const servers = this.config.servers || (this.config.server ? [this.config.server] : []);
     const usedKeys = new Set(this.clients.keys());
-    for (const server of servers) {
+    for (const [index, server] of servers.entries()) {
+      const serverOrdinal = index + 1;
       const baseKey = server.name || server.url || server.path || server.command || 'default';
       let serverKey = baseKey;
       for (let suffix = 1; usedKeys.has(serverKey); suffix++) {
         serverKey = `${baseKey}:${suffix}`;
       }
       usedKeys.add(serverKey);
-      logger.info(`connecting to server ${serverKey}`);
-      await this.connectToServer(server, serverKey, signal);
+      logger.info(`connecting to MCP server #${serverOrdinal}`);
+      await this.connectToServer(server, serverKey, signal, serverOrdinal);
     }
   }
 
@@ -208,7 +246,10 @@ export class MCPClient {
     server: MCPServerConfig,
     serverKey: string,
     signal: AbortSignal,
+    serverOrdinal: number,
   ): Promise<void> {
+    // The internal key may be a credential-bearing URL. Never expose it in diagnostics.
+    const serverLabel = `#${serverOrdinal}`;
     signal.throwIfAborted();
     const { Client } = await loadMcpClientSdk();
     signal.throwIfAborted();
@@ -318,7 +359,7 @@ export class MCPClient {
           logger.debug('Connected using Streamable HTTP transport');
         } catch (error) {
           logger.debug(
-            `Failed to connect to MCP server with Streamable HTTP transport ${serverKey}: ${error}`,
+            `Failed to connect to MCP server with Streamable HTTP transport ${serverLabel}: ${error}`,
           );
           // The failed HTTP transport is not stored in the connection maps.
           // Release it before replacing it with the fallback transport.
@@ -345,11 +386,11 @@ export class MCPClient {
       if (this.config.pingOnConnect) {
         try {
           await client.ping(requestOptions);
-          logger.debug(`MCP server ${serverKey} ping successful`);
+          logger.debug(`MCP server ${serverLabel} ping successful`);
         } catch (pingError) {
           const pingErrorMessage =
             pingError instanceof Error ? pingError.message : String(pingError);
-          throw new Error(`MCP server ${serverKey} ping failed: ${pingErrorMessage}`);
+          throw new Error(`MCP server ${serverLabel} ping failed: ${pingErrorMessage}`);
         }
       }
 
@@ -376,6 +417,11 @@ export class MCPClient {
         );
       }
 
+      // Compare only exposed tools, on the same connection that executes the eval.
+      if (server.expectedTools) {
+        assertExpectedMcpTools(serverLabel, server.expectedTools, filteredTools);
+      }
+
       signal.throwIfAborted();
       this.transports.set(serverKey, transport);
       this.clients.set(serverKey, client);
@@ -383,7 +429,7 @@ export class MCPClient {
 
       if (this.isVerboseEnabled) {
         console.log(
-          `Connected to MCP server ${serverKey} with tools:`,
+          `Connected to MCP server ${serverLabel} with tools:`,
           filteredTools.map((tool) => tool.name),
         );
       }
@@ -398,9 +444,9 @@ export class MCPClient {
       await close();
       const errorMessage = error instanceof Error ? error.message : String(error);
       if (this.isDebugEnabled) {
-        logger.error(`Failed to connect to MCP server ${serverKey}: ${errorMessage}`);
+        logger.error(`Failed to connect to MCP server ${serverLabel}: ${errorMessage}`);
       }
-      throw new Error(`Failed to connect to MCP server ${serverKey}: ${errorMessage}`);
+      throw new Error(`Failed to connect to MCP server ${serverLabel}: ${errorMessage}`);
     } finally {
       this.pendingConnections.delete(close);
     }
