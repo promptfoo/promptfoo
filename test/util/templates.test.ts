@@ -384,6 +384,18 @@ describe('analyzeTemplateReference', () => {
     expect(extractRequiredVariablesFromTemplate(template)).toContain('_conversation');
   });
 
+  it('does not mark a macro definite when its only declaration is unreachable', () => {
+    const value = '{% if false %}{% macro m() %}ok{% endmacro %}{% endif %}{{m()}}';
+    expect(extractRequiredVariablesFromTemplate(value)).toContain('m');
+  });
+
+  it('preserves computations in existence-test operands', () => {
+    expect(extractRequiredVariablesFromTemplate('{{ purpose | trim is defined }}')).toEqual([
+      'purpose',
+    ]);
+    expect(extractRequiredVariablesFromTemplate('{{ user is defined }}')).toEqual([]);
+  });
+
   it('analyzes JSON leaf strings as templates instead of nested structured prompts', () => {
     const prompt = JSON.stringify({ content: '{"{{_conversation|length}}":"x"}' });
     expect(analyzeTemplateReference(prompt, '_conversation')).toEqual({

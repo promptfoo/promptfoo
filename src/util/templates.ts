@@ -145,7 +145,7 @@ class LinkedScope implements ReadonlySet<string> {
   }
 
   findMacros(name: string): ReadonlySet<DeferredMacro> | undefined {
-    if (this.names.has(name)) {
+    if (this.names.has(name) || this.macros.has(name)) {
       return this.macros.get(name);
     }
     return this.parent instanceof LinkedScope ? this.parent.findMacros(name) : undefined;
@@ -745,7 +745,10 @@ function isNodeReferencesVariable(
     right.typename === 'Symbol' &&
     (right.value === 'defined' || right.value === 'undefined')
   ) {
-    return false;
+    return (
+      isNunjucksAstNode(node.left) &&
+      undefinedSafeOperandReferencesVariable(node.left, variableName, boundSymbols)
+    );
   }
 
   if (astChildReferencesVariable(node, 'left', variableName, boundSymbols)) {
@@ -1072,33 +1075,73 @@ function isStatementListNode(
   return (node.typename === 'Root' || node.typename === 'NodeList') && Array.isArray(node.children);
 }
 
+type ConditionalMacroBinding = {
+  candidates: ReadonlySet<DeferredMacro>;
+  definitelyBound: boolean;
+};
+
+type ConditionalExecutionMode = 'unknown' | 'body' | 'else';
+
+function conditionalExecutionMode(node: NunjucksAstNode): ConditionalExecutionMode {
+  const condition = node.cond;
+  if (isNunjucksAstNode(condition) && condition.typename === 'Literal') {
+    if (condition.value === true) {
+      return 'body';
+    }
+    if (condition.value === false) {
+      return 'else';
+    }
+  }
+  return 'unknown';
+}
+
 function conditionalMacroCandidates(
   name: string,
   bodySummary: ConditionalSummary,
   elseSummary: ConditionalSummary,
   boundSymbols: ReadonlySet<string>,
-): ReadonlySet<DeferredMacro> | undefined {
+  mode: ConditionalExecutionMode,
+): ConditionalMacroBinding | undefined {
   const assignedInBody = bodySummary.setBindings.has(name);
   const assignedInElse = elseSummary.setBindings.has(name);
-  const declaredMacro =
-    bodySummary.macroDeclarations.has(name) || elseSummary.macroDeclarations.has(name);
-  if (
-    (!assignedInBody && !assignedInElse) ||
-    (!(assignedInBody && assignedInElse) && !boundSymbols.has(name) && !declaredMacro)
-  ) {
-    return undefined;
-  }
+  const bodyRelevant = mode !== 'else';
+  const elseRelevant = mode !== 'body';
+  const declaredInBody = bodyRelevant && bodySummary.macroDeclarations.has(name);
+  const declaredInElse = elseRelevant && elseSummary.macroDeclarations.has(name);
+  const hasIncoming = boundSymbols.has(name);
+  const definitelyBound =
+    mode === 'body'
+      ? assignedInBody || hasIncoming
+      : mode === 'else'
+        ? assignedInElse || hasIncoming
+        : (assignedInBody && assignedInElse) || ((assignedInBody || assignedInElse) && hasIncoming);
 
-  const candidates = new Set<DeferredMacro>([
-    ...(bodySummary.macroCandidates.get(name) ?? []),
-    ...(elseSummary.macroCandidates.get(name) ?? []),
-  ]);
-  if ((!assignedInBody || !assignedInElse) && boundSymbols instanceof LinkedScope) {
-    for (const macro of boundSymbols.findMacros(name) ?? []) {
+  const candidates = new Set<DeferredMacro>();
+  const addCandidates = (candidatesToAdd?: ReadonlySet<DeferredMacro>) => {
+    for (const macro of candidatesToAdd ?? []) {
       candidates.add(macro);
     }
+  };
+  if ((bodyRelevant && assignedInBody) || declaredInBody) {
+    addCandidates(bodySummary.macroCandidates.get(name));
   }
-  return candidates;
+  if ((elseRelevant && assignedInElse) || declaredInElse) {
+    addCandidates(elseSummary.macroCandidates.get(name));
+  }
+  if (boundSymbols instanceof LinkedScope) {
+    if (
+      (mode === 'body' && !assignedInBody) ||
+      (mode === 'else' && !assignedInElse) ||
+      (mode === 'unknown' && (!assignedInBody || !assignedInElse))
+    ) {
+      addCandidates(boundSymbols.findMacros(name));
+    }
+  }
+
+  if (candidates.size === 0 && !definitelyBound) {
+    return undefined;
+  }
+  return { candidates, definitelyBound };
 }
 
 function ifNodeReferencesVariable(
@@ -1140,21 +1183,28 @@ function ifNodeReferencesVariable(
   }
 
   const assignedNames = new Set([...bodySummary.setBindings, ...elseSummary.setBindings]);
+  const mode = conditionalExecutionMode(node);
   for (const name of assignedNames) {
-    const candidates = conditionalMacroCandidates(name, bodySummary, elseSummary, boundSymbols);
-    if (candidates === undefined) {
+    const binding = conditionalMacroCandidates(name, bodySummary, elseSummary, boundSymbols, mode);
+    if (binding === undefined) {
       continue;
     }
-    summary?.setBindings.add(name);
-    if (candidates.size > 0) {
-      summary?.macroCandidates.set(name, candidates);
+    if (binding.definitelyBound) {
+      summary?.setBindings.add(name);
+    }
+    if (binding.candidates.size > 0) {
+      summary?.macroCandidates.set(name, binding.candidates);
     }
     if (boundSymbols instanceof LinkedScope) {
-      boundSymbols.removeMacro(name);
-      if (candidates.size > 0) {
-        boundSymbols.registerMacroCandidates(name, candidates);
+      if (binding.candidates.size > 0 || binding.definitelyBound) {
+        boundSymbols.removeMacro(name);
       }
-      boundSymbols.add(name);
+      if (binding.candidates.size > 0) {
+        boundSymbols.registerMacroCandidates(name, binding.candidates);
+      }
+      if (binding.definitelyBound) {
+        boundSymbols.add(name);
+      }
     }
   }
   return false;
@@ -1700,6 +1750,10 @@ export type TemplateReferenceResult = {
   parsed: boolean;
 };
 
+export type TemplateReferenceOptions = {
+  jsonMode?: 'auto' | 'structured' | 'whole';
+};
+
 function analyzeTemplateString(template: string, variableName: string): TemplateReferenceResult {
   if (!template.includes(variableName)) {
     return { referenced: false, parsed: true };
@@ -1725,6 +1779,7 @@ function analyzeTemplateString(template: string, variableName: string): Template
 export function analyzeTemplateReference(
   template: string,
   variableName: string,
+  options: TemplateReferenceOptions = {},
 ): TemplateReferenceResult {
   if (!variableName || !template.includes(variableName)) {
     return { referenced: false, parsed: true };
@@ -1733,9 +1788,10 @@ export function analyzeTemplateReference(
   // Structured prompts render each string independently. Do not let a set in
   // one JSON string hide a real reference in another string's scope. Each leaf
   // is then a single template, even if its text happens to look like JSON.
-  const structuredStrings = getEnvBool('PROMPTFOO_DISABLE_JSON_AUTOESCAPE')
-    ? undefined
-    : jsonTemplateStrings(template);
+  const structuredJson =
+    options.jsonMode === 'structured' ||
+    (options.jsonMode !== 'whole' && !getEnvBool('PROMPTFOO_DISABLE_JSON_AUTOESCAPE'));
+  const structuredStrings = structuredJson ? jsonTemplateStrings(template) : undefined;
   if (structuredStrings) {
     let referenced = false;
     let parsed = true;

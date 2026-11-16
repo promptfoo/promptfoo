@@ -1589,6 +1589,16 @@ describe('evaluatorHelpers', () => {
       expect(await renderPrompt(toPrompt('{{v}}'), { v: template }, {})).toBe(template);
     });
 
+    it('should preserve a call to a macro declared only in a false branch', async () => {
+      const template = '{% if false %}{% macro m() %}ok{% endmacro %}{% endif %}{{m()}}';
+      expect(await renderPrompt(toPrompt('{{v}}'), { v: template }, {})).toBe(template);
+    });
+
+    it('should preserve a computed existence-test operand that would throw', async () => {
+      const template = '{{ purpose | trim is defined }}';
+      expect(await renderPrompt(toPrompt('{{v}}'), { v: template }, {})).toBe(template);
+    });
+
     it('should preserve a computed branch in an existence-guarded inline conditional', async () => {
       const template = "{{ purpose | trim if enabled is defined else 'anonymous' }}";
       expect(await renderPrompt(toPrompt('{{v}}'), { v: template, enabled: true }, {})).toBe(
