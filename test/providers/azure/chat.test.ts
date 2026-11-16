@@ -514,10 +514,9 @@ describe('AzureChatCompletionProvider', () => {
         vars: {},
       });
 
-      // Verify the URL doesn't include the legacy extensions path
-      expect(vi.mocked(fetchWithCache).mock.calls[0][0]).not.toContain('extensions');
+      // Verify the URL includes extensions and uses the custom API version
       expect(vi.mocked(fetchWithCache).mock.calls[0][0]).toContain(
-        '/chat/completions?api-version=2024-custom',
+        '/extensions/chat/completions?api-version=2024-custom',
       );
     });
   });

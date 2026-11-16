@@ -686,12 +686,12 @@ export function buildStructuredImageOutputs(
 
   return data.data
     .map((item: any): ImageOutput | null => {
-      if (item.b64_json) {
+      if (typeof item?.b64_json === 'string' && item.b64_json.length > 0) {
         const mimeType = getMimeTypeForOutputFormat(outputFormat);
         return { data: `data:${mimeType};base64,${item.b64_json}`, mimeType };
       }
 
-      if (item.url) {
+      if (typeof item?.url === 'string' && item.url.length > 0) {
         const mimeType = inferMimeTypeFromUrl(item.url);
         return mimeType ? { data: item.url, mimeType } : { data: item.url };
       }

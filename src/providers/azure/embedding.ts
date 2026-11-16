@@ -80,7 +80,7 @@ export class AzureEmbeddingProvider extends AzureGenericProvider {
         };
     try {
       const embedding = data?.data?.[0]?.embedding;
-      if (!embedding) {
+      if (!Array.isArray(embedding) || embedding.length === 0) {
         await response.deleteFromCache?.();
         throw new Error('No embedding returned');
       }
