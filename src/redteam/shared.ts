@@ -74,11 +74,11 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
 
     if (options.liveRedteamConfig) {
       // Write liveRedteamConfig to a temporary file
-      const filename = `redteam-${Date.now()}.yaml`;
+      const filename = `redteam-${randomUUID()}.yaml`;
       const tmpDir = options.loadedFromCloud ? '' : os.tmpdir();
       const tmpFile = path.join(tmpDir, filename);
       await fs.mkdir(path.dirname(tmpFile), { recursive: true });
-      await fs.writeFile(tmpFile, yaml.dump(options.liveRedteamConfig));
+      await fs.writeFile(tmpFile, yaml.dump(options.liveRedteamConfig), { flag: 'wx' });
       redteamPath = tmpFile;
       // Do not use default config.
       configPath = tmpFile;
