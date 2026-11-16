@@ -55,12 +55,16 @@ function publishMcpToolNames(toolsByServer: ReadonlyMap<string, MCPTool[]>): Pub
   let serverNumber = 0;
   for (const [serverKey, tools] of toolsByServer) {
     serverNumber++;
-    for (const tool of tools) {
+    // Alias suffixes must be tied to physical names, not listTools response order:
+    // reconnects may return the same tools in a different order.
+    const serverRoutes = new Map<string, PublishedMcpTool>();
+    const sortedTools = [...tools].sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+    for (const tool of sortedTools) {
       // Preserve the first server's unqualified tool for existing callers.
       // Later servers with the same tool name receive a unique public alias.
       if (!usedNames.has(tool.name)) {
         usedNames.add(tool.name);
-        published.push({ serverKey, physicalName: tool.name, tool });
+        serverRoutes.set(tool.name, { serverKey, physicalName: tool.name, tool });
         continue;
       }
       const prefix = `mcp_${serverNumber}_`;
@@ -75,7 +79,7 @@ function publishMcpToolNames(toolsByServer: ReadonlyMap<string, MCPTool[]>): Pub
         }
       }
       reserved.add(candidate);
-      published.push({
+      serverRoutes.set(tool.name, {
         serverKey,
         physicalName: tool.name,
         tool: {
@@ -84,6 +88,13 @@ function publishMcpToolNames(toolsByServer: ReadonlyMap<string, MCPTool[]>): Pub
           description: `${tool.description}${tool.description ? ' ' : ''}(MCP server #${serverNumber})`,
         },
       });
+    }
+    // Preserve the provider's presentation order without using it as identity.
+    for (const tool of tools) {
+      const route = serverRoutes.get(tool.name);
+      if (route) {
+        published.push(route);
+      }
     }
   }
   return published;

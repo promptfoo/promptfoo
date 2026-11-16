@@ -472,6 +472,55 @@ describe('MCPClient', () => {
       await mcpClient.cleanup();
     });
 
+    it('keeps truncated aliases bound to physical names when a server reorders tools', async () => {
+      // Long names share the same model-safe 64-character alias stem.
+      const firstName = `${'x'.repeat(58)}alpha`;
+      const secondName = `${'x'.repeat(58)}beta`;
+      const physicalNames = [firstName, secondName];
+      const results: Array<Record<string, string>> = [];
+
+      for (const reverse of [false, true]) {
+        const firstClient = {
+          ...mockClient,
+          listTools: vi.fn().mockResolvedValue({
+            tools: physicalNames.map((name) => ({ name, description: name, inputSchema: {} })),
+          }),
+          callTool: vi.fn(),
+        };
+        const secondClient = {
+          ...mockClient,
+          listTools: vi.fn().mockResolvedValue({
+            tools: (reverse ? [...physicalNames].reverse() : physicalNames).map((name) => ({
+              name,
+              description: name,
+              inputSchema: {},
+            })),
+          }),
+          callTool: vi.fn().mockResolvedValue({ content: [] }),
+        };
+        mcpMocks.MockClient.mockImplementationOnce(function FirstClient() {
+          return firstClient;
+        }).mockImplementationOnce(function SecondClient() {
+          return secondClient;
+        });
+        mcpClient = new MCPClient(createMultipleServerOptions());
+        await mcpClient.initialize();
+
+        const aliases = mcpClient.getAllTools().filter((tool) => tool.name.startsWith('mcp_2_'));
+        expect(aliases).toHaveLength(2);
+        const physicalToPublic: Record<string, string> = {};
+        for (const alias of aliases) {
+          await mcpClient.callTool(alias.name, {});
+          const call = secondClient.callTool.mock.lastCall?.[0] as { name: string };
+          physicalToPublic[call.name] = alias.name;
+        }
+        expect(secondClient.callTool).toHaveBeenCalledTimes(2);
+        results.push(physicalToPublic);
+        await mcpClient.cleanup();
+      }
+      expect(results[1]).toEqual(results[0]);
+    });
+
     it('reserves existing tool names and keeps non-colliding tools unchanged', async () => {
       mockClient.listTools
         .mockResolvedValueOnce({
