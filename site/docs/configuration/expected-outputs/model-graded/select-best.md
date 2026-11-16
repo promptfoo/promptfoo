@@ -28,6 +28,12 @@ The select-best checker:
 3. Selects the best output
 4. Returns pass=true for the winning output and pass=false for others
 
+The default grader is asked to end with `Answer: 2` (using the chosen index). A
+standalone integer remains valid. If a custom grader mentions multiple candidate
+indexes without a clearly marked final answer, all outputs fail with an
+`Ambiguous select-best verdict` reason instead of silently selecting the first
+number in its explanation.
+
 ### Example Configuration
 
 Here's a complete example showing how to use select-best to compare different prompt variations:
