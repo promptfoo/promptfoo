@@ -281,6 +281,52 @@ describe('MCPClient', () => {
       await mcpClient.cleanup();
     });
 
+    it.each([0, 1])(
+      'rejects ambiguous tool dispatch when configured server #%s is pinned',
+      async (pinnedServer) => {
+        const approved = [{ name: 'tool1', description: 'desc1', inputSchema: {} }];
+        const first = { name: 'first', command: 'node' };
+        const second = { name: 'second', command: 'node' };
+        mcpClient = new MCPClient({
+          enabled: true,
+          servers: [
+            { ...first, ...(pinnedServer === 0 ? { expectedTools: approved } : {}) },
+            { ...second, ...(pinnedServer === 1 ? { expectedTools: approved } : {}) },
+          ],
+        });
+
+        await expect(mcpClient.initialize()).rejects.toThrow(/ambiguous.*tool1.*expectedTools/i);
+        expect(mockClient.callTool).not.toHaveBeenCalled();
+        expect(mockClient.listTools).toHaveBeenCalledTimes(2);
+        await mcpClient.cleanup();
+      },
+    );
+
+    it('permits separate tools across servers when a pin is configured', async () => {
+      mockClient.listTools
+        .mockResolvedValueOnce({
+          tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
+        })
+        .mockResolvedValueOnce({
+          tools: [{ name: 'tool2', description: 'desc2', inputSchema: {} }],
+        });
+      mcpClient = new MCPClient({
+        enabled: true,
+        servers: [
+          {
+            name: 'first',
+            command: 'node',
+            expectedTools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
+          },
+          { name: 'second', command: 'node' },
+        ],
+      });
+
+      await mcpClient.initialize();
+      expect(mcpClient.getAllTools().map((tool) => tool.name)).toEqual(['tool1', 'tool2']);
+      await mcpClient.cleanup();
+    });
+
     it('keeps forwarding calls whose approved MCP contract has not changed', async () => {
       mcpClient = new MCPClient({
         server: {

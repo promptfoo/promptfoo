@@ -437,6 +437,21 @@ export class MCPClient {
         assertExpectedMcpTools(serverLabel, server.expectedTools, filteredTools);
       }
 
+      // Model tool names are routed to the first server that advertises them.
+      // Reject ambiguous names when any server has a pin, since a later pinned
+      // server would otherwise be bypassed by an earlier unpinned one.
+      if (server.expectedTools !== undefined || this.pinnedTools.size > 0) {
+        const knownNames = new Set(this.getAllTools().map((tool) => tool.name));
+        for (const tool of filteredTools) {
+          if (knownNames.has(tool.name)) {
+            throw new MCPToolContractError(
+              `MCP server ${serverLabel} has ambiguous tool name '${tool.name}' while expectedTools is configured; visible tool names must be unique across MCP servers.`,
+            );
+          }
+          knownNames.add(tool.name);
+        }
+      }
+
       signal.throwIfAborted();
       this.transports.set(serverKey, transport);
       this.clients.set(serverKey, client);
