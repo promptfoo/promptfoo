@@ -275,11 +275,16 @@ describe('doRedteamRun', () => {
       const first = { ...mockConfig, description: 'first run' };
       const second = { ...mockConfig, description: 'second run' };
       // Finish the second run before the first generator reads its config.
-      vi.mocked(doGenerateRedteam).mockImplementationOnce(async ({ config }) => {
-        await doRedteamRun({ liveRedteamConfig: second });
-        expect(yaml.load(await disk.readFile(config!, 'utf8'))).toEqual(first);
-        return {};
-      });
+      vi.mocked(doGenerateRedteam)
+        .mockImplementationOnce(async ({ config }) => {
+          await doRedteamRun({ liveRedteamConfig: second });
+          expect(yaml.load(await disk.readFile(config!, 'utf8'))).toEqual(first);
+          return {};
+        })
+        .mockImplementationOnce(async ({ config }) => {
+          expect(yaml.load(await disk.readFile(config!, 'utf8'))).toEqual(second);
+          return {};
+        });
 
       try {
         await doRedteamRun({ liveRedteamConfig: first });
