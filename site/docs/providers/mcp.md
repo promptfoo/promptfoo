@@ -106,7 +106,10 @@ this SDK redirect policy.
 
 #### Multiple Servers
 
-You can connect to multiple MCP servers simultaneously:
+You can connect to multiple MCP servers simultaneously. Duplicate tool names are
+qualified by server position (for example, `echo` from the first server and
+`mcp_2_echo` from the second). Prompts should use the published alias for tools
+on later servers; Promptfoo sends the original name to the chosen MCP server.
 
 ```yaml
 providers:

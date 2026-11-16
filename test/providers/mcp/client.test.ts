@@ -429,6 +429,74 @@ describe('MCPClient', () => {
       expect(mockClient.close).toHaveBeenCalledTimes(2);
     });
 
+    it('exposes colliding tool names uniquely and sends each call to its original MCP name', async () => {
+      mockClient.listTools
+        .mockResolvedValueOnce({
+          tools: [{ name: 'echo', description: 'A echo', inputSchema: {} }],
+        })
+        .mockResolvedValueOnce({
+          tools: [{ name: 'echo', description: 'B echo', inputSchema: {} }],
+        });
+      mockClient.callTool.mockResolvedValue({ content: [{ type: 'text', text: 'received' }] });
+      mcpClient = new MCPClient(createMultipleServerOptions());
+
+      await mcpClient.initialize();
+      expect(mcpClient.getAllTools().map((tool) => tool.name)).toEqual(['echo', 'mcp_2_echo']);
+      await mcpClient.callTool('echo', { source: 1 });
+      await mcpClient.callTool('mcp_2_echo', { source: 2 });
+      expect(mockClient.callTool).toHaveBeenNthCalledWith(
+        1,
+        { name: 'echo', arguments: { source: 1 } },
+        undefined,
+        undefined,
+      );
+      expect(mockClient.callTool).toHaveBeenNthCalledWith(
+        2,
+        { name: 'echo', arguments: { source: 2 } },
+        undefined,
+        undefined,
+      );
+      await mcpClient.cleanup();
+    });
+
+    it('reserves existing tool names and keeps non-colliding tools unchanged', async () => {
+      mockClient.listTools
+        .mockResolvedValueOnce({
+          tools: [
+            { name: 'echo', description: 'A', inputSchema: {} },
+            { name: 'mcp_2_echo', description: 'already has alias-like name', inputSchema: {} },
+          ],
+        })
+        .mockResolvedValueOnce({
+          tools: [
+            { name: 'echo', description: 'B', inputSchema: {} },
+            { name: 'unique', description: 'B unique', inputSchema: {} },
+          ],
+        });
+      mcpClient = new MCPClient(createMultipleServerOptions());
+      await mcpClient.initialize();
+      expect(mcpClient.getAllTools().map((tool) => tool.name)).toEqual([
+        'echo',
+        'mcp_2_echo',
+        'mcp_2_echo_2',
+        'unique',
+      ]);
+      await mcpClient.cleanup();
+    });
+
+    it('fails startup on duplicate names within the same MCP server', async () => {
+      mockClient.listTools.mockResolvedValueOnce({
+        tools: [
+          { name: 'same', description: 'A', inputSchema: {} },
+          { name: 'same', description: 'B', inputSchema: {} },
+        ],
+      });
+      mcpClient = new MCPClient(createMcpServerOptions());
+      await expect(mcpClient.initialize()).rejects.toThrow(/duplicate.*tool.*same/i);
+      expect(mcpClient.getAllTools()).toEqual([]);
+      await mcpClient.cleanup();
+    });
+
     it('does not overwrite an explicitly named server with a generated command key', async () => {
       mcpClient = new MCPClient({
         enabled: true,
