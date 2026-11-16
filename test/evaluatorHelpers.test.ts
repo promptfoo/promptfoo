@@ -1502,6 +1502,21 @@ describe('evaluatorHelpers', () => {
       expect(renderedPrompt).toBe('x!');
     });
 
+    it('should render an undefined-safe default-filter input', async () => {
+      const template = "{% set greeting = name | default('anonymous') %}{{ greeting ~ '!' }}";
+      const renderedPrompt = await renderPrompt(toPrompt('{{v}}'), { v: template }, {});
+
+      expect(renderedPrompt).toBe('anonymous!');
+    });
+
+    it('should not require a call-block default when the macro never invokes caller', async () => {
+      const template =
+        '{% macro m() %}ok{% endmacro %}{% call(x=missing) m() %}unused{% endcall %}';
+      const renderedPrompt = await renderPrompt(toPrompt('{{v}}'), { v: template }, {});
+
+      expect(renderedPrompt).toBe('ok');
+    });
+
     it('should preserve an unterminated comment and its literal-looking suffix as data', async () => {
       const value = "{# {{ 'x' }}";
       const renderedPrompt = await renderPrompt(toPrompt('{"text":"{{v}}"}'), { v: value }, {});

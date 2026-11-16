@@ -343,6 +343,44 @@ describe('analyzeTemplateReference', () => {
       parsed: true,
     });
   });
+
+  it('preserves a common macro alias when conditional branches join', () => {
+    const template =
+      "{% macro m(x=_conversation) %}{{x}}{% endmacro %}{{m('x')}}{% if true %}{% set saved=m %}{% else %}{% set saved=m %}{% endif %}{{saved()}}";
+    expect(analyzeTemplateReference(template, '_conversation')).toEqual({
+      referenced: true,
+      parsed: true,
+    });
+    expect(extractRequiredVariablesFromTemplate(template)).toContain('_conversation');
+  });
+
+  it('treats default-filter inputs as undefined-safe only in required mode', () => {
+    const value = "{% set greeting = name | default('anonymous') %}{{ greeting ~ '!' }}";
+    expect(extractRequiredVariablesFromTemplate(value)).toEqual([]);
+    expect(extractUnboundVariablesFromTemplate(value)).toContain('name');
+
+    const alias = "{% set greeting = name | d('anonymous') %}{{ greeting ~ '!' }}";
+    expect(extractRequiredVariablesFromTemplate(alias)).toEqual([]);
+
+    const fallback = '{% set greeting = name | default(fallback) %}{{ greeting }}';
+    expect(extractRequiredVariablesFromTemplate(fallback)).toEqual(['fallback']);
+    expect(extractUnboundVariablesFromTemplate(fallback)).toEqual(
+      expect.arrayContaining(['name', 'fallback']),
+    );
+  });
+
+  it('defers unused call-block defaults in required mode', () => {
+    const value = '{% macro m() %}ok{% endmacro %}{% call(x=missing) m() %}unused{% endcall %}';
+    expect(extractRequiredVariablesFromTemplate(value)).toEqual([]);
+    expect(extractUnboundVariablesFromTemplate(value)).toContain('missing');
+
+    const ordinaryCall = '{% macro m(x) %}ok{% endmacro %}{{m(x=missing)}}';
+    expect(extractRequiredVariablesFromTemplate(ordinaryCall)).toContain('missing');
+
+    const macroBody =
+      '{% macro m() %}{{other}}{% endmacro %}{% call(x=missing) m() %}unused{% endcall %}';
+    expect(extractRequiredVariablesFromTemplate(macroBody)).toEqual(['other']);
+  });
 });
 
 function nestedMacroArgumentVariants(): string {

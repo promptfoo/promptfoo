@@ -694,6 +694,11 @@ function callerNodeReferencesVariable(
   variableName: ReferenceTarget,
   boundSymbols: ReadonlySet<string>,
 ): boolean {
+  if (typeof variableName === 'object' && 'excludeOrOperands' in variableName) {
+    // A call block packages its defaults and body as a deferred caller. They
+    // are not reads at the macro call site when caller() is never invoked.
+    return false;
+  }
   const { paramNames, referencesVariable } = analyzeSignatureArgs(
     node.args,
     variableName,
@@ -777,6 +782,8 @@ function postfixNodeReferencesVariable(
   return false;
 }
 
+const POSTFIX_NODES = new Set(['FunCall', 'LookupVal']);
+
 const LEFT_ASSOCIATIVE_BINARY_NODES = new Set([
   'Concat',
   'Add',
@@ -853,6 +860,81 @@ function guaranteedConditionalSetBindings(node: unknown): Set<string> {
   return bindings;
 }
 
+function updateMacroAlias(
+  aliases: Map<string, DeferredMacro>,
+  shadowed: Set<string>,
+  name: string,
+  macro: DeferredMacro | undefined,
+): void {
+  shadowed.add(name);
+  if (macro) {
+    aliases.set(name, macro);
+  } else {
+    aliases.delete(name);
+  }
+}
+
+function updateMacroAliasesFromStatement(
+  child: NunjucksAstNode,
+  boundSymbols: LinkedScope,
+  aliases: Map<string, DeferredMacro>,
+  shadowed: Set<string>,
+): void {
+  if (child.typename === 'Set') {
+    const sourceName = getSymbolName(child.value);
+    const sourceMacro = sourceName
+      ? (aliases.get(sourceName) ??
+        (shadowed.has(sourceName) ? undefined : boundSymbols.findMacro(sourceName)))
+      : undefined;
+    for (const name of collectBindingNames(child.targets)) {
+      updateMacroAlias(aliases, shadowed, name, sourceMacro);
+    }
+    return;
+  }
+  if (child.typename !== 'If') {
+    return;
+  }
+  const nested = guaranteedConditionalMacroAliases(child, boundSymbols);
+  for (const name of guaranteedConditionalSetBindings(child)) {
+    updateMacroAlias(aliases, shadowed, name, nested.get(name));
+  }
+}
+
+function guaranteedConditionalMacroAliases(
+  node: unknown,
+  boundSymbols: LinkedScope,
+): Map<string, DeferredMacro> {
+  if (!isNunjucksAstNode(node)) {
+    return new Map();
+  }
+  if (node.typename === 'If') {
+    if (!isNunjucksAstNode(node.else_)) {
+      return new Map();
+    }
+    const bodyAliases = guaranteedConditionalMacroAliases(node.body, boundSymbols);
+    const elseAliases = guaranteedConditionalMacroAliases(node.else_, boundSymbols);
+    const common = new Map<string, DeferredMacro>();
+    for (const [name, macro] of bodyAliases) {
+      if (elseAliases.get(name) === macro) {
+        common.set(name, macro);
+      }
+    }
+    return common;
+  }
+  if (!isStatementListNode(node)) {
+    return new Map();
+  }
+
+  const aliases = new Map<string, DeferredMacro>();
+  const shadowed = new Set<string>();
+  for (const child of node.children) {
+    if (isNunjucksAstNode(child)) {
+      updateMacroAliasesFromStatement(child, boundSymbols, aliases, shadowed);
+    }
+  }
+  return aliases;
+}
+
 function ifNodeReferencesVariable(
   node: NunjucksAstNode,
   variableName: ReferenceTarget,
@@ -872,9 +954,44 @@ function ifNodeReferencesVariable(
   }
 
   if (boundSymbols instanceof LinkedScope) {
+    for (const [name, macro] of guaranteedConditionalMacroAliases(node, boundSymbols)) {
+      boundSymbols.registerMacro(name, macro);
+    }
     addNamesToScopeInPlace(boundSymbols, Array.from(guaranteedConditionalSetBindings(node)));
   }
   return false;
+}
+
+function isDefaultFilterWithUndefinedSafeInput(
+  node: NunjucksAstNode,
+  variableName: ReferenceTarget,
+): boolean {
+  return (
+    node.typename === 'Filter' &&
+    typeof variableName === 'object' &&
+    'excludeOrOperands' in variableName &&
+    ['default', 'd'].includes(getSymbolName(node.name) ?? '')
+  );
+}
+
+function defaultFilterFallbackReferencesVariable(
+  node: NunjucksAstNode,
+  variableName: RequiredReferenceTarget,
+  boundSymbols: ReadonlySet<string>,
+): boolean {
+  const args = node.args;
+  if (!isNunjucksAstNode(args) || !Array.isArray(args.children)) {
+    return false;
+  }
+  // default/d accepts an undefined input. Only its fallback arguments are
+  // required; ordinary reference collection still sees the input name.
+  return args.children
+    .slice(1)
+    .some(
+      (child) =>
+        isNunjucksAstNode(child) &&
+        astReferencesVariable(child, variableName, { field: 'children', node: args }, boundSymbols),
+    );
 }
 
 function isExistenceGuardedConditional(
@@ -916,7 +1033,15 @@ function astReferencesVariable(
     return false;
   }
 
-  if (node.typename === 'FunCall' || node.typename === 'LookupVal') {
+  if (isDefaultFilterWithUndefinedSafeInput(node, variableName)) {
+    return defaultFilterFallbackReferencesVariable(
+      node,
+      variableName as RequiredReferenceTarget,
+      boundSymbols,
+    );
+  }
+
+  if (POSTFIX_NODES.has(node.typename!)) {
     return postfixNodeReferencesVariable(node, variableName, boundSymbols);
   }
 
