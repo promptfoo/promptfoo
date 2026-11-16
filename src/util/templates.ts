@@ -58,6 +58,7 @@ type DeferredMacro = {
 
 type ConditionalSummary = {
   setBindings: Set<string>;
+  macroDeclarations: Set<string>;
   macroCandidates: Map<string, ReadonlySet<DeferredMacro>>;
 };
 
@@ -364,7 +365,7 @@ function countAstNodes(nodes: readonly unknown[]): number {
 }
 
 function createConditionalSummary(): ConditionalSummary {
-  return { setBindings: new Set(), macroCandidates: new Map() };
+  return { setBindings: new Set(), macroDeclarations: new Set(), macroCandidates: new Map() };
 }
 
 function updateStatementBindings(
@@ -382,6 +383,12 @@ function updateStatementBindings(
     }
   } else if (item.typename === 'Macro') {
     addBindingNamesInPlace(scope, item.name);
+    if (summary) {
+      for (const name of collectBindingNames(item.name)) {
+        summary.setBindings.add(name);
+        summary.macroDeclarations.add(name);
+      }
+    }
   } else if (item.typename === 'Import') {
     scope.removeMacroBindings(item.target);
     addBindingNamesInPlace(scope, item.target);
@@ -403,6 +410,9 @@ function mergeConditionalBindings(
   }
   for (const name of source.setBindings) {
     target.setBindings.add(name);
+  }
+  for (const name of source.macroDeclarations) {
+    target.macroDeclarations.add(name);
   }
 }
 
@@ -578,7 +588,7 @@ function analyzeSignatureArgs(
 
 function collectSuppliedMacroParamNames(
   argsNode: unknown,
-  macro: DeferredMacro,
+  macro: Pick<DeferredMacro, 'paramNames' | 'paramNameSet'>,
   memo?: MacroAnalysisMemo,
 ): Set<string> {
   const supplied = new Set<string>();
@@ -794,6 +804,7 @@ function callerNodeReferencesVariable(
   variableName: ReferenceTarget,
   boundSymbols: ReadonlySet<string>,
   analyzeDeferred = false,
+  suppliedParamNames?: ReadonlySet<string>,
 ): boolean {
   if (!analyzeDeferred && typeof variableName === 'object' && 'excludeOrOperands' in variableName) {
     // A call block packages its defaults and body as a deferred caller. They
@@ -804,6 +815,7 @@ function callerNodeReferencesVariable(
     node.args,
     variableName,
     boundSymbols,
+    suppliedParamNames,
   );
   if (referencesVariable) {
     return true;
@@ -850,6 +862,74 @@ function astFieldsReferenceVariable(
   );
 }
 
+function intersectSuppliedNames(
+  current: ReadonlySet<string> | undefined,
+  incoming: ReadonlySet<string>,
+): Set<string> {
+  if (current === undefined) {
+    return new Set(incoming);
+  }
+  return new Set(Array.from(current).filter((name) => incoming.has(name)));
+}
+
+function collectCallerInvocations(node: unknown, memo?: MacroAnalysisMemo): NunjucksAstNode[] {
+  const invocations: NunjucksAstNode[] = [];
+  const pending = [node];
+  while (pending.length > 0) {
+    const current = pending.pop();
+    if (!isNunjucksAstNode(current)) {
+      continue;
+    }
+    consumeAnalysisWork(memo);
+    if (current.typename === 'FunCall' && getSymbolName(current.name) === 'caller') {
+      invocations.push(current);
+    }
+    for (const field of current.fields ?? []) {
+      const child = current[field];
+      if (Array.isArray(child)) {
+        for (const item of child) {
+          pending.push(item);
+        }
+      } else {
+        pending.push(child);
+      }
+    }
+  }
+  return invocations;
+}
+
+function collectSuppliedCallerParamNames(
+  callerNode: NunjucksAstNode,
+  macros: ReadonlySet<DeferredMacro> | undefined,
+  boundSymbols: ReadonlySet<string>,
+): ReadonlySet<string> | undefined {
+  if (macros === undefined) {
+    return undefined;
+  }
+  const memo = boundSymbols instanceof LinkedScope ? boundSymbols.macroAnalysisMemo() : undefined;
+  const { paramNames } = analyzeSignatureArgs(callerNode.args, undefined, boundSymbols);
+  const signature = { paramNames, paramNameSet: new Set(paramNames) };
+  let shared: Set<string> | undefined;
+  let foundCandidate = false;
+  for (const macro of macros) {
+    if (!macro.usesCaller) {
+      continue;
+    }
+    foundCandidate = true;
+    const invocations = collectCallerInvocations(macro.node.body, memo);
+    if (invocations.length === 0) {
+      return undefined;
+    }
+    let forMacro: Set<string> | undefined;
+    for (const invocation of invocations) {
+      const supplied = collectSuppliedMacroParamNames(invocation.args, signature, memo);
+      forMacro = intersectSuppliedNames(forMacro, supplied);
+    }
+    shared = intersectSuppliedNames(shared, forMacro ?? new Set<string>());
+  }
+  return foundCandidate ? shared : undefined;
+}
+
 function macroCandidatesUseCaller(macros: ReadonlySet<DeferredMacro>): boolean {
   for (const macro of macros) {
     if (macro.usesCaller) {
@@ -889,7 +969,16 @@ function funCallNodeReferencesVariable(
   if (!deferredCaller || (macros && !macroCandidatesUseCaller(macros))) {
     return false;
   }
-  return callerNodeReferencesVariable(deferredCaller, variableName, boundSymbols, true);
+  const suppliedCallerParams = deferredCaller
+    ? collectSuppliedCallerParamNames(deferredCaller, macros, boundSymbols)
+    : undefined;
+  return callerNodeReferencesVariable(
+    deferredCaller,
+    variableName,
+    boundSymbols,
+    true,
+    suppliedCallerParams,
+  );
 }
 
 function postfixNodeReferencesVariable(
@@ -991,9 +1080,11 @@ function conditionalMacroCandidates(
 ): ReadonlySet<DeferredMacro> | undefined {
   const assignedInBody = bodySummary.setBindings.has(name);
   const assignedInElse = elseSummary.setBindings.has(name);
+  const declaredMacro =
+    bodySummary.macroDeclarations.has(name) || elseSummary.macroDeclarations.has(name);
   if (
     (!assignedInBody && !assignedInElse) ||
-    (!(assignedInBody && assignedInElse) && !boundSymbols.has(name))
+    (!(assignedInBody && assignedInElse) && !boundSymbols.has(name) && !declaredMacro)
   ) {
     return undefined;
   }
@@ -1152,6 +1243,26 @@ function isExistenceGuardedConditional(
   );
 }
 
+function inlineIfNodeReferencesVariable(
+  node: NunjucksAstNode,
+  variableName: ReferenceTarget,
+  boundSymbols: ReadonlySet<string>,
+): boolean {
+  if (!isExistenceGuardedConditional(node, variableName)) {
+    return astFieldsReferenceVariable(node, variableName, boundSymbols);
+  }
+  if (astChildReferencesVariable(node, 'cond', variableName, boundSymbols)) {
+    return true;
+  }
+  const requiredTarget = variableName as RequiredReferenceTarget;
+  return (
+    (isNunjucksAstNode(node.body) &&
+      undefinedSafeOperandReferencesVariable(node.body, requiredTarget, boundSymbols)) ||
+    (isNunjucksAstNode(node.else_) &&
+      undefinedSafeOperandReferencesVariable(node.else_, requiredTarget, boundSymbols))
+  );
+}
+
 function orNodeReferencesVariable(
   node: NunjucksAstNode,
   variableName: RequiredReferenceTarget,
@@ -1186,8 +1297,8 @@ function astReferencesVariable(
     return ifNodeReferencesVariable(node, variableName, boundSymbols, summary);
   }
 
-  if (isExistenceGuardedConditional(node, variableName)) {
-    return false;
+  if (node.typename === 'InlineIf') {
+    return inlineIfNodeReferencesVariable(node, variableName, boundSymbols);
   }
 
   if (isDefaultFilterWithUndefinedSafeInput(node, variableName)) {
@@ -1622,7 +1733,9 @@ export function analyzeTemplateReference(
   // Structured prompts render each string independently. Do not let a set in
   // one JSON string hide a real reference in another string's scope. Each leaf
   // is then a single template, even if its text happens to look like JSON.
-  const structuredStrings = jsonTemplateStrings(template);
+  const structuredStrings = getEnvBool('PROMPTFOO_DISABLE_JSON_AUTOESCAPE')
+    ? undefined
+    : jsonTemplateStrings(template);
   if (structuredStrings) {
     let referenced = false;
     let parsed = true;

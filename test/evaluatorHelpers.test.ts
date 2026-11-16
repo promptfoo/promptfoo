@@ -1528,6 +1528,12 @@ describe('evaluatorHelpers', () => {
       expect(await renderPrompt(toPrompt('{{v}}'), { v: template }, {})).toBe(template);
     });
 
+    it('should render an invoked callback when an argument overrides its default', async () => {
+      const template =
+        "{% macro m() %}{{ caller('a') ~ '' }}{% endmacro %}{% call(x=missing) m() %}{{ x ~ '!' }}{% endcall %}";
+      expect(await renderPrompt(toPrompt('{{v}}'), { v: template }, {})).toBe('a!');
+    });
+
     it('should preserve an unterminated comment and its literal-looking suffix as data', async () => {
       const value = "{# {{ 'x' }}";
       const renderedPrompt = await renderPrompt(toPrompt('{"text":"{{v}}"}'), { v: value }, {});
@@ -1581,6 +1587,13 @@ describe('evaluatorHelpers', () => {
     it('should preserve a computed or operand that would throw', async () => {
       const template = '{{ purpose | trim or "anonymous" }}';
       expect(await renderPrompt(toPrompt('{{v}}'), { v: template }, {})).toBe(template);
+    });
+
+    it('should preserve a computed branch in an existence-guarded inline conditional', async () => {
+      const template = "{{ purpose | trim if enabled is defined else 'anonymous' }}";
+      expect(await renderPrompt(toPrompt('{{v}}'), { v: template, enabled: true }, {})).toBe(
+        template,
+      );
     });
 
     it('should render an or fallback when its left operand is missing', async () => {

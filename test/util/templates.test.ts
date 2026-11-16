@@ -374,12 +374,36 @@ describe('analyzeTemplateReference', () => {
     expect(extractRequiredVariablesFromTemplate(template)).toContain('_conversation');
   });
 
+  it('carries possible macro declarations through conditional joins', () => {
+    const template =
+      "{% if true %}{% macro m(x=_conversation) %}{{x}}{% endmacro %}{{m('warmup')}}{% endif %}{{m()}}";
+    expect(analyzeTemplateReference(template, '_conversation')).toEqual({
+      referenced: true,
+      parsed: true,
+    });
+    expect(extractRequiredVariablesFromTemplate(template)).toContain('_conversation');
+  });
+
   it('analyzes JSON leaf strings as templates instead of nested structured prompts', () => {
     const prompt = JSON.stringify({ content: '{"{{_conversation|length}}":"x"}' });
     expect(analyzeTemplateReference(prompt, '_conversation')).toEqual({
       referenced: true,
       parsed: true,
     });
+  });
+
+  it('uses whole-template analysis when JSON autoescape is disabled', () => {
+    const restoreEnv = mockProcessEnv({ PROMPTFOO_DISABLE_JSON_AUTOESCAPE: 'true' });
+    try {
+      expect(analyzeTemplateReference('{"{{_conversation|length}}":"x"}', '_conversation')).toEqual(
+        {
+          referenced: true,
+          parsed: true,
+        },
+      );
+    } finally {
+      restoreEnv();
+    }
   });
 
   it('treats default-filter inputs as undefined-safe only in required mode', () => {
@@ -444,6 +468,21 @@ describe('analyzeTemplateReference', () => {
     const value =
       '{% macro wrap() %}{{caller()}}{% endmacro %}{% call wrap() %}{{purpose|trim}}{% endcall %}';
     expect(extractRequiredVariablesFromTemplate(value)).toContain('purpose');
+  });
+
+  it('skips caller defaults overridden by callback arguments', () => {
+    const value =
+      "{% macro m() %}{{ caller('a') ~ '' }}{% endmacro %}{% call(x=missing) m() %}{{ x ~ '!' }}{% endcall %}";
+    expect(extractRequiredVariablesFromTemplate(value)).toEqual([]);
+    expect(getNunjucksEngine().renderString(value, {})).toBe('a!');
+  });
+
+  it('retains computations in existence-guarded inline conditionals', () => {
+    const value = "{{ purpose | trim if enabled is defined else 'anonymous' }}";
+    expect(extractRequiredVariablesFromTemplate(value)).toEqual(['purpose']);
+    expect(
+      extractRequiredVariablesFromTemplate("{{ user.name if user is defined else 'anonymous' }}"),
+    ).toEqual([]);
   });
 });
 
