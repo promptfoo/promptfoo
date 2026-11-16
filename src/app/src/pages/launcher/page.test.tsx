@@ -1,4 +1,5 @@
 import { TooltipProvider } from '@app/components/ui/tooltip';
+import { EVAL_ROUTES } from '@app/constants/routes';
 import { type ApiHealthResult, useApiHealth } from '@app/hooks/useApiHealth';
 import {
   mockMatchMedia as installMatchMedia,
@@ -8,7 +9,7 @@ import {
 import { useTestTimers } from '@app/tests/timers';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter } from 'react-router';
+import { MemoryRouter, useLocation } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import LauncherPage from './page';
 import type { DefinedUseQueryResult } from '@tanstack/react-query';
@@ -32,7 +33,28 @@ const renderLauncher = () =>
     ),
   });
 
-vi.mock('@app/hooks/useApiHealth', () => ({
+function LocationDisplay() {
+  const location = useLocation();
+  return <div data-testid="location">{location.pathname}</div>;
+}
+
+const renderLauncherWithLocation = () =>
+  render(
+    <>
+      <LocationDisplay />
+      <LauncherPage />
+    </>,
+    {
+      wrapper: ({ children }) => (
+        <TooltipProvider delayDuration={0}>
+          <MemoryRouter initialEntries={['/launcher']}>{children}</MemoryRouter>
+        </TooltipProvider>
+      ),
+    },
+  );
+
+vi.mock('@app/hooks/useApiHealth', async (importOriginal) => ({
+  ...(await importOriginal()),
   useApiHealth: vi.fn().mockReturnValue({
     data: { status: 'unknown', message: null },
     refetch: vi.fn(),
@@ -182,5 +204,51 @@ describe('LauncherPage', () => {
     view.rerender(<LauncherPage />);
     view.unmount();
     expect(timers.getTimerCount()).toBe(0);
+  });
+
+  it('redirects when the health check is skipped under no-network mode', () => {
+    const timers = useTestTimers();
+    try {
+      (useApiHealth as Mock).mockReturnValue({
+        data: healthData,
+        refetch: vi.fn(),
+        isLoading: false,
+      } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
+      healthData.status = 'skipped';
+
+      renderLauncherWithLocation();
+      expect(screen.getByTestId('location')).toHaveTextContent('/launcher');
+
+      act(() => {
+        timers.advanceBy(1000);
+      });
+
+      expect(screen.getByTestId('location')).toHaveTextContent(EVAL_ROUTES.ROOT);
+    } finally {
+      timers.restore();
+    }
+  });
+
+  it('keeps connecting when the health check is disabled', () => {
+    const timers = useTestTimers();
+    try {
+      (useApiHealth as Mock).mockReturnValue({
+        data: healthData,
+        refetch: vi.fn(),
+        isLoading: false,
+      } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
+      healthData.status = 'disabled';
+
+      renderLauncherWithLocation();
+
+      act(() => {
+        timers.advanceBy(5000);
+      });
+
+      expect(screen.getByTestId('location')).toHaveTextContent('/launcher');
+      expect(screen.getByText(/Connecting to Promptfoo on localhost:15500/)).toBeInTheDocument();
+    } finally {
+      timers.restore();
+    }
   });
 });
