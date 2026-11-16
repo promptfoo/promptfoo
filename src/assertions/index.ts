@@ -42,7 +42,6 @@ import {
   isPythonFile,
   normalizeWindowsFileUrlPath,
   parseExecutableFileReference,
-  parseRubyFileReference,
 } from '../util/fileExtensions';
 import invariant from '../util/invariant';
 import { getNunjucksEngine } from '../util/templates';
@@ -508,7 +507,9 @@ async function runAssertionInternal({
       const pythonReference = isPythonFile(executableReference.filePath)
         ? executableReference
         : undefined;
-      const rubyReference = parseRubyFileReference(fileReference);
+      const rubyReference = executableReference.filePath.endsWith('.rb')
+        ? executableReference
+        : undefined;
       const { filePath: referencedPath, functionName } = rubyReference ?? executableReference;
       const filePath = path.resolve(
         basePath,

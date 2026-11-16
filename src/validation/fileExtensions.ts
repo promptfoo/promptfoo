@@ -145,14 +145,8 @@ export function parseExecutableFileReference(
   filePath: string;
   functionName?: string;
 } {
-  const rubyReference =
-    options.includeRuby === false ? undefined : parseRubyFileReference(filePath);
-  if (rubyReference) {
-    return rubyReference;
-  }
-
-  // Prefer the rightmost JavaScript file boundary before considering Python.
-  // A selector such as 'check.py:detail' is an export key, not a Python file.
+  // Prefer the rightmost JavaScript file boundary before considering Ruby or
+  // Python. A selector such as 'check.rb:detail' is an export key, not a file.
   let separator = filePath.lastIndexOf(':');
   while (separator > 1) {
     const candidateFilePath = filePath.slice(0, separator);
@@ -165,6 +159,12 @@ export function parseExecutableFileReference(
       return { filePath: candidateFilePath, functionName };
     }
     separator = filePath.lastIndexOf(':', separator - 1);
+  }
+
+  const rubyReference =
+    options.includeRuby === false ? undefined : parseRubyFileReference(filePath);
+  if (rubyReference) {
+    return rubyReference;
   }
 
   const pythonReference = parsePythonFileReference(filePath);

@@ -813,6 +813,31 @@ describe('JavaScript file references', () => {
     expect(result).toMatchObject({ pass: true });
   });
 
+  it('should preserve Ruby-looking export names in JavaScript assertions', async () => {
+    const assertion: Assertion = {
+      type: 'javascript',
+      value: 'file://grader.cjs:check.rb:detail',
+    };
+
+    const mockFn = vi.fn((_output: string) => true);
+    vi.mocked(path.resolve).mockReturnValue('/configs/grader.cjs');
+    vi.mocked(path.extname).mockReturnValue('.cjs');
+    vi.mocked(isPackagePath).mockReturnValue(false);
+    vi.mocked(importModule).mockResolvedValue({ 'check.rb:detail': mockFn });
+
+    const result = await runAssertion({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      assertion,
+      test: {} as AtomicTestCase,
+      providerResponse: { output: 'Expected output' },
+    });
+
+    expect(importModule).toHaveBeenCalledWith('/configs/grader.cjs', 'check.rb:detail');
+    expect(mockFn).toHaveBeenCalledOnce();
+    expect(result).toMatchObject({ pass: true });
+  });
+
   it('should pass assertion config to JavaScript file references', async () => {
     const assertion: Assertion = {
       type: 'javascript',

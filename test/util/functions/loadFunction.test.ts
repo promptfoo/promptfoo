@@ -487,6 +487,7 @@ describe('parseFileUrl', () => {
     ['file://grader.cjs:other.js', 'grader.cjs', 'other.js'],
     ['file://grader.cjs:score.js', 'grader.cjs', 'score.js'],
     ['file://grader.cjs:check.py:detail', 'grader.cjs', 'check.py:detail'],
+    ['file://grader.cjs:check.rb:detail', 'grader.cjs', 'check.rb:detail'],
     ['file://grader.cjs:copy.cjs:grade', 'grader.cjs:copy.cjs', 'grade'],
     ['file://grader.cjs:copy.cjs:check:detail', 'grader.cjs:copy.cjs', 'check:detail'],
   ])('should preserve JavaScript file and export boundaries: %s', (fileUrl, filePath, fn) => {
