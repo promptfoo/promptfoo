@@ -419,6 +419,26 @@ describe('readPrompts', () => {
     },
   );
 
+  it('should read a named function from a mixed-case Python file', async () => {
+    const promptPath = 'prompt.PY:create_prompt';
+    const code = 'def create_prompt(context):\n    return "generated"';
+    vi.mocked(fs.readFileSync).mockReturnValue(code);
+    vi.mocked(fs.statSync).mockReturnValue({ isDirectory: () => false } as fs.Stats);
+
+    const result = await readPrompts(promptPath);
+
+    expect(maybeFilePath(promptPath)).toBe(true);
+    expect(result).toEqual([
+      {
+        raw: code,
+        label: promptPath,
+        function: expect.any(Function),
+        config: undefined,
+      },
+    ]);
+    expect(fs.readFileSync).toHaveBeenCalledWith('prompt.PY', 'utf-8');
+  });
+
   it('should read a .js file without named function', async () => {
     const promptPath = 'prompt.js';
     const mockFunction = () => console.log('dummy prompt');

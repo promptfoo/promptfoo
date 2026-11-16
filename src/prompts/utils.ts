@@ -20,9 +20,12 @@ export function maybeFilePath(str: string): boolean {
 
   // An extension can end the string or precede the last colon in a reference like prompts.py:generate.
   const lastColon = str.lastIndexOf(':');
+  const lowerStr = str.toLowerCase();
   return (
     str.startsWith('file://') ||
-    VALID_FILE_EXTENSIONS.some((ext) => str.endsWith(ext) || str.endsWith(ext, lastColon)) ||
+    VALID_FILE_EXTENSIONS.some(
+      (ext) => lowerStr.endsWith(ext) || lowerStr.endsWith(ext, lastColon),
+    ) ||
     str.charAt(str.length - 3) === '.' ||
     str.charAt(str.length - 4) === '.' ||
     str.includes('*') ||

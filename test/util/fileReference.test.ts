@@ -134,6 +134,7 @@ describe('fileReference utility functions', () => {
 
     it.each([
       ['file://grader.cjs:score.js', '/configs/grader.cjs', 'score.js'],
+      ['file://grader.cjs:check.py:detail', '/configs/grader.cjs', 'check.py:detail'],
       ['file://grader.cjs:copy.cjs:grade', '/configs/grader.cjs:copy.cjs', 'grade'],
       ['file://grader.cjs:check:detail', '/configs/grader.cjs', 'check:detail'],
     ])('should load the selected JavaScript export: %s', async (fileRef, filePath, exportName) => {

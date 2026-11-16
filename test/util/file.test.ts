@@ -1784,6 +1784,16 @@ describe('file utilities', () => {
       });
     });
 
+    it('should preserve a JavaScript boundary when the export contains a Python suffix', () => {
+      vi.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false } as fs.Stats);
+      expect(parsePathOrGlob('/base', 'grader.cjs:check.py:detail')).toEqual({
+        extension: '.cjs',
+        functionName: 'check.py:detail',
+        isPathPattern: false,
+        filePath: path.join('/base', 'grader.cjs'),
+      });
+    });
+
     it('should hash and load the same lowercase fallback used by the Python workers', () => {
       vi.spyOn(fs, 'existsSync').mockImplementation(
         (candidate) => candidate === path.join('/base', 'provider.py'),

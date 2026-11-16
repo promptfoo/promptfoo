@@ -39,9 +39,9 @@ import {
 } from '../types/index';
 import {
   isJavascriptFile,
+  isPythonFile,
   normalizeWindowsFileUrlPath,
   parseExecutableFileReference,
-  parsePythonFileReference,
   parseRubyFileReference,
 } from '../util/fileExtensions';
 import invariant from '../util/invariant';
@@ -504,10 +504,12 @@ async function runAssertionInternal({
     if (renderedValue.startsWith('file://')) {
       const basePath = cliState.basePath || '';
       const fileReference = renderedValue.slice('file://'.length);
-      const pythonReference = parsePythonFileReference(fileReference);
+      const executableReference = parseExecutableFileReference(fileReference);
+      const pythonReference = isPythonFile(executableReference.filePath)
+        ? executableReference
+        : undefined;
       const rubyReference = parseRubyFileReference(fileReference);
-      const { filePath: referencedPath, functionName } =
-        rubyReference ?? pythonReference ?? parseExecutableFileReference(fileReference);
+      const { filePath: referencedPath, functionName } = rubyReference ?? executableReference;
       const filePath = path.resolve(
         basePath,
         normalizeWindowsFileUrlPath(referencedPath, process.platform),

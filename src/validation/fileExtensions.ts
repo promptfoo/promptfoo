@@ -142,12 +142,13 @@ export function parseExecutableFileReference(filePath: string): {
   filePath: string;
   functionName?: string;
 } {
-  const pythonReference = parsePythonFileReference(filePath);
-  if (pythonReference) {
-    return pythonReference;
+  const rubyReference = parseRubyFileReference(filePath);
+  if (rubyReference) {
+    return rubyReference;
   }
 
-  // A leading drive-letter colon is part of the path, not a selector separator.
+  // Prefer the rightmost JavaScript file boundary before considering Python.
+  // A selector such as 'check.py:detail' is an export key, not a Python file.
   let separator = filePath.lastIndexOf(':');
   while (separator > 1) {
     const candidateFilePath = filePath.slice(0, separator);
@@ -160,6 +161,11 @@ export function parseExecutableFileReference(filePath: string): {
       return { filePath: candidateFilePath, functionName };
     }
     separator = filePath.lastIndexOf(':', separator - 1);
+  }
+
+  const pythonReference = parsePythonFileReference(filePath);
+  if (pythonReference) {
+    return pythonReference;
   }
 
   return { filePath };

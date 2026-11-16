@@ -15,7 +15,7 @@ import {
 import { importModule } from '../esm';
 import logger from '../logger';
 import { runPython } from '../python/pythonUtils';
-import { isJavascriptFile, isPythonFile } from './fileExtensions';
+import { isJavascriptFile, isPythonFile, parseExecutableFileReference } from './fileExtensions';
 
 export {
   isPythonFile,
@@ -393,18 +393,24 @@ export function parsePathOrGlob(
   let functionName: string | undefined;
 
   if (filename.includes(':')) {
-    // Windows-aware path parsing: check if colon is part of drive letter
-    const lastColonIndex = filename.lastIndexOf(':');
-    if (lastColonIndex > 1) {
-      const pathWithoutFunction = filename.slice(0, lastColonIndex);
-      if (
-        isJavascriptFile(pathWithoutFunction) ||
-        isPythonFile(pathWithoutFunction) ||
-        pathWithoutFunction.endsWith('.go') ||
-        pathWithoutFunction.endsWith('.rb')
-      ) {
-        functionName = filename.slice(lastColonIndex + 1);
-        filename = pathWithoutFunction;
+    const parsed = parseExecutableFileReference(filename);
+    filename = parsed.filePath;
+    functionName = parsed.functionName;
+    if (!functionName) {
+      // Keep Go's selector spelling and legacy path-shaped suffixes. JavaScript,
+      // Python and Ruby have already been resolved by the shared parser above.
+      const lastColonIndex = filename.lastIndexOf(':');
+      if (lastColonIndex > 1) {
+        const pathWithoutFunction = filename.slice(0, lastColonIndex);
+        if (
+          isJavascriptFile(pathWithoutFunction) ||
+          isPythonFile(pathWithoutFunction) ||
+          pathWithoutFunction.endsWith('.go') ||
+          pathWithoutFunction.endsWith('.rb')
+        ) {
+          functionName = filename.slice(lastColonIndex + 1);
+          filename = pathWithoutFunction;
+        }
       }
     }
   }
