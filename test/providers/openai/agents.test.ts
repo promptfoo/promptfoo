@@ -290,6 +290,124 @@ describe('OpenAiAgentsProvider', () => {
     vi.unstubAllEnvs();
   });
 
+  describe('opt-in SDK function-call metadata', () => {
+    const call = (callId: string, name: string, args: string) => ({
+      type: 'tool_call_item',
+      rawItem: { type: 'function_call', callId, name, arguments: args, status: 'completed' },
+    });
+    const output = (callId: string, status: string, body: string) => ({
+      type: 'tool_call_output_item',
+      rawItem: {
+        type: 'function_call_result',
+        name: 'check_inventory',
+        callId,
+        status,
+        output: { type: 'text', text: body },
+      },
+    });
+
+    it('preserves the provider response when collection is disabled', async () => {
+      mockRun.mockResolvedValueOnce({
+        finalOutput: 'same answer',
+        usage: undefined,
+        newItems: [call('c1', 'check_inventory', '{"id":1}')],
+      });
+      const provider = new OpenAiAgentsProvider('fixture', createSupportAgentOptions());
+      const result = await provider.callApi('test');
+      expect(result.output).toBe('same answer');
+      expect(result.metadata).toBeUndefined();
+    });
+
+    it('distinguishes an observed empty call list from disabled collection', async () => {
+      const provider = new OpenAiAgentsProvider('fixture', {
+        config: { ...createSupportAgentOptions().config, includeToolCalls: true },
+      });
+      const result = await provider.callApi('test');
+      expect(result.metadata).toEqual({ toolCalls: [] });
+    });
+
+    it('preserves call order and IDs, joins out-of-order results, and never exposes tool outputs', async () => {
+      mockRun.mockResolvedValueOnce({
+        finalOutput: 'same answer',
+        usage: undefined,
+        newItems: [
+          output('second', 'completed', 'PRIVATE_TOOL_RESULT'),
+          call('first', 'check_inventory', '{"playerId":"player1"}'),
+          call('second', 'check_inventory', '[1,2]'),
+          { type: 'tool_call_item', rawItem: { type: 'hosted_tool_call', name: 'browse' } },
+          output('first', 'completed', 'ANOTHER_PRIVATE_RESULT'),
+          call('unresolved', 'check_inventory', 'NOT_JSON'),
+          output('unmatched', 'completed', 'UNMATCHED_PRIVATE_RESULT'),
+        ],
+      });
+      const provider = new OpenAiAgentsProvider('fixture', {
+        config: { ...createSupportAgentOptions().config, includeToolCalls: true },
+      });
+      const result = await provider.callApi('test');
+      expect(result.output).toBe('same answer');
+      expect(result.metadata?.toolCalls).toEqual([
+        {
+          callId: 'first',
+          name: 'check_inventory',
+          rawArguments: '{"playerId":"player1"}',
+          arguments: { playerId: 'player1' },
+          argumentParseStatus: 'parsed',
+          callStatus: 'completed',
+          resultPresent: true,
+          resultStatus: 'completed',
+          executionMode: 'real',
+        },
+        {
+          callId: 'second',
+          name: 'check_inventory',
+          rawArguments: '[1,2]',
+          arguments: [1, 2],
+          argumentParseStatus: 'parsed',
+          callStatus: 'completed',
+          resultPresent: true,
+          resultStatus: 'completed',
+          executionMode: 'real',
+        },
+        {
+          callId: 'unresolved',
+          name: 'check_inventory',
+          rawArguments: 'NOT_JSON',
+          argumentParseStatus: 'invalid',
+          callStatus: 'completed',
+          resultPresent: false,
+          executionMode: 'real',
+        },
+      ]);
+      expect(JSON.stringify(result.metadata)).not.toContain('PRIVATE_RESULT');
+    });
+
+    it.each([
+      { executeTools: 'mock' as const, expectedMode: 'mock' },
+      { executeTools: false as const, expectedMode: 'disabled' },
+    ])(
+      'labels $expectedMode execution without claiming real tool execution',
+      async ({ executeTools, expectedMode }) => {
+        mockRun.mockResolvedValueOnce({
+          finalOutput: 'answer',
+          usage: undefined,
+          newItems: [call('c1', 'check_inventory', 'null')],
+        });
+        const provider = new OpenAiAgentsProvider('fixture', {
+          config: { ...createSupportAgentOptions().config, includeToolCalls: true, executeTools },
+        });
+        const result = await provider.callApi('test');
+        expect(result.metadata?.toolCalls).toEqual([
+          expect.objectContaining({
+            callId: 'c1',
+            arguments: null,
+            executionMode: expectedMode,
+            resultPresent: false,
+          }),
+        ]);
+      },
+    );
+  });
+
   it('creates a real SDK agent from inline definitions', async () => {
     const provider = new OpenAiAgentsProvider('gpt-5-mini', {
       config: {

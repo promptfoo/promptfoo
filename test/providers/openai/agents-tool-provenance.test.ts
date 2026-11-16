@@ -256,6 +256,53 @@ describe('OpenAiAgentsProvider tool provenance', () => {
     expect(target.model).toBe('source-model');
   });
 
+  it.each([false, true])(
+    'preserves real SDK function-tool behavior with includeToolCalls=%s',
+    async (includeToolCalls) => {
+      const execute = vi.fn(async () => 'PRIVATE_RESULT_SHOULD_NOT_BE_EXPORTED');
+      const inventoryTool = tool({
+        name: 'check_inventory',
+        description: 'Check inventory',
+        parameters: { type: 'object', properties: {}, required: [], additionalProperties: false },
+        execute,
+      });
+      const agent = new Agent({ name: 'Inventory', tools: [inventoryTool] });
+      outputs.push(() => [functionCall('check_inventory', 'call_approved')]);
+      const provider = new OpenAiAgentsProvider('fixture', {
+        config: {
+          agent: exportedAgent(agent),
+          model: 'source-model',
+          includeToolCalls,
+        },
+      });
+
+      const result = await provider.callApi('Please check inventory.');
+
+      expect(result.output).toBe('Done.');
+      expect(requests).toHaveLength(2);
+      expect(execute).toHaveBeenCalledTimes(1);
+      if (includeToolCalls) {
+        expect(result.metadata?.toolCalls).toEqual([
+          expect.objectContaining({
+            callId: 'call_approved',
+            name: 'check_inventory',
+            rawArguments: '{}',
+            arguments: {},
+            argumentParseStatus: 'parsed',
+            resultPresent: true,
+            resultStatus: 'completed',
+            executionMode: 'real',
+          }),
+        ]);
+        expect(JSON.stringify(result.metadata)).not.toContain(
+          'PRIVATE_RESULT_SHOULD_NOT_BE_EXPORTED',
+        );
+      } else {
+        expect(result.metadata).toBeUndefined();
+      }
+    },
+  );
+
   it('retains callback-assigned tools when the target originally omitted tools', async () => {
     const execute = vi.fn(async () => 'Local tool result');
     const callbackTool = tool({
