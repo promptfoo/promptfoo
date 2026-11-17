@@ -547,6 +547,45 @@ describe('analyzeTemplateReference', () => {
     expect(extractUnboundVariablesFromTemplate(value)).toContain('_conversation');
   });
 
+  it.each(['wrap()', 'wrap(h)'])(
+    'resolves caller arguments from the wrapper invocation: %s',
+    (call) => {
+      const value = `{% macro a() %}plain{% endmacro %}{% macro h(x=_conversation) %}{{x}}{% endmacro %}{% macro wrap(f=h) %}{{caller(f)}}{% endmacro %}{{h('warmup')}}{% set f=a %}{% call(g) ${call} %}{{g()}}{% endcall %}`;
+      expect(getNunjucksEngine().renderString(value, { _conversation: 'history' })).toBe(
+        'warmuphistory',
+      );
+      expect(analyzeTemplateReference(value, '_conversation')).toEqual({
+        referenced: true,
+        parsed: true,
+      });
+      expect(extractRequiredVariablesFromTemplate(value)).toContain('_conversation');
+    },
+  );
+
+  it('does not certify a negative when a custom filter can invoke a macro', () => {
+    const value = "{% macro h(x=_conversation) %}{{x}}{% endmacro %}{{h('warmup')}}{{h|invoke}}";
+    expect(
+      getNunjucksEngine({ invoke: (f: () => string) => f() }).renderString(value, {
+        _conversation: 'history',
+      }),
+    ).toBe('warmuphistory');
+    expect(analyzeTemplateReference(value, '_conversation')).toEqual({
+      referenced: true,
+      parsed: false,
+    });
+    expect(extractRequiredVariablesFromTemplate(value)).toBeUndefined();
+  });
+
+  it('does not treat a rendered macro result as a macro-valued filter input', () => {
+    const value = "{% macro h(x=purpose) %}{{x ~ ''}}{% endmacro %}{{h('ok')|custom_upper}}";
+    expect(
+      getNunjucksEngine({
+        custom_upper: (text: unknown) => String(text).toUpperCase(),
+      }).renderString(value, {}),
+    ).toBe('OK');
+    expect(extractRequiredVariablesFromTemplate(value)).toEqual([]);
+  });
+
   it('follows escaped macros behind unresolved named callees', () => {
     const value =
       "{% macro m(x=_conversation) %}{{x}}{% endmacro %}{{m('warmup')}}{% for f in [m] %}{{f()}}{% endfor %}";

@@ -776,6 +776,7 @@ function analyzeMacroBody(
   suppliedParamNames?: ReadonlySet<string>,
   suppliedMacroCandidates?: ReadonlyMap<string, ReadonlySet<DeferredMacro>>,
   definitionScope: ReadonlySet<string> = macro.definitionScope,
+  invocationScopes?: Map<DeferredMacro, LinkedScope>,
 ): boolean {
   const memoKey = macroAnalysisMemoKey(suppliedParamNames);
   const selectedMacroCandidates = new Map(suppliedMacroCandidates);
@@ -818,6 +819,7 @@ function analyzeMacroBody(
       macroScope.registerMacroCandidates(name, candidates, false);
     }
     macroScope.add('caller');
+    invocationScopes?.set(macro, macroScope);
     const result = astChildReferencesVariable(macro.node, 'body', variableName, macroScope);
     if (!result && memo && canMemoize) {
       const memoKeys = memo.results.get(macro) ?? new Set<string>();
@@ -1114,6 +1116,7 @@ function collectSuppliedCallerParamNames(
   macros: ReadonlySet<DeferredMacro> | undefined,
   boundSymbols: ReadonlySet<string>,
   suppliedMacroCandidates?: Map<string, ReadonlySet<DeferredMacro>>,
+  invocationScopes?: ReadonlyMap<DeferredMacro, LinkedScope>,
 ): ReadonlySet<string> | undefined {
   if (macros === undefined) {
     return undefined;
@@ -1133,6 +1136,7 @@ function collectSuppliedCallerParamNames(
       suppliedMacroCandidates?.clear();
       return undefined;
     }
+    const invocationScope = invocationScopes?.get(macro) ?? boundSymbols;
     let forMacro: Set<string> | undefined;
     for (const invocation of invocations) {
       const invocationCandidates = new Map<string, ReadonlySet<DeferredMacro>>();
@@ -1140,7 +1144,7 @@ function collectSuppliedCallerParamNames(
         invocation.args,
         signature,
         memo,
-        boundSymbols instanceof LinkedScope ? boundSymbols : undefined,
+        invocationScope instanceof LinkedScope ? invocationScope : undefined,
         invocationCandidates,
       );
       if (suppliedMacroCandidates) {
@@ -1183,6 +1187,7 @@ function funCallNodeReferencesVariable(
   const memo = boundSymbols instanceof LinkedScope ? boundSymbols.macroAnalysisMemo() : undefined;
   const candidates =
     macros ?? (boundSymbols instanceof LinkedScope ? boundSymbols.macrosUsedAsValues() : undefined);
+  const invocationScopes = deferredCaller ? new Map<DeferredMacro, LinkedScope>() : undefined;
   if (candidates) {
     for (const macro of candidates) {
       if (macros) {
@@ -1208,6 +1213,7 @@ function funCallNodeReferencesVariable(
           suppliedParamNames,
           suppliedMacroCandidates,
           deferredCaller ? new LinkedScope(definitionScope, ['caller']) : definitionScope,
+          invocationScopes,
         )
       ) {
         return true;
@@ -1224,6 +1230,7 @@ function funCallNodeReferencesVariable(
         macros,
         boundSymbols,
         suppliedCallerMacroCandidates,
+        invocationScopes,
       )
     : undefined;
   return callerNodeReferencesVariable(
@@ -1639,6 +1646,61 @@ function orNodeReferencesVariable(
   );
 }
 
+function filterArgumentsUseMacros(args: unknown, scope: LinkedScope): boolean {
+  const pending: Array<{ node: unknown; parent?: NunjucksParentContext }> = [{ node: args }];
+  while (pending.length > 0) {
+    const { node, parent } = pending.pop()!;
+    if (!isNunjucksAstNode(node)) {
+      continue;
+    }
+    consumeAnalysisWork(scope.macroAnalysisMemo());
+    if (node.typename === 'FunCall') {
+      const name = getSymbolName(node.name);
+      const binding = name ? scope.findMacroBinding(name) : undefined;
+      if (binding && !binding.dynamic && binding.candidates.size > 0) {
+        // A rendered Nunjucks macro returns text, not another callable.
+        continue;
+      }
+    }
+    const name = getSymbolName(node);
+    if (name && !isNonReferenceSymbol(parent) && scope.findMacros(name)?.size) {
+      return true;
+    }
+    for (const field of node.fields ?? []) {
+      const children = Array.isArray(node[field]) ? node[field] : [node[field]];
+      for (const child of children as unknown[]) {
+        pending.push({ node: child, parent: { field, node } });
+      }
+    }
+  }
+  return false;
+}
+
+function filterNodeReferencesVariable(
+  node: NunjucksAstNode,
+  variableName: ReferenceTarget,
+  boundSymbols: ReadonlySet<string>,
+): boolean {
+  if (isDefaultFilterWithUndefinedSafeInput(node, variableName)) {
+    return defaultFilterReferencesVariable(
+      node,
+      variableName as RequiredReferenceTarget,
+      boundSymbols,
+    );
+  }
+  if (astFieldsReferenceVariable(node, variableName, boundSymbols)) {
+    return true;
+  }
+  if (
+    boundSymbols instanceof LinkedScope &&
+    !isNunjucksFilter(getSymbolName(node.name)) &&
+    filterArgumentsUseMacros(node.args, boundSymbols)
+  ) {
+    throw new TemplateAnalysisLimitError('Custom filters can invoke macro-valued arguments');
+  }
+  return false;
+}
+
 function astReferencesVariable(
   node: NunjucksAstNode,
   variableName: ReferenceTarget,
@@ -1664,12 +1726,8 @@ function astReferencesVariable(
     return inlineIfNodeReferencesVariable(node, variableName, boundSymbols);
   }
 
-  if (isDefaultFilterWithUndefinedSafeInput(node, variableName)) {
-    return defaultFilterReferencesVariable(
-      node,
-      variableName as RequiredReferenceTarget,
-      boundSymbols,
-    );
+  if (node.typename === 'Filter') {
+    return filterNodeReferencesVariable(node, variableName, boundSymbols);
   }
 
   if (POSTFIX_NODES.has(node.typename!)) {
@@ -1856,6 +1914,12 @@ export function isNunjucksGlobal(name: string): boolean {
   // ordinary undefined variables stay on the non-exceptional path.
   const { globals } = globalsEngine as unknown as { globals: Record<string, unknown> };
   return globals[name] !== undefined;
+}
+
+function isNunjucksFilter(name: string | undefined): boolean {
+  globalsEngine ??= getNunjucksEngine();
+  const { filters } = globalsEngine as unknown as { filters: Record<string, unknown> };
+  return name !== undefined && Object.hasOwn(filters, name);
 }
 
 function isTemplateWhitespace(char: string | undefined): boolean {
