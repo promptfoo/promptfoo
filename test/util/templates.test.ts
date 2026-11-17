@@ -464,6 +464,56 @@ describe('analyzeTemplateReference', () => {
     expect(getNunjucksEngine().renderString(value, { purpose: 'ready' })).toBe('ready');
   });
 
+  it('propagates caller macro arguments in ordinary reference analysis', () => {
+    const value =
+      "{% macro h(x=_conversation) %}{{x}}{% endmacro %}{{h('warmup')}}{% macro wrap() %}{{caller(h)}}{% endmacro %}{% call(f) wrap() %}{{f()}}{% endcall %}";
+    expect(getNunjucksEngine().renderString(value, { _conversation: 'history' })).toBe(
+      'warmuphistory',
+    );
+    expect(analyzeTemplateReference(value, '_conversation')).toEqual({
+      referenced: true,
+      parsed: true,
+    });
+    expect(extractUnboundVariablesFromTemplate(value)).toContain('_conversation');
+  });
+
+  it('follows escaped macros behind unresolved named callees', () => {
+    const value =
+      "{% macro m(x=_conversation) %}{{x}}{% endmacro %}{{m('warmup')}}{% for f in [m] %}{{f()}}{% endfor %}";
+    expect(getNunjucksEngine().renderString(value, { _conversation: 'history' })).toBe(
+      'warmuphistory',
+    );
+    expect(analyzeTemplateReference(value, '_conversation')).toEqual({
+      referenced: true,
+      parsed: true,
+    });
+  });
+
+  it('does not certify a negative for reentrant macro bindings', () => {
+    const value =
+      "{% macro h(x=_conversation) %}{{x}}{% endmacro %}{% macro p() %}plain{% endmacro %}{% macro apply(f, again=true) %}{% if again %}{{apply(h,false)}}{% else %}{{f()}}{% endif %}{% endmacro %}{{h('warmup')}}{{apply(p)}}";
+    expect(getNunjucksEngine().renderString(value, { _conversation: 'history' })).toBe(
+      'warmuphistory',
+    );
+    expect(analyzeTemplateReference(value, '_conversation')).toEqual({
+      referenced: true,
+      parsed: false,
+    });
+    expect(extractRequiredVariablesFromTemplate(value)).toBeUndefined();
+  });
+
+  it.each(['m | default', 'm | d', "m or ''", "m if m is defined else ''"])(
+    'tracks macro values through undefined-safe operands: %s',
+    (expression) => {
+      const value = `{% macro m() %}{{purpose|trim}}{% endmacro %}{% set handlers=[${expression}] %}{{handlers[0]()}}`;
+      expect(extractRequiredVariablesFromTemplate(value)).toEqual(['purpose']);
+      expect(getNunjucksEngine().renderString(value, { purpose: 'ready' })).toBe('ready');
+
+      const unused = `{% macro m() %}{{purpose|trim}}{% endmacro %}{% set handlers=[${expression}] %}ok`;
+      expect(extractRequiredVariablesFromTemplate(unused)).toEqual([]);
+    },
+  );
+
   it('preserves live definition frames across conditional joins', () => {
     const value =
       "{% if true %}{% macro a() %}{{b()}}{% endmacro %}{% macro b(x='ok') %}{{x}}{% endmacro %}{{a()}}{% endif %}{% macro b(x=_conversation) %}{{x}}{% endmacro %}{{b('warmup')}}{{a()}}";

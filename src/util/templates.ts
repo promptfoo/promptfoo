@@ -53,6 +53,7 @@ type DeferredMacro = {
   definitionScope: ReadonlySet<string>;
   called: boolean;
   analyzing: boolean;
+  activeMacroCandidates?: ReadonlyMap<string, ReadonlySet<DeferredMacro>>;
   usesCaller: boolean;
 };
 
@@ -739,7 +740,9 @@ function analyzeMacroBody(
   }
 
   const wasAnalyzing = macro.analyzing;
+  const previousCandidates = macro.activeMacroCandidates;
   macro.analyzing = true;
+  macro.activeMacroCandidates = selectedMacroCandidates;
   macroAnalysisDepth++;
   try {
     // Defaults and bodies see the definition frame's current bindings at each
@@ -759,6 +762,9 @@ function analyzeMacroBody(
     }
     // Reentrant calls can evaluate defaults even when their body is already active.
     if (wasAnalyzing) {
+      if (selectedMacroCandidates.size || previousCandidates?.size) {
+        throw new TemplateAnalysisLimitError('Reentrant macro bindings cannot be resolved');
+      }
       return false;
     }
 
@@ -783,6 +789,7 @@ function analyzeMacroBody(
   } finally {
     macroAnalysisDepth--;
     macro.analyzing = wasAnalyzing;
+    macro.activeMacroCandidates = previousCandidates;
   }
 }
 
@@ -1107,10 +1114,7 @@ function funCallNodeReferencesVariable(
   if (astChildReferencesVariable(node, 'args', variableName, boundSymbols)) {
     return true;
   }
-  const deferredCaller =
-    typeof variableName === 'object' && 'excludeOrOperands' in variableName
-      ? findCallBlockCaller(node.args)
-      : undefined;
+  const deferredCaller = findCallBlockCaller(node.args);
   const macroName = getSymbolName(node.name);
   const macros =
     macroName && boundSymbols instanceof LinkedScope
@@ -1135,7 +1139,7 @@ function funCallNodeReferencesVariable(
       }
     }
   }
-  if (macroName === undefined && boundSymbols instanceof LinkedScope) {
+  if (!macros && boundSymbols instanceof LinkedScope) {
     for (const macro of boundSymbols.macrosUsedAsValues()) {
       if (analyzeMacroBody(macro, variableName, memo)) {
         return true;
@@ -1422,6 +1426,9 @@ function undefinedSafeOperandReferencesVariable(
   boundSymbols: ReadonlySet<string>,
 ): boolean {
   if (node.typename === 'Symbol') {
+    if (typeof node.value === 'string') {
+      registerMacroValueReference(node.value, undefined, boundSymbols);
+    }
     return false;
   }
 
@@ -1442,6 +1449,9 @@ function undefinedSafeOperandReferencesVariable(
       break;
     }
     if (target.typename === 'Symbol') {
+      if (typeof target.value === 'string') {
+        registerMacroValueReference(target.value, undefined, boundSymbols);
+      }
       return false;
     }
     if (target.typename !== 'LookupVal') {
