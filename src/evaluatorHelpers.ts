@@ -727,6 +727,7 @@ function shouldRenderAllVarTemplates(
 function collectPromptReferencedVars(
   basePrompt: string,
   vars: Record<string, VarValue>,
+  nunjucksFilters?: NunjucksFilterMap,
 ): Set<string> {
   const referenced = new Set<string>();
   // Includes/imports can read variables that never appear in the outer AST.
@@ -735,7 +736,7 @@ function collectPromptReferencedVars(
   if (templateLoadsExternalContext(basePrompt)) {
     return new Set(Object.keys(vars));
   }
-  const pending = extractUnboundVariablesFromTemplate(basePrompt);
+  const pending = extractUnboundVariablesFromTemplate(basePrompt, nunjucksFilters);
   if (!pending) {
     return new Set(Object.keys(vars));
   }
@@ -756,7 +757,7 @@ function collectPromptReferencedVars(
     if (templateLoadsExternalContext(value)) {
       return new Set(Object.keys(vars));
     }
-    const dependencies = extractUnboundVariablesFromTemplate(value);
+    const dependencies = extractUnboundVariablesFromTemplate(value, nunjucksFilters);
     if (!dependencies) {
       return new Set(Object.keys(vars));
     }
@@ -780,7 +781,11 @@ function autoWrapRawIfPartialNunjucks(prompt: string): string {
   return prompt;
 }
 
-function referencesUndefinedVariables(template: string, vars: Record<string, VarValue>): boolean {
+function referencesUndefinedVariables(
+  template: string,
+  vars: Record<string, VarValue>,
+  nunjucksFilters?: NunjucksFilterMap,
+): boolean {
   // Plain data needs no structural scan at all. This fast path is important for
   // large file-backed values on the full-render path: allocating a depth entry
   // per character would otherwise dominate both time and memory.
@@ -806,7 +811,7 @@ function referencesUndefinedVariables(template: string, vars: Record<string, Var
     }
   }
   scrubbed = mapSpans(scrubbed, nested, () => '');
-  const unboundReferences = extractRequiredVariablesFromTemplate(scrubbed);
+  const unboundReferences = extractRequiredVariablesFromTemplate(scrubbed, nunjucksFilters);
   if (unboundReferences) {
     return unboundReferences.some(
       (variableName) => !isNunjucksGlobal(variableName) && vars[variableName] === undefined,
@@ -1183,7 +1188,7 @@ export async function renderPrompt(
   );
   // Determine which vars the resolved prompt actually references so render
   // failures on unused values can be suppressed without hiding errors on used ones.
-  const promptReferencedVars = collectPromptReferencedVars(basePrompt, vars);
+  const promptReferencedVars = collectPromptReferencedVars(basePrompt, vars, nunjucksFilters);
   const renderedVars = Object.fromEntries(
     Object.entries(vars).map(([key, value]) => {
       if (
@@ -1198,7 +1203,7 @@ export async function renderPrompt(
         return [key, value];
       }
 
-      if (referencesUndefinedVariables(value, vars)) {
+      if (referencesUndefinedVariables(value, vars, nunjucksFilters)) {
         return [key, value];
       }
 

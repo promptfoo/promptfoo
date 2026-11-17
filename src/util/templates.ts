@@ -47,7 +47,7 @@ const MAX_MACRO_ANALYSIS_DEPTH = 100;
 let macroAnalysisDepth = 0;
 const macroAnalysisStack: Array<{
   macro: DeferredMacro;
-  invocationScopes?: Map<NunjucksAstNode, LinkedScope>;
+  invocationMacroCandidates?: Map<NunjucksAstNode, ReadonlyMap<string, ReadonlySet<DeferredMacro>>>;
 }> = [];
 
 type DeferredMacro = {
@@ -94,6 +94,9 @@ class LinkedScope implements ReadonlySet<string> {
     private readonly parent?: ReadonlySet<string>,
     names: Iterable<string> = [],
     private readonly kind: 'transparent' | 'branch' | 'frame' = 'transparent',
+    private readonly overriddenFilters: ReadonlySet<string> = parent instanceof LinkedScope
+      ? parent.overriddenFilters
+      : new Set(),
   ) {
     this.fallbackMacroMemo = parent instanceof LinkedScope ? parent.macroAnalysisMemo() : undefined;
     // Values escape branch/expression scopes even though lexical bindings do not.
@@ -220,6 +223,10 @@ class LinkedScope implements ReadonlySet<string> {
       }
     }
     return Array.from(macros);
+  }
+
+  hasFilterOverride(name: string | undefined): boolean {
+    return name !== undefined && this.overriddenFilters.has(name);
   }
 
   macroAnalysisMemo(): MacroAnalysisMemo | undefined {
@@ -726,14 +733,19 @@ function collectSuppliedMacroParamNames(
   memo?: MacroAnalysisMemo,
   boundSymbols?: LinkedScope,
   suppliedMacroCandidates?: Map<string, ReadonlySet<DeferredMacro>>,
+  invocationMacroCandidates?: ReadonlyMap<string, ReadonlySet<DeferredMacro>>,
 ): Set<string> {
   const supplied = new Set<string>();
   const recordMacroCandidate = (paramName: string | undefined, value: unknown) => {
-    if (!paramName || !suppliedMacroCandidates || !boundSymbols) {
+    if (!paramName || !suppliedMacroCandidates || (!boundSymbols && !invocationMacroCandidates)) {
       return;
     }
     const sourceName = getSymbolName(value);
-    const candidates = sourceName ? boundSymbols.findMacros(sourceName) : undefined;
+    const candidates = sourceName
+      ? invocationMacroCandidates
+        ? invocationMacroCandidates.get(sourceName)
+        : boundSymbols?.findMacros(sourceName)
+      : undefined;
     if (candidates && candidates.size > 0) {
       suppliedMacroCandidates.set(paramName, candidates);
     }
@@ -780,7 +792,7 @@ function analyzeMacroBody(
   suppliedParamNames?: ReadonlySet<string>,
   suppliedMacroCandidates?: ReadonlyMap<string, ReadonlySet<DeferredMacro>>,
   definitionScope: ReadonlySet<string> = macro.definitionScope,
-  invocationScopes?: Map<NunjucksAstNode, LinkedScope>,
+  invocationMacroCandidates?: Map<NunjucksAstNode, ReadonlyMap<string, ReadonlySet<DeferredMacro>>>,
 ): boolean {
   const memoKey = macroAnalysisMemoKey(suppliedParamNames);
   const selectedMacroCandidates = new Map(suppliedMacroCandidates);
@@ -794,7 +806,7 @@ function analyzeMacroBody(
   macro.analyzing = true;
   macro.activeMacroCandidates = selectedMacroCandidates;
   macroAnalysisDepth++;
-  macroAnalysisStack.push({ macro, invocationScopes });
+  macroAnalysisStack.push({ macro, invocationMacroCandidates });
   try {
     // Defaults and bodies see the definition frame's current bindings at each
     // call, not a declaration-time snapshot or the caller macro's local frame.
@@ -1117,12 +1129,47 @@ function collectCallerInvocations(node: unknown, memo?: MacroAnalysisMemo): Nunj
   return invocations;
 }
 
+function collectActiveSignatureDefaultCallerInvocations(
+  macro: DeferredMacro,
+  callArgs: unknown,
+  memo?: MacroAnalysisMemo,
+): NunjucksAstNode[] {
+  const suppliedParamNames = collectSuppliedMacroParamNames(callArgs, macro, memo);
+  const invocations: NunjucksAstNode[] = [];
+  if (!isNunjucksAstNode(macro.node.args) || !Array.isArray(macro.node.args.children)) {
+    return invocations;
+  }
+  for (const child of macro.node.args.children) {
+    if (
+      !isNunjucksAstNode(child) ||
+      child.typename !== 'KeywordArgs' ||
+      !Array.isArray(child.children)
+    ) {
+      continue;
+    }
+    for (const pair of child.children) {
+      if (!isNunjucksAstNode(pair) || pair.typename !== 'Pair') {
+        continue;
+      }
+      const paramName = getSymbolName(pair.key);
+      if (paramName && !suppliedParamNames.has(paramName)) {
+        invocations.push(...collectCallerInvocations(pair.value, memo));
+      }
+    }
+  }
+  return invocations;
+}
+
 function collectSuppliedCallerParamNames(
   callerNode: NunjucksAstNode,
   macros: ReadonlySet<DeferredMacro> | undefined,
   boundSymbols: ReadonlySet<string>,
   suppliedMacroCandidates?: Map<string, ReadonlySet<DeferredMacro>>,
-  invocationScopes?: ReadonlyMap<NunjucksAstNode, LinkedScope>,
+  invocationMacroCandidates?: ReadonlyMap<
+    NunjucksAstNode,
+    ReadonlyMap<string, ReadonlySet<DeferredMacro>>
+  >,
+  macroCallArgs?: unknown,
 ): ReadonlySet<string> | undefined {
   if (macros === undefined) {
     return undefined;
@@ -1137,24 +1184,30 @@ function collectSuppliedCallerParamNames(
       continue;
     }
     foundCandidate = true;
-    const invocations = collectCallerInvocations(macro.node.body, memo);
+    const defaultInvocations = collectActiveSignatureDefaultCallerInvocations(
+      macro,
+      macroCallArgs,
+      memo,
+    );
+    const invocations = [...defaultInvocations, ...collectCallerInvocations(macro.node.body, memo)];
     if (invocations.length === 0) {
       suppliedMacroCandidates?.clear();
       return undefined;
     }
     let forMacro: Set<string> | undefined;
     for (const invocation of invocations) {
-      const invocationScope = invocationScopes?.get(invocation) ?? boundSymbols;
-      const invocationCandidates = new Map<string, ReadonlySet<DeferredMacro>>();
+      const invocationCandidates = invocationMacroCandidates?.get(invocation);
+      const suppliedInvocationCandidates = new Map<string, ReadonlySet<DeferredMacro>>();
       const supplied = collectSuppliedMacroParamNames(
         invocation.args,
         signature,
         memo,
-        invocationScope instanceof LinkedScope ? invocationScope : undefined,
+        boundSymbols instanceof LinkedScope ? boundSymbols : undefined,
+        suppliedInvocationCandidates,
         invocationCandidates,
       );
       if (suppliedMacroCandidates) {
-        mergeMacroCandidateMap(suppliedMacroCandidates, invocationCandidates, memo);
+        mergeMacroCandidateMap(suppliedMacroCandidates, suppliedInvocationCandidates, memo);
       }
       forMacro = intersectSuppliedNames(forMacro, supplied);
     }
@@ -1176,14 +1229,48 @@ function macroCandidatesUseCaller(macros: ReadonlySet<DeferredMacro>): boolean {
   return false;
 }
 
-function recordCallerInvocationScope(
+function recordCallerInvocationMacroCandidates(
   node: NunjucksAstNode,
   boundSymbols: ReadonlySet<string>,
 ): void {
   if (getSymbolName(node.name) !== 'caller' || !(boundSymbols instanceof LinkedScope)) {
     return;
   }
-  macroAnalysisStack[macroAnalysisStack.length - 1]?.invocationScopes?.set(node, boundSymbols);
+  const candidates = new Map<string, ReadonlySet<DeferredMacro>>();
+  const memo = boundSymbols.macroAnalysisMemo();
+  const recordValue = (value: unknown) => {
+    const name = getSymbolName(value);
+    if (!name || candidates.has(name)) {
+      return;
+    }
+    const definitions = boundSymbols.findMacros(name);
+    if (definitions) {
+      for (const _definition of definitions) {
+        consumeAnalysisWork(memo);
+      }
+      candidates.set(name, new Set(definitions));
+    }
+  };
+  if (isNunjucksAstNode(node.args) && Array.isArray(node.args.children)) {
+    for (const child of node.args.children) {
+      if (!isNunjucksAstNode(child)) {
+        continue;
+      }
+      if (child.typename === 'KeywordArgs' && Array.isArray(child.children)) {
+        for (const pair of child.children) {
+          if (isNunjucksAstNode(pair) && pair.typename === 'Pair') {
+            recordValue(pair.value);
+          }
+        }
+      } else {
+        recordValue(child);
+      }
+    }
+  }
+  macroAnalysisStack[macroAnalysisStack.length - 1]?.invocationMacroCandidates?.set(
+    node,
+    candidates,
+  );
 }
 
 function funCallNodeReferencesVariable(
@@ -1191,7 +1278,7 @@ function funCallNodeReferencesVariable(
   variableName: ReferenceTarget,
   boundSymbols: ReadonlySet<string>,
 ): boolean {
-  recordCallerInvocationScope(node, boundSymbols);
+  recordCallerInvocationMacroCandidates(node, boundSymbols);
   if (astChildReferencesVariable(node, 'args', variableName, boundSymbols)) {
     return true;
   }
@@ -1204,7 +1291,9 @@ function funCallNodeReferencesVariable(
   const memo = boundSymbols instanceof LinkedScope ? boundSymbols.macroAnalysisMemo() : undefined;
   const candidates =
     macros ?? (boundSymbols instanceof LinkedScope ? boundSymbols.macrosUsedAsValues() : undefined);
-  const invocationScopes = deferredCaller ? new Map<NunjucksAstNode, LinkedScope>() : undefined;
+  const invocationMacroCandidates = deferredCaller
+    ? new Map<NunjucksAstNode, ReadonlyMap<string, ReadonlySet<DeferredMacro>>>()
+    : undefined;
   if (candidates) {
     for (const macro of candidates) {
       if (macros) {
@@ -1230,7 +1319,7 @@ function funCallNodeReferencesVariable(
           suppliedParamNames,
           suppliedMacroCandidates,
           deferredCaller ? new LinkedScope(definitionScope, ['caller']) : definitionScope,
-          invocationScopes,
+          invocationMacroCandidates,
         )
       ) {
         return true;
@@ -1247,7 +1336,8 @@ function funCallNodeReferencesVariable(
         macros,
         boundSymbols,
         suppliedCallerMacroCandidates,
-        invocationScopes,
+        invocationMacroCandidates,
+        node.args,
       )
     : undefined;
   return callerNodeReferencesVariable(
@@ -1513,12 +1603,15 @@ function ifNodeReferencesVariable(
 function isDefaultFilterWithUndefinedSafeInput(
   node: NunjucksAstNode,
   variableName: ReferenceTarget,
+  boundSymbols: ReadonlySet<string>,
 ): boolean {
+  const filterName = getSymbolName(node.name);
   return (
     node.typename === 'Filter' &&
     typeof variableName === 'object' &&
     'excludeOrOperands' in variableName &&
-    ['default', 'd'].includes(getSymbolName(node.name) ?? '')
+    ['default', 'd'].includes(filterName ?? '') &&
+    !(boundSymbols instanceof LinkedScope && boundSymbols.hasFilterOverride(filterName))
   );
 }
 
@@ -1707,7 +1800,7 @@ function filterNodeReferencesVariable(
   variableName: ReferenceTarget,
   boundSymbols: ReadonlySet<string>,
 ): boolean {
-  if (isDefaultFilterWithUndefinedSafeInput(node, variableName)) {
+  if (isDefaultFilterWithUndefinedSafeInput(node, variableName, boundSymbols)) {
     return defaultFilterReferencesVariable(
       node,
       variableName as RequiredReferenceTarget,
@@ -1717,12 +1810,13 @@ function filterNodeReferencesVariable(
   if (astFieldsReferenceVariable(node, variableName, boundSymbols)) {
     return true;
   }
-  if (
-    boundSymbols instanceof LinkedScope &&
-    !isNunjucksFilter(getSymbolName(node.name)) &&
-    filterArgumentsUseMacros(node.args, boundSymbols)
-  ) {
-    throw new TemplateAnalysisLimitError('Custom filters can invoke macro-valued arguments');
+  if (boundSymbols instanceof LinkedScope) {
+    const filterName = getSymbolName(node.name);
+    const canInvokeMacros =
+      !isNunjucksFilter(filterName) || boundSymbols.hasFilterOverride(filterName);
+    if (canInvokeMacros && filterArgumentsUseMacros(node.args, boundSymbols)) {
+      throw new TemplateAnalysisLimitError('Custom filters can invoke macro-valued arguments');
+    }
   }
   return false;
 }
@@ -1824,9 +1918,18 @@ function astReferencesVariable(
 function boundedAstReferencesVariable(
   node: NunjucksAstNode,
   variableName: ReferenceTarget,
+  nunjucksFilters?: NunjucksFilterMap,
 ): boolean | undefined {
+  const overriddenFilters = new Set(
+    Object.keys(nunjucksFilters ?? {}).filter((name) => isNunjucksFilter(name)),
+  );
   try {
-    return astReferencesVariable(node, variableName);
+    return astReferencesVariable(
+      node,
+      variableName,
+      undefined,
+      new LinkedScope(undefined, [], 'transparent', overriddenFilters),
+    );
   } catch (error) {
     if (error instanceof TemplateAnalysisLimitError || error instanceof RangeError) {
       return undefined;
@@ -2156,9 +2259,14 @@ export type TemplateReferenceResult = {
 
 export type TemplateReferenceOptions = {
   jsonMode?: 'auto' | 'structured' | 'whole';
+  nunjucksFilters?: NunjucksFilterMap;
 };
 
-function analyzeTemplateString(template: string, variableName: string): TemplateReferenceResult {
+function analyzeTemplateString(
+  template: string,
+  variableName: string,
+  nunjucksFilters?: NunjucksFilterMap,
+): TemplateReferenceResult {
   if (!template.includes(variableName)) {
     return { referenced: false, parsed: true };
   }
@@ -2166,7 +2274,7 @@ function analyzeTemplateString(template: string, variableName: string): Template
   if (!parseResult.ok) {
     return { referenced: true, parsed: false };
   }
-  const referenced = boundedAstReferencesVariable(parseResult.ast, variableName);
+  const referenced = boundedAstReferencesVariable(parseResult.ast, variableName, nunjucksFilters);
   return {
     referenced: referenced ?? true,
     parsed: referenced !== undefined,
@@ -2200,14 +2308,14 @@ export function analyzeTemplateReference(
     let referenced = false;
     let parsed = true;
     for (const value of structuredStrings) {
-      const result = analyzeTemplateString(value, variableName);
+      const result = analyzeTemplateString(value, variableName, options.nunjucksFilters);
       referenced ||= result.referenced;
       parsed &&= result.parsed;
     }
     return { referenced, parsed };
   }
 
-  return analyzeTemplateString(template, variableName);
+  return analyzeTemplateString(template, variableName, options.nunjucksFilters);
 }
 
 /**
@@ -2338,13 +2446,16 @@ export function templateLoadsExternalContext(template: string): boolean {
  * AST walk. Returns undefined when parsing or bounded analysis cannot complete,
  * so callers can retain their conservative textual fallback.
  */
-export function extractUnboundVariablesFromTemplate(template: string): string[] | undefined {
+export function extractUnboundVariablesFromTemplate(
+  template: string,
+  nunjucksFilters?: NunjucksFilterMap,
+): string[] | undefined {
   const parseResult = parseNunjucksTemplate(template);
   if (!parseResult.ok) {
     return undefined;
   }
   const references = new Set<string>();
-  if (boundedAstReferencesVariable(parseResult.ast, references) === undefined) {
+  if (boundedAstReferencesVariable(parseResult.ast, references, nunjucksFilters) === undefined) {
     return undefined;
   }
   return Array.from(references);
@@ -2356,7 +2467,10 @@ export function extractUnboundVariablesFromTemplate(template: string): string[] 
  * for this traversal; the same name elsewhere remains a required reference.
  * Returns undefined when parsing or bounded scope analysis cannot complete.
  */
-export function extractRequiredVariablesFromTemplate(template: string): string[] | undefined {
+export function extractRequiredVariablesFromTemplate(
+  template: string,
+  nunjucksFilters?: NunjucksFilterMap,
+): string[] | undefined {
   const parseResult = parseNunjucksTemplate(template);
   if (!parseResult.ok) {
     return undefined;
@@ -2365,7 +2479,7 @@ export function extractRequiredVariablesFromTemplate(template: string): string[]
     references: new Set<string>(),
     excludeOrOperands: true,
   };
-  if (boundedAstReferencesVariable(parseResult.ast, target) === undefined) {
+  if (boundedAstReferencesVariable(parseResult.ast, target, nunjucksFilters) === undefined) {
     return undefined;
   }
   return Array.from(target.references);

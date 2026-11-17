@@ -91,6 +91,25 @@ describe('runEval', () => {
     }
   });
 
+  it('uses the active filter configuration for conversation analysis', () => {
+    const prompt = {
+      raw: "{% macro h(x=_conversation) %}{{x}}{% endmacro %}{{h('warmup')}}{{h|upper}}",
+    };
+    const filters = { upper: (f: () => string) => f() };
+    try {
+      __resetPromptConversationCacheForTests();
+      expect(promptUsesConversationVariable(prompt)).toBe(false);
+      expect(promptUsesConversationVariable(prompt, filters)).toBe(true);
+      expect(promptUsesConversationVariable(prompt)).toBe(false);
+
+      __resetPromptConversationCacheForTests();
+      expect(promptUsesConversationVariable(prompt, filters)).toBe(true);
+      expect(promptUsesConversationVariable(prompt)).toBe(false);
+    } finally {
+      __resetPromptConversationCacheForTests();
+    }
+  });
+
   it('should handle basic prompt evaluation', async () => {
     const results = await runEval({
       ...defaultOptions,

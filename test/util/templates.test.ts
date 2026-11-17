@@ -575,6 +575,61 @@ describe('analyzeTemplateReference', () => {
     expect(extractRequiredVariablesFromTemplate(value)).toContain('_conversation');
   });
 
+  it('snapshots caller bindings before subsequent assignments', () => {
+    const value =
+      "{% macro a() %}plain{% endmacro %}{% macro h(x=_conversation) %}{{x}}{% endmacro %}{% macro wrap(f=h) %}{{caller(f)}}{% set f=a %}{% endmacro %}{{h('warmup')}}{% call(g) wrap() %}{{g()}}{% endcall %}";
+    expect(getNunjucksEngine().renderString(value, { _conversation: 'history' })).toBe(
+      'warmuphistory',
+    );
+    expect(analyzeTemplateReference(value, '_conversation')).toEqual({
+      referenced: true,
+      parsed: true,
+    });
+    expect(extractRequiredVariablesFromTemplate(value)).toContain('_conversation');
+  });
+
+  it('propagates macro arguments from signature-default caller invocations', () => {
+    const value =
+      "{% macro a() %}plain{% endmacro %}{% macro h(x=_conversation) %}{{x}}{% endmacro %}{{h('warmup')}}{% macro wrap(x=caller(h)) %}{{x}}{% endmacro %}{% call(g=a) wrap() %}{{g()}}{% endcall %}";
+    expect(getNunjucksEngine().renderString(value, { _conversation: 'history' })).toBe(
+      'warmuphistory',
+    );
+    expect(analyzeTemplateReference(value, '_conversation')).toEqual({
+      referenced: true,
+      parsed: true,
+    });
+    expect(extractRequiredVariablesFromTemplate(value)).toContain('_conversation');
+  });
+
+  it('recognizes arguments supplied by signature-default caller invocations', () => {
+    const value =
+      "{% macro wrap(x=caller('ok')) %}{{x ~ ''}}{% endmacro %}{% call(x=missing) wrap() %}{{x ~ ''}}{% endcall %}";
+    expect(getNunjucksEngine().renderString(value, {})).toBe('ok');
+    expect(extractRequiredVariablesFromTemplate(value)).toEqual([]);
+  });
+
+  it('handles configured overrides of built-in filter names conservatively', () => {
+    const filters = { upper: (f: () => string) => f() };
+    const value = "{% macro h(x=_conversation) %}{{x}}{% endmacro %}{{h('warmup')}}{{h|upper}}";
+    expect(getNunjucksEngine(filters).renderString(value, { _conversation: 'history' })).toBe(
+      'warmuphistory',
+    );
+    expect(analyzeTemplateReference(value, '_conversation', { nunjucksFilters: filters })).toEqual({
+      referenced: true,
+      parsed: false,
+    });
+    expect(extractRequiredVariablesFromTemplate(value, filters)).toBeUndefined();
+  });
+
+  it('does not apply built-in default semantics to an overridden default filter', () => {
+    const filters = { default: (f: () => string) => f() };
+    const value = "{% macro h(x=_conversation) %}{{x}}{% endmacro %}{{h('warmup')}}{{h|default}}";
+    expect(getNunjucksEngine(filters).renderString(value, { _conversation: 'history' })).toBe(
+      'warmuphistory',
+    );
+    expect(extractRequiredVariablesFromTemplate(value, filters)).toBeUndefined();
+  });
+
   it('tracks an escaped macro through a loop-local custom filter input', () => {
     const value =
       "{% macro h(x=_conversation) %}{{x}}{% endmacro %}{{h('warmup')}}{% for f in [h] %}{{f|invoke}}{% endfor %}";

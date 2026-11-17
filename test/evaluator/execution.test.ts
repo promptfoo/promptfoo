@@ -282,6 +282,7 @@ describeEvaluator('evaluator execution control', () => {
     rawPrompt: string,
     testCount = 4,
     providerOverrides: Partial<ApiProvider> = {},
+    nunjucksFilters?: TestSuite['nunjucksFilters'],
   ): Promise<ConcurrencyProbe> {
     let activeCalls = 0;
     let maxActiveCalls = 0;
@@ -332,6 +333,7 @@ describeEvaluator('evaluator execution control', () => {
       providers: [mockApiProvider],
       prompts: [toPrompt(rawPrompt)],
       tests,
+      nunjucksFilters,
     };
     const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
 
@@ -395,6 +397,20 @@ describeEvaluator('evaluator execution control', () => {
     const { maxActiveCalls } = await runConcurrencyProbe(
       '{{ {"history": _conversation}["history"][0].output }} {{ question }}',
       2,
+    );
+
+    expect(maxActiveCalls).toBe(1);
+  });
+
+  it('forces concurrency to 1 when a configured built-in filter override reads history', async () => {
+    const prompt = "{% macro h(x=_conversation) %}{{x}}{% endmacro %}{{h('warmup')}}{{h|upper}}";
+    const { maxActiveCalls } = await runConcurrencyProbe(
+      prompt,
+      4,
+      {},
+      {
+        upper: (f: () => string) => f(),
+      },
     );
 
     expect(maxActiveCalls).toBe(1);
