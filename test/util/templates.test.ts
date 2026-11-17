@@ -621,6 +621,58 @@ describe('analyzeTemplateReference', () => {
     expect(extractRequiredVariablesFromTemplate(value)).toContain('_conversation');
   });
 
+  it('preserves caller identity through a macro parameter', () => {
+    const value =
+      "{% macro a() %}plain{% endmacro %}{% macro h(x=_conversation) %}{{x}}{% endmacro %}{% macro relay(cb,f) %}{{cb(f)}}{% endmacro %}{% macro wrap() %}{{relay(caller,h)}}{% endmacro %}{{h('warmup')}}{% call(g=a) wrap() %}{{g()}}{% endcall %}";
+    expect(getNunjucksEngine().renderString(value, { _conversation: 'history' })).toBe(
+      'warmuphistory',
+    );
+    expect(analyzeTemplateReference(value, '_conversation')).toEqual({
+      referenced: true,
+      parsed: true,
+    });
+    expect(extractRequiredVariablesFromTemplate(value)).toContain('_conversation');
+  });
+
+  it.each(['{{h.call(0)}}', '{{h.apply(0, [])}}'])(
+    'does not count a call/apply receiver as a macro argument: %s',
+    (invocation) => {
+      const value = `{% macro h(x=_conversation) %}{{x}}{% endmacro %}{{h('warmup')}}${invocation}`;
+      expect(getNunjucksEngine().renderString(value, { _conversation: 'history' })).toBe(
+        'warmuphistory',
+      );
+      expect(analyzeTemplateReference(value, '_conversation')).toEqual({
+        referenced: true,
+        parsed: true,
+      });
+    },
+  );
+
+  it.each(['{{h.call(0, "explicit")}}', '{{h.apply(0, ["explicit"])}}'])(
+    'forwards call/apply arguments after the receiver: %s',
+    (invocation) => {
+      const value = `{% macro h(x=_conversation) %}{{x}}{% endmacro %}${invocation}`;
+      expect(getNunjucksEngine().renderString(value, { _conversation: 'history' })).toBe(
+        'explicit',
+      );
+      expect(analyzeTemplateReference(value, '_conversation')).toEqual({
+        referenced: false,
+        parsed: true,
+      });
+    },
+  );
+
+  it('leaves a dynamic apply argument list indeterminate', () => {
+    const value = '{% macro h(x=_conversation) %}{{x}}{% endmacro %}{{h.apply(0, args)}}';
+    expect(getNunjucksEngine().renderString(value, { _conversation: 'history', args: [] })).toBe(
+      'history',
+    );
+    expect(analyzeTemplateReference(value, '_conversation')).toEqual({
+      referenced: true,
+      parsed: false,
+    });
+  });
+
   it('preserves escaped alternatives across caller argument merges', () => {
     const value =
       "{% macro a() %}plain{% endmacro %}{% macro h(x=_conversation) %}{{x}}{% endmacro %}{{h('warmup')}}{% macro wrap() %}{{caller(a)}}{{caller(h|default)}}{% endmacro %}{% call(g) wrap() %}{{g()}}{% endcall %}";
