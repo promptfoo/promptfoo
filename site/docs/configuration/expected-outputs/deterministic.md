@@ -1533,20 +1533,9 @@ assert:
 
 ### METEOR
 
-METEOR (Metric for Evaluation of Translation with Explicit ORdering) is the most sophisticated text similarity metric, going beyond simple word matching to understand meaning.
+METEOR (Metric for Evaluation of Translation with Explicit ORdering) scores an output against reference text using exact word matches, Porter stemming, and WordNet synonyms. It combines precision and recall with a penalty for fragmented word order.
 
-**What makes METEOR special:**
-
-- **Understands synonyms**: Recognizes that "good" and "nice" mean similar things
-- **Handles word forms**: Knows that "running" and "ran" are the same verb
-- **Considers word order**: Unlike other metrics, it penalizes scrambled sentences
-- **Balanced scoring**: Combines precision, recall, AND word order into a single score
-
-**When to use METEOR:**
-
-- **High-quality translation**: When semantic accuracy matters more than exact wording
-- **Natural language understanding**: Evaluating if the model truly "gets" the meaning
-- **Flexible matching**: When there are many valid ways to express the same idea
+Use it for translation or other tasks where a reference answer exists and some wording variation is acceptable. METEOR measures lexical overlap, not factual accuracy or general semantic understanding.
 
 For additional context, read about the metric on [Wikipedia](https://en.wikipedia.org/wiki/METEOR).
 
@@ -1665,7 +1654,7 @@ F-score (also F1 score) is used for measuring classification accuracy when you n
 
 - **Classification tasks**: Sentiment analysis, intent detection, category assignment
 - **Imbalanced datasets**: When some categories are rare and you can't just optimize for accuracy
-- **Quality + Coverage**: When you need the model to be both accurate AND comprehensive
+- **Precision and recall**: When both false positives and false negatives matter
 
 See [Wikipedia](https://en.wikipedia.org/wiki/F1_score) for mathematical details.
 
