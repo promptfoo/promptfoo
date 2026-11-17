@@ -94,7 +94,15 @@ class LinkedScope implements ReadonlySet<string> {
   }
 
   has(value: string): boolean {
-    return this.names.has(value) || this.parent?.has(value) === true;
+    consumeAnalysisWork(this.macroAnalysisMemo());
+    let current: LinkedScope | undefined = this;
+    while (current) {
+      if (current.names.has(value)) {
+        return true;
+      }
+      current = current.parent instanceof LinkedScope ? current.parent : undefined;
+    }
+    return false;
   }
 
   add(value: string): this {
@@ -553,7 +561,7 @@ function analyzeSignatureArgs(
   variableName: ReferenceTarget | undefined,
   boundSymbols: ReadonlySet<string>,
   suppliedParamNames?: ReadonlySet<string>,
-  suppliedMacroCandidates?: ReadonlyMap<string, ReadonlySet<DeferredMacro>>,
+  suppliedMacroCandidates?: Map<string, ReadonlySet<DeferredMacro>>,
 ): { paramNames: string[]; referencesVariable: boolean } {
   const paramNames: string[] = [];
   if (!isNunjucksAstNode(argsNode) || !Array.isArray(argsNode.children)) {
@@ -562,8 +570,19 @@ function analyzeSignatureArgs(
 
   const defaultScope = new LinkedScope(boundSymbols);
   const memo = defaultScope.macroAnalysisMemo();
-  const bindParam = (name: string) => {
+  const bindParam = (name: string, defaultValue?: unknown) => {
     paramNames.push(name);
+    if (
+      suppliedMacroCandidates &&
+      !isSuppliedParamName(suppliedParamNames, name) &&
+      defaultValue !== undefined
+    ) {
+      const defaultName = getSymbolName(defaultValue);
+      const defaultCandidates = defaultName ? defaultScope.findMacros(defaultName) : undefined;
+      if (defaultCandidates && defaultCandidates.size > 0) {
+        suppliedMacroCandidates.set(name, defaultCandidates);
+      }
+    }
     defaultScope.add(name);
     const candidates = suppliedMacroCandidates?.get(name);
     if (candidates) {
@@ -595,7 +614,7 @@ function analyzeSignatureArgs(
           return { paramNames, referencesVariable: true };
         }
         if (keywordParamName) {
-          bindParam(keywordParamName);
+          bindParam(keywordParamName, isNunjucksAstNode(pair) ? pair.value : undefined);
         }
       }
       continue;
@@ -677,9 +696,7 @@ function analyzeMacroBody(
   suppliedMacroCandidates?: ReadonlyMap<string, ReadonlySet<DeferredMacro>>,
 ): boolean {
   const memoKey = macroAnalysisMemoKey(suppliedParamNames);
-  if (!suppliedMacroCandidates?.size && memo?.results.get(macro)?.has(memoKey)) {
-    return false;
-  }
+  const selectedMacroCandidates = new Map(suppliedMacroCandidates);
   if (macroAnalysisDepth >= MAX_MACRO_ANALYSIS_DEPTH) {
     throw new TemplateAnalysisLimitError('Template macro analysis exceeded its depth limit');
   }
@@ -695,10 +712,13 @@ function analyzeMacroBody(
       variableName,
       macro.definitionScope,
       suppliedParamNames,
-      suppliedMacroCandidates,
+      selectedMacroCandidates,
     );
     if (referencesVariable) {
       return true;
+    }
+    if (!selectedMacroCandidates.size && memo?.results.get(macro)?.has(memoKey)) {
+      return false;
     }
     // Reentrant calls can evaluate defaults even when their body is already active.
     if (wasAnalyzing) {
@@ -706,7 +726,7 @@ function analyzeMacroBody(
     }
 
     const macroScope = addNamesToScope(macro.definitionScope, macro.paramNames);
-    for (const [name, candidates] of suppliedMacroCandidates ?? []) {
+    for (const [name, candidates] of selectedMacroCandidates) {
       macroScope.registerMacroCandidates(name, candidates, false);
     }
     const macroName = getSymbolName(macro.node.name);
@@ -717,7 +737,7 @@ function analyzeMacroBody(
     }
     macroScope.add('caller');
     const result = astChildReferencesVariable(macro.node, 'body', variableName, macroScope);
-    if (!result && memo && !suppliedMacroCandidates?.size) {
+    if (!result && memo && !selectedMacroCandidates.size) {
       const memoKeys = memo.results.get(macro) ?? new Set<string>();
       memoKeys.add(memoKey);
       memo.results.set(macro, memoKeys);

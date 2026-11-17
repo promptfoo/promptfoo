@@ -420,6 +420,20 @@ describe('analyzeTemplateReference', () => {
     expect(getNunjucksEngine().renderString(value, { purpose: 'ready' })).toBe('ready');
   });
 
+  it('carries macro candidates selected by a default into the macro body', () => {
+    const value =
+      '{% macro m() %}{{purpose|trim}}{% endmacro %}{% macro apply(f=m) %}{{f()}}{% endmacro %}{{apply()}}';
+    expect(extractRequiredVariablesFromTemplate(value)).toEqual(['purpose']);
+    expect(getNunjucksEngine().renderString(value, { purpose: 'ready' })).toBe('ready');
+  });
+
+  it('carries macro candidates selected by a default into later defaults', () => {
+    const value =
+      '{% macro m() %}{{purpose|trim}}{% endmacro %}{% macro apply(f=m, x=f()) %}{{x}}{% endmacro %}{{apply()}}';
+    expect(extractRequiredVariablesFromTemplate(value)).toEqual(['purpose']);
+    expect(getNunjucksEngine().renderString(value, { purpose: 'ready' })).toBe('ready');
+  });
+
   it('preserves live definition frames across conditional joins', () => {
     const value =
       "{% if true %}{% macro a() %}{{b()}}{% endmacro %}{% macro b(x='ok') %}{{x}}{% endmacro %}{{a()}}{% endif %}{% macro b(x=_conversation) %}{{x}}{% endmacro %}{{b('warmup')}}{{a()}}";
@@ -599,6 +613,17 @@ describe('macro analysis work and scope changes', () => {
     value += '{{_conversation}}';
 
     // Budget exhaustion is deterministic; wall-clock timing varies on shared runners.
+    expect(extractUnboundVariablesFromTemplate(value)).toBeUndefined();
+  });
+
+  it('charges incoming-scope lookups to the shared analysis budget', () => {
+    let value = 'ok';
+    for (let index = 0; index < 400; index++) {
+      value = `{% if true %}{% set a${index}=1 %}{% set b${index}=2 %}{% set c${index}=3 %}{% set d${index}=4 %}${value}{% endif %}`;
+    }
+
+    // This shape has no macros. Incoming-scope membership work must become
+    // indeterminate rather than doing cubic synchronous work.
     expect(extractUnboundVariablesFromTemplate(value)).toBeUndefined();
   });
 
