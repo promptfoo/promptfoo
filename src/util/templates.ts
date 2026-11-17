@@ -77,6 +77,7 @@ function consumeAnalysisWork(memo?: MacroAnalysisMemo): void {
 class LinkedScope implements ReadonlySet<string> {
   private readonly names = new Set<string>();
   private readonly macros = new Map<string, Set<DeferredMacro>>();
+  private readonly valueMacros = new Set<DeferredMacro>();
   private fallbackMacroMemo?: MacroAnalysisMemo;
 
   constructor(
@@ -160,6 +161,29 @@ class LinkedScope implements ReadonlySet<string> {
       return this.macros.get(name);
     }
     return this.parent instanceof LinkedScope ? this.parent.findMacros(name) : undefined;
+  }
+
+  registerMacroValue(name: string): void {
+    const definitions = this.findMacros(name);
+    for (const definition of definitions ?? []) {
+      consumeAnalysisWork(this.macroAnalysisMemo());
+      this.valueMacros.add(definition);
+    }
+  }
+
+  macrosUsedAsValues(): ReadonlySet<DeferredMacro> {
+    const definitions = new Set<DeferredMacro>();
+    for (const definition of this.parent instanceof LinkedScope
+      ? this.parent.macrosUsedAsValues()
+      : []) {
+      consumeAnalysisWork(this.macroAnalysisMemo());
+      definitions.add(definition);
+    }
+    for (const definition of this.valueMacros) {
+      consumeAnalysisWork(this.macroAnalysisMemo());
+      definitions.add(definition);
+    }
+    return definitions;
   }
 
   localMacros(): DeferredMacro[] {
@@ -293,6 +317,19 @@ function getSymbolName(node: unknown): string | undefined {
   return isNunjucksAstNode(node) && node.typename === 'Symbol' && typeof node.value === 'string'
     ? node.value
     : undefined;
+}
+
+function registerMacroValueReference(
+  name: string,
+  parent: NunjucksParentContext | undefined,
+  boundSymbols: ReadonlySet<string>,
+): void {
+  if (
+    boundSymbols instanceof LinkedScope &&
+    (parent?.node.typename !== 'FunCall' || parent.field !== 'name')
+  ) {
+    boundSymbols.registerMacroValue(name);
+  }
 }
 
 function collectBindingNames(node: unknown): string[] {
@@ -730,7 +767,7 @@ function analyzeMacroBody(
       macroScope.registerMacroCandidates(name, candidates, false);
     }
     const macroName = getSymbolName(macro.node.name);
-    if (macroName) {
+    if (macroName && !selectedMacroCandidates.has(macroName)) {
       macroScope.add(macroName);
       // Initializing the implicit self binding does not rebind a visible definition.
       macroScope.registerMacro(macroName, macro, false);
@@ -877,6 +914,7 @@ function callerNodeReferencesVariable(
   boundSymbols: ReadonlySet<string>,
   analyzeDeferred = false,
   suppliedParamNames?: ReadonlySet<string>,
+  suppliedMacroCandidates?: Map<string, ReadonlySet<DeferredMacro>>,
 ): boolean {
   if (!analyzeDeferred && typeof variableName === 'object' && 'excludeOrOperands' in variableName) {
     // A call block packages its defaults and body as a deferred caller. They
@@ -888,12 +926,16 @@ function callerNodeReferencesVariable(
     variableName,
     boundSymbols,
     suppliedParamNames,
+    suppliedMacroCandidates,
   );
   if (referencesVariable) {
     return true;
   }
 
   const callerScope = addNamesToScope(boundSymbols, paramNames);
+  for (const [name, candidates] of suppliedMacroCandidates ?? []) {
+    callerScope.registerMacroCandidates(name, candidates, false);
+  }
   return astChildReferencesVariable(node, 'body', variableName, callerScope);
 }
 
@@ -944,6 +986,36 @@ function intersectSuppliedNames(
   return new Set(Array.from(current).filter((name) => incoming.has(name)));
 }
 
+function mergeMacroCandidateMap(
+  target: Map<string, ReadonlySet<DeferredMacro>>,
+  source: ReadonlyMap<string, ReadonlySet<DeferredMacro>>,
+  memo?: MacroAnalysisMemo,
+): void {
+  for (const [name, candidates] of source) {
+    const merged = new Set<DeferredMacro>();
+    for (const candidate of target.get(name) ?? []) {
+      consumeAnalysisWork(memo);
+      merged.add(candidate);
+    }
+    for (const candidate of candidates) {
+      consumeAnalysisWork(memo);
+      merged.add(candidate);
+    }
+    target.set(name, merged);
+  }
+}
+
+function retainSuppliedMacroCandidates(
+  candidates: Map<string, ReadonlySet<DeferredMacro>>,
+  suppliedNames: ReadonlySet<string> | undefined,
+): void {
+  for (const name of candidates.keys()) {
+    if (!suppliedNames?.has(name)) {
+      candidates.delete(name);
+    }
+  }
+}
+
 function collectCallerInvocations(node: unknown, memo?: MacroAnalysisMemo): NunjucksAstNode[] {
   const invocations: NunjucksAstNode[] = [];
   const pending = [node];
@@ -974,6 +1046,7 @@ function collectSuppliedCallerParamNames(
   callerNode: NunjucksAstNode,
   macros: ReadonlySet<DeferredMacro> | undefined,
   boundSymbols: ReadonlySet<string>,
+  suppliedMacroCandidates?: Map<string, ReadonlySet<DeferredMacro>>,
 ): ReadonlySet<string> | undefined {
   if (macros === undefined) {
     return undefined;
@@ -990,16 +1063,31 @@ function collectSuppliedCallerParamNames(
     foundCandidate = true;
     const invocations = collectCallerInvocations(macro.node.body, memo);
     if (invocations.length === 0) {
+      suppliedMacroCandidates?.clear();
       return undefined;
     }
     let forMacro: Set<string> | undefined;
     for (const invocation of invocations) {
-      const supplied = collectSuppliedMacroParamNames(invocation.args, signature, memo);
+      const invocationCandidates = new Map<string, ReadonlySet<DeferredMacro>>();
+      const supplied = collectSuppliedMacroParamNames(
+        invocation.args,
+        signature,
+        memo,
+        boundSymbols instanceof LinkedScope ? boundSymbols : undefined,
+        invocationCandidates,
+      );
+      if (suppliedMacroCandidates) {
+        mergeMacroCandidateMap(suppliedMacroCandidates, invocationCandidates, memo);
+      }
       forMacro = intersectSuppliedNames(forMacro, supplied);
     }
     shared = intersectSuppliedNames(shared, forMacro ?? new Set<string>());
   }
-  return foundCandidate ? shared : undefined;
+  const result = foundCandidate ? shared : undefined;
+  if (suppliedMacroCandidates) {
+    retainSuppliedMacroCandidates(suppliedMacroCandidates, result);
+  }
+  return result;
 }
 
 function macroCandidatesUseCaller(macros: ReadonlySet<DeferredMacro>): boolean {
@@ -1047,11 +1135,24 @@ function funCallNodeReferencesVariable(
       }
     }
   }
+  if (macroName === undefined && boundSymbols instanceof LinkedScope) {
+    for (const macro of boundSymbols.macrosUsedAsValues()) {
+      if (analyzeMacroBody(macro, variableName, memo)) {
+        return true;
+      }
+    }
+  }
   if (!deferredCaller || (macros && !macroCandidatesUseCaller(macros))) {
     return false;
   }
+  const suppliedCallerMacroCandidates = new Map<string, ReadonlySet<DeferredMacro>>();
   const suppliedCallerParams = deferredCaller
-    ? collectSuppliedCallerParamNames(deferredCaller, macros, boundSymbols)
+    ? collectSuppliedCallerParamNames(
+        deferredCaller,
+        macros,
+        boundSymbols,
+        suppliedCallerMacroCandidates,
+      )
     : undefined;
   return callerNodeReferencesVariable(
     deferredCaller,
@@ -1059,6 +1160,7 @@ function funCallNodeReferencesVariable(
     boundSymbols,
     true,
     suppliedCallerParams,
+    suppliedCallerMacroCandidates,
   );
 }
 
@@ -1466,6 +1568,7 @@ function astReferencesVariable(
   }
 
   if (node.typename === 'Symbol' && typeof node.value === 'string') {
+    registerMacroValueReference(node.value, parent, boundSymbols);
     const isReference = !boundSymbols.has(node.value) && !isNonReferenceSymbol(parent);
     if (typeof variableName === 'string') {
       if (node.value === variableName) {
