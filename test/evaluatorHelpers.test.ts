@@ -1502,6 +1502,12 @@ describe('evaluatorHelpers', () => {
       expect(renderedPrompt).toBe('x!');
     });
 
+    it('should bind the call-block caller in macro-default dependencies', async () => {
+      const template =
+        "{% macro m(x=caller()) %}{{x ~ ''}}{% endmacro %}{% call m() %}ok{% endcall %}";
+      expect(await renderPrompt(toPrompt('{{v}}'), { v: template }, {})).toBe('ok');
+    });
+
     it('should render an undefined-safe default-filter input', async () => {
       const template = "{% set greeting = name | default('anonymous') %}{{ greeting ~ '!' }}";
       const renderedPrompt = await renderPrompt(toPrompt('{{v}}'), { v: template }, {});

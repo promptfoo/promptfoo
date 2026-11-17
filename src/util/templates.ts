@@ -57,9 +57,14 @@ type DeferredMacro = {
   usesCaller: boolean;
 };
 
+type MacroBinding = {
+  candidates: ReadonlySet<DeferredMacro>;
+  dynamic: boolean;
+};
+
 type ConditionalSummary = {
   setBindings: Set<string>;
-  macroCandidates: Map<string, ReadonlySet<DeferredMacro>>;
+  macroBindings: Map<string, MacroBinding>;
 };
 
 type MacroAnalysisMemo = {
@@ -77,7 +82,7 @@ function consumeAnalysisWork(memo?: MacroAnalysisMemo): void {
 
 class LinkedScope implements ReadonlySet<string> {
   private readonly names = new Set<string>();
-  private readonly macros = new Map<string, Set<DeferredMacro>>();
+  private readonly macros = new Map<string, MacroBinding>();
   private readonly valueMacros: Set<DeferredMacro>;
   private fallbackMacroMemo?: MacroAnalysisMemo;
 
@@ -116,7 +121,7 @@ class LinkedScope implements ReadonlySet<string> {
   }
 
   registerMacro(name: string, definition: DeferredMacro, invalidateMemo = true): void {
-    this.macros.set(name, new Set([definition]));
+    this.macros.set(name, { candidates: new Set([definition]), dynamic: false });
     if (invalidateMemo) {
       this.macroAnalysisMemo()?.results.clear();
     }
@@ -126,12 +131,13 @@ class LinkedScope implements ReadonlySet<string> {
     name: string,
     definitions: ReadonlySet<DeferredMacro>,
     invalidateMemo = true,
+    dynamic = false,
   ): void {
     const memo = this.macroAnalysisMemo();
     for (const _definition of definitions) {
       consumeAnalysisWork(memo);
     }
-    this.macros.set(name, new Set(definitions));
+    this.macros.set(name, { candidates: new Set(definitions), dynamic });
     if (invalidateMemo) {
       this.macroAnalysisMemo()?.results.clear();
     }
@@ -145,12 +151,14 @@ class LinkedScope implements ReadonlySet<string> {
 
   rebindMacros(targets: unknown, value: unknown): void {
     const sourceName = getSymbolName(value);
-    const sourceMacros = sourceName ? this.findMacros(sourceName) : undefined;
+    const sourceBinding = sourceName ? this.findMacroBinding(sourceName) : undefined;
+    const binding = sourceBinding ?? {
+      candidates: new Set<DeferredMacro>(),
+      dynamic: !isNunjucksAstNode(value) || value.typename !== 'Literal',
+    };
     this.removeMacroBindings(targets);
-    if (sourceMacros) {
-      for (const name of collectBindingNames(targets)) {
-        this.registerMacroCandidates(name, sourceMacros);
-      }
+    for (const name of collectBindingNames(targets)) {
+      this.registerMacroCandidates(name, binding.candidates, true, binding.dynamic);
     }
   }
 
@@ -160,11 +168,23 @@ class LinkedScope implements ReadonlySet<string> {
     }
   }
 
-  findMacros(name: string): ReadonlySet<DeferredMacro> | undefined {
+  findMacroBinding(name: string): MacroBinding | undefined {
     if (this.names.has(name) || this.macros.has(name)) {
       return this.macros.get(name);
     }
-    return this.parent instanceof LinkedScope ? this.parent.findMacros(name) : undefined;
+    return this.parent instanceof LinkedScope ? this.parent.findMacroBinding(name) : undefined;
+  }
+
+  findMacros(name: string): ReadonlySet<DeferredMacro> | undefined {
+    const binding = this.findMacroBinding(name);
+    if (!binding?.dynamic) {
+      return binding?.candidates;
+    }
+    const candidates = new Set(binding.candidates);
+    for (const macro of this.macrosUsedAsValues()) {
+      candidates.add(macro);
+    }
+    return candidates;
   }
 
   registerMacroValue(name: string): void {
@@ -190,8 +210,8 @@ class LinkedScope implements ReadonlySet<string> {
 
   localMacros(): DeferredMacro[] {
     const macros = new Set<DeferredMacro>();
-    for (const candidates of this.macros.values()) {
-      for (const macro of candidates) {
+    for (const binding of this.macros.values()) {
+      for (const macro of binding.candidates) {
         macros.add(macro);
       }
     }
@@ -444,7 +464,7 @@ function countAstNodes(nodes: readonly unknown[]): number {
 }
 
 function createConditionalSummary(): ConditionalSummary {
-  return { setBindings: new Set(), macroCandidates: new Map() };
+  return { setBindings: new Set(), macroBindings: new Map() };
 }
 
 function updateStatementBindings(
@@ -490,25 +510,29 @@ function mergeConditionalBindings(
   for (const name of source.setBindings) {
     target.setBindings.add(name);
   }
-  for (const [name, candidates] of source.macroCandidates) {
+  for (const [name, binding] of source.macroBindings) {
+    const previous = target.macroBindings.get(name);
     const merged = new Set<DeferredMacro>();
-    for (const candidate of target.macroCandidates.get(name) ?? []) {
+    for (const candidate of previous?.candidates ?? []) {
       consumeAnalysisWork(memo);
       merged.add(candidate);
     }
-    for (const candidate of candidates) {
+    for (const candidate of binding.candidates) {
       consumeAnalysisWork(memo);
       merged.add(candidate);
     }
-    target.macroCandidates.set(name, merged);
+    target.macroBindings.set(name, {
+      candidates: merged,
+      dynamic: previous?.dynamic === true || binding.dynamic,
+    });
   }
 }
 
 function collectSummaryMacroCandidates(summary: ConditionalSummary, scope: LinkedScope): void {
   for (const name of summary.setBindings) {
-    const candidates = scope.findMacros(name);
-    if (candidates && candidates.size > 0) {
-      summary.macroCandidates.set(name, candidates);
+    const binding = scope.findMacroBinding(name);
+    if (binding) {
+      summary.macroBindings.set(name, binding);
     }
   }
 }
@@ -792,12 +816,6 @@ function analyzeMacroBody(
     const macroScope = addNamesToScope(definitionScope, macro.paramNames);
     for (const [name, candidates] of selectedMacroCandidates) {
       macroScope.registerMacroCandidates(name, candidates, false);
-    }
-    const macroName = getSymbolName(macro.node.name);
-    if (macroName && !selectedMacroCandidates.has(macroName)) {
-      macroScope.add(macroName);
-      // Initializing the implicit self binding does not rebind a visible definition.
-      macroScope.registerMacro(macroName, macro, false);
     }
     macroScope.add('caller');
     const result = astChildReferencesVariable(macro.node, 'body', variableName, macroScope);
@@ -1178,6 +1196,10 @@ function funCallNodeReferencesVariable(
         boundSymbols instanceof LinkedScope ? boundSymbols : undefined,
         suppliedMacroCandidates,
       );
+      const definitionScope =
+        boundSymbols instanceof LinkedScope
+          ? boundSymbols.definitionScopeView(macro.definitionScope)
+          : macro.definitionScope;
       if (
         analyzeMacroBody(
           macro,
@@ -1185,9 +1207,7 @@ function funCallNodeReferencesVariable(
           memo,
           suppliedParamNames,
           suppliedMacroCandidates,
-          boundSymbols instanceof LinkedScope
-            ? boundSymbols.definitionScopeView(macro.definitionScope)
-            : macro.definitionScope,
+          deferredCaller ? new LinkedScope(definitionScope, ['caller']) : definitionScope,
         )
       ) {
         return true;
@@ -1307,8 +1327,7 @@ function isStatementListNode(
   return (node.typename === 'Root' || node.typename === 'NodeList') && Array.isArray(node.children);
 }
 
-type ConditionalMacroBinding = {
-  candidates: ReadonlySet<DeferredMacro>;
+type ConditionalMacroBinding = MacroBinding & {
   definitelyBound: boolean;
 };
 
@@ -1325,6 +1344,19 @@ function conditionalExecutionMode(node: NunjucksAstNode): ConditionalExecutionMo
     }
   }
   return 'unknown';
+}
+
+function rebaseMacroDefinition(macro: DeferredMacro, boundSymbols: ReadonlySet<string>): void {
+  const definitionScope = macro.definitionScope;
+  if (
+    boundSymbols instanceof LinkedScope &&
+    definitionScope instanceof LinkedScope &&
+    definitionScope !== boundSymbols &&
+    definitionScope.isWithin(boundSymbols)
+  ) {
+    macro.definitionScope = boundSymbols;
+    boundSymbols.macroAnalysisMemo()?.results.clear();
+  }
 }
 
 function conditionalMacroCandidates(
@@ -1347,24 +1379,21 @@ function conditionalMacroCandidates(
         : (assignedInBody && assignedInElse) || ((assignedInBody || assignedInElse) && hasIncoming);
 
   const candidates = new Set<DeferredMacro>();
+  let dynamic = false;
   const memo = boundSymbols instanceof LinkedScope ? boundSymbols.macroAnalysisMemo() : undefined;
-  const addCandidates = (candidatesToAdd?: ReadonlySet<DeferredMacro>) => {
-    for (const macro of candidatesToAdd ?? []) {
+  const addCandidates = (binding?: MacroBinding) => {
+    dynamic ||= binding?.dynamic ?? true;
+    for (const macro of binding?.candidates ?? []) {
       consumeAnalysisWork(memo);
-      const definitionScope = macro.definitionScope;
-      const shouldRebase =
-        boundSymbols instanceof LinkedScope &&
-        definitionScope instanceof LinkedScope &&
-        definitionScope !== boundSymbols &&
-        definitionScope.isWithin(boundSymbols);
-      candidates.add(shouldRebase ? { ...macro, definitionScope: boundSymbols } : macro);
+      rebaseMacroDefinition(macro, boundSymbols);
+      candidates.add(macro);
     }
   };
-  if (bodyRelevant) {
-    addCandidates(bodySummary.macroCandidates.get(name));
+  if (bodyRelevant && (assignedInBody || bodySummary.macroBindings.has(name))) {
+    addCandidates(bodySummary.macroBindings.get(name));
   }
-  if (elseRelevant) {
-    addCandidates(elseSummary.macroCandidates.get(name));
+  if (elseRelevant && (assignedInElse || elseSummary.macroBindings.has(name))) {
+    addCandidates(elseSummary.macroBindings.get(name));
   }
   if (boundSymbols instanceof LinkedScope) {
     if (
@@ -1372,14 +1401,14 @@ function conditionalMacroCandidates(
       (mode === 'else' && !assignedInElse) ||
       (mode === 'unknown' && (!assignedInBody || !assignedInElse))
     ) {
-      addCandidates(boundSymbols.findMacros(name));
+      addCandidates(boundSymbols.findMacroBinding(name));
     }
   }
 
   if (candidates.size === 0 && !definitelyBound) {
     return undefined;
   }
-  return { candidates, definitelyBound };
+  return { candidates, dynamic, definitelyBound };
 }
 
 function ifNodeReferencesVariable(
@@ -1423,11 +1452,16 @@ function ifNodeReferencesVariable(
     return true;
   }
 
+  if (boundSymbols instanceof LinkedScope) {
+    for (const macro of boundSymbols.macrosUsedAsValues()) {
+      rebaseMacroDefinition(macro, boundSymbols);
+    }
+  }
   const assignedNames = new Set([
     ...bodySummary.setBindings,
     ...elseSummary.setBindings,
-    ...bodySummary.macroCandidates.keys(),
-    ...elseSummary.macroCandidates.keys(),
+    ...bodySummary.macroBindings.keys(),
+    ...elseSummary.macroBindings.keys(),
   ]);
   const mode = conditionalExecutionMode(node);
   for (const name of assignedNames) {
@@ -1438,16 +1472,12 @@ function ifNodeReferencesVariable(
     if (binding.definitelyBound) {
       summary?.setBindings.add(name);
     }
-    if (binding.candidates.size > 0) {
-      summary?.macroCandidates.set(name, binding.candidates);
-    }
+    summary?.macroBindings.set(name, binding);
     if (boundSymbols instanceof LinkedScope) {
       if (binding.candidates.size > 0 || binding.definitelyBound) {
         boundSymbols.removeMacro(name);
       }
-      if (binding.candidates.size > 0) {
-        boundSymbols.registerMacroCandidates(name, binding.candidates);
-      }
+      boundSymbols.registerMacroCandidates(name, binding.candidates, true, binding.dynamic);
       if (binding.definitelyBound) {
         boundSymbols.add(name);
       }

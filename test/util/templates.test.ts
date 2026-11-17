@@ -447,6 +447,40 @@ describe('analyzeTemplateReference', () => {
     expect(extractRequiredVariablesFromTemplate(value)).toContain('_conversation');
   });
 
+  it('preserves live own-name bindings when calling a saved macro', () => {
+    const value =
+      "{% macro m() %}{{m()}}{% endmacro %}{% macro h(x=_conversation) %}{{x}}{% endmacro %}{{h('warmup')}}{% set saved=m %}{% set m=h %}{{saved()}}";
+    expect(getNunjucksEngine().renderString(value, { _conversation: 'history' })).toBe(
+      'warmuphistory',
+    );
+    expect(analyzeTemplateReference(value, '_conversation')).toEqual({
+      referenced: true,
+      parsed: true,
+    });
+    expect(extractRequiredVariablesFromTemplate(value)).toContain('_conversation');
+  });
+
+  it('retains dynamic alternatives alongside resolved conditional macro candidates', () => {
+    const value =
+      "{% macro a() %}ok{% endmacro %}{% macro h(x=_conversation) %}{{x}}{% endmacro %}{{h('warmup')}}{% if enabled %}{% set f=a %}{% else %}{% set f=h|default %}{% endif %}{{f()}}";
+    expect(
+      getNunjucksEngine().renderString(value, { enabled: false, _conversation: 'history' }),
+    ).toBe('warmuphistory');
+    expect(analyzeTemplateReference(value, '_conversation')).toEqual({
+      referenced: true,
+      parsed: true,
+    });
+    expect(extractUnboundVariablesFromTemplate(value)).toContain('_conversation');
+    expect(extractRequiredVariablesFromTemplate(value)).toContain('_conversation');
+  });
+
+  it('does not mix escaped alternatives into a fully resolved macro call', () => {
+    const value =
+      "{% macro h(x=purpose) %}{{x ~ ''}}{% endmacro %}{% macro a() %}ok{% endmacro %}{% set handlers=[h] %}{% if enabled %}{% set f=a %}{% else %}{% set f=a %}{% endif %}{{f()}}";
+    expect(getNunjucksEngine().renderString(value, { enabled: false })).toBe('ok');
+    expect(extractRequiredVariablesFromTemplate(value)).toEqual(['enabled']);
+  });
+
   it('retains requirements for macro values used by unresolved container calls', () => {
     const value =
       '{% macro m() %}{{purpose|trim}}{% endmacro %}{% set handlers={run:m} %}{{handlers.run()}}';
@@ -471,6 +505,19 @@ describe('analyzeTemplateReference', () => {
       '{% macro wrap(f=caller|default) %}{{f()}}{% endmacro %}{% call wrap() %}{{purpose|trim}}{% endcall %}';
     expect(getNunjucksEngine().renderString(value, { purpose: 'ready' })).toBe('ready');
     expect(extractRequiredVariablesFromTemplate(value)).toContain('purpose');
+  });
+
+  it('binds a call-block caller before evaluating macro defaults', () => {
+    const value = "{% macro m(x=caller()) %}{{x ~ ''}}{% endmacro %}{% call m() %}ok{% endcall %}";
+    expect(getNunjucksEngine().renderString(value, {})).toBe('ok');
+    expect(extractUnboundVariablesFromTemplate(value)).toEqual([]);
+    expect(extractRequiredVariablesFromTemplate(value)).toEqual([]);
+  });
+
+  it('does not invent a call-block caller for a plain macro invocation', () => {
+    const value = "{% macro m(x=caller()) %}{{x ~ ''}}{% endmacro %}{{m()}}";
+    expect(() => getNunjucksEngine().renderString(value, {})).toThrow(/caller/);
+    expect(extractRequiredVariablesFromTemplate(value)).toContain('caller');
   });
 
   it('does not treat a caller parameter declaration as a caller read', () => {
@@ -613,6 +660,22 @@ describe('analyzeTemplateReference', () => {
       parsed: true,
     });
   });
+
+  it.each(['', "{% set a='' %}"])(
+    'preserves escaped definition frames across conditional joins: %s',
+    (rebind) => {
+      const value = `{% if true %}{% macro a() %}{{b()}}{% endmacro %}{% macro b(x='ok') %}{{x}}{% endmacro %}{% set handlers={run:a} %}{{a()}}${rebind}{% endif %}{% macro b(x=_conversation) %}{{x}}{% endmacro %}{{b('warmup')}}{{handlers.run()}}`;
+      expect(getNunjucksEngine().renderString(value, { _conversation: 'history' })).toBe(
+        'okwarmuphistory',
+      );
+      expect(analyzeTemplateReference(value, '_conversation')).toEqual({
+        referenced: true,
+        parsed: true,
+      });
+      expect(extractUnboundVariablesFromTemplate(value)).toContain('_conversation');
+      expect(extractRequiredVariablesFromTemplate(value)).toContain('_conversation');
+    },
+  );
 
   it('preserves overlapping output openers in the conservative scan', () => {
     expect(extractVariablesFromTemplate('{{{missing}}}')).toEqual(['missing']);
