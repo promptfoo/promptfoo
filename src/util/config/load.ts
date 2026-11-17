@@ -914,6 +914,10 @@ export async function resolveConfigs(
   cmdObj: Partial<CommandLineOptions>,
   _defaultConfig: Partial<UnifiedConfig>,
   type?: 'DatasetGeneration' | 'AssertionGeneration',
+  onConfigSourcesResolved?: (
+    config: Partial<UnifiedConfig>,
+    testSources?: TestSource[],
+  ) => Promise<void> | void,
 ): Promise<{
   testSuite: TestSuite;
   config: Partial<UnifiedConfig>;
@@ -937,6 +941,9 @@ export async function resolveConfigs(
     // The user has provided a config file, so we do not want to use the default config.
     defaultConfig = {};
   }
+  // Watchers must learn the new file references even when a subsequent test
+  // load fails (for example when the referenced file has not been created yet).
+  await onConfigSourcesResolved?.(configPaths ? fileConfig : defaultConfig, testSources);
   const resolved = await cliState.withBasePath(undefined, () =>
     cliState.withEnv(fileConfig.env || defaultConfig.env || {}, () =>
       cliState.withConfig({ ...defaultConfig, ...fileConfig }, () =>

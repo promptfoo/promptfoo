@@ -1013,6 +1013,180 @@ describe('evalCommand', () => {
     expect(chokidarMocks.watcher.unwatch).toHaveBeenCalledTimes(2);
   });
 
+  it('recovers a new file created after a config reload references a missing input', async () => {
+    const basePath = process.cwd();
+    const oldFile = path.join(basePath, 'existing-tests.yaml');
+    const newFile = path.join(basePath, 'new-tests.yaml');
+    const initialConfig = {
+      prompts: [],
+      providers: [],
+      tests: 'file://existing-tests.yaml',
+    } as UnifiedConfig;
+    const nextConfig = { ...initialConfig, tests: 'file://new-tests.yaml' };
+    let resolved = 0;
+    vi.mocked(resolveConfigs)
+      .mockReset()
+      .mockImplementation(async (_options, _config, _type, onConfigSourcesResolved) => {
+        resolved += 1;
+        if (resolved > 1) {
+          await onConfigSourcesResolved?.(nextConfig, [
+            { tests: 'file://new-tests.yaml', basePath },
+          ]);
+        }
+        if (resolved === 2) {
+          throw new ConfigResolutionError('New test file does not exist yet');
+        }
+        return {
+          config: resolved === 1 ? initialConfig : nextConfig,
+          testSuite: { prompts: [], providers: [] },
+          basePath,
+        };
+      });
+    vi.mocked(evaluate)
+      .mockReset()
+      .mockImplementation(async (_suite, record) => record as Eval);
+    chokidarMocks.watcher.add.mockReset();
+    chokidarMocks.watcher.unwatch.mockReset().mockResolvedValue(undefined);
+
+    await doEval({ watch: true, write: false }, initialConfig, defaultConfigPath, {});
+    expect(chokidarMocks.watch).toHaveBeenCalledWith(
+      expect.arrayContaining([oldFile]),
+      expect.anything(),
+    );
+    await chokidarMocks.handlers.get('change')?.(defaultConfigPath);
+    // The config reload failed, but the missing file must already be subscribed.
+    expect(resolved).toBe(2);
+    expect(chokidarMocks.watcher.add).toHaveBeenCalledWith([newFile]);
+    expect(chokidarMocks.watcher.unwatch).toHaveBeenCalledWith([oldFile]);
+
+    // Chokidar emits add when the missing file is created.
+    await chokidarMocks.handlers.get('add')?.(newFile);
+    expect(resolved).toBe(3);
+    expect(chokidarMocks.watcher.add).toHaveBeenCalledTimes(1);
+    expect(chokidarMocks.watcher.unwatch).toHaveBeenCalledTimes(1);
+  });
+
+  it('subscribes immediately and never lets a slower old run restore obsolete watched files', async () => {
+    const basePath = process.cwd();
+    const a = path.join(basePath, 'watch-race-a.yaml');
+    const b = path.join(basePath, 'watch-race-b.yaml');
+    const c = path.join(basePath, 'watch-race-c.yaml');
+    const configFor = (file: string) =>
+      ({ prompts: [], providers: [], tests: `file://${file}` }) as UnifiedConfig;
+    const resolvedConfigs = [
+      configFor('watch-race-a.yaml'),
+      configFor('watch-race-b.yaml'),
+      configFor('watch-race-c.yaml'),
+    ];
+    let resolveCount = 0;
+    vi.mocked(resolveConfigs)
+      .mockReset()
+      .mockImplementation(async (_cmd, _config, _type, onConfigSourcesResolved) => {
+        const config = resolvedConfigs[Math.min(resolveCount++, 2)];
+        if (resolveCount > 1) {
+          // Match the real resolver's early callback, before provider evaluation.
+          await onConfigSourcesResolved?.(config);
+        }
+        return { config, testSuite: { prompts: [], providers: [] }, basePath };
+      });
+
+    let reachedSlowEval!: () => void;
+    let releaseSlowEval!: () => void;
+    const slowStarted = new Promise<void>((resolve) => {
+      reachedSlowEval = resolve;
+    });
+    const slowGate = new Promise<void>((resolve) => {
+      releaseSlowEval = resolve;
+    });
+    vi.mocked(evaluate)
+      .mockReset()
+      .mockImplementation(async (_suite, record) => {
+        if (record.config.tests === 'file://watch-race-b.yaml') {
+          reachedSlowEval();
+          await slowGate;
+        }
+        return record as Eval;
+      });
+    chokidarMocks.watcher.add.mockReset();
+    chokidarMocks.watcher.unwatch.mockReset().mockResolvedValue(undefined);
+    await doEval(
+      { watch: true, write: false },
+      configFor('watch-race-a.yaml'),
+      defaultConfigPath,
+      {},
+    );
+    expect(chokidarMocks.watch).toHaveBeenCalledWith(
+      expect.arrayContaining([a]),
+      expect.anything(),
+    );
+    const onChange = chokidarMocks.handlers.get('change')!;
+    const pendingSlow = Promise.resolve(onChange(defaultConfigPath));
+    try {
+      await slowStarted;
+      // A newly resolved dependency must be watched before provider evaluation finishes.
+      expect(chokidarMocks.watcher.add).toHaveBeenCalledWith([b]);
+      await onChange(defaultConfigPath);
+      expect(chokidarMocks.watcher.add).toHaveBeenLastCalledWith([c]);
+    } finally {
+      releaseSlowEval();
+      await pendingSlow;
+    }
+    // The older run finishes last; it must not roll back the newest subscriptions.
+    expect(chokidarMocks.watcher.add).toHaveBeenLastCalledWith([c]);
+    expect(chokidarMocks.watcher.unwatch).toHaveBeenCalledWith([b]);
+  });
+
+  it('ignores obsolete watch dependencies when an older config resolution finishes last', async () => {
+    const basePath = process.cwd();
+    const configFor = (suffix: string) =>
+      ({ prompts: [], providers: [], tests: `file://watch-late-${suffix}.yaml` }) as UnifiedConfig;
+    const c = path.join(basePath, 'watch-late-c.yaml');
+    const a = path.join(basePath, 'watch-late-a.yaml');
+    let resolveCount = 0;
+    let reachedOldResolver!: () => void;
+    let releaseOldResolver!: () => void;
+    const oldResolverStarted = new Promise<void>((resolve) => {
+      reachedOldResolver = resolve;
+    });
+    const oldResolverGate = new Promise<void>((resolve) => {
+      releaseOldResolver = resolve;
+    });
+    vi.mocked(resolveConfigs)
+      .mockReset()
+      .mockImplementation(async (_cmd, _config, _type, beforeLoad) => {
+        const index = ++resolveCount;
+        const active = configFor(index === 1 ? 'a' : index === 2 ? 'b' : 'c');
+        if (index === 2) {
+          reachedOldResolver();
+          await oldResolverGate;
+        }
+        if (index > 1) {
+          await beforeLoad?.(active);
+        }
+        return { config: active, testSuite: { prompts: [], providers: [] }, basePath };
+      });
+    vi.mocked(evaluate)
+      .mockReset()
+      .mockImplementation(async (_suite, record) => record as Eval);
+    chokidarMocks.watcher.add.mockReset();
+    chokidarMocks.watcher.unwatch.mockReset().mockResolvedValue(undefined);
+
+    await doEval({ watch: true, write: false }, configFor('a'), defaultConfigPath, {});
+    const onChange = chokidarMocks.handlers.get('change')!;
+    const pendingOld = Promise.resolve(onChange(defaultConfigPath));
+    try {
+      await oldResolverStarted;
+      await onChange(defaultConfigPath);
+      expect(chokidarMocks.watcher.add).toHaveBeenCalledWith([c]);
+    } finally {
+      releaseOldResolver();
+      await pendingOld;
+    }
+    expect(chokidarMocks.watcher.add).toHaveBeenCalledTimes(1);
+    expect(chokidarMocks.watcher.add).toHaveBeenLastCalledWith([c]);
+    expect(chokidarMocks.watcher.unwatch).toHaveBeenCalledWith([a]);
+  });
+
   describe('watch mode process lifecycle', () => {
     // main() resolves as soon as the eval action handler returns, and its `finally`
     // then runs shutdownGracefully(), which closes the database and HTTP dispatcher
@@ -1958,7 +2132,7 @@ describe('evalCommand', () => {
         path.resolve('/suite', 'vars/scenario.yaml'),
         path.resolve('/suite', 'vars/body.txt'),
       ]),
-      { atomic: true, ignored: /^\./, persistent: true },
+      { atomic: true, ignored: /^\./, ignoreInitial: true, persistent: true },
     );
 
     const loggerInfoSpy = vi.spyOn(logger, 'info').mockImplementation(() => logger);
@@ -2006,7 +2180,7 @@ describe('evalCommand', () => {
         );
         expect(chokidarMocks.watch).toHaveBeenCalledWith(
           expect.arrayContaining([path.resolve(expected)]),
-          { atomic: true, ignored: /^\./, persistent: true },
+          { atomic: true, ignored: /^\./, ignoreInitial: true, persistent: true },
         );
       } finally {
         cwd.mockRestore();
