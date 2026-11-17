@@ -562,6 +562,34 @@ describe('analyzeTemplateReference', () => {
     },
   );
 
+  it('resolves caller arguments after wrapper-local assignments', () => {
+    const value =
+      "{% macro a() %}plain{% endmacro %}{% macro h(x=_conversation) %}{{x}}{% endmacro %}{% macro wrap(f=a) %}{% set f=h %}{{caller(f)}}{% endmacro %}{{h('warmup')}}{% call(g) wrap() %}{{g()}}{% endcall %}";
+    expect(getNunjucksEngine().renderString(value, { _conversation: 'history' })).toBe(
+      'warmuphistory',
+    );
+    expect(analyzeTemplateReference(value, '_conversation')).toEqual({
+      referenced: true,
+      parsed: true,
+    });
+    expect(extractRequiredVariablesFromTemplate(value)).toContain('_conversation');
+  });
+
+  it('tracks an escaped macro through a loop-local custom filter input', () => {
+    const value =
+      "{% macro h(x=_conversation) %}{{x}}{% endmacro %}{{h('warmup')}}{% for f in [h] %}{{f|invoke}}{% endfor %}";
+    expect(
+      getNunjucksEngine({ invoke: (f: () => string) => f() }).renderString(value, {
+        _conversation: 'history',
+      }),
+    ).toBe('warmuphistory');
+    expect(analyzeTemplateReference(value, '_conversation')).toEqual({
+      referenced: true,
+      parsed: false,
+    });
+    expect(extractRequiredVariablesFromTemplate(value)).toBeUndefined();
+  });
+
   it('does not certify a negative when a custom filter can invoke a macro', () => {
     const value = "{% macro h(x=_conversation) %}{{x}}{% endmacro %}{{h('warmup')}}{{h|invoke}}";
     expect(
@@ -895,6 +923,17 @@ describe('macro analysis work and scope changes', () => {
       referenced: true,
       parsed: false,
     });
+  });
+
+  it('charges every memoized macro-candidate invocation to the shared budget', () => {
+    const tree = (depth: number): string =>
+      depth === 0
+        ? '{% macro f() %}ok{% endmacro %}'
+        : `{% if enabled %}${tree(depth - 1)}{% else %}${tree(depth - 1)}{% endif %}`;
+    const value = tree(11) + '{{f()}}'.repeat(2048);
+
+    // A memo hit is still a candidate invocation, not free analysis work.
+    expect(extractUnboundVariablesFromTemplate(value)).toBeUndefined();
   });
 
   it('charges growing macro-candidate unions to the shared analysis budget', () => {

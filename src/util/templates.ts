@@ -45,6 +45,10 @@ function disposableIterator<T>(iterator: IterableIterator<T>): SetIterator<T> {
 
 const MAX_MACRO_ANALYSIS_DEPTH = 100;
 let macroAnalysisDepth = 0;
+const macroAnalysisStack: Array<{
+  macro: DeferredMacro;
+  invocationScopes?: Map<NunjucksAstNode, LinkedScope>;
+}> = [];
 
 type DeferredMacro = {
   node: NunjucksAstNode;
@@ -776,10 +780,11 @@ function analyzeMacroBody(
   suppliedParamNames?: ReadonlySet<string>,
   suppliedMacroCandidates?: ReadonlyMap<string, ReadonlySet<DeferredMacro>>,
   definitionScope: ReadonlySet<string> = macro.definitionScope,
-  invocationScopes?: Map<DeferredMacro, LinkedScope>,
+  invocationScopes?: Map<NunjucksAstNode, LinkedScope>,
 ): boolean {
   const memoKey = macroAnalysisMemoKey(suppliedParamNames);
   const selectedMacroCandidates = new Map(suppliedMacroCandidates);
+  consumeAnalysisWork(memo);
   if (macroAnalysisDepth >= MAX_MACRO_ANALYSIS_DEPTH) {
     throw new TemplateAnalysisLimitError('Template macro analysis exceeded its depth limit');
   }
@@ -789,6 +794,7 @@ function analyzeMacroBody(
   macro.analyzing = true;
   macro.activeMacroCandidates = selectedMacroCandidates;
   macroAnalysisDepth++;
+  macroAnalysisStack.push({ macro, invocationScopes });
   try {
     // Defaults and bodies see the definition frame's current bindings at each
     // call, not a declaration-time snapshot or the caller macro's local frame.
@@ -819,7 +825,6 @@ function analyzeMacroBody(
       macroScope.registerMacroCandidates(name, candidates, false);
     }
     macroScope.add('caller');
-    invocationScopes?.set(macro, macroScope);
     const result = astChildReferencesVariable(macro.node, 'body', variableName, macroScope);
     if (!result && memo && canMemoize) {
       const memoKeys = memo.results.get(macro) ?? new Set<string>();
@@ -828,6 +833,7 @@ function analyzeMacroBody(
     }
     return result;
   } finally {
+    macroAnalysisStack.pop();
     macroAnalysisDepth--;
     macro.analyzing = wasAnalyzing;
     macro.activeMacroCandidates = previousCandidates;
@@ -1116,7 +1122,7 @@ function collectSuppliedCallerParamNames(
   macros: ReadonlySet<DeferredMacro> | undefined,
   boundSymbols: ReadonlySet<string>,
   suppliedMacroCandidates?: Map<string, ReadonlySet<DeferredMacro>>,
-  invocationScopes?: ReadonlyMap<DeferredMacro, LinkedScope>,
+  invocationScopes?: ReadonlyMap<NunjucksAstNode, LinkedScope>,
 ): ReadonlySet<string> | undefined {
   if (macros === undefined) {
     return undefined;
@@ -1136,9 +1142,9 @@ function collectSuppliedCallerParamNames(
       suppliedMacroCandidates?.clear();
       return undefined;
     }
-    const invocationScope = invocationScopes?.get(macro) ?? boundSymbols;
     let forMacro: Set<string> | undefined;
     for (const invocation of invocations) {
+      const invocationScope = invocationScopes?.get(invocation) ?? boundSymbols;
       const invocationCandidates = new Map<string, ReadonlySet<DeferredMacro>>();
       const supplied = collectSuppliedMacroParamNames(
         invocation.args,
@@ -1170,11 +1176,22 @@ function macroCandidatesUseCaller(macros: ReadonlySet<DeferredMacro>): boolean {
   return false;
 }
 
+function recordCallerInvocationScope(
+  node: NunjucksAstNode,
+  boundSymbols: ReadonlySet<string>,
+): void {
+  if (getSymbolName(node.name) !== 'caller' || !(boundSymbols instanceof LinkedScope)) {
+    return;
+  }
+  macroAnalysisStack[macroAnalysisStack.length - 1]?.invocationScopes?.set(node, boundSymbols);
+}
+
 function funCallNodeReferencesVariable(
   node: NunjucksAstNode,
   variableName: ReferenceTarget,
   boundSymbols: ReadonlySet<string>,
 ): boolean {
+  recordCallerInvocationScope(node, boundSymbols);
   if (astChildReferencesVariable(node, 'args', variableName, boundSymbols)) {
     return true;
   }
@@ -1187,7 +1204,7 @@ function funCallNodeReferencesVariable(
   const memo = boundSymbols instanceof LinkedScope ? boundSymbols.macroAnalysisMemo() : undefined;
   const candidates =
     macros ?? (boundSymbols instanceof LinkedScope ? boundSymbols.macrosUsedAsValues() : undefined);
-  const invocationScopes = deferredCaller ? new Map<DeferredMacro, LinkedScope>() : undefined;
+  const invocationScopes = deferredCaller ? new Map<NunjucksAstNode, LinkedScope>() : undefined;
   if (candidates) {
     for (const macro of candidates) {
       if (macros) {
@@ -1646,6 +1663,15 @@ function orNodeReferencesVariable(
   );
 }
 
+function scopeHasMacroValueForFilter(scope: LinkedScope, name: string): boolean {
+  if (scope.findMacros(name)?.size) {
+    return true;
+  }
+  // A loop-local binding may carry an escaped callable into a custom filter
+  // without a named macro candidate. Keep that flow indeterminate.
+  return scope.has(name) && scope.macrosUsedAsValues().size > 0;
+}
+
 function filterArgumentsUseMacros(args: unknown, scope: LinkedScope): boolean {
   const pending: Array<{ node: unknown; parent?: NunjucksParentContext }> = [{ node: args }];
   while (pending.length > 0) {
@@ -1663,7 +1689,7 @@ function filterArgumentsUseMacros(args: unknown, scope: LinkedScope): boolean {
       }
     }
     const name = getSymbolName(node);
-    if (name && !isNonReferenceSymbol(parent) && scope.findMacros(name)?.size) {
+    if (name && !isNonReferenceSymbol(parent) && scopeHasMacroValueForFilter(scope, name)) {
       return true;
     }
     for (const field of node.fields ?? []) {
