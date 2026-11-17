@@ -723,6 +723,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
       cachedResponse: cached,
       provider: this.getGenAISystem(),
       region: this.getBillingRegion(),
+      regionalProcessing: this.getGenAISystem() === 'bedrock',
       serviceTier: data.service_tier ?? config.service_tier,
     });
     const searchCost = cached ? 0 : getChatSearchSurcharge(modelName);

@@ -965,27 +965,28 @@ temperatures are preserved; set `temperature: 0` only if that model supports sam
 
 #### Claude Fable and Mythos models
 
-[Claude Fable 5.1](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-anthropic-claude-fable-5-1.html)
-and [Claude Mythos 5.1](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-anthropic-claude-mythos-5-1.html)
-support InvokeModel, Converse, and the Anthropic-compatible Messages API on
-**Bedrock Runtime**. Use a `us.` or `global.` inference profile:
+[Claude Fable 5.2](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-anthropic-claude-fable-5-2.html),
+[Claude Mythos 5.2](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-anthropic-claude-mythos-5-2.html),
+and their 5.1 counterparts support InvokeModel, Converse, and the Anthropic-compatible
+Messages API on **Bedrock Runtime**. Use a `us.` or `global.` inference profile; the base model
+ID has no on-demand route:
 
 ```yaml
 providers:
-  - bedrock:us.anthropic.claude-fable-5-1
-  - bedrock:converse:us.anthropic.claude-mythos-5-1
-  - id: bedrock:messages:global.anthropic.claude-mythos-5-1
+  - bedrock:global.anthropic.claude-fable-5-2
+  - bedrock:converse:us.anthropic.claude-fable-5-2
+  - id: bedrock:messages:global.anthropic.claude-mythos-5-2
     config:
       region: us-east-1
       apiKey: '{{env.AWS_BEARER_TOKEN_BEDROCK}}'
 ```
 
-The `us.` profile keeps routing within its geography; `global.` permits worldwide
-routing. The Messages route uses
+The `us.` profile keeps routing within its geography and adds the 10% regional premium;
+`global.` permits worldwide routing at the base rate. The Messages route uses
 `https://bedrock-runtime.<region>.amazonaws.com/anthropic` and accepts a Bedrock
-API key or generates one from AWS credentials. Mythos 5.1 requires provider approval. Both 5.1 models retain always-on
-thinking and use a cache-read price of $0.25 per million tokens before regional
-premiums.
+API key or generates one from AWS credentials. The Mythos models require provider approval.
+Fable and Mythos 5.2 cost $8 / $40 per million input / output tokens before the premium, 5.1
+costs $10 / $50, and cache reads cost 2.5% of the input rate.
 
 Fable 5.1 also supports Mantle in **GovCloud West**: use
 `bedrock:messages:anthropic.claude-fable-5-1` with `region: us-gov-west-1`.
@@ -1774,7 +1775,7 @@ To use these capabilities, structure your prompts to include both image data and
 
 ### Nova Vision Capabilities
 
-Amazon Nova supports comprehensive vision understanding for both images and videos:
+Amazon Nova accepts image and video inputs:
 
 - **Images**: Supports PNG, JPG, JPEG, GIF, WebP formats via Base-64 encoding. Multiple images allowed per payload (up to 25MB total).
 - **Videos**: Supports various formats (MP4, MKV, MOV, WEBM, etc.) via Base-64 (less than 25MB) or Amazon S3 URI (up to 1GB).

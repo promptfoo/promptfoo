@@ -293,17 +293,17 @@ it('resolves a legacy Responses alias without rewriting the saved provider', asy
 
 it('preserves Messages routing while editing the model and credential profile', async () => {
   await renderEditor({
-    id: 'bedrock:messages:us.anthropic.claude-fable-5-1',
+    id: 'bedrock:messages:us.anthropic.claude-fable-5-2',
     config: { profile: 'work' },
   });
   await expect
     .element(page.getByLabelText('Bedrock API', { exact: false }))
     .toHaveValue('messages');
-  await page.getByLabelText('Model ID', { exact: false }).fill('global.anthropic.claude-fable-5-1');
+  await page.getByLabelText('Model ID', { exact: false }).fill('global.anthropic.claude-fable-5-2');
   await page.getByLabelText('AWS Profile').fill('production');
   await expect.element(page.getByTestId('saved-target')).toHaveTextContent(
     JSON.stringify({
-      id: 'bedrock:messages:global.anthropic.claude-fable-5-1',
+      id: 'bedrock:messages:global.anthropic.claude-fable-5-2',
       config: { profile: 'production' },
     }),
   );
@@ -568,8 +568,8 @@ it.each([
   },
   {
     mode: 'messages',
-    id: 'bedrock:messages:us.anthropic.claude-fable-5-1',
-    converseId: 'bedrock:converse:us.anthropic.claude-fable-5-1',
+    id: 'bedrock:messages:us.anthropic.claude-fable-5-2',
+    converseId: 'bedrock:converse:us.anthropic.claude-fable-5-2',
     capKey: 'max_tokens',
   },
 ])(

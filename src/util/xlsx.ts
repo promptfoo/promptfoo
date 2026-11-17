@@ -1,6 +1,17 @@
+import path from 'node:path';
+
 import type { Sheet } from 'read-excel-file/node';
 
 import type { CsvRow } from '../types/index';
+
+/** Only a hash after the workbook extension in the filename starts a sheet selector. */
+export function getExcelWorkbookPath(reference: string): string | undefined {
+  const match = /\.xlsx?(#[\s\S]*)?$/i.exec(path.basename(reference));
+  if (!match) {
+    return undefined;
+  }
+  return match[1] ? reference.slice(0, -match[1].length) : reference;
+}
 
 function selectSheet(sheets: Sheet[], selector: string | undefined): Sheet {
   if (sheets.length === 0) {
@@ -31,9 +42,8 @@ function selectSheet(sheets: Sheet[], selector: string | undefined): Sheet {
 
 export async function parseXlsxFile(filePath: string): Promise<CsvRow[]> {
   try {
-    // Parse file path and optional sheet name
-    // Supports syntax: file.xlsx#SheetName or file.xlsx#2 (1-based index)
-    const [actualFilePath, sheetSpecifier] = filePath.split('#');
+    const actualFilePath = getExcelWorkbookPath(filePath) ?? filePath;
+    const sheetSpecifier = filePath.slice(actualFilePath.length + 1);
 
     // Try to import read-excel-file first to give proper error if not installed
     let readXlsxFile: typeof import('read-excel-file/node').default;
