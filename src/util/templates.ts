@@ -1919,7 +1919,7 @@ export function isNunjucksGlobal(name: string): boolean {
 function isNunjucksFilter(name: string | undefined): boolean {
   globalsEngine ??= getNunjucksEngine();
   const { filters } = globalsEngine as unknown as { filters: Record<string, unknown> };
-  return name !== undefined && Object.hasOwn(filters, name);
+  return name !== undefined && Object.prototype.hasOwnProperty.call(filters, name);
 }
 
 function isTemplateWhitespace(char: string | undefined): boolean {
