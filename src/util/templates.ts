@@ -84,6 +84,7 @@ class LinkedScope implements ReadonlySet<string> {
   constructor(
     private readonly parent?: ReadonlySet<string>,
     names: Iterable<string> = [],
+    private readonly kind: 'transparent' | 'branch' | 'frame' = 'transparent',
   ) {
     this.fallbackMacroMemo = parent instanceof LinkedScope ? parent.macroAnalysisMemo() : undefined;
     // Values escape branch/expression scopes even though lexical bindings do not.
@@ -202,6 +203,23 @@ class LinkedScope implements ReadonlySet<string> {
       this.fallbackMacroMemo ??
       (this.parent instanceof LinkedScope ? this.parent.macroAnalysisMemo() : undefined)
     );
+  }
+
+  definitionScopeView(definitionScope: ReadonlySet<string>): ReadonlySet<string> {
+    let current: ReadonlySet<string> | undefined = this;
+    let view: LinkedScope | undefined = this;
+    let branchView: LinkedScope | undefined;
+    while (current instanceof LinkedScope && current !== definitionScope) {
+      consumeAnalysisWork(this.macroAnalysisMemo());
+      if (current.kind === 'frame') {
+        branchView = undefined;
+        view = current.parent instanceof LinkedScope ? current.parent : undefined;
+      } else if (current.kind === 'branch') {
+        branchView ??= view;
+      }
+      current = current.parent;
+    }
+    return current === definitionScope && branchView ? branchView : definitionScope;
   }
 
   isWithin(ancestor: LinkedScope): boolean {
@@ -352,7 +370,7 @@ function collectBindingNames(node: unknown): string[] {
 }
 
 function addBindingNames(scope: ReadonlySet<string>, node: unknown): LinkedScope {
-  const nextScope = new LinkedScope(scope);
+  const nextScope = new LinkedScope(scope, [], 'frame');
   for (const name of collectBindingNames(node)) {
     nextScope.add(name);
   }
@@ -366,7 +384,7 @@ function addBindingNamesInPlace(scope: LinkedScope, node: unknown): void {
 }
 
 function addNamesToScope(scope: ReadonlySet<string>, names: readonly string[]): LinkedScope {
-  const nextScope = new LinkedScope(scope);
+  const nextScope = new LinkedScope(scope, [], 'frame');
   for (const name of names) {
     nextScope.add(name);
   }
@@ -607,7 +625,7 @@ function analyzeSignatureArgs(
     return { paramNames, referencesVariable: false };
   }
 
-  const defaultScope = new LinkedScope(boundSymbols);
+  const defaultScope = new LinkedScope(boundSymbols, [], 'frame');
   const memo = defaultScope.macroAnalysisMemo();
   const bindParam = (name: string, defaultValue?: unknown) => {
     paramNames.push(name);
@@ -733,6 +751,7 @@ function analyzeMacroBody(
   memo?: MacroAnalysisMemo,
   suppliedParamNames?: ReadonlySet<string>,
   suppliedMacroCandidates?: ReadonlyMap<string, ReadonlySet<DeferredMacro>>,
+  definitionScope: ReadonlySet<string> = macro.definitionScope,
 ): boolean {
   const memoKey = macroAnalysisMemoKey(suppliedParamNames);
   const selectedMacroCandidates = new Map(suppliedMacroCandidates);
@@ -751,14 +770,15 @@ function analyzeMacroBody(
     const { referencesVariable } = analyzeSignatureArgs(
       macro.node.args,
       variableName,
-      macro.definitionScope,
+      definitionScope,
       suppliedParamNames,
       selectedMacroCandidates,
     );
     if (referencesVariable) {
       return true;
     }
-    if (!selectedMacroCandidates.size && memo?.results.get(macro)?.has(memoKey)) {
+    const canMemoize = !selectedMacroCandidates.size && definitionScope === macro.definitionScope;
+    if (canMemoize && memo?.results.get(macro)?.has(memoKey)) {
       return false;
     }
     // Reentrant calls can evaluate defaults even when their body is already active.
@@ -769,7 +789,7 @@ function analyzeMacroBody(
       return false;
     }
 
-    const macroScope = addNamesToScope(macro.definitionScope, macro.paramNames);
+    const macroScope = addNamesToScope(definitionScope, macro.paramNames);
     for (const [name, candidates] of selectedMacroCandidates) {
       macroScope.registerMacroCandidates(name, candidates, false);
     }
@@ -781,7 +801,7 @@ function analyzeMacroBody(
     }
     macroScope.add('caller');
     const result = astChildReferencesVariable(macro.node, 'body', variableName, macroScope);
-    if (!result && memo && !selectedMacroCandidates.size) {
+    if (!result && memo && canMemoize) {
       const memoKeys = memo.results.get(macro) ?? new Set<string>();
       memoKeys.add(memoKey);
       memo.results.set(macro, memoKeys);
@@ -1134,7 +1154,16 @@ function funCallNodeReferencesVariable(
         suppliedMacroCandidates,
       );
       if (
-        analyzeMacroBody(macro, variableName, memo, suppliedParamNames, suppliedMacroCandidates)
+        analyzeMacroBody(
+          macro,
+          variableName,
+          memo,
+          suppliedParamNames,
+          suppliedMacroCandidates,
+          boundSymbols instanceof LinkedScope
+            ? boundSymbols.definitionScopeView(macro.definitionScope)
+            : macro.definitionScope,
+        )
       ) {
         return true;
       }
@@ -1142,7 +1171,16 @@ function funCallNodeReferencesVariable(
   }
   if (!macros && boundSymbols instanceof LinkedScope) {
     for (const macro of boundSymbols.macrosUsedAsValues()) {
-      if (analyzeMacroBody(macro, variableName, memo)) {
+      if (
+        analyzeMacroBody(
+          macro,
+          variableName,
+          memo,
+          undefined,
+          undefined,
+          boundSymbols.definitionScopeView(macro.definitionScope),
+        )
+      ) {
         return true;
       }
     }
@@ -1358,7 +1396,7 @@ function ifNodeReferencesVariable(
       node,
       'body',
       variableName,
-      new LinkedScope(boundSymbols),
+      new LinkedScope(boundSymbols, [], 'branch'),
       bodySummary,
     )
   ) {
@@ -1369,7 +1407,7 @@ function ifNodeReferencesVariable(
       node,
       'else_',
       variableName,
-      new LinkedScope(boundSymbols),
+      new LinkedScope(boundSymbols, [], 'branch'),
       elseSummary,
     )
   ) {
@@ -1421,6 +1459,28 @@ function isDefaultFilterWithUndefinedSafeInput(
   );
 }
 
+function booleanOperandsReferenceVariable(
+  node: NunjucksAstNode,
+  variableName: RequiredReferenceTarget,
+  boundSymbols: ReadonlySet<string>,
+): boolean {
+  const pending: unknown[] = [node];
+  const memo = boundSymbols instanceof LinkedScope ? boundSymbols.macroAnalysisMemo() : undefined;
+  while (pending.length > 0) {
+    const current = pending.pop();
+    if (!isNunjucksAstNode(current)) {
+      continue;
+    }
+    consumeAnalysisWork(memo);
+    if (current.typename === 'And' || current.typename === 'Or') {
+      pending.push(current.right, current.left);
+    } else if (undefinedSafeOperandReferencesVariable(current, variableName, boundSymbols)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 function undefinedSafeOperandReferencesVariable(
   node: NunjucksAstNode,
   variableName: RequiredReferenceTarget,
@@ -1431,6 +1491,9 @@ function undefinedSafeOperandReferencesVariable(
       registerMacroValueReference(node.value, undefined, boundSymbols);
     }
     return false;
+  }
+  if (node.typename === 'And' || node.typename === 'Or') {
+    return booleanOperandsReferenceVariable(node, variableName, boundSymbols);
   }
 
   const memo = boundSymbols instanceof LinkedScope ? boundSymbols.macroAnalysisMemo() : undefined;
@@ -1881,7 +1944,7 @@ export function extractVariablesFromTemplate(template: string): string[] {
     if (end === -1) {
       // The suffix has no close for this tag kind. Keep -1 cached so later
       // malformed openers do not each rescan the same suffix.
-      cursor = start + 2;
+      cursor = start + 1;
       continue;
     }
 
@@ -1894,8 +1957,8 @@ export function extractVariablesFromTemplate(template: string): string[] {
     } else {
       // A malformed outer tag can contain a complete inner tag. Resume after
       // this opener instead of skipping the first close, preserving the old
-      // conservative behavior for nested placeholders.
-      cursor = start + 2;
+      // conservative behavior for nested placeholders, including overlapping openers.
+      cursor = start + 1;
     }
   }
 

@@ -1509,6 +1509,13 @@ describe('evaluatorHelpers', () => {
       expect(renderedPrompt).toBe('anonymous!');
     });
 
+    it.each(['{{{missing}}}', '{{{{missing}}}}'])(
+      'should preserve overlapping placeholders with undefined dependencies: %s',
+      async (value) => {
+        expect(await renderPrompt(toPrompt('{{v}}'), { v: value }, {})).toBe(value);
+      },
+    );
+
     it('should preserve a computed default-filter input that would throw', async () => {
       const template = "{{ purpose | trim | default('anonymous') }}";
       expect(await renderPrompt(toPrompt('{{v}}'), { v: template }, {})).toBe(template);

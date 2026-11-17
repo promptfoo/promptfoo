@@ -368,6 +368,7 @@ function advanceExpressionDelimiterState(
 function computeNestingDepths(
   value: string,
   rawSpans: Array<[number, number]> = collectRawSpans(value),
+  literalPositions?: Uint8Array,
 ): Int32Array {
   const depths = new Int32Array(value.length + 1);
   let depth = 0;
@@ -406,6 +407,7 @@ function computeNestingDepths(
       depth,
     );
     if (literal.handled) {
+      literalPositions?.fill(1, i, literal.index + 1);
       quote = literal.quote;
       i = literal.index;
       continue;
@@ -793,14 +795,13 @@ function referencesUndefinedVariables(template: string, vars: Record<string, Var
   scrubbed = mapSpans(scrubbed, collectCommentSpans(scrubbed), () => '');
   // A quoted placeholder inside a surrounding expression or block tag is
   // literal text too: {{ '{{x}}' }} renders to the text {{x}}, so x is not a
-  // dependency. The extractor below is regex-based and would report it, so
-  // scrub those occurrences first (same nesting notion as
-  // firstUnprotectedPlaceholder). Use PATH_PLACEHOLDER_REGEX so dotted paths
-  // like {{user.name}} are scrubbed too.
+  // dependency. Only actual literals are excluded: an overlapping opener in
+  // malformed source is not evidence that its inner placeholder is quoted.
   const nested: Array<[number, number]> = [];
-  const scrubbedDepths = computeNestingDepths(scrubbed);
+  const literalPositions = new Uint8Array(scrubbed.length + 1);
+  computeNestingDepths(scrubbed, undefined, literalPositions);
   for (const match of scrubbed.matchAll(PATH_PLACEHOLDER_REGEX)) {
-    if (scrubbedDepths[match.index] > 0) {
+    if (literalPositions[match.index]) {
       nested.push([match.index, match.index + match[0].length]);
     }
   }

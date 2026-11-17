@@ -555,6 +555,56 @@ describe('analyzeTemplateReference', () => {
     expect(extractRequiredVariablesFromTemplate(value)).toEqual(['range']);
   });
 
+  it('uses branch-local rebindings for outer macro definitions', () => {
+    const value =
+      "{% macro h(x=_conversation) %}{{x}}{% endmacro %}{% macro p() %}plain{% endmacro %}{% set b=p %}{% macro a() %}{{b()}}{% endmacro %}{{h('warmup')}}{% if true %}{% set b=h %}{{a()}}{% endif %}";
+    expect(getNunjucksEngine().renderString(value, { _conversation: 'history' })).toBe(
+      'warmuphistory',
+    );
+    expect(analyzeTemplateReference(value, '_conversation')).toEqual({
+      referenced: true,
+      parsed: true,
+    });
+  });
+
+  it('keeps caller parameters out of an outer macro definition frame', () => {
+    const value =
+      "{% macro h(x=_conversation) %}{{x}}{% endmacro %}{% macro p() %}plain{% endmacro %}{% set b=p %}{% macro a() %}{{b()}}{% endmacro %}{% macro wrap(b) %}{{a()}}{% endmacro %}{{h('warmup')}}{{wrap(h)}}";
+    expect(getNunjucksEngine().renderString(value, { _conversation: 'history' })).toBe(
+      'warmupplain',
+    );
+    expect(analyzeTemplateReference(value, '_conversation')).toEqual({
+      referenced: false,
+      parsed: true,
+    });
+  });
+
+  it('retains an outer branch view across an intervening macro frame', () => {
+    const value =
+      "{% macro h(x=_conversation) %}{{x}}{% endmacro %}{% macro p() %}plain{% endmacro %}{% set b=p %}{% macro a() %}{{b()}}{% endmacro %}{% macro wrap(b) %}{{a()}}{% endmacro %}{{h('warmup')}}{% if true %}{% set b=h %}{{wrap(p)}}{% endif %}";
+    expect(getNunjucksEngine().renderString(value, { _conversation: 'history' })).toBe(
+      'warmuphistory',
+    );
+    expect(analyzeTemplateReference(value, '_conversation')).toEqual({
+      referenced: true,
+      parsed: true,
+    });
+  });
+
+  it('preserves overlapping output openers in the conservative scan', () => {
+    expect(extractVariablesFromTemplate('{{{missing}}}')).toEqual(['missing']);
+    expect(extractVariablesFromTemplate('{{{{missing}}}}')).toEqual(['missing']);
+  });
+
+  it('keeps null-guarded boolean fallbacks undefined-safe', () => {
+    const value = "{{ user and user.name or 'anonymous' }}";
+    expect(getNunjucksEngine().renderString(value, {})).toBe('anonymous');
+    expect(extractRequiredVariablesFromTemplate(value)).toEqual([]);
+    expect(
+      extractRequiredVariablesFromTemplate("{{ purpose | trim and user or 'anonymous' }}"),
+    ).toEqual(['purpose']);
+  });
+
   it('preserves live definition frames across conditional joins', () => {
     const value =
       "{% if true %}{% macro a() %}{{b()}}{% endmacro %}{% macro b(x='ok') %}{{x}}{% endmacro %}{{a()}}{% endif %}{% macro b(x=_conversation) %}{{x}}{% endmacro %}{{b('warmup')}}{{a()}}";
