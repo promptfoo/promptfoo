@@ -369,6 +369,129 @@ describe('OpenAI billing helpers', () => {
     });
   });
 
+  describe('GPT-6.2', () => {
+    it.each([
+      { model: 'gpt-6.2-astra', inputs: 272_000, input: 8, cached: 0.4, write: 10, output: 40 },
+      { model: 'gpt-6.2-astra', inputs: 272_001, input: 16, cached: 0.8, write: 20, output: 60 },
+      { model: 'gpt-6.2-sol', inputs: 272_000, input: 2, cached: 0.1, write: 2.5, output: 10 },
+      { model: 'gpt-6.2-sol', inputs: 272_001, input: 4, cached: 0.2, write: 5, output: 15 },
+    ])(
+      'prices $model at $inputs input tokens',
+      ({ model, inputs, input, cached, write, output }) => {
+        const usage = {
+          input_tokens: inputs,
+          output_tokens: 1000,
+          input_tokens_details: {
+            cached_tokens: 500,
+            cache_write_tokens: 250,
+            cache_write_tokens_details: { ttl_12h_tokens: 50 },
+          },
+        };
+        const standard =
+          ((inputs - 750) * input + 500 * cached + 200 * write + 50 * write * 2 + 1000 * output) /
+          1e6;
+        for (const [serviceTier, multiplier] of [
+          ['default', 1],
+          ['batch', 0.5],
+          ['fast', 2],
+        ] as const) {
+          expect(calculateOpenAIUsageCost(model, {}, usage, { serviceTier })).toBeCloseTo(
+            standard * multiplier,
+            10,
+          );
+        }
+        expect(
+          calculateOpenAIUsageCost(model, {}, usage, { apiUrl: 'https://eu.api.openai.com/v1' }),
+        ).toBeCloseTo(standard * 1.1, 10);
+
+        expect(
+          calculateOpenAIUsageCost(model, {}, usage, {
+            serviceTier: 'default',
+            completionWindow: '2h',
+            apiUrl: 'https://eu.api.openai.com/v1',
+          }),
+        ).toBeCloseTo(standard * 1.1 * 0.7, 10);
+
+        const listPriceStart = Date.parse('2027-03-01T00:00:00-08:00') / 1000;
+        expect(
+          calculateOpenAIUsageCost(model, {}, usage, {
+            serviceTier: 'ultrafast',
+            createdAt: listPriceStart - 1,
+          }),
+        ).toBeCloseTo(standard * 3, 10);
+        expect(
+          calculateOpenAIUsageCost(model, {}, usage, {
+            serviceTier: 'ultrafast',
+            createdAt: listPriceStart,
+          }),
+        ).toBeCloseTo(standard * 6, 10);
+      },
+    );
+
+    it.each(['gpt-6.2-astra', 'gpt-6.2-sol'])(
+      'requires explicit prices for unpublished %s rates',
+      (model) => {
+        const usage = createCachedResponsesUsage();
+        for (const options of [
+          { serviceTier: 'flex' },
+          { apiUrl: 'https://bedrock-mantle.us-east-1.api.aws/v1' },
+          { provider: 'bedrock' },
+          { provider: 'azure' },
+        ]) {
+          expect(calculateOpenAIUsageCost(model, {}, usage, options)).toBeUndefined();
+          expect(calculateOpenAIUsageCost(model, { cost: 3 / 1e6 }, usage, options)).toBeCloseTo(
+            0.009,
+            10,
+          );
+        }
+        expect(
+          calculateOpenAIUsageCostFromTokenUsage(`openai.${model}`, {
+            prompt: 2000,
+            completion: 1000,
+            cached: 500,
+            completionDetails: { cacheCreationInputTokens: 250 },
+          }),
+        ).toBeUndefined();
+      },
+    );
+  });
+
+  describe('background completion windows', () => {
+    it.each(['gpt-6.2-astra', 'gpt-6.2-sol', 'gpt-6.1-terra', 'gpt-6-luna'])(
+      'discounts the catalog rates and preserves custom overrides for %s',
+      (model) => {
+        const usage = createCachedResponsesUsage();
+        const standard = calculateOpenAIUsageCost(model, {}, usage)!;
+        expect(calculateOpenAIUsageCost(model, {}, usage, { completionWindow: '8h' })).toBeCloseTo(
+          standard * 0.6,
+          10,
+        );
+        expect(
+          calculateOpenAIUsageCost(model, { cost: 2 / 1e6 }, usage, { completionWindow: '8h' }),
+        ).toBeCloseTo(0.006, 10);
+      },
+    );
+
+    it.each([
+      { model: 'gpt-6.1-sol', options: { completionWindow: '2h' } },
+      { model: 'gpt-6.2-sol', options: { completionWindow: 'soonest' } },
+      {
+        model: 'gpt-6.2-sol',
+        options: { completionWindow: '8h', apiUrl: 'https://gateway.example/v1' },
+      },
+      { model: 'gpt-6.2-sol', options: { completionWindow: '2h', serviceTier: 'fast' } },
+      { model: 'gpt-6.2-sol', options: { completionWindow: '2h', serviceTier: 'auto' } },
+      { model: 'gpt-6.1-terra', options: { completionWindow: '2h', provider: 'bedrock' } },
+    ])('preserves pricing for ineligible $model requests with $options', ({ model, options }) => {
+      const usage = createCachedResponsesUsage();
+      const withoutWindow = calculateOpenAIUsageCost(model, {}, usage, {
+        ...options,
+        completionWindow: undefined,
+      });
+      expect(calculateOpenAIUsageCost(model, {}, usage, options)).toBe(withoutWindow);
+    });
+  });
+
   describe('GPT-6.1 Sol', () => {
     it.each([
       { inputTokens: 272_000, input: 2, cached: 0.1, write: 2.5, output: 10 },

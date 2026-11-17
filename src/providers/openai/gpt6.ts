@@ -8,6 +8,8 @@ const MODEL_LABELS = {
   luna: 'GPT-6 Luna',
   '6.1-sol': 'GPT-6.1 Sol',
   '6.1-terra': 'GPT-6.1 Terra',
+  '6.2-astra': 'GPT-6.2 Astra',
+  '6.2-sol': 'GPT-6.2 Sol',
 } as const;
 
 type Gpt6Variant = keyof typeof MODEL_LABELS;
@@ -24,13 +26,12 @@ export function getGpt6Variant(modelName: unknown): Gpt6Variant | undefined {
     return undefined;
   }
   const baseModel = getGpt6BaseModelName(modelName);
-  const versioned = /(?:^|[.-])gpt-6\.1-(sol|terra)(?:[-:]|$)/.exec(baseModel);
-  if (versioned) {
-    return versioned[1] === 'sol' ? '6.1-sol' : '6.1-terra';
-  }
-  return /(?:^|[.-])gpt-6-(astra|sol|luna)(?:[-:]|$)/.exec(baseModel)?.[1] as
-    | Gpt6Variant
-    | undefined;
+  const versioned = /(?:^|[.-])gpt-(6\.1-(?:sol|terra)|6\.2-(?:astra|sol))(?:[-:]|$)/.exec(
+    baseModel,
+  );
+  const variant =
+    versioned?.[1] ?? /(?:^|[.-])gpt-6-(astra|sol|luna)(?:[-:]|$)/.exec(baseModel)?.[1];
+  return variant as Gpt6Variant | undefined;
 }
 
 export function isGpt6Model(modelName: unknown): boolean {
@@ -239,21 +240,25 @@ function getOpenRouterChatEffortUpdates(messages: unknown): unknown[] {
   return efforts;
 }
 
+function supportsReasoningNone(variant: Gpt6Variant): boolean {
+  return variant === 'sol' || variant === 'luna' || variant === '6.1-terra';
+}
+
 function validateReasoningEffort(effort: unknown, variant: Gpt6Variant, modelLabel: string): void {
-  const requiresReasoning = variant === 'astra' || variant === '6.1-sol';
+  const supportsNone = supportsReasoningNone(variant);
   if (
     effort == null ||
     effort === '' ||
     (typeof effort === 'string' &&
-      (REASONING_EFFORTS.has(effort) || (!requiresReasoning && effort === 'none')))
+      (REASONING_EFFORTS.has(effort) || (supportsNone && effort === 'none')))
   ) {
     return;
   }
 
   throw new Error(
-    requiresReasoning
-      ? `${modelLabel} supports reasoning effort low, medium, high, xhigh, or max. Use low instead of none or minimal.`
-      : `${modelLabel} supports reasoning effort none, low, medium, high, xhigh, or max.`,
+    supportsNone
+      ? `${modelLabel} supports reasoning effort none, low, medium, high, xhigh, or max.`
+      : `${modelLabel} supports reasoning effort low, medium, high, xhigh, or max. Use low instead of none or minimal.`,
   );
 }
 
@@ -279,7 +284,7 @@ function validateChatTools(
     return;
   }
 
-  if (variant === 'astra' || variant === '6.1-sol' || variant === '6.1-terra') {
+  if (variant !== 'sol' && variant !== 'luna') {
     const model = variant === 'astra' ? 'gpt-6-astra' : `gpt-${variant}`;
     throw new Error(
       `${modelLabel} tool calling requires the Responses API. Use openai:responses:${model} or azure:responses:<deployment>.`,
@@ -397,8 +402,7 @@ export function applyGpt6RequestRules(
   }
 
   if (
-    variant === 'astra' ||
-    variant === '6.1-sol' ||
+    !supportsReasoningNone(variant) ||
     (samplingEffort !== UNKNOWN_PERSISTED_EFFORT && samplingEffort !== 'none')
   ) {
     for (const key of ['temperature', 'top_p', 'logprobs', 'top_logprobs']) {

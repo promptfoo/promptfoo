@@ -289,6 +289,8 @@ describe('OpenAICodexSDKProvider', () => {
       new OpenAICodexSDKProvider({ config: { model: 'gpt-6-astra' } });
       new OpenAICodexSDKProvider({ config: { model: 'gpt-6.1-sol' } });
       new OpenAICodexSDKProvider({ config: { model: 'gpt-6.1-terra' } });
+      new OpenAICodexSDKProvider({ config: { model: 'gpt-6.2-astra' } });
+      new OpenAICodexSDKProvider({ config: { model: 'gpt-6.2-sol' } });
       new OpenAICodexSDKProvider({ config: { model: 'gpt-6-sol' } });
       new OpenAICodexSDKProvider({ config: { model: 'gpt-6-luna' } });
 

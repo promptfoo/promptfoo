@@ -41,7 +41,7 @@ You can reference this provider using either base ID, and you can inline the mod
 
 ## Installation
 
-Install Promptfoo and the Codex SDK together in your eval project. Promptfoo supports SDK versions from 0.156.1 through 0.166.x. Model availability depends on your Codex version and account. The [0.165.0 catalog](https://github.com/openai/codex/releases/tag/rust-v0.165.0) includes GPT-6.1 Sol and Terra with Ultra reasoning.
+Install Promptfoo and the Codex SDK together in your eval project. Promptfoo supports SDK versions from 0.156.1 through 0.166.x. Model availability depends on your Codex version and account. GPT-6.2 Astra and Sol require Codex CLI 0.166.0 or later. Install SDK 0.166.x to use them with its bundled CLI. See the [Codex model catalog](https://github.com/openai/codex/blob/6c0cee502d215e5df2dd9a303cf2e252229c9e12/codex-rs/models-manager/models.json).
 
 ```bash
 npm install promptfoo "@openai/codex-sdk@>=0.156.1 <0.167.0"
@@ -266,14 +266,14 @@ Select a model available to your account and sign-in method. See [installation](
 providers:
   - id: openai:codex-sdk
     config:
-      model: gpt-6-sol
+      model: gpt-6.2-sol
       model_reasoning_effort: max
 ```
 
 Choose a model based on your eval's needs:
 
-- **GPT-6 Astra** (`gpt-6-astra`) - Use for the most demanding reasoning and coding tasks, when your account has access.
-- **GPT-6 Sol** (`gpt-6-sol`) - Use for complex professional and coding workflows.
+- **GPT-6.2 Astra** (`gpt-6.2-astra`) - Use for demanding reasoning and coding tasks.
+- **GPT-6.2 Sol** (`gpt-6.2-sol`) - Use for everyday coding and agent workflows.
 - **GPT-6 Luna** (`gpt-6-luna`) - Use for cost-sensitive, high-volume evals.
 
 With ChatGPT sign-in, `gpt-5.4` and `gpt-5.4-mini` retired from Codex on August 31, 2026; `gpt-5.2` and `gpt-5.3-codex` are also deprecated for that sign-in method. Use `gpt-6-sol` or `gpt-6-luna` in new saved configurations when available. API-key authentication follows the separate [OpenAI API model lifecycle](https://developers.openai.com/api/docs/deprecations), so this Codex sign-in retirement does not invalidate API-key configurations or Promptfoo's native API grading pins. `gpt-5.3-codex-spark` requires eligible ChatGPT Pro/Codex authentication and is not available through the public Responses API.
@@ -620,7 +620,7 @@ providers:
       model_reasoning_effort: high # Thorough reasoning for complex tasks
 ```
 
-Available levels vary by model:
+GPT-6.2 Astra and Sol support `low`, `medium`, `high`, `xhigh`, `max`, and `ultra` in Codex. Available levels for earlier models vary:
 
 | Level     | Description                                     | Supported Models                                                                                                                                 |
 | --------- | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |

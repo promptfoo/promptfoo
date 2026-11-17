@@ -773,6 +773,8 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     'gpt-6-luna',
     'gpt-6.1-sol',
     'gpt-6.1-terra',
+    'gpt-6.2-astra',
+    'gpt-6.2-sol',
     // GPT-5.6 models
     'gpt-5.6-cyber',
     'gpt-5.6',
@@ -923,6 +925,11 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       {
         apiUrl: this.getApiUrl(),
         cachedResponse: cached,
+        createdAt: data.created_at,
+        completionWindow:
+          data.background === false
+            ? undefined
+            : (data.background_options?.completion_window ?? config.backgroundCompletionWindow),
         provider: isBedrock ? 'bedrock' : this.getGenAISystem(),
         region: this.getBillingRegion(),
         bedrockProfile: runtimeProfile?.[1],
@@ -1264,11 +1271,14 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     );
 
     omitDeprecatedClaudeSamplingParams(body);
+    const backgroundOptions = body.background_options as { completion_window?: string } | undefined;
 
     return {
       body,
       config: {
         ...config,
+        backgroundCompletionWindow:
+          body.background === true ? backgroundOptions?.completion_window : undefined,
         service_tier: effectiveServiceTier,
         tools: Array.isArray(body.tools) ? body.tools : loadedTools, // Include effective tools for downstream validation.
         response_format: responseFormat,

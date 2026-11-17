@@ -127,7 +127,7 @@ describe('FoundationModelConfiguration', () => {
     const modelIdInput = screen.getByRole('textbox', { name: /Model ID/i });
     expect(modelIdInput).toHaveAttribute(
       'placeholder',
-      'openai:gpt-6.1-sol, openai:gpt-6-luna, openai:gpt-6-astra',
+      'openai:gpt-6.2-sol, openai:gpt-6-luna, openai:gpt-6.2-astra',
     );
 
     const documentationLink = screen.getByRole('link', { name: /OpenAI documentation/ });
@@ -257,7 +257,7 @@ describe('FoundationModelConfiguration', () => {
     let modelIdInput = screen.getByRole('textbox', { name: /Model ID/i });
     expect(modelIdInput).toHaveAttribute(
       'placeholder',
-      'openai:gpt-6.1-sol, openai:gpt-6-luna, openai:gpt-6-astra',
+      'openai:gpt-6.2-sol, openai:gpt-6-luna, openai:gpt-6.2-astra',
     );
     let documentationLink = screen.getByRole('link', { name: /OpenAI documentation/ });
     expect(documentationLink).toHaveAttribute(

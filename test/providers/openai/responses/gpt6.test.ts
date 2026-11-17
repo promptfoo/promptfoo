@@ -26,6 +26,40 @@ const responseData = {
   },
 };
 
+describe('GPT-6.2 background Responses billing', () => {
+  it.each([
+    { returnedWindow: undefined, multiplier: 0.6 },
+    { returnedWindow: '2h', multiplier: 0.7 },
+    { returnedWindow: 'soonest', multiplier: 1 },
+  ])(
+    'uses the effective completion window ($returnedWindow)',
+    async ({ returnedWindow, multiplier }) => {
+      vi.mocked(cache.fetchWithCache).mockResolvedValue(
+        createMockFetchResponse({
+          ...responseData,
+          id: `resp_background_${returnedWindow ?? 'omitted'}`,
+          model: 'gpt-6.2-sol',
+          background: true,
+          background_options: returnedWindow ? { completion_window: returnedWindow } : undefined,
+          service_tier: 'default',
+          output: [...responseData.output, { type: 'file_search_call', status: 'completed' }],
+        }),
+      );
+      const result = await new OpenAiResponsesProvider('gpt-6.2-sol', {
+        config: {
+          apiKey: 'test-key',
+          background: true,
+          passthrough: { background_options: { completion_window: '8h' } },
+        },
+      }).callApi('Say ready.');
+
+      expect(result.error).toBeUndefined();
+      const standardTokenCost = (1250 * 2 + 500 * 0.1 + 250 * 2.5 + 1000 * 10) / 1e6;
+      expect(result.cost).toBeCloseTo(standardTokenCost * multiplier + 0.0025, 10);
+    },
+  );
+});
+
 describe('GPT-6.1 Sol Responses with Ultrafast', () => {
   it.each([
     { reported: 'ultrafast', cost: 0.018 },

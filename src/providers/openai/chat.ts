@@ -83,9 +83,8 @@ import type { McpToolCallEntry } from '../mcp/types';
 import type { OpenAiBillingConfig, OpenAiChatConfig, OpenAiRequestBody } from './config';
 import type { ReasoningEffort } from './types';
 
-export type OpenAiChatCompletionCostData = Pick<
-  OpenAI.Chat.Completions.ChatCompletion,
-  'service_tier' | 'usage'
+export type OpenAiChatCompletionCostData = Partial<
+  Pick<OpenAI.Chat.Completions.ChatCompletion, 'created' | 'service_tier' | 'usage'>
 >;
 
 export function getOpenAiGatewayRateLimitKind(data: unknown): 'quota' | 'rate_limit' | undefined {
@@ -721,6 +720,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
     const tokenCost = calculateOpenAIUsageCost(billingModelName, config, data.usage, {
       apiUrl: this.getApiUrl(),
       cachedResponse: cached,
+      createdAt: data.created,
       provider: this.getGenAISystem(),
       region: this.getBillingRegion(),
       regionalProcessing: this.getGenAISystem() === 'bedrock',

@@ -4,6 +4,7 @@ import {
   GPT_LONG_CONTEXT_THRESHOLD,
   getOpenAICacheWriteInputTokens,
   isAzureOpenAiEndpoint,
+  isOpenAiFirstPartyApiUrl,
   OPENAI_BILLING_MODELS,
   OPENAI_DAYBREAK_ALIASES,
 } from './util';
@@ -54,6 +55,10 @@ export type OpenAIBillingUsage = {
   imageOutputTokens: number;
 };
 
+const GPT_6_2_MODELS = new Set(['gpt-6.2-astra', 'gpt-6.2-sol']);
+const BACKGROUND_WINDOW_MODELS = new Set([...GPT_6_2_MODELS, 'gpt-6.1-terra', 'gpt-6-luna']);
+// OpenAI's Ultrafast promotion ends at midnight Pacific on March 1, 2027.
+const GPT_6_2_ULTRAFAST_LIST_PRICE_START = Date.parse('2027-03-01T08:00:00Z') / 1000;
 const PER_MILLION = 1 / 1_000_000;
 
 function perMillion(value: number): number {
@@ -76,9 +81,10 @@ function buildRateTable<T>(groups: RateGroup<T>[]): Record<string, T> {
 }
 
 const STANDARD_CACHED_INPUT_RATES = buildRateTable<number>([
+  { models: ['gpt-6.2-astra'], rates: perMillion(0.4) },
   { models: ['gpt-6-astra'], rates: perMillion(1) },
   { models: ['gpt-6-sol'], rates: perMillion(0.2) },
-  { models: ['gpt-6.1-sol'], rates: perMillion(0.1) },
+  { models: ['gpt-6.1-sol', 'gpt-6.2-sol'], rates: perMillion(0.1) },
   { models: ['gpt-6.1-terra'], rates: perMillion(0.05) },
   { models: ['gpt-6-luna'], rates: perMillion(0.01) },
   { models: ['gpt-5.6', 'gpt-5.6-sol'], rates: perMillion(0.4) },
@@ -204,9 +210,10 @@ const FINE_TUNED_BATCH_OVERRIDES = buildRateTable<OpenAITextRates>([
 ]);
 
 const LONG_CONTEXT_CACHED_INPUT_RATES = buildRateTable<number>([
+  { models: ['gpt-6.2-astra'], rates: perMillion(0.8) },
   { models: ['gpt-6-astra'], rates: perMillion(2) },
   { models: ['gpt-6-sol'], rates: perMillion(0.4) },
-  { models: ['gpt-6.1-sol'], rates: perMillion(0.2) },
+  { models: ['gpt-6.1-sol', 'gpt-6.2-sol'], rates: perMillion(0.2) },
   { models: ['gpt-6.1-terra'], rates: perMillion(0.1) },
   { models: ['gpt-6-luna'], rates: perMillion(0.02) },
   { models: ['gpt-5.6', 'gpt-5.6-sol'], rates: perMillion(0.8) },
@@ -261,6 +268,15 @@ const FLEX_SUPPORTED_TEXT_MODELS = new Set([
 
 const FAST_TEXT_RATES = buildRateTable<OpenAITextRates>([
   {
+    models: ['gpt-6.2-astra'],
+    rates: {
+      input: perMillion(16),
+      cachedInput: perMillion(0.8),
+      cacheWriteInput: perMillion(20),
+      output: perMillion(80),
+    },
+  },
+  {
     models: ['gpt-6-astra'],
     rates: {
       input: perMillion(20),
@@ -279,7 +295,7 @@ const FAST_TEXT_RATES = buildRateTable<OpenAITextRates>([
     },
   },
   {
-    models: ['gpt-6.1-sol'],
+    models: ['gpt-6.1-sol', 'gpt-6.2-sol'],
     rates: {
       input: perMillion(4),
       cachedInput: perMillion(0.2),
@@ -647,6 +663,7 @@ const BEDROCK_CYBER_RATES = new Map<string, OpenAITextRates>([
   ],
 ]);
 const CACHE_WRITE_MODELS = new Set([
+  ...GPT_6_2_MODELS,
   'gpt-6-astra',
   'gpt-6-sol',
   'gpt-6.1-sol',
@@ -658,7 +675,7 @@ const CACHE_WRITE_MODELS = new Set([
   'gpt-5.6-luna',
 ]);
 const OPENAI_REGIONAL_PROCESSING_MODEL =
-  /^(?:gpt-5\.[456]|gpt-6-(?:astra|sol|luna)|gpt-6\.1-(?:sol|terra))(?:-|$)/;
+  /^(?:gpt-5\.[456]|gpt-6-(?:astra|sol|luna)|gpt-6\.1-(?:sol|terra)|gpt-6\.2-(?:astra|sol))(?:-|$)/;
 const OPENAI_REGIONAL_PROCESSING_MULTIPLIER = 1.1;
 // FedRAMP applies the same 10% uplift to successful requests for supported models.
 const OPENAI_REGIONAL_PROCESSING_HOSTNAMES = new Set([
@@ -674,6 +691,19 @@ type OpenAIBillingConfig = ProviderConfig & {
   region?: string;
 };
 
+type OpenAIBillingOptions = {
+  serviceTier?: string | null;
+  completionWindow?: string;
+  /** Response creation time in Unix seconds. */
+  createdAt?: number;
+  cachedResponse?: boolean;
+  apiUrl?: string;
+  regionalProcessing?: boolean;
+  provider?: string;
+  region?: string;
+  bedrockProfile?: string;
+};
+
 export function getBedrockBillingEndpoint(
   hostname: string | undefined,
 ): { service: 'mantle' | 'runtime'; region: string } | null {
@@ -685,22 +715,31 @@ export function getBedrockBillingEndpoint(
   return match && { service: match[1] === 'mantle' ? 'mantle' : 'runtime', region: match[2] };
 }
 
-function applyRegionalProcessingRates(
+function applyOpenAIProcessingRates(
   modelName: string,
   modelRates: OpenAIModelRates,
   config: OpenAIBillingConfig,
-  options: { apiUrl?: string; regionalProcessing?: boolean; provider?: string; region?: string },
+  options: OpenAIBillingOptions,
 ): OpenAIModelRates {
+  const regional =
+    OPENAI_REGIONAL_PROCESSING_MODEL.test(modelName) &&
+    (options.regionalProcessing || usesOpenAIRegionalProcessing(config, options.apiUrl));
+  let multiplier = regional ? OPENAI_REGIONAL_PROCESSING_MULTIPLIER : 1;
+  // Discounted background windows apply to eligible first-party Standard requests.
   if (
-    !OPENAI_REGIONAL_PROCESSING_MODEL.test(modelName) ||
-    !(options.regionalProcessing || usesOpenAIRegionalProcessing(config, options.apiUrl))
+    (options.completionWindow === '2h' || options.completionWindow === '8h') &&
+    BACKGROUND_WINDOW_MODELS.has(modelName) &&
+    [undefined, null, 'default', 'standard'].includes(options.serviceTier) &&
+    (options.provider === undefined || options.provider === 'openai') &&
+    isOpenAiFirstPartyApiUrl(
+      options.apiUrl ?? (config.apiHost ? `https://${config.apiHost}` : config.apiBaseUrl),
+    )
   ) {
-    return modelRates;
+    multiplier *= options.completionWindow === '2h' ? 0.7 : 0.6;
   }
-  return {
-    ...modelRates,
-    text: applyRateMultiplier(modelRates.text, OPENAI_REGIONAL_PROCESSING_MULTIPLIER),
-  };
+  return multiplier === 1
+    ? modelRates
+    : { ...modelRates, text: applyRateMultiplier(modelRates.text, multiplier) };
 }
 
 export function usesAzureOpenAiBilling(
@@ -863,6 +902,9 @@ function getBedrockTextRates(
   if (!endpoint && !hasBedrockBillingMarker && options.provider !== 'bedrock') {
     return undefined;
   }
+  if (GPT_6_2_MODELS.has(billingModelName)) {
+    return null; // First-party OpenAI prices do not establish a Bedrock price.
+  }
   const region = endpoint?.region ?? options.region ?? config.region;
   // A system profile also identifies Runtime when its adapter uses a customer proxy.
   const runtime = endpoint ? endpoint.service === 'runtime' : options.bedrockProfile !== undefined;
@@ -990,7 +1032,8 @@ export function calculateOpenAIUsageCostFromTokenUsage(
   // Summarized Codex usage omits the endpoint, region, and effective Bedrock service tier.
   if (
     modelName.startsWith('openai.') &&
-    ['gpt-6-astra', 'gpt-6.1-sol'].includes(billingModelName)
+    (['gpt-6-astra', 'gpt-6.1-sol'].includes(billingModelName) ||
+      GPT_6_2_MODELS.has(billingModelName))
   ) {
     return undefined;
   }
@@ -1176,23 +1219,27 @@ function getFastTextRates(
 function getUltrafastModelRates(
   modelName: string,
   totalInputTokens: number,
+  createdAt: number | undefined,
 ): OpenAIModelRates | undefined {
-  // Astra and GPT-6.1 Sol have published Ultrafast rates at 6x Standard.
   // https://developers.openai.com/api/docs/pricing?latest-pricing=ultrafast
-  const text =
-    modelName === 'gpt-6-astra' || modelName === 'gpt-6.1-sol'
-      ? getBaseTextRates(modelName, totalInputTokens)
-      : undefined;
-  return text ? { text: applyRateMultiplier(text, 6) } : undefined;
+  const isGpt62 = GPT_6_2_MODELS.has(modelName);
+  if (!isGpt62 && modelName !== 'gpt-6-astra' && modelName !== 'gpt-6.1-sol') {
+    return undefined;
+  }
+  const promotional =
+    isGpt62 && (createdAt ?? Date.now() / 1000) < GPT_6_2_ULTRAFAST_LIST_PRICE_START;
+  const text = getBaseTextRates(modelName, totalInputTokens);
+  return text ? { text: applyRateMultiplier(text, promotional ? 3 : 6) } : undefined;
 }
 
 function getModelRates(
   modelName: string,
   tier: OpenAIProcessingTier,
   totalInputTokens: number,
+  createdAt: number | undefined,
 ): OpenAIModelRates | undefined {
   if (tier === 'ultrafast') {
-    return getUltrafastModelRates(modelName, totalInputTokens);
+    return getUltrafastModelRates(modelName, totalInputTokens, createdAt);
   }
 
   if (modelName.startsWith('ft:')) {
@@ -1477,15 +1524,7 @@ export function calculateOpenAIUsageCost(
   modelName: string,
   config: OpenAIBillingConfig,
   rawUsage: any,
-  options: {
-    serviceTier?: string | null;
-    cachedResponse?: boolean;
-    apiUrl?: string;
-    regionalProcessing?: boolean;
-    provider?: string;
-    region?: string;
-    bedrockProfile?: string;
-  } = {},
+  options: OpenAIBillingOptions = {},
 ): number | undefined {
   if (!rawUsage) {
     return undefined;
@@ -1530,7 +1569,7 @@ export function calculateOpenAIUsageCost(
     ? { text: bedrockTextRates }
     : TRUSTED_ACCESS_MODELS.has(modelName)
       ? getTrustedAccessModelRates(modelName, usage.totalInputTokens, options)
-      : getModelRates(modelName, tier, usage.totalInputTokens);
+      : getModelRates(modelName, tier, usage.totalInputTokens, options.createdAt);
   const explicitTextRates = getCompleteTextCostOverrides(config);
   const explicitAudioRates = getCompleteAudioCostOverrides(config, usage);
   // Complete explicit rates are authoritative when no catalog entry applies, including for
@@ -1553,7 +1592,7 @@ export function calculateOpenAIUsageCost(
   }
   const rates = bedrockTextRates
     ? modelRates
-    : applyRegionalProcessingRates(modelName, modelRates, config, options);
+    : applyOpenAIProcessingRates(modelName, modelRates, config, options);
 
   if (options.cachedResponse) {
     return 0;
