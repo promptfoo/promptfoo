@@ -608,6 +608,39 @@ describe('analyzeTemplateReference', () => {
     expect(extractRequiredVariablesFromTemplate(value)).toEqual([]);
   });
 
+  it('follows a local alias of the caller callback', () => {
+    const value =
+      "{% macro a() %}plain{% endmacro %}{% macro h(x=_conversation) %}{{x}}{% endmacro %}{% macro wrap(f=h) %}{% set cb=caller %}{{cb(f)}}{% endmacro %}{{h('warmup')}}{% call(g=a) wrap() %}{{g()}}{% endcall %}";
+    expect(getNunjucksEngine().renderString(value, { _conversation: 'history' })).toBe(
+      'warmuphistory',
+    );
+    expect(analyzeTemplateReference(value, '_conversation')).toEqual({
+      referenced: true,
+      parsed: true,
+    });
+    expect(extractRequiredVariablesFromTemplate(value)).toContain('_conversation');
+  });
+
+  it('preserves escaped alternatives across caller argument merges', () => {
+    const value =
+      "{% macro a() %}plain{% endmacro %}{% macro h(x=_conversation) %}{{x}}{% endmacro %}{{h('warmup')}}{% macro wrap() %}{{caller(a)}}{{caller(h|default)}}{% endmacro %}{% call(g) wrap() %}{{g()}}{% endcall %}";
+    expect(getNunjucksEngine().renderString(value, { _conversation: 'history' })).toBe(
+      'warmupplainhistory',
+    );
+    expect(analyzeTemplateReference(value, '_conversation')).toEqual({
+      referenced: true,
+      parsed: true,
+    });
+    expect(extractRequiredVariablesFromTemplate(value)).toContain('_conversation');
+  });
+
+  it('uses escaped callee candidates for deferred caller propagation', () => {
+    const value =
+      '{% macro a() %}ok{% endmacro %}{% macro h(x=purpose|trim) %}{{x}}{% endmacro %}{% macro wrap() %}{{caller(h)}}{% endmacro %}{% set handlers={run:wrap} %}{% call(g=a) handlers.run() %}{{g()}}{% endcall %}';
+    expect(getNunjucksEngine().renderString(value, { purpose: 'ready' })).toBe('ready');
+    expect(extractRequiredVariablesFromTemplate(value)).toEqual(['purpose']);
+  });
+
   it('handles configured overrides of built-in filter names conservatively', () => {
     const filters = { upper: (f: () => string) => f() };
     const value = "{% macro h(x=_conversation) %}{{x}}{% endmacro %}{{h('warmup')}}{{h|upper}}";

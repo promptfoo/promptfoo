@@ -87,6 +87,7 @@ function consumeAnalysisWork(memo?: MacroAnalysisMemo): void {
 class LinkedScope implements ReadonlySet<string> {
   private readonly names = new Set<string>();
   private readonly macros = new Map<string, MacroBinding>();
+  private readonly callerAliases = new Set<string>();
   private readonly valueMacros: Set<DeferredMacro>;
   private fallbackMacroMemo?: MacroAnalysisMemo;
 
@@ -128,6 +129,7 @@ class LinkedScope implements ReadonlySet<string> {
   }
 
   registerMacro(name: string, definition: DeferredMacro, invalidateMemo = true): void {
+    this.callerAliases.delete(name);
     this.macros.set(name, { candidates: new Set([definition]), dynamic: false });
     if (invalidateMemo) {
       this.macroAnalysisMemo()?.results.clear();
@@ -158,6 +160,8 @@ class LinkedScope implements ReadonlySet<string> {
 
   rebindMacros(targets: unknown, value: unknown): void {
     const sourceName = getSymbolName(value);
+    const callerAlias =
+      sourceName === 'caller' || (sourceName !== undefined && this.isCallerAlias(sourceName));
     const sourceBinding = sourceName ? this.findMacroBinding(sourceName) : undefined;
     const binding = sourceBinding ?? {
       candidates: new Set<DeferredMacro>(),
@@ -165,11 +169,17 @@ class LinkedScope implements ReadonlySet<string> {
     };
     this.removeMacroBindings(targets);
     for (const name of collectBindingNames(targets)) {
+      if (callerAlias) {
+        this.callerAliases.add(name);
+      } else {
+        this.callerAliases.delete(name);
+      }
       this.registerMacroCandidates(name, binding.candidates, true, binding.dynamic);
     }
   }
 
   removeMacro(name: string): void {
+    this.callerAliases.delete(name);
     if (this.macros.delete(name)) {
       this.macroAnalysisMemo()?.results.clear();
     }
@@ -180,6 +190,20 @@ class LinkedScope implements ReadonlySet<string> {
       return this.macros.get(name);
     }
     return this.parent instanceof LinkedScope ? this.parent.findMacroBinding(name) : undefined;
+  }
+
+  isCallerAlias(name: string | undefined): boolean {
+    if (name === undefined) {
+      return false;
+    }
+    consumeAnalysisWork(this.macroAnalysisMemo());
+    if (this.callerAliases.has(name)) {
+      return true;
+    }
+    if (this.names.has(name) || this.macros.has(name)) {
+      return false;
+    }
+    return this.parent instanceof LinkedScope ? this.parent.isCallerAlias(name) : false;
   }
 
   findMacros(name: string): ReadonlySet<DeferredMacro> | undefined {
@@ -745,7 +769,9 @@ function collectSuppliedMacroParamNames(
       ? invocationMacroCandidates
         ? invocationMacroCandidates.get(sourceName)
         : boundSymbols?.findMacros(sourceName)
-      : undefined;
+      : isNunjucksAstNode(value) && value.typename === 'Filter'
+        ? boundSymbols?.macrosUsedAsValues()
+        : undefined;
     if (candidates && candidates.size > 0) {
       suppliedMacroCandidates.set(paramName, candidates);
     }
@@ -1103,7 +1129,14 @@ function retainSuppliedMacroCandidates(
   }
 }
 
-function collectCallerInvocations(node: unknown, memo?: MacroAnalysisMemo): NunjucksAstNode[] {
+function collectCallerInvocations(
+  node: unknown,
+  memo?: MacroAnalysisMemo,
+  invocationMacroCandidates?: ReadonlyMap<
+    NunjucksAstNode,
+    ReadonlyMap<string, ReadonlySet<DeferredMacro>>
+  >,
+): NunjucksAstNode[] {
   const invocations: NunjucksAstNode[] = [];
   const pending = [node];
   while (pending.length > 0) {
@@ -1112,7 +1145,10 @@ function collectCallerInvocations(node: unknown, memo?: MacroAnalysisMemo): Nunj
       continue;
     }
     consumeAnalysisWork(memo);
-    if (current.typename === 'FunCall' && getSymbolName(current.name) === 'caller') {
+    if (
+      current.typename === 'FunCall' &&
+      (getSymbolName(current.name) === 'caller' || invocationMacroCandidates?.has(current))
+    ) {
       invocations.push(current);
     }
     for (const field of current.fields ?? []) {
@@ -1133,6 +1169,10 @@ function collectActiveSignatureDefaultCallerInvocations(
   macro: DeferredMacro,
   callArgs: unknown,
   memo?: MacroAnalysisMemo,
+  invocationMacroCandidates?: ReadonlyMap<
+    NunjucksAstNode,
+    ReadonlyMap<string, ReadonlySet<DeferredMacro>>
+  >,
 ): NunjucksAstNode[] {
   const suppliedParamNames = collectSuppliedMacroParamNames(callArgs, macro, memo);
   const invocations: NunjucksAstNode[] = [];
@@ -1153,7 +1193,7 @@ function collectActiveSignatureDefaultCallerInvocations(
       }
       const paramName = getSymbolName(pair.key);
       if (paramName && !suppliedParamNames.has(paramName)) {
-        invocations.push(...collectCallerInvocations(pair.value, memo));
+        invocations.push(...collectCallerInvocations(pair.value, memo, invocationMacroCandidates));
       }
     }
   }
@@ -1188,8 +1228,12 @@ function collectSuppliedCallerParamNames(
       macro,
       macroCallArgs,
       memo,
+      invocationMacroCandidates,
     );
-    const invocations = [...defaultInvocations, ...collectCallerInvocations(macro.node.body, memo)];
+    const invocations = [
+      ...defaultInvocations,
+      ...collectCallerInvocations(macro.node.body, memo, invocationMacroCandidates),
+    ];
     if (invocations.length === 0) {
       suppliedMacroCandidates?.clear();
       return undefined;
@@ -1233,7 +1277,11 @@ function recordCallerInvocationMacroCandidates(
   node: NunjucksAstNode,
   boundSymbols: ReadonlySet<string>,
 ): void {
-  if (getSymbolName(node.name) !== 'caller' || !(boundSymbols instanceof LinkedScope)) {
+  if (!(boundSymbols instanceof LinkedScope)) {
+    return;
+  }
+  const callerName = getSymbolName(node.name);
+  if (callerName !== 'caller' && !boundSymbols.isCallerAlias(callerName)) {
     return;
   }
   const candidates = new Map<string, ReadonlySet<DeferredMacro>>();
@@ -1333,7 +1381,7 @@ function funCallNodeReferencesVariable(
   const suppliedCallerParams = deferredCaller
     ? collectSuppliedCallerParamNames(
         deferredCaller,
-        macros,
+        candidates,
         boundSymbols,
         suppliedCallerMacroCandidates,
         invocationMacroCandidates,
