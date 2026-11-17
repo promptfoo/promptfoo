@@ -78,7 +78,7 @@ function consumeAnalysisWork(memo?: MacroAnalysisMemo): void {
 class LinkedScope implements ReadonlySet<string> {
   private readonly names = new Set<string>();
   private readonly macros = new Map<string, Set<DeferredMacro>>();
-  private readonly valueMacros = new Set<DeferredMacro>();
+  private readonly valueMacros: Set<DeferredMacro>;
   private fallbackMacroMemo?: MacroAnalysisMemo;
 
   constructor(
@@ -86,6 +86,8 @@ class LinkedScope implements ReadonlySet<string> {
     names: Iterable<string> = [],
   ) {
     this.fallbackMacroMemo = parent instanceof LinkedScope ? parent.macroAnalysisMemo() : undefined;
+    // Values escape branch/expression scopes even though lexical bindings do not.
+    this.valueMacros = parent instanceof LinkedScope ? parent.valueMacros : new Set();
     for (const name of names) {
       this.names.add(name);
     }
@@ -166,20 +168,18 @@ class LinkedScope implements ReadonlySet<string> {
 
   registerMacroValue(name: string): void {
     const definitions = this.findMacros(name);
+    const memo = this.macroAnalysisMemo();
     for (const definition of definitions ?? []) {
-      consumeAnalysisWork(this.macroAnalysisMemo());
-      this.valueMacros.add(definition);
+      consumeAnalysisWork(memo);
+      if (!this.valueMacros.has(definition)) {
+        this.valueMacros.add(definition);
+        memo?.results.clear();
+      }
     }
   }
 
   macrosUsedAsValues(): ReadonlySet<DeferredMacro> {
     const definitions = new Set<DeferredMacro>();
-    for (const definition of this.parent instanceof LinkedScope
-      ? this.parent.macrosUsedAsValues()
-      : []) {
-      consumeAnalysisWork(this.macroAnalysisMemo());
-      definitions.add(definition);
-    }
     for (const definition of this.valueMacros) {
       consumeAnalysisWork(this.macroAnalysisMemo());
       definitions.add(definition);
@@ -327,6 +327,7 @@ function registerMacroValueReference(
 ): void {
   if (
     boundSymbols instanceof LinkedScope &&
+    !isNonReferenceSymbol(parent) &&
     (parent?.node.typename !== 'FunCall' || parent.field !== 'name')
   ) {
     boundSymbols.registerMacroValue(name);
