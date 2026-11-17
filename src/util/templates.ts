@@ -839,12 +839,36 @@ function astUsesCaller(node: unknown, memo?: MacroAnalysisMemo): boolean {
   return false;
 }
 
+function signatureDefaultsUseCaller(argsNode: unknown, memo?: MacroAnalysisMemo): boolean {
+  if (!isNunjucksAstNode(argsNode) || !Array.isArray(argsNode.children)) {
+    return false;
+  }
+  for (const child of argsNode.children) {
+    consumeAnalysisWork(memo);
+    if (
+      !isNunjucksAstNode(child) ||
+      child.typename !== 'KeywordArgs' ||
+      !Array.isArray(child.children)
+    ) {
+      continue;
+    }
+    for (const pair of child.children) {
+      consumeAnalysisWork(memo);
+      if (isNunjucksAstNode(pair) && pair.typename === 'Pair' && astUsesCaller(pair.value, memo)) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 function macroNodeReferencesVariable(
   node: NunjucksAstNode,
   variableName: ReferenceTarget,
   boundSymbols: ReadonlySet<string>,
 ): boolean {
   const { paramNames } = analyzeSignatureArgs(node.args, undefined, boundSymbols);
+  const memo = boundSymbols instanceof LinkedScope ? boundSymbols.macroAnalysisMemo() : undefined;
   const macro: DeferredMacro = {
     node,
     paramNames,
@@ -852,10 +876,7 @@ function macroNodeReferencesVariable(
     definitionScope: boundSymbols,
     called: false,
     analyzing: false,
-    usesCaller: astUsesCaller(
-      node.body,
-      boundSymbols instanceof LinkedScope ? boundSymbols.macroAnalysisMemo() : undefined,
-    ),
+    usesCaller: astUsesCaller(node.body, memo) || signatureDefaultsUseCaller(node.args, memo),
   };
   const macroName = getSymbolName(node.name);
   if (macroName && boundSymbols instanceof LinkedScope) {
@@ -1142,9 +1163,13 @@ function funCallNodeReferencesVariable(
       ? boundSymbols.findMacros(macroName)
       : undefined;
   const memo = boundSymbols instanceof LinkedScope ? boundSymbols.macroAnalysisMemo() : undefined;
-  if (macros) {
-    for (const macro of macros) {
-      macro.called = true;
+  const candidates =
+    macros ?? (boundSymbols instanceof LinkedScope ? boundSymbols.macrosUsedAsValues() : undefined);
+  if (candidates) {
+    for (const macro of candidates) {
+      if (macros) {
+        macro.called = true;
+      }
       const suppliedMacroCandidates = new Map<string, ReadonlySet<DeferredMacro>>();
       const suppliedParamNames = collectSuppliedMacroParamNames(
         node.args,
@@ -1163,22 +1188,6 @@ function funCallNodeReferencesVariable(
           boundSymbols instanceof LinkedScope
             ? boundSymbols.definitionScopeView(macro.definitionScope)
             : macro.definitionScope,
-        )
-      ) {
-        return true;
-      }
-    }
-  }
-  if (!macros && boundSymbols instanceof LinkedScope) {
-    for (const macro of boundSymbols.macrosUsedAsValues()) {
-      if (
-        analyzeMacroBody(
-          macro,
-          variableName,
-          memo,
-          undefined,
-          undefined,
-          boundSymbols.definitionScopeView(macro.definitionScope),
         )
       ) {
         return true;

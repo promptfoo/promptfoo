@@ -457,6 +457,29 @@ describe('analyzeTemplateReference', () => {
     expect(extractRequiredVariablesFromTemplate(unused)).toEqual([]);
   });
 
+  it.each(["handlers.run('ok')", "handlers.run(x='ok')"])(
+    'applies supplied arguments to escaped macro calls: %s',
+    (call) => {
+      const value = `{% macro m(x=purpose) %}{{x ~ ''}}{% endmacro %}{% set handlers={run:m} %}{{${call} ~ ''}}`;
+      expect(getNunjucksEngine().renderString(value, {})).toBe('ok');
+      expect(extractRequiredVariablesFromTemplate(value)).toEqual([]);
+    },
+  );
+
+  it('detects deferred caller use through a macro default', () => {
+    const value =
+      '{% macro wrap(f=caller|default) %}{{f()}}{% endmacro %}{% call wrap() %}{{purpose|trim}}{% endcall %}';
+    expect(getNunjucksEngine().renderString(value, { purpose: 'ready' })).toBe('ready');
+    expect(extractRequiredVariablesFromTemplate(value)).toContain('purpose');
+  });
+
+  it('does not treat a caller parameter declaration as a caller read', () => {
+    const value =
+      '{% macro wrap(caller) %}ok{% endmacro %}{% call wrap() %}{{purpose|trim}}{% endcall %}';
+    expect(getNunjucksEngine().renderString(value, {})).toBe('ok');
+    expect(extractRequiredVariablesFromTemplate(value)).toEqual([]);
+  });
+
   it('carries macro-valued caller arguments into callback scopes', () => {
     const value =
       '{% macro m() %}{{purpose|trim}}{% endmacro %}{% macro wrap() %}{{caller(m)}}{% endmacro %}{% call(f) wrap() %}{{f()}}{% endcall %}';
