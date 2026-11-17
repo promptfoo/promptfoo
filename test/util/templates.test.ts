@@ -673,6 +673,36 @@ describe('analyzeTemplateReference', () => {
     });
   });
 
+  it('merges caller snapshots when a forwarded site executes twice', () => {
+    const value =
+      "{% macro a() %}plain{% endmacro %}{% macro h(x=_conversation) %}{{x}}{% endmacro %}{% macro relay(cb,f) %}{{cb(f)}}{% endmacro %}{% macro wrap() %}{{relay(caller,h)}}{{relay(caller,a)}}{% endmacro %}{{h('warmup')}}{% call(g=a) wrap() %}{{g()}}{% endcall %}";
+    expect(getNunjucksEngine().renderString(value, { _conversation: 'history' })).toBe(
+      'warmuphistoryplain',
+    );
+    expect(analyzeTemplateReference(value, '_conversation')).toEqual({
+      referenced: true,
+      parsed: true,
+    });
+  });
+
+  it('preserves a caller alias selected by a macro default', () => {
+    const value =
+      "{% macro a() %}plain{% endmacro %}{% macro h(x=_conversation) %}{{x}}{% endmacro %}{% macro wrap(cb=caller) %}{{cb(h)}}{% endmacro %}{{h('warmup')}}{% call(g=a) wrap() %}{{g()}}{% endcall %}";
+    expect(getNunjucksEngine().renderString(value, { _conversation: 'history' })).toBe(
+      'warmuphistory',
+    );
+    expect(analyzeTemplateReference(value, '_conversation')).toEqual({
+      referenced: true,
+      parsed: true,
+    });
+  });
+
+  it('requires an actual callback for a body-only caller read', () => {
+    const value = '{% macro m() %}{{caller()}}{% endmacro %}{{m()}}';
+    expect(() => getNunjucksEngine().renderString(value, {})).toThrow(/caller/);
+    expect(extractRequiredVariablesFromTemplate(value)).toContain('caller');
+  });
+
   it('preserves escaped alternatives across caller argument merges', () => {
     const value =
       "{% macro a() %}plain{% endmacro %}{% macro h(x=_conversation) %}{{x}}{% endmacro %}{{h('warmup')}}{% macro wrap() %}{{caller(a)}}{{caller(h|default)}}{% endmacro %}{% call(g) wrap() %}{{g()}}{% endcall %}";

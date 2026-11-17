@@ -682,7 +682,7 @@ function analyzeSignatureArgs(
   boundSymbols: ReadonlySet<string>,
   suppliedParamNames?: ReadonlySet<string>,
   suppliedMacroCandidates?: Map<string, ReadonlySet<DeferredMacro>>,
-  suppliedCallerAliases?: ReadonlySet<string>,
+  suppliedCallerAliases?: Set<string>,
 ): { paramNames: string[]; referencesVariable: boolean } {
   const paramNames: string[] = [];
   if (!isNunjucksAstNode(argsNode) || !Array.isArray(argsNode.children)) {
@@ -702,6 +702,13 @@ function analyzeSignatureArgs(
       const defaultCandidates = defaultName ? defaultScope.findMacros(defaultName) : undefined;
       if (defaultCandidates && defaultCandidates.size > 0) {
         suppliedMacroCandidates.set(name, defaultCandidates);
+      }
+    }
+    if (!isSuppliedParamName(suppliedParamNames, name) && defaultValue !== undefined) {
+      const defaultName = getSymbolName(defaultValue);
+      if (defaultName === 'caller' || defaultScope.isCallerAlias(defaultName)) {
+        suppliedCallerAliases?.add(name);
+        defaultScope.registerCallerAlias(name);
       }
     }
     defaultScope.add(name);
@@ -835,7 +842,7 @@ function analyzeMacroBody(
   suppliedMacroCandidates?: ReadonlyMap<string, ReadonlySet<DeferredMacro>>,
   definitionScope: ReadonlySet<string> = macro.definitionScope,
   invocationMacroCandidates?: Map<NunjucksAstNode, ReadonlyMap<string, ReadonlySet<DeferredMacro>>>,
-  suppliedCallerAliases?: ReadonlySet<string>,
+  suppliedCallerAliases?: Set<string>,
 ): boolean {
   const memoKey = macroAnalysisMemoKey(suppliedParamNames);
   const selectedMacroCandidates = new Map(suppliedMacroCandidates);
@@ -883,7 +890,6 @@ function analyzeMacroBody(
     for (const [name, candidates] of selectedMacroCandidates) {
       macroScope.registerMacroCandidates(name, candidates, false);
     }
-    macroScope.add('caller');
     const result = astChildReferencesVariable(macro.node, 'body', variableName, macroScope);
     if (!result && memo && canMemoize) {
       const memoKeys = memo.results.get(macro) ?? new Set<string>();
@@ -1339,10 +1345,13 @@ function recordCallerInvocationMacroCandidates(
       }
     }
   }
-  macroAnalysisStack[macroAnalysisStack.length - 1]?.invocationMacroCandidates?.set(
-    node,
-    candidates,
-  );
+  const activeInvocations =
+    macroAnalysisStack[macroAnalysisStack.length - 1]?.invocationMacroCandidates;
+  if (activeInvocations) {
+    const merged = new Map(activeInvocations.get(node));
+    mergeMacroCandidateMap(merged, candidates, memo);
+    activeInvocations.set(node, merged);
+  }
 }
 
 type MacroFunctionAdapter = { kind: 'call' | 'apply'; baseName?: string };
