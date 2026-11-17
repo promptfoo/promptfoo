@@ -2247,6 +2247,41 @@ describe('ResultsTable fetchEvalData pagination filters', () => {
 describe('ResultsTable Pagination', () => {
   const defaultProps = createDefaultProps();
 
+  it('keeps the current page after a rating changes the count, and clamps only when needed', async () => {
+    let count = 220;
+    const fetchEvalData = vi.fn();
+    vi.mocked(useTableStore).mockImplementation(() =>
+      createTableStore({
+        table: createEmptyTable(),
+        filteredResultsCount: count,
+        totalResultsCount: 220,
+        fetchEvalData,
+      }),
+    );
+    const view = renderWithProviders(<ResultsTable {...defaultProps} />);
+    const user = userEvent.setup();
+    await user.click(screen.getByLabelText('Results per page'));
+    await user.click(screen.getByRole('option', { name: '100' }));
+    await user.click(screen.getByRole('button', { name: 'Next page' }));
+    expect(screen.getByLabelText('Go to page')).toHaveValue(2);
+
+    fetchEvalData.mockClear();
+    count = 219;
+    view.rerender(<ResultsTable {...defaultProps} onFailureFilterToggle={vi.fn()} />);
+    expect(screen.getByLabelText('Go to page')).toHaveValue(2);
+    expect(fetchEvalData).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole('button', { name: 'Next page' }));
+    expect(screen.getByLabelText('Go to page')).toHaveValue(3);
+    count = 200;
+    view.rerender(<ResultsTable {...defaultProps} onFailureFilterToggle={vi.fn()} />);
+    await waitFor(() => expect(screen.getByLabelText('Go to page')).toHaveValue(2));
+    expect(fetchEvalData).toHaveBeenLastCalledWith(
+      '123',
+      expect.objectContaining({ pageIndex: 1, pageSize: 100 }),
+    );
+  });
+
   it('should render pagination controls when totalResultsCount is greater than 10', () => {
     vi.mocked(useTableStore).mockImplementation(() =>
       createTableStore({
