@@ -13,6 +13,8 @@ describe('Bedrock Converse GPT-6 profile pricing', () => {
   it.each([
     ['us.openai.gpt-6-luna', 0.11, 0.011, 0.1375, 0.55],
     ['global.openai.gpt-6-luna', 0.1, 0.01, 0.125, 0.5],
+    ['us.openai.gpt-6.2-astra', 8.8, 0.44, 11, 44],
+    ['global.openai.gpt-6.2-sol', 2, 0.1, 2.5, 10],
     ['us.openai.gpt-6.1-sol', 2.2, 0.11, 2.75, 11],
     [
       'arn:aws:bedrock:us-east-1:123456789012:inference-profile/global.openai.gpt-6.1-sol',
