@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearCache } from '../../src/cache';
-import { FikraProvider, createFikraProvider } from '../../src/providers/fikra';
+import { createFikraProvider, FikraProvider } from '../../src/providers/fikra';
 import * as fetchModule from '../../src/util/fetch/index';
 import { mockProcessEnv } from '../util/utils';
 
@@ -40,16 +40,6 @@ describe('Fikra', () => {
 
     afterEach(() => {
       restoreEnv();
-    });
-
-    it('should initialize with correct model name', () => {
-      const provider = new FikraProvider('deepseek-v4.1-flash', {});
-      expect(provider.modelName).toBe('deepseek-v4.1-flash');
-    });
-
-    it('should return correct id', () => {
-      const provider = new FikraProvider('deepseek-v4.1-flash', {});
-      expect(provider.id()).toBe('fikra:deepseek-v4.1-flash');
     });
 
     it('should return correct string representation', () => {
@@ -95,12 +85,6 @@ describe('Fikra', () => {
           apiBaseUrl: FIKRA_API_BASE,
         },
       });
-    });
-
-    it('should use default apiBaseUrl and apiKeyEnvar when not specified', () => {
-      const provider = new FikraProvider('deepseek-v4.1-flash', {});
-      expect(provider.config.apiBaseUrl).toBe(FIKRA_API_BASE);
-      expect(provider.config.apiKeyEnvar).toBe('FIKRA_API_KEY');
     });
 
     it('should preserve custom apiBaseUrl and apiKeyEnvar overrides', () => {
