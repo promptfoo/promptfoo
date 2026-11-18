@@ -396,13 +396,13 @@ The MCP server provides 14 tools for AI agents:
 **Core Eval Tools:**
 
 - **`list_evaluations`** - Browse your eval runs with optional dataset filtering
-- **`get_evaluation_details`** - Get comprehensive results, metrics, and test cases for a specific eval
+- **`get_evaluation_details`** - Get results, metrics, and test cases for an eval
 - **`run_evaluation`** - Run evals with custom parameters, test case filtering, and concurrency control
 - **`share_evaluation`** - Generate publicly shareable URLs for eval results
 
 **Redteam Security Tools:**
 
-- **`redteam_run`** - Execute comprehensive security testing against AI applications with dynamic attack probes
+- **`redteam_run`** - Run red team tests against an AI application
 - **`redteam_generate`** - Generate adversarial test cases for redteam security testing with configurable plugins and strategies
 
 **Configuration & Testing:**
