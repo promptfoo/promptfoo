@@ -1458,6 +1458,10 @@ describe('Ollama prompt config', () => {
     vi.resetAllMocks();
   });
 
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   const providers = [
     {
       kind: 'completion',
@@ -1505,6 +1509,23 @@ describe('Ollama prompt config', () => {
   );
 
   it.each(providers)(
+    'omits a $kind provider setting the prompt config sets to undefined',
+    async ({ Provider, data }) => {
+      vi.mocked(fetchWithCache).mockResolvedValue(createStreamResponse(data));
+      const provider = new Provider('llama3.3', { config: { temperature: 0.8, think: true } });
+
+      // Same contract as the other providers' prompt config overrides (for example Groq).
+      await provider.callApi(
+        'test prompt',
+        promptContext({ temperature: undefined, think: undefined }),
+      );
+
+      expect(requestBody().options).toEqual({});
+      expect(requestBody()).not.toHaveProperty('think');
+    },
+  );
+
+  it.each(providers)(
     'does not send the prompt suffix to the $kind endpoint',
     async ({ Provider, data }) => {
       const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => logger);
@@ -1518,7 +1539,6 @@ describe('Ollama prompt config', () => {
         promptContext({ prefix: 'Before. ', suffix: ' After.' }),
       );
       const warnings = warnSpy.mock.calls.map((c) => String(c[0]));
-      warnSpy.mockRestore();
 
       expect(requestBody()).not.toHaveProperty('suffix');
       expect(requestBody()).not.toHaveProperty('prefix');
@@ -1541,23 +1561,32 @@ describe('Ollama prompt config', () => {
   });
 
   it.each(providers)(
-    'does not report unset promptfoo options as dropped $kind config',
+    'does not report promptfoo test options as dropped $kind config',
     async ({ Provider, data }) => {
       const debugSpy = vi.spyOn(logger, 'debug').mockImplementation(() => logger);
       vi.mocked(fetchWithCache).mockResolvedValue(createStreamResponse(data));
 
-      // The CLI's defaultTest.options always carries these keys, unset unless the
-      // --prompt-prefix, --prompt-suffix or --grader flag is passed.
+      // The CLI's defaultTest.options always carries prefix, suffix and provider (unset
+      // unless --prompt-prefix, --prompt-suffix or --grader is passed), and graders and
+      // transforms are common test options.
       await new Provider('llama3.3').callApi(
         'test prompt',
-        promptContext({ prefix: undefined, suffix: undefined, provider: undefined }),
+        promptContext({
+          prefix: undefined,
+          suffix: undefined,
+          provider: 'openai:gpt-5-mini',
+          transform: 'output.trim()',
+          storeOutputAs: 'answer',
+          runSerially: true,
+        }),
       );
       const droppedCalls = debugSpy.mock.calls.filter((c) =>
         String(c[0]).includes('Ignoring unsupported config keys'),
       );
-      debugSpy.mockRestore();
 
       expect(droppedCalls).toHaveLength(0);
+      expect(requestBody().options).toEqual({});
+      expect(requestBody()).not.toHaveProperty('provider');
     },
   );
 });

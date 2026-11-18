@@ -140,19 +140,7 @@ so assertions like [`is-json`](/docs/configuration/expected-outputs/deterministi
 work reliably.
 
 A prompt's `config` and a test's `options` override the provider `config` for that call,
-so each test can use its own schema:
-
-```yaml
-tests:
-  - vars:
-      country: France
-    options:
-      format:
-        type: object
-        properties:
-          capital: { type: string }
-        required: [capital]
-```
+so `tests[].options.format` gives one test its own schema.
 
 :::warning
 On a reasoning model, combine `format` with `think: false`. Reasoning models emit a trace

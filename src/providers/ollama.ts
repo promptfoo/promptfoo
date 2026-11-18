@@ -189,11 +189,6 @@ function buildOllamaOptions(
   const options: Record<string, any> = {};
   for (const key of Object.keys(config)) {
     const optionName = key as keyof OllamaCompletionOptions;
-    // An unset key is neither sent nor worth reporting. The prompt config always carries
-    // promptfoo's own keys, such as `provider`, even when the user left them unset.
-    if (config[optionName] === undefined) {
-      continue;
-    }
     const isDeprecated = OllamaDeprecatedOptionKeys.has(optionName);
     if (OllamaCurrentNestedOptionKeys.has(optionName) || isDeprecated) {
       options[optionName] = config[optionName];
@@ -246,16 +241,38 @@ function splitOllamaPassthrough(config: OllamaCompletionOptions): {
 }
 
 /**
- * Layers the prompt's config (which also carries `tests[].options`) over the provider's.
- * Its `prefix` and `suffix` are promptfoo's prompt-text options (`--prompt-suffix`,
- * `tests[].options.suffix`), which the evaluator applies to the prompt itself, so they
- * must not reach Ollama as its fill-in-the-middle `suffix`.
+ * Test options that the prompt config also carries but promptfoo itself consumes: prompt
+ * text, output handling, grading and test controls. The evaluator already applies the
+ * prompt `suffix` (`--prompt-suffix`, `tests[].options.suffix`) to the prompt text, so it
+ * must not reach Ollama as its fill-in-the-middle `suffix`; the rest would be reported as
+ * dropped config on every request.
  */
+const PromptfooPromptOptionKeys = new Set([
+  'prefix',
+  'suffix',
+  'postprocess',
+  'transform',
+  'transformVars',
+  'storeOutputAs',
+  'rubricPrompt',
+  'provider',
+  'factuality',
+  'disableVarExpansion',
+  'disableConversationVar',
+  'disableDefaultAsserts',
+  'runSerially',
+]);
+
+/** Layers the prompt's config, which also carries `tests[].options`, over the provider's. */
 function mergeOllamaPromptConfig(
   config: OllamaCompletionOptions,
   context?: CallApiContextParams,
 ): OllamaCompletionOptions {
-  const { prefix: _prefix, suffix: _suffix, ...promptConfig } = context?.prompt?.config ?? {};
+  const promptConfig = Object.fromEntries(
+    Object.entries(context?.prompt?.config ?? {}).filter(
+      ([key]) => !PromptfooPromptOptionKeys.has(key),
+    ),
+  );
   return { ...config, ...promptConfig };
 }
 
