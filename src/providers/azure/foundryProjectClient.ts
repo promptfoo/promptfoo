@@ -13,7 +13,7 @@ const FoundryAgentPageSchema = z
   .object({
     data: z.array(z.unknown()),
     has_more: z.boolean().optional(),
-    last_id: z.string().optional(),
+    last_id: z.string().nullish(),
   })
   .refine((page) => !page.has_more || nonblankString.safeParse(page.last_id).success, {
     message: 'Foundry agent pagination requires a nonblank last_id when has_more is true',
@@ -51,7 +51,7 @@ export class FoundryProjectClient {
   }
 
   async *listAgents(): AsyncGenerator<FoundryAgent> {
-    let after: string | undefined;
+    let after: string | null | undefined;
     do {
       const response = await this.rest.path('/agents').get({
         queryParameters: { 'api-version': 'v1', after },

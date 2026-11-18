@@ -103,18 +103,19 @@ describe('Foundry project agent discovery', () => {
     expect(sendRequest).toHaveBeenCalledTimes(1);
   });
 
-  it.each([{ data: [] }, { data: [], has_more: false, last_id: '' }])(
-    'accepts an empty final page without a cursor %j',
-    async (body) => {
-      reply(200, body);
-      const client = new FoundryProjectClient('https://fixture.example/api/projects/project', {
-        getToken: async () => ({ token: 'fixture', expiresOnTimestamp: Date.now() + 3600000 }),
-      });
+  it.each([
+    { data: [] },
+    { data: [], has_more: false, last_id: '' },
+    { data: [], has_more: false, last_id: null },
+  ])('accepts an empty final page without a cursor %j', async (body) => {
+    reply(200, body);
+    const client = new FoundryProjectClient('https://fixture.example/api/projects/project', {
+      getToken: async () => ({ token: 'fixture', expiresOnTimestamp: Date.now() + 3600000 }),
+    });
 
-      await expect(client.listAgents().next()).resolves.toEqual({ done: true, value: undefined });
-      expect(sendRequest).toHaveBeenCalledTimes(1);
-    },
-  );
+    await expect(client.listAgents().next()).resolves.toEqual({ done: true, value: undefined });
+    expect(sendRequest).toHaveBeenCalledTimes(1);
+  });
 
   it.each([
     [401, 'Unauthorized', 'Invalid access token'],
