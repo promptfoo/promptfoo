@@ -62,17 +62,7 @@ describe('GPT-6.1 Terra requests', () => {
   });
 });
 
-describe('GPT-6.1 Sol requests', () => {
-  let restoreEnv: () => void;
-
-  beforeEach(() => {
-    restoreEnv = mockProcessEnv(createUnsetOpenAiGenerationEnv());
-  });
-
-  afterEach(() => {
-    restoreEnv();
-  });
-
+describe('GPT-6.1 Sol model names', () => {
   it.each([
     'gpt-6.1-sol',
     'gpt-6.1-sol-2026-09-29',
@@ -96,6 +86,40 @@ describe('GPT-6.1 Sol requests', () => {
   ])('does not infer GPT-6.1 Sol capabilities from %s', (model) => {
     expect(getGpt6Variant(model)).toBeUndefined();
   });
+});
+
+it.each([
+  ['https://deployment.openai.azure.com/openai/v1', true],
+  ['https://deployment.openai.azure.com.example.com/openai/v1', false],
+] as const)('handles GPT-6.2 Azure Chat parameters for %s', async (apiBaseUrl, isAzure) => {
+  const { body } = await new OpenAiChatCompletionProvider('gpt-6.2-sol', {
+    config: {
+      apiBaseUrl,
+      reasoning_effort: 'xhigh',
+      presence_penalty: 0.2,
+      passthrough: { frequency_penalty: 0.1, logit_bias: { '123': 2 } },
+    },
+  }).getOpenAiBody('Say ready.');
+  expect(body.reasoning_effort).toBe('xhigh');
+  expect(body.presence_penalty).toBe(isAzure ? undefined : 0.2);
+  expect(body.frequency_penalty).toBe(isAzure ? undefined : 0.1);
+  expect(body.logit_bias).toEqual(isAzure ? undefined : { '123': 2 });
+});
+
+describe.each([
+  ['gpt-6.1-sol', 'GPT-6.1 Sol'],
+  ['gpt-6.2-astra', 'GPT-6.2 Astra'],
+  ['gpt-6.2-sol', 'GPT-6.2 Sol'],
+])('%s requests', (model, label) => {
+  let restoreEnv: () => void;
+
+  beforeEach(() => {
+    restoreEnv = mockProcessEnv(createUnsetOpenAiGenerationEnv());
+  });
+
+  afterEach(() => {
+    restoreEnv();
+  });
 
   it.each([undefined, 'low', 'medium', 'high', 'xhigh', 'max'] as const)(
     'uses model defaults and preserves supported reasoning effort %s on both endpoints',
@@ -107,10 +131,10 @@ describe('GPT-6.1 Sol requests', () => {
         top_p: 0.8,
         passthrough: { logprobs: true, top_logprobs: 5 },
       };
-      const { body: chat } = await new OpenAiChatCompletionProvider('gpt-6.1-sol', {
+      const { body: chat } = await new OpenAiChatCompletionProvider(model, {
         config,
       }).getOpenAiBody('Say ready.');
-      const { body: responses } = await new OpenAiResponsesProvider('gpt-6.1-sol', {
+      const { body: responses } = await new OpenAiResponsesProvider(model, {
         config,
       }).getOpenAiBody('Say ready.');
 
@@ -138,15 +162,15 @@ describe('GPT-6.1 Sol requests', () => {
     'rejects unsupported passthrough reasoning effort %j on both endpoints',
     async (effort) => {
       await expect(
-        new OpenAiChatCompletionProvider('gpt-6.1-sol', {
+        new OpenAiChatCompletionProvider(model, {
           config: { passthrough: { reasoning_effort: effort } },
         }).getOpenAiBody('Say ready.'),
-      ).rejects.toThrow('GPT-6.1 Sol supports reasoning effort');
+      ).rejects.toThrow(`${label} supports reasoning effort`);
       await expect(
-        new OpenAiResponsesProvider('gpt-6.1-sol', {
+        new OpenAiResponsesProvider(model, {
           config: { passthrough: { reasoning: { effort } } },
         }).getOpenAiBody('Say ready.'),
-      ).rejects.toThrow('GPT-6.1 Sol supports reasoning effort');
+      ).rejects.toThrow(`${label} supports reasoning effort`);
     },
   );
 
@@ -157,14 +181,14 @@ describe('GPT-6.1 Sol requests', () => {
     { function_call: 'auto' },
   ])('requires Responses for Chat tool configuration %j', async (passthrough) => {
     await expect(
-      new OpenAiChatCompletionProvider('gpt-6.1-sol', {
+      new OpenAiChatCompletionProvider(model, {
         config: { passthrough },
       }).getOpenAiBody('Get the status.'),
-    ).rejects.toThrow('Use openai:responses:gpt-6.1-sol');
+    ).rejects.toThrow(`Use openai:responses:${model}`);
   });
 
   it('preserves Responses tools and explicit output caps while stripping logprob includes', async () => {
-    const { body } = await new OpenAiResponsesProvider('gpt-6.1-sol', {
+    const { body } = await new OpenAiResponsesProvider(model, {
       config: {
         reasoning: { effort: 'max', summary: 'auto' },
         max_output_tokens: 4096,
@@ -186,7 +210,7 @@ describe('GPT-6.1 Sol requests', () => {
     const config = {
       reasoning_effort: 'low',
       passthrough: {
-        model: 'gpt-6.1-sol',
+        model,
         temperature: 0.4,
         max_tokens: 128,
         max_completion_tokens: 256,
@@ -203,12 +227,12 @@ describe('GPT-6.1 Sol requests', () => {
       context,
     );
     expect(chat).toMatchObject({
-      model: 'gpt-6.1-sol',
+      model,
       reasoning_effort: 'low',
       max_completion_tokens: 256,
     });
     expect(responses).toMatchObject({
-      model: 'gpt-6.1-sol',
+      model,
       reasoning: { effort: 'low' },
       max_output_tokens: 512,
     });
@@ -222,7 +246,7 @@ describe('GPT-6.1 Sol requests', () => {
   });
 
   it('rejects persisted reasoning updates to none and strips sampling for linked responses', async () => {
-    const provider = new OpenAiResponsesProvider('gpt-6.1-sol', {
+    const provider = new OpenAiResponsesProvider(model, {
       config: { previous_response_id: 'resp_previous', temperature: 0.4, top_p: 0.8 },
     });
     await expect(
@@ -232,14 +256,14 @@ describe('GPT-6.1 Sol requests', () => {
           { role: 'user', content: 'Say ready.' },
         ]),
       ),
-    ).rejects.toThrow('GPT-6.1 Sol supports reasoning effort');
+    ).rejects.toThrow(`${label} supports reasoning effort`);
     const { body } = await provider.getOpenAiBody('Say ready.');
     expect(body).not.toHaveProperty('temperature');
     expect(body).not.toHaveProperty('top_p');
   });
 
   it('applies model defaults and restrictions to named Azure deployments', async () => {
-    const config = { apiKey: 'test-key', modelName: 'gpt-6.1-sol', temperature: 0.4 };
+    const config = { apiKey: 'test-key', modelName: model, temperature: 0.4 };
     const { body: chat } = await new AzureChatCompletionProvider('production', {
       config,
     }).getOpenAiBody('Say ready.');
@@ -258,18 +282,30 @@ describe('GPT-6.1 Sol requests', () => {
     ).rejects.toThrow('tool calling requires the Responses API');
   });
 
-  it('preserves OpenRouter tool routing without allowing reasoning to be disabled', async () => {
-    const { body } = await new OpenRouterProvider('openai/gpt-6.1-sol', {
-      config: { reasoning_effort: 'high', tools: [statusTool], temperature: 0.4 },
-    }).getOpenAiBody('Get the status.');
-    expect(body).toMatchObject({ reasoning_effort: 'high', tools: [statusTool] });
-    expect(body).not.toHaveProperty('temperature');
-    await expect(
-      new OpenRouterProvider('openai/gpt-6.1-sol', {
-        config: { passthrough: { reasoning: { enabled: false } } },
-      }).getOpenAiBody('Say ready.'),
-    ).rejects.toThrow('GPT-6.1 Sol supports reasoning effort');
-  });
+  it.each([
+    { Provider: OpenRouterProvider, host: 'openrouter.ai' },
+    { Provider: OpenAiChatCompletionProvider, host: 'eu.openrouter.ai' },
+    { Provider: OpenAiChatCompletionProvider, host: 'us.openrouter.ai' },
+  ])(
+    'preserves OpenRouter tool routing and reasoning rules at $host',
+    async ({ Provider, host }) => {
+      const apiBaseUrl = `https://${host}/api/v1`;
+      const { body } = await new Provider(`openai/${model}`, {
+        config: { apiBaseUrl, reasoning_effort: 'high', tools: [statusTool], temperature: 0.4 },
+      }).getOpenAiBody('Get the status.');
+      expect(body).toMatchObject({
+        model: `openai/${model}`,
+        reasoning_effort: 'high',
+        tools: [statusTool],
+      });
+      expect(body).not.toHaveProperty('temperature');
+      await expect(
+        new Provider(`openai/${model}`, {
+          config: { apiBaseUrl, passthrough: { reasoning: { enabled: false } } },
+        }).getOpenAiBody('Say ready.'),
+      ).rejects.toThrow(`${label} supports reasoning effort`);
+    },
+  );
 });
 
 describe('GPT-6 Astra requests', () => {
@@ -2197,6 +2233,8 @@ describe.each(['gpt-6-sol', 'gpt-6-luna'])('%s requests', (model) => {
     for (const apiBaseUrl of [
       'https://api.openai.com/v1',
       'https://openrouter.ai.example.com/v1',
+      'https://us.openrouter.ai.example.com/v1',
+      'https://custom.openrouter.ai/v1',
     ]) {
       await expect(
         new OpenAiChatCompletionProvider(`openai/${model}`, {
