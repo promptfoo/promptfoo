@@ -359,7 +359,7 @@ export class OpenAiAgentsProvider extends OpenAiGenericProvider {
         // The Agents SDK exposes aggregate usage, but a run can include handoffs to
         // agents with different models. Without per-model usage, no exact total is available.
         cost: undefined,
-        ...(this.agentConfig.includeToolCalls
+        ...(this.agentConfig.includeToolCalls === true
           ? {
               metadata: {
                 toolCalls: collectAgentFunctionToolCalls(

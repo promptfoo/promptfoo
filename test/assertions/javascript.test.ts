@@ -2668,8 +2668,9 @@ return s >= 0.5 && s <= 0.75;`,
         assertion: {
           type: 'tool-call-f1' as const,
           value: ['check_inventory', 'describe_scene'],
-          transform:
-            'JSON.stringify({tool_calls: context.metadata.toolCalls.map(c => ({function: {name: c.name}}))})',
+          transform: `return JSON.stringify({
+            tool_calls: context.metadata.toolCalls.map(call => ({ function: { name: call.name } }))
+          })`,
         },
         test: {} as AtomicTestCase,
         providerResponse: { output: 'Done.', metadata },

@@ -306,17 +306,22 @@ describe('OpenAiAgentsProvider', () => {
       },
     });
 
-    it('preserves the provider response when collection is disabled', async () => {
-      mockRun.mockResolvedValueOnce({
-        finalOutput: 'same answer',
-        usage: undefined,
-        newItems: [call('c1', 'check_inventory', '{"id":1}')],
-      });
-      const provider = new OpenAiAgentsProvider('fixture', createSupportAgentOptions());
-      const result = await provider.callApi('test');
-      expect(result.output).toBe('same answer');
-      expect(result.metadata).toBeUndefined();
-    });
+    it.each([undefined, false, 'false'])(
+      'omits tool arguments without boolean opt-in (%s)',
+      async (includeToolCalls) => {
+        mockRun.mockResolvedValueOnce({
+          finalOutput: 'same answer',
+          usage: undefined,
+          newItems: [call('c1', 'check_inventory', '{"id":1}')],
+        });
+        const provider = new OpenAiAgentsProvider('fixture', {
+          config: { ...createSupportAgentOptions().config, includeToolCalls },
+        });
+        const result = await provider.callApi('test');
+        expect(result.output).toBe('same answer');
+        expect(result.metadata).toBeUndefined();
+      },
+    );
 
     it('distinguishes an observed empty call list from disabled collection', async () => {
       const provider = new OpenAiAgentsProvider('fixture', {

@@ -141,7 +141,7 @@ assert:
   - type: tool-call-f1
     value: ['check_inventory']
     transform: |
-      JSON.stringify({
+      return JSON.stringify({
         tool_calls: context.metadata.toolCalls.map(call => ({
           function: { name: call.name }
         }))
