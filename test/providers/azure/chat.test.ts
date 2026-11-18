@@ -228,6 +228,60 @@ describe('AzureChatCompletionProvider', () => {
       expect(result.cost).toBeCloseTo((800 * 2.5 + 200 * 32 + 400 * 10 + 100 * 64) / 1e6, 12);
     });
 
+    it.each([
+      ['gpt-6.2-astra', undefined, '/openai/v1/chat/completions'],
+      [
+        'gpt-6.2-sol',
+        '2024-12-01-preview',
+        '/openai/deployments/prod/chat/completions?api-version=2024-12-01-preview',
+      ],
+    ] as const)(
+      'calls the configured Azure API for a %s deployment',
+      async (modelName, apiVersion, path) => {
+        provider = new AzureChatCompletionProvider('prod', {
+          config: {
+            ...createAzureApiOptions().config,
+            modelName,
+            apiVersion,
+            reasoning_effort: 'xhigh',
+            verbosity: 'low',
+            prompt_cache_key: 'policy',
+            prompt_cache_options: { mode: 'explicit', ttl: '30m' },
+          },
+        });
+        setAuthHeaders(provider);
+        vi.mocked(fetchWithCache).mockResolvedValueOnce(
+          createMockFetchResponse({
+            choices: [{ message: { role: 'assistant', content: 'ok' }, finish_reason: 'stop' }],
+            usage: {
+              prompt_tokens: 1600,
+              completion_tokens: 20,
+              total_tokens: 1620,
+              prompt_tokens_details: { cached_tokens: 200, cache_write_tokens: 1000 },
+            },
+          }),
+        );
+
+        const result = await provider.callApi('Check the policy.');
+        const [url, request] = vi.mocked(fetchWithCache).mock.lastCall!;
+        expect(url).toBe(`https://test.azure.com${path}`);
+        const body = JSON.parse(request!.body as string);
+        expect(body).toMatchObject({
+          model: 'prod',
+          reasoning_effort: 'xhigh',
+          verbosity: 'low',
+          prompt_cache_key: 'policy',
+          prompt_cache_options: { mode: 'explicit', ttl: '30m' },
+        });
+        expect(body).not.toHaveProperty('presence_penalty');
+        expect(body).not.toHaveProperty('frequency_penalty');
+        expect(result.tokenUsage?.completionDetails).toMatchObject({
+          cacheReadInputTokens: 200,
+          cacheCreationInputTokens: 1000,
+        });
+      },
+    );
+
     it('reports API prompt-cache usage for a fresh chat response', async () => {
       provider = new AzureChatCompletionProvider('gpt-5.6', createAzureApiOptions());
       setAuthHeaders(provider);
