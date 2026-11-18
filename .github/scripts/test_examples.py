@@ -498,7 +498,9 @@ class RunnerTests(unittest.TestCase):
 
     def test_throttled_pulls_tag_the_successful_source_and_run_both_suites(self):
         quota = "toomanyrequests: Data limit exceeded"
-        ecr_quota = "Error response from daemon: error from registry: Data limit exceeded"
+        ecr_quota = (
+            "Error response from daemon: error from registry: Data limit exceeded"
+        )
         for primary_errors, delays, fallback in (
             ([quota] * 4, [10, 30, 60], True),
             ([ecr_quota] * 4, [10, 30, 60], True),
