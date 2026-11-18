@@ -1,3 +1,5 @@
+import type { ResponseOutputItem } from './types';
+
 export class IncompleteResponsesStreamError extends Error {
   constructor(
     providerName: string,
@@ -33,8 +35,17 @@ type ResponsesStreamLogger = {
 
 type StreamErrorClassification = 'refusal' | 'content_policy_violation' | 'potential' | 'technical';
 
-export function getResponsesOutputText(response: any): string | undefined {
-  if (typeof response.output_text === 'string' && response.output_text.trim()) {
+export function isRootFinalAnswer(item: ResponseOutputItem | null | undefined): boolean {
+  return (
+    item?.type === 'message' &&
+    item.role === 'assistant' &&
+    item.phase === 'final_answer' &&
+    item.agent?.agent_name === '/root'
+  );
+}
+
+export function getResponsesOutputText(response: any, multiAgent = false): string | undefined {
+  if (!multiAgent && typeof response.output_text === 'string' && response.output_text.trim()) {
     return response.output_text;
   }
   if (!Array.isArray(response.output)) {
@@ -43,6 +54,7 @@ export function getResponsesOutputText(response: any): string | undefined {
   const result = response.output
     .flatMap((item: any) => {
       if (
+        (multiAgent && !isRootFinalAnswer(item)) ||
         !['message', 'output_message'].includes(item?.type) ||
         (item.role && item.role !== 'assistant')
       ) {
@@ -95,6 +107,7 @@ export async function readResponsesStream(
   logger: ResponsesStreamLogger,
   onResponse?: (response: any) => void,
   options?: {
+    multiAgent?: boolean;
     preserveFailedOutput?: boolean;
     requireTerminalEvent?: boolean;
     classifyError?: (response: unknown) => StreamErrorClassification | undefined;
@@ -153,7 +166,9 @@ export async function readResponsesStream(
       hasTerminalResponse = false;
     }
 
-    if (event.type === 'response.output_text.delta') {
+    // Multi-agent deltas can mix text from the root and its children. The terminal
+    // snapshot carries each item's author and phase, including partial output.
+    if (!options?.multiAgent && event.type === 'response.output_text.delta') {
       const delta = typeof event.delta === 'string' ? event.delta : event.output_text?.delta;
       if (typeof delta === 'string') {
         outputText += delta;
@@ -207,7 +222,7 @@ export async function readResponsesStream(
     }
   }
 
-  if (options?.requireTerminalEvent && !hasTerminalResponse) {
+  if ((options?.requireTerminalEvent || options?.multiAgent) && !hasTerminalResponse) {
     throw new IncompleteResponsesStreamError(providerName, latestResponse);
   }
 
