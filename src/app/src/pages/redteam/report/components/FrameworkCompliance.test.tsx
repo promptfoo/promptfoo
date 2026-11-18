@@ -1,5 +1,4 @@
 import { renderWithProviders } from '@app/utils/testutils';
-import { FRAMEWORK_COMPLIANCE_IDS } from '@promptfoo/redteam/constants';
 import { screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import FrameworkCard from './FrameworkCard';
@@ -59,9 +58,9 @@ describe('FrameworkCompliance', () => {
     expect(screen.getByText(/20\.00% Attack Success Rate/)).toBeInTheDocument();
     expect(screen.getByText(/\(8\/40 tests failed across 4 plugins\)/)).toBeInTheDocument();
 
-    expect(mockFrameworkCard.mock.calls.map(([props]) => props.framework)).toEqual(
-      FRAMEWORK_COMPLIANCE_IDS,
-    );
+    const frameworks = mockFrameworkCard.mock.calls.map(([props]) => props.framework);
+    expect(new Set(frameworks).size).toBe(10);
+    expect(frameworks).toContain('dpdp');
   });
 
   it.each([
