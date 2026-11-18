@@ -213,6 +213,22 @@ describe('bedrock mantle Chat Completions provider', () => {
       ).toThrow(/Use the bare "bedrock:openai\.gpt-future" id/);
     });
 
+    it.each(['openai.gpt-6.2-astra', 'openai.gpt-6.2-sol'])(
+      'sends %s to the configured Mantle Chat endpoint with GPT-6.2 parameters',
+      async (model) => {
+        vi.mocked(fetchWithCache).mockResolvedValue(createMockChatResponse('hello'));
+        const provider = createBedrockMantleChatProvider(model, {
+          config: { apiKey: 'test', region: 'us-east-1', reasoning_effort: 'max', temperature: 1 },
+        });
+        expect((await provider.callApi('hello')).output).toBe('hello');
+        const [url, request] = vi.mocked(fetchWithCache).mock.calls[0];
+        expect(url).toBe('https://bedrock-mantle.us-east-1.api.aws/openai/v1/chat/completions');
+        const body = JSON.parse(String(request?.body));
+        expect(body).toMatchObject({ model, reasoning_effort: 'max' });
+        expect(body).not.toHaveProperty('temperature');
+      },
+    );
+
     it.each([
       ['openai.gpt-6-astra', 'us-west-2'],
       ['openai.gpt-6.1-sol', 'us-east-1'],
