@@ -386,7 +386,7 @@ modelaudit scan --list-scanners --format json
 
 ## SARIF Output Format
 
-ModelAudit supports SARIF (Static Analysis Results Interchange Format) 2.1.0 output for seamless integration with security tools and CI/CD pipelines:
+ModelAudit supports SARIF (Static Analysis Results Interchange Format) 2.1.0 output for security tools and CI/CD pipelines:
 
 ```bash
 # Output SARIF to stdout
