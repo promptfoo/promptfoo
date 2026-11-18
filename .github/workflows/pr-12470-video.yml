@@ -1,0 +1,40 @@
+name: Record eval pagination fix
+on:
+  push:
+    branches: ['qa/pr-12470-video']
+permissions:
+  contents: read
+  actions: read
+jobs:
+  record:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '24'
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: promptfoo-platform-package
+          run-id: 44260129525
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/packed
+      - name: Extract built viewer
+        run: |
+          mkdir -p "$RUNNER_TEMP/viewer"
+          tar -xzf "$RUNNER_TEMP"/packed/*.tgz -C "$RUNNER_TEMP/viewer" package/dist/src/app
+          test -f "$RUNNER_TEMP/viewer/package/dist/src/app/index.html"
+      - name: Record browser flow
+        env:
+          VIEWER_ROOT: ${{ runner.temp }}/viewer/package/dist/src/app
+          VIDEO_PATH: ${{ runner.temp }}/eval-pagination.mp4
+        run: node qa/pr-12470-record.mjs
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: eval-pagination-video
+          path: ${{ runner.temp }}/eval-pagination.mp4
+          if-no-files-found: error
+          retention-days: 90
