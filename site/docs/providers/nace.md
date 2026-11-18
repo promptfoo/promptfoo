@@ -33,7 +33,7 @@ In Promptfoo, you can use Drex to:
    export NACE_API_KEY=your_api_key_here
    ```
 
-You can also set `apiKey` in the provider config.
+You can also set `apiKey` in the provider config. If `apiBaseUrl` points to a host other than `https://console.nace.ai`, the provider does not read `NACE_API_KEY` and sends only the `apiKey` set in the config.
 
 ## Provider format
 
