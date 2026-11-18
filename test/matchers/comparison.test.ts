@@ -38,25 +38,6 @@ describe('matchesSelectBest', () => {
     expect(result.map(({ score }) => score)).toEqual([0, 0, 1]);
   });
 
-  it.each([
-    'Text 0 is too long and text 1 is vague, so the best fit is 2.',
-    'Text 1 repeats the question; text 2 answers it. Best: 2',
-    'The best fit is 2. Text 0 and text 1 miss the tone.',
-  ])('does not guess a winner when %j mentions different output indexes', async (output) => {
-    const result = await matchesSelectBest('best answer', ['A', 'B', 'C'], {
-      provider: createSelectBestProvider(output),
-    });
-
-    expect(result).toHaveLength(3);
-    for (const grade of result) {
-      expect(grade).toMatchObject({
-        pass: false,
-        score: 0,
-        reason: 'Ambiguous select-best verdict: multiple output indexes',
-      });
-    }
-  });
-
   it.each(['-1', '+1', '−1', '0.9', '.9', '1e2', 'v1', '0,1', '0-2'])(
     'does not read a numeric fragment in %j as an output index',
     async (output) => {
@@ -70,40 +51,18 @@ describe('matchesSelectBest', () => {
   );
 
   it.each([
-    {
-      description: 'coverage counts',
-      output: 'Text 0 covers 2 of the 3 requested points; text 1 covers all of them. Best: 1',
-      outputCount: 3,
-    },
-    {
-      description: 'score fractions',
-      output: "Output 1 wins, scoring 9/10 against output 0's 7/10.",
-      outputCount: 3,
-    },
-    {
-      description: 'a count of criteria',
-      output: 'Using the 2 criteria, text 0 wins.',
-      outputCount: 3,
-    },
-    {
-      description: 'a multi-digit winner and runner-up',
-      output: 'Output 10 is best; output 2 is second.',
-      outputCount: 12,
-    },
-    {
-      description: 'elimination reasoning',
-      output: 'After eliminating 0 and 2, the winner is 1.',
-      outputCount: 3,
-    },
-    {
-      description: 'quoted candidate text',
-      output:
-        'Text 0 says "I have 2 dogs", which is irrelevant; text 1 answers the question. Best: 1',
-      outputCount: 3,
-    },
-  ])(
-    'rejects clear-verdict prose containing $description instead of inferring its winner',
-    async ({ output, outputCount }) => {
+    [3, 'Text 0 is too long and text 1 is vague, so the best fit is 2.'],
+    [3, 'Text 1 repeats the question; text 2 answers it. Best: 2'],
+    [3, 'The best fit is 2. Text 0 and text 1 miss the tone.'],
+    [3, 'Text 0 covers 2 of the 3 requested points; text 1 covers all of them. Best: 1'],
+    [3, "Output 1 wins, scoring 9/10 against output 0's 7/10."],
+    [3, 'Using the 2 criteria, text 0 wins.'],
+    [12, 'Output 10 is best; output 2 is second.'],
+    [3, 'After eliminating 0 and 2, the winner is 1.'],
+    [3, 'Text 0 says "I have 2 dogs", which is irrelevant; text 1 answers the question. Best: 1'],
+  ] as const)(
+    'rejects multiple candidate indexes among %i outputs in %j',
+    async (outputCount, output) => {
       const outputs = Array.from({ length: outputCount }, (_value, index) => 'Output ' + index);
       const result = await matchesSelectBest('best answer', outputs, {
         provider: createSelectBestProvider(output),
