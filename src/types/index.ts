@@ -172,6 +172,12 @@ export type VarMapping = Record<string, string>;
 // Exported for:
 // 1. Testing key overlap in merged schemas (see test/types/index.test.ts)
 // 2. External consumers who need to validate grading config independently
+function gradingProviderSchema() {
+  return z
+    .union([z.string(), z.any(), z.record(z.string(), z.union([z.string(), z.any()])).optional()])
+    .optional();
+}
+
 export const GradingConfigSchema = z.object({
   rubricPrompt: z
     .union([
@@ -185,9 +191,7 @@ export const GradingConfigSchema = z.object({
       ),
     ])
     .optional(),
-  provider: z
-    .union([z.string(), z.any(), z.record(z.string(), z.union([z.string(), z.any()])).optional()])
-    .optional(),
+  provider: gradingProviderSchema(),
   factuality: z
     .object({
       subset: z.number().optional(),
@@ -989,13 +993,7 @@ export const TestCaseSchema = z.object({
       ...OutputConfigSchema.shape,
       ...GradingConfigSchema.shape,
       // Explicit alias for provider when configuring a model-graded assertion provider.
-      graderProvider: z
-        .union([
-          z.string(),
-          z.any(),
-          z.record(z.string(), z.union([z.string(), z.any()])).optional(),
-        ])
-        .optional(),
+      graderProvider: gradingProviderSchema(),
       // If true, do not expand arrays of variables into multiple eval cases.
       disableVarExpansion: z.boolean().optional(),
       // If true, do not include an implicit `_conversation` variable in the prompt.
