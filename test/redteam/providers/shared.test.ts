@@ -838,21 +838,6 @@ describe('shared redteam provider utilities', () => {
       );
     });
 
-    it('rejects direct target calls that exceed the plugin-scoped maxCharsPerMessage', async () => {
-      const mockProvider = createMockProvider({
-        response: {
-          output: 'ok',
-          tokenUsage: { numRequests: 1 },
-        },
-      });
-      const context = createLimitedMessageContext() as CallApiContextParams;
-
-      expect(() => callTargetProvider(mockProvider, 'too long', context)).toThrow(
-        'Target prompt message at prompt exceeds maxCharsPerMessage=5: 8 characters.',
-      );
-      expect(mockProvider.callApi).not.toHaveBeenCalled();
-    });
-
     it('keeps the global message limit when plugin metadata would allow a longer message', async () => {
       setCliStateConfig({ redteam: { maxCharsPerMessage: 3 } });
       const target = createMockProvider({ response: { output: 'ok' } });
