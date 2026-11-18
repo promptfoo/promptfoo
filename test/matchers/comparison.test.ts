@@ -36,6 +36,7 @@ describe('matchesSelectBest', () => {
     ['Comparing all 3 texts, I choose 1.', 'valid in-range', 1],
     ['Text 2 is best for the 2025 criteria (confidence 0.9)', 'numeric noise', 2],
     ['Text 2 is best for 1 reason.', 'incidental count', 2],
+    ['Text 0 is best? No, text 1 wins.', 'conflicting references', null],
     ['Answer: 2', 'explicit answer', 2],
   ])('does not misgrade reasoning prose: %s (%s)', async (reply, _case, expected) => {
     const result = await matchesSelectBest('choose the best output', ['A', 'B', 'C'], {
