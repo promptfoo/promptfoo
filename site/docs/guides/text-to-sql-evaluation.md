@@ -5,11 +5,7 @@ description: Compare text-to-SQL accuracy across GPT-5-mini and GPT-5 using auto
 
 # Evaluating LLM text-to-SQL performance
 
-Promptfoo is a command-line tool that allows you to test and validate text-to-SQL conversions.
-
-This guide will walk you through setting up an eval harness that will help you improve the quality of your text-to-SQL prompts.
-
-The end result is a view that looks like this:
+Test text-to-SQL prompts with Promptfoo by generating queries and checking them against assertions. Compare the results in the web viewer:
 
 ![text to sql evaluation](/img/docs/text-to-sql-eval.png)
 
