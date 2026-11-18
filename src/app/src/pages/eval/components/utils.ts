@@ -1,7 +1,13 @@
 import { useSyncExternalStore } from 'react';
 
 import { HUMAN_ASSERTION_TYPE } from '@promptfoo/providers/constants';
-import type { EvaluateTableOutput, PromptMetrics } from '@promptfoo/types';
+import { sanitizeGradingProviderDisplay } from '../../../../../util/sanitizer';
+import type {
+  EvaluateTable,
+  EvaluateTableOutput,
+  GradingResult,
+  PromptMetrics,
+} from '@promptfoo/types';
 
 const EVAL_OUTPUT_PROMPT_HASH_PATTERN = /^#details-row-(\d+)-prompt-(\d+)$/;
 
@@ -200,4 +206,129 @@ export function getNamedMetricTotals(
     ...(metrics.namedScoresCount ?? {}),
     ...(metrics.namedScoreWeights ?? {}),
   };
+}
+
+/**
+ * Assertion types whose `provider` is an LLM-as-a-judge (text grader), not an
+ * embedding/classification/moderation provider. Used to gate the legacy
+ * `assertion.provider` display fallback so e.g. `similar` embedding providers
+ * are not labeled as Judges.
+ */
+const LLM_JUDGE_ASSERTION_TYPES = new Set<string>([
+  'agent-rubric',
+  'answer-relevance',
+  'context-faithfulness',
+  'context-recall',
+  'context-relevance',
+  'conversation-relevance',
+  'factuality',
+  'g-eval',
+  'llm-rubric',
+  'model-graded-closedqa',
+  'model-graded-factuality',
+  'search-rubric',
+  'trajectory:goal-success',
+]);
+
+function getAssertionBaseType(type: string | undefined): string | undefined {
+  if (!type) {
+    return undefined;
+  }
+  return type.startsWith('not-') ? type.slice(4) : type;
+}
+
+/**
+ * Format a configured assertion provider for display. Unwraps typed maps such
+ * as `{ text: 'litellm:judge' }` / `{ text: { id: '...' } }` the same way
+ * `getGradingProvider` resolves the `text` entry for LLM judges.
+ */
+function formatConfiguredProvider(configured: unknown): string | undefined {
+  if (typeof configured === 'string' && configured.trim()) {
+    return sanitizeGradingProviderDisplay(configured.trim());
+  }
+
+  if (!configured || typeof configured !== 'object' || Array.isArray(configured)) {
+    return undefined;
+  }
+
+  const record = configured as Record<string, unknown>;
+
+  // Typed provider map: prefer the text grader entry used by LLM judges.
+  if (Object.prototype.hasOwnProperty.call(record, 'text') && record.text != null) {
+    return formatConfiguredProvider(record.text);
+  }
+
+  const id = record.id;
+  if (typeof id === 'string' && id.trim()) {
+    const label = record.label;
+    return sanitizeGradingProviderDisplay(id.trim(), typeof label === 'string' ? label : undefined);
+  }
+
+  return undefined;
+}
+
+/**
+ * Resolve the LLM-as-a-judge provider id for display.
+ * Prefer the runtime-persisted `metadata.gradingProvider`; fall back to an
+ * explicitly configured `assertion.provider` for older eval results, but only
+ * when the assertion type actually invokes an LLM judge.
+ */
+export function getGradingProviderDisplay(
+  result: GradingResult | null | undefined,
+): string | undefined {
+  const fromMeta = result?.metadata?.gradingProvider;
+  if (typeof fromMeta === 'string' && fromMeta.trim()) {
+    return sanitizeGradingProviderDisplay(fromMeta.trim());
+  }
+
+  const baseType = getAssertionBaseType(result?.assertion?.type);
+  if (!baseType || !LLM_JUDGE_ASSERTION_TYPES.has(baseType)) {
+    return undefined;
+  }
+
+  // search-rubric may swap in a web-search-capable provider at runtime and
+  // records that actual grader as metadata.searchProvider.
+  if (baseType === 'search-rubric') {
+    const fromSearch = result?.metadata?.searchProvider;
+    if (typeof fromSearch === 'string' && fromSearch.trim()) {
+      return sanitizeGradingProviderDisplay(fromSearch.trim());
+    }
+    if (result?.metadata?.graderError) {
+      return undefined;
+    }
+  }
+
+  return formatConfiguredProvider(result?.assertion?.provider);
+}
+
+function collectGradingProvidersFromResult(
+  result: GradingResult | null | undefined,
+  out: Set<string>,
+): void {
+  if (!result) {
+    return;
+  }
+  const display = getGradingProviderDisplay(result);
+  if (display) {
+    out.add(display);
+  }
+  for (const child of result.componentResults ?? []) {
+    collectGradingProvidersFromResult(child, out);
+  }
+}
+
+/**
+ * Unique judge provider ids found across loaded eval table outputs.
+ */
+export function collectUniqueGradingProviders(table: EvaluateTable | null | undefined): string[] {
+  const providers = new Set<string>();
+  if (!table?.body) {
+    return [];
+  }
+  for (const row of table.body) {
+    for (const output of row.outputs ?? []) {
+      collectGradingProvidersFromResult(output?.gradingResult, providers);
+    }
+  }
+  return Array.from(providers).sort((a, b) => a.localeCompare(b));
 }

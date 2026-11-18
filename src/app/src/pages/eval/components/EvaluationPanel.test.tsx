@@ -504,4 +504,76 @@ describe('EvaluationPanel', () => {
     expect(screen.getByText('1 nested assertion')).toBeInTheDocument();
     expect(screen.getByText('google_docs/create_document')).toBeInTheDocument();
   });
+
+  it('shows a Judge column when gradingProvider metadata is present', () => {
+    const gradingResults: GradingResult[] = [
+      {
+        pass: true,
+        score: 1,
+        reason: 'Looks good',
+        assertion: { type: 'llm-rubric', value: 'be helpful' },
+        metadata: { gradingProvider: 'openai:gpt-4.1-mini' },
+      },
+    ];
+
+    render(<EvaluationPanel gradingResults={gradingResults} />);
+
+    expect(screen.getByText('Judge')).toBeInTheDocument();
+    expect(screen.getByText('openai:gpt-4.1-mini')).toBeInTheDocument();
+  });
+
+  it('falls back to assertion.provider when gradingProvider metadata is missing', () => {
+    const gradingResults: GradingResult[] = [
+      {
+        pass: true,
+        score: 1,
+        reason: 'Looks good',
+        assertion: {
+          type: 'llm-rubric',
+          value: 'be helpful',
+          provider: 'anthropic:claude-sonnet-4',
+        },
+      },
+    ];
+
+    render(<EvaluationPanel gradingResults={gradingResults} />);
+
+    expect(screen.getByText('Judge')).toBeInTheDocument();
+    expect(screen.getByText('anthropic:claude-sonnet-4')).toBeInTheDocument();
+  });
+
+  it('does not show a Judge column when no grading provider is available', () => {
+    const gradingResults: GradingResult[] = [
+      {
+        pass: true,
+        score: 1,
+        reason: 'Contains expected text',
+        assertion: { type: 'contains', value: 'hello' },
+      },
+    ];
+
+    render(<EvaluationPanel gradingResults={gradingResults} />);
+
+    expect(screen.queryByText('Judge')).not.toBeInTheDocument();
+  });
+
+  it('does not treat similar embedding providers as Judges', () => {
+    const gradingResults: GradingResult[] = [
+      {
+        pass: true,
+        score: 1,
+        reason: 'Similar enough',
+        assertion: {
+          type: 'similar',
+          value: 'hello',
+          provider: 'openai:text-embedding-3-large',
+        },
+      },
+    ];
+
+    render(<EvaluationPanel gradingResults={gradingResults} />);
+
+    expect(screen.queryByText('Judge')).not.toBeInTheDocument();
+    expect(screen.queryByText('openai:text-embedding-3-large')).not.toBeInTheDocument();
+  });
 });

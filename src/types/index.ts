@@ -588,6 +588,8 @@ export interface GradingResult {
     renderedAssertionValue?: string;
     // Full grading prompt sent to the grading LLM (for debugging)
     renderedGradingPrompt?: string;
+    // Resolved LLM-as-a-judge provider id used for this assertion (e.g. openai:gpt-4.1-mini)
+    gradingProvider?: string;
     // True when the complete grading response was reused without running a new task.
     cachedResponse?: boolean;
     // Set by LLM-grader matchers when a transport/parse failure prevents a real

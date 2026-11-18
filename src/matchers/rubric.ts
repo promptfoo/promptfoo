@@ -14,7 +14,12 @@ import { extractJsonObjects, safeJsonStringify } from '../util/json';
 import { getNunjucksEngine } from '../util/templates';
 import { loadYaml } from '../util/yamlLoad';
 import { callProviderWithContext, getAndCheckProvider } from './providers';
-import { graderFail, normalizeMatcherTokenUsage } from './shared';
+import {
+  attachGradingProvider,
+  formatResolvedGradingProvider,
+  graderFail,
+  normalizeMatcherTokenUsage,
+} from './shared';
 
 import type {
   ApiProvider,
@@ -928,11 +933,14 @@ export async function runJsonGradingPrompt({
     if (throwOnError) {
       throw new Error(resp.error || 'No output');
     }
-    return graderFailureFromResponse(resp.error || 'No output', resp);
+    return attachGradingProvider(
+      graderFailureFromResponse(resp.error || 'No output', resp),
+      finalProvider,
+    );
   }
   const { parsed, failure } = parseJsonGradingResponse(label, resp);
   if (!parsed) {
-    return failure as Omit<GradingResult, 'assertion'>;
+    return attachGradingProvider(failure as Omit<GradingResult, 'assertion'>, finalProvider);
   }
 
   const threshold =
@@ -940,9 +948,12 @@ export async function runJsonGradingPrompt({
 
   const verdict = deriveVerdictFromGrader(parsed, threshold);
   if (!verdict) {
-    return graderFailureFromResponse(
-      'Grader response contained neither a pass verdict nor a finite numeric score',
-      resp,
+    return attachGradingProvider(
+      graderFailureFromResponse(
+        'Grader response contained neither a pass verdict nor a finite numeric score',
+        resp,
+      ),
+      finalProvider,
     );
   }
   const { pass, score } = verdict;
@@ -957,7 +968,11 @@ export async function runJsonGradingPrompt({
       ? (JSON.parse(serializedMetadata) as Record<string, unknown>)
       : {};
   }
-  const { cachedResponse: _untrustedCachedResponse, ...trustedResponseMetadata } = responseMetadata;
+  const {
+    cachedResponse: _untrustedCachedResponse,
+    gradingProvider: _untrustedGradingProvider,
+    ...trustedResponseMetadata
+  } = responseMetadata;
 
   return {
     assertion,
@@ -971,6 +986,7 @@ export async function runJsonGradingPrompt({
     metadata: {
       ...trustedResponseMetadata,
       renderedGradingPrompt: renderedPrompt,
+      gradingProvider: formatResolvedGradingProvider(finalProvider),
       ...(imageCount > 0 ? { renderedGradingPromptImages: imageCount } : {}),
       ...(audioAttached ? { renderedGradingPromptAudio: true } : {}),
       ...(resp.cached ? { cachedResponse: true } : {}),

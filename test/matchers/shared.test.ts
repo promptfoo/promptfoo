@@ -1,9 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
+  attachGradingProvider,
+  formatResolvedGradingProvider,
   normalizeMatcherTokenUsage,
   splitIntoSentences,
   splitTextIntoSentences,
 } from '../../src/matchers/shared';
+
+import type { GradingResult } from '../../src/types/index';
+import type { ApiProvider } from '../../src/types/providers';
 
 describe('normalizeMatcherTokenUsage', () => {
   it('derives missing totals before matcher normalization makes them indistinguishable from zero', () => {
@@ -174,5 +179,144 @@ describe('splitTextIntoSentences', () => {
   it('returns an empty array for empty or whitespace-only text', () => {
     expect(splitTextIntoSentences('')).toEqual([]);
     expect(splitTextIntoSentences('   \n  \n ')).toEqual([]);
+  });
+});
+
+describe('formatResolvedGradingProvider', () => {
+  it('redacts credentials from HTTP judge URLs before display', () => {
+    const provider = {
+      id: () => 'https://user:pass@judge.example/grade?api_key=secret-token',
+      callApi: async () => ({ output: '' }),
+    } as ApiProvider;
+
+    expect(formatResolvedGradingProvider(provider)).toBe('https://judge.example/grade');
+  });
+
+  it('redacts credentials when a label is appended', () => {
+    const provider = {
+      id: () => 'https://judge.example/grade?api_key=secret-token',
+      label: 'Custom Judge',
+      callApi: async () => ({ output: '' }),
+    } as ApiProvider;
+
+    expect(formatResolvedGradingProvider(provider)).toBe(
+      'https://judge.example/grade (Custom Judge)',
+    );
+  });
+
+  it('redacts URL credentials embedded in a configured judge label', () => {
+    const provider = {
+      id: () => 'openai:gpt-4.1-mini',
+      label: 'Judge https://user:label-password@judge.example/grade?api_key=label-token',
+      callApi: async () => ({ output: '' }),
+    } as ApiProvider;
+
+    const result = attachGradingProvider({ pass: true, score: 1, reason: 'ok' }, provider);
+
+    expect(result.metadata.gradingProvider).toContain('Judge https://judge.example/grade');
+    expect(result.metadata.gradingProvider).not.toContain('label-password');
+    expect(result.metadata.gradingProvider).not.toContain('label-token');
+  });
+
+  it('sanitizes the complete raw id and label before composing them', () => {
+    const provider = {
+      id: () => 'https://judge.example/grade?api_key=first (second)',
+      label: 'Judge https://service.example/check?key=alpha beta',
+      callApi: async () => ({ output: '' }),
+    } as ApiProvider;
+    expect(formatResolvedGradingProvider(provider)).toBe(
+      'https://judge.example/grade (Judge https://service.example/check)',
+    );
+  });
+
+  it('leaves ordinary provider ids unchanged', () => {
+    const provider = {
+      id: () => 'openai:gpt-4.1-mini',
+      callApi: async () => ({ output: '' }),
+    } as ApiProvider;
+
+    expect(formatResolvedGradingProvider(provider)).toBe('openai:gpt-4.1-mini');
+  });
+});
+
+describe('attachGradingProvider', () => {
+  it('persists a redacted HTTP judge id into metadata.gradingProvider', () => {
+    const provider = {
+      id: () => 'https://judge.example/grade?api_key=super-secret',
+      callApi: async () => ({ output: '' }),
+    } as ApiProvider;
+
+    const baseResult: Omit<GradingResult, 'assertion'> = {
+      pass: true,
+      score: 1,
+      reason: 'ok',
+    };
+    const result = attachGradingProvider(baseResult, provider);
+
+    expect(result.metadata.gradingProvider).toBe('https://judge.example/grade');
+    expect(result.metadata.gradingProvider).not.toContain('super-secret');
+  });
+
+  it.each([
+    'https:judge.example/grade?api_key=super-secret',
+    'HTTPS:user:pass@judge.example/grade?api_key=super-secret',
+    'https:/judge.example/grade?api_key=super-secret',
+    'https:\\\\judge.example/grade?api_key=super-secret',
+    // WHATWG URL parsing drops ASCII tab/newline anywhere and trims C0 controls/spaces.
+    'https:\tjudge.example/grade?api_key=super-secret',
+    'https:\r\n//judge.example/grade?api_key=super-secret',
+    'ht\ttps://judge.example/grade?api_key=super-secret',
+    'https://judge.exa\nmple/grade?api_key=super-secret',
+    ' \u0000https:judge.example/grade?api_key=super-secret\u001f ',
+  ])('persists a redacted judge id for the accepted %s form', (id) => {
+    // Every form here is one the URL parser (and so fetch) accepts for this host.
+    expect(new URL(id).host).toBe('judge.example');
+    const provider = {
+      id: () => id,
+      label: 'Judge',
+      callApi: async () => ({ output: '' }),
+    } as ApiProvider;
+
+    const result = attachGradingProvider({ pass: true, score: 1, reason: 'ok' }, provider);
+
+    expect(result.metadata.gradingProvider).toBe('https://judge.example/grade (Judge)');
+    expect(result.metadata.gradingProvider).not.toContain('super-secret');
+    expect(result.metadata.gradingProvider).not.toContain('pass@');
+  });
+
+  it.each([
+    ['https:\u00a0judge.example/grade?api_key=super-secret', 'Judge'],
+    ['openai:gpt-4.1-mini', 'Judge,https:judge.example?api_key=super-secret'],
+    ['openai:gpt-4.1-mini', 'Judge\u0001https:judge.example/grade?api_key=super-secret'],
+  ])('fails closed when %s / %s keeps an HTTP scheme it cannot split', (id, label) => {
+    const provider = { id: () => id, label, callApi: async () => ({ output: '' }) } as ApiProvider;
+
+    const result = attachGradingProvider({ pass: true, score: 1, reason: 'ok' }, provider);
+
+    expect(result.metadata.gradingProvider).toContain('[REDACTED]');
+    expect(result.metadata.gradingProvider).not.toContain('super-secret');
+  });
+
+  it.each([
+    ['https://gateway.example//token/abcdef1234567890/grade', 'https://gateway.example//token/'],
+    ['https://gateway.example//v1/token_privateTenantCredential123/responses', '//v1/'],
+    ['/relative//token/abcdef1234567890/grade', '/relative//token/'],
+  ])('redacts path credentials behind a double slash in %s', (id, expectedPrefix) => {
+    const provider = { id: () => id, callApi: async () => ({ output: '' }) } as ApiProvider;
+
+    const result = attachGradingProvider({ pass: true, score: 1, reason: 'ok' }, provider);
+
+    expect(result.metadata.gradingProvider).toContain(expectedPrefix);
+    expect(result.metadata.gradingProvider).not.toMatch(/abcdef1234567890|privateTenantCredential/);
+  });
+
+  it('leaves plain provider ids and labels alone', () => {
+    const provider = {
+      id: () => 'openai:gpt-4.1-mini',
+      label: 'Strict judge: v2',
+      callApi: async () => ({ output: '' }),
+    } as ApiProvider;
+
+    expect(formatResolvedGradingProvider(provider)).toBe('openai:gpt-4.1-mini (Strict judge: v2)');
   });
 });

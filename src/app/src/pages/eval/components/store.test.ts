@@ -5,7 +5,7 @@ import { convertResultsToTable } from '@promptfoo/presentation/evalResults';
 import { Severity } from '@promptfoo/redteam/constants';
 import { act } from '@testing-library/react';
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
-import { type ResultsFilter, useTableStore } from './store';
+import { type ResultsFilter, useResultsViewSettingsStore, useTableStore } from './store';
 import type {
   EvalTableDTO,
   EvaluateSummaryV2,
@@ -1184,6 +1184,291 @@ describe('useTableStore', () => {
       const actualFilterParam = JSON.parse(rawFilterParam || '{}');
       const expectedFilterParam = JSON.parse(expectedEncodedFilterValue);
       expect(actualFilterParam).toEqual(expectedFilterParam);
+    });
+
+    it('accumulates unique judges across paginated fetches for the same eval', async () => {
+      const mockEvalId = 'judge-agg-eval';
+
+      const pageOne = {
+        head: { prompts: [], vars: [] },
+        body: [
+          {
+            outputs: [
+              {
+                id: '1',
+                pass: true,
+                score: 1,
+                text: 'out',
+                prompt: 'p',
+                cost: 0,
+                latencyMs: 1,
+                namedScores: {},
+                failureReason: 0,
+                testCase: {},
+                gradingResult: {
+                  pass: true,
+                  score: 1,
+                  reason: 'ok',
+                  metadata: { gradingProvider: 'openai:judge-a' },
+                },
+              },
+            ],
+          },
+        ],
+      };
+
+      const pageTwo = {
+        head: { prompts: [], vars: [] },
+        body: [
+          {
+            outputs: [
+              {
+                id: '2',
+                pass: true,
+                score: 1,
+                text: 'out',
+                prompt: 'p',
+                cost: 0,
+                latencyMs: 1,
+                namedScores: {},
+                failureReason: 0,
+                testCase: {},
+                gradingResult: {
+                  pass: true,
+                  score: 1,
+                  reason: 'ok',
+                  metadata: { gradingProvider: 'openai:judge-b' },
+                },
+              },
+            ],
+          },
+        ],
+      };
+
+      (callApi as Mock).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          table: pageOne,
+          totalCount: 2,
+          filteredCount: 2,
+        }),
+      } as any);
+
+      await act(async () => {
+        await useTableStore.getState().fetchEvalData(mockEvalId, { pageIndex: 0, pageSize: 1 });
+      });
+
+      expect(useTableStore.getState().accumulatedGradingProviders).toEqual(['openai:judge-a']);
+
+      (callApi as Mock).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          table: pageTwo,
+          totalCount: 2,
+          filteredCount: 2,
+        }),
+      } as any);
+
+      await act(async () => {
+        await useTableStore.getState().fetchEvalData(mockEvalId, { pageIndex: 1, pageSize: 1 });
+      });
+
+      expect(useTableStore.getState().accumulatedGradingProviders).toEqual([
+        'openai:judge-a',
+        'openai:judge-b',
+      ]);
+
+      (callApi as Mock).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          table: pageOne,
+          totalCount: 2,
+          filteredCount: 2,
+        }),
+      } as any);
+
+      await act(async () => {
+        const store = useTableStore.getState();
+        store.setEvalId(mockEvalId);
+        await store.fetchEvalData(mockEvalId, {
+          skipSettingEvalId: true,
+          skipLoadingState: true,
+        });
+      });
+
+      expect(useTableStore.getState().accumulatedGradingProviders).toEqual([
+        'openai:judge-a',
+        'openai:judge-b',
+      ]);
+    });
+
+    it('does not let a pending page update the next evaluation', async () => {
+      const store = useTableStore.getState();
+      let completePage!: (response: Response) => void;
+      const pendingPage = new Promise<Response>((resolve) => {
+        completePage = resolve;
+      });
+      (callApi as Mock).mockReturnValueOnce(pendingPage);
+
+      await act(async () => {
+        store.setEvalId('previous-eval');
+        const request = store.fetchEvalData('previous-eval', {
+          skipSettingEvalId: true,
+          skipLoadingState: true,
+        });
+        store.setEvalId('current-eval');
+        completePage(
+          new Response(JSON.stringify({ table: { head: { prompts: [], vars: [] }, body: [] } })),
+        );
+        await request;
+      });
+
+      expect(useTableStore.getState()).toMatchObject({
+        evalId: 'current-eval',
+        table: null,
+        accumulatedGradingProviders: [],
+      });
+    });
+
+    it('drops comparison eval judges once the comparison set changes', async () => {
+      const tableWithJudges = (...judges: string[]) => ({
+        head: { prompts: [], vars: [] },
+        body: [
+          {
+            outputs: judges.map((gradingProvider, index) => ({
+              id: String(index),
+              pass: true,
+              score: 1,
+              text: 'out',
+              prompt: 'p',
+              cost: 0,
+              latencyMs: 1,
+              namedScores: {},
+              failureReason: 0,
+              testCase: {},
+              gradingResult: { pass: true, score: 1, reason: 'ok', metadata: { gradingProvider } },
+            })),
+          },
+        ],
+      });
+      const respondWith = (table: ReturnType<typeof tableWithJudges>) =>
+        (callApi as Mock).mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ table, totalCount: 1, filteredCount: 1 }),
+        } as any);
+
+      try {
+        useResultsViewSettingsStore.getState().setComparisonEvalIds(['eval-b']);
+        respondWith(tableWithJudges('openai:judge-a', 'openai:judge-b'));
+        await act(async () => {
+          await useTableStore.getState().fetchEvalData('eval-a');
+        });
+        expect(useTableStore.getState().accumulatedGradingProviders).toEqual([
+          'openai:judge-a',
+          'openai:judge-b',
+        ]);
+
+        useResultsViewSettingsStore.getState().setComparisonEvalIds([]);
+        respondWith(tableWithJudges('openai:judge-a'));
+        await act(async () => {
+          await useTableStore.getState().fetchEvalData('eval-a');
+        });
+        expect(useTableStore.getState().accumulatedGradingProviders).toEqual(['openai:judge-a']);
+
+        // Paging within the base-only view keeps accumulating.
+        respondWith(tableWithJudges('openai:judge-c'));
+        await act(async () => {
+          await useTableStore.getState().fetchEvalData('eval-a', { pageIndex: 1 });
+        });
+        expect(useTableStore.getState().accumulatedGradingProviders).toEqual([
+          'openai:judge-a',
+          'openai:judge-c',
+        ]);
+      } finally {
+        useResultsViewSettingsStore.getState().setComparisonEvalIds([]);
+      }
+    });
+
+    it('resets accumulated judges when switching to a different eval', async () => {
+      (callApi as Mock).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          table: {
+            head: { prompts: [], vars: [] },
+            body: [
+              {
+                outputs: [
+                  {
+                    id: '1',
+                    pass: true,
+                    score: 1,
+                    text: 'out',
+                    prompt: 'p',
+                    cost: 0,
+                    latencyMs: 1,
+                    namedScores: {},
+                    failureReason: 0,
+                    testCase: {},
+                    gradingResult: {
+                      pass: true,
+                      score: 1,
+                      reason: 'ok',
+                      metadata: { gradingProvider: 'openai:old-judge' },
+                    },
+                  },
+                ],
+              },
+            ],
+          },
+          totalCount: 1,
+          filteredCount: 1,
+        }),
+      } as any);
+
+      await act(async () => {
+        await useTableStore.getState().fetchEvalData('eval-one');
+      });
+      expect(useTableStore.getState().accumulatedGradingProviders).toEqual(['openai:old-judge']);
+
+      (callApi as Mock).mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          table: {
+            head: { prompts: [], vars: [] },
+            body: [
+              {
+                outputs: [
+                  {
+                    id: '2',
+                    pass: true,
+                    score: 1,
+                    text: 'out',
+                    prompt: 'p',
+                    cost: 0,
+                    latencyMs: 1,
+                    namedScores: {},
+                    failureReason: 0,
+                    testCase: {},
+                    gradingResult: {
+                      pass: true,
+                      score: 1,
+                      reason: 'ok',
+                      metadata: { gradingProvider: 'openai:new-judge' },
+                    },
+                  },
+                ],
+              },
+            ],
+          },
+          totalCount: 1,
+          filteredCount: 1,
+        }),
+      } as any);
+
+      await act(async () => {
+        await useTableStore.getState().fetchEvalData('eval-two');
+      });
+      expect(useTableStore.getState().accumulatedGradingProviders).toEqual(['openai:new-judge']);
     });
 
     it('should handle non-200 response from API', async () => {
