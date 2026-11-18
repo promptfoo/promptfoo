@@ -1390,4 +1390,36 @@ describe('XAIResponsesProvider', () => {
       'xAI API error: xAI streaming response did not include output content\n\nIf this persists, verify your API key at https://x.ai/',
     );
   });
+
+  describe('thrown 502 handling', () => {
+    const genericSuffix = '\n\nIf this persists, verify your API key at https://x.ai/';
+
+    it.each([
+      'Error parsing response from http://localhost:25020/v1/responses: Unexpected token',
+      'Request timed out after 150200 ms',
+      'prompt is too long: 15021 tokens',
+      'request_id: req_a5020f',
+    ])('does not report a bad gateway when "%s" merely contains 502', async (message) => {
+      mockFetchWithCache.mockRejectedValueOnce(new Error(message));
+
+      const provider = new XAIResponsesProvider('grok-4.3', { config: { apiKey: 'test-key' } });
+      const result = await provider.callApi('hello');
+
+      expect(result.error).toBe(`xAI API error: ${message}${genericSuffix}`);
+    });
+
+    it.each([
+      'Error parsing response from https://api.x.ai/v1/responses: Unexpected token. HTTP 502 Bad Gateway. Received text: Bad Gateway',
+      'HTTP 502',
+      'upstream returned 502: retry later',
+      'Bad Gateway',
+    ])('still reports a bad gateway for "%s"', async (message) => {
+      mockFetchWithCache.mockRejectedValueOnce(new Error(message));
+
+      const provider = new XAIResponsesProvider('grok-4.3', { config: { apiKey: 'test-key' } });
+      const result = await provider.callApi('hello');
+
+      expect(result.error).toContain('502 Bad Gateway - This often indicates an invalid API key.');
+    });
+  });
 });
