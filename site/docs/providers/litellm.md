@@ -49,6 +49,8 @@ providers:
   - id: litellm:chat:gpt-5-mini
 ```
 
+Use `litellm:gpt-6.2-astra` or `litellm:gpt-6.2-sol` when your proxy exposes those model names. You can use Chat Completions function tools with either model. [LiteLLM routes these requests to OpenAI's Responses API](https://docs.litellm.ai/blog/gpt-6-2-astra-sol).
+
 #### Completion models
 
 ```yaml
