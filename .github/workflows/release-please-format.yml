@@ -32,6 +32,8 @@ jobs:
         startsWith(github.event.changes.body.from, '<!-- reviewed-release-notes -->')))
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      PR: ${{ github.event.pull_request.number || github.event.issue.number }}
     steps:
       # Use only protected-branch tooling. The script reads the proposed manifest
       # and changelog as git objects and never checks out or executes the PR tree.
@@ -43,15 +45,13 @@ jobs:
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version-file: .nvmrc
-      - name: Install isolated Markdown formatter
+      - name: Install isolated Markdown parser and formatter
         working-directory: ${{ runner.temp }}
         run: npm install --prefix prettier-install --no-save --no-audit --no-fund --ignore-scripts --registry=https://registry.npmjs.org/ prettier@3.8.1
       - name: Prepare and validate the reviewed release notes
         env:
           GH_TOKEN: ${{ github.token }}
-          PR: ${{ github.event.pull_request.number || github.event.issue.number }}
-        run: |
-          python .github/scripts/release_notes.py prepare "$PR" "$RUNNER_TEMP/notes-input.json"
+        run: python .github/scripts/release_notes.py prepare "$PR" "$RUNNER_TEMP/notes-input.json"
       - name: Format release Markdown without credentials
         id: prepare
         run: |
@@ -69,5 +69,4 @@ jobs:
         if: steps.prepare.outputs.update == 'true'
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
-          PR: ${{ github.event.pull_request.number || github.event.issue.number }}
         run: python .github/scripts/release_notes.py apply "$PR" "$RUNNER_TEMP/notes-plan.json"

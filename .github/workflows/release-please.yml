@@ -61,8 +61,7 @@ jobs:
     needs: release-please
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    permissions:
-      contents: read
+    permissions: *read-only-permissions
     env:
       CLI_TAG: ${{ needs.release-please.outputs.release_created == 'true' && needs.release-please.outputs.tag_name || '' }}
       ACTION_TAG: ${{ needs.release-please.outputs.code_scan_action_release_created == 'true' && needs.release-please.outputs.code_scan_action_tag_name || '' }}

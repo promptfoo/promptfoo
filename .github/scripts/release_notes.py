@@ -2,7 +2,6 @@
 
 import argparse
 import base64
-import hashlib
 import html
 import json
 import os
@@ -11,7 +10,7 @@ import subprocess
 import textwrap
 from pathlib import Path
 
-from release_note_links import LINK, check_links
+from release_note_links import check_links
 
 COMPONENTS = {
     "promptfoo": (".", "CHANGELOG.md", ""),
@@ -25,7 +24,6 @@ BRANCH_PREFIX = "release-please--branches--main--components--"
 HEADER = re.compile(r"^## \[(\d+\.\d+\.\d+)\](?:\([^\n]+\))?[^\n]*$", re.M)
 DISCLOSURE = "<details>\n<summary>All changes</summary>"
 OVERRIDE = "<!-- reviewed-release-notes -->"
-CHECKSUM = "<!-- release-notes-sha256:"
 FOOTER = "This PR was generated with [Release Please](https://github.com/googleapis/release-please)."
 
 
@@ -34,7 +32,6 @@ def run(*args, data=None):
         args,
         input=data,
         encoding="utf-8",
-        capture_output=False,
         stdout=subprocess.PIPE,
         check=True,
         timeout=120,
@@ -50,15 +47,19 @@ def gh(path, *args, data=None):
     )
 
 
+def gh_rows(endpoint, selector=".[]"):
+    output = run("gh", "api", "--paginate", endpoint, "--jq", selector + " | @json")
+    return [json.loads(line) for line in output.splitlines()]
+
+
 def section_bounds(text, version):
     headings = list(HEADER.finditer(text))
     matches = [i for i, heading in enumerate(headings) if heading[1] == version]
     if len(matches) != 1:
         raise ValueError(f"Expected exactly one changelog section for {version}")
     i = matches[0]
-    return headings[i].start(), headings[i + 1].start() if i + 1 < len(
-        headings
-    ) else len(text)
+    end = headings[i + 1].start() if i + 1 < len(headings) else len(text)
+    return headings[i].start(), end
 
 
 def extract(text, version):
@@ -71,6 +72,8 @@ def extract(text, version):
 
 def prepare_section(section, overview, component, scanner_version=None):
     title, _, content = section.partition("\n")
+    if content.count(DISCLOSURE) > 1:
+        raise ValueError("Expected one All changes disclosure")
     if DISCLOSURE in content:
         _, _, content = content.partition(DISCLOSURE)
         if not content.rstrip().endswith("</details>"):
@@ -79,49 +82,48 @@ def prepare_section(section, overview, component, scanner_version=None):
     inventory = content.strip()
     if not inventory:
         raise ValueError("Empty release inventory")
-    if overview:
-        # A second version heading or disclosure would break consumers' section boundaries.
-        if re.search(
-            r"^#{1,2}(?:\s|$)|^---+$|</?(?:details|summary)\b", overview, re.M | re.I
-        ):
-            raise ValueError(
-                "Use prose, lists and level-three headings in reviewed release notes"
-            )
-        breaking = re.search(
-            r"^### [^\n]*BREAKING[^\n]*\n(.*?)(?=^### |\Z)", inventory, re.M | re.S
+    if re.search(
+        r"^#{1,2}(?:\s|$)|^---+$|</?(?:details|summary)\b", overview, re.M | re.I
+    ):
+        raise ValueError(
+            "Use prose, lists and level-three headings in reviewed release notes"
         )
-        if breaking and not re.search(
-            r"^### (Before upgrading|Upgrade notes|Breaking changes)$",
-            overview,
-            re.M | re.I,
-        ):
-            overview = (
-                "### Before upgrading\n\n" + breaking[1].strip() + "\n\n" + overview
-            )
-    else:
-        groups = re.split(r"^### (.+)$", inventory, flags=re.M)
-        breaking, features, fixes = [], [], []
-        for name, body in zip(groups[1::2], groups[2::2]):
-            bullets = [s for s in body.splitlines() if s.startswith(("- ", "* "))]
-            if "BREAKING" in name.upper():
-                breaking.extend(bullets)
-            elif name in {"Features", "Bug Fixes", "Performance Improvements"}:
-                (features if name == "Features" else fixes).extend(bullets)
-        priority = features + [s for s in fixes if "**deps:**" not in s] + fixes
-        if not priority and not breaking:
-            priority = [
-                line for line in inventory.splitlines() if line.startswith(("- ", "* "))
-            ]
-        bullets = list(dict.fromkeys(priority))[:4]
-        chunks = []
-        if breaking:
-            chunks.append("### Before upgrading\n\n" + "\n".join(breaking))
-        if bullets:
-            chunks.append("### Highlights\n\n" + "\n".join(bullets))
-        overview = "\n\n".join(chunks)
-    if (
-        component == "code-scan-action"
-        and f"promptfoo@{scanner_version}" not in overview
+    groups = re.findall(r"^### ([^\n]+)\n(.*?)(?=^### |\Z)", inventory, re.M | re.S)
+    breaking = [body.strip() for name, body in groups if "BREAKING" in name.upper()]
+    if not overview:
+        # Surface user-visible features/fixes first and preserve all entries below.
+        bullets = [
+            line
+            for name, body in (groups or [("", inventory)])
+            if "BREAKING" not in name.upper()
+            for line in body.splitlines()
+            if line.startswith(("- ", "* "))
+        ]
+        displayed = list(
+            dict.fromkeys(sorted(bullets, key=lambda line: "**deps:**" in line))
+        )[:4]
+        if displayed:
+            overview = "### Highlights\n\n" + "\n".join(displayed)
+        elif not breaking:
+            overview = inventory.split("\n\n")[-1]
+    # Raw comments can hide the entire summary or everything after an open comment.
+    visible = re.sub(r"<!--.*?-->", "", overview, flags=re.S)
+    if "<!--" in visible or (
+        overview
+        and not re.search(
+            r"\w", re.sub(r"^#{1,6} [^\n]*|<[^>]*>", "", visible, flags=re.M)
+        )
+    ):
+        raise ValueError("Expected visible release notes below the overview heading")
+    upgrade = re.search(
+        r"^### (?:Before upgrading|Upgrade notes|Breaking changes)\n(.*?)(?=^### |\Z)",
+        visible,
+        re.M | re.S | re.I,
+    )
+    if breaking and not (upgrade and re.search(r"\w", upgrade[1])):
+        overview = "\n\n".join(["### Before upgrading", *breaking, overview]).strip()
+    if component == "code-scan-action" and not has_scanner_pin(
+        visible, scanner_version
     ):
         overview += (
             f"\n\nThis action installs `promptfoo@{scanner_version}` to run scans."
@@ -129,43 +131,55 @@ def prepare_section(section, overview, component, scanner_version=None):
     return f"{title}\n\n{overview.strip()}\n\n{DISCLOSURE}\n\n{inventory}\n\n</details>"
 
 
-def mark_checked(section):
-    """Bind the link check to the formatted version section, excluding its marker."""
-    title, _, body = section.partition("\n\n")
-    overview, disclosure, inventory = body.partition(DISCLOSURE)
-    if (
-        not disclosure
-        or not overview.strip()
-        or not inventory.endswith("</details>")
-        or not inventory.removesuffix("</details>").strip()
-        or DISCLOSURE in inventory
-        or CHECKSUM in section
-    ):
-        raise ValueError(
-            "Expected an overview followed by the complete All changes disclosure"
-        )
-    digest = hashlib.sha256(section.encode("utf-8")).hexdigest()
-    return f"{title}\n\n{CHECKSUM} {digest} -->\n\n{body}"
+def has_scanner_pin(text, version):
+    return re.search(rf"(?<![\w@/-])promptfoo@{re.escape(version)}(?![\w.+-])", text)
 
 
-def verify_checked(section):
-    title, _, rest = section.partition("\n\n")
-    marker, _, body = rest.partition("\n\n")
-    if not marker.startswith(CHECKSUM) or section != mark_checked(f"{title}\n\n{body}"):
+def candidate_notes(repo, component, base_ref, head, overview=None):
+    """Render a proposed section, or validate the exact candidate bytes when no overview is supplied."""
+    package, path, prefix = COMPONENTS[component]
+    package_json = str(Path(package) / "package.json")
+    base = run("git", "merge-base", base_ref, head).strip()
+    previous, version = version_at(base, package_json), version_at(head, package_json)
+    manifest = json.loads(run("git", "show", f"{head}:.release-please-manifest.json"))
+    if manifest.get(package) != version or previous == version:
         raise ValueError(
-            "Release notes are unformatted or changed after link validation. Run the release notes formatter on this head."
+            f"Expected a matching release bump in {package_json} and the manifest"
         )
+    source = run("git", "show", f"{head}:{path}")
+    original = extract(source, version)
+    verify_only = overview is None
+    if verify_only:
+        _, _, body = original.partition("\n")
+        overview, disclosure, _ = body.partition(DISCLOSURE)
+        if not disclosure or not overview.strip():
+            raise ValueError("Expected a visible overview followed by All changes")
+    expected = prepare_section(
+        original, overview.strip(), component, version_at(head, "package.json")
+    )
+    checked = check_links(expected, repo, prefix + previous, prefix + version, head)
+    if verify_only and checked != original:
+        raise ValueError(
+            "The candidate needs updated release notes or references; refresh this release PR"
+        )
+    return source, version, checked
+
+
+def verify(head, branch):
+    candidate_notes(
+        os.environ["GITHUB_REPOSITORY"],
+        branch.removeprefix(BRANCH_PREFIX),
+        os.environ.get("BASE_SHA", "origin/main"),
+        head,
+    )
 
 
 def writer_overview(repo, number):
-    comments = []
-    for page in range(1, 11):
-        batch = gh(f"repos/{repo}/issues/{number}/comments?per_page=100&page={page}")
-        comments.extend(c for c in batch if c["body"].splitlines()[:1] == [OVERRIDE])
-        if len(batch) < 100:
-            break
-    else:
-        raise ValueError("Too many comments to establish the latest reviewed wording")
+    comments = (
+        comment
+        for comment in gh_rows(f"repos/{repo}/issues/{number}/comments?per_page=100")
+        if comment["body"].splitlines()[:1] == [OVERRIDE]
+    )
     for comment in sorted(
         comments, key=lambda c: (c["updated_at"], c["id"]), reverse=True
     ):
@@ -209,27 +223,9 @@ def prepare(repo, number, output):
     run("git", "fetch", "--no-tags", "origin", f"refs/pull/{number}/head")
     if run("git", "rev-parse", "FETCH_HEAD").strip() != head:
         raise ValueError("Release branch advanced; rerun on its latest commit")
-    package, path, prefix = COMPONENTS[component]
-    package_json = "package.json" if package == "." else f"{package}/package.json"
-    version = version_at(head, package_json)
-    base = run("git", "merge-base", head, pr["base"]["sha"]).strip()
-    previous = version_at(base, package_json)
-    manifest = json.loads(run("git", "show", f"{head}:.release-please-manifest.json"))
-    if manifest.get(package) != version:
-        raise ValueError(
-            f"The release manifest and {package_json} disagree for {component}"
-        )
-    if previous == version:
-        raise ValueError("Release PR must advance the component version")
-    tag, previous_tag = prefix + version, prefix + previous
-    source = run("git", "show", f"{head}:{path}")
-    section = prepare_section(
-        extract(source, version),
-        writer_overview(repo, number),
-        component,
-        version_at(head, "package.json"),
+    source, version, section = candidate_notes(
+        repo, component, pr["base"]["sha"], head, writer_overview(repo, number)
     )
-    section = check_links(section, repo, previous_tag, tag, head)
     output.write_text(
         json.dumps(
             {
@@ -237,7 +233,7 @@ def prepare(repo, number, output):
                 "number": number,
                 "branch": branch,
                 "head": head,
-                "path": path,
+                "path": COMPONENTS[component][1],
                 "source": source,
                 "version": version,
                 "section": section,
@@ -266,27 +262,16 @@ def pr_preview(section, intro, changelog_url, footer=""):
     # excerpts to text (including link labels) so no truncated Markdown can leak
     # into the next heading, code block, or link.
     heading, _, body = overview.partition("\n")
-    groups = re.split(r"^### ([^\n]+)$", body, flags=re.M)
-    excerpts = [heading]
-    sections = [("", groups[0]), *zip(groups[1::2], groups[2::2])]
-    for title, paragraph in sections:
-        line = next(
-            (
-                line.strip("-* ")
-                for line in paragraph.splitlines()
-                if line.strip() and not line.startswith(("```", "~~~", CHECKSUM))
-            ),
-            "",
-        )
-        if line:
-            value = LINK.sub(lambda m: m[1], line).replace("**", "").replace("`", "")
-            value = textwrap.shorten(value, width=600, placeholder="…")
-            if title:
-                excerpts.append("### " + html.escape(title[:80]))
-            excerpts.append("<p>" + html.escape(value) + "</p>")
-        if len(excerpts) >= 10:
-            break
-    return compose("\n\n".join([*excerpts, more]))
+    blocks = [heading]
+    for block in body.strip().split("\n\n")[:10]:
+        if len(block.encode()) <= 2000:
+            blocks.append(block)
+        else:
+            excerpt = textwrap.shorten(
+                block.lstrip("-* ").replace("**", ""), width=600, placeholder="…"
+            )
+            blocks.append("<p>" + html.escape(excerpt) + "</p>")
+    return compose("\n\n".join([*blocks, more]))
 
 
 def format_plan(prepared, output, prettier):
@@ -304,7 +289,6 @@ def format_plan(prepared, output, prettier):
         "markdown",
         data=section,
     ).strip()
-    section = mark_checked(section)
     start, end = section_bounds(source, version)
     tail = source[end:]
     updated = source[:start] + section + ("\n\n" if tail else "\n") + tail
@@ -390,9 +374,9 @@ def main():
     commit = modes.add_parser("apply")
     commit.add_argument("pr", type=int)
     commit.add_argument("plan", type=Path)
-    verify = modes.add_parser("verify")
-    verify.add_argument("head")
-    verify.add_argument("branch")
+    check = modes.add_parser("verify")
+    check.add_argument("head")
+    check.add_argument("branch")
     tagged = modes.add_parser("extract")
     tagged.add_argument("tag")
     mirror = modes.add_parser("mirror-preview")
@@ -408,9 +392,7 @@ def main():
     elif args.mode == "apply":
         apply(args.plan, os.environ["GITHUB_REPOSITORY"], args.pr)
     elif args.mode == "verify":
-        package, path, _ = COMPONENTS[args.branch.removeprefix(BRANCH_PREFIX)]
-        version = version_at(args.head, str(Path(package) / "package.json"))
-        verify_checked(extract(run("git", "show", f"{args.head}:{path}"), version))
+        verify(args.head, args.branch)
     elif args.mode == "mirror-preview":
         repo = os.environ["GITHUB_REPOSITORY"]
         source = f"https://github.com/{repo}"
@@ -420,7 +402,7 @@ def main():
             f"[commit {args.source_sha[:12]}]({source}/commit/{args.source_sha})."
         )
         section = extract(args.changelog.read_text(), args.version)
-        if f"promptfoo@{args.scanner_version}" not in section.partition(DISCLOSURE)[0]:
+        if not has_scanner_pin(section.partition(DISCLOSURE)[0], args.scanner_version):
             intro += (
                 f" The action installs `promptfoo@{args.scanner_version}` to run scans."
             )

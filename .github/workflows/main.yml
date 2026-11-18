@@ -457,17 +457,21 @@ jobs:
           persist-credentials: false
           fetch-depth: ${{ startsWith(github.head_ref, 'release-please--branches--main--components--') && '0' || '1' }}
 
-      - name: Verify checked release notes and the component's full tag history
-        if: startsWith(github.head_ref, 'release-please--branches--main--components--')
+      - name: Install the release notes Markdown parser
+        if: &release-notes-pr startsWith(github.head_ref, 'release-please--branches--main--components--')
+        working-directory: ${{ runner.temp }}
+        run: npm install --prefix prettier-install --no-save --no-audit --no-fund --ignore-scripts --registry=https://registry.npmjs.org/ prettier@3.8.1
+
+      - name: Verify release notes and the component's full tag history
+        if: *release-notes-pr
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           GH_TOKEN: ${{ github.token }}
         run: |
           # Validate with protected-branch code. The candidate changelog is only data.
-          git show "$BASE_SHA:scripts/check-release-notes-completeness.mjs" > "$RUNNER_TEMP/check-release-notes-completeness.mjs"
-          node "$RUNNER_TEMP/check-release-notes-completeness.mjs" "$BASE_SHA" "$HEAD_SHA"
-          git archive "$BASE_SHA" .github/scripts/release_notes.py .github/scripts/release_note_links.py | tar -x -C "$RUNNER_TEMP"
+          git archive "$BASE_SHA" .github/scripts | tar -x -C "$RUNNER_TEMP"
+          python "$RUNNER_TEMP/.github/scripts/release_history.py" "$BASE_SHA" "$HEAD_SHA"
           python "$RUNNER_TEMP/.github/scripts/release_notes.py" verify "$HEAD_SHA" "$GITHUB_HEAD_REF"
 
       - &use-node

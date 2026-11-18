@@ -1,138 +1,55 @@
-"""Check release section links before the tag exists. Only gh api receives a GitHub credential."""
+"""Validate links in the proposed Markdown. Only gh receives the GitHub credential."""
 
 import ipaddress
 import json
 import os
 import re
 import socket
-import string
 import subprocess
+from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
-from html import unescape
 from html.parser import HTMLParser
-from typing import NamedTuple
-from urllib.parse import quote, unquote, urljoin, urlsplit
-
-# Simple labels used by the optional plain-text preview excerpt. Never use for link validation.
-LINK = re.compile(r"\[([^\]\n]*)\]\(([^()\s]+)\)")
-SHA = re.compile(r"[0-9a-f]{40}")
+from pathlib import Path
+from urllib.parse import quote, unquote, urlsplit
 
 
-ESCAPABLE = frozenset(string.punctuation)
-CODE_FENCE = re.compile(r"^ {0,3}(`{3,}|~{3,})([^\n]*)$", re.M)
+class Page(HTMLParser):
+    def __init__(self, html):
+        super().__init__()
+        self.links = Counter()
+        self.anchors = set()
+        self.feed(html)
 
-
-class InlineLink(NamedTuple):
-    label_start: int
-    label_end: int
-    url_start: int
-    url_end: int
-    url: str
-
-
-def inline_links(markdown):
-    """Read the inline destinations in reviewed Markdown, retaining spans for safe edits."""
-    labels = []
-    i = 0
-    while i < len(markdown):
-        char = markdown[i]
-        if char == "\\" and markdown[i + 1 : i + 2] in ESCAPABLE:
-            i += 2
-            continue
-        if (i == 0 or markdown[i - 1] == "\n") and (
-            fence := CODE_FENCE.match(markdown, i)
-        ):
-            ticks, info = fence.groups()
-            if ticks[0] == "~" or "`" not in info:
-                close = re.compile(
-                    r"^ {0,3}" + ticks[0] + "{" + str(len(ticks)) + r",}[ \t]*$", re.M
-                )
-                end = close.search(markdown, fence.end() + 1)
-                i = end.end() if end else len(markdown)
-                labels.clear()
-                continue
-        if char == "`":
-            end = i + 1
-            while markdown[end : end + 1] == "`":
-                end += 1
-            # A single-line code span is a common place to document expressions
-            # such as methods[0](). They are code, not release-note links.
-            close = re.compile(r"(?<!`)" + markdown[i:end] + r"(?!`)")
-            newline = markdown.find("\n", end)
-            end_code = close.search(
-                markdown, end, newline if newline >= 0 else len(markdown)
-            )
-            i = end_code.end() if end_code else end
-            continue
-        if char == "[":
-            labels.append(i + 1)
-        if char != "]" or not labels:
-            i += 1
-            continue
-        label = labels.pop()
-        if markdown[i + 1 : i + 2] != "(":
-            i += 1
-            continue
-        label_end = i
-        i += 2
-        while i < len(markdown) and markdown[i].isspace():
-            i += 1
-        enclosed = markdown[i : i + 1] == "<"
-        i += int(enclosed)
-        start = i
-        depth = 0
-        while i < len(markdown):
-            char = markdown[i]
-            if char == "\\" and markdown[i + 1 : i + 2] in ESCAPABLE:
-                i += 2
-                continue
-            if enclosed:
-                if char == ">":
-                    break
-                if char in "<\n\r":
-                    raise ValueError(
-                        "Invalid angle-bracketed release-note link destination"
-                    )
-            elif char == "(":
-                depth += 1
-            elif char == ")":
-                if not depth:
-                    break
-                depth -= 1
-            elif char.isspace():
-                break
-            i += 1
-        end = i
-        if depth or (enclosed and markdown[i : i + 1] != ">"):
-            raise ValueError("Unclosed release-note link destination")
-        i += int(enclosed)
-        # A link title can use either quotation mark or a pair of parentheses.
-        # Preserve the original title and escape syntax when repairing a destination.
-        after_url = i
-        while i < len(markdown) and markdown[i].isspace():
-            i += 1
-        if i > after_url and markdown[i : i + 1] in {'"', "'", "("}:
-            close = ")" if markdown[i] == "(" else markdown[i]
-            i += 1
-            while i < len(markdown) and markdown[i] != close:
-                i += (
-                    2
-                    if markdown[i] == "\\" and markdown[i + 1 : i + 2] in ESCAPABLE
-                    else 1
-                )
-            i += 1
-            while i < len(markdown) and markdown[i].isspace():
-                i += 1
-        if markdown[i : i + 1] != ")" or re.search(
-            r"\n[ \t]*\r?\n", markdown[label_end + 2 : i]
-        ):
-            raise ValueError("Unsupported release-note link destination or title")
-        raw = re.sub(
-            r"\\([" + re.escape(string.punctuation) + r"])", r"\1", markdown[start:end]
+    def handle_starttag(self, tag, attrs):
+        attrs = dict(attrs)
+        if tag == "a" and attrs.get("href"):
+            self.links[attrs["href"]] += 1
+        if tag == "img" and attrs.get("src"):
+            self.links[attrs["src"]] += 1
+        self.anchors.update(
+            v for v in (attrs.get("id"), attrs.get("name") if tag == "a" else None) if v
         )
-        url = quote(unescape(raw), safe=":/?#[]@!$&'()*+,;=%")
-        yield InlineLink(label, label_end, start, end, url)
-        i += 1
+
+
+def rendered_links(markdown):
+    # Actions installs a fixed, protected copy outside the checkout. The parser
+    # reads Markdown on stdin without loading project config or any credentials.
+    tools = (
+        Path(os.environ["RUNNER_TEMP"]) / "prettier-install"
+        if "RUNNER_TEMP" in os.environ
+        else Path.cwd()
+    )
+    result = subprocess.check_output(
+        ["node", Path(__file__).with_name("release_note_markdown.mjs"), tools],
+        input=markdown,
+        text=True,
+        timeout=45,
+        env={"PATH": os.environ["PATH"]},
+    )
+    parsed = json.loads(result)
+    links = Page("\n".join(parsed["html"])).links
+    links.update(quote(url, safe=":/?#[]@!$&'()*+,;=%") for url in parsed["urls"])
+    return links
 
 
 def issue_types(repo, numbers):
@@ -144,12 +61,8 @@ def issue_types(repo, numbers):
         fields = " ".join(
             f"n{n}:issueOrPullRequest(number:{n}){{__typename}}" for n in chunk
         )
-        query = (
-            "query($owner:String!,$name:String!){repository(owner:$owner,name:$name){"
-            + fields
-            + "}}"
-        )
-        r = subprocess.run(
+        query = f"query($owner:String!,$name:String!){{repository(owner:$owner,name:$name){{{fields}}}}}"
+        result = subprocess.run(
             [
                 "gh",
                 "api",
@@ -165,15 +78,15 @@ def issue_types(repo, numbers):
             text=True,
             timeout=30,
         )
-        obj = json.loads(r.stdout)
+        obj = json.loads(result.stdout)
         errors = obj.get("errors", [])
-        if (r.returncode and not errors) or any(
-            e.get("type") != "NOT_FOUND"
-            or e.get("path") not in [["repository", f"n{n}"] for n in chunk]
+        expected_paths = [["repository", f"n{n}"] for n in chunk]
+        if (result.returncode and not errors) or any(
+            e.get("type") != "NOT_FOUND" or e.get("path") not in expected_paths
             for e in errors
         ):
             raise ValueError(
-                "GitHub could not validate release PR links; retry after the API recovers"
+                "GitHub could not validate release citations; retry after the API recovers"
             )
         for n in chunk:
             row = obj["data"]["repository"][f"n{n}"]
@@ -181,37 +94,24 @@ def issue_types(repo, numbers):
     return found
 
 
-class AnchorParser(HTMLParser):
-    def __init__(self):
-        super().__init__()
-        self.anchors = set()
-
-    def handle_starttag(self, tag, attrs):
-        self.anchors.update(
-            v for k, v in attrs if k == "id" or (k == "name" and tag == "a")
-        )
-
-
 def check_public_url(url):
-    # Resolve each redirect again and pin a public address for the request. Never
-    # forward GH_TOKEN, credentials from curlrc, proxy credentials or cookies.
     original = url
     fragment = unquote(urlsplit(url).fragment)
     for _ in range(6):
-        parsed = urlsplit(url)
+        target = urlsplit(url)
+        host = target.hostname or ""
         if (
-            parsed.scheme != "https"
-            or not parsed.hostname
-            or parsed.port not in (None, 443)
-            or parsed.username
-            or parsed.password
-            or not re.fullmatch(r"[a-zA-Z0-9.-]+", parsed.hostname)
+            target.scheme != "https"
+            or target.port not in (None, 443)
+            or target.username
+            or target.password
+            or not re.fullmatch(r"[a-zA-Z0-9.-]+", host)
         ):
             raise ValueError(f"Expected a public HTTPS release-note link: {original}")
         env = {"PATH": os.environ["PATH"]}
-        if parsed.hostname in {"www.promptfoo.dev", "promptfoo.dev", "github.com"}:
-            # These fixed public origins may also be reached through a CI egress proxy.
-            # The subprocess receives no GitHub token or ambient curl configuration.
+        routing = []
+        if host in {"www.promptfoo.dev", "promptfoo.dev", "github.com"}:
+            # These fixed public origins may be reached through the environment's egress proxy.
             env.update(
                 {
                     k: os.environ[k]
@@ -224,30 +124,24 @@ def check_public_url(url):
                     if k in os.environ
                 }
             )
-            routing = []
         else:
-            addresses = [
-                v[4][0]
-                for v in socket.getaddrinfo(
-                    parsed.hostname, 443, type=socket.SOCK_STREAM
-                )
+            # Check and pin the destination for *each* hop, including redirects.
+            ips = [
+                r[4][0] for r in socket.getaddrinfo(host, 443, type=socket.SOCK_STREAM)
             ]
-            if not addresses or not all(
-                ipaddress.ip_address(a).is_global for a in addresses
-            ):
+            if not ips or not all(ipaddress.ip_address(ip).is_global for ip in ips):
                 raise ValueError(
                     f"Release-note link does not resolve to a public address: {original}"
                 )
-            addr = next((a for a in addresses if ":" not in a), f"[{addresses[0]}]")
-            routing = ["--noproxy", "*", "--resolve", f"{parsed.hostname}:443:{addr}"]
-        r = subprocess.run(
+            ip = next((ip for ip in ips if ":" not in ip), f"[{ips[0]}]")
+            routing = ["--noproxy", "*", "--resolve", f"{host}:443:{ip}"]
+        output = subprocess.check_output(
             [
                 "curl",
                 "--disable",
                 "--silent",
                 "--show-error",
                 "--globoff",
-                "--suppress-connect-headers",
                 *routing,
                 "--proto",
                 "=https",
@@ -255,34 +149,26 @@ def check_public_url(url):
                 "12",
                 "--max-filesize",
                 "5000000",
-                "--dump-header",
-                "-",
+                "--write-out",
+                "\n%{response_code}\n%{redirect_url}",
                 "--url",
                 url,
             ],
-            stdout=subprocess.PIPE,
-            check=True,
-            timeout=15,
             env=env,
-        ).stdout
-        header, _, body = r.partition(b"\r\n\r\n")
-        status = int(header.splitlines()[0].split()[1])
-        if 300 <= status < 400:
-            match = re.search(rb"^location:\s*(.*?)\s*$", header, re.I | re.M)
-            if not match:
-                break
-            url = urljoin(url, match[1].decode())
+            timeout=15,
+        )
+        body, status, redirect = output.rsplit(b"\n", 2)
+        if status.startswith(b"3") and redirect:
+            url = redirect.decode()
             fragment = unquote(urlsplit(url).fragment) or fragment
             continue
-        if status < 200 or status >= 300:
-            raise ValueError(f"Release-note link returned {status}: {original}")
+        if not status.startswith(b"2"):
+            raise ValueError(
+                f"Release-note link returned {status.decode()}: {original}"
+            )
         if fragment:
-            anchors = AnchorParser()
-            anchors.feed(body.decode("utf-8", errors="replace"))
-            if (
-                fragment not in anchors.anchors
-                and f"user-content-{fragment}" not in anchors.anchors
-            ):
+            anchors = Page(body.decode(errors="replace")).anchors
+            if fragment not in anchors and "user-content-" + fragment not in anchors:
                 raise ValueError(f"Missing release-note link anchor: {original}")
         return
     raise ValueError(f"Too many redirects for release-note link: {original}")
@@ -290,83 +176,65 @@ def check_public_url(url):
 
 def check_links(section, repo, previous_tag, tag, head):
     prefix = f"https://github.com/{repo}/"
-    links = list(inline_links(section))
-    urls = {link.url for link in links}
     compare = f"{prefix}compare/{previous_tag}...{tag}"
-    if not any(
-        link.url == compare and link.url_end <= len(section.splitlines()[0])
-        for link in links
-    ):
+    if f"]({compare})" not in section.splitlines()[0]:
         raise ValueError(f"Expected component comparison {compare}")
-    # The right side is the future release tag. Its immutable candidate is head.
+    # The new tag does not exist before merge. Validate its base against the actual candidate.
     subprocess.run(
-        ["git", "merge-base", "--is-ancestor", f"refs/tags/{previous_tag}", head],
+        ["git", "merge-base", "--is-ancestor", "refs/tags/" + previous_tag, head],
         check=True,
     )
-    issue_urls, commits, outside = {}, {}, set()
-    for url in urls - {compare}:
-        path = url.removeprefix(prefix)
-        if url.startswith(prefix) and (m := re.fullmatch(r"(issues|pull)/(\d+)", path)):
-            issue_urls[url] = (m[1], int(m[2]))
-        elif (
-            url.startswith(prefix)
-            and path.startswith("commit/")
-            and SHA.fullmatch(path[7:])
-        ):
-            commits[url] = path[7:]
-        else:
-            outside.add(url)
-    for sha in commits.values():
-        subprocess.run(["git", "merge-base", "--is-ancestor", sha, head], check=True)
-    # Compare both the issue number and its type. GitHub's /issues/N redirects for PRs.
-    types = issue_types(repo, {n for _, n in issue_urls.values()})
-    with ThreadPoolExecutor(max_workers=6) as pool:
-        list(pool.map(check_public_url, sorted(outside)))
-    # Use the immutable squash commit's own PR number. This also works after a
-    # previous refresh has already replaced the dead link in the inventory.
-    fallbacks = {}
-    if commits:
-        subjects = subprocess.check_output(
-            [
-                "git",
-                "show",
-                "--no-patch",
-                "--format=%H%x09%s",
-                *dict.fromkeys(commits.values()),
-            ],
-            text=True,
-        )
-        for line in subjects.splitlines():
-            sha, _, subject = line.partition("\t")
-            number = re.search(r"\(#(\d+)\)$", subject)
-            if number:
-                fallbacks.setdefault(int(number[1]), set()).add(
-                    prefix + "commit/" + sha
-                )
-
-    replacements = []
-    for link in links:
-        if link.url not in issue_urls:
-            continue
-        kind, number = issue_urls[link.url]
-        if types[number] and (kind == "issues" or types[number] == "PullRequest"):
-            continue
-        sources = fallbacks.get(number, set())
-        if len(sources) != 1:
-            raise ValueError(f"Missing {link.url}; supply a link to the source commit")
-        commit = next(iter(sources))
-        replacements.append((link.url_start, link.url_end, commit))
-        if section[link.label_start : link.label_end] == f"#{number}":
-            replacements.append(
-                (link.label_start, link.label_end, commit.rsplit("/", 1)[1][:7])
+    links = rendered_links(section)
+    if compare not in links:
+        raise ValueError(f"Missing component comparison {compare}")
+    citations, commits, outside = {}, [], []
+    for url in links.keys() - {compare}:
+        path = url[len(prefix) :] if url.startswith(prefix) else ""
+        if match := re.fullmatch(r"(issues|pull)/([1-9]\d*)", path):
+            citations[url] = match[1], int(match[2])
+        elif match := re.fullmatch(r"commit/([0-9a-f]{40})", path):
+            sha = match[1]
+            subprocess.run(
+                ["git", "merge-base", "--is-ancestor", sha, head], check=True
             )
-
-    # Preserve wrappers, nested labels and titles verbatim on fallback links.
-    for start, end, replacement in sorted(replacements, reverse=True):
-        section = section[:start] + replacement + section[end:]
-    # Generated inventories already carry the verified commit next to the PR.
-    return re.sub(
-        r"(\(\[[a-f0-9]+\]\(https://github\.com/[^)]+/commit/[0-9a-f]{40}\)\)) \1",
+            commits.append(sha)
+        else:
+            outside.append(url)
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        list(pool.map(check_public_url, outside))
+    types = issue_types(repo, {n for _, n in citations.values()})
+    missing = {
+        url: n
+        for url, (kind, n) in citations.items()
+        if not types[n] or (kind == "pull" and types[n] != "PullRequest")
+    }
+    if not missing:
+        return section
+    subjects = (
+        subprocess.check_output(
+            ["git", "show", "--no-patch", "--format=%H%x09%s", *commits], text=True
+        )
+        if commits
+        else ""
+    )
+    for url, number in missing.items():
+        shas = re.findall(rf"^([0-9a-f]{{40}})\t[^\n]*\(#{number}\)$", subjects, re.M)
+        # Only change literal citations with an unambiguous, verified squash commit.
+        # If a code sample or prose also quotes the URL, leave that decision to its author.
+        candidate = re.compile(re.escape(url) + r"""(?=[\s)>'"]|$)""")
+        if len(shas) != 1 or len(candidate.findall(section)) != links[url]:
+            raise ValueError(f"Missing {url}; supply a link to the source commit")
+        commit = prefix + "commit/" + shas[0]
+        section = section.replace(f"[#{number}]({url})", f"[{shas[0][:7]}]({commit})")
+        section = candidate.sub(commit, section)
+    # Drop duplicate adjacent commit citations in Release Please's generated bullet.
+    section = re.sub(
+        r"(\(\[[0-9a-f]+\]\(https://github\.com/[^)]+/commit/[0-9a-f]{40}\)\)) \1",
         r"\1",
         section,
     )
+    if missing.keys() & rendered_links(section).keys():
+        raise ValueError(
+            "Could not replace every unavailable PR; use its source commit in the reviewed notes"
+        )
+    return section

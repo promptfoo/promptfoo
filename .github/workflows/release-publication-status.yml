@@ -19,10 +19,12 @@ on:
         type: number
 
 permissions:
+  actions: read
   contents: read
+  pull-requests: read
 
 jobs:
-  discover:
+  report:
     if: >-
       github.repository == 'promptfoo/promptfoo' &&
       github.ref == 'refs/heads/main' &&
@@ -30,62 +32,29 @@ jobs:
        (github.event.workflow_run.event == 'push' &&
         github.event.workflow_run.head_repository.full_name == github.repository &&
         startsWith(github.event.workflow_run.head_commit.message, 'chore(main): release ')))
+    concurrency:
+      group: release-publication-status
+      cancel-in-progress: false
     runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      contents: read
-      pull-requests: read
-    outputs:
-      prs: ${{ steps.find.outputs.prs }}
+    timeout-minutes: 10
     steps:
-      - &checkout
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
-          # Only run the reporter from the trusted default branch.
           ref: refs/heads/main
           persist-credentials: false
           sparse-checkout: .github/scripts
-      - id: find
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
-          RELEASE_PR: ${{ inputs.pull_request }}
-        run: |
-          prs="$(python3 .github/scripts/release_publication_status.py discover)"
-          echo "prs=$prs" >> "$GITHUB_OUTPUT"
-
-  report:
-    needs: discover
-    if: needs.discover.outputs.prs != '[]'
-    strategy:
-      fail-fast: false
-      matrix:
-        pr: ${{ fromJSON(needs.discover.outputs.prs) }}
-    concurrency:
-      group: release-publication-status-pr-${{ matrix.pr }}
-      cancel-in-progress: false
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      actions: read
-      contents: read
-      pull-requests: read
-    env:
-      RELEASE_PR: ${{ matrix.pr }}
-    steps:
-      - *checkout
+      - name: Create a fresh directory for comment updates
+        id: scratch
+        run: mkdir .release-comments
       - name: Prepare the publication status with read-only credentials
-        id: prepare
         env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          status=0
-          python3 .github/scripts/release_publication_status.py prepare "$RUNNER_TEMP/status.json" || status=$?
-          if [[ -s "$RUNNER_TEMP/status.json" ]]; then echo "changed=true" >> "$GITHUB_OUTPUT"; fi
-          exit "$status"
+          RELEASE_PR: ${{ inputs.pull_request }}
+          RELEASE_SHA: ${{ github.event.workflow_run.head_sha || (github.event_name == 'push' && github.sha) || '' }}
+        run: python3 .github/scripts/release_publication_status.py prepare .release-comments
       - name: Create a token for the publication comment
         # A failed registry check can still produce a pending report for the next reconciliation.
-        if: ${{ !cancelled() && steps.prepare.outputs.changed == 'true' }}
+        if: ${{ !cancelled() && steps.scratch.outcome == 'success' && hashFiles('.release-comments/*.json') != '' }}
         id: comment-token
         uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3
         with:
@@ -96,4 +65,4 @@ jobs:
         if: ${{ !cancelled() && steps.comment-token.outcome == 'success' }}
         env:
           GH_TOKEN: ${{ steps.comment-token.outputs.token }}
-        run: python3 .github/scripts/release_publication_status.py publish "$RUNNER_TEMP/status.json"
+        run: python3 .github/scripts/release_publication_status.py publish .release-comments

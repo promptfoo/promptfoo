@@ -1,8 +1,11 @@
 """Release notes must survive bot refreshes and retain usable, reviewed source links."""
 
+import json
+import os
 import subprocess
 import tempfile
 import unittest
+from collections import Counter
 from pathlib import Path
 from unittest.mock import patch
 
@@ -35,24 +38,26 @@ class NotesTests(unittest.TestCase):
         )
         self.assertEqual(notes.prepare_section(result, "", "promptfoo"), result)
 
-    def test_formatter_binds_checked_bytes_to_the_version_section(self):
-        first = notes.prepare_section(BODY, "", "promptfoo")
-        stamped = notes.mark_checked(first)
-        notes.verify_checked(stamped)
-        self.assertEqual(
-            notes.extract(stamped + "\n\n## [1.1.0]\n\nOld notes", "1.2.0"), stamped
-        )
-        self.assertEqual(
-            notes.mark_checked(notes.prepare_section(stamped, "", "promptfoo")), stamped
-        )
-        for changed in (
-            BODY,
-            first,
-            stamped.replace("New syntax", "Changed wording", 1),
-            stamped.replace("### Bug Fixes", "### Fixes"),
+    def test_required_check_validates_actual_candidate_shape_and_links(self):
+        branch = notes.BRANCH_PREFIX + "promptfoo"
+        written = notes.prepare_section(BODY, "", "promptfoo")
+        with (
+            patch.dict(os.environ, {"GITHUB_REPOSITORY": REPO}),
+            patch.object(notes, "run", return_value='{".": "1.2.0"}'),
+            patch.object(
+                notes, "version_at", side_effect=["1.1.0", "1.2.0", "1.2.0"] * 3
+            ),
+            patch.object(notes, "extract", return_value=written) as section,
+            patch.object(notes, "check_links", return_value=written) as check,
         ):
-            with self.subTest(changed=changed), self.assertRaises(ValueError):
-                notes.verify_checked(changed)
+            notes.verify("candidate", branch)
+            self.assertEqual(check.call_args.args[0], written)
+            check.return_value = written + " corrected"
+            with self.assertRaisesRegex(ValueError, "references"):
+                notes.verify("candidate", branch)
+            section.return_value = BODY
+            with self.assertRaisesRegex(ValueError, "overview"):
+                notes.verify("candidate", branch)
 
     def test_override_survives_repeat_and_bot_refresh(self):
         override = (
@@ -67,9 +72,30 @@ class NotesTests(unittest.TestCase):
             override,
             notes.prepare_section(BODY + "\n- Fix retries", override, "promptfoo"),
         )
-        for content in ("## [2.0.0]\nBad", "</details>"):
+        for content in (
+            "## [2.0.0]\nBad",
+            "</details>",
+            "<!-- empty -->",
+            "<!-- don't ship",
+            "### Editor heading",
+        ):
             with self.assertRaises(ValueError):
                 notes.prepare_section(BODY, content, "promptfoo")
+
+    def test_single_disclosure_exact_scanner_pin_and_visible_upgrade_guidance(self):
+        with self.assertRaisesRegex(ValueError, "one All changes"):
+            notes.prepare_section(BODY + 2 * notes.DISCLOSURE, "", "promptfoo")
+        for suffix in ["0", "-beta", ".7"]:
+            text = notes.prepare_section(
+                BODY, "Install promptfoo@3.2.1" + suffix, "code-scan-action", "3.2.1"
+            )
+            self.assertIn("installs `promptfoo@3.2.1`", text)
+        for overview in [
+            "<!-- ### Before upgrading\nFake upgrade -->\n\n### Highlights\n\nA change",
+            "### Before upgrading\n\n### Highlights\n\nA change",
+        ]:
+            text = notes.prepare_section(BODY, overview, "promptfoo")
+            self.assertIn("### Before upgrading\n\n- New syntax", text)
 
     def test_large_pr_preview_keeps_upgrade_and_links_to_full_notes(self):
         overview = (
@@ -110,10 +136,15 @@ class NotesTests(unittest.TestCase):
             }
             for i, who in enumerate(["writer", "reader"])
         ]
-        with patch.object(
-            notes,
-            "gh",
-            side_effect=[comments, {"permission": "read"}, {"permission": "write"}],
+        with (
+            patch.object(
+                notes, "run", return_value="\n".join(map(json.dumps, comments))
+            ),
+            patch.object(
+                notes,
+                "gh",
+                side_effect=[{"permission": "read"}, {"permission": "write"}],
+            ),
         ):
             self.assertEqual(notes.writer_overview(REPO, 42), "writer")
 
@@ -137,121 +168,75 @@ class NotesTests(unittest.TestCase):
             self.assertFalse(plan.exists())
             api.assert_called_once_with(f"repos/{REPO}/pulls/1")
 
-    def test_repair_requires_correct_reachable_commit(self):
+    def test_unavailable_pr_uses_its_verified_commit_without_rewriting_other_markdown(
+        self,
+    ):
         sha = "a" * 40
-        commit = f"{ROOT}/commit/{sha}"
-        content = f"{HEADER}\n\n- Fix an error ([#123]({ROOT}/issues/123)) ([aaaaaaa]({commit}))"
-        with (
-            patch.object(links, "issue_types", return_value={123: None}),
-            patch.object(subprocess, "run"),
-            patch.object(
-                subprocess,
-                "check_output",
-                return_value=f"{sha}\tfix: an error (#123)\n",
-            ),
-        ):
-            result = links.check_links(content, REPO, "1.1.0", "1.2.0", "HEAD")
-            self.assertNotIn("/issues/123", result)
-            self.assertEqual(result.count(commit), 1)
-            with self.assertRaisesRegex(ValueError, "source commit"):
-                links.check_links(
-                    content.split(" ([aaaa")[0],
-                    REPO,
-                    "1.1.0",
-                    "1.2.0",
-                    "HEAD",
-                )
-
-    def test_full_500_commit_release_accepts_all_inventory_links(self):
-        inventory = "\n".join(
-            f"- Fix {n} ([#{n}]({ROOT}/issues/{n})) ([commit]({ROOT}/commit/{n:040x}))"
-            for n in range(1, 501)
+        url, commit = f"{ROOT}/issues/123", f"{ROOT}/commit/{sha}"
+        compare = ROOT + "/compare/1.1.0...1.2.0"
+        source = f'{HEADER}\n\n[API [guide]](<{url}> "Migration") ([#123]({url})) ([aaaaaaa]({commit}))'
+        corrected = (
+            f'{HEADER}\n\n[API [guide]](<{commit}> "Migration") ([aaaaaaa]({commit}))'
         )
-        section = HEADER + "\n\n" + inventory
         with (
             patch.object(
                 links,
-                "issue_types",
-                return_value=dict.fromkeys(range(1, 501), "PullRequest"),
+                "rendered_links",
+                side_effect=[
+                    Counter([compare, url, url, commit]),
+                    Counter([compare, commit, commit]),
+                ],
             ),
+            patch.object(links, "issue_types", return_value={123: None}),
             patch.object(subprocess, "run"),
-            patch.object(subprocess, "check_output", return_value=""),
+            patch.object(
+                subprocess, "check_output", return_value=f"{sha}\tfix: API (#123)\n"
+            ),
         ):
             self.assertEqual(
-                links.check_links(section, REPO, "1.1.0", "1.2.0", "HEAD"), section
+                links.check_links(source, REPO, "1.1.0", "1.2.0", "HEAD"), corrected
             )
-
-    def test_common_markdown_destinations_and_titles_reach_the_url_validator(self):
-        examples = [
-            (
-                '[Upgrade [guide]](https://example.org/missing "Migration guide")',
-                "https://example.org/missing",
-            ),
-            (
-                "[Wiki](https://example.org/wiki/F(a(b)c)#examples 'page')",
-                "https://example.org/wiki/F(a(b)c)#examples",
-            ),
-            (
-                r"[Escaped](https://example.org/wiki/F\(a\)?x=1&amp;y=2 (optional title))",
-                "https://example.org/wiki/F(a)?x=1&y=2",
-            ),
-            (
-                '[Page](<https://example.org/a b>\n "title")',
-                "https://example.org/a%20b",
-            ),
-        ]
-        section = HEADER + "\n\n" + "\n".join(example for example, _ in examples)
         with (
+            patch.object(links, "rendered_links", return_value=Counter([compare, url])),
+            patch.object(links, "issue_types", return_value={123: None}),
+            patch.object(subprocess, "run"),
+        ):
+            with self.assertRaisesRegex(ValueError, "source commit"):
+                links.check_links(source, REPO, "1.1.0", "1.2.0", "HEAD")
+
+    def test_uses_real_gfm_destinations_and_validates_every_external_link(self):
+        section = (
+            HEADER
+            + '\n\n[ref]: https://example.org/wiki/F(a) "Docs"\n\n[Guide][ref] and `[example](ignored)`'
+        )
+        rendered = json.dumps(
+            {
+                "urls": [
+                    ROOT + "/compare/1.1.0...1.2.0",
+                    "https://example.org/wiki/F(a)",
+                ],
+                "html": [
+                    '<img src="https://example.org/logo.png" data-canonical-src="ignored">'
+                ],
+            }
+        )
+        with (
+            patch.object(subprocess, "check_output", return_value=rendered) as api,
             patch.object(subprocess, "run"),
             patch.object(links, "check_public_url") as check,
         ):
             self.assertEqual(
                 links.check_links(section, REPO, "1.1.0", "1.2.0", "HEAD"), section
             )
+            self.assertEqual(api.call_args.args[0][0], "node")
+            self.assertEqual(set(api.call_args.kwargs["env"]), {"PATH"})
             self.assertEqual(
-                {call.args[0] for call in check.call_args_list},
-                {url for _, url in examples},
+                {c.args[0] for c in check.call_args_list},
+                {"https://example.org/wiki/F(a)", "https://example.org/logo.png"},
             )
             check.side_effect = ValueError("Missing release-note link anchor")
             with self.assertRaisesRegex(ValueError, "Missing release-note link anchor"):
                 links.check_links(section, REPO, "1.1.0", "1.2.0", "HEAD")
-
-    def test_repaired_pr_preserves_title_and_other_link_formatting(self):
-        sha = "b" * 40
-        commit = f"{ROOT}/commit/{sha}"
-        section = (
-            HEADER
-            + f'\n\nReview [notes [API]](<{ROOT}/pull/8> "details") and [source]({commit}).'
-        )
-        with (
-            patch.object(links, "issue_types", return_value={8: None}),
-            patch.object(subprocess, "run"),
-            patch.object(
-                subprocess, "check_output", return_value=f"{sha}\tfix: API docs (#8)\n"
-            ),
-        ):
-            result = links.check_links(section, REPO, "1.1.0", "1.2.0", "HEAD")
-        self.assertIn(f'[notes [API]](<{commit}> "details")', result)
-
-    def test_malformed_title_cannot_hide_the_next_paragraphs_links(self):
-        text = '[a](https://example.org/a "title\n\n[broken](https://example.org/missing)\n\nend")'
-        with self.assertRaisesRegex(ValueError, "Unsupported"):
-            list(links.inline_links(text))
-
-    def test_code_examples_and_escaped_brackets_are_not_links(self):
-        section = (
-            HEADER + "\n\nUse `handlers[0]()` or the following example.\n\n"
-            '```markdown\n[demo](missing "illustration")\n```\n'
-            r"\[escaped](https://example.org/demo)\n"
-        )
-        with (
-            patch.object(subprocess, "run"),
-            patch.object(links, "check_public_url") as check,
-        ):
-            self.assertEqual(
-                links.check_links(section, REPO, "1.1.0", "1.2.0", "HEAD"), section
-            )
-            check.assert_not_called()
 
     def test_invalid_compare_or_private_outbound_link_fails(self):
         with self.assertRaisesRegex(ValueError, "component comparison"):

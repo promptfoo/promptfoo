@@ -28,16 +28,13 @@ Guidance for AI agents working on GitHub Actions workflows.
 
 ### Reviewing release notes
 
-The release PR previews the tagged changelog section from `CHANGELOG.md` (CLI) or
-`code-scan-action/CHANGELOG.md` (Action). The generated commit inventory is under
-**All changes**. Check breaking changes, migration instructions, notable features,
-and changes to data sent by scans. The Action section includes its bundled CLI pin.
+Review the upgrade instructions, breaking changes, and notable features in the release PR
+preview. For Code Scan Action, also check its bundled CLI version and changes to data
+sent by scans. **All changes** contains the generated inventory. Style Check compares it
+and the overview with Git history since the previous component tag.
 
-To revise the overview, add a PR comment with the following first line and the complete
-replacement Markdown below it. Use level-three headings, short paragraphs or bullets,
-and inline HTTPS Markdown links. The newest marked comment from a current repository
-writer wins. Editing the comment refreshes the preview, and later bot updates reuse
-the wording. Delete the override to restore the previous eligible override or the defaults.
+To edit the overview or supply a missing PR or commit link, post the complete replacement
+as a PR comment. Start with the marker below and use level-three headings and HTTPS links.
 
 ```markdown
 <!-- reviewed-release-notes -->
@@ -47,15 +44,10 @@ the wording. Delete the override to restore the previous eligible override or th
 Describe who needs to act and how to update their configuration.
 ```
 
-Check the resulting preview before merging. The publisher reads the versioned section
-from the release tag. For an Action release, the mirror PR and mirror changelog carry
-the same notes.
+The latest marked comment from a current repository writer survives bot refreshes.
+Editing or deleting it refreshes the preview. The release tag supplies the published
+notes, including those sent to the Action mirror.
 
-The required Style Check compares each release candidate with its previous component
-tag across the full Git history. If a change is missing, add a summary and its PR
-or commit reference in the maintainer comment above so it survives bot refreshes.
-
-After merge, the source release PR links to the published artifacts and, for
-Code Scan Action, the mirror PR and pinned CLI. Incomplete reports refresh hourly.
-To recheck an older release, run **Release publication status** on `main` with the
-merged source PR number.
+After merge, check the source PR for artifact links and the Action mirror's progress.
+Incomplete reports refresh hourly. To recheck a merged PR, run **Release publication
+status** on `main` with its PR number.
