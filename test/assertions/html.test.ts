@@ -387,6 +387,7 @@ describe('handleIsHtml', () => {
   it('should reject HTML with unclosed elements', () => {
     const unclosedExamples = [
       { input: '<div>Unclosed div', tag: 'div' },
+      { input: '<div><search></div>', tag: 'search' },
       { input: '<div><a href="/"><p>x</a></div>', tag: 'p' },
       { input: '<div><svg><circle r=1/></svg></div>', tag: 'circle' },
       { input: '<!DOCTYPE html><html><body><main><h1>Title</h1><p>Truncated', tag: 'main' },

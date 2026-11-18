@@ -167,6 +167,7 @@ const VALID_HTML_ELEMENTS = new Set([
   'figure',
   'figcaption',
   'main',
+  'search',
   'div',
   // Inline text semantics
   'a',
