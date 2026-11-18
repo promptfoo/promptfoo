@@ -69,11 +69,31 @@ jobs:
     permissions:
       actions: read
       contents: read
-      pull-requests: write
+      pull-requests: read
+    env:
+      RELEASE_PR: ${{ matrix.pr }}
     steps:
       - *checkout
-      - name: Update the publication status on the merged release PR
+      - name: Prepare the publication status with read-only credentials
+        id: prepare
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_PR: ${{ matrix.pr }}
-        run: python3 .github/scripts/release_publication_status.py update
+        run: |
+          status=0
+          python3 .github/scripts/release_publication_status.py prepare "$RUNNER_TEMP/status.json" || status=$?
+          if [[ -s "$RUNNER_TEMP/status.json" ]]; then echo "changed=true" >> "$GITHUB_OUTPUT"; fi
+          exit "$status"
+      - name: Create a token for the publication comment
+        # A failed registry check can still produce a pending report for the next reconciliation.
+        if: ${{ !cancelled() && steps.prepare.outputs.changed == 'true' }}
+        id: comment-token
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3
+        with:
+          app-id: ${{ vars.PROMPTFOOBOT_APP_ID }}
+          private-key: ${{ secrets.PROMPTFOOBOT_APP_PRIVATE_KEY }}
+          permission-pull-requests: write
+      - name: Update the publication status on the merged release PR
+        if: ${{ !cancelled() && steps.comment-token.outcome == 'success' }}
+        env:
+          GH_TOKEN: ${{ steps.comment-token.outputs.token }}
+        run: python3 .github/scripts/release_publication_status.py publish "$RUNNER_TEMP/status.json"

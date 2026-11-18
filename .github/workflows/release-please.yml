@@ -62,22 +62,37 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
-      contents: write
+      contents: read
+    env:
+      CLI_TAG: ${{ needs.release-please.outputs.release_created == 'true' && needs.release-please.outputs.tag_name || '' }}
+      ACTION_TAG: ${{ needs.release-please.outputs.code_scan_action_release_created == 'true' && needs.release-please.outputs.code_scan_action_tag_name || '' }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
           fetch-depth: 0
-      - name: Publish the reviewed section from each new tag
-        env:
-          GH_TOKEN: ${{ github.token }}
-          CLI_TAG: ${{ needs.release-please.outputs.release_created == 'true' && needs.release-please.outputs.tag_name || '' }}
-          ACTION_TAG: ${{ needs.release-please.outputs.code_scan_action_release_created == 'true' && needs.release-please.outputs.code_scan_action_tag_name || '' }}
+      - name: Extract the reviewed section from each new tag
         run: |
-          for tag in "$CLI_TAG" "$ACTION_TAG"; do
+          for component in CLI_TAG ACTION_TAG; do
+            tag="${!component}"
             [[ -n "$tag" ]] || continue
-            python .github/scripts/release_notes.py extract "$tag" > "$RUNNER_TEMP/release.md"
-            gh release edit "$tag" --repo "$GITHUB_REPOSITORY" --notes-file "$RUNNER_TEMP/release.md"
+            python .github/scripts/release_notes.py extract "$tag" > "$RUNNER_TEMP/$component.md"
+          done
+      - name: Create a token for publishing the reviewed release notes
+        id: notes-token
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3
+        with:
+          app-id: ${{ vars.PROMPTFOOBOT_APP_ID }}
+          private-key: ${{ secrets.PROMPTFOOBOT_APP_PRIVATE_KEY }}
+          permission-contents: write
+      - name: Publish the reviewed release notes
+        env:
+          GH_TOKEN: ${{ steps.notes-token.outputs.token }}
+        run: |
+          for component in CLI_TAG ACTION_TAG; do
+            tag="${!component}"
+            [[ -n "$tag" ]] || continue
+            gh release edit "$tag" --repo "$GITHUB_REPOSITORY" --notes-file "$RUNNER_TEMP/$component.md"
           done
 
   build:

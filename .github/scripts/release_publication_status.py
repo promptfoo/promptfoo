@@ -7,6 +7,7 @@ import re
 import subprocess
 import sys
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from urllib.error import HTTPError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
@@ -277,34 +278,35 @@ def status_comment(pr_number):
         (
             comment
             for comment in comments
-            if comment["user"]["login"] == "github-actions[bot]"
+            if comment["user"]["login"] in {BOT, "github-actions[bot]"}
             and comment["body"].startswith(MARKER)
         ),
         None,
     )
 
 
-def update(pr_number, dry_run=False):
+def prepare(pr_number, destination=None):
     pr = github(f"repos/{SOURCE}/pulls/{pr_number}")
     if not source_component(pr):
         raise ValueError(
             "Expected a merged release-please PR from the source repository"
         )
-    if dry_run:
+    if destination is None:
         print(report(pr))
         return
 
     existing = status_comment(pr_number)
-    endpoint = f"repos/{SOURCE}/issues/{pr_number}/comments"
 
     def save(body):
-        if not existing:
-            github(endpoint, method="POST", body={"body": body})
-        elif existing["body"] != body:
-            github(
-                f"repos/{SOURCE}/issues/comments/{existing['id']}",
-                method="PATCH",
-                body={"body": body},
+        if not existing or existing["body"] != body:
+            destination.write_text(
+                json.dumps(
+                    {
+                        "pr": pr_number,
+                        "comment_id": existing["id"] if existing else None,
+                        "body": body,
+                    }
+                )
             )
 
     try:
@@ -319,6 +321,21 @@ def update(pr_number, dry_run=False):
     save(body)
 
 
+def publish(pr_number, source):
+    plan = json.loads(source.read_text())
+    if plan["pr"] != pr_number or not plan["body"].startswith(MARKER):
+        raise ValueError("Unexpected release publication comment")
+    body = {"body": plan["body"]}
+    if plan["comment_id"] is None:
+        github(f"repos/{SOURCE}/issues/{pr_number}/comments", method="POST", body=body)
+    else:
+        github(
+            f"repos/{SOURCE}/issues/comments/{int(plan['comment_id'])}",
+            method="PATCH",
+            body=body,
+        )
+
+
 if __name__ == "__main__":
     if sys.argv[1] == "discover":
         print(
@@ -330,5 +347,9 @@ if __name__ == "__main__":
                 )
             )
         )
-    elif sys.argv[1] in ("update", "preview"):
-        update(int(os.environ["RELEASE_PR"]), dry_run=sys.argv[1] == "preview")
+    elif sys.argv[1] == "preview":
+        prepare(int(os.environ["RELEASE_PR"]))
+    elif sys.argv[1] == "prepare":
+        prepare(int(os.environ["RELEASE_PR"]), Path(sys.argv[2]))
+    elif sys.argv[1] == "publish":
+        publish(int(os.environ["RELEASE_PR"]), Path(sys.argv[2]))

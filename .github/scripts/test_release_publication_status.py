@@ -1,6 +1,8 @@
 import base64
 import json
 import unittest
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
 import release_publication_status as status
@@ -39,7 +41,7 @@ class PublicationTests(unittest.TestCase):
                 ) as api,
             ):
                 with self.assertRaises(ValueError):
-                    status.update(123)
+                    status.prepare(123)
                 self.assertEqual(api.call_count, 1)
 
     def test_discovery_requires_matching_merge_commit(self):
@@ -104,44 +106,55 @@ class PublicationTests(unittest.TestCase):
             self.assertNotIn(status.PENDING, final)
             docker.assert_called_with(VERSION)
 
-    def test_update_preserves_other_comments_and_skips_unchanged_body(self):
+    def test_write_uses_only_the_prepared_comment_and_preserves_legacy_identity(self):
         body = f"{status.MARKER}\nNew status"
-        for owned, expected_method in [(None, "POST"), ("Old", "PATCH"), (body, None)]:
+        cases = [
+            (None, "POST", None),
+            ("github-actions[bot]", "PATCH", status.MARKER + "old"),
+            (status.BOT, "PATCH", status.MARKER + "old"),
+            (status.BOT, None, body),
+        ]
+        for owner, method, old in cases:
             comments = [{"id": 3, "body": body, "user": {"login": "someone"}}]
-            if owned is not None:
-                comments.append(
-                    {
-                        "id": 9,
-                        "body": owned if owned == body else status.MARKER + owned,
-                        "user": {"login": "github-actions[bot]"},
-                    }
-                )
+            if owner:
+                comments.append({"id": 9, "body": old, "user": {"login": owner}})
             with (
-                self.subTest(owned=owned),
+                self.subTest(owner=owner, method=method),
+                TemporaryDirectory() as temp,
                 patch.object(
                     status, "github", side_effect=[SOURCE_PR, comments, {}]
                 ) as api,
                 patch.object(status, "report", return_value=body),
             ):
-                status.update(123)
-                if expected_method is None:
-                    self.assertEqual(api.call_count, 2)
-                else:
-                    self.assertEqual(
-                        api.call_args.kwargs,
-                        {"method": expected_method, "body": {"body": body}},
+                plan = Path(temp) / "status.json"
+                status.prepare(123, plan)
+                # The whole discovery phase uses only read requests.
+                self.assertEqual(api.call_count, 2)
+                self.assertFalse(
+                    any("method" in call.kwargs for call in api.call_args_list)
+                )
+                self.assertEqual(plan.exists(), bool(method))
+                if method:
+                    api.reset_mock()
+                    status.publish(123, plan)
+                    api.assert_called_once_with(
+                        f"repos/{status.SOURCE}/issues/"
+                        + ("123/comments" if method == "POST" else "comments/9"),
+                        method=method,
+                        body={"body": body},
                     )
-                    if expected_method == "PATCH":
-                        self.assertTrue(api.call_args.args[0].endswith("comments/9"))
 
-    def test_first_outage_creates_a_reconcilable_report(self):
+    def test_first_outage_prepares_a_reconcilable_report(self):
         with (
-            patch.object(status, "github", side_effect=[SOURCE_PR, [], {}]) as api,
+            TemporaryDirectory() as temp,
+            patch.object(status, "github", side_effect=[SOURCE_PR, []]) as api,
             patch.object(status, "report", side_effect=OSError("registry unavailable")),
         ):
+            plan = Path(temp) / "status.json"
             with self.assertRaises(OSError):
-                status.update(123)
-            self.assertIn(status.PENDING, api.call_args.kwargs["body"]["body"])
+                status.prepare(123, plan)
+            self.assertEqual(api.call_count, 2)
+            self.assertIn(status.PENDING, json.loads(plan.read_text())["body"])
 
     def test_annotated_and_lightweight_tags(self):
         target = {"type": "commit", "sha": MIRROR_SHA}
