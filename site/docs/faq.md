@@ -132,7 +132,7 @@ Yes. The documentation website follows the [LLMs.txt specification](https://llms
 - [llms.txt](https://www.promptfoo.dev/llms.txt) - Navigation and structure
 - [llms-full.txt](https://www.promptfoo.dev/llms-full.txt) - Complete documentation content
 
-**Usage with AI assistants:** Copy the llms-full.txt content into your AI assistant (ChatGPT, Claude, etc.) for comprehensive promptfoo context when working on LLM evaluations, red-teaming, or configuration questions.
+**Usage with AI assistants:** Copy the llms-full.txt content into your AI assistant (ChatGPT, Claude, etc.) as a reference for Promptfoo evals, red teaming, and configuration.
 
 ### Further Reading
 
