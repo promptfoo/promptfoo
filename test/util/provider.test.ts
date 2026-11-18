@@ -440,6 +440,15 @@ describe('doesProviderRefMatch', () => {
     },
   );
 
+  it('keeps exec command arguments out of normalized path matching', () => {
+    const command = createProvider('exec:echo junk/../scripts/result.js');
+    expect(doesProviderRefMatch('exec:./scripts/*', command)).toBe(false);
+    expect(doesProviderRefMatch('exec:echo *', command)).toBe(true);
+    expect(
+      doesProviderRefMatch('exec:echo junk/../scripts/*', createProvider('exec:scripts/result.js')),
+    ).toBe(false);
+  });
+
   it('preserves raw label wildcards that look like file paths', () => {
     const provider = createProvider('custom-provider', 'file://./providers/alpha');
     expect(doesProviderRefMatch('file://./providers/*', provider)).toBe(true);

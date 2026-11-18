@@ -74,7 +74,12 @@ export function sanitizeProviderIdForLog(providerId: string): string {
     : providerId;
 }
 
-function normalizeWildcardPath(canonical: string): string {
+function normalizeWildcardPath(raw: string, canonical: string): string {
+  // An exec ID can contain a command and arguments. Resolving the whole string as
+  // a path can remove the executable when an argument contains a parent segment.
+  if (raw.startsWith('exec:') && /\s/.test(raw)) {
+    return raw;
+  }
   // The shared canonicalizer preserves absolute file IDs for exact matching.
   return canonical.startsWith('file://')
     ? `file://${path.normalize(canonical.slice('file://'.length))}`
@@ -126,12 +131,13 @@ export function doesProviderRefMatch(ref: string, provider: ApiProvider): boolea
   if (ref.endsWith('*')) {
     const prefix = ref.slice(0, -1);
     // Normalize before removing '*' so a directory's trailing separator is retained.
-    const canonicalPrefix = normalizeWildcardPath(canonicalRef).slice(0, -1);
+    const canonicalPrefix = normalizeWildcardPath(ref, canonicalRef).slice(0, -1);
+    const wildcardId = normalizeWildcardPath(id, canonicalId);
     if (
       label?.startsWith(prefix) ||
       id.startsWith(prefix) ||
-      canonicalId.startsWith(prefix) ||
-      normalizeWildcardPath(canonicalId).startsWith(canonicalPrefix)
+      wildcardId.startsWith(prefix) ||
+      wildcardId.startsWith(canonicalPrefix)
     ) {
       return true;
     }
