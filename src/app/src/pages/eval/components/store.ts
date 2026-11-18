@@ -534,7 +534,13 @@ const clearFilters = (prevState: TableState) => ({
   },
 });
 
-let foregroundEvalQuery: EvalTableQuery | null = null;
+type ForegroundEvalRequest = {
+  query: EvalTableQuery;
+  settled: Promise<void>;
+  settle: () => void;
+};
+
+let foregroundEvalRequest: ForegroundEvalRequest | null = null;
 
 export const useTableStore = create<TableState>()(
   subscribeWithSelector((set, get) => ({
@@ -602,8 +608,28 @@ export const useTableStore = create<TableState>()(
         evalId: id,
         options: { pageIndex, pageSize, filterMode, searchText, filters },
       };
+      const pendingForeground = foregroundEvalRequest;
+      if (
+        skipLoadingState &&
+        pendingForeground?.query.evalId === id &&
+        JSON.stringify(pendingForeground.query.options) === JSON.stringify(query.options)
+      ) {
+        // Let the selected page commit before refreshing it. A failed refresh
+        // must not discard an otherwise successful foreground page load.
+        await pendingForeground.settled;
+        if (get().activeEvalQuery !== pendingForeground.query) {
+          return null;
+        }
+      }
+
+      let request: ForegroundEvalRequest | null = null;
       if (!skipLoadingState) {
-        foregroundEvalQuery = query;
+        let settle!: () => void;
+        const settled = new Promise<void>((resolve) => {
+          settle = resolve;
+        });
+        request = { query, settled, settle };
+        foregroundEvalRequest = request;
       }
 
       const { comparisonEvalIds } = useResultsViewSettingsStore.getState();
@@ -723,9 +749,12 @@ export const useTableStore = create<TableState>()(
         }
         return null;
       } finally {
-        if (foregroundEvalQuery === query) {
-          foregroundEvalQuery = null;
-          set({ isFetching: false });
+        if (request) {
+          if (foregroundEvalRequest === request) {
+            foregroundEvalRequest = null;
+            set({ isFetching: false });
+          }
+          request.settle();
         }
       }
     },
