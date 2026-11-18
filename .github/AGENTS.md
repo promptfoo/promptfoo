@@ -50,3 +50,12 @@ Describe who needs to act and how to update their configuration.
 Check the resulting preview before merging. The publisher reads the versioned section
 from the release tag. For an Action release, the mirror PR and mirror changelog carry
 the same notes.
+
+The required Style Check compares each release candidate with its previous component
+tag across the full Git history. If a change is missing, add a summary and its PR
+or commit reference in the maintainer comment above so it survives bot refreshes.
+
+After merge, the source release PR links to the published artifacts and, for
+Code Scan Action, the mirror PR and pinned CLI. Incomplete reports refresh hourly.
+To recheck an older release, run **Release publication status** on `main` with the
+merged source PR number.

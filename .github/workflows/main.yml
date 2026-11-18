@@ -445,10 +445,28 @@ jobs:
 
   style-check:
     name: Style Check
-    timeout-minutes: 10
+    timeout-minutes: 15
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
     steps:
-      - *checkout-repo-read-only
+      - name: Checkout repo
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+          fetch-depth: ${{ startsWith(github.head_ref, 'release-please--branches--main--components--') && '0' || '1' }}
+
+      - name: Check release notes against the component's full tag history
+        if: startsWith(github.head_ref, 'release-please--branches--main--components--')
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Validate with protected-branch code. The candidate changelog is only data.
+          git show "$BASE_SHA:scripts/check-release-notes-completeness.mjs" > "$RUNNER_TEMP/check-release-notes-completeness.mjs"
+          node "$RUNNER_TEMP/check-release-notes-completeness.mjs" "$BASE_SHA" "$HEAD_SHA"
 
       - &use-node
         name: Use Node
