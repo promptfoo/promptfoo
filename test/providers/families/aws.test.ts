@@ -20,6 +20,8 @@ describe('aws bedrock provider factory routing', () => {
   });
 
   it.each([
+    ['bedrock:openai.gpt-6.2-astra', 'us-east-1'],
+    ['bedrock:responses:openai.gpt-6.2-sol', 'us-east-1'],
     ['bedrock:openai.gpt-5.6-sol', 'us-east-2'],
     ['bedrock:openai.gpt-5.6-terra', 'us-west-2'],
     ['bedrock:openai.gpt-5.6-luna', 'us-east-1'],
