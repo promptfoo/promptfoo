@@ -183,26 +183,21 @@ function SingleProductModal() {
     // Update with the new value
     currentAttrNames[attributeName] = newValue;
 
-    // Find a variant that matches all current attribute names
-    const matchingVariant = selectedProduct.variants.find((v) =>
-      Object.entries(currentAttrNames).every(
-        ([key, name]) => v.attributes[key] && getAttributeName(v.attributes[key]) === name,
-      ),
-    );
-
-    if (matchingVariant) {
-      setSelectedVariantId(matchingVariant.id);
-      setCurrentImageIndex(0);
-    } else {
-      // Fallback: find any variant with the selected attribute name
-      const fallbackVariant = selectedProduct.variants.find(
-        (v) =>
-          v.attributes[attributeName] && getAttributeName(v.attributes[attributeName]) === newValue,
+    const variant =
+      selectedProduct.variants.find((candidate) =>
+        Object.entries(currentAttrNames).every(
+          ([key, name]) =>
+            candidate.attributes[key] && getAttributeName(candidate.attributes[key]) === name,
+        ),
+      ) ??
+      selectedProduct.variants.find(
+        (candidate) =>
+          candidate.attributes[attributeName] &&
+          getAttributeName(candidate.attributes[attributeName]) === newValue,
       );
-      if (fallbackVariant) {
-        setSelectedVariantId(fallbackVariant.id);
-        setCurrentImageIndex(0);
-      }
+    if (variant) {
+      setSelectedVariantId(variant.id);
+      setCurrentImageIndex(0);
     }
   };
 
