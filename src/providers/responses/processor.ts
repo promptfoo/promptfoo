@@ -1,6 +1,7 @@
 import logger from '../../logger';
 import { normalizeFinishReason } from '../../util/finishReason';
 import { formatOpenAiError, getOpenAICompletionTokenDetails } from '../openai/util';
+import { isRootFinalAnswer } from './stream';
 
 import type { ProviderResponse, TokenUsage } from '../../types/index';
 import type {
@@ -109,7 +110,7 @@ export class ResponsesProcessor {
         config: requestConfig,
         cached,
         data,
-        suppressReasoningOutput: options.suppressReasoningOutput,
+        ...options,
       };
 
       const processedOutput = await this.processOutput(data.output, context);
@@ -189,6 +190,7 @@ export class ResponsesProcessor {
     }
 
     let result = '';
+    const pendingToolOutputs: string[] = [];
     let refusal = '';
     let isRefusal = false;
     const annotations: any[] = [];
@@ -201,6 +203,13 @@ export class ResponsesProcessor {
       }
 
       const processed = await this.processOutputItem(item, context);
+      // A turn can pause for tools before the root produces a final answer.
+      if (context.multiAgent && !isRootFinalAnswer(item)) {
+        if (item.type === 'function_call' && processed.content) {
+          pendingToolOutputs.push(processed.content);
+        }
+        continue;
+      }
 
       if (processed.isRefusal) {
         refusal = processed.content || '';
@@ -220,7 +229,7 @@ export class ResponsesProcessor {
     }
 
     return {
-      result,
+      result: result || pendingToolOutputs.join('\n'),
       refusal,
       isRefusal,
       annotations: annotations.length > 0 ? annotations : undefined,
@@ -337,7 +346,11 @@ export class ResponsesProcessor {
     let functionResult: string;
 
     // Check if this is a meaningful function call or just a status update
-    if (item.arguments === '{}' && item.status === 'completed') {
+    if (
+      item.arguments === '{}' &&
+      item.status === 'completed' &&
+      !(context.multiAgent && item.call_id)
+    ) {
       // This appears to be a status update with no meaningful arguments
       // This often happens when using Chat API tool format with Responses API
       // In this case, return the function call info instead of trying to execute with empty args
@@ -375,38 +388,37 @@ export class ResponsesProcessor {
     let refusal = '';
     const annotations: any[] = [];
 
-    if (item.content) {
-      for (const contentItem of item.content) {
-        if (!contentItem || typeof contentItem !== 'object') {
-          logger.warn(`Skipping invalid content item: ${JSON.stringify(contentItem)}`);
-          continue;
-        }
-
-        if (contentItem.type === 'output_text') {
-          content += contentItem.text;
-          // Preserve annotations for deep research citations
-          if (Array.isArray(contentItem.annotations) && contentItem.annotations.length > 0) {
-            annotations.push(...contentItem.annotations);
-          }
-        } else if (contentItem.type === 'tool_use' || contentItem.type === 'function_call') {
-          const status = contentItem.status ?? item.status ?? context.data.status;
-          if (['incomplete', 'in_progress'].includes(status)) {
-            content += JSON.stringify(contentItem);
-            continue;
-          }
-
-          // Handle function calls within message content
-          const functionResult = await this.config.functionCallbackHandler.processCalls(
-            contentItem,
-            context.config.functionToolCallbacks,
-          );
-          content = functionResult;
-        } else if (contentItem.type === 'refusal') {
-          refusal = contentItem.refusal;
-          isRefusal = true;
-        }
+    for (const contentItem of item.content ?? []) {
+      if (!contentItem || typeof contentItem !== 'object') {
+        logger.warn(`Skipping invalid content item: ${JSON.stringify(contentItem)}`);
+        continue;
       }
-    } else if (item.refusal) {
+
+      if (contentItem.type === 'output_text') {
+        content += contentItem.text;
+        // Preserve annotations for deep research citations
+        if (Array.isArray(contentItem.annotations) && contentItem.annotations.length > 0) {
+          annotations.push(...contentItem.annotations);
+        }
+      } else if (contentItem.type === 'tool_use' || contentItem.type === 'function_call') {
+        const status = contentItem.status ?? item.status ?? context.data.status;
+        const incomplete = ['incomplete', 'in_progress'].includes(status);
+        const toolOutput = incomplete
+          ? content + JSON.stringify(contentItem)
+          : await this.config.functionCallbackHandler.processCalls(
+              contentItem,
+              context.config.functionToolCallbacks,
+            );
+        if (!context.multiAgent) {
+          content = toolOutput;
+        }
+      } else if (contentItem.type === 'refusal') {
+        refusal = contentItem.refusal;
+        isRefusal = true;
+      }
+    }
+
+    if (!item.content && item.refusal) {
       refusal = item.refusal;
       isRefusal = true;
     }

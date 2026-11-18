@@ -565,6 +565,19 @@ describe('calculateAzureCost', () => {
     expect(cost).toBeUndefined();
   });
 
+  it.each(['gpt-6.2-astra', 'gpt-6.2-sol-2026-11-17'])(
+    'uses only explicitly configured per-token rates for %s',
+    (model) => {
+      expect(calculateAzureCost(model, {}, 100, 50)).toBeUndefined();
+      expect(calculateAzureCost(model, { inputCost: 0.01 }, 100, 50)).toBeUndefined();
+      expect(calculateAzureCost(model, { outputCost: 0.02 }, 100, 50)).toBeUndefined();
+      expect(calculateAzureCost(model, { inputCost: 0.01 }, 100, 0)).toBe(1);
+      expect(calculateAzureCost(model, { cost: 0 }, 100, 50)).toBe(0);
+      expect(calculateAzureCost(model, { cost: 1, inputCost: 0.01 }, 100, 50, 25)).toBe(51);
+      expect(calculateAzureCost(model, { inputCost: 0.01, outputCost: 0.02 }, 100, 50)).toBe(2);
+    },
+  );
+
   it.each([
     'gpt-5.5-2026-04-23',
     'gpt-5.5-pro',
