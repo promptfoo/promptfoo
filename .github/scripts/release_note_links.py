@@ -170,10 +170,8 @@ def check_public_url(url):
 def check_links(section, repo, previous_tag, tag, head):
     prefix = f"https://github.com/{repo}/"
     urls = {m[2] for m in LINK.finditer(section)}
-    if len(urls) > 1000:
-        raise ValueError("Release section exceeds the 1,000-link validation budget")
     compare = f"{prefix}compare/{previous_tag}...{tag}"
-    if compare not in section.splitlines()[0]:
+    if compare not in {m[2] for m in LINK.finditer(section.splitlines()[0])}:
         raise ValueError(f"Expected component comparison {compare}")
     # The right side is the future release tag. Its immutable candidate is head.
     subprocess.run(

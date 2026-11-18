@@ -143,6 +143,25 @@ class NotesTests(unittest.TestCase):
                     "HEAD",
                 )
 
+    def test_full_500_commit_release_accepts_all_inventory_links(self):
+        inventory = "\n".join(
+            f"- Fix {n} ([#{n}]({ROOT}/issues/{n})) ([commit]({ROOT}/commit/{n:040x}))"
+            for n in range(1, 501)
+        )
+        section = HEADER + "\n\n" + inventory
+        with (
+            patch.object(
+                links,
+                "issue_types",
+                return_value=dict.fromkeys(range(1, 501), "PullRequest"),
+            ),
+            patch.object(subprocess, "run"),
+            patch.object(subprocess, "check_output", return_value=""),
+        ):
+            self.assertEqual(
+                links.check_links(section, REPO, "1.1.0", "1.2.0", "HEAD"), section
+            )
+
     def test_invalid_compare_or_private_outbound_link_fails(self):
         with self.assertRaisesRegex(ValueError, "component comparison"):
             links.check_links(BODY, REPO, "1.0.0", "1.2.0", "HEAD")
