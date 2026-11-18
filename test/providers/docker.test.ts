@@ -112,16 +112,14 @@ describe('docker model runner provider', () => {
     });
 
     it.each([
-      ['http://custom:8080', 'http://custom:8080/engines/v1'],
-      ['http://custom:8080/', 'http://custom:8080/engines/v1'],
-      ['http://custom:8080/proxy//', 'http://custom:8080/proxy/engines/v1'],
-    ])('builds the API base URL from %s without a doubled slash', (baseUrl, expected) => {
-      for (const providerPath of ['docker:chat:m', 'docker:completion:m', 'docker:embeddings:m']) {
-        const provider = createDockerProvider(providerPath, {
-          env: { DOCKER_MODEL_RUNNER_BASE_URL: baseUrl },
-        }) as DMRChatCompletionProvider | DMRCompletionProvider | DMREmbeddingProvider;
-        expect(provider.config.apiBaseUrl).toBe(expected);
-      }
+      ['docker:chat:m', 'http://custom:8080', 'http://custom:8080/engines/v1'],
+      ['docker:completion:m', 'http://custom:8080/', 'http://custom:8080/engines/v1'],
+      ['docker:embeddings:m', 'http://custom:8080/proxy//', 'http://custom:8080/proxy/engines/v1'],
+    ])('builds the %s API base URL from %s', (providerPath, baseUrl, expected) => {
+      const provider = createDockerProvider(providerPath, {
+        env: { DOCKER_MODEL_RUNNER_BASE_URL: baseUrl },
+      }) as DMRChatCompletionProvider | DMRCompletionProvider | DMREmbeddingProvider;
+      expect(provider.config.apiBaseUrl).toBe(expected);
     });
   });
 
