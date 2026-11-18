@@ -941,13 +941,12 @@ export async function resolveConfigs(
     // The user has provided a config file, so we do not want to use the default config.
     defaultConfig = {};
   }
-  // Watchers must learn the new file references even when a subsequent test
-  // load fails (for example when the referenced file has not been created yet).
-  await onConfigSourcesResolved?.(configPaths ? fileConfig : defaultConfig, testSources);
   const resolved = await cliState.withBasePath(undefined, () =>
     cliState.withEnv(fileConfig.env || defaultConfig.env || {}, () =>
-      cliState.withConfig({ ...defaultConfig, ...fileConfig }, () =>
-        resolveLoadedConfig(
+      cliState.withConfig({ ...defaultConfig, ...fileConfig }, async () => {
+        // Subscribe using the new config environment before attempting to read its inputs.
+        await onConfigSourcesResolved?.(configPaths ? fileConfig : defaultConfig, testSources);
+        return resolveLoadedConfig(
           cmdObj,
           fileConfig,
           defaultConfig,
@@ -955,8 +954,8 @@ export async function resolveConfigs(
           type,
           testSources,
           promptBasePaths,
-        ),
-      ),
+        );
+      }),
     ),
   );
   cliState.basePath = resolved.basePath;

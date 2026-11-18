@@ -377,13 +377,15 @@ async function doEvalWithEnv(
       return [];
     }
     const basePath = activeConfig.basePath ?? path.dirname(configPaths[0]);
-    const promptPaths = Array.isArray(activeConfig.prompts)
-      ? (activeConfig.prompts
+    const prompts = activeCmd.prompts ?? activeConfig.prompts;
+    const promptBase = activeCmd.prompts ? process.cwd() : basePath;
+    const promptPaths = Array.isArray(prompts)
+      ? (prompts
           .map((p) => {
             if (typeof p === 'string' && p.startsWith('file://')) {
-              return path.resolve(basePath, p.slice('file://'.length));
+              return path.resolve(promptBase, p.slice('file://'.length));
             } else if (typeof p === 'object' && p.id && p.id.startsWith('file://')) {
-              return path.resolve(basePath, p.id.slice('file://'.length));
+              return path.resolve(promptBase, p.id.slice('file://'.length));
             }
             return null;
           })
@@ -1314,7 +1316,12 @@ async function doEvalWithEnv(
         watcher
           .on('change', onWatchedFileChanged)
           .on('add', onWatchedFileChanged)
-          .on('unlink', onWatchedFileChanged)
+          .on('unlink', (filePath) =>
+            // A rename or replacement may recreate the input on the next add event.
+            onWatchedFileChanged(filePath).catch((error) => {
+              logger.error(`Could not reload after removing ${filePath}: ${error}`);
+            }),
+          )
           .on('error', (error) => logger.error(`Watcher error: ${error}`))
           .on('ready', () =>
             watchPaths.forEach((watchPath) =>

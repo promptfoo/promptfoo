@@ -1064,6 +1064,11 @@ describe('evalCommand', () => {
     expect(resolved).toBe(3);
     expect(chokidarMocks.watcher.add).toHaveBeenCalledTimes(1);
     expect(chokidarMocks.watcher.unwatch).toHaveBeenCalledTimes(1);
+
+    vi.mocked(resolveConfigs).mockRejectedValueOnce(new Error('prompt input is missing'));
+    await expect(chokidarMocks.handlers.get('unlink')?.(newFile)).resolves.toBeUndefined();
+    await chokidarMocks.handlers.get('add')?.(newFile);
+    expect(resolved).toBe(4);
   });
 
   it('subscribes immediately and never lets a slower old run restore obsolete watched files', async () => {
