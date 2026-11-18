@@ -1,6 +1,6 @@
 ---
 sidebar_label: LLM Providers
-description: Configure multiple LLM providers including Claude, GPT, and Gemini models with standardized testing interfaces for comprehensive AI evaluation
+description: Configure model providers and custom targets in Promptfoo to compare APIs, local models, agents, and application endpoints. Find provider IDs and setup guides.
 ---
 
 # LLM Providers
@@ -46,7 +46,7 @@ providers:
 | [AbliteratedLLM](./abliteratedllm.md)                   | OpenAI-compatible abliterated and stock open-weight models       | `openai:chat:glm-5.3-flash-abliterated`                                                                               |
 | [Abliteration](./abliteration.md)                       | OpenAI-compatible chat and multimodal models                     | `abliteration:abliterated-model-large-v2`                                                                             |
 | [AI21 Labs](./ai21.md)                                  | Jamba models                                                     | `ai21:jamba-mini`                                                                                                     |
-| [AI/ML API](./aimlapi.md)                               | Tap into 300+ cutting-edge AI models with a single API           | `aimlapi:chat:deepseek-r1`                                                                                            |
+| [AI/ML API](./aimlapi.md)                               | Access models through the AI/ML API                              | `aimlapi:chat:deepseek-r1`                                                                                            |
 | [Alibaba Cloud (Qwen)](./alibaba.md)                    | Alibaba Cloud's Qwen models                                      | `alibaba:qwen-max` or `qwen-plus`                                                                                     |
 | [Atlas Cloud](./atlascloud.md)                          | OpenAI-compatible AI model aggregation platform                  | `atlascloud:deepseek-v3`                                                                                              |
 | [AWS Bedrock](./aws-bedrock.md)                         | AWS-hosted models from various providers                         | `bedrock:us.anthropic.claude-opus-5`                                                                                  |
@@ -343,7 +343,7 @@ For detailed MCP documentation and advanced configurations, see the [MCP Integra
 This feature is available in [Promptfoo Cloud](/docs/enterprise) deployments.
 :::
 
-Link custom providers ([Python](/docs/providers/python/), [JavaScript](/docs/providers/custom-api/), [HTTP](/docs/providers/http/)) to cloud targets using `linkedTargetId`. This consolidates findings from multiple eval runs into one dashboard, allowing you to track performance over time and view comprehensive reporting.
+Link custom providers ([Python](/docs/providers/python/), [JavaScript](/docs/providers/custom-api/), [HTTP](/docs/providers/http/)) to cloud targets using `linkedTargetId`. This groups findings from multiple eval runs under the same target in the dashboard.
 
 ```yaml
 providers:
