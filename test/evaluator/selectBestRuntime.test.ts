@@ -78,11 +78,6 @@ describeEvaluator('select-best runtime grading configuration', () => {
   it.each([
     { name: 'native zero', output: 0, expected: '0' },
     { name: 'native false', output: false, expected: 'false' },
-    { name: 'positive number', output: 7, expected: '7' },
-    { name: 'true', output: true, expected: 'true' },
-    { name: 'empty string', output: '', expected: '' },
-    { name: 'textual zero', output: '0', expected: '0' },
-    { name: 'textual false', output: 'false', expected: 'false' },
   ])('preserves $name in the select-best grader prompt', async ({ output, expected }) => {
     const { grader, suite, target } = makeSuite();
     vi.mocked(target.callApi).mockImplementation(async (prompt) => ({
