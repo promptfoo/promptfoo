@@ -6,7 +6,7 @@ description: Compare OpenAI vs Azure OpenAI performance across speed, cost, and 
 
 # OpenAI vs Azure: How to benchmark
 
-Whether you use GPT through the OpenAI or Azure APIs, the results are pretty similar. But there are some key differences:
+Compare the same GPT model through OpenAI and Azure on:
 
 - Speed of inference
 - Frequency of model updates (Azure tends to move more slowly here) and therefore variation between models
@@ -15,9 +15,7 @@ Whether you use GPT through the OpenAI or Azure APIs, the results are pretty sim
 - Ease of integration
 - Compliance with data regulations
 
-This guide will walk you through a systematic approach to comparing these models using the `promptfoo` CLI tool.
-
-The end result will be a side-by-side comparison view that looks like this, which includes timing information and outputs.
+Use Promptfoo to compare outputs and timing side by side.
 
 ![openai and azure comparison](/img/docs/openai-vs-azure-comparison.png)
 

@@ -1,4 +1,11 @@
-import { Agent, setTracingDisabled, Usage } from '@openai/agents';
+import {
+  Agent,
+  OpenAIProvider,
+  setDefaultModelProvider,
+  setTracingDisabled,
+  Usage,
+} from '@openai/agents';
+import OpenAI from 'openai';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { OpenAiAgentsProvider } from '../../../src/providers/openai/agents';
 import { createDeferred } from '../../util/utils';
@@ -43,6 +50,48 @@ describe('OpenAiAgentsProvider with the installed SDK', () => {
     vi.restoreAllMocks();
     setTracingDisabled(false);
   });
+
+  it.each(['gpt-6.2-astra', 'gpt-6.2-sol'])(
+    'sends the %s override through the SDK Responses transport',
+    async (model) => {
+      const fetch = vi.fn<typeof globalThis.fetch>(async () =>
+        Response.json({
+          id: 'resp_1',
+          object: 'response',
+          model,
+          status: 'completed',
+          output: [
+            {
+              id: 'msg_1',
+              type: 'message',
+              role: 'assistant',
+              status: 'completed',
+              content: [{ type: 'output_text', text: 'Ready.', annotations: [] }],
+            },
+          ],
+        }),
+      );
+      const client = new OpenAI({ apiKey: 'fixture', fetch });
+      setDefaultModelProvider(new OpenAIProvider({ openAIClient: client }));
+      try {
+        const provider = new OpenAiAgentsProvider('fixture', {
+          config: { agent: new Agent({ name: 'Fixture', model: 'gpt-5.6-luna' }), model },
+        });
+        expect((await provider.callApi('Say ready.')).output).toBe('Ready.');
+        expect(fetch).toHaveBeenCalledTimes(1);
+        const [url, init] = fetch.mock.calls[0];
+        expect(String(url)).toMatch(/\/v1\/responses$/);
+        const body = JSON.parse(init!.body as string);
+        expect(body.model).toBe(model);
+        expect([undefined, 'low', 'medium', 'high', 'xhigh', 'max']).toContain(
+          body.reasoning?.effort,
+        );
+        expect(body.temperature).toBeUndefined();
+      } finally {
+        setDefaultModelProvider(new OpenAIProvider({ cacheResponsesWebSocketModels: false }));
+      }
+    },
+  );
 
   it('preserves conversation history and numeric usage through the real runner and session', async () => {
     const model = scriptedModel(async () => reply('Remembered.'));
