@@ -1,6 +1,6 @@
 ---
 title: Helicone AI Gateway
-description: Monitor and optimize LLM usage through Helicone's AI gateway with unified access, caching, and comprehensive observability
+description: Route Promptfoo eval requests through a local Helicone AI Gateway. Configure OpenAI-compatible providers, caching, load balancing, and optional observability.
 ---
 
 # Helicone AI Gateway

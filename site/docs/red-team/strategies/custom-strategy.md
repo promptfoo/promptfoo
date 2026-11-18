@@ -14,7 +14,7 @@ tags: [red-team, strategies, custom, multi-turn]
 
 # Custom Strategy
 
-Write natural language instructions to create powerful multi-turn red team strategies. No coding required.
+Define a multi-turn red team strategy using natural language instructions.
 
 :::tip Quick Start
 
