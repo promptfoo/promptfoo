@@ -23,7 +23,7 @@ This guide maps the preset to seven GDPR articles that are particularly relevant
 
 ## Scanning for Data Protection Risks
 
-Promptfoo helps identify privacy, access-control, and personal-data handling issues through comprehensive red teaming.
+The GDPR preset tests for privacy, access-control, and personal-data handling issues.
 
 To set up the scan through the Promptfoo UI, select the GDPR preset on the Plugins page. The configuration identifier remains `gdpr` for compatibility.
 
@@ -424,4 +424,4 @@ Remember that Promptfoo's testing capabilities complement but don't replace:
 - Organizational policies and procedures
 - User consent mechanisms and data processing agreements
 
-To learn more about setting up comprehensive AI red teaming, see [Introduction to LLM red teaming](/docs/red-team/) and [Configuration details](/docs/red-team/configuration/).
+To learn more about setting up AI red teaming, see [Introduction to LLM red teaming](/docs/red-team/) and [Configuration details](/docs/red-team/configuration/).
