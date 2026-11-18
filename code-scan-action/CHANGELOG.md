@@ -4,11 +4,10 @@ All notable changes to this package will be documented in this file.
 
 ## [0.2.3](https://github.com/promptfoo/promptfoo/compare/code-scan-action-0.2.2...code-scan-action-0.2.3) (2026-11-18)
 
-
 ### Bug Fixes
 
-* **code-scan:** upgrade the filesystem MCP server to 2.3.0 ([#12185](https://github.com/promptfoo/promptfoo/issues/12185)) ([9e66910](https://github.com/promptfoo/promptfoo/commit/9e66910303f288c88bb49a8ce227b96789ab9400))
-* **deps:** upgrade Undici in the CLI and scan action ([#12437](https://github.com/promptfoo/promptfoo/issues/12437)) ([f12d114](https://github.com/promptfoo/promptfoo/commit/f12d1144af0678ce5f88f39a439f4b89378ec5fd))
+- **code-scan:** upgrade the filesystem MCP server to 2.3.0 ([#12185](https://github.com/promptfoo/promptfoo/issues/12185)) ([9e66910](https://github.com/promptfoo/promptfoo/commit/9e66910303f288c88bb49a8ce227b96789ab9400))
+- **deps:** upgrade Undici in the CLI and scan action ([#12437](https://github.com/promptfoo/promptfoo/issues/12437)) ([f12d114](https://github.com/promptfoo/promptfoo/commit/f12d1144af0678ce5f88f39a439f4b89378ec5fd))
 
 ## [0.2.2](https://github.com/promptfoo/promptfoo/compare/code-scan-action-0.2.1...code-scan-action-0.2.2) (2026-10-08)
 
