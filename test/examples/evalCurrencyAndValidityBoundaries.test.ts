@@ -51,6 +51,8 @@ describe('Currency and validity boundary example', () => {
       { currency: 'USD', items: [{ amount: 0.001 }], total: 0 },
       /invalid item amount/i,
     ],
+    ['validateTemporalBoundary', { effectiveUntil: '2026-05-31T23:59:59' }, /valid ISO dates/i],
+    ['validateTemporalBoundary', { effectiveUntil: '2026-02-30T00:00:00Z' }, /valid ISO dates/i],
     ['validateCurrencyCode', { currency: 'EUR', total: '0.25' }, /currency mismatch/i],
   ] as const)('rejects invalid output from %s: %j', async (handler, invoice, reason) => {
     const query = JSON.stringify(invoice);
@@ -59,7 +61,7 @@ describe('Currency and validity boundary example', () => {
       provider,
       providerResponse: await provider.callApi(query),
       test: {
-        vars: { expectedCurrency: 'USD' },
+        vars: { expectedCurrency: 'USD', cutoffUtc: '2026-06-01T00:00:00Z' },
         assert: [{ type: 'javascript', value: `file://assert-boundary.cjs:${handler}` }],
       },
     });

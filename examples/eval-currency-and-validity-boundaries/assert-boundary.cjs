@@ -156,64 +156,40 @@ function validateCurrencyCode(output, context) {
   };
 }
 
+// Require an explicit time zone so the result is independent of the machine running the eval.
+function parseTimestamp(value) {
+  const match =
+    typeof value === 'string' &&
+    /^(\d{4}-\d{2}-\d{2})T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?(?:Z|[+-]\d{2}:\d{2})$/.exec(value);
+  if (!match) {
+    return NaN;
+  }
+  // Date.parse rolls dates such as February 30 into the following month.
+  const midnight = Date.parse(match[1] + 'T00:00:00Z');
+  return Number.isFinite(midnight) && new Date(midnight).toISOString().startsWith(match[1])
+    ? Date.parse(value)
+    : NaN;
+}
+
 function validateTemporalBoundary(output, context) {
-  const data = parseJsonOutput(output);
-  if (!data) {
-    return {
-      pass: false,
-      score: 0,
-      reason: 'Output is not valid JSON or object',
-    };
-  }
-
   const cutoffUtc = context?.vars?.cutoffUtc;
-  if (!cutoffUtc) {
+  const effectiveUntil = parseJsonOutput(output)?.effectiveUntil;
+  const cutoffTime = parseTimestamp(cutoffUtc);
+  const effectiveTime = parseTimestamp(effectiveUntil);
+  if (!Number.isFinite(cutoffTime) || !Number.isFinite(effectiveTime)) {
     return {
       pass: false,
       score: 0,
-      reason: 'Missing cutoffUtc in test vars',
+      reason: 'Both timestamps must be valid ISO dates with an explicit time zone',
     };
   }
-
-  const cutoffTime = new Date(cutoffUtc).getTime();
-  if (Number.isNaN(cutoffTime)) {
-    return {
-      pass: false,
-      score: 0,
-      reason: `Invalid cutoffUtc timestamp: ${cutoffUtc}`,
-    };
-  }
-
-  const effectiveUntil = data.effectiveUntil;
-  if (!effectiveUntil) {
-    return {
-      pass: false,
-      score: 0,
-      reason: 'Missing effectiveUntil date in output',
-    };
-  }
-
-  const effectiveTime = new Date(effectiveUntil).getTime();
-  if (Number.isNaN(effectiveTime)) {
-    return {
-      pass: false,
-      score: 0,
-      reason: `Invalid effectiveUntil timestamp: ${effectiveUntil}`,
-    };
-  }
-
-  if (effectiveTime > cutoffTime) {
-    return {
-      pass: false,
-      score: 0,
-      reason: `Quote expired: effectiveUntil ${effectiveUntil} is past cutoff ${cutoffUtc}`,
-    };
-  }
-
+  const pass = effectiveTime <= cutoffTime;
   return {
-    pass: true,
-    score: 1,
-    reason: `Quote effective until ${effectiveUntil} is within cutoff ${cutoffUtc}`,
+    pass,
+    score: pass ? 1 : 0,
+    reason: pass
+      ? `Quote effective until ${effectiveUntil} is within cutoff ${cutoffUtc}`
+      : `Quote expired: effectiveUntil ${effectiveUntil} is past cutoff ${cutoffUtc}`,
   };
 }
 
