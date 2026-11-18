@@ -227,7 +227,7 @@ describe('redteamInit', () => {
     expect(process.exitCode).toBe(1);
   });
 
-  it('offers current Gemini models for AI Studio and Vertex targets', async () => {
+  it('offers current OpenAI, AI Studio, and Vertex targets', async () => {
     await redteamInit(undefined);
 
     const modelPrompt = vi
@@ -236,6 +236,8 @@ describe('redteamInit', () => {
 
     expect(modelPrompt?.[0].choices).toEqual(
       expect.arrayContaining([
+        expect.objectContaining({ value: 'openai:gpt-6.2-sol' }),
+        expect.objectContaining({ value: 'openai:gpt-6.2-astra' }),
         expect.objectContaining({ value: 'google:gemini-4-argon' }),
         expect.objectContaining({ value: 'google:gemini-4-hydrogen' }),
         expect.objectContaining({ value: 'google:gemini-3.8-flash' }),

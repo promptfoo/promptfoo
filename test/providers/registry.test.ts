@@ -934,6 +934,8 @@ describe('Provider Registry', () => {
         'gpt-6.1',
         'gpt-6.1-sol',
         'gpt-6.1-sol-2026-09-29',
+        'gpt-6.2-astra',
+        'gpt-6.2-sol',
         'gpt-7-mini',
       ])('defaults bare %s to Responses', async (model) => {
         const provider = await registry.create(`openai:${model}`);
@@ -950,6 +952,8 @@ describe('Provider Registry', () => {
         'gpt-6-sol',
         'gpt-6-luna',
         'gpt-6.1-sol',
+        'gpt-6.2-astra',
+        'gpt-6.2-sol',
         'gpt-7-mini',
       ])('honors the explicit Chat endpoint for %s', async (model) => {
         const provider = await registry.create(`openai:chat:${model}`);
