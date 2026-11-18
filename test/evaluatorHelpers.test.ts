@@ -685,6 +685,12 @@ describe('evaluatorHelpers', () => {
       });
     });
 
+    it('does not resolve inherited names after an unresolved placeholder', () => {
+      expect(
+        resolveVariables({ message: '{{missing}} {{constructor}} {{name}}', name: 'ok' }).message,
+      ).toBe('{{missing}} {{constructor}} ok');
+    });
+
     it('should keep resolving later placeholders when an earlier one is unresolved', () => {
       const variables = {
         message: '{{missing}} {{a}} {{b}}',

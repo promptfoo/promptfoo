@@ -177,16 +177,7 @@ export function resolveVariables(
   let resolved: boolean;
   const regex = /\{\{\s*(\w+)\s*\}\}/g; // Matches {{variableName}}, {{ variableName }}, etc.
 
-  // Variables whose placeholder references form a cycle. Substituting a cyclic
-  // variable inlines its growing value into a dependent on every pass (a cycle
-  // behind an unresolved placeholder duplicates the unresolved text), so cyclic
-  // variables are never substituted. Cycle membership is recomputed after every
-  // substitution, because a substitution can assemble a placeholder that was
-  // absent from the graph moments earlier (a value ending in '{{' can complete
-  // a later 'name}}', and a stringified non-string value can carry placeholder
-  // text): only a cycle set derived from the current values is sound.
-  // Comparing parsed placeholder names avoids building a RegExp from arbitrary
-  // variable keys, which can throw on metacharacters.
+  // Never inline a cyclic variable: doing so can grow its contents on every pass.
   let cyclicVars = findCyclicVars(variables, regex);
 
   let iterations = 0;
@@ -215,7 +206,11 @@ export function resolveVariables(
         // resolved-from-skipped, so cycle checks must not look inside them.
         const candidateIsSkipped =
           skipResolveVars?.includes(varName) || varsResolvedFromSkipped?.has(varName);
-        if (variables[varName] === undefined || (!candidateIsSkipped && cyclicVars.has(varName))) {
+        if (
+          !Object.hasOwn(variables, varName) ||
+          variables[varName] === undefined ||
+          (!candidateIsSkipped && cyclicVars.has(varName))
+        ) {
           continue;
         }
         match = candidate;
@@ -224,14 +219,21 @@ export function resolveVariables(
       if (match) {
         const [placeholder, varName] = match;
         // A replacer function keeps `$&`, `$'` and `` $` `` in the value literal.
-        variables[key] = value.replace(placeholder, () => variables[varName] as string);
+        const updated = value.replace(placeholder, () => variables[varName] as string);
+        variables[key] = updated;
         if (skipResolveVars?.includes(varName) || varsResolvedFromSkipped?.has(varName)) {
           varsResolvedFromSkipped?.add(key);
         }
-        // The mutation above may have assembled a new placeholder, so cycle
-        // membership must be rebuilt from the current values before the next
-        // candidate is considered.
-        cyclicVars = findCyclicVars(variables, regex);
+        // Dropping edges from a noncyclic key cannot change any cycle. Rebuild only
+        // when an existing cycle may have broken or the new value could lead back to key.
+        if (
+          cyclicVars.has(key) ||
+          Array.from(updated.matchAll(regex)).some(
+            ([, name]) => Object.hasOwn(variables, name) && typeof variables[name] === 'string',
+          )
+        ) {
+          cyclicVars = findCyclicVars(variables, regex);
+        }
         resolved = false; // Indicate that we've made a replacement and should check again
       }
     }
