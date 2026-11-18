@@ -14,7 +14,7 @@ function createSequenceCall(responses: ProviderResponse[]) {
   return {
     callApi,
     provider,
-    context: { originalProvider, vars: {} },
+    context: { originalProvider, prompt: { raw: 'prompt', label: 'prompt' }, vars: {} },
   };
 }
 
