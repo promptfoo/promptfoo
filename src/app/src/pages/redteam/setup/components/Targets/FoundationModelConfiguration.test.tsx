@@ -127,7 +127,7 @@ describe('FoundationModelConfiguration', () => {
     const modelIdInput = screen.getByRole('textbox', { name: /Model ID/i });
     expect(modelIdInput).toHaveAttribute(
       'placeholder',
-      'openai:gpt-6.1-sol, openai:gpt-6-luna, openai:gpt-6-astra',
+      'openai:gpt-6.2-sol, openai:gpt-6-luna, openai:gpt-6.2-astra',
     );
 
     const documentationLink = screen.getByRole('link', { name: /OpenAI documentation/ });
@@ -189,8 +189,44 @@ describe('FoundationModelConfiguration', () => {
       />,
     );
 
-    const modelIdInput = screen.getByPlaceholderText('azure:chat:your-deployment-name');
-    expect(modelIdInput).toHaveAttribute('placeholder', 'azure:chat:your-deployment-name');
+    const modelIdInput = screen.getByPlaceholderText('azure:responses:your-deployment-name');
+    expect(modelIdInput).toHaveAttribute('placeholder', 'azure:responses:your-deployment-name');
+  });
+
+  it.each([
+    ['openai:gpt-6.2-astra', 'openai'],
+    ['openai:responses:gpt-6.2-sol', 'openai'],
+    ['azure:responses:my-production-deployment', 'azure'],
+  ])('edits a Responses output cap for %s', async (id, providerType) => {
+    const user = userEvent.setup();
+    render(
+      <FoundationModelConfiguration
+        selectedTarget={{ id, config: { max_tokens: 256 } }}
+        updateCustomTarget={mockUpdateCustomTarget}
+        providerType={providerType}
+      />,
+    );
+    await user.click(screen.getByRole('button', { name: /Advanced Configuration/ }));
+    const cap = screen.getByLabelText('Max Output Tokens');
+    expect(cap).toHaveValue(256);
+    await user.tripleClick(cap);
+    await user.paste('512');
+    expect(mockUpdateCustomTarget).toHaveBeenLastCalledWith('config', { max_output_tokens: 512 });
+  });
+
+  it('keeps the deployment ID when editing its Azure model hint', async () => {
+    const user = userEvent.setup();
+    render(
+      <FoundationModelConfiguration
+        selectedTarget={{ id: 'azure:chat:my-production-deployment', config: {} }}
+        updateCustomTarget={mockUpdateCustomTarget}
+        providerType="azure"
+      />,
+    );
+    await user.click(screen.getByRole('button', { name: /Advanced Configuration/ }));
+    await user.click(screen.getByLabelText('Underlying model'));
+    await user.paste('gpt-6.2-astra');
+    expect(mockUpdateCustomTarget).toHaveBeenLastCalledWith('modelName', 'gpt-6.2-astra');
   });
 
   it('should display the correct placeholder and documentation link for the openrouter provider', () => {
@@ -205,7 +241,7 @@ describe('FoundationModelConfiguration', () => {
     const modelIdInput = screen.getByRole('textbox', { name: /Model ID/i });
     expect(modelIdInput).toHaveAttribute(
       'placeholder',
-      'openrouter:openai/gpt-6-sol, openrouter:anthropic/claude-opus-5.5',
+      'openrouter:openai/gpt-6.2-sol, openrouter:anthropic/claude-opus-5.5',
     );
 
     const documentationLink = screen.getByRole('link', { name: /OpenRouter documentation/ });
@@ -257,7 +293,7 @@ describe('FoundationModelConfiguration', () => {
     let modelIdInput = screen.getByRole('textbox', { name: /Model ID/i });
     expect(modelIdInput).toHaveAttribute(
       'placeholder',
-      'openai:gpt-6.1-sol, openai:gpt-6-luna, openai:gpt-6-astra',
+      'openai:gpt-6.2-sol, openai:gpt-6-luna, openai:gpt-6.2-astra',
     );
     let documentationLink = screen.getByRole('link', { name: /OpenAI documentation/ });
     expect(documentationLink).toHaveAttribute(
@@ -562,7 +598,7 @@ describe('FoundationModelConfiguration', () => {
   it.each([
     'bedrock:responses:openai.gpt-oss-120b',
     'bedrock:mantle:custom.future-model',
-    'bedrock:messages:us.anthropic.claude-fable-5-1',
+    'bedrock:messages:us.anthropic.claude-fable-5-2',
   ])('acknowledges a custom endpoint for %s without inventing new model restrictions', (id) => {
     render(
       <FoundationModelConfiguration
@@ -602,6 +638,7 @@ describe('FoundationModelConfiguration', () => {
     ['gpt-5.6-sol', 'bedrock:responses:openai.gpt-5.6-sol'],
     ['gpt-oss-120b', 'bedrock:responses:openai.gpt-oss-120b'],
     ['openai.gpt-5.6-sol', 'bedrock:responses:openai.gpt-5.6-sol'],
+    ['gpt-6.2-astra', 'bedrock:responses:openai.gpt-6.2-astra'],
     ['custom.model', 'bedrock:responses:custom.model'],
     ['us.openai.gpt-5.6-sol', 'bedrock:responses:us.openai.gpt-5.6-sol'],
     [
@@ -787,7 +824,7 @@ describe('FoundationModelConfiguration', () => {
     ['bedrock:completion:xai.grok-4.3', 'responses', 'xai.grok-4.3'],
     ['bedrock:mantle:openai.gpt-oss-120b', 'chat', 'openai.gpt-oss-120b'],
     ['bedrock:mantle:openai.gpt-6.1-sol', 'chat', 'openai.gpt-6.1-sol'],
-    ['bedrock:messages:us.anthropic.claude-fable-5-1', 'messages', 'us.anthropic.claude-fable-5-1'],
+    ['bedrock:messages:us.anthropic.claude-fable-5-2', 'messages', 'us.anthropic.claude-fable-5-2'],
     ['bedrock:anthropic.claude-mythos-5', 'messages', 'anthropic.claude-mythos-5'],
   ])(
     'displays the resolved API and settings for %s without rewriting it',
@@ -852,9 +889,9 @@ describe('FoundationModelConfiguration', () => {
       'bedrock:mantle:openai.gpt-oss-20b',
     ],
     [
-      'bedrock:messages:us.anthropic.claude-fable-5-1',
-      'global.anthropic.claude-fable-5-1',
-      'bedrock:messages:global.anthropic.claude-fable-5-1',
+      'bedrock:messages:us.anthropic.claude-fable-5-2',
+      'global.anthropic.claude-fable-5-2',
+      'bedrock:messages:global.anthropic.claude-fable-5-2',
     ],
     [
       'bedrock:completion:amazon.nova-pro-v1:0',
@@ -949,7 +986,7 @@ describe('FoundationModelConfiguration', () => {
     'bedrock:converse:anthropic.claude-3-5-sonnet-20241022-v2:0',
     'bedrock:runtime:chat:qwen.qwen3-coder-next',
     'bedrock:mantle:openai.gpt-oss-120b',
-    'bedrock:messages:us.anthropic.claude-fable-5-1',
+    'bedrock:messages:us.anthropic.claude-fable-5-2',
   ])('renders MCP configuration for %s and saves servers under config.mcp', async (id) => {
     const user = userEvent.setup();
     render(

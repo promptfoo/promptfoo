@@ -26,6 +26,20 @@ describe('Bedrock Runtime model compatibility', () => {
     },
   );
 
+  it.each([
+    'anthropic.claude-fable-5-1',
+    'anthropic.claude-mythos-5-1',
+    'anthropic.claude-fable-5-2',
+    'anthropic.claude-mythos-5-2',
+  ])('rejects the bare %s ID on Converse and InvokeModel', async (model) => {
+    await expect(factory.create(`bedrock:converse:${model}`, {}, {} as never)).rejects.toThrow(
+      `bedrock:global.${model}`,
+    );
+    expect(() => getHandlerForModel(model)).toThrow(`bedrock:us.${model}`);
+    expect(getHandlerForModel(`global.${model}`)).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
+    expect(getHandlerForModel(`us.${model}`)).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
+  });
+
   it.each(['xai.grok-4.7', 'zai.glm-5.3', 'moonshotai.kimi-k3'])(
     'keeps application profile resources opaque for %s',
     (model) => {

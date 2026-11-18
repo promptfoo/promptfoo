@@ -37,6 +37,7 @@ export default defineConfig({
         'src/**/*.d.ts',
         'src/**/*.test.ts',
         'src/**/*.test.tsx',
+        'src/**/*.browser.tsx',
         'src/setupTests.ts',
         'src/test/**',
       ],

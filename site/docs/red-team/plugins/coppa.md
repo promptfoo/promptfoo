@@ -1,6 +1,6 @@
 ---
 sidebar_label: COPPA
-description: Test AI systems for COPPA compliance vulnerabilities by detecting failures in age verification, parental consent, and child privacy protection to ensure compliance with children's online privacy regulations
+description: Test AI systems for potential issues with age verification, parental consent, and child privacy protections relevant to COPPA. Review test cases and findings.
 ---
 
 # COPPA
