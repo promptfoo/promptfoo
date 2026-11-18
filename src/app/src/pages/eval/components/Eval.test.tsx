@@ -463,6 +463,7 @@ describe('Eval', () => {
       ],
     };
     (useTableStore as any).getState.mockReturnValue({
+      ...useTableStore.getState(),
       filters: { values: {} },
       activeEvalQuery: { evalId: 'retried-eval', options },
     });
