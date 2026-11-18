@@ -16,7 +16,7 @@ cd eval-exactly-once-browser-action
 npx promptfoo@latest eval -c promptfooconfig.yaml --no-cache
 ```
 
-The `wait` case passes both assertions. The deliberately unsafe `queue` case fails both assertions, so the command exits nonzero as expected.
+In this two-action state, waiting is both correct and safe, so both named metrics use the same predicate. The `wait` case passes both assertions. The deliberately unsafe `queue` case fails both assertions, so the command exits nonzero as expected.
 
 To evaluate a live agent instead:
 
