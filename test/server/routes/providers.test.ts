@@ -21,7 +21,10 @@ vi.mock(import('../../../src/server/config/serverConfig'), async (importOriginal
 }));
 vi.mock('../../../src/redteam/commands/discover');
 vi.mock('../../../src/redteam/remoteGeneration');
-vi.mock('../../../src/util/fetch/index');
+vi.mock(import('../../../src/util/fetch/index'), async (importOriginal) => ({
+  ...(await importOriginal()),
+  fetchWithProxy: vi.fn(),
+}));
 vi.mock('../../../src/globalConfig/cloud', () => ({
   cloudConfig: {
     isEnabled: vi.fn(),

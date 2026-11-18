@@ -881,6 +881,7 @@ export function createServerOpenApiRegistry() {
     responses: {
       200: jsonResponse(ProviderSchemas.Test.Response),
       400: jsonResponse(ErrorResponseSchema, 'Validation error'),
+      403: jsonResponse(ErrorResponseSchema, 'Cloud proxying not enabled'),
       500: jsonResponse(ErrorResponseSchema, 'Server error'),
     },
   });
@@ -976,6 +977,7 @@ export function createServerOpenApiRegistry() {
     responses: {
       200: jsonResponse(RedteamSchemas.GenerateTest.Response),
       400: jsonResponse(ErrorResponseSchema, 'Validation error'),
+      403: jsonResponse(ErrorResponseSchema, 'Cloud proxying not enabled'),
       500: jsonResponse(ErrorResponseSchema, 'Server error'),
     },
   });

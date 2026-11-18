@@ -14,7 +14,10 @@ vi.mock('../../../src/redteam/plugins/index');
 vi.mock('../../../src/redteam/providers/shared');
 vi.mock('../../../src/redteam/shared');
 vi.mock('../../../src/redteam/remoteGeneration');
-vi.mock('../../../src/util/fetch/index');
+vi.mock(import('../../../src/util/fetch/index'), async (importOriginal) => ({
+  ...(await importOriginal()),
+  fetchWithProxy: vi.fn(),
+}));
 vi.mock('../../../src/server/services/redteamTestCaseGenerationService');
 
 // Import after mocking

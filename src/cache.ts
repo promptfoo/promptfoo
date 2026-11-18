@@ -10,6 +10,7 @@ import logger from './logger';
 import { getRequestTimeoutMs, throwIfAborted, waitForPromiseWithAbort } from './providers/shared';
 import { getConfigDirectoryPath } from './util/config/manage';
 import { sha256 } from './util/createHash';
+import { getFetchDestinationGuard } from './util/fetch/destinationGuard';
 import { isAbortError, isTransientConnectionError } from './util/fetch/errors';
 import { fetchWithRetries, getFetchWithProxyHeaders } from './util/fetch/index';
 import {
@@ -926,6 +927,7 @@ export async function fetchWithCache<T = unknown>(
   onResponsePrepared?: (response: FetchWithCacheResult<T>) => void,
   onRateLimitBackoff?: (observation: FetchRateLimitObservation) => void,
 ): Promise<FetchWithCacheResult<T>> {
+  getFetchDestinationGuard()?.(getRequestUrlString(url));
   const timeoutMs = Number(timeout);
   const signal = getEffectiveRequestSignal(url, options);
   throwIfAborted(signal);

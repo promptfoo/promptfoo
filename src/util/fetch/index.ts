@@ -16,6 +16,7 @@ import { sha256 } from '../createHash';
 import { sanitizeUrl, sanitizeUrlForLogging } from '../sanitizer';
 import { CloudAuthRedirectError } from './cloudAuthRedirects';
 import { createDecompressionInterceptor, stripDecompressionHeaders } from './decompress';
+import { withFetchDestinationGuard } from './destinationGuard';
 import {
   extractRateLimitErrorCode,
   extractRateLimitErrorType,
@@ -23,7 +24,11 @@ import {
   HttpRateLimitError,
   type SystemError,
 } from './errors';
-import { monkeyPatchFetch, preserveCloudAuthRedirects } from './monkeyPatchFetch';
+import {
+  isPromptfooCloudApiHost,
+  monkeyPatchFetch,
+  preserveCloudAuthRedirects,
+} from './monkeyPatchFetch';
 import { getEffectiveRequestSignal } from './requestSignal';
 import { readWithResponseDeadline, trackResponseDeadline } from './responseDeadline';
 import { getFetchRetryContextMaxRetries } from './retryContext';
@@ -210,6 +215,14 @@ function getFetchUrlString(url: RequestInfo): string | undefined {
     return url.url;
   }
   return undefined;
+}
+
+export function withCloudDestinationGuard<T>(check: (target: URL) => void, run: () => T): T {
+  return withFetchDestinationGuard((url) => {
+    if (isPromptfooCloudApiHost(url)) {
+      check(new URL(url));
+    }
+  }, run);
 }
 
 export async function fetchWithProxy(
