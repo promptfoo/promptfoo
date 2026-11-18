@@ -802,6 +802,27 @@ describe('analyzeTemplateReference', () => {
     });
   });
 
+  it('preserves function adapters for loop-bound macro receivers', () => {
+    const value =
+      "{% macro h(x=_conversation) %}{{x}}{% endmacro %}{{h('warmup')}}{% for f in [h] %}{{f.call(0)}}{% endfor %}";
+    expect(getNunjucksEngine().renderString(value, { _conversation: 'history' })).toBe(
+      'warmuphistory',
+    );
+    expect(analyzeTemplateReference(value, '_conversation')).toEqual({
+      referenced: true,
+      parsed: true,
+    });
+  });
+
+  it('allows missing direct inputs in inline truthiness conditions', () => {
+    const value = "{{ 'member' if user else 'guest' }}";
+    expect(getNunjucksEngine().renderString(value, {})).toBe('guest');
+    expect(extractRequiredVariablesFromTemplate(value)).toEqual([]);
+    expect(
+      extractRequiredVariablesFromTemplate("{{ 'member' if user|trim else 'guest' }}"),
+    ).toContain('user');
+  });
+
   it('preserves escaped alternatives across caller argument merges', () => {
     const value =
       "{% macro a() %}plain{% endmacro %}{% macro h(x=_conversation) %}{{x}}{% endmacro %}{{h('warmup')}}{% macro wrap() %}{{caller(a)}}{{caller(h|default)}}{% endmacro %}{% call(g) wrap() %}{{g()}}{% endcall %}";

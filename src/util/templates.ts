@@ -694,6 +694,37 @@ function isForLikeNode(node: NunjucksAstNode): boolean {
   return node.typename === 'For' || node.typename === 'AsyncEach' || node.typename === 'AsyncAll';
 }
 
+function loopMacroBinding(
+  node: NunjucksAstNode,
+  boundSymbols: ReadonlySet<string>,
+): MacroBinding | undefined {
+  if (!(boundSymbols instanceof LinkedScope)) {
+    return undefined;
+  }
+  const sources =
+    isNunjucksAstNode(node.arr) && node.arr.typename === 'Array' && Array.isArray(node.arr.children)
+      ? node.arr.children
+      : [node.arr];
+  const candidates = new Set<DeferredMacro>();
+  const memo = boundSymbols.macroAnalysisMemo();
+  let dynamic = false;
+  let found = false;
+  for (const source of sources) {
+    const name = getSymbolName(source);
+    const binding = name ? boundSymbols.findMacroBinding(name) : undefined;
+    if (!binding) {
+      continue;
+    }
+    found = true;
+    dynamic ||= binding.dynamic;
+    for (const candidate of binding.candidates) {
+      consumeAnalysisWork(memo);
+      candidates.add(candidate);
+    }
+  }
+  return found ? { candidates, dynamic } : undefined;
+}
+
 function forLikeNodeReferencesVariable(
   node: NunjucksAstNode,
   variableName: ReferenceTarget,
@@ -703,6 +734,15 @@ function forLikeNodeReferencesVariable(
   const loopName = getSymbolName(node.name);
   if (loopName && containerContainsCallerAlias(node.arr, boundSymbols)) {
     loopScope.registerCallerAlias(loopName);
+  }
+  const macroBinding = loopName ? loopMacroBinding(node, boundSymbols) : undefined;
+  if (loopName && macroBinding) {
+    loopScope.registerMacroCandidates(
+      loopName,
+      macroBinding.candidates,
+      true,
+      macroBinding.dynamic,
+    );
   }
   // Nunjucks exposes the frame-local `loop` object alongside the explicit loop
   // variable. It is neither an external dependency nor an engine global.
@@ -2165,6 +2205,14 @@ function inlineIfNodeReferencesVariable(
   boundSymbols: ReadonlySet<string>,
 ): boolean {
   if (!isExistenceGuardedConditional(node, variableName)) {
+    if (typeof variableName === 'object' && 'excludeOrOperands' in variableName) {
+      return (
+        (isNunjucksAstNode(node.cond) &&
+          undefinedSafeOperandReferencesVariable(node.cond, variableName, boundSymbols)) ||
+        astChildReferencesVariable(node, 'body', variableName, boundSymbols) ||
+        astChildReferencesVariable(node, 'else_', variableName, boundSymbols)
+      );
+    }
     return astFieldsReferenceVariable(node, variableName, boundSymbols);
   }
   if (astChildReferencesVariable(node, 'cond', variableName, boundSymbols)) {
