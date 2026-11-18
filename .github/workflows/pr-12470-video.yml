@@ -27,6 +27,8 @@ jobs:
           mkdir -p "$RUNNER_TEMP/viewer"
           tar -xzf "$RUNNER_TEMP"/packed/*.tgz -C "$RUNNER_TEMP/viewer" package/dist/src/app
           test -f "$RUNNER_TEMP/viewer/package/dist/src/app/index.html"
+      - name: Install video encoder
+        run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends ffmpeg
       - name: Record browser flow
         env:
           VIEWER_ROOT: ${{ runner.temp }}/viewer/package/dist/src/app
@@ -38,3 +40,36 @@ jobs:
           path: ${{ runner.temp }}/eval-pagination.mp4
           if-no-files-found: error
           retention-days: 90
+  publish:
+    needs: record
+    if: github.repository == 'promptfoo/promptfoo' && github.ref == 'refs/heads/qa/pr-12470-video' && github.actor == 'ianw-oai'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: main
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: eval-pagination-video
+          path: ${{ runner.temp }}/video
+      - name: Prepare video commit
+        env:
+          VIDEO_FILE: ${{ runner.temp }}/video/eval-pagination.mp4
+        run: |
+          test -f "$VIDEO_FILE"
+          git switch -c qa/pr-12470-video-asset
+          mkdir -p .github/assets/pr-demos
+          cp "$VIDEO_FILE" .github/assets/pr-demos/eval-pagination.mp4
+          git add .github/assets/pr-demos/eval-pagination.mp4
+          git -c core.hooksPath=/dev/null -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -m 'docs: add eval pagination demo video'
+          test "$(git diff-tree --no-commit-id --name-only -r HEAD)" = .github/assets/pr-demos/eval-pagination.mp4
+      - name: Publish video branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          basic_auth="$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 | tr -d '\n')"
+          git -c core.hooksPath=/dev/null -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $basic_auth" push origin HEAD:refs/heads/qa/pr-12470-video-asset
