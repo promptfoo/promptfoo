@@ -1,0 +1,29 @@
+name: Release notes completeness
+
+on:
+  pull_request:
+    branches: [main]
+    paths: ['.release-please-manifest.json']
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  check-release-notes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Compare version notes with each component's full tag range
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Run the base revision's validator. The candidate's files are only data.
+          git show "$BASE_SHA:scripts/check-release-notes-completeness.mjs" > "$RUNNER_TEMP/check-release-notes-completeness.mjs"
+          node "$RUNNER_TEMP/check-release-notes-completeness.mjs" "$BASE_SHA" "$HEAD_SHA"
