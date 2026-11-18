@@ -1175,6 +1175,8 @@ Use the model ID from the [AWS OpenAI model cards](https://docs.aws.amazon.com/b
 
 Mantle uses bare AWS model IDs such as `openai.gpt-6.1-sol`. Promptfoo preserves that ID on the request and sends it to the regional `/openai/v1` endpoint. Set `config.region` to choose a supported Region. When you omit the Region, promptfoo selects a default for the model and API. The GPT-6.1 Sol and Terra defaults are `us-east-1`.
 
+For GPT-6.2 Astra and Sol, use `bedrock:openai.gpt-6.2-astra` or `bedrock:openai.gpt-6.2-sol` for Responses. For Chat Completions, use `bedrock:mantle:openai.gpt-6.2-astra` or `bedrock:mantle:openai.gpt-6.2-sol`. Set `config.region` to the Region enabled for your model and endpoint in Bedrock. Astra supports the optional `service_tier: ultrafast` on eligible deployments. See the [AWS launch announcement](https://aws.amazon.com/about-aws/whats-new/2026/11/openai-gpt-6-2-astra-sol-amazon-bedrock/).
+
 For a Responses request to GPT-6 Astra or GPT-6.1 Sol using `service_tier: ultrafast`, select `us-east-1`. For eligible Daybreak Blue accounts, use `openai.gpt-daybreak-blue-5.6-sol` on Mantle in `us-east-2`. For Daybreak Red, see [GovCloud access](#daybreak-red-on-aws-govcloud).
 
 Authentication accepts either a pre-generated **Amazon Bedrock API key** or AWS credentials:
