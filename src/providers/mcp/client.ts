@@ -83,11 +83,12 @@ function createOAuthFetch(
 ): FetchLike {
   return async (url, init) => {
     // SDK transports pass their lifetime signal, not the individual tool request's signal.
-    // Only bind tools/call: the SDK must still be able to send notifications/cancelled.
+    // Bind tool calls and their pinned list rechecks; cancellation notifications remain independent.
     let requestSignal: AbortSignal | undefined;
     if (typeof init?.body === 'string') {
       try {
-        if (JSON.parse(init.body).method === 'tools/call') {
+        const { method } = JSON.parse(init.body);
+        if (method === 'tools/call' || method === 'tools/list') {
           requestSignal = oauthRequestSignal.getStore();
         }
       } catch {
@@ -258,6 +259,7 @@ export class MCPClient {
     const signal = this.startupController.signal;
     // Initialize servers
     const servers = this.config.servers || (this.config.server ? [this.config.server] : []);
+    const requireUniqueTools = servers.some((server) => server.expectedTools !== undefined);
     const usedKeys = new Set(this.clients.keys());
     for (const [index, server] of servers.entries()) {
       const serverOrdinal = index + 1;
@@ -268,7 +270,7 @@ export class MCPClient {
       }
       usedKeys.add(serverKey);
       logger.info(`connecting to MCP server #${serverOrdinal}`);
-      await this.connectToServer(server, serverKey, signal, serverOrdinal);
+      await this.connectToServer(server, serverKey, signal, serverOrdinal, requireUniqueTools);
     }
   }
 
@@ -277,6 +279,7 @@ export class MCPClient {
     serverKey: string,
     signal: AbortSignal,
     serverOrdinal: number,
+    requireUniqueTools: boolean,
   ): Promise<void> {
     // The internal key may be a credential-bearing URL. Never expose it in diagnostics.
     const serverLabel = `#${serverOrdinal}`;
@@ -440,7 +443,7 @@ export class MCPClient {
       // Model tool names are routed to the first server that advertises them.
       // Reject ambiguous names when any server has a pin, since a later pinned
       // server would otherwise be bypassed by an earlier unpinned one.
-      if (server.expectedTools !== undefined || this.pinnedTools.size > 0) {
+      if (requireUniqueTools) {
         const knownNames = new Set(this.getAllTools().map((tool) => tool.name));
         for (const tool of filteredTools) {
           if (knownNames.has(tool.name)) {
@@ -554,7 +557,16 @@ export class MCPClient {
                 this.listVisibleTools(client, requestOptions, true, pin.serverLabel),
               ),
               signal,
-            );
+            ).catch((error: unknown) => {
+              signal?.throwIfAborted();
+              if (error instanceof MCPToolContractError) {
+                throw error;
+              }
+              // A transport failure also prevents verifying the pinned contract.
+              throw new MCPToolContractError(
+                `MCP server ${pin.serverLabel} tool contract could not be verified`,
+              );
+            });
             assertExpectedMcpTools(pin.serverLabel, pin.expectedTools, currentTools);
           }
           result = await waitForPromiseWithAbort(

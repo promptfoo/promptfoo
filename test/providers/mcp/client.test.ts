@@ -260,6 +260,22 @@ describe('MCPClient', () => {
       expect(mockClient.callTool).not.toHaveBeenCalled();
     });
 
+    it('fails closed if the pinned tool list cannot be refreshed', async () => {
+      mcpClient = new MCPClient({
+        server: {
+          command: 'node',
+          expectedTools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
+        },
+      });
+      await mcpClient.initialize();
+      mockClient.listTools.mockRejectedValueOnce(new Error('transport disconnected'));
+      await expect(mcpClient.callTool('tool1', {})).rejects.toThrow(
+        /contract could not be verified/,
+      );
+      expect(mockClient.callTool).not.toHaveBeenCalled();
+      await mcpClient.cleanup();
+    });
+
     it('refuses in-flight tool contract drift before forwarding a previously approved tool call', async () => {
       mcpClient = new MCPClient({
         server: {
@@ -281,7 +297,7 @@ describe('MCPClient', () => {
       await mcpClient.cleanup();
     });
 
-    it.each([0, 1])(
+    it.each([0, 1, 2])(
       'rejects ambiguous tool dispatch when configured server #%s is pinned',
       async (pinnedServer) => {
         const approved = [{ name: 'tool1', description: 'desc1', inputSchema: {} }];
@@ -292,6 +308,7 @@ describe('MCPClient', () => {
           servers: [
             { ...first, ...(pinnedServer === 0 ? { expectedTools: approved } : {}) },
             { ...second, ...(pinnedServer === 1 ? { expectedTools: approved } : {}) },
+            ...(pinnedServer === 2 ? [{ command: 'third', expectedTools: [] }] : []),
           ],
         });
 
