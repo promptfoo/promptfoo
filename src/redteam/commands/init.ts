@@ -314,6 +314,8 @@ export async function redteamInit(directory: string | undefined) {
   } else {
     const providerChoices = [
       { name: `I'll choose later`, value: 'Other' },
+      { name: 'openai:gpt-6.2-sol', value: 'openai:gpt-6.2-sol' },
+      { name: 'openai:gpt-6.2-astra', value: 'openai:gpt-6.2-astra' },
       { name: 'openai:gpt-5.6', value: 'openai:gpt-5.6' },
       { name: 'openai:gpt-5.4-mini', value: 'openai:gpt-5.4-mini' },
       {
