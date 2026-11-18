@@ -306,16 +306,16 @@ describe('OpenAiAgentsProvider', () => {
       },
     });
 
-    it.each([undefined, false, 'false'])(
+    it.each(['{}', '{"includeToolCalls":false}', '{"includeToolCalls":"false"}'])(
       'omits tool arguments without boolean opt-in (%s)',
-      async (includeToolCalls) => {
+      async (configJson) => {
         mockRun.mockResolvedValueOnce({
           finalOutput: 'same answer',
           usage: undefined,
           newItems: [call('c1', 'check_inventory', '{"id":1}')],
         });
         const provider = new OpenAiAgentsProvider('fixture', {
-          config: { ...createSupportAgentOptions().config, includeToolCalls },
+          config: { ...createSupportAgentOptions().config, ...JSON.parse(configJson) },
         });
         const result = await provider.callApi('test');
         expect(result.output).toBe('same answer');
