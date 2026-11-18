@@ -69,6 +69,7 @@ type MacroBinding = {
 type ConditionalSummary = {
   setBindings: Set<string>;
   macroBindings: Map<string, MacroBinding>;
+  callerAliases: Set<string>;
 };
 
 type MacroAnalysisMemo = {
@@ -503,7 +504,7 @@ function countAstNodes(nodes: readonly unknown[]): number {
 }
 
 function createConditionalSummary(): ConditionalSummary {
-  return { setBindings: new Set(), macroBindings: new Map() };
+  return { setBindings: new Set(), macroBindings: new Map(), callerAliases: new Set() };
 }
 
 function updateStatementBindings(
@@ -517,6 +518,11 @@ function updateStatementBindings(
     if (summary) {
       for (const name of collectBindingNames(item.targets)) {
         summary.setBindings.add(name);
+        if (scope.isCallerAlias(name)) {
+          summary.callerAliases.add(name);
+        } else {
+          summary.callerAliases.delete(name);
+        }
       }
     }
   } else if (item.typename === 'Macro') {
@@ -524,15 +530,22 @@ function updateStatementBindings(
     if (summary) {
       for (const name of collectBindingNames(item.name)) {
         summary.setBindings.add(name);
+        summary.callerAliases.delete(name);
       }
     }
   } else if (item.typename === 'Import') {
     scope.removeMacroBindings(item.target);
     addBindingNamesInPlace(scope, item.target);
+    if (summary) {
+      for (const name of collectBindingNames(item.target)) {
+        summary.callerAliases.delete(name);
+      }
+    }
   } else if (item.typename === 'FromImport') {
     const names = collectFromImportBindingNames(item.names);
     for (const name of names) {
       scope.removeMacro(name);
+      summary?.callerAliases.delete(name);
     }
     addNamesToScopeInPlace(scope, names);
   }
@@ -548,6 +561,9 @@ function mergeConditionalBindings(
   }
   for (const name of source.setBindings) {
     target.setBindings.add(name);
+  }
+  for (const name of source.callerAliases) {
+    target.callerAliases.add(name);
   }
   for (const [name, binding] of source.macroBindings) {
     const previous = target.macroBindings.get(name);
@@ -871,7 +887,10 @@ function analyzeMacroBody(
     if (referencesVariable) {
       return true;
     }
-    const canMemoize = !selectedMacroCandidates.size && definitionScope === macro.definitionScope;
+    const canMemoize =
+      !selectedMacroCandidates.size &&
+      definitionScope === macro.definitionScope &&
+      invocationMacroCandidates === undefined;
     if (canMemoize && memo?.results.get(macro)?.has(memoKey)) {
       return false;
     }
@@ -1671,6 +1690,166 @@ function conditionalMacroCandidates(
   return { candidates, dynamic, definitelyBound };
 }
 
+function conditionalCallerAlias(
+  name: string,
+  bodySummary: ConditionalSummary,
+  elseSummary: ConditionalSummary,
+  boundSymbols: ReadonlySet<string>,
+  mode: ConditionalExecutionMode,
+): boolean {
+  const incoming = boundSymbols instanceof LinkedScope && boundSymbols.isCallerAlias(name);
+  const bodyAlias =
+    bodySummary.callerAliases.has(name) || (!bodySummary.setBindings.has(name) && incoming);
+  const elseAlias =
+    elseSummary.callerAliases.has(name) || (!elseSummary.setBindings.has(name) && incoming);
+  return mode === 'body' ? bodyAlias : mode === 'else' ? elseAlias : bodyAlias || elseAlias;
+}
+
+function applyConditionalBindings(
+  bodySummary: ConditionalSummary,
+  elseSummary: ConditionalSummary,
+  boundSymbols: ReadonlySet<string>,
+  summary: ConditionalSummary | undefined,
+  mode: ConditionalExecutionMode,
+): void {
+  if (boundSymbols instanceof LinkedScope) {
+    for (const macro of boundSymbols.macrosUsedAsValues()) {
+      rebaseMacroDefinition(macro, boundSymbols);
+    }
+  }
+  const assignedNames = new Set([
+    ...bodySummary.setBindings,
+    ...elseSummary.setBindings,
+    ...bodySummary.macroBindings.keys(),
+    ...elseSummary.macroBindings.keys(),
+  ]);
+  for (const name of assignedNames) {
+    const callerAlias = conditionalCallerAlias(name, bodySummary, elseSummary, boundSymbols, mode);
+    const binding = conditionalMacroCandidates(name, bodySummary, elseSummary, boundSymbols, mode);
+    if (binding !== undefined) {
+      if (binding.definitelyBound) {
+        summary?.setBindings.add(name);
+      }
+      summary?.macroBindings.set(name, binding);
+      if (boundSymbols instanceof LinkedScope) {
+        if (binding.candidates.size > 0 || binding.definitelyBound) {
+          boundSymbols.removeMacro(name);
+        }
+        boundSymbols.registerMacroCandidates(name, binding.candidates, true, binding.dynamic);
+        if (binding.definitelyBound) {
+          boundSymbols.add(name);
+        }
+      }
+    }
+    if (callerAlias) {
+      summary?.callerAliases.add(name);
+      if (boundSymbols instanceof LinkedScope) {
+        boundSymbols.registerCallerAlias(name);
+      }
+    } else {
+      summary?.callerAliases.delete(name);
+    }
+  }
+}
+
+function switchCaseSelection(
+  node: NunjucksAstNode,
+  cases: unknown[],
+): {
+  selectedCase: number;
+  dynamicBeforeMatch: boolean;
+} {
+  let selectedCase = -1;
+  let dynamicBeforeMatch = false;
+  for (let index = 0; index < cases.length; index++) {
+    const caseNode = cases[index];
+    if (!isNunjucksAstNode(caseNode)) {
+      continue;
+    }
+    if (
+      isNunjucksAstNode(node.expr) &&
+      node.expr.typename === 'Literal' &&
+      isNunjucksAstNode(caseNode.cond) &&
+      caseNode.cond.typename === 'Literal'
+    ) {
+      if (node.expr.value === caseNode.cond.value) {
+        selectedCase = index;
+        break;
+      }
+    } else {
+      dynamicBeforeMatch = true;
+      break;
+    }
+  }
+  return { selectedCase, dynamicBeforeMatch };
+}
+
+function switchNodeReferencesVariable(
+  node: NunjucksAstNode,
+  variableName: ReferenceTarget,
+  boundSymbols: ReadonlySet<string>,
+  summary?: ConditionalSummary,
+): boolean {
+  if (astChildReferencesVariable(node, 'expr', variableName, boundSymbols)) {
+    return true;
+  }
+  const cases = Array.isArray(node.cases) ? node.cases : [];
+  const { selectedCase, dynamicBeforeMatch } = switchCaseSelection(node, cases);
+  const caseSummaries: ConditionalSummary[] = [];
+  for (const caseNode of cases) {
+    if (!isNunjucksAstNode(caseNode)) {
+      continue;
+    }
+    if (astChildReferencesVariable(caseNode, 'cond', variableName, boundSymbols)) {
+      return true;
+    }
+    const caseSummary = createConditionalSummary();
+    if (
+      astChildReferencesVariable(
+        caseNode,
+        'body',
+        variableName,
+        new LinkedScope(boundSymbols, [], 'branch'),
+        caseSummary,
+      )
+    ) {
+      return true;
+    }
+    caseSummaries.push(caseSummary);
+  }
+  const defaultSummary = createConditionalSummary();
+  if (
+    astChildReferencesVariable(
+      node,
+      'default',
+      variableName,
+      new LinkedScope(boundSymbols, [], 'branch'),
+      defaultSummary,
+    )
+  ) {
+    return true;
+  }
+  const mode = selectedCase >= 0 ? 'body' : dynamicBeforeMatch ? 'unknown' : 'else';
+  const caseSummary = createConditionalSummary();
+  if (mode === 'body') {
+    mergeConditionalBindings(
+      caseSummary,
+      caseSummaries[selectedCase]!,
+      boundSymbols instanceof LinkedScope ? boundSymbols.macroAnalysisMemo() : undefined,
+    );
+  } else if (mode === 'unknown') {
+    for (const current of caseSummaries) {
+      mergeConditionalBindings(
+        caseSummary,
+        current,
+        boundSymbols instanceof LinkedScope ? boundSymbols.macroAnalysisMemo() : undefined,
+      );
+    }
+  }
+  applyConditionalBindings(caseSummary, defaultSummary, boundSymbols, summary, mode);
+  return false;
+}
+
 function ifNodeReferencesVariable(
   node: NunjucksAstNode,
   variableName: ReferenceTarget,
@@ -1712,37 +1891,8 @@ function ifNodeReferencesVariable(
     return true;
   }
 
-  if (boundSymbols instanceof LinkedScope) {
-    for (const macro of boundSymbols.macrosUsedAsValues()) {
-      rebaseMacroDefinition(macro, boundSymbols);
-    }
-  }
-  const assignedNames = new Set([
-    ...bodySummary.setBindings,
-    ...elseSummary.setBindings,
-    ...bodySummary.macroBindings.keys(),
-    ...elseSummary.macroBindings.keys(),
-  ]);
   const mode = conditionalExecutionMode(node);
-  for (const name of assignedNames) {
-    const binding = conditionalMacroCandidates(name, bodySummary, elseSummary, boundSymbols, mode);
-    if (binding === undefined) {
-      continue;
-    }
-    if (binding.definitelyBound) {
-      summary?.setBindings.add(name);
-    }
-    summary?.macroBindings.set(name, binding);
-    if (boundSymbols instanceof LinkedScope) {
-      if (binding.candidates.size > 0 || binding.definitelyBound) {
-        boundSymbols.removeMacro(name);
-      }
-      boundSymbols.registerMacroCandidates(name, binding.candidates, true, binding.dynamic);
-      if (binding.definitelyBound) {
-        boundSymbols.add(name);
-      }
-    }
-  }
+  applyConditionalBindings(bodySummary, elseSummary, boundSymbols, summary, mode);
   return false;
 }
 
@@ -1967,6 +2117,11 @@ function filterNodeReferencesVariable(
   return false;
 }
 
+const CONDITIONAL_HANDLERS: Readonly<Record<string, typeof ifNodeReferencesVariable>> = {
+  If: ifNodeReferencesVariable,
+  Switch: switchNodeReferencesVariable,
+};
+
 function astReferencesVariable(
   node: NunjucksAstNode,
   variableName: ReferenceTarget,
@@ -1984,8 +2139,9 @@ function astReferencesVariable(
     return orNodeReferencesVariable(node, variableName as RequiredReferenceTarget, boundSymbols);
   }
 
-  if (node.typename === 'If') {
-    return ifNodeReferencesVariable(node, variableName, boundSymbols, summary);
+  const conditionalHandler = CONDITIONAL_HANDLERS[node.typename!];
+  if (conditionalHandler) {
+    return conditionalHandler(node, variableName, boundSymbols, summary);
   }
 
   if (node.typename === 'InlineIf') {

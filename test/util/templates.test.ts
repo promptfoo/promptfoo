@@ -703,6 +703,37 @@ describe('analyzeTemplateReference', () => {
     expect(extractRequiredVariablesFromTemplate(value)).toContain('caller');
   });
 
+  it('propagates switch-case rebindings into the enclosing scope', () => {
+    const value =
+      "{% macro p() %}plain{% endmacro %}{% macro h(x=_conversation) %}{{x}}{% endmacro %}{{h('warmup')}}{% set f=p %}{% switch true %}{% case true %}{% set f=h %}{% endswitch %}{{f()}}";
+    expect(getNunjucksEngine().renderString(value, { _conversation: 'history' })).toBe(
+      'warmuphistory',
+    );
+    expect(analyzeTemplateReference(value, '_conversation')).toEqual({
+      referenced: true,
+      parsed: true,
+    });
+  });
+
+  it('preserves a caller alias across a conditional join', () => {
+    const value =
+      "{% macro a() %}plain{% endmacro %}{% macro h(x=_conversation) %}{{x}}{% endmacro %}{% macro wrap(f=h) %}{% if true %}{% set cb=caller %}{% endif %}{{cb(f)}}{% endmacro %}{{h('warmup')}}{% call(g=a) wrap() %}{{g()}}{% endcall %}";
+    expect(getNunjucksEngine().renderString(value, { _conversation: 'history' })).toBe(
+      'warmuphistory',
+    );
+    expect(analyzeTemplateReference(value, '_conversation')).toEqual({
+      referenced: true,
+      parsed: true,
+    });
+  });
+
+  it('replays callback invocations on memo hits', () => {
+    const value =
+      "{% macro relay(cb) %}{{cb('ok') ~ ''}}{% endmacro %}{% macro wrap() %}{{relay(caller) ~ ''}}{% endmacro %}{% call(x=missing) wrap() %}{{x ~ ''}}{% endcall %}{% call(x=missing) wrap() %}{{x ~ ''}}{% endcall %}";
+    expect(getNunjucksEngine().renderString(value, {})).toBe('okok');
+    expect(extractRequiredVariablesFromTemplate(value)).toEqual([]);
+  });
+
   it('preserves escaped alternatives across caller argument merges', () => {
     const value =
       "{% macro a() %}plain{% endmacro %}{% macro h(x=_conversation) %}{{x}}{% endmacro %}{{h('warmup')}}{% macro wrap() %}{{caller(a)}}{{caller(h|default)}}{% endmacro %}{% call(g) wrap() %}{{g()}}{% endcall %}";
