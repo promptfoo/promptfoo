@@ -1775,7 +1775,7 @@ To use these capabilities, structure your prompts to include both image data and
 
 ### Nova Vision Capabilities
 
-Amazon Nova supports comprehensive vision understanding for both images and videos:
+Amazon Nova accepts image and video inputs:
 
 - **Images**: Supports PNG, JPG, JPEG, GIF, WebP formats via Base-64 encoding. Multiple images allowed per payload (up to 25MB total).
 - **Videos**: Supports various formats (MP4, MKV, MOV, WEBM, etc.) via Base-64 (less than 25MB) or Amazon S3 URI (up to 1GB).

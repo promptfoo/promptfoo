@@ -21,7 +21,7 @@ export interface RawDiffEntry {
  *
  * Note: Rename/Copy status includes similarity (e.g., R100, R90, C100)
  */
-export function parseRawDiff(rawOutput: string): RawDiffEntry[] {
+export function parseRawDiff(rawOutput: string, regularFilesOnly = false): RawDiffEntry[] {
   const entries = rawOutput.split('\0').filter(Boolean);
   const results: RawDiffEntry[] = [];
 
@@ -40,8 +40,8 @@ export function parseRawDiff(rawOutput: string): RawDiffEntry[] {
       continue;
     }
 
-    const shaA = parts[2] === '0000000000000000000000000000000000000000' ? null : parts[2];
-    const shaB = parts[3] === '0000000000000000000000000000000000000000' ? null : parts[3];
+    const shaA = /^0+$/.test(parts[2]) ? null : parts[2];
+    const shaB = /^0+$/.test(parts[3]) ? null : parts[3];
     const status = parts[4];
 
     // Check if this is a rename or copy operation
@@ -59,6 +59,15 @@ export function parseRawDiff(rawOutput: string): RawDiffEntry[] {
     i++;
 
     if (!filePath) {
+      continue;
+    }
+
+    // An absent side is normal for adds and deletes. Never share a symlink or gitlink blob.
+    if (
+      regularFilesOnly &&
+      (![parts[0].slice(1), parts[1]].every((mode) => /^(?:100644|100755|000000)$/.test(mode)) ||
+        !['A', 'M', 'D'].includes(status))
+    ) {
       continue;
     }
 
