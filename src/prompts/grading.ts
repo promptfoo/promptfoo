@@ -156,7 +156,7 @@ Here are the pieces of text:
 </Text>
 {% endfor %}
 
-Choose the index of the text that best fits the criteria. Finish with one line in the exact format Answer: <index> (for example, Answer: 2). Do not write anything after that line.`,
+Choose the index of the text that best fits the criteria. Finish with one line in the exact format Answer: <index>. Do not write anything after that line.`,
   },
 ]);
 

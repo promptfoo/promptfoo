@@ -73,11 +73,22 @@ export async function matchesSelectBest(
   const reply = resp.output.trim();
   // Prefer an explicit final answer to incidental indexes in the grader's reasoning.
   const markedAnswer = reply.match(/(?:^|[\n;.])\s*(?:answer|best|winner)\s*:\s*(\d+)\.?\s*$/i);
+  if (!markedAnswer && /(?:^|[\n;.])\s*(?:answer|best|winner)\s*:[^\n]*$/i.test(reply)) {
+    return failureResults(() => 'Invalid select-best verdict: final answer must be an index');
+  }
   // Ignore numbers embedded in words, dates, decimals, negative numbers and versions.
   const numbers = [...reply.matchAll(/(?<![\p{L}\p{N}.,-])\d+(?![\p{L}\p{N}]|[.,]\d)/gu)].map(
     ([value]) => Number.parseInt(value, 10),
   );
-  const candidateIndexes = [...new Set(numbers.filter((number) => number < outputs.length))];
+  // A count in “Text 2 is best for 1 reason” does not name another candidate.
+  const namedWinners = [
+    ...reply.matchAll(/\b(?:text|output)\s+(\d+)\s+is\s+(?:the\s+)?best\b/gi),
+  ].map((match) => Number(match[1]));
+  const candidateIndexes = [
+    ...new Set(
+      namedWinners.length ? namedWinners : numbers.filter((number) => number < outputs.length),
+    ),
+  ];
   if (!markedAnswer && candidateIndexes.length > 1) {
     return failureResults(
       () =>
