@@ -170,6 +170,9 @@ export function getProviderType(
   }
 
   // Runtime provider prefixes can differ from the target selector's UI types.
+  if (providerType === 'azureopenai') {
+    return 'azure';
+  }
   if (providerType === 'togetherai') {
     return 'together';
   }
