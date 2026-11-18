@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   checkGoogleSheetAccess,
+  fetchCsvFromGoogleSheet,
   fetchCsvFromGoogleSheetAuthenticated,
   fetchCsvFromGoogleSheetUnauthenticated,
   writeCsvToGoogleSheet,
@@ -111,12 +112,15 @@ describe('Google Sheets Integration', () => {
       );
     });
 
-    it('should throw error on non-200 response', async () => {
-      vi.mocked(fetchWithProxy).mockResolvedValue(createMockResponse({ status: 403 }));
+    it('propagates a public CSV export failure without requesting credentials', async () => {
+      vi.mocked(fetchWithProxy)
+        .mockResolvedValueOnce(createMockResponse({ status: 200 }))
+        .mockResolvedValueOnce(createMockResponse({ status: 403 }));
 
-      await expect(fetchCsvFromGoogleSheetUnauthenticated(TEST_SHEET_URL)).rejects.toThrow(
+      await expect(fetchCsvFromGoogleSheet(TEST_SHEET_URL)).rejects.toThrow(
         'Failed to fetch CSV from Google Sheets URL',
       );
+      expect(mockGoogleAuth).not.toHaveBeenCalled();
     });
   });
 

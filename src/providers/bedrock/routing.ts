@@ -106,6 +106,8 @@ const RUNTIME_MESSAGES_PROFILES = new Map<string, readonly string[]>([
   ['anthropic.claude-fable-5', ['us', 'global']],
   ['anthropic.claude-fable-5-1', ['us', 'global']],
   ['anthropic.claude-mythos-5-1', ['us', 'global']],
+  ['anthropic.claude-fable-5-2', ['us', 'global']],
+  ['anthropic.claude-mythos-5-2', ['us', 'global']],
   ['anthropic.claude-haiku-4-5-20251001-v1:0', ['us', 'eu', 'au', 'jp', 'in', 'global']],
   ['anthropic.claude-haiku-5-5', ['us', 'ca', 'eu', 'au', 'jp', 'us-gov', 'global']],
   ['anthropic.claude-opus-4-7', ['us', 'eu', 'jp', 'au', 'global']],
@@ -155,7 +157,12 @@ export function isBedrockOpenAiResponsesModel(modelName: string): boolean {
 }
 
 export function isBedrockOpenAiChatModel(modelName: string): boolean {
-  return BEDROCK_OPENAI_MANTLE_REGIONS.has(modelName);
+  // AWS announced GPT-6.2 before publishing the per-model regional availability table.
+  return (
+    modelName === 'openai.gpt-6.2-astra' ||
+    modelName === 'openai.gpt-6.2-sol' ||
+    BEDROCK_OPENAI_MANTLE_REGIONS.has(modelName)
+  );
 }
 
 export function isBedrockGptOssResponsesModel(modelName: string): boolean {

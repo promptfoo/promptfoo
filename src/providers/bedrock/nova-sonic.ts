@@ -2,6 +2,7 @@ import { Buffer } from 'node:buffer';
 import { Readable } from 'node:stream';
 
 import logger from '../../logger';
+import { encodePcmToWav } from '../pcm';
 import { AwsBedrockGenericProvider } from './base';
 import type { BedrockRuntimeClient } from '@aws-sdk/client-bedrock-runtime';
 import type { AwsCredentialIdentity, AwsCredentialIdentityProvider } from '@smithy/types';
@@ -583,21 +584,22 @@ export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiP
       }
 
       const audioConfig = this.config?.audioOutputConfiguration || DEFAULT_CONFIG.audio.output;
-      const audioOutput = audioChunks.some((chunk) => chunk.length > 0)
-        ? {
-            audio: {
-              data: this.convertRawToWav(
-                Buffer.concat(audioChunks),
-                audioConfig.sampleRateHertz,
-                audioConfig.sampleSizeBits,
-                audioConfig.channelCount,
-              ).toString('base64'),
-              format: 'wav',
-              transcript: assistantTranscript,
-            },
-            userTranscript,
-          }
-        : {};
+      let audioOutput;
+      if (audioChunks.some((chunk) => chunk.length > 0)) {
+        const pcm = Buffer.concat(audioChunks);
+        const { sampleRateHertz = 8_000, sampleSizeBits, channelCount } = audioConfig;
+        audioOutput = {
+          audio: {
+            data: encodePcmToWav(pcm, sampleRateHertz, {
+              bitsPerSample: sampleSizeBits,
+              channels: channelCount,
+            }).toString('base64'),
+            format: 'wav',
+            transcript: assistantTranscript,
+          },
+          userTranscript,
+        };
+      }
 
       return {
         ...(toolCalls.length > 0 ? { error: TOOL_EXECUTION_UNSUPPORTED_ERROR } : {}),
@@ -629,37 +631,5 @@ export class NovaSonicProvider extends AwsBedrockGenericProvider implements ApiP
       await this.endSession(sessionId);
       this.sessions.delete(sessionId);
     }
-  }
-
-  private convertRawToWav(
-    audioData: Buffer,
-    sampleRate: number = 8000,
-    bitsPerSample: number = 16,
-    channels: number = 1,
-  ): Buffer {
-    const dataLength = audioData.length;
-    const fileLength = 44 + dataLength;
-    const header = Buffer.alloc(44);
-
-    // RIFF header
-    header.write('RIFF', 0);
-    header.writeUInt32LE(fileLength - 8, 4);
-    header.write('WAVE', 8);
-
-    // fmt chunk
-    header.write('fmt ', 12);
-    header.writeUInt32LE(16, 16); // fmt chunk size
-    header.writeUInt16LE(1, 20); // PCM format
-    header.writeUInt16LE(channels, 22); // number of channels
-    header.writeUInt32LE(sampleRate, 24); // sample rate
-    header.writeUInt32LE((sampleRate * channels * bitsPerSample) / 8, 28); // byte rate
-    header.writeUInt16LE((channels * bitsPerSample) / 8, 32); // block align
-    header.writeUInt16LE(bitsPerSample, 34); // bits per sample
-
-    // data chunk
-    header.write('data', 36);
-    header.writeUInt32LE(dataLength, 40);
-
-    return Buffer.concat([header, audioData]);
   }
 }

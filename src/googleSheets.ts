@@ -82,11 +82,7 @@ async function getSheetTitle(auth: GoogleAuth, endpoint: string, gid?: string): 
 export async function checkGoogleSheetAccess(url: string) {
   try {
     const response = await fetchWithProxy(url);
-    if (response.ok) {
-      return { public: true, status: response.status };
-    } else {
-      return { public: false, status: response.status };
-    }
+    return { public: Boolean(response.ok), status: response.status };
   } catch (error) {
     logger.error(`Error checking sheet access: ${error}`);
     return { public: false };
@@ -168,21 +164,14 @@ export async function fetchCsvFromGoogleSheet(url: string): Promise<CsvRow[]> {
   const access = await checkGoogleSheetAccess(url);
   const { public: isPublic } = access;
   logger.debug(`Google Sheets URL: ${url}, isPublic: ${isPublic}`);
-  if (isPublic) {
+  // A failed probe leaves public access unknown. Try the export before requesting credentials.
+  if (isPublic || !('status' in access)) {
     try {
       return await fetchCsvFromGoogleSheetUnauthenticated(url);
     } catch (error) {
-      if (error instanceof GoogleSheetAuthenticationRequiredError) {
-        return fetchCsvFromGoogleSheetAuthenticated(url);
+      if (isPublic && !(error instanceof GoogleSheetAuthenticationRequiredError)) {
+        throw error;
       }
-      throw error;
-    }
-  }
-  if (!('status' in access)) {
-    try {
-      return await fetchCsvFromGoogleSheetUnauthenticated(url);
-    } catch {
-      return fetchCsvFromGoogleSheetAuthenticated(url);
     }
   }
   return fetchCsvFromGoogleSheetAuthenticated(url);

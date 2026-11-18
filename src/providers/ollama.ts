@@ -87,11 +87,10 @@ interface OllamaCompletionOptions {
   passthrough?: Record<string, any>; // Pass arbitrary fields to the API
 
   // Promptfoo-side rendering option: prepend the model's reasoning to the output.
-  // Deliberately absent from OllamaCompletionOptionKeys so it is never sent to Ollama.
   showThinking?: boolean;
 }
 
-const OllamaCompletionOptionKeys = new Set<keyof OllamaCompletionOptions>([
+const OllamaCurrentNestedOptionKeys = new Set<keyof OllamaCompletionOptions>([
   'num_predict',
   'num_keep',
   'seed',
@@ -112,49 +111,6 @@ const OllamaCompletionOptionKeys = new Set<keyof OllamaCompletionOptions>([
   'use_mmap',
   'num_thread',
   'draft_num_predict',
-  'tfs_z',
-  'num_gqa',
-  'f16_kv',
-  'logits_all',
-  'vocab_only',
-  'low_vram',
-  'use_mlock',
-  'embedding_only',
-  'rope_frequency_base',
-  'rope_frequency_scale',
-  'penalize_newline',
-  'mirostat',
-  'mirostat_tau',
-  'mirostat_eta',
-  'tools',
-  'think',
-  'keep_alive',
-  'truncate',
-  'dimensions',
-  'format',
-  'suffix',
-  'system',
-  'template',
-  'raw',
-  'passthrough',
-]);
-
-/**
- * Keys that live in the config block but are NOT members of Ollama's nested `options`
- * object: they are either top-level API parameters or promptfoo-side settings.
- */
-const OllamaNonNestedOptionKeys = new Set<string>([
-  'tools',
-  'think',
-  'passthrough',
-  'keep_alive',
-  'truncate',
-  'dimensions',
-  'format',
-  'suffix',
-  'system',
-  'template',
-  'raw',
 ]);
 
 /**
@@ -163,7 +119,10 @@ const OllamaNonNestedOptionKeys = new Set<string>([
  * a chat provider, or `tools` on a completion provider, is a config mistake worth
  * surfacing.
  */
-const OllamaEndpointTopLevelKeys: Record<'completion' | 'chat' | 'embedding', Set<string>> = {
+const OllamaEndpointTopLevelKeys: Record<
+  'completion' | 'chat' | 'embedding',
+  Set<keyof OllamaCompletionOptions>
+> = {
   completion: new Set([
     'think',
     'keep_alive',
@@ -182,20 +141,21 @@ const OllamaEndpointTopLevelKeys: Record<'completion' | 'chat' | 'embedding', Se
   embedding: new Set(['keep_alive', 'truncate', 'dimensions']),
 };
 
+const OllamaTopLevelKeys = new Set(
+  Object.values(OllamaEndpointTopLevelKeys).flatMap((keys) => [...keys]),
+);
+
 /**
- * Keys that are never user-supplied Ollama options, so reporting them as "dropped" would
- * be noise. `basePath` is injected into every provider config by loadApiProvider
- * (src/providers/index.ts), and `showThinking` is a promptfoo-side rendering option.
- * src/providers/envoy.ts:44 strips `basePath` for the same reason.
+ * Promptfoo injects basePath, renders showThinking locally and merges passthrough separately.
  */
-const OllamaInternalConfigKeys = new Set<string>(['showThinking', 'basePath']);
+const OllamaInternalConfigKeys = new Set(['showThinking', 'basePath', 'passthrough']);
 
 /**
  * Options Ollama has dropped from its Options struct. Still forwarded -- modern servers
  * ignore unknown option keys, and an older OLLAMA_BASE_URL may still honor them -- but
  * worth telling the user they are almost certainly doing nothing.
  */
-const OllamaDeprecatedOptionKeys = new Set<string>([
+const OllamaDeprecatedOptionKeys = new Set<keyof OllamaCompletionOptions>([
   'tfs_z',
   'num_gqa',
   'f16_kv',
@@ -226,26 +186,23 @@ function buildOllamaOptions(
   const wrongEndpoint: string[] = [];
   const deprecated: string[] = [];
   const supportedTopLevel = OllamaEndpointTopLevelKeys[endpoint];
-  const options = Object.keys(config).reduce<Record<string, any>>((acc, key) => {
+  const options: Record<string, any> = {};
+  for (const key of Object.keys(config)) {
     const optionName = key as keyof OllamaCompletionOptions;
-    if (OllamaCompletionOptionKeys.has(optionName)) {
-      if (OllamaNonNestedOptionKeys.has(key)) {
-        // A valid Ollama key, but not one this endpoint accepts -- it would otherwise be
-        // neither forwarded nor reported.
-        if (key !== 'passthrough' && !supportedTopLevel.has(key)) {
-          wrongEndpoint.push(key);
-        }
-      } else {
-        acc[optionName] = config[optionName];
-        if (OllamaDeprecatedOptionKeys.has(key)) {
-          deprecated.push(key);
-        }
+    const isDeprecated = OllamaDeprecatedOptionKeys.has(optionName);
+    if (OllamaCurrentNestedOptionKeys.has(optionName) || isDeprecated) {
+      options[optionName] = config[optionName];
+      if (isDeprecated) {
+        deprecated.push(key);
+      }
+    } else if (OllamaTopLevelKeys.has(optionName)) {
+      if (!supportedTopLevel.has(optionName)) {
+        wrongEndpoint.push(key);
       }
     } else if (!OllamaInternalConfigKeys.has(key)) {
       dropped.push(key);
     }
-    return acc;
-  }, {});
+  }
 
   if (wrongEndpoint.length > 0) {
     logger.warn(

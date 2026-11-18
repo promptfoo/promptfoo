@@ -896,20 +896,21 @@ describe('AwsBedrockGenericProvider', () => {
       }
     });
 
-    it.each(['global.anthropic.claude-opus-5-5', 'global.anthropic.claude-fable-5-1'])(
-      'keeps thinking headroom for always-on %s even when thinking is disabled',
-      async (model) => {
-        // The rejected `disabled` block is dropped, so the model still thinks against max_tokens.
-        const params = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(
-          { region: 'us-east-1', thinking: { type: 'disabled' } },
-          'hi',
-          undefined,
-          model,
-        );
-        expect(params).not.toHaveProperty('thinking');
-        expect(params.max_tokens).toBe(2048);
-      },
-    );
+    it.each([
+      'global.anthropic.claude-opus-5-5',
+      'global.anthropic.claude-fable-5-1',
+      'global.anthropic.claude-fable-5-2',
+    ])('keeps thinking headroom for always-on %s even when thinking is disabled', async (model) => {
+      // The rejected `disabled` block is dropped, so the model still thinks against max_tokens.
+      const params = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(
+        { region: 'us-east-1', thinking: { type: 'disabled' } },
+        'hi',
+        undefined,
+        model,
+      );
+      expect(params).not.toHaveProperty('thinking');
+      expect(params.max_tokens).toBe(2048);
+    });
 
     it('keeps the 1024 default for models that do not think by default', async () => {
       const params = await BEDROCK_MODEL.CLAUDE_MESSAGES.params(
@@ -3569,14 +3570,20 @@ it('keeps independently replaceable Bedrock token callbacks', () => {
 });
 
 describe('AWS_BEDROCK_MODELS mapping', () => {
-  it.each(['fable', 'mythos'])('maps %s 5.1 base, US, and global Runtime IDs', (family) => {
-    for (const prefix of ['', 'us.', 'global.']) {
-      const model = `${prefix}anthropic.claude-${family}-5-1`;
-      expect(AWS_BEDROCK_MODELS[model]).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
-      expect(getHandlerForModel(model)).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
-    }
-    expect(AWS_BEDROCK_MODELS[`eu.anthropic.claude-${family}-5-1`]).toBeUndefined();
-  });
+  it.each(['fable-5-1', 'mythos-5-1', 'fable-5-2', 'mythos-5-2'])(
+    'maps %s US and global profiles and rejects the bare ID',
+    (model) => {
+      for (const prefix of ['us.', 'global.']) {
+        const id = `${prefix}anthropic.claude-${model}`;
+        expect(AWS_BEDROCK_MODELS[id]).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
+        expect(getHandlerForModel(id)).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
+      }
+      expect(() => getHandlerForModel(`anthropic.claude-${model}`)).toThrow(
+        'requires a cross-region inference profile',
+      );
+      expect(AWS_BEDROCK_MODELS[`eu.anthropic.claude-${model}`]).toBeUndefined();
+    },
+  );
 
   it('maps Fable to Runtime and keeps Messages-only Mythos out of the registry', () => {
     expect(AWS_BEDROCK_MODELS['anthropic.claude-fable-5']).toBe(BEDROCK_MODEL.CLAUDE_MESSAGES);
@@ -4302,6 +4309,8 @@ describe('AwsBedrockCompletionProvider', () => {
     expect(result.cost).toBeCloseTo(0.00555, 8);
   });
   it.each([
+    ['global.anthropic.claude-fable-5-2', 1000, 0.02904],
+    ['global.anthropic.claude-mythos-5-2', 0, 0.02104],
     ['global.anthropic.claude-fable-5-1', 1000, 0.0363],
     ['global.anthropic.claude-opus-5-5', 1000, 0.01454],
     ['global.anthropic.claude-sonnet-5-5', 1000, 0.00727],

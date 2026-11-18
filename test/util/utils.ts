@@ -233,15 +233,17 @@ export function spoofedNodeVersionEnv(version: string): NodeJS.ProcessEnv {
   };
 }
 
-export const createGoogleImageEnvCleanup = () => () => {
-  mockProcessEnv({ GOOGLE_API_KEY: undefined });
-  mockProcessEnv({ GOOGLE_PROJECT_ID: undefined });
-  mockProcessEnv({ GOOGLE_CLOUD_PROJECT: undefined });
-  mockProcessEnv({ GOOGLE_GENERATIVE_AI_API_KEY: undefined });
-  mockProcessEnv({ GEMINI_API_KEY: undefined });
-  mockProcessEnv({ VERTEX_PROJECT_ID: undefined });
-  mockProcessEnv({ VERTEX_API_KEY: undefined });
-  mockProcessEnv({ VERTEX_REGION: undefined });
-  mockProcessEnv({ GOOGLE_CLOUD_LOCATION: undefined });
-  mockProcessEnv({ GOOGLE_LOCATION: undefined });
-};
+export function mockGoogleImageEnv() {
+  return mockProcessEnv({
+    GOOGLE_API_KEY: 'test-api-key',
+    GOOGLE_GENERATIVE_AI_API_KEY: undefined,
+    GEMINI_API_KEY: undefined,
+    GOOGLE_PROJECT_ID: undefined,
+    GOOGLE_CLOUD_PROJECT: undefined,
+    VERTEX_PROJECT_ID: undefined,
+    VERTEX_API_KEY: undefined,
+    VERTEX_REGION: undefined,
+    GOOGLE_CLOUD_LOCATION: undefined,
+    GOOGLE_LOCATION: undefined,
+  });
+}

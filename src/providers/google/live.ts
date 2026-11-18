@@ -7,6 +7,7 @@ import { fetchWithProxy } from '../../util/fetch/index';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { resolveProviderApiKey } from '../credentials';
 import { loadProviderCallbackFromFileUrl } from '../functionCallbackUtils';
+import { encodePcmToWav } from '../pcm';
 import { withGenAIToolSpan } from '../tracing';
 import { GOOGLE_MODELS } from './shared';
 import {
@@ -467,35 +468,6 @@ export class GoogleLiveProvider implements ApiProvider {
 
   toString(): string {
     return `[Google Live Provider ${this.modelName}]`;
-  }
-
-  private convertPcmToWav(pcmBuffer: Buffer): string {
-    const wavBuffer = this.createWavHeader(pcmBuffer.length, 24000, 16, 1);
-    const wavData = Buffer.concat([wavBuffer, pcmBuffer]);
-    return wavData.toString('base64');
-  }
-
-  private createWavHeader(
-    dataLength: number,
-    sampleRate: number,
-    bitsPerSample: number,
-    channels: number,
-  ): Buffer {
-    const header = Buffer.alloc(44);
-    header.write('RIFF', 0);
-    header.writeUInt32LE(36 + dataLength, 4);
-    header.write('WAVE', 8);
-    header.write('fmt ', 12);
-    header.writeUInt32LE(16, 16);
-    header.writeUInt16LE(1, 20);
-    header.writeUInt16LE(channels, 22);
-    header.writeUInt32LE(sampleRate, 24);
-    header.writeUInt32LE((sampleRate * channels * bitsPerSample) / 8, 28);
-    header.writeUInt16LE((channels * bitsPerSample) / 8, 32);
-    header.writeUInt16LE(bitsPerSample, 34);
-    header.write('data', 36);
-    header.writeUInt32LE(dataLength, 40);
-    return header;
   }
 
   getApiKey(): string | undefined {
@@ -1315,11 +1287,11 @@ export class GoogleLiveProvider implements ApiProvider {
 
         // `hasAudioContent` is also set when only a transcription arrives on an
         // audio-expected stream, so gate the WAV on actual PCM bytes — otherwise
-        // convertPcmToWav emits a bare 44-byte header with no samples. The
+        // an empty buffer would produce a bare 44-byte header. The
         // transcript is still preserved as the response output text above.
         if (hasAudioContent && responseAudioChunks.length > 0) {
           result.audio = {
-            data: this.convertPcmToWav(Buffer.concat(responseAudioChunks)),
+            data: encodePcmToWav(Buffer.concat(responseAudioChunks), 24_000).toString('base64'),
             format: 'wav',
             transcript: response_audio_transcript || response_text_total || undefined,
           };
