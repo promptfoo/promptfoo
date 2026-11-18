@@ -10,7 +10,7 @@ export const isFoundationModelProvider = (providerId: string) => {
 /** Token-limit field for native OpenAI and Azure targets in the configuration editor. */
 export function getOpenAiTokenLimitField(
   providerId: string,
-  config?: { model?: unknown; modelName?: unknown },
+  config?: Record<string, unknown>,
 ): 'max_output_tokens' | 'max_completion_tokens' | undefined {
   const [family, subtype = '', deployment] = providerId.split(':', 3);
   const isAzure = family === 'azure' || family === 'azureopenai';
