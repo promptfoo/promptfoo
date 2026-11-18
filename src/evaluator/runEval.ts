@@ -493,7 +493,7 @@ async function callProviderForRunEval({
   traceContext: Awaited<ReturnType<typeof generateTraceContextIfNeeded>>;
   vars: Vars;
 }): Promise<ProviderCallResult> {
-  const startTime = Date.now();
+  const startTime = performance.now();
   let response: ProviderResponse | undefined;
   let providerInvoked = false;
   let providerFailed = false;
@@ -531,7 +531,9 @@ async function callProviderForRunEval({
     sanitizeResponseMetadata(response);
 
     return {
-      latencyMs: Date.now() - startTime,
+      // Results store whole milliseconds. Shared results land in integer columns, and
+      // servers reject fractional values.
+      latencyMs: Math.round(performance.now() - startTime),
       response,
       traceContext,
     };

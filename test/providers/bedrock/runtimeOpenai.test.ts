@@ -85,6 +85,44 @@ describe.each([
     });
   };
 
+  it.each([
+    ['2027-03-01T07:59:59Z', 0.0042768],
+    ['2027-03-01T08:00:00Z', 0.0085536],
+  ] as const)(
+    'uses the GPT-6.2 Astra response timestamp %s for Runtime Ultrafast',
+    async (date, expected) => {
+      vi.mocked(fetchWithCache).mockResolvedValue({
+        data: {
+          ...reply,
+          [mode === 'chat' ? 'created' : 'created_at']: Date.parse(date) / 1000,
+          service_tier: 'ultrafast',
+        },
+        status: 200,
+        statusText: 'OK',
+        cached: false,
+      });
+      const model = 'us.openai.gpt-6.2-astra';
+      const result = await new Provider(model, {
+        config: {
+          apiKey: 'fixture',
+          region: 'us-east-1',
+          reasoning_effort: 'max',
+          temperature: 0.5,
+        },
+      }).callApi('hello');
+      expect(result.output).toBe('READY');
+      expect(result.cost).toBeCloseTo(expected, 10);
+      const [url, request] = vi.mocked(fetchWithCache).mock.calls[0];
+      expect(url).toBe(`https://bedrock-runtime.us-east-1.amazonaws.com/openai/v1/${path}`);
+      const body = JSON.parse(String(request?.body));
+      expect(body).toMatchObject({
+        model,
+        ...(mode === 'chat' ? { reasoning_effort: 'max' } : { reasoning: { effort: 'max' } }),
+      });
+      expect(body).not.toHaveProperty('temperature');
+    },
+  );
+
   describe('GPT-6.1 Sol Ultrafast billing', () => {
     it.each([
       ['us.openai.gpt-6.1-sol', 3.650955, 7.2689364],
