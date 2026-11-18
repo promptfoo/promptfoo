@@ -53,6 +53,33 @@ jobs:
         with:
           token: ${{ steps.app-token.outputs.token }}
 
+  publish-release-notes:
+    if: >-
+      ${{ always() && !cancelled() &&
+          (needs.release-please.outputs.release_created == 'true' ||
+           needs.release-please.outputs.code_scan_action_release_created == 'true') }}
+    needs: release-please
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Publish the reviewed section from each new tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CLI_TAG: ${{ needs.release-please.outputs.release_created == 'true' && needs.release-please.outputs.tag_name || '' }}
+          ACTION_TAG: ${{ needs.release-please.outputs.code_scan_action_release_created == 'true' && needs.release-please.outputs.code_scan_action_tag_name || '' }}
+        run: |
+          for tag in "$CLI_TAG" "$ACTION_TAG"; do
+            [[ -n "$tag" ]] || continue
+            python .github/scripts/release_notes.py extract "$tag" > "$RUNNER_TEMP/release.md"
+            gh release edit "$tag" --repo "$GITHUB_REPOSITORY" --notes-file "$RUNNER_TEMP/release.md"
+          done
+
   build:
     # release-please can create a release, then still fail while opening the
     # next release PR. Preserve artifact publication when the release outputs
@@ -355,6 +382,9 @@ jobs:
     # npm-availability check below for the rationale.
     needs: [release-please, build, publish-npm]
     permissions: *read-only-permissions
+    outputs:
+      source_sha: ${{ steps.pin.outputs.sha }}
+      scanner_version: ${{ steps.pin.outputs.version }}
     env:
       # Plain release-artifact files mirrored into promptfoo/code-scan-action.
       # `dist/` (a directory) and `.release-source.json` (generated below, not
@@ -367,6 +397,7 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
+          ref: refs/tags/${{ needs.release-please.outputs.code_scan_action_tag_name }}
 
       - *actions-setup-node
 
@@ -383,9 +414,12 @@ jobs:
       # a same-run publish has finished before this check runs, and the retries
       # absorb registry read-after-write lag for a just-published version.
       - name: Verify pinned promptfoo version is published to npm
+        id: pin
         run: |
           set -euo pipefail
           version="$(node -p "require('./package.json').version")"
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
           for attempt in 1 2 3 4 5; do
             if npm view "promptfoo@${version}" version --registry=https://registry.npmjs.org/; then
               exit 0
@@ -431,7 +465,7 @@ jobs:
       - name: Prepare mirror release payload
         env:
           CODE_SCAN_ACTION_VERSION: ${{ needs.release-please.outputs.code_scan_action_version }}
-          SOURCE_SHA: ${{ github.sha }}
+          SOURCE_SHA: ${{ steps.pin.outputs.sha }}
           SOURCE_TAG: ${{ needs.release-please.outputs.code_scan_action_tag_name }}
         run: |
           set -euo pipefail
@@ -502,7 +536,7 @@ jobs:
 
   publish-code-scan-action:
     if: ${{ always() && !cancelled() && needs.attest-code-scan-action.result == 'success' }}
-    needs: [release-please, attest-code-scan-action]
+    needs: [release-please, build-code-scan-action-release, attest-code-scan-action]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -513,11 +547,23 @@ jobs:
         README.md
         CHANGELOG.md
     steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/scripts
       - name: Download attested release payload
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: code-scan-action-release-payload
           path: ${{ runner.temp }}/code-scan-action-export
+
+      - name: Preview the attested mirror changelog
+        env:
+          VERSION: ${{ needs.release-please.outputs.code_scan_action_version }}
+          SOURCE_SHA: ${{ needs.build-code-scan-action-release.outputs.source_sha }}
+          SCANNER_VERSION: ${{ needs.build-code-scan-action-release.outputs.scanner_version }}
+        run: |
+          python .github/scripts/release_notes.py mirror-preview "$RUNNER_TEMP/code-scan-action-export/CHANGELOG.md" "$VERSION" "$SOURCE_SHA" "$SCANNER_VERSION" > "$RUNNER_TEMP/mirror-pr.md"
 
       # Mint the foreign-repository write token only after all dependency
       # installation, build, and payload preparation steps have completed.
@@ -534,7 +580,6 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.mirror-token.outputs.token }}
           CODE_SCAN_ACTION_VERSION: ${{ needs.release-please.outputs.code_scan_action_version }}
-          SOURCE_SHA: ${{ github.sha }}
           SOURCE_TAG: ${{ needs.release-please.outputs.code_scan_action_tag_name }}
         run: |
           set -euo pipefail
@@ -588,19 +633,10 @@ jobs:
           git -c "$auth_header" -c core.hooksPath=/dev/null \
             push --force-with-lease origin "HEAD:$branch"
 
-          pr_body=$(cat <<BODY
-          Automated release mirror for \`@promptfoo/code-scan-action\` v${CODE_SCAN_ACTION_VERSION}.
-
-          Source: promptfoo/promptfoo@${SOURCE_SHA}
-          Source tag: ${SOURCE_TAG}
-
-          This PR is generated from the monorepo release workflow. The mirror repository validation workflow rebuilds from \`.release-source.json\` and checks that the generated artifacts match.
-          BODY
-          )
-
+          body_file="$RUNNER_TEMP/mirror-pr.md"
           existing_pr="$(gh pr list --repo promptfoo/code-scan-action --head "$branch" --base main --state open --json number --jq '.[0].number // empty')"
           if [[ -n "$existing_pr" ]]; then
-            gh pr edit "$existing_pr" --repo promptfoo/code-scan-action --title "Release code-scan-action v${CODE_SCAN_ACTION_VERSION}" --body "$pr_body"
+            gh pr edit "$existing_pr" --repo promptfoo/code-scan-action --title "Release code-scan-action v${CODE_SCAN_ACTION_VERSION}" --body-file "$body_file"
           else
-            gh pr create --repo promptfoo/code-scan-action --base main --head "$branch" --title "Release code-scan-action v${CODE_SCAN_ACTION_VERSION}" --body "$pr_body"
+            gh pr create --repo promptfoo/code-scan-action --base main --head "$branch" --title "Release code-scan-action v${CODE_SCAN_ACTION_VERSION}" --body-file "$body_file"
           fi

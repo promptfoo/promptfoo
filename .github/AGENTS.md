@@ -25,3 +25,28 @@ Guidance for AI agents working on GitHub Actions workflows.
 - Pin exact versions for any tooling installed at workflow runtime (e.g., `prettier@3.8.1`, not `prettier@^3.8.1`; `npm install -g npm@11.11.0`, not `@latest`). Semver ranges mean a future compromised patch release can alter published artifacts.
 - Least-privilege every job. `publish-npm` does not need `packages: write`; only Docker jobs pushing to ghcr.io do.
 - **`actions/create-github-app-token` `permission-*` inputs are a subset-request, not a grant.** GitHub returns 422 if you request a permission the App installation was not already granted — even a permission release-please-action appears to use (e.g., `issues: write` for label creation). Before adding `permission-*` inputs, confirm every requested permission is already granted to the App installation in the GitHub App settings; otherwise inherit the installation's granted set by omitting the inputs.
+
+### Reviewing release notes
+
+The release PR previews the tagged changelog section from `CHANGELOG.md` (CLI) or
+`code-scan-action/CHANGELOG.md` (Action). The generated commit inventory is under
+**All changes**. Check breaking changes, migration instructions, notable features,
+and changes to data sent by scans. The Action section includes its bundled CLI pin.
+
+To revise the overview, add a PR comment with the following first line and the complete
+replacement Markdown below it. Use level-three headings, short paragraphs or bullets,
+and inline HTTPS Markdown links. The newest marked comment from a current repository
+writer wins. Editing the comment refreshes the preview, and later bot updates reuse
+the wording. Delete the override to restore the previous eligible override or the defaults.
+
+```markdown
+<!-- reviewed-release-notes -->
+
+### Before upgrading
+
+Describe who needs to act and how to update their configuration.
+```
+
+Check the resulting preview before merging. The publisher reads the versioned section
+from the release tag. For an Action release, the mirror PR and mirror changelog carry
+the same notes.

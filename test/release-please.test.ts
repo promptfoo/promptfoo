@@ -192,7 +192,11 @@ describe('release-please automation', () => {
       '${{ runner.temp }}/code-scan-action-attest/action.yml',
     ]);
 
-    expect(publishJob.needs).toEqual(['release-please', 'attest-code-scan-action']);
+    expect(publishJob.needs).toEqual([
+      'release-please',
+      'build-code-scan-action-release',
+      'attest-code-scan-action',
+    ]);
     expect(publishJob.if).toBe(
       "${{ always() && !cancelled() && needs.attest-code-scan-action.result == 'success' }}",
     );
