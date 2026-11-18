@@ -501,8 +501,14 @@ export class MCPClient {
     }
   }
 
-  getAllTools(): MCPTool[] {
-    return publishMcpToolNames(this.tools).map(({ tool }) => tool);
+  getAllTools(configuredNames: Iterable<string | undefined> = []): MCPTool[] {
+    const reserved = new Set(configuredNames);
+    return publishMcpToolNames(this.tools).map(({ physicalName, tool }) => {
+      if (tool.name !== physicalName && reserved.has(tool.name)) {
+        throw new Error(`Generated MCP alias "${tool.name}" conflicts with a configured tool`);
+      }
+      return tool;
+    });
   }
 
   async callTool(

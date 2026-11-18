@@ -112,7 +112,7 @@ qualified by server position (for example, `echo` from the first server and
 on later servers; Promptfoo sends the original name to the chosen MCP server.
 MCP names that cannot be sent as model function names (such as `admin.tools.list`
 or names longer than 64 characters) also receive aliases. Direct calls to a
-uniquely named tool can still use its original MCP name.
+uniquely named tool can still use its original MCP name. If a generated alias matches a tool declared in the provider configuration, rename the configured tool before running the eval.
 
 ```yaml
 providers:

@@ -18,7 +18,7 @@ import {
   loadProviderCallbackFromFileUrl,
 } from '../functionCallbackUtils';
 import { MCPClient } from '../mcp/client';
-import { transformMCPToolsToOpenAi } from '../mcp/transform';
+import { getConfiguredOpenAiToolName, transformMCPToolsToOpenAi } from '../mcp/transform';
 import { getMcpErrorMessage, isMcpErrorResult, normalizeMcpToolContent } from '../mcp/util';
 import {
   calculateOpenRouterResponseCost,
@@ -524,13 +524,17 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         : undefined;
 
     // --- MCP tool injection logic ---
-    const mcpTools = this.mcpClient ? transformMCPToolsToOpenAi(this.mcpClient.getAllTools()) : [];
     const loadedTools =
       (await prepareOpenAiTools(config.tools, context?.vars, callApiOptions?.abortSignal)) ?? [];
     const functions = prepareOpenAiFunctions(config.functions, context?.vars);
     const responseFormat = prepareOpenAiResponseFormat(config.response_format, context?.vars);
     // Transform tools to OpenAI format if needed
     const fileTools = loadedTools;
+    const mcpTools = this.mcpClient
+      ? transformMCPToolsToOpenAi(
+          this.mcpClient.getAllTools(fileTools.map(getConfiguredOpenAiToolName)),
+        )
+      : [];
     const allTools = [...mcpTools, ...fileTools];
     // --- End MCP tool injection logic ---
 
