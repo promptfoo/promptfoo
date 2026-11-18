@@ -108,6 +108,11 @@ Grading spans describe each assertion with `gen_ai.evaluation.name`,
 reason, `gen_ai.evaluation.explanation` records a sanitized, shortened version. Any model call used
 by the grader appears in a child span. See [`is-refusal`](/docs/configuration/expected-outputs/deterministic/#is-refusal) for how provider-reported refusals and output transforms affect grading.
 
+For [`select-best`](/docs/configuration/expected-outputs/model-graded/select-best), the grading reason
+`Ambiguous select-best verdict: multiple output indexes` means the grader returned more than one
+distinct valid output index. All compared outputs fail in this case. Inspect the grader's response and
+configure it to return only the winning zero-based index, with any reasoning in a separate provider field.
+
 ### Example Trace Output
 
 When calling OpenAI's GPT-6 Luna through Chat Completions with `reasoning_effort: none`:
