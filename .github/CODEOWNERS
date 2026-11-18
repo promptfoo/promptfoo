@@ -9,7 +9,7 @@
 # ============================================================================
 # DEFAULT
 # ============================================================================
-* @promptfoo/engineering
+* @promptfoo/engineering @ianw-oai
 
 # ============================================================================
 # TOP-LEVEL DIRECTORIES
@@ -97,7 +97,7 @@
 /vitest.integration.config.ts  @mldangelo-oai           # Integration test config
 /knip.json                     @faizan-oai                # Dead code detection
 /renovate.json                 @mldangelo-oai           # Dependency updates
-/package.json                  @mldangelo-oai           # Dependencies & scripts
+/package.json                  @mldangelo-oai @ianw-oai # Dependencies & scripts
 /release-please-config.json    @mldangelo-oai           # Release automation
 
 # ============================================================================
