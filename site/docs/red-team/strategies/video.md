@@ -134,12 +134,12 @@ This strategy is worth implementing because:
 2. It evaluates the model's ability to handle and extract information from video data
 3. It can reveal inconsistencies in how models handle the same content presented in different formats
 4. Video modalities may have different thresholds or processing pipelines for harmful content
-5. It complements image and audio strategies to provide comprehensive multi-modal testing
+5. It tests video inputs alongside the separate image and audio strategies
 
 ## Related Concepts
 
 - [Audio Jailbreaking](/docs/red-team/strategies/audio) - Similar approach using speech audio
 - [Image Jailbreaking](/docs/red-team/strategies/image) - Similar approach using images
-- [Multi-Modal Red Teaming Guide](/docs/guides/multimodal-red-team) - Comprehensive guide for testing multi-modal models
+- [Multi-Modal Red Teaming Guide](/docs/guides/multimodal-red-team) - Test multi-modal models
 - [Types of LLM vulnerabilities](/docs/red-team/llm-vulnerability-types/) - Full vulnerability and plugin directory with category mapping
 - [Red Team Strategies](/docs/red-team/strategies/) - Full strategy catalog
