@@ -18,6 +18,10 @@ export class FikraProvider extends OpenAiChatCompletionProvider {
     });
   }
 
+  override getOrganization(config = this.config): string | undefined {
+    return config.organization;
+  }
+
   id(): string {
     return `fikra:${this.modelName}`;
   }

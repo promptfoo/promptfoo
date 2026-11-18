@@ -35,7 +35,10 @@ describe('Fikra', () => {
     let restoreEnv: () => void;
 
     beforeEach(() => {
-      restoreEnv = mockProcessEnv({ FIKRA_API_KEY: 'fikra-test-key' });
+      restoreEnv = mockProcessEnv({
+        FIKRA_API_KEY: 'fikra-test-key',
+        OPENAI_ORGANIZATION: 'openai-org',
+      });
     });
 
     afterEach(() => {
@@ -110,7 +113,7 @@ describe('Fikra', () => {
       const provider = new FikraProvider('deepseek-v4.1-flash', {});
       mockedFetchWithRetries.mockResolvedValueOnce(
         jsonResponse({
-          choices: [{ message: { content: 'Atlas output' }, finish_reason: 'stop' }],
+          choices: [{ message: { content: 'Fikra output' }, finish_reason: 'stop' }],
           usage: { total_tokens: 12, prompt_tokens: 5, completion_tokens: 7 },
         }),
       );
@@ -122,7 +125,8 @@ describe('Fikra', () => {
       expect((init as RequestInit | undefined)?.headers).toMatchObject({
         Authorization: 'Bearer fikra-test-key',
       });
-      expect(result.output).toBe('Atlas output');
+      expect(new Headers((init as RequestInit).headers).has('OpenAI-Organization')).toBe(false);
+      expect(result.output).toBe('Fikra output');
       expect(result.tokenUsage).toEqual({
         total: 12,
         prompt: 5,
@@ -134,7 +138,7 @@ describe('Fikra', () => {
     it('should call the configured apiBaseUrl instead of the default host', async () => {
       const customApiBaseUrl = 'https://proxy.example.com/atlas/v1';
       const provider = new FikraProvider('deepseek-v4.1-flash', {
-        config: { apiBaseUrl: customApiBaseUrl },
+        config: { apiBaseUrl: customApiBaseUrl, organization: 'configured-org' },
       });
       mockedFetchWithRetries.mockResolvedValueOnce(
         jsonResponse({
@@ -145,8 +149,11 @@ describe('Fikra', () => {
 
       await provider.callApi('Test prompt');
 
-      const [url] = mockedFetchWithRetries.mock.calls[0] ?? [];
+      const [url, init] = mockedFetchWithRetries.mock.calls[0] ?? [];
       expect(url).toBe(`${customApiBaseUrl}/chat/completions`);
+      expect(new Headers((init as RequestInit).headers).get('OpenAI-Organization')).toBe(
+        'configured-org',
+      );
     });
 
     it('should surface API errors', async () => {
