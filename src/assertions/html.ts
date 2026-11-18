@@ -41,6 +41,9 @@ function hasSourceCodeLocation(element: HtmlElement): boolean {
 }
 
 function getChildNodes(node: HtmlNode): HtmlChildNode[] {
+  if ('content' in node) {
+    return node.content.childNodes;
+  }
   return 'childNodes' in node ? node.childNodes : [];
 }
 
@@ -310,31 +313,6 @@ function isUnclosedElement(element: HtmlElement, input: string): boolean {
   return true;
 }
 
-// Iterative pre-order DFS, like findFirstElement but also traversing template
-// content: parse5 stores a template's descendants in its content fragment
-// rather than its childNodes, so a walker that only follows childNodes never
-// sees elements inside a <template>.
-function findFirstUnclosedElement(root: HtmlNode, input: string): HtmlElement | undefined {
-  const stack: HtmlNode[] = [root];
-  while (stack.length > 0) {
-    const current = stack.pop() as HtmlNode;
-    if (isElementNode(current)) {
-      if (isUnclosedElement(current, input)) {
-        return current;
-      }
-      if (current.tagName === 'template' && 'content' in current) {
-        stack.push((current as unknown as { content: HtmlNode }).content);
-      }
-    }
-    const children = getChildNodes(current);
-    // Push in reverse so pop() yields document order.
-    for (let i = children.length - 1; i >= 0; i--) {
-      stack.push(children[i]);
-    }
-  }
-  return undefined;
-}
-
 function isUserProvidedElement(element: HtmlElement, inputLowercase: string): boolean {
   const tagName = element.tagName.toLowerCase();
   if (isWrapperTagName(tagName)) {
@@ -560,7 +538,9 @@ function validateHtml(htmlString: string): { isValid: boolean; reason: string } 
     return { isValid: false, reason: 'Output does not contain recognized HTML elements' };
   }
 
-  const unclosedElement = findFirstUnclosedElement(document, trimmed);
+  const unclosedElement = findFirstElement(document, (element) =>
+    isUnclosedElement(element, trimmed),
+  );
   if (unclosedElement) {
     return {
       isValid: false,
