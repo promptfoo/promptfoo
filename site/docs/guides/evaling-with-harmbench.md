@@ -5,9 +5,7 @@ description: Assess LLM vulnerabilities against 400 HarmBench behaviors to ident
 
 # Evaluating LLM safety with HarmBench
 
-Recent research has shown that even the most advanced LLMs [remain vulnerable](https://unit42.paloaltonetworks.com/jailbreaking-deepseek-three-techniques/) to adversarial attacks. Recent reports from security researchers have documented threat actors exploiting these vulnerabilities to [generate](https://unit42.paloaltonetworks.com/using-llms-obfuscate-malicious-javascript/) [malware](https://www.proofpoint.com/uk/blog/threat-insight/security-brief-ta547-targets-german-organizations-rhadamanthys-stealer) variants and evade detection systems, highlighting the importance of robust safety testing for any LLM-powered application.
-
-To help define a systematic way to assess potential risks and vulnerabilities in LLM systems, researchers at UC Berkeley, Google DeepMind, and the Center for AI Safety created [HarmBench](https://arxiv.org/abs/2402.04249), a standardized evaluation framework for automated red teaming of Large Language Models (LLMs). The dataset evaluates models across 400 key harmful behaviors including:
+[HarmBench](https://arxiv.org/abs/2402.04249) is an automated red teaming benchmark created by researchers at UC Berkeley, Google DeepMind, and the Center for AI Safety. It includes 400 harmful behaviors across categories such as:
 
 - Chemical and biological threats (e.g., dangerous substances, weapons)
 - Illegal activities (e.g., theft, fraud, trafficking)
@@ -16,11 +14,7 @@ To help define a systematic way to assess potential risks and vulnerabilities in
 - Cybercrime (e.g., malware, system exploitation)
 - Copyright violations
 
-This guide will show you how to use Promptfoo to run HarmBench evaluations against your own LLMs or GenAI applications. Unlike testing base models in isolation, Promptfoo enables you to evaluate the actual behavior of LLMs **within your application's context** - including your prompt engineering, safety guardrails, and any additional processing layers.
-
-This is important because your application's prompt engineering and context can significantly impact model behavior. For instance, even refusal-trained LLMs can still easily be [jailbroken](https://arxiv.org/abs/2410.13886) when operating as an agent in a web browser.
-
-The end result of testing with HarmBench is a report that shows how well your model or application defends against HarmBench's attacks.
+Run HarmBench against a model or an application endpoint to test the configured prompts, guardrails, and processing layers. The report shows which tested behaviors produced failures.
 ![harmbench evaluation results](/img/docs/harmbench-results.png)
 
 ## Configure the evaluation
@@ -113,11 +107,7 @@ targets:
 
 ## Conclusion and Next Steps
 
-While HarmBench provides valuable insights through its static dataset, it's most effective when combined with other red teaming approaches.
-
-Promptfoo's plugin architecture allows you to run multiple evaluation types together, combining HarmBench with plugins that generate dynamic test cases. For instance, you can sequence evaluations that check for PII leaks, hallucinations, excessive agency, and emerging cybersecurity threats.
-
-This multi-layered approach helps ensure more comprehensive coverage as attack vectors and vulnerabilities evolve over time.
+HarmBench uses a static dataset. Add plugins for application-specific risks such as PII leaks or excessive agency to test behavior outside the benchmark.
 
 For more information, see:
 
