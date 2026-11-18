@@ -1,4 +1,5 @@
 import { renderWithProviders } from '@app/utils/testutils';
+import { FRAMEWORK_COMPLIANCE_IDS } from '@promptfoo/redteam/constants';
 import { screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import FrameworkCard from './FrameworkCard';
@@ -58,8 +59,9 @@ describe('FrameworkCompliance', () => {
     expect(screen.getByText(/20\.00% Attack Success Rate/)).toBeInTheDocument();
     expect(screen.getByText(/\(8\/40 tests failed across 4 plugins\)/)).toBeInTheDocument();
 
-    // FrameworkCard should be called for each framework in FRAMEWORK_COMPLIANCE_IDS
-    expect(mockFrameworkCard.mock.calls.length).toBeGreaterThan(0);
+    expect(mockFrameworkCard.mock.calls.map(([props]) => props.framework)).toEqual(
+      FRAMEWORK_COMPLIANCE_IDS,
+    );
   });
 
   it('stacks heading controls on narrow screens', () => {
@@ -189,18 +191,6 @@ describe('FrameworkCompliance', () => {
     // Should not include other frameworks
     expect(renderedFrameworks.includes('mitre:atlas')).toBe(false);
     expect(renderedFrameworks.includes('nist:ai:measure')).toBe(false);
-  });
-
-  it('should show all frameworks when no config.redteam.frameworks is provided', () => {
-    const categoryStats = {
-      bola: { pass: 10, total: 10, passWithFilter: 10, failCount: 0 },
-    };
-
-    renderFrameworkCompliance(categoryStats, 0.9, undefined);
-
-    // Should render FrameworkCards for all frameworks (10 total)
-    const frameworkCardCalls = mockFrameworkCard.mock.calls;
-    expect(frameworkCardCalls.length).toBe(10); // All FRAMEWORK_COMPLIANCE_IDS
   });
 
   it('should pass frameworksToShow to CSVExporter', () => {
