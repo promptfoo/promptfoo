@@ -18,7 +18,7 @@ keywords:
 
 # Managing Large Configurations
 
-As your Promptfoo evaluations grow more complex, you'll need strategies to keep your configurations manageable, maintainable, and reusable. This guide covers best practices for organizing large configurations and making them modular.
+Split large eval configurations into files and reuse shared prompts, providers, and test cases.
 
 ## Separate Configuration Files
 
