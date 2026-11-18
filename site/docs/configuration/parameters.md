@@ -21,7 +21,7 @@ pagination_next: configuration/prompts
 Configure how promptfoo evaluates your LLM applications.
 
 :::tip Detailed Documentation
-For comprehensive guides, see the dedicated pages:
+See the dedicated pages for:
 
 - **[Prompts](/docs/configuration/prompts)** - Configure what you send to LLMs
 - **[Test Cases](/docs/configuration/test-cases)** - Set up evaluation scenarios

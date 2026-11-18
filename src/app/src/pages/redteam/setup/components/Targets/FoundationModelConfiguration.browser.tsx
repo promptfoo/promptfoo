@@ -9,6 +9,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { page, userEvent } from 'vitest/browser';
 import { DEFAULT_BEDROCK_TARGET_ID } from '../constants';
 import ProviderConfigEditor from './ProviderConfigEditor';
+import { getProviderEditorType } from './providerCatalog';
 
 import type { ProviderOptions } from '../../types';
 
@@ -46,7 +47,11 @@ function Editor({ initial }: { initial: ProviderOptions }) {
   const [target, setTarget] = useState(initial);
   return (
     <TooltipProvider>
-      <ProviderConfigEditor provider={target} setProvider={setTarget} providerType="bedrock" />
+      <ProviderConfigEditor
+        provider={target}
+        setProvider={setTarget}
+        providerType={getProviderEditorType(initial.id)}
+      />
       <output data-testid="saved-target">{JSON.stringify(target)}</output>
     </TooltipProvider>
   );
@@ -64,6 +69,19 @@ afterEach(() => {
   container?.remove();
   root = undefined;
   container = undefined;
+});
+
+it.each([
+  ['openai:chat:gpt-4.1', 'max_tokens'],
+  ['openai:chat:gpt-6.2-sol', 'max_completion_tokens'],
+])('preserves the %s cap when changing to a GPT-6.2 Responses model', async (id, field) => {
+  renderEditor({ id, config: { [field]: 256 } });
+  await page.getByLabelText('Model ID', { exact: false }).fill('openai:gpt-6.2-astra');
+  await expect
+    .element(page.getByTestId('saved-target'))
+    .toHaveTextContent(
+      JSON.stringify({ id: 'openai:gpt-6.2-astra', config: { max_output_tokens: 256 } }),
+    );
 });
 
 it('starts a new Bedrock target on Responses with the OpenAI Models label', async () => {
