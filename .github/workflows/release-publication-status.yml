@@ -1,0 +1,73 @@
+name: Release publication status
+
+on:
+  workflow_run:
+    workflows: [release-please]
+    branches: [main]
+    types: [in_progress, completed]
+  schedule:
+    # Mirror validation, tag movement and manual backfills finish independently.
+    - cron: '17 * * * *'
+  workflow_dispatch:
+    inputs:
+      pull_request:
+        description: Merged source release PR number to refresh
+        required: true
+        type: number
+
+permissions:
+  contents: read
+
+jobs:
+  discover:
+    if: >-
+      github.repository == 'promptfoo/promptfoo' &&
+      github.ref == 'refs/heads/main' &&
+      (github.event_name != 'workflow_run' ||
+       (github.event.workflow_run.event == 'push' && github.event.workflow_run.head_repository.full_name == github.repository))
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      prs: ${{ steps.find.outputs.prs }}
+    steps:
+      - &checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          # Only run the reporter from the trusted default branch.
+          ref: refs/heads/main
+          persist-credentials: false
+      - id: find
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_SHA: ${{ github.event.workflow_run.head_sha }}
+          RELEASE_PR: ${{ inputs.pull_request }}
+        run: |
+          prs="$(python3 .github/scripts/release_publication_status.py discover)"
+          echo "prs=$prs" >> "$GITHUB_OUTPUT"
+
+  report:
+    needs: discover
+    if: needs.discover.outputs.prs != '[]'
+    strategy:
+      fail-fast: false
+      matrix:
+        pr: ${{ fromJSON(needs.discover.outputs.prs) }}
+    concurrency:
+      group: release-publication-status-pr-${{ matrix.pr }}
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read
+      contents: read
+      pull-requests: write
+    steps:
+      - *checkout
+      - name: Update the publication status on the merged release PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_PR: ${{ matrix.pr }}
+        run: python3 .github/scripts/release_publication_status.py update
