@@ -1,10 +1,13 @@
 name: Release publication status
 
 on:
+  push:
+    branches: [main]
+    paths: ['.release-please-manifest.json']
   workflow_run:
     workflows: [release-please]
     branches: [main]
-    types: [in_progress, completed]
+    types: [completed]
   schedule:
     # Mirror validation, tag movement and manual backfills finish independently.
     - cron: '17 * * * *'
@@ -24,7 +27,9 @@ jobs:
       github.repository == 'promptfoo/promptfoo' &&
       github.ref == 'refs/heads/main' &&
       (github.event_name != 'workflow_run' ||
-       (github.event.workflow_run.event == 'push' && github.event.workflow_run.head_repository.full_name == github.repository))
+       (github.event.workflow_run.event == 'push' &&
+        github.event.workflow_run.head_repository.full_name == github.repository &&
+        startsWith(github.event.workflow_run.head_commit.message, 'chore(main): release ')))
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -39,10 +44,11 @@ jobs:
           # Only run the reporter from the trusted default branch.
           ref: refs/heads/main
           persist-credentials: false
+          sparse-checkout: .github/scripts
       - id: find
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_SHA: ${{ github.event.workflow_run.head_sha }}
+          RELEASE_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
           RELEASE_PR: ${{ inputs.pull_request }}
         run: |
           prs="$(python3 .github/scripts/release_publication_status.py discover)"

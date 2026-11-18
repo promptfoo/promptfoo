@@ -6,6 +6,7 @@ import os
 import re
 import subprocess
 import sys
+from datetime import datetime, timedelta, timezone
 from urllib.error import HTTPError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
@@ -64,20 +65,30 @@ def source_component(pr):
 def discover(event, sha, number):
     if event == "workflow_dispatch":
         return [int(number)]
-    if event == "workflow_run":
+    if event in ("push", "workflow_run"):
         prs = github(f"repos/{SOURCE}/commits/{sha}/pulls")
         return [
             pr["number"]
             for pr in prs
             if pr["merge_commit_sha"] == sha and source_component(pr)
         ]
-    # The machine-owned comment loses this phrase when every artifact is visible.
-    # Old open mirror PRs stay discoverable without keeping an Actions runner alive.
-    query = f'repo:{SOURCE} is:pr is:merged author:app/promptfoobot head:{BRANCH} in:comments "{PENDING}"'
-    prs = github(
-        "search/issues?" + urlencode({"q": query, "per_page": 100}), items=".items[]"
-    )
-    return [pr["number"] for pr in prs]
+    # Cover first-attempt outages as well as mirror PRs that remain open for
+    # weeks. Completed releases need no more registry or workflow checks.
+    query = f"repo:{SOURCE} is:pr is:merged author:app/promptfoobot head:{BRANCH}"
+
+    def search(qualifier):
+        params = urlencode({"q": f"{query} {qualifier}", "per_page": 100})
+        return {
+            pr["number"] for pr in github("search/issues?" + params, items=".items[]")
+        }
+
+    pending = search(f'in:comments "{PENDING}"')
+    week_ago = (datetime.now(timezone.utc).date() - timedelta(days=7)).isoformat()
+    for number in search(f"merged:>={week_ago}") - pending:
+        comment = status_comment(number)
+        if not comment or PENDING in comment["body"]:
+            pending.add(number)
+    return sorted(pending)
 
 
 def workflow(repo, filename, sha, event):
@@ -250,12 +261,26 @@ def report(pr):
         )
     footer = (
         ""
-        if npm and available
+        if npm and available and run_state(run) != "Pending"
         else f"\n\n{PENDING}. This report refreshes automatically."
     )
     lines = "\n".join(f"- {row}" for row in rows)
     return (
         f"{MARKER}\n## Publication status for {component} {version}\n\n{lines}{footer}"
+    )
+
+
+def status_comment(pr_number):
+    endpoint = f"repos/{SOURCE}/issues/{pr_number}/comments"
+    comments = github(f"{endpoint}?per_page=100", items=".[]")
+    return next(
+        (
+            comment
+            for comment in comments
+            if comment["user"]["login"] == "github-actions[bot]"
+            and comment["body"].startswith(MARKER)
+        ),
+        None,
     )
 
 
@@ -269,17 +294,8 @@ def update(pr_number, dry_run=False):
         print(report(pr))
         return
 
+    existing = status_comment(pr_number)
     endpoint = f"repos/{SOURCE}/issues/{pr_number}/comments"
-    comments = github(f"{endpoint}?per_page=100", items=".[]")
-    existing = next(
-        (
-            comment
-            for comment in comments
-            if comment["user"]["login"] == "github-actions[bot]"
-            and comment["body"].startswith(MARKER)
-        ),
-        None,
-    )
 
     def save(body):
         if not existing:

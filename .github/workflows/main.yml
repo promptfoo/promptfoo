@@ -612,7 +612,7 @@ jobs:
       - name: Run Tests
         run: |
           python -m unittest discover -s src/python -p '*_test.py'
-          python -m unittest discover -s .github/scripts -p test_release_publication_status.py
+          python -m unittest discover -s .github/scripts -p 'test_release*.py'
 
   docs:
     name: Build Docs

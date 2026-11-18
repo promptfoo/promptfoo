@@ -53,6 +53,37 @@ class PublicationTests(unittest.TestCase):
         ):
             self.assertEqual(status.discover("workflow_run", SHA, None), [123])
 
+    def test_scheduled_reconciliation_recovers_missing_reports_and_skips_completed(
+        self,
+    ):
+        # 1 is an old pending mirror. 2 never received its first status comment.
+        # 3 is complete, and the search index hasn't indexed pending PR 4 yet.
+        def comment(number):
+            return {2: None, 3: {"body": "Published"}, 4: {"body": status.PENDING}}[
+                number
+            ]
+
+        with (
+            patch.object(
+                status,
+                "github",
+                side_effect=[[{"number": 1}], [{"number": n} for n in (1, 2, 3, 4)]],
+            ),
+            patch.object(status, "status_comment", side_effect=comment),
+        ):
+            self.assertEqual(status.discover("schedule", None, None), [1, 2, 4])
+
+    def test_visible_artifacts_do_not_hide_a_running_source_workflow(self):
+        with (
+            patch.object(status, "version_at", return_value=VERSION),
+            patch.object(
+                status, "workflow", return_value={**SUCCESS, "status": "in_progress"}
+            ),
+            patch.object(status, "npm_published", return_value=True),
+            patch.object(status, "docker_digest", return_value="sha256:" + "e" * 64),
+        ):
+            self.assertIn(status.PENDING, status.report(SOURCE_PR))
+
     def test_cli_uses_artifacts_even_after_a_failed_source_workflow(self):
         with (
             patch.object(status, "version_at", return_value=VERSION),
