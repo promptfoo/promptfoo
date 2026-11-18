@@ -115,7 +115,7 @@ Azure provides access to OpenAI models as well as third-party models through Azu
 
 | Category             | Models                                                                                                                                                                                                            |
 | -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **GPT-6 Series**     | `gpt-6-astra`, `gpt-6-sol`, `gpt-6-luna`                                                                                                                                                                          |
+| **GPT-6 Series**     | `gpt-6.2-astra`, `gpt-6.2-sol`, `gpt-6-astra`, `gpt-6-sol`, `gpt-6-luna`                                                                                                                                          |
 | **GPT-5 Series**     | `gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna`, `gpt-5.5`, `gpt-5.4`, `gpt-5.4-pro`, `gpt-5.4-mini`, `gpt-5.4-nano`, `gpt-5`, `gpt-5-pro`, `gpt-5-mini`, `gpt-5-nano`, `gpt-5.1`, `gpt-5.1-chat`, `gpt-5.1-codex` |
 | **GPT-4.1 Series**   | `gpt-4.1`, `gpt-4.1-mini`, `gpt-4.1-nano`                                                                                                                                                                         |
 | **GPT-4o Series**    | `gpt-4o`, `gpt-4o-mini`, `gpt-4o-realtime`                                                                                                                                                                        |
@@ -142,6 +142,28 @@ Azure AI Foundry provides access to models from multiple providers:
 | **Core42**           | `JAIS-70b-chat`, `Falcon3-7B-Instruct`                                                                                                                                                                                                                                                      |
 
 For the complete list of models with pricing, see the [Microsoft Foundry model catalog](https://azure.microsoft.com/en-us/products/ai-foundry).
+
+### GPT-6.2 on Azure
+
+Azure offers `gpt-6.2-astra` and `gpt-6.2-sol`, both version `2026-11-17`, through Chat Completions and Responses. Use `azure:chat:<deployment>` for text or image prompts and `azure:responses:<deployment>` for tools, including parallel function calls. Both models support structured output, verbosity, and reasoning effort. Use Responses for `max` effort. [Azure model capabilities](https://learn.microsoft.com/azure/foundry/foundry-models/concepts/models-sold-directly-by-azure#gpt-62) · [Azure reasoning features](https://learn.microsoft.com/azure/foundry/openai/how-to/reasoning#api-and-feature-support).
+
+Use your deployment name in the provider ID. If it differs from the model ID, set `config.modelName` so Promptfoo applies the model's request rules.
+
+```yaml
+providers:
+  - id: azure:responses:production
+    config:
+      modelName: gpt-6.2-sol
+      reasoning_effort: high
+      prompt_cache_key: support-policy
+      prompt_cache_options:
+        mode: implicit
+        ttl: 12h
+```
+
+The default cache lifetime is 30 minutes. Eligible Responses deployments also support 12-hour writes. For multi-agent Responses, set `config.passthrough.multi_agent.enabled` to `true`. Promptfoo grades the root agent's final answer. [Azure prompt caching](https://learn.microsoft.com/azure/foundry/openai/how-to/prompt-caching) · [Azure multi-agent orchestration](https://learn.microsoft.com/azure/foundry/openai/how-to/responses-multi-agent).
+
+Azure pricing varies by deployment type. To estimate token costs for GPT-6.2, set `inputCost` and `outputCost` in USD per token, or `cost` for a flat rate. These overrides price every input and output token at the configured rates. Promptfoo omits the estimate when rates are unknown or a Responses request incurs unpriced hosted tool charges. [Microsoft Foundry pricing for GPT-6.2](https://techcommunity.microsoft.com/blog/azure-ai-foundry-blog/gpt-6-2-astra-and-gpt-6-2-sol-now-generally-available-in-microsoft-foundry/4574122).
 
 ### GPT-6 on Azure
 
@@ -248,7 +270,7 @@ does not select the Azure URL or its API-key authentication.
 
 The Responses API supports Azure deployments backed by current Azure OpenAI responses-capable models. Common examples include:
 
-- **GPT-6 Series**: `gpt-6-astra`, `gpt-6-sol`, `gpt-6-luna`
+- **GPT-6 Series**: `gpt-6.2-astra`, `gpt-6.2-sol`, `gpt-6-astra`, `gpt-6-sol`, `gpt-6-luna`
 - **GPT-5 Series**: `gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna`, `gpt-5.5`, `gpt-5.4`, `gpt-5.4-pro`, `gpt-5.4-mini`, `gpt-5.4-nano`, `gpt-5`, `gpt-5-mini`, `gpt-5-nano`, `gpt-5.1`
 - **GPT-4 Series**: `gpt-4o`, `gpt-4o-mini`, `gpt-4.1`, `gpt-4.1-mini`, `gpt-4.1-nano`
 - **Reasoning Models**: `o1`, `o1-mini`, `o1-pro`, `o3`, `o3-mini`, `o3-pro`, `o4-mini`
@@ -1065,8 +1087,8 @@ providers:
 ```
 
 For Claude 5 and Opus 4.7/4.8 deployments with recognizable model names, promptfoo
-omits unsupported `temperature`, `top_p`, and `top_k` values. Fable/Mythos 5.1 and
-Opus 5.5 and Sonnet 5.5 also omit forced `tool_choice` values; use `auto` or `none` instead.
+omits unsupported `temperature`, `top_p`, and `top_k` values. Fable/Mythos 5.1 and 5.2,
+Opus 5.5, and Sonnet 5.5 also omit forced `tool_choice` values; use `auto` or `none` instead.
 
 If your Azure deployment uses a custom alias, set `modelName` to the underlying Claude model ID. Promptfoo uses it for request compatibility and cost estimates while continuing to send the deployment name to Azure:
 
@@ -1076,7 +1098,7 @@ providers:
     config:
       apiHost: 'your-deployment.services.ai.azure.com'
       apiVersion: '2025-04-01-preview'
-      modelName: claude-fable-5-1
+      modelName: claude-fable-5-2
       max_tokens: 4096
 ```
 
@@ -1088,6 +1110,8 @@ Available Claude deployments on Azure AI Foundry:
 
 | Model                        | Description                                    |
 | ---------------------------- | ---------------------------------------------- |
+| `claude-fable-5-2`           | Claude Fable 5.2 (hosted on Anthropic)         |
+| `claude-mythos-5-2`          | Claude Mythos 5.2 (provider approval required) |
 | `claude-fable-5-1`           | Claude Fable 5.1                               |
 | `claude-mythos-5-1`          | Claude Mythos 5.1 (provider approval required) |
 | `claude-fable-5`             | Claude Fable 5                                 |
@@ -1444,24 +1468,26 @@ Run `npx promptfoo@latest eval`.
 
 Set these under the provider's `config`:
 
-| Parameter                             | Description                                                                          |
-| ------------------------------------- | ------------------------------------------------------------------------------------ |
-| `projectUrl`                          | Project endpoint; overrides `AZURE_AI_PROJECT_URL`                                   |
-| `instructions`                        | Per-request instructions                                                             |
-| `temperature`, `top_p`                | Sampling settings, if supported by the model                                         |
-| `max_tokens`, `max_completion_tokens` | Responses API `max_output_tokens`                                                    |
-| `response_format`                     | `json_object` or `json_schema` output                                                |
-| `tools`, `tool_choice`                | Tool definitions and selection                                                       |
-| `functionToolCallbacks`               | Local callbacks for function calls                                                   |
-| `modelName`                           | Model override                                                                       |
-| `reasoning_effort`                    | Responses API `reasoning.effort`                                                     |
-| `verbosity`                           | Responses text verbosity                                                             |
-| `metadata`                            | Request metadata                                                                     |
-| `passthrough`                         | Additional Responses API fields                                                      |
-| `maxPollTimeMs`                       | Tool-loop time budget after the first response (default: `300000` ms)                |
-| `timeoutMs`                           | Deadline for each request attempt (default: `600000` ms)                             |
-| `retryOptions.maxRetries`             | Non-negative integer retry count (default: `2`); other retry options are unsupported |
-| `maxToolIterations`                   | Maximum callback batches (default: `8`; range: `1`–`64`)                             |
+| Parameter                                  | Description                                                                          |
+| ------------------------------------------ | ------------------------------------------------------------------------------------ |
+| `projectUrl`                               | Project endpoint; overrides `AZURE_AI_PROJECT_URL`                                   |
+| `instructions`                             | Per-request instructions                                                             |
+| `temperature`, `top_p`                     | Sampling settings, if supported by the model                                         |
+| `max_tokens`, `max_completion_tokens`      | Responses API `max_output_tokens`                                                    |
+| `response_format`                          | `json_object` or `json_schema` output                                                |
+| `tools`, `tool_choice`                     | Tool definitions and selection                                                       |
+| `functionToolCallbacks`                    | Local callbacks for function calls                                                   |
+| `modelName`                                | Deployment override. Omit to use the agent's configured model.                       |
+| `reasoning`                                | Responses reasoning options, including effort and summary                            |
+| `reasoning_effort`                         | Responses API `reasoning.effort`                                                     |
+| `prompt_cache_key`, `prompt_cache_options` | Prompt cache key, mode and supported lifetime                                        |
+| `verbosity`                                | Responses text verbosity                                                             |
+| `metadata`                                 | Request metadata                                                                     |
+| `passthrough`                              | Additional Responses API fields                                                      |
+| `maxPollTimeMs`                            | Tool-loop time budget after the first response (default: `300000` ms)                |
+| `timeoutMs`                                | Deadline for each request attempt (default: `600000` ms)                             |
+| `retryOptions.maxRetries`                  | Non-negative integer retry count (default: `2`); other retry options are unsupported |
+| `maxToolIterations`                        | Maximum callback batches (default: `8`; range: `1`–`64`)                             |
 
 The runtime ignores `tool_resources`, `frequency_penalty`, `presence_penalty`, `seed`, and `stop` on eval requests. Configure these on the agent in Foundry where supported.
 

@@ -9,6 +9,7 @@ import logger from '../../../src/logger';
 import { GoogleAuthManager } from '../../../src/providers/google/auth';
 import * as vertexUtil from '../../../src/providers/google/util';
 import { VertexChatProvider, VertexEmbeddingProvider } from '../../../src/providers/google/vertex';
+import * as genaiTracer from '../../../src/tracing/genaiTracer';
 import { fetchWithProxy } from '../../../src/util/fetch';
 import { mockProcessEnv } from '../../util/utils';
 import type { JSONClient } from 'google-auth-library/build/src/auth/googleauth';
@@ -3262,6 +3263,43 @@ describe('VertexChatProvider.callLlamaApi', () => {
     vi.clearAllMocks();
   });
 
+  it.each(['stop', 'length'])(
+    'returns an empty Llama completion (finish_reason %s) as valid output',
+    async (finish_reason) => {
+      mockVertexRequest({
+        choices: [{ message: { content: '' }, finish_reason }],
+        usage: { total_tokens: 10, prompt_tokens: 10, completion_tokens: 0 },
+      });
+      provider = new VertexChatProvider('llama-4-scout-17b-16e-instruct-maas', {
+        config: { region: 'us-east5' },
+      });
+
+      const response = await provider.callLlamaApi('test prompt');
+
+      expect(response.error).toBeUndefined();
+      expect(response).toMatchObject({
+        output: '',
+        tokenUsage: { total: 10, prompt: 10, completion: 0 },
+        finishReason: finish_reason,
+      });
+    },
+  );
+
+  it.each([
+    { choices: [] },
+    { choices: [{ message: {} }] },
+    { choices: [{ message: { content: null } }] },
+  ])('rejects a Llama response without string content: %j', async (data) => {
+    mockVertexRequest(data);
+    provider = new VertexChatProvider('llama-4-scout-17b-16e-instruct-maas', {
+      config: { region: 'us-east5' },
+    });
+
+    const response = await provider.callLlamaApi('test prompt');
+
+    expect(response.error).toBe(`No output found in Llama API response: ${JSON.stringify(data)}`);
+  });
+
   it('should enforce us-central1 region for legacy Llama models', async () => {
     // Create provider with non-us-central1 region
     provider = new VertexChatProvider('llama-3.3-70b-instruct-maas', {
@@ -3504,6 +3542,41 @@ describe('VertexChatProvider.callLlamaApi', () => {
       }),
     );
   });
+
+  it.each([
+    { nested: 64, topLevel: 250, expected: 64 },
+    { nested: 0, topLevel: 250, expected: 0 },
+    { nested: undefined, topLevel: 0, expected: 0 },
+  ])(
+    'sends and traces the effective Llama sampling options ($nested, $topLevel)',
+    async ({ nested, topLevel, expected }) => {
+      using span = vi.spyOn(genaiTracer, 'withGenAISpan');
+      const request = mockVertexRequest({ choices: [{ message: { content: 'ok' } }] });
+      provider = new VertexChatProvider('llama-4-scout-17b-16e-instruct-maas', {
+        config: {
+          region: 'us-east5',
+          temperature: 0.7,
+          maxOutputTokens: topLevel,
+          generationConfig: { maxOutputTokens: nested, temperature: 0.2, topP: 0.9, topK: 40 },
+        },
+      });
+
+      await provider.callApi('test prompt');
+
+      expect(request.mock.calls[0][0].data).toMatchObject({
+        max_tokens: expected,
+        temperature: 0.2,
+        top_p: 0.9,
+        top_k: 40,
+      });
+      expect(span.mock.calls[0][0]).toMatchObject({
+        maxTokens: expected,
+        temperature: 0.2,
+        topP: 0.9,
+        topK: 40,
+      });
+    },
+  );
 
   it('hashes Llama request body cache keys without leaking prompts', async () => {
     const prompt = 'llama-secret-prompt-value';
@@ -3782,6 +3855,54 @@ describe('VertexChatProvider.callClaudeApi', () => {
 
   afterEach(() => {
     vi.clearAllMocks();
+  });
+
+  it.each([
+    { name: 'an empty text block', content: [{ type: 'text', text: '' }], stop: 'end_turn' },
+    { name: 'an empty content array', content: [], stop: 'end_turn' },
+    {
+      name: 'only thinking that used up max_tokens',
+      content: [{ type: 'thinking', thinking: 'Considering...', signature: 'sig' }],
+      stop: 'max_tokens',
+    },
+  ])(
+    'returns an empty Claude completion ($name) with usage, cost, and finish reason',
+    async ({ content, stop }) => {
+      mockVertexRequest({
+        id: 'test-id',
+        type: 'message',
+        role: 'assistant',
+        model: 'claude-sonnet-4-5@20250929',
+        content,
+        stop_reason: stop,
+        stop_sequence: null,
+        usage: { input_tokens: 20, output_tokens: 10 },
+      });
+      provider = new VertexChatProvider('claude-sonnet-4-5@20250929', {
+        config: { region: 'global' },
+      });
+
+      const response = await provider.callClaudeApi('test prompt');
+
+      expect(response.error).toBeUndefined();
+      expect(response).toMatchObject({
+        output: '',
+        tokenUsage: { prompt: 20, completion: 10 },
+        finishReason: stop === 'max_tokens' ? 'length' : 'stop',
+      });
+      // Billed tokens still cost money: 20 * $3/MTok + 10 * $15/MTok.
+      expect(response.cost).toBeCloseTo(0.00021, 10);
+    },
+  );
+
+  it('rejects a Claude response without a content array', async () => {
+    const data = { id: 'test-id', type: 'message', role: 'assistant', stop_reason: 'end_turn' };
+    mockVertexRequest(data);
+    provider = new VertexChatProvider('claude-3-5-sonnet-v2@20241022');
+
+    const response = await provider.callClaudeApi('test prompt');
+
+    expect(response.error).toBe(`No output found in Claude API response: ${JSON.stringify(data)}`);
   });
 
   it('should accept anthropicVersion parameter', async () => {
@@ -4601,9 +4722,18 @@ describe('VertexChatProvider.callClaudeApi', () => {
     },
   );
 
-  it.each(['claude-fable-5', 'claude-fable-5-1', 'claude-mythos-5-1'])(
+  // Base cost of 5 input and 1 output tokens: $10/$50 per MTok, or $8/$40 on 5.2.
+  const FABLE_BASE_COSTS = [
+    ['claude-fable-5', 0.0001],
+    ['claude-fable-5-1', 0.0001],
+    ['claude-mythos-5-1', 0.0001],
+    ['claude-fable-5-2', 0.00008],
+    ['claude-mythos-5-2', 0.00008],
+  ] as const;
+
+  it.each(FABLE_BASE_COSTS)(
     'supports %s with adaptive-safe parameters and regional pricing',
-    async (model) => {
+    async (model, baseCost) => {
       provider = new VertexChatProvider(model, {
         config: { max_tokens: 32, temperature: 0.5, top_p: 0.9, top_k: 40 },
       });
@@ -4641,13 +4771,13 @@ describe('VertexChatProvider.callClaudeApi', () => {
       expect(sentBody.temperature).toBeUndefined();
       expect(sentBody.top_p).toBeUndefined();
       expect(sentBody.top_k).toBeUndefined();
-      expect(result.cost).toBeCloseTo(0.00011, 8);
+      expect(result.cost).toBeCloseTo(baseCost * 1.1, 10);
     },
   );
 
-  it.each(['claude-fable-5', 'claude-fable-5-1', 'claude-mythos-5-1'])(
+  it.each(FABLE_BASE_COSTS)(
     'uses base pricing for %s on the global Vertex region',
-    async (model) => {
+    async (model, baseCost) => {
       provider = new VertexChatProvider(model, {
         config: { region: 'global', max_tokens: 32 },
       });
@@ -4681,9 +4811,8 @@ describe('VertexChatProvider.callClaudeApi', () => {
 
       const request = mockRequest.mock.calls[0][0];
       expect(request.url).toContain('/locations/global/');
-      // Global region bills at the base Claude 5 rate (no 10% regional premium):
-      // 5 input * $10/MTok + 1 output * $50/MTok = $0.0001
-      expect(result.cost).toBeCloseTo(0.0001, 8);
+      // Global region bills at the base rate (no 10% regional premium).
+      expect(result.cost).toBeCloseTo(baseCost, 10);
     },
   );
 

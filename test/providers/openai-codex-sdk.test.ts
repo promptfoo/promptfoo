@@ -110,7 +110,7 @@ const bundledCodexCli = path.resolve(process.cwd(), 'node_modules/@openai/codex/
 
 describe('bundled Codex model metadata', () => {
   it.runIf(fs.existsSync(bundledCodexCli))(
-    'includes the supported Sol and Luna reasoning modes offline',
+    'includes the supported Codex reasoning modes offline',
     () => {
       const codexHome = fs.mkdtempSync(path.join(os.tmpdir(), 'promptfoo-codex-models-'));
       try {
@@ -131,6 +131,9 @@ describe('bundled Codex model metadata', () => {
           catalog.models
             .find((model) => model.slug === slug)
             ?.supported_reasoning_levels.map(({ effort }) => effort);
+        for (const model of ['gpt-6.2-astra', 'gpt-6.2-sol']) {
+          expect(modelEfforts(model)).toEqual(['low', 'medium', 'high', 'xhigh', 'max', 'ultra']);
+        }
         expect(modelEfforts('gpt-6-sol')).toEqual(expect.arrayContaining(['high', 'max', 'ultra']));
         expect(modelEfforts('gpt-6-luna')).toEqual(expect.arrayContaining(['high', 'max']));
         expect(modelEfforts('gpt-6-luna')).not.toContain('ultra');
@@ -194,15 +197,15 @@ describe('OpenAICodexSDKProvider', () => {
     await clearCache();
   });
 
-  it.each(['0.156.0', '0.166.0-beta.1', '0.167.0', '1.0.0', 'invalid', null])(
+  it.each(['0.156.0', '0.166.0-beta.1', '0.170.0', '1.0.0', 'invalid', null])(
     'rejects incompatible SDK %s before importing it',
     async (version) => {
       vi.mocked(getPackageVersion).mockReturnValue(version);
       const provider = new OpenAICodexSDKProvider({ config: { apiKey: 'test-key' } });
       const response = await provider.callApi('test');
-      expect(response.error).toContain('requires @openai/codex-sdk@>=0.156.1 <0.167.0');
+      expect(response.error).toContain('requires @openai/codex-sdk@>=0.156.1 <0.170.0');
       expect(response.error).toContain(
-        'npm install promptfoo "@openai/codex-sdk@>=0.156.1 <0.167.0"',
+        'npm install promptfoo "@openai/codex-sdk@>=0.156.1 <0.170.0"',
       );
       expect(importModule).not.toHaveBeenCalled();
     },
@@ -289,6 +292,8 @@ describe('OpenAICodexSDKProvider', () => {
       new OpenAICodexSDKProvider({ config: { model: 'gpt-6-astra' } });
       new OpenAICodexSDKProvider({ config: { model: 'gpt-6.1-sol' } });
       new OpenAICodexSDKProvider({ config: { model: 'gpt-6.1-terra' } });
+      new OpenAICodexSDKProvider({ config: { model: 'gpt-6.2-astra' } });
+      new OpenAICodexSDKProvider({ config: { model: 'gpt-6.2-sol' } });
       new OpenAICodexSDKProvider({ config: { model: 'gpt-6-sol' } });
       new OpenAICodexSDKProvider({ config: { model: 'gpt-6-luna' } });
 
@@ -1931,6 +1936,8 @@ describe('OpenAICodexSDKProvider', () => {
       });
 
       it.each([
+        ['gpt-6.2-astra', 'ultra'],
+        ['gpt-6.2-sol', 'max'],
         ['gpt-6-astra', 'max'],
         ['gpt-6-astra', 'ultra'],
         ['gpt-6-sol', 'max'],
