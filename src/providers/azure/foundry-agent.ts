@@ -22,8 +22,11 @@ import {
 import { sleepWithAbort } from '../../util/time';
 import { accumulateTokenUsage } from '../../util/tokenUsageUtils';
 import { FunctionCallbackHandler, loadProviderCallbackFromFileUrl } from '../functionCallbackUtils';
+import { hasUnpricedAzureResponsesToolUsage } from '../openai/billing';
+import { applyGpt6RequestRules, getGpt6ResponsesReasoning, getGpt6Variant } from '../openai/gpt6';
 import { getOpenAICompletionTokenDetails, resolveMaxToolIterations } from '../openai/util';
 import { ResponsesProcessor } from '../responses/index';
+import { getResponsesOutputText } from '../responses/stream';
 import {
   buildChatSpanContext,
   emitTurnMarkerSpan,
@@ -44,7 +47,7 @@ import type {
   ProviderResponse,
   TokenUsage,
 } from '../../types/index';
-import type { CallbackContext, ReasoningEffort } from '../openai/types';
+import type { CallbackContext } from '../openai/types';
 import type { FoundryAgent, FoundryProjectClient } from './foundryProjectClient';
 import type { AzureAssistantOptions, AzureAssistantProviderOptions } from './types';
 
@@ -112,6 +115,17 @@ function hashFoundryAgentCacheValue(value: unknown): string {
   return createHmac('sha256', 'promptfoo:azure-foundry-agent:cache-key:v2')
     .update(serialized ?? String(value))
     .digest('hex');
+}
+
+function hashFoundryRequest(
+  body: Record<string, any>,
+  { cost, inputCost, outputCost }: EffectiveFoundryConfig,
+) {
+  // Cached responses include their estimated cost. Keep existing keys for deployments without overrides.
+  if (cost === undefined && inputCost === undefined && outputCost === undefined) {
+    return hashFoundryAgentCacheValue(body);
+  }
+  return hashFoundryAgentCacheValue({ body, cost, inputCost, outputCost });
 }
 
 /**
@@ -559,9 +573,6 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
     const loadedTools = config.tools
       ? await maybeLoadToolsFromExternalFile(config.tools, context?.vars)
       : undefined;
-    const reasoningEffort = config.reasoning_effort
-      ? (renderVarsInObject(config.reasoning_effort, context?.vars) as ReasoningEffort)
-      : undefined;
     const maxOutputTokens =
       config.max_output_tokens ?? config.max_completion_tokens ?? config.max_tokens;
 
@@ -587,13 +598,18 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
       text = { ...(text || {}), verbosity: config.verbosity };
     }
 
-    const body = {
+    const body: Record<string, any> = {
       input: this.parsePromptInput(prompt),
       ...(config.instructions ? { instructions: config.instructions } : {}),
       ...(config.metadata ? { metadata: config.metadata } : {}),
       ...(config.modelName ? { model: config.modelName } : {}),
       ...(maxOutputTokens === undefined ? {} : { max_output_tokens: maxOutputTokens }),
-      ...(reasoningEffort ? { reasoning: { effort: reasoningEffort } } : {}),
+      ...(config.prompt_cache_key === undefined
+        ? {}
+        : { prompt_cache_key: config.prompt_cache_key }),
+      ...(config.prompt_cache_options === undefined
+        ? {}
+        : { prompt_cache_options: config.prompt_cache_options }),
       ...(config.temperature === undefined ? {} : { temperature: config.temperature }),
       ...(config.top_p === undefined ? {} : { top_p: config.top_p }),
       ...(config.tool_choice ? { tool_choice: config.tool_choice } : {}),
@@ -601,6 +617,26 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
       ...(text ? { text } : {}),
       ...(config.passthrough || {}),
     };
+
+    if (getGpt6Variant(body.model)?.startsWith('6.2-')) {
+      const reasoning = getGpt6ResponsesReasoning(
+        this.assistantConfig,
+        context?.prompt?.config,
+        (value) => renderVarsInObject(value, context?.vars),
+      );
+      if (reasoning) {
+        body.reasoning = reasoning;
+      } else {
+        delete body.reasoning;
+      }
+      applyGpt6RequestRules(body, body.model, 'responses');
+    } else if (!('reasoning' in body)) {
+      const reasoning =
+        config.reasoning ?? (config.reasoning_effort && { effort: config.reasoning_effort });
+      if (reasoning) {
+        body.reasoning = renderVarsInObject(reasoning, context?.vars);
+      }
+    }
 
     return {
       body,
@@ -909,8 +945,12 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
   ): number | undefined {
     const usage = response.usage;
     const modelOverride = (config.passthrough as { model?: string } | undefined)?.model;
+    const model = response.model || modelOverride || config.modelName || this.deploymentName;
+    if (getGpt6Variant(model)?.startsWith('6.2-') && hasUnpricedAzureResponsesToolUsage(response)) {
+      return undefined;
+    }
     return calculateAzureCost(
-      response.model || modelOverride || config.modelName || this.deploymentName,
+      model,
       config,
       usage?.input_tokens,
       usage?.output_tokens,
@@ -981,6 +1021,7 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
   private async processResponse(
     response: FoundryResponse,
     effectiveConfig: EffectiveFoundryConfig,
+    multiAgent: boolean,
   ): Promise<ProviderResponse> {
     const failure = this.responseFailureMessage(response);
     // Normalize any partial output without allowing response errors or callbacks
@@ -989,7 +1030,9 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
       response.error ? { ...response, error: null } : response,
       { ...effectiveConfig, functionToolCallbacks: undefined },
       false,
+      { multiAgent },
     );
+    const outputText = multiAgent ? getResponsesOutputText(response, true) : response.output_text;
     const metadata = {
       ...result.metadata,
       ...(response.status && { responseStatus: response.status }),
@@ -1001,7 +1044,7 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
       return {
         ...result,
         ...((result.error || (result.isRefusal && result.output === '')) &&
-          response.output_text && { output: response.output_text }),
+          outputText && { output: outputText }),
         error: failure,
         raw: response,
         metadata: {
@@ -1011,8 +1054,8 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
         },
       };
     }
-    if (result.error && response.output_text) {
-      return { ...result, error: undefined, output: response.output_text, raw: response, metadata };
+    if (result.error && outputText) {
+      return { ...result, error: undefined, output: outputText, raw: response, metadata };
     }
     return { ...result, metadata };
   }
@@ -1061,7 +1104,7 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
     }
     const maxToolIterations = resolveMaxToolIterations(effectiveConfig.maxToolIterations);
     const projectScope = hashFoundryAgentCacheValue(this.projectUrl);
-    const cacheKey = `azure_foundry_agent:${this.deploymentName}:${projectScope}:${hashFoundryAgentCacheValue(body)}`;
+    const cacheKey = `azure_foundry_agent:${this.deploymentName}:${projectScope}:${hashFoundryRequest(body, effectiveConfig)}`;
 
     // Client-side tool behavior is absent from the serialized request body.
     // Callback closures cannot be safely represented in a persistent cache key.
@@ -1266,7 +1309,10 @@ export class AzureFoundryAgentProvider extends AzureGenericProvider {
       }
 
       const result = aggregateResult(
-        await waitWithAbort(() => this.processResponse(response, effectiveConfig), abortSignal),
+        await waitWithAbort(
+          () => this.processResponse(response, effectiveConfig, body.multi_agent?.enabled === true),
+          abortSignal,
+        ),
       );
       if (useCache && !result.error) {
         try {
