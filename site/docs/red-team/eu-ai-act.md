@@ -1,11 +1,11 @@
 ---
 sidebar_position: 26
-description: Red team LLM applications against EU AI Act requirements to ensure compliance with prohibited practices and high-risk system regulations
+description: Test LLM applications for technical risks mapped to EU AI Act prohibited practices and high-risk system categories, and review compliance obligations.
 ---
 
 # EU AI Act
 
-The EU Artificial Intelligence Act (AI Act) is the world's first comprehensive legal framework specifically regulating artificial intelligence systems. Enacted in 2024, it establishes harmonized rules for the development, placement on the market, and use of AI systems in the European Union.
+The EU Artificial Intelligence Act (AI Act), enacted in 2024, regulates the development, marketing, and use of AI systems in the European Union.
 
 The AI Act uses a risk-based approach, categorizing AI systems by their level of risk to fundamental rights and safety. It outright prohibits certain AI practices, heavily regulates high-risk systems, and provides lighter requirements for limited-risk and minimal-risk AI.
 
@@ -472,7 +472,7 @@ redteam:
 
 ## Comprehensive EU AI Act Testing
 
-For complete EU AI Act compliance testing:
+To run the EU AI Act preset:
 
 ```yaml
 redteam:
@@ -483,7 +483,7 @@ redteam:
     - jailbreak-templates
 ```
 
-This tests across both prohibited practices and high-risk system requirements.
+This runs the preset checks mapped to prohibited practices and high-risk system categories. It does not establish legal compliance.
 
 ## Compliance Requirements Beyond Testing
 
@@ -554,9 +554,9 @@ redteam:
 
 ## What's Next
 
-The EU AI Act is a living regulation with ongoing guidance and standards development. Regular testing with Promptfoo helps maintain compliance as requirements evolve.
+Review findings with the teams responsible for legal compliance, risk management, and system documentation.
 
-To learn more about setting up comprehensive AI red teaming, see [Introduction to LLM red teaming](/docs/red-team/) and [Configuration details](/docs/red-team/configuration/).
+To learn more about setting up AI red teaming, see [Introduction to LLM red teaming](/docs/red-team/) and [Configuration details](/docs/red-team/configuration/).
 
 ## Additional Resources
 

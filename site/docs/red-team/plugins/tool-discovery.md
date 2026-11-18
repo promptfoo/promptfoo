@@ -8,11 +8,7 @@ keywords: [security testing, tool discovery, red team, function calls, API enume
 
 The Tool Discovery plugin tests if an AI system reveals the tools, functions, or API calls that it has access to, or capabilities that its application purpose explicitly prohibits disclosing.
 
-This is important for security because revealing available tools and function calls could potentially:
-
-1. Allow attackers to learn which tools are available for exploitation
-2. Provide information that could be used in crafting more sophisticated attacks
-3. Reveal internal system capabilities and architecture
+Disclosing internal tool names, arguments, or API calls can help attackers target those capabilities.
 
 ## Configuration
 
