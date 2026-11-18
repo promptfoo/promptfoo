@@ -210,6 +210,14 @@ GPT-6.1 Terra supports `none`, `low`, `medium` (the default), `high`, `xhigh`, a
 
 Use `openai:gpt-6.2-astra` or `openai:gpt-6.2-sol` for the Responses API, including tool calls. For Chat Completions without tools, use `openai:chat:gpt-6.2-astra` or `openai:chat:gpt-6.2-sol`. Both models accept `low`, `medium`, `high`, `xhigh`, and `max` reasoning effort. Promptfoo omits sampling and log-probability parameters on both endpoints. See the [GPT-6.2 migration guide](https://developers.openai.com/api/docs/guides/latest-model#migration-quickstart).
 
+To run a multi-agent Responses eval, set `config.passthrough.multi_agent` to `{ enabled: true, max_concurrent_subagents: 3 }`. Promptfoo enables the beta on OpenAI endpoints and grades the root agent's final answer. For a proxy that forwards to OpenAI, add `OpenAI-Beta: responses_multi_agent=v1` to `config.headers`. When a turn ends with function calls, Promptfoo returns the callback results or serialized calls. Inspect `raw.output` for commentary, subagent messages, and tool calls. [OpenAI multi-agent guide](https://developers.openai.com/api/docs/guides/responses-multi-agent)
+
+For an Azure OpenAI deployment, set `config.apiBaseUrl` to `https://YOUR-RESOURCE.openai.azure.com/openai/v1?api-version=preview` and enable `multi_agent` as above. Promptfoo grades the root agent's final answer using Azure's preview API. [Azure multi-agent guide](https://learn.microsoft.com/azure/foundry/openai/how-to/responses-multi-agent)
+
+For hosted deployments, configure the deployment or model ID from [Azure Foundry](./azure.md#azure-responses-api) or [Amazon Bedrock](./aws-bedrock.md). For a gateway, use the model ID and credentials described in the [OpenRouter](./openrouter.md), [Vercel AI Gateway](./vercel.md), or [LiteLLM](./litellm.md) guide.
+
+Both models can also power an [Agents SDK evaluation](./openai-agents.md), a [hosted Agents API session](./openai-agents-api.md), a [Codex SDK thread](./openai-codex-sdk.md), or a [Codex App Server turn](./openai-codex-app-server.md).
+
 ### Fine-tuned models {#fine-tuned-and-legacy-completion-models}
 
 Use the full fine-tuned model ID with its supported endpoint:
