@@ -2,7 +2,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -31,7 +31,9 @@ function commit(subject: string) {
 }
 
 function run(base: string, preload?: string) {
-  const args = preload ? ['--import', preload, checker, base, 'HEAD'] : [checker, base, 'HEAD'];
+  const args = preload
+    ? ['--import', pathToFileURL(preload).href, checker, base, 'HEAD']
+    : [checker, base, 'HEAD'];
   const result = spawnSync(process.execPath, args, {
     cwd,
     encoding: 'utf8',
@@ -42,6 +44,11 @@ function run(base: string, preload?: string) {
     },
   });
   return { status: result.status, output: result.stdout + result.stderr };
+}
+
+function expectSuccess(base: string, preload?: string) {
+  const result = run(base, preload);
+  expect(result.status, result.output).toBe(0);
 }
 
 beforeEach(() => {
@@ -100,7 +107,7 @@ describe('complete release notes', () => {
     );
     commit('chore(main): release');
     const missing = run(base);
-    expect(missing.status).toBe(1);
+    expect(missing.status, missing.output).toBe(1);
     expect(missing.output).toContain(`CHANGELOG.md (1.0.1): ${base}`);
     expect(missing.output).toContain(`${actionLog} (0.2.3): ${shared}`);
     expect(missing.output).not.toContain(`${actionLog} (0.2.3): ${base}`);
@@ -110,7 +117,7 @@ describe('complete release notes', () => {
       '## [0.2.3]\n\n[Updated security](https://github.com/promptfoo/promptfoo/issues/10108)\n',
     );
     commit('docs: clarify both changes');
-    expect(run(base).status).toBe(0);
+    expectSuccess(base);
   });
 
   it('accepts rewritten PR-linked notes for breaking changes, and excludes a fully reverted change', () => {
@@ -136,7 +143,7 @@ describe('complete release notes', () => {
       return Response.json([{ number: 99, merged_at: '2026-01-01', base: { ref: 'main', repo: { full_name: 'promptfoo/promptfoo' } } }]);
     };`,
     );
-    expect(run(base, mock).status).toBe(0);
+    expectSuccess(base, mock);
   });
 
   it('includes a feature restored by a Git reapplication', () => {
@@ -152,7 +159,7 @@ describe('complete release notes', () => {
     expect(run(base).output).toContain(feature);
     write('CHANGELOG.md', '## [1.0.1]\n\nRestored functionality (#19).\n');
     commit('docs: acknowledge restored feature');
-    expect(run(base).status).toBe(0);
+    expectSuccess(base);
   });
 
   it('checks newly merged base changes against the action tag even when the CLI released later', () => {
@@ -175,6 +182,6 @@ describe('complete release notes', () => {
     expect(run(late).output).toContain('extend scanner (#567)');
     write(actionLog, '## [0.2.3]\n\nScanner functionality and corrections. #567 #568\n');
     commit('docs: link both changes');
-    expect(run(late).status).toBe(0);
+    expectSuccess(late);
   });
 });
