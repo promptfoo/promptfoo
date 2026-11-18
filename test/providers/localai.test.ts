@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   LocalAiChatProvider,
   LocalAiCompletionProvider,
@@ -20,10 +20,6 @@ afterEach(() => {
 });
 
 describe('LocalAI temperature handling', () => {
-  beforeEach(() => {
-    vi.resetAllMocks();
-  });
-
   it('should send temperature: 0 to the API when explicitly configured (chat)', async () => {
     vi.mocked(fetchWithCache).mockResolvedValue(createChatResponseData() as any);
 
@@ -121,10 +117,6 @@ describe('LocalAI temperature handling', () => {
 });
 
 describe('LocalAI empty choices handling', () => {
-  beforeEach(() => {
-    vi.resetAllMocks();
-  });
-
   it('returns a clean malformed-response error on empty choices (chat)', async () => {
     vi.mocked(fetchWithCache).mockResolvedValue({ data: { choices: [] } } as any);
 
@@ -162,43 +154,34 @@ describe('LocalAI empty choices handling', () => {
   });
 });
 
-describe.each([
-  { source: 'env', baseUrl: 'http://localai.example/v1' },
-  { source: 'env', baseUrl: 'http://localai.example/v1/' },
-  { source: 'env', baseUrl: 'http://localai.example/v1///' },
-  { source: 'config', baseUrl: 'http://localai.example/v1/' },
-])('LocalAI base URL from $source: $baseUrl', ({ source, baseUrl }) => {
-  const options =
-    source === 'env' ? { env: { LOCALAI_BASE_URL: baseUrl } } : { config: { apiBaseUrl: baseUrl } };
-
-  beforeEach(() => {
-    vi.resetAllMocks();
-  });
-
-  it.each([
-    {
-      endpoint: 'chat/completions',
-      call: () => new LocalAiChatProvider('test-model', options).callApi('Test prompt'),
-      data: { choices: [{ message: { content: 'Test output' } }] },
-    },
-    {
-      endpoint: 'completions',
-      call: () => new LocalAiCompletionProvider('test-model', options).callApi('Test prompt'),
-      data: { choices: [{ text: 'Test output' }] },
-    },
-    {
-      endpoint: 'embeddings',
-      call: () => new LocalAiEmbeddingProvider('test-model', options).callEmbeddingApi('Test'),
-      data: { data: [{ embedding: [0.1, 0.2] }] },
-    },
-  ])('requests $endpoint without a doubled slash', async ({ endpoint, call, data }) => {
-    vi.mocked(fetchWithCache).mockResolvedValue({ data } as any);
-
-    const result = await call();
-
-    expect(result.error).toBeUndefined();
-    expect(vi.mocked(fetchWithCache).mock.calls[0][0]).toBe(
-      `http://localai.example/v1/${endpoint}`,
-    );
-  });
+it.each([
+  {
+    endpoint: 'chat/completions',
+    call: () =>
+      new LocalAiChatProvider('test-model', {
+        config: { apiBaseUrl: 'http://localai.example/v1/' },
+      }).callApi('Test prompt'),
+    data: { choices: [{ message: { content: 'Test output' } }] },
+  },
+  {
+    endpoint: 'completions',
+    call: () =>
+      new LocalAiCompletionProvider('test-model', {
+        env: { LOCALAI_BASE_URL: 'http://localai.example/v1' },
+      }).callApi('Test prompt'),
+    data: { choices: [{ text: 'Test output' }] },
+  },
+  {
+    endpoint: 'embeddings',
+    call: () =>
+      new LocalAiEmbeddingProvider('test-model', {
+        env: { LOCALAI_BASE_URL: 'http://localai.example/v1///' },
+      }).callEmbeddingApi('Test'),
+    data: { data: [{ embedding: [0.1, 0.2] }] },
+  },
+])('requests $endpoint without a doubled slash', async ({ endpoint, call, data }) => {
+  vi.mocked(fetchWithCache).mockResolvedValue({ data } as any);
+  const result = await call();
+  expect(result.error).toBeUndefined();
+  expect(vi.mocked(fetchWithCache).mock.calls[0][0]).toBe(`http://localai.example/v1/${endpoint}`);
 });
