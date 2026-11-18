@@ -181,6 +181,78 @@ class NotesTests(unittest.TestCase):
                 links.check_links(section, REPO, "1.1.0", "1.2.0", "HEAD"), section
             )
 
+    def test_common_markdown_destinations_and_titles_reach_the_url_validator(self):
+        examples = [
+            (
+                '[Upgrade [guide]](https://example.org/missing "Migration guide")',
+                "https://example.org/missing",
+            ),
+            (
+                "[Wiki](https://example.org/wiki/F(a(b)c)#examples 'page')",
+                "https://example.org/wiki/F(a(b)c)#examples",
+            ),
+            (
+                r"[Escaped](https://example.org/wiki/F\(a\)?x=1&amp;y=2 (optional title))",
+                "https://example.org/wiki/F(a)?x=1&y=2",
+            ),
+            (
+                '[Page](<https://example.org/a b>\n "title")',
+                "https://example.org/a%20b",
+            ),
+        ]
+        section = HEADER + "\n\n" + "\n".join(example for example, _ in examples)
+        with (
+            patch.object(subprocess, "run"),
+            patch.object(links, "check_public_url") as check,
+        ):
+            self.assertEqual(
+                links.check_links(section, REPO, "1.1.0", "1.2.0", "HEAD"), section
+            )
+            self.assertEqual(
+                {call.args[0] for call in check.call_args_list},
+                {url for _, url in examples},
+            )
+            check.side_effect = ValueError("Missing release-note link anchor")
+            with self.assertRaisesRegex(ValueError, "Missing release-note link anchor"):
+                links.check_links(section, REPO, "1.1.0", "1.2.0", "HEAD")
+
+    def test_repaired_pr_preserves_title_and_other_link_formatting(self):
+        sha = "b" * 40
+        commit = f"{ROOT}/commit/{sha}"
+        section = (
+            HEADER
+            + f'\n\nReview [notes [API]](<{ROOT}/pull/8> "details") and [source]({commit}).'
+        )
+        with (
+            patch.object(links, "issue_types", return_value={8: None}),
+            patch.object(subprocess, "run"),
+            patch.object(
+                subprocess, "check_output", return_value=f"{sha}\tfix: API docs (#8)\n"
+            ),
+        ):
+            result = links.check_links(section, REPO, "1.1.0", "1.2.0", "HEAD")
+        self.assertIn(f'[notes [API]](<{commit}> "details")', result)
+
+    def test_malformed_title_cannot_hide_the_next_paragraphs_links(self):
+        text = '[a](https://example.org/a "title\n\n[broken](https://example.org/missing)\n\nend")'
+        with self.assertRaisesRegex(ValueError, "Unsupported"):
+            list(links.inline_links(text))
+
+    def test_code_examples_and_escaped_brackets_are_not_links(self):
+        section = (
+            HEADER + "\n\nUse `handlers[0]()` or the following example.\n\n"
+            '```markdown\n[demo](missing "illustration")\n```\n'
+            r"\[escaped](https://example.org/demo)\n"
+        )
+        with (
+            patch.object(subprocess, "run"),
+            patch.object(links, "check_public_url") as check,
+        ):
+            self.assertEqual(
+                links.check_links(section, REPO, "1.1.0", "1.2.0", "HEAD"), section
+            )
+            check.assert_not_called()
+
     def test_invalid_compare_or_private_outbound_link_fails(self):
         with self.assertRaisesRegex(ValueError, "component comparison"):
             links.check_links(BODY, REPO, "1.0.0", "1.2.0", "HEAD")

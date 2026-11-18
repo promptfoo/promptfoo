@@ -5,13 +5,134 @@ import json
 import os
 import re
 import socket
+import string
 import subprocess
 from concurrent.futures import ThreadPoolExecutor
+from html import unescape
 from html.parser import HTMLParser
-from urllib.parse import unquote, urljoin, urlsplit
+from typing import NamedTuple
+from urllib.parse import quote, unquote, urljoin, urlsplit
 
+# Simple labels used by the optional plain-text preview excerpt. Never use for link validation.
 LINK = re.compile(r"\[([^\]\n]*)\]\(([^()\s]+)\)")
 SHA = re.compile(r"[0-9a-f]{40}")
+
+
+ESCAPABLE = frozenset(string.punctuation)
+CODE_FENCE = re.compile(r"^ {0,3}(`{3,}|~{3,})([^\n]*)$", re.M)
+
+
+class InlineLink(NamedTuple):
+    label_start: int
+    label_end: int
+    url_start: int
+    url_end: int
+    url: str
+
+
+def inline_links(markdown):
+    """Read the inline destinations in reviewed Markdown, retaining spans for safe edits."""
+    labels = []
+    i = 0
+    while i < len(markdown):
+        char = markdown[i]
+        if char == "\\" and markdown[i + 1 : i + 2] in ESCAPABLE:
+            i += 2
+            continue
+        if (i == 0 or markdown[i - 1] == "\n") and (
+            fence := CODE_FENCE.match(markdown, i)
+        ):
+            ticks, info = fence.groups()
+            if ticks[0] == "~" or "`" not in info:
+                close = re.compile(
+                    r"^ {0,3}" + ticks[0] + "{" + str(len(ticks)) + r",}[ \t]*$", re.M
+                )
+                end = close.search(markdown, fence.end() + 1)
+                i = end.end() if end else len(markdown)
+                labels.clear()
+                continue
+        if char == "`":
+            end = i + 1
+            while markdown[end : end + 1] == "`":
+                end += 1
+            # A single-line code span is a common place to document expressions
+            # such as methods[0](). They are code, not release-note links.
+            close = re.compile(r"(?<!`)" + markdown[i:end] + r"(?!`)")
+            newline = markdown.find("\n", end)
+            end_code = close.search(
+                markdown, end, newline if newline >= 0 else len(markdown)
+            )
+            i = end_code.end() if end_code else end
+            continue
+        if char == "[":
+            labels.append(i + 1)
+        if char != "]" or not labels:
+            i += 1
+            continue
+        label = labels.pop()
+        if markdown[i + 1 : i + 2] != "(":
+            i += 1
+            continue
+        label_end = i
+        i += 2
+        while i < len(markdown) and markdown[i].isspace():
+            i += 1
+        enclosed = markdown[i : i + 1] == "<"
+        i += int(enclosed)
+        start = i
+        depth = 0
+        while i < len(markdown):
+            char = markdown[i]
+            if char == "\\" and markdown[i + 1 : i + 2] in ESCAPABLE:
+                i += 2
+                continue
+            if enclosed:
+                if char == ">":
+                    break
+                if char in "<\n\r":
+                    raise ValueError(
+                        "Invalid angle-bracketed release-note link destination"
+                    )
+            elif char == "(":
+                depth += 1
+            elif char == ")":
+                if not depth:
+                    break
+                depth -= 1
+            elif char.isspace():
+                break
+            i += 1
+        end = i
+        if depth or (enclosed and markdown[i : i + 1] != ">"):
+            raise ValueError("Unclosed release-note link destination")
+        i += int(enclosed)
+        # A link title can use either quotation mark or a pair of parentheses.
+        # Preserve the original title and escape syntax when repairing a destination.
+        after_url = i
+        while i < len(markdown) and markdown[i].isspace():
+            i += 1
+        if i > after_url and markdown[i : i + 1] in {'"', "'", "("}:
+            close = ")" if markdown[i] == "(" else markdown[i]
+            i += 1
+            while i < len(markdown) and markdown[i] != close:
+                i += (
+                    2
+                    if markdown[i] == "\\" and markdown[i + 1 : i + 2] in ESCAPABLE
+                    else 1
+                )
+            i += 1
+            while i < len(markdown) and markdown[i].isspace():
+                i += 1
+        if markdown[i : i + 1] != ")" or re.search(
+            r"\n[ \t]*\r?\n", markdown[label_end + 2 : i]
+        ):
+            raise ValueError("Unsupported release-note link destination or title")
+        raw = re.sub(
+            r"\\([" + re.escape(string.punctuation) + r"])", r"\1", markdown[start:end]
+        )
+        url = quote(unescape(raw), safe=":/?#[]@!$&'()*+,;=%")
+        yield InlineLink(label, label_end, start, end, url)
+        i += 1
 
 
 def issue_types(repo, numbers):
@@ -169,9 +290,13 @@ def check_public_url(url):
 
 def check_links(section, repo, previous_tag, tag, head):
     prefix = f"https://github.com/{repo}/"
-    urls = {m[2] for m in LINK.finditer(section)}
+    links = list(inline_links(section))
+    urls = {link.url for link in links}
     compare = f"{prefix}compare/{previous_tag}...{tag}"
-    if compare not in {m[2] for m in LINK.finditer(section.splitlines()[0])}:
+    if not any(
+        link.url == compare and link.url_end <= len(section.splitlines()[0])
+        for link in links
+    ):
         raise ValueError(f"Expected component comparison {compare}")
     # The right side is the future release tag. Its immutable candidate is head.
     subprocess.run(
@@ -219,23 +344,29 @@ def check_links(section, repo, previous_tag, tag, head):
                     prefix + "commit/" + sha
                 )
 
-    def fix(match):
-        label, url = match.groups()
-        if url not in issue_urls:
-            return match[0]
-        kind, number = issue_urls[url]
+    replacements = []
+    for link in links:
+        if link.url not in issue_urls:
+            continue
+        kind, number = issue_urls[link.url]
         if types[number] and (kind == "issues" or types[number] == "PullRequest"):
-            return match[0]
+            continue
         sources = fallbacks.get(number, set())
         if len(sources) != 1:
-            raise ValueError(f"Missing {url}; supply a link to the source commit")
+            raise ValueError(f"Missing {link.url}; supply a link to the source commit")
         commit = next(iter(sources))
-        return f"[{commit.rsplit('/', 1)[1][:7] if label == '#' + str(number) else label}]({commit})"
+        replacements.append((link.url_start, link.url_end, commit))
+        if section[link.label_start : link.label_end] == f"#{number}":
+            replacements.append(
+                (link.label_start, link.label_end, commit.rsplit("/", 1)[1][:7])
+            )
 
+    # Preserve wrappers, nested labels and titles verbatim on fallback links.
+    for start, end, replacement in sorted(replacements, reverse=True):
+        section = section[:start] + replacement + section[end:]
     # Generated inventories already carry the verified commit next to the PR.
-    normalized = LINK.sub(fix, section)
     return re.sub(
         r"(\(\[[a-f0-9]+\]\(https://github\.com/[^)]+/commit/[0-9a-f]{40}\)\)) \1",
         r"\1",
-        normalized,
+        section,
     )
