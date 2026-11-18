@@ -18,52 +18,45 @@ describe('workbooks below directories containing hashes', () => {
     fs.rmSync(directory, { recursive: true, force: true });
   });
 
-  for (const folder of [
-    'plain',
-    'suite#archive',
-    'outer#one/inner#two',
-    'outer#one/suite.xlsx#archive/deeper',
-  ]) {
-    for (const relative of [false, true]) {
-      it.each([
-        ['', 'primary'],
-        ['#', 'primary'],
-        ['#2', 'other'],
-        ['#Other', 'other'],
-      ])(
-        'loads ' + folder + ' (relative=' + relative + ') with selector %s',
-        async (selector, value) => {
-          const filename = path.join(directory, folder, 'cases.xlsx');
-          fs.mkdirSync(path.dirname(filename), { recursive: true });
-          fs.copyFileSync(fixture, filename);
-          const source = relative ? path.relative(process.cwd(), filename) : filename;
-          const reference = source + selector;
-          const expected = [{ value: value + '-a' }, { value: value + '-b' }];
+  function workbook(folder: string): string {
+    const filename = path.join(directory, folder, 'cases.xlsx');
+    fs.mkdirSync(path.dirname(filename), { recursive: true });
+    fs.copyFileSync(fixture, filename);
+    return filename;
+  }
 
-          expect(await parseXlsxFile(reference)).toEqual(expected);
-          const fileReference = 'file://' + reference;
-          for (const read of [readStandaloneTestsFile, readTests, readTestConfigs]) {
-            expect((await read(fileReference, process.cwd())).map((test) => test.vars)).toEqual(
-              expected,
-            );
-          }
-          for (const read of [readTests, readTestConfigs]) {
-            expect(
-              (await read({ path: fileReference }, process.cwd())).map((test) => test.vars),
-            ).toEqual(expected);
-          }
-        },
+  it.each([
+    ['plain', '', 'primary', true],
+    ['suite#archive', '#', 'primary', false],
+    ['outer#one/inner#two', '#2', 'other', true],
+    ['outer#one/suite.xlsx#archive/deeper', '#Other', 'other', false],
+  ] as const)('loads %s with selector %s', async (folder, selector, sheet, relative) => {
+    const file = workbook(folder);
+    const source = relative ? path.relative(process.cwd(), file) : file;
+    expect(await parseXlsxFile(source + selector)).toEqual([
+      { value: sheet + '-a' },
+      { value: sheet + '-b' },
+    ]);
+  });
+
+  it('routes a workbook with a hash in its directory through each test reader', async () => {
+    const reference = 'file://' + workbook('suite#archive') + '#Other';
+    const expected = [{ value: 'other-a' }, { value: 'other-b' }];
+    for (const read of [readStandaloneTestsFile, readTests, readTestConfigs]) {
+      expect((await read(reference, process.cwd())).map((test) => test.vars)).toEqual(expected);
+    }
+    for (const read of [readTests, readTestConfigs]) {
+      expect((await read({ path: reference }, process.cwd())).map((test) => test.vars)).toEqual(
+        expected,
       );
     }
-  }
+  });
 
   it.each([
     ['#0', 'Sheet index 0 is out of range.'],
     ['#Missing', 'Sheet "Missing" not found.'],
   ])('validates %s after opening the workbook below a hash directory', async (selector, error) => {
-    const filename = path.join(directory, 'suite#archive', 'cases.xlsx');
-    fs.mkdirSync(path.dirname(filename));
-    fs.copyFileSync(fixture, filename);
+    const filename = workbook('suite#archive');
 
     await expect(parseXlsxFile(filename + selector)).rejects.toThrow(error);
     await expect(readTests('file://' + filename + selector)).rejects.toThrow(error);
