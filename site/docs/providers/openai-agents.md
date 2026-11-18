@@ -52,7 +52,7 @@ providers:
     config:
       agent:
         name: Customer Support Agent
-        model: gpt-6-luna
+        model: gpt-6.2-sol
         instructions: You are a helpful customer support agent.
       maxTurns: 10
 ```
