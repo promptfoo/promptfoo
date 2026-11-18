@@ -1578,6 +1578,8 @@ describe('Ollama prompt config', () => {
           transform: 'output.trim()',
           storeOutputAs: 'answer',
           runSerially: true,
+          // Added to every test's options when redteam.graderExamples is set.
+          redteamGraderExamples: [{ output: 'No.', pass: true, score: 1, reason: 'Refused' }],
         }),
       );
       const droppedCalls = debugSpy.mock.calls.filter((c) =>
@@ -1587,6 +1589,24 @@ describe('Ollama prompt config', () => {
       expect(droppedCalls).toHaveLength(0);
       expect(requestBody().options).toEqual({});
       expect(requestBody()).not.toHaveProperty('provider');
+      expect(requestBody()).not.toHaveProperty('redteamGraderExamples');
+    },
+  );
+
+  it.each(providers)(
+    'still reports a prompt config key $kind does not know',
+    async ({ Provider, data }) => {
+      const debugSpy = vi.spyOn(logger, 'debug').mockImplementation(() => logger);
+      vi.mocked(fetchWithCache).mockResolvedValue(createStreamResponse(data));
+
+      // An OpenAI key in a prompt config shared across providers.
+      await new Provider('llama3.3').callApi('test prompt', promptContext({ max_tokens: 99 }));
+      const dropped = debugSpy.mock.calls.find((c) =>
+        String(c[0]).includes('Ignoring unsupported config keys'),
+      );
+
+      expect(dropped?.[1]).toMatchObject({ dropped: ['max_tokens'] });
+      expect(requestBody().options).toEqual({});
     },
   );
 });

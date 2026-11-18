@@ -242,7 +242,7 @@ function splitOllamaPassthrough(config: OllamaCompletionOptions): {
 
 /**
  * Test options that the prompt config also carries but promptfoo itself consumes: prompt
- * text, output handling, grading and test controls. The evaluator already applies the
+ * text, output handling, grading and test controls (`repeat` is removed upstream). The evaluator already applies the
  * prompt `suffix` (`--prompt-suffix`, `tests[].options.suffix`) to the prompt text, so it
  * must not reach Ollama as its fill-in-the-middle `suffix`; the rest would be reported as
  * dropped config on every request.
@@ -261,6 +261,7 @@ const PromptfooPromptOptionKeys = new Set([
   'disableConversationVar',
   'disableDefaultAsserts',
   'runSerially',
+  'redteamGraderExamples',
 ]);
 
 /** Layers the prompt's config, which also carries `tests[].options`, over the provider's. */
