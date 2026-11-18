@@ -917,17 +917,15 @@ describe('assertionFromString', () => {
   });
 
   it.each([
-    ['answer-relevance', 0.5],
-    ['context-faithfulness', 0.5],
-    ['context-recall', 0.5],
-    ['context-relevance', 0.5],
-    ['classifier', 1],
-  ])('should leave the handler default threshold intact for %s', (type, threshold) => {
+    'answer-relevance',
+    'context-faithfulness',
+    'context-recall',
+    'context-relevance',
+    'classifier',
+  ])('should leave the handler default threshold intact for %s', (type) => {
     const result: Assertion = assertionFromString(`${type}:Expected output`);
 
     expect(result).toEqual({ type, value: 'Expected output' });
-    // The assertion handlers apply their own defaults when threshold is undefined.
-    expect(threshold).toBe(type === 'classifier' ? 1 : 0.5);
   });
 
   it('should return complete assertion object structure for representative threshold-based assertion types', () => {
