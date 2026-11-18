@@ -2561,7 +2561,7 @@ describe('util', () => {
         expect(contents).toEqual([]);
       });
 
-      it('should register media values nested inside cyclic arrays and objects within contextVars', () => {
+      it('should register media values nested inside deep and cyclic contextVars', () => {
         const rawImage =
           '/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/2wBDAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAAAAX/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwA/8A/9k=';
         const prompt = JSON.stringify([
@@ -2572,11 +2572,11 @@ describe('util', () => {
         ]);
         const cyclic: Record<string, unknown> = {};
         cyclic.self = cyclic;
-        const contextVars = {
-          cyclic,
-          items: [{ nestedImage: rawImage }],
-          mediaList: [rawImage],
-        };
+        let nested: object = { image: rawImage };
+        for (let depth = 0; depth < 15_000; depth++) {
+          nested = [nested];
+        }
+        const contextVars = { cyclic, nested };
         const { contents } = geminiFormatAndSystemInstructions(prompt, contextVars);
         expect(contents[0].parts[0]).toEqual({
           inlineData: {

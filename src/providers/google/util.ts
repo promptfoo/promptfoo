@@ -1954,7 +1954,11 @@ function processImagesInContents(
   const base64ToMimeType = new Map<string, string>();
 
   const seen = new WeakSet<object>();
-  function registerMediaValue(value: unknown) {
+  const pending: unknown[] = Object.entries(contextVars || {})
+    .filter(([key]) => key !== '_conversation')
+    .map(([, value]) => value);
+  while (pending.length > 0) {
+    const value = pending.pop();
     if (typeof value === 'string') {
       let mimeType = getMimeTypeFromBase64(value);
       // Generic MP4 brands need audio provenance bound to the current loaded bytes.
@@ -1974,20 +1978,13 @@ function processImagesInContents(
         !Array.isArray(value) &&
         ![null, Object.prototype].includes(Object.getPrototypeOf(value))
       ) {
-        return;
+        continue;
       }
       seen.add(value);
       for (const item of Object.values(value)) {
-        registerMediaValue(item);
+        pending.push(item);
       }
     }
-  }
-
-  for (const [key, value] of Object.entries(contextVars || {})) {
-    if (key === '_conversation') {
-      continue;
-    }
-    registerMediaValue(value);
   }
 
   return contents.map((content) => {
