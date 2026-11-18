@@ -823,6 +823,38 @@ describe('analyzeTemplateReference', () => {
     ).toContain('user');
   });
 
+  it('preserves unresolved alternatives in loop macro bindings', () => {
+    const value =
+      "{% macro a() %}plain{% endmacro %}{% macro h(x=_conversation) %}{{x}}{% endmacro %}{{h('warmup')}}{% for f in [a, h|default] %}{{f()}}{% endfor %}";
+    expect(getNunjucksEngine().renderString(value, { _conversation: 'history' })).toBe(
+      'warmupplainhistory',
+    );
+    expect(analyzeTemplateReference(value, '_conversation')).toEqual({
+      referenced: true,
+      parsed: true,
+    });
+  });
+
+  it('recognizes grouped symbols as function-adapter receivers', () => {
+    const value = "{% macro h(x=_conversation) %}{{x}}{% endmacro %}{{h('warmup')}}{{(h).call(0)}}";
+    expect(getNunjucksEngine().renderString(value, { _conversation: 'history' })).toBe(
+      'warmuphistory',
+    );
+    expect(analyzeTemplateReference(value, '_conversation')).toEqual({
+      referenced: true,
+      parsed: true,
+    });
+  });
+
+  it('treats negated inline conditions as undefined-safe', () => {
+    const value = "{{ 'guest' if not user else 'member' }}";
+    expect(getNunjucksEngine().renderString(value, {})).toBe('guest');
+    expect(extractRequiredVariablesFromTemplate(value)).toEqual([]);
+    expect(
+      extractRequiredVariablesFromTemplate("{{ 'guest' if not user|trim else 'member' }}"),
+    ).toContain('user');
+  });
+
   it('preserves escaped alternatives across caller argument merges', () => {
     const value =
       "{% macro a() %}plain{% endmacro %}{% macro h(x=_conversation) %}{{x}}{% endmacro %}{{h('warmup')}}{% macro wrap() %}{{caller(a)}}{{caller(h|default)}}{% endmacro %}{% call(g) wrap() %}{{g()}}{% endcall %}";

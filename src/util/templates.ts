@@ -713,6 +713,10 @@ function loopMacroBinding(
     const name = getSymbolName(source);
     const binding = name ? boundSymbols.findMacroBinding(name) : undefined;
     if (!binding) {
+      if (!isNunjucksAstNode(source) || source.typename !== 'Literal') {
+        found = true;
+        dynamic = true;
+      }
       continue;
     }
     found = true;
@@ -1468,6 +1472,13 @@ function recordCallerInvocationMacroCandidates(
 
 type MacroFunctionAdapter = { kind: 'call' | 'apply'; baseName?: string };
 
+function groupedSymbolName(node: unknown): string | undefined {
+  if (isNunjucksAstNode(node) && node.typename === 'Group' && Array.isArray(node.children)) {
+    return node.children.length === 1 ? groupedSymbolName(node.children[0]) : undefined;
+  }
+  return getSymbolName(node);
+}
+
 function hasAdaptableFunctionReceiver(node: unknown, boundSymbols: LinkedScope): boolean {
   if (!isNunjucksAstNode(node)) {
     return false;
@@ -1503,7 +1514,7 @@ function macroFunctionAdapter(
     return undefined;
   }
   const kind = node.name.val.value;
-  const baseName = getSymbolName(node.name.target);
+  const baseName = groupedSymbolName(node.name.target);
   if (baseName && boundSymbols.findMacros(baseName)?.size) {
     return { kind, baseName };
   }
@@ -2123,6 +2134,9 @@ function undefinedSafeOperandReferencesVariable(
       registerMacroValueReference(node.value, undefined, boundSymbols);
     }
     return false;
+  }
+  if (node.typename === 'Not' && isNunjucksAstNode(node.target)) {
+    return undefinedSafeOperandReferencesVariable(node.target, variableName, boundSymbols);
   }
   if (node.typename === 'And' || node.typename === 'Or') {
     return booleanOperandsReferenceVariable(node, variableName, boundSymbols);
