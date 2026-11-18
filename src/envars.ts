@@ -272,7 +272,6 @@ type EnvVars = {
 
   // Atlas Cloud
   ATLASCLOUD_API_KEY?: string;
-  FIKRA_API_KEY?: string;
 
   // AWS Bedrock
   AWS_ACCESS_KEY_ID?: string;
@@ -337,6 +336,9 @@ type EnvVars = {
 
   // FAL
   FAL_KEY?: string;
+
+  // Fikra
+  FIKRA_API_KEY?: string;
 
   // GitHub
   GITHUB_TOKEN?: string;

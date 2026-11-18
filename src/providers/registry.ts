@@ -15,7 +15,6 @@ import { AnthropicCompletionProvider } from './anthropic/completion';
 import { AnthropicMessagesProvider } from './anthropic/messages';
 import { ANTHROPIC_SHORTHAND_MODEL_IDS, looksLikeClaudeModelId } from './anthropic/util';
 import { createAtlasCloudProvider } from './atlascloud';
-import { createFikraProvider } from './fikra';
 import { AzureAssistantProvider } from './azure/assistant';
 import { AzureChatCompletionProvider } from './azure/chat';
 import { AzureCompletionProvider } from './azure/completion';
@@ -42,6 +41,7 @@ import {
   ElevenLabsTTSProvider,
 } from './elevenlabs';
 import { FalImageGenerationProvider } from './fal';
+import { createFikraProvider } from './fikra';
 import { createGitHubProvider } from './github/index';
 import { GolangProvider } from './golangCompletion';
 import { determineGoogleVertexMode } from './google/auth';
