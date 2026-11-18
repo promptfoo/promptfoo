@@ -75,13 +75,9 @@ function EvalProviderSetup() {
 }
 
 const cases = [
-  ...[
-    { label: 'Llamafile', type: 'llamafile' },
-    { label: 'vLLM', type: 'vllm' },
-    { label: 'Text Generation WebUI', type: 'text-generation-webui' },
-  ].flatMap((target) =>
+  ...['Llamafile', 'vLLM', 'Text Generation WebUI'].flatMap((label) =>
     [true, false].map((keepType) => ({
-      ...target,
+      label,
       keepType,
       id: 'openai:chat:tenant/private-served-model:Q4_K_M',
       config: {
@@ -90,14 +86,25 @@ const cases = [
         stop: ['<end>'],
         passthrough: { chat_template_kwargs: { enable_thinking: false } },
       },
+      changes: {
+        stop: ['<new-end>'],
+        passthrough: { chat_template_kwargs: { enable_thinking: true } },
+      },
     })),
   ),
   {
+    label: 'OpenAI Codex SDK',
+    keepType: true,
+    id: 'openai:codex:gpt-6-sol',
+    config: { model_reasoning_effort: 'high', working_dir: './workspace' },
+    changes: { sandbox_mode: 'workspace-write' },
+  },
+  {
     label: 'AWS Bedrock Agents',
-    type: 'bedrock-agent',
     keepType: true,
     id: 'bedrock:agents:AGENT123',
     config: { agentAliasId: 'ALIAS456', region: 'eu-west-1' },
+    changes: { agentAliasId: 'ALIAS789' },
   },
 ];
 
@@ -533,7 +540,7 @@ describe('eval provider configuration round trips', () => {
 
   it.each(cases)(
     'keeps $label editable after saving and reopening (saved type: $keepType)',
-    async ({ label, type, keepType, id, config }) => {
+    async ({ label, keepType, id, config, changes }) => {
       const user = userEvent.setup();
       const onSave = vi.fn();
       const onClose = vi.fn();
@@ -593,14 +600,7 @@ describe('eval provider configuration round trips', () => {
       );
       expect(screen.getByRole('button', { name: 'Save Changes' })).toBeDisabled();
       expect(onSave).not.toHaveBeenCalled();
-      const edited =
-        type === 'bedrock-agent'
-          ? { ...config, agentAliasId: 'ALIAS789' }
-          : {
-              ...config,
-              stop: ['<new-end>'],
-              passthrough: { chat_template_kwargs: { enable_thinking: true } },
-            };
+      const edited = { ...config, ...changes };
       await replaceText(
         user,
         screen.getByRole('textbox', { name: 'Provider configuration JSON' }),
