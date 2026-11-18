@@ -139,6 +139,22 @@ describe('complete release notes', () => {
     expect(run(base, mock).status).toBe(0);
   });
 
+  it('includes a feature restored by a Git reapplication', () => {
+    write('src/feature.js', 'released after all');
+    const feature = commit('feat: restored functionality (#19)');
+    git('revert', '--no-edit', feature);
+    const reverted = git('rev-parse', 'HEAD');
+    git('revert', '--no-edit', reverted);
+    write(manifest, JSON.stringify({ '.': '1.0.1', [action]: '0.2.2' }));
+    write('CHANGELOG.md', '## [1.0.1]\n\nOther changes.\n');
+    const base = git('rev-parse', 'HEAD');
+    commit('chore(main): release');
+    expect(run(base).output).toContain(feature);
+    write('CHANGELOG.md', '## [1.0.1]\n\nRestored functionality (#19).\n');
+    commit('docs: acknowledge restored feature');
+    expect(run(base).status).toBe(0);
+  });
+
   it('checks newly merged base changes against the action tag even when the CLI released later', () => {
     write(`${action}/scanner.js`, 'new functionality');
     commit('feat: extend scanner (#567)');

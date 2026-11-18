@@ -457,7 +457,7 @@ jobs:
           persist-credentials: false
           fetch-depth: ${{ startsWith(github.head_ref, 'release-please--branches--main--components--') && '0' || '1' }}
 
-      - name: Check release notes against the component's full tag history
+      - name: Verify checked release notes and the component's full tag history
         if: startsWith(github.head_ref, 'release-please--branches--main--components--')
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
@@ -467,6 +467,8 @@ jobs:
           # Validate with protected-branch code. The candidate changelog is only data.
           git show "$BASE_SHA:scripts/check-release-notes-completeness.mjs" > "$RUNNER_TEMP/check-release-notes-completeness.mjs"
           node "$RUNNER_TEMP/check-release-notes-completeness.mjs" "$BASE_SHA" "$HEAD_SHA"
+          git archive "$BASE_SHA" .github/scripts/release_notes.py .github/scripts/release_note_links.py | tar -x -C "$RUNNER_TEMP"
+          python "$RUNNER_TEMP/.github/scripts/release_notes.py" verify "$HEAD_SHA" "$GITHUB_HEAD_REF"
 
       - &use-node
         name: Use Node

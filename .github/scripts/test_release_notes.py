@@ -35,6 +35,25 @@ class NotesTests(unittest.TestCase):
         )
         self.assertEqual(notes.prepare_section(result, "", "promptfoo"), result)
 
+    def test_formatter_binds_checked_bytes_to_the_version_section(self):
+        first = notes.prepare_section(BODY, "", "promptfoo")
+        stamped = notes.mark_checked(first)
+        notes.verify_checked(stamped)
+        self.assertEqual(
+            notes.extract(stamped + "\n\n## [1.1.0]\n\nOld notes", "1.2.0"), stamped
+        )
+        self.assertEqual(
+            notes.mark_checked(notes.prepare_section(stamped, "", "promptfoo")), stamped
+        )
+        for changed in (
+            BODY,
+            first,
+            stamped.replace("New syntax", "Changed wording", 1),
+            stamped.replace("### Bug Fixes", "### Fixes"),
+        ):
+            with self.subTest(changed=changed), self.assertRaises(ValueError):
+                notes.verify_checked(changed)
+
     def test_override_survives_repeat_and_bot_refresh(self):
         override = (
             "### Before upgrading\n\nUse the new syntax to keep existing tests working."

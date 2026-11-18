@@ -99,14 +99,17 @@ function releaseChanges(commits) {
     if (reverted.has(commit.sha)) {
       continue;
     }
-    const isRevert = /^(?:revert(?:\([^()]+\))?!?: |Revert ")/.test(commit.subject);
+    const isRevert = /^(?:revert(?:\([^()]+\))?!?: |(?:Revert|Reapply) ")/.test(commit.subject);
     const target = isRevert && /^This reverts commit ([a-f\d]{40})\b/m.exec(commit.message)?.[1];
     // Walk newest first so reverting a revert restores the original change.
     if (target && inRange.has(target)) {
       reverted.add(target);
       continue;
     }
-    if (visible(commit.message) || (target && visible(commit.subject.slice('Revert "'.length)))) {
+    if (
+      visible(commit.message) ||
+      (target && visible(commit.subject.replace(/^(?:Revert|Reapply) "/, '')))
+    ) {
       changes.push(commit);
     }
   }

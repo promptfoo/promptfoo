@@ -2,6 +2,7 @@
 
 import argparse
 import base64
+import hashlib
 import html
 import json
 import os
@@ -24,6 +25,7 @@ BRANCH_PREFIX = "release-please--branches--main--components--"
 HEADER = re.compile(r"^## \[(\d+\.\d+\.\d+)\](?:\([^\n]+\))?[^\n]*$", re.M)
 DISCLOSURE = "<details>\n<summary>All changes</summary>"
 OVERRIDE = "<!-- reviewed-release-notes -->"
+CHECKSUM = "<!-- release-notes-sha256:"
 FOOTER = "This PR was generated with [Release Please](https://github.com/googleapis/release-please)."
 
 
@@ -125,6 +127,34 @@ def prepare_section(section, overview, component, scanner_version=None):
             f"\n\nThis action installs `promptfoo@{scanner_version}` to run scans."
         )
     return f"{title}\n\n{overview.strip()}\n\n{DISCLOSURE}\n\n{inventory}\n\n</details>"
+
+
+def mark_checked(section):
+    """Bind the link check to the formatted version section, excluding its marker."""
+    title, _, body = section.partition("\n\n")
+    overview, disclosure, inventory = body.partition(DISCLOSURE)
+    if (
+        not disclosure
+        or not overview.strip()
+        or not inventory.endswith("</details>")
+        or not inventory.removesuffix("</details>").strip()
+        or DISCLOSURE in inventory
+        or CHECKSUM in section
+    ):
+        raise ValueError(
+            "Expected an overview followed by the complete All changes disclosure"
+        )
+    digest = hashlib.sha256(section.encode("utf-8")).hexdigest()
+    return f"{title}\n\n{CHECKSUM} {digest} -->\n\n{body}"
+
+
+def verify_checked(section):
+    title, _, rest = section.partition("\n\n")
+    marker, _, body = rest.partition("\n\n")
+    if not marker.startswith(CHECKSUM) or section != mark_checked(f"{title}\n\n{body}"):
+        raise ValueError(
+            "Release notes are unformatted or changed after link validation. Run the release notes formatter on this head."
+        )
 
 
 def writer_overview(repo, number):
@@ -244,7 +274,7 @@ def pr_preview(section, intro, changelog_url, footer=""):
             (
                 line.strip("-* ")
                 for line in paragraph.splitlines()
-                if line.strip() and not line.startswith(("```", "~~~"))
+                if line.strip() and not line.startswith(("```", "~~~", CHECKSUM))
             ),
             "",
         )
@@ -274,6 +304,7 @@ def format_plan(prepared, output, prettier):
         "markdown",
         data=section,
     ).strip()
+    section = mark_checked(section)
     start, end = section_bounds(source, version)
     tail = source[end:]
     updated = source[:start] + section + ("\n\n" if tail else "\n") + tail
@@ -359,6 +390,9 @@ def main():
     commit = modes.add_parser("apply")
     commit.add_argument("pr", type=int)
     commit.add_argument("plan", type=Path)
+    verify = modes.add_parser("verify")
+    verify.add_argument("head")
+    verify.add_argument("branch")
     tagged = modes.add_parser("extract")
     tagged.add_argument("tag")
     mirror = modes.add_parser("mirror-preview")
@@ -373,6 +407,10 @@ def main():
         format_plan(args.prepared, args.plan, args.prettier)
     elif args.mode == "apply":
         apply(args.plan, os.environ["GITHUB_REPOSITORY"], args.pr)
+    elif args.mode == "verify":
+        package, path, _ = COMPONENTS[args.branch.removeprefix(BRANCH_PREFIX)]
+        version = version_at(args.head, str(Path(package) / "package.json"))
+        verify_checked(extract(run("git", "show", f"{args.head}:{path}"), version))
     elif args.mode == "mirror-preview":
         repo = os.environ["GITHUB_REPOSITORY"]
         source = f"https://github.com/{repo}"
