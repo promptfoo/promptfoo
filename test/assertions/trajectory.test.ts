@@ -900,97 +900,56 @@ describe('trajectory assertions', () => {
       });
     });
 
-    it('treats a max-only count as having no lower bound', () => {
-      const value = { name: 'missing_tool', max: 0 };
-      const params: AssertionParams = {
-        ...defaultParams,
-        baseType: 'trajectory:tool-used',
-        assertion: { type: 'trajectory:tool-used', value },
-        renderedValue: value,
-      };
-
-      const result = handleTrajectoryToolUsed(params);
-      expect(result).toEqual({
+    it.each([
+      {
+        value: { name: 'missing_tool', max: 0 },
+        inverse: false,
         pass: true,
-        score: 1,
         reason: 'Matched tool "missing_tool" 0 time(s) (expected 0-0)',
-        assertion: params.assertion,
-      });
-    });
-
-    it('fails a max-only count when the tool is used more than allowed', () => {
-      const value = { name: 'search_orders', max: 0 };
-      const params: AssertionParams = {
-        ...defaultParams,
-        baseType: 'trajectory:tool-used',
-        assertion: { type: 'trajectory:tool-used', value },
-        renderedValue: value,
-      };
-
-      const result = handleTrajectoryToolUsed(params);
-      expect(result).toEqual({
+      },
+      {
+        value: { name: 'search_orders', max: 0 },
+        inverse: false,
         pass: false,
-        score: 0,
         reason:
           'Matched tool "search_orders" 1 time(s) (expected 0-0). Matches: tool:search_orders',
-        assertion: params.assertion,
-      });
-    });
-
-    it('passes a max-only count with a positive budget when the tool is never used', () => {
-      const value = { name: 'missing_tool', max: 2 };
-      const params: AssertionParams = {
-        ...defaultParams,
-        baseType: 'trajectory:tool-used',
-        assertion: { type: 'trajectory:tool-used', value },
-        renderedValue: value,
-      };
-
-      const result = handleTrajectoryToolUsed(params);
-      expect(result).toEqual({
+      },
+      {
+        value: { name: 'missing_tool', max: 2 },
+        inverse: false,
         pass: true,
-        score: 1,
         reason: 'Matched tool "missing_tool" 0 time(s) (expected 0-2)',
-        assertion: params.assertion,
-      });
-    });
-
-    it('fails an inverse max-only count when the usage is within the budget', () => {
-      const value = { name: 'missing_tool', max: 2 };
-      const params: AssertionParams = {
-        ...defaultParams,
-        baseType: 'trajectory:tool-used',
+      },
+      {
+        value: { name: 'missing_tool', max: 2 },
         inverse: true,
-        assertion: { type: 'not-trajectory:tool-used', value },
-        renderedValue: value,
-      };
-
-      const result = handleTrajectoryToolUsed(params);
-      expect(result).toEqual({
         pass: false,
-        score: 0,
         reason: 'Tool "missing_tool" matched 0 time(s), which violates the inverse assertion',
-        assertion: params.assertion,
-      });
-    });
-
-    it('keeps requiring a match when min is present but not a number', () => {
-      const value = { name: 'missing_tool', max: 2, min: '2' };
-      const params: AssertionParams = {
-        ...defaultParams,
-        baseType: 'trajectory:tool-used',
-        assertion: { type: 'trajectory:tool-used', value },
-        renderedValue: value,
-      };
-
-      const result = handleTrajectoryToolUsed(params);
-      expect(result).toEqual({
+      },
+      {
+        value: { name: 'missing_tool', max: 2, min: '2' },
+        inverse: false,
         pass: false,
-        score: 0,
         reason: 'Matched tool "missing_tool" 0 time(s) (expected 1-2)',
-        assertion: params.assertion,
-      });
-    });
+      },
+    ])(
+      'handles the tool count $value with inverse=$inverse',
+      ({ value, inverse, pass, reason }) => {
+        const params: AssertionParams = {
+          ...defaultParams,
+          baseType: 'trajectory:tool-used',
+          inverse,
+          assertion: { type: inverse ? 'not-trajectory:tool-used' : 'trajectory:tool-used', value },
+          renderedValue: value,
+        };
+        expect(handleTrajectoryToolUsed(params)).toEqual({
+          pass,
+          score: Number(pass),
+          reason,
+          assertion: params.assertion,
+        });
+      },
+    );
 
     it('fails when required tools are missing', () => {
       const params: AssertionParams = {
