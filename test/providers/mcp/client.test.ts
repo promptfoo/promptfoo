@@ -1276,11 +1276,11 @@ describe('MCPClient', () => {
     await mcpClient.initialize();
 
     expect(mcpClient.getAllTools().map((tool) => tool.name)).toEqual([
-      'alpha__lookup',
-      'beta__lookup',
+      'mcp_1__lookup',
+      'mcp_2__lookup',
     ]);
-    expect((await mcpClient.callTool('alpha__lookup', { id: 1 })).content).toBe('alpha result');
-    expect((await mcpClient.callTool('beta__lookup', { id: 2 })).content).toBe('beta result');
+    expect((await mcpClient.callTool('mcp_1__lookup', { id: 1 })).content).toBe('alpha result');
+    expect((await mcpClient.callTool('mcp_2__lookup', { id: 2 })).content).toBe('beta result');
     expect(alphaCall).toHaveBeenCalledWith(
       { name: 'lookup', arguments: { id: 1 } },
       undefined,
@@ -1302,7 +1302,7 @@ describe('MCPClient', () => {
       .mockResolvedValueOnce({
         tools: [
           { name: 'lookup', description: '', inputSchema: {} },
-          { name: 'alpha__lookup', description: '', inputSchema: {} },
+          { name: 'mcp_1__lookup', description: '', inputSchema: {} },
         ],
       })
       .mockResolvedValueOnce({
@@ -1325,19 +1325,19 @@ describe('MCPClient', () => {
     });
     await mcpClient.initialize();
     expect(mcpClient.getAllTools().map((tool) => tool.name)).toEqual([
-      'alpha__lookup_2',
-      'alpha__lookup',
-      'beta__lookup',
+      'mcp_1__lookup_2',
+      'mcp_1__lookup',
+      'mcp_2__lookup',
     ]);
-    await mcpClient.callTool('alpha__lookup_2', {});
-    await mcpClient.callTool('alpha__lookup', {});
-    await mcpClient.callTool('beta__lookup', {});
-    expect(alphaCall.mock.calls.map(([call]) => call.name)).toEqual(['lookup', 'alpha__lookup']);
+    await mcpClient.callTool('mcp_1__lookup_2', {});
+    await mcpClient.callTool('mcp_1__lookup', {});
+    await mcpClient.callTool('mcp_2__lookup', {});
+    expect(alphaCall.mock.calls.map(([call]) => call.name)).toEqual(['lookup', 'mcp_1__lookup']);
     expect(betaCall.mock.calls.map(([call]) => call.name)).toEqual(['lookup']);
     await mcpClient.cleanup();
   });
 
-  it('preserves the tool name in long URL-derived aliases within the 64-character limit', async () => {
+  it('does not expose server URLs in model-visible aliases', async () => {
     mockClient.listTools.mockResolvedValue({
       tools: [{ name: 'lookup', description: '', inputSchema: {} }],
     });
@@ -1351,11 +1351,7 @@ describe('MCPClient', () => {
     await mcpClient.initialize();
 
     const names = mcpClient.getAllTools().map(({ name }) => name);
-    expect(new Set(names).size).toBe(2);
-    for (const name of names) {
-      expect(name.length).toBeLessThanOrEqual(64);
-      expect(name).toMatch(/^[-_a-zA-Z0-9]+lookup(?:_\d+)?$/);
-    }
+    expect(names).toEqual(['mcp_1__lookup', 'mcp_2__lookup']);
     await mcpClient.cleanup();
   });
 
