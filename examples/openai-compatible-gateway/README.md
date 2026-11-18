@@ -56,6 +56,8 @@ providers:
     config:
       apiBaseUrl: https://api.iteracompute.com/v1
       apiKeyEnvar: ITERACOMPUTE_API_KEY
+      headers:
+        OpenAI-Organization: ''
       omitDefaults: true
       showThinking: false
 
