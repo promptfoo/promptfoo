@@ -162,7 +162,9 @@ class LinkedScope implements ReadonlySet<string> {
   rebindMacros(targets: unknown, value: unknown): void {
     const sourceName = getSymbolName(value);
     const callerAlias =
-      sourceName === 'caller' || (sourceName !== undefined && this.isCallerAlias(sourceName));
+      sourceName === 'caller' ||
+      (sourceName !== undefined && this.isCallerAlias(sourceName)) ||
+      containerContainsCallerAlias(value, this);
     const sourceBinding = sourceName ? this.findMacroBinding(sourceName) : undefined;
     const binding = sourceBinding ?? {
       candidates: new Set<DeferredMacro>(),
@@ -396,6 +398,32 @@ function getSymbolName(node: unknown): string | undefined {
   return isNunjucksAstNode(node) && node.typename === 'Symbol' && typeof node.value === 'string'
     ? node.value
     : undefined;
+}
+
+function containerContainsCallerAlias(value: unknown, boundSymbols: ReadonlySet<string>): boolean {
+  const pending = [value];
+  while (pending.length > 0) {
+    const current = pending.pop();
+    if (!isNunjucksAstNode(current)) {
+      continue;
+    }
+    const name = getSymbolName(current);
+    if (
+      name === 'caller' ||
+      (boundSymbols instanceof LinkedScope && boundSymbols.isCallerAlias(name))
+    ) {
+      return true;
+    }
+    if (current.typename === 'Pair') {
+      pending.push(current.value);
+    } else if (
+      ['Dict', 'Array', 'NodeList'].includes(current.typename!) &&
+      Array.isArray(current.children)
+    ) {
+      pending.push(...current.children);
+    }
+  }
+  return false;
 }
 
 function registerMacroValueReference(
@@ -717,7 +745,7 @@ function analyzeSignatureArgs(
       const defaultName = getSymbolName(defaultValue);
       const defaultCandidates = defaultName ? defaultScope.findMacros(defaultName) : undefined;
       if (defaultCandidates && defaultCandidates.size > 0) {
-        suppliedMacroCandidates.set(name, defaultCandidates);
+        mergeMacroCandidateMap(suppliedMacroCandidates, new Map([[name, defaultCandidates]]), memo);
       }
     }
     if (!isSuppliedParamName(suppliedParamNames, name) && defaultValue !== undefined) {
@@ -1264,6 +1292,7 @@ function collectSuppliedCallerParamNames(
   const { paramNames } = analyzeSignatureArgs(callerNode.args, undefined, boundSymbols);
   const signature = { paramNames, paramNameSet: new Set(paramNames) };
   let shared: Set<string> | undefined;
+  const suppliedInAnyInvocation = new Set<string>();
   let foundCandidate = false;
   for (const macro of macros) {
     if (!macro.usesCaller) {
@@ -1302,13 +1331,16 @@ function collectSuppliedCallerParamNames(
       if (suppliedMacroCandidates) {
         mergeMacroCandidateMap(suppliedMacroCandidates, suppliedInvocationCandidates, memo);
       }
+      for (const name of supplied) {
+        suppliedInAnyInvocation.add(name);
+      }
       forMacro = intersectSuppliedNames(forMacro, supplied);
     }
     shared = intersectSuppliedNames(shared, forMacro ?? new Set<string>());
   }
   const result = foundCandidate ? shared : undefined;
   if (suppliedMacroCandidates) {
-    retainSuppliedMacroCandidates(suppliedMacroCandidates, result);
+    retainSuppliedMacroCandidates(suppliedMacroCandidates, suppliedInAnyInvocation);
   }
   return result;
 }
@@ -1322,6 +1354,16 @@ function macroCandidatesUseCaller(macros: ReadonlySet<DeferredMacro>): boolean {
   return false;
 }
 
+function macroContainerBaseName(node: unknown): string | undefined {
+  if (!isNunjucksAstNode(node)) {
+    return undefined;
+  }
+  if (node.typename === 'LookupVal') {
+    return macroContainerBaseName(node.target);
+  }
+  return getSymbolName(node);
+}
+
 function recordCallerInvocationMacroCandidates(
   node: NunjucksAstNode,
   boundSymbols: ReadonlySet<string>,
@@ -1330,7 +1372,12 @@ function recordCallerInvocationMacroCandidates(
     return;
   }
   const callerName = getSymbolName(node.name);
-  if (callerName !== 'caller' && !boundSymbols.isCallerAlias(callerName)) {
+  const containerName = callerName === undefined ? macroContainerBaseName(node.name) : undefined;
+  if (
+    callerName !== 'caller' &&
+    !boundSymbols.isCallerAlias(callerName) &&
+    !boundSymbols.isCallerAlias(containerName)
+  ) {
     return;
   }
   const candidates = new Map<string, ReadonlySet<DeferredMacro>>();
@@ -1705,50 +1752,120 @@ function conditionalCallerAlias(
   return mode === 'body' ? bodyAlias : mode === 'else' ? elseAlias : bodyAlias || elseAlias;
 }
 
+function conditionalAlternativeMacroCandidates(
+  name: string,
+  alternatives: readonly ConditionalSummary[],
+  boundSymbols: ReadonlySet<string>,
+): ConditionalMacroBinding | undefined {
+  const emptySummary = createConditionalSummary();
+  const candidates = new Set<DeferredMacro>();
+  const memo = boundSymbols instanceof LinkedScope ? boundSymbols.macroAnalysisMemo() : undefined;
+  let dynamic = false;
+  let definitelyBound = alternatives.length > 0;
+  for (const alternative of alternatives) {
+    const binding = conditionalMacroCandidates(
+      name,
+      alternative,
+      emptySummary,
+      boundSymbols,
+      'body',
+    );
+    definitelyBound &&= binding?.definitelyBound === true;
+    dynamic ||= binding?.dynamic === true;
+    for (const candidate of binding?.candidates ?? []) {
+      consumeAnalysisWork(memo);
+      candidates.add(candidate);
+    }
+  }
+  if (candidates.size === 0 && !definitelyBound) {
+    return undefined;
+  }
+  return { candidates, dynamic, definitelyBound };
+}
+
+function conditionalAlternativeCallerAlias(
+  name: string,
+  alternatives: readonly ConditionalSummary[],
+  boundSymbols: ReadonlySet<string>,
+): boolean {
+  const emptySummary = createConditionalSummary();
+  return alternatives.some((alternative) =>
+    conditionalCallerAlias(name, alternative, emptySummary, boundSymbols, 'body'),
+  );
+}
+
+function applyConditionalBinding(
+  name: string,
+  bodySummary: ConditionalSummary,
+  elseSummary: ConditionalSummary,
+  boundSymbols: ReadonlySet<string>,
+  summary: ConditionalSummary | undefined,
+  mode: ConditionalExecutionMode,
+  alternatives?: readonly ConditionalSummary[],
+): void {
+  const callerAlias = alternatives
+    ? conditionalAlternativeCallerAlias(name, alternatives, boundSymbols)
+    : conditionalCallerAlias(name, bodySummary, elseSummary, boundSymbols, mode);
+  const binding = alternatives
+    ? conditionalAlternativeMacroCandidates(name, alternatives, boundSymbols)
+    : conditionalMacroCandidates(name, bodySummary, elseSummary, boundSymbols, mode);
+  if (binding !== undefined) {
+    if (binding.definitelyBound) {
+      summary?.setBindings.add(name);
+    }
+    summary?.macroBindings.set(name, binding);
+    if (boundSymbols instanceof LinkedScope) {
+      if (binding.candidates.size > 0 || binding.definitelyBound) {
+        boundSymbols.removeMacro(name);
+      }
+      boundSymbols.registerMacroCandidates(name, binding.candidates, true, binding.dynamic);
+      if (binding.definitelyBound) {
+        boundSymbols.add(name);
+      }
+    }
+  }
+  if (callerAlias) {
+    summary?.callerAliases.add(name);
+    if (boundSymbols instanceof LinkedScope) {
+      boundSymbols.registerCallerAlias(name);
+    }
+  } else {
+    summary?.callerAliases.delete(name);
+  }
+}
+
 function applyConditionalBindings(
   bodySummary: ConditionalSummary,
   elseSummary: ConditionalSummary,
   boundSymbols: ReadonlySet<string>,
   summary: ConditionalSummary | undefined,
   mode: ConditionalExecutionMode,
+  alternatives?: readonly ConditionalSummary[],
 ): void {
   if (boundSymbols instanceof LinkedScope) {
     for (const macro of boundSymbols.macrosUsedAsValues()) {
       rebaseMacroDefinition(macro, boundSymbols);
     }
   }
-  const assignedNames = new Set([
-    ...bodySummary.setBindings,
-    ...elseSummary.setBindings,
-    ...bodySummary.macroBindings.keys(),
-    ...elseSummary.macroBindings.keys(),
-  ]);
+  const assignedNames = new Set<string>();
+  for (const current of alternatives ?? [bodySummary, elseSummary]) {
+    for (const name of current.setBindings) {
+      assignedNames.add(name);
+    }
+    for (const name of current.macroBindings.keys()) {
+      assignedNames.add(name);
+    }
+  }
   for (const name of assignedNames) {
-    const callerAlias = conditionalCallerAlias(name, bodySummary, elseSummary, boundSymbols, mode);
-    const binding = conditionalMacroCandidates(name, bodySummary, elseSummary, boundSymbols, mode);
-    if (binding !== undefined) {
-      if (binding.definitelyBound) {
-        summary?.setBindings.add(name);
-      }
-      summary?.macroBindings.set(name, binding);
-      if (boundSymbols instanceof LinkedScope) {
-        if (binding.candidates.size > 0 || binding.definitelyBound) {
-          boundSymbols.removeMacro(name);
-        }
-        boundSymbols.registerMacroCandidates(name, binding.candidates, true, binding.dynamic);
-        if (binding.definitelyBound) {
-          boundSymbols.add(name);
-        }
-      }
-    }
-    if (callerAlias) {
-      summary?.callerAliases.add(name);
-      if (boundSymbols instanceof LinkedScope) {
-        boundSymbols.registerCallerAlias(name);
-      }
-    } else {
-      summary?.callerAliases.delete(name);
-    }
+    applyConditionalBinding(
+      name,
+      bodySummary,
+      elseSummary,
+      boundSymbols,
+      summary,
+      mode,
+      alternatives,
+    );
   }
 }
 
@@ -1837,16 +1954,15 @@ function switchNodeReferencesVariable(
       caseSummaries[selectedCase]!,
       boundSymbols instanceof LinkedScope ? boundSymbols.macroAnalysisMemo() : undefined,
     );
-  } else if (mode === 'unknown') {
-    for (const current of caseSummaries) {
-      mergeConditionalBindings(
-        caseSummary,
-        current,
-        boundSymbols instanceof LinkedScope ? boundSymbols.macroAnalysisMemo() : undefined,
-      );
-    }
   }
-  applyConditionalBindings(caseSummary, defaultSummary, boundSymbols, summary, mode);
+  applyConditionalBindings(
+    caseSummary,
+    defaultSummary,
+    boundSymbols,
+    summary,
+    mode,
+    mode === 'unknown' ? [...caseSummaries, defaultSummary] : undefined,
+  );
   return false;
 }
 

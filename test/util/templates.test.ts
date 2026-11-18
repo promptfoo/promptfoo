@@ -734,6 +734,38 @@ describe('analyzeTemplateReference', () => {
     expect(extractRequiredVariablesFromTemplate(value)).toEqual([]);
   });
 
+  it('preserves incoming bindings on non-assigning switch alternatives', () => {
+    const value =
+      "{% macro a() %}plain{% endmacro %}{% macro h(x=_conversation) %}{{x}}{% endmacro %}{{h('warmup')}}{% set f=h %}{% switch key %}{% case 1 %}{% set f=a %}{% case 2 %}two{% default %}{% set f=a %}{% endswitch %}{{f()}}";
+    expect(getNunjucksEngine().renderString(value, { key: 2, _conversation: 'history' })).toBe(
+      'warmuptwohistory',
+    );
+    expect(analyzeTemplateReference(value, '_conversation')).toEqual({
+      referenced: true,
+      parsed: true,
+    });
+  });
+
+  it('retains callback candidates supplied on only some invocations', () => {
+    const value =
+      "{% macro a() %}ok{% endmacro %}{% macro h(x=purpose|trim) %}{{x}}{% endmacro %}{% macro wrap() %}{{caller('t',h) ~ ''}}{{caller('t') ~ ''}}{% endmacro %}{% call(t,g=a) wrap() %}{{g()}}{% endcall %}";
+    expect(getNunjucksEngine().renderString(value, { purpose: 'ready' })).toBe('readyok');
+    expect(() => getNunjucksEngine().renderString(value, {})).toThrow(/replace/);
+    expect(extractRequiredVariablesFromTemplate(value)).toContain('purpose');
+  });
+
+  it('tracks caller identity through container lookups', () => {
+    const value =
+      "{% macro a() %}plain{% endmacro %}{% macro h(x=_conversation) %}{{x}}{% endmacro %}{{h('warmup')}}{% macro wrap() %}{% set callbacks={run:caller} %}{{callbacks.run(h)}}{% endmacro %}{% call(g=a) wrap() %}{{g()}}{% endcall %}";
+    expect(getNunjucksEngine().renderString(value, { _conversation: 'history' })).toBe(
+      'warmuphistory',
+    );
+    expect(analyzeTemplateReference(value, '_conversation')).toEqual({
+      referenced: true,
+      parsed: true,
+    });
+  });
+
   it('preserves escaped alternatives across caller argument merges', () => {
     const value =
       "{% macro a() %}plain{% endmacro %}{% macro h(x=_conversation) %}{{x}}{% endmacro %}{{h('warmup')}}{% macro wrap() %}{{caller(a)}}{{caller(h|default)}}{% endmacro %}{% call(g) wrap() %}{{g()}}{% endcall %}";
