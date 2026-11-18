@@ -430,7 +430,8 @@ export class TypeSafeProvider implements ApiProvider {
     try {
       // Read text so an error page or empty body still reports its HTTP status.
       fetched = await fetchWithCache<string>(
-        `${this.config.apiBaseUrl || defaultApiBaseUrl}/v1/systemone`,
+        // Drop trailing slashes so `https://host/` does not become `https://host//v1/systemone`.
+        `${(this.config.apiBaseUrl || defaultApiBaseUrl).replace(/\/+$/, '')}/v1/systemone`,
         {
           method: 'POST',
           headers: {

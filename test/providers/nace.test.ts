@@ -198,6 +198,16 @@ describe('NaceProvider', () => {
 
       expect(lastRequest().url).toBe('http://localhost:8080/v1/systemone');
     });
+
+    it('drops trailing slashes from the configured base URL', async () => {
+      mockAnswer({ type: 'noul', noul: 0.9 });
+      await createProvider({ apiBaseUrl: 'http://localhost:8080/proxy//' }).callApi(
+        '',
+        rubricContext('Is polite', 'Thanks!'),
+      );
+
+      expect(lastRequest().url).toBe('http://localhost:8080/proxy/v1/systemone');
+    });
   });
 
   describe('llm-rubric grading', () => {
