@@ -37,8 +37,8 @@ function mergeGuardrails(
 
   const flagged = current.flagged === true || next.flagged === true;
   const reason = flagged
-    ? (current.flagged === true ? current.reason : undefined) ??
-      (next.flagged === true ? next.reason : undefined)
+    ? ((current.flagged === true ? current.reason : undefined) ??
+      (next.flagged === true ? next.reason : undefined))
     : (current.reason ?? next.reason);
 
   return {
@@ -80,6 +80,7 @@ export class SequenceProvider implements ApiProvider {
     const nunjucks = getNunjucksEngine();
     const responses: string[] = [];
     const accumulatedTokenUsage = createEmptyTokenUsage();
+    let allStepsCached = true;
     let accumulatedCost: number | undefined;
     let accumulatedIncurredCost: number | undefined;
     let accumulatedGuardrails: ProviderResponse['guardrails'];
@@ -95,6 +96,7 @@ export class SequenceProvider implements ApiProvider {
 
       const response = await context.originalProvider.callApi(renderedInput, context, options);
 
+      allStepsCached &&= response.cached === true;
       accumulateResponseTokenUsage(accumulatedTokenUsage, response);
       if (response.cost !== undefined && Number.isFinite(response.cost)) {
         accumulatedCost = (accumulatedCost ?? 0) + response.cost;
@@ -111,6 +113,7 @@ export class SequenceProvider implements ApiProvider {
       if (response.error) {
         return {
           ...response,
+          cached: allStepsCached,
           tokenUsage: accumulatedTokenUsage,
           cost: accumulatedCost,
           incurredCost: accumulatedIncurredCost,

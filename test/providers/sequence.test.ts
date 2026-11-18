@@ -71,29 +71,35 @@ describe('SequenceProvider', () => {
     expect(response.incurredCost).toBeCloseTo(0.01);
   });
 
-  it('should preserve accumulated usage and cost when a later step returns an error', async () => {
-    const { provider, context } = createSequenceCall([
-      {
-        output: 'first response',
-        cost: 0.02,
-        tokenUsage: { prompt: 2, completion: 3, total: 5, numRequests: 1 },
-      },
-      {
+  it.each([false, true])(
+    'accounts for a cached error after a first step with cached=%s',
+    async (cached) => {
+      const { provider, context } = createSequenceCall([
+        {
+          output: 'first response',
+          cached,
+          cost: 0.02,
+          tokenUsage: { prompt: 2, completion: 3, total: 5, numRequests: 1 },
+        },
+        {
+          error: 'second step failed',
+          cached: true,
+          cost: 0.03,
+          tokenUsage: { prompt: 1, completion: 1, total: 2, numRequests: 1 },
+        },
+      ]);
+
+      const response = await provider.callApi('prompt', context);
+
+      expect(response).toMatchObject({
         error: 'second step failed',
-        cost: 0.03,
-        tokenUsage: { prompt: 1, completion: 1, total: 2, numRequests: 1 },
-      },
-    ]);
-
-    const response = await provider.callApi('prompt', context);
-
-    expect(response).toMatchObject({
-      error: 'second step failed',
-      cost: 0.05,
-      incurredCost: 0.05,
-      tokenUsage: { prompt: 3, completion: 4, total: 7, numRequests: 2 },
-    });
-  });
+        cached,
+        cost: 0.05,
+        incurredCost: cached ? 0 : 0.02,
+        tokenUsage: { total: 7, cached: cached ? 7 : 2, numRequests: 2 },
+      });
+    },
+  );
 
   it('should ignore non-finite reported costs', async () => {
     const { provider, context } = createSequenceCall([
