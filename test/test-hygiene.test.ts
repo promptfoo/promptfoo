@@ -299,7 +299,6 @@ const legacyModuleScopePersistentMockFiles = new Set<string>([
   'util/logs.test.ts',
   'util/output.test.ts',
   'util/redteamProbeLimit.test.ts',
-  'util/runtime.test.ts',
   'util/sharing.test.ts',
 ]);
 
