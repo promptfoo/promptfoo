@@ -13,7 +13,9 @@ type OpenRouterBillingData = { usage?: OpenRouterUsage | null };
 
 export function isOpenRouterEndpoint(apiUrl: string): boolean {
   try {
-    return new URL(apiUrl).hostname === 'openrouter.ai';
+    return ['openrouter.ai', 'eu.openrouter.ai', 'us.openrouter.ai'].includes(
+      new URL(apiUrl).hostname,
+    );
   } catch {
     return false;
   }
