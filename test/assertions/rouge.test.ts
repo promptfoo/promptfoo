@@ -52,12 +52,14 @@ describe('handleRougeScore', () => {
     );
     expect(high.pass).toBe(false);
     expect(high.score).toBe(0);
+    expect(high.reason).toBe('ROUGE-N score 1.00 is greater than or equal to threshold 0.75');
 
     const low = handleRougeScore(
       makeParams('some different output', 'This is the expected output.', { inverse: true }),
     );
     expect(low.pass).toBe(true);
     expect(low.score).toBeCloseTo(0.7778, 4);
+    expect(low.reason).toBe('Assertion passed');
   });
 
   it('should score case-only differences as a perfect match (consistent with bleu/gleu/meteor)', () => {
