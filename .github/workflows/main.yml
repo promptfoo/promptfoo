@@ -76,7 +76,7 @@ jobs:
     name: Test on Node ${{ matrix.node }} and ${{ matrix.os }}${{ matrix.shard && format(' (shard {0}/3)', matrix.shard) || '' }}
     # Cold-cache Node 26 installs can approach 20m before the test phase starts, so leave room for the test body.
     timeout-minutes: 40
-    runs-on: ${{ matrix.os }}
+    runs-on: ${{ matrix.os == 'ubuntu-latest' && 'ubuntu-24.04' || matrix.os }}
     permissions: &test-reporting-permissions
       contents: read
       checks: write
@@ -339,7 +339,7 @@ jobs:
     name: Build on Node ${{ matrix.node }}
     needs: package-build
     if: ${{ !cancelled() }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions: *read-only-permissions
     strategy:
@@ -585,7 +585,7 @@ jobs:
   python:
     name: Check Python
     timeout-minutes: 5
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       matrix:
         python-version: [3.9, 3.14]
@@ -846,7 +846,7 @@ jobs:
 
   integration-tests:
     name: Run Integration Tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - *checkout-repo-read-only
@@ -874,7 +874,7 @@ jobs:
 
   smoke-tests:
     name: Run Smoke Tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - *checkout-repo
@@ -1078,7 +1078,7 @@ jobs:
   ruby:
     name: Check Ruby
     timeout-minutes: 5
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       matrix:
         ruby-version: ['3.0', '3.4']
