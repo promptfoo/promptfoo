@@ -1,7 +1,7 @@
 ---
 sidebar_position: 50
 sidebar_label: Javascript
-description: Build sophisticated JavaScript validators for LLM outputs with async operations, scoring logic, and comprehensive error handling
+description: Write JavaScript assertions to validate LLM outputs, return custom scores, and run asynchronous checks. Use inline expressions or scripts in your eval config.
 ---
 
 # Javascript assertions
