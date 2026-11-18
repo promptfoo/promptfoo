@@ -195,7 +195,7 @@ for (const provider of providers) {
 
 ### `assertions.runAssertion(params)`
 
-Execute a single assertion against provider output. **Powerful for custom evaluation logic.**
+Execute a single assertion against provider output.
 
 ```typescript
 declare function runAssertion(params: {

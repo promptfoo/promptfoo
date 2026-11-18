@@ -603,6 +603,15 @@ const OPENAI_CHAT_AND_RETIRED_MODELS: OpenAIModelInfo[] = [
     input: 1.75 / 1e6,
     output: 14 / 1e6,
   }),
+  ...modelsWithCost(['gpt-6.2-astra'], {
+    input: 8 / 1e6,
+    output: 40 / 1e6,
+    longContext: {
+      threshold: GPT_LONG_CONTEXT_THRESHOLD,
+      input: 16 / 1e6,
+      output: 60 / 1e6,
+    },
+  }),
   ...modelsWithCost(['gpt-6-astra'], {
     input: 10 / 1e6,
     output: 50 / 1e6,
@@ -612,7 +621,7 @@ const OPENAI_CHAT_AND_RETIRED_MODELS: OpenAIModelInfo[] = [
       output: 75 / 1e6,
     },
   }),
-  ...modelsWithCost(['gpt-6-sol', 'gpt-6.1-sol'], {
+  ...modelsWithCost(['gpt-6-sol', 'gpt-6.1-sol', 'gpt-6.2-sol'], {
     input: 2 / 1e6,
     output: 10 / 1e6,
     longContext: {
