@@ -17,8 +17,7 @@ import {
   isRejectedPrefixedMythosId,
   requiresBedrockAnthropicMessagesModel,
 } from '@promptfoo/providers/bedrock/routing';
-import { isGpt6Model } from '@promptfoo/providers/openai/gpt6';
-import { shouldDefaultToOpenAiResponses } from '@promptfoo/providers/openai/routing';
+import { getOpenAiTokenLimitField } from '@promptfoo/providers/constants';
 import {
   DEFAULT_BEDROCK_TARGET_ID,
   DEFAULT_GOOGLE_TARGET_ID,
@@ -62,31 +61,19 @@ function resolveTokenLimit(
   modelId = '',
   config?: ProviderOptions['config'],
 ) {
-  const [family, subtype = '', deployment] = modelId.split(':', 3);
-  const isAzure = family === 'azure' || family === 'azureopenai';
-  const isGpt6Chat =
-    !mode &&
-    subtype === 'chat' &&
-    ((family === 'openai' && isGpt6Model(deployment ?? config?.model)) ||
-      (isAzure && isGpt6Model(config?.modelName ?? deployment)));
-  const isOpenAiResponses =
-    !mode &&
-    ((family === 'openai' &&
-      (subtype === 'responses' || shouldDefaultToOpenAiResponses(subtype))) ||
-      (isAzure && subtype === 'responses'));
+  const openAiField = mode ? undefined : getOpenAiTokenLimitField(modelId, config);
   const key =
-    isOpenAiResponses || mode === 'responses' || mode === 'runtime-responses'
+    openAiField ??
+    (mode === 'responses' || mode === 'runtime-responses'
       ? 'max_output_tokens'
-      : isGpt6Chat ||
-          mode === 'runtime-chat' ||
-          (mode === 'invoke' && modelId.includes('openai.gpt-oss'))
+      : mode === 'runtime-chat' || (mode === 'invoke' && modelId.includes('openai.gpt-oss'))
         ? 'max_completion_tokens'
-        : 'max_tokens';
+        : 'max_tokens');
   // Converse prefers its native camelCase field; the UI continues to write its supported alias.
   const fields =
     mode === 'converse'
       ? ['maxTokens', 'max_tokens']
-      : isOpenAiResponses || key === 'max_completion_tokens'
+      : openAiField || key === 'max_completion_tokens'
         ? [key, 'max_tokens']
         : [key];
   // Match Converse's nullish fallback without changing explicit null on the other APIs.
