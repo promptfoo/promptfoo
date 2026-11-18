@@ -62,6 +62,7 @@ export const PROVIDER_DOCUMENTATION_MAP: Record<string, string> = {
 
   // Third-Party Providers
   openrouter: `${BASE_DOCS_URL}/openrouter`,
+  vercel: `${BASE_DOCS_URL}/vercel`,
   ai21: `${BASE_DOCS_URL}/ai21`,
   aimlapi: `${BASE_DOCS_URL}/aimlapi`,
   hyperbolic: `${BASE_DOCS_URL}/hyperbolic`,
