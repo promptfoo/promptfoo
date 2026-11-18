@@ -806,9 +806,14 @@ describe('GPT-6 Sol and Luna Responses billing', () => {
     },
   );
 
-  it.each(['gpt-6-sol', 'gpt-6-luna'])(
-    'uses reported OpenRouter Responses billing and preserves BYOK uncertainty for %s',
-    async (model) => {
+  it.each([
+    ['gpt-6-sol', 'openrouter.ai'],
+    ['gpt-6-luna', 'openrouter.ai'],
+    ['gpt-6.2-astra', 'eu.openrouter.ai'],
+    ['gpt-6.2-sol', 'us.openrouter.ai'],
+  ])(
+    'uses reported OpenRouter Responses billing and preserves BYOK uncertainty for %s at %s',
+    async (model, host) => {
       const counts = { input_tokens: 1_000, output_tokens: 100, total_tokens: 1_100 };
       for (const { usage, config, cached, expected } of [
         {
@@ -860,7 +865,7 @@ describe('GPT-6 Sol and Luna Responses billing', () => {
           },
         });
         const result = await new OpenAiResponsesProvider(`openai/${model}`, {
-          config: { apiKey: 'test-key', apiBaseUrl: 'https://openrouter.ai/api/v1', ...config },
+          config: { apiKey: 'test-key', apiBaseUrl: `https://${host}/api/v1`, ...config },
         }).callApi('Say ready.');
         expect(result.error).toBeUndefined();
         expect(result.output).toContain('Ready.');
@@ -1121,6 +1126,16 @@ describe('GPT-6 Sol and Luna Responses billing', () => {
   );
 
   it.each([
+    [
+      'arn:aws:bedrock:us-east-1:123456789012:inference-profile/us.openai.gpt-6.2-sol',
+      'bedrock-runtime.us-east-1.amazonaws.com',
+      0.0132,
+    ],
+    [
+      'arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/us.openai.gpt-6.2-sol',
+      'bedrock-runtime.us-east-1.amazonaws.com',
+      undefined,
+    ],
     ['in.openai.gpt-5.6-terra', 'bedrock-runtime.ap-south-1.amazonaws.com', 0.0154],
     ['in.openai.gpt-5.6-luna', 'bedrock-runtime.ap-south-2.amazonaws.com', 0.00154],
     [

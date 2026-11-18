@@ -349,6 +349,8 @@ export function applyGpt6RequestRules(
   api: 'chat' | 'responses',
   options: {
     isOpenRouter?: boolean;
+    isAzure?: boolean;
+    bridgesGpt62ChatTools?: boolean;
     defaultResponsesTemperature?: number;
     supportsPersistedEffortUpdates?: boolean;
   } = {},
@@ -379,7 +381,15 @@ export function applyGpt6RequestRules(
   validateReasoningEffort(effort, variant, modelLabel);
 
   if (api === 'chat') {
-    validateChatTools(body, variant, modelLabel, effort, options.isOpenRouter ?? false);
+    if (options.isAzure && variant.startsWith('6.2-')) {
+      delete body.presence_penalty;
+      delete body.frequency_penalty;
+      delete body.logit_bias;
+    }
+    const allowChatTools =
+      !!options.isOpenRouter ||
+      (!!options.bridgesGpt62ChatTools && (variant === '6.2-astra' || variant === '6.2-sol'));
+    validateChatTools(body, variant, modelLabel, effort, allowChatTools);
   }
   const samplingEffort = getSamplingEffort(
     body,

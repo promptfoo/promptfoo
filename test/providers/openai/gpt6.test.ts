@@ -88,6 +88,24 @@ describe('GPT-6.1 Sol model names', () => {
   });
 });
 
+it.each([
+  ['https://deployment.openai.azure.com/openai/v1', true],
+  ['https://deployment.openai.azure.com.example.com/openai/v1', false],
+] as const)('handles GPT-6.2 Azure Chat parameters for %s', async (apiBaseUrl, isAzure) => {
+  const { body } = await new OpenAiChatCompletionProvider('gpt-6.2-sol', {
+    config: {
+      apiBaseUrl,
+      reasoning_effort: 'xhigh',
+      presence_penalty: 0.2,
+      passthrough: { frequency_penalty: 0.1, logit_bias: { '123': 2 } },
+    },
+  }).getOpenAiBody('Say ready.');
+  expect(body.reasoning_effort).toBe('xhigh');
+  expect(body.presence_penalty).toBe(isAzure ? undefined : 0.2);
+  expect(body.frequency_penalty).toBe(isAzure ? undefined : 0.1);
+  expect(body.logit_bias).toEqual(isAzure ? undefined : { '123': 2 });
+});
+
 describe.each([
   ['gpt-6.1-sol', 'GPT-6.1 Sol'],
   ['gpt-6.2-astra', 'GPT-6.2 Astra'],
@@ -264,18 +282,30 @@ describe.each([
     ).rejects.toThrow('tool calling requires the Responses API');
   });
 
-  it('preserves OpenRouter tool routing without allowing reasoning to be disabled', async () => {
-    const { body } = await new OpenRouterProvider(`openai/${model}`, {
-      config: { reasoning_effort: 'high', tools: [statusTool], temperature: 0.4 },
-    }).getOpenAiBody('Get the status.');
-    expect(body).toMatchObject({ reasoning_effort: 'high', tools: [statusTool] });
-    expect(body).not.toHaveProperty('temperature');
-    await expect(
-      new OpenRouterProvider(`openai/${model}`, {
-        config: { passthrough: { reasoning: { enabled: false } } },
-      }).getOpenAiBody('Say ready.'),
-    ).rejects.toThrow(`${label} supports reasoning effort`);
-  });
+  it.each([
+    { Provider: OpenRouterProvider, host: 'openrouter.ai' },
+    { Provider: OpenAiChatCompletionProvider, host: 'eu.openrouter.ai' },
+    { Provider: OpenAiChatCompletionProvider, host: 'us.openrouter.ai' },
+  ])(
+    'preserves OpenRouter tool routing and reasoning rules at $host',
+    async ({ Provider, host }) => {
+      const apiBaseUrl = `https://${host}/api/v1`;
+      const { body } = await new Provider(`openai/${model}`, {
+        config: { apiBaseUrl, reasoning_effort: 'high', tools: [statusTool], temperature: 0.4 },
+      }).getOpenAiBody('Get the status.');
+      expect(body).toMatchObject({
+        model: `openai/${model}`,
+        reasoning_effort: 'high',
+        tools: [statusTool],
+      });
+      expect(body).not.toHaveProperty('temperature');
+      await expect(
+        new Provider(`openai/${model}`, {
+          config: { apiBaseUrl, passthrough: { reasoning: { enabled: false } } },
+        }).getOpenAiBody('Say ready.'),
+      ).rejects.toThrow(`${label} supports reasoning effort`);
+    },
+  );
 });
 
 describe('GPT-6 Astra requests', () => {
@@ -2203,6 +2233,8 @@ describe.each(['gpt-6-sol', 'gpt-6-luna'])('%s requests', (model) => {
     for (const apiBaseUrl of [
       'https://api.openai.com/v1',
       'https://openrouter.ai.example.com/v1',
+      'https://us.openrouter.ai.example.com/v1',
+      'https://custom.openrouter.ai/v1',
     ]) {
       await expect(
         new OpenAiChatCompletionProvider(`openai/${model}`, {
