@@ -14,20 +14,43 @@ import type { GitMetadata } from '../../types/codeScan';
  * @param repoPath Path to the git repository
  * @param baseBranch Base branch or commit
  * @param compareRef Compare branch or commit
+ * @param fullScan Send only immutable revision identifiers for a hosted full scan
  * @returns Git metadata object
  */
 export async function extractMetadata(
   repoPath: string,
   baseBranch: string,
   compareRef: string,
+  fullScan = false,
 ): Promise<GitMetadata> {
   try {
     const resolveRef = (ref: string) =>
-      runGit(repoPath, ['rev-parse', '--verify', '--end-of-options', ref]);
+      runGit(repoPath, [
+        ...(fullScan ? ['--no-replace-objects'] : []),
+        'rev-parse',
+        '--verify',
+        '--end-of-options',
+        fullScan ? `${ref}^{commit}` : ref,
+      ]);
     const [baseSha, compareSha] = await Promise.all([
       resolveRef(baseBranch),
       resolveRef(compareRef),
     ]);
+    if (fullScan) {
+      // History can contain private subjects, authors, or branch names from outside the scan root.
+      // A full scan needs only the pinned revisions; never read the log or the worktree mailmap.
+      return {
+        branch: compareSha,
+        baseBranch: baseSha,
+        baseRef: baseSha,
+        baseSha,
+        compareRef: compareSha,
+        compareSha,
+        commitMessages: [],
+        author: 'Unknown',
+        timestamp: new Date().toISOString(),
+      };
+    }
     const stdout = await runGit(repoPath, [
       'log',
       '--no-show-signature',
@@ -55,6 +78,9 @@ export async function extractMetadata(
       timestamp: fields[3] || new Date().toISOString(),
     };
   } catch (error) {
+    if (fullScan) {
+      throw new GitMetadataError('Failed to resolve full-scan revisions');
+    }
     throw new GitMetadataError(
       `Failed to extract git metadata: ${error instanceof Error ? error.message : String(error)}`,
     );
