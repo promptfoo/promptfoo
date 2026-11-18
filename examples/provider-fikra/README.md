@@ -1,4 +1,4 @@
-# Fikra
+# provider-fikra (Fikra chat example)
 
 Evaluate models served by [Fikra](https://fikraapi.co.ke), an OpenAI-compatible API for open-weight models.
 
@@ -11,5 +11,7 @@ Evaluate models served by [Fikra](https://fikraapi.co.ke), an OpenAI-compatible 
 
 ```sh
 export FIKRA_API_KEY=fikra_...
-promptfoo eval -c examples/provider-fikra/promptfooconfig.yaml
+npx promptfoo@latest init --example provider-fikra
+cd provider-fikra
+npx promptfoo@latest eval -c promptfooconfig.yaml
 ```
