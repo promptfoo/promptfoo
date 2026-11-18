@@ -175,6 +175,15 @@ describe('parseRateLimitHeaders', () => {
   });
 
   describe('Generic format (ratelimit-*)', () => {
+    it('reads the effective limit from a generic quota policy list', () => {
+      const result = parseRateLimitHeaders({
+        'x-ratelimit-limit-requests': '99, 99;w=60',
+        'ratelimit-limit': '100, 100;w=60, 1000;w=3600',
+      });
+
+      expect(result.limitRequests).toBe(100);
+    });
+
     it('should parse generic ratelimit headers', () => {
       const headers = {
         'ratelimit-remaining': '300',

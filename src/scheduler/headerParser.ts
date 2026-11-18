@@ -160,14 +160,16 @@ function parseIntegerHeader(value: string): number | undefined {
     return undefined;
   }
   const num = Number.parseInt(trimmed, 10);
-  return Number.isFinite(num) && num >= 0 ? num : undefined;
+  return Number.isFinite(num) ? num : undefined;
 }
 
 function parseFirstMatch(headers: Record<string, string>, names: string[]): number | undefined {
   for (const name of names) {
     const value = headers[name];
     if (value !== undefined) {
-      const num = parseIntegerHeader(value);
+      // RateLimit-Limit may list extra quota policies after its effective limit.
+      const counter = name === STANDARD_HEADERS.limit ? value.split(',', 1)[0] : value;
+      const num = parseIntegerHeader(counter);
       if (num !== undefined) {
         return num;
       }
