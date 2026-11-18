@@ -17,6 +17,15 @@ tests:
       - type: javascript
         value: file://assert-boundary.cjs:validateExactMoney
 
+  - description: Exact USD total with a fractional credit
+    vars:
+      query: '{"currency":"USD","items":[{"amount":1},{"amount":"-0.25"}],"total":"0.75"}'
+      expectedCurrency: USD
+      expectedTotal: '0.75'
+    assert:
+      - type: javascript
+        value: file://assert-boundary.cjs:validateExactMoney
+
   - description: Exact EUR total with integer cent accuracy
     vars:
       query: '{"currency":"EUR","items":[{"description":"Monthly subscription","amount":"99.00"},{"description":"VAT","amount":"1.50"}],"total":"100.50"}'

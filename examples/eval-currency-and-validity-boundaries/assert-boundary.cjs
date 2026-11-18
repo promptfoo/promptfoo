@@ -22,7 +22,7 @@ function parseJsonOutput(output) {
  */
 function parseCents(amount) {
   if (typeof amount === 'number') {
-    amount = amount.toFixed(2);
+    amount = String(amount);
   }
   if (typeof amount !== 'string') {
     return NaN;
@@ -32,10 +32,8 @@ function parseCents(amount) {
   if (!match) {
     return NaN;
   }
-  const whole = parseInt(match[1], 10);
-  const frac = (match[2] || '').padEnd(2, '0');
-  const cents = parseInt(frac, 10);
-  return whole < 0 ? whole * 100 - cents : whole * 100 + cents;
+  const cents = Number(match[1] + (match[2] ?? '').padEnd(2, '0'));
+  return Number.isSafeInteger(cents) ? cents : NaN;
 }
 
 function validateExactMoney(output, context) {
@@ -67,15 +65,18 @@ function validateExactMoney(output, context) {
 
   let calculatedCents = 0;
   for (const item of data.items) {
-    const itemCents = parseCents(item.amount);
+    const itemCents = parseCents(item?.amount);
     if (Number.isNaN(itemCents)) {
       return {
         pass: false,
         score: 0,
-        reason: `Invalid item amount: ${item.amount}`,
+        reason: `Invalid item amount: ${item?.amount}`,
       };
     }
     calculatedCents += itemCents;
+    if (!Number.isSafeInteger(calculatedCents)) {
+      return { pass: false, score: 0, reason: 'Total exceeds the safe integer cent range' };
+    }
   }
 
   const reportedCents = parseCents(data.total);
