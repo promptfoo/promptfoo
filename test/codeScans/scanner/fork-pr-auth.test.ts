@@ -81,7 +81,8 @@ describe('Scanner fork PR auth rejection', () => {
       createSpinner: vi.fn().mockReturnValue(undefined),
       displayScanResults: vi.fn(),
     }));
-    vi.doMock('../../../src/codeScan/scanner/request', () => ({
+    vi.doMock('../../../src/codeScan/scanner/request', async (importOriginal) => ({
+      ...(await importOriginal<typeof import('../../../src/codeScan/scanner/request')>()),
       buildScanRequest: vi.fn().mockReturnValue({ request: 'test' }),
       executeScanRequestWithRetry: vi
         .fn()

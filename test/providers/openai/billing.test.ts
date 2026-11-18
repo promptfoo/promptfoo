@@ -188,6 +188,8 @@ describe('OpenAI billing helpers', () => {
   describe('Bedrock OpenAI model card rates', () => {
     it.each([
       ['bedrock:gpt-daybreak-blue-5.6-sol', 'us-east-2', 'default', 4.4, 0.44, 5.5, 22],
+      ['gpt-6.2-astra', 'us-east-1', 'default', 8.8, 0.44, 11, 44],
+      ['gpt-6.2-sol', 'us-east-1', 'default', 2.2, 0.11, 2.75, 11],
       ['gpt-6.1-sol', 'us-east-1', 'default', 2.2, 0.11, 2.75, 11],
       ['gpt-6.1-sol', 'us-east-1', 'ultrafast', 13.2, 0.66, 16.5, 66],
       ['gpt-6-astra', 'us-west-2', 'default', 11, 1.1, 13.75, 55],
@@ -214,6 +216,9 @@ describe('OpenAI billing helpers', () => {
       },
     );
     it.each([
+      ['gpt-6.2-sol', 'us-east-1', 'ultrafast'],
+      ['gpt-6.2-astra', 'us-gov-west-1', 'default'],
+      ['gpt-6.2-astra', 'cn-north-1', 'default'],
       ['bedrock:gpt-daybreak-blue-5.6-sol', 'us-east-1', 'default'],
       ['gpt-6.1-sol', 'us-east-2', 'default'],
       ['gpt-6-astra', 'us-west-2', 'ultrafast'],
@@ -226,6 +231,43 @@ describe('OpenAI billing helpers', () => {
         calculateOpenAIUsageCost(model, { cost: 0 }, createCachedResponsesUsage(), options),
       ).toBe(0);
     });
+    it('prices Bedrock GPT-6.2 Astra Ultrafast using the creation time of the response', () => {
+      const usage = createCachedResponsesUsage();
+      const options = { apiUrl: 'https://bedrock-mantle.us-east-1.api.aws/openai/v1' };
+      const standard = calculateOpenAIUsageCost('gpt-6.2-astra', {}, usage, options)!;
+      const listPriceStart = Date.parse('2027-03-01T08:00:00Z') / 1000;
+      for (const [createdAt, multiplier] of [
+        [listPriceStart - 1, 3],
+        [listPriceStart, 6],
+      ]) {
+        expect(
+          calculateOpenAIUsageCost('gpt-6.2-astra', {}, usage, {
+            ...options,
+            serviceTier: 'ultrafast',
+            createdAt,
+          }),
+        ).toBeCloseTo(standard * multiplier, 10);
+      }
+    });
+
+    it('leaves Bedrock GPT-6.2 unpriced when cache writes are missing or use an unpriced lifetime', () => {
+      const options = { apiUrl: 'https://bedrock-mantle.us-east-1.api.aws/openai/v1' };
+      for (const details of [
+        { cached_tokens: 500 },
+        {
+          cached_tokens: 500,
+          cache_write_tokens: 250,
+          cache_write_tokens_details: { ttl_12h_tokens: 250 },
+        },
+      ]) {
+        const usage = { input_tokens: 2000, output_tokens: 1000, input_tokens_details: details };
+        expect(calculateOpenAIUsageCost('gpt-6.2-sol', {}, usage, options)).toBeUndefined();
+        expect(
+          calculateOpenAIUsageCost('gpt-6.2-sol', { inputCost: 3 / 1e6 }, usage, options),
+        ).toBeCloseTo((2000 * 3 + 1000 * 11) / 1e6, 10);
+      }
+    });
+
     it('prices GPT-5.4 short-context input in GovCloud West including cache reads', () => {
       const options = { apiUrl: 'https://bedrock-mantle.us-gov-west-1.api.aws/openai/v1' };
       const usage = {
@@ -242,6 +284,10 @@ describe('OpenAI billing helpers', () => {
       ).toBeUndefined();
     });
     it.each([
+      ['gpt-6.2-astra', 'global', 'default', 8, 0.4, 10, 40],
+      ['gpt-6.2-astra', 'us', 'default', 8.8, 0.44, 11, 44],
+      ['gpt-6.2-sol', 'global', 'default', 2, 0.1, 2.5, 10],
+      ['gpt-6.2-sol', 'us', 'default', 2.2, 0.11, 2.75, 11],
       ['gpt-6.1-sol', 'us', 'default', 2.2, 0.11, 2.75, 11],
       ['gpt-6.1-sol', 'global', 'default', 2, 0.1, 2.5, 10],
       ['gpt-6-astra', 'us', 'ultrafast', 66, 6.6, 82.5, 330],
@@ -366,6 +412,129 @@ describe('OpenAI billing helpers', () => {
           { apiUrl: govCloudUrl },
         ),
       ).toBeUndefined();
+    });
+  });
+
+  describe('GPT-6.2', () => {
+    it.each([
+      { model: 'gpt-6.2-astra', inputs: 272_000, input: 8, cached: 0.4, write: 10, output: 40 },
+      { model: 'gpt-6.2-astra', inputs: 272_001, input: 16, cached: 0.8, write: 20, output: 60 },
+      { model: 'gpt-6.2-sol', inputs: 272_000, input: 2, cached: 0.1, write: 2.5, output: 10 },
+      { model: 'gpt-6.2-sol', inputs: 272_001, input: 4, cached: 0.2, write: 5, output: 15 },
+    ])(
+      'prices $model at $inputs input tokens',
+      ({ model, inputs, input, cached, write, output }) => {
+        const usage = {
+          input_tokens: inputs,
+          output_tokens: 1000,
+          input_tokens_details: {
+            cached_tokens: 500,
+            cache_write_tokens: 250,
+            cache_write_tokens_details: { ttl_12h_tokens: 50 },
+          },
+        };
+        const standard =
+          ((inputs - 750) * input + 500 * cached + 200 * write + 50 * write * 2 + 1000 * output) /
+          1e6;
+        for (const [serviceTier, multiplier] of [
+          ['default', 1],
+          ['batch', 0.5],
+          ['fast', 2],
+        ] as const) {
+          expect(calculateOpenAIUsageCost(model, {}, usage, { serviceTier })).toBeCloseTo(
+            standard * multiplier,
+            10,
+          );
+        }
+        expect(
+          calculateOpenAIUsageCost(model, {}, usage, { apiUrl: 'https://eu.api.openai.com/v1' }),
+        ).toBeCloseTo(standard * 1.1, 10);
+
+        expect(
+          calculateOpenAIUsageCost(model, {}, usage, {
+            serviceTier: 'default',
+            completionWindow: '2h',
+            apiUrl: 'https://eu.api.openai.com/v1',
+          }),
+        ).toBeCloseTo(standard * 1.1 * 0.7, 10);
+
+        const listPriceStart = Date.parse('2027-03-01T00:00:00-08:00') / 1000;
+        expect(
+          calculateOpenAIUsageCost(model, {}, usage, {
+            serviceTier: 'ultrafast',
+            createdAt: listPriceStart - 1,
+          }),
+        ).toBeCloseTo(standard * 3, 10);
+        expect(
+          calculateOpenAIUsageCost(model, {}, usage, {
+            serviceTier: 'ultrafast',
+            createdAt: listPriceStart,
+          }),
+        ).toBeCloseTo(standard * 6, 10);
+      },
+    );
+
+    it.each(['gpt-6.2-astra', 'gpt-6.2-sol'])(
+      'requires explicit prices for unpublished %s rates',
+      (model) => {
+        const usage = createCachedResponsesUsage();
+        for (const options of [
+          { serviceTier: 'flex' },
+          { apiUrl: 'https://bedrock-runtime.us-east-1.amazonaws.com/openai/v1' },
+          { provider: 'bedrock' },
+          { provider: 'azure' },
+        ]) {
+          expect(calculateOpenAIUsageCost(model, {}, usage, options)).toBeUndefined();
+          expect(calculateOpenAIUsageCost(model, { cost: 3 / 1e6 }, usage, options)).toBeCloseTo(
+            0.009,
+            10,
+          );
+        }
+        expect(
+          calculateOpenAIUsageCostFromTokenUsage(`openai.${model}`, {
+            prompt: 2000,
+            completion: 1000,
+            cached: 500,
+            completionDetails: { cacheCreationInputTokens: 250 },
+          }),
+        ).toBeUndefined();
+      },
+    );
+  });
+
+  describe('background completion windows', () => {
+    it.each(['gpt-6.2-astra', 'gpt-6.2-sol', 'gpt-6.1-terra', 'gpt-6-luna'])(
+      'discounts the catalog rates and preserves custom overrides for %s',
+      (model) => {
+        const usage = createCachedResponsesUsage();
+        const standard = calculateOpenAIUsageCost(model, {}, usage)!;
+        expect(calculateOpenAIUsageCost(model, {}, usage, { completionWindow: '8h' })).toBeCloseTo(
+          standard * 0.6,
+          10,
+        );
+        expect(
+          calculateOpenAIUsageCost(model, { cost: 2 / 1e6 }, usage, { completionWindow: '8h' }),
+        ).toBeCloseTo(0.006, 10);
+      },
+    );
+
+    it.each([
+      { model: 'gpt-6.1-sol', options: { completionWindow: '2h' } },
+      { model: 'gpt-6.2-sol', options: { completionWindow: 'soonest' } },
+      {
+        model: 'gpt-6.2-sol',
+        options: { completionWindow: '8h', apiUrl: 'https://gateway.example/v1' },
+      },
+      { model: 'gpt-6.2-sol', options: { completionWindow: '2h', serviceTier: 'fast' } },
+      { model: 'gpt-6.2-sol', options: { completionWindow: '2h', serviceTier: 'auto' } },
+      { model: 'gpt-6.1-terra', options: { completionWindow: '2h', provider: 'bedrock' } },
+    ])('preserves pricing for ineligible $model requests with $options', ({ model, options }) => {
+      const usage = createCachedResponsesUsage();
+      const withoutWindow = calculateOpenAIUsageCost(model, {}, usage, {
+        ...options,
+        completionWindow: undefined,
+      });
+      expect(calculateOpenAIUsageCost(model, {}, usage, options)).toBe(withoutWindow);
     });
   });
 
