@@ -189,8 +189,44 @@ describe('FoundationModelConfiguration', () => {
       />,
     );
 
-    const modelIdInput = screen.getByPlaceholderText('azure:chat:your-deployment-name');
-    expect(modelIdInput).toHaveAttribute('placeholder', 'azure:chat:your-deployment-name');
+    const modelIdInput = screen.getByPlaceholderText('azure:responses:your-deployment-name');
+    expect(modelIdInput).toHaveAttribute('placeholder', 'azure:responses:your-deployment-name');
+  });
+
+  it.each([
+    ['openai:gpt-6.2-astra', 'openai'],
+    ['openai:responses:gpt-6.2-sol', 'openai'],
+    ['azure:responses:my-production-deployment', 'azure'],
+  ])('edits a Responses output cap for %s', async (id, providerType) => {
+    const user = userEvent.setup();
+    render(
+      <FoundationModelConfiguration
+        selectedTarget={{ id, config: { max_tokens: 256 } }}
+        updateCustomTarget={mockUpdateCustomTarget}
+        providerType={providerType}
+      />,
+    );
+    await user.click(screen.getByRole('button', { name: /Advanced Configuration/ }));
+    const cap = screen.getByLabelText('Max Output Tokens');
+    expect(cap).toHaveValue(256);
+    await user.tripleClick(cap);
+    await user.paste('512');
+    expect(mockUpdateCustomTarget).toHaveBeenLastCalledWith('config', { max_output_tokens: 512 });
+  });
+
+  it('keeps the deployment ID when editing its Azure model hint', async () => {
+    const user = userEvent.setup();
+    render(
+      <FoundationModelConfiguration
+        selectedTarget={{ id: 'azure:chat:my-production-deployment', config: {} }}
+        updateCustomTarget={mockUpdateCustomTarget}
+        providerType="azure"
+      />,
+    );
+    await user.click(screen.getByRole('button', { name: /Advanced Configuration/ }));
+    await user.click(screen.getByLabelText('Underlying model'));
+    await user.paste('gpt-6.2-astra');
+    expect(mockUpdateCustomTarget).toHaveBeenLastCalledWith('modelName', 'gpt-6.2-astra');
   });
 
   it('should display the correct placeholder and documentation link for the openrouter provider', () => {
@@ -205,7 +241,7 @@ describe('FoundationModelConfiguration', () => {
     const modelIdInput = screen.getByRole('textbox', { name: /Model ID/i });
     expect(modelIdInput).toHaveAttribute(
       'placeholder',
-      'openrouter:openai/gpt-6-sol, openrouter:anthropic/claude-opus-5.5',
+      'openrouter:openai/gpt-6.2-sol, openrouter:anthropic/claude-opus-5.5',
     );
 
     const documentationLink = screen.getByRole('link', { name: /OpenRouter documentation/ });
@@ -602,6 +638,7 @@ describe('FoundationModelConfiguration', () => {
     ['gpt-5.6-sol', 'bedrock:responses:openai.gpt-5.6-sol'],
     ['gpt-oss-120b', 'bedrock:responses:openai.gpt-oss-120b'],
     ['openai.gpt-5.6-sol', 'bedrock:responses:openai.gpt-5.6-sol'],
+    ['gpt-6.2-astra', 'bedrock:responses:openai.gpt-6.2-astra'],
     ['custom.model', 'bedrock:responses:custom.model'],
     ['us.openai.gpt-5.6-sol', 'bedrock:responses:us.openai.gpt-5.6-sol'],
     [

@@ -17,6 +17,8 @@ import {
   isRejectedPrefixedMythosId,
   requiresBedrockAnthropicMessagesModel,
 } from '@promptfoo/providers/bedrock/routing';
+import { isGpt6Model } from '@promptfoo/providers/openai/gpt6';
+import { shouldDefaultToOpenAiResponses } from '@promptfoo/providers/openai/routing';
 import {
   DEFAULT_BEDROCK_TARGET_ID,
   DEFAULT_GOOGLE_TARGET_ID,
@@ -55,22 +57,36 @@ function supportsBedrockMcp(apiMode?: BedrockApiMode): boolean {
   );
 }
 
-function resolveBedrockTokenLimit(
+function resolveTokenLimit(
   mode?: BedrockApiMode,
   modelId = '',
   config?: ProviderOptions['config'],
 ) {
+  const [family, subtype = '', deployment] = modelId.split(':', 3);
+  const isAzure = family === 'azure' || family === 'azureopenai';
+  const isGpt6Chat =
+    !mode &&
+    subtype === 'chat' &&
+    ((family === 'openai' && isGpt6Model(deployment ?? config?.model)) ||
+      (isAzure && isGpt6Model(config?.modelName ?? deployment)));
+  const isOpenAiResponses =
+    !mode &&
+    ((family === 'openai' &&
+      (subtype === 'responses' || shouldDefaultToOpenAiResponses(subtype))) ||
+      (isAzure && subtype === 'responses'));
   const key =
-    mode === 'responses' || mode === 'runtime-responses'
+    isOpenAiResponses || mode === 'responses' || mode === 'runtime-responses'
       ? 'max_output_tokens'
-      : mode === 'runtime-chat' || (mode === 'invoke' && modelId.includes('openai.gpt-oss'))
+      : isGpt6Chat ||
+          mode === 'runtime-chat' ||
+          (mode === 'invoke' && modelId.includes('openai.gpt-oss'))
         ? 'max_completion_tokens'
         : 'max_tokens';
   // Converse prefers its native camelCase field; the UI continues to write its supported alias.
   const fields =
     mode === 'converse'
       ? ['maxTokens', 'max_tokens']
-      : key === 'max_completion_tokens'
+      : isOpenAiResponses || key === 'max_completion_tokens'
         ? [key, 'max_tokens']
         : [key];
   // Match Converse's nullish fallback without changing explicit null on the other APIs.
@@ -196,7 +212,7 @@ const FoundationModelConfiguration = ({
     key: tokenLimitKey,
     fields: tokenLimitFields,
     value: tokenLimit,
-  } = resolveBedrockTokenLimit(
+  } = resolveTokenLimit(
     bedrockApiMode,
     getBedrockModelFromId(selectedTarget.id),
     selectedTarget.config,
@@ -275,7 +291,11 @@ const FoundationModelConfiguration = ({
   };
 
   const updateProviderId = (id: string, apiMode = bedrockApiMode) => {
-    const destination = resolveBedrockTokenLimit(apiMode, getBedrockModelFromId(id));
+    const destination = resolveTokenLimit(
+      apiMode,
+      getBedrockModelFromId(id),
+      selectedTarget.config,
+    );
     const hasCompetingLimit = [...tokenLimitFields, ...destination.fields].some(
       (field) => field !== destination.key && selectedTarget.config?.[field] !== undefined,
     );
@@ -420,21 +440,21 @@ const FoundationModelConfiguration = ({
       azure: {
         name: 'Azure OpenAI',
         defaultModel: 'azure:chat:gpt-4o',
-        placeholder: 'azure:chat:your-deployment-name',
+        placeholder: 'azure:responses:your-deployment-name',
         docUrl: 'https://www.promptfoo.dev/docs/providers/azure',
         envVar: 'AZURE_OPENAI_API_KEY',
       },
       bedrock: {
         name: 'AWS Bedrock',
         defaultModel: DEFAULT_BEDROCK_TARGET_ID,
-        placeholder: 'gpt-5.6-sol',
+        placeholder: 'gpt-6.2-sol',
         docUrl: 'https://www.promptfoo.dev/docs/providers/aws-bedrock',
         envVar: 'AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY',
       },
       openrouter: {
         name: 'OpenRouter',
         defaultModel: 'openrouter:openai/gpt-6-sol',
-        placeholder: 'openrouter:openai/gpt-6-sol, openrouter:anthropic/claude-opus-5.5',
+        placeholder: 'openrouter:openai/gpt-6.2-sol, openrouter:anthropic/claude-opus-5.5',
         docUrl: 'https://www.promptfoo.dev/docs/providers/openrouter',
         envVar: 'OPENROUTER_API_KEY',
       },
@@ -531,7 +551,7 @@ const FoundationModelConfiguration = ({
                 </>
               ) : (
                 <>
-                  Choose an API, then enter its model ID. GPT names such as <code>gpt-5.6-sol</code>{' '}
+                  Choose an API, then enter its model ID. GPT names such as <code>gpt-6.2-sol</code>{' '}
                   are saved with Bedrock's <code>openai.</code> prefix. Full Bedrock model IDs are
                   also accepted.
                 </>
@@ -733,6 +753,21 @@ const FoundationModelConfiguration = ({
           className="mt-4"
         >
           <div className="grid gap-4">
+            {providerType === 'azure' && (
+              <div className="space-y-2">
+                <Label htmlFor="azure-model-name">Underlying model</Label>
+                <Input
+                  id="azure-model-name"
+                  value={selectedTarget.config?.modelName ?? ''}
+                  placeholder="gpt-6.2-sol"
+                  onChange={(e) => updateCustomTarget('modelName', e.target.value || undefined)}
+                />
+                <p className="text-sm text-muted-foreground">
+                  Set the model name when your Azure deployment uses a custom name so Promptfoo can
+                  apply the model's request settings.
+                </p>
+              </div>
+            )}
             <div className="space-y-2">
               <Label htmlFor="temperature">Temperature</Label>
               <NumberInput
@@ -749,9 +784,7 @@ const FoundationModelConfiguration = ({
 
             <div className="space-y-2">
               <Label htmlFor="max-tokens">
-                {bedrockApiMode === 'responses' || bedrockApiMode === 'runtime-responses'
-                  ? 'Max Output Tokens'
-                  : 'Max Tokens'}
+                {tokenLimitKey === 'max_output_tokens' ? 'Max Output Tokens' : 'Max Tokens'}
               </Label>
               <Input
                 id="max-tokens"
