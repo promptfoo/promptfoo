@@ -370,7 +370,7 @@ redteam:
     - jailbreak-templates
 ```
 
-See the [RAG security guide](./rag.md) for comprehensive coverage.
+See the [RAG security guide](./rag.md) for retrieval and generation risks.
 
 ### MCP Tools
 

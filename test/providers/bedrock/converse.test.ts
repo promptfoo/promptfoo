@@ -2831,6 +2831,9 @@ Third line`;
     it.each([
       ['us.openai.gpt-6-luna', 0.000165],
       ['us.openai.gpt-6.1-sol', 0.0033],
+      ['us.openai.gpt-6.1-terra', 0.00165],
+      ['global.openai.gpt-6.1-terra', 0.0015],
+      ['us.openai.gpt-6-sol', 0.0033],
     ] as const)('supports cost assertions for %s', async (model, expectedCost) => {
       const provider = new AwsBedrockConverseProvider(model, { config: { region: 'us-east-1' } });
       mockSend.mockResolvedValueOnce(
