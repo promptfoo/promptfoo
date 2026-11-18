@@ -29,7 +29,7 @@ npx promptfoo@latest eval
 - `llm-rubric` with `levels` sends a Score question and scales the result to 0–1.
 - `classifier` sends a Choice question and checks the probability of one label.
 
-Drex doesn't return a rationale, so each `reason` states how the verdict was derived, such as `Drex Noul probability 0.99 >= threshold 0.5`.
+Drex doesn't return a rationale, so an `llm-rubric` `reason` reports the answer it graded, such as `Drex Noul probability 0.99`, or the raw and normalized score with the nearest level for a Score question. The pass/fail verdict comes from comparing the score with the threshold.
 
 ### Test your own Drex questions
 
