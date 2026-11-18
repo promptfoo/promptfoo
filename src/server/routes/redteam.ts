@@ -22,6 +22,10 @@ import { type RedteamFileConfig, TestCaseWithPlugin } from '../../types';
 import { RedteamSchemas } from '../../types/api/redteam';
 import { fetchWithProxy } from '../../util/fetch/index';
 import { sanitizeObject } from '../../util/sanitizer';
+import {
+  allowLocalCloudProxyRequests,
+  LOCAL_CLOUD_PROXY_DISABLED_MESSAGE,
+} from '../config/serverConfig';
 import { evalJobService } from '../services/evalJobService';
 import {
   extractGeneratedPrompt,
@@ -29,10 +33,6 @@ import {
   getPluginConfigurationError,
   RemoteGenerationDisabledError,
 } from '../services/redteamTestCaseGenerationService';
-import {
-  allowLocalCloudProxyRequests,
-  LOCAL_CLOUD_PROXY_DISABLED_MESSAGE,
-} from '../utils/cloudProxy';
 import type { Request, Response } from 'express';
 
 export const redteamRouter = Router();

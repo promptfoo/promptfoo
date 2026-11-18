@@ -13,11 +13,11 @@ import {
 import { neverGenerateRemote } from '../../redteam/remoteGeneration';
 import { ProviderSchemas } from '../../types/api/providers';
 import { fetchWithProxy } from '../../util/fetch/index';
-import { getAvailableProviders } from '../config/serverConfig';
 import {
   allowLocalCloudProxyRequests,
+  getAvailableProviders,
   LOCAL_CLOUD_PROXY_DISABLED_MESSAGE,
-} from '../utils/cloudProxy';
+} from '../config/serverConfig';
 import { sendError } from '../utils/errors';
 import type { Request, Response } from 'express';
 

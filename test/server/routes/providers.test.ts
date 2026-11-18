@@ -15,7 +15,10 @@ const createGeneratedChatConfig = () => ({
 // Mock dependencies
 vi.mock('../../../src/providers/index');
 vi.mock('../../../src/node/testProvider');
-vi.mock('../../../src/server/config/serverConfig');
+vi.mock(import('../../../src/server/config/serverConfig'), async (importOriginal) => ({
+  ...(await importOriginal()),
+  getAvailableProviders: vi.fn(),
+}));
 vi.mock('../../../src/redteam/commands/discover');
 vi.mock('../../../src/redteam/remoteGeneration');
 vi.mock('../../../src/util/fetch/index');

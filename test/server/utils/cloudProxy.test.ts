@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { getEnvBool } from '../../../src/envars';
 import { setEnvOverridesProvider } from '../../../src/envOverrides';
-import { allowLocalCloudProxyRequests } from '../../../src/server/utils/cloudProxy';
+import { allowLocalCloudProxyRequests } from '../../../src/server/config/serverConfig';
 
 describe('allowLocalCloudProxyRequests', () => {
   afterEach(() => {
