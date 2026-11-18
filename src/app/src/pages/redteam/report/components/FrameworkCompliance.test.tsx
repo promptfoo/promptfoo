@@ -64,6 +64,26 @@ describe('FrameworkCompliance', () => {
     );
   });
 
+  it.each([
+    { plugin: 'harmful:hate', isCompliant: false },
+    { plugin: 'bola', isCompliant: true },
+  ])(
+    'counts only passing DPDP plugins in the heading and card ($plugin)',
+    ({ plugin, isCompliant }) => {
+      renderFrameworkCompliance(
+        { [plugin]: { pass: 1, total: 1, passWithFilter: 1, failCount: 0 } },
+        0.9,
+        { redteam: { frameworks: ['dpdp'] } },
+      );
+      expect(
+        screen.getByRole('heading', { name: `Framework Compliance (${Number(isCompliant)}/1)` }),
+      ).toBeInTheDocument();
+      expect(mockFrameworkCard.mock.calls.map(([props]) => props.isCompliant)).toEqual([
+        isCompliant,
+      ]);
+    },
+  );
+
   it('stacks heading controls on narrow screens', () => {
     renderFrameworkCompliance();
 
