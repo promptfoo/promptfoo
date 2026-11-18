@@ -1,3 +1,4 @@
+import { createCache } from 'cache-manager';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getCache, isCacheEnabled } from '../../../src/cache';
 import { AzureFoundryAgentProvider } from '../../../src/providers/azure/foundry-agent';
@@ -123,6 +124,85 @@ describe('Foundry Responses conversation and accounting', () => {
     });
     expect(result.output).toEqual({ weather: 'sunny' });
     expect(callback).toHaveBeenCalledTimes(2);
+  });
+
+  it.each(['gpt-6.2-astra', 'gpt-6.2-sol'])(
+    'applies %s Responses settings across tool continuations',
+    async (model) => {
+      create
+        .mockResolvedValueOnce(reply('first', [tool()], { model }))
+        .mockResolvedValueOnce(reply('last', [text('done')], { model }));
+      const result = await provider({
+        modelName: model,
+        reasoning: { effort: 'high', summary: 'auto' },
+        temperature: 1,
+        prompt_cache_key: 'weather',
+        prompt_cache_options: { mode: 'explicit', ttl: '12h' },
+        cost: 0.01,
+      }).callApi('weather?', { prompt: { config: { reasoning_effort: 'max' } } } as any);
+
+      expect(result.output).toBe('done');
+      expect(result.cost).toBeCloseTo(0.3);
+      expect(create).toHaveBeenCalledTimes(2);
+      for (const [body] of create.mock.calls) {
+        expect(body).toMatchObject({
+          agent_reference: { name: 'agent', type: 'agent_reference' },
+          model,
+          reasoning: { effort: 'max', summary: 'auto' },
+          prompt_cache_key: 'weather',
+          prompt_cache_options: { mode: 'explicit', ttl: '12h' },
+        });
+        expect(body).not.toHaveProperty('temperature');
+        expect(body).not.toHaveProperty('cost');
+      }
+    },
+  );
+
+  it('validates the model selected by passthrough before calling the agent', async () => {
+    const invocation = provider({
+      modelName: 'previous-deployment',
+      passthrough: { model: 'gpt-6.2-sol', reasoning: { effort: 'none' } },
+    }).callApi('weather?');
+    await expect(invocation).rejects.toThrow('GPT-6.2 Sol supports reasoning effort');
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('grades the root answer and omits incomplete pricing for hosted tool use', async () => {
+    create.mockResolvedValue(
+      reply(
+        'last',
+        [
+          { ...text('working'), phase: 'commentary', agent: { agent_name: '/root' } },
+          {
+            ...text('worker answer'),
+            phase: 'final_answer',
+            agent: { agent_name: '/root/worker' },
+          },
+          { type: 'web_search_call' },
+          { ...text('done'), phase: 'final_answer', agent: { agent_name: '/root' } },
+        ],
+        { model: 'gpt-6.2-sol' },
+      ),
+    );
+    const result = await provider({
+      cost: 0.01,
+      passthrough: { multi_agent: { enabled: true } },
+    }).callApi('weather?');
+    expect(result.output).toBe('done');
+    expect(result.cost).toBeUndefined();
+    expect(result.metadata?.costIncomplete).toBe(true);
+  });
+
+  it('keeps cached cost estimates scoped to configured token prices', async () => {
+    vi.mocked(isCacheEnabled).mockReturnValue(true);
+    vi.mocked(getCache).mockReturnValue(createCache());
+    create.mockResolvedValue(reply('last', [text('done')], { model: 'gpt-6.2-astra' }));
+    const price = (cost: number) =>
+      provider({ cost, functionToolCallbacks: undefined }).callApi('same');
+    expect((await price(1)).cost).toBe(15);
+    expect((await price(2)).cost).toBe(30);
+    expect(await price(2)).toMatchObject({ cost: 30, cached: true });
+    expect(create).toHaveBeenCalledTimes(2);
   });
 
   it.each([

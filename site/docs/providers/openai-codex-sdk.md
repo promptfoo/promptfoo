@@ -30,7 +30,7 @@ You can reference this provider using either base ID, and you can inline the mod
 | Final assistant text               | Yes        | Returned in `response.output` as a string.                                                                                                                                                                                                                                                                                                                                                                                                        |
 | Text + local image prompt inputs   | Partial    | Pass plain text as usual, or pass a JSON array of `{"type":"text","text":"..."}` and `{"type":"local_image","path":"/abs/file.png"}` entries. Other JSON prompt shapes are treated as plain text.                                                                                                                                                                                                                                                 |
 | JSON schema output                 | Yes        | Pass `output_schema`; use `is-json` and `JSON.parse(output)` in JS assertions because the provider does not auto-parse the final text.                                                                                                                                                                                                                                                                                                            |
-| Token usage and estimated cost     | Yes        | `tokenUsage` is returned when available, including `completionDetails.reasoning` when Codex reports reasoning output tokens. Standard API cost is estimated when `config.model` is known to promptfoo's pricing table, including GPT-6 Astra, Sol, and Luna. Missing cache-write counts can understate costs. Codex's instruction preamble and tool schemas are included in prompt tokens, so small prompts can still report high `input_tokens`. |
+| Token usage and estimated cost     | Yes        | `tokenUsage` is returned when available, including `completionDetails.reasoning` when Codex reports reasoning output tokens. Standard API cost is estimated when `config.model` is known to promptfoo's pricing table, including GPT-6 Astra, Sol, and Luna. A missing cache-write count leaves cost unknown. Codex's instruction preamble and tool schemas are included in prompt tokens, so small prompts can still report high `input_tokens`. |
 | Session/thread IDs                 | Yes        | `sessionId` is returned from the underlying Codex thread.                                                                                                                                                                                                                                                                                                                                                                                         |
 | Shell/MCP/search/file trajectories | Yes        | Enable `enable_streaming` for provider-level spans. Enable `deep_tracing` to propagate OTEL context into the Codex CLI process.                                                                                                                                                                                                                                                                                                                   |
 | Skill usage assertions             | Partial    | `skill-used` relies on heuristic detection of direct `SKILL.md` command reads, not a first-class SDK skill event.                                                                                                                                                                                                                                                                                                                                 |
@@ -41,10 +41,10 @@ You can reference this provider using either base ID, and you can inline the mod
 
 ## Installation
 
-Install Promptfoo and the Codex SDK together in your eval project. Promptfoo supports SDK versions from 0.156.1 through 0.166.x. Model availability depends on your Codex version and account. The [0.165.0 catalog](https://github.com/openai/codex/releases/tag/rust-v0.165.0) includes GPT-6.1 Sol and Terra with Ultra reasoning.
+Install Promptfoo and the Codex SDK together in your eval project. Promptfoo supports SDK versions from 0.156.1 through 0.169.x. For GPT-6.2 Astra and Sol, install SDK 0.169.1 or later in this range. Its bundled CLI includes both models in the [Codex model catalog](https://github.com/openai/codex/blob/rust-v0.169.1/codex-rs/models-manager/models.json). Model access depends on your account.
 
 ```bash
-npm install promptfoo "@openai/codex-sdk@>=0.156.1 <0.167.0"
+npm install promptfoo "@openai/codex-sdk@>=0.156.1 <0.170.0"
 ```
 
 Use Node.js `>=22.22.0`, which matches promptfoo's repo/runtime requirement and the provider's loader checks.
@@ -266,21 +266,21 @@ Select a model available to your account and sign-in method. See [installation](
 providers:
   - id: openai:codex-sdk
     config:
-      model: gpt-6-sol
+      model: gpt-6.2-sol
       model_reasoning_effort: max
 ```
 
 Choose a model based on your eval's needs:
 
-- **GPT-6 Astra** (`gpt-6-astra`) - Use for the most demanding reasoning and coding tasks, when your account has access.
-- **GPT-6 Sol** (`gpt-6-sol`) - Use for complex professional and coding workflows.
+- **GPT-6.2 Astra** (`gpt-6.2-astra`) - Use for demanding reasoning and coding tasks.
+- **GPT-6.2 Sol** (`gpt-6.2-sol`) - Use for everyday coding and agent workflows.
 - **GPT-6 Luna** (`gpt-6-luna`) - Use for cost-sensitive, high-volume evals.
 
 With ChatGPT sign-in, `gpt-5.4` and `gpt-5.4-mini` retired from Codex on August 31, 2026; `gpt-5.2` and `gpt-5.3-codex` are also deprecated for that sign-in method. Use `gpt-6-sol` or `gpt-6-luna` in new saved configurations when available. API-key authentication follows the separate [OpenAI API model lifecycle](https://developers.openai.com/api/docs/deprecations), so this Codex sign-in retirement does not invalidate API-key configurations or Promptfoo's native API grading pins. `gpt-5.3-codex-spark` requires eligible ChatGPT Pro/Codex authentication and is not available through the public Responses API.
 
 If you omit `config.model`, the Codex CLI may choose an internal default model alias and the backend may resolve that alias to a different concrete model. The current Codex SDK turn payload exposed to Promptfoo includes `items`, `finalResponse`, and `usage`, but not the backend-resolved model name, so tracing and cost attribution use the requested `config.model` when present and otherwise leave `response.cost` undefined.
 
-GPT-6 Astra, Sol, and Luna, GPT-5.6, and GPT-5.5 receive Standard API cost estimates from the token usage reported by Codex. Missing cache-write counts can understate costs. Batch, Flex, and Fast mode are not automatically inferred from Codex runtime settings. See the [OpenAI provider cost estimates](/docs/providers/openai#cost-estimates).
+GPT-6.2 Astra and Sol receive Standard API cost estimates when Codex reports input, output, and cache-write token counts. Batch, Flex, and Fast mode are not automatically inferred from Codex runtime settings. See the [OpenAI provider cost estimates](/docs/providers/openai#cost-estimates).
 
 ### Mini Models
 
@@ -620,7 +620,7 @@ providers:
       model_reasoning_effort: high # Thorough reasoning for complex tasks
 ```
 
-Available levels vary by model:
+GPT-6.2 Astra and Sol support `low`, `medium`, `high`, `xhigh`, `max`, and `ultra` in Codex. Available levels for earlier models vary:
 
 | Level     | Description                                     | Supported Models                                                                                                                                 |
 | --------- | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
