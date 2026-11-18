@@ -2,10 +2,12 @@ import { EventEmitter } from 'events';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TargetLinkEvents } from '../../../src/types/targetLink';
+import { fetchWithProxy } from '../../../src/util/fetch/index';
 
 vi.mock('../../../src/logger', () => ({
   default: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
+vi.mock('../../../src/util/fetch/index', () => ({ fetchWithProxy: vi.fn() }));
 
 // ── Fake client factory ───────────────────────────────────────────────────────
 
@@ -35,6 +37,7 @@ describe('attachTargetLink', () => {
 
   beforeEach(() => {
     fakeClient = createFakeClient();
+    vi.mocked(fetchWithProxy).mockReset();
   });
 
   afterEach(() => {
@@ -51,6 +54,9 @@ describe('attachTargetLink', () => {
       (e) => e.event === TargetLinkEvents.READY,
     );
     expect(readyEvents).toHaveLength(1);
+    expect(readyEvents[0].args[0]).toMatchObject({
+      capabilities: expect.arrayContaining(['http-probe-same-origin-redirects']),
+    });
   });
 
   it('sets up handler before emitting ready', async () => {
@@ -223,6 +229,63 @@ describe('attachTargetLink', () => {
       );
       expect(results).toHaveLength(1);
       expect((results[0].args[0] as any).tokenUsage).toBeUndefined();
+    });
+  });
+
+  describe('HTTP probe redirects', () => {
+    const source = 'http://localhost:8000/start';
+    const request = {
+      requestId: 'http-redirect',
+      url: source,
+      method: 'POST',
+      headers: { Authorization: 'Bearer dummy', 'X-Custom-Token': 'dummy' },
+      body: 'dummy-body',
+    };
+
+    async function probe() {
+      const { attachTargetLink } = await import('../../../src/util/agent/targetLink');
+      attachTargetLink(fakeClient as any, {
+        id: () => 'test',
+        callApi: vi.fn(async () => ({ output: 'ok' })),
+      });
+      fakeClient._simulateEvent(TargetLinkEvents.PROBE_HTTP, request);
+      await vi.waitFor(() => {
+        expect(
+          fakeClient._emittedToServer.some((e) => e.event === TargetLinkEvents.PROBE_HTTP_RESULT),
+        ).toBe(true);
+      });
+      return fakeClient._emittedToServer.find(
+        (e) => e.event === TargetLinkEvents.PROBE_HTTP_RESULT,
+      )!.args[0] as any;
+    }
+
+    it.each([301, 302, 303, 307, 308])(
+      'rejects a cross-origin %i before forwarding credentials',
+      async (status) => {
+        vi.mocked(fetchWithProxy)
+          .mockResolvedValueOnce(
+            new Response(null, { status, headers: { location: 'http://localhost:8001/collect' } }),
+          )
+          .mockResolvedValueOnce(new Response('OK'));
+        const result = await probe();
+        expect(fetchWithProxy).toHaveBeenCalledTimes(1);
+        expect(result).toMatchObject({
+          success: false,
+          error: expect.stringContaining('Cross-origin'),
+        });
+      },
+    );
+
+    it('follows a same-origin relative redirect and preserves the 307 body', async () => {
+      vi.mocked(fetchWithProxy)
+        .mockResolvedValueOnce(new Response(null, { status: 307, headers: { location: '/next' } }))
+        .mockResolvedValueOnce(new Response('OK'));
+      const result = await probe();
+      expect(result).toMatchObject({ success: true, finalUrl: 'http://localhost:8000/next' });
+      expect(fetchWithProxy).toHaveBeenLastCalledWith(
+        'http://localhost:8000/next',
+        expect.objectContaining({ method: 'POST', headers: request.headers, body: request.body }),
+      );
     });
   });
 });
