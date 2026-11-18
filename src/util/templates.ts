@@ -642,7 +642,9 @@ function astNodeListReferencesVariable(
         continue;
       }
       const nestedSummary =
-        summary && item.typename === 'If' ? createConditionalSummary() : undefined;
+        summary && ['If', 'Switch'].includes(item.typename!)
+          ? createConditionalSummary()
+          : undefined;
       if (astReferencesVariable(item, variableName, parent, scope, nestedSummary)) {
         return true;
       }
@@ -698,6 +700,10 @@ function forLikeNodeReferencesVariable(
   boundSymbols: ReadonlySet<string>,
 ): boolean {
   const loopScope = addBindingNames(boundSymbols, node.name);
+  const loopName = getSymbolName(node.name);
+  if (loopName && containerContainsCallerAlias(node.arr, boundSymbols)) {
+    loopScope.registerCallerAlias(loopName);
+  }
   // Nunjucks exposes the frame-local `loop` object alongside the explicit loop
   // variable. It is neither an external dependency nor an engine global.
   loopScope.add('loop');
@@ -1422,6 +1428,26 @@ function recordCallerInvocationMacroCandidates(
 
 type MacroFunctionAdapter = { kind: 'call' | 'apply'; baseName?: string };
 
+function hasAdaptableFunctionReceiver(node: unknown, boundSymbols: LinkedScope): boolean {
+  if (!isNunjucksAstNode(node)) {
+    return false;
+  }
+  if (node.typename === 'LookupVal') {
+    return true;
+  }
+  if (node.typename === 'Group' && Array.isArray(node.children) && node.children.length === 1) {
+    return hasAdaptableFunctionReceiver(node.children[0], boundSymbols);
+  }
+  if (node.typename === 'Filter') {
+    const filterName = getSymbolName(node.name);
+    return (
+      (filterName === 'default' || filterName === 'd') &&
+      !boundSymbols.hasFilterOverride(filterName)
+    );
+  }
+  return false;
+}
+
 function macroFunctionAdapter(
   node: NunjucksAstNode,
   boundSymbols: ReadonlySet<string>,
@@ -1443,9 +1469,7 @@ function macroFunctionAdapter(
   }
   // A lookup through a container can also produce a function value. A plain
   // object property named `call`, however, remains an ordinary macro callee.
-  return isNunjucksAstNode(node.name.target) && node.name.target.typename === 'LookupVal'
-    ? { kind }
-    : undefined;
+  return hasAdaptableFunctionReceiver(node.name.target, boundSymbols) ? { kind } : undefined;
 }
 
 function macroCalleeName(
