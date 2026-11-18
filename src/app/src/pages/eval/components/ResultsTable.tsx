@@ -1644,7 +1644,9 @@ function ResultsTable({
   const [lightboxImage, setLightboxImage] = React.useState<string | null>(null);
   const [pagination, setPagination] = React.useState<{ pageIndex: number; pageSize: number }>({
     pageIndex: 0,
-    pageSize: filteredResultsCount > 10 ? 50 : 10,
+    // Eval's initial table request always uses a limit of 50, even when the
+    // previous eval's count is still visible while switching evaluations.
+    pageSize: 50,
   });
 
   // Persist column sizing state to prevent header resize flicker during pagination.
@@ -2462,7 +2464,7 @@ function ResultsTable({
           <div className="flex items-center gap-2">
             <span className="whitespace-nowrap">Results per page:</span>
             <Select
-              value={String(pagination.pageSize)}
+              value={String(filteredResultsCount <= 10 ? 10 : pagination.pageSize)}
               onValueChange={(value) => {
                 clearRowDeepLink();
                 setPagination((prev) => ({

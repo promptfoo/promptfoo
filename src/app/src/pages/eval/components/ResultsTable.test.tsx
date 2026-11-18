@@ -2247,6 +2247,22 @@ describe('ResultsTable fetchEvalData pagination filters', () => {
 describe('ResultsTable Pagination', () => {
   const defaultProps = createDefaultProps();
 
+  it('uses the initial request limit when switching from a small eval to a larger one', async () => {
+    let count = 5;
+    const fetchEvalData = vi.fn();
+    vi.mocked(useTableStore).mockImplementation(() =>
+      createTableStore({ table: createEmptyTable(), filteredResultsCount: count, fetchEvalData }),
+    );
+    const view = renderWithProviders(<ResultsTable {...defaultProps} />);
+    count = 120;
+    view.rerender(<ResultsTable {...defaultProps} onFailureFilterToggle={vi.fn()} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Next page' }));
+    expect(fetchEvalData).toHaveBeenLastCalledWith(
+      '123',
+      expect.objectContaining({ pageIndex: 1, pageSize: 50 }),
+    );
+  });
+
   it('keeps the current page after a rating changes the count, and clamps only when needed', async () => {
     let count = 220;
     const fetchEvalData = vi.fn();
