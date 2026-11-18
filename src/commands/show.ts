@@ -8,6 +8,18 @@ import type { Command } from 'commander';
 
 type MatchedPrompt = NonNullable<Awaited<ReturnType<typeof getPromptFromHash>>>;
 
+// Wide enough for a full `eval-xxx-YYYY-MM-DDTHH:MM:SS` ID, so it can be copied into
+// `promptfoo show eval <id>`.
+const EVAL_USAGE_COLUMN_WIDTHS = {
+  'Eval ID': 32,
+  'Dataset ID': 12,
+  'Prompt ID': 12,
+  'Raw score': 11,
+  'Pass rate': 11,
+  'Pass count': 12,
+  'Fail count': 18,
+};
+
 function formatMetrics(metrics: MatchedPrompt['evals'][number]['metrics']) {
   const rawScore = metrics?.score?.toFixed(2) || '-';
   const passRate =
@@ -49,14 +61,15 @@ function showPrompt(id: string, prompt: MatchedPrompt | undefined) {
 
   logger.info(`This prompt is used in the following evals:`);
   const table = [];
-  for (const evl of prompt.evals.sort((a, b) => b.id.localeCompare(a.id)).slice(0, 10)) {
+  // Evals are already ordered newest first; eval IDs start with random characters.
+  for (const evl of prompt.evals.slice(0, 10)) {
     table.push({
-      'Eval ID': evl.id.slice(0, 6),
+      'Eval ID': evl.id,
       'Dataset ID': evl.datasetId.slice(0, 6),
       ...formatMetrics(evl.metrics),
     });
   }
-  logger.info(wrapTable(table) as string);
+  logger.info(wrapTable(table, EVAL_USAGE_COLUMN_WIDTHS) as string);
   printBorder();
   printResourceHint('eval');
   printResourceHint('dataset');
@@ -126,15 +139,13 @@ function showDataset(id: string, dataset: Awaited<ReturnType<typeof getDatasetFr
   printBorder();
 
   logger.info(`This dataset is used in the following evals:`);
-  const table = dataset.prompts
-    .sort((a, b) => b.evalId.localeCompare(a.evalId))
-    .slice(0, 10)
-    .map((prompt) => ({
-      'Eval ID': prompt.evalId.slice(0, 6),
-      'Prompt ID': prompt.id.slice(0, 6),
-      ...formatMetrics(prompt.prompt.metrics),
-    }));
-  logger.info(wrapTable(table) as string);
+  // Prompts are already ordered by their newest eval; eval IDs start with random characters.
+  const table = dataset.prompts.slice(0, 10).map((prompt) => ({
+    'Eval ID': prompt.evalId,
+    'Prompt ID': prompt.id.slice(0, 6),
+    ...formatMetrics(prompt.prompt.metrics),
+  }));
+  logger.info(wrapTable(table, EVAL_USAGE_COLUMN_WIDTHS) as string);
   printBorder();
   printResourceHint('prompt');
   printResourceHint('eval');
