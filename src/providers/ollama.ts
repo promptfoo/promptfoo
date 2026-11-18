@@ -189,6 +189,11 @@ function buildOllamaOptions(
   const options: Record<string, any> = {};
   for (const key of Object.keys(config)) {
     const optionName = key as keyof OllamaCompletionOptions;
+    // An unset key is neither sent nor worth reporting. The prompt config always carries
+    // promptfoo's own keys, such as `provider`, even when the user left them unset.
+    if (config[optionName] === undefined) {
+      continue;
+    }
     const isDeprecated = OllamaDeprecatedOptionKeys.has(optionName);
     if (OllamaCurrentNestedOptionKeys.has(optionName) || isDeprecated) {
       options[optionName] = config[optionName];
@@ -238,6 +243,20 @@ function splitOllamaPassthrough(config: OllamaCompletionOptions): {
 } {
   const { options: passthroughOptions, ...passthroughRest } = config.passthrough ?? {};
   return { passthroughOptions: passthroughOptions ?? {}, passthroughRest };
+}
+
+/**
+ * Layers the prompt's config (which also carries `tests[].options`) over the provider's.
+ * Its `prefix` and `suffix` are promptfoo's prompt-text options (`--prompt-suffix`,
+ * `tests[].options.suffix`), which the evaluator applies to the prompt itself, so they
+ * must not reach Ollama as its fill-in-the-middle `suffix`.
+ */
+function mergeOllamaPromptConfig(
+  config: OllamaCompletionOptions,
+  context?: CallApiContextParams,
+): OllamaCompletionOptions {
+  const { prefix: _prefix, suffix: _suffix, ...promptConfig } = context?.prompt?.config ?? {};
+  return { ...config, ...promptConfig };
 }
 
 /**
@@ -504,16 +523,18 @@ export class OllamaCompletionProvider implements ApiProvider {
   }
 
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+    const config = mergeOllamaPromptConfig(this.config, context);
+
     // Set up tracing context
     const spanContext: GenAISpanContext = {
       system: 'ollama',
       operationName: 'completion',
       model: this.modelName,
       providerId: this.id(),
-      temperature: this.config.temperature,
-      topP: this.config.top_p,
-      maxTokens: this.config.num_predict,
-      stopSequences: this.config.stop,
+      temperature: config.temperature,
+      topP: config.top_p,
+      maxTokens: config.num_predict,
+      stopSequences: config.stop,
       testIndex: context?.testIdx ?? (context?.test?.vars?.__testIdx as number | undefined),
       promptLabel: context?.prompt?.label,
       // W3C Trace Context for linking to evaluation trace
@@ -522,29 +543,30 @@ export class OllamaCompletionProvider implements ApiProvider {
 
     return withGenAISpan(
       spanContext,
-      () => this.callApiInternal(prompt, context),
+      () => this.callApiInternal(prompt, config, context),
       (response) => extractGenAIResponse(response, true),
     );
   }
 
   private async callApiInternal(
     prompt: string,
+    config: OllamaCompletionOptions,
     context?: CallApiContextParams,
   ): Promise<ProviderResponse> {
-    const { passthroughOptions, passthroughRest } = splitOllamaPassthrough(this.config);
+    const { passthroughOptions, passthroughRest } = splitOllamaPassthrough(config);
     const params = {
       model: this.modelName,
       prompt,
       stream: false,
-      options: { ...buildOllamaOptions(this.config, 'completion'), ...passthroughOptions },
-      ...(this.config.think === undefined ? {} : { think: this.config.think }),
-      ...(this.config.keep_alive === undefined ? {} : { keep_alive: this.config.keep_alive }),
-      ...(this.config.format === undefined ? {} : { format: this.config.format }),
-      ...(this.config.truncate === undefined ? {} : { truncate: this.config.truncate }),
-      ...(this.config.suffix === undefined ? {} : { suffix: this.config.suffix }),
-      ...(this.config.system === undefined ? {} : { system: this.config.system }),
-      ...(this.config.template === undefined ? {} : { template: this.config.template }),
-      ...(this.config.raw === undefined ? {} : { raw: this.config.raw }),
+      options: { ...buildOllamaOptions(config, 'completion'), ...passthroughOptions },
+      ...(config.think === undefined ? {} : { think: config.think }),
+      ...(config.keep_alive === undefined ? {} : { keep_alive: config.keep_alive }),
+      ...(config.format === undefined ? {} : { format: config.format }),
+      ...(config.truncate === undefined ? {} : { truncate: config.truncate }),
+      ...(config.suffix === undefined ? {} : { suffix: config.suffix }),
+      ...(config.system === undefined ? {} : { system: config.system }),
+      ...(config.template === undefined ? {} : { template: config.template }),
+      ...(config.raw === undefined ? {} : { raw: config.raw }),
       ...passthroughRest,
     };
 
@@ -609,7 +631,7 @@ export class OllamaCompletionProvider implements ApiProvider {
         .filter((s: string | null) => s !== null)
         .join('');
 
-      output = applyOllamaThinking(output, thinking, this.config.showThinking) as string;
+      output = applyOllamaThinking(output, thinking, config.showThinking) as string;
 
       // Extract token usage from the final chunk (where done: true)
       const finalChunk = lines.find((chunk: OllamaCompletionJsonL) => chunk.done);
@@ -653,16 +675,18 @@ export class OllamaChatProvider implements ApiProvider {
   }
 
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+    const config = mergeOllamaPromptConfig(this.config, context);
+
     // Set up tracing context
     const spanContext: GenAISpanContext = {
       system: 'ollama',
       operationName: 'chat',
       model: this.modelName,
       providerId: this.id(),
-      temperature: this.config.temperature,
-      topP: this.config.top_p,
-      maxTokens: this.config.num_predict,
-      stopSequences: this.config.stop,
+      temperature: config.temperature,
+      topP: config.top_p,
+      maxTokens: config.num_predict,
+      stopSequences: config.stop,
       testIndex: context?.testIdx ?? (context?.test?.vars?.__testIdx as number | undefined),
       promptLabel: context?.prompt?.label,
       // W3C Trace Context for linking to evaluation trace
@@ -671,34 +695,35 @@ export class OllamaChatProvider implements ApiProvider {
 
     return withGenAISpan(
       spanContext,
-      () => this.callApiInternal(prompt, context),
+      () => this.callApiInternal(prompt, config, context),
       (response) => extractGenAIResponse(response, true),
     );
   }
 
   private async callApiInternal(
     prompt: string,
+    config: OllamaCompletionOptions,
     context?: CallApiContextParams,
   ): Promise<ProviderResponse> {
     const messages = normalizeOllamaRequestMessages(
       parseChatPrompt<unknown>(prompt, [{ role: 'user', content: prompt }]),
     );
 
-    const { passthroughOptions, passthroughRest } = splitOllamaPassthrough(this.config);
+    const { passthroughOptions, passthroughRest } = splitOllamaPassthrough(config);
     const params: any = {
       model: this.modelName,
       messages,
-      options: { ...buildOllamaOptions(this.config, 'chat'), ...passthroughOptions },
-      ...(this.config.think === undefined ? {} : { think: this.config.think }),
-      ...(this.config.keep_alive === undefined ? {} : { keep_alive: this.config.keep_alive }),
-      ...(this.config.format === undefined ? {} : { format: this.config.format }),
-      ...(this.config.truncate === undefined ? {} : { truncate: this.config.truncate }),
+      options: { ...buildOllamaOptions(config, 'chat'), ...passthroughOptions },
+      ...(config.think === undefined ? {} : { think: config.think }),
+      ...(config.keep_alive === undefined ? {} : { keep_alive: config.keep_alive }),
+      ...(config.format === undefined ? {} : { format: config.format }),
+      ...(config.truncate === undefined ? {} : { truncate: config.truncate }),
       ...passthroughRest,
     };
 
     // Handle tools if configured
-    if (this.config.tools) {
-      const loadedTools = await maybeLoadToolsFromExternalFile(this.config.tools, context?.vars);
+    if (config.tools) {
+      const loadedTools = await maybeLoadToolsFromExternalFile(config.tools, context?.vars);
       if (loadedTools !== undefined) {
         // Transform tools to OpenAI format if needed (Ollama uses OpenAI format)
         params.tools = transformTools(loadedTools, 'openai');
@@ -795,7 +820,7 @@ export class OllamaChatProvider implements ApiProvider {
         output = content;
       }
 
-      output = applyOllamaThinking(output, thinking, this.config.showThinking);
+      output = applyOllamaThinking(output, thinking, config.showThinking);
 
       // Extract token usage from the final chunk (where done: true)
       const tokenUsage = finalChunk ? extractOllamaTokenUsage(finalChunk) : undefined;

@@ -139,6 +139,21 @@ This returns clean JSON (`{ "capital": "Paris" }`) rather than a markdown-fenced
 so assertions like [`is-json`](/docs/configuration/expected-outputs/deterministic/#is-json)
 work reliably.
 
+A prompt's `config` and a test's `options` override the provider `config` for that call,
+so each test can use its own schema:
+
+```yaml
+tests:
+  - vars:
+      country: France
+    options:
+      format:
+        type: object
+        properties:
+          capital: { type: string }
+        required: [capital]
+```
+
 :::warning
 On a reasoning model, combine `format` with `think: false`. Reasoning models emit a trace
 by default, and promptfoo prepends it as `Thinking: ...`, which makes the output no longer
@@ -160,6 +175,9 @@ providers:
       template: '{{ .Prompt }}' # override the model's prompt template
       suffix: '    return result' # fill-in-the-middle, for models that support insert
 ```
+
+Set `suffix` in the provider config. A test's `options.suffix`, like `--prompt-suffix`,
+is appended to the prompt text and is not sent to Ollama.
 
 `raw: true` bypasses prompt templating entirely and is **mutually exclusive** with
 `system` and `template` — Ollama rejects the combination with
