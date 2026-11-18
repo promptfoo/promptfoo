@@ -11,18 +11,6 @@ NON_NEGATIVE_FIELDS = {
     "duration_s",
 }
 
-NON_FINITE_STRINGS = {
-    "nan",
-    "+nan",
-    "-nan",
-    "inf",
-    "+inf",
-    "-inf",
-    "infinity",
-    "+infinity",
-    "-infinity",
-}
-
 
 def get_assert(output, context):
     """Validate MCP tool arguments using deterministic rules."""
@@ -52,13 +40,6 @@ def get_assert(output, context):
         # technically treats bool as a subclass of int.
         if isinstance(value, bool):
             errors.append(f"{field}: boolean is not a valid numeric value.")
-            continue
-
-        if isinstance(value, str):
-            if value.strip().lower() in NON_FINITE_STRINGS:
-                errors.append(f"{field}: non-finite value is not allowed.")
-            else:
-                errors.append(f"{field}: expected a numeric value.")
             continue
 
         if not isinstance(value, (int, float)):
