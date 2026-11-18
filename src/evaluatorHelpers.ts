@@ -174,6 +174,7 @@ export function resolveVariables(
   skipResolveVars?: string[],
   varsResolvedFromSkipped?: Set<string>,
 ): Record<string, VarValue> {
+  const variableNames = new Set(Object.keys(variables));
   let resolved: boolean;
   const regex = /\{\{\s*(\w+)\s*\}\}/g; // Matches {{variableName}}, {{ variableName }}, etc.
 
@@ -183,7 +184,7 @@ export function resolveVariables(
   let iterations = 0;
   do {
     resolved = true;
-    for (const key of Object.keys(variables)) {
+    for (const key of variableNames) {
       if (
         skipResolveVars?.includes(key) ||
         varsResolvedFromSkipped?.has(key) ||
@@ -207,7 +208,7 @@ export function resolveVariables(
         const candidateIsSkipped =
           skipResolveVars?.includes(varName) || varsResolvedFromSkipped?.has(varName);
         if (
-          !Object.hasOwn(variables, varName) ||
+          !variableNames.has(varName) ||
           variables[varName] === undefined ||
           (!candidateIsSkipped && cyclicVars.has(varName))
         ) {
@@ -229,7 +230,7 @@ export function resolveVariables(
         if (
           cyclicVars.has(key) ||
           Array.from(updated.matchAll(regex)).some(
-            ([, name]) => Object.hasOwn(variables, name) && typeof variables[name] === 'string',
+            ([, name]) => variableNames.has(name) && typeof variables[name] === 'string',
           )
         ) {
           cyclicVars = findCyclicVars(variables, regex);
